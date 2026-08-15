@@ -96,7 +96,8 @@ is why there is no "always allow" in the contract yet.
 ## What is deliberately not forwarded
 
 `claude auth status` returns an email, an org id, an org name and a subscription
-type. It is reduced to one boolean inside `binary.rs`. stderr is drained into a
-bounded ring and never emitted nor logged. Search locations are reported as
-labels (`$PATH/claude`, `~/.local/bin/claude`) rather than raw environment
-values. There is no logging statement anywhere in the module.
+type. It is reduced to one boolean inside `binary.rs`. stderr is read so the pipe
+never fills and then discarded unread. Search locations are reported as labels
+(`$PATH/claude`, `~/.local/bin/claude`) rather than raw environment values, and
+`redact` collapses the home directory out of every path *and* every shell command
+before it crosses to React. There is no logging statement anywhere in the module.

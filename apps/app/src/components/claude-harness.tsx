@@ -2,7 +2,7 @@ import { useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 
-import { describeTransportError } from "@/lib/claude/contract"
+import { describeTransportError } from "@/lib/claude/messages"
 import { useClaudeTransport } from "@/lib/claude/use-claude-transport"
 
 export function ClaudeHarness() {

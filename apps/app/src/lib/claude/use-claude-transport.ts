@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react"
+import { useCallback, useEffect, useReducer } from "react"
 
 import type {
 	ActivityEvent,
@@ -34,6 +34,8 @@ type Action =
 	| { type: "binaryVersion"; version: string | null }
 	| { type: "reset" }
 
+const MAX_ERRORS = 20
+
 const initialSnapshot: TransportSnapshot = {
 	connection: "checking",
 	turn: "idle",
@@ -46,21 +48,21 @@ const initialSnapshot: TransportSnapshot = {
 }
 
 function upsertMessage(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
-	const index = messages.findIndex((entry) => entry.id === message.id)
+	const index = messages.findLastIndex((entry) => entry.id === message.id)
 	if (index === -1) {
 		return [...messages, message]
 	}
-	const merged = { ...messages[index], ...message }
-	return messages.with(index, merged.text ? merged : { ...merged, text: messages[index].text })
+	const previous = messages[index]
+	const text = message.text || previous.text
+	return messages.with(index, { ...previous, ...message, text })
 }
 
 function upsertActivity(activities: ActivityEvent[], activity: ActivityEvent): ActivityEvent[] {
-	const index = activities.findIndex((entry) => entry.id === activity.id)
+	const index = activities.findLastIndex((entry) => entry.id === activity.id)
 	if (index === -1) {
 		return [...activities, activity]
 	}
-	const previous = activities[index]
-	return activities.with(index, { ...previous, ...activity, title: activity.title || previous.title })
+	return activities.with(index, { ...activities[index], ...activity })
 }
 
 function applyEvent(state: TransportSnapshot, event: ClaudeEvent): TransportSnapshot {
@@ -74,7 +76,7 @@ function applyEvent(state: TransportSnapshot, event: ClaudeEvent): TransportSnap
 		case "messageStarted":
 			return { ...state, messages: upsertMessage(state.messages, event.message) }
 		case "messageDelta": {
-			const index = state.messages.findIndex((entry) => entry.id === event.id)
+			const index = state.messages.findLastIndex((entry) => entry.id === event.id)
 			if (index === -1) {
 				return state
 			}
@@ -94,14 +96,13 @@ function applyEvent(state: TransportSnapshot, event: ClaudeEvent): TransportSnap
 			return state.permission?.id === event.id ? { ...state, permission: null } : state
 		case "turnEnded":
 			return { ...state, sessionId: event.ended.sessionId ?? state.sessionId, permission: null }
-		case "failed":
-			return {
-				...state,
-				errors: [
-					...state.errors,
-					{ id: `${event.error.kind}-${state.errors.length}-${Date.now()}`, error: event.error },
-				],
+		case "failed": {
+			const entry = {
+				id: `${event.error.kind}-${state.errors.length}-${Date.now()}`,
+				error: event.error,
 			}
+			return { ...state, errors: [...state.errors, entry].slice(-MAX_ERRORS) }
+		}
 	}
 }
 
@@ -127,8 +128,6 @@ function toTransportError(reason: unknown): TransportError {
 
 export function useClaudeTransport() {
 	const [state, dispatch] = useReducer(reducer, initialSnapshot)
-	const sessionIdRef = useRef<string | null>(null)
-	sessionIdRef.current = state.sessionId
 
 	useEffect(() => {
 		const pending = claudeTransport.subscribe((event) => dispatch({ type: "event", event }))
@@ -192,10 +191,7 @@ export function useClaudeTransport() {
 
 	const shutdown = useCallback(() => claudeTransport.shutdown().catch(report), [report])
 
-	const resumeCurrent = useCallback(
-		() => start(sessionIdRef.current ?? undefined),
-		[start],
-	)
+	const resumeCurrent = () => start(state.sessionId ?? undefined)
 
 	return { state, check, start, resumeCurrent, submit, cancel, respond, shutdown }
 }

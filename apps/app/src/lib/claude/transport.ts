@@ -26,8 +26,6 @@ export const claudeTransport = {
 	respondToPermission: (id: string, decision: PermissionDecision) =>
 		invoke<void>("claude_respond_to_permission", { id, decision }),
 
-	sessionId: () => invoke<string | null>("claude_session_id"),
-
 	shutdown: () => invoke<void>("claude_shutdown"),
 
 	subscribe: (onEvent: (event: ClaudeEvent) => void) =>

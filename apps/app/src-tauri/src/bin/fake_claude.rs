@@ -11,18 +11,15 @@ use serde_json::{json, Value};
 
 const DEFAULT_SESSION: &str = "fake-session-0001";
 
-fn emit(frame: Value) {
-	let stdout = std::io::stdout();
-	let mut handle = stdout.lock();
-	let _ = writeln!(handle, "{frame}");
-	let _ = handle.flush();
-}
-
 fn emit_raw(line: &str) {
 	let stdout = std::io::stdout();
 	let mut handle = stdout.lock();
 	let _ = writeln!(handle, "{line}");
 	let _ = handle.flush();
+}
+
+fn emit(frame: Value) {
+	emit_raw(&frame.to_string());
 }
 
 fn scenario() -> String {
@@ -47,7 +44,6 @@ enum Incoming {
 	Initialize(String),
 	Interrupt(String),
 	Permission { request_id: String, allowed: bool },
-	Eof,
 }
 
 fn read_incoming(tx: mpsc::Sender<Incoming>) {
@@ -84,7 +80,6 @@ fn read_incoming(tx: mpsc::Sender<Incoming>) {
 			}
 		}
 	}
-	let _ = tx.send(Incoming::Eof);
 }
 
 fn emit_init() {
@@ -183,7 +178,6 @@ fn main() {
 
 	while let Ok(incoming) = rx.recv() {
 		match incoming {
-			Incoming::Eof => break,
 			Incoming::Initialize(request_id) => {
 				if scenario == "startup_timeout" {
 					continue;

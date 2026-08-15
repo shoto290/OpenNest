@@ -49,7 +49,6 @@ pub struct ChatMessage {
 #[serde(rename_all = "camelCase")]
 pub enum ActivityKind {
 	Tool,
-	Thinking,
 	Permission,
 }
 
@@ -60,7 +59,6 @@ pub enum ActivityStatus {
 	Running,
 	Succeeded,
 	Failed,
-	Denied,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -175,10 +173,11 @@ pub struct CheckReport {
 	pub error: Option<TransportError>,
 }
 
+/// Deliberately carries no session id: the only trustworthy one arrives later
+/// on [`ClaudeEvent::SessionReady`], straight from the child.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionHandle {
-	pub session_id: Option<String>,
 	pub resumed: bool,
 }
 

@@ -43,8 +43,6 @@ fn commands_are_registered_and_report_typed_errors_without_a_session() {
 		.build()
 		.expect("window builds");
 
-	assert_eq!(call(&window, "claude_session_id", json!({})), Ok(Value::Null));
-
 	assert_eq!(call(&window, "claude_cancel_turn", json!({})), Err(json!({ "kind": "notStarted" })));
 	assert_eq!(
 		call(&window, "claude_submit_prompt", json!({ "text": "salut" })),

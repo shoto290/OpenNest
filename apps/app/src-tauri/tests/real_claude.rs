@@ -3,7 +3,7 @@
 //! Ignored by default: these tests need a signed-in binary and the network.
 //! Run them with `cargo test --test real_claude -- --ignored --test-threads=1`.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use opennest_app::claude::binary;
@@ -15,22 +15,9 @@ use tokio::sync::mpsc;
 
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
 
-struct Recorder {
-	tx: mpsc::UnboundedSender<ClaudeEvent>,
-	log: Arc<Mutex<Vec<ClaudeEvent>>>,
-}
-
-impl EventSink for Recorder {
-	fn emit(&self, event: ClaudeEvent) {
-		self.log.lock().expect("log").push(event.clone());
-		let _ = self.tx.send(event);
-	}
-}
-
 struct Live {
 	session: Session,
 	events: mpsc::UnboundedReceiver<ClaudeEvent>,
-	sink: Arc<dyn EventSink>,
 }
 
 async fn live(resume: Option<String>) -> Live {
@@ -38,17 +25,17 @@ async fn live(resume: Option<String>) -> Live {
 	assert!(binary::is_authenticated(&path).await.expect("auth probe"), "claude must be signed in");
 
 	let (tx, events) = mpsc::unbounded_channel();
-	let sink: Arc<dyn EventSink> = Arc::new(Recorder { tx, log: Arc::new(Mutex::new(Vec::new())) });
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
 	let options = SessionOptions::new(path, std::env::temp_dir()).resuming(resume);
-	let session = Session::start(options, sink.clone()).await.expect("session starts");
-	Live { session, events, sink }
+	let session = Session::start(options, sink).await.expect("session starts");
+	Live { session, events }
 }
 
 impl Live {
 	/// Drains one turn, auto-approving every permission so the run stays
 	/// unattended.
 	async fn run_turn(&mut self, prompt: &str) -> Vec<ClaudeEvent> {
-		self.session.submit_prompt(prompt, self.sink.as_ref()).await.expect("prompt accepted");
+		self.session.submit_prompt(prompt).await.expect("prompt accepted");
 		self.collect().await
 	}
 
@@ -60,11 +47,7 @@ impl Live {
 				Ok(Some(event)) => {
 					if let ClaudeEvent::PermissionRequested { request } = &event {
 						self.session
-							.respond_to_permission(
-								&request.id,
-								PermissionDecision::AllowOnce,
-								self.sink.as_ref(),
-							)
+							.respond_to_permission(&request.id, PermissionDecision::AllowOnce)
 							.await
 							.expect("approval accepted");
 					}
@@ -167,15 +150,12 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	let pid = live.session.pid();
 
 	live.session
-		.submit_prompt(
-			"Count from 1 to 300, one number per line, with a short sentence about each.",
-			live.sink.as_ref(),
-		)
+		.submit_prompt("Count from 1 to 300, one number per line, with a short sentence about each.")
 		.await
 		.expect("prompt accepted");
 	tokio::time::sleep(Duration::from_secs(6)).await;
 
-	live.session.cancel_turn(live.sink.as_ref()).await.expect("cancel accepted");
+	live.session.cancel_turn().await.expect("cancel accepted");
 	let events = live.collect().await;
 	let outcome = events.iter().find_map(|event| match event {
 		ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),

@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
-use super::binary::redact;
+use super::redact;
 use super::contract::{
 	ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, ClaudeEvent, MessageCompletion,
 	MessageRole, PermissionRequest, TurnEnded, TurnOutcome,
@@ -33,7 +33,10 @@ fn string_field(input: &Value, key: &str) -> Option<String> {
 fn path_label(input: &Value) -> Option<String> {
 	let raw = string_field(input, "file_path").or_else(|| string_field(input, "path"))?;
 	let path = Path::new(&raw);
-	Some(path.file_name().map_or_else(|| redact(path), |name| name.to_string_lossy().into_owned()))
+	Some(
+		path.file_name()
+			.map_or_else(|| redact::path(path), |name| name.to_string_lossy().into_owned()),
+	)
 }
 
 fn tool_title(name: &str, input: &Value) -> String {
@@ -48,13 +51,14 @@ fn tool_title(name: &str, input: &Value) -> String {
 	}
 }
 
+/// Every branch goes through the redaction rule, including the shell command —
+/// which mentions the user's home directory as often as a path does.
 fn permission_detail(name: &str, input: &Value) -> Option<String> {
-	match name {
-		"Bash" => string_field(input, "command"),
-		_ => string_field(input, "file_path")
-			.or_else(|| string_field(input, "path"))
-			.map(|raw| redact(Path::new(&raw))),
-	}
+	let raw = match name {
+		"Bash" => string_field(input, "command")?,
+		_ => string_field(input, "file_path").or_else(|| string_field(input, "path"))?,
+	};
+	Some(redact::text(&raw))
 }
 
 #[derive(Debug, Default)]
@@ -84,10 +88,6 @@ impl Translator {
 	/// back verbatim. Removed from the map once answered.
 	pub fn take_permission_input(&mut self, request_id: &str) -> Option<Value> {
 		self.pending_permissions.remove(request_id)
-	}
-
-	pub fn has_permission(&self, request_id: &str) -> bool {
-		self.pending_permissions.contains_key(request_id)
 	}
 
 	pub fn ingest(&mut self, frame: Frame) -> Vec<ClaudeEvent> {
@@ -230,7 +230,13 @@ impl Translator {
 			});
 		}
 
+		// A turn that ends mid-tool or mid-prompt leaves entries behind, and an
+		// unanswered permission holds the whole tool input — file contents
+		// included. The client drops both on turn end, so this does too.
 		self.cancelling = false;
+		self.activity_titles.clear();
+		self.pending_permissions.clear();
+
 		events.push(ClaudeEvent::TurnEnded {
 			ended: TurnEnded { session_id: self.session_id.clone(), outcome },
 		});

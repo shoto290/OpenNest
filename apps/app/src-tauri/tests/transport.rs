@@ -17,7 +17,6 @@ const SETTLE: Duration = Duration::from_millis(400);
 struct Harness {
 	session: Session,
 	events: mpsc::UnboundedReceiver<ClaudeEvent>,
-	sink: Arc<dyn EventSink>,
 }
 
 fn options(scenario: &str) -> SessionOptions {
@@ -30,17 +29,17 @@ fn options(scenario: &str) -> SessionOptions {
 async fn start(options: SessionOptions) -> Result<Harness, TransportError> {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
-	let session = Session::start(options, sink.clone()).await?;
-	Ok(Harness { session, events, sink })
+	let session = Session::start(options, sink).await?;
+	Ok(Harness { session, events })
 }
 
 impl Harness {
 	async fn submit(&self, text: &str) -> Result<(), TransportError> {
-		self.session.submit_prompt(text, self.sink.as_ref()).await
+		self.session.submit_prompt(text).await
 	}
 
 	async fn cancel(&self) -> Result<(), TransportError> {
-		self.session.cancel_turn(self.sink.as_ref()).await
+		self.session.cancel_turn().await
 	}
 
 	/// Drains until the turn closes, or gives up so a hung transport fails the
@@ -279,7 +278,7 @@ async fn a_permission_request_can_be_allowed() {
 
 	harness
 		.session
-		.respond_to_permission(&request.id, PermissionDecision::AllowOnce, harness.sink.as_ref())
+		.respond_to_permission(&request.id, PermissionDecision::AllowOnce)
 		.await
 		.expect("decision accepted");
 
@@ -307,7 +306,7 @@ async fn a_permission_request_can_be_denied() {
 
 	harness
 		.session
-		.respond_to_permission(&request.id, PermissionDecision::Deny, harness.sink.as_ref())
+		.respond_to_permission(&request.id, PermissionDecision::Deny)
 		.await
 		.expect("decision accepted");
 
@@ -324,7 +323,7 @@ async fn answering_an_unknown_permission_is_rejected() {
 	let harness = start(options("normal")).await.expect("session starts");
 	let error = harness
 		.session
-		.respond_to_permission("nope", PermissionDecision::AllowOnce, harness.sink.as_ref())
+		.respond_to_permission("nope", PermissionDecision::AllowOnce)
 		.await
 		.expect_err("unknown id rejected");
 	assert!(matches!(error, TransportError::UnknownPermission { .. }));

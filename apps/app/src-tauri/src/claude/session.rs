@@ -1,9 +1,8 @@
 //! Supervises one Claude Code child process over NDJSON stdin/stdout.
 //!
-//! stderr is drained into a bounded in-memory ring and never forwarded, never
-//! logged: it is the one channel that could carry an environment value, so it
-//! stops here. Transport failures are reported through the typed contract
-//! instead.
+//! stderr is drained and discarded, never forwarded and never logged: it is the
+//! one channel that could carry an environment value, so it stops here.
+//! Transport failures are reported through the typed contract instead.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -17,14 +16,13 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
 use super::contract::{
-	ClaudeEvent, ConnectionState, PermissionDecision, TransportError, TurnState,
+	ClaudeEvent, ConnectionState, PermissionDecision, TransportError, TurnOutcome, TurnState,
 };
 use super::protocol::{self, Frame};
 use super::translate::Translator;
 
 pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
-const STDERR_RING_LINES: usize = 32;
 
 pub trait EventSink: Send + Sync + 'static {
 	fn emit(&self, event: ClaudeEvent);
@@ -96,11 +94,24 @@ struct Shared {
 	shutting_down: bool,
 }
 
+impl Shared {
+	/// The single place a turn changes state, so every transition emits exactly
+	/// one event and a no-op transition emits none.
+	fn set_turn(&mut self, next: TurnState) -> Option<ClaudeEvent> {
+		if self.turn == next {
+			return None;
+		}
+		self.turn = next;
+		Some(ClaudeEvent::TurnChanged { state: next })
+	}
+}
+
 pub struct Session {
 	stdin_tx: mpsc::UnboundedSender<Value>,
 	shared: Arc<Mutex<Shared>>,
 	pending: PendingControls,
 	child: Arc<Mutex<Option<Child>>>,
+	sink: Arc<dyn EventSink>,
 	pid: u32,
 	resumed: bool,
 }
@@ -128,10 +139,10 @@ impl Session {
 
 		let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<Value>();
 		tokio::spawn(write_loop(stdin, stdin_rx));
-		tokio::spawn(drain_stderr(stderr));
+		tokio::spawn(discard_stderr(stderr));
 		tokio::spawn(read_loop(stdout, shared.clone(), pending.clone(), sink.clone(), child.clone()));
 
-		let session = Self { stdin_tx, shared, pending, child, pid, resumed };
+		let session = Self { stdin_tx, shared, pending, child, sink, pid, resumed };
 		session.handshake(options.startup_timeout).await?;
 		Ok(session)
 	}
@@ -160,7 +171,7 @@ impl Session {
 		match tokio::time::timeout(timeout, ack).await {
 			Ok(Ok(())) => Ok(()),
 			Ok(Err(_)) => {
-				let code = self.reap().await;
+				let code = wait_code(&self.child).await;
 				Err(TransportError::Crashed { code, detail: Some("exited during startup".into()) })
 			}
 			Err(_) => {
@@ -182,28 +193,28 @@ impl Session {
 			.map_err(|_| TransportError::WriteFailed { detail: "stdin closed".into() })
 	}
 
-	pub async fn submit_prompt(&self, text: &str, sink: &dyn EventSink) -> Result<(), TransportError> {
-		{
+	pub async fn submit_prompt(&self, text: &str) -> Result<(), TransportError> {
+		let entering = {
 			let mut shared = self.shared.lock().await;
 			if matches!(shared.turn, TurnState::Submitting | TurnState::Running | TurnState::Stopping) {
 				return Err(TransportError::TurnAlreadyRunning);
 			}
-			shared.turn = TurnState::Submitting;
-		}
-		sink.emit(ClaudeEvent::TurnChanged { state: TurnState::Submitting });
+			shared.set_turn(TurnState::Submitting)
+		};
+		self.emit(entering);
 		self.write(protocol::user_message(text))
 	}
 
-	pub async fn cancel_turn(&self, sink: &dyn EventSink) -> Result<(), TransportError> {
-		{
+	pub async fn cancel_turn(&self) -> Result<(), TransportError> {
+		let stopping = {
 			let mut shared = self.shared.lock().await;
 			if !matches!(shared.turn, TurnState::Submitting | TurnState::Running) {
 				return Err(TransportError::NoActiveTurn);
 			}
-			shared.turn = TurnState::Stopping;
 			shared.translator.mark_cancelling();
-		}
-		sink.emit(ClaudeEvent::TurnChanged { state: TurnState::Stopping });
+			shared.set_turn(TurnState::Stopping)
+		};
+		self.emit(stopping);
 
 		let request_id = format!("opennest-interrupt-{}", uuid::Uuid::new_v4());
 		self.write(protocol::interrupt_request(&request_id))
@@ -213,7 +224,6 @@ impl Session {
 		&self,
 		id: &str,
 		decision: PermissionDecision,
-		sink: &dyn EventSink,
 	) -> Result<(), TransportError> {
 		let input = {
 			let mut shared = self.shared.lock().await;
@@ -228,8 +238,14 @@ impl Session {
 			PermissionDecision::Deny => protocol::deny_response(id, "User denied this action."),
 		};
 		self.write(frame)?;
-		sink.emit(ClaudeEvent::PermissionResolved { id: id.to_owned(), decision });
+		self.sink.emit(ClaudeEvent::PermissionResolved { id: id.to_owned(), decision });
 		Ok(())
+	}
+
+	fn emit(&self, event: Option<ClaudeEvent>) {
+		if let Some(event) = event {
+			self.sink.emit(event);
+		}
 	}
 
 	/// Closes stdin, then escalates to the whole process group so no Claude
@@ -259,14 +275,15 @@ impl Session {
 		let _ = child.wait().await;
 		*slot = None;
 	}
+}
 
-	async fn reap(&self) -> Option<i32> {
-		let mut slot = self.child.lock().await;
-		let child = slot.as_mut()?;
-		let status = child.wait().await.ok()?;
-		*slot = None;
-		status.code()
-	}
+/// Leaves the handle in place: the read loop and a failed handshake both want
+/// the exit code, and `wait` on an already-reaped child returns the cached
+/// status. Clearing the slot is `kill`'s job.
+async fn wait_code(child: &Arc<Mutex<Option<Child>>>) -> Option<i32> {
+	let mut slot = child.lock().await;
+	let handle = slot.as_mut()?;
+	handle.wait().await.ok().and_then(|status| status.code())
 }
 
 fn spawn(options: &SessionOptions) -> Result<Child, TransportError> {
@@ -316,17 +333,9 @@ async fn write_loop(mut stdin: tokio::process::ChildStdin, mut rx: mpsc::Unbound
 	}
 }
 
-/// Consumed so the pipe never fills, retained only as a bounded ring for local
-/// debugging. Deliberately never emitted and never logged.
-async fn drain_stderr(stderr: tokio::process::ChildStderr) {
-	let mut lines = BufReader::new(stderr).lines();
-	let mut ring: Vec<String> = Vec::with_capacity(STDERR_RING_LINES);
-	while let Ok(Some(line)) = lines.next_line().await {
-		if ring.len() == STDERR_RING_LINES {
-			ring.remove(0);
-		}
-		ring.push(line);
-	}
+/// Read so the pipe never fills, then thrown away unread.
+async fn discard_stderr(mut stderr: tokio::process::ChildStderr) {
+	let _ = tokio::io::copy(&mut stderr, &mut tokio::io::sink()).await;
 }
 
 async fn read_loop(
@@ -360,30 +369,19 @@ async fn read_loop(
 			}
 		}
 
-		let mut guard = shared.lock().await;
-		if matches!(guard.turn, TurnState::Submitting) && is_turn_activity(&frame) {
-			guard.turn = TurnState::Running;
-			sink.emit(ClaudeEvent::TurnChanged { state: TurnState::Running });
-		}
+		let (entering, events, ending) = {
+			let mut guard = shared.lock().await;
+			let entering = match guard.turn {
+				TurnState::Submitting if is_turn_activity(&frame) => guard.set_turn(TurnState::Running),
+				_ => None,
+			};
+			let events = guard.translator.ingest(frame);
+			let ending = turn_outcome(&events).and_then(|outcome| guard.set_turn(outcome.into()));
+			(entering, events, ending)
+		};
 
-		let events = guard.translator.ingest(frame);
-		for event in &events {
-			if let ClaudeEvent::TurnEnded { ended } = event {
-				guard.turn = match ended.outcome {
-					super::contract::TurnOutcome::Failed => TurnState::Failed,
-					_ => TurnState::Idle,
-				};
-			}
-		}
-		let turn_after = guard.turn;
-		let ended = events.iter().any(|event| matches!(event, ClaudeEvent::TurnEnded { .. }));
-		drop(guard);
-
-		for event in events {
+		for event in entering.into_iter().chain(events).chain(ending) {
 			sink.emit(event);
-		}
-		if ended {
-			sink.emit(ClaudeEvent::TurnChanged { state: turn_after });
 		}
 	}
 
@@ -393,26 +391,42 @@ async fn read_loop(
 	on_exit(shared, sink, child).await;
 }
 
+impl From<TurnOutcome> for TurnState {
+	fn from(outcome: TurnOutcome) -> Self {
+		match outcome {
+			TurnOutcome::Failed => TurnState::Failed,
+			TurnOutcome::Completed | TurnOutcome::Cancelled => TurnState::Idle,
+		}
+	}
+}
+
+fn turn_outcome(events: &[ClaudeEvent]) -> Option<TurnOutcome> {
+	events.iter().find_map(|event| match event {
+		ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),
+		_ => None,
+	})
+}
+
 fn is_turn_activity(frame: &Frame) -> bool {
 	matches!(frame, Frame::StreamEvent(_) | Frame::Assistant(_) | Frame::ControlRequest(_))
 }
 
 async fn on_exit(shared: Arc<Mutex<Shared>>, sink: Arc<dyn EventSink>, child: Arc<Mutex<Option<Child>>>) {
-	let mut guard = shared.lock().await;
-	if guard.shutting_down {
-		return;
-	}
-	guard.turn = TurnState::Failed;
-	drop(guard);
-
-	let code = match child.lock().await.as_mut() {
-		Some(child) => child.wait().await.ok().and_then(|status| status.code()),
-		None => None,
+	let failing = {
+		let mut guard = shared.lock().await;
+		if guard.shutting_down {
+			return;
+		}
+		guard.set_turn(TurnState::Failed)
 	};
+
+	let code = wait_code(&child).await;
 
 	sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed });
 	sink.emit(ClaudeEvent::Failed {
 		error: TransportError::Crashed { code, detail: Some("claude exited unexpectedly".into()) },
 	});
-	sink.emit(ClaudeEvent::TurnChanged { state: TurnState::Failed });
+	if let Some(event) = failing {
+		sink.emit(event);
+	}
 }

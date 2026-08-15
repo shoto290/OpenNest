@@ -12,6 +12,7 @@ use tokio::process::Command;
 
 use super::contract::{CheckReport, ConnectionState, TransportError};
 use super::protocol::AuthStatus;
+use super::redact::{home_dir, path as redact};
 
 pub const BINARY_OVERRIDE_ENV: &str = "OPENNEST_CLAUDE_BIN";
 
@@ -24,19 +25,6 @@ fn binary_name() -> &'static str {
 		"claude.exe"
 	} else {
 		"claude"
-	}
-}
-
-fn home_dir() -> Option<PathBuf> {
-	std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
-}
-
-/// Renders a path with the home prefix collapsed to `~` so no username reaches
-/// the frontend or the logs.
-pub fn redact(path: &Path) -> String {
-	match home_dir().and_then(|home| path.strip_prefix(home).ok().map(Path::to_path_buf)) {
-		Some(rest) => format!("~/{}", rest.display()),
-		None => path.display().to_string(),
 	}
 }
 
@@ -136,9 +124,12 @@ pub async fn check() -> CheckReport {
 		}
 	};
 
-	let binary_version = version(&binary).await;
+	// Each probe cold-starts the ~300 MB CLI and neither feeds the other, so
+	// the check costs one spawn rather than two in sequence.
+	let (binary_version, authenticated) =
+		tokio::join!(version(&binary), is_authenticated(&binary));
 
-	match is_authenticated(&binary).await {
+	match authenticated {
 		Ok(true) => CheckReport {
 			connection: ConnectionState::Ready,
 			binary_version,
@@ -182,9 +173,4 @@ mod tests {
 		assert!(labels.iter().any(|label| label.starts_with("$PATH/")), "PATH probe not reported");
 	}
 
-	#[test]
-	fn home_paths_are_collapsed_to_a_tilde() {
-		let home = home_dir().expect("home");
-		assert_eq!(redact(&home.join(".local/bin/claude")), "~/.local/bin/claude");
-	}
 }

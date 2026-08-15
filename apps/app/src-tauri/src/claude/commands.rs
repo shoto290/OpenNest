@@ -20,7 +20,6 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		claude_submit_prompt,
 		claude_cancel_turn,
 		claude_respond_to_permission,
-		claude_session_id,
 		claude_shutdown,
 	]
 }
@@ -86,50 +85,32 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 		}
 	};
 
-	let handle = SessionHandle { session_id: resume, resumed: session.resumed() };
+	let handle = SessionHandle { resumed: session.resumed() };
 	*state.session.lock().await = Some(Arc::new(session));
 	sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Ready });
 	Ok(handle)
 }
 
 #[tauri::command]
-pub async fn claude_submit_prompt<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn claude_submit_prompt(
 	state: State<'_, ClaudeState>,
 	text: String,
 ) -> Result<(), TransportError> {
-	let session = state.current().await?;
-	session.submit_prompt(&text, sink(&app).as_ref()).await
+	state.current().await?.submit_prompt(&text).await
 }
 
 #[tauri::command]
-pub async fn claude_cancel_turn<R: Runtime>(
-	app: AppHandle<R>,
-	state: State<'_, ClaudeState>,
-) -> Result<(), TransportError> {
-	let session = state.current().await?;
-	session.cancel_turn(sink(&app).as_ref()).await
+pub async fn claude_cancel_turn(state: State<'_, ClaudeState>) -> Result<(), TransportError> {
+	state.current().await?.cancel_turn().await
 }
 
 #[tauri::command]
-pub async fn claude_respond_to_permission<R: Runtime>(
-	app: AppHandle<R>,
+pub async fn claude_respond_to_permission(
 	state: State<'_, ClaudeState>,
 	id: String,
 	decision: PermissionDecision,
 ) -> Result<(), TransportError> {
-	let session = state.current().await?;
-	session.respond_to_permission(&id, decision, sink(&app).as_ref()).await
-}
-
-#[tauri::command]
-pub async fn claude_session_id(
-	state: State<'_, ClaudeState>,
-) -> Result<Option<String>, TransportError> {
-	match state.session.lock().await.clone() {
-		Some(session) => Ok(session.session_id().await),
-		None => Ok(None),
-	}
+	state.current().await?.respond_to_permission(&id, decision).await
 }
 
 #[tauri::command]
