@@ -51,7 +51,11 @@ export const InLayout = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByRole("banner")).toHaveClass(/pl-20/)
+		const header = canvas.getByRole("banner")
+
+		// The gutter has to clear the control group, not merely offset it.
+		await expect(header).toHaveClass(/pl-22/)
+		await expect(getComputedStyle(header).paddingLeft).toBe("88px")
 	},
 })
 

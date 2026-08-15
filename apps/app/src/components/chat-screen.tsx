@@ -185,7 +185,7 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 			header={
 				<AppHeader
 					insetWindowControls
-					data-tauri-drag-region
+					data-tauri-drag-region="deep"
 					trailing={
 						<ConnectionStatus
 							state={state.connection}
