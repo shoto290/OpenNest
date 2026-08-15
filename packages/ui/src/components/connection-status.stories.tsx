@@ -22,7 +22,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Reports whether the local Claude Code CLI can be reached, as one quiet line for a header's trailing edge. It owns its own copy and holds no action: recovery belongs to ChatNotice or ChatEmptyState, which is why this never renders a button. It reports the CLI, never the turn — a running turn shows up in the transcript, not here.",
+					"Reports whether the local Claude Code CLI can be reached, as a mark and a coloured dot on a header's trailing edge. The copy stays for screen readers only, so the header carries no prose. It holds no action: recovery belongs to ChatNotice or ChatEmptyState, which is why this never renders a button. It reports the CLI, never the turn — a running turn shows up in the transcript, not here.",
 			},
 		},
 	},
@@ -38,15 +38,15 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this once the preflight answered: the binary resolved, reported its version, and the composer below is live. Check that the version renders monospaced next to the label so it reads as data rather than prose. Pick `Variants` to compare it against the three states where typing would fail.",
+					"Reach for this once the preflight answered: the binary resolved, reported its version, and the composer below is live. Check that nothing but the mark and the green dot is painted, while the label and version still reach a screen reader. Pick `Variants` to compare it against the three states where typing would fail.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
-			"Claude Code ready",
+			"Claude Code ready v2.1.233",
 		)
-		await expect(canvas.getByText("v2.1.233")).toBeVisible()
+		await expect(canvas.getByRole("status")).toHaveClass("sr-only")
 	},
 })
 

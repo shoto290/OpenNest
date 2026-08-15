@@ -37,7 +37,7 @@ function ConnectionStatus({
 			data-slot="connection-status"
 			data-state={state}
 			className={cn(
-				"flex items-center gap-2 text-muted-foreground text-xs",
+				"flex items-center gap-1.5 text-muted-foreground",
 				className,
 			)}
 			{...props}
@@ -47,8 +47,10 @@ function ConnectionStatus({
 				aria-hidden="true"
 				className={cn("size-1.5 rounded-full", CONNECTION_STATUS_DOT[state])}
 			/>
-			<span role="status">{CONNECTION_STATUS_COPY[state]}</span>
-			{version ? <span className="font-mono">v{version}</span> : null}
+			<span role="status" className="sr-only">
+				{CONNECTION_STATUS_COPY[state]}
+				{version ? ` v${version}` : null}
+			</span>
 		</div>
 	)
 }
