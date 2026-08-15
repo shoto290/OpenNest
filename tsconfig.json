@@ -1,0 +1,10 @@
+{
+	"references": [],
+	"files": [],
+	"include": [],
+	"compilerOptions": {
+		"sourceMap": true,
+		"inlineSources": true,
+		"sourceRoot": "/"
+	}
+}
