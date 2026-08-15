@@ -2,10 +2,21 @@ import { memo, type Ref, useCallback, useEffect, useRef, useState } from "react"
 
 import { AgentActivity } from "@workspace/ui/components/agent-activity"
 import { AppHeader } from "@workspace/ui/components/app-header"
+import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import {
+	BotWorking,
+	type BotWorkingKind,
+} from "@workspace/ui/components/bot-working"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import { ChatNotice } from "@workspace/ui/components/chat-notice"
-import { AssistantTurn, UserTurn } from "@workspace/ui/components/chat-turn"
+import {
+	AssistantTurn,
+	CHAT_AVATAR_SIZE,
+	ChatTurnGroup,
+	type ChatTurnRun,
+	UserTurn,
+} from "@workspace/ui/components/chat-turn"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import {
@@ -21,41 +32,58 @@ import {
 	emptyStateStatusFor,
 	needsFreshSession,
 	noticeTitleFor,
+	type TranscriptRow,
 	toActivityItems,
+	toRuns,
+	toTranscriptRows,
+	workingStateFor,
 } from "@/lib/chat/screen-model"
 import { useChat } from "@/lib/chat/use-chat"
 import type {
 	ActivityEvent,
-	ChatMessage,
 	PermissionRequest,
 	TurnState,
 } from "@/lib/claude/contract"
 import { describeTransportError } from "@/lib/claude/messages"
 
-/** Memoised: a streamed delta rewrites one message, never the rest of the transcript. */
+/** Memoised: a streamed delta rewrites one message, and the view model hands
+ * back the same rows for the rest. `run` arrives from the enclosing group and
+ * `avatar` stays a boolean, so the shallow compare holds through a stream. */
 const TranscriptTurn = memo(function TranscriptTurn({
-	message,
+	row,
 	controller,
+	run,
+	avatar,
 }: {
-	message: ChatMessage
+	row: TranscriptRow
 	controller: ChatController
+	run?: ChatTurnRun
+	avatar: boolean
 }) {
-	if (message.role === "user") {
+	if (row.role === "user") {
 		return (
 			<UserTurn
-				state={message.completion}
+				state={row.completion}
+				run={run}
 				onRetry={() => {
-					void controller.retry(message.id)
+					void controller.retry(row.messageId)
 				}}
 			>
-				{message.text}
+				{row.text}
 			</UserTurn>
 		)
 	}
 
 	return (
-		<AssistantTurn state={message.completion} copyText={message.text}>
-			{message.text}
+		<AssistantTurn
+			state={row.completion}
+			run={run}
+			copyText={row.copyText}
+			avatar={
+				avatar ? <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} /> : null
+			}
+		>
+			{row.text}
 		</AssistantTurn>
 	)
 })
@@ -65,9 +93,11 @@ const TranscriptTurn = memo(function TranscriptTurn({
 const ActivityLog = memo(function ActivityLog({
 	activities,
 	turn,
+	workingKind,
 }: {
 	activities: ActivityEvent[]
 	turn: TurnState
+	workingKind?: BotWorkingKind
 }) {
 	const items = toActivityItems(activities)
 
@@ -75,7 +105,9 @@ const ActivityLog = memo(function ActivityLog({
 		<AgentActivity
 			items={items}
 			status={activityStatusFor(turn)}
-			activeLabel="Working…"
+			// The rows below already name the step, so the header only says how the
+			// bot is busy.
+			renderWorkingStatus={() => <BotWorking kind={workingKind} />}
 			summary={`Ran ${items.length} ${items.length === 1 ? "step" : "steps"}`}
 		/>
 	)
@@ -163,6 +195,8 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
 	const latestError = state.errors.at(-1)
 	const notice = latestError?.id === dismissedErrorId ? undefined : latestError
+	const runs = toRuns(toTranscriptRows(state.messages))
+	const working = workingStateFor(state)
 
 	const preflight = useCallback(() => {
 		void controller.preflight()
@@ -232,16 +266,34 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 				/>
 			) : null}
 
-			{state.messages.map((message) => (
-				<TranscriptTurn
-					key={message.id}
-					message={message}
-					controller={controller}
-				/>
-			))}
+			{runs.map((run, runIndex) => {
+				// The closing row carries the mark, unless the working row below is
+				// already carrying it for a run that is still live.
+				const live = working !== null && runIndex === runs.length - 1
+				const avatarIndex = live ? -1 : run.length - 1
+
+				return (
+					<ChatTurnGroup key={run[0].id}>
+						{run.map((row, index) => (
+							<TranscriptTurn
+								key={row.id}
+								row={row}
+								controller={controller}
+								avatar={index === avatarIndex}
+							/>
+						))}
+					</ChatTurnGroup>
+				)
+			})}
 
 			{state.activities.length > 0 ? (
-				<ActivityLog activities={state.activities} turn={state.turn} />
+				<ActivityLog
+					activities={state.activities}
+					turn={state.turn}
+					workingKind={working?.kind}
+				/>
+			) : working ? (
+				<BotWorking kind={working.kind} label={working.label} />
 			) : null}
 
 			{state.permission ? (

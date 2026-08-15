@@ -1,0 +1,79 @@
+"use client"
+
+import { useState } from "react"
+
+import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
+import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
+import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
+import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
+import { CHAT_AVATAR_SIZE } from "@workspace/ui/components/chat-turn"
+import { cn } from "@workspace/ui/lib/utils"
+
+/** What the bot is busy with, named after the pose it holds while doing it.
+ * The caller reads it off the running tool. */
+type BotWorkingKind = Extract<
+	BotAvatarState,
+	"thinking" | "searching" | "working" | "writing" | "waiting"
+>
+
+interface BotWorkingProps {
+	kind?: BotWorkingKind
+	/** Name the hover text puts in front of the verb. */
+	name?: string
+	/** What it is working on right now, e.g. the running tool. Replaces the verb. */
+	label?: string
+	animal?: BotAvatarAnimal
+	size?: number
+	className?: string
+}
+
+/** Work that runs long enough for the reader to want a clock on it. */
+const isTimed = (kind: BotWorkingKind) =>
+	kind === "searching" || kind === "working"
+
+/** The avatar is the whole signal; the words only answer a reader who points at
+ * it. They stay in the DOM either way, so assistive tech never loses them. */
+function BotWorking({
+	kind = "thinking",
+	name = "No name",
+	label,
+	animal,
+	size = CHAT_AVATAR_SIZE,
+	className,
+}: BotWorkingProps) {
+	const [pointed, setPointed] = useState(false)
+	const verb = kind === "waiting" ? "waiting for you" : kind
+	const text = label ? `${name} · ${label}` : `${name} is ${verb}…`
+
+	return (
+		<div
+			data-slot="bot-working"
+			data-kind={kind}
+			className={cn("flex min-w-0 items-center gap-2", className)}
+		>
+			<span
+				className="inline-flex shrink-0"
+				onPointerEnter={() => setPointed(true)}
+				onPointerLeave={() => setPointed(false)}
+			>
+				<BotAvatar animal={animal} state={kind} size={size} />
+			</span>
+			<span
+				className={cn(
+					"min-w-0 text-muted-foreground text-sm transition-opacity duration-200",
+					pointed ? "opacity-100" : "opacity-0",
+				)}
+			>
+				{isTimed(kind) ? (
+					// The clock only ticks while it is being read.
+					<AgentProgress indicator={null} label={text} running={pointed} />
+				) : (
+					<ThinkingShimmer>{text}</ThinkingShimmer>
+				)}
+			</span>
+		</div>
+	)
+}
+
+export { BotWorking, type BotWorkingKind, type BotWorkingProps }
