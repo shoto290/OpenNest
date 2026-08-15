@@ -1,0 +1,31 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+file_include_globs = """
+.env*
+.env.local*
+settings.local.json*
+"""
+
+[scripts]
+setup = """
+bun install
+"""
+run_mode = "nonconcurrent"
+
+[prompts]
+code_review = "/review:deep-review"
+create_pr = "/git:create"
+resolve_merge_conflicts = "/git:rebase"
+
+[tasks.dev]
+label = "Dev"
+command = "bun run dev"
+icon = "play"
+default = true
+available_in = ["local", "cloud"]
+
+[tasks.storybook]
+label = "Storybook"
+command = "bun run storybook"
+icon = "play"
+available_in = ["local", "cloud"]
