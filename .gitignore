@@ -31,3 +31,10 @@ dist-ssr
 
 # typescript
 *.tsbuildinfo
+
+# storybook
+storybook-static
+
+# conductor
+.conductor/settings.local.toml
+.context/

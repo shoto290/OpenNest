@@ -14,6 +14,10 @@
 			"dependsOn": ["^build"],
 			"cache": false
 		},
+		"storybook": {
+			"cache": false,
+			"persistent": true
+		},
 		"types": {
 			"dependsOn": ["^types"]
 		},
