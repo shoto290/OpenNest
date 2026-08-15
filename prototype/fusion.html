@@ -287,6 +287,7 @@
         <div class="button-row">
           <button class="action primary" id="blink-now" type="button">Cligner</button>
           <button class="action" id="reset-all" type="button">Réinitialiser</button>
+          <button class="action" id="export-svg" type="button">Exporter PNG</button>
         </div>
       </aside>
 
@@ -474,30 +475,30 @@
         {
           id: 'bear',
           name: 'Ours',
-          faceY: 128,
-          scale: 0.5,
+          faceY: 130,
+          scale: 0.52,
           head: `
-            M120,70 C154,70 184,96 184,140 C184,176 156,200 120,200
-            C84,200 56,176 56,140 C56,96 86,70 120,70 Z`,
+            M120,74 C158,74 186,102 186,144 C186,178 158,198 120,198
+            C82,198 54,178 54,144 C54,102 82,74 120,74 Z`,
           ears: [
             {
-              pivot: [80, 76],
+              pivot: [84, 72],
               side: -1,
-              art: `<circle class="outline" cx="78" cy="64" r="19"/>
-                    <circle class="accent" cx="78" cy="64" r="8"/>`,
+              art: `<circle class="outline" cx="84" cy="68" r="18"/>
+                    <circle class="accent" cx="84" cy="68" r="8"/>`,
             },
             {
-              pivot: [160, 76],
+              pivot: [156, 72],
               side: 1,
-              art: `<circle class="outline" cx="162" cy="64" r="19"/>
-                    <circle class="accent" cx="162" cy="64" r="8"/>`,
+              art: `<circle class="outline" cx="156" cy="68" r="18"/>
+                    <circle class="accent" cx="156" cy="68" r="8"/>`,
             },
           ],
           extras: ``,
           nose: ``,
           mouth: ``,
-          mouthC: [120, 177],
-          noseTop: 158,
+          mouthC: [120, 170],
+          noseTop: 150,
         },
         {
           id: 'chick',
@@ -524,52 +525,52 @@
         {
           id: 'dog',
           name: 'Chien',
-          faceY: 124,
+          faceY: 126,
           scale: 0.48,
           head: `
-            M120,64 C144,64 162,78 168,102 C172,116 172,134 166,148
-            C156,178 140,192 120,192 C100,192 84,178 74,148
-            C68,134 68,116 72,102 C78,78 96,64 120,64 Z`,
+            M120,68 C148,68 168,86 172,112 C175,134 172,154 162,168
+            C152,182 138,190 120,190 C102,190 88,182 78,168
+            C68,154 65,134 68,112 C72,86 92,68 120,68 Z`,
           ears: [
             {
-              pivot: [76, 88],
+              pivot: [88, 74],
               side: -1,
-              art: `<path class="outline" d="M78,82 C62,86 52,102 50,122 C48,142 54,156 64,162 C74,154 80,138 80,118 C80,104 79,92 78,82 Z"/>
-                    <path class="accent" d="M66,100 C58,112 56,128 61,140 C69,134 73,120 73,108 Z"/>`,
+              art: `<path class="outline" d="M90,70 C70,64 54,76 50,98 C46,124 52,150 64,162 C76,154 84,132 86,106 C87,92 88,80 90,70 Z"/>
+                    <path class="accent" d="M64,104 C58,118 58,136 63,148 C71,140 75,124 75,110 Z"/>`,
             },
             {
-              pivot: [164, 88],
+              pivot: [152, 74],
               side: 1,
-              art: `<path class="outline" d="M162,82 C178,86 188,102 190,122 C192,142 186,156 176,162 C166,154 160,138 160,118 C160,104 161,92 162,82 Z"/>
-                    <path class="accent" d="M174,100 C182,112 184,128 179,140 C171,134 167,120 167,108 Z"/>`,
+              art: `<path class="outline" d="M150,70 C170,64 186,76 190,98 C194,124 188,150 176,162 C164,154 156,132 154,106 C153,92 152,80 150,70 Z"/>
+                    <path class="accent" d="M176,104 C182,118 182,136 177,148 C169,140 165,124 165,110 Z"/>`,
             },
           ],
           extras: ``,
           nose: ``,
           mouth: ``,
-          mouthC: [120, 172],
-          noseTop: 152,
+          mouthC: [120, 170],
+          noseTop: 150,
         },
         {
           id: 'mouse',
           name: 'Souris',
-          faceY: 128,
-          scale: 0.5,
+          faceY: 130,
+          scale: 0.46,
           head: `
-            M120,74 C150,74 178,98 182,138 C184,174 154,198 120,198
-            C86,198 56,174 58,138 C62,98 90,74 120,74 Z`,
+            M120,76 C144,76 166,98 170,132 C173,166 150,192 120,192
+            C90,192 67,166 70,132 C74,98 96,76 120,76 Z`,
           ears: [
             {
-              pivot: [80, 84],
+              pivot: [86, 74],
               side: -1,
-              art: `<circle class="outline" cx="70" cy="58" r="26"/>
-                    <circle class="accent" cx="70" cy="58" r="13"/>`,
+              art: `<circle class="outline" cx="80" cy="56" r="24"/>
+                    <circle class="accent" cx="80" cy="56" r="12"/>`,
             },
             {
-              pivot: [160, 84],
+              pivot: [154, 74],
               side: 1,
-              art: `<circle class="outline" cx="170" cy="58" r="26"/>
-                    <circle class="accent" cx="170" cy="58" r="13"/>`,
+              art: `<circle class="outline" cx="160" cy="56" r="24"/>
+                    <circle class="accent" cx="160" cy="56" r="12"/>`,
             },
           ],
           extras: ``,
@@ -581,26 +582,26 @@
         {
           id: 'owl',
           name: 'Hibou',
-          faceY: 126,
-          scale: 0.5,
+          faceY: 122,
+          scale: 0.48,
           head: `
-            M120,64 C156,64 182,88 182,132 C182,170 154,194 120,194
-            C86,194 58,170 58,132 C58,88 84,64 120,64 Z`,
+            M120,72 C154,72 180,94 180,132 C180,168 154,190 120,190
+            C86,190 60,168 60,132 C60,94 86,72 120,72 Z`,
           ears: [
             {
-              pivot: [72, 82],
+              pivot: [84, 80],
               side: -1,
-              art: `<path class="outline" d="M64,90 C52,74 46,52 48,32 C62,40 76,56 84,72 C76,76 69,82 64,90 Z"/>
-                    <path class="accent" d="M60,68 L56,44 L74,60 Z"/>`,
+              art: `<path class="outline" d="M78,84 C68,70 62,52 62,34 C76,44 90,60 98,74 C90,76 83,79 78,84 Z"/>
+                    <path class="accent" d="M74,66 L70,46 L86,62 Z"/>`,
             },
             {
-              pivot: [168, 82],
+              pivot: [156, 80],
               side: 1,
-              art: `<path class="outline" d="M176,90 C188,74 194,52 192,32 C178,40 164,56 156,72 C164,76 171,82 176,90 Z"/>
-                    <path class="accent" d="M180,68 L184,44 L166,60 Z"/>`,
+              art: `<path class="outline" d="M162,84 C172,70 178,52 178,34 C164,44 150,60 142,74 C150,76 157,79 162,84 Z"/>
+                    <path class="accent" d="M166,66 L170,46 L154,62 Z"/>`,
             },
           ],
-          extras: ``,
+          extras: `<path class="line" style="stroke-width:4" fill="none" d="M120,92 C102,76 78,88 76,112 C74,136 94,152 120,158 C146,152 166,136 164,112 C162,88 138,76 120,92 Z"/>`,
           nose: ``,
           mouth: ``,
           mouthC: [120, 170],
@@ -609,23 +610,23 @@
         {
           id: 'koala',
           name: 'Koala',
-          faceY: 130,
-          scale: 0.48,
+          faceY: 132,
+          scale: 0.46,
           head: `
-            M120,74 C152,74 180,98 182,136 C184,172 154,196 120,196
-            C86,196 56,172 58,136 C60,98 88,74 120,74 Z`,
+            M120,82 C154,82 182,104 184,140 C185,172 156,194 120,194
+            C84,194 55,172 56,140 C58,104 86,82 120,82 Z`,
           ears: [
             {
-              pivot: [76, 74],
+              pivot: [78, 76],
               side: -1,
-              art: `<path class="outline" d="M74,88 C56,88 42,72 44,54 C46,38 62,30 76,35 C90,40 97,54 94,68 C92,80 84,88 74,88 Z"/>
-                    <ellipse class="accent" cx="69" cy="60" rx="11" ry="13"/>`,
+              art: `<path class="outline" d="M76,92 C54,92 38,74 40,52 C42,34 60,26 76,31 C92,37 100,52 97,68 C95,82 86,92 76,92 Z"/>
+                    <ellipse class="accent" cx="66" cy="58" rx="13" ry="15"/>`,
             },
             {
-              pivot: [164, 74],
+              pivot: [162, 76],
               side: 1,
-              art: `<path class="outline" d="M166,88 C184,88 198,72 196,54 C194,38 178,30 164,35 C150,40 143,54 146,68 C148,80 156,88 166,88 Z"/>
-                    <ellipse class="accent" cx="171" cy="60" rx="11" ry="13"/>`,
+              art: `<path class="outline" d="M164,92 C186,92 202,74 200,52 C198,34 180,26 164,31 C148,37 140,52 143,68 C145,82 154,92 164,92 Z"/>
+                    <ellipse class="accent" cx="174" cy="58" rx="13" ry="15"/>`,
             },
           ],
           extras: ``,
@@ -916,7 +917,15 @@
           e.sy += e.vSy * dt;
         });
         render(now);
-        requestAnimationFrame(animate);
+        if (params.get('testexport') !== null) {
+        setTimeout(() => {
+          document.body.innerHTML =
+            '<div style="background:repeating-conic-gradient(#777 0 25%,#bbb 0 50%) 0 0/28px 28px;padding:20px;width:480px">' +
+            buildExportSvg() +
+            '</div>';
+        }, 900);
+      }
+      requestAnimationFrame(animate);
       }
 
       function scheduleBlink() {
@@ -974,6 +983,61 @@
       }, 140);
 
       $('blink-now').addEventListener('click', () => { blinkStart = performance.now(); });
+      function buildExportSvg() {
+        const clone = $('stage').cloneNode(true);
+        const cs = getComputedStyle(document.documentElement);
+        const ink = '#26241f';
+        const orange = cs.getPropertyValue('--orange').trim();
+        const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        style.textContent =
+          `.outline{stroke:${ink};fill:none;stroke-width:5.5;stroke-linecap:round;stroke-linejoin:round}` +
+          `.line{stroke:${ink};fill:none;stroke-width:5.5;stroke-linecap:round;stroke-linejoin:round}` +
+          `.accent{fill:${orange};stroke:none}` +
+          `.eye{fill:${ink}}`;
+        clone.insertBefore(style, clone.firstChild);
+        const headD = clone.querySelector('#head-art > path.outline').getAttribute('d');
+        const mask = document.createElementNS('http://www.w3.org/2000/svg', 'mask');
+        mask.setAttribute('id', 'ear-knockout');
+        mask.setAttribute('maskUnits', 'userSpaceOnUse');
+        mask.setAttribute('x', '-40');
+        mask.setAttribute('y', '-40');
+        mask.setAttribute('width', '320');
+        mask.setAttribute('height', '320');
+        mask.innerHTML =
+          `<rect x="-40" y="-40" width="320" height="320" fill="#fff"/>` +
+          `<path d="${headD}" fill="#000"/>`;
+        clone.querySelector('defs').appendChild(mask);
+        clone.querySelectorAll('[id^="ear-"]').forEach((earG) => {
+          const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          wrapper.setAttribute('mask', 'url(#ear-knockout)');
+          earG.parentNode.insertBefore(wrapper, earG);
+          wrapper.appendChild(earG);
+        });
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        clone.setAttribute('width', '1024');
+        clone.setAttribute('height', '1024');
+        return new XMLSerializer().serializeToString(clone);
+      }
+      $('export-svg').addEventListener('click', () => {
+        const svgBlob = new Blob([buildExportSvg()], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024;
+          canvas.height = 1024;
+          canvas.getContext('2d').drawImage(img, 0, 0, 1024, 1024);
+          URL.revokeObjectURL(url);
+          canvas.toBlob((blob) => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `mascotte-${animal.id}-${state}.png`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }, 'image/png');
+        };
+        img.src = url;
+      });
       $('reset-all').addEventListener('click', () => {
         $('turn').value = 0;
         $('spring').value = 7;
@@ -1026,6 +1090,14 @@
         clearTimeout(autoExpressionTimer);
         selectExpression(clamp(Number(params.get('expr')) || 0, 0, EXPRESSIONS.length - 1));
         morph = 1;
+      }
+      if (params.get('testexport') !== null) {
+        setTimeout(() => {
+          document.body.innerHTML =
+            '<div style="background:repeating-conic-gradient(#777 0 25%,#bbb 0 50%) 0 0/28px 28px;padding:20px;width:480px">' +
+            buildExportSvg() +
+            '</div>';
+        }, 900);
       }
       requestAnimationFrame(animate);
     </script>
