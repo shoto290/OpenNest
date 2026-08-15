@@ -1,13 +1,30 @@
 # opennest
 
-Vite monorepo with shadcn/ui.
+Tauri desktop app (macOS and Linux for now) in a Vite monorepo with shadcn/ui.
+
+## Development
+
+```bash
+bun install
+bun run dev
+```
+
+`bun run dev` launches the Tauri app locally (Vite dev server + native window with hot reload).
+
+Requirements: [Bun](https://bun.sh) and the [Rust toolchain](https://rustup.rs). On Linux, install the [Tauri system dependencies](https://tauri.app/start/prerequisites/#linux).
+
+## Building
+
+```bash
+bun run tauri:build
+```
 
 ## Adding components
 
-To add components to your app, run the following command at the root of your `web` app:
+To add components to your app, run the following command at the root of your `app` app:
 
 ```bash
-bunx --bun shadcn@latest add button -c apps/web
+bunx --bun shadcn@latest add button -c apps/app
 ```
 
 This will place the ui components in the `packages/ui/src/components` directory.
