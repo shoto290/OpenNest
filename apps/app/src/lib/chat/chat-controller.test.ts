@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { type ChatController, createChatController } from "./chat-controller"
+import { isSessionReady } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
+
+import type { ClaudeEvent } from "../claude/contract"
 
 const STEP_MS = 10
 
@@ -13,7 +16,10 @@ type Harness = {
 }
 
 function createHarness(): Harness {
-	const driver = createFakeChatDriver({ stepMs: STEP_MS, replyFor: () => "un deux trois quatre cinq six" })
+	const driver = createFakeChatDriver({
+		stepMs: STEP_MS,
+		replyFor: () => "un deux trois quatre cinq six",
+	})
 	const controller = createChatController(driver)
 	const detach = controller.attach()
 	return { driver, controller, detach }
@@ -41,7 +47,10 @@ describe("createChatController", () => {
 		const sending = controller.send("bonjour")
 		const optimistic = controller.getState()
 		expect(optimistic.messages).toHaveLength(1)
-		expect(optimistic.messages[0]).toMatchObject({ role: "user", text: "bonjour" })
+		expect(optimistic.messages[0]).toMatchObject({
+			role: "user",
+			text: "bonjour",
+		})
 		expect(optimistic.turn).toBe("submitting")
 
 		await sending
@@ -67,7 +76,9 @@ describe("createChatController", () => {
 		await controller.send("deuxième")
 
 		const state = controller.getState()
-		expect(state.messages.filter((message) => message.role === "user")).toHaveLength(1)
+		expect(
+			state.messages.filter((message) => message.role === "user"),
+		).toHaveLength(1)
 		expect(state.errors.at(-1)?.error.kind).toBe("turnAlreadyRunning")
 	})
 
@@ -84,7 +95,9 @@ describe("createChatController", () => {
 		expect(state.turn).toBe("idle")
 		const assistant = state.messages.at(-1)
 		expect(assistant?.completion).toBe("cancelled")
-		expect(assistant?.text.length).toBeLessThan("un deux trois quatre cinq six".length)
+		expect(assistant?.text.length).toBeLessThan(
+			"un deux trois quatre cinq six".length,
+		)
 	})
 
 	it("surfaces a failed turn and keeps partial text", async () => {
@@ -117,6 +130,33 @@ describe("createChatController", () => {
 		expect(state.messages.at(-1)?.completion).toBe("complete")
 	})
 
+	it("leaves no permission activity pending after either decision", async () => {
+		for (const decision of ["allowOnce", "deny"] as const) {
+			const { controller } = await startedHarness()
+			await controller.send("liste les fichiers /permission")
+			await vi.runAllTimersAsync()
+
+			const paused = controller.getState()
+			expect(paused.permission).not.toBeNull()
+			expect(
+				paused.activities.some((entry) => entry.status === "pending"),
+			).toBe(true)
+
+			await controller.respond(paused.permission?.id ?? "", decision)
+			await vi.runAllTimersAsync()
+
+			const state = controller.getState()
+			expect(state.permission).toBeNull()
+			expect(
+				state.activities.filter((entry) => entry.status === "pending"),
+			).toEqual([])
+			expect(
+				state.activities.find((entry) => entry.id === paused.permission?.id)
+					?.status,
+			).toBe(decision === "allowOnce" ? "succeeded" : "failed")
+		}
+	})
+
 	it("cancels the turn when the permission is denied", async () => {
 		const { controller } = await startedHarness()
 		await controller.send("supprime tout /permission")
@@ -143,7 +183,10 @@ describe("createChatController", () => {
 	})
 
 	it("retries a rejected optimistic message with the same text", async () => {
-		const fake = createFakeChatDriver({ stepMs: STEP_MS, replyFor: () => "un deux trois" })
+		const fake = createFakeChatDriver({
+			stepMs: STEP_MS,
+			replyFor: () => "un deux trois",
+		})
 		let failNext = true
 		const flaky: ChatDriver = {
 			...fake,
@@ -170,38 +213,126 @@ describe("createChatController", () => {
 
 		const state = controller.getState()
 		expect(state.turn).toBe("idle")
-		expect(state.messages[0]).toMatchObject({ text: "bonjour", completion: "complete" })
-		expect(state.messages.at(-1)).toMatchObject({ role: "assistant", completion: "complete" })
+		expect(state.messages[0]).toMatchObject({
+			text: "bonjour",
+			completion: "complete",
+		})
+		expect(state.messages.at(-1)).toMatchObject({
+			role: "assistant",
+			completion: "complete",
+		})
 	})
 
-	it("resets state on reconnect and drops stale events from the old session", async () => {
+	it("keeps the transcript across a restart that succeeds", async () => {
+		const { controller } = await startedHarness()
+		await controller.send("bonjour")
+		await vi.runAllTimersAsync()
+		const before = controller.getState()
+		expect(before.messages.length).toBeGreaterThan(1)
+
+		await controller.preflight()
+		await vi.runAllTimersAsync()
+
+		const after = controller.getState()
+		expect(after.messages).toEqual(before.messages)
+		expect(after.activities).toEqual(before.activities)
+		expect(isSessionReady(after)).toBe(true)
+		expect(after.turn).toBe("idle")
+	})
+
+	it("keeps the transcript when the restart itself fails", async () => {
 		const { driver, controller } = await startedHarness()
 		await controller.send("bonjour")
-		await vi.advanceTimersByTimeAsync(STEP_MS * 5)
-		const firstSession = controller.getState().sessionId
-		expect(controller.getState().messages.length).toBeGreaterThan(0)
+		await vi.runAllTimersAsync()
+		const before = controller.getState()
+		vi.spyOn(driver, "startOrResumeSession").mockRejectedValue({
+			kind: "spawnFailed",
+			detail: "binaire introuvable",
+		})
 
-		await controller.start()
-		const reset = controller.getState()
-		expect(reset.messages).toHaveLength(0)
-		expect(reset.turn).toBe("idle")
-		expect(reset.sessionId).not.toBe(firstSession)
+		await controller.preflight()
+		await vi.runAllTimersAsync()
 
-		driver.pushEvent({ type: "turnChanged", state: "running" })
-		driver.pushEvent({ type: "messageDelta", id: "fake-msg-1", seq: 99, text: "fantôme" })
-		driver.pushEvent({ type: "turnEnded", ended: { sessionId: firstSession, outcome: "failed" } })
+		const after = controller.getState()
+		expect(after.messages).toEqual(before.messages)
+		expect(after.activities).toEqual(before.activities)
+		expect(after.errors.at(-1)?.error.kind).toBe("spawnFailed")
+		expect(isSessionReady(after)).toBe(false)
+	})
+
+	// A restart re-subscribes, so a frame the dead session emits late reaches the
+	// listener it was registered with, which still carries the old epoch.
+	it("ignores late events from the session that died", async () => {
+		const fake = createFakeChatDriver({ stepMs: STEP_MS })
+		const listeners: Array<(event: ClaudeEvent) => void> = []
+		const driver: ChatDriver = {
+			...fake,
+			subscribe: (onEvent) => {
+				listeners.push(onEvent)
+				return fake.subscribe(onEvent)
+			},
+		}
+		const controller = createChatController(driver)
+		controller.attach()
+		await controller.preflight()
+		await controller.send("bonjour")
+		await vi.runAllTimersAsync()
+
+		await controller.preflight()
+		await vi.runAllTimersAsync()
+		const restarted = controller.getState()
+		const deadListener = listeners[0]
+
+		deadListener({ type: "turnChanged", state: "running" })
+		deadListener({
+			type: "messageDelta",
+			id: "fake-msg-1",
+			seq: 99,
+			text: "fantôme",
+		})
+		deadListener({
+			type: "messageStarted",
+			message: {
+				id: "ghost",
+				role: "assistant",
+				text: "",
+				completion: "streaming",
+				timestamp: 0,
+			},
+		})
+		deadListener({
+			type: "turnEnded",
+			ended: { sessionId: "dead", outcome: "failed" },
+		})
 
 		const state = controller.getState()
+		expect(state.messages).toEqual(restarted.messages)
 		expect(state.turn).toBe("idle")
+	})
+
+	it("drops the transcript only when the conversation is cleared", async () => {
+		const { controller } = await startedHarness()
+		await controller.send("bonjour")
+		await vi.runAllTimersAsync()
+		expect(controller.getState().messages.length).toBeGreaterThan(1)
+
+		controller.clearConversation()
+
+		const state = controller.getState()
 		expect(state.messages).toHaveLength(0)
-		expect(state.sessionId).not.toBe(firstSession)
+		expect(state.activities).toHaveLength(0)
+		expect(isSessionReady(state)).toBe(true)
 	})
 
 	it("leaves stopping deterministically when cancelTurn is rejected", async () => {
-		const fake = createFakeChatDriver({ stepMs: STEP_MS, replyFor: () => "un deux trois" })
+		const fake = createFakeChatDriver({
+			stepMs: STEP_MS,
+			replyFor: () => "un deux trois",
+		})
 		const brokenCancel: ChatDriver = {
 			...fake,
-			cancelTurn: () => Promise.reject({ kind: "writeFailed", detail: "pipe fermé" }),
+			cancelTurn: () =>
+				Promise.reject({ kind: "writeFailed", detail: "pipe fermé" }),
 		}
 		const controller = createChatController(brokenCancel)
 		controller.attach()
@@ -222,7 +353,10 @@ describe("createChatController", () => {
 		await vi.runAllTimersAsync()
 		const state = controller.getState()
 		expect(state.turn).toBe("idle")
-		expect(state.messages.at(-1)).toMatchObject({ role: "assistant", completion: "complete" })
+		expect(state.messages.at(-1)).toMatchObject({
+			role: "assistant",
+			completion: "complete",
+		})
 	})
 
 	it("resumes the same session with a clean slate", async () => {
@@ -234,6 +368,84 @@ describe("createChatController", () => {
 		expect(state.messages).toHaveLength(0)
 	})
 
+	it("opens a session on preflight and collapses concurrent calls into one", async () => {
+		const { driver, controller } = createHarness()
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		const [first, second] = await Promise.all([
+			controller.preflight(),
+			controller.preflight(),
+		])
+		await vi.runAllTimersAsync()
+
+		expect(first).toBe(second)
+		expect(startSpy).toHaveBeenCalledTimes(1)
+		const state = controller.getState()
+		expect(state.connection).toBe("ready")
+		expect(state.binaryVersion).toBe("fake-0.0.1")
+		// The CLI reports its session id on the first prompt, so the composer must
+		// open on `sessionOpen` alone or the first prompt could never be sent.
+		expect(state.sessionOpen).toBe(true)
+		expect(state.sessionId).toBeNull()
+	})
+
+	it("reports an unavailable binary on preflight without opening a session", async () => {
+		const { driver, controller } = createHarness()
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+		vi.spyOn(driver, "check").mockResolvedValue({
+			connection: "unavailable",
+			binaryVersion: null,
+			authenticated: false,
+			error: { kind: "notAuthenticated" },
+		})
+
+		expect(await controller.preflight()).toBeNull()
+		expect(startSpy).not.toHaveBeenCalled()
+		const state = controller.getState()
+		expect(state.connection).toBe("unavailable")
+		expect(state.sessionOpen).toBe(false)
+		expect(state.errors.at(-1)?.error.kind).toBe("notAuthenticated")
+	})
+
+	it("runs a fresh preflight once the previous one settled", async () => {
+		const { driver, controller } = createHarness()
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.preflight()
+		await controller.preflight()
+
+		expect(startSpy).toHaveBeenCalledTimes(2)
+	})
+
+	// Tauri registers event listeners over IPC, so a subscription is not live the
+	// moment `subscribe()` is called. A session that emits from inside
+	// `startOrResumeSession` is exactly the window this guards.
+	it("waits for the subscription before starting, so startup events are not lost", async () => {
+		let listener: ((event: ClaudeEvent) => void) | null = null
+		const driver: ChatDriver = {
+			...createFakeChatDriver({ stepMs: STEP_MS }),
+			startOrResumeSession: () => {
+				listener?.({ type: "sessionReady", sessionId: "s-1", resumed: false })
+				return Promise.resolve({ resumed: false })
+			},
+			subscribe: (onEvent) =>
+				Promise.resolve()
+					.then(() => undefined)
+					.then(() => {
+						listener = onEvent
+						return () => {
+							listener = null
+						}
+					}),
+		}
+		const controller = createChatController(driver)
+		controller.attach()
+
+		await controller.preflight()
+
+		expect(controller.getState().sessionId).toBe("s-1")
+	})
+
 	it("stops notifying detached listeners", async () => {
 		const { controller, detach } = await startedHarness()
 		detach()
@@ -241,7 +453,9 @@ describe("createChatController", () => {
 		const before = controller.getState()
 		await controller.send("bonjour")
 		await vi.runAllTimersAsync()
-		expect(controller.getState().messages).toHaveLength(before.messages.length + 1)
+		expect(controller.getState().messages).toHaveLength(
+			before.messages.length + 1,
+		)
 		expect(controller.getState().messages.at(-1)?.role).toBe("user")
 	})
 })

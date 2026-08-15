@@ -1,11 +1,12 @@
+import { completionForOutcome, turnForOutcome } from "./chat-state"
+import type { ChatDriver } from "./driver"
+
 import type {
 	ChatMessage,
 	ClaudeEvent,
 	PermissionDecision,
 	TurnOutcome,
 } from "../claude/contract"
-import { completionForOutcome, turnForOutcome } from "./chat-state"
-import type { ChatDriver } from "./driver"
 
 export type FakeChatDriver = ChatDriver & {
 	pushEvent: (event: ClaudeEvent) => void
@@ -33,7 +34,9 @@ function toChunks(reply: string): string[] {
 	return chunks
 }
 
-export function createFakeChatDriver(options: FakeChatDriverOptions = {}): FakeChatDriver {
+export function createFakeChatDriver(
+	options: FakeChatDriverOptions = {},
+): FakeChatDriver {
 	const stepMs = options.stepMs ?? 120
 	const replyFor = options.replyFor ?? defaultReply
 	const listeners = new Set<(event: ClaudeEvent) => void>()
@@ -47,6 +50,7 @@ export function createFakeChatDriver(options: FakeChatDriverOptions = {}): FakeC
 	let waiting = false
 	let streaming: ChatMessage | null = null
 	let pendingPermissionId: string | null = null
+	let announced = false
 	let queue: Array<() => void> = []
 	let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -99,6 +103,17 @@ export function createFakeChatDriver(options: FakeChatDriverOptions = {}): FakeC
 		const id = `fake-perm-${permissionSeq}`
 		pendingPermissionId = id
 		waiting = true
+		// The transport announces the wait as an activity row before it asks, so the
+		// pending step is visible in the log and not only in the approval card.
+		emit({
+			type: "activity",
+			activity: {
+				id,
+				title: "Exécuter une commande",
+				kind: "permission",
+				status: "pending",
+			},
+		})
 		emit({
 			type: "permissionRequested",
 			request: {
@@ -139,7 +154,12 @@ export function createFakeChatDriver(options: FakeChatDriverOptions = {}): FakeC
 			() =>
 				emit({
 					type: "activity",
-					activity: { id: activityId, title: "Réflexion", kind: "tool", status: "running" },
+					activity: {
+						id: activityId,
+						title: "Réflexion",
+						kind: "tool",
+						status: "running",
+					},
 				}),
 			() => {
 				streaming = message
@@ -167,7 +187,11 @@ export function createFakeChatDriver(options: FakeChatDriverOptions = {}): FakeC
 			steps.push(() => {
 				emit({
 					type: "failed",
-					error: { kind: "crashed", code: 1, detail: "Panne simulée du faux driver" },
+					error: {
+						kind: "crashed",
+						code: 1,
+						detail: "Panne simulée du faux driver",
+					},
 				})
 				finishTurn("failed")
 			})
@@ -193,9 +217,9 @@ export function createFakeChatDriver(options: FakeChatDriverOptions = {}): FakeC
 			streaming = null
 			pendingPermissionId = null
 			sessionSeq += 1
+			announced = false
 			sessionId = resume ?? `fake-session-${sessionSeq}`
 			emit({ type: "connectionChanged", state: "ready" })
-			emit({ type: "sessionReady", sessionId, resumed: Boolean(resume) })
 			return Promise.resolve({ resumed: Boolean(resume) })
 		},
 
@@ -207,6 +231,12 @@ export function createFakeChatDriver(options: FakeChatDriverOptions = {}): FakeC
 				return Promise.reject({ kind: "turnAlreadyRunning" })
 			}
 			turnActive = true
+			// The CLI only emits `system/init` once it starts answering, so the
+			// session id lands on the first prompt and never before it.
+			if (!announced) {
+				announced = true
+				emit({ type: "sessionReady", sessionId, resumed: false })
+			}
 			queue.push(...buildTurnSteps(text))
 			pump()
 			return Promise.resolve()

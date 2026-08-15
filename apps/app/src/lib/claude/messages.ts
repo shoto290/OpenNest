@@ -3,28 +3,28 @@ import type { TransportError } from "./contract"
 export function describeTransportError(error: TransportError): string {
 	switch (error.kind) {
 		case "binaryNotFound":
-			return `Claude Code introuvable. Emplacements testés : ${error.searched.join(", ")}`
+			return `Claude Code was not found. Locations tried: ${error.searched.join(", ")}`
 		case "notAuthenticated":
-			return "Claude Code n'est pas connecté. Lancez `claude auth login`."
+			return "Claude Code is not signed in. Run `claude auth login`."
 		case "authCheckFailed":
-			return `Vérification d'authentification impossible : ${error.detail}`
+			return `The sign-in check failed: ${error.detail}`
 		case "spawnFailed":
-			return `Démarrage de Claude Code impossible : ${error.detail}`
+			return `Claude Code could not be started: ${error.detail}`
 		case "startupTimeout":
-			return `Claude Code n'a pas répondu en ${error.timeoutMs} ms.`
+			return `Claude Code did not answer within ${error.timeoutMs} ms.`
 		case "crashed":
-			return `Claude Code s'est arrêté (code ${error.code ?? "inconnu"}).`
+			return `Claude Code exited (code ${error.code ?? "unknown"}).`
 		case "invalidFrame":
-			return `Trame illisible ignorée : ${error.detail}`
+			return `An unreadable frame was skipped: ${error.detail}`
 		case "notStarted":
-			return "Aucune session active."
+			return "No session is running."
 		case "turnAlreadyRunning":
-			return "Un tour est déjà en cours."
+			return "A turn is already running."
 		case "noActiveTurn":
-			return "Aucun tour à interrompre."
+			return "There is no turn to interrupt."
 		case "unknownPermission":
-			return `Demande de permission inconnue (${error.id}).`
+			return `Unknown permission request (${error.id}).`
 		case "writeFailed":
-			return `Envoi impossible : ${error.detail}`
+			return `The prompt could not be sent: ${error.detail}`
 	}
 }

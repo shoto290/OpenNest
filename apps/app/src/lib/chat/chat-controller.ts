@@ -1,3 +1,13 @@
+import {
+	type ChatAction,
+	type ChatState,
+	canStopTurn,
+	chatReducer,
+	initialChatState,
+	isTurnBusy,
+} from "./chat-state"
+import type { ChatDriver } from "./driver"
+
 import type {
 	ChatMessage,
 	CheckReport,
@@ -5,8 +15,6 @@ import type {
 	SessionHandle,
 	TransportError,
 } from "../claude/contract"
-import { type ChatAction, type ChatState, chatReducer, initialChatState } from "./chat-state"
-import type { ChatDriver } from "./driver"
 
 export type ChatController = {
 	getState: () => ChatState
@@ -14,6 +22,11 @@ export type ChatController = {
 	attach: () => () => void
 	check: () => Promise<CheckReport | null>
 	start: (resume?: string) => Promise<SessionHandle | null>
+	/** Checks the binary and opens a session when it answers. Deduplicated while in flight. */
+	preflight: (resume?: string) => Promise<SessionHandle | null>
+	/** Drops the transcript on purpose. A restart never does this — a dead session
+	 * clears its own state and leaves what the reader can still see. */
+	clearConversation: () => void
 	send: (text: string) => Promise<void>
 	stop: () => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
@@ -33,6 +46,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 	let epoch = 0
 	let localSeq = 0
 	let detach: Promise<() => void> | null = null
+	let pendingPreflight: Promise<SessionHandle | null> | null = null
 	const listeners = new Set<() => void>()
 
 	const dispatch = (action: ChatAction) => {
@@ -58,12 +72,15 @@ export function createChatController(driver: ChatDriver): ChatController {
 		detach = null
 	}
 
+	/** Resolves once the subscription is live. Tauri registers listeners over IPC,
+	 * so a command issued before this settles loses the events it emits. */
 	const connect = () => {
 		const captured = epoch
 		disconnect()
 		detach = driver.subscribe((event) =>
 			dispatch({ type: "driverEvent", epoch: captured, event }),
 		)
+		return detach
 	}
 
 	const attach = () => {
@@ -93,22 +110,47 @@ export function createChatController(driver: ChatDriver): ChatController {
 	const start = async (resume?: string) => {
 		epoch += 1
 		dispatch({ type: "sessionReset", epoch })
-		if (detach) {
-			connect()
-		}
 		try {
-			return await driver.startOrResumeSession(resume)
+			if (detach) {
+				await connect()
+			}
+			const handle = await driver.startOrResumeSession(resume)
+			dispatch({ type: "sessionOpened" })
+			return handle
 		} catch (reason) {
 			report(reason)
 			return null
 		}
 	}
 
+	const runPreflight = async (resume?: string) => {
+		const checked = await check()
+		if (checked?.connection !== "ready") {
+			return null
+		}
+		return start(resume)
+	}
+
+	const preflight = (resume?: string) => {
+		pendingPreflight ??= runPreflight(resume).finally(() => {
+			pendingPreflight = null
+		})
+		return pendingPreflight
+	}
+
+	const clearConversation = () => {
+		dispatch({ type: "conversationCleared" })
+	}
+
 	const submit = async (message: ChatMessage) => {
 		try {
 			await driver.submitPrompt(message.text)
 		} catch (reason) {
-			dispatch({ type: "promptRejected", id: message.id, error: toTransportError(reason) })
+			dispatch({
+				type: "promptRejected",
+				id: message.id,
+				error: toTransportError(reason),
+			})
 		}
 	}
 
@@ -117,7 +159,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 		if (trimmed.length === 0) {
 			return
 		}
-		if (state.turn !== "idle" && state.turn !== "failed") {
+		if (isTurnBusy(state.turn)) {
 			report({ kind: "turnAlreadyRunning" })
 			return
 		}
@@ -143,10 +185,14 @@ export function createChatController(driver: ChatDriver): ChatController {
 	}
 
 	const stop = async () => {
-		if (state.turn !== "submitting" && state.turn !== "running") {
+		if (!canStopTurn(state.turn)) {
 			return
 		}
-		dispatch({ type: "driverEvent", epoch, event: { type: "turnChanged", state: "stopping" } })
+		dispatch({
+			type: "driverEvent",
+			epoch,
+			event: { type: "turnChanged", state: "stopping" },
+		})
 		try {
 			await driver.cancelTurn()
 		} catch (reason) {
@@ -173,6 +219,8 @@ export function createChatController(driver: ChatDriver): ChatController {
 		attach,
 		check,
 		start,
+		preflight,
+		clearConversation,
 		send,
 		stop,
 		respond,
