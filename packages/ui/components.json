@@ -10,6 +10,9 @@
 		"cssVariables": true
 	},
 	"iconLibrary": "hugeicons",
+	"registries": {
+		"@beui": "https://beui.dev/r/{name}.json"
+	},
 	"aliases": {
 		"components": "@workspace/ui/components",
 		"utils": "@workspace/ui/lib/utils",
