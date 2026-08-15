@@ -1,0 +1,90 @@
+import { expect } from "storybook/test"
+
+import preview from "@workspace/storybook/preview"
+import { listExhaustively, Row } from "@workspace/storybook/story-utils"
+import {
+	ConnectionStatus,
+	type ConnectionStatusState,
+} from "@workspace/ui/components/connection-status"
+
+const CONNECTION_STATUS_STATES = listExhaustively<ConnectionStatusState>({
+	checking: true,
+	ready: true,
+	unavailable: true,
+	crashed: true,
+})
+
+const meta = preview.meta({
+	title: "AI/ConnectionStatus",
+	component: ConnectionStatus,
+	parameters: {
+		layout: "centered",
+		docs: {
+			description: {
+				component:
+					"Reports whether the local Claude Code CLI can be reached, as one quiet line for a header's trailing edge. It owns its own copy and holds no action: recovery belongs to ChatNotice or ChatEmptyState, which is why this never renders a button. It reports the CLI, never the turn — a running turn shows up in the transcript, not here.",
+			},
+		},
+	},
+	args: { state: "ready", version: "2.1.233" },
+	argTypes: {
+		state: { control: "inline-radio", options: CONNECTION_STATUS_STATES },
+	},
+})
+
+export const Default = meta.story({
+	args: { state: "ready", version: "2.1.233" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this once the preflight answered: the binary resolved, reported its version, and the composer below is live. Check that the version renders monospaced next to the label so it reads as data rather than prose. Pick `Variants` to compare it against the three states where typing would fail.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("status")).toHaveTextContent(
+			"Claude Code ready",
+		)
+		await expect(canvas.getByText("v2.1.233")).toBeVisible()
+	},
+})
+
+export const Variants = meta.story({
+	args: { state: "ready" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every state the preflight and the session can land in, top to bottom. Check that `checking` is the only one that animates, and that `unavailable` and `crashed` share the destructive dot while keeping distinct copy — one means the CLI was never reachable, the other that it died mid-session. Pick `ZeroValue` for the window before a version is known.",
+			},
+		},
+	},
+	render: () => (
+		<div className="flex flex-col gap-3">
+			{CONNECTION_STATUS_STATES.map((state) => (
+				<Row key={state}>
+					<ConnectionStatus state={state} version="2.1.233" />
+				</Row>
+			))}
+		</div>
+	),
+})
+
+export const ZeroValue = meta.story({
+	args: { state: "checking", version: null },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the first frame after launch: the check is in flight, so no version exists yet. Check that the version slot collapses instead of rendering an empty `v`, and that the label carries the wait on its own. Pick `Default` once the binary has answered.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("status")).toHaveTextContent(
+			"Checking Claude Code…",
+		)
+		await expect(canvas.queryByText(/^v/)).toBeNull()
+	},
+})

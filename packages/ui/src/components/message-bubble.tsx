@@ -18,7 +18,7 @@ import {
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 export type MessageBubbleVariant =
 	| "solid"
@@ -80,15 +80,6 @@ export interface MessageBubbleCollapsibleProps
 	contentClassName?: string
 	triggerClassName?: string
 	children?: ReactNode
-}
-
-function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
-	return (node: T | null) => {
-		for (const ref of refs) {
-			if (typeof ref === "function") ref(node)
-			else if (ref) ref.current = node
-		}
-	}
 }
 
 const BUBBLE_CONTENT_REVEAL = {
