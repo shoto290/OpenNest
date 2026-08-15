@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Exploration — mascottes animales</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500&display=swap');
+      :root {
+        --page: #f1efe8;
+        --background: #fffdf7;
+        --foreground: #171813;
+        --muted-foreground: #6e7067;
+        --border: #d5d1c5;
+        --primary: #2f66e8;
+        --orange: #e36f3d;
+        --ink: #26241f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #11130f;
+          --background: #1c1f19;
+          --foreground: #f3f0e7;
+          --muted-foreground: #a5a89d;
+          --border: #393d33;
+          --primary: #6f96ff;
+          --orange: #ff8b5e;
+          --ink: #e8e4d8;
+        }
+      }
+      html {
+        background: var(--page);
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        padding: 40px 24px 80px;
+        font-family: 'Azeret Mono', monospace;
+        color: var(--foreground);
+        max-width: 1080px;
+        margin-inline: auto;
+      }
+      h1 {
+        font-family: 'Fraunces', serif;
+        font-weight: 500;
+        font-size: 34px;
+        margin: 0 0 6px;
+      }
+      .kicker {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      p.intro {
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--muted-foreground);
+        max-width: 640px;
+        margin: 10px 0 28px;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        margin-bottom: 28px;
+      }
+      .group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .group-label {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .seg {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .seg button {
+        font: inherit;
+        font-size: 12px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--background);
+        color: var(--foreground);
+        cursor: pointer;
+      }
+      .seg button[aria-pressed='true'] {
+        border-color: var(--primary);
+        color: var(--primary);
+        box-shadow: inset 0 0 0 1px var(--primary);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 20px;
+      }
+      .card {
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px 14px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .card svg {
+        width: 100%;
+        max-width: 230px;
+        height: auto;
+      }
+      .card .name {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .outline {
+        stroke: var(--ink);
+        fill: var(--background);
+        stroke-width: 5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .line {
+        stroke: var(--ink);
+        fill: none;
+        stroke-width: 5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .accent {
+        fill: var(--orange);
+        stroke: none;
+      }
+      .eye-fill {
+        fill: var(--ink);
+      }
+      .blink {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: blink 4.6s infinite;
+      }
+      @keyframes blink {
+        0%, 94%, 100% { transform: scaleY(1); }
+        96%, 98% { transform: scaleY(0.08); }
+      }
+    </style>
+  </head>
+  <body>
+    <span class="kicker">Exploration · avatars IA</span>
+    <h1>Têtes d'animaux</h1>
+    <p class="intro">
+      Style de référence : contour crayon irrégulier, remplissage papier, grands yeux noirs,
+      touches orange. Choisis un trait et une expression — tout est du SVG paramétrable.
+    </p>
+
+    <div class="toolbar">
+      <div class="group">
+        <span class="group-label">Trait</span>
+        <div class="seg" id="style-seg"></div>
+      </div>
+      <div class="group">
+        <span class="group-label">Expression</span>
+        <div class="seg" id="expr-seg"></div>
+      </div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <script>
+      const STYLES = [
+        { id: 'clean', label: 'Propre', width: 4, filter: '' },
+        { id: 'pencil', label: 'Crayon', width: 5, filter: 'url(#rough-soft)' },
+        { id: 'rough', label: 'Esquisse', width: 5.5, filter: 'url(#rough-strong)' },
+        { id: 'double', label: 'Double passe', width: 4.5, filter: 'url(#rough-soft)' },
+      ];
+      const EXPRESSIONS = [
+        { id: 'neutral', label: 'Neutre' },
+        { id: 'happy', label: 'Joyeux' },
+        { id: 'sleepy', label: 'Dodo' },
+      ];
+      let currentStyle = 'pencil';
+      let currentExpr = 'neutral';
+
+      const FILTERS = `
+        <defs>
+          <filter id="rough-soft" x="-15%" y="-15%" width="130%" height="130%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" seed="7" result="n"/>
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
+          </filter>
+          <filter id="rough-strong" x="-15%" y="-15%" width="130%" height="130%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.024" numOctaves="3" seed="3" result="n"/>
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="10"/>
+          </filter>
+          <filter id="rough-alt" x="-15%" y="-15%" width="130%" height="130%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="11" result="n"/>
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="7"/>
+          </filter>
+        </defs>`;
+
+      function eyes(cx1, cx2, cy, scale = 1) {
+        const rx = 10 * scale;
+        const ry = 15 * scale;
+        if (currentExpr === 'neutral') {
+          return `
+            <ellipse class="eye-fill blink" cx="${cx1}" cy="${cy}" rx="${rx}" ry="${ry}"/>
+            <ellipse class="eye-fill blink" cx="${cx2}" cy="${cy}" rx="${rx}" ry="${ry}"/>`;
+        }
+        if (currentExpr === 'happy') {
+          const w = 22 * scale;
+          const h = 12 * scale;
+          return `
+            <path class="line" d="M${cx1 - w / 2},${cy + 3} q${w / 2},-${h} ${w},0"/>
+            <path class="line" d="M${cx2 - w / 2},${cy + 3} q${w / 2},-${h} ${w},0"/>`;
+        }
+        const w = 22 * scale;
+        const h = 9 * scale;
+        return `
+          <path class="line" d="M${cx1 - w / 2},${cy - 2} q${w / 2},${h} ${w},0"/>
+          <path class="line" d="M${cx2 - w / 2},${cy - 2} q${w / 2},${h} ${w},0"/>`;
+      }
+
+      const ANIMALS = [
+        {
+          id: 'cat',
+          name: 'Chat',
+          draw: () => `
+            <path class="outline" d="
+              M64,88
+              C56,66 52,44 56,30
+              C70,34 84,46 92,54
+              C102,47 138,47 148,54
+              C156,46 170,34 184,30
+              C188,44 184,66 176,88
+              C186,102 190,118 188,134
+              C194,138 194,146 187,149
+              C192,155 189,163 181,163
+              C176,177 166,187 152,191
+              C151,198 143,201 138,196
+              C133,204 123,206 119,199
+              C114,206 105,204 101,196
+              C96,201 89,198 88,191
+              C74,187 64,177 59,163
+              C51,163 48,155 53,149
+              C46,146 46,138 52,134
+              C50,118 54,102 64,88 Z"/>
+            <path class="accent" d="M62,64 L68,40 L86,56 Z"/>
+            <path class="accent" d="M178,64 L172,40 L154,56 Z"/>
+            ${eyes(94, 146, 126)}
+            <path class="accent" d="M113,146 h14 l-7,9 Z"/>`,
+        },
+        {
+          id: 'fox',
+          name: 'Renard',
+          draw: () => `
+            <path class="outline" d="
+              M58,92
+              C46,68 40,42 44,26
+              C62,32 80,46 90,54
+              C102,46 138,46 150,54
+              C160,46 178,32 196,26
+              C200,42 194,68 182,92
+              C192,108 194,126 186,140
+              C192,145 190,153 182,155
+              C172,176 150,188 120,188
+              C90,188 68,176 58,155
+              C50,153 48,145 54,140
+              C46,126 48,108 58,92 Z"/>
+            <path class="accent" d="M58,72 L52,36 L82,56 Z"/>
+            <path class="accent" d="M182,72 L188,36 L158,56 Z"/>
+            ${eyes(94, 146, 124)}
+            <path class="accent" d="M113,146 h14 l-7,9 Z"/>`,
+        },
+        {
+          id: 'rabbit',
+          name: 'Lapin',
+          draw: () => `
+            <path class="outline" d="
+              M94,98
+              C80,78 74,44 82,20
+              C98,26 108,58 110,88
+              C116,84 124,84 130,88
+              C132,58 142,26 158,20
+              C166,44 160,78 146,98
+              C164,110 176,130 176,150
+              C176,182 152,204 120,204
+              C88,204 64,182 64,150
+              C64,130 76,110 94,98 Z"/>
+            <path class="accent" d="M92,80 C86,62 85,44 90,32 C98,42 101,64 101,80 Z"/>
+            <path class="accent" d="M148,80 C154,62 155,44 150,32 C142,42 139,64 139,80 Z"/>
+            ${eyes(96, 144, 144)}
+            <path class="accent" d="M114,162 h12 l-6,8 Z"/>`,
+        },
+        {
+          id: 'bear',
+          name: 'Ours',
+          draw: () => `
+            <path class="outline" d="
+              M78,82
+              C62,70 60,50 74,42
+              C84,36 98,42 102,54
+              C114,47 126,47 138,54
+              C142,42 156,36 166,42
+              C180,50 178,70 162,82
+              C176,96 184,118 184,140
+              C184,176 156,200 120,200
+              C84,200 56,176 56,140
+              C56,118 64,96 78,82 Z"/>
+            <circle class="accent" cx="82" cy="56" r="8"/>
+            <circle class="accent" cx="158" cy="56" r="8"/>
+            ${eyes(94, 146, 128)}
+            <path class="accent" d="M112,150 h16 l-8,10 Z"/>
+            <path class="line" d="M112,168 q8,6 16,0"/>`,
+        },
+        {
+          id: 'chick',
+          name: 'Poussin',
+          draw: () => `
+            <path class="outline" d="
+              M98,66
+              C104,58 112,52 114,42
+              C118,50 118,56 116,62
+              C122,52 130,46 140,46
+              C136,54 130,62 126,66
+              C154,72 178,98 178,136
+              C178,172 152,198 120,198
+              C88,198 62,172 62,136
+              C62,98 76,72 98,66 Z"/>
+            ${eyes(98, 142, 126, 0.9)}
+            <path class="accent" d="M110,140 L120,134 L130,140 L120,150 Z"/>`,
+        },
+        {
+          id: 'dog',
+          name: 'Chien',
+          draw: () => `
+            <path class="outline" d="
+              M74,80
+              C60,88 50,106 48,126
+              C46,146 52,160 62,166
+              C68,162 72,154 74,146
+              C82,178 100,192 120,192
+              C140,192 158,178 166,146
+              C168,154 172,162 178,166
+              C188,160 194,146 192,126
+              C190,106 180,88 166,80
+              C154,64 86,64 74,80 Z"/>
+            ${eyes(96, 144, 122)}
+            <path class="accent" d="M112,144 h16 l-8,10 Z"/>
+            <path class="line" d="M120,154 v10 M112,170 q8,6 16,0"/>`,
+        },
+      ];
+
+      function render() {
+        const grid = document.getElementById('grid');
+        grid.innerHTML = '';
+        const style = STYLES.find((s) => s.id === currentStyle);
+        for (const animal of ANIMALS) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          const art = animal.draw();
+          const doublePass =
+            currentStyle === 'double'
+              ? `<g filter="url(#rough-alt)" opacity="0.45" style="--sw:${style.width}px">${art}</g>`
+              : '';
+          card.innerHTML = `
+            <svg viewBox="0 0 240 240" style="stroke-width:${style.width}">
+              ${FILTERS}
+              ${doublePass}
+              <g ${style.filter ? `filter="${style.filter}"` : ''}>${art}</g>
+            </svg>
+            <span class="name">${animal.name}</span>`;
+          card.querySelectorAll('.outline, .line').forEach((el) => {
+            el.style.strokeWidth = style.width;
+          });
+          grid.appendChild(card);
+        }
+      }
+
+      function buildSeg(elId, items, get, set) {
+        const el = document.getElementById(elId);
+        for (const item of items) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = item.label;
+          b.setAttribute('aria-pressed', String(get() === item.id));
+          b.addEventListener('click', () => {
+            set(item.id);
+            el.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+            b.setAttribute('aria-pressed', 'true');
+            render();
+          });
+          el.appendChild(b);
+        }
+      }
+
+      buildSeg('style-seg', STYLES, () => currentStyle, (v) => (currentStyle = v));
+      buildSeg('expr-seg', EXPRESSIONS, () => currentExpr, (v) => (currentExpr = v));
+      render();
+    </script>
+  </body>
+</html>

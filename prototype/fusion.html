@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Fusion — esquisse × moteur GrokBot</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500&display=swap');
+      :root {
+        --page: #f1efe8;
+        --background: #fffdf7;
+        --foreground: #171813;
+        --muted-foreground: #6e7067;
+        --border: #d5d1c5;
+        --primary: #2f66e8;
+        --orange: #e36f3d;
+        --ink: #26241f;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #11130f;
+          --background: #1c1f19;
+          --foreground: #f3f0e7;
+          --muted-foreground: #a5a89d;
+          --border: #393d33;
+          --primary: #6f96ff;
+          --orange: #ff8b5e;
+          --ink: #e8e4d8;
+        }
+      }
+      html {
+        background: var(--page);
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0 auto;
+        padding: 36px 24px 80px;
+        font-family: 'Azeret Mono', monospace;
+        color: var(--foreground);
+        max-width: 1080px;
+      }
+      h1 {
+        font-family: 'Fraunces', serif;
+        font-weight: 500;
+        font-size: 32px;
+        margin: 0 0 6px;
+      }
+      .kicker {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 24px;
+        align-items: start;
+        margin-top: 24px;
+      }
+      @media (max-width: 820px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+      }
+      .preview {
+        position: sticky;
+        top: 24px;
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .preview svg {
+        width: 100%;
+        height: auto;
+        touch-action: none;
+      }
+      .status-line {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+      .status-line strong {
+        color: var(--foreground);
+        font-weight: 500;
+      }
+      .panel {
+        background: var(--background);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .panel h3 {
+        margin: 0 0 10px;
+        font-family: 'Fraunces', serif;
+        font-weight: 500;
+        font-size: 17px;
+      }
+      .seg {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .seg button,
+      .action {
+        font: inherit;
+        font-size: 12px;
+        padding: 7px 13px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--background);
+        color: var(--foreground);
+        cursor: pointer;
+      }
+      .seg button[aria-pressed='true'] {
+        border-color: var(--primary);
+        color: var(--primary);
+        box-shadow: inset 0 0 0 1px var(--primary);
+      }
+      .action.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      .expression-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+        gap: 6px;
+      }
+      .expression-grid button {
+        font: inherit;
+        font-size: 11px;
+        padding: 6px 0;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--background);
+        color: var(--foreground);
+        cursor: pointer;
+      }
+      .expression-grid button[aria-pressed='true'] {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+      .state-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .state-group span {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        margin-bottom: 6px;
+      }
+      .control {
+        display: block;
+        margin-top: 12px;
+        font-size: 12px;
+      }
+      .control-head {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+      input[type='range'] {
+        width: 100%;
+        accent-color: var(--primary);
+      }
+      .switch-line {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        margin-top: 10px;
+      }
+      .button-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .outline {
+        stroke: var(--stroke-c, var(--ink));
+        fill: var(--background);
+        stroke-width: 5.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .line {
+        stroke: var(--stroke-c, var(--ink));
+        fill: none;
+        stroke-width: 5.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .accent {
+        fill: var(--orange);
+        stroke: none;
+      }
+      .eye {
+        fill: var(--eye-c, var(--ink));
+      }
+      .blush {
+        transition: opacity 0.5s ease;
+      }
+      .swatch-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .swatch-row > span {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        width: 84px;
+        flex-shrink: 0;
+      }
+      .swatch {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        padding: 0;
+      }
+      .swatch[aria-pressed='true'] {
+        box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--primary);
+      }
+      .spark {
+        pointer-events: none;
+        fill: var(--background);
+      }
+      .nav {
+        font-size: 12px;
+        margin: 6px 0 0;
+      }
+      .nav a {
+        color: var(--primary);
+        text-decoration: none;
+      }
+      .nav span {
+        color: var(--muted-foreground);
+      }
+    </style>
+  </head>
+  <body>
+    <span class="kicker">Prototype · esquisse × moteur d'animation</span>
+    <h1>Mascotte animale animée</h1>
+    <p class="nav"><span>Proto A — esquisse</span> · <a href="fusion-b.html">Proto B — rond</a> · <a href="fusion-c.html">Proto C — kawaii</a></p>
+
+    <div class="shell">
+      <aside class="preview">
+        <svg id="stage" viewBox="0 0 240 240">
+          <defs>
+            <filter id="sketch" x="-15%" y="-15%" width="130%" height="130%">
+              <feTurbulence id="boil-noise" type="fractalNoise" baseFrequency="0.024" numOctaves="3" seed="3" result="n"/>
+              <feDisplacementMap in="SourceGraphic" in2="n" scale="10"/>
+            </filter>
+            <clipPath id="face-clip"><path id="clip-path-el" d=""/></clipPath>
+          </defs>
+          <g filter="url(#sketch)">
+            <g id="rig">
+              <g id="head-art"></g>
+              <g clip-path="url(#face-clip)">
+                <g id="face-map">
+                  <path class="eye" id="eye-0"/>
+                  <path class="eye" id="eye-1"/>
+                </g>
+              </g>
+              <g id="features"></g>
+            </g>
+          </g>
+        </svg>
+        <div class="status-line">
+          <span>État <strong id="status-state">waiting</strong></span>
+          <span>Expression <strong id="status-expression">00</strong></span>
+        </div>
+        <div class="button-row">
+          <button class="action primary" id="blink-now" type="button">Cligner</button>
+          <button class="action" id="reset-all" type="button">Réinitialiser</button>
+        </div>
+      </aside>
+
+      <main>
+        <div class="panel">
+          <h3>Animal</h3>
+          <div class="seg" id="animal-seg"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Couleur</h3>
+          <div class="swatch-row"><span>Bordures</span><div class="seg" id="stroke-swatches"></div></div>
+          <div class="swatch-row"><span>Yeux</span><div class="seg" id="eye-swatches"></div></div>
+        </div>
+
+        <div class="panel">
+          <h3>État</h3>
+          <div class="state-groups" id="state-groups"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Expression manuelle</h3>
+          <div class="expression-grid" id="expression-grid"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Réglages</h3>
+          <label class="control">
+            <span class="control-head"><span>Rotation</span><output id="turn-output">0°</output></span>
+            <input id="turn" type="range" min="-100" max="100" value="0" step="1" />
+          </label>
+          <label class="control">
+            <span class="control-head"><span>Vitesse du ressort</span><output id="spring-output">7.0</output></span>
+            <input id="spring" type="range" min="4" max="12" value="7" step=".5" />
+          </label>
+          <div class="switch-line">
+            <label for="boil">Trait vivant (états actifs seulement)</label>
+            <input id="boil" type="checkbox" checked />
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="engine-data.js"></script>
+    <script>
+      const { EXPRESSIONS, GROUPS, POOLS, EXPR_CADENCE, BLINK } = window.GROKBOT_DATA;
+      const $ = (id) => document.getElementById(id);
+
+      const CENTER = 114.2705;
+      const makeUwuExpression = () => {
+        const width = 42;
+        const depth = 15;
+        const thick = 9;
+        const cy = 96;
+        const makeEye = (cx) => {
+          const ring = [];
+          for (let i = 0; i < 24; i++) {
+            const t = i / 23;
+            ring.push([cx - width / 2 + width * t, cy + depth * Math.sin(Math.PI * t)]);
+          }
+          for (let i = 0; i < 24; i++) {
+            const t = 1 - i / 23;
+            ring.push([cx - width / 2 + width * t, cy + depth * Math.sin(Math.PI * t) - thick]);
+          }
+          return ring;
+        };
+        return [makeEye(CENTER - 38), makeEye(CENTER + 38)];
+      };
+      EXPRESSIONS.push(makeUwuExpression());
+      const UWU = EXPRESSIONS.length - 1;
+
+      GROUPS['Cycle de vie'] = ['waiting', ...GROUPS['Cycle de vie']];
+      POOLS.waiting = [UWU];
+      EXPR_CADENCE.waiting = [9000, 16000];
+      BLINK.waiting = null;
+      const EAR_POSES = {
+        neutral: { rot: 0, sy: 1 },
+        soft: { rot: 6, sy: 0.98 },
+        perk: { rot: -8, sy: 1.1 },
+        flat: { rot: 26, sy: 0.88 },
+        back: { rot: 16, sy: 0.82 },
+      };
+      const EAR_STATE = {
+        waiting: 'soft', happy: 'soft', laughing: 'soft', proud: 'soft', idle: 'soft', humming: 'soft',
+        listening: 'perk', searching: 'perk', curious: 'perk', excited: 'perk', surprised: 'perk',
+        notifying: 'perk', alerting: 'perk', dictating: 'perk', receiving: 'perk', spawning: 'perk',
+        playful: 'perk', celebrate: 'perk', waking: 'perk', dragging: 'perk',
+        scared: 'flat', sad: 'flat', shy: 'flat', sleeping: 'flat', drowsy: 'flat', bored: 'flat',
+        'powering-down': 'flat',
+        angry: 'back', suspicious: 'back',
+      };
+      const PASSIVE = new Set(['waiting', 'sleeping', 'idle', 'bored', 'drowsy', 'powering-down']);
+      const HAPPY = new Set(['waiting', 'happy', 'laughing', 'playful', 'celebrate', 'excited', 'proud']);
+
+      const ANIMALS = [
+        {
+          id: 'cat',
+          name: 'Chat',
+          faceY: 122,
+          scale: 0.52,
+          head: `
+            M58,92 C64,64 88,48 120,48 C152,48 176,64 182,92
+            C192,108 194,126 186,140 C192,145 190,153 182,155
+            C172,176 150,188 120,188 C90,188 68,176 58,155
+            C50,153 48,145 54,140 C46,126 48,108 58,92 Z`,
+          ears: [
+            {
+              pivot: [72, 72],
+              side: -1,
+              art: `<path class="outline" d="M56,96 C44,72 40,44 46,26 C64,32 82,46 94,58 C78,64 64,78 56,96 Z"/>
+                    <path class="accent" d="M60,74 L56,42 L82,58 Z"/>`,
+            },
+            {
+              pivot: [168, 72],
+              side: 1,
+              art: `<path class="outline" d="M184,96 C196,72 200,44 194,26 C176,32 158,46 146,58 C162,64 176,78 184,96 Z"/>
+                    <path class="accent" d="M180,74 L184,42 L158,58 Z"/>`,
+            },
+          ],
+          extras: ``,
+          nose: `<path class="accent" d="M113,152 h14 l-7,9 Z"/>`,
+          mouth: `<path class="line" d="M112,166 q8,6 16,0"/>`,
+          mouthC: [120, 169],
+          noseTop: 152,
+        },
+        {
+          id: 'rabbit',
+          name: 'Lapin',
+          faceY: 148,
+          scale: 0.42,
+          head: `
+            M120,92 C154,92 178,116 178,148 C178,181 153,204 120,204
+            C87,204 62,181 62,148 C62,116 86,92 120,92 Z`,
+          ears: [
+            {
+              pivot: [96, 98],
+              side: -1,
+              art: `<path class="outline" d="M90,102 C74,84 66,46 76,20 C93,26 104,60 106,94 C100,96 94,98 90,102 Z"/>
+                    <path class="accent" d="M88,78 C83,62 82,44 86,34 C94,44 97,62 97,78 Z"/>`,
+            },
+            {
+              pivot: [144, 98],
+              side: 1,
+              art: `<path class="outline" d="M150,102 C166,84 174,46 164,20 C147,26 136,60 134,94 C140,96 146,98 150,102 Z"/>
+                    <path class="accent" d="M152,78 C157,62 158,44 154,34 C146,44 143,62 143,78 Z"/>`,
+            },
+          ],
+          extras: ``,
+          nose: `<path class="accent" d="M114,164 h12 l-6,8 Z"/>`,
+          mouth: `<path class="line" d="M110,178 q5,5 10,0 q5,5 10,0"/>`,
+          mouthC: [120, 181],
+          noseTop: 164,
+        },
+        {
+          id: 'bear',
+          name: 'Ours',
+          faceY: 128,
+          scale: 0.5,
+          head: `
+            M120,70 C154,70 184,96 184,140 C184,176 156,200 120,200
+            C84,200 56,176 56,140 C56,96 86,70 120,70 Z`,
+          ears: [
+            {
+              pivot: [80, 76],
+              side: -1,
+              art: `<circle class="outline" cx="78" cy="64" r="19"/>
+                    <circle class="accent" cx="78" cy="64" r="8"/>`,
+            },
+            {
+              pivot: [160, 76],
+              side: 1,
+              art: `<circle class="outline" cx="162" cy="64" r="19"/>
+                    <circle class="accent" cx="162" cy="64" r="8"/>`,
+            },
+          ],
+          extras: ``,
+          nose: `<path class="accent" d="M112,158 h16 l-8,10 Z"/>`,
+          mouth: `<path class="line" d="M112,174 q8,6 16,0"/>`,
+          mouthC: [120, 177],
+          noseTop: 158,
+        },
+        {
+          id: 'chick',
+          name: 'Poussin',
+          faceY: 128,
+          scale: 0.46,
+          head: `
+            M102,64 C108,60 116,60 122,64 C152,72 178,98 178,136
+            C178,172 152,198 120,198 C88,198 62,172 62,136
+            C62,98 76,72 102,64 Z`,
+          ears: [
+            {
+              pivot: [114, 62],
+              side: 1,
+              art: `<path class="outline" d="M100,66 C102,56 108,48 112,38 C116,46 117,54 116,60 C122,52 130,47 138,48 C134,56 128,62 122,66 C115,62 107,62 100,66 Z"/>`,
+            },
+          ],
+          extras: ``,
+          nose: `<path class="accent" d="M110,150 L120,144 L130,150 L120,160 Z"/>`,
+          mouth: ``,
+          mouthC: [120, 150],
+          noseTop: 144,
+        },
+        {
+          id: 'dog',
+          name: 'Chien',
+          faceY: 124,
+          scale: 0.48,
+          head: `
+            M120,64 C144,64 162,78 168,102 C172,116 172,134 166,148
+            C156,178 140,192 120,192 C100,192 84,178 74,148
+            C68,134 68,116 72,102 C78,78 96,64 120,64 Z`,
+          ears: [
+            {
+              pivot: [76, 88],
+              side: -1,
+              art: `<path class="outline" d="M78,82 C62,86 52,102 50,122 C48,142 54,156 64,162 C74,154 80,138 80,118 C80,104 79,92 78,82 Z"/>
+                    <path class="accent" d="M66,100 C58,112 56,128 61,140 C69,134 73,120 73,108 Z"/>`,
+            },
+            {
+              pivot: [164, 88],
+              side: 1,
+              art: `<path class="outline" d="M162,82 C178,86 188,102 190,122 C192,142 186,156 176,162 C166,154 160,138 160,118 C160,104 161,92 162,82 Z"/>
+                    <path class="accent" d="M174,100 C182,112 184,128 179,140 C171,134 167,120 167,108 Z"/>`,
+            },
+          ],
+          extras: ``,
+          nose: `<path class="accent" d="M112,152 h16 l-8,10 Z"/>`,
+          mouth: `<path class="line" d="M120,162 v6 M112,176 q8,6 16,0"/>`,
+          mouthC: [120, 172],
+          noseTop: 152,
+        },
+      ];
+
+      const RADIUS = 105;
+      const meanCentroid = (rings) => {
+        let x = 0, y = 0, n = 0;
+        for (const ring of rings) {
+          for (const p of ring) { x += p[0]; y += p[1]; n++; }
+        }
+        return [x / n, y / n];
+      };
+      const EYE_HOME = (() => {
+        let x = 0, y = 0;
+        for (const rings of EXPRESSIONS) {
+          const m = meanCentroid(rings);
+          x += m[0];
+          y += m[1];
+        }
+        return [x / EXPRESSIONS.length, y / EXPRESSIONS.length];
+      })();
+      const ringHeight = (ring) => {
+        let min = Infinity, max = -Infinity;
+        for (const p of ring) {
+          min = Math.min(min, p[1]);
+          max = Math.max(max, p[1]);
+        }
+        return max - min;
+      };
+      const eyesHeight = (rings) => (ringHeight(rings[0]) + ringHeight(rings[1])) / 2;
+      const EYES_BASE_HEIGHT = eyesHeight(EXPRESSIONS[0]);
+      const eyesBottom = (rings) => {
+        let max = -Infinity;
+        for (const ring of rings) for (const p of ring) max = Math.max(max, p[1]);
+        return max;
+      };
+      const EYES_HOME_BOTTOM =
+        EXPRESSIONS.reduce((sum, rings) => sum + eyesBottom(rings), 0) / EXPRESSIONS.length;
+
+      let animal = ANIMALS[0];
+      let expression = 0;
+      let currentRings = EXPRESSIONS[0].map((r) => r.map((p) => [p[0], p[1]]));
+      let targetRings = EXPRESSIONS[0];
+      let morph = 1;
+      let velocity = 0;
+      let lastFrame = performance.now();
+      let blinkStart = null;
+      let state = 'idle';
+      let autoExpressionTimer = null;
+      let earCur = { rot: 0, sy: 1 };
+      let autoBlinkTimer = null;
+
+      const centroid = (ring) => {
+        let x = 0, y = 0;
+        ring.forEach((p) => { x += p[0]; y += p[1]; });
+        return [x / ring.length, y / ring.length];
+      };
+      const pathFrom = (ring) =>
+        'M' + ring.map((p) => p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join('L') + 'Z';
+      const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+      function displayedRings() {
+        return currentRings.map((ring, eye) =>
+          ring.map((p, i) => [
+            p[0] + (targetRings[eye][i][0] - p[0]) * clamp(morph, 0, 1),
+            p[1] + (targetRings[eye][i][1] - p[1]) * clamp(morph, 0, 1),
+          ])
+        );
+      }
+
+      function selectExpression(index) {
+        currentRings = displayedRings();
+        targetRings = EXPRESSIONS[index];
+        expression = index;
+        morph = 0;
+        velocity = 0;
+        document
+          .querySelectorAll('.expression-grid button')
+          .forEach((b, i) => b.setAttribute('aria-pressed', String(i === index)));
+        $('status-expression').textContent = String(index).padStart(2, '0');
+      }
+
+      function blinkScale(now) {
+        if (blinkStart === null) return 1;
+        const t = (now - blinkStart) / 320;
+        if (t >= 1) { blinkStart = null; return 1; }
+        return Math.max(t < 0.42 ? 1 - t / 0.42 : (t - 0.42) / 0.58, 0.04);
+      }
+
+      function setAnimal(next) {
+        animal = next;
+        $('head-art').innerHTML =
+          animal.ears.map((e, i) => `<g id="ear-${i}">${e.art}</g>`).join('') +
+          `<path class="outline" d="${animal.head}"/>${animal.extras}` +
+          `<g id="blush-g" class="blush" opacity="0">` +
+          `<ellipse class="accent" rx="9" ry="4.5"/>` +
+          `<ellipse class="accent" rx="9" ry="4.5"/>` +
+          `</g>`;
+        $('features').innerHTML =
+          `<g id="nose-g">${animal.nose}</g><g id="mouth-g">${animal.mouth}</g>`;
+        updateBlush();
+        $('clip-path-el').setAttribute('d', animal.head);
+        const s = animal.scale;
+        $('face-map').setAttribute(
+          'transform',
+          `translate(120 ${animal.faceY}) scale(${s}) translate(${-CENTER} ${-CENTER})`
+        );
+        document
+          .querySelectorAll('#animal-seg button')
+          .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.id === animal.id)));
+      }
+
+      function render(now) {
+        const rings = displayedRings();
+        const gazeX = 0;
+        const gazeY = 0;
+        const turn = (Number($('turn').value) * Math.PI) / 180;
+        const blink = blinkScale(now);
+        const s = animal.scale;
+        const k = Math.min(1, 64 / Math.max(1, eyesHeight(rings) * s));
+        $('face-map').setAttribute(
+          'transform',
+          `translate(120 ${animal.faceY}) scale(${(s * k).toFixed(4)}) translate(${-CENTER} ${-CENTER})`
+        );
+        const eyeInfo = [];
+        rings.forEach((ring, index) => {
+          const c = centroid(ring);
+          const offset = c[0] - CENTER;
+          const baseLongitude = Math.asin(clamp(offset / RADIUS, -1, 1));
+          const longitude = baseLongitude + turn;
+          const depth = Math.cos(longitude);
+          const perspective = Math.max(depth, 0.02) / Math.max(Math.cos(baseLongitude), 0.02);
+          const x = CENTER + RADIUS * Math.sin(longitude) + gazeX;
+          const y = c[1] + gazeY;
+          const sx = clamp(perspective, 0.02, 2.4);
+          const sy = clamp(blink, 0.02, 2.4);
+          const el = $('eye-' + index);
+          el.setAttribute('d', pathFrom(ring));
+          el.setAttribute(
+            'transform',
+            `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${sx.toFixed(4)} ${sy.toFixed(4)}) translate(${(-c[0]).toFixed(2)} ${(-c[1]).toFixed(2)})`
+          );
+          el.style.opacity = depth > 0.02 ? '1' : '0';
+          let ringBot = -Infinity;
+          for (const p of ring) ringBot = Math.max(ringBot, p[1]);
+          eyeInfo[index] = {
+            ax: 120 + (x - CENTER) * s * k,
+            abot: animal.faceY + (ringBot - CENTER) * s * k,
+          };
+        });
+        const sinT = Math.sin(turn);
+        const mean = meanCentroid(rings);
+        const faceDx = mean[0] - EYE_HOME[0];
+        const faceDy = mean[1] - EYE_HOME[1];
+        const breath = Math.sin(now * 0.0016);
+        const rigDx = sinT * 20 + faceDx * s * 0.5;
+        const rigDy = faceDy * s * 0.5 + breath * 1.3;
+        const tilt = faceDx * 0.12 + sinT * 3;
+        const squeeze = 1 - 0.1 * (1 - Math.cos(turn));
+        const stretch = clamp(velocity * 0.025, -0.09, 0.13);
+        $('rig').setAttribute(
+          'transform',
+          `translate(${(120 + rigDx).toFixed(2)} ${(132 + rigDy).toFixed(2)}) ` +
+            `rotate(${tilt.toFixed(2)}) ` +
+            `scale(${(squeeze * (1 - stretch * 0.5)).toFixed(4)} ${(1 + stretch).toFixed(4)}) ` +
+            `translate(-120 -132)`
+        );
+        const earPose = EAR_POSES[EAR_STATE[state] || 'neutral'];
+        earCur.rot += (earPose.rot - earCur.rot) * 0.1;
+        earCur.sy += (earPose.sy - earCur.sy) * 0.1;
+        const earWiggle = clamp(velocity, -3, 3) * 1.4 + faceDx * 0.06;
+        animal.ears.forEach((e, i) => {
+          const g = $('ear-' + i);
+          if (!g) return;
+          const angle = e.side * earCur.rot + earWiggle;
+          g.setAttribute(
+            'transform',
+            `translate(${e.pivot[0]} ${e.pivot[1]}) rotate(${angle.toFixed(2)}) ` +
+              `scale(1 ${earCur.sy.toFixed(3)}) translate(${-e.pivot[0]} ${-e.pivot[1]})`
+          );
+        });
+        const openness = clamp(eyesHeight(rings) / EYES_BASE_HEIGHT, 0.25, 2.2);
+        const bounce = clamp(Math.abs(velocity) * 0.05, 0, 0.3);
+        const mouthSy = clamp((0.55 + 0.45 * openness) * (0.6 + 0.4 * blink) * (1 + bounce), 0.35, 1.35);
+        const mouthSx = clamp(
+          1 - (openness - 1) * 0.08 + bounce * 0.2 + Math.max(0, 0.7 - openness) * 0.3,
+          0.85,
+          1.25
+        );
+        const featDy = faceDy * 0.3 + (eyesBottom(rings) - EYES_HOME_BOTTOM) * 0.45;
+        const eyesBotA = animal.faceY + (eyesBottom(rings) - CENTER) * s * k;
+        let noseDy = featDy * s;
+        noseDy = Math.max(noseDy, eyesBotA + 5 - animal.noseTop);
+        $('nose-g').setAttribute(
+          'transform',
+          `translate(${(sinT * 26 * s + faceDx * s * 0.85).toFixed(2)} ${noseDy.toFixed(2)})`
+        );
+        const mc = animal.mouthC;
+        $('mouth-g').setAttribute(
+          'transform',
+          `translate(${(sinT * 40 * s + faceDx * s * 0.9).toFixed(2)} ${(noseDy * 1.08).toFixed(2)}) ` +
+            `translate(${mc[0]} ${mc[1]}) scale(${mouthSx.toFixed(3)} ${mouthSy.toFixed(3)}) ` +
+            `translate(${-mc[0]} ${-mc[1]})`
+        );
+        document.querySelectorAll('#blush-g ellipse').forEach((el, i) => {
+          const info = eyeInfo[i];
+          if (!info) return;
+          const out = Math.sign(info.ax - 120) || (i === 0 ? -1 : 1);
+          el.setAttribute('cx', (info.ax + out * 9).toFixed(2));
+          el.setAttribute('cy', Math.max(info.abot + 9, animal.faceY + 6).toFixed(2));
+        });
+        $('turn-output').textContent = $('turn').value + '°';
+        $('spring-output').textContent = Number($('spring').value).toFixed(1);
+      }
+
+      function animate(now) {
+        const dt = Math.min((now - lastFrame) / 1000, 0.1);
+        lastFrame = now;
+        const frequency = Number($('spring').value);
+        velocity += (-2 * frequency * velocity - frequency * frequency * (morph - 1)) * dt;
+        morph += velocity * dt;
+        if (!Number.isFinite(morph)) { morph = 1; velocity = 0; }
+        render(now);
+        requestAnimationFrame(animate);
+      }
+
+      function scheduleBlink() {
+        clearTimeout(autoBlinkTimer);
+        const cadence = BLINK[state];
+        if (!cadence) return;
+        const delay = cadence[0] + Math.random() * (cadence[1] - cadence[0]);
+        autoBlinkTimer = setTimeout(() => {
+          blinkStart = performance.now();
+          scheduleBlink();
+        }, delay);
+      }
+
+      function scheduleExpression() {
+        clearTimeout(autoExpressionTimer);
+        const cadence = EXPR_CADENCE[state];
+        const pool = POOLS[state];
+        if (!cadence || !pool) return;
+        const delay = cadence[0] + Math.random() * (cadence[1] - cadence[0]);
+        autoExpressionTimer = setTimeout(() => {
+          const alternatives = pool.filter((x) => x !== expression);
+          const next = alternatives.length
+            ? alternatives[Math.floor(Math.random() * alternatives.length)]
+            : pool[0];
+          selectExpression(next);
+          scheduleExpression();
+        }, delay);
+      }
+
+      function updateBlush() {
+        const el = $('blush-g');
+        if (el) el.style.opacity = HAPPY.has(state) ? '0.9' : '0';
+      }
+
+      function setState(next) {
+        state = next;
+        $('status-state').textContent = state + (PASSIVE.has(state) ? ' · calme' : ' · actif');
+        selectExpression(POOLS[state][0]);
+        scheduleExpression();
+        scheduleBlink();
+        updateBlush();
+        document
+          .querySelectorAll('#state-groups button')
+          .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.state === state)));
+      }
+
+      const BOIL_SEEDS = [3, 9, 17];
+      let boilIndex = 0;
+      setInterval(() => {
+        if (!$('boil').checked || PASSIVE.has(state)) return;
+        boilIndex = (boilIndex + 1) % BOIL_SEEDS.length;
+        $('boil-noise').setAttribute('seed', BOIL_SEEDS[boilIndex]);
+      }, 140);
+
+      $('blink-now').addEventListener('click', () => { blinkStart = performance.now(); });
+      $('reset-all').addEventListener('click', () => {
+        $('turn').value = 0;
+        $('spring').value = 7;
+        setState('waiting');
+      });
+
+      for (const a of ANIMALS) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.id = a.id;
+        b.textContent = a.name;
+        b.addEventListener('click', () => setAnimal(a));
+        $('animal-seg').appendChild(b);
+      }
+      EXPRESSIONS.forEach((_, index) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = String(index).padStart(2, '0');
+        b.addEventListener('click', () => {
+          selectExpression(index);
+          scheduleExpression();
+        });
+        $('expression-grid').appendChild(b);
+      });
+      Object.entries(GROUPS).forEach(([label, states]) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'state-group';
+        const title = document.createElement('span');
+        title.textContent = label;
+        wrap.appendChild(title);
+        const seg = document.createElement('div');
+        seg.className = 'seg';
+        for (const name of states) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.dataset.state = name;
+          b.textContent = name;
+          b.addEventListener('click', () => setState(name));
+          seg.appendChild(b);
+        }
+        wrap.appendChild(seg);
+        $('state-groups').appendChild(wrap);
+      });
+
+      const COLORS = ['', '#2f66e8', '#7c5cff', '#2f9e6e', '#e0558f', '#e36f3d', '#e8b93d'];
+      const stageEl = $('stage');
+      function buildSwatches(elId, cssVar) {
+        const el = $(elId);
+        for (const color of COLORS) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'swatch';
+          b.title = color || 'défaut';
+          b.style.background = color || 'var(--ink)';
+          b.setAttribute('aria-pressed', String(color === ''));
+          b.addEventListener('click', () => {
+            if (color) stageEl.style.setProperty(cssVar, color);
+            else stageEl.style.removeProperty(cssVar);
+            el.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+            b.setAttribute('aria-pressed', 'true');
+          });
+          el.appendChild(b);
+        }
+      }
+      buildSwatches('stroke-swatches', '--stroke-c');
+      buildSwatches('eye-swatches', '--eye-c');
+
+      const params = new URLSearchParams(location.search);
+      setAnimal(ANIMALS.find((a) => a.id === params.get('animal')) || ANIMALS[0]);
+      setState(POOLS[params.get('state')] ? params.get('state') : 'waiting');
+      if (params.get('turn') !== null) $('turn').value = clamp(Number(params.get('turn')) || 0, -100, 100);
+      if (params.get('stroke')) stageEl.style.setProperty('--stroke-c', '#' + params.get('stroke'));
+      if (params.get('eyes')) stageEl.style.setProperty('--eye-c', '#' + params.get('eyes'));
+      if (params.get('expr') !== null) {
+        clearTimeout(autoExpressionTimer);
+        selectExpression(clamp(Number(params.get('expr')) || 0, 0, EXPRESSIONS.length - 1));
+        morph = 1;
+      }
+      requestAnimationFrame(animate);
+    </script>
+  </body>
+</html>
