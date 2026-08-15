@@ -71,7 +71,7 @@ export type ClaudeEvent =
 	| { type: "turnChanged"; state: TurnState }
 	| { type: "sessionReady"; sessionId: string; resumed: boolean }
 	| { type: "messageStarted"; message: ChatMessage }
-	| { type: "messageDelta"; id: string; text: string }
+	| { type: "messageDelta"; id: string; seq: number; text: string }
 	| { type: "messageCompleted"; message: ChatMessage }
 	| { type: "activity"; activity: ActivityEvent }
 	| { type: "permissionRequested"; request: PermissionRequest }

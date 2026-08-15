@@ -66,6 +66,7 @@ pub struct Translator {
 	session_id: Option<String>,
 	resumed: bool,
 	streaming_message: Option<String>,
+	delta_seq: u64,
 	cancelling: bool,
 	pending_permissions: HashMap<String, Value>,
 	activity_titles: HashMap<String, String>,
@@ -140,7 +141,10 @@ impl Translator {
 			StreamEvent::ContentBlockDelta { delta: Some(ContentDelta::TextDelta { text }) } => self
 				.streaming_message
 				.clone()
-				.map(|id| vec![ClaudeEvent::MessageDelta { id, text }])
+				.map(|id| {
+					self.delta_seq += 1;
+					vec![ClaudeEvent::MessageDelta { id, seq: self.delta_seq, text }]
+				})
 				.unwrap_or_default(),
 			StreamEvent::ContentBlockStart { content_block: Some(ContentBlock::ToolUse { id, name, input }) } => {
 				vec![self.tool_started(id, &name, &input)]
