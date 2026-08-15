@@ -155,6 +155,19 @@
 			}
 		},
 		{
+			"includes": [
+				"packages/ui/src/components/agents/**",
+				"packages/ui/src/components/motion/**"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["**/prisma.config.ts"],
 			"linter": {
 				"rules": {

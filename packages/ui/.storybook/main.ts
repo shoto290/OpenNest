@@ -36,6 +36,9 @@ export default defineMain({
 					"@workspace/ui": new URL("../src", import.meta.url).pathname,
 				},
 			},
+			optimizeDeps: {
+				include: ["lucide-react", "motion/react", "shiki"],
+			},
 		})
 	},
 })
