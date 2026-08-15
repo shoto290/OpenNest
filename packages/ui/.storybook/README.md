@@ -1,0 +1,172 @@
+# OpenNest story contract
+
+Authoring rules for every story in this repo, human or agent written. A story that breaks a rule below is not done.
+
+Reference story: `packages/ui/src/components/button.stories.tsx`. When in doubt, copy its shape.
+
+## 1. Taxonomy
+
+Stories are discovered from `packages/ui/src/**` (`*.stories.tsx` and `*.mdx`).
+
+Every story file is authored with the CSF factories exported by `@workspace/storybook/preview` — `preview.meta({...})` at the top, `meta.story({...})` per export. No default export, no `Meta` / `StoryObj` types.
+
+`@workspace/storybook/*` is the **single canonical form** for anything under `.storybook`.
+
+**A story must import its own component by package subpath, never relatively.** Write `import { Button } from "@workspace/ui/components/button"`, not `from "./button"` — even though the story sits right next to it.
+
+This is the one place the contract overrides normal colocation instinct, and it is not cosmetic. `@storybook/addon-mcp` copies the story's own import specifier into `manifests/components.json`, which is what an agent pastes into real code. A relative specifier cannot survive that copy: the addon rewrites it to the bare package root, emitting `import { Button } from "@workspace/ui"` — an import that does not resolve, because `@workspace/ui` has no root entry point. The subpath form is passed through untouched and resolves from anywhere in the monorepo. The per-component cost is exactly one longer import line; there is no annotation to add and nothing to keep in sync.
+
+```tsx
+import preview from "@workspace/storybook/preview"
+
+const meta = preview.meta({
+  title: "Primitives/Button",
+  component: Button,
+  parameters: { layout: "centered" },
+  args: { children: "Button", onClick: fn() },
+})
+```
+
+One title shape, enforced by `storySort` in `preview.tsx`: `<Section>/<Component>` — two levels, never deeper.
+
+Design-system sections, in sidebar order: `Foundations`, `Primitives`, `Forms`, `Overlays`, `Feedback`, `Navigation`, `Data`, `Display`, `Layout`, `Patterns`, `Branding`, `AI`. The section reflects what the component **is**, not the folder it sits in. Full rationale: **Foundations → Introduction** (`src/foundations/introduction.mdx`).
+
+An unknown root **throws** at sort time, so a typo fails the sidebar rather than the review.
+
+## 2. Story names
+
+One shared vocabulary of exported names. Reuse an existing name before inventing one.
+
+**Structural names** — exhaustive matrices, for primitives with a variant API.
+
+| Export | Must contain |
+| --- | --- |
+| `Variants` | Every visual variant, exhaustively. |
+| `Sizes` | Every size, exhaustively. |
+| `States` | Hover, focus, active via `parameters.pseudo`, plus disabled — and loading when the component has that state. |
+
+`Variants` and `Sizes` must be derived, not hand-listed. Use `listExhaustively` from `@workspace/storybook/story-utils` so a new variant added to the component is a **type error** in the story:
+
+```tsx
+const BUTTON_VARIANTS = listExhaustively<ButtonVariant>({
+  default: true,
+  secondary: true,
+  outline: true,
+})
+```
+
+Interactive states come from `storybook-addon-pseudo-states`, targeted by id:
+
+```tsx
+export const States = meta.story({
+  parameters: {
+    pseudo: { hover: "#button-hover", focusVisible: "#button-focus", active: "#button-active" },
+  },
+  render: () => (
+    <Row>
+      <Button id="button-hover">Hover</Button>
+      <Button disabled>Disabled</Button>
+    </Row>
+  ),
+})
+```
+
+**Scenario names** — named after the real data condition they exercise, never after the render.
+
+| Export | The condition |
+| --- | --- |
+| `Default` | The nominal case the component was designed for. |
+| `LongContent` | Text or lists long enough to wrap, truncate or overflow. |
+| `ZeroValue` | Real data whose value is `0` / `null` — not the same as empty. |
+| `SparseData` | Enough data to render, too little to be representative (gaps, one point). |
+| `Loading` | The pending / skeleton surface. |
+| `Empty` | No data at all. |
+| `Error` | The failure surface. |
+| `With*` | Composition with another component (`WithIcons`, `WithAction`). |
+| `As*` | Rendered as another element (`AsLink`, `AsChildTrigger`). |
+| `In*` | Placed in a realistic host layout (`InToolbar`, `InLayout`). |
+
+`Empty`, `Loading` and `Error` only when the component genuinely has that state. Never faked.
+
+`Playground` is **optional**: the args-driven knob story, worth adding for a tunable primitive, pointless for a component with no interesting args.
+
+## 3. Fixtures
+
+Fictional and deterministic. `test:storybook` runs every story in a real browser, so the same story must render identically on every run.
+
+- No `Math.random()`, no `Date.now()`, no bare `new Date()`. A date is a fixed ISO string: `new Date("2026-03-04T09:30:00Z")`.
+- No incrementing ids, no counters, no faker or any generator.
+- Names, emails and phone numbers must be obviously fake: `Ada Martin`, `ada@example.com`, `+33 1 23 45 67 89`.
+
+Fixtures live **inline** by default — in the story, or as a module-level `const` above `meta`.
+
+Promote to a shared fixture once **2+ story files** need the same data: a colocated `<component>.fixtures.ts` next to the stories. Explicitly typed against the component's props or its domain type, `const` exports only, no barrel, no logic, no factory functions.
+
+## 4. Descriptions that help the MCP
+
+This Storybook runs `@storybook/addon-mcp`: agents read story text to pick the right state. A description that describes the pixels is noise; one that states **when and why** to reach for that state is the payload.
+
+Component purpose goes on the meta.
+
+**Scope of the rule:** every **new or genuinely reworked** scenario story MUST carry `parameters.docs.description.story`. Backfilling the stories that predate this contract is opportunistic — do it when you touch the file, never as a blocker.
+
+The description names the condition, what to check, and when to pick this story over its neighbour.
+
+```tsx
+export const SparseData = meta.story({
+  args: { data: NEWLY_ONBOARDED_WEEK },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Reach for this when an account was onboarded mid-week: three real points, two null days. Check that the line anchors to the y-axis floor instead of collapsing, and that no empty state takes over — `Empty` covers no data at all, this one covers data too thin to be representative.",
+      },
+    },
+  },
+})
+```
+
+Bad: `"A line chart with three points and two gaps."` — restates the render; an agent still cannot tell when to open it.
+Good: the snippet above — the reader learns the condition it reproduces, what to verify, and why it is not `Empty`.
+
+## 5. A11y and viewports
+
+`parameters.a11y = { test: "error" }` is set globally in `preview.tsx`. An accessibility violation **fails** `test:storybook`.
+
+- Never disable a rule to go green. Fix the markup. The one sanctioned exception is `A11Y_CONTRAST_AWAITING_DESIGN_DECISION` from `@workspace/storybook/story-utils`: it covers the palette contrast debt tracked by `PAIRS_AWAITING_DESIGN_DECISION` in **Foundations → Token Contrast**, marks violations for review instead of hiding them, and must be removed from a story the moment the tokens it excuses pass the audit.
+- Icon-only controls need `aria-label` — see `Sizes` and `WithIcons` in `button.stories.tsx`.
+- Every input needs a label, visible or `aria-label`.
+
+Viewports available: `mobile` 390x844, `tablet` 768x1024, `laptop` 1280x800, `desktop` 1536x960. Set `parameters.viewport.defaultViewport` only for stories whose layout is genuinely viewport-dependent; the default is fine for everything else.
+
+One toolbar global exists as a review tool, not as story config: `theme_layout` (`single` / `side-by-side`, renders light and dark at once). Check it before calling a story done.
+
+## 6. Forbidden
+
+This Storybook is a public build artifact — that is the whole reason for both rules below.
+
+**No network egress, ever.** No live API, no `axios` or `fetch` reaching a real host, no remote image or font URL.
+
+Connected views are allowed, rendered through **local deterministic doubles**, at either level:
+
+- **module level** — the default: a decorator wrapping the story in the real provider, callbacks stubbed with `fn()` from `storybook/test`, in-memory fixture data from section 3;
+- **request level** — allowed when a dedicated ticket justifies intercepting the HTTP layer rather than the module.
+
+MSW is not installed today. Adding a request-mock layer is a dependency decision — it needs its own ticket and approval (house rule: no new deps without approval), not an inline call by a story author.
+
+Determinism is absolute: whatever the double, the story renders identically on every run.
+
+**Zero real user data.** No real names, emails, phone numbers or account identities — including anonymised production exports. Invent everything.
+
+## 7. Validation
+
+Run from `packages/ui`.
+
+```bash
+bun run storybook         # local dev, not part of the gate
+bun run lint
+bun run test:storybook
+bun run build-storybook
+```
+
+A story is done only when `lint`, `test:storybook` and `build-storybook` all pass.

@@ -126,6 +126,7 @@
 			"includes": [
 				"packages/ui/.storybook/**",
 				"packages/components/.storybook/**",
+				"packages/ui/vitest.config.ts",
 				"packages/ui/src/**/*.stories.tsx",
 				"**/*.stories.*"
 			],

@@ -1,0 +1,34 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+import {
+	FontSample,
+	FontWeights,
+	TypeScale,
+} from "@workspace/ui/foundations/type-scale"
+
+<Meta title="Foundations/Typography" />
+
+# Typography
+
+## Fonts
+
+Two families, self-hosted through `@fontsource-variable/roboto` and `@fontsource-variable/roboto-slab`, imported at the top of `src/styles/globals.css`. They are bound in the `@theme inline` block: `font-sans` is the default everywhere, `font-heading` is opt-in for headings.
+
+```css
+--font-sans: "Roboto Variable", sans-serif;
+--font-heading: "Roboto Slab Variable", serif;
+```
+
+<FontSample />
+
+## Size scale
+
+No custom type scale is declared — the system uses the Tailwind v4 default scale, with its paired line height.
+
+<TypeScale />
+
+## Weights
+
+Both Roboto variable families cover the full 100–900 axis. These four are the ones the system uses in practice.
+
+<FontWeights />

@@ -1,0 +1,30 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+import {
+	AnimationScale,
+	EasingScale,
+} from "@workspace/ui/foundations/motion-scale"
+
+<Meta title="Foundations/Motion" />
+
+# Motion
+
+## Easing
+
+**`globals.css` declares no custom easing tokens.** The system uses the Tailwind defaults.
+
+<EasingScale />
+
+## Enter animations
+
+Animations come from `tw-animate-css`, imported in `globals.css`. Utilities are composable: `animate-in` plus one or more of `fade-in`, `zoom-in`, `spin-in`, `slide-in-from-*`, with `duration-*` and `ease-*` to tune them. The `animate-out` counterparts exist for exit transitions.
+
+<AnimationScale />
+
+## Reduced motion
+
+**`globals.css` declares no `prefers-reduced-motion` block.** Honouring the preference is the component's job: pair every `animate-*` or `transition-*` utility with its `motion-reduce:` counterpart, as the previews on this page do.
+
+```tsx
+<div className="animate-in fade-in motion-reduce:animate-none" />
+```
