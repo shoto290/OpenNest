@@ -17,11 +17,7 @@ const THEMES: ThemeName[] = ["light", "dark"]
 const TRANSPARENT_COMPUTED_COLOR = "rgba(0, 0, 0, 0)"
 const CANVAS_BASE: Rgb = [255, 255, 255]
 
-const SEMANTIC_TOKENS = [
-	...SURFACE_TOKENS,
-	...ACTION_TOKENS,
-	...SIDEBAR_TOKENS,
-]
+const SEMANTIC_TOKENS = [...SURFACE_TOKENS, ...ACTION_TOKENS, ...SIDEBAR_TOKENS]
 
 const ROOT_PAIR: TokenPair = {
 	background: "--background",

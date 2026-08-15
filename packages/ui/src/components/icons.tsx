@@ -50,4 +50,4 @@ const Icons = {
 	Success: createIcon(CheckmarkCircle02Icon),
 }
 
-export { Icons, type IconProps }
+export { type IconProps, Icons }
