@@ -12,6 +12,6 @@
 		}
 	},
 	"include": ["src"],
-	"exclude": ["vite.config.ts", "node_modules", "dist"],
+	"exclude": ["vite.config.ts", "vitest.config.ts", "node_modules", "dist"],
 	"references": [{ "path": "../../packages/ui" }]
 }

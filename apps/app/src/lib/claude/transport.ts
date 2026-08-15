@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 
+import type { ChatDriver } from "../chat/driver"
 import type {
 	CheckReport,
 	ClaudeEvent,
@@ -10,7 +11,7 @@ import type {
 
 const EVENT_CHANNEL = "claude://event"
 
-export const claudeTransport = {
+export const claudeTransport: ChatDriver = {
 	check: () => invoke<CheckReport>("claude_check"),
 
 	startOrResumeSession: (resume?: string, cwd?: string) =>

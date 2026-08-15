@@ -9,7 +9,8 @@
 		"build": "tsc -b && vite build",
 		"serve": "vite preview",
 		"types": "tsc -b",
-		"test": "cargo test --manifest-path src-tauri/Cargo.toml",
+		"test": "vitest run && cargo test --manifest-path src-tauri/Cargo.toml",
+		"test:unit": "vitest run",
 		"test:live": "cargo test --manifest-path src-tauri/Cargo.toml --test real_claude -- --ignored --test-threads=1",
 		"lint": "biome lint",
 		"lint:fix": "biome check --assist-enabled=true --unsafe --write .",
@@ -28,6 +29,7 @@
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		"@vitejs/plugin-react": "^6",
-		"vite": "^8"
+		"vite": "^8",
+		"vitest": "4.1.10"
 	}
 }

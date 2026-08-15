@@ -194,7 +194,7 @@ pub enum ClaudeEvent {
 	#[serde(rename_all = "camelCase")]
 	MessageStarted { message: ChatMessage },
 	#[serde(rename_all = "camelCase")]
-	MessageDelta { id: String, text: String },
+	MessageDelta { id: String, seq: u64, text: String },
 	#[serde(rename_all = "camelCase")]
 	MessageCompleted { message: ChatMessage },
 	#[serde(rename_all = "camelCase")]

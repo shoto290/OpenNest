@@ -1,16 +1,23 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
+import { MessageScroller } from "@workspace/ui/components/message-scroller"
 
+import { createFakeChatDriver } from "@/lib/chat/fake-driver"
+import { useChat } from "@/lib/chat/use-chat"
 import { describeTransportError } from "@/lib/claude/messages"
-import { useClaudeTransport } from "@/lib/claude/use-claude-transport"
+import { claudeTransport } from "@/lib/claude/transport"
+
+function selectDriver() {
+	return "__TAURI_INTERNALS__" in window ? claudeTransport : createFakeChatDriver()
+}
 
 export function ClaudeHarness() {
-	const { state, check, start, resumeCurrent, submit, cancel, respond, shutdown } =
-		useClaudeTransport()
+	const driver = useMemo(selectDriver, [])
+	const { state, controller } = useChat(driver)
 	const [draft, setDraft] = useState("")
 
-	const busy = state.turn === "submitting" || state.turn === "running"
+	const busy = state.turn === "submitting" || state.turn === "running" || state.turn === "stopping"
 	const canSend = draft.trim().length > 0 && !busy
 	const permission = state.permission
 
@@ -18,7 +25,7 @@ export function ClaudeHarness() {
 		if (!canSend) {
 			return
 		}
-		submit(draft.trim())
+		controller.send(draft.trim())
 		setDraft("")
 	}
 
@@ -37,24 +44,24 @@ export function ClaudeHarness() {
 			</header>
 
 			<div className="flex flex-wrap gap-2">
-				<Button size="sm" variant="outline" onClick={() => check()}>
+				<Button size="sm" variant="outline" onClick={() => controller.check()}>
 					Check
 				</Button>
-				<Button size="sm" variant="outline" onClick={() => start()}>
+				<Button size="sm" variant="outline" onClick={() => controller.start()}>
 					Start
 				</Button>
 				<Button
 					size="sm"
 					variant="outline"
 					disabled={!state.sessionId}
-					onClick={() => resumeCurrent()}
+					onClick={() => controller.start(state.sessionId ?? undefined)}
 				>
 					Resume
 				</Button>
-				<Button size="sm" variant="outline" disabled={!busy} onClick={() => cancel()}>
+				<Button size="sm" variant="outline" disabled={!busy} onClick={() => controller.stop()}>
 					Stop
 				</Button>
-				<Button size="sm" variant="outline" onClick={() => shutdown()}>
+				<Button size="sm" variant="outline" onClick={() => controller.shutdown()}>
 					Shutdown
 				</Button>
 			</div>
@@ -69,25 +76,46 @@ export function ClaudeHarness() {
 							</p>
 						) : null}
 					</div>
-					<Button size="sm" onClick={() => respond(permission.id, "allowOnce")}>
+					<Button size="sm" onClick={() => controller.respond(permission.id, "allowOnce")}>
 						Autoriser
 					</Button>
-					<Button size="sm" variant="outline" onClick={() => respond(permission.id, "deny")}>
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => controller.respond(permission.id, "deny")}
+					>
 						Refuser
 					</Button>
 				</div>
 			) : null}
 
-			<ol className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-				{state.messages.map((message) => (
-					<li key={message.id} className="flex flex-col gap-1">
-						<span className="text-muted-foreground text-xs uppercase">
-							{message.role} · {message.completion}
-						</span>
-						<p className="whitespace-pre-wrap">{message.text}</p>
-					</li>
-				))}
-			</ol>
+			<MessageScroller
+				className="min-h-0 flex-1"
+				busy={busy}
+				contentClassName="flex flex-col gap-3"
+			>
+				<ol className="flex flex-col gap-3">
+					{state.messages.map((message) => (
+						<li key={message.id} className="flex flex-col gap-1">
+							<span className="text-muted-foreground text-xs uppercase">
+								{message.role} · {message.completion}
+							</span>
+							<p className="whitespace-pre-wrap">{message.text}</p>
+							{message.role === "user" && message.completion === "failed" ? (
+								<div>
+									<Button
+										size="sm"
+										variant="outline"
+										onClick={() => controller.retry(message.id)}
+									>
+										Réessayer
+									</Button>
+								</div>
+							) : null}
+						</li>
+					))}
+				</ol>
+			</MessageScroller>
 
 			{state.activities.length > 0 ? (
 				<ul className="text-muted-foreground flex flex-col gap-1 text-xs">
