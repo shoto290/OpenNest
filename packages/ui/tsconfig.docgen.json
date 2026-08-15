@@ -1,14 +1,9 @@
 {
-	"extends": "../../tsconfig.base.json",
+	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"composite": false,
 		"declaration": false,
 		"declarationMap": false,
-		"noEmit": true,
-		"module": "ESNext",
-		"moduleResolution": "bundler",
-		"jsx": "react-jsx"
-	},
-	"include": ["src", ".storybook/**/*.ts", ".storybook/**/*.tsx"],
-	"exclude": ["node_modules"]
+		"noEmit": true
+	}
 }

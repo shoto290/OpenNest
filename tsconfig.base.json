@@ -30,8 +30,7 @@
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true,
 		"paths": {
-			"@workspace/ui/*": ["./packages/ui/src/*"],
-			"@workspace/storybook/*": ["./packages/ui/.storybook/*"]
+			"@workspace/ui/*": ["./packages/ui/src/*"]
 		}
 	}
 }

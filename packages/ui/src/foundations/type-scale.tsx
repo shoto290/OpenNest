@@ -17,23 +17,22 @@ const FONT_WEIGHTS = [
 ]
 
 const FONT_FAMILIES = [
-	{ className: "font-sans", token: "--font-sans", label: "Roboto Variable" },
-	{
-		className: "font-heading",
-		token: "--font-heading",
-		label: "Roboto Slab Variable",
-	},
+	{ className: "font-sans", token: "--font-sans" },
+	{ className: "font-heading", token: "--font-heading" },
 ]
+
+const readFontStack = (token: string) =>
+	getComputedStyle(document.documentElement).getPropertyValue(token).trim()
 
 export const FontSample = () => (
 	<div className="flex flex-col gap-2">
-		{FONT_FAMILIES.map(({ className, token, label }) => (
+		{FONT_FAMILIES.map(({ className, token }) => (
 			<div
 				key={token}
 				className="flex flex-col gap-1 rounded-lg border border-border bg-card p-4"
 			>
 				<code className="font-mono text-muted-foreground text-xs">
-					{token} — {label}
+					{token} — {readFontStack(token)}
 				</code>
 				<p className={`${className} text-2xl text-foreground`}>
 					The quick brown fox jumps over the lazy dog — 0123456789

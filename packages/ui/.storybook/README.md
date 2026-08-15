@@ -43,7 +43,7 @@ One shared vocabulary of exported names. Reuse an existing name before inventing
 | --- | --- |
 | `Variants` | Every visual variant, exhaustively. |
 | `Sizes` | Every size, exhaustively. |
-| `States` | Hover, focus, active via `parameters.pseudo`, plus disabled and loading. |
+| `States` | Hover, focus, active via `parameters.pseudo`, plus disabled — and loading when the component has that state. |
 
 `Variants` and `Sizes` must be derived, not hand-listed. Use `listExhaustively` from `@workspace/storybook/story-utils` so a new variant added to the component is a **type error** in the story:
 
@@ -133,7 +133,7 @@ Good: the snippet above — the reader learns the condition it reproduces, what 
 
 `parameters.a11y = { test: "error" }` is set globally in `preview.tsx`. An accessibility violation **fails** `test:storybook`.
 
-- Never disable a rule to go green. Fix the markup.
+- Never disable a rule to go green. Fix the markup. The one sanctioned exception is `A11Y_CONTRAST_AWAITING_DESIGN_DECISION` from `@workspace/storybook/story-utils`: it covers the palette contrast debt tracked by `PAIRS_AWAITING_DESIGN_DECISION` in **Foundations → Token Contrast**, marks violations for review instead of hiding them, and must be removed from a story the moment the tokens it excuses pass the audit.
 - Icon-only controls need `aria-label` — see `Sizes` and `WithIcons` in `button.stories.tsx`.
 - Every input needs a label, visible or `aria-label`.
 

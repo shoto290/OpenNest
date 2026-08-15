@@ -2,7 +2,11 @@ import type { VariantProps } from "class-variance-authority"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively, Row } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	listExhaustively,
+	Row,
+} from "@workspace/storybook/story-utils"
 import { Button, type buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 
@@ -58,12 +62,6 @@ export const Playground = meta.story({
 		await expect(args.onClick).toHaveBeenCalled()
 	},
 })
-
-const A11Y_CONTRAST_AWAITING_DESIGN_DECISION = {
-	config: {
-		rules: [{ id: "color-contrast", reviewOnFail: true }],
-	},
-}
 
 export const Variants = meta.story({
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },

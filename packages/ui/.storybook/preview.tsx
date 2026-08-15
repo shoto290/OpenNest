@@ -11,7 +11,7 @@ import {
 
 import { THEME_CLASS_NAMES, ThemedDocsContainer } from "./themed-docs-container"
 
-const SIDE_BY_SIDE_THEMES = ["light", "dark"]
+const SIDE_BY_SIDE_THEMES = Object.keys(THEME_CLASS_NAMES)
 
 const withThemeLayout: Decorator = (Story, context) => {
 	if (context.globals.theme_layout !== "side-by-side") {

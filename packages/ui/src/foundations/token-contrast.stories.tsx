@@ -3,7 +3,6 @@ import { expect } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	ACTION_TOKENS,
-	FEEDBACK_TOKENS,
 	SIDEBAR_TOKENS,
 	SURFACE_TOKENS,
 } from "@workspace/ui/foundations/color-tokens"
@@ -21,7 +20,6 @@ const CANVAS_BASE: Rgb = [255, 255, 255]
 const SEMANTIC_TOKENS = [
 	...SURFACE_TOKENS,
 	...ACTION_TOKENS,
-	...FEEDBACK_TOKENS,
 	...SIDEBAR_TOKENS,
 ]
 
