@@ -1,8 +1,7 @@
 "use client"
-// beui.dev/components/agents/message-bubble
+// Adapted from beui.dev/components/agents/message-bubble
 
-import { ChevronDown } from "lucide-react"
-import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
 import {
 	type ComponentPropsWithRef,
 	cloneElement,
@@ -17,6 +16,7 @@ import {
 } from "react"
 
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
+import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -41,8 +41,16 @@ const MessageBubbleContext = createContext<MessageBubbleContextValue>({
 })
 const MessageBubbleLayoutContext = createContext<() => void>(() => {})
 
+type MotionOwnedProps =
+	| "onDrag"
+	| "onDragStart"
+	| "onDragEnd"
+	| "onAnimationStart"
+	| "onAnimationEnd"
+	| "onAnimationIteration"
+
 export interface MessageBubbleProps
-	extends Omit<HTMLMotionProps<"div">, "children"> {
+	extends Omit<ComponentPropsWithRef<"div">, "children" | MotionOwnedProps> {
 	variant?: MessageBubbleVariant
 	/** Defaults to the surrounding Message alignment when omitted. */
 	align?: MessageBubbleAlign
@@ -103,11 +111,6 @@ export function MessageBubble({
 	animateIn = false,
 	className,
 	children,
-	initial,
-	animate,
-	exit,
-	transition,
-	layout,
 	...props
 }: MessageBubbleProps) {
 	const reduce = useReducedMotion() ?? false
@@ -122,13 +125,9 @@ export function MessageBubble({
 				data-slot="message-bubble"
 				data-align={resolvedAlign}
 				data-variant={variant}
-				layout={layout}
-				initial={initial ?? false}
-				animate={animate}
-				exit={
-					exit ?? (reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.99 })
-				}
-				transition={transition ?? (reduce ? { duration: 0.12 } : SPRING_LAYOUT)}
+				initial={false}
+				exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.99 }}
+				transition={reduce ? { duration: 0.12 } : SPRING_LAYOUT}
 				className={cn(
 					"group/bubble flex w-full flex-col",
 					resolvedAlign === "end" ? "items-end" : "items-start",
@@ -149,7 +148,7 @@ function bubbleContentClass(
 	return cn(
 		"relative z-0 min-w-9 max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-6 text-foreground",
 		"[&_a]:font-medium [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:bg-background/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p+p]:mt-2 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-background/60 [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5",
-		variant === "solid" && "text-background",
+		variant === "solid" && "text-primary-foreground",
 		variant === "ghost" && "w-full max-w-none rounded-none px-0 py-0",
 		variant === "danger" && "text-destructive",
 		interactive &&
@@ -164,7 +163,7 @@ function bubbleSurfaceClass(
 	return cn(
 		"pointer-events-none absolute inset-0 -z-10 rounded-[inherit]",
 		align === "end" ? "origin-bottom-right" : "origin-bottom-left",
-		variant === "solid" && "bg-foreground",
+		variant === "solid" && "bg-primary",
 		variant === "soft" && "bg-muted",
 		variant === "tint" && "bg-primary/10",
 		variant === "outline" && "border border-border/70 bg-background",
@@ -352,7 +351,7 @@ export function MessageBubbleCollapsible({
 					animate={{ rotate: currentOpen ? 180 : 0 }}
 					transition={reduce ? { duration: 0 } : SPRING_SWAP}
 				>
-					<ChevronDown className="size-3.5" />
+					<Icons.ArrowDown className="size-3.5" />
 				</motion.span>
 			</button>
 		</div>
