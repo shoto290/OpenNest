@@ -4,10 +4,12 @@
 import {
 	type FormEvent,
 	type KeyboardEvent,
+	type Ref,
 	type TextareaHTMLAttributes,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react"
@@ -15,7 +17,7 @@ import {
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { ActionSwapIcon } from "@workspace/ui/components/motion/action-swap"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 /** Matches `leading-6` on the textarea and its measurement mirror. */
 const LINE_HEIGHT = 24
@@ -38,6 +40,8 @@ export interface PromptInputProps
 	onStop?: () => void
 	minRows?: number
 	maxRows?: number
+	/** Exposes the textarea so a host can restore focus after its own interactions. */
+	textareaRef?: Ref<HTMLTextAreaElement>
 }
 
 export function PromptInput({
@@ -54,10 +58,15 @@ export function PromptInput({
 	placeholder = "Ask the agent to do something…",
 	"aria-label": ariaLabel = "Prompt",
 	onKeyDown,
+	textareaRef: externalTextareaRef,
 	...textareaProps
 }: PromptInputProps) {
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 	const measurementRef = useRef<HTMLDivElement>(null)
+	const setTextareaRef = useMemo(
+		() => mergeRefs(textareaRef, externalTextareaRef),
+		[externalTextareaRef],
+	)
 	const [internalValue, setInternalValue] = useState(defaultValue)
 	const currentValue = value ?? internalValue
 	const canSubmit = Boolean(currentValue.trim()) && !disabled && !loading
@@ -131,7 +140,7 @@ export function PromptInput({
 				{`${currentValue}\u200b`}
 			</div>
 			<textarea
-				ref={textareaRef}
+				ref={setTextareaRef}
 				value={currentValue}
 				disabled={disabled}
 				placeholder={placeholder}

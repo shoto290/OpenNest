@@ -5,6 +5,7 @@ import type {
 	ClaudeEvent,
 	ConnectionState,
 	MessageCompletion,
+	PermissionDecision,
 	PermissionRequest,
 	TransportError,
 	TurnEnded,
@@ -21,6 +22,9 @@ export type ChatState = {
 	epoch: number
 	connection: ConnectionState
 	turn: TurnState
+	/** The host holds a live child process. Set when the session opens, not when
+	 * Claude first reports its id — `sessionReady` only lands after a prompt. */
+	sessionOpen: boolean
 	sessionId: string | null
 	binaryVersion: string | null
 	messages: ChatMessage[]
@@ -33,7 +37,12 @@ export type ChatState = {
 
 export type ChatAction =
 	| { type: "driverEvent"; epoch: number; event: ClaudeEvent }
+	/** A session died or was replaced. Clears what belonged to that process and
+	 * keeps the transcript the reader can still see. */
 	| { type: "sessionReset"; epoch: number }
+	/** Drops the transcript itself. Only a deliberate "new conversation" does this. */
+	| { type: "conversationCleared" }
+	| { type: "sessionOpened" }
 	| { type: "promptSubmitted"; message: ChatMessage }
 	| { type: "promptRejected"; id: string; error: TransportError }
 	| { type: "promptRetried"; id: string }
@@ -44,6 +53,7 @@ export const initialChatState: ChatState = {
 	epoch: 0,
 	connection: "checking",
 	turn: "idle",
+	sessionOpen: false,
 	sessionId: null,
 	binaryVersion: null,
 	messages: [],
@@ -69,6 +79,21 @@ const ACTIVITY_RANK: Record<ActivityStatus, number> = {
 	running: 1,
 	succeeded: 2,
 	failed: 2,
+}
+
+/** A turn Claude is still working on. Nothing else may be submitted. */
+export function isTurnBusy(turn: TurnState): boolean {
+	return turn === "submitting" || turn === "running" || turn === "stopping"
+}
+
+/** A busy turn that has not been asked to stop yet. */
+export function canStopTurn(turn: TurnState): boolean {
+	return turn === "submitting" || turn === "running"
+}
+
+/** A live session able to take a prompt. The id Claude reports arrives later. */
+export function isSessionReady(state: ChatState): boolean {
+	return state.connection === "ready" && state.sessionOpen
 }
 
 export function completionForOutcome(outcome: TurnOutcome): MessageCompletion {
@@ -135,26 +160,38 @@ function applyMessageDelta(
 	}
 	return {
 		...state,
-		messages: state.messages.with(index, { ...target, text: target.text + event.text }),
+		messages: state.messages.with(index, {
+			...target,
+			text: target.text + event.text,
+		}),
 		deltaSeqs: { ...state.deltaSeqs, [event.id]: event.seq },
 	}
 }
 
-function applyMessageStarted(state: ChatState, message: ChatMessage): ChatState {
+function applyMessageStarted(
+	state: ChatState,
+	message: ChatMessage,
+): ChatState {
 	if (state.messages.some((entry) => entry.id === message.id)) {
 		return state
 	}
 	return { ...state, messages: [...state.messages, message] }
 }
 
-function applyMessageCompleted(state: ChatState, message: ChatMessage): ChatState {
+function applyMessageCompleted(
+	state: ChatState,
+	message: ChatMessage,
+): ChatState {
 	const index = state.messages.findIndex((entry) => entry.id === message.id)
 	if (index === -1) {
 		return { ...state, messages: [...state.messages, message] }
 	}
 	const previous = state.messages[index]
 	const text = message.text || previous.text
-	return { ...state, messages: state.messages.with(index, { ...message, text }) }
+	return {
+		...state,
+		messages: state.messages.with(index, { ...message, text }),
+	}
 }
 
 function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
@@ -162,13 +199,19 @@ function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
 	if (index === -1) {
 		return { ...state, activities: [...state.activities, activity] }
 	}
-	if (ACTIVITY_RANK[activity.status] < ACTIVITY_RANK[state.activities[index].status]) {
+	if (
+		ACTIVITY_RANK[activity.status] <
+		ACTIVITY_RANK[state.activities[index].status]
+	) {
 		return state
 	}
 	return { ...state, activities: state.activities.with(index, activity) }
 }
 
-function applyPermissionRequested(state: ChatState, request: PermissionRequest): ChatState {
+function applyPermissionRequested(
+	state: ChatState,
+	request: PermissionRequest,
+): ChatState {
 	if (state.turn !== "submitting" && state.turn !== "running") {
 		return state
 	}
@@ -176,6 +219,33 @@ function applyPermissionRequested(state: ChatState, request: PermissionRequest):
 		return state
 	}
 	return { ...state, permission: request }
+}
+
+/** The answer settles the request's own activity row on the spot. Nothing else
+ * reports it: an allowed tool runs under its own tool-use id, and a denied one
+ * never runs at all, so waiting for a transport event leaves the row pending. */
+function applyPermissionResolved(
+	state: ChatState,
+	id: string,
+	decision: PermissionDecision,
+): ChatState {
+	const cleared =
+		state.permission?.id === id ? { ...state, permission: null } : state
+	const index = cleared.activities.findIndex((activity) => activity.id === id)
+	if (index === -1) {
+		return cleared
+	}
+	const target = cleared.activities[index]
+	if (target.status !== "pending") {
+		return cleared
+	}
+	return {
+		...cleared,
+		activities: cleared.activities.with(index, {
+			...target,
+			status: decision === "allowOnce" ? "succeeded" : "failed",
+		}),
+	}
 }
 
 function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
@@ -187,14 +257,19 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 		...next,
 		sessionId: ended.sessionId ?? state.sessionId,
 		permission: null,
-		messages: finalizeStreaming(next.messages, completionForOutcome(ended.outcome)),
+		messages: finalizeStreaming(
+			next.messages,
+			completionForOutcome(ended.outcome),
+		),
 	}
 }
 
 function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 	switch (event.type) {
 		case "connectionChanged":
-			return state.connection === event.state ? state : { ...state, connection: event.state }
+			return state.connection === event.state
+				? state
+				: { ...state, connection: event.state }
 		case "turnChanged":
 			return setTurn(state, event.state)
 		case "sessionReady":
@@ -210,7 +285,7 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 		case "permissionRequested":
 			return applyPermissionRequested(state, event.request)
 		case "permissionResolved":
-			return state.permission?.id === event.id ? { ...state, permission: null } : state
+			return applyPermissionResolved(state, event.id, event.decision)
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
 		case "failed":
@@ -221,12 +296,29 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 	switch (action.type) {
 		case "driverEvent":
-			return action.epoch === state.epoch ? applyEvent(state, action.event) : state
+			return action.epoch === state.epoch
+				? applyEvent(state, action.event)
+				: state
+		case "sessionOpened":
+			return state.sessionOpen ? state : { ...state, sessionOpen: true }
 		case "sessionReset":
 			return {
-				...initialChatState,
+				...state,
 				epoch: action.epoch,
+				turn: "idle",
+				sessionOpen: false,
+				sessionId: null,
+				permission: null,
+				deltaSeqs: {},
+				messages: finalizeStreaming(state.messages, "failed"),
+			}
+		case "conversationCleared":
+			return {
+				...initialChatState,
+				epoch: state.epoch,
 				connection: state.connection,
+				sessionOpen: state.sessionOpen,
+				sessionId: state.sessionId,
 				binaryVersion: state.binaryVersion,
 				errorCount: state.errorCount,
 			}
@@ -237,11 +329,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 			)
 		case "promptRejected": {
 			const next = pushError(state, action.error)
-			const index = next.messages.findIndex((message) => message.id === action.id)
+			const index = next.messages.findIndex(
+				(message) => message.id === action.id,
+			)
 			const messages =
 				index === -1
 					? next.messages
-					: next.messages.with(index, { ...next.messages[index], completion: "failed" })
+					: next.messages.with(index, {
+							...next.messages[index],
+							completion: "failed",
+						})
 			return {
 				...next,
 				messages,
@@ -249,7 +346,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 			}
 		}
 		case "promptRetried": {
-			const index = state.messages.findIndex((message) => message.id === action.id)
+			const index = state.messages.findIndex(
+				(message) => message.id === action.id,
+			)
 			if (index === -1) {
 				return state
 			}
