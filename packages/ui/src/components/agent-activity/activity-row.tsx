@@ -33,7 +33,7 @@ function StepRow({ item }: { item: AgentActivityStep }) {
 		<div className="flex min-h-7 items-start gap-2.5 rounded-md px-1.5 py-1">
 			<span
 				aria-hidden="true"
-				className="mt-0.5 grid size-4 shrink-0 place-items-center text-muted-foreground/70"
+				className="mt-0.5 grid size-4 shrink-0 place-items-center text-muted-foreground"
 			>
 				{state === "complete" ? (
 					<Check className="size-4" strokeWidth={1.8} />
@@ -54,14 +54,14 @@ function StepRow({ item }: { item: AgentActivityStep }) {
 				className={cn(
 					"min-w-0 flex-1 leading-5",
 					state === "pending"
-						? "text-muted-foreground/55"
-						: "text-foreground/90",
+						? "text-muted-foreground"
+						: "text-foreground",
 				)}
 			>
 				{item.label}
 			</span>
 			{item.meta ? (
-				<span className="shrink-0 leading-5 text-muted-foreground/55">
+				<span className="shrink-0 leading-5 text-muted-foreground">
 					{item.meta}
 				</span>
 			) : null}
@@ -86,11 +86,11 @@ function SearchResultRow({ result }: { result: AgentSearchResult }) {
 			>
 				{result.icon ?? <Globe2 className="size-3" strokeWidth={2} />}
 			</span>
-			<span className="min-w-0 truncate font-medium text-foreground/90">
+			<span className="min-w-0 truncate font-medium text-foreground">
 				{result.title}
 			</span>
 			{result.domain ? (
-				<span className="min-w-0 truncate text-muted-foreground/55">
+				<span className="min-w-0 truncate text-muted-foreground">
 					{result.domain}
 				</span>
 			) : null}
@@ -159,7 +159,7 @@ function SearchRow({ item }: { item: AgentActivitySearch }) {
 						animate={visible}
 						exit={exit}
 						transition={transition}
-						className="px-1.5 py-1 pl-8 text-muted-foreground/55"
+						className="px-1.5 py-1 pl-8 text-muted-foreground"
 					>
 						+{item.moreCount} more
 					</motion.div>
@@ -185,22 +185,22 @@ function ToolRow({ item }: { item: AgentActivityTool }) {
 		<div className="flex min-h-8 min-w-0 items-center gap-2.5 rounded-md px-1.5 py-0.5 leading-5">
 			<span
 				aria-hidden="true"
-				className="grid size-4 shrink-0 place-items-center text-muted-foreground/70"
+				className="grid size-4 shrink-0 place-items-center text-muted-foreground"
 			>
 				<ActionIcon action={item.action} />
 			</span>
-			<span className="shrink-0 font-medium text-foreground/90">{action}</span>
-			<span className="min-w-0 flex-1 truncate rounded-lg bg-muted/80 px-2.5 py-1 font-mono text-xs text-muted-foreground/70">
+			<span className="shrink-0 font-medium text-foreground">{action}</span>
+			<span className="min-w-0 flex-1 truncate rounded-lg bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
 				{item.target}
 			</span>
 			{typeof item.additions === "number" ||
 			typeof item.deletions === "number" ? (
 				<span className="flex shrink-0 items-center gap-2 font-mono tabular-nums">
 					{typeof item.additions === "number" ? (
-						<span className="text-emerald-500">+{item.additions}</span>
+						<span className="text-foreground">+{item.additions}</span>
 					) : null}
 					{typeof item.deletions === "number" ? (
-						<span className="text-rose-500">−{item.deletions}</span>
+						<span className="text-destructive">−{item.deletions}</span>
 					) : null}
 				</span>
 			) : null}
@@ -222,13 +222,13 @@ function TraceRow({ item }: { item: AgentActivityTrace }) {
 		<div className="grid min-h-8 grid-cols-[1rem_auto_minmax(0,1fr)] items-center gap-2.5 rounded-md px-1.5 py-0.5">
 			<span
 				aria-hidden="true"
-				className="grid size-4 place-items-center text-muted-foreground/70"
+				className="grid size-4 place-items-center text-muted-foreground"
 			>
 				{item.icon ?? <TraceIcon kind={item.kind} />}
 			</span>
-			<span className="font-medium text-foreground/90">{item.label}</span>
+			<span className="font-medium text-foreground">{item.label}</span>
 			{item.detail ? (
-				<span className="min-w-0 truncate rounded-lg bg-muted/80 px-2.5 py-1 font-mono text-xs text-muted-foreground/70">
+				<span className="min-w-0 truncate rounded-lg bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
 					{item.detail}
 				</span>
 			) : (

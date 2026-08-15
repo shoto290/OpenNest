@@ -137,6 +137,9 @@
 					},
 					"correctness": {
 						"useHookAtTopLevel": "off"
+					},
+					"suspicious": {
+						"noShadowRestrictedNames": "off"
 					}
 				}
 			}
@@ -156,6 +159,7 @@
 		},
 		{
 			"includes": [
+				"packages/ui/src/components/agent-activity/**",
 				"packages/ui/src/components/agents/**",
 				"packages/ui/src/components/motion/**"
 			],
