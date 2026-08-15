@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 
-export type AgentActivityStatus = "working" | "complete"
+export type AgentActivityStatus = "working" | "complete" | "failed"
 export type AgentStepStatus = "pending" | "active" | "complete"
 
 export interface AgentActivityStep {
@@ -75,15 +75,16 @@ export interface AgentActivityProps {
 	contentType?: AgentActivityContentType
 	/** Current run phase. Active runs always stay expanded. */
 	status?: AgentActivityStatus
-	/** Elapsed run time, in seconds. Used by the step-only summary. */
+	/** Elapsed run time, in seconds. Used by the step-only and failed summaries. */
 	duration?: number
-	/** Controlled expanded state used after the run completes. */
+	/** Controlled expanded state used once the run is over. */
 	open?: boolean
-	/** Initial expanded state used after the run completes. */
+	/** Initial expanded state used once the run is over. Failed runs open anyway. */
 	defaultOpen?: boolean
-	/** Called when the completed activity disclosure changes state. */
+	/** Called when the settled activity disclosure changes state. */
 	onOpenChange?: (open: boolean) => void
-	/** Collapse the disclosure when status changes from working to complete. */
+	/** Collapse the disclosure when status changes from working to complete.
+	 * Never applies to failed runs, which expand so the trace stays readable. */
 	collapseOnComplete?: boolean
 	/** Optional label shown while the run is active. */
 	activeLabel?: ReactNode

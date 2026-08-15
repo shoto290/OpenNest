@@ -1,7 +1,7 @@
 "use client"
 // beui.dev/components/agents/agent-activity
 
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, TriangleAlert } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
 	type ReactNode,
@@ -23,6 +23,7 @@ import type {
 	AgentActivityContentType,
 	AgentActivityItem,
 	AgentActivityProps,
+	AgentActivityStatus,
 } from "./types"
 
 export type {
@@ -90,7 +91,16 @@ function getSummary(
 	type: AgentActivityContentType,
 	items: AgentActivityItem[],
 	duration: number,
+	status: AgentActivityStatus,
 ): ReactNode {
+	if (status === "failed") {
+		return (
+			<>
+				Failed after{" "}
+				<span className="tabular-nums">{formatDuration(duration)}</span>
+			</>
+		)
+	}
 	if (type === "step" || type === "text") {
 		return (
 			<>
@@ -142,10 +152,11 @@ export function AgentActivity({
 	const [contentHeight, setContentHeight] = useState(0)
 	const [currentOpen, setOpen] = useControllableOpen({
 		open,
-		defaultOpen,
+		defaultOpen: defaultOpen || status === "failed",
 		onOpenChange,
 	})
 	const working = status === "working"
+	const failed = status === "failed"
 	const expanded = working || currentOpen
 	const contentType = items.length
 		? getContentType(items)
@@ -153,6 +164,7 @@ export function AgentActivity({
 	const cappedHeight = Math.min(contentHeight, Math.max(0, maxHeight))
 	const viewportHeight = working ? Math.max(0, maxHeight) : cappedHeight
 	const capped = contentHeight > maxHeight
+	const scrollable = capped && expanded && !working
 	const streamOffset = working ? Math.min(0, viewportHeight - contentHeight) : 0
 
 	useLayoutEffect(() => {
@@ -169,8 +181,8 @@ export function AgentActivity({
 	}, [])
 
 	useEffect(() => {
-		if (previousStatus.current === "working" && status === "complete") {
-			setOpen(!collapseOnComplete)
+		if (previousStatus.current === "working" && status !== "working") {
+			setOpen(status === "failed" || !collapseOnComplete)
 		}
 		previousStatus.current = status
 	}, [collapseOnComplete, setOpen, status])
@@ -183,7 +195,8 @@ export function AgentActivity({
 	}
 
 	const liveLabel = activeLabel ?? getActiveLabel(contentType)
-	const completedSummary = summary ?? getSummary(contentType, items, duration)
+	const completedSummary =
+		summary ?? getSummary(contentType, items, duration, status)
 	const maskImage = capped
 		? working
 			? "linear-gradient(to bottom, transparent, black 12px)"
@@ -193,6 +206,7 @@ export function AgentActivity({
 	return (
 		<div
 			data-state={working ? "working" : expanded ? "open" : "closed"}
+			data-status={status}
 			data-content={contentType}
 			aria-busy={working}
 			className={cn("w-full text-sm", className)}
@@ -216,8 +230,18 @@ export function AgentActivity({
 					aria-expanded={expanded}
 					aria-controls={contentId}
 					onClick={toggle}
-					className="group flex h-7 min-w-0 items-center gap-1.5 rounded-md text-left font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+					className={cn(
+						"group flex h-7 min-w-0 items-center gap-1.5 rounded-md text-left font-medium outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+						failed ? "text-destructive" : "text-muted-foreground",
+					)}
 				>
+					{failed ? (
+						<TriangleAlert
+							aria-hidden="true"
+							className="size-3.5 shrink-0"
+							strokeWidth={2}
+						/>
+					) : null}
 					<span className="truncate">
 						{renderCompletedStatus
 							? renderCompletedStatus({ summary: completedSummary, duration })
@@ -227,7 +251,7 @@ export function AgentActivity({
 						aria-hidden="true"
 						animate={{ rotate: expanded ? 180 : 0 }}
 						transition={reduce ? { duration: 0 } : SPRING_SWAP}
-						className="inline-flex shrink-0 text-muted-foreground/70 group-hover:text-foreground"
+						className="inline-flex shrink-0 group-hover:text-foreground"
 					>
 						<ChevronDown className="size-3.5" />
 					</motion.span>
@@ -243,11 +267,10 @@ export function AgentActivity({
 			>
 				<div
 					ref={viewportRef}
+					tabIndex={scrollable ? 0 : undefined}
 					className={cn(
-						"scrollbar-hide pr-1",
-						capped && expanded && !working
-							? "overflow-y-auto"
-							: "overflow-y-hidden",
+						"scrollbar-hide rounded-md pr-1 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+						scrollable ? "overflow-y-auto" : "overflow-y-hidden",
 					)}
 					style={{
 						height: viewportHeight,
