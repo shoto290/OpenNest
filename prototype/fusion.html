@@ -256,7 +256,6 @@
   <body>
     <span class="kicker">Prototype · esquisse × moteur d'animation</span>
     <h1>Mascotte animale animée</h1>
-    <p class="nav"><span>Proto A — esquisse</span> · <a href="fusion-b.html">Proto B — rond</a> · <a href="fusion-c.html">Proto C — kawaii</a></p>
 
     <div class="shell">
       <aside class="preview">
@@ -298,12 +297,6 @@
         </div>
 
         <div class="panel">
-          <h3>Couleur</h3>
-          <div class="swatch-row"><span>Bordures</span><div class="seg" id="stroke-swatches"></div></div>
-          <div class="swatch-row"><span>Yeux</span><div class="seg" id="eye-swatches"></div></div>
-        </div>
-
-        <div class="panel">
           <h3>État</h3>
           <div class="state-groups" id="state-groups"></div>
         </div>
@@ -338,23 +331,55 @@
 
       const CENTER = 114.2705;
       const makeUwuExpression = () => {
-        const width = 42;
-        const depth = 15;
-        const thick = 9;
-        const cy = 96;
+        const width = 40;
+        const depth = 17;
+        const thick = 13;
+        const cy = 112;
         const makeEye = (cx) => {
+          const N = 21;
+          const CAP = 3;
+          const P = (t) => [cx - width / 2 + width * t, cy + depth * Math.sin(Math.PI * t)];
+          const frame = (t) => {
+            const d = 0.001;
+            const [x1, y1] = P(Math.max(0, t - d));
+            const [x2, y2] = P(Math.min(1, t + d));
+            const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+            return { n: [-(y2 - y1) / len, (x2 - x1) / len], tg: [(x2 - x1) / len, (y2 - y1) / len] };
+          };
           const ring = [];
-          for (let i = 0; i < 24; i++) {
-            const t = i / 23;
-            ring.push([cx - width / 2 + width * t, cy + depth * Math.sin(Math.PI * t)]);
+          for (let i = 0; i < N; i++) {
+            const t = i / (N - 1);
+            const [x, y] = P(t);
+            const { n } = frame(t);
+            ring.push([x + (n[0] * thick) / 2, y + (n[1] * thick) / 2]);
           }
-          for (let i = 0; i < 24; i++) {
-            const t = 1 - i / 23;
-            ring.push([cx - width / 2 + width * t, cy + depth * Math.sin(Math.PI * t) - thick]);
+          const end = frame(1);
+          const [ex, ey] = P(1);
+          for (let i = 1; i <= CAP; i++) {
+            const a = (i / (CAP + 1)) * Math.PI;
+            ring.push([
+              ex + ((Math.cos(a) * end.n[0] + Math.sin(a) * end.tg[0]) * thick) / 2,
+              ey + ((Math.cos(a) * end.n[1] + Math.sin(a) * end.tg[1]) * thick) / 2,
+            ]);
+          }
+          for (let i = 0; i < N; i++) {
+            const t = 1 - i / (N - 1);
+            const [x, y] = P(t);
+            const { n } = frame(t);
+            ring.push([x - (n[0] * thick) / 2, y - (n[1] * thick) / 2]);
+          }
+          const start = frame(0);
+          const [sx0, sy0] = P(0);
+          for (let i = 1; i <= CAP; i++) {
+            const a = (i / (CAP + 1)) * Math.PI;
+            ring.push([
+              sx0 + ((-Math.cos(a) * start.n[0] - Math.sin(a) * start.tg[0]) * thick) / 2,
+              sy0 + ((-Math.cos(a) * start.n[1] - Math.sin(a) * start.tg[1]) * thick) / 2,
+            ]);
           }
           return ring;
         };
-        return [makeEye(CENTER - 38), makeEye(CENTER + 38)];
+        return [makeEye(CENTER - 36), makeEye(CENTER + 36)];
       };
       EXPRESSIONS.push(makeUwuExpression());
       const UWU = EXPRESSIONS.length - 1;
@@ -364,23 +389,28 @@
       EXPR_CADENCE.waiting = [9000, 16000];
       BLINK.waiting = null;
       const EAR_POSES = {
-        neutral: { rot: 0, sy: 1 },
-        soft: { rot: 6, sy: 0.98 },
-        perk: { rot: -8, sy: 1.1 },
-        flat: { rot: 26, sy: 0.88 },
-        back: { rot: 16, sy: 0.82 },
+        neutral: [{ rot: 0, sy: 1 }, { rot: 0, sy: 1 }],
+        soft: [{ rot: 8, sy: 0.97 }, { rot: 8, sy: 0.97 }],
+        perk: [{ rot: -10, sy: 1.16 }, { rot: -10, sy: 1.16 }],
+        flat: [{ rot: 32, sy: 0.82 }, { rot: 32, sy: 0.82 }],
+        back: [{ rot: 20, sy: 0.78 }, { rot: 20, sy: 0.78 }],
+        tilt: [{ rot: -16, sy: 1.16 }, { rot: 18, sy: 0.9 }],
+        radar: [{ rot: -12, sy: 1.12 }, { rot: 6, sy: 1.0 }],
       };
       const EAR_STATE = {
         waiting: 'soft', happy: 'soft', laughing: 'soft', proud: 'soft', idle: 'soft', humming: 'soft',
-        listening: 'perk', searching: 'perk', curious: 'perk', excited: 'perk', surprised: 'perk',
-        notifying: 'perk', alerting: 'perk', dictating: 'perk', receiving: 'perk', spawning: 'perk',
-        playful: 'perk', celebrate: 'perk', waking: 'perk', dragging: 'perk',
+        listening: 'perk', excited: 'perk', surprised: 'perk', notifying: 'perk', alerting: 'perk',
+        dictating: 'perk', receiving: 'perk', spawning: 'perk', playful: 'perk', celebrate: 'perk',
+        waking: 'perk', dragging: 'perk',
+        curious: 'tilt', confused: 'tilt',
+        thinking: 'radar', searching: 'radar', working: 'radar', loading: 'radar',
+        uploading: 'radar', writing: 'radar', sending: 'radar',
         scared: 'flat', sad: 'flat', shy: 'flat', sleeping: 'flat', drowsy: 'flat', bored: 'flat',
         'powering-down': 'flat',
         angry: 'back', suspicious: 'back',
       };
       const PASSIVE = new Set(['waiting', 'sleeping', 'idle', 'bored', 'drowsy', 'powering-down']);
-      const HAPPY = new Set(['waiting', 'happy', 'laughing', 'playful', 'celebrate', 'excited', 'proud']);
+      const HAPPY = new Set(['happy', 'laughing', 'playful', 'celebrate', 'excited', 'proud']);
 
       const ANIMALS = [
         {
@@ -408,8 +438,8 @@
             },
           ],
           extras: ``,
-          nose: `<path class="accent" d="M113,152 h14 l-7,9 Z"/>`,
-          mouth: `<path class="line" d="M112,166 q8,6 16,0"/>`,
+          nose: ``,
+          mouth: ``,
           mouthC: [120, 169],
           noseTop: 152,
         },
@@ -436,8 +466,8 @@
             },
           ],
           extras: ``,
-          nose: `<path class="accent" d="M114,164 h12 l-6,8 Z"/>`,
-          mouth: `<path class="line" d="M110,178 q5,5 10,0 q5,5 10,0"/>`,
+          nose: ``,
+          mouth: ``,
           mouthC: [120, 181],
           noseTop: 164,
         },
@@ -464,8 +494,8 @@
             },
           ],
           extras: ``,
-          nose: `<path class="accent" d="M112,158 h16 l-8,10 Z"/>`,
-          mouth: `<path class="line" d="M112,174 q8,6 16,0"/>`,
+          nose: ``,
+          mouth: ``,
           mouthC: [120, 177],
           noseTop: 158,
         },
@@ -486,7 +516,7 @@
             },
           ],
           extras: ``,
-          nose: `<path class="accent" d="M110,150 L120,144 L130,150 L120,160 Z"/>`,
+          nose: ``,
           mouth: ``,
           mouthC: [120, 150],
           noseTop: 144,
@@ -515,10 +545,94 @@
             },
           ],
           extras: ``,
-          nose: `<path class="accent" d="M112,152 h16 l-8,10 Z"/>`,
-          mouth: `<path class="line" d="M120,162 v6 M112,176 q8,6 16,0"/>`,
+          nose: ``,
+          mouth: ``,
           mouthC: [120, 172],
           noseTop: 152,
+        },
+        {
+          id: 'mouse',
+          name: 'Souris',
+          faceY: 128,
+          scale: 0.5,
+          head: `
+            M120,74 C150,74 178,98 182,138 C184,174 154,198 120,198
+            C86,198 56,174 58,138 C62,98 90,74 120,74 Z`,
+          ears: [
+            {
+              pivot: [80, 84],
+              side: -1,
+              art: `<circle class="outline" cx="70" cy="58" r="26"/>
+                    <circle class="accent" cx="70" cy="58" r="13"/>`,
+            },
+            {
+              pivot: [160, 84],
+              side: 1,
+              art: `<circle class="outline" cx="170" cy="58" r="26"/>
+                    <circle class="accent" cx="170" cy="58" r="13"/>`,
+            },
+          ],
+          extras: ``,
+          nose: ``,
+          mouth: ``,
+          mouthC: [120, 170],
+          noseTop: 150,
+        },
+        {
+          id: 'owl',
+          name: 'Hibou',
+          faceY: 126,
+          scale: 0.5,
+          head: `
+            M120,64 C156,64 182,88 182,132 C182,170 154,194 120,194
+            C86,194 58,170 58,132 C58,88 84,64 120,64 Z`,
+          ears: [
+            {
+              pivot: [72, 82],
+              side: -1,
+              art: `<path class="outline" d="M64,90 C52,74 46,52 48,32 C62,40 76,56 84,72 C76,76 69,82 64,90 Z"/>
+                    <path class="accent" d="M60,68 L56,44 L74,60 Z"/>`,
+            },
+            {
+              pivot: [168, 82],
+              side: 1,
+              art: `<path class="outline" d="M176,90 C188,74 194,52 192,32 C178,40 164,56 156,72 C164,76 171,82 176,90 Z"/>
+                    <path class="accent" d="M180,68 L184,44 L166,60 Z"/>`,
+            },
+          ],
+          extras: ``,
+          nose: ``,
+          mouth: ``,
+          mouthC: [120, 170],
+          noseTop: 150,
+        },
+        {
+          id: 'koala',
+          name: 'Koala',
+          faceY: 130,
+          scale: 0.48,
+          head: `
+            M120,74 C152,74 180,98 182,136 C184,172 154,196 120,196
+            C86,196 56,172 58,136 C60,98 88,74 120,74 Z`,
+          ears: [
+            {
+              pivot: [76, 74],
+              side: -1,
+              art: `<path class="outline" d="M74,88 C56,88 42,72 44,54 C46,38 62,30 76,35 C90,40 97,54 94,68 C92,80 84,88 74,88 Z"/>
+                    <ellipse class="accent" cx="69" cy="60" rx="11" ry="13"/>`,
+            },
+            {
+              pivot: [164, 74],
+              side: 1,
+              art: `<path class="outline" d="M166,88 C184,88 198,72 196,54 C194,38 178,30 164,35 C150,40 143,54 146,68 C148,80 156,88 166,88 Z"/>
+                    <ellipse class="accent" cx="171" cy="60" rx="11" ry="13"/>`,
+            },
+          ],
+          extras: ``,
+          nose: ``,
+          mouth: ``,
+          mouthC: [120, 170],
+          noseTop: 150,
         },
       ];
 
@@ -567,7 +681,31 @@
       let blinkStart = null;
       let state = 'idle';
       let autoExpressionTimer = null;
-      let earCur = { rot: 0, sy: 1 };
+      const earPhys = [
+        { rot: 0, vRot: 0, sy: 1, vSy: 0 },
+        { rot: 0, vRot: 0, sy: 1, vSy: 0 },
+      ];
+      let earSwap = false;
+      let earSwapTimer = null;
+      let earTwitchTimer = null;
+
+      function scheduleEarTwitch() {
+        clearTimeout(earTwitchTimer);
+        const calm = PASSIVE.has(state);
+        const delay = (calm ? 5000 : 1600) + Math.random() * (calm ? 9000 : 3000);
+        earTwitchTimer = setTimeout(() => {
+          const ear = earPhys[Math.floor(Math.random() * earPhys.length)];
+          ear.vRot += (Math.random() < 0.5 ? -1 : 1) * (60 + Math.random() * 90);
+          scheduleEarTwitch();
+        }, delay);
+      }
+      function scheduleEarSwap() {
+        clearTimeout(earSwapTimer);
+        earSwapTimer = setTimeout(() => {
+          earSwap = !earSwap;
+          scheduleEarSwap();
+        }, 2200 + Math.random() * 2800);
+      }
       let autoBlinkTimer = null;
 
       const centroid = (ring) => {
@@ -661,11 +799,18 @@
             `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${sx.toFixed(4)} ${sy.toFixed(4)}) translate(${(-c[0]).toFixed(2)} ${(-c[1]).toFixed(2)})`
           );
           el.style.opacity = depth > 0.02 ? '1' : '0';
-          let ringBot = -Infinity;
-          for (const p of ring) ringBot = Math.max(ringBot, p[1]);
+          let ringBot = -Infinity, ringTop = Infinity, ringL = Infinity, ringR = -Infinity;
+          for (const p of ring) {
+            ringBot = Math.max(ringBot, p[1]);
+            ringTop = Math.min(ringTop, p[1]);
+            ringL = Math.min(ringL, p[0]);
+            ringR = Math.max(ringR, p[0]);
+          }
           eyeInfo[index] = {
             ax: 120 + (x - CENTER) * s * k,
             abot: animal.faceY + (ringBot - CENTER) * s * k,
+            ex: x,
+            area: Math.max(1, (ringR - ringL) * (ringBot - ringTop)),
           };
         });
         const sinT = Math.sin(turn);
@@ -685,18 +830,17 @@
             `scale(${(squeeze * (1 - stretch * 0.5)).toFixed(4)} ${(1 + stretch).toFixed(4)}) ` +
             `translate(-120 -132)`
         );
-        const earPose = EAR_POSES[EAR_STATE[state] || 'neutral'];
-        earCur.rot += (earPose.rot - earCur.rot) * 0.1;
-        earCur.sy += (earPose.sy - earCur.sy) * 0.1;
-        const earWiggle = clamp(velocity, -3, 3) * 1.4 + faceDx * 0.06;
+        const earWiggle = clamp(velocity, -3, 3) * 1.8 + faceDx * 0.08;
         animal.ears.forEach((e, i) => {
           const g = $('ear-' + i);
           if (!g) return;
-          const angle = e.side * earCur.rot + earWiggle;
+          const st = earPhys[Math.min(i, earPhys.length - 1)];
+          const sway = Math.sin(now * 0.0008 + i * 2.3) * 1.6;
+          const angle = e.side * st.rot + earWiggle + sway;
           g.setAttribute(
             'transform',
             `translate(${e.pivot[0]} ${e.pivot[1]}) rotate(${angle.toFixed(2)}) ` +
-              `scale(1 ${earCur.sy.toFixed(3)}) translate(${-e.pivot[0]} ${-e.pivot[1]})`
+              `scale(1 ${Math.max(0.5, st.sy).toFixed(3)}) translate(${-e.pivot[0]} ${-e.pivot[1]})`
           );
         });
         const openness = clamp(eyesHeight(rings) / EYES_BASE_HEIGHT, 0.25, 2.2);
@@ -707,19 +851,38 @@
           0.85,
           1.25
         );
-        const featDy = faceDy * 0.3 + (eyesBottom(rings) - EYES_HOME_BOTTOM) * 0.45;
-        const eyesBotA = animal.faceY + (eyesBottom(rings) - CENTER) * s * k;
-        let noseDy = featDy * s;
-        noseDy = Math.max(noseDy, eyesBotA + 5 - animal.noseTop);
-        $('nose-g').setAttribute(
-          'transform',
-          `translate(${(sinT * 26 * s + faceDx * s * 0.85).toFixed(2)} ${noseDy.toFixed(2)})`
-        );
+        const areaSum = eyeInfo[0].area + eyeInfo[1].area;
+        const muzzleAx = (eyeInfo[0].ax * eyeInfo[0].area + eyeInfo[1].ax * eyeInfo[1].area) / areaSum;
+        const MUZZLE_LEAD = 1.45;
+        let muzzleDx = (muzzleAx - 120) * MUZZLE_LEAD + sinT * 36 * s;
+        const eyesBotA = Math.max(eyeInfo[0].abot, eyeInfo[1].abot);
+        const homeBotA = animal.faceY + (EYES_HOME_BOTTOM - CENTER) * s;
+        let noseDy = clamp((eyesBotA - homeBotA) * 1.25, -40, 32);
+        noseDy = Math.max(noseDy, eyesBotA + 4 - animal.noseTop);
+        const faceR = RADIUS * s;
+        const maxRad = faceR * 0.72;
+        const rawRad = Math.hypot(muzzleDx, noseDy);
+        if (rawRad > maxRad) {
+          const f = maxRad / rawRad;
+          muzzleDx *= f;
+          noseDy *= f;
+        }
+        const radial = Math.min(1, Math.hypot(muzzleDx, noseDy * 0.8) / faceR);
+        const sphereScale = clamp(1 - 0.45 * Math.pow(radial, 1.6), 0.55, 1);
+        const sphereRot = -muzzleDx * 0.22;
+        const px = 120;
+        const py = (animal.noseTop + animal.mouthC[1]) / 2;
+        const sphereT = (dy) =>
+          `translate(${muzzleDx.toFixed(2)} ${dy.toFixed(2)}) ` +
+          `translate(${px} ${py}) rotate(${sphereRot.toFixed(2)}) ` +
+          `scale(${sphereScale.toFixed(3)}) translate(${-px} ${-py})`;
+        $('nose-g').setAttribute('transform', sphereT(noseDy));
         const mc = animal.mouthC;
+        const mouthDy = noseDy + Math.max(0, mouthSy - 1) * 5;
         $('mouth-g').setAttribute(
           'transform',
-          `translate(${(sinT * 40 * s + faceDx * s * 0.9).toFixed(2)} ${(noseDy * 1.08).toFixed(2)}) ` +
-            `translate(${mc[0]} ${mc[1]}) scale(${mouthSx.toFixed(3)} ${mouthSy.toFixed(3)}) ` +
+          sphereT(mouthDy) +
+            ` translate(${mc[0]} ${mc[1]}) scale(${mouthSx.toFixed(3)} ${mouthSy.toFixed(3)}) ` +
             `translate(${-mc[0]} ${-mc[1]})`
         );
         document.querySelectorAll('#blush-g ellipse').forEach((el, i) => {
@@ -740,6 +903,18 @@
         velocity += (-2 * frequency * velocity - frequency * frequency * (morph - 1)) * dt;
         morph += velocity * dt;
         if (!Number.isFinite(morph)) { morph = 1; velocity = 0; }
+        const pose = EAR_POSES[EAR_STATE[state] || 'neutral'];
+        earPhys.forEach((e, i) => {
+          let idx = Math.min(i, pose.length - 1);
+          if (earSwap && pose.length > 1) idx = pose.length - 1 - idx;
+          const target = pose[idx];
+          const w0 = 14;
+          const z = 0.5;
+          e.vRot += (-2 * z * w0 * e.vRot - w0 * w0 * (e.rot - target.rot)) * dt;
+          e.rot += e.vRot * dt;
+          e.vSy += (-2 * z * w0 * e.vSy - w0 * w0 * (e.sy - target.sy)) * dt;
+          e.sy += e.vSy * dt;
+        });
         render(now);
         requestAnimationFrame(animate);
       }
@@ -782,6 +957,8 @@
         selectExpression(POOLS[state][0]);
         scheduleExpression();
         scheduleBlink();
+        scheduleEarTwitch();
+        scheduleEarSwap();
         updateBlush();
         document
           .querySelectorAll('#state-groups button')
@@ -841,35 +1018,10 @@
         $('state-groups').appendChild(wrap);
       });
 
-      const COLORS = ['', '#2f66e8', '#7c5cff', '#2f9e6e', '#e0558f', '#e36f3d', '#e8b93d'];
-      const stageEl = $('stage');
-      function buildSwatches(elId, cssVar) {
-        const el = $(elId);
-        for (const color of COLORS) {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'swatch';
-          b.title = color || 'défaut';
-          b.style.background = color || 'var(--ink)';
-          b.setAttribute('aria-pressed', String(color === ''));
-          b.addEventListener('click', () => {
-            if (color) stageEl.style.setProperty(cssVar, color);
-            else stageEl.style.removeProperty(cssVar);
-            el.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', 'false'));
-            b.setAttribute('aria-pressed', 'true');
-          });
-          el.appendChild(b);
-        }
-      }
-      buildSwatches('stroke-swatches', '--stroke-c');
-      buildSwatches('eye-swatches', '--eye-c');
-
       const params = new URLSearchParams(location.search);
       setAnimal(ANIMALS.find((a) => a.id === params.get('animal')) || ANIMALS[0]);
       setState(POOLS[params.get('state')] ? params.get('state') : 'waiting');
       if (params.get('turn') !== null) $('turn').value = clamp(Number(params.get('turn')) || 0, -100, 100);
-      if (params.get('stroke')) stageEl.style.setProperty('--stroke-c', '#' + params.get('stroke'));
-      if (params.get('eyes')) stageEl.style.setProperty('--eye-c', '#' + params.get('eyes'));
       if (params.get('expr') !== null) {
         clearTimeout(autoExpressionTimer);
         selectExpression(clamp(Number(params.get('expr')) || 0, 0, EXPRESSIONS.length - 1));
