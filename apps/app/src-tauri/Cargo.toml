@@ -3,6 +3,19 @@ name = "opennest-app"
 version = "0.0.1"
 description = "OpenNest desktop app"
 edition = "2021"
+default-run = "opennest-app"
+
+[lib]
+name = "opennest_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "opennest-app"
+path = "src/main.rs"
+
+[[bin]]
+name = "fake_claude"
+path = "src/bin/fake_claude.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -11,3 +24,15 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
+tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread"] }
+libc = "0.2"
