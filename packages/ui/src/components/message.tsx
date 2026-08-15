@@ -1,4 +1,3 @@
-"use client"
 // beui.dev/components/agents/message
 
 import { motion, useReducedMotion } from "motion/react"
@@ -13,15 +12,6 @@ import { MessageSideContext } from "@workspace/ui/components/agents/message-cont
 import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
-export {
-	MessageBubble,
-	MessageBubbleCollapsible,
-	MessageBubbleContent,
-	MessageBubbleGroup,
-} from "@workspace/ui/components/agents/message-bubble"
-export type { MessageScrollerProps } from "@workspace/ui/components/agents/message-scroller"
-export { MessageScroller } from "@workspace/ui/components/agents/message-scroller"
-
 export type MessageFrom = "user" | "assistant"
 
 interface MessageContextValue {
@@ -32,8 +22,16 @@ const MessageContext = createContext<MessageContextValue>({
 	from: "assistant",
 })
 
+type MotionOwnedProps =
+	| "onDrag"
+	| "onDragStart"
+	| "onDragEnd"
+	| "onAnimationStart"
+	| "onAnimationEnd"
+	| "onAnimationIteration"
+
 export interface MessageProps
-	extends Omit<ComponentPropsWithRef<typeof motion.article>, "children"> {
+	extends Omit<ComponentPropsWithRef<"article">, "children" | MotionOwnedProps> {
 	from: MessageFrom
 	/** Plays a trailing-edge pop-up once when this message row mounts. */
 	animateIn?: boolean
@@ -42,6 +40,8 @@ export interface MessageProps
 
 export interface MessageGroupProps extends ComponentPropsWithRef<"div"> {
 	spacing?: "compact" | "default"
+	/** Names the transcript for assistive technology. */
+	label?: string
 }
 
 export interface MessageAvatarProps extends ComponentPropsWithRef<"div"> {
@@ -72,14 +72,11 @@ export function Message({
 	animateIn = false,
 	children,
 	className,
-	initial,
-	animate,
-	transition,
-	exit,
 	style,
 	...props
 }: MessageProps) {
 	const reduce = useReducedMotion() ?? false
+	const entrance = animateIn && !reduce
 
 	return (
 		<MessageSideContext.Provider value={from === "user" ? "end" : "start"}>
@@ -89,35 +86,21 @@ export function Message({
 					data-from={from}
 					aria-label={props["aria-label"] ?? `${from} message`}
 					initial={
-						initial ??
-						(animateIn && !reduce
-							? {
-									opacity: 0,
-									transform: "translateY(8px) scale(0.95)",
-								}
-							: false)
+						entrance
+							? { opacity: 0, transform: "translateY(8px) scale(0.95)" }
+							: false
 					}
 					animate={
-						animate ??
-						(animateIn && !reduce
-							? {
-									opacity: 1,
-									transform: "translateY(0px) scale(1)",
-								}
-							: { opacity: 1 })
+						entrance
+							? { opacity: 1, transform: "translateY(0px) scale(1)" }
+							: { opacity: 1 }
 					}
 					exit={
-						exit ??
-						(reduce
+						reduce
 							? { opacity: 0 }
-							: {
-									opacity: 0,
-									transform: "translateY(-3px) scale(0.99)",
-								})
+							: { opacity: 0, transform: "translateY(-3px) scale(0.99)" }
 					}
-					transition={
-						transition ?? (reduce ? { duration: 0.12 } : MESSAGE_POP_UP)
-					}
+					transition={reduce ? { duration: 0.12 } : MESSAGE_POP_UP}
 					style={{
 						transformOrigin: from === "user" ? "100% 100%" : "0% 100%",
 						...style,
@@ -138,12 +121,17 @@ export function Message({
 
 export function MessageGroup({
 	spacing = "compact",
+	label = "Conversation",
 	className,
 	...props
 }: MessageGroupProps) {
 	return (
 		<div
 			data-slot="message-group"
+			role="log"
+			aria-label={label}
+			aria-live="polite"
+			aria-relevant="additions"
 			className={cn(
 				"flex w-full flex-col",
 				spacing === "compact" ? "gap-1.5" : "gap-4",
@@ -165,7 +153,7 @@ export function MessageAvatar({
 			data-slot="message-avatar"
 			aria-hidden={placeholder || undefined}
 			className={cn(
-				"grid size-7 shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-xs font-medium text-muted-foreground [&_img]:size-full [&_img]:object-cover [&_svg]:size-3.5",
+				"grid size-7 shrink-0 place-items-center overflow-hidden rounded-full bg-secondary text-xs font-medium text-secondary-foreground [&_img]:size-full [&_img]:object-cover [&_svg]:size-3.5",
 				placeholder && "invisible",
 				className,
 			)}
@@ -183,7 +171,7 @@ export function MessageContent({ className, ...props }: MessageContentProps) {
 		<div
 			data-slot="message-content"
 			className={cn(
-				"flex min-w-0 flex-1 flex-col gap-1.5",
+				"flex min-w-0 flex-1 flex-col gap-1.5 text-sm leading-6",
 				from === "user" ? "items-end" : "items-start",
 				className,
 			)}
@@ -199,7 +187,7 @@ export function MessageHeader({ className, ...props }: MessageHeaderProps) {
 		<div
 			data-slot="message-header"
 			className={cn(
-				"flex items-center gap-1.5 px-1 text-[11px] leading-none text-muted-foreground",
+				"flex items-center gap-1.5 px-1 text-xs leading-none text-muted-foreground",
 				from === "user" ? "justify-end" : "justify-start",
 				className,
 			)}
@@ -215,7 +203,7 @@ export function MessageFooter({ className, ...props }: MessageFooterProps) {
 		<div
 			data-slot="message-footer"
 			className={cn(
-				"flex min-h-5 items-center gap-1 px-1 text-[11px] text-muted-foreground",
+				"flex min-h-5 items-center gap-1 px-1 text-xs text-muted-foreground",
 				from === "user" ? "justify-end" : "justify-start",
 				className,
 			)}
@@ -229,7 +217,7 @@ export function MessageMarker({ className, ...props }: MessageMarkerProps) {
 		<div
 			data-slot="message-marker"
 			className={cn(
-				"mx-auto flex w-fit max-w-[88%] items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1 text-center text-xs text-muted-foreground",
+				"mx-auto flex w-fit max-w-lg items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-center text-xs text-secondary-foreground",
 				className,
 			)}
 			{...props}
