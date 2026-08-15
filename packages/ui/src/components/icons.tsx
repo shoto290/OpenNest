@@ -26,6 +26,7 @@ import {
 	RefreshIcon,
 	Search01Icon,
 	Settings01Icon,
+	Shield01Icon,
 	StopIcon,
 	ThumbsDownIcon,
 	ThumbsUpIcon,
@@ -70,6 +71,7 @@ const Icons = {
 	Search: createIcon(Search01Icon),
 	Send: createIcon(ArrowUp02Icon),
 	Settings: createIcon(Settings01Icon),
+	Shield: createIcon(Shield01Icon),
 	Stop: createIcon(StopIcon),
 	Success: createIcon(CheckmarkCircle02Icon),
 	Terminal: createIcon(ComputerTerminal01Icon),
@@ -78,4 +80,4 @@ const Icons = {
 	Tool: createIcon(Configuration01Icon),
 }
 
-export { Icons, type IconProps }
+export { type IconProps, Icons }
