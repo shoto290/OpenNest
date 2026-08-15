@@ -1,0 +1,45 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+import {
+	ACTION_TOKENS,
+	CHART_TOKENS,
+	ColorTokenGrid,
+	CONTROL_TOKENS,
+	FEEDBACK_TOKENS,
+	SIDEBAR_TOKENS,
+	SURFACE_TOKENS,
+} from "@workspace/ui/foundations/color-tokens"
+
+<Meta title="Foundations/Colors" />
+
+# Colors
+
+Every swatch reads its live CSS variable, so this page follows the theme toolbar. Switch to **Theme layout → Side by side** to compare light and dark at once.
+
+Tokens are declared in `src/styles/globals.css`: light values on `:root`, dark overrides on `.dark`. Use the Tailwind utility (`bg-primary`, `text-muted-foreground`) rather than the raw variable.
+
+## Surfaces
+
+<ColorTokenGrid tokens={SURFACE_TOKENS} />
+
+## Actions and emphasis
+
+<ColorTokenGrid tokens={ACTION_TOKENS} />
+
+## Feedback
+
+`--destructive` has no `-foreground` pair — components use it as a text colour or as an alpha background (`bg-destructive/10 text-destructive`), never as a solid surface with text on top.
+
+<ColorTokenGrid tokens={FEEDBACK_TOKENS} />
+
+## Borders and controls
+
+<ColorTokenGrid tokens={CONTROL_TOKENS} />
+
+## Charts
+
+<ColorTokenGrid tokens={CHART_TOKENS} />
+
+## Sidebar
+
+<ColorTokenGrid tokens={SIDEBAR_TOKENS} />

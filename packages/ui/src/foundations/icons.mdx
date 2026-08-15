@@ -1,0 +1,25 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+import { IconCount, IconGrid } from "@workspace/ui/foundations/icon-grid"
+
+<Meta title="Foundations/Icons" />
+
+# Icons
+
+<IconCount /> icons, exported as one `Icons` object from `src/components/icons.tsx`, wrapping [Hugeicons](https://hugeicons.com) (`@hugeicons/core-free-icons` rendered through `@hugeicons/react`). Never import from `@hugeicons/*` directly — the wrapper is what keeps names semantic (`Icons.Delete`, not `Delete02Icon`) and keeps sizing consistent.
+
+```tsx
+import { Icons } from "@workspace/ui/components/icons"
+
+<Icons.Add className="size-4" />
+```
+
+Each icon takes the Hugeicons SVG props. Size with `size-*`, colour with `text-*`. Decorative icons need `aria-hidden="true"`; an icon-only control needs an `aria-label` on the control, not on the icon.
+
+## Adding an icon
+
+1. Import the Hugeicons icon at the top of `icons.tsx`.
+2. Wrap it: `Foo: createIcon(Foo01Icon)`.
+3. Name it after its **purpose**, not its shape.
+
+<IconGrid />

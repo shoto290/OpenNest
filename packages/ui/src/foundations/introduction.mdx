@@ -1,0 +1,34 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+<Meta title="Foundations/Introduction" />
+
+# OpenNest Design System
+
+`@workspace/ui` is a source-only React package consumed through the `@workspace/ui/*` path alias. There is no build step: apps import components directly and Tailwind compiles them from source.
+
+## Token pipeline
+
+All design decisions live in one CSS file:
+
+- `src/styles/globals.css` — semantic tokens on `:root`, dark overrides on `.dark`, plus the `@theme inline` block that maps them to Tailwind utilities.
+
+Components never read a raw colour. They use Tailwind utilities backed by semantic tokens (`bg-background`, `text-muted-foreground`, `border-border`), so a theme swap needs no component change.
+
+## Theming
+
+`dark` is a class-based variant: `@custom-variant dark (&:is(.dark *))`. Put `dark` on an ancestor and everything below follows. Use the toolbar to switch, or **Theme layout → Side by side** to render a story in both themes at once.
+
+## Import convention
+
+Direct imports only — never a barrel file.
+
+```tsx
+import { Button } from "@workspace/ui/components/button"
+import { Icons } from "@workspace/ui/components/icons"
+```
+
+## Story taxonomy
+
+Every story is titled `<Section>/<Name>` — two levels, never deeper. Sections are fixed and ordered: `Foundations`, `Primitives`, `Forms`, `Overlays`, `Feedback`, `Navigation`, `Data`, `Display`, `Layout`, `Patterns`, `Branding`, `AI`. An unknown section makes `storySort` throw, so drift is caught in CI instead of in review.
+
+The section is deliberately decoupled from the file path. `Primitives` means genuinely primitive components — Button, Badge, Separator — not the whole `src/components/` directory. Pick the section by what the component _is_, not by where it lives.

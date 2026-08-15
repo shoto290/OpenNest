@@ -12,7 +12,10 @@
 	"scripts": {
 		"types": "tsc -b",
 		"lint": "biome lint",
-		"lint:fix": "biome check --assist-enabled=true --unsafe --write ."
+		"lint:fix": "biome check --assist-enabled=true --unsafe --write .",
+		"storybook": "storybook dev --port 6006 --no-open",
+		"build-storybook": "storybook build",
+		"test:storybook": "vitest run --project=storybook"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.7.0",
@@ -30,8 +33,24 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
+		"@storybook/addon-a11y": "10.5.5",
+		"@storybook/addon-docs": "10.5.5",
+		"@storybook/addon-mcp": "0.7.0",
+		"@storybook/addon-themes": "10.5.5",
+		"@storybook/addon-vitest": "10.5.5",
+		"@storybook/react-vite": "10.5.5",
+		"@tailwindcss/vite": "^4.3.3",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
-		"tailwindcss": "^4"
+		"@vitejs/plugin-react": "^6.0.1",
+		"@vitest/browser": "4.1.10",
+		"@vitest/browser-playwright": "4.1.10",
+		"@vitest/coverage-v8": "4.1.10",
+		"playwright": "1.62.1",
+		"storybook": "10.5.5",
+		"storybook-addon-pseudo-states": "10.5.5",
+		"tailwindcss": "^4",
+		"vite": "^8.0.0",
+		"vitest": "4.1.10"
 	}
 }
