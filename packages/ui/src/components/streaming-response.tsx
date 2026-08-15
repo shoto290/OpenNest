@@ -1,31 +1,11 @@
 "use client"
-// beui.dev/components/agents/streaming-response
+// Adapted from beui.dev/components/agents/streaming-response
 
-import {
-	Check,
-	ChevronDown,
-	Copy,
-	RotateCcw,
-	ThumbsDown,
-	ThumbsUp,
-} from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import {
-	type ReactNode,
-	useCallback,
-	useEffect,
-	useId,
-	useRef,
-	useState,
-} from "react"
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 
-import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
-import {
-	type CitationItem,
-	CitationList,
-	CitationStack,
-} from "@workspace/ui/components/agents/citations"
-import { EASE_OUT, SPRING_PRESS, SPRING_SWAP } from "@workspace/ui/lib/ease"
+import { Icons } from "@workspace/ui/components/icons"
+import { EASE_OUT, SPRING_PRESS } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
 export type StreamingResponseStatus = "streaming" | "complete" | "error"
@@ -40,12 +20,6 @@ export interface StreamingResponseProps {
 	/** Overrides the built-in clipboard action. */
 	onCopy?: () => void | Promise<void>
 	onRetry?: () => void
-	/** Optional sources shown as a compact footer disclosure after streaming. */
-	sources?: CitationItem[]
-	sourcesOpen?: boolean
-	defaultSourcesOpen?: boolean
-	onSourcesOpenChange?: (open: boolean) => void
-	sourceIdPrefix?: string
 	feedback?: StreamingResponseFeedback
 	defaultFeedback?: StreamingResponseFeedback
 	onFeedbackChange?: (feedback: StreamingResponseFeedback) => void
@@ -57,6 +31,8 @@ export interface StreamingResponseProps {
 	contentClassName?: string
 	actionsClassName?: string
 }
+
+const FEEDBACK_LABELS = ["Helpful", "Not helpful"]
 
 function ResponseAction({
 	label,
@@ -76,9 +52,7 @@ function ResponseAction({
 			type="button"
 			aria-label={label}
 			title={label}
-			aria-pressed={
-				label === "Helpful" || label === "Not helpful" ? active : undefined
-			}
+			aria-pressed={FEEDBACK_LABELS.includes(label) ? active : undefined}
 			onClick={onClick}
 			whileTap={reduce ? undefined : { scale: 0.9 }}
 			transition={SPRING_PRESS}
@@ -98,11 +72,6 @@ export function StreamingResponse({
 	copyText,
 	onCopy,
 	onRetry,
-	sources = [],
-	sourcesOpen,
-	defaultSourcesOpen = false,
-	onSourcesOpenChange,
-	sourceIdPrefix,
 	feedback,
 	defaultFeedback = null,
 	onFeedbackChange,
@@ -113,24 +82,16 @@ export function StreamingResponse({
 	actionsClassName,
 }: StreamingResponseProps) {
 	const reduce = useReducedMotion() ?? false
-	const baseId = useId()
 	const [copied, setCopied] = useState(false)
 	const [internalFeedback, setInternalFeedback] =
 		useState<StreamingResponseFeedback>(defaultFeedback)
-	const [internalSourcesOpen, setInternalSourcesOpen] =
-		useState(defaultSourcesOpen)
 	const copyTimer = useRef<number | undefined>(undefined)
 	const currentFeedback = feedback ?? internalFeedback
-	const currentSourcesOpen = sourcesOpen ?? internalSourcesOpen
 	const streaming = status === "streaming"
 	const complete = status === "complete"
 	const canCopy = Boolean(copyText || onCopy)
-	const hasSources = sources.length > 0
 	const shouldShowActions =
-		showActions && !streaming && (canCopy || onRetry || complete || hasSources)
-	const sourcesContentId = `${baseId}-sources`
-	const resolvedSourcePrefix =
-		sourceIdPrefix ?? `response-source-${baseId.replace(/:/g, "")}`
+		showActions && !streaming && (canCopy || onRetry || complete)
 
 	useEffect(
 		() => () => {
@@ -154,21 +115,15 @@ export function StreamingResponse({
 		onFeedbackChange?.(value)
 	}
 
-	const setSourcesOpen = useCallback(
-		(next: boolean) => {
-			if (sourcesOpen === undefined) setInternalSourcesOpen(next)
-			onSourcesOpenChange?.(next)
-		},
-		[onSourcesOpenChange, sourcesOpen],
-	)
-
 	return (
 		<div
+			data-slot="streaming-response"
 			data-state={status}
 			aria-busy={streaming}
 			className={cn("w-full", className)}
 		>
 			<div
+				data-slot="streaming-response-content"
 				aria-live={announce ? "polite" : "off"}
 				className={cn(
 					"text-sm leading-6 text-foreground/90 [&_a]:font-medium [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5 [&_p+p]:mt-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border [&_pre]:bg-muted/45 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5",
@@ -185,77 +140,42 @@ export function StreamingResponse({
 						animate={{ opacity: 1, y: 0 }}
 						exit={{ opacity: 0 }}
 						transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE_OUT }}
-						className="mt-3"
+						className={cn("mt-3 flex items-center gap-0.5", actionsClassName)}
 					>
-						<div className={cn("flex items-center gap-0.5", actionsClassName)}>
-							{canCopy ? (
+						{canCopy ? (
+							<ResponseAction
+								label={copied ? "Copied" : "Copy response"}
+								onClick={handleCopy}
+							>
+								{copied ? (
+									<Icons.Success className="size-3.5" />
+								) : (
+									<Icons.Copy className="size-3.5" />
+								)}
+							</ResponseAction>
+						) : null}
+						{onRetry ? (
+							<ResponseAction label="Retry response" onClick={onRetry}>
+								<Icons.Retry className="size-3.5" />
+							</ResponseAction>
+						) : null}
+						{complete ? (
+							<>
 								<ResponseAction
-									label={copied ? "Copied" : "Copy response"}
-									onClick={handleCopy}
+									label="Helpful"
+									active={currentFeedback === "up"}
+									onClick={() => setFeedback("up")}
 								>
-									{copied ? (
-										<Check className="size-3.5" />
-									) : (
-										<Copy className="size-3.5" />
-									)}
+									<Icons.ThumbsUp className="size-3.5" />
 								</ResponseAction>
-							) : null}
-							{onRetry ? (
-								<ResponseAction label="Retry response" onClick={onRetry}>
-									<RotateCcw className="size-3.5" />
-								</ResponseAction>
-							) : null}
-							{complete ? (
-								<>
-									<ResponseAction
-										label="Helpful"
-										active={currentFeedback === "up"}
-										onClick={() => setFeedback("up")}
-									>
-										<ThumbsUp className="size-3.5" />
-									</ResponseAction>
-									<ResponseAction
-										label="Not helpful"
-										active={currentFeedback === "down"}
-										onClick={() => setFeedback("down")}
-									>
-										<ThumbsDown className="size-3.5" />
-									</ResponseAction>
-								</>
-							) : null}
-							{hasSources ? (
-								<button
-									type="button"
-									aria-expanded={currentSourcesOpen}
-									aria-controls={sourcesContentId}
-									onClick={() => setSourcesOpen(!currentSourcesOpen)}
-									className="group ml-1 inline-flex min-h-7 items-center gap-2 rounded-md px-1.5 text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+								<ResponseAction
+									label="Not helpful"
+									active={currentFeedback === "down"}
+									onClick={() => setFeedback("down")}
 								>
-									<CitationStack citations={sources} />
-									<span className="tabular-nums">
-										{sources.length}{" "}
-										{sources.length === 1 ? "source" : "sources"}
-									</span>
-									<motion.span
-										aria-hidden="true"
-										animate={{ rotate: currentSourcesOpen ? 180 : 0 }}
-										transition={reduce ? { duration: 0 } : SPRING_SWAP}
-										className="text-muted-foreground/50 group-hover:text-muted-foreground"
-									>
-										<ChevronDown className="size-3" />
-									</motion.span>
-								</button>
-							) : null}
-						</div>
-
-						{hasSources ? (
-							<AgentDisclosure id={sourcesContentId} open={currentSourcesOpen}>
-								<CitationList
-									citations={sources}
-									idPrefix={resolvedSourcePrefix}
-									className="mt-2 rounded-xl bg-muted p-2"
-								/>
-							</AgentDisclosure>
+									<Icons.ThumbsDown className="size-3.5" />
+								</ResponseAction>
+							</>
 						) : null}
 					</motion.div>
 				) : null}

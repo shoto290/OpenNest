@@ -16,8 +16,11 @@ import {
 	Loading03Icon,
 	MoreHorizontalIcon,
 	PencilEdit01Icon,
+	RefreshIcon,
 	Search01Icon,
 	Settings01Icon,
+	ThumbsDownIcon,
+	ThumbsUpIcon,
 } from "@hugeicons/core-free-icons"
 import {
 	HugeiconsIcon,
@@ -49,9 +52,12 @@ const Icons = {
 	Info: createIcon(InformationCircleIcon),
 	Loading: createIcon(Loading03Icon),
 	More: createIcon(MoreHorizontalIcon),
+	Retry: createIcon(RefreshIcon),
 	Search: createIcon(Search01Icon),
 	Settings: createIcon(Settings01Icon),
 	Success: createIcon(CheckmarkCircle02Icon),
+	ThumbsDown: createIcon(ThumbsDownIcon),
+	ThumbsUp: createIcon(ThumbsUpIcon),
 }
 
 export { Icons, type IconProps }
