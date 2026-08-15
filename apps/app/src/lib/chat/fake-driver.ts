@@ -20,8 +20,10 @@ export type FakeChatDriverOptions = {
 const FAIL_DIRECTIVE = "/fail"
 const PERMISSION_DIRECTIVE = "/permission"
 
+/** Several paragraphs, so `bun dev:web` shows an answer landing in the flow one
+ * message at a time rather than as a single block. */
 function defaultReply(prompt: string): string {
-	return `Réponse simulée à « ${prompt} ». Ce texte est diffusé morceau par morceau par le faux driver pour reproduire un tour Claude Code complet.`
+	return `Réponse simulée à « ${prompt} ».\n\nCe texte est diffusé morceau par morceau par le faux driver pour reproduire un tour Claude Code complet.\n\nChaque paragraphe part dans le fil dès qu'il est terminé.`
 }
 
 function toChunks(reply: string): string[] {

@@ -2,10 +2,15 @@ import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
+import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import { ChatNotice } from "@workspace/ui/components/chat-notice"
-import { AssistantTurn, UserTurn } from "@workspace/ui/components/chat-turn"
+import {
+	AssistantTurn,
+	CHAT_AVATAR_SIZE,
+	UserTurn,
+} from "@workspace/ui/components/chat-turn"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 
@@ -50,7 +55,12 @@ export const Default = meta.story({
 		children: (
 			<>
 				<UserTurn>How is this workspace laid out?</UserTurn>
-				<AssistantTurn copyText={ANSWER}>{ANSWER}</AssistantTurn>
+				<AssistantTurn
+					copyText={ANSWER}
+					avatar={<BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />}
+				>
+					{ANSWER}
+				</AssistantTurn>
 			</>
 		),
 	},
