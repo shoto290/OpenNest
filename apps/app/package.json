@@ -9,11 +9,14 @@
 		"build": "tsc -b && vite build",
 		"serve": "vite preview",
 		"types": "tsc -b",
+		"test": "cargo test --manifest-path src-tauri/Cargo.toml",
+		"test:live": "cargo test --manifest-path src-tauri/Cargo.toml --test real_claude -- --ignored --test-threads=1",
 		"lint": "biome lint",
 		"lint:fix": "biome check --assist-enabled=true --unsafe --write .",
 		"tauri:build": "tauri build"
 	},
 	"dependencies": {
+		"@tauri-apps/api": "^2.11.1",
 		"@workspace/ui": "workspace:*",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6"

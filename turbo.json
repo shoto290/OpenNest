@@ -24,6 +24,9 @@
 		"types": {
 			"dependsOn": ["^types"]
 		},
+		"test": {
+			"cache": false
+		},
 		"lint": {},
 		"lint:fix": {
 			"cache": false
