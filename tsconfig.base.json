@@ -1,0 +1,36 @@
+{
+	"display": "Recommended",
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"compilerOptions": {
+		"rootDir": ".",
+		"outDir": "./dist",
+		"composite": true,
+		"declaration": true,
+		"declarationMap": true,
+		"target": "ESNext",
+		"lib": ["DOM", "DOM.Iterable", "ESNext"],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"allowJs": false,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"resolveJsonModule": true,
+		"allowSyntheticDefaultImports": true,
+		"noUnusedLocals": true,
+		"strictNullChecks": true,
+		"isolatedModules": true,
+		"sourceMap": true,
+		"inlineSources": true,
+		"noImplicitAny": true,
+		"noImplicitOverride": true,
+		"noUncheckedSideEffectImports": true,
+		"forceConsistentCasingInFileNames": true,
+		"useDefineForClassFields": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"paths": {
+			"@workspace/ui/*": ["./packages/ui/src/*"]
+		}
+	}
+}

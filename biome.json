@@ -1,0 +1,167 @@
+{
+	"root": true,
+	"$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"ignoreUnknown": false,
+		"includes": ["**", "!**/src/generated/**"]
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab"
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"style": {
+				"noNonNullAssertion": {
+					"level": "warn",
+					"fix": "none"
+				},
+				"noDefaultExport": "error",
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"paths": {
+							"lucide-react": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is centralized in packages/ui."
+						}
+					}
+				},
+				"useConsistentArrayType": "error",
+				"useConsistentObjectDefinitions": "error",
+				"useConsistentCurlyBraces": {
+					"level": "error",
+					"fix": "safe"
+				}
+			},
+			"complexity": {
+				"useArrowFunction": "error",
+				"noExcessiveCognitiveComplexity": "warn"
+			},
+			"correctness": {
+				"noUnusedImports": {
+					"level": "error",
+					"fix": "safe"
+				}
+			},
+			"suspicious": {
+				"noExplicitAny": "error"
+			},
+			"security": {
+				"noDangerouslySetInnerHtml": "warn"
+			},
+			"a11y": {
+				"useKeyWithClickEvents": "off",
+				"useFocusableInteractive": "warn",
+				"useSemanticElements": "warn"
+			}
+		}
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": {
+					"level": "on",
+					"options": {
+						"groups": [
+							":URL:",
+							":BLANK_LINE:",
+							[":BUN:", ":NODE:"],
+							":BLANK_LINE:",
+							[":PACKAGE:", "!@workspace", "!@workspace/**"],
+							":BLANK_LINE:",
+							["@workspace", "@workspace/**"],
+							":BLANK_LINE:",
+							["./*"],
+							":BLANK_LINE:",
+							["../*"]
+						]
+					}
+				}
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double",
+			"semicolons": "asNeeded"
+		}
+	},
+	"css": {
+		"parser": {
+			"cssModules": false,
+			"tailwindDirectives": true
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["packages/ui/src/components/**"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noExcessiveCognitiveComplexity": "off"
+					},
+					"correctness": {
+						"useHookAtTopLevel": "off"
+					},
+					"a11y": {
+						"useSemanticElements": "off",
+						"useFocusableInteractive": "off"
+					},
+					"performance": {
+						"noAccumulatingSpread": "off"
+					},
+					"security": {
+						"noDangerouslySetInnerHtml": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"packages/ui/.storybook/**",
+				"packages/components/.storybook/**",
+				"packages/ui/src/**/*.stories.tsx",
+				"**/*.stories.*"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noDefaultExport": "off"
+					},
+					"correctness": {
+						"useHookAtTopLevel": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"packages/ui/src/components/icons.tsx",
+				"packages/ui/src/types/icon.types.ts"
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["**/prisma.config.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noDefaultExport": "off"
+					}
+				}
+			}
+		}
+	]
+}
