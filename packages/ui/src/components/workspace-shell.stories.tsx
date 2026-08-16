@@ -111,20 +111,22 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal workspace: an expanded sidebar holding the session tree, and a live conversation in the main column. Check that the transcript keeps its centred reading column instead of stretching to the window edge now that the shell is wider than the chat, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar trigger before the transcript. Pick `Collapsed` for the icon rail, `Empty` for the shell with no sidebar at all.",
+					"The nominal workspace: an expanded sidebar holding the session tree, and a live conversation in the main column. Check that the transcript takes the whole room the panel leaves it and starts where the panel ends rather than running under it, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar trigger before the transcript. Pick `Collapsed` for the icon rail, `Empty` for the shell with no sidebar at all.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByRole("complementary", { name: "Workspace" }),
-		).toBeVisible()
+		const sidebar = canvas.getByRole("complementary", { name: "Workspace" })
+		await expect(sidebar).toBeVisible()
 		await expect(canvas.getByRole("main")).toBeVisible()
 		await expect(canvas.getByRole("textbox", { name: "Prompt" })).toBeVisible()
 
 		const viewport = canvas.getByRole("region", { name: "Conversation" })
 		const column = canvas.getByRole("log")
-		await expect(viewport.clientWidth).toBeGreaterThan(column.clientWidth)
+		await expect(viewport.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			sidebar.getBoundingClientRect().right,
+		)
+		await expect(column.clientWidth).toBe(viewport.clientWidth)
 		await expect(viewport.clientHeight).toBeLessThan(window.innerHeight)
 		await expect(getComputedStyle(viewport).overflowY).toBe("auto")
 	},
