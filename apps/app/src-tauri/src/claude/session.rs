@@ -187,6 +187,7 @@ impl Session {
 		let stdout = child.stdout.take().expect("stdout piped");
 		let stderr = child.stderr.take().expect("stderr piped");
 		let pid = child.id().unwrap_or_default();
+		remember_group(pid);
 
 		let shared = Arc::new(Mutex::new(Shared {
 			translator: Translator::new(resumed),
@@ -238,6 +239,10 @@ impl Session {
 			Ok(Ok(())) => Ok(()),
 			Ok(Err(_)) => {
 				let code = wait_code(&self.child).await;
+				// The child is gone, but a start reaches this far only after it
+				// has had time to spawn its own children, and reaping it never
+				// reaches those.
+				self.kill().await;
 				Err(TransportError::Crashed { code, detail: Some("exited during startup".into()) })
 			}
 			Err(_) => {
@@ -348,7 +353,7 @@ impl Session {
 
 		signal_group(self.pid, Signal::Term);
 		let _ = tokio::time::timeout(TERMINATE_GRACE, child.wait()).await;
-		signal_group(self.pid, Signal::Kill);
+		sweep_group(self.pid);
 		*slot = None;
 	}
 
@@ -370,8 +375,35 @@ impl Session {
 			}
 		}
 
-		signal_group(self.pid, Signal::Kill);
+		sweep_group(self.pid);
 		*slot = None;
+	}
+}
+
+/// Every process group this run has spawned and not yet swept. A session only
+/// becomes reachable through the app's state once its handshake has returned,
+/// and the host quits through `std::process::exit`, which runs no destructor —
+/// so for the length of a startup nothing else knows the group exists.
+static LIVE_GROUPS: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new());
+
+fn remember_group(pid: u32) {
+	LIVE_GROUPS.lock().expect("live groups").push(pid);
+}
+
+/// The one place a group is signalled for good, so it stops being tracked in
+/// the same breath: the system reuses pids, and a stale one left on the list
+/// would hand a later sweep somebody else's processes.
+fn sweep_group(pid: u32) {
+	signal_group(pid, Signal::Kill);
+	LIVE_GROUPS.lock().expect("live groups").retain(|live| *live != pid);
+}
+
+/// Sweeps what the host's exit would otherwise abandon, a session still
+/// starting up included.
+pub fn sweep_live_groups() {
+	let live = std::mem::take(&mut *LIVE_GROUPS.lock().expect("live groups"));
+	for pid in live {
+		signal_group(pid, Signal::Kill);
 	}
 }
 

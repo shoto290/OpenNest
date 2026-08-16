@@ -47,6 +47,13 @@ fn ignores_eof() -> bool {
 	std::env::var("FAKE_CLAUDE_IGNORE_EOF").is_ok()
 }
 
+/// A grandchild spawned before the handshake, the way the real CLI starts its
+/// stdio MCP servers. Composes with any scenario, including the ones that never
+/// reach a prompt.
+fn orphans_at_startup() -> bool {
+	std::env::var("FAKE_CLAUDE_ORPHAN_AT_STARTUP").is_ok()
+}
+
 /// The preflight probes run through `Command::output()`, which hands the child a
 /// null stdin: they have to answer before the reader thread meets EOF.
 fn preflight_answer() -> Option<String> {
@@ -193,9 +200,20 @@ fn ack(request_id: &str) {
 	}));
 }
 
-/// A grandchild that only a process-group kill can reach.
+/// A grandchild that only a process-group kill can reach. It gets pipes of its
+/// own, the way the real CLI hands them to a stdio MCP server: inheriting this
+/// process's stdout would keep it open past this process's death, and the
+/// transport would never see the EOF that tells it the child is gone.
 fn spawn_orphan() {
-	let Ok(child) = std::process::Command::new("sleep").arg("60").spawn() else { return };
+	let Ok(child) = std::process::Command::new("sleep")
+		.arg("60")
+		.stdin(std::process::Stdio::null())
+		.stdout(std::process::Stdio::null())
+		.stderr(std::process::Stdio::null())
+		.spawn()
+	else {
+		return;
+	};
 	if let Ok(path) = std::env::var("FAKE_CLAUDE_PID_FILE") {
 		let _ = std::fs::write(path, child.id().to_string());
 	}
@@ -205,6 +223,10 @@ fn main() {
 	if let Some(answer) = preflight_answer() {
 		emit_raw(&answer);
 		return;
+	}
+
+	if orphans_at_startup() {
+		spawn_orphan();
 	}
 
 	let scenario = scenario();

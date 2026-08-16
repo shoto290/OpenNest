@@ -9,7 +9,7 @@ use super::contract::{
 	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, SessionHandle, SessionSnapshot,
 	TransportError,
 };
-use super::session::{EventSink, GatedSink, Session, SessionOptions};
+use super::session::{self, EventSink, GatedSink, Session, SessionOptions};
 use super::store;
 
 pub const EVENT_CHANNEL: &str = "claude://event";
@@ -163,11 +163,14 @@ pub async fn shutdown_session(state: &ClaudeState) {
 }
 
 /// For the host's own exit, where the graceful ladder's seconds of waiting
-/// would block the platform's quit sequence.
+/// would block the platform's quit sequence. The sweep runs whether or not a
+/// session was reachable: a start that has not returned yet is not in the state
+/// and has a live process group all the same.
 pub async fn terminate_session(state: &ClaudeState) {
 	if let Some(session) = state.session.lock().await.take() {
 		session.terminate().await;
 	}
+	session::sweep_live_groups();
 }
 
 #[tauri::command]

@@ -472,14 +472,21 @@ async fn closing_stdin_ends_a_healthy_child_well_inside_the_grace() {
 	assert!(elapsed < Duration::from_secs(1), "shutdown waited {elapsed:?} instead of taking EOF");
 }
 
+/// The probe file is named after this test process: worktrees run their suites
+/// side by side and a shared path would have them racing.
+#[cfg(unix)]
+fn probe_file(label: &str) -> PathBuf {
+	let path = std::env::temp_dir()
+		.join(format!("opennest-orphan-probe-{}-{label}.pid", std::process::id()));
+	let _ = std::fs::remove_file(&path);
+	path
+}
+
 /// Runs a session that has spawned a grandchild only a process-group kill can
-/// reach. The probe file is named after this test process: worktrees run their
-/// suites side by side and a shared path would have them racing.
+/// reach.
 #[cfg(unix)]
 async fn orphan_probe(label: &str, options: SessionOptions) -> (Harness, i32) {
-	let pid_file = std::env::temp_dir()
-		.join(format!("opennest-orphan-probe-{}-{label}.pid", std::process::id()));
-	let _ = std::fs::remove_file(&pid_file);
+	let pid_file = probe_file(label);
 
 	let harness = start(options.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy()))
 		.await
@@ -535,6 +542,29 @@ async fn shutdown_escalates_on_a_child_that_ignores_stdin_close() {
 		.expect("the escalation keeps the shutdown bounded");
 
 	poll_until("the escalation to leave no orphan behind", || !is_alive(orphan)).await;
+}
+
+/// A start that fails still spent time as a running child, and the real CLI has
+/// its stdio MCP servers up by then. Reaping the child it left them under
+/// reaches none of them, so the group has to be swept on the way out.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_start_that_crashes_takes_its_group_down_with_it() {
+	let pid_file = probe_file("startup-crash");
+	let error = start(
+		options("startup_crash")
+			.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
+			.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1"),
+	)
+	.await
+	.err()
+	.expect("handshake fails");
+	assert!(matches!(error, TransportError::Crashed { .. }));
+
+	let orphan = recorded_pid(&pid_file).expect("the fake recorded its grandchild");
+	poll_until("the failed start to leave no orphan behind", || !is_alive(orphan)).await;
+
+	let _ = std::fs::remove_file(&pid_file);
 }
 
 #[cfg(unix)]
