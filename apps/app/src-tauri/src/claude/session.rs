@@ -148,7 +148,7 @@ impl SessionOptions {
 
 type PendingControls = Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>;
 
-/// Optional only so `kill` can drop the sender: closing this channel is what
+/// Optional only so a shutdown can drop the sender: closing this channel is what
 /// makes `write_loop` release the child's stdin, and that release is the EOF the
 /// child needs to exit on its own. Nothing else can deliver it — the handle was
 /// moved out of `Child` at startup.
@@ -450,7 +450,7 @@ pub fn live_groups() -> Vec<u32> {
 
 /// Leaves the handle in place: the read loop and a failed handshake both want
 /// the exit code, and `wait` on an already-reaped child returns the cached
-/// status. Clearing the slot is `kill`'s job.
+/// status. Clearing the slot is the shutdown's job.
 ///
 /// The group is not left in place. Reaping is what frees the pid for the system
 /// to hand out again, so this is the last moment the group is still
