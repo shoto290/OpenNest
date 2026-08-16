@@ -36,6 +36,15 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
 	}
 }
 
+function prompt(overrides: Partial<ChatMessage> = {}): ChatMessage {
+	return message({
+		role: "user",
+		text: "And?",
+		completion: "complete",
+		...overrides,
+	})
+}
+
 function chatState(overrides: Partial<ChatState> = {}): ChatState {
 	return { ...initialChatState, turn: "running", ...overrides }
 }
@@ -157,6 +166,50 @@ describe("toRuns", () => {
 			"user",
 			"assistant",
 		])
+	})
+
+	it("gathers prompts sent within minutes of each other", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				prompt({ id: "local-1", timestamp: 0 }),
+				prompt({ id: "local-2", timestamp: 60_000 }),
+			]),
+		)
+
+		expect(runs.map((run) => run.length)).toEqual([2])
+	})
+
+	it("opens a new block after a long pause", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				prompt({ id: "local-1", timestamp: 0 }),
+				prompt({ id: "local-2", timestamp: 6 * 60_000 }),
+			]),
+		)
+
+		expect(runs.map((run) => run.length)).toEqual([1, 1])
+	})
+
+	it("holds a long burst together while every pause stays short", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				prompt({ id: "local-1", timestamp: 0 }),
+				prompt({ id: "local-2", timestamp: 4 * 60_000 }),
+				prompt({ id: "local-3", timestamp: 8 * 60_000 }),
+			]),
+		)
+
+		expect(runs.map((run) => run.length)).toEqual([3])
+	})
+
+	it("keeps the paragraphs of one answer together", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				message({ text: "One.\n\nTwo.\n\nThree.", completion: "complete" }),
+			]),
+		)
+
+		expect(runs.map((run) => run.length)).toEqual([3])
 	})
 
 	it("keeps an empty transcript empty", () => {
