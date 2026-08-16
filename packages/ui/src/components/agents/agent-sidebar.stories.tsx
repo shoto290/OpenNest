@@ -71,7 +71,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The conversation panel of an agent app, mounted whole: the animated sidebar shell around a single selected conversation. It takes its open state from the `WorkspaceShell` above it, so the same Cmd/Ctrl+B and the same trigger drive the panel and the page beside it. The row is the bot avatar itself, so the agent's live state is read off the pose rather than off a spinner bolted next to a label. The second line carries the last message at rest and is taken over by the pose verb while the agent is busy — a screen maps its running tool onto `status` and `pose`, and nothing here polls the transport.",
+					"The conversation panel of an agent app, mounted whole: the animated sidebar shell around a single selected conversation. It carries no chrome of its own — an empty pinned region clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. The row is the bot avatar itself, so the agent's live state is read off the pose rather than off a spinner bolted next to a label. The second line carries the last message at rest and is taken over by the pose verb while the agent is busy — a screen maps its running tool onto `status` and `pose`, and nothing here polls the transport.",
 			},
 		},
 	},
@@ -94,7 +94,7 @@ export const Idle = meta.story({
 		docs: {
 			description: {
 				story:
-					'Nothing is running: the avatar rests in its waiting pose, `pose` is ignored and the second line shows the last message. The message is deliberately wider than the rail — check that it clips to one line with an ellipsis instead of wrapping the row taller or pushing the panel wider, and that it carries `aria-current="page"` as the selected conversation. Tab reaches the collapse trigger first and the row second, the two stops the panel owns. Pick `Thinking` for the first pose a turn walks into, `Collapsed` for the icon rail.',
+					'Nothing is running: the avatar rests in its waiting pose, `pose` is ignored and the second line shows the last message. The message is deliberately wider than the rail — check that it clips to one line with an ellipsis instead of wrapping the row taller or pushing the panel wider, and that it carries `aria-current="page"` as the selected conversation. The row is the only stop Tab finds here, and the empty region above it holds the window-control gutter clear without adding a target. Pick `Thinking` for the first pose a turn walks into, `Collapsed` for the icon rail.',
 			},
 		},
 	},
@@ -113,11 +113,6 @@ export const Idle = meta.story({
 		await expect(detail.getBoundingClientRect().height).toBeLessThanOrEqual(
 			SINGLE_LINE_HEIGHT,
 		)
-
-		const trigger = canvas.getByRole("button", { name: "Toggle sidebar" })
-		await userEvent.tab()
-		await expect(trigger).toHaveFocus()
-		await expect(trigger.matches(":focus-visible")).toBe(true)
 
 		await userEvent.tab()
 		await expect(row).toHaveFocus()
@@ -219,7 +214,7 @@ export const Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel opened on its icon rail, which is how a host restores a remembered choice through `defaultOpen`. Check that the rail is one avatar wide with the avatar sitting centred in it and nothing clipped against either edge, that the trigger is alone at the top and still the first thing Tab reaches, and that the two lines of text are gone from the picture and from the accessibility tree — the row keeps its name through `aria-label` instead. Pick `Toggle` to watch the panel travel between the two widths.",
+					"The panel opened on its icon rail, which is how a host restores a remembered choice through `defaultOpen`. Check that the rail is one avatar wide with the avatar sitting centred in it and nothing clipped against either edge, that the row is still the first and only thing Tab reaches, and that the two lines of text are gone from the picture and from the accessibility tree — the row keeps its name through `aria-label` instead. Pick `Toggle` to watch the panel travel between the two widths.",
 			},
 		},
 	},
@@ -232,11 +227,10 @@ export const Collapsed = meta.story({
 			)
 		}, FRAME_POLL)
 
-		const trigger = canvas.getByRole("button", { name: "Toggle sidebar" })
-		await expect(trigger).toHaveAttribute("aria-expanded", "false")
+		const railRow = canvas.getByRole("button", { name: "No Name" })
 		await userEvent.tab()
-		await expect(trigger).toHaveFocus()
-		await expect(trigger.matches(":focus-visible")).toBe(true)
+		await expect(railRow).toHaveFocus()
+		await expect(railRow.matches(":focus-visible")).toBe(true)
 
 		const panelBox = panel.getBoundingClientRect()
 		const avatarBox = canvas
@@ -245,7 +239,7 @@ export const Collapsed = meta.story({
 		await expect(avatarBox.left).toBeGreaterThanOrEqual(panelBox.left)
 		await expect(avatarBox.right).toBeLessThanOrEqual(panelBox.right)
 
-		await expect(canvas.getByRole("button", { name: "No Name" })).toBeVisible()
+		await expect(railRow).toBeVisible()
 		await expect(canvas.queryByRole("button", { name: /Renamed/ })).toBeNull()
 		await expect(
 			canvas.getByText(LAST_MESSAGE).closest("[aria-hidden='true']"),
@@ -258,21 +252,23 @@ export const Toggle = meta.story({
 		docs: {
 			description: {
 				story:
-					"The collapse itself, driven from the trigger the panel carries. Check that one click takes the panel to the rail and reports it through `aria-expanded`, that focus stays on the trigger instead of falling back to the page so a second press reopens it, and that the avatar rides the width down without the row changing height or the transcript beside it reflowing twice. Cmd/Ctrl+B does the same thing from anywhere. Pick `Collapsed` for the resting rail.",
+					"The collapse itself, driven from Cmd/Ctrl+B — the panel carries no trigger of its own, so the shortcut and whatever control the page mounts are the two ways in. Check that one press takes the panel to the rail and back, that focus stays exactly where it was instead of falling back to the page, and that the avatar rides the width down without the row changing height or the transcript beside it reflowing twice. Pick `Collapsed` for the resting rail.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
-		const trigger = canvas.getByRole("button", { name: "Toggle sidebar" })
 		const row = canvas.getByRole("button", { name: /No Name/ })
+		const detail = canvas.getByText(LAST_MESSAGE)
 		const rowHeight = row.getBoundingClientRect().height
 
-		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+		await expect(panel).toHaveAttribute("data-state", "expanded")
+		await userEvent.tab()
+		await expect(row).toHaveFocus()
 
-		await userEvent.click(trigger)
-		await expect(trigger).toHaveAttribute("aria-expanded", "false")
-		await expect(trigger).toHaveFocus()
+		await userEvent.keyboard("{Meta>}b{/Meta}")
+		await expect(panel).toHaveAttribute("data-state", "collapsed")
+		await expect(row).toHaveFocus()
 		await waitFor(async () => {
 			await expect(panel.getBoundingClientRect().width).toBeCloseTo(
 				railWidth(),
@@ -281,13 +277,15 @@ export const Toggle = meta.story({
 		}, FRAME_POLL)
 		await expect(row.getBoundingClientRect().height).toBe(rowHeight)
 
-		await userEvent.click(trigger)
-		await expect(trigger).toHaveAttribute("aria-expanded", "true")
-		await expect(trigger).toHaveFocus()
+		await userEvent.keyboard("{Control>}b{/Control}")
+		await expect(panel).toHaveAttribute("data-state", "expanded")
+		await expect(row).toHaveFocus()
 		await waitFor(async () => {
 			await expect(panel.getBoundingClientRect().width).toBeGreaterThan(
 				railWidth(),
 			)
+			const label = detail.closest("[aria-hidden]")
+			await expect(label && getComputedStyle(label).opacity).toBe("1")
 		}, FRAME_POLL)
 	},
 })
@@ -313,7 +311,6 @@ export const ReducedMotion = meta.story({
 		).toHaveAttribute("aria-busy", "true")
 		await expect(canvas.getByRole("status")).toHaveTextContent("No Name working")
 
-		await userEvent.tab()
 		await userEvent.tab()
 		await expect(row).toHaveFocus()
 		await expect(row.matches(":focus-visible")).toBe(true)
