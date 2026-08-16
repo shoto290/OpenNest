@@ -26,6 +26,33 @@ const railWidth = () => {
 	return width
 }
 
+const PANEL_VIEWPORTS = [
+	{ width: 1440, height: 900 },
+	{ width: 768, height: 900 },
+]
+
+const expectExpandedAcrossViewports = async (panel: HTMLElement) => {
+	if (!import.meta.env.VITEST_STORYBOOK) return
+
+	const { page } = await import("vitest/browser")
+	const restore = { width: window.innerWidth, height: window.innerHeight }
+
+	for (const viewport of PANEL_VIEWPORTS) {
+		await page.viewport(viewport.width, viewport.height)
+		await waitFor(async () => {
+			await expect(window.innerWidth).toBe(viewport.width)
+			await expect(panel.getBoundingClientRect().width).toBeGreaterThan(
+				railWidth(),
+			)
+		}, FRAME_POLL)
+	}
+
+	await page.viewport(restore.width, restore.height)
+	await waitFor(async () => {
+		await expect(window.innerWidth).toBe(restore.width)
+	}, FRAME_POLL)
+}
+
 const renderShell = (defaultOpen: boolean) => (args: AgentSidebarProps) => (
 	<WorkspaceShell
 		defaultOpen={defaultOpen}
@@ -72,9 +99,10 @@ export const Idle = meta.story({
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		await expect(
-			canvas.getByRole("complementary", { name: "Conversations" }),
-		).toBeVisible()
+		const panel = canvas.getByRole("complementary", { name: "Conversations" })
+		await expect(panel).toBeVisible()
+		await expect(panel).toHaveAttribute("aria-busy", "false")
+		await expect(canvas.getByRole("status")).toBeEmptyDOMElement()
 
 		const row = canvas.getByRole("button", { name: /No Name/ })
 		await expect(row).toHaveAttribute("aria-current", "page")
@@ -111,6 +139,11 @@ export const Thinking = meta.story({
 		await expect(canvas.getByRole("img", { name: /thinking$/ })).toBeVisible()
 		await expect(canvas.getByText("thinking…")).toBeVisible()
 		await expect(canvas.queryByText(LAST_MESSAGE)).toBeNull()
+
+		await expect(
+			canvas.getByRole("complementary", { name: "Conversations" }),
+		).toHaveAttribute("aria-busy", "true")
+		await expect(canvas.getByRole("status")).toHaveTextContent("No Name thinking")
 	},
 })
 
@@ -127,6 +160,13 @@ export const Searching = meta.story({
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("img", { name: /searching$/ })).toBeVisible()
 		await expect(canvas.getByText("searching…")).toBeVisible()
+
+		await expect(
+			canvas.getByRole("complementary", { name: "Conversations" }),
+		).toHaveAttribute("aria-busy", "true")
+		await expect(canvas.getByRole("status")).toHaveTextContent(
+			"No Name searching",
+		)
 	},
 })
 
@@ -143,6 +183,11 @@ export const Writing = meta.story({
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("img", { name: /writing$/ })).toBeVisible()
 		await expect(canvas.getByText("writing…")).toBeVisible()
+
+		await expect(
+			canvas.getByRole("complementary", { name: "Conversations" }),
+		).toHaveAttribute("aria-busy", "true")
+		await expect(canvas.getByRole("status")).toHaveTextContent("No Name writing")
 	},
 })
 
@@ -152,13 +197,19 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"A shell command or a long tool is running — the catch-all pose. Check that it stays legible beside `Searching` so the two never read as the same state.",
+					"A shell command or a long tool is running — the catch-all pose. Check that it stays legible beside `Searching` so the two never read as the same state, and that the panel reports itself busy while it runs. The test run sweeps a wide and a narrow viewport and asserts the panel stays wider than its icon rail at both, so a breakpoint that collapsed it early would fail here.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
+		const panel = canvas.getByRole("complementary", { name: "Conversations" })
 		await expect(canvas.getByRole("img", { name: /working$/ })).toBeVisible()
 		await expect(canvas.getByText("working…")).toBeVisible()
+
+		await expect(panel).toHaveAttribute("aria-busy", "true")
+		await expect(canvas.getByRole("status")).toHaveTextContent("No Name working")
+
+		await expectExpandedAcrossViewports(panel)
 	},
 })
 
@@ -256,6 +307,11 @@ export const ReducedMotion = meta.story({
 		await expect(canvas.getByRole("img", { name: /working$/ })).toBeVisible()
 		await expect(canvas.getByText("working…")).toBeVisible()
 		await expect(row).toHaveAttribute("aria-current", "page")
+
+		await expect(
+			canvas.getByRole("complementary", { name: "Conversations" }),
+		).toHaveAttribute("aria-busy", "true")
+		await expect(canvas.getByRole("status")).toHaveTextContent("No Name working")
 
 		await userEvent.tab()
 		await userEvent.tab()
