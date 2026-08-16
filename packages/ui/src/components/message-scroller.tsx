@@ -1,7 +1,7 @@
 "use client"
 // beui.dev/components/agents/message-scroller
 
-import { useReducedMotion } from "motion/react"
+import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react"
 import {
 	type ComponentPropsWithRef,
 	type Ref,
@@ -40,7 +40,7 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
 	/** Imperative live edge, for a jump-to-latest control owned by the host. */
 	scrollerRef?: Ref<MessageScrollerHandle>
 	viewportProps?: Omit<
-		ComponentPropsWithRef<"section">,
+		HTMLMotionProps<"section">,
 		"children" | "className" | "ref"
 	>
 	contentProps?: Omit<
@@ -183,10 +183,14 @@ export function MessageScroller({
 			className={cn("min-h-0", className)}
 			{...props}
 		>
-			<section
+			{/* `layoutScroll` because this viewport scrolls under its own content:
+			 * without it a mark animating between two rows is measured in a
+			 * coordinate space the follow-scroll then moves, and it slides. */}
+			<motion.section
+				layoutScroll
 				ref={setViewportRef}
 				aria-label={label}
-				// biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable transcript must be reachable by keyboard
+				// A scrollable region must be reachable by keyboard.
 				tabIndex={0}
 				{...restViewportProps}
 				onScroll={(event) => {
@@ -223,7 +227,7 @@ export function MessageScroller({
 				>
 					{children}
 				</div>
-			</section>
+			</motion.section>
 		</div>
 	)
 }

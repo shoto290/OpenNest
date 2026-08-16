@@ -50,12 +50,49 @@ const MarkHandoff = () => {
 				</Button>
 				<UserTurn>How is this workspace laid out?</UserTurn>
 				{delivered ? (
-					<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
+					<AssistantTurn carriesMark copyText={ANSWER} avatar={<Avatar />}>
 						{ANSWER}
 					</AssistantTurn>
 				) : (
 					<BotWorking kind="thinking" />
 				)}
+			</div>
+		</ChatMarkProvider>
+	)
+}
+
+const TESTS =
+	"Beside what they test: Vitest drives the stories in `@workspace/ui`, and `cargo test` covers the Tauri host."
+
+/** A transcript that already holds an answered run, so a second avatar is on
+ * screen while the mark moves. */
+const MarkedHistory = () => {
+	const [working, setWorking] = useState(false)
+
+	return (
+		<ChatMarkProvider>
+			<div className="mx-auto flex max-w-2xl flex-col gap-6">
+				<Button
+					size="sm"
+					variant="outline"
+					className="self-start"
+					onClick={() => setWorking(!working)}
+				>
+					{working ? "Land the turn" : "Start a new turn"}
+				</Button>
+				<UserTurn>How is this workspace laid out?</UserTurn>
+				<ChatTurnGroup>
+					<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
+						{ANSWER}
+					</AssistantTurn>
+				</ChatTurnGroup>
+				<UserTurn>And where do the tests live?</UserTurn>
+				<ChatTurnGroup carriesMark>
+					<AssistantTurn copyText={TESTS} avatar={working ? null : <Avatar />}>
+						{TESTS}
+					</AssistantTurn>
+				</ChatTurnGroup>
+				{working ? <BotWorking kind="thinking" /> : null}
 			</div>
 		</ChatMarkProvider>
 	)
@@ -160,11 +197,52 @@ export const Mark = meta.story({
 
 		// One identity throughout: the mark is never absent and never doubled.
 		await expect(marks()).toHaveLength(1)
-		await expect(
-			canvasElement.querySelector(
-				'[data-slot="message-gutter"] [data-slot="shared-mark"]',
-			),
-		).toBeInTheDocument()
+
+		const gutter = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="message-gutter"]',
+		)
+		const landed = gutter?.firstElementChild
+
+		await expect(landed).toBeInTheDocument()
+		// The gutter measures the mark and nothing else, so the spring lands the
+		// avatar on the bubble rather than a descender above it.
+		await expect(gutter?.getBoundingClientRect().height).toBe(
+			landed?.getBoundingClientRect().height,
+		)
+	},
+})
+
+export const MarkAcrossRuns = meta.story({
+	render: () => <MarkedHistory />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this once the transcript has history: every answered run keeps its own avatar, but only the newest group is told `carriesMark`, so only its closing row answers to the transcript's mark. Start a new turn and check that the mark leaves the newest gutter for the working row while the avatar above it does not budge. Pick `Mark` for the handoff itself, and `Primitives/SharedMark` for the invariant underneath it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const gutterAvatars = () =>
+			canvasElement.querySelectorAll('[data-slot="message-gutter"] > *')
+		const marked = () => canvasElement.querySelectorAll('[data-state="marked"]')
+
+		await expect(gutterAvatars()).toHaveLength(2)
+		await expect(marked()).toHaveLength(1)
+
+		const settled = gutterAvatars()[0].getBoundingClientRect()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Start a new turn" }),
+		)
+		await waitFor(() => expect(gutterAvatars()).toHaveLength(1))
+
+		// The mark left for the working row; the run above it never held it, so it
+		// stays exactly where it was drawn.
+		await expect(marked()).toHaveLength(1)
+		await expect(gutterAvatars()[0].getBoundingClientRect().top).toBe(
+			settled.top,
+		)
 	},
 })
 

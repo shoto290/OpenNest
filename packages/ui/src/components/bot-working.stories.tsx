@@ -51,6 +51,7 @@ const MarkHandoff = () => {
 					{delivered ? "Rewind to working" : "Land the turn"}
 				</Button>
 				<AssistantTurn
+					carriesMark
 					state={delivered ? "complete" : "streaming"}
 					copyText={delivered ? ANSWER : undefined}
 					avatar={

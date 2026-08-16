@@ -6,6 +6,7 @@ import {
 	isValidElement,
 	type ReactElement,
 	type ReactNode,
+	useState,
 } from "react"
 
 import { Button } from "@workspace/ui/components/button"
@@ -36,7 +37,13 @@ type ChatTurnState = "streaming" | "complete" | "cancelled" | "failed"
 /** Where the row sits in a run of messages from the same speaker. */
 type ChatTurnRun = "single" | "first" | "middle" | "last"
 
+/** What `ChatTurnGroup` hands down: facts a row cannot know about itself. */
+type InjectedTurnProps = { run?: ChatTurnRun; carriesMark?: boolean }
+
 interface ChatTurnGroupProps {
+	/** Lets this group's closing row claim the transcript's travelling mark.
+	 * Only the newest group in a transcript may. */
+	carriesMark?: boolean
 	children: ReactNode
 	className?: string
 }
@@ -64,6 +71,13 @@ interface AssistantTurnProps {
 	/** The bot's mark, in the left gutter. Pass it on the row that closes a run
 	 * so one avatar stands for every message the bot sent in a row. */
 	avatar?: ReactNode
+	/** Lets this row's avatar claim the transcript's travelling mark. A
+	 * transcript names one mark, and two rows answering to it at once are
+	 * projected onto each other and jump — so only the newest run may, and
+	 * every older avatar stays plain, exactly where it was drawn. Set by the
+	 * surrounding `ChatTurnGroup`; only override it to render a row out of its
+	 * group. */
+	carriesMark?: boolean
 	className?: string
 }
 
@@ -119,7 +133,11 @@ function CopyAction({ text }: { text: string }) {
 /** Holds one run of messages from the same speaker tight enough to read as a
  * block, while the transcript keeps its own spacing between speakers. It tells
  * each turn where it sits, so no caller counts rows itself. */
-function ChatTurnGroup({ children, className }: ChatTurnGroupProps) {
+function ChatTurnGroup({
+	carriesMark = false,
+	children,
+	className,
+}: ChatTurnGroupProps) {
 	const turns = Children.toArray(children).filter(isValidElement)
 
 	return (
@@ -128,9 +146,11 @@ function ChatTurnGroup({ children, className }: ChatTurnGroupProps) {
 			className={cn("gap-1", className)}
 		>
 			{turns.map((turn, index) => {
-				const row = turn as ReactElement<{ run?: ChatTurnRun }>
+				const row = turn as ReactElement<InjectedTurnProps>
+				const closes = index === turns.length - 1
 				return cloneElement(row, {
 					run: row.props.run ?? runPositionFor(index, turns.length),
+					carriesMark: row.props.carriesMark ?? (carriesMark && closes),
 				})
 			})}
 		</MessageBubbleGroup>
@@ -174,14 +194,18 @@ function AssistantTurn({
 	run = "single",
 	copyText,
 	avatar,
+	carriesMark = false,
 	className,
 }: AssistantTurnProps) {
-	const markId = useChatMarkId()
+	const transcriptMarkId = useChatMarkId()
+	const markId = carriesMark ? transcriptMarkId : undefined
 	const footer = state === "cancelled" || state === "failed"
 	// This row mounts in the commit that hands it the mark, and its own entrance
 	// fades from nothing — which would blank the mark mid-flight. The bubble
-	// carries the entrance instead, leaving the gutter alone.
-	const receivesMark = Boolean(avatar && markId)
+	// carries the entrance instead, leaving the gutter alone. Frozen at mount:
+	// an entrance replays if it is handed back later, and a row that gives the
+	// mark up to the working row must not pop under the mark as it leaves.
+	const [receivesMark] = useState(Boolean(avatar && markId))
 
 	return (
 		<Message from="assistant" animateIn={!receivesMark} className={className}>
