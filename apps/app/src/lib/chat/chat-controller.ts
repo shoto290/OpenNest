@@ -219,6 +219,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 
 	const clearConversation = () => {
 		dispatch({ type: "conversationCleared" })
+		persistNow()
 	}
 
 	const submit = async (message: ChatMessage) => {

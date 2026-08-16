@@ -388,6 +388,19 @@ describe("createChatController", () => {
 		expect(isSessionReady(state)).toBe(true)
 	})
 
+	// Clearing a sensitive conversation has to reach the disk: what is only dropped
+	// in memory comes straight back on the next boot.
+	it("writes the cleared transcript instead of leaving it on disk", async () => {
+		const { controller, saved } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		expect(saved).toHaveLength(0)
+
+		controller.clearConversation()
+
+		expect(saved.at(-1)).toMatchObject({ messages: [], activities: [] })
+	})
+
 	it("leaves stopping deterministically when cancelTurn is rejected", async () => {
 		const fake = createFakeChatDriver({
 			stepMs: STEP_MS,
