@@ -1,6 +1,6 @@
 [package]
 name = "opennest-app"
-version = "0.0.1"
+version = "0.1.0"
 description = "OpenNest desktop app"
 edition = "2021"
 default-run = "opennest-app"
