@@ -18,6 +18,8 @@ export function describeTransportError(error: TransportError): string {
 			return `An unreadable frame was skipped: ${error.detail}`
 		case "notStarted":
 			return "No session is running."
+		case "resumeFailed":
+			return "Your previous conversation could not be resumed. A new session is ready."
 		case "turnAlreadyRunning":
 			return "A turn is already running."
 		case "noActiveTurn":

@@ -7,10 +7,16 @@ import {
 	isTurnBusy,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
+import {
+	clearStoredSession,
+	readStoredSession,
+	writeStoredSession,
+} from "./session-storage"
 
 import type {
 	ChatMessage,
 	CheckReport,
+	ClaudeEvent,
 	PermissionDecision,
 	SessionHandle,
 	TransportError,
@@ -32,6 +38,12 @@ export type ChatController = {
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	retry: (id: string) => Promise<void>
 	shutdown: () => Promise<void>
+}
+
+/** A frame that closes something worth keeping. Streamed deltas are left out on
+ * purpose: persisting each one would rewrite the record token by token. */
+function isTurnBoundary(event: ClaudeEvent): boolean {
+	return event.type === "sessionReady" || event.type === "turnEnded"
 }
 
 function toTransportError(reason: unknown): TransportError {
@@ -67,6 +79,16 @@ export function createChatController(driver: ChatDriver): ChatController {
 			event: { type: "failed", error: toTransportError(reason) },
 		})
 
+	const persist = () => {
+		if (!state.sessionId) {
+			return
+		}
+		writeStoredSession({
+			sessionId: state.sessionId,
+			messages: state.messages,
+		})
+	}
+
 	const disconnect = () => {
 		detach?.then((unlisten) => unlisten())
 		detach = null
@@ -77,9 +99,12 @@ export function createChatController(driver: ChatDriver): ChatController {
 	const connect = () => {
 		const captured = epoch
 		disconnect()
-		detach = driver.subscribe((event) =>
-			dispatch({ type: "driverEvent", epoch: captured, event }),
-		)
+		detach = driver.subscribe((event) => {
+			dispatch({ type: "driverEvent", epoch: captured, event })
+			if (isTurnBoundary(event)) {
+				persist()
+			}
+		})
 		return detach
 	}
 
@@ -123,12 +148,33 @@ export function createChatController(driver: ChatDriver): ChatController {
 		}
 	}
 
+	const restoreStored = () => {
+		const stored = readStoredSession()
+		if (stored) {
+			dispatch({ type: "transcriptRestored", messages: stored.messages })
+		}
+		return stored
+	}
+
+	/** The stored id led nowhere. The transcript goes with it — it describes a
+	 * session that no longer exists — and the reader is told once. */
+	const startAfterFailedResume = () => {
+		clearStoredSession()
+		dispatch({ type: "conversationCleared" })
+		report({ kind: "resumeFailed" })
+		return start()
+	}
+
 	const runPreflight = async (resume?: string) => {
+		const stored = resume === undefined ? restoreStored() : null
 		const checked = await check()
 		if (checked?.connection !== "ready") {
 			return null
 		}
-		return start(resume)
+		if (!stored) {
+			return start(resume)
+		}
+		return (await start(stored.sessionId)) ?? startAfterFailedResume()
 	}
 
 	const preflight = (resume?: string) => {
@@ -205,6 +251,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 	}
 
 	const shutdown = async () => {
+		persist()
 		await driver.shutdown().catch(report)
 	}
 

@@ -206,6 +206,19 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 		preflight()
 	}, [preflight])
 
+	// The window is going away: stop the child process instead of orphaning it.
+	useEffect(() => {
+		const shutdown = () => {
+			void controller.shutdown()
+		}
+
+		window.addEventListener("beforeunload", shutdown)
+
+		return () => {
+			window.removeEventListener("beforeunload", shutdown)
+		}
+	}, [controller])
+
 	useEffect(() => {
 		if (acceptsInput) {
 			composerRef.current?.focus({ preventScroll: true })

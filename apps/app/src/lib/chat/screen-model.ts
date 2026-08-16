@@ -55,6 +55,7 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	startupTimeout: true,
 	crashed: true,
 	notStarted: true,
+	resumeFailed: false,
 	invalidFrame: false,
 	turnAlreadyRunning: false,
 	noActiveTurn: false,
@@ -230,6 +231,9 @@ export function needsFreshSession(error: TransportError): boolean {
 export function noticeTitleFor(error: TransportError): string {
 	if (error.kind === "crashed") {
 		return "Claude Code stopped"
+	}
+	if (error.kind === "resumeFailed") {
+		return "Previous conversation not restored"
 	}
 	if (needsFreshSession(error)) {
 		return "Claude Code is unavailable"

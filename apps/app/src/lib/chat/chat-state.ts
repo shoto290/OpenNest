@@ -42,6 +42,9 @@ export type ChatAction =
 	| { type: "sessionReset"; epoch: number }
 	/** Drops the transcript itself. Only a deliberate "new conversation" does this. */
 	| { type: "conversationCleared" }
+	/** Seeds the transcript a previous run left behind, before the session it
+	 * belongs to is resumed. */
+	| { type: "transcriptRestored"; messages: ChatMessage[] }
 	| { type: "sessionOpened" }
 	| { type: "promptSubmitted"; message: ChatMessage }
 	| { type: "promptRejected"; id: string; error: TransportError }
@@ -264,6 +267,19 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 	}
 }
 
+/** Only ever seeds an empty transcript: a live conversation outranks whatever a
+ * previous run left on disk. An answer still streaming when the app quit was
+ * interrupted by that quit, and no live turn can ever finish it. */
+function applyTranscriptRestored(
+	state: ChatState,
+	messages: ChatMessage[],
+): ChatState {
+	if (state.messages.length > 0 || messages.length === 0) {
+		return state
+	}
+	return { ...state, messages: finalizeStreaming(messages, "cancelled") }
+}
+
 function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 	switch (event.type) {
 		case "connectionChanged":
@@ -322,6 +338,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 				binaryVersion: state.binaryVersion,
 				errorCount: state.errorCount,
 			}
+		case "transcriptRestored":
+			return applyTranscriptRestored(state, action.messages)
 		case "promptSubmitted":
 			return setTurn(
 				{ ...state, messages: [...state.messages, action.message] },

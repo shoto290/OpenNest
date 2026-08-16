@@ -50,6 +50,7 @@ export type TransportError =
 	| { kind: "crashed"; code: number | null; detail: string | null }
 	| { kind: "invalidFrame"; detail: string }
 	| { kind: "notStarted" }
+	| { kind: "resumeFailed" }
 	| { kind: "turnAlreadyRunning" }
 	| { kind: "noActiveTurn" }
 	| { kind: "unknownPermission"; id: string }
