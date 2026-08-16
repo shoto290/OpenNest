@@ -567,4 +567,31 @@ describe("session restore", () => {
 			activities: live.activities,
 		})
 	})
+
+	// A turn rewrites the whole file once a second, so what goes on disk has to be
+	// bounded even though what stays on screen is not.
+	it("writes only the most recent messages and activities", () => {
+		const state: ChatState = {
+			...initialChatState,
+			messages: Array.from({ length: 250 }, (_, index) =>
+				assistantMessage({ id: `msg-${index + 1}`, completion: "complete" }),
+			),
+			activities: Array.from({ length: 250 }, (_, index) => ({
+				id: `act-${index + 1}`,
+				title: "Lecture",
+				kind: "tool" as const,
+				status: "succeeded" as const,
+			})),
+		}
+
+		const snapshot = toSessionSnapshot(state)
+
+		expect(snapshot.messages).toHaveLength(200)
+		expect(snapshot.messages[0].id).toBe("msg-51")
+		expect(snapshot.messages.at(-1)?.id).toBe("msg-250")
+		expect(snapshot.activities).toHaveLength(200)
+		expect(snapshot.activities[0].id).toBe("act-51")
+		expect(snapshot.activities.at(-1)?.id).toBe("act-250")
+		expect(state.messages).toHaveLength(250)
+	})
 })

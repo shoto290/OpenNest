@@ -73,6 +73,10 @@ export const initialChatState: ChatState = {
 
 const MAX_ERRORS = 20
 
+const MAX_PERSISTED_MESSAGES = 200
+
+const MAX_PERSISTED_ACTIVITIES = 200
+
 const TURN_TRANSITIONS: Record<TurnState, TurnState[]> = {
 	idle: ["submitting"],
 	submitting: ["running", "stopping", "idle", "failed"],
@@ -122,12 +126,17 @@ export function turnForOutcome(outcome: TurnOutcome): TurnState {
  * from a live counter a restored one would collide with, and a pending permission
  * has no business on disk. The store hands back exactly what it was given, so a
  * message caught mid-stream is written as stopped: nothing on disk can resume, and
- * an interrupted answer is not a failed one. */
+ * an interrupted answer is not a failed one. Only the tail is kept: a turn rewrites
+ * the whole file once a second, so an unbounded transcript means an unbounded fsync
+ * per second of every answer. */
 export function toSessionSnapshot(state: ChatState): SessionSnapshot {
 	return {
 		sessionId: state.sessionId,
-		messages: finalizeStreaming(state.messages, "cancelled"),
-		activities: state.activities,
+		messages: finalizeStreaming(
+			state.messages.slice(-MAX_PERSISTED_MESSAGES),
+			"cancelled",
+		),
+		activities: state.activities.slice(-MAX_PERSISTED_ACTIVITIES),
 	}
 }
 
