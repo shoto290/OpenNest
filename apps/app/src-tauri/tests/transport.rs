@@ -9,7 +9,7 @@ use opennest_app::claude::contract::{
 	ActivityKind, ActivityStatus, ClaudeEvent, ConnectionState, MessageCompletion,
 	PermissionDecision, PermissionRequest, TransportError, TurnOutcome, TurnState,
 };
-use opennest_app::claude::session::{EventSink, Session, SessionOptions};
+use opennest_app::claude::session::{EventSink, Session, SessionOptions, SHUTDOWN_GRACE};
 use tokio::sync::mpsc;
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
@@ -460,16 +460,40 @@ async fn answering_an_unknown_permission_is_rejected() {
 }
 
 /// The grace window is a ceiling, not a schedule: a child handed EOF exits on
-/// its own, so the shutdown lands far inside it and never reaches a signal.
+/// its own, so the shutdown returns inside it and never reaches a signal.
+/// Anything at or past it means the escalation had to do the work.
 #[tokio::test]
-async fn closing_stdin_ends_a_healthy_child_well_inside_the_grace() {
+async fn closing_stdin_ends_a_healthy_child_without_reaching_the_signal() {
 	let harness = start(options("normal")).await.expect("session starts");
 
 	let started = Instant::now();
 	harness.session.shutdown().await;
 	let elapsed = started.elapsed();
 
-	assert!(elapsed < Duration::from_secs(1), "shutdown waited {elapsed:?} instead of taking EOF");
+	assert!(elapsed < SHUTDOWN_GRACE, "shutdown waited {elapsed:?} instead of taking EOF");
+}
+
+/// EOF on stdout says the child stopped talking, not that it stopped running.
+/// The wait that follows holds the child lock, so an unbounded one leaves the
+/// quit path blocked on the very child it exists to end.
+#[tokio::test]
+async fn a_child_that_closes_stdout_and_keeps_running_is_reported_and_still_terminable() {
+	let mut harness = start(options("stdout_eof").with_env("FAKE_CLAUDE_IGNORE_EOF", "1"))
+		.await
+		.expect("session starts");
+	harness.submit("tais-toi mais reste").await.expect("prompt accepted");
+
+	harness
+		.wait_for("the silent child to be reported", |events| {
+			events.iter().any(|event| {
+				matches!(event, ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed })
+			})
+		})
+		.await;
+
+	tokio::time::timeout(DEADLINE, harness.session.terminate())
+		.await
+		.expect("the quit path never got the child lock back");
 }
 
 /// The probe file is named after this test process: worktrees run their suites

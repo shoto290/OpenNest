@@ -67,7 +67,11 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 	resume: Option<String>,
 	cwd: Option<String>,
 ) -> Result<SessionHandle, TransportError> {
-	if let Some(previous) = state.session.lock().await.take() {
+	// Taken out of the scrutinee on purpose: in edition 2021 a guard there lives
+	// to the end of the block, which would hold every other command behind the
+	// seconds the previous child is allowed to die in.
+	let previous = state.session.lock().await.take();
+	if let Some(previous) = previous {
 		previous.shutdown().await;
 	}
 
@@ -157,7 +161,8 @@ pub async fn claude_respond_to_permission(
 }
 
 pub async fn shutdown_session(state: &ClaudeState) {
-	if let Some(session) = state.session.lock().await.take() {
+	let session = state.session.lock().await.take();
+	if let Some(session) = session {
 		session.shutdown().await;
 	}
 }
@@ -167,7 +172,8 @@ pub async fn shutdown_session(state: &ClaudeState) {
 /// session was reachable: a start that has not returned yet is not in the state
 /// and has a live process group all the same.
 pub async fn terminate_session(state: &ClaudeState) {
-	if let Some(session) = state.session.lock().await.take() {
+	let session = state.session.lock().await.take();
+	if let Some(session) = session {
 		session.terminate().await;
 	}
 	session::sweep_live_groups();

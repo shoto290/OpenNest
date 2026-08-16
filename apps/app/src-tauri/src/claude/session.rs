@@ -22,8 +22,15 @@ use super::protocol::{self, Frame};
 use super::translate::Translator;
 
 pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
+/// How long a child handed EOF is given to leave on its own before the ladder
+/// escalates. Public so a test can tell "the child took the EOF" apart from
+/// "the escalation had to reach it".
+pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
 const TERMINATE_GRACE: Duration = Duration::from_millis(500);
+/// A child that closed its stdout has all but always exited, so this is only
+/// ever spent on one that has not — and no exit code is worth the child lock it
+/// would otherwise hold forever.
+const EXIT_CODE_GRACE: Duration = Duration::from_millis(500);
 
 pub trait EventSink: Send + Sync + 'static {
 	fn emit(&self, event: ClaudeEvent);
@@ -341,12 +348,16 @@ impl Session {
 	}
 
 	/// The bounded counterpart of [`Session::shutdown`], for a host that is
-	/// already quitting. It skips the stdin handshake and never waits for
-	/// reaping: blocking a quitting app for seconds risks the platform killing
-	/// it before the escalation lands, which would leave behind exactly the
-	/// orphan this call exists to prevent. `SIGKILL` needs no witness.
+	/// already quitting. It hands the child EOF without ever waiting to see it
+	/// taken, and never waits for reaping: blocking a quitting app for seconds
+	/// risks the platform killing it before the escalation lands, which would
+	/// leave behind exactly the orphan this call exists to prevent. `SIGKILL`
+	/// needs no witness.
 	pub async fn terminate(&self) {
 		self.shared.lock().await.shutting_down = true;
+		// Before the child lock, never after: whoever holds it is waiting on a
+		// child that may itself be waiting for this.
+		self.close_stdin();
 
 		let mut slot = self.child.lock().await;
 		let Some(child) = slot.as_mut() else { return };
@@ -410,10 +421,19 @@ pub fn sweep_live_groups() {
 /// Leaves the handle in place: the read loop and a failed handshake both want
 /// the exit code, and `wait` on an already-reaped child returns the cached
 /// status. Clearing the slot is `kill`'s job.
+///
+/// Bounded because both callers reach here on stdout EOF, which says the child
+/// stopped talking and nothing about whether it stopped running. Waiting on one
+/// that kept running would hold the child lock for good, and the shutdown that
+/// needs that lock is the only thing left that could end it.
 async fn wait_code(child: &Arc<Mutex<Option<Child>>>) -> Option<i32> {
 	let mut slot = child.lock().await;
 	let handle = slot.as_mut()?;
-	handle.wait().await.ok().and_then(|status| status.code())
+	tokio::time::timeout(EXIT_CODE_GRACE, handle.wait())
+		.await
+		.ok()?
+		.ok()
+		.and_then(|status| status.code())
 }
 
 fn spawn(options: &SessionOptions) -> Result<Child, TransportError> {

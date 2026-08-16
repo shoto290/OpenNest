@@ -3,7 +3,11 @@
 
 use std::sync::{Arc, Mutex};
 
-use opennest_app::claude::commands::{invoke_handler, EVENT_CHANNEL};
+use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::claude::commands::{
+	claude_start_or_resume_session, invoke_handler, shutdown_session, terminate_session,
+	EVENT_CHANNEL,
+};
 use opennest_app::claude::contract::{ClaudeEvent, ConnectionState};
 use opennest_app::claude::ClaudeState;
 use serde_json::{json, Value};
@@ -85,6 +89,50 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 		event,
 		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking }
 	)));
+}
+
+/// The state lock guards a pointer, not the child behind it. Held across the
+/// shutdown of a child that is deaf to EOF, it blocks every other command for
+/// the whole grace — the quit path included, which is the one caller that has
+/// no time to spare.
+///
+/// Both halves run on one task, so the order they finish in is decided by the
+/// lock alone: the second can only report first if the first let go of it.
+#[test]
+fn shutting_down_frees_the_state_before_waiting_on_the_child() {
+	std::env::set_var(BINARY_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_claude"));
+	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
+
+	let app = app();
+	let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+	let finished: Mutex<Vec<&str>> = Mutex::new(Vec::new());
+	runtime.block_on(async {
+		claude_start_or_resume_session(
+			app.handle().clone(),
+			app.state::<ClaudeState>(),
+			None,
+			Some(std::env::temp_dir().to_string_lossy().into_owned()),
+		)
+		.await
+		.expect("session starts");
+
+		let state = app.state::<ClaudeState>();
+		tokio::join!(
+			async {
+				shutdown_session(&state).await;
+				finished.lock().expect("order").push("shutdown");
+			},
+			async {
+				terminate_session(&state).await;
+				finished.lock().expect("order").push("terminate");
+			},
+		);
+	});
+
+	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
+	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	assert_eq!(*finished.lock().expect("order"), ["terminate", "shutdown"]);
 }
 
 /// The identifier decides the app data directory, so this test claims one of

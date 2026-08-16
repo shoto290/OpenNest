@@ -200,6 +200,16 @@ fn ack(request_id: &str) {
 	}));
 }
 
+/// Stops talking without stopping: the transport reads EOF on stdout, which
+/// says nothing about whether the process behind it is still alive.
+#[cfg(unix)]
+fn close_stdout() {
+	unsafe { libc::close(1) };
+}
+
+#[cfg(not(unix))]
+fn close_stdout() {}
+
 /// A grandchild that only a process-group kill can reach. It gets pipes of its
 /// own, the way the real CLI hands them to a stdio MCP server: inheriting this
 /// process's stdout would keep it open past this process's death, and the
@@ -287,6 +297,7 @@ fn main() {
 						emit_text_turn("partial");
 						std::process::exit(9);
 					}
+					"stdout_eof" => close_stdout(),
 					"invalid_frames" => {
 						emit_raw("this is not json");
 						emit_raw("{\"type\":");
