@@ -34,20 +34,20 @@ const STORED_SNAPSHOT: SessionSnapshot = {
 		{
 			id: "local-3",
 			role: "user",
-			text: "bonjour",
+			text: "hello",
 			completion: "complete",
 			timestamp: 0,
 		},
 		{
 			id: "fake-msg-9",
 			role: "assistant",
-			text: "salut",
+			text: "hi",
 			completion: "complete",
 			timestamp: 0,
 		},
 	],
 	activities: [
-		{ id: "act-1", title: "Lecture", kind: "tool", status: "succeeded" },
+		{ id: "act-1", title: "Read", kind: "tool", status: "succeeded" },
 	],
 }
 
@@ -64,7 +64,7 @@ type StoredHarness = Harness & {
 function createHarness(): Harness {
 	const driver = createFakeChatDriver({
 		stepMs: STEP_MS,
-		replyFor: () => "un deux trois quatre cinq six",
+		replyFor: () => "one two three four five six",
 	})
 	const controller = createChatController(driver)
 	const detach = controller.attach()
@@ -74,7 +74,7 @@ function createHarness(): Harness {
 function storedHarness(snapshot: SessionSnapshot): StoredHarness {
 	const fake = createFakeChatDriver({
 		stepMs: STEP_MS,
-		replyFor: () => "un deux trois",
+		replyFor: () => "one two three",
 	})
 	const saved: SessionSnapshot[] = []
 	const driver: FakeChatDriver = {
@@ -108,12 +108,12 @@ describe("createChatController", () => {
 	it("runs a happy-path turn with an optimistic user message", async () => {
 		const { controller, detach } = await startedHarness()
 
-		const sending = controller.send("bonjour")
+		const sending = controller.send("hello")
 		const optimistic = controller.getState()
 		expect(optimistic.messages).toHaveLength(1)
 		expect(optimistic.messages[0]).toMatchObject({
 			role: "user",
-			text: "bonjour",
+			text: "hello",
 		})
 		expect(optimistic.turn).toBe("submitting")
 
@@ -126,7 +126,7 @@ describe("createChatController", () => {
 		expect(state.messages[1]).toMatchObject({
 			role: "assistant",
 			completion: "complete",
-			text: "un deux trois quatre cinq six",
+			text: "one two three four five six",
 		})
 		expect(state.activities.at(-1)?.status).toBe("succeeded")
 		expect(state.errors).toHaveLength(0)
@@ -135,9 +135,9 @@ describe("createChatController", () => {
 
 	it("refuses a second prompt while a turn is running", async () => {
 		const { controller } = await startedHarness()
-		await controller.send("premier")
+		await controller.send("first")
 		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
-		await controller.send("deuxième")
+		await controller.send("second")
 
 		const state = controller.getState()
 		expect(
@@ -148,7 +148,7 @@ describe("createChatController", () => {
 
 	it("stops a streaming turn and marks the message cancelled", async () => {
 		const { controller } = await startedHarness()
-		await controller.send("bonjour")
+		await controller.send("hello")
 		await vi.advanceTimersByTimeAsync(STEP_MS * 5)
 		expect(controller.getState().turn).toBe("running")
 
@@ -160,13 +160,13 @@ describe("createChatController", () => {
 		const assistant = state.messages.at(-1)
 		expect(assistant?.completion).toBe("cancelled")
 		expect(assistant?.text.length).toBeLessThan(
-			"un deux trois quatre cinq six".length,
+			"one two three four five six".length,
 		)
 	})
 
 	it("surfaces a failed turn and keeps partial text", async () => {
 		const { controller } = await startedHarness()
-		await controller.send("explique /fail")
+		await controller.send("explain /fail")
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
@@ -178,7 +178,7 @@ describe("createChatController", () => {
 
 	it("pauses on a permission request and resumes on allowOnce", async () => {
 		const { controller } = await startedHarness()
-		await controller.send("liste les fichiers /permission")
+		await controller.send("list the files /permission")
 		await vi.runAllTimersAsync()
 
 		const paused = controller.getState()
@@ -197,7 +197,7 @@ describe("createChatController", () => {
 	it("leaves no permission activity pending after either decision", async () => {
 		for (const decision of ["allowOnce", "deny"] as const) {
 			const { controller } = await startedHarness()
-			await controller.send("liste les fichiers /permission")
+			await controller.send("list the files /permission")
 			await vi.runAllTimersAsync()
 
 			const paused = controller.getState()
@@ -223,7 +223,7 @@ describe("createChatController", () => {
 
 	it("cancels the turn when the permission is denied", async () => {
 		const { controller } = await startedHarness()
-		await controller.send("supprime tout /permission")
+		await controller.send("delete everything /permission")
 		await vi.runAllTimersAsync()
 
 		const paused = controller.getState()
@@ -238,7 +238,7 @@ describe("createChatController", () => {
 
 	it("rejects a prompt sent before the session starts", async () => {
 		const { controller } = createHarness()
-		await controller.send("bonjour")
+		await controller.send("hello")
 
 		const failed = controller.getState()
 		expect(failed.turn).toBe("failed")
@@ -249,7 +249,7 @@ describe("createChatController", () => {
 	it("retries a rejected optimistic message with the same text", async () => {
 		const fake = createFakeChatDriver({
 			stepMs: STEP_MS,
-			replyFor: () => "un deux trois",
+			replyFor: () => "one two three",
 		})
 		let failNext = true
 		const flaky: ChatDriver = {
@@ -257,7 +257,7 @@ describe("createChatController", () => {
 			submitPrompt: (text) => {
 				if (failNext) {
 					failNext = false
-					return Promise.reject({ kind: "writeFailed", detail: "réseau coupé" })
+					return Promise.reject({ kind: "writeFailed", detail: "network down" })
 				}
 				return fake.submitPrompt(text)
 			},
@@ -266,7 +266,7 @@ describe("createChatController", () => {
 		controller.attach()
 		await controller.start()
 
-		await controller.send("bonjour")
+		await controller.send("hello")
 		const failed = controller.getState()
 		expect(failed.turn).toBe("failed")
 		expect(failed.messages[0].completion).toBe("failed")
@@ -278,7 +278,7 @@ describe("createChatController", () => {
 		const state = controller.getState()
 		expect(state.turn).toBe("idle")
 		expect(state.messages[0]).toMatchObject({
-			text: "bonjour",
+			text: "hello",
 			completion: "complete",
 		})
 		expect(state.messages.at(-1)).toMatchObject({
@@ -289,7 +289,7 @@ describe("createChatController", () => {
 
 	it("keeps the transcript across a restart that succeeds", async () => {
 		const { controller } = await startedHarness()
-		await controller.send("bonjour")
+		await controller.send("hello")
 		await vi.runAllTimersAsync()
 		const before = controller.getState()
 		expect(before.messages.length).toBeGreaterThan(1)
@@ -306,12 +306,12 @@ describe("createChatController", () => {
 
 	it("keeps the transcript when the restart itself fails", async () => {
 		const { driver, controller } = await startedHarness()
-		await controller.send("bonjour")
+		await controller.send("hello")
 		await vi.runAllTimersAsync()
 		const before = controller.getState()
 		vi.spyOn(driver, "startOrResumeSession").mockRejectedValue({
 			kind: "spawnFailed",
-			detail: "binaire introuvable",
+			detail: "binary not found",
 		})
 
 		await controller.preflight()
@@ -339,7 +339,7 @@ describe("createChatController", () => {
 		const controller = createChatController(driver)
 		controller.attach()
 		await controller.preflight()
-		await controller.send("bonjour")
+		await controller.send("hello")
 		await vi.runAllTimersAsync()
 
 		await controller.preflight()
@@ -352,7 +352,7 @@ describe("createChatController", () => {
 			type: "messageDelta",
 			id: "fake-msg-1",
 			seq: 99,
-			text: "fantôme",
+			text: "phantom",
 		})
 		deadListener({
 			type: "messageStarted",
@@ -377,17 +377,17 @@ describe("createChatController", () => {
 	it("leaves stopping deterministically when cancelTurn is rejected", async () => {
 		const fake = createFakeChatDriver({
 			stepMs: STEP_MS,
-			replyFor: () => "un deux trois",
+			replyFor: () => "one two three",
 		})
 		const brokenCancel: ChatDriver = {
 			...fake,
 			cancelTurn: () =>
-				Promise.reject({ kind: "writeFailed", detail: "pipe fermé" }),
+				Promise.reject({ kind: "writeFailed", detail: "pipe closed" }),
 		}
 		const controller = createChatController(brokenCancel)
 		controller.attach()
 		await controller.start()
-		await controller.send("bonjour")
+		await controller.send("hello")
 		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
 		expect(controller.getState().turn).toBe("running")
 
@@ -399,7 +399,7 @@ describe("createChatController", () => {
 		await vi.runAllTimersAsync()
 		expect(controller.getState().turn).not.toBe("stopping")
 
-		await controller.send("on repart")
+		await controller.send("here we go again")
 		await vi.runAllTimersAsync()
 		const state = controller.getState()
 		expect(state.turn).toBe("idle")
@@ -521,7 +521,7 @@ describe("createChatController", () => {
 		await controller.boot()
 		await vi.runAllTimersAsync()
 
-		await controller.send("et après ?")
+		await controller.send("and then?")
 
 		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
 	})
@@ -540,7 +540,7 @@ describe("createChatController", () => {
 		})
 		expect(controller.getState().sessionId).toBeNull()
 
-		await controller.send("et après ?")
+		await controller.send("and then?")
 
 		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual([null])
 	})
@@ -558,7 +558,7 @@ describe("createChatController", () => {
 		})
 		expect(controller.getState().sessionId).toBe("s-stored")
 
-		await controller.send("et après ?")
+		await controller.send("and then?")
 
 		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
 	})
@@ -592,7 +592,7 @@ describe("createChatController", () => {
 		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
 		vi.spyOn(driver, "loadSession").mockRejectedValue({
 			kind: "writeFailed",
-			detail: "disque illisible",
+			detail: "unreadable disk",
 		})
 
 		await controller.boot()
@@ -609,10 +609,10 @@ describe("createChatController", () => {
 		await vi.runAllTimersAsync()
 		expect(saved).toHaveLength(0)
 
-		const sending = controller.send("bonjour")
+		const sending = controller.send("hello")
 		expect(saved).toHaveLength(1)
 		expect(saved[0].messages).toEqual([
-			expect.objectContaining({ role: "user", text: "bonjour" }),
+			expect.objectContaining({ role: "user", text: "hello" }),
 		])
 
 		await sending
@@ -632,17 +632,17 @@ describe("createChatController", () => {
 		await vi.runAllTimersAsync()
 		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
 
-		await controller.send("bonjour")
+		await controller.send("hello")
 		driver.pushEvent({ type: "turnChanged", state: "running" })
 		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
-		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Bon" })
-		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 2, text: "jour" })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Hel" })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 2, text: "lo" })
 		await vi.advanceTimersByTimeAsync(PERSIST_MS)
 
 		expect(controller.getState().turn).toBe("running")
 		expect(saved.at(-1)?.messages).toEqual([
-			expect.objectContaining({ role: "user", text: "bonjour" }),
-			expect.objectContaining({ text: "Bonjour", completion: "cancelled" }),
+			expect.objectContaining({ role: "user", text: "hello" }),
+			expect.objectContaining({ text: "Hello", completion: "cancelled" }),
 		])
 	})
 
@@ -652,7 +652,7 @@ describe("createChatController", () => {
 		await vi.runAllTimersAsync()
 		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
 
-		await controller.send("bonjour")
+		await controller.send("hello")
 		driver.pushEvent({ type: "turnChanged", state: "running" })
 		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
 
@@ -679,7 +679,7 @@ describe("createChatController", () => {
 			message: {
 				id: "msg-1",
 				role: "assistant",
-				text: "Bonjour",
+				text: "Hello",
 				completion: "streaming",
 				timestamp: 0,
 			},
@@ -701,7 +701,7 @@ describe("createChatController", () => {
 		await controller.boot()
 		await vi.runAllTimersAsync()
 
-		await controller.send("et après ?")
+		await controller.send("and then?")
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
@@ -717,7 +717,7 @@ describe("createChatController", () => {
 		detach()
 		await vi.runAllTimersAsync()
 		const before = controller.getState()
-		await controller.send("bonjour")
+		await controller.send("hello")
 		await vi.runAllTimersAsync()
 		expect(controller.getState().messages).toHaveLength(
 			before.messages.length + 1,
