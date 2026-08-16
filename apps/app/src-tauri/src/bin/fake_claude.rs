@@ -5,11 +5,13 @@
 //! wall clock. The scenario is picked with `FAKE_CLAUDE_SCENARIO`.
 
 use std::io::{BufRead, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 
 use serde_json::{json, Value};
 
 const DEFAULT_SESSION: &str = "fake-session-0001";
+const VERSION_LINE: &str = "2.0.0-fake (OpenNest fake)";
 
 fn emit_raw(line: &str) {
 	let stdout = std::io::stdout();
@@ -37,6 +39,55 @@ fn session_id() -> String {
 
 fn resumed() -> bool {
 	std::env::args().any(|arg| arg == "--resume")
+}
+
+/// A child deaf to the EOF on its stdin, so only a signal can end it. Set apart
+/// from the scenarios because it composes with any of them.
+fn ignores_eof() -> bool {
+	std::env::var("FAKE_CLAUDE_IGNORE_EOF").is_ok()
+}
+
+/// A grandchild spawned before the handshake, the way the real CLI starts its
+/// stdio MCP servers. Composes with any scenario, including the ones that never
+/// reach a prompt.
+fn orphans_at_startup() -> bool {
+	std::env::var("FAKE_CLAUDE_ORPHAN_AT_STARTUP").is_ok()
+}
+
+/// A child no group signal can reach, which is what every rung of the shutdown
+/// ladder is aimed at. It rejoins the group it was forked out of — the one group
+/// certain to exist in its own session — and the group the transport put it in
+/// is left empty. Composes with any scenario.
+#[cfg(unix)]
+fn escape_group() {
+	if std::env::var("FAKE_CLAUDE_ESCAPE_GROUP").is_err() {
+		return;
+	}
+	unsafe {
+		let parent_group = libc::getpgid(libc::getppid());
+		libc::setpgid(0, parent_group);
+	}
+}
+
+#[cfg(not(unix))]
+fn escape_group() {}
+
+/// The preflight probes run through `Command::output()`, which hands the child a
+/// null stdin: they have to answer before the reader thread meets EOF.
+fn preflight_answer() -> Option<String> {
+	let args: Vec<String> = std::env::args().skip(1).collect();
+	match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+		["--version"] => Some(VERSION_LINE.into()),
+		["auth", "status"] => Some(json!({ "loggedIn": true }).to_string()),
+		_ => None,
+	}
+}
+
+/// Unique per process and per turn: a restored transcript and a fresh turn
+/// sharing an id would let the new deltas attach to the hydrated message.
+fn next_message_id() -> String {
+	static TURN: AtomicU64 = AtomicU64::new(0);
+	format!("msg_fake_{}_{}", std::process::id(), TURN.fetch_add(1, Ordering::Relaxed))
 }
 
 enum Incoming {
@@ -80,6 +131,12 @@ fn read_incoming(tx: mpsc::Sender<Incoming>) {
 			}
 		}
 	}
+
+	// Holding `tx` past EOF keeps the main loop waiting, which is the whole
+	// point: the process outlives its own stdin.
+	while ignores_eof() {
+		std::thread::park();
+	}
 }
 
 fn emit_init() {
@@ -92,9 +149,10 @@ fn emit_init() {
 }
 
 fn emit_text_turn(text: &str) {
+	let message_id = next_message_id();
 	emit(json!({
 		"type": "stream_event",
-		"event": { "type": "message_start", "message": { "id": "msg_fake_1", "role": "assistant" } }
+		"event": { "type": "message_start", "message": { "id": message_id, "role": "assistant" } }
 	}));
 	emit(json!({
 		"type": "stream_event",
@@ -108,7 +166,7 @@ fn emit_text_turn(text: &str) {
 	}
 	emit(json!({
 		"type": "assistant",
-		"message": { "id": "msg_fake_1", "role": "assistant", "content": [{ "type": "text", "text": text }] }
+		"message": { "id": message_id, "role": "assistant", "content": [{ "type": "text", "text": text }] }
 	}));
 }
 
@@ -160,15 +218,47 @@ fn ack(request_id: &str) {
 	}));
 }
 
-/// A grandchild that only a process-group kill can reach.
+/// Stops talking without stopping: the transport reads EOF on stdout, which
+/// says nothing about whether the process behind it is still alive.
+#[cfg(unix)]
+fn close_stdout() {
+	unsafe { libc::close(1) };
+}
+
+#[cfg(not(unix))]
+fn close_stdout() {}
+
+/// A grandchild that only a process-group kill can reach. It gets pipes of its
+/// own, the way the real CLI hands them to a stdio MCP server: inheriting this
+/// process's stdout would keep it open past this process's death, and the
+/// transport would never see the EOF that tells it the child is gone.
 fn spawn_orphan() {
-	let Ok(child) = std::process::Command::new("sleep").arg("600").spawn() else { return };
+	let Ok(child) = std::process::Command::new("sleep")
+		.arg("60")
+		.stdin(std::process::Stdio::null())
+		.stdout(std::process::Stdio::null())
+		.stderr(std::process::Stdio::null())
+		.spawn()
+	else {
+		return;
+	};
 	if let Ok(path) = std::env::var("FAKE_CLAUDE_PID_FILE") {
 		let _ = std::fs::write(path, child.id().to_string());
 	}
 }
 
 fn main() {
+	if let Some(answer) = preflight_answer() {
+		emit_raw(&answer);
+		return;
+	}
+
+	escape_group();
+
+	if orphans_at_startup() {
+		spawn_orphan();
+	}
+
 	let scenario = scenario();
 	let (tx, rx) = mpsc::channel();
 	std::thread::spawn(move || read_incoming(tx));
@@ -184,6 +274,22 @@ fn main() {
 				}
 				if scenario == "startup_crash" {
 					std::process::exit(3);
+				}
+				if scenario == "resume_crash" && resumed() {
+					std::process::exit(4);
+				}
+				if scenario == "resume_timeout" && resumed() {
+					continue;
+				}
+				if scenario == "resume_timeout_then_crash" {
+					if resumed() {
+						continue;
+					}
+					std::process::exit(3);
+				}
+				if scenario == "early_init" {
+					announced = true;
+					emit_init();
 				}
 				ack(&request_id);
 			}
@@ -220,6 +326,7 @@ fn main() {
 						emit_text_turn("partial");
 						std::process::exit(9);
 					}
+					"stdout_eof" => close_stdout(),
 					"invalid_frames" => {
 						emit_raw("this is not json");
 						emit_raw("{\"type\":");
@@ -252,7 +359,7 @@ fn main() {
 						}
 						emit(json!({
 							"type": "stream_event",
-							"event": { "type": "message_start", "message": { "id": "msg_fake_slow", "role": "assistant" } }
+							"event": { "type": "message_start", "message": { "id": next_message_id(), "role": "assistant" } }
 						}));
 					}
 					_ => {

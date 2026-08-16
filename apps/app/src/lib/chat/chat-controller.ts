@@ -5,6 +5,7 @@ import {
 	chatReducer,
 	initialChatState,
 	isTurnBusy,
+	toSessionSnapshot,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
 
@@ -24,15 +25,23 @@ export type ChatController = {
 	start: (resume?: string) => Promise<SessionHandle | null>
 	/** Checks the binary and opens a session when it answers. Deduplicated while in flight. */
 	preflight: (resume?: string) => Promise<SessionHandle | null>
-	/** Drops the transcript on purpose. A restart never does this — a dead session
-	 * clears its own state and leaves what the reader can still see. */
-	clearConversation: () => void
+	/** Hydrates the stored transcript, then resumes its session. Sequential by
+	 * construction: two parallel effects would open a brand-new session while the
+	 * transcript is still loading, and the resume id would be lost. */
+	boot: () => Promise<SessionHandle | null>
+	/** Reopens the session the transcript belongs to. The recovery affordance the
+	 * reader is offered, so it resumes rather than starting Claude amnesiac. */
+	restart: () => Promise<SessionHandle | null>
 	send: (text: string) => Promise<void>
 	stop: () => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	retry: (id: string) => Promise<void>
 	shutdown: () => Promise<void>
 }
+
+const LOCAL_ID_PREFIX = "local-"
+
+const STREAMING_PERSIST_MS = 1000
 
 function toTransportError(reason: unknown): TransportError {
 	if (typeof reason === "object" && reason !== null && "kind" in reason) {
@@ -41,12 +50,30 @@ function toTransportError(reason: unknown): TransportError {
 	return { kind: "writeFailed", detail: String(reason) }
 }
 
+function localSeqOf(id: string): number {
+	if (!id.startsWith(LOCAL_ID_PREFIX)) {
+		return 0
+	}
+	const seq = Number(id.slice(LOCAL_ID_PREFIX.length))
+	return Number.isInteger(seq) ? seq : 0
+}
+
+/** Restored messages already carry minted ids, so the counter has to pick up where
+ * the stored transcript left off or the next prompt reuses an id on screen. */
+function highestLocalSeq(messages: ChatMessage[]): number {
+	return messages.reduce(
+		(highest, message) => Math.max(highest, localSeqOf(message.id)),
+		0,
+	)
+}
+
 export function createChatController(driver: ChatDriver): ChatController {
 	let state = initialChatState
 	let epoch = 0
 	let localSeq = 0
 	let detach: Promise<() => void> | null = null
 	let pendingPreflight: Promise<SessionHandle | null> | null = null
+	let scheduledPersist: ReturnType<typeof setTimeout> | null = null
 	const listeners = new Set<() => void>()
 
 	const dispatch = (action: ChatAction) => {
@@ -67,7 +94,35 @@ export function createChatController(driver: ChatDriver): ChatController {
 			event: { type: "failed", error: toTransportError(reason) },
 		})
 
+	const writeSnapshot = () => {
+		void driver.saveSession(toSessionSnapshot(state)).catch(() => undefined)
+	}
+
+	const cancelScheduledPersist = () => {
+		if (scheduledPersist === null) {
+			return
+		}
+		clearTimeout(scheduledPersist)
+		scheduledPersist = null
+	}
+
+	const persistNow = () => {
+		cancelScheduledPersist()
+		writeSnapshot()
+	}
+
+	/** A turn in flight is worth keeping — quitting mid-answer must not lose it —
+	 * but it emits one delta per token, and a write per delta would rewrite the
+	 * whole transcript per token. */
+	const persistSoon = () => {
+		scheduledPersist ??= setTimeout(() => {
+			scheduledPersist = null
+			writeSnapshot()
+		}, STREAMING_PERSIST_MS)
+	}
+
 	const disconnect = () => {
+		cancelScheduledPersist()
 		detach?.then((unlisten) => unlisten())
 		detach = null
 	}
@@ -77,9 +132,19 @@ export function createChatController(driver: ChatDriver): ChatController {
 	const connect = () => {
 		const captured = epoch
 		disconnect()
-		detach = driver.subscribe((event) =>
-			dispatch({ type: "driverEvent", epoch: captured, event }),
-		)
+		detach = driver.subscribe((event) => {
+			dispatch({ type: "driverEvent", epoch: captured, event })
+			if (captured !== epoch) {
+				return
+			}
+			if (event.type === "turnEnded") {
+				persistNow()
+				return
+			}
+			if (isTurnBusy(state.turn)) {
+				persistSoon()
+			}
+		})
 		return detach
 	}
 
@@ -109,7 +174,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 
 	const start = async (resume?: string) => {
 		epoch += 1
-		dispatch({ type: "sessionReset", epoch })
+		dispatch({ type: "sessionReset", epoch, sessionId: resume ?? null })
 		try {
 			if (detach) {
 				await connect()
@@ -138,9 +203,16 @@ export function createChatController(driver: ChatDriver): ChatController {
 		return pendingPreflight
 	}
 
-	const clearConversation = () => {
-		dispatch({ type: "conversationCleared" })
+	const boot = async () => {
+		const snapshot = await driver.loadSession().catch(() => null)
+		if (snapshot) {
+			dispatch({ type: "sessionRestored", snapshot })
+			localSeq = Math.max(localSeq, highestLocalSeq(snapshot.messages))
+		}
+		return preflight(snapshot?.sessionId ?? undefined)
 	}
+
+	const restart = () => preflight(state.sessionId ?? undefined)
 
 	const submit = async (message: ChatMessage) => {
 		try {
@@ -165,13 +237,14 @@ export function createChatController(driver: ChatDriver): ChatController {
 		}
 		localSeq += 1
 		const message: ChatMessage = {
-			id: `local-${localSeq}`,
+			id: `${LOCAL_ID_PREFIX}${localSeq}`,
 			role: "user",
 			text: trimmed,
 			completion: "complete",
 			timestamp: Date.now(),
 		}
 		dispatch({ type: "promptSubmitted", message })
+		persistNow()
 		await submit(message)
 	}
 
@@ -220,7 +293,8 @@ export function createChatController(driver: ChatDriver): ChatController {
 		check,
 		start,
 		preflight,
-		clearConversation,
+		boot,
+		restart,
 		send,
 		stop,
 		respond,

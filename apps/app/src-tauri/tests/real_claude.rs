@@ -8,9 +8,10 @@ use std::time::Duration;
 
 use opennest_app::claude::binary;
 use opennest_app::claude::contract::{
-	ActivityKind, ClaudeEvent, PermissionDecision, TurnOutcome,
+	ActivityKind, ClaudeEvent, PermissionDecision, SessionSnapshot, TurnOutcome,
 };
 use opennest_app::claude::session::{EventSink, Session, SessionOptions};
+use opennest_app::claude::store;
 use tokio::sync::mpsc;
 
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
@@ -120,18 +121,18 @@ async fn two_turns_stream_and_the_second_resumes_the_first() {
 	first.session.shutdown().await;
 
 	let mut second = live(Some(id.clone())).await;
-	let recall = second
-		.run_turn("What number did I ask you to remember? Reply with only the digits.")
-		.await;
+	let recall =
+		second.run_turn("What number did I ask you to remember? Reply with only the digits.").await;
 	assert!(text(&recall).contains("4271"), "resumed turn lost the context: {:?}", text(&recall));
 
-	let tooling = second
-		.run_turn("Run the bash command `echo OPENNEST_PROBE` and report its output.")
-		.await;
+	let tooling =
+		second.run_turn("Run the bash command `echo OPENNEST_PROBE` and report its output.").await;
 	let tools: Vec<_> = tooling
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::Activity { activity } if activity.kind == ActivityKind::Tool => Some(activity),
+			ClaudeEvent::Activity { activity } if activity.kind == ActivityKind::Tool => {
+				Some(activity)
+			}
 			_ => None,
 		})
 		.collect();
@@ -150,7 +151,9 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	let pid = live.session.pid();
 
 	live.session
-		.submit_prompt("Count from 1 to 300, one number per line, with a short sentence about each.")
+		.submit_prompt(
+			"Count from 1 to 300, one number per line, with a short sentence about each.",
+		)
 		.await
 		.expect("prompt accepted");
 	tokio::time::sleep(Duration::from_secs(6)).await;
@@ -164,11 +167,38 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	assert_eq!(outcome, Some(TurnOutcome::Cancelled));
 
 	let after = live.run_turn("Reply with exactly: STILL_ALIVE").await;
-	assert!(text(&after).contains("STILL_ALIVE"), "session unusable after stop: {:?}", text(&after));
+	assert!(
+		text(&after).contains("STILL_ALIVE"),
+		"session unusable after stop: {:?}",
+		text(&after)
+	);
 
 	live.session.shutdown().await;
 	tokio::time::sleep(Duration::from_secs(1)).await;
 	assert!(!group_alive(pid), "shutdown left claude processes behind");
+}
+
+/// The restart path, minus the app: an id minted by a real child goes through
+/// the store on disk and still resumes the conversation on the way back.
+#[tokio::test]
+#[ignore = "needs a signed-in claude and the network"]
+async fn an_id_stored_on_disk_resumes_the_conversation() {
+	let mut first = live(None).await;
+	let opening = first.run_turn("Remember the number 4271. Reply with exactly: OK").await;
+	let id = session_id(&opening).expect("session id captured from the live stream");
+	first.session.shutdown().await;
+
+	let path = std::env::temp_dir().join(format!("opennest-live-{id}.json"));
+	store::save(&path, &SessionSnapshot { session_id: Some(id), ..SessionSnapshot::default() });
+	let restored = store::load(&path).session_id.expect("the stored id survives the round trip");
+
+	let mut second = live(Some(restored)).await;
+	let recall =
+		second.run_turn("What number did I ask you to remember? Reply with only the digits.").await;
+	assert!(text(&recall).contains("4271"), "the stored id did not resume: {:?}", text(&recall));
+
+	second.session.shutdown().await;
+	std::fs::remove_file(&path).expect("cleanup");
 }
 
 #[cfg(unix)]

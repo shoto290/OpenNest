@@ -35,10 +35,7 @@ mod tests {
 	fn paths_and_text_both_lose_the_home_prefix() {
 		let home = home_dir().expect("home");
 		assert_eq!(path(&home.join(".local/bin/claude")), "~/.local/bin/claude");
-		assert_eq!(
-			text(&format!("cat {}/notes.txt", home.display())),
-			"cat ~/notes.txt"
-		);
+		assert_eq!(text(&format!("cat {}/notes.txt", home.display())), "cat ~/notes.txt");
 	}
 
 	#[test]

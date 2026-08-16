@@ -14,12 +14,16 @@ export function describeTransportError(error: TransportError): string {
 			return `Claude Code did not answer within ${error.timeoutMs} ms.`
 		case "crashed":
 			return `Claude Code exited (code ${error.code ?? "unknown"}).`
+		case "resumeFailed":
+			return "That conversation could not be resumed. Claude Code started a new one; your messages are still here."
 		case "invalidFrame":
 			return `An unreadable frame was skipped: ${error.detail}`
 		case "notStarted":
 			return "No session is running."
 		case "turnAlreadyRunning":
 			return "A turn is already running."
+		case "transitionInProgress":
+			return "A session change is already in progress."
 		case "noActiveTurn":
 			return "There is no turn to interrupt."
 		case "unknownPermission":

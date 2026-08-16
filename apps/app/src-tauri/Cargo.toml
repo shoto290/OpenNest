@@ -1,6 +1,6 @@
 [package]
 name = "opennest-app"
-version = "0.0.1"
+version = "0.1.0"
 description = "OpenNest desktop app"
 edition = "2021"
 default-run = "opennest-app"
@@ -13,9 +13,17 @@ path = "src/lib.rs"
 name = "opennest-app"
 path = "src/main.rs"
 
+# Every suite but real_claude.rs spawns this one, so run them with
+# `cargo test --features fake-claude`. Cargo hands the tests its path either
+# way, so a plain `cargo test` still compiles and then fails at each spawn with
+# `SpawnFailed { detail: "No such file or directory" }`.
 [[bin]]
 name = "fake_claude"
 path = "src/bin/fake_claude.rs"
+required-features = ["fake-claude"]
+
+[features]
+fake-claude = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -7,9 +7,14 @@ import {
 	initialChatState,
 	isSessionReady,
 	isTurnBusy,
+	toSessionSnapshot,
 } from "./chat-state"
 
-import type { ChatMessage, ClaudeEvent } from "../claude/contract"
+import type {
+	ChatMessage,
+	ClaudeEvent,
+	SessionSnapshot,
+} from "../claude/contract"
 
 function applyEvents(state: ChatState, events: ClaudeEvent[]): ChatState {
 	return events.reduce(
@@ -152,6 +157,7 @@ describe("chatReducer", () => {
 		const reset = chatReducer(initialChatState, {
 			type: "sessionReset",
 			epoch: 2,
+			sessionId: null,
 		})
 		const stale = chatReducer(reset, {
 			type: "driverEvent",
@@ -259,7 +265,11 @@ describe("chatReducer", () => {
 			type: "binaryVersion",
 			version: "1.2.3",
 		})
-		const reset = chatReducer(versioned, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(versioned, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 		expect(reset.connection).toBe("ready")
 		expect(reset.binaryVersion).toBe("1.2.3")
 		expect(reset.epoch).toBe(1)
@@ -313,7 +323,11 @@ describe("turn predicates", () => {
 		const ready: ChatState = { ...initialChatState, connection: "ready" }
 		const open = chatReducer(ready, { type: "sessionOpened" })
 		expect(isSessionReady(open)).toBe(true)
-		const reset = chatReducer(open, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(open, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 		expect(reset.sessionOpen).toBe(false)
 		expect(isSessionReady(reset)).toBe(false)
 	})
@@ -405,7 +419,11 @@ describe("session reset", () => {
 			conversation,
 		)
 		const open = chatReducer(live, { type: "sessionOpened" })
-		const reset = chatReducer(open, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(open, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 
 		expect(reset.messages).toEqual(open.messages)
 		expect(reset.activities).toEqual(open.activities)
@@ -416,25 +434,150 @@ describe("session reset", () => {
 		expect(reset.epoch).toBe(1)
 	})
 
-	it("settles a message left mid-stream by the session that died", () => {
-		const streaming = applyEvents(initialChatState, streamedTurn)
-		const reset = chatReducer(streaming, { type: "sessionReset", epoch: 1 })
-
-		expect(reset.messages[0].text).toBe("Bonjour le monde")
-		expect(reset.messages[0].completion).toBe("failed")
-	})
-
-	it("drops the transcript only on an explicit clear", () => {
+	// The child re-announces its id only on the first prompt of the new session,
+	// so a reset that drops the id leaves the app unable to name what it resumed.
+	it("carries the resumed id through the reset that opens it", () => {
 		const live = applyEvents(
 			{ ...initialChatState, connection: "ready" },
 			conversation,
 		)
-		const open = chatReducer(live, { type: "sessionOpened" })
-		const cleared = chatReducer(open, { type: "conversationCleared" })
+		const reset = chatReducer(live, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: "s-1",
+		})
 
-		expect(cleared.messages).toHaveLength(0)
-		expect(cleared.activities).toHaveLength(0)
-		expect(cleared.sessionOpen).toBe(true)
-		expect(cleared.sessionId).toBe("s-1")
+		expect(reset.sessionId).toBe("s-1")
+	})
+
+	it("settles a message left mid-stream by the session that died", () => {
+		const streaming = applyEvents(initialChatState, streamedTurn)
+		const reset = chatReducer(streaming, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
+
+		expect(reset.messages[0].text).toBe("Bonjour le monde")
+		expect(reset.messages[0].completion).toBe("failed")
+	})
+})
+
+describe("session restore", () => {
+	const snapshot: SessionSnapshot = {
+		sessionId: "s-1",
+		messages: [assistantMessage({ text: "Bonjour", completion: "complete" })],
+		activities: [
+			{ id: "act-1", title: "Lecture", kind: "tool", status: "succeeded" },
+		],
+	}
+
+	function restore(state: ChatState): ChatState {
+		return chatReducer(state, { type: "sessionRestored", snapshot })
+	}
+
+	it("hydrates the stored transcript, activities and session id", () => {
+		const restored = restore(initialChatState)
+
+		expect(restored.messages).toEqual(snapshot.messages)
+		expect(restored.activities).toEqual(snapshot.activities)
+		expect(restored.sessionId).toBe("s-1")
+	})
+
+	it("is a no-op once anything is already on screen", () => {
+		const live = applyEvents(initialChatState, streamedTurn)
+		expect(restore(live)).toBe(live)
+
+		// StrictMode mounts twice, so the second hydration must not replay either.
+		const hydrated = restore(initialChatState)
+		expect(restore(hydrated)).toBe(hydrated)
+	})
+
+	it("keeps the hydrated transcript across the session reset that follows", () => {
+		const reset = chatReducer(restore(initialChatState), {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
+
+		expect(reset.messages).toEqual(snapshot.messages)
+		expect(reset.activities).toEqual(snapshot.activities)
+	})
+
+	// Quitting mid-answer writes a message the reducer never settled. It comes back
+	// stopped, which is what happened, and the reset that follows the boot must not
+	// turn it into a failure the reader never saw.
+	it("brings a transcript interrupted mid-stream back as stopped", () => {
+		const interrupted = toSessionSnapshot(
+			applyEvents(initialChatState, streamedTurn),
+		)
+		expect(interrupted.messages[0].completion).toBe("cancelled")
+
+		const restored = chatReducer(initialChatState, {
+			type: "sessionRestored",
+			snapshot: interrupted,
+		})
+		const reset = chatReducer(restored, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
+
+		expect(reset.messages[0]).toMatchObject({
+			text: "Bonjour le monde",
+			completion: "cancelled",
+		})
+	})
+
+	it("leaves errors and pending permissions out of the snapshot it writes", () => {
+		const live = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "submitting" },
+			{ type: "messageStarted", message: assistantMessage() },
+			{
+				type: "permissionRequested",
+				request: {
+					id: "perm-1",
+					toolName: "Bash",
+					title: "Exécuter",
+					detail: null,
+				},
+			},
+			{ type: "failed", error: { kind: "notStarted" } },
+		])
+		expect(live.errors).toHaveLength(1)
+		expect(live.permission).not.toBeNull()
+
+		expect(toSessionSnapshot(live)).toEqual({
+			sessionId: live.sessionId,
+			messages: [assistantMessage({ completion: "cancelled" })],
+			activities: live.activities,
+		})
+	})
+
+	// A turn rewrites the whole file once a second, so what goes on disk has to be
+	// bounded even though what stays on screen is not.
+	it("writes only the most recent messages and activities", () => {
+		const state: ChatState = {
+			...initialChatState,
+			messages: Array.from({ length: 250 }, (_, index) =>
+				assistantMessage({ id: `msg-${index + 1}`, completion: "complete" }),
+			),
+			activities: Array.from({ length: 250 }, (_, index) => ({
+				id: `act-${index + 1}`,
+				title: "Lecture",
+				kind: "tool" as const,
+				status: "succeeded" as const,
+			})),
+		}
+
+		const snapshot = toSessionSnapshot(state)
+
+		expect(snapshot.messages).toHaveLength(200)
+		expect(snapshot.messages[0].id).toBe("msg-51")
+		expect(snapshot.messages.at(-1)?.id).toBe("msg-250")
+		expect(snapshot.activities).toHaveLength(200)
+		expect(snapshot.activities[0].id).toBe("act-51")
+		expect(snapshot.activities.at(-1)?.id).toBe("act-250")
+		expect(state.messages).toHaveLength(250)
 	})
 })

@@ -3,19 +3,27 @@
 
 use std::sync::{Arc, Mutex};
 
-use opennest_app::claude::commands::{invoke_handler, EVENT_CHANNEL};
+use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::claude::commands::{
+	claude_start_or_resume_session, invoke_handler, shutdown_session, terminate_session,
+	EVENT_CHANNEL,
+};
 use opennest_app::claude::contract::{ClaudeEvent, ConnectionState};
 use opennest_app::claude::ClaudeState;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{Listener, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 fn app() -> tauri::App<MockRuntime> {
+	build(mock_context(noop_assets()))
+}
+
+fn build(context: tauri::Context<MockRuntime>) -> tauri::App<MockRuntime> {
 	mock_builder()
 		.manage(ClaudeState::default())
 		.invoke_handler(invoke_handler())
-		.build(mock_context(noop_assets()))
+		.build(context)
 		.expect("app builds")
 }
 
@@ -39,17 +47,23 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str, body: Value) -> Result<V
 #[test]
 fn commands_are_registered_and_report_typed_errors_without_a_session() {
 	let app = app();
-	let window = WebviewWindowBuilder::new(&app, "main", Default::default())
-		.build()
-		.expect("window builds");
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
-	assert_eq!(call(&window, "claude_cancel_turn", json!({})), Err(json!({ "kind": "notStarted" })));
+	assert_eq!(
+		call(&window, "claude_cancel_turn", json!({})),
+		Err(json!({ "kind": "notStarted" }))
+	);
 	assert_eq!(
 		call(&window, "claude_submit_prompt", json!({ "text": "salut" })),
 		Err(json!({ "kind": "notStarted" }))
 	);
 	assert_eq!(
-		call(&window, "claude_respond_to_permission", json!({ "id": "x", "decision": "allowOnce" })),
+		call(
+			&window,
+			"claude_respond_to_permission",
+			json!({ "id": "x", "decision": "allowOnce" })
+		),
 		Err(json!({ "kind": "notStarted" }))
 	);
 }
@@ -57,9 +71,8 @@ fn commands_are_registered_and_report_typed_errors_without_a_session() {
 #[test]
 fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	let app = app();
-	let window = WebviewWindowBuilder::new(&app, "main", Default::default())
-		.build()
-		.expect("window builds");
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
 	let seen: Arc<Mutex<Vec<ClaudeEvent>>> = Arc::new(Mutex::new(Vec::new()));
 	let sink = seen.clone();
@@ -72,7 +85,84 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	assert_eq!(call(&window, "claude_shutdown", json!({})), Ok(Value::Null));
 
 	let events = seen.lock().expect("log").clone();
-	assert!(events
-		.iter()
-		.any(|event| matches!(event, ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking })));
+	assert!(events.iter().any(|event| matches!(
+		event,
+		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking }
+	)));
+}
+
+/// The state lock guards a pointer, not the child behind it. Held across the
+/// shutdown of a child that is deaf to EOF, it blocks every other command for
+/// the whole grace — the quit path included, which is the one caller that has
+/// no time to spare.
+///
+/// Both halves run on one task, so the order they finish in is decided by the
+/// lock alone: the second can only report first if the first let go of it.
+#[test]
+fn shutting_down_frees_the_state_before_waiting_on_the_child() {
+	std::env::set_var(BINARY_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_claude"));
+	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
+
+	let app = app();
+	let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+	let finished: Mutex<Vec<&str>> = Mutex::new(Vec::new());
+	runtime.block_on(async {
+		claude_start_or_resume_session(
+			app.handle().clone(),
+			app.state::<ClaudeState>(),
+			None,
+			Some(std::env::temp_dir().to_string_lossy().into_owned()),
+		)
+		.await
+		.expect("session starts");
+
+		let state = app.state::<ClaudeState>();
+		tokio::join!(
+			async {
+				shutdown_session(&state).await;
+				finished.lock().expect("order").push("shutdown");
+			},
+			async {
+				terminate_session(&state).await;
+				finished.lock().expect("order").push("terminate");
+			},
+		);
+	});
+
+	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
+	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	assert_eq!(*finished.lock().expect("order"), ["terminate", "shutdown"]);
+}
+
+/// The identifier decides the app data directory, so this test claims one of
+/// its own rather than writing where a real install would.
+#[test]
+fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
+	let mut context = mock_context(noop_assets());
+	context.config_mut().identifier = "com.opennest.store-test".into();
+	let app = build(context);
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
+
+	let snapshot = json!({
+		"sessionId": "session-1",
+		"messages": [{
+			"id": "m1",
+			"role": "user",
+			"text": "salut",
+			"completion": "complete",
+			"timestamp": 17
+		}],
+		"activities": [{ "id": "a1", "title": "Read", "kind": "tool", "status": "succeeded" }]
+	});
+
+	assert_eq!(
+		call(&window, "claude_save_session", json!({ "snapshot": snapshot })),
+		Ok(Value::Null)
+	);
+	assert_eq!(call(&window, "claude_load_session", json!({})), Ok(snapshot));
+
+	let dir = app.path().app_data_dir().expect("data dir");
+	std::fs::remove_dir_all(&dir).expect("cleanup");
 }

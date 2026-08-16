@@ -85,7 +85,9 @@ pub fn resolve() -> Result<PathBuf, TransportError> {
 async fn run(binary: &Path, args: &[&str]) -> Result<(bool, String), TransportError> {
 	let output = tokio::time::timeout(PROBE_TIMEOUT, Command::new(binary).args(args).output())
 		.await
-		.map_err(|_| TransportError::StartupTimeout { timeout_ms: PROBE_TIMEOUT.as_millis() as u64 })?
+		.map_err(|_| TransportError::StartupTimeout {
+			timeout_ms: PROBE_TIMEOUT.as_millis() as u64,
+		})?
 		.map_err(|error| TransportError::SpawnFailed { detail: error.to_string() })?;
 
 	let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -105,9 +107,10 @@ pub async fn version(binary: &Path) -> Option<String> {
 /// single boolean here and the rest is dropped on the floor.
 pub async fn is_authenticated(binary: &Path) -> Result<bool, TransportError> {
 	let (_, stdout) = run(binary, &["auth", "status"]).await?;
-	let status: AuthStatus = serde_json::from_str(stdout.trim()).map_err(|_| {
-		TransportError::AuthCheckFailed { detail: "auth status returned an unreadable payload".into() }
-	})?;
+	let status: AuthStatus =
+		serde_json::from_str(stdout.trim()).map_err(|_| TransportError::AuthCheckFailed {
+			detail: "auth status returned an unreadable payload".into(),
+		})?;
 	Ok(status.logged_in)
 }
 
@@ -126,8 +129,7 @@ pub async fn check() -> CheckReport {
 
 	// Each probe cold-starts the ~300 MB CLI and neither feeds the other, so
 	// the check costs one spawn rather than two in sequence.
-	let (binary_version, authenticated) =
-		tokio::join!(version(&binary), is_authenticated(&binary));
+	let (binary_version, authenticated) = tokio::join!(version(&binary), is_authenticated(&binary));
 
 	match authenticated {
 		Ok(true) => CheckReport {
@@ -172,5 +174,4 @@ mod tests {
 		assert!(!labels.iter().any(|label| label.contains(&home)), "leaked the home directory");
 		assert!(labels.iter().any(|label| label.starts_with("$PATH/")), "PATH probe not reported");
 	}
-
 }

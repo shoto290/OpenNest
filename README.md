@@ -11,6 +11,8 @@ bun run dev
 
 `bun run dev` launches the Tauri app locally (Vite dev server + native window with hot reload).
 
+`bun run test` runs the Storybook suite in headless Chromium — install that browser once with `bunx playwright install chromium` from `packages/ui`.
+
 Requirements: [Bun](https://bun.sh) and the [Rust toolchain](https://rustup.rs). On Linux, install the [Tauri system dependencies](https://tauri.app/start/prerequisites/#linux).
 
 ## Building
@@ -18,6 +20,8 @@ Requirements: [Bun](https://bun.sh) and the [Rust toolchain](https://rustup.rs).
 ```bash
 bun run tauri:build
 ```
+
+Before tagging a release, walk [`apps/app/SMOKE.md`](apps/app/SMOKE.md) — the manual checks against a real Claude Code that the automated suite cannot reach.
 
 ## Adding components
 

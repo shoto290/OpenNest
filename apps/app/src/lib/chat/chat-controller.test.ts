@@ -5,14 +5,60 @@ import { isSessionReady } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
 
-import type { ClaudeEvent } from "../claude/contract"
+import type {
+	ChatMessage,
+	ClaudeEvent,
+	SessionSnapshot,
+} from "../claude/contract"
 
 const STEP_MS = 10
+const PERSIST_MS = 1000
+
+const STREAMING_MESSAGE: ChatMessage = {
+	id: "msg-1",
+	role: "assistant",
+	text: "",
+	completion: "streaming",
+	timestamp: 0,
+}
+
+const EMPTY_SNAPSHOT: SessionSnapshot = {
+	sessionId: null,
+	messages: [],
+	activities: [],
+}
+
+const STORED_SNAPSHOT: SessionSnapshot = {
+	sessionId: "s-stored",
+	messages: [
+		{
+			id: "local-3",
+			role: "user",
+			text: "bonjour",
+			completion: "complete",
+			timestamp: 0,
+		},
+		{
+			id: "fake-msg-9",
+			role: "assistant",
+			text: "salut",
+			completion: "complete",
+			timestamp: 0,
+		},
+	],
+	activities: [
+		{ id: "act-1", title: "Lecture", kind: "tool", status: "succeeded" },
+	],
+}
 
 type Harness = {
 	driver: FakeChatDriver
 	controller: ChatController
 	detach: () => void
+}
+
+type StoredHarness = Harness & {
+	saved: SessionSnapshot[]
 }
 
 function createHarness(): Harness {
@@ -23,6 +69,24 @@ function createHarness(): Harness {
 	const controller = createChatController(driver)
 	const detach = controller.attach()
 	return { driver, controller, detach }
+}
+
+function storedHarness(snapshot: SessionSnapshot): StoredHarness {
+	const fake = createFakeChatDriver({
+		stepMs: STEP_MS,
+		replyFor: () => "un deux trois",
+	})
+	const saved: SessionSnapshot[] = []
+	const driver: FakeChatDriver = {
+		...fake,
+		loadSession: () => Promise.resolve(snapshot),
+		saveSession: (next) => {
+			saved.push(next)
+			return Promise.resolve()
+		},
+	}
+	const controller = createChatController(driver)
+	return { driver, controller, detach: controller.attach(), saved }
 }
 
 async function startedHarness(): Promise<Harness> {
@@ -310,20 +374,6 @@ describe("createChatController", () => {
 		expect(state.turn).toBe("idle")
 	})
 
-	it("drops the transcript only when the conversation is cleared", async () => {
-		const { controller } = await startedHarness()
-		await controller.send("bonjour")
-		await vi.runAllTimersAsync()
-		expect(controller.getState().messages.length).toBeGreaterThan(1)
-
-		controller.clearConversation()
-
-		const state = controller.getState()
-		expect(state.messages).toHaveLength(0)
-		expect(state.activities).toHaveLength(0)
-		expect(isSessionReady(state)).toBe(true)
-	})
-
 	it("leaves stopping deterministically when cancelTurn is rejected", async () => {
 		const fake = createFakeChatDriver({
 			stepMs: STEP_MS,
@@ -444,6 +494,222 @@ describe("createChatController", () => {
 		await controller.preflight()
 
 		expect(controller.getState().sessionId).toBe("s-1")
+	})
+
+	it("restores the stored transcript and resumes its session on boot", async () => {
+		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		const loadSpy = vi.spyOn(driver, "loadSession")
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		expect(loadSpy).toHaveBeenCalledTimes(1)
+		expect(startSpy).toHaveBeenCalledWith("s-stored")
+		const state = controller.getState()
+		expect(state.sessionId).toBe("s-stored")
+		expect(state.messages).toEqual(STORED_SNAPSHOT.messages)
+		expect(state.activities).toEqual(STORED_SNAPSHOT.activities)
+		expect(isSessionReady(state)).toBe(true)
+	})
+
+	// The id comes back from the child on the first prompt, never on the resume
+	// itself, so the write that precedes that prompt is the one that used to erase
+	// it — and a crash right there boots the next launch amnesiac.
+	it("never writes a null session id over the one it just resumed", async () => {
+		const { controller, saved } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		await controller.send("et après ?")
+
+		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
+	})
+
+	// The host forgets the id on disk the moment the child refuses it, so keeping
+	// it here would write it back and retry a dead session on every launch.
+	it("stops carrying a stored id the child refused to resume", async () => {
+		const { driver, controller, saved } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		expect(controller.getState().sessionId).toBe("s-stored")
+
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "resumeFailed", forgotSessionId: true },
+		})
+		expect(controller.getState().sessionId).toBeNull()
+
+		await controller.send("et après ?")
+
+		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual([null])
+	})
+
+	// A resume that only ran out of time proves nothing, so the host keeps the id
+	// on disk. The prompt that follows is what would write a null over it.
+	it("keeps a stored id the host refused to give up on", async () => {
+		const { driver, controller, saved } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "resumeFailed", forgotSessionId: false },
+		})
+		expect(controller.getState().sessionId).toBe("s-stored")
+
+		await controller.send("et après ?")
+
+		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
+	})
+
+	it("resumes the stored session when the restart affordance is used", async () => {
+		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.restart()
+		await vi.runAllTimersAsync()
+
+		expect(startSpy).toHaveBeenCalledWith("s-stored")
+		expect(controller.getState().sessionId).toBe("s-stored")
+	})
+
+	it("boots without a resume id when nothing was stored", async () => {
+		const { driver, controller } = storedHarness(EMPTY_SNAPSHOT)
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		expect(startSpy).toHaveBeenCalledWith(undefined)
+		expect(controller.getState().messages).toHaveLength(0)
+		expect(isSessionReady(controller.getState())).toBe(true)
+	})
+
+	it("still opens a session when the stored transcript cannot be read", async () => {
+		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		vi.spyOn(driver, "loadSession").mockRejectedValue({
+			kind: "writeFailed",
+			detail: "disque illisible",
+		})
+
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.messages).toHaveLength(0)
+		expect(isSessionReady(state)).toBe(true)
+	})
+
+	it("persists the prompt on the way out, then the settled turn", async () => {
+		const { controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		expect(saved).toHaveLength(0)
+
+		const sending = controller.send("bonjour")
+		expect(saved).toHaveLength(1)
+		expect(saved[0].messages).toEqual([
+			expect.objectContaining({ role: "user", text: "bonjour" }),
+		])
+
+		await sending
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(saved).toHaveLength(2)
+		expect(saved[1].messages).toEqual(state.messages)
+		expect(saved[1].activities).toEqual(state.activities)
+	})
+
+	// Quitting while Claude answers used to lose the prompt and the partial reply
+	// alike, since nothing was written before the turn ended.
+	it("keeps the prompt and the partial answer of a turn that never ends", async () => {
+		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+
+		await controller.send("bonjour")
+		driver.pushEvent({ type: "turnChanged", state: "running" })
+		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Bon" })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 2, text: "jour" })
+		await vi.advanceTimersByTimeAsync(PERSIST_MS)
+
+		expect(controller.getState().turn).toBe("running")
+		expect(saved.at(-1)?.messages).toEqual([
+			expect.objectContaining({ role: "user", text: "bonjour" }),
+			expect.objectContaining({ text: "Bonjour", completion: "cancelled" }),
+		])
+	})
+
+	it("throttles the streaming write to once a second, not once per delta", async () => {
+		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+
+		await controller.send("bonjour")
+		driver.pushEvent({ type: "turnChanged", state: "running" })
+		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+
+		const deltas = 40
+		for (let seq = 1; seq <= deltas; seq += 1) {
+			driver.pushEvent({ type: "messageDelta", id: "msg-1", seq, text: "x" })
+			await vi.advanceTimersByTimeAsync(PERSIST_MS / 20)
+		}
+
+		expect(controller.getState().messages.at(-1)?.text).toHaveLength(deltas)
+		expect(saved).toHaveLength(3)
+	})
+
+	// The persisted snapshot is what a cold start paints, so a message left
+	// mid-stream would come back as a failed bubble the reader never saw fail.
+	it("persists a settled transcript, never a message mid-stream", async () => {
+		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		driver.pushEvent({ type: "turnChanged", state: "submitting" })
+		driver.pushEvent({
+			type: "messageStarted",
+			message: {
+				id: "msg-1",
+				role: "assistant",
+				text: "Bonjour",
+				completion: "streaming",
+				timestamp: 0,
+			},
+		})
+		driver.pushEvent({
+			type: "turnEnded",
+			ended: { sessionId: "s-live", outcome: "completed" },
+		})
+
+		expect(saved).toHaveLength(1)
+		expect(saved[0].sessionId).toBe("s-live")
+		expect(saved[0].messages).toEqual([
+			expect.objectContaining({ id: "msg-1", completion: "complete" }),
+		])
+	})
+
+	it("never reuses a restored message id on the next prompt", async () => {
+		const { controller } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		await controller.send("et après ?")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(
+			state.messages
+				.filter((message) => message.role === "user")
+				.map((message) => message.id),
+		).toEqual(["local-3", "local-4"])
 	})
 
 	it("stops notifying detached listeners", async () => {

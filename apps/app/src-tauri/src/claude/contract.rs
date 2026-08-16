@@ -107,25 +107,54 @@ pub enum TurnOutcome {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TransportError {
 	#[serde(rename_all = "camelCase")]
-	BinaryNotFound { searched: Vec<String> },
+	BinaryNotFound {
+		searched: Vec<String>,
+	},
 	NotAuthenticated,
 	#[serde(rename_all = "camelCase")]
-	AuthCheckFailed { detail: String },
+	AuthCheckFailed {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	SpawnFailed { detail: String },
+	SpawnFailed {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	StartupTimeout { timeout_ms: u64 },
+	StartupTimeout {
+		timeout_ms: u64,
+	},
 	#[serde(rename_all = "camelCase")]
-	Crashed { code: Option<i32>, detail: Option<String> },
+	Crashed {
+		code: Option<i32>,
+		detail: Option<String>,
+	},
+	/// The stored id was refused and a fresh session took its place. The
+	/// underlying failure is spent and nothing about it is actionable once the
+	/// replacement session is up — but whether the host gave the id up is, since
+	/// the frontend holds a copy of it that would otherwise be written back.
 	#[serde(rename_all = "camelCase")]
-	InvalidFrame { detail: String },
+	ResumeFailed {
+		forgot_session_id: bool,
+	},
+	#[serde(rename_all = "camelCase")]
+	InvalidFrame {
+		detail: String,
+	},
 	NotStarted,
 	TurnAlreadyRunning,
+	/// A lifecycle transition already owns the session. Transient: the caller is
+	/// refused rather than queued, so it never launches a second child behind the
+	/// first one's back.
+	TransitionInProgress,
 	NoActiveTurn,
 	#[serde(rename_all = "camelCase")]
-	UnknownPermission { id: String },
+	UnknownPermission {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	WriteFailed { detail: String },
+	WriteFailed {
+		detail: String,
+	},
 }
 
 impl TransportError {
@@ -152,9 +181,15 @@ impl std::fmt::Display for TransportError {
 				write!(f, "startup timed out after {timeout_ms}ms")
 			}
 			TransportError::Crashed { code, .. } => write!(f, "claude exited with {code:?}"),
+			TransportError::ResumeFailed { .. } => {
+				write!(f, "the stored session could not be resumed")
+			}
 			TransportError::InvalidFrame { detail } => write!(f, "invalid frame: {detail}"),
 			TransportError::NotStarted => write!(f, "session not started"),
 			TransportError::TurnAlreadyRunning => write!(f, "a turn is already running"),
+			TransportError::TransitionInProgress => {
+				write!(f, "a session transition is already in progress")
+			}
 			TransportError::NoActiveTurn => write!(f, "no active turn"),
 			TransportError::UnknownPermission { id } => write!(f, "unknown permission {id}"),
 			TransportError::WriteFailed { detail } => write!(f, "write failed: {detail}"),
@@ -179,6 +214,17 @@ pub struct CheckReport {
 #[serde(rename_all = "camelCase")]
 pub struct SessionHandle {
 	pub resumed: bool,
+}
+
+/// What survives a restart: the visible transcript and the id needed to resume
+/// it. Pending permissions and transport errors describe a moment, not a
+/// conversation, so they are left out.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSnapshot {
+	pub session_id: Option<String>,
+	pub messages: Vec<ChatMessage>,
+	pub activities: Vec<ActivityEvent>,
 }
 
 /// The single stream React consumes. One tagged union, no raw Claude payloads.

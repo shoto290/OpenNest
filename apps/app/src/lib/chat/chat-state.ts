@@ -7,6 +7,7 @@ import type {
 	MessageCompletion,
 	PermissionDecision,
 	PermissionRequest,
+	SessionSnapshot,
 	TransportError,
 	TurnEnded,
 	TurnOutcome,
@@ -38,10 +39,14 @@ export type ChatState = {
 export type ChatAction =
 	| { type: "driverEvent"; epoch: number; event: ClaudeEvent }
 	/** A session died or was replaced. Clears what belonged to that process and
-	 * keeps the transcript the reader can still see. */
-	| { type: "sessionReset"; epoch: number }
-	/** Drops the transcript itself. Only a deliberate "new conversation" does this. */
-	| { type: "conversationCleared" }
+	 * keeps the transcript the reader can still see. `sessionId` is the id the new
+	 * session resumes: the child only re-announces it on the first prompt, so
+	 * dropping it here would write `null` over a session that is very much alive. */
+	| { type: "sessionReset"; epoch: number; sessionId: string | null }
+	/** Hydrates the stored transcript on boot. Ignored the moment anything is
+	 * already on screen, so a late or replayed restore — StrictMode mounts twice —
+	 * can never clobber a live conversation. */
+	| { type: "sessionRestored"; snapshot: SessionSnapshot }
 	| { type: "sessionOpened" }
 	| { type: "promptSubmitted"; message: ChatMessage }
 	| { type: "promptRejected"; id: string; error: TransportError }
@@ -65,6 +70,10 @@ export const initialChatState: ChatState = {
 }
 
 const MAX_ERRORS = 20
+
+const MAX_PERSISTED_MESSAGES = 200
+
+const MAX_PERSISTED_ACTIVITIES = 200
 
 const TURN_TRANSITIONS: Record<TurnState, TurnState[]> = {
 	idle: ["submitting"],
@@ -109,6 +118,24 @@ export function completionForOutcome(outcome: TurnOutcome): MessageCompletion {
 
 export function turnForOutcome(outcome: TurnOutcome): TurnState {
 	return outcome === "failed" ? "failed" : "idle"
+}
+
+/** Only what survives a restart. `errors` stay behind because their ids are minted
+ * from a live counter a restored one would collide with, and a pending permission
+ * has no business on disk. The store hands back exactly what it was given, so a
+ * message caught mid-stream is written as stopped: nothing on disk can resume, and
+ * an interrupted answer is not a failed one. Only the tail is kept: a turn rewrites
+ * the whole file once a second, so an unbounded transcript means an unbounded fsync
+ * per second of every answer. */
+export function toSessionSnapshot(state: ChatState): SessionSnapshot {
+	return {
+		sessionId: state.sessionId,
+		messages: finalizeStreaming(
+			state.messages.slice(-MAX_PERSISTED_MESSAGES),
+			"cancelled",
+		),
+		activities: state.activities.slice(-MAX_PERSISTED_ACTIVITIES),
+	}
 }
 
 function setTurn(state: ChatState, next: TurnState): ChatState {
@@ -264,6 +291,17 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 	}
 }
 
+/** Only a refusal that cost the host its stored id costs this one too: holding an
+ * id the host gave up on would write it straight back and make every launch retry
+ * a session that is gone, and dropping one the host kept — a resume that only ran
+ * out of time proves nothing — writes `null` over a live conversation instead. */
+function applyFailure(state: ChatState, error: TransportError): ChatState {
+	const next = pushError(state, error)
+	return error.kind === "resumeFailed" && error.forgotSessionId
+		? { ...next, sessionId: null }
+		: next
+}
+
 function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 	switch (event.type) {
 		case "connectionChanged":
@@ -289,7 +327,7 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
 		case "failed":
-			return pushError(state, event.error)
+			return applyFailure(state, event.error)
 	}
 }
 
@@ -307,21 +345,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 				epoch: action.epoch,
 				turn: "idle",
 				sessionOpen: false,
-				sessionId: null,
+				sessionId: action.sessionId,
 				permission: null,
 				deltaSeqs: {},
 				messages: finalizeStreaming(state.messages, "failed"),
 			}
-		case "conversationCleared":
-			return {
-				...initialChatState,
-				epoch: state.epoch,
-				connection: state.connection,
-				sessionOpen: state.sessionOpen,
-				sessionId: state.sessionId,
-				binaryVersion: state.binaryVersion,
-				errorCount: state.errorCount,
-			}
+		case "sessionRestored":
+			return state.messages.length > 0
+				? state
+				: {
+						...state,
+						sessionId: action.snapshot.sessionId,
+						messages: action.snapshot.messages,
+						activities: action.snapshot.activities,
+					}
 		case "promptSubmitted":
 			return setTurn(
 				{ ...state, messages: [...state.messages, action.message] },

@@ -48,9 +48,11 @@ export type TransportError =
 	| { kind: "spawnFailed"; detail: string }
 	| { kind: "startupTimeout"; timeoutMs: number }
 	| { kind: "crashed"; code: number | null; detail: string | null }
+	| { kind: "resumeFailed"; forgotSessionId: boolean }
 	| { kind: "invalidFrame"; detail: string }
 	| { kind: "notStarted" }
 	| { kind: "turnAlreadyRunning" }
+	| { kind: "transitionInProgress" }
 	| { kind: "noActiveTurn" }
 	| { kind: "unknownPermission"; id: string }
 	| { kind: "writeFailed"; detail: string }
@@ -64,6 +66,12 @@ export type CheckReport = {
 
 export type SessionHandle = {
 	resumed: boolean
+}
+
+export type SessionSnapshot = {
+	sessionId: string | null
+	messages: ChatMessage[]
+	activities: ActivityEvent[]
 }
 
 export type ClaudeEvent =
