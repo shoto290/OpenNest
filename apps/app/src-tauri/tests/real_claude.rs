@@ -121,18 +121,18 @@ async fn two_turns_stream_and_the_second_resumes_the_first() {
 	first.session.shutdown().await;
 
 	let mut second = live(Some(id.clone())).await;
-	let recall = second
-		.run_turn("What number did I ask you to remember? Reply with only the digits.")
-		.await;
+	let recall =
+		second.run_turn("What number did I ask you to remember? Reply with only the digits.").await;
 	assert!(text(&recall).contains("4271"), "resumed turn lost the context: {:?}", text(&recall));
 
-	let tooling = second
-		.run_turn("Run the bash command `echo OPENNEST_PROBE` and report its output.")
-		.await;
+	let tooling =
+		second.run_turn("Run the bash command `echo OPENNEST_PROBE` and report its output.").await;
 	let tools: Vec<_> = tooling
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::Activity { activity } if activity.kind == ActivityKind::Tool => Some(activity),
+			ClaudeEvent::Activity { activity } if activity.kind == ActivityKind::Tool => {
+				Some(activity)
+			}
 			_ => None,
 		})
 		.collect();
@@ -151,7 +151,9 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	let pid = live.session.pid();
 
 	live.session
-		.submit_prompt("Count from 1 to 300, one number per line, with a short sentence about each.")
+		.submit_prompt(
+			"Count from 1 to 300, one number per line, with a short sentence about each.",
+		)
 		.await
 		.expect("prompt accepted");
 	tokio::time::sleep(Duration::from_secs(6)).await;
@@ -165,7 +167,11 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	assert_eq!(outcome, Some(TurnOutcome::Cancelled));
 
 	let after = live.run_turn("Reply with exactly: STILL_ALIVE").await;
-	assert!(text(&after).contains("STILL_ALIVE"), "session unusable after stop: {:?}", text(&after));
+	assert!(
+		text(&after).contains("STILL_ALIVE"),
+		"session unusable after stop: {:?}",
+		text(&after)
+	);
 
 	live.session.shutdown().await;
 	tokio::time::sleep(Duration::from_secs(1)).await;
@@ -187,9 +193,8 @@ async fn an_id_stored_on_disk_resumes_the_conversation() {
 	let restored = store::load(&path).session_id.expect("the stored id survives the round trip");
 
 	let mut second = live(Some(restored)).await;
-	let recall = second
-		.run_turn("What number did I ask you to remember? Reply with only the digits.")
-		.await;
+	let recall =
+		second.run_turn("What number did I ask you to remember? Reply with only the digits.").await;
 	assert!(text(&recall).contains("4271"), "the stored id did not resume: {:?}", text(&recall));
 
 	second.session.shutdown().await;

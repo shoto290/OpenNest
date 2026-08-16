@@ -191,7 +191,8 @@ async fn invalid_frames_are_reported_without_killing_the_turn() {
 
 #[tokio::test]
 async fn a_missing_binary_is_reported_before_spawning() {
-	let mut options = SessionOptions::new(PathBuf::from("/nonexistent/claude"), std::env::temp_dir());
+	let mut options =
+		SessionOptions::new(PathBuf::from("/nonexistent/claude"), std::env::temp_dir());
 	options.startup_timeout = Duration::from_secs(1);
 	let error = start(options).await.err().expect("spawn fails");
 	assert!(matches!(error, TransportError::SpawnFailed { .. }));

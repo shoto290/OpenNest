@@ -199,7 +199,13 @@ impl Session {
 		let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<Value>();
 		tokio::spawn(write_loop(stdin, stdin_rx));
 		tokio::spawn(discard_stderr(stderr));
-		tokio::spawn(read_loop(stdout, shared.clone(), pending.clone(), sink.clone(), child.clone()));
+		tokio::spawn(read_loop(
+			stdout,
+			shared.clone(),
+			pending.clone(),
+			sink.clone(),
+			child.clone(),
+		));
 
 		let stdin_tx = StdinChannel::new(Some(stdin_tx));
 		let session = Self { stdin_tx, shared, pending, child, sink, pid, resumed };
@@ -267,7 +273,10 @@ impl Session {
 	pub async fn submit_prompt(&self, text: &str) -> Result<(), TransportError> {
 		let entering = {
 			let mut shared = self.shared.lock().await;
-			if matches!(shared.turn, TurnState::Submitting | TurnState::Running | TurnState::Stopping) {
+			if matches!(
+				shared.turn,
+				TurnState::Submitting | TurnState::Running | TurnState::Stopping
+			) {
 				return Err(TransportError::TurnAlreadyRunning);
 			}
 			shared.set_turn(TurnState::Submitting)
@@ -445,7 +454,9 @@ async fn read_loop(
 
 		let Ok(frame) = serde_json::from_str::<Frame>(&line) else {
 			sink.emit(ClaudeEvent::Failed {
-				error: TransportError::InvalidFrame { detail: format!("unreadable frame at line {index}") },
+				error: TransportError::InvalidFrame {
+					detail: format!("unreadable frame at line {index}"),
+				},
 			});
 			continue;
 		};
@@ -461,7 +472,9 @@ async fn read_loop(
 		let (entering, events, ending) = {
 			let mut guard = shared.lock().await;
 			let entering = match guard.turn {
-				TurnState::Submitting if is_turn_activity(&frame) => guard.set_turn(TurnState::Running),
+				TurnState::Submitting if is_turn_activity(&frame) => {
+					guard.set_turn(TurnState::Running)
+				}
 				_ => None,
 			};
 			let events = guard.translator.ingest(frame);
@@ -500,7 +513,11 @@ fn is_turn_activity(frame: &Frame) -> bool {
 	matches!(frame, Frame::StreamEvent(_) | Frame::Assistant(_) | Frame::ControlRequest(_))
 }
 
-async fn on_exit(shared: Arc<Mutex<Shared>>, sink: Arc<dyn EventSink>, child: Arc<Mutex<Option<Child>>>) {
+async fn on_exit(
+	shared: Arc<Mutex<Shared>>,
+	sink: Arc<dyn EventSink>,
+	child: Arc<Mutex<Option<Child>>>,
+) {
 	let failing = {
 		let mut guard = shared.lock().await;
 		if guard.shutting_down {

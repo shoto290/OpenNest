@@ -32,7 +32,9 @@ pub fn run() {
 		// before that call — unlike `ExitRequested`, which a listener may veto.
 		.run(|app, event| {
 			if matches!(event, RunEvent::Exit) {
-				tauri::async_runtime::block_on(terminate_session(app.state::<ClaudeState>().inner()));
+				tauri::async_runtime::block_on(terminate_session(
+					app.state::<ClaudeState>().inner(),
+				));
 			}
 		})
 }

@@ -107,29 +107,46 @@ pub enum TurnOutcome {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TransportError {
 	#[serde(rename_all = "camelCase")]
-	BinaryNotFound { searched: Vec<String> },
+	BinaryNotFound {
+		searched: Vec<String>,
+	},
 	NotAuthenticated,
 	#[serde(rename_all = "camelCase")]
-	AuthCheckFailed { detail: String },
+	AuthCheckFailed {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	SpawnFailed { detail: String },
+	SpawnFailed {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	StartupTimeout { timeout_ms: u64 },
+	StartupTimeout {
+		timeout_ms: u64,
+	},
 	#[serde(rename_all = "camelCase")]
-	Crashed { code: Option<i32>, detail: Option<String> },
+	Crashed {
+		code: Option<i32>,
+		detail: Option<String>,
+	},
 	/// The stored id was refused and a fresh session took its place. Carries no
 	/// payload: the underlying failure is already spent and nothing about it is
 	/// actionable once the replacement session is up.
 	ResumeFailed,
 	#[serde(rename_all = "camelCase")]
-	InvalidFrame { detail: String },
+	InvalidFrame {
+		detail: String,
+	},
 	NotStarted,
 	TurnAlreadyRunning,
 	NoActiveTurn,
 	#[serde(rename_all = "camelCase")]
-	UnknownPermission { id: String },
+	UnknownPermission {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	WriteFailed { detail: String },
+	WriteFailed {
+		detail: String,
+	},
 }
 
 impl TransportError {

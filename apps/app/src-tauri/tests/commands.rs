@@ -43,17 +43,23 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str, body: Value) -> Result<V
 #[test]
 fn commands_are_registered_and_report_typed_errors_without_a_session() {
 	let app = app();
-	let window = WebviewWindowBuilder::new(&app, "main", Default::default())
-		.build()
-		.expect("window builds");
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
-	assert_eq!(call(&window, "claude_cancel_turn", json!({})), Err(json!({ "kind": "notStarted" })));
+	assert_eq!(
+		call(&window, "claude_cancel_turn", json!({})),
+		Err(json!({ "kind": "notStarted" }))
+	);
 	assert_eq!(
 		call(&window, "claude_submit_prompt", json!({ "text": "salut" })),
 		Err(json!({ "kind": "notStarted" }))
 	);
 	assert_eq!(
-		call(&window, "claude_respond_to_permission", json!({ "id": "x", "decision": "allowOnce" })),
+		call(
+			&window,
+			"claude_respond_to_permission",
+			json!({ "id": "x", "decision": "allowOnce" })
+		),
 		Err(json!({ "kind": "notStarted" }))
 	);
 }
@@ -61,9 +67,8 @@ fn commands_are_registered_and_report_typed_errors_without_a_session() {
 #[test]
 fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	let app = app();
-	let window = WebviewWindowBuilder::new(&app, "main", Default::default())
-		.build()
-		.expect("window builds");
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
 	let seen: Arc<Mutex<Vec<ClaudeEvent>>> = Arc::new(Mutex::new(Vec::new()));
 	let sink = seen.clone();
@@ -76,9 +81,10 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	assert_eq!(call(&window, "claude_shutdown", json!({})), Ok(Value::Null));
 
 	let events = seen.lock().expect("log").clone();
-	assert!(events
-		.iter()
-		.any(|event| matches!(event, ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking })));
+	assert!(events.iter().any(|event| matches!(
+		event,
+		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking }
+	)));
 }
 
 /// The identifier decides the app data directory, so this test claims one of
@@ -88,9 +94,8 @@ fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = "com.opennest.store-test".into();
 	let app = build(context);
-	let window = WebviewWindowBuilder::new(&app, "main", Default::default())
-		.build()
-		.expect("window builds");
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
 	let snapshot = json!({
 		"sessionId": "session-1",

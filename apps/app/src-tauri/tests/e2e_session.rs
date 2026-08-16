@@ -42,9 +42,8 @@ fn launch() -> Harness {
 		.invoke_handler(invoke_handler())
 		.build(context)
 		.expect("app builds");
-	let window = WebviewWindowBuilder::new(&app, "main", Default::default())
-		.build()
-		.expect("window builds");
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
 	let log: Arc<Mutex<Vec<ClaudeEvent>>> = Arc::new(Mutex::new(Vec::new()));
 	let sink = log.clone();
@@ -255,10 +254,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 		}],
 		"activities": []
 	});
-	assert_eq!(
-		first.call("claude_save_session", json!({ "snapshot": snapshot })),
-		Ok(Value::Null)
-	);
+	assert_eq!(first.call("claude_save_session", json!({ "snapshot": snapshot })), Ok(Value::Null));
 	assert_eq!(first.call("claude_load_session", json!({})), Ok(snapshot.clone()));
 
 	scenario("permission");

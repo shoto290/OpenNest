@@ -10,14 +10,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
-use super::redact;
 use super::contract::{
 	ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, ClaudeEvent, MessageCompletion,
 	MessageRole, PermissionRequest, TurnEnded, TurnOutcome,
 };
-use super::protocol::{
-	ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent,
-};
+use super::protocol::{ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent};
+use super::redact;
 
 fn now_ms() -> i64 {
 	SystemTime::now()
@@ -94,7 +92,9 @@ impl Translator {
 	pub fn ingest(&mut self, frame: Frame) -> Vec<ClaudeEvent> {
 		match frame {
 			Frame::System(system) => self.on_system(system.subtype.as_deref(), system.session_id),
-			Frame::StreamEvent(frame) => frame.event.map(|event| self.on_stream(event)).unwrap_or_default(),
+			Frame::StreamEvent(frame) => {
+				frame.event.map(|event| self.on_stream(event)).unwrap_or_default()
+			}
 			Frame::Assistant(frame) => {
 				frame.message.map(|body| self.on_assistant(body.content)).unwrap_or_default()
 			}
@@ -107,7 +107,9 @@ impl Translator {
 				}
 				self.on_result(result.subtype.as_deref(), result.is_error)
 			}
-			Frame::ControlRequest(request) => self.on_control_request(request.request_id, request.request),
+			Frame::ControlRequest(request) => {
+				self.on_control_request(request.request_id, request.request)
+			}
 			Frame::ControlResponse(_) | Frame::Ignored => Vec::new(),
 		}
 	}
@@ -138,15 +140,18 @@ impl Translator {
 					},
 				}]
 			}
-			StreamEvent::ContentBlockDelta { delta: Some(ContentDelta::TextDelta { text }) } => self
-				.streaming_message
-				.clone()
-				.map(|id| {
-					self.delta_seq += 1;
-					vec![ClaudeEvent::MessageDelta { id, seq: self.delta_seq, text }]
-				})
-				.unwrap_or_default(),
-			StreamEvent::ContentBlockStart { content_block: Some(ContentBlock::ToolUse { id, name, input }) } => {
+			StreamEvent::ContentBlockDelta { delta: Some(ContentDelta::TextDelta { text }) } => {
+				self.streaming_message
+					.clone()
+					.map(|id| {
+						self.delta_seq += 1;
+						vec![ClaudeEvent::MessageDelta { id, seq: self.delta_seq, text }]
+					})
+					.unwrap_or_default()
+			}
+			StreamEvent::ContentBlockStart {
+				content_block: Some(ContentBlock::ToolUse { id, name, input }),
+			} => {
 				vec![self.tool_started(id, &name, &input)]
 			}
 			_ => Vec::new(),
@@ -157,7 +162,12 @@ impl Translator {
 		let title = tool_title(name, input);
 		self.activity_titles.insert(id.clone(), title.clone());
 		ClaudeEvent::Activity {
-			activity: ActivityEvent { id, title, kind: ActivityKind::Tool, status: ActivityStatus::Running },
+			activity: ActivityEvent {
+				id,
+				title,
+				kind: ActivityKind::Tool,
+				status: ActivityStatus::Running,
+			},
 		}
 	}
 
@@ -170,7 +180,11 @@ impl Translator {
 						title: self.activity_titles.remove(&tool_use_id).unwrap_or_default(),
 						id: tool_use_id,
 						kind: ActivityKind::Tool,
-						status: if is_error { ActivityStatus::Failed } else { ActivityStatus::Succeeded },
+						status: if is_error {
+							ActivityStatus::Failed
+						} else {
+							ActivityStatus::Succeeded
+						},
 					},
 				}),
 				_ => None,
@@ -247,8 +261,13 @@ impl Translator {
 		events
 	}
 
-	fn on_control_request(&mut self, request_id: String, body: ControlRequestBody) -> Vec<ClaudeEvent> {
-		let ControlRequestBody::CanUseTool { tool_name, display_name, description, input } = body else {
+	fn on_control_request(
+		&mut self,
+		request_id: String,
+		body: ControlRequestBody,
+	) -> Vec<ClaudeEvent> {
+		let ControlRequestBody::CanUseTool { tool_name, display_name, description, input } = body
+		else {
 			return Vec::new();
 		};
 
