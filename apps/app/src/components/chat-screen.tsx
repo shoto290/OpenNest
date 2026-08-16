@@ -26,7 +26,6 @@ import {
 
 import type { ChatController } from "@/lib/chat/chat-controller"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
-import type { ChatDriver } from "@/lib/chat/driver"
 import {
 	activityStatusFor,
 	emptyStateStatusFor,
@@ -38,7 +37,7 @@ import {
 	toTranscriptRows,
 	workingStateFor,
 } from "@/lib/chat/screen-model"
-import { useChat } from "@/lib/chat/use-chat"
+import type { Chat } from "@/lib/chat/use-chat"
 import type {
 	ActivityEvent,
 	PermissionRequest,
@@ -185,8 +184,12 @@ const Composer = memo(function Composer({
 	)
 })
 
-export function ChatScreen({ driver }: { driver: ChatDriver }) {
-	const { state, controller } = useChat(driver)
+type ChatScreenProps = {
+	chat: Chat
+}
+
+export function ChatScreen({ chat }: ChatScreenProps) {
+	const { state, controller } = chat
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
@@ -200,10 +203,6 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 
 	const restart = useCallback(() => {
 		void controller.restart()
-	}, [controller])
-
-	useEffect(() => {
-		void controller.boot()
 	}, [controller])
 
 	useEffect(() => {
