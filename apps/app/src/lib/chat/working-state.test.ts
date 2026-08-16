@@ -8,7 +8,8 @@ import type { TurnState } from "../claude/contract"
 
 const STEP_MS = 10
 const TURN_STEPS = 12
-const REPLY = "un deux trois"
+const REPLY = "one two three"
+const PERMISSION_PROMPT = "list the files /permission"
 
 type SidebarPhase = SidebarActivity & { turn: TurnState }
 
@@ -34,27 +35,12 @@ const isSamePhase = (left: SidebarPhase, right: SidebarPhase): boolean =>
 	left.isWorking === right.isWorking &&
 	left.kind === right.kind
 
-const stepThroughTurn = async (
-	controller: ChatController,
-	steps: number,
-): Promise<SidebarPhase[]> => {
+/** Every phase the sidebar renders from here on. Reading state per dispatch is
+ * what the screen does, so a phase opened and closed inside one task is caught
+ * here rather than slipping between two timer samples. */
+const collectPhases = (controller: ChatController): SidebarPhase[] => {
 	let latest = phaseOf(controller)
 	const phases = [latest]
-	for (let step = 0; step < steps; step += 1) {
-		await vi.advanceTimersByTimeAsync(STEP_MS)
-		const next = phaseOf(controller)
-		if (isSamePhase(latest, next)) {
-			continue
-		}
-		latest = next
-		phases.push(next)
-	}
-	return phases
-}
-
-const recordPhases = (controller: ChatController): SidebarPhase[] => {
-	let latest = phaseOf(controller)
-	const phases: SidebarPhase[] = []
 	controller.subscribe(() => {
 		const next = phaseOf(controller)
 		if (isSamePhase(latest, next)) {
@@ -64,6 +50,27 @@ const recordPhases = (controller: ChatController): SidebarPhase[] => {
 		phases.push(next)
 	})
 	return phases
+}
+
+const advanceSteps = async (steps: number): Promise<void> => {
+	await vi.advanceTimersByTimeAsync(STEP_MS * steps)
+}
+
+const stepThroughTurn = async (
+	controller: ChatController,
+	steps: number,
+): Promise<SidebarPhase[]> => {
+	const phases = collectPhases(controller)
+	await advanceSteps(steps)
+	return phases
+}
+
+const pendingPermissionIdOf = (controller: ChatController): string => {
+	const { permission } = controller.getState()
+	if (!permission) {
+		throw new Error("the turn is not waiting on a permission")
+	}
+	return permission.id
 }
 
 describe("sidebar working state over a turn", () => {
@@ -84,7 +91,7 @@ describe("sidebar working state over a turn", () => {
 	it("works through every phase of a turn, then settles for good", async () => {
 		const controller = await startedHarness()
 
-		await controller.send("bonjour")
+		await controller.send("hello")
 
 		expect(await stepThroughTurn(controller, TURN_STEPS)).toEqual([
 			{ turn: "submitting", isWorking: true, kind: "thinking" },
@@ -97,19 +104,14 @@ describe("sidebar working state over a turn", () => {
 
 	it("keeps working while the turn is stopping, then settles", async () => {
 		const controller = await startedHarness()
-		await controller.send("bonjour")
-		await vi.advanceTimersByTimeAsync(STEP_MS * 5)
+		await controller.send("hello")
+		await advanceSteps(5)
 
-		expect(phaseOf(controller)).toEqual({
-			turn: "running",
-			isWorking: true,
-			kind: "working",
-		})
-
-		const stopped = recordPhases(controller)
+		const stopped = collectPhases(controller)
 		await controller.stop()
 
 		expect(stopped).toEqual([
+			{ turn: "running", isWorking: true, kind: "working" },
 			{ turn: "stopping", isWorking: true, kind: "working" },
 			{ turn: "idle", isWorking: false },
 		])
@@ -121,7 +123,7 @@ describe("sidebar working state over a turn", () => {
 	it("goes quiet once the turn has failed", async () => {
 		const controller = await startedHarness()
 
-		await controller.send("explique /fail")
+		await controller.send("explain /fail")
 
 		expect(await stepThroughTurn(controller, TURN_STEPS)).toEqual([
 			{ turn: "submitting", isWorking: true, kind: "thinking" },
@@ -130,5 +132,49 @@ describe("sidebar working state over a turn", () => {
 			{ turn: "running", isWorking: true, kind: "writing" },
 			{ turn: "failed", isWorking: false },
 		])
+	})
+
+	it("waits on the reader for as long as the permission stands, then works on once allowed", async () => {
+		const controller = await startedHarness()
+		await controller.send(PERMISSION_PROMPT)
+
+		const phases = collectPhases(controller)
+		await advanceSteps(TURN_STEPS)
+
+		expect(phaseOf(controller)).toEqual({
+			turn: "running",
+			isWorking: true,
+			kind: "waiting",
+		})
+
+		await controller.respond(pendingPermissionIdOf(controller), "allowOnce")
+		await advanceSteps(TURN_STEPS)
+
+		expect(phases).toEqual([
+			{ turn: "submitting", isWorking: true, kind: "thinking" },
+			{ turn: "running", isWorking: true, kind: "thinking" },
+			{ turn: "running", isWorking: true, kind: "working" },
+			{ turn: "running", isWorking: true, kind: "waiting" },
+			{ turn: "running", isWorking: true, kind: "working" },
+			{ turn: "running", isWorking: true, kind: "writing" },
+			{ turn: "idle", isWorking: false },
+		])
+	})
+
+	it("settles once the reader denies the permission", async () => {
+		const controller = await startedHarness()
+		await controller.send(PERMISSION_PROMPT)
+		await advanceSteps(TURN_STEPS)
+
+		expect(phaseOf(controller)).toEqual({
+			turn: "running",
+			isWorking: true,
+			kind: "waiting",
+		})
+
+		await controller.respond(pendingPermissionIdOf(controller), "deny")
+		await advanceSteps(TURN_STEPS)
+
+		expect(phaseOf(controller)).toEqual({ turn: "idle", isWorking: false })
 	})
 })
