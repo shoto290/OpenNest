@@ -377,6 +377,11 @@ impl Session {
 	/// The group is swept either way: a clean exit reaps the child, never the
 	/// grandchildren it left behind, and those are the orphans this call exists
 	/// to prevent.
+	///
+	/// Every rung is bounded, the last one included: a group signal reaches
+	/// nothing on a child that left the group, and nothing at all on a platform
+	/// that has no groups. An unbounded wait there would hold the child lock for
+	/// good, and with it the command that owns the shutdown.
 	async fn kill(&self) {
 		self.close_stdin();
 
@@ -387,7 +392,7 @@ impl Session {
 			signal_group(self.pid, Signal::Term);
 			if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_err() {
 				signal_group(self.pid, Signal::Kill);
-				let _ = child.wait().await;
+				let _ = tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await;
 			}
 		}
 

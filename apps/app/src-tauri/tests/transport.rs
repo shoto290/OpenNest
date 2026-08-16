@@ -16,6 +16,10 @@ const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
 const SETTLE: Duration = Duration::from_millis(400);
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
+/// Every rung of the escalation and then some. The ladder's own waits are the
+/// only thing a shutdown may spend time on, and each is bounded by
+/// `SHUTDOWN_GRACE`.
+const LADDER_CEILING: Duration = Duration::from_secs(12);
 
 struct Harness {
 	session: Session,
@@ -632,6 +636,34 @@ async fn a_start_that_crashes_takes_its_group_down_with_it() {
 	poll_until("the failed start to leave no orphan behind", || !is_alive(orphan)).await;
 
 	let _ = std::fs::remove_file(&pid_file);
+}
+
+/// The last rung of the ladder waits on a child the signal before it may never
+/// have reached — one that left the group, a platform where a group signal does
+/// nothing at all — and that wait holds the child lock. `claude_shutdown` and
+/// every restart go through it, so an unbounded one leaves the command
+/// unresolved and the frontend deduplicating every later attempt into a promise
+/// that can no longer settle.
+#[cfg(unix)]
+#[tokio::test]
+async fn shutting_down_returns_even_when_no_group_signal_reaches_the_child() {
+	let harness = start(
+		options("normal")
+			.with_env("FAKE_CLAUDE_IGNORE_EOF", "1")
+			.with_env("FAKE_CLAUDE_ESCAPE_GROUP", "1"),
+	)
+	.await
+	.expect("session starts");
+	let child = harness.session.pid() as libc::pid_t;
+
+	poll_until("the child to leave the group the transport put it in", || unsafe {
+		libc::getpgid(child) != child
+	})
+	.await;
+
+	tokio::time::timeout(LADDER_CEILING, harness.session.shutdown())
+		.await
+		.expect("the shutdown never gave the child lock back");
 }
 
 /// A child that dies on its own is reaped where it is read, and the pid it held

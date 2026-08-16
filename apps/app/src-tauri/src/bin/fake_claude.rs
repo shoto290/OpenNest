@@ -54,6 +54,24 @@ fn orphans_at_startup() -> bool {
 	std::env::var("FAKE_CLAUDE_ORPHAN_AT_STARTUP").is_ok()
 }
 
+/// A child no group signal can reach, which is what every rung of the shutdown
+/// ladder is aimed at. It rejoins the group it was forked out of — the one group
+/// certain to exist in its own session — and the group the transport put it in
+/// is left empty. Composes with any scenario.
+#[cfg(unix)]
+fn escape_group() {
+	if std::env::var("FAKE_CLAUDE_ESCAPE_GROUP").is_err() {
+		return;
+	}
+	unsafe {
+		let parent_group = libc::getpgid(libc::getppid());
+		libc::setpgid(0, parent_group);
+	}
+}
+
+#[cfg(not(unix))]
+fn escape_group() {}
+
 /// The preflight probes run through `Command::output()`, which hands the child a
 /// null stdin: they have to answer before the reader thread meets EOF.
 fn preflight_answer() -> Option<String> {
@@ -234,6 +252,8 @@ fn main() {
 		emit_raw(&answer);
 		return;
 	}
+
+	escape_group();
 
 	if orphans_at_startup() {
 		spawn_orphan();
