@@ -183,7 +183,10 @@ function kindForTool(title: string): BotWorkingKind {
 }
 
 /** What to show while the turn runs. The newest unfinished step wins: it is the
- * one the reader is waiting on. */
+ * one the reader is waiting on. An answer that has landed holds the writing pose
+ * until the turn ends: a settled message with the turn still running is the turn
+ * winding down, not fresh thinking, and falling back would flick the sidebar to
+ * "thinking" for one frame at the end of every turn. */
 export function workingStateFor(state: ChatState): WorkingState | null {
 	if (!isTurnBusy(state.turn)) {
 		return null
@@ -200,10 +203,8 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 		return { kind: kindForTool(active.title), label: active.title || undefined }
 	}
 
-	const isWriting =
-		state.messages.findLast(
-			(message) => message.completion === "streaming" && message.text.length > 0,
-		) !== undefined
+	const latest = state.messages.at(-1)
+	const isWriting = latest?.role === "assistant" && latest.text.length > 0
 	return { kind: isWriting ? "writing" : "thinking" }
 }
 
