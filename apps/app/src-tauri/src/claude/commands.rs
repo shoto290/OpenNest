@@ -9,7 +9,7 @@ use super::contract::{
 	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, SessionHandle, SessionSnapshot,
 	TransportError,
 };
-use super::session::{EventSink, Session, SessionOptions};
+use super::session::{EventSink, GatedSink, Session, SessionOptions};
 use super::store;
 
 pub const EVENT_CHANNEL: &str = "claude://event";
@@ -108,6 +108,10 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 /// discarded on purpose. So the id is only blamed once a resume-free start has
 /// proven it wrong: a second failure means `--resume` was never the variable,
 /// and the stored id is kept rather than costing the reader their transcript.
+///
+/// For the same reason the resume attempt emits behind a gate: its crash is a
+/// step in a launch still expected to succeed, so the reader sees it only if it
+/// turns out to be the answer.
 pub async fn start_with_fallback(
 	options: SessionOptions,
 	resume: Option<String>,
@@ -117,10 +121,16 @@ pub async fn start_with_fallback(
 		return Session::start(options, sink).await;
 	}
 
-	let refused = match Session::start(options.clone().resuming(resume), sink.clone()).await {
-		Ok(session) => return Ok(session),
+	let gated = Arc::new(GatedSink::new(sink.clone()));
+	let refused = match Session::start(options.clone().resuming(resume), gated.clone()).await {
+		Ok(session) => {
+			gated.promote();
+			return Ok(session);
+		}
 		Err(error) => error,
 	};
+
+	gated.discard();
 	Session::start(options, sink).await.map_err(|_| refused)
 }
 

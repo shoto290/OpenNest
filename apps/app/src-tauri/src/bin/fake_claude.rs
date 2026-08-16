@@ -226,6 +226,10 @@ fn main() {
 				if scenario == "resume_crash" && resumed() {
 					std::process::exit(4);
 				}
+				if scenario == "early_init" {
+					announced = true;
+					emit_init();
+				}
 				ack(&request_id);
 			}
 			Incoming::Interrupt(request_id) => {

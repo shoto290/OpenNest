@@ -35,6 +35,58 @@ impl EventSink for mpsc::UnboundedSender<ClaudeEvent> {
 	}
 }
 
+enum Gate {
+	Buffering(Vec<ClaudeEvent>),
+	Forwarding,
+	Discarding,
+}
+
+/// Holds back what an attempt emits until the attempt is known to have worked.
+/// A start that is allowed a second try is not a failure yet, and the reader is
+/// owed the outcome rather than the first draft of it.
+///
+/// The gate is a `std::sync::Mutex` on purpose: `emit` is synchronous and is
+/// called from inside the read loop, where awaiting a lock would stall the very
+/// task feeding it.
+pub struct GatedSink {
+	inner: Arc<dyn EventSink>,
+	gate: std::sync::Mutex<Gate>,
+}
+
+impl GatedSink {
+	pub fn new(inner: Arc<dyn EventSink>) -> Self {
+		Self { inner, gate: std::sync::Mutex::new(Gate::Buffering(Vec::new())) }
+	}
+
+	/// Flushes under the lock, so an event arriving mid-flush queues behind the
+	/// buffer instead of overtaking it.
+	pub fn promote(&self) {
+		let mut gate = self.gate.lock().expect("gate");
+		if let Gate::Buffering(buffered) = std::mem::replace(&mut *gate, Gate::Forwarding) {
+			for event in buffered {
+				self.inner.emit(event);
+			}
+		}
+	}
+
+	/// Keeps swallowing afterwards: the attempt is spent, but the child behind
+	/// it is still dying and still emitting.
+	pub fn discard(&self) {
+		*self.gate.lock().expect("gate") = Gate::Discarding;
+	}
+}
+
+impl EventSink for GatedSink {
+	fn emit(&self, event: ClaudeEvent) {
+		let mut gate = self.gate.lock().expect("gate");
+		match &mut *gate {
+			Gate::Buffering(buffered) => buffered.push(event),
+			Gate::Forwarding => self.inner.emit(event),
+			Gate::Discarding => {}
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionOptions {
 	pub binary: PathBuf,

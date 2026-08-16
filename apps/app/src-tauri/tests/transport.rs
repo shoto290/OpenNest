@@ -231,6 +231,67 @@ async fn a_refused_resume_falls_back_to_a_fresh_session() {
 	session.shutdown().await;
 }
 
+/// The fallback is expected to work, so the attempt it replaces has nothing to
+/// report: a crash banner would flash on the one path built never to fail the
+/// reader.
+#[tokio::test]
+async fn a_refused_resume_keeps_its_crash_off_the_channel() {
+	let (tx, events) = mpsc::unbounded_channel();
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
+
+	let session = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
+		.await
+		.expect("the fresh start rescues the launch");
+	let mut harness = Harness { session, events };
+	let seen = harness.drain_available().await;
+
+	assert!(
+		!seen.iter().any(|event| matches!(
+			event,
+			ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed }
+				| ClaudeEvent::Failed { error: TransportError::Crashed { .. } }
+		)),
+		"the refused attempt reached the reader: {seen:#?}"
+	);
+	harness.session.shutdown().await;
+}
+
+/// A resume that works must lose nothing it emitted while it was still being
+/// judged, and the announcement has to lead the turn it belongs to.
+#[tokio::test]
+async fn an_accepted_resume_keeps_what_it_buffered() {
+	let (tx, events) = mpsc::unbounded_channel();
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
+
+	let session = start_with_fallback(options("early_init"), Some("carried-over".into()), sink)
+		.await
+		.expect("the stored id is accepted");
+	let mut harness = Harness { session, events };
+
+	harness.submit("et avant ?").await.expect("prompt accepted");
+	let seen = harness.drain_turn().await;
+
+	let announced = seen
+		.iter()
+		.position(|event| {
+			matches!(
+				event,
+				ClaudeEvent::SessionReady { session_id, resumed }
+					if session_id == "carried-over" && *resumed
+			)
+		})
+		.expect("the buffered announcement survived the promotion");
+	let streamed = seen
+		.iter()
+		.position(|event| matches!(event, ClaudeEvent::MessageDelta { .. }))
+		.expect("the turn streamed");
+
+	assert_eq!(announced, 0, "the flush comes before anything the session emits after it");
+	assert!(announced < streamed, "the turn overtook the announcement");
+	assert_eq!(assistant_text(&seen), "resumed carried-over :: et avant ?");
+	harness.session.shutdown().await;
+}
+
 /// A failure the fresh start reproduces belongs to the install, so it travels
 /// upward untouched and the caller never reaches the branch that would drop the
 /// stored id.
