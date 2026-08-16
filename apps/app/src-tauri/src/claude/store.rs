@@ -5,6 +5,7 @@
 //! created `0600` because the redaction discipline this crate applies on the
 //! way to the frontend stops at RAM — on disk the transcript is plain text.
 
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -17,11 +18,21 @@ use super::contract::SessionSnapshot;
 pub const FILE_NAME: &str = "session.json";
 
 const VERSION: u32 = 1;
+const BACKUP_SUFFIX: &str = ".bak";
 
 #[derive(Serialize, Deserialize)]
 struct StoredSession {
 	version: u32,
 	snapshot: SessionSnapshot,
+}
+
+/// What the last read found. `Unreadable` is kept apart from `Missing` because
+/// only one of the two may be written over: bytes this build cannot parse may
+/// still be a transcript, and an absent file holds nothing to lose.
+enum Stored {
+	Missing,
+	Snapshot(SessionSnapshot),
+	Unreadable,
 }
 
 /// `app_data_dir()` only computes a path, so the directory is created here: on
@@ -32,20 +43,36 @@ pub fn file<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(dir.join(FILE_NAME))
 }
 
-/// Any unreadable file yields the default snapshot and is left untouched: a
-/// half-restored transcript is worse than an empty one, and a file this build
-/// cannot parse may still belong to another.
-pub fn load(path: &Path) -> SessionSnapshot {
-	let Ok(raw) = fs::read_to_string(path) else {
-		return SessionSnapshot::default();
+fn read(path: &Path) -> Stored {
+	let raw = match fs::read_to_string(path) {
+		Ok(raw) => raw,
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Stored::Missing,
+		Err(_) => return Stored::Unreadable,
 	};
 	match serde_json::from_str::<StoredSession>(&raw) {
-		Ok(stored) if stored.version == VERSION => stored.snapshot,
-		_ => SessionSnapshot::default(),
+		Ok(stored) if stored.version == VERSION => Stored::Snapshot(stored.snapshot),
+		_ => Stored::Unreadable,
 	}
 }
 
+/// Any unreadable file yields the default snapshot and stays where it is: a
+/// half-restored transcript is worse than an empty one, and a file this build
+/// cannot parse may still belong to another.
+pub fn load(path: &Path) -> SessionSnapshot {
+	sweep_temporaries(path);
+	match read(path) {
+		Stored::Snapshot(snapshot) => snapshot,
+		Stored::Missing | Stored::Unreadable => SessionSnapshot::default(),
+	}
+}
+
+/// Never writes over bytes it could not read. Leaving them in place would only
+/// postpone the loss to the next prompt, so they are moved to `session.json.bak`
+/// and the write goes ahead — and if even that fails, nothing is written at all.
 pub fn save(path: &Path, snapshot: &SessionSnapshot) {
+	if matches!(read(path), Stored::Unreadable) && fs::rename(path, backup(path)).is_err() {
+		return;
+	}
 	let stored = StoredSession { version: VERSION, snapshot: snapshot.clone() };
 	let Ok(body) = serde_json::to_vec(&stored) else {
 		return;
@@ -56,10 +83,43 @@ pub fn save(path: &Path, snapshot: &SessionSnapshot) {
 	}
 }
 
+/// A file this build cannot read holds no id to forget, and rewriting it here
+/// would spend the one copy another build may still be able to open.
 pub fn forget_session_id(path: &Path) {
-	let mut snapshot = load(path);
+	let Stored::Snapshot(mut snapshot) = read(path) else {
+		return;
+	};
 	snapshot.session_id = None;
 	save(path, &snapshot);
+}
+
+fn backup(path: &Path) -> PathBuf {
+	let mut name = path.as_os_str().to_owned();
+	name.push(BACKUP_SUFFIX);
+	PathBuf::from(name)
+}
+
+/// A crash between a temporary's creation and its rename leaves it behind for
+/// good. A read is the one moment where every temporary around is known to be
+/// abandoned: it happens before this process has written anything, and the
+/// single-instance lock keeps another one from saving into the same directory.
+fn sweep_temporaries(path: &Path) {
+	let (Some(parent), Some(stem)) = (path.parent(), path.file_stem()) else {
+		return;
+	};
+	let Ok(entries) = fs::read_dir(parent) else {
+		return;
+	};
+	for entry in entries.flatten() {
+		if is_temporary(&entry.file_name(), stem) {
+			let _ = fs::remove_file(entry.path());
+		}
+	}
+}
+
+fn is_temporary(name: &OsStr, stem: &OsStr) -> bool {
+	name.as_encoded_bytes().starts_with(stem.as_encoded_bytes())
+		&& Path::new(name).extension().is_some_and(|extension| extension == "tmp")
 }
 
 /// A crash mid-write must cost the last turn, not the whole transcript, so the
@@ -73,7 +133,23 @@ fn write_atomically(path: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()
 	restrict_to_owner(&file)?;
 	file.write_all(body)?;
 	file.sync_all()?;
-	fs::rename(temp, path)
+	fs::rename(temp, path)?;
+	sync_parent(path)
+}
+
+/// The flushed sibling only becomes the target once the directory entry itself
+/// is durable; a power cut in between leaves the rename unrecorded.
+#[cfg(unix)]
+fn sync_parent(path: &Path) -> std::io::Result<()> {
+	let Some(parent) = path.parent() else {
+		return Ok(());
+	};
+	fs::File::open(parent)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) -> std::io::Result<()> {
+	Ok(())
 }
 
 #[cfg(unix)]
@@ -93,6 +169,9 @@ mod tests {
 	use crate::claude::contract::{
 		ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, MessageCompletion, MessageRole,
 	};
+
+	const NEWER_VERSION: &str =
+		r#"{"version":2,"snapshot":{"sessionId":"s","messages":[],"activities":[]}}"#;
 
 	fn temp_dir() -> PathBuf {
 		let dir = std::env::temp_dir().join(format!("opennest-store-{}", uuid::Uuid::new_v4()));
@@ -144,13 +223,73 @@ mod tests {
 	fn a_newer_version_loads_an_empty_snapshot() {
 		let dir = temp_dir();
 		let path = dir.join(FILE_NAME);
-		fs::write(
-			&path,
-			r#"{"version":2,"snapshot":{"sessionId":"s","messages":[],"activities":[]}}"#,
-		)
-		.expect("write");
+		fs::write(&path, NEWER_VERSION).expect("write");
 
 		assert_eq!(load(&path), SessionSnapshot::default());
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The load is not where the promise is kept: the file survives being read
+	/// either way, and it is the first save after it that would replace it.
+	#[test]
+	fn saving_over_an_unreadable_file_keeps_it_as_a_backup() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		fs::write(&path, "{").expect("write");
+
+		load(&path);
+		save(&path, &sample());
+
+		assert_eq!(fs::read_to_string(backup(&path)).expect("the backup"), "{");
+		assert_eq!(load(&path), sample());
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// A build that writes version 2 is not a build this one may overwrite: the
+	/// snapshot it left is intact, only unreadable here.
+	#[test]
+	fn saving_over_a_newer_version_keeps_it_as_a_backup() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		fs::write(&path, NEWER_VERSION).expect("write");
+
+		save(&path, &sample());
+
+		assert_eq!(fs::read_to_string(backup(&path)).expect("the backup"), NEWER_VERSION);
+		assert_eq!(load(&path), sample());
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn forgetting_the_session_id_leaves_an_unreadable_file_alone() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		fs::write(&path, "{").expect("write");
+
+		forget_session_id(&path);
+
+		assert_eq!(fs::read_to_string(&path).expect("read"), "{");
+		assert!(!backup(&path).exists(), "there was no id to forget and no reason to rewrite");
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_temporary_left_by_a_crashed_save_is_swept_on_the_next_read() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		let leftover = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+		fs::write(&leftover, "half a snapshot").expect("write");
+		let unrelated = dir.join("keep.json");
+		fs::write(&unrelated, "not ours").expect("write");
+
+		load(&path);
+
+		assert!(!leftover.exists(), "the abandoned temporary outlived the run that left it");
+		assert!(unrelated.exists(), "the sweep reached beyond its own temporaries");
 
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
