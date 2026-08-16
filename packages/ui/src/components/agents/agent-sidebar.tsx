@@ -16,6 +16,10 @@ import {
 const ROW_AVATAR_SIZE = 56
 const PANEL_LABEL = "Conversations"
 const WINDOW_CONTROLS_INSET = "h-12 p-0"
+const AWAITING_READER_STATE = "listening"
+
+const busyStateFor = (pose: BotWorkingKind) =>
+	pose === "waiting" ? AWAITING_READER_STATE : pose
 
 interface AgentSidebarProps {
 	status?: "idle" | "working"
@@ -30,41 +34,43 @@ const AgentSidebarBase = ({
 	name = "No Name",
 	lastMessage,
 }: AgentSidebarProps) => (
-	<AnimatedSidebar
-		aria-busy={status === "working"}
-		ariaLabel={PANEL_LABEL}
-		collapsible="icon"
-	>
-		<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET} />
-		<AnimatedSidebarContent className="pt-0 group-data-[state=collapsed]/sidebar:px-0">
-			<AnimatedSidebarMenu>
-				<AnimatedSidebarMenuItem>
-					<AnimatedSidebarMenuButton
-						className="py-2"
-						icon={
-							<BotAvatar
-								size={ROW_AVATAR_SIZE}
-								state={status === "working" ? pose : "waiting"}
-							/>
-						}
-						isActive
-						isIconDecorative={false}
-						label={name}
-					>
-						<span className="flex min-w-0 flex-col">
-							<span className="truncate">{name}</span>
-							<span className="truncate text-sidebar-foreground/80 text-xs">
-								{status === "working" ? `${pose}…` : lastMessage}
+	<>
+		<AnimatedSidebar
+			aria-busy={status === "working"}
+			ariaLabel={PANEL_LABEL}
+			collapsible="icon"
+		>
+			<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET} />
+			<AnimatedSidebarContent className="pt-0 group-data-[state=collapsed]/sidebar:px-0">
+				<AnimatedSidebarMenu>
+					<AnimatedSidebarMenuItem>
+						<AnimatedSidebarMenuButton
+							className="py-2"
+							icon={
+								<BotAvatar
+									size={ROW_AVATAR_SIZE}
+									state={status === "working" ? busyStateFor(pose) : "waiting"}
+								/>
+							}
+							isActive
+							isIconDecorative={false}
+							label={name}
+						>
+							<span className="flex min-w-0 flex-col">
+								<span className="truncate">{name}</span>
+								<span className="truncate text-sidebar-foreground/80 text-xs">
+									{status === "working" ? `${pose}…` : lastMessage}
+								</span>
 							</span>
-						</span>
-					</AnimatedSidebarMenuButton>
-				</AnimatedSidebarMenuItem>
-			</AnimatedSidebarMenu>
-		</AnimatedSidebarContent>
+						</AnimatedSidebarMenuButton>
+					</AnimatedSidebarMenuItem>
+				</AnimatedSidebarMenu>
+			</AnimatedSidebarContent>
+		</AnimatedSidebar>
 		<span className="sr-only" role="status">
-			{status === "working" ? `${name} ${pose}` : null}
+			{status === "working" ? `${name} ${pose}` : `${name} idle`}
 		</span>
-	</AnimatedSidebar>
+	</>
 )
 
 /** Hosts render this from a streaming store, so a shallow compare keeps every token from re-measuring the Motion layout projections inside the panel. */

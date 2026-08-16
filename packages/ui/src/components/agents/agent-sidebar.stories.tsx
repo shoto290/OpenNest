@@ -8,7 +8,13 @@ import {
 import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
-const POSES: BotWorkingKind[] = ["thinking", "searching", "writing", "working"]
+const POSES: BotWorkingKind[] = [
+	"thinking",
+	"searching",
+	"writing",
+	"working",
+	"waiting",
+]
 
 const LAST_MESSAGE =
 	"Renamed the transport module and updated every caller, so the second turn resumes the first one cleanly again."
@@ -26,31 +32,8 @@ const railWidth = () => {
 	return width
 }
 
-const PANEL_VIEWPORTS = [
-	{ width: 1440, height: 900 },
-	{ width: 768, height: 900 },
-]
-
-const expectExpandedAcrossViewports = async (panel: HTMLElement) => {
-	if (!import.meta.env.VITEST_STORYBOOK) return
-
-	const { page } = await import("vitest/browser")
-	const restore = { width: window.innerWidth, height: window.innerHeight }
-
-	for (const viewport of PANEL_VIEWPORTS) {
-		await page.viewport(viewport.width, viewport.height)
-		await waitFor(async () => {
-			await expect(window.innerWidth).toBe(viewport.width)
-			await expect(panel.getBoundingClientRect().width).toBeGreaterThan(
-				railWidth(),
-			)
-		}, FRAME_POLL)
-	}
-
-	await page.viewport(restore.width, restore.height)
-	await waitFor(async () => {
-		await expect(window.innerWidth).toBe(restore.width)
-	}, FRAME_POLL)
+const NARROW_VIEWPORT = {
+	narrow: { name: "Narrow", styles: { width: "800px", height: "900px" } },
 }
 
 const renderShell = (defaultOpen: boolean) => (args: AgentSidebarProps) => (
@@ -94,7 +77,7 @@ export const Idle = meta.story({
 		docs: {
 			description: {
 				story:
-					'Nothing is running: the avatar rests in its waiting pose, `pose` is ignored and the second line shows the last message. The message is deliberately wider than the rail — check that it clips to one line with an ellipsis instead of wrapping the row taller or pushing the panel wider, and that it carries `aria-current="page"` as the selected conversation. The row is the only stop Tab finds here, and the empty region above it holds the window-control gutter clear without adding a target. Pick `Thinking` for the first pose a turn walks into, `Collapsed` for the icon rail.',
+					'Nothing is running: the avatar rests in its waiting pose, `pose` is ignored and the second line shows the last message. The message is deliberately wider than the rail — check that it clips to one line with an ellipsis instead of wrapping the row taller or pushing the panel wider, and that it carries `aria-current="page"` as the selected conversation. The row is the only stop Tab finds here, and the empty region above it holds the window-control gutter clear without adding a target. The panel still announces itself at rest from a live region that sits outside it, so the edge back to idle is spoken rather than silent. Pick `Thinking` for the first pose a turn walks into, `Collapsed` for the icon rail.',
 			},
 		},
 	},
@@ -102,7 +85,10 @@ export const Idle = meta.story({
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
 		await expect(panel).toBeVisible()
 		await expect(panel).toHaveAttribute("aria-busy", "false")
-		await expect(canvas.getByRole("status")).toBeEmptyDOMElement()
+
+		const liveRegion = canvas.getByRole("status")
+		await expect(liveRegion).toHaveTextContent("No Name idle")
+		await expect(panel.contains(liveRegion)).toBe(false)
 
 		const row = canvas.getByRole("button", { name: /No Name/ })
 		await expect(row).toHaveAttribute("aria-current", "page")
@@ -192,7 +178,7 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"A shell command or a long tool is running — the catch-all pose. Check that it stays legible beside `Searching` so the two never read as the same state, and that the panel reports itself busy while it runs. The test run sweeps a wide and a narrow viewport and asserts the panel stays wider than its icon rail at both, so a breakpoint that collapsed it early would fail here.",
+					"A shell command or a long tool is running — the catch-all pose. Check that it stays legible beside `Searching` so the two never read as the same state, that the panel reports itself busy while it runs, and that the announcement sits outside the busy panel — a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `Narrow` for the same state in a window one notch above the drawer breakpoint.",
 			},
 		},
 	},
@@ -202,9 +188,60 @@ export const Working = meta.story({
 		await expect(canvas.getByText("working…")).toBeVisible()
 
 		await expect(panel).toHaveAttribute("aria-busy", "true")
-		await expect(canvas.getByRole("status")).toHaveTextContent("No Name working")
 
-		await expectExpandedAcrossViewports(panel)
+		const liveRegion = canvas.getByRole("status")
+		await expect(liveRegion).toHaveTextContent("No Name working")
+		await expect(panel.contains(liveRegion)).toBe(false)
+
+		await expect(panel.getBoundingClientRect().width).toBeGreaterThan(
+			railWidth(),
+		)
+	},
+})
+
+export const Narrow = meta.story({
+	args: { status: "working", pose: "working" },
+	globals: { viewport: { value: "narrow" } },
+	parameters: {
+		viewport: { options: NARROW_VIEWPORT },
+		docs: {
+			description: {
+				story:
+					"The same running agent in a window just wide enough to keep two columns, one notch above the width where the panel becomes a drawer. Check that it is still a column at its full width rather than the icon rail — a breakpoint that collapsed it early would fail here — and that the row keeps its avatar, its verb and its selection at that width. Pick `Working` for a full window, `Layout/WorkspaceShell` `OffCanvas` for the drawer a narrower window gets instead.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const panel = canvas.getByRole("complementary", { name: "Conversations" })
+		await expect(canvas.getByRole("img", { name: /working$/ })).toBeVisible()
+		await expect(canvas.getByText("working…")).toBeVisible()
+		await expect(panel.getBoundingClientRect().width).toBeGreaterThan(
+			railWidth(),
+		)
+	},
+})
+
+export const PermissionPending = meta.story({
+	args: { status: "working", pose: "waiting" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					'The turn is blocked on a permission prompt, which a host maps to `status="working"` with `pose="waiting"` — the turn is waiting on the reader, not over. Check that the avatar holds its listening pose and never the resting one it wears when nothing runs: the panel reports itself busy and the announcement says the agent is waiting, so an avatar that looked idle here would contradict both at once. Pick `Idle` for the resting pose this state must not borrow.',
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const panel = canvas.getByRole("complementary", { name: "Conversations" })
+		await expect(canvas.getByRole("img", { name: /listening$/ })).toBeVisible()
+		await expect(canvas.queryByRole("img", { name: /waiting$/ })).toBeNull()
+		await expect(canvas.getByText("waiting…")).toBeVisible()
+
+		await expect(panel).toHaveAttribute("aria-busy", "true")
+
+		const liveRegion = canvas.getByRole("status")
+		await expect(liveRegion).toHaveTextContent("No Name waiting")
+		await expect(panel.contains(liveRegion)).toBe(false)
 	},
 })
 
@@ -220,11 +257,9 @@ export const Collapsed = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
+		const rail = railWidth()
 		await waitFor(async () => {
-			await expect(panel.getBoundingClientRect().width).toBeCloseTo(
-				railWidth(),
-				0,
-			)
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(rail, 0)
 		}, FRAME_POLL)
 
 		const railRow = canvas.getByRole("button", { name: "No Name" })
@@ -261,6 +296,7 @@ export const Toggle = meta.story({
 		const row = canvas.getByRole("button", { name: /No Name/ })
 		const detail = canvas.getByText(LAST_MESSAGE)
 		const rowHeight = row.getBoundingClientRect().height
+		const rail = railWidth()
 
 		await expect(panel).toHaveAttribute("data-state", "expanded")
 		await userEvent.tab()
@@ -270,10 +306,7 @@ export const Toggle = meta.story({
 		await expect(panel).toHaveAttribute("data-state", "collapsed")
 		await expect(row).toHaveFocus()
 		await waitFor(async () => {
-			await expect(panel.getBoundingClientRect().width).toBeCloseTo(
-				railWidth(),
-				0,
-			)
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(rail, 0)
 		}, FRAME_POLL)
 		await expect(row.getBoundingClientRect().height).toBe(rowHeight)
 
@@ -281,9 +314,7 @@ export const Toggle = meta.story({
 		await expect(panel).toHaveAttribute("data-state", "expanded")
 		await expect(row).toHaveFocus()
 		await waitFor(async () => {
-			await expect(panel.getBoundingClientRect().width).toBeGreaterThan(
-				railWidth(),
-			)
+			await expect(panel.getBoundingClientRect().width).toBeGreaterThan(rail)
 			const label = detail.closest("[aria-hidden]")
 			await expect(label && getComputedStyle(label).opacity).toBe("1")
 		}, FRAME_POLL)
