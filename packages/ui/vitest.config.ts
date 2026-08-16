@@ -6,6 +6,18 @@ export default defineConfig({
 	test: {
 		projects: [
 			{
+				resolve: {
+					alias: {
+						"@workspace/ui": new URL("./src", import.meta.url).pathname,
+					},
+				},
+				test: {
+					name: "unit",
+					environment: "node",
+					include: ["src/**/*.test.ts"],
+				},
+			},
+			{
 				plugins: [storybookTest({ configDir: ".storybook" })],
 				test: {
 					name: "storybook",

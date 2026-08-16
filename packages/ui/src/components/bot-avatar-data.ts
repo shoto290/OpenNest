@@ -2832,3 +2832,9 @@ export const BLINK_CADENCE: Record<BotAvatarState, [number, number] | null> = {
 	"powering-down": null,
 	waiting: null,
 }
+
+export type BotAvatarPose = { yaw: number; pitch: number; roll: number }
+
+export const STATE_POSES: Partial<Record<BotAvatarState, BotAvatarPose>> = {
+	waiting: { yaw: -16, pitch: 23, roll: 6 },
+}
