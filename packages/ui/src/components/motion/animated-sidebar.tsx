@@ -282,8 +282,8 @@ export function AnimatedSidebarProvider({
 	return (
 		<AnimatedSidebarContext.Provider value={contextValue}>
 			<div
-				{...props}
 				data-slot="sidebar-wrapper"
+				{...props}
 				data-state={desktopOpen ? "expanded" : "collapsed"}
 				style={style}
 				className={cn(
