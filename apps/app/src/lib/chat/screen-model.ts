@@ -200,10 +200,11 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 		return { kind: kindForTool(active.title), label: active.title || undefined }
 	}
 
-	const writing = state.messages.some(
-		(message) => message.completion === "streaming" && message.text.length > 0,
-	)
-	return { kind: writing ? "writing" : "thinking" }
+	const isWriting =
+		state.messages.findLast(
+			(message) => message.completion === "streaming" && message.text.length > 0,
+		) !== undefined
+	return { kind: isWriting ? "writing" : "thinking" }
 }
 
 /** Whether the sidebar shows the bot as busy, and with what. A pending
@@ -219,6 +220,18 @@ export function sidebarActivityFor(state: ChatState): SidebarActivity {
 		return { isWorking: false }
 	}
 	return { isWorking: true, kind: working.kind }
+}
+
+/** The reply still streaming is skipped: the sidebar hides its row while the
+ * turn works, so trimming a growing answer on every delta is dead work that
+ * churns a fresh string per token and defeats the row's memo. Holding the last
+ * settled reply keeps the value stable for the whole turn. */
+export function lastAssistantTextFor(state: ChatState): string | undefined {
+	const latest = state.messages.findLast(
+		(message) =>
+			message.role === "assistant" && message.completion !== "streaming",
+	)
+	return latest?.text.trim() || undefined
 }
 
 export function toActivityItems(

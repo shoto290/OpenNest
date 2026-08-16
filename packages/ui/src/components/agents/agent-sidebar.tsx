@@ -1,8 +1,9 @@
 "use client"
 
+import { memo } from "react"
+
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
-import { Icons } from "@workspace/ui/components/icons"
 import {
 	AnimatedSidebar,
 	AnimatedSidebarContent,
@@ -11,8 +12,8 @@ import {
 	AnimatedSidebarMenu,
 	AnimatedSidebarMenuButton,
 	AnimatedSidebarMenuItem,
-	AnimatedSidebarTrigger,
 } from "@workspace/ui/components/motion/animated-sidebar"
+import { SidebarToggle } from "@workspace/ui/components/sidebar-toggle"
 
 const ROW_AVATAR_SIZE = 56
 const PANEL_LABEL = "Conversations"
@@ -24,7 +25,7 @@ interface AgentSidebarProps {
 	lastMessage?: string
 }
 
-const AgentSidebar = ({
+const AgentSidebarBase = ({
 	status = "idle",
 	pose = "thinking",
 	name = "No Name",
@@ -36,9 +37,7 @@ const AgentSidebar = ({
 				<AnimatedSidebarGroupLabel className="min-w-0 truncate">
 					{PANEL_LABEL}
 				</AnimatedSidebarGroupLabel>
-				<AnimatedSidebarTrigger>
-					<Icons.Sidebar className="size-4" />
-				</AnimatedSidebarTrigger>
+				<SidebarToggle />
 			</div>
 		</AnimatedSidebarHeader>
 		<AnimatedSidebarContent className="group-data-[state=collapsed]/sidebar:px-0">
@@ -68,5 +67,8 @@ const AgentSidebar = ({
 		</AnimatedSidebarContent>
 	</AnimatedSidebar>
 )
+
+/** Hosts render this from a streaming store, so a shallow compare keeps every token from re-measuring the Motion layout projections inside the panel. */
+const AgentSidebar = memo(AgentSidebarBase)
 
 export { AgentSidebar, type AgentSidebarProps }
