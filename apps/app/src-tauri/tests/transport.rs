@@ -7,13 +7,15 @@ use std::time::{Duration, Instant};
 use opennest_app::claude::commands::start_with_fallback;
 use opennest_app::claude::contract::{
 	ActivityKind, ActivityStatus, ClaudeEvent, ConnectionState, MessageCompletion,
-	PermissionDecision, TransportError, TurnOutcome, TurnState,
+	PermissionDecision, PermissionRequest, TransportError, TurnOutcome, TurnState,
 };
 use opennest_app::claude::session::{EventSink, Session, SessionOptions};
 use tokio::sync::mpsc;
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
 const SETTLE: Duration = Duration::from_millis(400);
+const DEADLINE: Duration = Duration::from_secs(10);
+const POLL: Duration = Duration::from_millis(25);
 
 struct Harness {
 	session: Session,
@@ -47,7 +49,7 @@ impl Harness {
 	/// test instead of hanging it.
 	async fn drain_turn(&mut self) -> Vec<ClaudeEvent> {
 		let mut seen = Vec::new();
-		let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+		let deadline = tokio::time::Instant::now() + DEADLINE;
 		loop {
 			match tokio::time::timeout_at(deadline, self.events.recv()).await {
 				Ok(Some(event)) => {
@@ -63,7 +65,36 @@ impl Harness {
 		}
 	}
 
-	async fn drain_available(&mut self) -> Vec<ClaudeEvent> {
+	/// Collects until the caller's expectation holds. A wait that runs out says
+	/// what it was waiting for and what arrived instead, which a fixed sleep
+	/// cannot: it just leaves the next assertion to fail somewhere else.
+	async fn wait_for(
+		&mut self,
+		expectation: &str,
+		is_satisfied: impl Fn(&[ClaudeEvent]) -> bool,
+	) -> Vec<ClaudeEvent> {
+		let mut seen = Vec::new();
+		let deadline = tokio::time::Instant::now() + DEADLINE;
+		while !is_satisfied(&seen) {
+			match tokio::time::timeout_at(deadline, self.events.recv()).await {
+				Ok(Some(event)) => seen.push(event),
+				Ok(None) => panic!("the channel closed while waiting for {expectation}: {seen:#?}"),
+				Err(_) => panic!("timed out waiting for {expectation}: {seen:#?}"),
+			}
+		}
+		seen
+	}
+
+	async fn wait_for_permission(&mut self) -> PermissionRequest {
+		let seen = self
+			.wait_for("a permission request", |events| permission_request(events).is_some())
+			.await;
+		permission_request(&seen).expect("the wait only returns once it is there")
+	}
+
+	/// The one wait that cannot be an expectation: proving nothing arrives needs
+	/// a window for it to arrive in. Every other caller states what it awaits.
+	async fn drain_after_settling(&mut self) -> Vec<ClaudeEvent> {
 		tokio::time::sleep(SETTLE).await;
 		let mut seen = Vec::new();
 		while let Ok(event) = self.events.try_recv() {
@@ -71,6 +102,17 @@ impl Harness {
 		}
 		seen
 	}
+}
+
+fn permission_request(events: &[ClaudeEvent]) -> Option<PermissionRequest> {
+	events.iter().find_map(|event| match event {
+		ClaudeEvent::PermissionRequested { request } => Some(request.clone()),
+		_ => None,
+	})
+}
+
+fn has_started_streaming(events: &[ClaudeEvent]) -> bool {
+	events.iter().any(|event| matches!(event, ClaudeEvent::MessageStarted { .. }))
 }
 
 fn assistant_text(events: &[ClaudeEvent]) -> String {
@@ -244,7 +286,7 @@ async fn a_refused_resume_keeps_its_crash_off_the_channel() {
 		.await
 		.expect("the fresh start rescues the launch");
 	let mut harness = Harness { session, events };
-	let seen = harness.drain_available().await;
+	let seen = harness.drain_after_settling().await;
 
 	assert!(
 		!seen.iter().any(|event| matches!(
@@ -330,7 +372,7 @@ async fn a_mid_turn_crash_lands_on_the_crashed_connection_state() {
 async fn cancelling_ends_the_turn_and_leaves_the_session_reusable() {
 	let mut harness = start(options("slow")).await.expect("session starts");
 	harness.submit("compte jusqu'a mille").await.expect("prompt accepted");
-	tokio::time::sleep(SETTLE).await;
+	harness.wait_for("the answer to start streaming", has_started_streaming).await;
 
 	harness.cancel().await.expect("cancel accepted");
 	let events = harness.drain_turn().await;
@@ -364,15 +406,8 @@ async fn a_second_prompt_during_a_turn_is_rejected() {
 async fn a_permission_request_can_be_allowed() {
 	let mut harness = start(options("permission")).await.expect("session starts");
 	harness.submit("ecris un fichier").await.expect("prompt accepted");
-	let pending = harness.drain_available().await;
+	let request = harness.wait_for_permission().await;
 
-	let request = pending
-		.iter()
-		.find_map(|event| match event {
-			ClaudeEvent::PermissionRequested { request } => Some(request.clone()),
-			_ => None,
-		})
-		.expect("permission requested");
 	assert_eq!(request.tool_name, "Write");
 	assert_eq!(request.title, "Write · notes.txt");
 	assert_eq!(request.detail.as_deref(), Some("/fake/notes.txt"));
@@ -396,14 +431,7 @@ async fn a_permission_request_can_be_allowed() {
 async fn a_permission_request_can_be_denied() {
 	let mut harness = start(options("permission")).await.expect("session starts");
 	harness.submit("ecris un fichier").await.expect("prompt accepted");
-	let pending = harness.drain_available().await;
-	let request = pending
-		.iter()
-		.find_map(|event| match event {
-			ClaudeEvent::PermissionRequested { request } => Some(request.clone()),
-			_ => None,
-		})
-		.expect("permission requested");
+	let request = harness.wait_for_permission().await;
 
 	harness
 		.session
@@ -457,17 +485,30 @@ async fn orphan_probe(label: &str, options: SessionOptions) -> (Harness, i32) {
 		.await
 		.expect("session starts");
 	harness.submit("lance un enfant").await.expect("prompt accepted");
-	tokio::time::sleep(SETTLE).await;
+	poll_until("the fake child to record its grandchild", || recorded_pid(&pid_file).is_some())
+		.await;
 
-	let orphan: i32 = std::fs::read_to_string(&pid_file)
-		.expect("fake child recorded its grandchild")
-		.trim()
-		.parse()
-		.expect("pid is a number");
+	let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");
 	assert!(is_alive(orphan), "grandchild should be running before the kill");
 	let _ = std::fs::remove_file(&pid_file);
 
 	(harness, orphan)
+}
+
+/// The filesystem and the process table cannot be awaited, so these two are the
+/// only waits left that genuinely have to sample.
+#[cfg(unix)]
+async fn poll_until(expectation: &str, is_satisfied: impl Fn() -> bool) {
+	let deadline = tokio::time::Instant::now() + DEADLINE;
+	while !is_satisfied() {
+		assert!(tokio::time::Instant::now() < deadline, "timed out waiting for {expectation}");
+		tokio::time::sleep(POLL).await;
+	}
+}
+
+#[cfg(unix)]
+fn recorded_pid(pid_file: &std::path::Path) -> Option<i32> {
+	std::fs::read_to_string(pid_file).ok()?.trim().parse().ok()
 }
 
 #[cfg(unix)]
@@ -476,9 +517,8 @@ async fn shutdown_takes_the_whole_process_group_down() {
 	let (harness, orphan) = orphan_probe("shutdown", options("orphan")).await;
 
 	harness.session.shutdown().await;
-	tokio::time::sleep(SETTLE).await;
 
-	assert!(!is_alive(orphan), "shutdown must leave no orphan behind");
+	poll_until("the shutdown to leave no orphan behind", || !is_alive(orphan)).await;
 }
 
 /// A child deaf to EOF is the only thing the escalation is left for, and it
@@ -493,9 +533,8 @@ async fn shutdown_escalates_on_a_child_that_ignores_stdin_close() {
 	tokio::time::timeout(Duration::from_secs(8), harness.session.shutdown())
 		.await
 		.expect("the escalation keeps the shutdown bounded");
-	tokio::time::sleep(SETTLE).await;
 
-	assert!(!is_alive(orphan), "the escalation must leave no orphan behind");
+	poll_until("the escalation to leave no orphan behind", || !is_alive(orphan)).await;
 }
 
 #[cfg(unix)]
@@ -504,9 +543,8 @@ async fn terminating_takes_the_whole_process_group_down() {
 	let (harness, orphan) = orphan_probe("terminate", options("orphan")).await;
 
 	harness.session.terminate().await;
-	tokio::time::sleep(SETTLE).await;
 
-	assert!(!is_alive(orphan), "the exit path must leave no orphan behind");
+	poll_until("the exit path to leave no orphan behind", || !is_alive(orphan)).await;
 }
 
 #[cfg(unix)]
