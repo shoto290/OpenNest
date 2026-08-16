@@ -9,6 +9,7 @@ import {
 } from "react"
 
 import { Button } from "@workspace/ui/components/button"
+import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	Message,
@@ -20,6 +21,7 @@ import {
 	MessageBubbleContent,
 	MessageBubbleGroup,
 } from "@workspace/ui/components/message-bubble"
+import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -174,10 +176,15 @@ function AssistantTurn({
 	avatar,
 	className,
 }: AssistantTurnProps) {
+	const markId = useChatMarkId()
 	const footer = state === "cancelled" || state === "failed"
+	// This row mounts in the commit that hands it the mark, and its own entrance
+	// fades from nothing — which would blank the mark mid-flight. The bubble
+	// carries the entrance instead, leaving the gutter alone.
+	const receivesMark = Boolean(avatar && markId)
 
 	return (
-		<Message from="assistant" animateIn className={className}>
+		<Message from="assistant" animateIn={!receivesMark} className={className}>
 			{/* The gutter is a grid column so the avatar settles against the bubble
 			 * it belongs to rather than under the footer below it. */}
 			<MessageContent
@@ -189,9 +196,12 @@ function AssistantTurn({
 					aria-hidden="true"
 					className="col-start-1 row-start-1 self-end"
 				>
-					{avatar}
+					{avatar ? <SharedMark markId={markId}>{avatar}</SharedMark> : null}
 				</span>
-				<MessageBubble className="col-start-2 row-start-1">
+				<MessageBubble
+					animateIn={receivesMark}
+					className="col-start-2 row-start-1"
+				>
 					<MessageBubbleContent
 						className={cn("whitespace-pre-wrap", RUN_RADIUS.assistant[run])}
 					>
