@@ -40,7 +40,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. The transcript region stretches even when it holds one short row, so a lone child can centre itself with `m-auto` instead of stranding itself at the top. It owns no data and no scroll logic of its own — it wraps MessageScroller and hands it the column width.",
+					"The whole chat screen shell: a fixed header, a transcript that always fills every pixel between header and composer, and a composer that keeps its natural height. The transcript region stretches even when it holds one short row, so a lone child can centre itself with `m-auto` instead of stranding itself at the top. It owns no data and no scroll logic of its own — it wraps MessageScroller and lets the transcript run the full width of the shell.",
 			},
 		},
 	},
@@ -106,7 +106,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this once the transcript is taller than the viewport. Check that only the transcript scrolls — the header and the composer must stay put — and that the column keeps its reading width instead of spreading to the window edge. Pick `Default` for a transcript that fits.",
+					"Reach for this once the transcript is taller than the viewport. Check that only the transcript scrolls — the header and the composer must stay put — and that the rows wrap inside the full-width transcript however wide the window gets, without pushing the layout sideways. Pick `Default` for a transcript that fits.",
 			},
 		},
 	},

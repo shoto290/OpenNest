@@ -48,7 +48,7 @@ function ChatLayout({
 				busy={busy}
 				label={label}
 				contentClassName={cn(
-					"mx-auto flex min-h-full w-full max-w-3xl flex-col gap-6 px-6 py-8",
+					"flex min-h-full w-full flex-col gap-6 px-6 py-8",
 					contentClassName,
 				)}
 			>
@@ -56,7 +56,7 @@ function ChatLayout({
 			</MessageScroller>
 
 			{notice || composer ? (
-				<div className="mx-auto flex w-full max-w-3xl shrink-0 flex-col gap-3 px-6 pb-6">
+				<div className="flex w-full shrink-0 flex-col gap-3 px-6 pb-6">
 					{notice}
 					{composer}
 				</div>
