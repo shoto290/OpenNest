@@ -461,20 +461,6 @@ describe("session reset", () => {
 		expect(reset.messages[0].text).toBe("Bonjour le monde")
 		expect(reset.messages[0].completion).toBe("failed")
 	})
-
-	it("drops the transcript only on an explicit clear", () => {
-		const live = applyEvents(
-			{ ...initialChatState, connection: "ready" },
-			conversation,
-		)
-		const open = chatReducer(live, { type: "sessionOpened" })
-		const cleared = chatReducer(open, { type: "conversationCleared" })
-
-		expect(cleared.messages).toHaveLength(0)
-		expect(cleared.activities).toHaveLength(0)
-		expect(cleared.sessionOpen).toBe(true)
-		expect(cleared.sessionId).toBe("s-1")
-	})
 })
 
 describe("session restore", () => {

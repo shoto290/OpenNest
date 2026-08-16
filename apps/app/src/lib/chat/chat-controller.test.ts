@@ -374,33 +374,6 @@ describe("createChatController", () => {
 		expect(state.turn).toBe("idle")
 	})
 
-	it("drops the transcript only when the conversation is cleared", async () => {
-		const { controller } = await startedHarness()
-		await controller.send("bonjour")
-		await vi.runAllTimersAsync()
-		expect(controller.getState().messages.length).toBeGreaterThan(1)
-
-		controller.clearConversation()
-
-		const state = controller.getState()
-		expect(state.messages).toHaveLength(0)
-		expect(state.activities).toHaveLength(0)
-		expect(isSessionReady(state)).toBe(true)
-	})
-
-	// Clearing a sensitive conversation has to reach the disk: what is only dropped
-	// in memory comes straight back on the next boot.
-	it("writes the cleared transcript instead of leaving it on disk", async () => {
-		const { controller, saved } = storedHarness(STORED_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
-		expect(saved).toHaveLength(0)
-
-		controller.clearConversation()
-
-		expect(saved.at(-1)).toMatchObject({ messages: [], activities: [] })
-	})
-
 	it("leaves stopping deterministically when cancelTurn is rejected", async () => {
 		const fake = createFakeChatDriver({
 			stepMs: STEP_MS,

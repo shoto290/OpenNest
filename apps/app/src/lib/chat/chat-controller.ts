@@ -32,9 +32,6 @@ export type ChatController = {
 	/** Reopens the session the transcript belongs to. The recovery affordance the
 	 * reader is offered, so it resumes rather than starting Claude amnesiac. */
 	restart: () => Promise<SessionHandle | null>
-	/** Drops the transcript on purpose. A restart never does this — a dead session
-	 * clears its own state and leaves what the reader can still see. */
-	clearConversation: () => void
 	send: (text: string) => Promise<void>
 	stop: () => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
@@ -217,11 +214,6 @@ export function createChatController(driver: ChatDriver): ChatController {
 
 	const restart = () => preflight(state.sessionId ?? undefined)
 
-	const clearConversation = () => {
-		dispatch({ type: "conversationCleared" })
-		persistNow()
-	}
-
 	const submit = async (message: ChatMessage) => {
 		try {
 			await driver.submitPrompt(message.text)
@@ -303,7 +295,6 @@ export function createChatController(driver: ChatDriver): ChatController {
 		preflight,
 		boot,
 		restart,
-		clearConversation,
 		send,
 		stop,
 		respond,

@@ -43,8 +43,6 @@ export type ChatAction =
 	 * session resumes: the child only re-announces it on the first prompt, so
 	 * dropping it here would write `null` over a session that is very much alive. */
 	| { type: "sessionReset"; epoch: number; sessionId: string | null }
-	/** Drops the transcript itself. Only a deliberate "new conversation" does this. */
-	| { type: "conversationCleared" }
 	/** Hydrates the stored transcript on boot. Ignored the moment anything is
 	 * already on screen, so a late or replayed restore — StrictMode mounts twice —
 	 * can never clobber a live conversation. */
@@ -351,16 +349,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 				permission: null,
 				deltaSeqs: {},
 				messages: finalizeStreaming(state.messages, "failed"),
-			}
-		case "conversationCleared":
-			return {
-				...initialChatState,
-				epoch: state.epoch,
-				connection: state.connection,
-				sessionOpen: state.sessionOpen,
-				sessionId: state.sessionId,
-				binaryVersion: state.binaryVersion,
-				errorCount: state.errorCount,
 			}
 		case "sessionRestored":
 			return state.messages.length > 0
