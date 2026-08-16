@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { useState } from "react"
-import { expect, within } from "storybook/test"
+import { expect, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { listExhaustively, Row } from "@workspace/storybook/story-utils"
@@ -29,6 +29,25 @@ import {
 } from "@workspace/ui/components/motion/animated-sidebar"
 
 const HOVER_HIGHLIGHT_CLASS = "hover:bg-sidebar-accent/70"
+
+const FRAME_POLL = { interval: 10 }
+
+const layerOf = (drawer: HTMLElement) => {
+	const layer = drawer.closest<HTMLElement>(
+		"[data-slot='sidebar-mobile-layer']",
+	)
+	if (!layer) {
+		throw new Error("The mobile drawer is not mounted inside its portal layer.")
+	}
+	return layer
+}
+
+const settleDrawer = async (drawer: HTMLElement) => {
+	await waitFor(async () => {
+		await expect(drawer).toBeVisible()
+		await expect(getComputedStyle(drawer).opacity).toBe("1")
+	}, FRAME_POLL)
+}
 
 interface NavItem {
 	id: string
@@ -148,6 +167,39 @@ const NavShell = ({
 				</AnimatedSidebarFooter>
 			) : null}
 		</AnimatedSidebar>
+	</AnimatedSidebarProvider>
+)
+
+const DrawerShell = (sidebar: AnimatedSidebarProps) => (
+	<AnimatedSidebarProvider>
+		<AnimatedSidebar {...sidebar}>
+			<AnimatedSidebarContent>
+				<AnimatedSidebarGroup>
+					<AnimatedSidebarGroupLabel>Workspace</AnimatedSidebarGroupLabel>
+					<AnimatedSidebarGroupContent>
+						<AnimatedSidebarMenu>
+							{NAV_ITEMS.map((item) => (
+								<AnimatedSidebarMenuItem key={item.id}>
+									<AnimatedSidebarMenuButton
+										icon={item.icon}
+										isActive={item.id === "overview"}
+									>
+										{item.label}
+									</AnimatedSidebarMenuButton>
+								</AnimatedSidebarMenuItem>
+							))}
+						</AnimatedSidebarMenu>
+					</AnimatedSidebarGroupContent>
+				</AnimatedSidebarGroup>
+			</AnimatedSidebarContent>
+		</AnimatedSidebar>
+		<AnimatedSidebarInset>
+			<AnimatedSidebarHeader>
+				<AnimatedSidebarTrigger>
+					<Icons.More className="size-4" />
+				</AnimatedSidebarTrigger>
+			</AnimatedSidebarHeader>
+		</AnimatedSidebarInset>
 	</AnimatedSidebarProvider>
 )
 
@@ -523,5 +575,69 @@ export const InLayout = meta.story({
 		await expect(firstLink).toHaveFocus()
 		await expect(firstLink.matches(":focus-visible")).toBe(true)
 		await expect(firstLink).toHaveAttribute("aria-current", "page")
+	},
+})
+
+export const Drawer = meta.story({
+	args: { "aria-busy": true },
+	globals: { viewport: { value: "mobile" } },
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"Below the `md` breakpoint the panel stops being a column and becomes a focus-trapped drawer over the page, opened from a trigger the page keeps. Check that nothing is left behind in the layout — no landmark, no rail — and that the drawer is the dialog carrying the panel's own name. Check too that what is handed to `AnimatedSidebar` still lands on it here: `aria-busy` has to reach the drawer exactly as it reaches the desktop panel, or a busy sidebar goes quiet on a narrow window. Pick `DrawerExit` for the way back out, `InLayout` for the two-column shell.",
+			},
+		},
+	},
+	render: (args) => <DrawerShell {...args} />,
+	play: async ({ canvas, userEvent }) => {
+		const overlay = within(document.body)
+		const trigger = canvas.getByRole("button", { name: "Toggle sidebar" })
+
+		await expect(canvas.queryByRole("complementary")).toBeNull()
+
+		await userEvent.click(trigger)
+		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+
+		const drawer = overlay.getByRole("dialog", { name: "Primary" })
+		await settleDrawer(drawer)
+
+		await expect(drawer).toHaveAttribute("data-slot", "sidebar-mobile-panel")
+		await expect(drawer).toHaveAttribute("aria-busy", "true")
+	},
+})
+
+export const DrawerExit = meta.story({
+	globals: { viewport: { value: "mobile" } },
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"The way out of the drawer, dismissed from the scrim covering the page. Check that the drawer and the scrim travel away instead of blinking out: the layer holding them keeps its `visibility` for as long as the tween runs and only goes hidden once it lands. Check too that the drawer leaves the accessibility tree the moment the dismiss is asked for rather than when the animation ends — the exit is for the eye, not for the screen reader. Pick `Drawer` for the way in.",
+			},
+		},
+	},
+	render: (args) => <DrawerShell {...args} />,
+	play: async ({ canvas, userEvent }) => {
+		const overlay = within(document.body)
+		const trigger = canvas.getByRole("button", { name: "Toggle sidebar" })
+
+		await userEvent.click(trigger)
+		const drawer = overlay.getByRole("dialog", { name: "Primary" })
+		await settleDrawer(drawer)
+
+		const layer = layerOf(drawer)
+		await userEvent.click(
+			overlay.getByRole("button", { name: "Close sidebar" }),
+		)
+		await expect(getComputedStyle(layer).visibility).toBe("visible")
+		await expect(trigger).toHaveAttribute("aria-expanded", "false")
+		await expect(drawer).toHaveAttribute("aria-hidden", "true")
+
+		await waitFor(async () => {
+			await expect(getComputedStyle(layer).visibility).toBe("hidden")
+		}, FRAME_POLL)
 	},
 })
