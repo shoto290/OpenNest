@@ -95,17 +95,29 @@ impl Harness {
 			.await;
 		permission_request(&seen).expect("the wait only returns once it is there")
 	}
+}
 
-	/// The one wait that cannot be an expectation: proving nothing arrives needs
-	/// a window for it to arrive in. Every other caller states what it awaits.
-	async fn drain_after_settling(&mut self) -> Vec<ClaudeEvent> {
-		tokio::time::sleep(SETTLE).await;
-		let mut seen = Vec::new();
-		while let Ok(event) = self.events.try_recv() {
-			seen.push(event);
-		}
-		seen
+/// The one wait that cannot be an expectation: proving nothing arrives needs a
+/// window for it to arrive in. Every other caller states what it awaits.
+async fn drain_after_settling(
+	events: &mut mpsc::UnboundedReceiver<ClaudeEvent>,
+) -> Vec<ClaudeEvent> {
+	tokio::time::sleep(SETTLE).await;
+	let mut seen = Vec::new();
+	while let Ok(event) = events.try_recv() {
+		seen.push(event);
 	}
+	seen
+}
+
+fn reports_a_crash(events: &[ClaudeEvent]) -> bool {
+	events.iter().any(|event| {
+		matches!(
+			event,
+			ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed }
+				| ClaudeEvent::Failed { error: TransportError::Crashed { .. } }
+		)
+	})
 }
 
 fn permission_request(events: &[ClaudeEvent]) -> Option<PermissionRequest> {
@@ -313,17 +325,28 @@ async fn a_refused_resume_keeps_its_crash_off_the_channel() {
 		.await
 		.expect("the fresh start rescues the launch");
 	let mut harness = Harness { session: started.session, events };
-	let seen = harness.drain_after_settling().await;
+	let seen = drain_after_settling(&mut harness.events).await;
 
-	assert!(
-		!seen.iter().any(|event| matches!(
-			event,
-			ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed }
-				| ClaudeEvent::Failed { error: TransportError::Crashed { .. } }
-		)),
-		"the refused attempt reached the reader: {seen:#?}"
-	);
+	assert!(!reports_a_crash(&seen), "the refused attempt reached the reader: {seen:#?}");
 	harness.session.shutdown().await;
+}
+
+/// A start that fails is reported by the command that owns it, once. The child
+/// it kills on the way out reaches `on_exit` too, on a task of its own, and a
+/// second account of the same failure racing the first can leave a startup
+/// timeout on screen as "claude exited unexpectedly".
+#[tokio::test]
+async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
+	let (tx, mut events) = mpsc::unbounded_channel();
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
+
+	let error =
+		Session::start(options("startup_timeout"), sink).await.err().expect("handshake fails");
+	assert!(matches!(error, TransportError::StartupTimeout { .. }));
+
+	let seen = drain_after_settling(&mut events).await;
+
+	assert!(!reports_a_crash(&seen), "the killed child reported a crash of its own: {seen:#?}");
 }
 
 /// A resume that works must lose nothing it emitted while it was still being

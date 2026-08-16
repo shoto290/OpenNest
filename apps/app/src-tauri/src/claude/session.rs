@@ -250,11 +250,11 @@ impl Session {
 				// The child is gone, but a start reaches this far only after it
 				// has had time to spawn its own children, and reaping it never
 				// reaches those.
-				self.kill().await;
+				self.shutdown().await;
 				Err(TransportError::Crashed { code, detail: Some("exited during startup".into()) })
 			}
 			Err(_) => {
-				self.kill().await;
+				self.shutdown().await;
 				Err(TransportError::StartupTimeout { timeout_ms: timeout.as_millis() as u64 })
 			}
 		}
@@ -341,14 +341,41 @@ impl Session {
 		}
 	}
 
-	/// Closes stdin, then escalates to the whole process group so no Claude
-	/// child survives the shutdown.
+	/// Hands the child EOF first and only escalates on a child that ignores it,
+	/// up to the whole process group so no Claude child survives. The group is
+	/// swept either way: a clean exit reaps the child, never the grandchildren it
+	/// left behind, and those are the orphans this call exists to prevent.
+	///
+	/// Every rung is bounded, the last one included: a group signal reaches
+	/// nothing on a child that left the group, and nothing at all on a platform
+	/// that has no groups. An unbounded wait there would hold the child lock for
+	/// good, and with it the command that owns the shutdown.
+	///
+	/// The dying child is disowned here rather than by the caller, because a
+	/// failed start ends this way too and the reader is owed one account of it:
+	/// the read loop reaching `on_exit` on a session nobody is shutting down
+	/// reports a crash of its own, on a different task, and which of the two
+	/// lands first is a race.
 	pub async fn shutdown(&self) {
 		self.shared.lock().await.shutting_down = true;
-		self.kill().await;
+		self.close_stdin();
+
+		let mut slot = self.child.lock().await;
+		let Some(child) = slot.as_mut() else { return };
+
+		if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_err() {
+			signal_group(self.pid, Signal::Term);
+			if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_err() {
+				signal_group(self.pid, Signal::Kill);
+				let _ = tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await;
+			}
+		}
+
+		sweep_group(self.pid);
+		*slot = None;
 	}
 
-	/// The bounded counterpart of [`Session::shutdown`], for a host that is
+	/// The short counterpart of [`Session::shutdown`], for a host that is
 	/// already quitting. It hands the child EOF without ever waiting to see it
 	/// taken, and never waits for reaping: blocking a quitting app for seconds
 	/// risks the platform killing it before the escalation lands, which would
@@ -369,33 +396,6 @@ impl Session {
 			signal_group(self.pid, Signal::Term);
 			let _ = tokio::time::timeout(TERMINATE_GRACE, child.wait()).await;
 		}
-		sweep_group(self.pid);
-		*slot = None;
-	}
-
-	/// Hands the child EOF first and only escalates on a child that ignores it.
-	/// The group is swept either way: a clean exit reaps the child, never the
-	/// grandchildren it left behind, and those are the orphans this call exists
-	/// to prevent.
-	///
-	/// Every rung is bounded, the last one included: a group signal reaches
-	/// nothing on a child that left the group, and nothing at all on a platform
-	/// that has no groups. An unbounded wait there would hold the child lock for
-	/// good, and with it the command that owns the shutdown.
-	async fn kill(&self) {
-		self.close_stdin();
-
-		let mut slot = self.child.lock().await;
-		let Some(child) = slot.as_mut() else { return };
-
-		if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_err() {
-			signal_group(self.pid, Signal::Term);
-			if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_err() {
-				signal_group(self.pid, Signal::Kill);
-				let _ = tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await;
-			}
-		}
-
 		sweep_group(self.pid);
 		*slot = None;
 	}
