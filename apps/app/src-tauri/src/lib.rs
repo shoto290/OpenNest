@@ -1,8 +1,8 @@
 pub mod claude;
 
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
-use claude::commands::invoke_handler;
+use claude::commands::{invoke_handler, terminate_session};
 use claude::ClaudeState;
 
 pub fn run() {
@@ -25,6 +25,14 @@ pub fn run() {
 		)
 		.manage(ClaudeState::default())
 		.invoke_handler(invoke_handler())
-		.run(tauri::generate_context!())
-		.expect("error while running tauri application")
+		.build(tauri::generate_context!())
+		.expect("error while building tauri application")
+		// Tauri quits through `std::process::exit`, so no destructor runs and
+		// `kill_on_drop` never fires. `Exit` is the last, uncancellable event
+		// before that call — unlike `ExitRequested`, which a listener may veto.
+		.run(|app, event| {
+			if matches!(event, RunEvent::Exit) {
+				tauri::async_runtime::block_on(terminate_session(app.state::<ClaudeState>().inner()));
+			}
+		})
 }

@@ -369,10 +369,13 @@ async fn answering_an_unknown_permission_is_rejected() {
 	harness.session.shutdown().await;
 }
 
+/// Runs a session that has spawned a grandchild only a process-group kill can
+/// reach. The probe file is named after this test process: worktrees run their
+/// suites side by side and a shared path would have them racing.
 #[cfg(unix)]
-#[tokio::test]
-async fn shutdown_takes_the_whole_process_group_down() {
-	let pid_file = std::env::temp_dir().join("opennest-orphan-probe.pid");
+async fn orphan_probe(label: &str) -> (Harness, i32) {
+	let pid_file = std::env::temp_dir()
+		.join(format!("opennest-orphan-probe-{}-{label}.pid", std::process::id()));
 	let _ = std::fs::remove_file(&pid_file);
 
 	let harness = start(options("orphan").with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy()))
@@ -386,13 +389,32 @@ async fn shutdown_takes_the_whole_process_group_down() {
 		.trim()
 		.parse()
 		.expect("pid is a number");
-	assert!(is_alive(orphan), "grandchild should be running before shutdown");
+	assert!(is_alive(orphan), "grandchild should be running before the kill");
+	let _ = std::fs::remove_file(&pid_file);
+
+	(harness, orphan)
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn shutdown_takes_the_whole_process_group_down() {
+	let (harness, orphan) = orphan_probe("shutdown").await;
 
 	harness.session.shutdown().await;
 	tokio::time::sleep(SETTLE).await;
 
 	assert!(!is_alive(orphan), "shutdown must leave no orphan behind");
-	let _ = std::fs::remove_file(&pid_file);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn terminating_takes_the_whole_process_group_down() {
+	let (harness, orphan) = orphan_probe("terminate").await;
+
+	harness.session.terminate().await;
+	tokio::time::sleep(SETTLE).await;
+
+	assert!(!is_alive(orphan), "the exit path must leave no orphan behind");
 }
 
 #[cfg(unix)]

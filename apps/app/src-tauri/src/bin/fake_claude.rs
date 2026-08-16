@@ -162,7 +162,7 @@ fn ack(request_id: &str) {
 
 /// A grandchild that only a process-group kill can reach.
 fn spawn_orphan() {
-	let Ok(child) = std::process::Command::new("sleep").arg("600").spawn() else { return };
+	let Ok(child) = std::process::Command::new("sleep").arg("60").spawn() else { return };
 	if let Ok(path) = std::env::var("FAKE_CLAUDE_PID_FILE") {
 		let _ = std::fs::write(path, child.id().to_string());
 	}

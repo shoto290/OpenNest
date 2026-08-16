@@ -23,6 +23,7 @@ use super::translate::Translator;
 
 pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
+const TERMINATE_GRACE: Duration = Duration::from_millis(500);
 
 pub trait EventSink: Send + Sync + 'static {
 	fn emit(&self, event: ClaudeEvent);
@@ -253,6 +254,23 @@ impl Session {
 	pub async fn shutdown(&self) {
 		self.shared.lock().await.shutting_down = true;
 		self.kill().await;
+	}
+
+	/// The bounded counterpart of [`Session::shutdown`], for a host that is
+	/// already quitting. It skips the stdin handshake and never waits for
+	/// reaping: blocking a quitting app for seconds risks the platform killing
+	/// it before the escalation lands, which would leave behind exactly the
+	/// orphan this call exists to prevent. `SIGKILL` needs no witness.
+	pub async fn terminate(&self) {
+		self.shared.lock().await.shutting_down = true;
+
+		let mut slot = self.child.lock().await;
+		let Some(child) = slot.as_mut() else { return };
+
+		signal_group(self.pid, Signal::Term);
+		let _ = tokio::time::timeout(TERMINATE_GRACE, child.wait()).await;
+		signal_group(self.pid, Signal::Kill);
+		*slot = None;
 	}
 
 	async fn kill(&self) {

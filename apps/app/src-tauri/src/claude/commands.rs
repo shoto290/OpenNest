@@ -146,14 +146,26 @@ pub async fn claude_respond_to_permission(
 	state.current().await?.respond_to_permission(&id, decision).await
 }
 
+pub async fn shutdown_session(state: &ClaudeState) {
+	if let Some(session) = state.session.lock().await.take() {
+		session.shutdown().await;
+	}
+}
+
+/// For the host's own exit, where the graceful ladder's seconds of waiting
+/// would block the platform's quit sequence.
+pub async fn terminate_session(state: &ClaudeState) {
+	if let Some(session) = state.session.lock().await.take() {
+		session.terminate().await;
+	}
+}
+
 #[tauri::command]
 pub async fn claude_shutdown<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, ClaudeState>,
 ) -> Result<(), TransportError> {
-	if let Some(session) = state.session.lock().await.take() {
-		session.shutdown().await;
-	}
+	shutdown_session(&state).await;
 	sink(&app).emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
 }
