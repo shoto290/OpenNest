@@ -34,7 +34,7 @@ import {
 	EASE_OUT,
 	SPRING_LAYOUT,
 	SPRING_PRESS,
-	TWEEN_REDUCED,
+	TRANSITION_NONE,
 } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
@@ -412,7 +412,7 @@ function MobileSidebar({
 				tabIndex={context.openMobile ? 0 : -1}
 				initial={false}
 				animate={{ opacity: context.openMobile ? 1 : 0 }}
-				transition={context.reduce ? TWEEN_REDUCED : PANEL_TRANSITION}
+				transition={context.reduce ? TRANSITION_NONE : PANEL_TRANSITION}
 				onClick={() => context.setOpenMobile(false)}
 				data-slot="sidebar-mobile-overlay"
 				className={cn(
@@ -442,7 +442,7 @@ function MobileSidebar({
 						side,
 					}),
 				}}
-				transition={context.reduce ? TWEEN_REDUCED : PANEL_TRANSITION}
+				transition={context.reduce ? TRANSITION_NONE : PANEL_TRANSITION}
 				onKeyDown={handlePanelKeyDown}
 				className={cn(
 					"pointer-events-auto absolute inset-y-0 flex h-dvh w-(--sidebar-width-mobile) max-w-[88vw] flex-col overflow-hidden",
@@ -550,7 +550,7 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 						opacity: offcanvas ? 0 : 1,
 						x: offcanvas ? (side === "left" ? "-100%" : "100%") : "0%",
 					}}
-					transition={context.reduce ? TWEEN_REDUCED : PANEL_TRANSITION}
+					transition={context.reduce ? TRANSITION_NONE : PANEL_TRANSITION}
 					data-slot="sidebar-panel"
 					className={cn(
 						"sticky top-0 flex h-svh w-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground",
@@ -1104,7 +1104,7 @@ export function AnimatedSidebarMenuButton({
 				}}
 				transition={
 					context.reduce
-						? TWEEN_REDUCED
+						? TRANSITION_NONE
 						: panel.collapsed
 							? LABEL_EXIT_TRANSITION
 							: LABEL_ENTER_TRANSITION

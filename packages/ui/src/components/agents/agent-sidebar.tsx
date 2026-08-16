@@ -31,7 +31,11 @@ const AgentSidebarBase = ({
 	name = "No Name",
 	lastMessage,
 }: AgentSidebarProps) => (
-	<AnimatedSidebar ariaLabel={PANEL_LABEL} collapsible="icon">
+	<AnimatedSidebar
+		aria-busy={status === "working"}
+		ariaLabel={PANEL_LABEL}
+		collapsible="icon"
+	>
 		<AnimatedSidebarHeader>
 			<div className="flex items-center justify-between gap-2 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:gap-0">
 				<AnimatedSidebarGroupLabel className="min-w-0 truncate">
@@ -65,6 +69,9 @@ const AgentSidebarBase = ({
 				</AnimatedSidebarMenuItem>
 			</AnimatedSidebarMenu>
 		</AnimatedSidebarContent>
+		<span className="sr-only" role="status">
+			{status === "working" ? `${name} ${pose}` : null}
+		</span>
 	</AnimatedSidebar>
 )
 
