@@ -38,8 +38,8 @@ const streamedTurn: ClaudeEvent[] = [
 	{ type: "turnChanged", state: "submitting" },
 	{ type: "turnChanged", state: "running" },
 	{ type: "messageStarted", message: assistantMessage() },
-	{ type: "messageDelta", id: "msg-1", seq: 1, text: "Bonjour" },
-	{ type: "messageDelta", id: "msg-1", seq: 2, text: " le monde" },
+	{ type: "messageDelta", id: "msg-1", seq: 1, text: "Hello" },
+	{ type: "messageDelta", id: "msg-1", seq: 2, text: " world" },
 ]
 
 describe("chatReducer", () => {
@@ -47,7 +47,7 @@ describe("chatReducer", () => {
 		const state = applyEvents(initialChatState, streamedTurn)
 		expect(state.turn).toBe("running")
 		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Bonjour le monde")
+		expect(state.messages[0].text).toBe("Hello world")
 	})
 
 	it("ignores a replayed messageStarted without resetting text", () => {
@@ -56,26 +56,26 @@ describe("chatReducer", () => {
 			{ type: "messageStarted", message: assistantMessage() },
 		])
 		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Bonjour le monde")
+		expect(state.messages[0].text).toBe("Hello world")
 	})
 
 	it("applies a replayed delta only once, even non-consecutively", () => {
 		const state = applyEvents(initialChatState, [
 			...streamedTurn,
 			{ type: "messageDelta", id: "msg-1", seq: 3, text: " !" },
-			{ type: "messageDelta", id: "msg-1", seq: 2, text: " le monde" },
-			{ type: "messageDelta", id: "msg-1", seq: 1, text: "Bonjour" },
+			{ type: "messageDelta", id: "msg-1", seq: 2, text: " world" },
+			{ type: "messageDelta", id: "msg-1", seq: 1, text: "Hello" },
 		])
-		expect(state.messages[0].text).toBe("Bonjour le monde !")
+		expect(state.messages[0].text).toBe("Hello world !")
 	})
 
 	it("keeps two consecutive chunks with identical text", () => {
 		const state = applyEvents(initialChatState, [
 			...streamedTurn,
-			{ type: "messageDelta", id: "msg-1", seq: 3, text: " encore" },
-			{ type: "messageDelta", id: "msg-1", seq: 4, text: " encore" },
+			{ type: "messageDelta", id: "msg-1", seq: 3, text: " again" },
+			{ type: "messageDelta", id: "msg-1", seq: 4, text: " again" },
 		])
-		expect(state.messages[0].text).toBe("Bonjour le monde encore encore")
+		expect(state.messages[0].text).toBe("Hello world again again")
 	})
 
 	it("drops deltas for unknown or completed messages", () => {
@@ -84,15 +84,15 @@ describe("chatReducer", () => {
 			{
 				type: "messageCompleted",
 				message: assistantMessage({
-					text: "Bonjour le monde",
+					text: "Hello world",
 					completion: "complete",
 				}),
 			},
-			{ type: "messageDelta", id: "msg-1", seq: 3, text: " en retard" },
-			{ type: "messageDelta", id: "msg-inconnu", seq: 4, text: "fantôme" },
+			{ type: "messageDelta", id: "msg-1", seq: 3, text: " late" },
+			{ type: "messageDelta", id: "msg-unknown", seq: 4, text: "ghost" },
 		])
 		expect(completed.messages).toHaveLength(1)
-		expect(completed.messages[0].text).toBe("Bonjour le monde")
+		expect(completed.messages[0].text).toBe("Hello world")
 	})
 
 	it("preserves streamed text when messageCompleted arrives empty", () => {
@@ -108,7 +108,7 @@ describe("chatReducer", () => {
 			},
 		])
 		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Bonjour le monde")
+		expect(state.messages[0].text).toBe("Hello world")
 		expect(state.messages[0].completion).toBe("cancelled")
 		expect(state.messages[0].timestamp).toBe(42)
 	})
@@ -117,13 +117,13 @@ describe("chatReducer", () => {
 		const done: ClaudeEvent = {
 			type: "messageCompleted",
 			message: assistantMessage({
-				text: "Bonjour le monde",
+				text: "Hello world",
 				completion: "complete",
 			}),
 		}
 		const state = applyEvents(initialChatState, [...streamedTurn, done, done])
 		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Bonjour le monde")
+		expect(state.messages[0].text).toBe("Hello world")
 	})
 
 	it("keeps turnEnded idempotent and finalizes streaming messages", () => {
@@ -193,7 +193,7 @@ describe("chatReducer", () => {
 			request: {
 				id: "perm-1",
 				toolName: "Bash",
-				title: "Exécuter",
+				title: "Run",
 				detail: null,
 			},
 		}
@@ -213,7 +213,7 @@ describe("chatReducer", () => {
 				request: {
 					id: "perm-1",
 					toolName: "Bash",
-					title: "Exécuter",
+					title: "Run",
 					detail: null,
 				},
 			},
@@ -394,7 +394,7 @@ describe("session reset", () => {
 		},
 		{
 			type: "messageCompleted",
-			message: assistantMessage({ text: "Bonjour", completion: "complete" }),
+			message: assistantMessage({ text: "Hello", completion: "complete" }),
 		},
 		{ type: "turnEnded", ended: { sessionId: "s-1", outcome: "completed" } },
 	]
@@ -420,7 +420,7 @@ describe("session reset", () => {
 		const streaming = applyEvents(initialChatState, streamedTurn)
 		const reset = chatReducer(streaming, { type: "sessionReset", epoch: 1 })
 
-		expect(reset.messages[0].text).toBe("Bonjour le monde")
+		expect(reset.messages[0].text).toBe("Hello world")
 		expect(reset.messages[0].completion).toBe("failed")
 	})
 
