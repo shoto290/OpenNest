@@ -68,9 +68,10 @@ pub fn load(path: &Path) -> SessionSnapshot {
 
 /// Never writes over bytes it could not read. Leaving them in place would only
 /// postpone the loss to the next prompt, so they are moved to `session.json.bak`
-/// and the write goes ahead — and if even that fails, nothing is written at all.
+/// and the write goes ahead — and if they cannot be moved, nothing is written at
+/// all.
 pub fn save(path: &Path, snapshot: &SessionSnapshot) {
-	if matches!(read(path), Stored::Unreadable) && fs::rename(path, backup(path)).is_err() {
+	if matches!(read(path), Stored::Unreadable) && !keep_as_backup(path) {
 		return;
 	}
 	let stored = StoredSession { version: VERSION, snapshot: snapshot.clone() };
@@ -91,6 +92,16 @@ pub fn forget_session_id(path: &Path) {
 	};
 	snapshot.session_id = None;
 	save(path, &snapshot);
+}
+
+/// Answers whether the unreadable bytes are safe. The backup name is spent the
+/// first time it is used: a second unreadable file belongs to another build just
+/// as much as the first, and renaming over it would destroy the only copy that
+/// one has left. A build that cannot make room stops writing rather than trade
+/// one transcript for another.
+fn keep_as_backup(path: &Path) -> bool {
+	let destination = backup(path);
+	!destination.exists() && fs::rename(path, &destination).is_ok()
 }
 
 fn backup(path: &Path) -> PathBuf {
@@ -259,6 +270,31 @@ mod tests {
 
 		assert_eq!(fs::read_to_string(backup(&path)).expect("the backup"), NEWER_VERSION);
 		assert_eq!(load(&path), sample());
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The backup name holds one file, and the bytes already under it are as
+	/// unreadable-here and as valuable-elsewhere as the ones arriving. Trading
+	/// the first for the second would destroy the only copy that build has left,
+	/// so the arriving snapshot stays where it is and the save gives up.
+	#[test]
+	fn a_second_unreadable_file_never_takes_the_first_one_s_backup() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		fs::write(&path, NEWER_VERSION).expect("write");
+		save(&path, &sample());
+		assert_eq!(fs::read_to_string(backup(&path)).expect("the backup"), NEWER_VERSION);
+
+		fs::write(&path, "{").expect("another build leaves bytes this one cannot read either");
+		save(&path, &sample());
+
+		assert_eq!(
+			fs::read_to_string(backup(&path)).expect("the backup"),
+			NEWER_VERSION,
+			"the second unreadable file was traded for the first"
+		);
+		assert_eq!(fs::read_to_string(&path).expect("read"), "{", "the second one was spent too");
 
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
