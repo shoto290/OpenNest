@@ -185,6 +185,9 @@ fn main() {
 				if scenario == "startup_crash" {
 					std::process::exit(3);
 				}
+				if scenario == "resume_crash" && resumed() {
+					std::process::exit(4);
+				}
 				ack(&request_id);
 			}
 			Incoming::Interrupt(request_id) => {

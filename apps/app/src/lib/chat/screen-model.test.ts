@@ -251,4 +251,11 @@ describe("notices", () => {
 			"That request did not go through",
 		)
 	})
+
+	it("keeps a refused resume out of the session-ending errors", () => {
+		expect(needsFreshSession({ kind: "resumeFailed" })).toBe(false)
+		expect(noticeTitleFor({ kind: "resumeFailed" })).toBe(
+			"Previous conversation could not be resumed",
+		)
+	})
 })

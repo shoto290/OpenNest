@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use opennest_app::claude::commands::start_with_fallback;
 use opennest_app::claude::contract::{
 	ActivityKind, ActivityStatus, ClaudeEvent, ConnectionState, MessageCompletion,
 	PermissionDecision, TransportError, TurnOutcome, TurnState,
@@ -205,6 +206,44 @@ async fn a_silent_child_trips_the_startup_timeout() {
 #[tokio::test]
 async fn a_child_dying_during_startup_is_reported_as_a_crash() {
 	let error = start(options("startup_crash")).await.err().expect("handshake fails");
+	assert!(matches!(error, TransportError::Crashed { code: Some(3), .. }));
+}
+
+#[tokio::test]
+async fn a_child_can_refuse_the_resume_flag_alone() {
+	let refused = start(options("resume_crash").resuming(Some("dead-id".into()))).await;
+	assert!(matches!(refused.err(), Some(TransportError::Crashed { code: Some(4), .. })));
+
+	let harness = start(options("resume_crash")).await.expect("a fresh start is accepted");
+	harness.session.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_refused_resume_falls_back_to_a_fresh_session() {
+	let (tx, _events) = mpsc::unbounded_channel();
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
+
+	let session = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
+		.await
+		.expect("the fresh start rescues the launch");
+
+	assert!(!session.resumed(), "the fallback session must not claim the stored id");
+	session.shutdown().await;
+}
+
+/// A failure the fresh start reproduces belongs to the install, so it travels
+/// upward untouched and the caller never reaches the branch that would drop the
+/// stored id.
+#[tokio::test]
+async fn a_start_failing_without_the_resume_flag_too_stays_a_failure() {
+	let (tx, _events) = mpsc::unbounded_channel();
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
+
+	let error = start_with_fallback(options("startup_crash"), Some("dead-id".into()), sink)
+		.await
+		.err()
+		.expect("both attempts fail");
+
 	assert!(matches!(error, TransportError::Crashed { code: Some(3), .. }));
 }
 

@@ -78,9 +78,10 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 		.unwrap_or_else(|| PathBuf::from("."));
 
 	let sink = sink(&app);
-	let options = SessionOptions::new(binary, working_dir).resuming(resume.clone());
+	let options = SessionOptions::new(binary, working_dir);
+	let has_stored_id = resume.is_some();
 
-	let session = match Session::start(options, sink.clone()).await {
+	let session = match start_with_fallback(options, resume, sink.clone()).await {
 		Ok(session) => session,
 		Err(error) => {
 			sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Unavailable });
@@ -89,10 +90,38 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 		}
 	};
 
+	if has_stored_id && !session.resumed() {
+		if let Some(path) = store::file(&app) {
+			store::forget_session_id(&path);
+		}
+		sink.emit(ClaudeEvent::Failed { error: TransportError::ResumeFailed });
+	}
+
 	let handle = SessionHandle { resumed: session.resumed() };
 	*state.session.lock().await = Some(Arc::new(session));
 	sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Ready });
 	Ok(handle)
+}
+
+/// A dead stored id and a broken install both surface as the same startup
+/// failure, and stderr — the one channel that would tell them apart — is
+/// discarded on purpose. So the id is only blamed once a resume-free start has
+/// proven it wrong: a second failure means `--resume` was never the variable,
+/// and the stored id is kept rather than costing the reader their transcript.
+pub async fn start_with_fallback(
+	options: SessionOptions,
+	resume: Option<String>,
+	sink: Arc<dyn EventSink>,
+) -> Result<Session, TransportError> {
+	if resume.is_none() {
+		return Session::start(options, sink).await;
+	}
+
+	let refused = match Session::start(options.clone().resuming(resume), sink.clone()).await {
+		Ok(session) => return Ok(session),
+		Err(error) => error,
+	};
+	Session::start(options, sink).await.map_err(|_| refused)
 }
 
 #[tauri::command]
