@@ -1,5 +1,15 @@
 //! The session lifecycle driven end to end through the Tauri command layer.
 //!
+//! "End to end" stops at that layer: command handlers, `ClaudeState`, the real
+//! `Session` and its transport, the fake Claude child, and a relaunch through the
+//! on-disk store. Nothing above the IPC boundary runs — no React mount, no
+//! `chat-screen.tsx`, no `use-chat` subscription, no rendering — and `MockRuntime`
+//! never emits `RunEvent::Exit`, so shutdown-on-quit is unproven here too.
+//! `SMOKE.md` covers both by hand.
+//!
+//! No WebDriver alternative exists: macOS WKWebView exposes no WebDriver endpoint,
+//! so `tauri-driver` supports Linux and Windows only.
+//!
 //! Deliberately a single test: the binary override and the fake's scenario are
 //! process-global, and `cargo test` runs the tests of one binary in parallel, so
 //! a second `#[test]` here would race on them.

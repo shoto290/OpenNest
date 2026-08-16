@@ -87,6 +87,9 @@ Repeat the pair for each way out of the app:
 
 ## Known limitations
 
+- Every UI check here is manual because nothing automates it: `e2e_session.rs`
+  stops at the Tauri command layer and never mounts React, and `tauri-driver`
+  has no macOS support — WKWebView exposes no WebDriver endpoint.
 - `kill -9` on the app leaves the process group behind. `SIGKILL` is
   uncatchable, so no handler runs — this is not a failure of the shutdown path.
 - A WKWebView content-process crash is not covered. Tauri v2 exposes no portable
