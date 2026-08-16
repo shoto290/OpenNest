@@ -9,7 +9,7 @@ use opennest_app::claude::contract::{
 	ActivityKind, ActivityStatus, ClaudeEvent, ConnectionState, MessageCompletion,
 	PermissionDecision, PermissionRequest, TransportError, TurnOutcome, TurnState,
 };
-use opennest_app::claude::session::{EventSink, Session, SessionOptions, SHUTDOWN_GRACE};
+use opennest_app::claude::session::{self, EventSink, Session, SessionOptions, SHUTDOWN_GRACE};
 use tokio::sync::mpsc;
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
@@ -632,6 +632,46 @@ async fn a_start_that_crashes_takes_its_group_down_with_it() {
 	poll_until("the failed start to leave no orphan behind", || !is_alive(orphan)).await;
 
 	let _ = std::fs::remove_file(&pid_file);
+}
+
+/// A child that dies on its own is reaped where it is read, and the pid it held
+/// goes back to the system the moment it is. Anything still tracking that pid —
+/// the exit sweep, the quit path, a restart — would be aiming a `SIGKILL` at
+/// whoever holds it by then, so the group has to be spent and dropped in the
+/// same breath as the reaping.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_child_that_exits_on_its_own_spends_its_group_and_stops_tracking_it() {
+	let pid_file = probe_file("natural-exit");
+	let mut harness = start(
+		options("crash")
+			.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
+			.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1"),
+	)
+	.await
+	.expect("session starts");
+	let pid = harness.session.pid();
+
+	poll_until("the fake to record its grandchild", || recorded_pid(&pid_file).is_some()).await;
+	let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");
+	let _ = std::fs::remove_file(&pid_file);
+
+	harness.submit("meurs").await.expect("prompt accepted");
+	harness.drain_turn().await;
+
+	assert!(
+		!session::live_groups().contains(&pid),
+		"a reaped pid stayed on the list a later sweep signals"
+	);
+	poll_until("the reaping to take the grandchild with it", || !is_alive(orphan)).await;
+
+	tokio::time::timeout(DEADLINE, harness.session.terminate())
+		.await
+		.expect("the quit path never returned");
+	assert!(
+		!session::live_groups().contains(&pid),
+		"the quit path put a reaped pid back on the list"
+	);
 }
 
 #[cfg(unix)]

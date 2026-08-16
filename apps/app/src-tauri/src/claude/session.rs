@@ -213,6 +213,7 @@ impl Session {
 			pending.clone(),
 			sink.clone(),
 			child.clone(),
+			pid,
 		));
 
 		let stdin_tx = StdinChannel::new(Some(stdin_tx));
@@ -245,7 +246,7 @@ impl Session {
 		match tokio::time::timeout(timeout, ack).await {
 			Ok(Ok(())) => Ok(()),
 			Ok(Err(_)) => {
-				let code = wait_code(&self.child).await;
+				let code = wait_code(&self.child, self.pid).await;
 				// The child is gone, but a start reaches this far only after it
 				// has had time to spawn its own children, and reaping it never
 				// reaches those.
@@ -362,8 +363,12 @@ impl Session {
 		let mut slot = self.child.lock().await;
 		let Some(child) = slot.as_mut() else { return };
 
-		signal_group(self.pid, Signal::Term);
-		let _ = tokio::time::timeout(TERMINATE_GRACE, child.wait()).await;
+		// A reaped child no longer vouches for its pid, and the system may have
+		// handed that pid to somebody else by now.
+		if !matches!(child.try_wait(), Ok(Some(_))) {
+			signal_group(self.pid, Signal::Term);
+			let _ = tokio::time::timeout(TERMINATE_GRACE, child.wait()).await;
+		}
 		sweep_group(self.pid);
 		*slot = None;
 	}
@@ -403,10 +408,23 @@ fn remember_group(pid: u32) {
 
 /// The one place a group is signalled for good, so it stops being tracked in
 /// the same breath: the system reuses pids, and a stale one left on the list
-/// would hand a later sweep somebody else's processes.
+/// would hand a later sweep somebody else's processes. Only whoever takes it off
+/// the list signals it, which is what keeps a second sweep of the same pid from
+/// reaching whoever holds it by then.
 fn sweep_group(pid: u32) {
-	signal_group(pid, Signal::Kill);
-	LIVE_GROUPS.lock().expect("live groups").retain(|live| *live != pid);
+	if forget_group(pid) {
+		signal_group(pid, Signal::Kill);
+	}
+}
+
+/// Answers whether this call is the one that dropped the group.
+fn forget_group(pid: u32) -> bool {
+	let mut live = LIVE_GROUPS.lock().expect("live groups");
+	let Some(index) = live.iter().position(|entry| *entry == pid) else {
+		return false;
+	};
+	live.swap_remove(index);
+	true
 }
 
 /// Sweeps what the host's exit would otherwise abandon, a session still
@@ -418,22 +436,32 @@ pub fn sweep_live_groups() {
 	}
 }
 
+/// The groups a sweep would still reach. Public because the list is otherwise
+/// only observable by signalling it, and a test proving a reaped group stops
+/// being tracked cannot afford to.
+pub fn live_groups() -> Vec<u32> {
+	LIVE_GROUPS.lock().expect("live groups").clone()
+}
+
 /// Leaves the handle in place: the read loop and a failed handshake both want
 /// the exit code, and `wait` on an already-reaped child returns the cached
 /// status. Clearing the slot is `kill`'s job.
+///
+/// The group is not left in place. Reaping is what frees the pid for the system
+/// to hand out again, so this is the last moment the group is still
+/// unmistakably this session's — and the grandchildren the reaping never
+/// reached are still in it.
 ///
 /// Bounded because both callers reach here on stdout EOF, which says the child
 /// stopped talking and nothing about whether it stopped running. Waiting on one
 /// that kept running would hold the child lock for good, and the shutdown that
 /// needs that lock is the only thing left that could end it.
-async fn wait_code(child: &Arc<Mutex<Option<Child>>>) -> Option<i32> {
+async fn wait_code(child: &Arc<Mutex<Option<Child>>>, pid: u32) -> Option<i32> {
 	let mut slot = child.lock().await;
 	let handle = slot.as_mut()?;
-	tokio::time::timeout(EXIT_CODE_GRACE, handle.wait())
-		.await
-		.ok()?
-		.ok()
-		.and_then(|status| status.code())
+	let waited = tokio::time::timeout(EXIT_CODE_GRACE, handle.wait()).await.ok()?;
+	sweep_group(pid);
+	waited.ok().and_then(|status| status.code())
 }
 
 fn spawn(options: &SessionOptions) -> Result<Child, TransportError> {
@@ -494,6 +522,7 @@ async fn read_loop(
 	pending: PendingControls,
 	sink: Arc<dyn EventSink>,
 	child: Arc<Mutex<Option<Child>>>,
+	pid: u32,
 ) {
 	let mut lines = BufReader::new(stdout).lines();
 	let mut index: u64 = 0;
@@ -542,7 +571,7 @@ async fn read_loop(
 	// Dropping the acks turns any in-flight control request into a failure
 	// instead of leaving the caller to time out on a process that is gone.
 	pending.lock().await.clear();
-	on_exit(shared, sink, child).await;
+	on_exit(shared, sink, child, pid).await;
 }
 
 impl From<TurnOutcome> for TurnState {
@@ -569,6 +598,7 @@ async fn on_exit(
 	shared: Arc<Mutex<Shared>>,
 	sink: Arc<dyn EventSink>,
 	child: Arc<Mutex<Option<Child>>>,
+	pid: u32,
 ) {
 	let failing = {
 		let mut guard = shared.lock().await;
@@ -578,7 +608,7 @@ async fn on_exit(
 		guard.set_turn(TurnState::Failed)
 	};
 
-	let code = wait_code(&child).await;
+	let code = wait_code(&child, pid).await;
 
 	sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed });
 	sink.emit(ClaudeEvent::Failed {
