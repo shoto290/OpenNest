@@ -198,8 +198,8 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 	const runs = toRuns(toTranscriptRows(state.messages))
 	const working = workingStateFor(state)
 
-	const preflight = useCallback(() => {
-		void controller.preflight()
+	const restart = useCallback(() => {
+		void controller.restart()
 	}, [controller])
 
 	useEffect(() => {
@@ -240,7 +240,7 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 										label: "Restart session",
 										onRetry: () => {
 											setDismissedErrorId(notice.id)
-											preflight()
+											restart()
 										},
 									}
 								: undefined
@@ -262,7 +262,7 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 				<ChatEmptyState
 					className="m-auto"
 					status={emptyStateStatus}
-					onSetup={preflight}
+					onSetup={restart}
 				/>
 			) : null}
 

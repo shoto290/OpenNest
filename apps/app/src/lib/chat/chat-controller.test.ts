@@ -521,9 +521,36 @@ describe("createChatController", () => {
 		expect(loadSpy).toHaveBeenCalledTimes(1)
 		expect(startSpy).toHaveBeenCalledWith("s-stored")
 		const state = controller.getState()
+		expect(state.sessionId).toBe("s-stored")
 		expect(state.messages).toEqual(STORED_SNAPSHOT.messages)
 		expect(state.activities).toEqual(STORED_SNAPSHOT.activities)
 		expect(isSessionReady(state)).toBe(true)
+	})
+
+	// The id comes back from the child on the first prompt, never on the resume
+	// itself, so the write that precedes that prompt is the one that used to erase
+	// it — and a crash right there boots the next launch amnesiac.
+	it("never writes a null session id over the one it just resumed", async () => {
+		const { controller, saved } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		await controller.send("et après ?")
+
+		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
+	})
+
+	it("resumes the stored session when the restart affordance is used", async () => {
+		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.restart()
+		await vi.runAllTimersAsync()
+
+		expect(startSpy).toHaveBeenCalledWith("s-stored")
+		expect(controller.getState().sessionId).toBe("s-stored")
 	})
 
 	it("boots without a resume id when nothing was stored", async () => {

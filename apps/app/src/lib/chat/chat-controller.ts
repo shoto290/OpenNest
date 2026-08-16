@@ -29,6 +29,9 @@ export type ChatController = {
 	 * construction: two parallel effects would open a brand-new session while the
 	 * transcript is still loading, and the resume id would be lost. */
 	boot: () => Promise<SessionHandle | null>
+	/** Reopens the session the transcript belongs to. The recovery affordance the
+	 * reader is offered, so it resumes rather than starting Claude amnesiac. */
+	restart: () => Promise<SessionHandle | null>
 	/** Drops the transcript on purpose. A restart never does this — a dead session
 	 * clears its own state and leaves what the reader can still see. */
 	clearConversation: () => void
@@ -174,7 +177,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 
 	const start = async (resume?: string) => {
 		epoch += 1
-		dispatch({ type: "sessionReset", epoch })
+		dispatch({ type: "sessionReset", epoch, sessionId: resume ?? null })
 		try {
 			if (detach) {
 				await connect()
@@ -211,6 +214,8 @@ export function createChatController(driver: ChatDriver): ChatController {
 		}
 		return preflight(snapshot?.sessionId ?? undefined)
 	}
+
+	const restart = () => preflight(state.sessionId ?? undefined)
 
 	const clearConversation = () => {
 		dispatch({ type: "conversationCleared" })
@@ -296,6 +301,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 		start,
 		preflight,
 		boot,
+		restart,
 		clearConversation,
 		send,
 		stop,

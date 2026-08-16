@@ -157,6 +157,7 @@ describe("chatReducer", () => {
 		const reset = chatReducer(initialChatState, {
 			type: "sessionReset",
 			epoch: 2,
+			sessionId: null,
 		})
 		const stale = chatReducer(reset, {
 			type: "driverEvent",
@@ -264,7 +265,11 @@ describe("chatReducer", () => {
 			type: "binaryVersion",
 			version: "1.2.3",
 		})
-		const reset = chatReducer(versioned, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(versioned, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 		expect(reset.connection).toBe("ready")
 		expect(reset.binaryVersion).toBe("1.2.3")
 		expect(reset.epoch).toBe(1)
@@ -318,7 +323,11 @@ describe("turn predicates", () => {
 		const ready: ChatState = { ...initialChatState, connection: "ready" }
 		const open = chatReducer(ready, { type: "sessionOpened" })
 		expect(isSessionReady(open)).toBe(true)
-		const reset = chatReducer(open, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(open, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 		expect(reset.sessionOpen).toBe(false)
 		expect(isSessionReady(reset)).toBe(false)
 	})
@@ -410,7 +419,11 @@ describe("session reset", () => {
 			conversation,
 		)
 		const open = chatReducer(live, { type: "sessionOpened" })
-		const reset = chatReducer(open, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(open, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 
 		expect(reset.messages).toEqual(open.messages)
 		expect(reset.activities).toEqual(open.activities)
@@ -421,9 +434,29 @@ describe("session reset", () => {
 		expect(reset.epoch).toBe(1)
 	})
 
+	// The child re-announces its id only on the first prompt of the new session,
+	// so a reset that drops the id leaves the app unable to name what it resumed.
+	it("carries the resumed id through the reset that opens it", () => {
+		const live = applyEvents(
+			{ ...initialChatState, connection: "ready" },
+			conversation,
+		)
+		const reset = chatReducer(live, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: "s-1",
+		})
+
+		expect(reset.sessionId).toBe("s-1")
+	})
+
 	it("settles a message left mid-stream by the session that died", () => {
 		const streaming = applyEvents(initialChatState, streamedTurn)
-		const reset = chatReducer(streaming, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(streaming, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 
 		expect(reset.messages[0].text).toBe("Bonjour le monde")
 		expect(reset.messages[0].completion).toBe("failed")
@@ -478,6 +511,7 @@ describe("session restore", () => {
 		const reset = chatReducer(restore(initialChatState), {
 			type: "sessionReset",
 			epoch: 1,
+			sessionId: null,
 		})
 
 		expect(reset.messages).toEqual(snapshot.messages)
@@ -497,7 +531,11 @@ describe("session restore", () => {
 			type: "sessionRestored",
 			snapshot: interrupted,
 		})
-		const reset = chatReducer(restored, { type: "sessionReset", epoch: 1 })
+		const reset = chatReducer(restored, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
 
 		expect(reset.messages[0]).toMatchObject({
 			text: "Bonjour le monde",

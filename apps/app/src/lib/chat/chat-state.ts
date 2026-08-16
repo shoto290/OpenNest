@@ -39,8 +39,10 @@ export type ChatState = {
 export type ChatAction =
 	| { type: "driverEvent"; epoch: number; event: ClaudeEvent }
 	/** A session died or was replaced. Clears what belonged to that process and
-	 * keeps the transcript the reader can still see. */
-	| { type: "sessionReset"; epoch: number }
+	 * keeps the transcript the reader can still see. `sessionId` is the id the new
+	 * session resumes: the child only re-announces it on the first prompt, so
+	 * dropping it here would write `null` over a session that is very much alive. */
+	| { type: "sessionReset"; epoch: number; sessionId: string | null }
 	/** Drops the transcript itself. Only a deliberate "new conversation" does this. */
 	| { type: "conversationCleared" }
 	/** Hydrates the stored transcript on boot. Ignored the moment anything is
@@ -325,7 +327,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 				epoch: action.epoch,
 				turn: "idle",
 				sessionOpen: false,
-				sessionId: null,
+				sessionId: action.sessionId,
 				permission: null,
 				deltaSeqs: {},
 				messages: finalizeStreaming(state.messages, "failed"),
