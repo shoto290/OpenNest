@@ -19,6 +19,8 @@ Requirements: [Bun](https://bun.sh) and the [Rust toolchain](https://rustup.rs).
 bun run tauri:build
 ```
 
+Before tagging a release, walk [`apps/app/SMOKE.md`](apps/app/SMOKE.md) — the manual checks against a real Claude Code that the automated suite cannot reach.
+
 ## Adding components
 
 To add components to your app, run the following command at the root of your `app` app:
