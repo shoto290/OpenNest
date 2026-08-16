@@ -94,10 +94,11 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 	};
 
 	if let Some(refusal) = &started.resume_refusal {
-		if let Some(path) = store::file(&app) {
-			forget_the_id_a_refusal_blames(&path, refusal);
-		}
-		sink.emit(ClaudeEvent::Failed { error: TransportError::ResumeFailed });
+		let forgot_session_id =
+			forget_the_id_a_refusal_blames(store::file(&app).as_deref(), refusal);
+		sink.emit(ClaudeEvent::Failed {
+			error: TransportError::ResumeFailed { forgot_session_id },
+		});
 	}
 
 	let session = started.session;
@@ -112,10 +113,20 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 /// looks like — Claude replays the transcript before it acknowledges anything —
 /// and dropping the id there would cost a reader the very conversation whose
 /// size caused the wait.
-fn forget_the_id_a_refusal_blames(path: &Path, refusal: &TransportError) {
-	if matches!(refusal, TransportError::Crashed { .. }) {
+///
+/// Answers whether the id was given up on, because the frontend holds a copy of
+/// it and only the two dropped together stay in step: a frontend that drops one
+/// the host kept writes `null` straight back over it on the next prompt. The
+/// verdict does not depend on the store being reachable — an unreachable one
+/// leaves the id no less spent.
+fn forget_the_id_a_refusal_blames(path: Option<&Path>, refusal: &TransportError) -> bool {
+	if !matches!(refusal, TransportError::Crashed { .. }) {
+		return false;
+	}
+	if let Some(path) = path {
 		store::forget_session_id(path);
 	}
+	true
 }
 
 /// A launch, and what it spent on the way. `resume_refusal` carries why a
@@ -244,16 +255,18 @@ mod tests {
 			SessionSnapshot { session_id: Some("session-1".into()), ..SessionSnapshot::default() };
 		store::save(&path, &snapshot);
 
-		forget_the_id_a_refusal_blames(
-			&path,
+		let spent = forget_the_id_a_refusal_blames(
+			Some(&path),
 			&TransportError::StartupTimeout { timeout_ms: 30_000 },
 		);
+		assert!(!spent, "a slow resume was reported to the frontend as a spent id");
 		assert_eq!(stored_id(&path).as_deref(), Some("session-1"), "a slow resume cost the id");
 
-		forget_the_id_a_refusal_blames(
-			&path,
+		let spent = forget_the_id_a_refusal_blames(
+			Some(&path),
 			&TransportError::Crashed { code: Some(4), detail: None },
 		);
+		assert!(spent, "the frontend was left holding an id the host gave up on");
 		assert_eq!(stored_id(&path), None, "a refused id outlived the crash that proved it dead");
 
 		std::fs::remove_dir_all(&dir).expect("cleanup");

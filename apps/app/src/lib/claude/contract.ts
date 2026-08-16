@@ -48,7 +48,7 @@ export type TransportError =
 	| { kind: "spawnFailed"; detail: string }
 	| { kind: "startupTimeout"; timeoutMs: number }
 	| { kind: "crashed"; code: number | null; detail: string | null }
-	| { kind: "resumeFailed" }
+	| { kind: "resumeFailed"; forgotSessionId: boolean }
 	| { kind: "invalidFrame"; detail: string }
 	| { kind: "notStarted" }
 	| { kind: "turnAlreadyRunning" }

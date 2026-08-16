@@ -556,14 +556,38 @@ describe("createChatController", () => {
 	// The host forgets the id on disk the moment the child refuses it, so keeping
 	// it here would write it back and retry a dead session on every launch.
 	it("stops carrying a stored id the child refused to resume", async () => {
-		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		const { driver, controller, saved } = storedHarness(STORED_SNAPSHOT)
 		await controller.boot()
 		await vi.runAllTimersAsync()
 		expect(controller.getState().sessionId).toBe("s-stored")
 
-		driver.pushEvent({ type: "failed", error: { kind: "resumeFailed" } })
-
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "resumeFailed", forgotSessionId: true },
+		})
 		expect(controller.getState().sessionId).toBeNull()
+
+		await controller.send("et après ?")
+
+		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual([null])
+	})
+
+	// A resume that only ran out of time proves nothing, so the host keeps the id
+	// on disk. The prompt that follows is what would write a null over it.
+	it("keeps a stored id the host refused to give up on", async () => {
+		const { driver, controller, saved } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "resumeFailed", forgotSessionId: false },
+		})
+		expect(controller.getState().sessionId).toBe("s-stored")
+
+		await controller.send("et après ?")
+
+		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
 	})
 
 	it("resumes the stored session when the restart affordance is used", async () => {

@@ -253,8 +253,9 @@ describe("notices", () => {
 	})
 
 	it("keeps a refused resume out of the session-ending errors", () => {
-		expect(needsFreshSession({ kind: "resumeFailed" })).toBe(false)
-		expect(noticeTitleFor({ kind: "resumeFailed" })).toBe(
+		const refused = { kind: "resumeFailed", forgotSessionId: true } as const
+		expect(needsFreshSession(refused)).toBe(false)
+		expect(noticeTitleFor(refused)).toBe(
 			"Previous conversation could not be resumed",
 		)
 	})

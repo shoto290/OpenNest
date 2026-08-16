@@ -128,10 +128,14 @@ pub enum TransportError {
 		code: Option<i32>,
 		detail: Option<String>,
 	},
-	/// The stored id was refused and a fresh session took its place. Carries no
-	/// payload: the underlying failure is already spent and nothing about it is
-	/// actionable once the replacement session is up.
-	ResumeFailed,
+	/// The stored id was refused and a fresh session took its place. The
+	/// underlying failure is spent and nothing about it is actionable once the
+	/// replacement session is up — but whether the host gave the id up is, since
+	/// the frontend holds a copy of it that would otherwise be written back.
+	#[serde(rename_all = "camelCase")]
+	ResumeFailed {
+		forgot_session_id: bool,
+	},
 	#[serde(rename_all = "camelCase")]
 	InvalidFrame {
 		detail: String,
@@ -173,7 +177,9 @@ impl std::fmt::Display for TransportError {
 				write!(f, "startup timed out after {timeout_ms}ms")
 			}
 			TransportError::Crashed { code, .. } => write!(f, "claude exited with {code:?}"),
-			TransportError::ResumeFailed => write!(f, "the stored session could not be resumed"),
+			TransportError::ResumeFailed { .. } => {
+				write!(f, "the stored session could not be resumed")
+			}
 			TransportError::InvalidFrame { detail } => write!(f, "invalid frame: {detail}"),
 			TransportError::NotStarted => write!(f, "session not started"),
 			TransportError::TurnAlreadyRunning => write!(f, "a turn is already running"),

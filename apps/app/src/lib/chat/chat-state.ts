@@ -293,11 +293,15 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 	}
 }
 
-/** The host forgets a stored id the child refused to resume, so holding it would
- * write it straight back and make every launch retry a session that is gone. */
+/** Only a refusal that cost the host its stored id costs this one too: holding an
+ * id the host gave up on would write it straight back and make every launch retry
+ * a session that is gone, and dropping one the host kept — a resume that only ran
+ * out of time proves nothing — writes `null` over a live conversation instead. */
 function applyFailure(state: ChatState, error: TransportError): ChatState {
 	const next = pushError(state, error)
-	return error.kind === "resumeFailed" ? { ...next, sessionId: null } : next
+	return error.kind === "resumeFailed" && error.forgotSessionId
+		? { ...next, sessionId: null }
+		: next
 }
 
 function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {

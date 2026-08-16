@@ -157,7 +157,7 @@ fn message_started(seen: &[ClaudeEvent]) -> Option<()> {
 
 fn resume_failure(seen: &[ClaudeEvent]) -> Option<()> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::Failed { error: TransportError::ResumeFailed } => Some(()),
+		ClaudeEvent::Failed { error: TransportError::ResumeFailed { .. } } => Some(()),
 		_ => None,
 	})
 }
