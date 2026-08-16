@@ -195,6 +195,21 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 	return { kind: writing ? "writing" : "thinking" }
 }
 
+/** Whether the sidebar shows the bot as busy, and with what. A pending
+ * permission counts as busy: the turn is waiting on the reader, not over. */
+export type SidebarActivity = {
+	isWorking: boolean
+	kind?: BotWorkingKind
+}
+
+export function sidebarActivityFor(state: ChatState): SidebarActivity {
+	const working = workingStateFor(state)
+	if (!working) {
+		return { isWorking: false }
+	}
+	return { isWorking: true, kind: working.kind }
+}
+
 export function toActivityItems(
 	activities: ActivityEvent[],
 ): AgentActivityStep[] {

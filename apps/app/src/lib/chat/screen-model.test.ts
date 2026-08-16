@@ -6,6 +6,7 @@ import {
 	emptyStateStatusFor,
 	needsFreshSession,
 	noticeTitleFor,
+	sidebarActivityFor,
 	toActivityItems,
 	toRuns,
 	toTranscriptRows,
@@ -213,6 +214,64 @@ describe("workingStateFor", () => {
 			workingStateFor(chatState({ messages: [message({ text: "Well" })] }))
 				?.kind,
 		).toBe("writing")
+	})
+})
+
+describe("sidebarActivityFor", () => {
+	it("goes quiet once the turn is over, kind and all", () => {
+		expect(sidebarActivityFor(chatState({ turn: "idle" }))).toEqual({
+			isWorking: false,
+		})
+		expect(sidebarActivityFor(chatState({ turn: "failed" }))).toEqual({
+			isWorking: false,
+		})
+	})
+
+	it("stays awake for every stage of a busy turn", () => {
+		expect(sidebarActivityFor(chatState({ turn: "submitting" })).isWorking).toBe(
+			true,
+		)
+		expect(sidebarActivityFor(chatState({ turn: "running" })).isWorking).toBe(
+			true,
+		)
+		expect(sidebarActivityFor(chatState({ turn: "stopping" })).isWorking).toBe(
+			true,
+		)
+	})
+
+	it("thinks when the turn has nothing to show yet", () => {
+		expect(sidebarActivityFor(chatState())).toEqual({
+			isWorking: true,
+			kind: "thinking",
+		})
+	})
+
+	it("carries the pose read off the running step", () => {
+		const state = chatState({
+			activities: [activity({ title: "Grep · driver" })],
+		})
+
+		expect(sidebarActivityFor(state)).toEqual({
+			isWorking: true,
+			kind: "searching",
+		})
+	})
+
+	it("keeps waiting on the reader as a busy state", () => {
+		const state = chatState({
+			activities: [activity()],
+			permission: {
+				id: "req-1",
+				toolName: "Bash",
+				title: "Run npm test",
+				detail: null,
+			},
+		})
+
+		expect(sidebarActivityFor(state)).toEqual({
+			isWorking: true,
+			kind: "waiting",
+		})
 	})
 })
 
