@@ -19,7 +19,6 @@ import {
 } from "@workspace/ui/components/chat-turn"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
-import { SidebarToggle } from "@workspace/ui/components/sidebar-toggle"
 import {
 	ToolApproval,
 	ToolApprovalCode,
@@ -220,7 +219,6 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 				<AppHeader
 					insetWindowControls
 					data-tauri-drag-region="deep"
-					leading={<SidebarToggle />}
 					trailing={
 						<ConnectionStatus
 							state={state.connection}

@@ -7,16 +7,15 @@ import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 import {
 	AnimatedSidebar,
 	AnimatedSidebarContent,
-	AnimatedSidebarGroupLabel,
 	AnimatedSidebarHeader,
 	AnimatedSidebarMenu,
 	AnimatedSidebarMenuButton,
 	AnimatedSidebarMenuItem,
 } from "@workspace/ui/components/motion/animated-sidebar"
-import { SidebarToggle } from "@workspace/ui/components/sidebar-toggle"
 
 const ROW_AVATAR_SIZE = 56
 const PANEL_LABEL = "Conversations"
+const WINDOW_CONTROLS_INSET = "h-12 p-0"
 
 interface AgentSidebarProps {
 	status?: "idle" | "working"
@@ -36,15 +35,8 @@ const AgentSidebarBase = ({
 		ariaLabel={PANEL_LABEL}
 		collapsible="icon"
 	>
-		<AnimatedSidebarHeader>
-			<div className="flex items-center justify-between gap-2 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:gap-0">
-				<AnimatedSidebarGroupLabel className="min-w-0 truncate">
-					{PANEL_LABEL}
-				</AnimatedSidebarGroupLabel>
-				<SidebarToggle />
-			</div>
-		</AnimatedSidebarHeader>
-		<AnimatedSidebarContent className="group-data-[state=collapsed]/sidebar:px-0">
+		<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET} />
+		<AnimatedSidebarContent className="pt-0 group-data-[state=collapsed]/sidebar:px-0">
 			<AnimatedSidebarMenu>
 				<AnimatedSidebarMenuItem>
 					<AnimatedSidebarMenuButton
