@@ -59,7 +59,7 @@ fn read(path: &Path) -> Stored {
 /// half-restored transcript is worse than an empty one, and a file this build
 /// cannot parse may still belong to another.
 pub fn load(path: &Path) -> SessionSnapshot {
-	sweep_temporaries(path);
+	sweep_abandoned_temporaries(path);
 	match read(path) {
 		Stored::Snapshot(snapshot) => snapshot,
 		Stored::Missing | Stored::Unreadable => SessionSnapshot::default(),
@@ -111,9 +111,19 @@ fn backup(path: &Path) -> PathBuf {
 }
 
 /// A crash between a temporary's creation and its rename leaves it behind for
-/// good. A read is the one moment where every temporary around is known to be
-/// abandoned: it happens before this process has written anything, and the
+/// good. The first read of a run is the one moment where every temporary around
+/// is known to be abandoned: nothing this process wrote can exist yet, and the
 /// single-instance lock keeps another one from saving into the same directory.
+///
+/// No read after it carries that promise. `claude_load_session` is a command the
+/// frontend may call whenever it likes, and a save caught between its
+/// `File::create` and its rename would lose the temporary underneath it and
+/// return having written nothing at all.
+fn sweep_abandoned_temporaries(path: &Path) {
+	static ONCE: std::sync::Once = std::sync::Once::new();
+	ONCE.call_once(|| sweep_temporaries(path));
+}
+
 fn sweep_temporaries(path: &Path) {
 	let (Some(parent), Some(stem)) = (path.parent(), path.file_stem()) else {
 		return;
@@ -314,7 +324,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_temporary_left_by_a_crashed_save_is_swept_on_the_next_read() {
+	fn a_temporary_left_by_a_crashed_save_is_swept_and_nothing_else_is() {
 		let dir = temp_dir();
 		let path = dir.join(FILE_NAME);
 		let leftover = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
@@ -322,10 +332,28 @@ mod tests {
 		let unrelated = dir.join("keep.json");
 		fs::write(&unrelated, "not ours").expect("write");
 
-		load(&path);
+		sweep_temporaries(&path);
 
 		assert!(!leftover.exists(), "the abandoned temporary outlived the run that left it");
 		assert!(unrelated.exists(), "the sweep reached beyond its own temporaries");
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// Loading is a command, not a boot step: the frontend may ask for the
+	/// transcript at any time, and only the first read of a run can tell an
+	/// abandoned temporary from the one a save is holding open right now.
+	#[test]
+	fn a_read_after_the_first_one_leaves_a_save_in_flight_alone() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		load(&path);
+
+		let in_flight = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+		fs::write(&in_flight, "a save between its create and its rename").expect("write");
+		load(&path);
+
+		assert!(in_flight.exists(), "a later read cancelled a save that was still writing");
 
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
