@@ -553,6 +553,19 @@ describe("createChatController", () => {
 		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
 	})
 
+	// The host forgets the id on disk the moment the child refuses it, so keeping
+	// it here would write it back and retry a dead session on every launch.
+	it("stops carrying a stored id the child refused to resume", async () => {
+		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		expect(controller.getState().sessionId).toBe("s-stored")
+
+		driver.pushEvent({ type: "failed", error: { kind: "resumeFailed" } })
+
+		expect(controller.getState().sessionId).toBeNull()
+	})
+
 	it("resumes the stored session when the restart affordance is used", async () => {
 		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
 		await controller.boot()

@@ -293,6 +293,13 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 	}
 }
 
+/** The host forgets a stored id the child refused to resume, so holding it would
+ * write it straight back and make every launch retry a session that is gone. */
+function applyFailure(state: ChatState, error: TransportError): ChatState {
+	const next = pushError(state, error)
+	return error.kind === "resumeFailed" ? { ...next, sessionId: null } : next
+}
+
 function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 	switch (event.type) {
 		case "connectionChanged":
@@ -318,7 +325,7 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
 		case "failed":
-			return pushError(state, event.error)
+			return applyFailure(state, event.error)
 	}
 }
 
