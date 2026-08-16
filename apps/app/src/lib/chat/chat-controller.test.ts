@@ -5,9 +5,22 @@ import { isSessionReady } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
 
-import type { ClaudeEvent, SessionSnapshot } from "../claude/contract"
+import type {
+	ChatMessage,
+	ClaudeEvent,
+	SessionSnapshot,
+} from "../claude/contract"
 
 const STEP_MS = 10
+const PERSIST_MS = 1000
+
+const STREAMING_MESSAGE: ChatMessage = {
+	id: "msg-1",
+	role: "assistant",
+	text: "",
+	completion: "streaming",
+	timestamp: 0,
+}
 
 const EMPTY_SNAPSHOT: SessionSnapshot = {
 	sessionId: null,
@@ -540,19 +553,67 @@ describe("createChatController", () => {
 		expect(isSessionReady(state)).toBe(true)
 	})
 
-	it("persists once when the turn ends, not once per streamed token", async () => {
+	it("persists the prompt on the way out, then the settled turn", async () => {
 		const { controller, saved } = storedHarness(EMPTY_SNAPSHOT)
 		await controller.boot()
 		await vi.runAllTimersAsync()
 		expect(saved).toHaveLength(0)
 
-		await controller.send("bonjour")
+		const sending = controller.send("bonjour")
+		expect(saved).toHaveLength(1)
+		expect(saved[0].messages).toEqual([
+			expect.objectContaining({ role: "user", text: "bonjour" }),
+		])
+
+		await sending
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
-		expect(saved).toHaveLength(1)
-		expect(saved[0].messages).toEqual(state.messages)
-		expect(saved[0].activities).toEqual(state.activities)
+		expect(saved).toHaveLength(2)
+		expect(saved[1].messages).toEqual(state.messages)
+		expect(saved[1].activities).toEqual(state.activities)
+	})
+
+	// Quitting while Claude answers used to lose the prompt and the partial reply
+	// alike, since nothing was written before the turn ended.
+	it("keeps the prompt and the partial answer of a turn that never ends", async () => {
+		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+
+		await controller.send("bonjour")
+		driver.pushEvent({ type: "turnChanged", state: "running" })
+		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Bon" })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 2, text: "jour" })
+		await vi.advanceTimersByTimeAsync(PERSIST_MS)
+
+		expect(controller.getState().turn).toBe("running")
+		expect(saved.at(-1)?.messages).toEqual([
+			expect.objectContaining({ role: "user", text: "bonjour" }),
+			expect.objectContaining({ text: "Bonjour", completion: "cancelled" }),
+		])
+	})
+
+	it("throttles the streaming write to once a second, not once per delta", async () => {
+		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+
+		await controller.send("bonjour")
+		driver.pushEvent({ type: "turnChanged", state: "running" })
+		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+
+		const deltas = 40
+		for (let seq = 1; seq <= deltas; seq += 1) {
+			driver.pushEvent({ type: "messageDelta", id: "msg-1", seq, text: "x" })
+			await vi.advanceTimersByTimeAsync(PERSIST_MS / 20)
+		}
+
+		expect(controller.getState().messages.at(-1)?.text).toHaveLength(deltas)
+		expect(saved).toHaveLength(3)
 	})
 
 	// The persisted snapshot is what a cold start paints, so a message left

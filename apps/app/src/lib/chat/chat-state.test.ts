@@ -484,6 +484,27 @@ describe("session restore", () => {
 		expect(reset.activities).toEqual(snapshot.activities)
 	})
 
+	// Quitting mid-answer writes a message the reducer never settled. It comes back
+	// stopped, which is what happened, and the reset that follows the boot must not
+	// turn it into a failure the reader never saw.
+	it("brings a transcript interrupted mid-stream back as stopped", () => {
+		const interrupted = toSessionSnapshot(
+			applyEvents(initialChatState, streamedTurn),
+		)
+		expect(interrupted.messages[0].completion).toBe("cancelled")
+
+		const restored = chatReducer(initialChatState, {
+			type: "sessionRestored",
+			snapshot: interrupted,
+		})
+		const reset = chatReducer(restored, { type: "sessionReset", epoch: 1 })
+
+		expect(reset.messages[0]).toMatchObject({
+			text: "Bonjour le monde",
+			completion: "cancelled",
+		})
+	})
+
 	it("leaves errors and pending permissions out of the snapshot it writes", () => {
 		const live = applyEvents(initialChatState, [
 			{ type: "turnChanged", state: "submitting" },
@@ -504,7 +525,7 @@ describe("session restore", () => {
 
 		expect(toSessionSnapshot(live)).toEqual({
 			sessionId: live.sessionId,
-			messages: live.messages,
+			messages: [assistantMessage({ completion: "cancelled" })],
 			activities: live.activities,
 		})
 	})

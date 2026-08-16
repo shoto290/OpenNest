@@ -41,6 +41,8 @@ export type ChatController = {
 
 const LOCAL_ID_PREFIX = "local-"
 
+const STREAMING_PERSIST_MS = 1000
+
 function toTransportError(reason: unknown): TransportError {
 	if (typeof reason === "object" && reason !== null && "kind" in reason) {
 		return reason as TransportError
@@ -71,6 +73,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 	let localSeq = 0
 	let detach: Promise<() => void> | null = null
 	let pendingPreflight: Promise<SessionHandle | null> | null = null
+	let scheduledPersist: ReturnType<typeof setTimeout> | null = null
 	const listeners = new Set<() => void>()
 
 	const dispatch = (action: ChatAction) => {
@@ -91,16 +94,37 @@ export function createChatController(driver: ChatDriver): ChatController {
 			event: { type: "failed", error: toTransportError(reason) },
 		})
 
-	const disconnect = () => {
-		detach?.then((unlisten) => unlisten())
-		detach = null
+	const writeSnapshot = () => {
+		void driver.saveSession(toSessionSnapshot(state)).catch(() => undefined)
 	}
 
-	/** The end of a turn is the one instant the transcript is worth writing: the
-	 * reducer has just settled every streaming message and recorded the session id,
-	 * and a per-event write would rewrite the whole transcript per streamed token. */
-	const persist = () => {
-		void driver.saveSession(toSessionSnapshot(state)).catch(() => undefined)
+	const cancelScheduledPersist = () => {
+		if (scheduledPersist === null) {
+			return
+		}
+		clearTimeout(scheduledPersist)
+		scheduledPersist = null
+	}
+
+	const persistNow = () => {
+		cancelScheduledPersist()
+		writeSnapshot()
+	}
+
+	/** A turn in flight is worth keeping — quitting mid-answer must not lose it —
+	 * but it emits one delta per token, and a write per delta would rewrite the
+	 * whole transcript per token. */
+	const persistSoon = () => {
+		scheduledPersist ??= setTimeout(() => {
+			scheduledPersist = null
+			writeSnapshot()
+		}, STREAMING_PERSIST_MS)
+	}
+
+	const disconnect = () => {
+		cancelScheduledPersist()
+		detach?.then((unlisten) => unlisten())
+		detach = null
 	}
 
 	/** Resolves once the subscription is live. Tauri registers listeners over IPC,
@@ -110,8 +134,15 @@ export function createChatController(driver: ChatDriver): ChatController {
 		disconnect()
 		detach = driver.subscribe((event) => {
 			dispatch({ type: "driverEvent", epoch: captured, event })
-			if (event.type === "turnEnded" && captured === epoch) {
-				persist()
+			if (captured !== epoch) {
+				return
+			}
+			if (event.type === "turnEnded") {
+				persistNow()
+				return
+			}
+			if (isTurnBusy(state.turn)) {
+				persistSoon()
 			}
 		})
 		return detach
@@ -215,6 +246,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 			timestamp: Date.now(),
 		}
 		dispatch({ type: "promptSubmitted", message })
+		persistNow()
 		await submit(message)
 	}
 

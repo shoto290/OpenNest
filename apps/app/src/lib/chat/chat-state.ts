@@ -118,11 +118,13 @@ export function turnForOutcome(outcome: TurnOutcome): TurnState {
 
 /** Only what survives a restart. `errors` stay behind because their ids are minted
  * from a live counter a restored one would collide with, and a pending permission
- * has no business on disk. */
+ * has no business on disk. The store hands back exactly what it was given, so a
+ * message caught mid-stream is written as stopped: nothing on disk can resume, and
+ * an interrupted answer is not a failed one. */
 export function toSessionSnapshot(state: ChatState): SessionSnapshot {
 	return {
 		sessionId: state.sessionId,
-		messages: state.messages,
+		messages: finalizeStreaming(state.messages, "cancelled"),
 		activities: state.activities,
 	}
 }
