@@ -6,9 +6,11 @@ use tokio::sync::Mutex;
 
 use super::binary;
 use super::contract::{
-	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, SessionHandle, TransportError,
+	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, SessionHandle, SessionSnapshot,
+	TransportError,
 };
 use super::session::{EventSink, Session, SessionOptions};
+use super::store;
 
 pub const EVENT_CHANNEL: &str = "claude://event";
 
@@ -21,6 +23,8 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		claude_cancel_turn,
 		claude_respond_to_permission,
 		claude_shutdown,
+		claude_load_session,
+		claude_save_session,
 	]
 }
 
@@ -123,4 +127,19 @@ pub async fn claude_shutdown<R: Runtime>(
 	}
 	sink(&app).emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
+}
+
+/// Both persistence commands are infallible: an unreachable store leaves the
+/// frontend with an empty transcript, which is exactly what it would show a
+/// first-time user, and there is no recovery it could offer.
+#[tauri::command]
+pub async fn claude_load_session<R: Runtime>(app: AppHandle<R>) -> SessionSnapshot {
+	store::file(&app).map(|path| store::load(&path)).unwrap_or_default()
+}
+
+#[tauri::command]
+pub async fn claude_save_session<R: Runtime>(app: AppHandle<R>, snapshot: SessionSnapshot) {
+	if let Some(path) = store::file(&app) {
+		store::save(&path, &snapshot);
+	}
 }

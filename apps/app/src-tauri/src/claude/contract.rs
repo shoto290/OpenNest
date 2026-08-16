@@ -181,6 +181,17 @@ pub struct SessionHandle {
 	pub resumed: bool,
 }
 
+/// What survives a restart: the visible transcript and the id needed to resume
+/// it. Pending permissions and transport errors describe a moment, not a
+/// conversation, so they are left out.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSnapshot {
+	pub session_id: Option<String>,
+	pub messages: Vec<ChatMessage>,
+	pub activities: Vec<ActivityEvent>,
+}
+
 /// The single stream React consumes. One tagged union, no raw Claude payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]

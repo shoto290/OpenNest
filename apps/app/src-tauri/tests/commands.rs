@@ -9,13 +9,17 @@ use opennest_app::claude::ClaudeState;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{Listener, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 fn app() -> tauri::App<MockRuntime> {
+	build(mock_context(noop_assets()))
+}
+
+fn build(context: tauri::Context<MockRuntime>) -> tauri::App<MockRuntime> {
 	mock_builder()
 		.manage(ClaudeState::default())
 		.invoke_handler(invoke_handler())
-		.build(mock_context(noop_assets()))
+		.build(context)
 		.expect("app builds")
 }
 
@@ -75,4 +79,37 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	assert!(events
 		.iter()
 		.any(|event| matches!(event, ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking })));
+}
+
+/// The identifier decides the app data directory, so this test claims one of
+/// its own rather than writing where a real install would.
+#[test]
+fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
+	let mut context = mock_context(noop_assets());
+	context.config_mut().identifier = "com.opennest.store-test".into();
+	let app = build(context);
+	let window = WebviewWindowBuilder::new(&app, "main", Default::default())
+		.build()
+		.expect("window builds");
+
+	let snapshot = json!({
+		"sessionId": "session-1",
+		"messages": [{
+			"id": "m1",
+			"role": "user",
+			"text": "salut",
+			"completion": "complete",
+			"timestamp": 17
+		}],
+		"activities": [{ "id": "a1", "title": "Read", "kind": "tool", "status": "succeeded" }]
+	});
+
+	assert_eq!(
+		call(&window, "claude_save_session", json!({ "snapshot": snapshot })),
+		Ok(Value::Null)
+	);
+	assert_eq!(call(&window, "claude_load_session", json!({})), Ok(snapshot));
+
+	let dir = app.path().app_data_dir().expect("data dir");
+	std::fs::remove_dir_all(&dir).expect("cleanup");
 }
