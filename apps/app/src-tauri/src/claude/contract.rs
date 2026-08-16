@@ -142,6 +142,10 @@ pub enum TransportError {
 	},
 	NotStarted,
 	TurnAlreadyRunning,
+	/// A lifecycle transition already owns the session. Transient: the caller is
+	/// refused rather than queued, so it never launches a second child behind the
+	/// first one's back.
+	TransitionInProgress,
 	NoActiveTurn,
 	#[serde(rename_all = "camelCase")]
 	UnknownPermission {
@@ -183,6 +187,9 @@ impl std::fmt::Display for TransportError {
 			TransportError::InvalidFrame { detail } => write!(f, "invalid frame: {detail}"),
 			TransportError::NotStarted => write!(f, "session not started"),
 			TransportError::TurnAlreadyRunning => write!(f, "a turn is already running"),
+			TransportError::TransitionInProgress => {
+				write!(f, "a session transition is already in progress")
+			}
 			TransportError::NoActiveTurn => write!(f, "no active turn"),
 			TransportError::UnknownPermission { id } => write!(f, "unknown permission {id}"),
 			TransportError::WriteFailed { detail } => write!(f, "write failed: {detail}"),

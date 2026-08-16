@@ -52,6 +52,7 @@ export type TransportError =
 	| { kind: "invalidFrame"; detail: string }
 	| { kind: "notStarted" }
 	| { kind: "turnAlreadyRunning" }
+	| { kind: "transitionInProgress" }
 	| { kind: "noActiveTurn" }
 	| { kind: "unknownPermission"; id: string }
 	| { kind: "writeFailed"; detail: string }

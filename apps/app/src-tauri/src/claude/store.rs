@@ -5,10 +5,13 @@
 //! created `0600` because the redaction discipline this crate applies on the
 //! way to the frontend stops at RAM — on disk the transcript is plain text.
 
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
@@ -66,11 +69,70 @@ pub fn load(path: &Path) -> SessionSnapshot {
 	}
 }
 
+/// Every write takes its number the moment it is asked for, and the file only
+/// moves forward through those numbers: an older intention that was still on its
+/// way once a newer one has been admitted has nothing left to say, so it is
+/// dropped rather than allowed to land last. The newest number is kept per store
+/// path — a number only orders writes aimed at the same file, and two paths must
+/// never cancel each other's.
+static NEWEST_ADMITTED: Mutex<BTreeMap<PathBuf, u64>> = Mutex::new(BTreeMap::new());
+static NEXT_NUMBER: AtomicU64 = AtomicU64::new(0);
+
+fn take_number() -> u64 {
+	NEXT_NUMBER.fetch_add(1, Ordering::Relaxed)
+}
+
+/// The number is recorded before any I/O and whether or not the write below ever
+/// reaches the disk: what makes an older intention stale is the newer ask, not
+/// the bytes landing. A panic under this lock leaves the numbers in the map
+/// truthful, so a poisoned lock is taken as it is rather than turning every save
+/// after it into a panic. The guard travels with the answer: an admitted write
+/// holds it for its whole run, so admitted writes go one at a time.
+fn admit(path: &Path, number: u64) -> Option<MutexGuard<'static, BTreeMap<PathBuf, u64>>> {
+	let mut newest = NEWEST_ADMITTED.lock().unwrap_or_else(PoisonError::into_inner);
+	if newest.get(path).is_some_and(|&admitted| admitted >= number) {
+		return None;
+	}
+	newest.insert(path.to_path_buf(), number);
+	Some(newest)
+}
+
+pub fn save(path: &Path, snapshot: &SessionSnapshot) {
+	save_in_order(path, snapshot, take_number());
+}
+
+fn save_in_order(path: &Path, snapshot: &SessionSnapshot, number: u64) {
+	let Some(_admitted) = admit(path, number) else {
+		return;
+	};
+	write_snapshot(path, snapshot);
+}
+
+/// A file this build cannot read holds no id to forget, and rewriting it here
+/// would spend the one copy another build may still be able to open.
+pub fn forget_session_id(path: &Path) {
+	forget_session_id_in_order(path, take_number());
+}
+
+/// The read happens under the same admission as the write it feeds: a save
+/// slipping in between the two would be read back and then written over by a
+/// forget that was already older than it.
+fn forget_session_id_in_order(path: &Path, number: u64) {
+	let Some(_admitted) = admit(path, number) else {
+		return;
+	};
+	let Stored::Snapshot(mut snapshot) = read(path) else {
+		return;
+	};
+	snapshot.session_id = None;
+	write_snapshot(path, &snapshot);
+}
+
 /// Never writes over bytes it could not read. Leaving them in place would only
 /// postpone the loss to the next prompt, so they are moved to `session.json.bak`
 /// and the write goes ahead — and if they cannot be moved, nothing is written at
 /// all.
-pub fn save(path: &Path, snapshot: &SessionSnapshot) {
+fn write_snapshot(path: &Path, snapshot: &SessionSnapshot) {
 	if matches!(read(path), Stored::Unreadable) && !keep_as_backup(path) {
 		return;
 	}
@@ -82,16 +144,6 @@ pub fn save(path: &Path, snapshot: &SessionSnapshot) {
 	if write_atomically(path, &temp, &body).is_err() {
 		let _ = fs::remove_file(&temp);
 	}
-}
-
-/// A file this build cannot read holds no id to forget, and rewriting it here
-/// would spend the one copy another build may still be able to open.
-pub fn forget_session_id(path: &Path) {
-	let Stored::Snapshot(mut snapshot) = read(path) else {
-		return;
-	};
-	snapshot.session_id = None;
-	save(path, &snapshot);
 }
 
 /// Answers whether the unreadable bytes are safe. The backup name is spent the
@@ -138,9 +190,19 @@ fn sweep_temporaries(path: &Path) {
 	}
 }
 
+/// Only the exact name a save writes is swept: the stem, a dot, the unique id it
+/// generated, then `.tmp`. Anything looser reaches past our own leftovers —
+/// `session-import.tmp` and `session.draft.tmp` are somebody else's files, and
+/// the sweep deleting them would be a loss no crash of ours caused.
 fn is_temporary(name: &OsStr, stem: &OsStr) -> bool {
-	name.as_encoded_bytes().starts_with(stem.as_encoded_bytes())
-		&& Path::new(name).extension().is_some_and(|extension| extension == "tmp")
+	let Some(after_stem) = name.as_encoded_bytes().strip_prefix(stem.as_encoded_bytes()) else {
+		return false;
+	};
+	let Some(unique) = after_stem.strip_prefix(b".").and_then(|rest| rest.strip_suffix(b".tmp"))
+	else {
+		return false;
+	};
+	std::str::from_utf8(unique).is_ok_and(|unique| uuid::Uuid::try_parse(unique).is_ok())
 }
 
 /// A crash mid-write must cost the last turn, not the whole transcript, so the
@@ -323,6 +385,9 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	/// The neighbours are the whole point: a name that merely starts like ours,
+	/// and one that ends like ours but carries a middle segment no save of ours
+	/// could have generated. Both belong to somebody else.
 	#[test]
 	fn a_temporary_left_by_a_crashed_save_is_swept_and_nothing_else_is() {
 		let dir = temp_dir();
@@ -331,11 +396,17 @@ mod tests {
 		fs::write(&leftover, "half a snapshot").expect("write");
 		let unrelated = dir.join("keep.json");
 		fs::write(&unrelated, "not ours").expect("write");
+		let same_beginning = dir.join("session-import.tmp");
+		fs::write(&same_beginning, "another tool's import").expect("write");
+		let named_middle = dir.join("session.draft.tmp");
+		fs::write(&named_middle, "a draft, not a unique id").expect("write");
 
 		sweep_temporaries(&path);
 
 		assert!(!leftover.exists(), "the abandoned temporary outlived the run that left it");
 		assert!(unrelated.exists(), "the sweep reached beyond its own temporaries");
+		assert!(same_beginning.exists(), "the sweep took a file that only starts like ours");
+		assert!(named_middle.exists(), "the sweep took a temporary no save of ours could write");
 
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
@@ -421,6 +492,69 @@ mod tests {
 
 		let reloaded = load(&path);
 		assert!(reloaded == short || reloaded == long, "concurrent saves tore the file");
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The sleep only makes the stall real; the number is what decides. Whichever
+	/// thread the scheduler favours, the complete snapshot is the last intention
+	/// and the one the file must end up holding.
+	#[test]
+	fn a_save_that_stalled_never_lands_on_top_of_a_newer_one() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		let complete = sample();
+		let partial = SessionSnapshot { activities: Vec::new(), ..complete.clone() };
+		let stalled = take_number();
+		let newer = take_number();
+
+		std::thread::scope(|scope| {
+			scope.spawn(|| {
+				std::thread::sleep(std::time::Duration::from_millis(50));
+				save_in_order(&path, &partial, stalled);
+			});
+			scope.spawn(|| save_in_order(&path, &complete, newer));
+		});
+
+		assert_eq!(load(&path), complete, "the stalled save landed on top of a newer one");
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_save_that_stalled_never_restores_an_id_a_later_forget_dropped() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		let snapshot = sample();
+		save(&path, &snapshot);
+		let stalled = take_number();
+
+		forget_session_id(&path);
+		save_in_order(&path, &snapshot, stalled);
+
+		let reloaded = load(&path);
+		assert_eq!(reloaded.session_id, None, "a stalled save brought back a forgotten id");
+		assert_eq!(reloaded.messages, snapshot.messages);
+		assert_eq!(reloaded.activities, snapshot.activities);
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_forget_that_stalled_never_drops_an_id_a_newer_save_carries() {
+		let dir = temp_dir();
+		let path = dir.join(FILE_NAME);
+		let snapshot = sample();
+		let stalled = take_number();
+
+		save(&path, &snapshot);
+		forget_session_id_in_order(&path, stalled);
+
+		assert_eq!(
+			load(&path).session_id,
+			snapshot.session_id,
+			"a stalled forget dropped an id a newer save carried"
+		);
 
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}

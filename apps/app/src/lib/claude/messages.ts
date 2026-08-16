@@ -22,6 +22,8 @@ export function describeTransportError(error: TransportError): string {
 			return "No session is running."
 		case "turnAlreadyRunning":
 			return "A turn is already running."
+		case "transitionInProgress":
+			return "A session change is already in progress."
 		case "noActiveTurn":
 			return "There is no turn to interrupt."
 		case "unknownPermission":

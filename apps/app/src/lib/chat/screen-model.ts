@@ -58,6 +58,7 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	resumeFailed: false,
 	invalidFrame: false,
 	turnAlreadyRunning: false,
+	transitionInProgress: false,
 	noActiveTurn: false,
 	unknownPermission: false,
 	writeFailed: false,
