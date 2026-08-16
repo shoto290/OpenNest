@@ -26,6 +26,7 @@ export type TranscriptRow = {
 	messageId: string
 	role: MessageRole
 	text: string
+	timestamp: number
 	completion: MessageCompletion
 	/** The whole message, set on its closing row so a copy takes the answer
 	 * entire rather than the paragraph the reader happened to hover. */
@@ -66,6 +67,8 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 
 const PARAGRAPH_BREAK = /\n{2,}/
 
+const RUN_GAP_MS = 5 * 60_000
+
 /** Tools that read rather than change something, keyed by the leading word of
  * the activity title. Anything else is plain work. */
 const SEARCH_TOOLS = new Set([
@@ -98,6 +101,7 @@ function toRow(
 		id: index === undefined ? message.id : `${message.id}#${index}`,
 		messageId: message.id,
 		role: message.role,
+		timestamp: message.timestamp,
 		...rest,
 	}
 }
@@ -149,13 +153,20 @@ export function toTranscriptRows(messages: ChatMessage[]): TranscriptRow[] {
 	})
 }
 
-/** Consecutive rows from the same speaker, so the screen can tie them into one
- * block and give the whole run a single avatar. */
+/** Consecutive rows from the same speaker sent close in time, so the screen can
+ * tie them into one block and give the whole run a single avatar. A pause longer
+ * than RUN_GAP_MS reads as a new thought, so it opens a new block. */
 export function toRuns(rows: TranscriptRow[]): TranscriptRow[][] {
 	const runs: TranscriptRow[][] = []
 	for (const row of rows) {
 		const current = runs.at(-1)
-		if (current && current[0].role === row.role) {
+		const previous = current?.at(-1)
+		if (
+			current &&
+			previous &&
+			previous.role === row.role &&
+			row.timestamp - previous.timestamp <= RUN_GAP_MS
+		) {
 			current.push(row)
 		} else {
 			runs.push([row])
