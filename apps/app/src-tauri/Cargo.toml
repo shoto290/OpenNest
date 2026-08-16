@@ -16,6 +16,10 @@ path = "src/main.rs"
 [[bin]]
 name = "fake_claude"
 path = "src/bin/fake_claude.rs"
+required-features = ["fake-claude"]
+
+[features]
+fake-claude = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
