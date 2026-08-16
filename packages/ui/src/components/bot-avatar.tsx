@@ -50,10 +50,12 @@ const STROKE_BASE = {
 } as const
 
 const ROLE_PROPS = {
-	outline: { ...STROKE_BASE, fill: "var(--background)" },
+	outline: { ...STROKE_BASE, fill: "none" },
 	line: { ...STROKE_BASE, fill: "none" },
 	accent: { fill: "var(--bot-avatar-accent, #e36f3d)", stroke: "none" },
 } as const
+
+const HEAD_MASK_BOUNDS = { x: -240, y: -240, width: 720, height: 720 } as const
 
 const DRAG_DEGREES_PER_PIXEL = 0.6
 const DRAG_LIMIT = 60
@@ -161,6 +163,8 @@ function BotAvatar({
 	const filterId = `bot-avatar-sketch-${id}`
 	const clipId = `bot-avatar-clip-${id}`
 	const splitId = `bot-avatar-split-${id}`
+	const headPathId = `bot-avatar-head-${id}`
+	const headMaskId = `bot-avatar-head-mask-${id}`
 	const definition = ANIMALS[animal]
 	const weight = inkWeight({ ink, size })
 	const boil = round2((BOIL_DISPLACEMENT * INK_WEIGHTS[ink]) / weight)
@@ -242,9 +246,18 @@ function BotAvatar({
 						/>
 						<feDisplacementMap in="SourceGraphic" in2="n" scale={boil} />
 					</filter>
+					<path data-part={PARTS.headClip} d={definition.head} id={headPathId} />
 					<clipPath id={clipId}>
-						<path data-part={PARTS.headClip} d={definition.head} />
+						<use href={`#${headPathId}`} />
 					</clipPath>
+					<mask
+						id={headMaskId}
+						maskUnits="userSpaceOnUse"
+						{...HEAD_MASK_BOUNDS}
+					>
+						<rect fill="white" {...HEAD_MASK_BOUNDS} />
+						<use fill="black" href={`#${headPathId}`} />
+					</mask>
 					{definition.ears.map((ear, index) => (
 						<clipPath
 							clipPathUnits="userSpaceOnUse"
@@ -257,13 +270,15 @@ function BotAvatar({
 				</defs>
 				<g filter={`url(#${filterId})`}>
 					<g data-part={PARTS.rig}>
-						<EarLayer
-							animal={animal}
-							ears={definition.ears}
-							layer="back"
-							splitId={splitId}
-							weight={weight}
-						/>
+						<g mask={`url(#${headMaskId})`}>
+							<EarLayer
+								animal={animal}
+								ears={definition.ears}
+								layer="back"
+								splitId={splitId}
+								weight={weight}
+							/>
+						</g>
 						<g data-part={PARTS.head}>
 							<path
 								d={definition.head}
@@ -305,7 +320,18 @@ function BotAvatar({
 				</g>
 			</>
 		),
-		[animal, boil, clipId, definition, filterId, splitId, weight, wireframe],
+		[
+			animal,
+			boil,
+			clipId,
+			definition,
+			filterId,
+			headMaskId,
+			headPathId,
+			splitId,
+			weight,
+			wireframe,
+		],
 	)
 
 	return (
