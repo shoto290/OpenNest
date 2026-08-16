@@ -7,6 +7,7 @@ import type {
 	MessageCompletion,
 	PermissionDecision,
 	PermissionRequest,
+	SessionSnapshot,
 	TransportError,
 	TurnEnded,
 	TurnOutcome,
@@ -42,6 +43,10 @@ export type ChatAction =
 	| { type: "sessionReset"; epoch: number }
 	/** Drops the transcript itself. Only a deliberate "new conversation" does this. */
 	| { type: "conversationCleared" }
+	/** Hydrates the stored transcript on boot. Ignored the moment anything is
+	 * already on screen, so a late or replayed restore — StrictMode mounts twice —
+	 * can never clobber a live conversation. */
+	| { type: "sessionRestored"; snapshot: SessionSnapshot }
 	| { type: "sessionOpened" }
 	| { type: "promptSubmitted"; message: ChatMessage }
 	| { type: "promptRejected"; id: string; error: TransportError }
@@ -109,6 +114,17 @@ export function completionForOutcome(outcome: TurnOutcome): MessageCompletion {
 
 export function turnForOutcome(outcome: TurnOutcome): TurnState {
 	return outcome === "failed" ? "failed" : "idle"
+}
+
+/** Only what survives a restart. `errors` stay behind because their ids are minted
+ * from a live counter a restored one would collide with, and a pending permission
+ * has no business on disk. */
+export function toSessionSnapshot(state: ChatState): SessionSnapshot {
+	return {
+		sessionId: state.sessionId,
+		messages: state.messages,
+		activities: state.activities,
+	}
 }
 
 function setTurn(state: ChatState, next: TurnState): ChatState {
@@ -322,6 +338,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 				binaryVersion: state.binaryVersion,
 				errorCount: state.errorCount,
 			}
+		case "sessionRestored":
+			return state.messages.length > 0
+				? state
+				: {
+						...state,
+						sessionId: action.snapshot.sessionId,
+						messages: action.snapshot.messages,
+						activities: action.snapshot.activities,
+					}
 		case "promptSubmitted":
 			return setTurn(
 				{ ...state, messages: [...state.messages, action.message] },

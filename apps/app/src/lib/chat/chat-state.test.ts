@@ -7,9 +7,14 @@ import {
 	initialChatState,
 	isSessionReady,
 	isTurnBusy,
+	toSessionSnapshot,
 } from "./chat-state"
 
-import type { ChatMessage, ClaudeEvent } from "../claude/contract"
+import type {
+	ChatMessage,
+	ClaudeEvent,
+	SessionSnapshot,
+} from "../claude/contract"
 
 function applyEvents(state: ChatState, events: ClaudeEvent[]): ChatState {
 	return events.reduce(
@@ -436,5 +441,71 @@ describe("session reset", () => {
 		expect(cleared.activities).toHaveLength(0)
 		expect(cleared.sessionOpen).toBe(true)
 		expect(cleared.sessionId).toBe("s-1")
+	})
+})
+
+describe("session restore", () => {
+	const snapshot: SessionSnapshot = {
+		sessionId: "s-1",
+		messages: [assistantMessage({ text: "Bonjour", completion: "complete" })],
+		activities: [
+			{ id: "act-1", title: "Lecture", kind: "tool", status: "succeeded" },
+		],
+	}
+
+	function restore(state: ChatState): ChatState {
+		return chatReducer(state, { type: "sessionRestored", snapshot })
+	}
+
+	it("hydrates the stored transcript, activities and session id", () => {
+		const restored = restore(initialChatState)
+
+		expect(restored.messages).toEqual(snapshot.messages)
+		expect(restored.activities).toEqual(snapshot.activities)
+		expect(restored.sessionId).toBe("s-1")
+	})
+
+	it("is a no-op once anything is already on screen", () => {
+		const live = applyEvents(initialChatState, streamedTurn)
+		expect(restore(live)).toBe(live)
+
+		// StrictMode mounts twice, so the second hydration must not replay either.
+		const hydrated = restore(initialChatState)
+		expect(restore(hydrated)).toBe(hydrated)
+	})
+
+	it("keeps the hydrated transcript across the session reset that follows", () => {
+		const reset = chatReducer(restore(initialChatState), {
+			type: "sessionReset",
+			epoch: 1,
+		})
+
+		expect(reset.messages).toEqual(snapshot.messages)
+		expect(reset.activities).toEqual(snapshot.activities)
+	})
+
+	it("leaves errors and pending permissions out of the snapshot it writes", () => {
+		const live = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "submitting" },
+			{ type: "messageStarted", message: assistantMessage() },
+			{
+				type: "permissionRequested",
+				request: {
+					id: "perm-1",
+					toolName: "Bash",
+					title: "Exécuter",
+					detail: null,
+				},
+			},
+			{ type: "failed", error: { kind: "notStarted" } },
+		])
+		expect(live.errors).toHaveLength(1)
+		expect(live.permission).not.toBeNull()
+
+		expect(toSessionSnapshot(live)).toEqual({
+			sessionId: live.sessionId,
+			messages: live.messages,
+			activities: live.activities,
+		})
 	})
 })

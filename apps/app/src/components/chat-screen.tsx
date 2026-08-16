@@ -203,8 +203,8 @@ export function ChatScreen({ driver }: { driver: ChatDriver }) {
 	}, [controller])
 
 	useEffect(() => {
-		preflight()
-	}, [preflight])
+		void controller.boot()
+	}, [controller])
 
 	useEffect(() => {
 		if (acceptsInput) {

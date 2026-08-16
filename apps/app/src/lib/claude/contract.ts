@@ -66,6 +66,12 @@ export type SessionHandle = {
 	resumed: boolean
 }
 
+export type SessionSnapshot = {
+	sessionId: string | null
+	messages: ChatMessage[]
+	activities: ActivityEvent[]
+}
+
 export type ClaudeEvent =
 	| { type: "connectionChanged"; state: ConnectionState }
 	| { type: "turnChanged"; state: TurnState }

@@ -5,14 +5,47 @@ import { isSessionReady } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
 
-import type { ClaudeEvent } from "../claude/contract"
+import type { ClaudeEvent, SessionSnapshot } from "../claude/contract"
 
 const STEP_MS = 10
+
+const EMPTY_SNAPSHOT: SessionSnapshot = {
+	sessionId: null,
+	messages: [],
+	activities: [],
+}
+
+const STORED_SNAPSHOT: SessionSnapshot = {
+	sessionId: "s-stored",
+	messages: [
+		{
+			id: "local-3",
+			role: "user",
+			text: "bonjour",
+			completion: "complete",
+			timestamp: 0,
+		},
+		{
+			id: "fake-msg-9",
+			role: "assistant",
+			text: "salut",
+			completion: "complete",
+			timestamp: 0,
+		},
+	],
+	activities: [
+		{ id: "act-1", title: "Lecture", kind: "tool", status: "succeeded" },
+	],
+}
 
 type Harness = {
 	driver: FakeChatDriver
 	controller: ChatController
 	detach: () => void
+}
+
+type StoredHarness = Harness & {
+	saved: SessionSnapshot[]
 }
 
 function createHarness(): Harness {
@@ -23,6 +56,24 @@ function createHarness(): Harness {
 	const controller = createChatController(driver)
 	const detach = controller.attach()
 	return { driver, controller, detach }
+}
+
+function storedHarness(snapshot: SessionSnapshot): StoredHarness {
+	const fake = createFakeChatDriver({
+		stepMs: STEP_MS,
+		replyFor: () => "un deux trois",
+	})
+	const saved: SessionSnapshot[] = []
+	const driver: FakeChatDriver = {
+		...fake,
+		loadSession: () => Promise.resolve(snapshot),
+		saveSession: (next) => {
+			saved.push(next)
+			return Promise.resolve()
+		},
+	}
+	const controller = createChatController(driver)
+	return { driver, controller, detach: controller.attach(), saved }
 }
 
 async function startedHarness(): Promise<Harness> {
@@ -444,6 +495,110 @@ describe("createChatController", () => {
 		await controller.preflight()
 
 		expect(controller.getState().sessionId).toBe("s-1")
+	})
+
+	it("restores the stored transcript and resumes its session on boot", async () => {
+		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		const loadSpy = vi.spyOn(driver, "loadSession")
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		expect(loadSpy).toHaveBeenCalledTimes(1)
+		expect(startSpy).toHaveBeenCalledWith("s-stored")
+		const state = controller.getState()
+		expect(state.messages).toEqual(STORED_SNAPSHOT.messages)
+		expect(state.activities).toEqual(STORED_SNAPSHOT.activities)
+		expect(isSessionReady(state)).toBe(true)
+	})
+
+	it("boots without a resume id when nothing was stored", async () => {
+		const { driver, controller } = storedHarness(EMPTY_SNAPSHOT)
+		const startSpy = vi.spyOn(driver, "startOrResumeSession")
+
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		expect(startSpy).toHaveBeenCalledWith(undefined)
+		expect(controller.getState().messages).toHaveLength(0)
+		expect(isSessionReady(controller.getState())).toBe(true)
+	})
+
+	it("still opens a session when the stored transcript cannot be read", async () => {
+		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
+		vi.spyOn(driver, "loadSession").mockRejectedValue({
+			kind: "writeFailed",
+			detail: "disque illisible",
+		})
+
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.messages).toHaveLength(0)
+		expect(isSessionReady(state)).toBe(true)
+	})
+
+	it("persists once when the turn ends, not once per streamed token", async () => {
+		const { controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+		expect(saved).toHaveLength(0)
+
+		await controller.send("bonjour")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(saved).toHaveLength(1)
+		expect(saved[0].messages).toEqual(state.messages)
+		expect(saved[0].activities).toEqual(state.activities)
+	})
+
+	// The persisted snapshot is what a cold start paints, so a message left
+	// mid-stream would come back as a failed bubble the reader never saw fail.
+	it("persists a settled transcript, never a message mid-stream", async () => {
+		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		driver.pushEvent({ type: "turnChanged", state: "submitting" })
+		driver.pushEvent({
+			type: "messageStarted",
+			message: {
+				id: "msg-1",
+				role: "assistant",
+				text: "Bonjour",
+				completion: "streaming",
+				timestamp: 0,
+			},
+		})
+		driver.pushEvent({
+			type: "turnEnded",
+			ended: { sessionId: "s-live", outcome: "completed" },
+		})
+
+		expect(saved).toHaveLength(1)
+		expect(saved[0].sessionId).toBe("s-live")
+		expect(saved[0].messages).toEqual([
+			expect.objectContaining({ id: "msg-1", completion: "complete" }),
+		])
+	})
+
+	it("never reuses a restored message id on the next prompt", async () => {
+		const { controller } = storedHarness(STORED_SNAPSHOT)
+		await controller.boot()
+		await vi.runAllTimersAsync()
+
+		await controller.send("et après ?")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(
+			state.messages
+				.filter((message) => message.role === "user")
+				.map((message) => message.id),
+		).toEqual(["local-3", "local-4"])
 	})
 
 	it("stops notifying detached listeners", async () => {

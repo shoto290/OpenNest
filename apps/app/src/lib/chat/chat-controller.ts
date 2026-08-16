@@ -5,6 +5,7 @@ import {
 	chatReducer,
 	initialChatState,
 	isTurnBusy,
+	toSessionSnapshot,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
 
@@ -24,6 +25,10 @@ export type ChatController = {
 	start: (resume?: string) => Promise<SessionHandle | null>
 	/** Checks the binary and opens a session when it answers. Deduplicated while in flight. */
 	preflight: (resume?: string) => Promise<SessionHandle | null>
+	/** Hydrates the stored transcript, then resumes its session. Sequential by
+	 * construction: two parallel effects would open a brand-new session while the
+	 * transcript is still loading, and the resume id would be lost. */
+	boot: () => Promise<SessionHandle | null>
 	/** Drops the transcript on purpose. A restart never does this — a dead session
 	 * clears its own state and leaves what the reader can still see. */
 	clearConversation: () => void
@@ -34,11 +39,30 @@ export type ChatController = {
 	shutdown: () => Promise<void>
 }
 
+const LOCAL_ID_PREFIX = "local-"
+
 function toTransportError(reason: unknown): TransportError {
 	if (typeof reason === "object" && reason !== null && "kind" in reason) {
 		return reason as TransportError
 	}
 	return { kind: "writeFailed", detail: String(reason) }
+}
+
+function localSeqOf(id: string): number {
+	if (!id.startsWith(LOCAL_ID_PREFIX)) {
+		return 0
+	}
+	const seq = Number(id.slice(LOCAL_ID_PREFIX.length))
+	return Number.isInteger(seq) ? seq : 0
+}
+
+/** Restored messages already carry minted ids, so the counter has to pick up where
+ * the stored transcript left off or the next prompt reuses an id on screen. */
+function highestLocalSeq(messages: ChatMessage[]): number {
+	return messages.reduce(
+		(highest, message) => Math.max(highest, localSeqOf(message.id)),
+		0,
+	)
 }
 
 export function createChatController(driver: ChatDriver): ChatController {
@@ -72,14 +96,24 @@ export function createChatController(driver: ChatDriver): ChatController {
 		detach = null
 	}
 
+	/** The end of a turn is the one instant the transcript is worth writing: the
+	 * reducer has just settled every streaming message and recorded the session id,
+	 * and a per-event write would rewrite the whole transcript per streamed token. */
+	const persist = () => {
+		void driver.saveSession(toSessionSnapshot(state)).catch(() => undefined)
+	}
+
 	/** Resolves once the subscription is live. Tauri registers listeners over IPC,
 	 * so a command issued before this settles loses the events it emits. */
 	const connect = () => {
 		const captured = epoch
 		disconnect()
-		detach = driver.subscribe((event) =>
-			dispatch({ type: "driverEvent", epoch: captured, event }),
-		)
+		detach = driver.subscribe((event) => {
+			dispatch({ type: "driverEvent", epoch: captured, event })
+			if (event.type === "turnEnded" && captured === epoch) {
+				persist()
+			}
+		})
 		return detach
 	}
 
@@ -138,6 +172,15 @@ export function createChatController(driver: ChatDriver): ChatController {
 		return pendingPreflight
 	}
 
+	const boot = async () => {
+		const snapshot = await driver.loadSession().catch(() => null)
+		if (snapshot) {
+			dispatch({ type: "sessionRestored", snapshot })
+			localSeq = Math.max(localSeq, highestLocalSeq(snapshot.messages))
+		}
+		return preflight(snapshot?.sessionId ?? undefined)
+	}
+
 	const clearConversation = () => {
 		dispatch({ type: "conversationCleared" })
 	}
@@ -165,7 +208,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 		}
 		localSeq += 1
 		const message: ChatMessage = {
-			id: `local-${localSeq}`,
+			id: `${LOCAL_ID_PREFIX}${localSeq}`,
 			role: "user",
 			text: trimmed,
 			completion: "complete",
@@ -220,6 +263,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 		check,
 		start,
 		preflight,
+		boot,
 		clearConversation,
 		send,
 		stop,
