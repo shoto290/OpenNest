@@ -26,12 +26,20 @@
 	},
 	"bundle": {
 		"active": true,
+		"targets": ["app", "dmg"],
+		"category": "DeveloperTool",
+		"copyright": "© 2026 OpenNest",
+		"shortDescription": "A desktop window for the Claude Code CLI.",
+		"longDescription": "OpenNest drives the Claude Code CLI already installed on your machine as a local child process, and puts a chat window in front of it: streamed answers, tool activity, permission prompts, stop mid-turn, and session resume. No server sits in between.",
 		"icon": [
 			"icons/32x32.png",
 			"icons/128x128.png",
 			"icons/128x128@2x.png",
 			"icons/icon.icns",
 			"icons/icon.ico"
-		]
+		],
+		"macOS": {
+			"minimumSystemVersion": "10.15"
+		}
 	}
 }
