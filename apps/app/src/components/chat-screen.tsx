@@ -266,13 +266,14 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 			) : null}
 
 			{runs.map((run, runIndex) => {
-				// The closing row carries the mark, unless the working row below is
-				// already carrying it for a run that is still live.
-				const live = working !== null && runIndex === runs.length - 1
+				// Only the newest run may hold the mark, and only once the working
+				// row below has given it up.
+				const newest = runIndex === runs.length - 1
+				const live = working !== null && newest
 				const avatarIndex = live ? -1 : run.length - 1
 
 				return (
-					<ChatTurnGroup key={run[0].id}>
+					<ChatTurnGroup key={run[0].id} carriesMark={newest}>
 						{run.map((row, index) => (
 							<TranscriptTurn
 								key={row.id}

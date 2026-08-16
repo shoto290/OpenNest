@@ -4,6 +4,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
 	useId,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 } from "react"
@@ -173,14 +174,25 @@ function BotAvatar({
 
 	const engine = useMemo(() => new BotAvatarEngine(definition), [definition])
 
-	useEffect(() => {
+	// A layout effect, not a passive one: the eyes and ears carry no geometry
+	// until the engine draws them, so a passive first pass paints a faceless
+	// frame. It poses the rig before starting it, so the first drawn frame is
+	// already the one asked for; the effects below only ever redraw an SVG that
+	// is on screen and posed, and can stay passive.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-time setup — the effects below own every later change
+	useLayoutEffect(() => {
 		if (!svgRef.current) return
 		engine.bind(svgRef.current)
-		if (isAnimated) {
-			engine.start()
-			return () => engine.stop()
+		engine.setState(state)
+		engine.setPerspective(perspective)
+		engine.setWireframe(wireframe)
+		engine.setOrientation({ yaw, pitch, roll })
+		if (!isAnimated) {
+			engine.renderStatic()
+			return
 		}
-		engine.renderStatic()
+		engine.start()
+		return () => engine.stop()
 	}, [engine, isAnimated])
 
 	useEffect(() => {
