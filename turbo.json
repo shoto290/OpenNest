@@ -12,7 +12,8 @@
 		},
 		"tauri:build": {
 			"dependsOn": ["^build"],
-			"cache": false
+			"cache": false,
+			"passThroughEnv": ["APPLE_SIGNING_IDENTITY"]
 		},
 		"storybook": {
 			"cache": false,

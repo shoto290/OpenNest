@@ -15,12 +15,42 @@ macOS quit sequence.
   directory are shared with the packaged app — the two builds fight over both.
 - Store path: `~/Library/Application Support/com.opennest.app/session.json`.
 
+## Signing
+
+`bun run tauri:build` on its own ad-hoc signs the bundle. To sign it with the
+Developer ID, put the identity in the environment:
+
+```
+APPLE_SIGNING_IDENTITY="Developer ID Application: Steve Puget (BBE5V2JL5H)" bun run tauri:build
+```
+
+The identity stays out of the committed config on purpose: a personal
+certificate name is not shared property. Tauri reads `APPLE_SIGNING_IDENTITY`
+and enables the hardened runtime on its own — no entitlements file and no
+`bundle.macOS` config are needed. Confirm both:
+
+```
+APP=apps/app/src-tauri/target/release/bundle/macos/OpenNest.app
+codesign --verify --deep --strict --verbose=4 "$APP"
+codesign -d --verbose=4 "$APP" 2>&1 | grep -E "flags|Authority"
+```
+
+→ `valid on disk`, `flags=0x10000(runtime)`, and an `Authority` chain ending at
+`Apple Root CA`. Anything else and the bundle is not signed with the Developer
+ID, whatever the build log claimed.
+
+**Signing is not notarization.** A signed bundle is still refused by Gatekeeper:
+`spctl --assess --type execute "$APP"` answers
+`rejected / source=Unnotarized Developer ID` until the bundle has been submitted
+to Apple and stapled. That is a separate step run outside this checklist, and no
+notarization credential belongs in the repo.
+
 ## Steps
 
 1. `bun run --filter app test:live`
    → the four `#[ignore]`d live tests pass.
 
-2. `bun run tauri:build`, then
+2. Build signed (see **Signing** above), then
    `ls apps/app/src-tauri/target/release/bundle/macos/OpenNest.app/Contents/MacOS/`
    → **only** `opennest-app`. `fake_claude` next to it means the feature gate
    regressed.
@@ -28,9 +58,9 @@ macOS quit sequence.
 3. Open the `.dmg` from
    `apps/app/src-tauri/target/release/bundle/dmg/`, drag to `/Applications`,
    launch.
-   → first launch needs right-click → Open: the bundle is ad-hoc signed, so
-   Gatekeeper refuses a double-click. On a Mac that received the `.dmg` over the
-   network, the fix is
+   → first launch needs right-click → Open: the bundle is not notarized, so
+   Gatekeeper refuses a double-click whether it is ad-hoc or Developer ID
+   signed. On a Mac that received the `.dmg` over the network, the fix is
    `xattr -dr com.apple.quarantine /Applications/OpenNest.app`.
 
 4. Read the header.
