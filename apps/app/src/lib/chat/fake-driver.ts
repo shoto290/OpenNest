@@ -23,7 +23,7 @@ const PERMISSION_DIRECTIVE = "/permission"
 /** Several paragraphs, so `bun dev:web` shows an answer landing in the flow one
  * message at a time rather than as a single block. */
 function defaultReply(prompt: string): string {
-	return `Réponse simulée à « ${prompt} ».\n\nCe texte est diffusé morceau par morceau par le faux driver pour reproduire un tour Claude Code complet.\n\nChaque paragraphe part dans le fil dès qu'il est terminé.`
+	return `Simulated reply to "${prompt}".\n\nThe fake driver streams this text piece by piece to reproduce a whole Claude Code turn.\n\nEach paragraph lands in the thread as soon as it is finished.`
 }
 
 function toChunks(reply: string): string[] {
@@ -111,7 +111,7 @@ export function createFakeChatDriver(
 			type: "activity",
 			activity: {
 				id,
-				title: "Exécuter une commande",
+				title: "Run a command",
 				kind: "permission",
 				status: "pending",
 			},
@@ -121,8 +121,8 @@ export function createFakeChatDriver(
 			request: {
 				id,
 				toolName: "Bash",
-				title: "Exécuter une commande",
-				detail: "echo bonjour",
+				title: "Run a command",
+				detail: "echo hello",
 			},
 		})
 	}
@@ -158,7 +158,7 @@ export function createFakeChatDriver(
 					type: "activity",
 					activity: {
 						id: activityId,
-						title: "Réflexion",
+						title: "Thinking",
 						kind: "tool",
 						status: "running",
 					},
@@ -179,7 +179,7 @@ export function createFakeChatDriver(
 				type: "activity",
 				activity: {
 					id: activityId,
-					title: "Réflexion",
+					title: "Thinking",
 					kind: "tool",
 					status: failing ? "failed" : "succeeded",
 				},
@@ -192,7 +192,7 @@ export function createFakeChatDriver(
 					error: {
 						kind: "crashed",
 						code: 1,
-						detail: "Panne simulée du faux driver",
+						detail: "Simulated fake driver crash",
 					},
 				})
 				finishTurn("failed")
