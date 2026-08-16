@@ -1,6 +1,8 @@
-import { expect, fn } from "storybook/test"
+import type { ReactNode } from "react"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import {
 	AISidebar,
 	type SidebarResource,
@@ -59,10 +61,11 @@ const SIDEBAR = (
 	</AnimatedSidebar>
 )
 
-const CHAT = (
+const chat = (leading?: ReactNode) => (
 	<ChatLayout
 		header={
 			<AppHeader
+				leading={leading}
 				trailing={<ConnectionStatus state="ready" version="2.1.233" />}
 			/>
 		}
@@ -76,6 +79,14 @@ const CHAT = (
 			{ANSWER}
 		</AssistantTurn>
 	</ChatLayout>
+)
+
+const CHAT = chat()
+
+const CHAT_WITH_TRIGGER = chat(
+	<AnimatedSidebarTrigger>
+		<Icons.Sidebar className="size-4" />
+	</AnimatedSidebarTrigger>,
 )
 
 const meta = preview.meta({
@@ -131,17 +142,72 @@ export const Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same workspace opened with the sidebar already collapsed, which is how a host restores a remembered choice through `defaultOpen`. Check that the main column takes the room the panel gave up rather than leaving a gap beside the rail, that the trigger stays on the rail and reports `aria-expanded=false`, and that expanding it widens the panel while the conversation reflows without reloading. The session tree hides itself on the rail — that is the panel's own collapse behaviour, not the shell's. Pick `Default` for the expanded panel.",
+					"The same workspace opened with the sidebar already collapsed, which is how a host restores a remembered choice through `defaultOpen`. Check that the main column takes the room the panel gave up rather than leaving a gap beside the rail, that the trigger stays on the rail and reports `aria-expanded=false`, and that expanding it widens the panel while the conversation reflows without reloading. The session tree hides itself on the rail — that is the panel's own collapse behaviour, not the shell's. Check too that the main column keeps its full height across both widths. Pick `Default` for the expanded panel, `OffCanvas` for the drawer a narrow window gets instead.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const trigger = canvas.getByRole("button", { name: "Toggle workspace" })
+		const main = canvas.getByRole("main")
+		const mainHeight = main.getBoundingClientRect().height
 
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 
 		await userEvent.click(trigger)
 		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+		await expect(main.getBoundingClientRect().height).toBe(mainHeight)
+	},
+})
+
+export const OffCanvas = meta.story({
+	globals: { viewport: { value: "mobile" } },
+	args: {
+		children: CHAT_WITH_TRIGGER,
+		sidebar: <AgentSidebar lastMessage={ANSWER} name="No Name" />,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same shell on a window too narrow for two columns, where the panel stops being a column and becomes a drawer over the page. Check that the conversation keeps the whole width until the trigger in the bar opens the drawer, that the drawer slides in over the transcript with the scrim dimming it rather than pushing it aside, and that Escape closes it and puts focus back on the trigger that opened it. The page underneath keeps its full height throughout — the drawer must never resize the column it covers. Pick `Default` for the two-column shell.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const overlay = within(document.body)
+		const trigger = canvas.getByRole("button", { name: "Toggle sidebar" })
+		const main = canvas.getByRole("main")
+		const mainHeight = main.getBoundingClientRect().height
+
+		await expect(trigger).toHaveAttribute("aria-expanded", "false")
+		await expect(canvas.queryByRole("complementary")).toBeNull()
+
+		await userEvent.click(trigger)
+		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+
+		const drawer = overlay.getByRole("dialog", { name: "Conversations" })
+		const scrim = overlay.getByRole("button", { name: "Close sidebar" })
+		await waitFor(
+			async () => {
+				await expect(drawer).toBeVisible()
+				await expect(scrim).toBeVisible()
+			},
+			{ interval: 10 },
+		)
+		await expect(drawer.getBoundingClientRect().left).toBeCloseTo(0, 0)
+		await expect(main.getBoundingClientRect().height).toBe(mainHeight)
+
+		await waitFor(
+			async () => {
+				await expect(drawer.contains(document.activeElement)).toBe(true)
+			},
+			{ interval: 10 },
+		)
+
+		await userEvent.keyboard("{Escape}")
+		await expect(trigger).toHaveFocus()
+		await expect(trigger).toHaveAttribute("aria-expanded", "false")
+		await expect(main.getBoundingClientRect().height).toBe(mainHeight)
 	},
 })
 

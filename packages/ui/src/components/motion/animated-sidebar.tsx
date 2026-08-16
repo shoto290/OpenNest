@@ -773,7 +773,7 @@ export const AnimatedSidebarGroup = forwardRef<
 	)
 })
 
-/** Section heading. Fades out and leaves the accessibility tree once collapsed. */
+/** Section heading. Fades out, gives up its box and leaves the accessibility tree once collapsed. */
 export const AnimatedSidebarGroupLabel = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
@@ -791,7 +791,7 @@ export const AnimatedSidebarGroupLabel = forwardRef<
 			data-slot="sidebar-group-label"
 			className={cn(
 				"mb-1 h-7 overflow-hidden px-2 font-medium text-[10px] text-sidebar-foreground/70 uppercase tracking-[0.14em] transition-opacity",
-				collapsed ? "opacity-0" : "opacity-100",
+				collapsed ? "mb-0 h-0 w-0 px-0 opacity-0" : "opacity-100",
 				className,
 			)}
 		>
@@ -1021,8 +1021,12 @@ export function AnimatedSidebarMenuSubButton({
 
 export interface AnimatedSidebarMenuButtonProps {
 	children: ReactNode
-	/** Leading glyph. The only thing left visible once the panel collapses. */
+	/** Leading visual. The only thing left visible once the panel collapses. */
 	icon?: ReactNode
+	/** Hides `icon` from the accessibility tree. Turn off for a visual that carries its own name. */
+	isIconDecorative?: boolean
+	/** Accessible name once the panel collapses. Defaults to string children. */
+	label?: string
 	/** Renders an anchor instead of a button. */
 	href?: string
 	/** Marks the row as the current page and gives it the shared active pill. */
@@ -1046,6 +1050,8 @@ export interface AnimatedSidebarMenuButtonProps {
 export function AnimatedSidebarMenuButton({
 	children,
 	icon,
+	isIconDecorative = true,
+	label,
 	href,
 	isActive = false,
 	ariaExpanded,
@@ -1058,7 +1064,8 @@ export function AnimatedSidebarMenuButton({
 }: AnimatedSidebarMenuButtonProps) {
 	const context = useAnimatedSidebar()
 	const panel = useAnimatedSidebarPanel()
-	const textLabel = typeof children === "string" ? children : undefined
+	const textLabel =
+		label ?? (typeof children === "string" ? children : undefined)
 
 	const select = (event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
 		if (disabled) {
@@ -1083,8 +1090,8 @@ export function AnimatedSidebarMenuButton({
 			) : null}
 			{icon ? (
 				<span
-					aria-hidden="true"
-					className="relative z-10 grid size-5 shrink-0 place-items-center"
+					aria-hidden={isIconDecorative || undefined}
+					className="relative z-10 grid min-h-5 min-w-5 shrink-0 place-items-center"
 				>
 					{icon}
 				</span>
@@ -1105,7 +1112,7 @@ export function AnimatedSidebarMenuButton({
 				aria-hidden={panel.collapsed}
 				className={cn(
 					"relative z-10 min-w-0 flex-1 truncate",
-					panel.collapsed && "pointer-events-none",
+					panel.collapsed && "w-0 flex-none pointer-events-none",
 				)}
 			>
 				{children}
@@ -1120,7 +1127,10 @@ export function AnimatedSidebarMenuButton({
 						x: panel.collapsed ? 4 : 0,
 					}}
 					transition={context.reduce ? { duration: 0 } : SPRING_LAYOUT}
-					className="relative z-10 grid size-4 shrink-0 place-items-center text-sidebar-foreground/70"
+					className={cn(
+						"relative z-10 grid shrink-0 place-items-center text-sidebar-foreground/70",
+						panel.collapsed ? "h-4 w-0" : "size-4",
+					)}
 				>
 					<ChevronRight className="size-3.5" />
 				</motion.span>
@@ -1131,6 +1141,7 @@ export function AnimatedSidebarMenuButton({
 	const interactiveClassName = cn(
 		"relative flex min-h-9 w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-xl px-3 text-left font-medium text-sm outline-none",
 		"text-sidebar-foreground/70",
+		panel.collapsed && "justify-center gap-0 px-0",
 		!disabled &&
 			"hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
 		"focus-visible:bg-sidebar-accent/70 focus-visible:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
