@@ -200,7 +200,7 @@ function AssistantTurn({
 				</span>
 				<MessageBubble
 					animateIn={receivesMark}
-					className="col-start-2 row-start-1"
+					className="col-start-2 row-start-1 min-w-0"
 				>
 					<MessageBubbleContent
 						className={cn("whitespace-pre-wrap", RUN_RADIUS.assistant[run])}

@@ -5,24 +5,30 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { ChatScreen } from "@/components/chat-screen"
 import { createChatDriver } from "@/lib/chat/create-driver"
-import { sidebarActivityFor } from "@/lib/chat/screen-model"
+import {
+	lastAssistantTextFor,
+	sidebarActivityFor,
+} from "@/lib/chat/screen-model"
 import { useChat } from "@/lib/chat/use-chat"
 
 export function App() {
 	const driver = useMemo(createChatDriver, [])
 	const chat = useChat(driver)
-	const sidebar = sidebarActivityFor(chat.state)
 
 	useEffect(() => {
 		void chat.controller.boot()
 	}, [chat.controller])
 
+	const activity = sidebarActivityFor(chat.state)
+
 	return (
 		<WorkspaceShell
+			defaultOpen
 			sidebar={
 				<AgentSidebar
-					status={sidebar.isWorking ? "working" : "idle"}
-					pose={sidebar.kind}
+					status={activity.isWorking ? "working" : "idle"}
+					pose={activity.kind}
+					lastMessage={lastAssistantTextFor(chat.state)}
 				/>
 			}
 		>

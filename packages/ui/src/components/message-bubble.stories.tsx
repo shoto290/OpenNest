@@ -82,7 +82,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The pairing every transcript is built from: the user in `solid` yellow pinned to the trailing edge, the agent in `soft` on the leading edge. Check that the two surfaces stay distinguishable in both themes and that neither bubble stretches past 82% of the thread. Reach for `Variants` instead when you need to compare a surface in isolation.",
+					"The pairing every transcript is built from: the user in `solid` yellow pinned to the trailing edge, the agent in `soft` on the leading edge. Check that the two surfaces stay distinguishable in both themes and that each bubble hugs its own content, free to span the whole row when the message is long enough. Reach for `Variants` instead when you need to compare a surface in isolation.",
 			},
 		},
 	},

@@ -28,6 +28,7 @@ import {
 	AnimatedSidebarTrigger,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import { SidebarToggle } from "@workspace/ui/components/sidebar-toggle"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const ANSWER =
@@ -83,11 +84,7 @@ const chat = (leading?: ReactNode) => (
 
 const CHAT = chat()
 
-const CHAT_WITH_TRIGGER = chat(
-	<AnimatedSidebarTrigger>
-		<Icons.Sidebar className="size-4" />
-	</AnimatedSidebarTrigger>,
-)
+const CHAT_WITH_TRIGGER = chat(<SidebarToggle />)
 
 const meta = preview.meta({
 	title: "Layout/WorkspaceShell",
