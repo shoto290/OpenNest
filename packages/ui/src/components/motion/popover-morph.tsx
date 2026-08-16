@@ -20,7 +20,7 @@ import { createPortal } from "react-dom"
 
 import { usePopoverPortalPosition } from "@workspace/ui/components/motion/popover-position"
 import { EASE_OUT, SPRING_PANEL } from "@workspace/ui/lib/ease"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 type Side = "top" | "bottom"
 type Align = "start" | "end"
@@ -126,16 +126,6 @@ export function MorphPopover({
 
 export interface MorphPopoverTriggerProps {
 	children: ReactElement
-}
-
-function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
-	return (node: T | null) => {
-		for (const ref of refs) {
-			if (typeof ref === "function") ref(node)
-			else if (ref && typeof ref === "object")
-				(ref as React.MutableRefObject<T | null>).current = node
-		}
-	}
 }
 
 /** Wraps a single element, toggling the popover on click. */
@@ -252,10 +242,13 @@ export function MorphPopoverContent({
 					// Wrapper carries the shadow as a drop-shadow filter, which hugs the
 					// clipped shape below (box-shadow would just get clipped away).
 					variants={wrap}
-					initial={reduce ? { opacity: 0 } : "hidden"}
+					// Reduced motion gets the panel at its resting opacity on the first
+					// paint: a fade would leave the text half-transparent against the
+					// page, which is both motion the user opted out of and unreadable.
+					initial={reduce ? false : "hidden"}
 					animate={reduce ? { opacity: 1 } : "show"}
 					exit={reduce ? { opacity: 0 } : "hidden"}
-					transition={reduce ? { duration: 0.12 } : undefined}
+					transition={reduce ? { duration: 0 } : undefined}
 					style={{
 						left,
 						top,
@@ -271,8 +264,10 @@ export function MorphPopoverContent({
 						aria-labelledby={ctx.triggerId}
 						variants={clip}
 						style={{ borderRadius: radius }}
+						// Portalled out of the themed subtree, so the panel paints a whole
+						// surface — background and text come from the same layer.
 						className={cn(
-							"overflow-hidden border border-border bg-background",
+							"overflow-hidden border border-border bg-popover text-popover-foreground",
 							className,
 						)}
 					>
