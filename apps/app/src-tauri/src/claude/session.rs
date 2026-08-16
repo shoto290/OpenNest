@@ -89,6 +89,12 @@ impl SessionOptions {
 
 type PendingControls = Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>;
 
+/// Optional only so `kill` can drop the sender: closing this channel is what
+/// makes `write_loop` release the child's stdin, and that release is the EOF the
+/// child needs to exit on its own. Nothing else can deliver it — the handle was
+/// moved out of `Child` at startup.
+type StdinChannel = std::sync::Mutex<Option<mpsc::UnboundedSender<Value>>>;
+
 struct Shared {
 	translator: Translator,
 	turn: TurnState,
@@ -108,7 +114,7 @@ impl Shared {
 }
 
 pub struct Session {
-	stdin_tx: mpsc::UnboundedSender<Value>,
+	stdin_tx: StdinChannel,
 	shared: Arc<Mutex<Shared>>,
 	pending: PendingControls,
 	child: Arc<Mutex<Option<Child>>>,
@@ -143,6 +149,7 @@ impl Session {
 		tokio::spawn(discard_stderr(stderr));
 		tokio::spawn(read_loop(stdout, shared.clone(), pending.clone(), sink.clone(), child.clone()));
 
+		let stdin_tx = StdinChannel::new(Some(stdin_tx));
 		let session = Self { stdin_tx, shared, pending, child, sink, pid, resumed };
 		session.handshake(options.startup_timeout).await?;
 		Ok(session)
@@ -189,9 +196,20 @@ impl Session {
 	}
 
 	fn write(&self, frame: Value) -> Result<(), TransportError> {
-		self.stdin_tx
-			.send(frame)
-			.map_err(|_| TransportError::WriteFailed { detail: "stdin closed".into() })
+		let delivered = self
+			.stdin_tx
+			.lock()
+			.expect("stdin channel")
+			.as_ref()
+			.is_some_and(|tx| tx.send(frame).is_ok());
+
+		delivered
+			.then_some(())
+			.ok_or_else(|| TransportError::WriteFailed { detail: "stdin closed".into() })
+	}
+
+	fn close_stdin(&self) {
+		self.stdin_tx.lock().expect("stdin channel").take();
 	}
 
 	pub async fn submit_prompt(&self, text: &str) -> Result<(), TransportError> {
@@ -273,24 +291,25 @@ impl Session {
 		*slot = None;
 	}
 
+	/// Hands the child EOF first and only escalates on a child that ignores it.
+	/// The group is swept either way: a clean exit reaps the child, never the
+	/// grandchildren it left behind, and those are the orphans this call exists
+	/// to prevent.
 	async fn kill(&self) {
+		self.close_stdin();
+
 		let mut slot = self.child.lock().await;
 		let Some(child) = slot.as_mut() else { return };
 
-		drop(child.stdin.take());
-		if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_ok() {
-			*slot = None;
-			return;
-		}
-
-		signal_group(self.pid, Signal::Term);
-		if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_ok() {
-			*slot = None;
-			return;
+		if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_err() {
+			signal_group(self.pid, Signal::Term);
+			if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_err() {
+				signal_group(self.pid, Signal::Kill);
+				let _ = child.wait().await;
+			}
 		}
 
 		signal_group(self.pid, Signal::Kill);
-		let _ = child.wait().await;
 		*slot = None;
 	}
 }

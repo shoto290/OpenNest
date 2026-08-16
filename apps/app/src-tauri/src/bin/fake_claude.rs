@@ -41,6 +41,12 @@ fn resumed() -> bool {
 	std::env::args().any(|arg| arg == "--resume")
 }
 
+/// A child deaf to the EOF on its stdin, so only a signal can end it. Set apart
+/// from the scenarios because it composes with any of them.
+fn ignores_eof() -> bool {
+	std::env::var("FAKE_CLAUDE_IGNORE_EOF").is_ok()
+}
+
 /// The preflight probes run through `Command::output()`, which hands the child a
 /// null stdin: they have to answer before the reader thread meets EOF.
 fn preflight_answer() -> Option<String> {
@@ -99,6 +105,12 @@ fn read_incoming(tx: mpsc::Sender<Incoming>) {
 				return;
 			}
 		}
+	}
+
+	// Holding `tx` past EOF keeps the main loop waiting, which is the whole
+	// point: the process outlives its own stdin.
+	while ignores_eof() {
+		std::thread::park();
 	}
 }
 

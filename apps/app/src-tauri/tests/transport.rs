@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use opennest_app::claude::commands::start_with_fallback;
 use opennest_app::claude::contract::{
@@ -369,16 +369,29 @@ async fn answering_an_unknown_permission_is_rejected() {
 	harness.session.shutdown().await;
 }
 
+/// The grace window is a ceiling, not a schedule: a child handed EOF exits on
+/// its own, so the shutdown lands far inside it and never reaches a signal.
+#[tokio::test]
+async fn closing_stdin_ends_a_healthy_child_well_inside_the_grace() {
+	let harness = start(options("normal")).await.expect("session starts");
+
+	let started = Instant::now();
+	harness.session.shutdown().await;
+	let elapsed = started.elapsed();
+
+	assert!(elapsed < Duration::from_secs(1), "shutdown waited {elapsed:?} instead of taking EOF");
+}
+
 /// Runs a session that has spawned a grandchild only a process-group kill can
 /// reach. The probe file is named after this test process: worktrees run their
 /// suites side by side and a shared path would have them racing.
 #[cfg(unix)]
-async fn orphan_probe(label: &str) -> (Harness, i32) {
+async fn orphan_probe(label: &str, options: SessionOptions) -> (Harness, i32) {
 	let pid_file = std::env::temp_dir()
 		.join(format!("opennest-orphan-probe-{}-{label}.pid", std::process::id()));
 	let _ = std::fs::remove_file(&pid_file);
 
-	let harness = start(options("orphan").with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy()))
+	let harness = start(options.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy()))
 		.await
 		.expect("session starts");
 	harness.submit("lance un enfant").await.expect("prompt accepted");
@@ -398,7 +411,7 @@ async fn orphan_probe(label: &str) -> (Harness, i32) {
 #[cfg(unix)]
 #[tokio::test]
 async fn shutdown_takes_the_whole_process_group_down() {
-	let (harness, orphan) = orphan_probe("shutdown").await;
+	let (harness, orphan) = orphan_probe("shutdown", options("orphan")).await;
 
 	harness.session.shutdown().await;
 	tokio::time::sleep(SETTLE).await;
@@ -406,10 +419,27 @@ async fn shutdown_takes_the_whole_process_group_down() {
 	assert!(!is_alive(orphan), "shutdown must leave no orphan behind");
 }
 
+/// A child deaf to EOF is the only thing the escalation is left for, and it
+/// still has to be reached — bounded, so a wedged child cannot hold the app on
+/// its way out.
+#[cfg(unix)]
+#[tokio::test]
+async fn shutdown_escalates_on_a_child_that_ignores_stdin_close() {
+	let (harness, orphan) =
+		orphan_probe("deaf", options("orphan").with_env("FAKE_CLAUDE_IGNORE_EOF", "1")).await;
+
+	tokio::time::timeout(Duration::from_secs(8), harness.session.shutdown())
+		.await
+		.expect("the escalation keeps the shutdown bounded");
+	tokio::time::sleep(SETTLE).await;
+
+	assert!(!is_alive(orphan), "the escalation must leave no orphan behind");
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn terminating_takes_the_whole_process_group_down() {
-	let (harness, orphan) = orphan_probe("terminate").await;
+	let (harness, orphan) = orphan_probe("terminate", options("orphan")).await;
 
 	harness.session.terminate().await;
 	tokio::time::sleep(SETTLE).await;
