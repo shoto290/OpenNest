@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 
+import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
 import { MessageScroller } from "@workspace/ui/components/message-scroller"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -15,7 +16,8 @@ interface ChatLayoutProps {
 	/** Accessible name of the scrollable transcript. */
 	label?: string
 	/** The transcript. Stretches to the full height between header and composer,
-	 * so a lone child can centre itself with `m-auto`. */
+	 * so a lone child can centre itself with `m-auto`. Rows here share one mark
+	 * identity, so the bot's mark travels between them rather than reappearing. */
 	children: ReactNode
 	className?: string
 	contentClassName?: string
@@ -50,7 +52,7 @@ function ChatLayout({
 					contentClassName,
 				)}
 			>
-				{children}
+				<ChatMarkProvider>{children}</ChatMarkProvider>
 			</MessageScroller>
 
 			{notice || composer ? (

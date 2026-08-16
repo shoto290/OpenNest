@@ -1,7 +1,11 @@
-import { expect, fn } from "storybook/test"
+import { useState } from "react"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import { BotWorking } from "@workspace/ui/components/bot-working"
+import { Button } from "@workspace/ui/components/button"
+import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
 import {
 	AssistantTurn,
 	CHAT_AVATAR_SIZE,
@@ -27,6 +31,35 @@ const TURN_STATES: ChatTurnState[] = [
 ]
 
 const Avatar = () => <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />
+
+/** The handoff the app performs: a run withholds its closing paragraph until
+ * the turn lands, so that row mounts in the very commit that hands it the mark. */
+const MarkHandoff = () => {
+	const [delivered, setDelivered] = useState(false)
+
+	return (
+		<ChatMarkProvider>
+			<div className="mx-auto flex max-w-2xl flex-col gap-6">
+				<Button
+					size="sm"
+					variant="outline"
+					className="self-start"
+					onClick={() => setDelivered(!delivered)}
+				>
+					{delivered ? "Rewind to working" : "Land the turn"}
+				</Button>
+				<UserTurn>How is this workspace laid out?</UserTurn>
+				{delivered ? (
+					<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
+						{ANSWER}
+					</AssistantTurn>
+				) : (
+					<BotWorking kind="thinking" />
+				)}
+			</div>
+		</ChatMarkProvider>
+	)
+}
 
 const meta = preview.meta({
 	title: "AI/ChatTurn",
@@ -99,6 +132,39 @@ export const Run = meta.story({
 		await expect(canvas.getAllByRole("button", { name: "Copy" })).toHaveLength(
 			1,
 		)
+	},
+})
+
+export const Mark = meta.story({
+	render: () => <MarkHandoff />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to watch the bot's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Neither is told an id: the transcript names its own mark — `ChatLayout` does this for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble unfolds beside it while the row itself holds still, and that with reduced motion the mark simply arrives. Pick `AI/BotWorking → Mark` for a mark leaving an activity header instead.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const marks = () =>
+			canvasElement.querySelectorAll('[data-slot="shared-mark"]')
+
+		await expect(marks()).toHaveLength(1)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Land the turn" }))
+		// The answer arrives on a fade, so nothing may be read off it until the
+		// reveal has landed.
+		await waitFor(() =>
+			expect(getComputedStyle(canvas.getByText(ANSWER)).opacity).toBe("1"),
+		)
+
+		// One identity throughout: the mark is never absent and never doubled.
+		await expect(marks()).toHaveLength(1)
+		await expect(
+			canvasElement.querySelector(
+				'[data-slot="message-gutter"] [data-slot="shared-mark"]',
+			),
+		).toBeInTheDocument()
 	},
 })
 

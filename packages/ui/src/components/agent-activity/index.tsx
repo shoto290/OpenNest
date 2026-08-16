@@ -215,7 +215,7 @@ export function AgentActivity({
 				<div
 					id={triggerId}
 					role="status"
-					className="flex h-7 min-w-0 items-center text-muted-foreground"
+					className="flex min-h-7 min-w-0 items-center text-muted-foreground"
 				>
 					{renderWorkingStatus ? (
 						renderWorkingStatus({ label: liveLabel, duration })

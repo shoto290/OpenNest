@@ -7,7 +7,9 @@ import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
+import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { CHAT_AVATAR_SIZE } from "@workspace/ui/components/chat-turn"
+import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { cn } from "@workspace/ui/lib/utils"
 
 /** What the bot is busy with, named after the pose it holds while doing it.
@@ -42,6 +44,7 @@ function BotWorking({
 	size = CHAT_AVATAR_SIZE,
 	className,
 }: BotWorkingProps) {
+	const markId = useChatMarkId()
 	const [pointed, setPointed] = useState(false)
 	const verb = kind === "waiting" ? "waiting for you" : kind
 	const text = label ? `${name} · ${label}` : `${name} is ${verb}…`
@@ -52,13 +55,14 @@ function BotWorking({
 			data-kind={kind}
 			className={cn("flex min-w-0 items-center gap-2", className)}
 		>
-			<span
-				className="inline-flex shrink-0"
+			<SharedMark
+				markId={markId}
+				className="shrink-0"
 				onPointerEnter={() => setPointed(true)}
 				onPointerLeave={() => setPointed(false)}
 			>
 				<BotAvatar animal={animal} state={kind} size={size} />
-			</span>
+			</SharedMark>
 			<span
 				className={cn(
 					"min-w-0 text-muted-foreground text-sm transition-opacity duration-200",

@@ -8,6 +8,9 @@ export const EASE_OUT_CSS = "cubic-bezier(0.16, 1, 0.3, 1)"
 /** Reduced-motion fallback: a flat, short tween instead of a spring. */
 export const TWEEN_REDUCED = { duration: 0.16, ease: EASE_OUT } as const
 
+/** Reduced-motion fallback for motion that has nowhere to go but its end state. */
+export const TRANSITION_NONE = { duration: 0 } as const
+
 /** Press feedback on buttons and other tappable surfaces. */
 export const SPRING_PRESS = {
 	type: "spring",
