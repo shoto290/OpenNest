@@ -5,11 +5,13 @@
 //! wall clock. The scenario is picked with `FAKE_CLAUDE_SCENARIO`.
 
 use std::io::{BufRead, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 
 use serde_json::{json, Value};
 
 const DEFAULT_SESSION: &str = "fake-session-0001";
+const VERSION_LINE: &str = "2.0.0-fake (OpenNest fake)";
 
 fn emit_raw(line: &str) {
 	let stdout = std::io::stdout();
@@ -37,6 +39,24 @@ fn session_id() -> String {
 
 fn resumed() -> bool {
 	std::env::args().any(|arg| arg == "--resume")
+}
+
+/// The preflight probes run through `Command::output()`, which hands the child a
+/// null stdin: they have to answer before the reader thread meets EOF.
+fn preflight_answer() -> Option<String> {
+	let args: Vec<String> = std::env::args().skip(1).collect();
+	match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+		["--version"] => Some(VERSION_LINE.into()),
+		["auth", "status"] => Some(json!({ "loggedIn": true }).to_string()),
+		_ => None,
+	}
+}
+
+/// Unique per process and per turn: a restored transcript and a fresh turn
+/// sharing an id would let the new deltas attach to the hydrated message.
+fn next_message_id() -> String {
+	static TURN: AtomicU64 = AtomicU64::new(0);
+	format!("msg_fake_{}_{}", std::process::id(), TURN.fetch_add(1, Ordering::Relaxed))
 }
 
 enum Incoming {
@@ -92,9 +112,10 @@ fn emit_init() {
 }
 
 fn emit_text_turn(text: &str) {
+	let message_id = next_message_id();
 	emit(json!({
 		"type": "stream_event",
-		"event": { "type": "message_start", "message": { "id": "msg_fake_1", "role": "assistant" } }
+		"event": { "type": "message_start", "message": { "id": message_id, "role": "assistant" } }
 	}));
 	emit(json!({
 		"type": "stream_event",
@@ -108,7 +129,7 @@ fn emit_text_turn(text: &str) {
 	}
 	emit(json!({
 		"type": "assistant",
-		"message": { "id": "msg_fake_1", "role": "assistant", "content": [{ "type": "text", "text": text }] }
+		"message": { "id": message_id, "role": "assistant", "content": [{ "type": "text", "text": text }] }
 	}));
 }
 
@@ -169,6 +190,11 @@ fn spawn_orphan() {
 }
 
 fn main() {
+	if let Some(answer) = preflight_answer() {
+		emit_raw(&answer);
+		return;
+	}
+
 	let scenario = scenario();
 	let (tx, rx) = mpsc::channel();
 	std::thread::spawn(move || read_incoming(tx));
@@ -255,7 +281,7 @@ fn main() {
 						}
 						emit(json!({
 							"type": "stream_event",
-							"event": { "type": "message_start", "message": { "id": "msg_fake_slow", "role": "assistant" } }
+							"event": { "type": "message_start", "message": { "id": next_message_id(), "role": "assistant" } }
 						}));
 					}
 					_ => {
