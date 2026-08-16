@@ -38,3 +38,5 @@ storybook-static
 # conductor
 .conductor/settings.local.toml
 .context/
+
+.claude/settings.local.json
