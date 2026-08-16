@@ -89,8 +89,10 @@ notarization credential belongs in the repo.
 
 10. Quit, then `echo '{' > ~/Library/Application\ Support/com.opennest.app/session.json`
     and relaunch.
-    → empty transcript, no crash, and the file is still on disk — an unreadable
-    store is never deleted.
+    → empty transcript, no crash, and the file is untouched — a read never
+    deletes an unreadable store. Send one prompt, then list the directory
+    → `session.json.bak` holds the original `{` and `session.json` is a fresh
+    snapshot: the first save moves bytes it cannot parse aside, never over.
 
 11. Quit, then set `"sessionId":"00000000-0000-0000-0000-000000000000"` in
     `session.json` and relaunch.
