@@ -17,6 +17,7 @@ import {
 	type MouseEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
+	type Ref,
 	type RefObject,
 	useCallback,
 	useContext,
@@ -35,6 +36,7 @@ import {
 	SPRING_LAYOUT,
 	SPRING_PRESS,
 	TRANSITION_NONE,
+	TWEEN_REDUCED,
 } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
@@ -297,10 +299,11 @@ export function AnimatedSidebarProvider({
 	)
 }
 
-interface MobileSidebarProps {
+interface MobileSidebarProps extends SidebarAsideAttributes {
 	ariaLabel: string
 	children: ReactNode
-	className?: string
+	forwardedRef?: Ref<HTMLElement>
+	panelClassName?: string
 	side: AnimatedSidebarSide
 }
 
@@ -320,10 +323,14 @@ function MobileSidebar({
 	ariaLabel,
 	children,
 	className,
+	forwardedRef,
+	panelClassName,
 	side,
+	...props
 }: MobileSidebarProps) {
 	const context = useAnimatedSidebar()
 	const panelRef = useRef<HTMLDivElement>(null)
+	const drawerTransition = context.reduce ? TWEEN_REDUCED : PANEL_TRANSITION
 
 	useEffect(() => {
 		if (!context.openMobile) return
@@ -399,10 +406,18 @@ function MobileSidebar({
 	}
 
 	return createPortal(
+		// A `visibility` transition holds `visible` for its whole duration, so the
+		// layer only leaves the accessibility tree once the drawer and the scrim
+		// have finished animating out. Opening zeroes it to show them at once.
 		<div
 			data-slot="sidebar-mobile-layer"
+			style={{
+				transitionDuration: context.openMobile
+					? "0s"
+					: `${drawerTransition.duration}s`,
+			}}
 			className={cn(
-				"pointer-events-none fixed inset-0 z-50 md:hidden",
+				"pointer-events-none fixed inset-0 z-50 transition-[visibility] md:hidden",
 				context.openMobile ? "visible" : "invisible",
 			)}
 		>
@@ -412,7 +427,7 @@ function MobileSidebar({
 				tabIndex={context.openMobile ? 0 : -1}
 				initial={false}
 				animate={{ opacity: context.openMobile ? 1 : 0 }}
-				transition={context.reduce ? TRANSITION_NONE : PANEL_TRANSITION}
+				transition={drawerTransition}
 				onClick={() => context.setOpenMobile(false)}
 				data-slot="sidebar-mobile-overlay"
 				className={cn(
@@ -422,7 +437,8 @@ function MobileSidebar({
 			/>
 
 			<motion.div
-				ref={panelRef}
+				{...props}
+				ref={mergeRefs<HTMLElement>(panelRef, forwardedRef)}
 				role="dialog"
 				aria-modal="true"
 				aria-label={ariaLabel}
@@ -442,7 +458,7 @@ function MobileSidebar({
 						side,
 					}),
 				}}
-				transition={context.reduce ? TRANSITION_NONE : PANEL_TRANSITION}
+				transition={drawerTransition}
 				onKeyDown={handlePanelKeyDown}
 				className={cn(
 					"pointer-events-auto absolute inset-y-0 flex h-dvh w-(--sidebar-width-mobile) max-w-[88vw] flex-col overflow-hidden",
@@ -450,6 +466,7 @@ function MobileSidebar({
 					side === "left" ? "left-0 border-r" : "right-0 border-l",
 					!context.openMobile && "pointer-events-none",
 					className,
+					panelClassName,
 				)}
 			>
 				<AnimatedSidebarPanelContext.Provider value={panelContextValue}>
@@ -517,7 +534,15 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 
 		if (context.isMobile) {
 			return (
-				<MobileSidebar ariaLabel={ariaLabel} className={className} side={side}>
+				<MobileSidebar
+					{...props}
+					ariaLabel={ariaLabel}
+					className={className}
+					forwardedRef={forwardedRef}
+					panelClassName={panelClassName}
+					side={side}
+					style={style}
+				>
 					{children}
 				</MobileSidebar>
 			)
