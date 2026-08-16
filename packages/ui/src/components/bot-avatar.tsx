@@ -35,7 +35,7 @@ const INK_WEIGHTS: Record<BotAvatarInk, number> = {
 
 const AUTHORED_WEIGHT = 5.5
 const REFERENCE_SIZE = 240
-const MIN_RENDERED_WEIGHT = 2.4
+const MIN_RENDERED_WEIGHT = 1.25
 const BOIL_DISPLACEMENT = 10
 
 type InkWeight = { ink: BotAvatarInk; size: number }
