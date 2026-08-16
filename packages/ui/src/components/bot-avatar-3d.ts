@@ -4,7 +4,7 @@ export type Quat = [number, number, number, number]
 
 export type EulerAngles = { yaw: number; pitch: number; roll: number }
 
-export type ProjectedEllipse = {
+type ProjectedEllipse = {
 	cx: number
 	cy: number
 	major: number
@@ -12,12 +12,15 @@ export type ProjectedEllipse = {
 	angle: number
 }
 
-export type SurfacePoint = { point: Vec3; normal: Vec3 }
+type SurfacePoint = { point: Vec3; normal: Vec3 }
 
-const FOCAL_LENGTH = 420
+export const ORIGIN: Vec3 = [0, 0, 0]
+export const AXIS_Z: Vec3 = [0, 0, 1]
+
+export const FOCAL_LENGTH = 420
+const NEAR_PLANE_LIMIT = 0.8
 const AXIS_X: Vec3 = [1, 0, 0]
 const AXIS_Y: Vec3 = [0, 1, 0]
-const AXIS_Z: Vec3 = [0, 0, 1]
 const UNIT_AXES: Vec3[] = [AXIS_X, AXIS_Y, AXIS_Z]
 
 export const IDENTITY_QUAT: Quat = [1, 0, 0, 0]
@@ -27,6 +30,9 @@ export const toRadians = (degrees: number) => (degrees * Math.PI) / 180
 export const toDegrees = (radians: number) => (radians * 180) / Math.PI
 
 export const round2 = (value: number) => Math.round(value * 100) / 100
+
+export const clamp = (value: number, min: number, max: number) =>
+	Math.max(min, Math.min(max, value))
 
 export const quatFromAxisAngle = (axis: Vec3, angle: number): Quat => {
 	const half = angle / 2
@@ -62,16 +68,24 @@ export const rotateVec3 = (rotation: Quat, v: Vec3): Vec3 => {
 	]
 }
 
-export const normalize = (v: Vec3): Vec3 => {
+export const rotatedZ = (rotation: Quat, v: Vec3) => {
+	const [w, qx, qy, qz] = rotation
+	const tx = 2 * (qy * v[2] - qz * v[1])
+	const ty = 2 * (qz * v[0] - qx * v[2])
+	const tz = 2 * (qx * v[1] - qy * v[0])
+	return v[2] + w * tz + qx * ty - qy * tx
+}
+
+const normalize = (v: Vec3): Vec3 => {
 	const length = Math.hypot(v[0], v[1], v[2]) || 1
 	return [v[0] / length, v[1] / length, v[2] / length]
 }
 
 type DepthScale = { depth: number; perspective: number }
 
-export const perspectiveScale = ({ depth, perspective }: DepthScale) => {
+const perspectiveScale = ({ depth, perspective }: DepthScale) => {
 	if (perspective <= 0) return 1
-	const near = Math.min(depth, FOCAL_LENGTH * 0.8)
+	const near = Math.min(depth, FOCAL_LENGTH * NEAR_PLANE_LIMIT)
 	return 1 + perspective * (FOCAL_LENGTH / (FOCAL_LENGTH - near) - 1)
 }
 
@@ -107,13 +121,22 @@ export const faceToSurface = ({ radii, face }: FaceMapping): SurfacePoint => {
 export const isFrontFacing = (normal: Vec3) => normal[2] > 0
 
 export const viewDepthRow = (rotation: Quat): Vec3 => [
-	rotateVec3(rotation, AXIS_X)[2],
-	rotateVec3(rotation, AXIS_Y)[2],
-	rotateVec3(rotation, AXIS_Z)[2],
+	rotatedZ(rotation, AXIS_X),
+	rotatedZ(rotation, AXIS_Y),
+	rotatedZ(rotation, AXIS_Z),
 ]
 
 const CLIP_REACH = 4096
 const FULL_COVER = `M${-CLIP_REACH} ${-CLIP_REACH}H${CLIP_REACH}V${CLIP_REACH}H${-CLIP_REACH}Z`
+
+const halfPlaneCorner = (
+	foot: Vec2,
+	tangent: Vec2,
+	unit: Vec2,
+	alongTangent: number,
+	alongNormal: number,
+) =>
+	`${round2(foot[0] + tangent[0] * alongTangent + unit[0] * alongNormal)} ${round2(foot[1] + tangent[1] * alongTangent + unit[1] * alongNormal)}`
 
 type HalfPlane = { normal: Vec2; offset: number }
 
@@ -124,10 +147,23 @@ export const halfPlanePath = ({ normal, offset }: HalfPlane) => {
 	}
 	const unit: Vec2 = [normal[0] / length, normal[1] / length]
 	const tangent: Vec2 = [-unit[1], unit[0]]
-	const foot: Vec2 = [(-offset / length) * unit[0], (-offset / length) * unit[1]]
-	const corner = (alongTangent: number, alongNormal: number) =>
-		`${round2(foot[0] + tangent[0] * alongTangent + unit[0] * alongNormal)} ${round2(foot[1] + tangent[1] * alongTangent + unit[1] * alongNormal)}`
-	return `M${corner(-CLIP_REACH, 0)}L${corner(CLIP_REACH, 0)}L${corner(CLIP_REACH, CLIP_REACH)}L${corner(-CLIP_REACH, CLIP_REACH)}Z`
+	const foot: Vec2 = [
+		(-offset / length) * unit[0],
+		(-offset / length) * unit[1],
+	]
+	const at = (alongTangent: number, alongNormal: number) =>
+		halfPlaneCorner(foot, tangent, unit, alongTangent, alongNormal)
+	return `M${at(-CLIP_REACH, 0)}L${at(CLIP_REACH, 0)}L${at(CLIP_REACH, CLIP_REACH)}L${at(-CLIP_REACH, CLIP_REACH)}Z`
+}
+
+type EarSplit = { rotation: Quat; plateCenter: Vec2; depth: number }
+
+export const earSplitPath = ({ rotation, plateCenter, depth }: EarSplit) => {
+	const row = viewDepthRow(rotation)
+	return halfPlanePath({
+		normal: [row[0], row[1]],
+		offset: depth - row[0] * plateCenter[0] - row[1] * plateCenter[1],
+	})
 }
 
 type EllipsoidProjection = {
@@ -137,7 +173,7 @@ type EllipsoidProjection = {
 	perspective: number
 }
 
-export type Conic = { xx: number; xy: number; yy: number }
+type Conic = { xx: number; xy: number; yy: number }
 
 export const projectConic = ({
 	radii,
@@ -149,15 +185,15 @@ export const projectConic = ({
 	let xx = 0
 	let xy = 0
 	let yy = 0
-	UNIT_AXES.forEach((axis, index) => {
-		const rotated = rotateVec3(rotation, axis)
+	for (let index = 0; index < UNIT_AXES.length; index += 1) {
+		const rotated = rotateVec3(rotation, UNIT_AXES[index])
 		const length = radii[index] * scale
 		const x = rotated[0] * length
 		const y = rotated[1] * length
 		xx += x * x
 		xy += x * y
 		yy += y * y
-	})
+	}
 	return { xx, xy, yy }
 }
 
@@ -226,7 +262,10 @@ export const conicAffine = ({
 	}
 }
 
-export const applySurfaceAffine = ({ spin, sx, sy }: SurfaceAffine, v: Vec2): Vec2 => {
+export const applySurfaceAffine = (
+	{ spin, sx, sy }: SurfaceAffine,
+	v: Vec2,
+): Vec2 => {
 	const cos = Math.cos(spin)
 	const sin = Math.sin(spin)
 	const x = v[0] * sx
@@ -244,8 +283,6 @@ type Visibility = { visible: boolean[]; closed: boolean }
 export const visibleRuns = ({ visible, closed }: Visibility): number[][] => {
 	const count = visible.length
 	if (count === 0) return []
-	if (visible.every(Boolean)) return [visible.map((_, index) => index)]
-	if (!visible.some(Boolean)) return []
 	const runs: number[][] = []
 	let run: number[] = []
 	const push = () => {
@@ -285,7 +322,10 @@ const lineFrom = (points: Vec2[], runs: number[][]) =>
 		.map(
 			(run) =>
 				`M${run
-					.map((index) => `${round2(points[index][0])} ${round2(points[index][1])}`)
+					.map(
+						(index) =>
+							`${round2(points[index][0])} ${round2(points[index][1])}`,
+					)
 					.join("L")}`,
 		)
 		.join("")

@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url"
+
 import { storybookTest } from "@storybook/addon-vitest/vitest-plugin"
 import { playwright } from "@vitest/browser-playwright"
 import { defineConfig } from "vitest/config"
@@ -8,7 +10,7 @@ export default defineConfig({
 			{
 				resolve: {
 					alias: {
-						"@workspace/ui": new URL("./src", import.meta.url).pathname,
+						"@workspace/ui": fileURLToPath(new URL("./src", import.meta.url)),
 					},
 				},
 				test: {

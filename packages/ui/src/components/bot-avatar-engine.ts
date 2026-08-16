@@ -1,12 +1,13 @@
 import {
+	AXIS_Z,
 	affineTransform,
+	clamp,
 	conicAffine,
 	type EulerAngles,
+	earSplitPath,
 	ellipseToPath,
-	faceToSurface,
-	halfPlanePath,
 	inPlaneSpin,
-	isFrontFacing,
+	ORIGIN,
 	project,
 	projectConic,
 	projectEllipsoid,
@@ -14,13 +15,13 @@ import {
 	quatFromAxisAngle,
 	quatFromEuler,
 	quatMultiply,
+	rotatedZ,
 	rotateVec3,
 	round2,
 	type SurfaceAffine,
 	toRadians,
 	type Vec2,
 	type Vec3,
-	viewDepthRow,
 	visibleRuns,
 	wireframePath,
 } from "@workspace/ui/components/bot-avatar-3d"
@@ -29,26 +30,42 @@ import { onBotAvatarFrame } from "@workspace/ui/components/bot-avatar-clock"
 import {
 	BLINK_CADENCE,
 	type BotAvatarState,
+	EAR_POSES,
+	EAR_STATE,
 	EXPRESSION_CADENCE,
 	EXPRESSIONS,
 	STATE_POOLS,
 	STATE_POSES,
 } from "@workspace/ui/components/bot-avatar-data"
 import {
+	type BotAvatarEarRest,
 	type BotAvatarSilhouette,
 	botAvatarSilhouette,
+	headSurfaceAffine,
 	weldToSilhouette,
 } from "@workspace/ui/components/bot-avatar-silhouette"
 
+type AxisTriple = { yaw: number; pitch: number; roll: number }
+
 const CENTER = 114.2705
 const BOIL_SEEDS = [3, 9, 17]
-const ORIGIN: Vec3 = [0, 0, 0]
-const VIEW_AXIS: Vec3 = [0, 0, 1]
 const AMBIENT_INTERVAL = 1000 / 30
 const AMBIENT_DEGREES = 1.1
-const AMBIENT_PERIODS: EulerAngles = { yaw: 2.6, pitch: 3.3, roll: 4.1 }
-const AMBIENT_PHASES: EulerAngles = { yaw: 0, pitch: 11.7, roll: 23.4 }
+const AMBIENT_PERIODS: AxisTriple = { yaw: 2.6, pitch: 3.3, roll: 4.1 }
+const AMBIENT_PHASES: AxisTriple = { yaw: 0, pitch: 11.7, roll: 23.4 }
 const POSE_EPSILON = 0.0004
+const POSE_SPRING_FREQUENCY = 9
+const POSE_SPRING_DAMPING = 0.9
+const EAR_WIGGLE_VELOCITY_LIMIT = 3
+const EAR_WIGGLE_DEGREES = 1.8
+const EAR_WIGGLE_FACE_DRIFT = 0.08
+const EAR_SWAY_DEGREES = 1.6
+const EAR_SWAY_RATE = 0.0008
+const EAR_SWAY_STAGGER = 2.3
+const EAR_PLATE_SQUASH_FLOOR = 0.5
+const BLUSH_OUTWARD_OFFSET = 9
+const BLUSH_BELOW_EYE_OFFSET = 9
+const BLUSH_FACE_FLOOR = 6
 const WIRE_PARALLELS = 6
 const WIRE_MERIDIANS = 8
 const WIRE_SAMPLES = 40
@@ -59,8 +76,6 @@ export const PARTS = {
 	rig: "rig",
 	head: "head",
 	headClip: "head-clip",
-	earsBack: "ears-back",
-	earsFront: "ears-front",
 	eye0: "eye-0",
 	eye1: "eye-1",
 	blush: "blush",
@@ -90,71 +105,6 @@ const HAPPY = new Set<BotAvatarState>([
 	"proud",
 ])
 
-type EarPose = { rot: number; sy: number }
-
-const symmetric = (rot: number, sy: number): [EarPose, EarPose] => [
-	{ rot, sy },
-	{ rot, sy },
-]
-
-const EAR_POSES: Record<string, [EarPose, EarPose]> = {
-	neutral: symmetric(0, 1),
-	soft: symmetric(8, 0.97),
-	perk: symmetric(-10, 1.16),
-	flat: symmetric(32, 0.82),
-	back: symmetric(20, 0.78),
-	tilt: [
-		{ rot: -16, sy: 1.16 },
-		{ rot: 18, sy: 0.9 },
-	],
-	radar: [
-		{ rot: -12, sy: 1.12 },
-		{ rot: 6, sy: 1 },
-	],
-}
-
-const EAR_STATE: Partial<Record<BotAvatarState, keyof typeof EAR_POSES>> = {
-	waiting: "soft",
-	happy: "soft",
-	laughing: "soft",
-	proud: "soft",
-	idle: "soft",
-	humming: "soft",
-	listening: "perk",
-	excited: "perk",
-	surprised: "perk",
-	notifying: "perk",
-	alerting: "perk",
-	dictating: "perk",
-	receiving: "perk",
-	spawning: "perk",
-	playful: "perk",
-	celebrate: "perk",
-	waking: "perk",
-	dragging: "perk",
-	curious: "tilt",
-	confused: "tilt",
-	thinking: "radar",
-	searching: "radar",
-	working: "radar",
-	loading: "radar",
-	uploading: "radar",
-	writing: "radar",
-	sending: "radar",
-	scared: "flat",
-	sad: "flat",
-	shy: "flat",
-	sleeping: "flat",
-	drowsy: "flat",
-	bored: "flat",
-	"powering-down": "flat",
-	angry: "back",
-	suspicious: "back",
-}
-
-const clamp = (v: number, min: number, max: number) =>
-	Math.max(min, Math.min(max, v))
-
 const centroid = (ring: number[][]) => {
 	let x = 0
 	let y = 0
@@ -167,18 +117,20 @@ const centroid = (ring: number[][]) => {
 
 const EYE_HOME = centroid(EXPRESSIONS.flat(2) as unknown as number[][])
 
-const eyesHeight = (rings: number[][][]) => {
-	const heights = rings.map((ring) => {
-		let min = Number.POSITIVE_INFINITY
-		let max = Number.NEGATIVE_INFINITY
-		for (const p of ring) {
-			min = Math.min(min, p[1])
-			max = Math.max(max, p[1])
-		}
-		return max - min
-	})
-	return (heights[0] + heights[1]) / 2
+const ringHeight = (ring: number[][]) => {
+	let min = Number.POSITIVE_INFINITY
+	let max = Number.NEGATIVE_INFINITY
+	for (const p of ring) {
+		min = Math.min(min, p[1])
+		max = Math.max(max, p[1])
+	}
+	return max - min
 }
+
+const eyesHeight = (rings: number[][][]) =>
+	(ringHeight(rings[0]) + ringHeight(rings[1])) / 2
+
+const springOut: [number, number] = [0, 0]
 
 const springStep = (
 	position: number,
@@ -193,7 +145,9 @@ const springStep = (
 		(-2 * damping * frequency * velocity -
 			frequency * frequency * (position - target)) *
 			dt
-	return [position + nextVelocity * dt, nextVelocity]
+	springOut[0] = position + nextVelocity * dt
+	springOut[1] = nextVelocity
+	return springOut
 }
 
 const latticeValue = (cell: number) => {
@@ -210,22 +164,15 @@ const valueNoise = (t: number) => {
 	return (from + (to - from) * blend) * 2 - 1
 }
 
-const ambientPose = (seconds: number): EulerAngles => ({
-	yaw: toRadians(
-		valueNoise(seconds / AMBIENT_PERIODS.yaw + AMBIENT_PHASES.yaw) *
+const ambientAxis = (seconds: number, axis: keyof AxisTriple) =>
+	toRadians(
+		valueNoise(seconds / AMBIENT_PERIODS[axis] + AMBIENT_PHASES[axis]) *
 			AMBIENT_DEGREES,
-	),
-	pitch: toRadians(
-		valueNoise(seconds / AMBIENT_PERIODS.pitch + AMBIENT_PHASES.pitch) *
-			AMBIENT_DEGREES,
-	),
-	roll: toRadians(
-		valueNoise(seconds / AMBIENT_PERIODS.roll + AMBIENT_PHASES.roll) *
-			AMBIENT_DEGREES,
-	),
-})
+	)
 
 const NEUTRAL_POSE: EulerAngles = { yaw: 0, pitch: 0, roll: 0 }
+
+const POSE_AXES: (keyof EulerAngles)[] = ["yaw", "pitch", "roll"]
 
 export type BotAvatarOrientation = {
 	yaw?: number
@@ -244,13 +191,6 @@ const poseInRadians = (state: BotAvatarState): EulerAngles => {
 }
 
 type EarPhysics = { rot: number; vRot: number; sy: number; vSy: number }
-
-type EarRest = {
-	restRadii: Vec2
-	anchor: Vec3
-	attach: Vec2
-	attachRest: Vec2
-}
 
 type EarNodes = {
 	back: SVGGElement
@@ -301,7 +241,8 @@ export class BotAvatarEngine {
 	private perspective = 0.55
 	private wireframe = false
 	private surface: BotAvatarSilhouette
-	private earRests: EarRest[]
+	private earRests: BotAvatarEarRest[]
+	private welds: Vec2[]
 
 	constructor(animal: BotAvatarAnimalDefinition) {
 		this.animal = animal
@@ -310,20 +251,8 @@ export class BotAvatarEngine {
 		this.earPhys = animal.ears.map(() => ({ rot: 0, vRot: 0, sy: 1, vSy: 0 }))
 		this.currentRings = EXPRESSIONS[0].map((ring) => ring.map((p) => [...p]))
 		this.targetRings = EXPRESSIONS[0]
-		const [cx, cy] = this.surface.center
-		this.earRests = animal.ears.map((ear, index) => {
-			const attach = this.surface.attachments[index]
-			return {
-				restRadii: [ear.volume.radii[0], ear.volume.radii[1]],
-				anchor: [
-					ear.volume.center[0] - cx,
-					ear.volume.center[1] - cy,
-					ear.depth,
-				],
-				attach,
-				attachRest: [cx + attach[0], cy + attach[1]],
-			}
-		})
+		this.welds = animal.ears.map((): Vec2 => [0, 0])
+		this.earRests = this.surface.earRests
 	}
 
 	bind(svg: SVGSVGElement) {
@@ -553,17 +482,19 @@ export class BotAvatarEngine {
 
 	private stepPose(now: number, dt: number) {
 		if (now - this.ambientAt >= AMBIENT_INTERVAL) {
-			this.ambient = ambientPose(now / 1000)
+			const seconds = now / 1000
+			this.ambient.yaw = ambientAxis(seconds, "yaw")
+			this.ambient.pitch = ambientAxis(seconds, "pitch")
+			this.ambient.roll = ambientAxis(seconds, "roll")
 			this.ambientAt = now
 		}
-		const axes: (keyof EulerAngles)[] = ["yaw", "pitch", "roll"]
-		for (const axis of axes) {
+		for (const axis of POSE_AXES) {
 			const [next, velocity] = springStep(
 				this.pose[axis],
 				this.poseVelocity[axis],
 				this.restPose(axis) + this.ambient[axis],
-				9,
-				0.9,
+				POSE_SPRING_FREQUENCY,
+				POSE_SPRING_DAMPING,
 				dt,
 			)
 			this.pose[axis] = Number.isFinite(next) ? next : 0
@@ -600,7 +531,8 @@ export class BotAvatarEngine {
 			this.velocity = 0
 		}
 		const pose = EAR_POSES[EAR_STATE[this.state] ?? "neutral"]
-		this.earPhys.forEach((ear, i) => {
+		for (let i = 0; i < this.earPhys.length; i += 1) {
+			const ear = this.earPhys[i]
 			const target = pose[this.earSwap ? 1 - (i % 2) : i % 2]
 			;[ear.rot, ear.vRot] = springStep(
 				ear.rot,
@@ -611,7 +543,7 @@ export class BotAvatarEngine {
 				dt,
 			)
 			;[ear.sy, ear.vSy] = springStep(ear.sy, ear.vSy, target.sy, 14, 0.5, dt)
-		})
+		}
 		this.render(now)
 	}
 
@@ -630,27 +562,37 @@ export class BotAvatarEngine {
 	private renderEars(rotation: Quat, welds: Vec2[], now: number) {
 		const parts = this.parts
 		if (!parts) return
-		const wiggle = clamp(this.velocity, -3, 3) * 1.8 + this.faceDx * 0.08
-		this.animal.ears.forEach((ear, index) => {
+		const wiggle =
+			clamp(
+				this.velocity,
+				-EAR_WIGGLE_VELOCITY_LIMIT,
+				EAR_WIGGLE_VELOCITY_LIMIT,
+			) *
+				EAR_WIGGLE_DEGREES +
+			this.faceDx * EAR_WIGGLE_FACE_DRIFT
+		for (let index = 0; index < this.animal.ears.length; index += 1) {
+			const ear = this.animal.ears[index]
 			const el = parts.ears[index]
 			const phys = this.earPhys[index]
 			const rest = this.earRests[index]
-			if (!el || !phys || !rest) return
-			const sway = Math.sin(now * 0.0008 + index * 2.3) * 1.6
+			if (!el || !phys || !rest) continue
+			const sway =
+				Math.sin(now * EAR_SWAY_RATE + index * EAR_SWAY_STAGGER) *
+				EAR_SWAY_DEGREES
 			const twist = quatFromAxisAngle(
-				VIEW_AXIS,
+				AXIS_Z,
 				toRadians(ear.side * phys.rot + wiggle + sway),
 			)
 			const hinged = quatMultiply(rotation, twist)
 			const anchor = rotateVec3(rotation, rest.anchor)
 			const plate: Vec3 = [
 				ear.volume.radii[0],
-				ear.volume.radii[1] * Math.max(0.5, phys.sy),
+				ear.volume.radii[1] * Math.max(EAR_PLATE_SQUASH_FLOOR, phys.sy),
 				ear.volume.radii[2],
 			]
 			const transform = affineTransform({
 				affine: conicAffine({
-					restRadii: rest.restRadii,
+					restRadii: [ear.volume.radii[0], ear.volume.radii[1]],
 					current: projectConic({
 						radii: plate,
 						rotation: hinged,
@@ -665,19 +607,18 @@ export class BotAvatarEngine {
 			el.back.setAttribute("transform", transform)
 			el.front.setAttribute("transform", transform)
 			this.writeEarSplit(index, hinged, anchor[2])
-		})
+		}
 	}
 
 	private writeEarSplit(index: number, hinged: Quat, depth: number) {
 		const split = this.parts?.ears[index]?.split
 		if (!split) return
-		const [plateX, plateY] = this.animal.ears[index].volume.center
-		const row = viewDepthRow(hinged)
 		split.setAttribute(
 			"d",
-			halfPlanePath({
-				normal: [row[0], row[1]],
-				offset: depth - row[0] * plateX - row[1] * plateY,
+			earSplitPath({
+				rotation: hinged,
+				plateCenter: this.animal.ears[index].volume.center,
+				depth,
 			}),
 		)
 	}
@@ -692,6 +633,7 @@ export class BotAvatarEngine {
 			animal.scale *
 			Math.min(1, 64 / Math.max(1, eyesHeight(rings) * animal.scale))
 		const offsetY = animal.faceY - this.surface.center[1]
+		const [rx, ry, rz] = this.surface.radii
 		const eyeCentroids: number[][] = []
 		rings.forEach((ring, index) => {
 			const middle = centroid(ring)
@@ -700,19 +642,30 @@ export class BotAvatarEngine {
 			const points: Vec2[] = []
 			const visible: boolean[] = []
 			for (const vertex of ring) {
-				const face: Vec2 = [
-					(vertex[0] - CENTER) * faceScale,
-					middleY +
-						((vertex[1] - CENTER) * faceScale + offsetY - middleY) * blink,
+				const longitude = ((vertex[0] - CENTER) * faceScale) / rx
+				const latitude =
+					(middleY +
+						((vertex[1] - CENTER) * faceScale + offsetY - middleY) * blink) /
+					ry
+				const cosLatitude = Math.cos(latitude)
+				const point: Vec3 = [
+					rx * cosLatitude * Math.sin(longitude),
+					ry * Math.sin(latitude),
+					rz * cosLatitude * Math.cos(longitude),
 				]
-				const surface = faceToSurface({ radii: this.surface.radii, face })
 				points.push(
 					project({
-						point: rotateVec3(rotation, surface.point),
+						point: rotateVec3(rotation, point),
 						perspective: this.perspective,
 					}),
 				)
-				visible.push(isFrontFacing(rotateVec3(rotation, surface.normal)))
+				visible.push(
+					rotatedZ(rotation, [
+						point[0] / (rx * rx),
+						point[1] / (ry * ry),
+						point[2] / (rz * rz),
+					]) > 0,
+				)
 			}
 			this.writeEye(index, points, visible)
 		})
@@ -732,20 +685,16 @@ export class BotAvatarEngine {
 			el.style.opacity = isVisible ? "1" : "0"
 		}
 		if (!isVisible) return
-		el.setAttribute(
-			"d",
-			runs
-				.map(
-					(run) =>
-						`M${run
-							.map(
-								(at) =>
-									`${round2(cx + points[at][0])} ${round2(cy + points[at][1])}`,
-							)
-							.join("L")}Z`,
-				)
-				.join(""),
-		)
+		let d = ""
+		for (const run of runs) {
+			for (let step = 0; step < run.length; step += 1) {
+				const at = run[step]
+				d += step === 0 ? "M" : "L"
+				d += `${round2(cx + points[at][0])} ${round2(cy + points[at][1])}`
+			}
+			d += "Z"
+		}
+		el.setAttribute("d", d)
 		const dot = parts.blushDots[index]
 		if (!dot) return
 		let bottom = Number.NEGATIVE_INFINITY
@@ -756,10 +705,20 @@ export class BotAvatarEngine {
 		}
 		const middleX = sum / runs[0].length
 		const away = Math.sign(middleX - cx) || (index === 0 ? -1 : 1)
-		dot.setAttribute("cx", String(round2(middleX + away * 9)))
+		dot.setAttribute(
+			"cx",
+			String(round2(middleX + away * BLUSH_OUTWARD_OFFSET)),
+		)
 		dot.setAttribute(
 			"cy",
-			String(round2(Math.max(bottom + 9, this.animal.faceY + 6))),
+			String(
+				round2(
+					Math.max(
+						bottom + BLUSH_BELOW_EYE_OFFSET,
+						this.animal.faceY + BLUSH_FACE_FLOOR,
+					),
+				),
+			),
 		)
 	}
 
@@ -810,25 +769,25 @@ export class BotAvatarEngine {
 			Math.abs(this.velocity) < 0.001 &&
 			this.blinkStart === null
 		const rotation = quatFromEuler(this.pose)
-		const headAffine = conicAffine({
-			restRadii: [this.surface.radii[0], this.surface.radii[1]],
-			current: projectConic({
-				radii: this.surface.radii,
-				rotation,
-				center: ORIGIN,
-				perspective: this.perspective,
-			}),
-			spin: inPlaneSpin(rotation),
+		const headAffine = headSurfaceAffine({
+			surface: this.surface,
+			rotation,
+			perspective: this.perspective,
 		})
-		const welds = this.earRests.map((rest) =>
-			weldToSilhouette({
+		const welds = this.welds
+		for (let index = 0; index < this.earRests.length; index += 1) {
+			const weld = weldToSilhouette({
 				surface: this.surface,
-				attach: rest.attach,
+				attach: this.earRests[index].attach,
 				affine: headAffine,
-			}),
-		)
+			})
+			welds[index][0] = weld[0]
+			welds[index][1] = weld[1]
+		}
 		if (!settled || this.eyesDirty || this.poseMoved()) {
-			this.renderedPose = { ...this.pose }
+			this.renderedPose.yaw = this.pose.yaw
+			this.renderedPose.pitch = this.pose.pitch
+			this.renderedPose.roll = this.pose.roll
 			this.renderHead(headAffine)
 			this.renderEyes(rotation, now)
 			this.renderWire(rotation, welds)

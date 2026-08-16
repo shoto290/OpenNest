@@ -1,66 +1,82 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	AXIS_Z,
 	affineTransform,
+	applySurfaceAffine,
 	conicAffine,
-	halfPlanePath,
+	earSplitPath,
 	IDENTITY_AFFINE,
 	IDENTITY_QUAT,
 	inPlaneSpin,
+	ORIGIN,
 	projectConic,
-	type Quat,
 	quatFromAxisAngle,
 	quatFromEuler,
 	quatMultiply,
 	rotateVec3,
+	type SurfaceAffine,
 	toRadians,
 	type Vec2,
-	viewDepthRow,
 } from "@workspace/ui/components/bot-avatar-3d"
 import {
 	ANIMALS,
 	type BotAvatarAnimal,
 	type BotAvatarAnimalDefinition,
+	type BotAvatarEar,
 } from "@workspace/ui/components/bot-avatar-animals"
 import {
+	type BotAvatarSilhouette,
 	botAvatarSilhouette,
 	flattenPath,
+	headSurfaceAffine,
 	nearestOutlinePoint,
 	outlineBounds,
-	warpedOutline,
 	weldToSilhouette,
 } from "@workspace/ui/components/bot-avatar-silhouette"
 
-const ORIGIN: [number, number, number] = [0, 0, 0]
 const ANIMAL_NAMES = Object.keys(ANIMALS) as BotAvatarAnimal[]
 const SWEEP = [-60, -40, -20, -8, 0, 8, 20, 40, 60]
 const WELD_TOLERANCE = 1e-9
-const VIEW_AXIS: [number, number, number] = [0, 0, 1]
 
 const definitionOf = (name: BotAvatarAnimal) =>
 	ANIMALS[name] as BotAvatarAnimalDefinition
 
-const headAffine = (
-	surface: ReturnType<typeof botAvatarSilhouette>,
-	rotation: Quat,
-	perspective: number,
-) =>
-	conicAffine({
-		restRadii: [surface.radii[0], surface.radii[1]],
-		current: projectConic({
-			radii: surface.radii,
-			rotation,
-			center: ORIGIN,
-			perspective,
-		}),
-		spin: inPlaneSpin(rotation),
+const warpedOutline = (
+	surface: BotAvatarSilhouette,
+	affine: SurfaceAffine,
+): Vec2[] => {
+	const [cx, cy] = surface.center
+	return surface.outline.map((point) => {
+		const warped = applySurfaceAffine(affine, [point[0] - cx, point[1] - cy])
+		return [cx + warped[0], cy + warped[1]]
+	})
+}
+
+const controlPoints = (d: string): Vec2[] => {
+	const values = (d.match(/-?\d*\.?\d+/g) ?? []).map(Number)
+	const points: Vec2[] = []
+	for (let at = 0; at + 1 < values.length; at += 2) {
+		points.push([values[at], values[at + 1]])
+	}
+	return points
+}
+
+const drawnEarPoints = (ear: BotAvatarEar): Vec2[] =>
+	ear.shapes.flatMap((shape): Vec2[] => {
+		if (shape.kind === "path") return flattenPath(shape.d)
+		const rx = shape.kind === "circle" ? shape.r : shape.rx
+		const ry = shape.kind === "circle" ? shape.r : shape.ry
+		return [
+			[shape.cx - rx, shape.cy - ry],
+			[shape.cx + rx, shape.cy + ry],
+		]
 	})
 
-const distanceToOutline = (outline: Vec2[], target: Vec2) =>
-	Math.hypot(
-		target[0] - nearestOutlinePoint({ points: outline, target })[0],
-		target[1] - nearestOutlinePoint({ points: outline, target })[1],
-	)
+const distanceToOutline = (outline: Vec2[], target: Vec2) => {
+	const nearest = nearestOutlinePoint({ points: outline, target })
+	return Math.hypot(target[0] - nearest[0], target[1] - nearest[1])
+}
 
 type WeldCase = {
 	animal: BotAvatarAnimal
@@ -78,7 +94,7 @@ const weldGap = ({ animal, yaw, pitch, roll, perspective }: WeldCase) => {
 		pitch: toRadians(pitch),
 		roll: toRadians(roll),
 	})
-	const affine = headAffine(surface, rotation, perspective)
+	const affine = headSurfaceAffine({ surface, rotation, perspective })
 	const outline = warpedOutline(surface, affine)
 	return surface.attachments.map((attach) =>
 		distanceToOutline(outline, weldToSilhouette({ surface, attach, affine })),
@@ -131,11 +147,22 @@ describe("head volume fit", () => {
 		}
 	})
 
-	it("tightens the volume the control-point heuristic left loose", () => {
-		expect(botAvatarSilhouette(ANIMALS.cat).radii[0]).toBeLessThan(74)
-		expect(botAvatarSilhouette(ANIMALS.dog).radii[0]).toBeLessThan(55)
-		expect(botAvatarSilhouette(ANIMALS.mouse).radii[0]).toBeLessThan(53)
-		expect(botAvatarSilhouette(ANIMALS.koala).radii[0]).toBeLessThan(65)
+	it("never exceeds the control-point bound, and beats it where the curve bends inside its hull", () => {
+		let tighterAnimals = 0
+		for (const name of ANIMAL_NAMES) {
+			const animal = definitionOf(name)
+			const surface = botAvatarSilhouette(animal)
+			const hull = outlineBounds(controlPoints(animal.head))
+			expect(surface.radii[0]).toBeLessThanOrEqual(hull.extent[0] + 1e-9)
+			expect(surface.radii[1]).toBeLessThanOrEqual(hull.extent[1] + 1e-9)
+			if (
+				surface.radii[0] < hull.extent[0] - 1e-9 ||
+				surface.radii[1] < hull.extent[1] - 1e-9
+			) {
+				tighterAnimals += 1
+			}
+		}
+		expect(tighterAnimals).toBeGreaterThan(0)
 	})
 })
 
@@ -205,7 +232,11 @@ describe("ear attachment", () => {
 		for (const animal of ANIMAL_NAMES) {
 			const definition = definitionOf(animal)
 			const surface = botAvatarSilhouette(definition)
-			const affine = headAffine(surface, IDENTITY_QUAT, 0)
+			const affine = headSurfaceAffine({
+				surface,
+				rotation: IDENTITY_QUAT,
+				perspective: 0,
+			})
 			surface.attachments.forEach((attach, index) => {
 				const attachRest: Vec2 = [
 					surface.center[0] + attach[0],
@@ -226,7 +257,6 @@ describe("ear attachment", () => {
 					restPivot: attachRest,
 					pivot: weldToSilhouette({ surface, attach, affine }),
 				})
-				expect(transform).toContain("rotate(0) scale(1 1)")
 				expect(transform).toBe(
 					affineTransform({
 						affine: IDENTITY_AFFINE,
@@ -241,7 +271,7 @@ describe("ear attachment", () => {
 	it("carries the anchor with the head through the same arc as the skull", () => {
 		const surface = botAvatarSilhouette(ANIMALS.cat)
 		const rotation = quatFromEuler({ yaw: toRadians(50), pitch: 0, roll: 0 })
-		const affine = headAffine(surface, rotation, 0)
+		const affine = headSurfaceAffine({ surface, rotation, perspective: 0 })
 		const attach = surface.attachments[0]
 		const weld = weldToSilhouette({ surface, attach, affine })
 		expect(affine.spin).toBeCloseTo(0, 9)
@@ -254,11 +284,11 @@ describe("ear attachment", () => {
 	it("rolls the anchor with the head when the head rolls", () => {
 		const surface = botAvatarSilhouette(ANIMALS.cat)
 		const roll = toRadians(30)
-		const affine = headAffine(
+		const affine = headSurfaceAffine({
 			surface,
-			quatFromEuler({ yaw: 0, pitch: 0, roll }),
-			0,
-		)
+			rotation: quatFromEuler({ yaw: 0, pitch: 0, roll }),
+			perspective: 0,
+		})
 		const attach = surface.attachments[0]
 		const weld = weldToSilhouette({ surface, attach, affine })
 		expect(affine.spin).toBeCloseTo(roll, 9)
@@ -269,25 +299,46 @@ describe("ear attachment", () => {
 	})
 })
 
+describe("ear volume authoring", () => {
+	const EAR_VOLUME_TOLERANCE = 3
+
+	it("keeps every authored ear volume on top of the shapes it is drawn from", () => {
+		for (const name of ANIMAL_NAMES) {
+			for (const ear of definitionOf(name).ears) {
+				const drawn = outlineBounds(drawnEarPoints(ear))
+				expect(Math.abs(ear.volume.center[0] - drawn.center[0])).toBeLessThan(
+					EAR_VOLUME_TOLERANCE,
+				)
+				expect(Math.abs(ear.volume.center[1] - drawn.center[1])).toBeLessThan(
+					EAR_VOLUME_TOLERANCE,
+				)
+				expect(Math.abs(ear.volume.radii[0] - drawn.extent[0])).toBeLessThan(
+					EAR_VOLUME_TOLERANCE,
+				)
+				expect(Math.abs(ear.volume.radii[1] - drawn.extent[1])).toBeLessThan(
+					EAR_VOLUME_TOLERANCE,
+				)
+			}
+		}
+	})
+})
+
 describe("ear depth split", () => {
 	const splitFor = (yaw: number) => {
 		const definition = definitionOf("cat")
 		const surface = botAvatarSilhouette(definition)
 		const ear = definition.ears[0]
 		const rotation = quatFromEuler({ yaw: toRadians(yaw), pitch: 0, roll: 0 })
-		const hinged = quatMultiply(rotation, quatFromAxisAngle(VIEW_AXIS, 0))
+		const hinged = quatMultiply(rotation, quatFromAxisAngle(AXIS_Z, 0))
 		const anchor = rotateVec3(rotation, [
 			ear.volume.center[0] - surface.center[0],
 			ear.volume.center[1] - surface.center[1],
 			ear.depth,
 		])
-		const row = viewDepthRow(hinged)
-		return halfPlanePath({
-			normal: [row[0], row[1]],
-			offset:
-				anchor[2] -
-				row[0] * ear.volume.center[0] -
-				row[1] * ear.volume.center[1],
+		return earSplitPath({
+			rotation: hinged,
+			plateCenter: ear.volume.center,
+			depth: anchor[2],
 		})
 	}
 

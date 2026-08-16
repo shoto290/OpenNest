@@ -311,15 +311,47 @@ describe("svg emission", () => {
 	})
 
 	it("draws only the near sheet of the wireframe", () => {
+		const parallels = 4
+		const meridians = 4
+		const samples = 24
+		const rotation = quatFromEuler({
+			yaw: toRadians(35),
+			pitch: toRadians(-20),
+			roll: 0,
+		})
 		const path = wireframePath({
 			radii: HEAD_RADII,
-			rotation: IDENTITY_QUAT,
+			rotation,
 			perspective: 0,
-			parallels: 4,
-			meridians: 4,
-			samples: 24,
+			parallels,
+			meridians,
+			samples,
 		})
-		expect(path.startsWith("M")).toBe(true)
-		expect(path.split("M").length).toBeGreaterThan(4)
+		let sampled = 0
+		let facingViewer = 0
+		const count = (latitude: number, longitude: number) => {
+			sampled += 1
+			const { normal } = faceToSurface({
+				radii: HEAD_RADII,
+				face: [longitude * HEAD_RADII[0], latitude * HEAD_RADII[1]],
+			})
+			if (isFrontFacing(rotateVec3(rotation, normal))) facingViewer += 1
+		}
+		for (let index = 1; index < parallels; index += 1) {
+			const latitude = -Math.PI / 2 + (Math.PI * index) / parallels
+			for (let step = 0; step <= samples; step += 1) {
+				count(latitude, -Math.PI + (2 * Math.PI * step) / samples)
+			}
+		}
+		for (let index = 0; index < meridians; index += 1) {
+			const longitude = -Math.PI / 2 + (Math.PI * index) / meridians
+			for (let step = 0; step <= samples; step += 1) {
+				count(-Math.PI / 2 + (Math.PI * step) / samples, longitude)
+			}
+		}
+		const drawn = (path.match(/-?[\d.]+ -?[\d.]+/g) ?? []).length
+		expect(facingViewer).toBeLessThan(sampled)
+		expect(drawn).toBeGreaterThan(0)
+		expect(drawn).toBeLessThanOrEqual(facingViewer)
 	})
 })

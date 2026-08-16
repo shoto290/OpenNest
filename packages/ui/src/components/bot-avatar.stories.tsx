@@ -11,6 +11,7 @@ import {
 	type BotAvatarState,
 	STATE_GROUPS,
 	STATE_POOLS,
+	STATE_POSES,
 } from "@workspace/ui/components/bot-avatar-data"
 
 const BOT_AVATAR_ANIMALS = Object.keys(ANIMALS) as BotAvatarAnimal[]
@@ -34,7 +35,7 @@ const STATE_OPTIONS = [
 const STATE_LABELS = Object.fromEntries(
 	STATE_OPTIONS.map((state) => [
 		state,
-		`${GROUPED_STATES.find((entry) => entry.state === state)?.group ?? "Autres"} · ${state}`,
+		`${GROUPED_STATES.find((entry) => entry.state === state)?.group ?? "Other"} · ${state}`,
 	]),
 )
 
@@ -119,11 +120,9 @@ const meta = preview.meta({
 export const Lab3D = meta.story({
 	name: "Lab 3D",
 	args: {
+		...STATE_POSES.waiting,
 		size: 360,
 		interactive: true,
-		yaw: -16,
-		pitch: 23,
-		roll: 6,
 		perspective: 0,
 	},
 	parameters: {

@@ -1,5 +1,11 @@
 import {
 	applySurfaceAffine,
+	clamp,
+	conicAffine,
+	inPlaneSpin,
+	ORIGIN,
+	projectConic,
+	type Quat,
 	type SurfaceAffine,
 	type Vec2,
 	type Vec3,
@@ -82,13 +88,11 @@ export const nearestOutlinePoint = ({ points, target }: NearestPoint): Vec2 => {
 		const edgeX = to[0] - from[0]
 		const edgeY = to[1] - from[1]
 		const lengthSquared = edgeX * edgeX + edgeY * edgeY || 1
-		const along = Math.max(
+		const along = clamp(
+			((target[0] - from[0]) * edgeX + (target[1] - from[1]) * edgeY) /
+				lengthSquared,
 			0,
-			Math.min(
-				1,
-				((target[0] - from[0]) * edgeX + (target[1] - from[1]) * edgeY) /
-					lengthSquared,
-			),
+			1,
 		)
 		const point: Vec2 = [from[0] + edgeX * along, from[1] + edgeY * along]
 		const distance = Math.hypot(target[0] - point[0], target[1] - point[1])
@@ -99,23 +103,44 @@ export const nearestOutlinePoint = ({ points, target }: NearestPoint): Vec2 => {
 	return best
 }
 
+export type BotAvatarEarRest = {
+	anchor: Vec3
+	attach: Vec2
+	attachRest: Vec2
+}
+
 export type BotAvatarSilhouette = {
 	center: Vec2
 	radii: Vec3
 	outline: Vec2[]
 	attachments: Vec2[]
+	earRests: BotAvatarEarRest[]
 }
 
 const solve = (animal: BotAvatarAnimalDefinition): BotAvatarSilhouette => {
 	const outline = flattenPath(animal.head)
 	const { center, extent } = outlineBounds(outline)
+	const [cx, cy] = center
+	const attachments: Vec2[] = animal.ears.map((ear) => {
+		const attach = nearestOutlinePoint({ points: outline, target: ear.pivot })
+		return [attach[0] - cx, attach[1] - cy]
+	})
 	return {
 		center,
 		radii: [extent[0], extent[1], animal.headDepth],
 		outline,
-		attachments: animal.ears.map((ear) => {
-			const attach = nearestOutlinePoint({ points: outline, target: ear.pivot })
-			return [attach[0] - center[0], attach[1] - center[1]]
+		attachments,
+		earRests: animal.ears.map((ear, index) => {
+			const attach = attachments[index]
+			return {
+				anchor: [
+					ear.volume.center[0] - cx,
+					ear.volume.center[1] - cy,
+					ear.depth,
+				],
+				attach,
+				attachRest: [cx + attach[0], cy + attach[1]],
+			}
 		}),
 	}
 }
@@ -129,6 +154,28 @@ export const botAvatarSilhouette = (animal: BotAvatarAnimalDefinition) => {
 	CACHE.set(animal, solved)
 	return solved
 }
+
+type HeadAffine = {
+	surface: BotAvatarSilhouette
+	rotation: Quat
+	perspective: number
+}
+
+export const headSurfaceAffine = ({
+	surface,
+	rotation,
+	perspective,
+}: HeadAffine): SurfaceAffine =>
+	conicAffine({
+		restRadii: [surface.radii[0], surface.radii[1]],
+		current: projectConic({
+			radii: surface.radii,
+			rotation,
+			center: ORIGIN,
+			perspective,
+		}),
+		spin: inPlaneSpin(rotation),
+	})
 
 type EarWeld = {
 	surface: BotAvatarSilhouette
@@ -144,15 +191,4 @@ export const weldToSilhouette = ({
 	const [cx, cy] = surface.center
 	const hit = applySurfaceAffine(affine, attach)
 	return [cx + hit[0], cy + hit[1]]
-}
-
-export const warpedOutline = (
-	surface: BotAvatarSilhouette,
-	affine: SurfaceAffine,
-): Vec2[] => {
-	const [cx, cy] = surface.center
-	return surface.outline.map((point) => {
-		const warped = applySurfaceAffine(affine, [point[0] - cx, point[1] - cy])
-		return [cx + warped[0], cy + warped[1]]
-	})
 }

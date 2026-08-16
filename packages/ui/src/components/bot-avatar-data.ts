@@ -2838,3 +2838,70 @@ export type BotAvatarPose = { yaw: number; pitch: number; roll: number }
 export const STATE_POSES: Partial<Record<BotAvatarState, BotAvatarPose>> = {
 	waiting: { yaw: -16, pitch: 23, roll: 6 },
 }
+
+export type BotAvatarEarPose = { rot: number; sy: number }
+
+const symmetric = (
+	rot: number,
+	sy: number,
+): [BotAvatarEarPose, BotAvatarEarPose] => [
+	{ rot, sy },
+	{ rot, sy },
+]
+
+export const EAR_POSES: Record<string, [BotAvatarEarPose, BotAvatarEarPose]> = {
+	neutral: symmetric(0, 1),
+	soft: symmetric(8, 0.97),
+	perk: symmetric(-10, 1.16),
+	flat: symmetric(32, 0.82),
+	back: symmetric(20, 0.78),
+	tilt: [
+		{ rot: -16, sy: 1.16 },
+		{ rot: 18, sy: 0.9 },
+	],
+	radar: [
+		{ rot: -12, sy: 1.12 },
+		{ rot: 6, sy: 1 },
+	],
+}
+
+export const EAR_STATE: Partial<
+	Record<BotAvatarState, keyof typeof EAR_POSES>
+> = {
+	waiting: "soft",
+	happy: "soft",
+	laughing: "soft",
+	proud: "soft",
+	idle: "soft",
+	humming: "soft",
+	listening: "perk",
+	excited: "perk",
+	surprised: "perk",
+	notifying: "perk",
+	alerting: "perk",
+	dictating: "perk",
+	receiving: "perk",
+	spawning: "perk",
+	playful: "perk",
+	celebrate: "perk",
+	waking: "perk",
+	dragging: "perk",
+	curious: "tilt",
+	confused: "tilt",
+	thinking: "radar",
+	searching: "radar",
+	working: "radar",
+	loading: "radar",
+	uploading: "radar",
+	writing: "radar",
+	sending: "radar",
+	scared: "flat",
+	sad: "flat",
+	shy: "flat",
+	sleeping: "flat",
+	drowsy: "flat",
+	bored: "flat",
+	"powering-down": "flat",
+	angry: "back",
+	suspicious: "back",
+}

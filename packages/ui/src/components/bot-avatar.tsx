@@ -8,6 +8,7 @@ import {
 	useRef,
 } from "react"
 
+import { clamp, round2 } from "@workspace/ui/components/bot-avatar-3d"
 import {
 	ANIMALS,
 	type BotAvatarAnimal,
@@ -62,11 +63,6 @@ const shapeKey = (shape: BotAvatarShape) =>
 		? `${shape.role}-${shape.d.slice(0, 24)}`
 		: `${shape.kind}-${shape.role}-${shape.cx}-${shape.cy}`
 
-const clamp = (value: number, limit: number) =>
-	Math.max(-limit, Math.min(limit, value))
-
-const round = (value: number) => Math.round(value * 100) / 100
-
 type EarLayerProps = {
 	animal: BotAvatarAnimal
 	ears: BotAvatarEar[]
@@ -75,11 +71,14 @@ type EarLayerProps = {
 	splitId: string
 }
 
-function EarLayer({ animal, ears, layer, weight, splitId }: EarLayerProps) {
+const EarLayer = ({ animal, ears, layer, weight, splitId }: EarLayerProps) => {
 	return (
-		<g data-part={layer === "front" ? PARTS.earsFront : PARTS.earsBack}>
+		<g>
 			{ears.map((ear, index) => (
-				<g data-part={PARTS.ear(index, layer)} key={`${animal}-ear-${ear.pivot[0]}`}>
+				<g
+					data-part={PARTS.ear(index, layer)}
+					key={`${animal}-ear-${ear.pivot[0]}`}
+				>
 					<g
 						clipPath={
 							layer === "front" ? `url(#${splitId}-${index})` : undefined
@@ -104,7 +103,7 @@ function Shape({ shape, weight }: ShapeProps) {
 			: AUTHORED_WEIGHT
 	const props = {
 		...ROLE_PROPS[shape.role],
-		strokeWidth: round((authored * weight) / AUTHORED_WEIGHT),
+		strokeWidth: round2((authored * weight) / AUTHORED_WEIGHT),
 	}
 	if (shape.kind === "circle") {
 		return <circle cx={shape.cx} cy={shape.cy} r={shape.r} {...props} />
@@ -164,7 +163,7 @@ function BotAvatar({
 	const splitId = `bot-avatar-split-${id}`
 	const definition = ANIMALS[animal]
 	const weight = inkWeight({ ink, size })
-	const boil = round((BOIL_DISPLACEMENT * INK_WEIGHTS[ink]) / weight)
+	const boil = round2((BOIL_DISPLACEMENT * INK_WEIGHTS[ink]) / weight)
 	const prefersReducedMotion = usePrefersReducedMotion()
 	const isAnimated = animated && !prefersReducedMotion
 
@@ -211,10 +210,12 @@ function BotAvatar({
 		onOrientationChange?.({
 			yaw: clamp(
 				origin.yaw + (event.clientX - origin.x) * DRAG_DEGREES_PER_PIXEL,
+				-DRAG_LIMIT,
 				DRAG_LIMIT,
 			),
 			pitch: clamp(
 				origin.pitch - (event.clientY - origin.y) * DRAG_DEGREES_PER_PIXEL,
+				-DRAG_LIMIT,
 				DRAG_LIMIT,
 			),
 			roll: origin.roll,
@@ -225,6 +226,87 @@ function BotAvatar({
 		if (!interactive) return
 		event.currentTarget.releasePointerCapture(event.pointerId)
 	}
+
+	const body = useMemo(
+		() => (
+			<>
+				<defs>
+					<filter id={filterId} x="-15%" y="-15%" width="130%" height="130%">
+						<feTurbulence
+							data-part={PARTS.noise}
+							type="fractalNoise"
+							baseFrequency="0.024"
+							numOctaves="3"
+							seed="3"
+							result="n"
+						/>
+						<feDisplacementMap in="SourceGraphic" in2="n" scale={boil} />
+					</filter>
+					<clipPath id={clipId}>
+						<path data-part={PARTS.headClip} d={definition.head} />
+					</clipPath>
+					{definition.ears.map((ear, index) => (
+						<clipPath
+							clipPathUnits="userSpaceOnUse"
+							id={`${splitId}-${index}`}
+							key={`${animal}-split-${ear.pivot[0]}`}
+						>
+							<path data-part={PARTS.earSplit(index)} d="" />
+						</clipPath>
+					))}
+				</defs>
+				<g filter={`url(#${filterId})`}>
+					<g data-part={PARTS.rig}>
+						<EarLayer
+							animal={animal}
+							ears={definition.ears}
+							layer="back"
+							splitId={splitId}
+							weight={weight}
+						/>
+						<g data-part={PARTS.head}>
+							<path
+								d={definition.head}
+								{...ROLE_PROPS.outline}
+								strokeWidth={round2(weight)}
+							/>
+							{definition.extras.map((shape) => (
+								<Shape key={shapeKey(shape)} shape={shape} weight={weight} />
+							))}
+						</g>
+						<EarLayer
+							animal={animal}
+							ears={definition.ears}
+							layer="front"
+							splitId={splitId}
+							weight={weight}
+						/>
+						<g
+							data-part={PARTS.blush}
+							opacity={0}
+							style={{ transition: "opacity 0.5s ease" }}
+						>
+							<ellipse rx={9} ry={4.5} {...ROLE_PROPS.accent} />
+							<ellipse rx={9} ry={4.5} {...ROLE_PROPS.accent} />
+						</g>
+						<g clipPath={`url(#${clipId})`}>
+							<path data-part={PARTS.eye0} fill="currentColor" />
+							<path data-part={PARTS.eye1} fill="currentColor" />
+						</g>
+						<path
+							data-part={PARTS.wire}
+							fill="none"
+							stroke="var(--bot-avatar-accent, #e36f3d)"
+							strokeWidth={1}
+							opacity={0.55}
+							style={{ display: wireframe ? undefined : "none" }}
+						/>
+					</g>
+				</g>
+			</>
+		),
+		[animal, boil, clipId, definition, filterId, splitId, weight, wireframe],
+	)
 
 	return (
 		<svg
@@ -243,79 +325,7 @@ function BotAvatar({
 				className,
 			)}
 		>
-			<defs>
-				<filter id={filterId} x="-15%" y="-15%" width="130%" height="130%">
-					<feTurbulence
-						data-part={PARTS.noise}
-						type="fractalNoise"
-						baseFrequency="0.024"
-						numOctaves="3"
-						seed="3"
-						result="n"
-					/>
-					<feDisplacementMap in="SourceGraphic" in2="n" scale={boil} />
-				</filter>
-				<clipPath id={clipId}>
-					<path data-part={PARTS.headClip} d={definition.head} />
-				</clipPath>
-				{definition.ears.map((ear, index) => (
-					<clipPath
-						clipPathUnits="userSpaceOnUse"
-						id={`${splitId}-${index}`}
-						key={`${animal}-split-${ear.pivot[0]}`}
-					>
-						<path data-part={PARTS.earSplit(index)} d="" />
-					</clipPath>
-				))}
-			</defs>
-			<g filter={`url(#${filterId})`}>
-				<g data-part={PARTS.rig}>
-					<EarLayer
-						animal={animal}
-						ears={definition.ears}
-						layer="back"
-						splitId={splitId}
-						weight={weight}
-					/>
-					<g data-part={PARTS.head}>
-						<path
-							d={definition.head}
-							{...ROLE_PROPS.outline}
-							strokeWidth={round(weight)}
-						/>
-						{definition.extras.map((shape) => (
-							<Shape key={shapeKey(shape)} shape={shape} weight={weight} />
-						))}
-					</g>
-					<EarLayer
-						animal={animal}
-						ears={definition.ears}
-						layer="front"
-						splitId={splitId}
-						weight={weight}
-					/>
-					<g
-						data-part={PARTS.blush}
-						opacity={0}
-						style={{ transition: "opacity 0.5s ease" }}
-					>
-						<ellipse rx={9} ry={4.5} {...ROLE_PROPS.accent} />
-						<ellipse rx={9} ry={4.5} {...ROLE_PROPS.accent} />
-					</g>
-					<g clipPath={`url(#${clipId})`}>
-						<path data-part={PARTS.eye0} fill="currentColor" />
-						<path data-part={PARTS.eye1} fill="currentColor" />
-					</g>
-					<path
-						data-part={PARTS.wire}
-						fill="none"
-						stroke="var(--bot-avatar-accent, #e36f3d)"
-						strokeWidth={1}
-						opacity={0.55}
-						style={{ display: wireframe ? undefined : "none" }}
-					/>
-				</g>
-			</g>
+			{body}
 		</svg>
 	)
 }
