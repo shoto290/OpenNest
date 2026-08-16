@@ -22,7 +22,8 @@ use super::protocol::{self, Frame};
 use super::translate::Translator;
 
 pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
+const EOF_GRACE: Duration = Duration::from_millis(500);
+const TERM_GRACE: Duration = Duration::from_secs(1);
 
 pub trait EventSink: Send + Sync + 'static {
 	fn emit(&self, event: ClaudeEvent);
@@ -107,7 +108,9 @@ impl Shared {
 }
 
 pub struct Session {
-	stdin_tx: mpsc::UnboundedSender<Value>,
+	/// Held as an option because dropping the sender is what ends `write_loop`,
+	/// and that is the only way to actually close the child's stdin.
+	stdin_tx: std::sync::Mutex<Option<mpsc::UnboundedSender<Value>>>,
 	shared: Arc<Mutex<Shared>>,
 	pending: PendingControls,
 	child: Arc<Mutex<Option<Child>>>,
@@ -142,7 +145,15 @@ impl Session {
 		tokio::spawn(discard_stderr(stderr));
 		tokio::spawn(read_loop(stdout, shared.clone(), pending.clone(), sink.clone(), child.clone()));
 
-		let session = Self { stdin_tx, shared, pending, child, sink, pid, resumed };
+		let session = Self {
+			stdin_tx: std::sync::Mutex::new(Some(stdin_tx)),
+			shared,
+			pending,
+			child,
+			sink,
+			pid,
+			resumed,
+		};
 		session.handshake(options.startup_timeout).await?;
 		Ok(session)
 	}
@@ -188,9 +199,13 @@ impl Session {
 	}
 
 	fn write(&self, frame: Value) -> Result<(), TransportError> {
-		self.stdin_tx
-			.send(frame)
-			.map_err(|_| TransportError::WriteFailed { detail: "stdin closed".into() })
+		let closed = || TransportError::WriteFailed { detail: "stdin closed".into() };
+		let guard = self.stdin_tx.lock().expect("stdin channel");
+		guard.as_ref().ok_or_else(closed)?.send(frame).map_err(|_| closed())
+	}
+
+	fn close_stdin(&self) {
+		self.stdin_tx.lock().expect("stdin channel").take();
 	}
 
 	pub async fn submit_prompt(&self, text: &str) -> Result<(), TransportError> {
@@ -255,21 +270,20 @@ impl Session {
 		self.kill().await;
 	}
 
+	/// Closing stdin is the child's cue to leave on its own, which is the fast
+	/// path; both group signals then go out unconditionally, because the
+	/// grandchildren it spawned outlive it otherwise. Signalling a group whose
+	/// leader was already reaped is safe: a pid stays reserved as long as a
+	/// process group carries it, so the call reaches that group or nothing.
 	async fn kill(&self) {
 		let mut slot = self.child.lock().await;
 		let Some(child) = slot.as_mut() else { return };
 
-		drop(child.stdin.take());
-		if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_ok() {
-			*slot = None;
-			return;
-		}
+		self.close_stdin();
+		let _ = tokio::time::timeout(EOF_GRACE, child.wait()).await;
 
 		signal_group(self.pid, Signal::Term);
-		if tokio::time::timeout(SHUTDOWN_GRACE, child.wait()).await.is_ok() {
-			*slot = None;
-			return;
-		}
+		let _ = tokio::time::timeout(TERM_GRACE, child.wait()).await;
 
 		signal_group(self.pid, Signal::Kill);
 		let _ = child.wait().await;

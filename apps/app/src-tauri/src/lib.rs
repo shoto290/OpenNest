@@ -1,8 +1,8 @@
 pub mod claude;
 
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
-use claude::commands::invoke_handler;
+use claude::commands::{invoke_handler, shutdown_blocking};
 use claude::ClaudeState;
 
 pub fn run() {
@@ -25,6 +25,13 @@ pub fn run() {
 		)
 		.manage(ClaudeState::default())
 		.invoke_handler(invoke_handler())
-		.run(tauri::generate_context!())
-		.expect("error while running tauri application")
+		.build(tauri::generate_context!())
+		.expect("error while building tauri application")
+		// Both events, because the platform that skips one still has to reap the
+		// child: taking the session out makes the second call a no-op.
+		.run(|app, event| {
+			if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+				shutdown_blocking(app);
+			}
+		})
 }

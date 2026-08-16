@@ -41,6 +41,21 @@ impl ClaudeState {
 	async fn current(&self) -> Result<Arc<Session>, TransportError> {
 		self.session.lock().await.clone().ok_or(TransportError::NotStarted)
 	}
+
+	/// The single teardown path. Taking the session out first makes any second
+	/// call — the exit handler after `claude_shutdown`, or the reverse — a no-op.
+	pub async fn shutdown(&self) {
+		if let Some(session) = self.session.lock().await.take() {
+			session.shutdown().await;
+		}
+	}
+}
+
+/// Tauri's exit callback is synchronous and the process ends as soon as it
+/// returns, so the child has to be reaped here instead of on the async runtime.
+pub fn shutdown_blocking<R: Runtime>(app: &AppHandle<R>) {
+	let Some(state) = app.try_state::<ClaudeState>() else { return };
+	tauri::async_runtime::block_on(state.shutdown());
 }
 
 fn sink<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn EventSink> {
@@ -63,9 +78,7 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 	resume: Option<String>,
 	cwd: Option<String>,
 ) -> Result<SessionHandle, TransportError> {
-	if let Some(previous) = state.session.lock().await.take() {
-		previous.shutdown().await;
-	}
+	state.shutdown().await;
 
 	let binary = binary::resolve()?;
 	let working_dir = cwd
@@ -118,9 +131,7 @@ pub async fn claude_shutdown<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, ClaudeState>,
 ) -> Result<(), TransportError> {
-	if let Some(session) = state.session.lock().await.take() {
-		session.shutdown().await;
-	}
+	state.shutdown().await;
 	sink(&app).emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
 }
