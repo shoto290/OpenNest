@@ -258,6 +258,15 @@ fn main() {
 				if scenario == "resume_crash" && resumed() {
 					std::process::exit(4);
 				}
+				if scenario == "resume_timeout" && resumed() {
+					continue;
+				}
+				if scenario == "resume_timeout_then_crash" {
+					if resumed() {
+						continue;
+					}
+					std::process::exit(3);
+				}
 				if scenario == "early_init" {
 					announced = true;
 					emit_init();

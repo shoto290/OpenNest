@@ -266,12 +266,35 @@ async fn a_refused_resume_falls_back_to_a_fresh_session() {
 	let (tx, _events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let session = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
+	let started = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
 		.await
 		.expect("the fresh start rescues the launch");
 
-	assert!(!session.resumed(), "the fallback session must not claim the stored id");
-	session.shutdown().await;
+	assert!(!started.session.resumed(), "the fallback session must not claim the stored id");
+	assert!(matches!(started.resume_refusal, Some(TransportError::Crashed { .. })));
+	started.session.shutdown().await;
+}
+
+/// A resume that only ran out of time has proven nothing about the id. Claude
+/// replays a conversation before it acknowledges anything, so the bigger the
+/// transcript the likelier the wait — and that transcript is exactly what
+/// blaming the id would cost.
+#[tokio::test]
+async fn a_resume_that_timed_out_is_reported_as_a_timeout() {
+	let (tx, _events) = mpsc::unbounded_channel();
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
+
+	let started = start_with_fallback(options("resume_timeout"), Some("slow-id".into()), sink)
+		.await
+		.expect("the fresh start rescues the launch");
+
+	assert!(!started.session.resumed());
+	assert!(
+		matches!(started.resume_refusal, Some(TransportError::StartupTimeout { .. })),
+		"a slow resume was reported as something the id could be blamed for: {:?}",
+		started.resume_refusal
+	);
+	started.session.shutdown().await;
 }
 
 /// The fallback is expected to work, so the attempt it replaces has nothing to
@@ -282,10 +305,10 @@ async fn a_refused_resume_keeps_its_crash_off_the_channel() {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let session = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
+	let started = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
 		.await
 		.expect("the fresh start rescues the launch");
-	let mut harness = Harness { session, events };
+	let mut harness = Harness { session: started.session, events };
 	let seen = harness.drain_after_settling().await;
 
 	assert!(
@@ -306,10 +329,11 @@ async fn an_accepted_resume_keeps_what_it_buffered() {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let session = start_with_fallback(options("early_init"), Some("carried-over".into()), sink)
+	let started = start_with_fallback(options("early_init"), Some("carried-over".into()), sink)
 		.await
 		.expect("the stored id is accepted");
-	let mut harness = Harness { session, events };
+	assert_eq!(started.resume_refusal, None, "the stored id was never given up on");
+	let mut harness = Harness { session: started.session, events };
 
 	harness.submit("et avant ?").await.expect("prompt accepted");
 	let seen = harness.drain_turn().await;
@@ -336,8 +360,7 @@ async fn an_accepted_resume_keeps_what_it_buffered() {
 }
 
 /// A failure the fresh start reproduces belongs to the install, so it travels
-/// upward untouched and the caller never reaches the branch that would drop the
-/// stored id.
+/// upward and the caller never reaches the branch that would drop the stored id.
 #[tokio::test]
 async fn a_start_failing_without_the_resume_flag_too_stays_a_failure() {
 	let (tx, _events) = mpsc::unbounded_channel();
@@ -349,6 +372,26 @@ async fn a_start_failing_without_the_resume_flag_too_stays_a_failure() {
 		.expect("both attempts fail");
 
 	assert!(matches!(error, TransportError::Crashed { code: Some(3), .. }));
+}
+
+/// When the two attempts fail differently the reader is owed the fresh one:
+/// the resume attempt's verdict is the older of the two and the one about a
+/// flag that is no longer in play.
+#[tokio::test]
+async fn two_different_failures_surface_the_fresh_one() {
+	let (tx, _events) = mpsc::unbounded_channel();
+	let sink: Arc<dyn EventSink> = Arc::new(tx);
+
+	let error =
+		start_with_fallback(options("resume_timeout_then_crash"), Some("slow-id".into()), sink)
+			.await
+			.err()
+			.expect("both attempts fail");
+
+	assert!(
+		matches!(error, TransportError::Crashed { code: Some(3), .. }),
+		"the spent resume attempt outlived the fresh one: {error:?}"
+	);
 }
 
 #[tokio::test]

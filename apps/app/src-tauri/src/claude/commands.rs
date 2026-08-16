@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -83,10 +83,9 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 
 	let sink = sink(&app);
 	let options = SessionOptions::new(binary, working_dir);
-	let has_stored_id = resume.is_some();
 
-	let session = match start_with_fallback(options, resume, sink.clone()).await {
-		Ok(session) => session,
+	let started = match start_with_fallback(options, resume, sink.clone()).await {
+		Ok(started) => started,
 		Err(error) => {
 			sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Unavailable });
 			sink.emit(ClaudeEvent::Failed { error: error.clone() });
@@ -94,24 +93,45 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 		}
 	};
 
-	if has_stored_id && !session.resumed() {
+	if let Some(refusal) = &started.resume_refusal {
 		if let Some(path) = store::file(&app) {
-			store::forget_session_id(&path);
+			forget_the_id_a_refusal_blames(&path, refusal);
 		}
 		sink.emit(ClaudeEvent::Failed { error: TransportError::ResumeFailed });
 	}
 
+	let session = started.session;
 	let handle = SessionHandle { resumed: session.resumed() };
 	*state.session.lock().await = Some(Arc::new(session));
 	sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Ready });
 	Ok(handle)
 }
 
+/// A crash is the only refusal that implicates the id itself. A startup timeout
+/// says the handshake was slow, which is what resuming a long conversation
+/// looks like — Claude replays the transcript before it acknowledges anything —
+/// and dropping the id there would cost a reader the very conversation whose
+/// size caused the wait.
+fn forget_the_id_a_refusal_blames(path: &Path, refusal: &TransportError) {
+	if matches!(refusal, TransportError::Crashed { .. }) {
+		store::forget_session_id(path);
+	}
+}
+
+/// A launch, and what it spent on the way. `resume_refusal` carries why a
+/// stored id was given up on, because a fresh session says only that one was.
+pub struct Started {
+	pub session: Session,
+	pub resume_refusal: Option<TransportError>,
+}
+
 /// A dead stored id and a broken install both surface as the same startup
 /// failure, and stderr — the one channel that would tell them apart — is
-/// discarded on purpose. So the id is only blamed once a resume-free start has
-/// proven it wrong: a second failure means `--resume` was never the variable,
-/// and the stored id is kept rather than costing the reader their transcript.
+/// discarded on purpose. So a refusal is only ever reported alongside the
+/// session that replaced it, and never on its own: when the resume-free start
+/// fails too, `--resume` was never the variable, and the failure that travels
+/// upward is the fresh attempt's — the newer account, and the one that
+/// describes the install rather than the id.
 ///
 /// For the same reason the resume attempt emits behind a gate: its crash is a
 /// step in a launch still expected to succeed, so the reader sees it only if it
@@ -120,22 +140,24 @@ pub async fn start_with_fallback(
 	options: SessionOptions,
 	resume: Option<String>,
 	sink: Arc<dyn EventSink>,
-) -> Result<Session, TransportError> {
+) -> Result<Started, TransportError> {
 	if resume.is_none() {
-		return Session::start(options, sink).await;
+		let session = Session::start(options, sink).await?;
+		return Ok(Started { session, resume_refusal: None });
 	}
 
 	let gated = Arc::new(GatedSink::new(sink.clone()));
-	let refused = match Session::start(options.clone().resuming(resume), gated.clone()).await {
+	let refusal = match Session::start(options.clone().resuming(resume), gated.clone()).await {
 		Ok(session) => {
 			gated.promote();
-			return Ok(session);
+			return Ok(Started { session, resume_refusal: None });
 		}
 		Err(error) => error,
 	};
 
 	gated.discard();
-	Session::start(options, sink).await.map_err(|_| refused)
+	let session = Session::start(options, sink).await?;
+	Ok(Started { session, resume_refusal: Some(refusal) })
 }
 
 #[tauri::command]
@@ -201,5 +223,39 @@ pub async fn claude_load_session<R: Runtime>(app: AppHandle<R>) -> SessionSnapsh
 pub async fn claude_save_session<R: Runtime>(app: AppHandle<R>, snapshot: SessionSnapshot) {
 	if let Some(path) = store::file(&app) {
 		store::save(&path, &snapshot);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn stored_id(path: &Path) -> Option<String> {
+		store::load(path).session_id
+	}
+
+	/// The fallback runs on both, and only one of the two says anything about
+	/// the id it gave up on.
+	#[test]
+	fn a_timed_out_resume_keeps_the_stored_id_and_a_crashed_one_spends_it() {
+		let dir = std::env::temp_dir().join(format!("opennest-refusal-{}", uuid::Uuid::new_v4()));
+		let path = dir.join(store::FILE_NAME);
+		let snapshot =
+			SessionSnapshot { session_id: Some("session-1".into()), ..SessionSnapshot::default() };
+		store::save(&path, &snapshot);
+
+		forget_the_id_a_refusal_blames(
+			&path,
+			&TransportError::StartupTimeout { timeout_ms: 30_000 },
+		);
+		assert_eq!(stored_id(&path).as_deref(), Some("session-1"), "a slow resume cost the id");
+
+		forget_the_id_a_refusal_blames(
+			&path,
+			&TransportError::Crashed { code: Some(4), detail: None },
+		);
+		assert_eq!(stored_id(&path), None, "a refused id outlived the crash that proved it dead");
+
+		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 }
