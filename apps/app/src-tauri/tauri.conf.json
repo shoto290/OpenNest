@@ -26,12 +26,18 @@
 	},
 	"bundle": {
 		"active": true,
+		"targets": ["app", "dmg"],
+		"category": "DeveloperTool",
+		"copyright": "© 2026 OpenNest",
 		"icon": [
 			"icons/32x32.png",
 			"icons/128x128.png",
 			"icons/128x128@2x.png",
 			"icons/icon.icns",
 			"icons/icon.ico"
-		]
+		],
+		"macOS": {
+			"minimumSystemVersion": "10.15"
+		}
 	}
 }
