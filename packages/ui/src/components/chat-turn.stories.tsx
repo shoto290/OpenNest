@@ -23,6 +23,8 @@ const RUN = [
 	"`app` holds the Tauri shell and consumes that system. Nothing goes back the other way.",
 ]
 
+const PASTED = `Walk me through every package.\n\nStart with the design system, then the Tauri shell, and call out anything that crosses between them.`
+
 const TURN_STATES: ChatTurnState[] = [
 	"streaming",
 	"complete",
@@ -106,7 +108,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `ChatTurnGroup` and it tells each row where it sits, so nothing counts rows by hand; pass the avatar and `copyText` on the row that closes the run. Both take the transport's completion verbatim as `state`, so a screen maps nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `ChatTurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -116,7 +118,9 @@ const meta = preview.meta({
 export const Default = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<UserTurn>How is this workspace laid out?</UserTurn>
+			<UserTurn copyText="How is this workspace laid out?">
+				How is this workspace laid out?
+			</UserTurn>
 			<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
 				{ANSWER}
 			</AssistantTurn>
@@ -126,7 +130,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the nominal exchange: a prompt that landed and an answer that finished. Check that the prompt sits right with no avatar beside it while the answer sits left behind one, and that only the finished answer exposes a copy action. Pick `Run` for an answer that arrived in several parts.",
+					"Reach for this for the nominal exchange: a prompt that landed and an answer that finished. Check that the prompt sits right with no avatar beside it while the answer sits left behind one, and that hovering either bubble fades in a copy action on its outer side — the reader's own words are as copyable as the bot's. Pick `Run` for an answer that arrived in several parts.",
 			},
 		},
 	},
@@ -140,15 +144,17 @@ export const Run = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<ChatTurnGroup>
-				<UserTurn>How is this workspace laid out?</UserTurn>
-				<UserTurn>Keep it short.</UserTurn>
+				<UserTurn copyText="How is this workspace laid out?">
+					How is this workspace laid out?
+				</UserTurn>
+				<UserTurn copyText="Keep it short.">Keep it short.</UserTurn>
 			</ChatTurnGroup>
 			<ChatTurnGroup>
 				{RUN.map((paragraph, index) => (
 					<AssistantTurn
 						key={paragraph}
 						avatar={index === RUN.length - 1 ? <Avatar /> : undefined}
-						copyText={index === RUN.length - 1 ? RUN.join("\n\n") : undefined}
+						copyText={paragraph}
 					>
 						{paragraph}
 					</AssistantTurn>
@@ -160,14 +166,14 @@ export const Run = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the shape a real answer takes: one paragraph per row, published as each one closes. Check that the run reads as one block — tight spacing and the corners facing a neighbour pulled in — that a single avatar marks it from the last row while the rows above keep the gutter empty, and that one copy action covers the run rather than one per paragraph.",
+					"Reach for this for the shape a real answer takes: one paragraph per row, published as each one closes. Check that the run reads as one block — tight spacing and the corners facing a neighbour pulled in — and that a single avatar marks it from the last row while the rows above keep the gutter empty. Every bubble carries its own copy, and copying one takes that paragraph alone: there is no action anywhere for the answer entire, because the reader points at the part they want.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getAllByLabelText("assistant message")).toHaveLength(3)
 		await expect(canvas.getAllByRole("button", { name: "Copy" })).toHaveLength(
-			1,
+			5,
 		)
 	},
 })
@@ -249,32 +255,47 @@ export const MarkAcrossRuns = meta.story({
 export const Variants = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			{TURN_STATES.map((state) => (
-				<AssistantTurn
-					key={state}
-					state={state}
-					copyText={ANSWER}
-					avatar={<Avatar />}
-				>
-					{state === "streaming" ? ANSWER.slice(0, 48) : ANSWER}
-				</AssistantTurn>
-			))}
+			{TURN_STATES.map((state) => {
+				const text = state === "streaming" ? ANSWER.slice(0, 48) : ANSWER
+				return (
+					<AssistantTurn
+						key={state}
+						state={state}
+						copyText={text}
+						avatar={<Avatar />}
+					>
+						{text}
+					</AssistantTurn>
+				)
+			})}
+			<AssistantTurn state="cancelled" copyText="" avatar={<Avatar />}>
+				{""}
+			</AssistantTurn>
 		</div>
 	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Every completion the transport can report, in order. Check that `cancelled` keeps the partial text it had when Stop was pressed and marks it `Stopped` rather than treating it as an error, and that `failed` drops the copy action since there is nothing worth taking. Pick `Error` for the user side of a prompt that never reached Claude at all.",
+					"Every completion the transport can report, in order, then the row a turn stopped before writing anything leaves behind. Check that `cancelled` keeps the partial text it had when Stop was pressed and marks it `Stopped` rather than treating it as an error, that `failed` still offers its copy since the words it did write are worth taking, and that the empty row is the only one without one — an empty bubble has nothing to hand over. Pick `Error` for the user side of a prompt that never reached Claude at all.",
 			},
 		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getAllByRole("button", { name: "Copy" })).toHaveLength(
+			4,
+		)
 	},
 })
 
 export const Error = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<UserTurn state="failed" onRetry={fn()}>
+			<UserTurn
+				state="failed"
+				copyText="How is this workspace laid out?"
+				onRetry={fn()}
+			>
 				How is this workspace laid out?
 			</UserTurn>
 		</div>
@@ -283,25 +304,25 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the write to the CLI was rejected, so the prompt exists in the transcript but Claude never saw it. Check that the retry sits under the bubble on the user side and that the text is preserved verbatim for the resend. Pick `Variants` when Claude did answer and it was the turn that failed.",
+					"Reach for this when the write to the CLI was rejected, so the prompt exists in the transcript but Claude never saw it. Both actions live left of the bubble, on the outer side as on every row, but they do not behave alike: the retry is pinned, since a way out nobody can see is not offered at all, while the copy stays behind a hover like every other. Check that the retry is there before the pointer is, that it sits nearest the bubble, and that the text is preserved verbatim for the resend. Pick `Variants` when Claude did answer and it was the turn that failed.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const retry = canvas.getByRole("button", { name: "Retry" })
 
-		await userEvent.click(retry)
 		await expect(retry).toBeVisible()
+
+		await userEvent.click(retry)
+		await waitFor(() => expect(retry).toBeVisible())
 	},
 })
 
 export const LongContent = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<UserTurn>
-				{`Walk me through every package.\n\nStart with the design system, then the Tauri shell, and call out anything that crosses between them.`}
-			</UserTurn>
-			<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
+			<UserTurn copyText={PASTED}>{PASTED}</UserTurn>
+			<AssistantTurn copyText={`${ANSWER}\n\n${ANSWER}`} avatar={<Avatar />}>
 				{`${ANSWER}\n\n${ANSWER}`}
 			</AssistantTurn>
 		</div>

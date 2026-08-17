@@ -1,23 +1,45 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
+
+const QUERY = "(hover: hover) and (pointer: fine)"
+
+let media: MediaQueryList | null = null
+
+const hoverQuery = () => {
+	if (media === null) media = window.matchMedia(QUERY)
+	return media
+}
+
+/** One native listener for the whole page, however many callers subscribe: a
+ * transcript mounts one of these per bubble action, and each would otherwise
+ * hold its own. */
+const listeners = new Set<() => void>()
+
+const broadcast = () => {
+	for (const notify of listeners) notify()
+}
+
+const subscribe = (onChange: () => void) => {
+	if (listeners.size === 0) hoverQuery().addEventListener("change", broadcast)
+	listeners.add(onChange)
+	return () => {
+		listeners.delete(onChange)
+		if (listeners.size === 0) {
+			hoverQuery().removeEventListener("change", broadcast)
+		}
+	}
+}
 
 /**
  * Returns true only on devices that have a true hover (mouse / trackpad).
  * Touch devices fire phantom `:hover` on tap that sticks until tap-elsewhere
  * — gate hover-only effects (scale lifts, magnetic pulls) behind this.
+ * Read during render, so the first paint already knows.
  */
-export function useHoverCapable() {
-	const [canHover, setCanHover] = useState(false)
-
-	useEffect(() => {
-		if (typeof window === "undefined" || !window.matchMedia) return
-		const mq = window.matchMedia("(hover: hover) and (pointer: fine)")
-		const update = () => setCanHover(mq.matches)
-		update()
-		mq.addEventListener?.("change", update)
-		return () => mq.removeEventListener?.("change", update)
-	}, [])
-
-	return canHover
-}
+export const useHoverCapable = () =>
+	useSyncExternalStore(
+		subscribe,
+		() => hoverQuery().matches,
+		() => false,
+	)
