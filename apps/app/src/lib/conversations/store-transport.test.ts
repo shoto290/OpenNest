@@ -72,6 +72,25 @@ const WRITES: WriteCase[] = [
 		call: ["conversation_main_chat", { botId: "b-1" }],
 	},
 	{
+		member: "recordProviderSession",
+		write: () =>
+			conversationStore.recordProviderSession(
+				CONVERSATION,
+				"b-1",
+				"run-1",
+				"claude-9f3c",
+			),
+		call: [
+			"conversation_record_provider_session",
+			{
+				conversationId: CONVERSATION,
+				botId: "b-1",
+				runtimeSessionId: "run-1",
+				providerSessionId: "claude-9f3c",
+			},
+		],
+	},
+	{
 		member: "startTurn",
 		write: () => conversationStore.startTurn(TURN),
 		call: ["conversation_start_turn", { turn: TURN }],

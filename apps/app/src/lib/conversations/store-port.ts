@@ -26,6 +26,17 @@ export type TranscriptStore = TranscriptPort & {
 		startedAt: number,
 		reason: string | null,
 	) => Promise<RuntimeSession>
+	/** The id the provider gave the process answering in a run, kept beside that run
+	 * and never in place of it: `runtimeSessionId` is this side's name for the run,
+	 * `providerSessionId` is Claude's for the process. Written once and only while
+	 * the run is live — the same id again is the callback arriving twice, anything
+	 * else is refused. */
+	recordProviderSession: (
+		conversationId: string,
+		botId: string,
+		runtimeSessionId: string,
+		providerSessionId: string,
+	) => Promise<void>
 	/** Everything a run has to be told to carry on a conversation it never saw,
 	 * bounded and composed by the host. The prompt is named rather than sent: it is
 	 * already on the record, and reading it from there is what keeps it out of its

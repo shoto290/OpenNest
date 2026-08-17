@@ -315,15 +315,42 @@ export function createChatController(
 		}
 	}
 
+	/** The provider's own name for the process, written down against the run it
+	 * announced itself in. The run is the one the event named, taken now rather than
+	 * when the store answers: a rotation in between would otherwise hand the run that
+	 * took over the id of the process it replaced.
+	 *
+	 * Nothing is decided here. One run answers under one provider session, and which
+	 * writes that leaves — the first, a replay of it, or a refusal — is the store's
+	 * to settle inside the transaction that writes them. */
+	const recordProviderSession = (
+		scope: RuntimeScope | null,
+		sessionId: string,
+	) => {
+		if (!scope) {
+			return
+		}
+		write(() =>
+			store.recordProviderSession(
+				scope.conversationId,
+				scope.botId,
+				scope.runtimeSessionId,
+				sessionId,
+			),
+		)
+	}
+
 	/** The durable half of a transport event. Nothing here decides anything the
 	 * reducer decides: it writes down what the session reported, in the order it
 	 * reported it. */
-	const persist = (event: ClaudeEvent) => {
+	const persist = (scope: RuntimeScope | null, event: ClaudeEvent) => {
 		const conversationId = state.conversationId
 		if (!conversationId) {
 			return
 		}
 		switch (event.type) {
+			case "sessionReady":
+				return recordProviderSession(scope, event.sessionId)
 			case "messageStarted":
 				return openReply(event.message, conversationId)
 			case "messageDelta":
@@ -358,7 +385,7 @@ export function createChatController(
 				return
 			}
 			noteFailure(event)
-			persist(event)
+			persist(scope, event)
 		})
 		return detach
 	}

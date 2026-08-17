@@ -1563,3 +1563,177 @@ describe("every ending survives a launch", () => {
 		},
 	)
 })
+
+/** The name Claude gives the process answering in a run, on the record beside the
+ * run rather than instead of it. Everything here is composed: the driver announces
+ * the id the way the CLI does, the controller writes it down, and the store holds
+ * it under the rules the file holds it under. */
+describe("the provider session a run answered under", () => {
+	const REFUSED_BY_THE_STORE = {
+		kind: "writeFailed",
+		detail: "the transcript store refused it (storage)",
+	}
+
+	const STALE_WRITE = { kind: "storage", failure: { kind: "staleWrite" } }
+
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	/** The store, and every write it was asked for as the pair a lineage is made
+	 * of: the run named, and the provider id named for it. */
+	const recording = (base: TranscriptStore) => {
+		const calls: [string, string][] = []
+		const store: TranscriptStore = {
+			...base,
+			recordProviderSession: (
+				conversationId,
+				botId,
+				runtimeSessionId,
+				providerSessionId,
+			) => {
+				calls.push([runtimeSessionId, providerSessionId])
+				return base.recordProviderSession(
+					conversationId,
+					botId,
+					runtimeSessionId,
+					providerSessionId,
+				)
+			},
+		}
+		return { store, calls }
+	}
+
+	const announced = (sessionId: string): ClaudeEvent => ({
+		type: "sessionReady",
+		sessionId,
+		resumed: false,
+	})
+
+	// The defect this locks: a real turn ran, a real child answered, and the run it
+	// answered in kept no word of the process it was holding.
+	it("writes the id the child announces against the run it is answering in", async () => {
+		const base = createFakeTranscriptStore()
+		const { store, calls } = recording(base)
+		const { controller } = await bootedHarness({ store })
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		const run = runOf(controller)
+		const state = controller.getState()
+		expect(state.sessionId).not.toBeNull()
+		expect(calls).toEqual([[run.runtimeSessionId, state.sessionId]])
+		expect(state.errors).toEqual([])
+		// The row holds it: one that did not would take any id at all.
+		await expect(
+			base.recordProviderSession(
+				run.conversationId,
+				run.botId,
+				run.runtimeSessionId,
+				"a-second-process",
+			),
+		).rejects.toEqual(STALE_WRITE)
+	})
+
+	it("takes the same announcement twice as the one write it is", async () => {
+		const base = createFakeTranscriptStore()
+		const { store, calls } = recording(base)
+		const { controller, driver } = await bootedHarness({ store })
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+		const run = runOf(controller)
+		const sessionId = controller.getState().sessionId ?? ""
+
+		driver.pushEvent(announced(sessionId), run)
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(calls).toEqual([
+			[run.runtimeSessionId, sessionId],
+			[run.runtimeSessionId, sessionId],
+		])
+		expect(state.errors).toEqual([])
+		expect(state.sessionId).toBe(sessionId)
+		expect(state.runtime).toEqual(run)
+	})
+
+	// One run answers under one provider session. A second, different id is a
+	// disagreement the store settles, and the reader is told it was not written.
+	it("reports a second, different id without moving the run it holds", async () => {
+		const base = createFakeTranscriptStore()
+		const { store } = recording(base)
+		const { controller, driver } = await bootedHarness({ store })
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+		const run = runOf(controller)
+
+		driver.pushEvent(announced("a-second-process"), run)
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.errors.at(-1)?.error).toEqual(REFUSED_BY_THE_STORE)
+		expect(state.runtime).toEqual(run)
+		expect(state.turn).toBe("idle")
+	})
+
+	// The write is issued under the run that announced and lands after that run has
+	// been replaced. The row it names is the one it was announced in, whatever the
+	// controller holds by the time the store answers.
+	it("cannot write a replaced run's id onto the run that took its place", async () => {
+		const base = createFakeTranscriptStore()
+		const calls: [string, string][] = []
+		let release: () => void = () => undefined
+		const held = new Promise<void>((resolve) => {
+			release = resolve
+		})
+		const store: TranscriptStore = {
+			...base,
+			recordProviderSession: async (
+				conversationId,
+				botId,
+				runtimeSessionId,
+				providerSessionId,
+			) => {
+				calls.push([runtimeSessionId, providerSessionId])
+				await held
+				return base.recordProviderSession(
+					conversationId,
+					botId,
+					runtimeSessionId,
+					providerSessionId,
+				)
+			},
+		}
+		const { controller, driver } = await bootedHarness({ store })
+		const replaced = runOf(controller)
+
+		driver.pushEvent(announced("stale-process"), replaced)
+		await vi.advanceTimersByTimeAsync(0)
+		await controller.restart()
+		await vi.runAllTimersAsync()
+		const replacement = runOf(controller)
+		release()
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(replacement.runtimeSessionId).not.toBe(replaced.runtimeSessionId)
+		expect(calls).toEqual([[replaced.runtimeSessionId, "stale-process"]])
+		expect(state.runtime).toEqual(replacement)
+		expect(state.errors.at(-1)?.error).toEqual(REFUSED_BY_THE_STORE)
+		// The replacement never took the replaced run's word for it: its own id
+		// still lands, which a row already holding one would refuse.
+		await expect(
+			base.recordProviderSession(
+				replacement.conversationId,
+				replacement.botId,
+				replacement.runtimeSessionId,
+				"its-own-process",
+			),
+		).resolves.toBeUndefined()
+	})
+})

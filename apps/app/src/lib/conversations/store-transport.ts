@@ -45,6 +45,19 @@ export const conversationStore: TranscriptStore = {
 			reason,
 		}),
 
+	recordProviderSession: (
+		conversationId: string,
+		botId: string,
+		runtimeSessionId: string,
+		providerSessionId: string,
+	) =>
+		invoke<void>("conversation_record_provider_session", {
+			conversationId,
+			botId,
+			runtimeSessionId,
+			providerSessionId,
+		}),
+
 	boundedContext: (
 		conversationId: string,
 		botId: string,
