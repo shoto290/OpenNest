@@ -1,6 +1,5 @@
 "use client"
 
-import { Check, ChevronDown } from "lucide-react"
 import {
 	motion,
 	type Transition,
@@ -20,6 +19,7 @@ import {
 	useState,
 } from "react"
 
+import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -226,7 +226,7 @@ export function SelectTrigger({ className, children }: SelectTriggerProps) {
 				transition={ctx.reduce ? { duration: 0 } : CHEVRON_TRANSITION}
 				className="text-muted-foreground"
 			>
-				<ChevronDown className="h-4 w-4" />
+				<Icons.Expand className="h-4 w-4" />
 			</motion.span>
 		</motion.button>
 	)
@@ -413,7 +413,7 @@ export function SelectItem({
 				)}
 			>
 				{children}
-				{selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+				{selected ? <Icons.Check className="h-3.5 w-3.5 shrink-0" /> : null}
 			</button>
 		</motion.li>
 	)

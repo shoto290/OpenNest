@@ -1,6 +1,5 @@
 "use client"
 
-import { ChevronRight } from "lucide-react"
 import {
 	AnimatePresence,
 	type HTMLMotionProps,
@@ -29,6 +28,7 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
+import { Icons } from "@workspace/ui/components/icons"
 import { useMediaQuery } from "@workspace/ui/hooks/use-media-query"
 import {
 	EASE_DRAWER,
@@ -1157,7 +1157,7 @@ export function AnimatedSidebarMenuButton({
 						panel.collapsed ? "h-4 w-0" : "size-4",
 					)}
 				>
-					<ChevronRight className="size-3.5" />
+					<Icons.Next className="size-3.5" />
 				</motion.span>
 			) : null}
 		</>

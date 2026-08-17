@@ -1,6 +1,5 @@
 "use client"
 
-import { Check, Loader2, X } from "lucide-react"
 import {
 	AnimatePresence,
 	motion,
@@ -15,6 +14,7 @@ import {
 	useState,
 } from "react"
 
+import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 
 import { Button, type ButtonProps } from "./base"
@@ -224,17 +224,17 @@ export const StatefulButton = forwardRef<
 				<AnimatePresence initial={false}>
 					{state === "loading" ? (
 						<IconSlot keyId="loading-icon">
-							<Loader2 className="h-4 w-4 animate-spin" />
+							<Icons.Loading className="h-4 w-4 animate-spin" />
 						</IconSlot>
 					) : null}
 					{state === "success" ? (
 						<IconSlot keyId="success-icon">
-							<Check className="h-4 w-4" />
+							<Icons.Check className="h-4 w-4" />
 						</IconSlot>
 					) : null}
 					{state === "error" ? (
 						<IconSlot keyId="error-icon">
-							<X className="h-4 w-4" />
+							<Icons.Close className="h-4 w-4" />
 						</IconSlot>
 					) : null}
 				</AnimatePresence>

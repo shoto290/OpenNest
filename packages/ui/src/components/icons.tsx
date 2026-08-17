@@ -1,85 +1,120 @@
 import {
-	Add01Icon,
-	Alert02Icon,
-	ArrowDown01Icon,
-	ArrowLeft01Icon,
-	ArrowRight01Icon,
-	ArrowUp02Icon,
+	ArrowDownIcon,
+	ArrowUpIcon,
 	BanIcon,
-	BracketsIcon,
-	Calendar01Icon,
-	Cancel01Icon,
-	CancelCircleIcon,
-	CheckmarkCircle02Icon,
-	ClaudeIcon,
-	ComputerTerminal01Icon,
-	Configuration01Icon,
-	Copy01Icon,
-	Delete02Icon,
-	Download01Icon,
+	BookmarkIcon,
+	BookOpenTextIcon,
+	BracesIcon,
+	BrainIcon,
+	CalendarIcon,
+	CheckIcon,
+	ChevronDownIcon,
+	ChevronRightIcon,
+	CircleCheckIcon,
+	CircleIcon,
+	CircleXIcon,
+	CopyIcon,
+	EllipsisIcon,
+	ExternalLinkIcon,
 	FileCodeIcon,
-	Home01Icon,
-	InformationCircleIcon,
-	Loading03Icon,
-	MoreHorizontalIcon,
-	PencilEdit01Icon,
-	RefreshIcon,
-	Search01Icon,
-	Settings01Icon,
-	Shield01Icon,
-	SidebarLeft01Icon,
-	StopIcon,
+	FileTextIcon,
+	FolderIcon,
+	FolderOpenIcon,
+	Globe2Icon,
+	HouseIcon,
+	ImageIcon,
+	InfoIcon,
+	LoaderCircleIcon,
+	type LucideIcon,
+	type LucideProps,
+	MessageSquareIcon,
+	PanelLeftIcon,
+	PencilIcon,
+	PencilLineIcon,
+	PlusIcon,
+	RefreshCwIcon,
+	SearchIcon,
+	SettingsIcon,
+	ShieldIcon,
+	SquareIcon,
+	SquareTerminalIcon,
+	TerminalIcon,
 	ThumbsDownIcon,
 	ThumbsUpIcon,
-	Tick02Icon,
-} from "@hugeicons/core-free-icons"
-import {
-	HugeiconsIcon,
-	type HugeiconsIconProps,
-	type IconSvgElement,
-} from "@hugeicons/react"
+	Trash2Icon,
+	TriangleAlertIcon,
+	WrenchIcon,
+	XIcon,
+} from "lucide-react"
 
-type IconProps = Omit<HugeiconsIconProps, "icon">
+type IconProps = LucideProps
 
-const createIcon = (icon: IconSvgElement) => {
-	const Icon = (props: IconProps) => <HugeiconsIcon icon={icon} {...props} />
-	return Icon
-}
+type Icon = LucideIcon
+
+const Claude = ({ size = 24, strokeWidth = 2, ...props }: IconProps) => (
+	<svg
+		aria-hidden="true"
+		fill="none"
+		height={size}
+		stroke="currentColor"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		strokeWidth={strokeWidth}
+		viewBox="0 0 24 24"
+		width={size}
+		xmlns="http://www.w3.org/2000/svg"
+		{...props}
+	>
+		<path d="M13 12L18.5 5M7.63965 3L12.5 12L13.6865 3M4.48381 6.71679L11.9872 12M3 12L11.9872 12.473M12.2244 13.177L7 20M4.84194 16.8682L11.2824 12.9758M11.5 21L12.665 13.177M21 14L13.1846 12.668M21 10.5788L13 12.3223M16.779 19.646L12.8876 13.3772M19.3566 18.207L13.313 12.9893" />
+	</svg>
+)
 
 const Icons = {
-	Add: createIcon(Add01Icon),
-	Alert: createIcon(Alert02Icon),
-	ArrowDown: createIcon(ArrowDown01Icon),
-	ArrowLeft: createIcon(ArrowLeft01Icon),
-	ArrowRight: createIcon(ArrowRight01Icon),
-	Blocked: createIcon(BanIcon),
-	Calendar: createIcon(Calendar01Icon),
-	Check: createIcon(Tick02Icon),
-	Claude: createIcon(ClaudeIcon),
-	Close: createIcon(Cancel01Icon),
-	Copy: createIcon(Copy01Icon),
-	Delete: createIcon(Delete02Icon),
-	Download: createIcon(Download01Icon),
-	Edit: createIcon(PencilEdit01Icon),
-	Error: createIcon(CancelCircleIcon),
-	FileCode: createIcon(FileCodeIcon),
-	Home: createIcon(Home01Icon),
-	Info: createIcon(InformationCircleIcon),
-	Json: createIcon(BracketsIcon),
-	Loading: createIcon(Loading03Icon),
-	More: createIcon(MoreHorizontalIcon),
-	Retry: createIcon(RefreshIcon),
-	Search: createIcon(Search01Icon),
-	Send: createIcon(ArrowUp02Icon),
-	Settings: createIcon(Settings01Icon),
-	Shield: createIcon(Shield01Icon),
-	Sidebar: createIcon(SidebarLeft01Icon),
-	Stop: createIcon(StopIcon),
-	Success: createIcon(CheckmarkCircle02Icon),
-	Terminal: createIcon(ComputerTerminal01Icon),
-	ThumbsDown: createIcon(ThumbsDownIcon),
-	ThumbsUp: createIcon(ThumbsUpIcon),
-	Tool: createIcon(Configuration01Icon),
+	Add: PlusIcon,
+	Alert: TriangleAlertIcon,
+	ArrowDown: ArrowDownIcon,
+	Blocked: BanIcon,
+	Bookmark: BookmarkIcon,
+	Calendar: CalendarIcon,
+	Check: CheckIcon,
+	Claude,
+	Close: XIcon,
+	Command: SquareTerminalIcon,
+	Copy: CopyIcon,
+	Delete: Trash2Icon,
+	Docs: BookOpenTextIcon,
+	Edit: PencilIcon,
+	Error: CircleXIcon,
+	Expand: ChevronDownIcon,
+	ExternalLink: ExternalLinkIcon,
+	File: FileTextIcon,
+	FileCode: FileCodeIcon,
+	Folder: FolderIcon,
+	FolderOpen: FolderOpenIcon,
+	Home: HouseIcon,
+	Image: ImageIcon,
+	Info: InfoIcon,
+	Json: BracesIcon,
+	Loading: LoaderCircleIcon,
+	Message: MessageSquareIcon,
+	More: EllipsisIcon,
+	Next: ChevronRightIcon,
+	Pending: CircleIcon,
+	Retry: RefreshCwIcon,
+	Search: SearchIcon,
+	Send: ArrowUpIcon,
+	Settings: SettingsIcon,
+	Shield: ShieldIcon,
+	Sidebar: PanelLeftIcon,
+	Stop: SquareIcon,
+	Success: CircleCheckIcon,
+	Terminal: TerminalIcon,
+	Thinking: BrainIcon,
+	ThumbsDown: ThumbsDownIcon,
+	ThumbsUp: ThumbsUpIcon,
+	Tool: WrenchIcon,
+	Web: Globe2Icon,
+	Write: PencilLineIcon,
 }
 
-export { type IconProps, Icons }
+export { type Icon, type IconProps, Icons }

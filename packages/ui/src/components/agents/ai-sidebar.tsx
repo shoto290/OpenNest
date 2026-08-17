@@ -1,13 +1,5 @@
 "use client"
 
-import {
-	Bookmark,
-	FileText,
-	Folder,
-	FolderOpen,
-	MoreHorizontal,
-	Pencil,
-} from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import {
 	type DragEvent,
@@ -21,6 +13,7 @@ import {
 	useState,
 } from "react"
 
+import { Icons } from "@workspace/ui/components/icons"
 import {
 	MorphPopover,
 	MorphPopoverContent,
@@ -248,10 +241,10 @@ function renameResource(
 
 function defaultIcon(item: SidebarResource, expanded: boolean) {
 	if (canContain(item)) {
-		const ContainerIcon = expanded ? FolderOpen : Folder
+		const ContainerIcon = expanded ? Icons.FolderOpen : Icons.Folder
 		return <ContainerIcon className="size-4" />
 	}
-	const LeafIcon = item.kind === "bookmark" ? Bookmark : FileText
+	const LeafIcon = item.kind === "bookmark" ? Icons.Bookmark : Icons.File
 	return <LeafIcon className="size-4" />
 }
 
@@ -432,7 +425,7 @@ function ResourceRowBase({
 					onClick={startRename}
 					className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 				>
-					<Pencil aria-hidden="true" className="size-3.5" />
+					<Icons.Edit aria-hidden="true" className="size-3.5" />
 					Rename
 				</button>
 			))
@@ -546,7 +539,7 @@ function ResourceRowBase({
 							onClick={(event) => event.stopPropagation()}
 							className="grid size-7 shrink-0 place-items-center rounded-lg opacity-0 outline-none hover:bg-foreground/5 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/resource:opacity-100 group-data-[menu-open=true]/resource:opacity-100"
 						>
-							<MoreHorizontal aria-hidden="true" className="size-4" />
+							<Icons.More aria-hidden="true" className="size-4" />
 						</button>
 					</MorphPopoverTrigger>
 					{isMenuMounted ? (

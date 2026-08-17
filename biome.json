@@ -28,7 +28,12 @@
 					"level": "error",
 					"options": {
 						"paths": {
-							"lucide-react": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is centralized in packages/ui."
+							"lucide-react": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is centralized in packages/ui.",
+							"@hugeicons/react": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is the only icon library in this repo, centralized in packages/ui/src/components/icons.tsx.",
+							"@hugeicons/core-free-icons": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is the only icon library in this repo, centralized in packages/ui/src/components/icons.tsx.",
+							"react-icons": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is the only icon library in this repo, centralized in packages/ui/src/components/icons.tsx.",
+							"@heroicons/react": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is the only icon library in this repo, centralized in packages/ui/src/components/icons.tsx.",
+							"@radix-ui/react-icons": "Import icons via Icons from \"@workspace/ui/components/icons\" (e.g. Icons.Home). lucide-react is the only icon library in this repo, centralized in packages/ui/src/components/icons.tsx."
 						}
 					}
 				},
@@ -145,24 +150,7 @@
 			}
 		},
 		{
-			"includes": [
-				"packages/ui/src/components/icons.tsx",
-				"packages/ui/src/types/icon.types.ts"
-			],
-			"linter": {
-				"rules": {
-					"style": {
-						"noRestrictedImports": "off"
-					}
-				}
-			}
-		},
-		{
-			"includes": [
-				"packages/ui/src/components/agent-activity/**",
-				"packages/ui/src/components/agents/**",
-				"packages/ui/src/components/motion/**"
-			],
+			"includes": ["packages/ui/src/components/icons.tsx"],
 			"linter": {
 				"rules": {
 					"style": {

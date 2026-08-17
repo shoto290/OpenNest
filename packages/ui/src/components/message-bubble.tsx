@@ -340,7 +340,7 @@ export function MessageBubbleCollapsible({
 					animate={{ rotate: currentOpen ? 180 : 0 }}
 					transition={reduce ? { duration: 0 } : SPRING_SWAP}
 				>
-					<Icons.ArrowDown className="size-3.5" />
+					<Icons.Expand className="size-3.5" />
 				</motion.span>
 			</button>
 		</div>
