@@ -12,13 +12,42 @@ import {
 	useRef,
 } from "react"
 
+import { Button } from "@workspace/ui/components/button"
+import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
+
+interface PrependPin {
+	anchor: HTMLElement
+	offset: number
+}
+
+const offsetFromViewportTop = (anchor: HTMLElement, viewportTop: number) =>
+	anchor.getBoundingClientRect().top - viewportTop
+
+const topVisibleRow = (content: HTMLElement, viewportTop: number) => {
+	const rows = Array.from(content.children) as HTMLElement[]
+	return rows.find((row) => row.getBoundingClientRect().bottom > viewportTop)
+}
 
 export interface MessageScrollerHandle {
 	/** Returns to the newest content and re-arms follow. */
 	scrollToEnd: (behavior?: ScrollBehavior) => void
 	/** Whether the reader currently sits at the live edge. */
 	isFollowing: () => boolean
+}
+
+export interface MessageScrollerOlder {
+	/** Whether an older page still sits above the current transcript. */
+	has: boolean
+	/** Marks the older page as in flight. Required for an async load: it holds
+	 * the reader's anchor until the page it asked for actually lands. */
+	isLoading?: boolean
+	/** Asks the host for the page above the current transcript. */
+	onLoad: () => void
+	/** Label of the control that requests the page above. */
+	label?: string
+	/** Copy shown in its place once no older page remains. */
+	startOfHistoryLabel?: string
 }
 
 export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
@@ -34,6 +63,9 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
 	label?: string
 	/** Marks the transcript as waiting for more streamed content. */
 	busy?: boolean
+	/** Cursor pagination for the history above the transcript. Omit it and no
+	 * pagination affordance is rendered at all. */
+	older?: MessageScrollerOlder
 	viewportClassName?: string
 	contentClassName?: string
 	viewportRef?: Ref<HTMLElement>
@@ -56,6 +88,7 @@ export function MessageScroller({
 	onFollowChange,
 	label = "Conversation",
 	busy,
+	older,
 	viewportClassName,
 	contentClassName,
 	viewportRef: externalViewportRef,
@@ -73,6 +106,7 @@ export function MessageScroller({
 	const programmaticScrollRef = useRef(false)
 	const scrollTimerRef = useRef<number | undefined>(undefined)
 	const frameRef = useRef<number | undefined>(undefined)
+	const pinRef = useRef<PrependPin | null>(null)
 	const {
 		onScroll: onViewportScroll,
 		onWheel: onViewportWheel,
@@ -102,37 +136,62 @@ export function MessageScroller({
 		[onFollowChange],
 	)
 
-	const scrollToEnd = useCallback((behavior: ScrollBehavior) => {
-		const viewport = viewportRef.current
-		if (!viewport) return
-
+	const holdProgrammaticScroll = useCallback((duration: number) => {
 		programmaticScrollRef.current = true
-		if (typeof viewport.scrollTo === "function") {
-			viewport.scrollTo({ top: viewport.scrollHeight, behavior })
-		} else {
-			viewport.scrollTop = viewport.scrollHeight
-		}
 		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
-		scrollTimerRef.current = window.setTimeout(
-			() => {
-				programmaticScrollRef.current = false
-			},
-			behavior === "smooth" ? 320 : 0,
-		)
+		scrollTimerRef.current = window.setTimeout(() => {
+			programmaticScrollRef.current = false
+		}, duration)
+	}, [])
+
+	const scrollToEnd = useCallback(
+		(behavior: ScrollBehavior) => {
+			const viewport = viewportRef.current
+			if (!viewport) return
+
+			holdProgrammaticScroll(behavior === "smooth" ? 320 : 0)
+			if (typeof viewport.scrollTo === "function") {
+				viewport.scrollTo({ top: viewport.scrollHeight, behavior })
+			} else {
+				viewport.scrollTop = viewport.scrollHeight
+			}
+		},
+		[holdProgrammaticScroll],
+	)
+
+	const pinTopVisibleRow = useCallback(() => {
+		const viewport = viewportRef.current
+		const content = contentRef.current
+		if (!viewport || !content) return
+
+		const viewportTop = viewport.getBoundingClientRect().top
+		const anchor = topVisibleRow(content, viewportTop)
+		pinRef.current = anchor
+			? { anchor, offset: offsetFromViewportTop(anchor, viewportTop) }
+			: null
 	}, [])
 
 	const handleScroll = useCallback(() => {
 		const viewport = viewportRef.current
 		if (!viewport || programmaticScrollRef.current) return
 
+		// The reader moved while a page was in flight: hold where they are now.
+		if (pinRef.current) pinTopVisibleRow()
+
 		const distance =
 			viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
 		setFollowing(distance <= followThreshold)
-	}, [followThreshold, setFollowing])
+	}, [followThreshold, pinTopVisibleRow, setFollowing])
 
 	const leaveLiveEdge = useCallback(() => {
 		programmaticScrollRef.current = false
 	}, [])
+
+	const requestOlder = () => {
+		if (!older || older.isLoading) return
+		pinTopVisibleRow()
+		older.onLoad()
+	}
 
 	useImperativeHandle(
 		scrollerRef,
@@ -156,11 +215,34 @@ export function MessageScroller({
 		}
 	}, [followOutput, scrollToEnd])
 
+	/* Pinned to a row rather than to a scroll height: content appended below the
+	 * reader grows the transcript without moving that row, so only the rows that
+	 * actually land above it are ever compensated. */
+	useLayoutEffect(() => {
+		const viewport = viewportRef.current
+		const pin = pinRef.current
+		if (!viewport || !pin) return
+
+		if (!pin.anchor.isConnected) {
+			pinRef.current = null
+			return
+		}
+
+		const viewportTop = viewport.getBoundingClientRect().top
+		const drift = offsetFromViewportTop(pin.anchor, viewportTop) - pin.offset
+		if (drift !== 0) {
+			holdProgrammaticScroll(0)
+			viewport.scrollTop += drift
+		}
+		if (!older?.isLoading) pinRef.current = null
+	})
+
 	useEffect(() => {
 		const content = contentRef.current
 		if (!content || typeof ResizeObserver === "undefined") return
 
 		const observer = new ResizeObserver(() => {
+			if (pinRef.current) return
 			if (!followOutput || !followingRef.current) return
 			scrollToEnd(reduce || !smooth ? "auto" : "smooth")
 		})
@@ -216,6 +298,39 @@ export function MessageScroller({
 					viewportClassName,
 				)}
 			>
+				{older ? (
+					<div
+						data-slot="message-scroller-older"
+						className="flex min-h-9 items-center justify-center px-3"
+					>
+						{older.has ? (
+							/* `aria-disabled` rather than `disabled`: the control keeps its
+							 * focus and its name while the page loads, instead of dropping
+							 * a keyboard reader back to the top of the viewport. */
+							<Button
+								variant="ghost"
+								size="sm"
+								aria-busy={older.isLoading}
+								aria-disabled={older.isLoading}
+								className="aria-disabled:opacity-60"
+								onClick={requestOlder}
+							>
+								{older.isLoading ? (
+									<Icons.Loading
+										data-icon="inline-start"
+										className={cn(!reduce && "animate-spin")}
+									/>
+								) : null}
+								{older.label ?? "Load older messages"}
+							</Button>
+						) : (
+							<p className="text-muted-foreground text-xs">
+								{older.startOfHistoryLabel ?? "Beginning of the conversation"}
+							</p>
+						)}
+					</div>
+				) : null}
+
 				<div
 					ref={contentRef}
 					role="log"

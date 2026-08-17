@@ -143,12 +143,26 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
 	Database::open(&connection::file(app)?)
 }
 
-/// The database a test works on, opened where `temp_dir` put it. Lives beside
-/// `open` rather than in a test module because `Database::open` is private and
-/// every test module around the database needs it.
+/// Every test module under `db` opens a database the same way, on a directory of
+/// its own from [`connection::temp_dir`]. Lives here rather than in each of them
+/// because `Database::open` is private to this module.
 #[cfg(test)]
-pub fn opened(dir: &Path) -> Database {
+pub(in crate::db) fn open(dir: &Path) -> Database {
 	Database::open(&dir.join(connection::FILE_NAME)).expect("the database opens")
+}
+
+/// Counting rows is how those modules check that a write landed, or that a
+/// refused one left nothing behind. The table is a literal, never a value from
+/// outside: it is interpolated, not bound.
+#[cfg(test)]
+pub(in crate::db) async fn count_of(database: &Database, table: &'static str) -> u32 {
+	database
+		.call(move |connection| {
+			Ok(connection
+				.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0))?)
+		})
+		.await
+		.expect("query")
 }
 
 #[cfg(test)]
@@ -193,16 +207,6 @@ mod tests {
 			.expect("query")
 	}
 
-	async fn count_of(database: &Database, table: &'static str) -> u32 {
-		database
-			.call(move |connection| {
-				Ok(connection
-					.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0))?)
-			})
-			.await
-			.expect("query")
-	}
-
 	const A_CONVERSATION: &str =
 		"INSERT INTO conversations (id, kind, title, created_at, updated_at)
 		VALUES ('c1', 'main', 'First', 1, 1)";
@@ -211,7 +215,7 @@ mod tests {
 	async fn a_fresh_path_becomes_a_database_at_the_latest_version() {
 		let dir = temp_dir();
 
-		let database = opened(&dir);
+		let database = open(&dir);
 
 		assert!(dir.join(FILE_NAME).exists(), "no file was created");
 		assert_eq!(version(&database).await, migrations::latest_version());
@@ -230,12 +234,12 @@ mod tests {
 	#[tokio::test]
 	async fn reopening_leaves_the_schema_and_the_version_as_they_were() {
 		let dir = temp_dir();
-		let first = opened(&dir);
+		let first = open(&dir);
 		let version_after_install = version(&first).await;
 		let objects_after_install = object_count(&first).await;
 		drop(first);
 
-		let second = opened(&dir);
+		let second = open(&dir);
 
 		assert_eq!(version(&second).await, version_after_install, "a step ran twice");
 		assert_eq!(
@@ -257,7 +261,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_waiting_on_the_file_leaves_the_runtime_free() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 		database
 			.call(|connection| Ok(connection.busy_timeout(CONTENDED_TIMEOUT)?))
 			.await
@@ -307,7 +311,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_write_spanning_two_statements_lands_whole_or_not_at_all() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 
 		let landed = database
 			.call_mut(|connection| {
@@ -358,7 +362,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_that_panics_is_reported_instead_of_taking_the_host_down() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 
 		let interrupted: Result<(), DatabaseError> =
 			database.call(|_| panic!("a query gave up under the lock")).await;
@@ -383,7 +387,7 @@ mod tests {
 		use std::os::unix::fs::PermissionsExt;
 
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 
 		let mode = fs::metadata(dir.join(FILE_NAME)).expect("metadata").permissions().mode();
 		assert_eq!(mode & 0o777, 0o600, "the transcript must not be world readable");

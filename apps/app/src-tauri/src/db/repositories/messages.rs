@@ -922,7 +922,7 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::db::{opened, Database};
+	use crate::db::{open, Database};
 
 	/// Two conversations and a bot taking part in both: the second one is what a
 	/// reference reaching across has to be refused for, and the participant rows
@@ -950,7 +950,7 @@ mod tests {
 		[TerminalStatus::Succeeded, TerminalStatus::Failed, TerminalStatus::Terminated];
 
 	async fn seeded(dir: &Path) -> Database {
-		let database = opened(dir);
+		let database = open(dir);
 		database
 			.call(|connection| Ok(connection.execute_batch(FIXTURE)?))
 			.await
@@ -1396,7 +1396,7 @@ mod tests {
 			(written, activities)
 		};
 
-		let reopened = opened(&dir);
+		let reopened = open(&dir);
 
 		assert_eq!(
 			whole_transcript(&reopened, PAGE).await,
