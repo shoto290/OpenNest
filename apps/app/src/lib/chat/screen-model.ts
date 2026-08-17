@@ -5,29 +5,46 @@ import type {
 } from "@workspace/ui/components/agent-activity"
 import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 import type { ChatEmptyStateStatus } from "@workspace/ui/components/chat-empty-state"
+import type { ChatTurnState } from "@workspace/ui/components/chat-turn"
 
 import { type ChatState, isTurnBusy } from "./chat-state"
 
 import type {
 	ActivityEvent,
 	ActivityStatus,
-	ChatMessage,
 	ConnectionState,
-	MessageCompletion,
-	MessageRole,
 	TransportError,
 	TurnState,
 } from "../claude/contract"
+import type {
+	TranscriptCompletion,
+	TranscriptMessage,
+	TranscriptRole,
+} from "../conversations/transcript-contract"
+import { isTerminalCompletion } from "../conversations/transcript-state"
 
 /** One bubble in the transcript. An answer is published paragraph by paragraph,
  * so a long reply reads as a run of messages rather than one growing block. */
 export type TranscriptRow = {
 	id: string
 	messageId: string
-	role: MessageRole
+	role: TranscriptRole
 	text: string
 	timestamp: number
-	completion: MessageCompletion
+	completion: ChatTurnState
+}
+
+/** How a stored ending reads on screen. `pending` is a message the store has a
+ * place for and no words yet, so it reads as one still being written. A stream
+ * the process died under has no state of its own here and borrows the stopped
+ * one: the turn ended early either way, and the reader is not told it failed. */
+const TURN_STATE: Record<TranscriptCompletion, ChatTurnState> = {
+	pending: "streaming",
+	streaming: "streaming",
+	complete: "complete",
+	cancelled: "cancelled",
+	failed: "failed",
+	interrupted: "cancelled",
 }
 
 /** What the bot is busy with, and what it is busy on. */
@@ -88,7 +105,7 @@ function toParagraphs(text: string, streaming: boolean): string[] {
 }
 
 function toRow(
-	message: ChatMessage,
+	message: TranscriptMessage,
 	fields: Pick<TranscriptRow, "text" | "completion"> & {
 		index?: number
 	},
@@ -98,28 +115,29 @@ function toRow(
 		id: index === undefined ? message.id : `${message.id}#${index}`,
 		messageId: message.id,
 		role: message.role,
-		timestamp: message.timestamp,
+		timestamp: message.createdAt,
 		...rest,
 	}
 }
 
-function assistantRows(message: ChatMessage): TranscriptRow[] {
-	const streaming = message.completion === "streaming"
-	const paragraphs = toParagraphs(message.text, streaming)
+function assistantRows(message: TranscriptMessage): TranscriptRow[] {
+	const unfinished = !isTerminalCompletion(message.completion)
+	const ending = TURN_STATE[message.completion]
+	const paragraphs = toParagraphs(message.content, unfinished)
 
 	if (paragraphs.length === 0) {
 		// A turn stopped or failed before its first paragraph still has to say so.
-		return streaming || message.completion === "complete"
+		return unfinished || ending === "complete"
 			? []
-			: [toRow(message, { index: 0, text: "", completion: message.completion })]
+			: [toRow(message, { index: 0, text: "", completion: ending })]
 	}
 
 	return paragraphs.map((text, index) => {
-		const closes = index === paragraphs.length - 1 && !streaming
+		const closes = index === paragraphs.length - 1 && !unfinished
 		return toRow(message, {
 			index,
 			text,
-			completion: closes ? message.completion : "complete",
+			completion: closes ? ending : "complete",
 		})
 	})
 }
@@ -127,9 +145,9 @@ function assistantRows(message: ChatMessage): TranscriptRow[] {
 /** Rows keyed by the message they came from. The reducer replaces only the
  * message a delta touched, so every other row keeps its identity and the
  * memoised transcript rows stay put through a stream. */
-const rowsByMessage = new WeakMap<ChatMessage, TranscriptRow[]>()
+const rowsByMessage = new WeakMap<TranscriptMessage, TranscriptRow[]>()
 
-export function toTranscriptRows(messages: ChatMessage[]): TranscriptRow[] {
+export function toTranscriptRows(messages: TranscriptMessage[]): TranscriptRow[] {
 	return messages.flatMap((message) => {
 		const cached = rowsByMessage.get(message)
 		if (cached) {
@@ -139,8 +157,8 @@ export function toTranscriptRows(messages: ChatMessage[]): TranscriptRow[] {
 			message.role === "user"
 				? [
 						toRow(message, {
-							text: message.text,
-							completion: message.completion,
+							text: message.content,
+							completion: TURN_STATE[message.completion],
 						}),
 					]
 				: assistantRows(message)
@@ -200,7 +218,7 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 	}
 
 	const latest = state.messages.at(-1)
-	const isWriting = latest?.role === "assistant" && latest.text.length > 0
+	const isWriting = latest?.role === "assistant" && latest.content.length > 0
 	return { kind: isWriting ? "writing" : "thinking" }
 }
 
@@ -226,9 +244,9 @@ export function sidebarActivityFor(state: ChatState): SidebarActivity {
 export function lastAssistantTextFor(state: ChatState): string | undefined {
 	const latest = state.messages.findLast(
 		(message) =>
-			message.role === "assistant" && message.completion !== "streaming",
+			message.role === "assistant" && isTerminalCompletion(message.completion),
 	)
-	return latest?.text.trim() || undefined
+	return latest?.content.trim() || undefined
 }
 
 export function toActivityItems(

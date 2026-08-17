@@ -53,16 +53,20 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	controller,
 	run,
 	avatar,
+	rejected,
 }: {
 	row: TranscriptRow
 	controller: ChatController
 	run?: ChatTurnRun
 	avatar: boolean
+	/** Claude refused this prompt. The stored row is whole either way — the reader
+	 * wrote it and the store took it — so the retry lives on the screen alone. */
+	rejected?: boolean
 }) {
 	if (row.role === "user") {
 		return (
 			<UserTurn
-				state={row.completion}
+				state={rejected ? "failed" : row.completion}
 				run={run}
 				copyText={row.text}
 				onRetry={() => {
@@ -281,6 +285,7 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 								row={row}
 								controller={controller}
 								avatar={index === avatarIndex}
+								rejected={row.messageId === state.rejectedPromptId}
 							/>
 						))}
 					</ChatTurnGroup>

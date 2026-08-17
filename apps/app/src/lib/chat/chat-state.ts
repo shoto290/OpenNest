@@ -1,24 +1,29 @@
 import type {
 	ActivityEvent,
 	ActivityStatus,
-	ChatMessage,
 	ClaudeEvent,
 	ConnectionState,
 	MessageCompletion,
 	PermissionDecision,
 	PermissionRequest,
-	SessionSnapshot,
 	TransportError,
 	TurnEnded,
 	TurnOutcome,
 	TurnState,
 } from "../claude/contract"
+import type { TranscriptMessage } from "../conversations/transcript-contract"
 
 export type ChatError = {
 	id: string
 	error: TransportError
 }
 
+/** What the screen needs that a restart may not survive, plus a mirror of the
+ * durable transcript. Everything here but `messages`, `hasOlder` and
+ * `conversationId` belongs to the running process: a connection, a turn, a
+ * permission and the provider's own session id are facts about this launch, and
+ * none of them is written down. What was said is the transcript's business, and
+ * the transcript is SQLite's. */
 export type ChatState = {
 	epoch: number
 	connection: ConnectionState
@@ -28,12 +33,20 @@ export type ChatState = {
 	sessionOpen: boolean
 	sessionId: string | null
 	binaryVersion: string | null
-	messages: ChatMessage[]
+	/** The one visible chat, resolved from the store before anything is written. */
+	conversationId: string | null
+	messages: TranscriptMessage[]
+	/** History still sits above what is loaded. */
+	hasOlder: boolean
+	loadingOlder: boolean
+	/** The prompt Claude refused to take. It is on the record either way — the
+	 * store took it before the submission was attempted — so the failure lives
+	 * here rather than on the durable row, which no submission can change. */
+	rejectedPromptId: string | null
 	activities: ActivityEvent[]
 	permission: PermissionRequest | null
 	errors: ChatError[]
 	errorCount: number
-	deltaSeqs: Record<string, number>
 }
 
 export type ChatAction =
@@ -43,13 +56,14 @@ export type ChatAction =
 	 * session resumes: the child only re-announces it on the first prompt, so
 	 * dropping it here would write `null` over a session that is very much alive. */
 	| { type: "sessionReset"; epoch: number; sessionId: string | null }
-	/** Hydrates the stored transcript on boot. Ignored the moment anything is
-	 * already on screen, so a late or replayed restore — StrictMode mounts twice —
-	 * can never clobber a live conversation. */
-	| { type: "sessionRestored"; snapshot: SessionSnapshot }
 	| { type: "sessionOpened" }
-	| { type: "promptSubmitted"; message: ChatMessage }
-	| { type: "promptRejected"; id: string; error: TransportError }
+	| { type: "conversationOpened"; conversationId: string }
+	/** The durable transcript moved. The controller hands the whole selection
+	 * rather than a patch: the transcript reducer owns order and identity. */
+	| { type: "transcriptChanged"; messages: TranscriptMessage[]; hasOlder: boolean }
+	| { type: "olderLoading"; loading: boolean }
+	| { type: "promptSubmitted" }
+	| { type: "promptRejected"; id: string | null; error: TransportError }
 	| { type: "promptRetried"; id: string }
 	| { type: "stopRejected"; error: TransportError }
 	| { type: "binaryVersion"; version: string | null }
@@ -61,19 +75,18 @@ export const initialChatState: ChatState = {
 	sessionOpen: false,
 	sessionId: null,
 	binaryVersion: null,
+	conversationId: null,
 	messages: [],
+	hasOlder: false,
+	loadingOlder: false,
+	rejectedPromptId: null,
 	activities: [],
 	permission: null,
 	errors: [],
 	errorCount: 0,
-	deltaSeqs: {},
 }
 
 const MAX_ERRORS = 20
-
-const MAX_PERSISTED_MESSAGES = 200
-
-const MAX_PERSISTED_ACTIVITIES = 200
 
 const TURN_TRANSITIONS: Record<TurnState, TurnState[]> = {
 	idle: ["submitting"],
@@ -120,24 +133,6 @@ export function turnForOutcome(outcome: TurnOutcome): TurnState {
 	return outcome === "failed" ? "failed" : "idle"
 }
 
-/** Only what survives a restart. `errors` stay behind because their ids are minted
- * from a live counter a restored one would collide with, and a pending permission
- * has no business on disk. The store hands back exactly what it was given, so a
- * message caught mid-stream is written as stopped: nothing on disk can resume, and
- * an interrupted answer is not a failed one. Only the tail is kept: a turn rewrites
- * the whole file once a second, so an unbounded transcript means an unbounded fsync
- * per second of every answer. */
-export function toSessionSnapshot(state: ChatState): SessionSnapshot {
-	return {
-		sessionId: state.sessionId,
-		messages: finalizeStreaming(
-			state.messages.slice(-MAX_PERSISTED_MESSAGES),
-			"cancelled",
-		),
-		activities: state.activities.slice(-MAX_PERSISTED_ACTIVITIES),
-	}
-}
-
 function setTurn(state: ChatState, next: TurnState): ChatState {
 	if (state.turn === next) {
 		return state
@@ -154,70 +149,6 @@ function pushError(state: ChatState, error: TransportError): ChatState {
 		...state,
 		errorCount: state.errorCount + 1,
 		errors: [...state.errors, entry].slice(-MAX_ERRORS),
-	}
-}
-
-function finalizeStreaming(
-	messages: ChatMessage[],
-	completion: MessageCompletion,
-): ChatMessage[] {
-	if (!messages.some((message) => message.completion === "streaming")) {
-		return messages
-	}
-	return messages.map((message) =>
-		message.completion === "streaming" ? { ...message, completion } : message,
-	)
-}
-
-function applyMessageDelta(
-	state: ChatState,
-	event: { id: string; seq: number; text: string },
-): ChatState {
-	const index = state.messages.findIndex((message) => message.id === event.id)
-	if (index === -1) {
-		return state
-	}
-	const target = state.messages[index]
-	if (target.completion !== "streaming") {
-		return state
-	}
-	const lastSeq = state.deltaSeqs[event.id]
-	if (lastSeq !== undefined && event.seq <= lastSeq) {
-		return state
-	}
-	return {
-		...state,
-		messages: state.messages.with(index, {
-			...target,
-			text: target.text + event.text,
-		}),
-		deltaSeqs: { ...state.deltaSeqs, [event.id]: event.seq },
-	}
-}
-
-function applyMessageStarted(
-	state: ChatState,
-	message: ChatMessage,
-): ChatState {
-	if (state.messages.some((entry) => entry.id === message.id)) {
-		return state
-	}
-	return { ...state, messages: [...state.messages, message] }
-}
-
-function applyMessageCompleted(
-	state: ChatState,
-	message: ChatMessage,
-): ChatState {
-	const index = state.messages.findIndex((entry) => entry.id === message.id)
-	if (index === -1) {
-		return { ...state, messages: [...state.messages, message] }
-	}
-	const previous = state.messages[index]
-	const text = message.text || previous.text
-	return {
-		...state,
-		messages: state.messages.with(index, { ...message, text }),
 	}
 }
 
@@ -275,6 +206,8 @@ function applyPermissionResolved(
 	}
 }
 
+/** The messages a turn produced are settled where they live, in the store. Only
+ * what the running process owned is cleared here. */
 function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 	if (state.turn === "idle" || state.turn === "failed") {
 		return state
@@ -284,10 +217,6 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 		...next,
 		sessionId: ended.sessionId ?? state.sessionId,
 		permission: null,
-		messages: finalizeStreaming(
-			next.messages,
-			completionForOutcome(ended.outcome),
-		),
 	}
 }
 
@@ -312,12 +241,12 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 			return setTurn(state, event.state)
 		case "sessionReady":
 			return { ...state, sessionId: event.sessionId }
+		// What a message says and how it ended reach the screen through the
+		// transcript, never through here: the reader is shown what was stored.
 		case "messageStarted":
-			return applyMessageStarted(state, event.message)
 		case "messageDelta":
-			return applyMessageDelta(state, event)
 		case "messageCompleted":
-			return applyMessageCompleted(state, event.message)
+			return state
 		case "activity":
 			return applyActivity(state, event.activity)
 		case "permissionRequested":
@@ -331,6 +260,57 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 	}
 }
 
+function applySessionReset(
+	state: ChatState,
+	epoch: number,
+	sessionId: string | null,
+): ChatState {
+	return {
+		...state,
+		epoch,
+		turn: "idle",
+		sessionOpen: false,
+		sessionId,
+		permission: null,
+	}
+}
+
+function applyTranscriptChanged(
+	state: ChatState,
+	messages: TranscriptMessage[],
+	hasOlder: boolean,
+): ChatState {
+	if (state.messages === messages && state.hasOlder === hasOlder) {
+		return state
+	}
+	return { ...state, messages, hasOlder }
+}
+
+function applyPromptRejected(
+	state: ChatState,
+	id: string | null,
+	error: TransportError,
+): ChatState {
+	const next = pushError(state, error)
+	return {
+		...next,
+		rejectedPromptId: id,
+		turn: next.turn === "submitting" ? "failed" : next.turn,
+	}
+}
+
+function applyPromptRetried(state: ChatState, id: string): ChatState {
+	if (state.rejectedPromptId !== id) {
+		return state
+	}
+	return setTurn({ ...state, rejectedPromptId: null }, "submitting")
+}
+
+function applyStopRejected(state: ChatState, error: TransportError): ChatState {
+	const next = pushError(state, error)
+	return next.turn === "stopping" ? { ...next, turn: "failed" } : next
+}
+
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 	switch (action.type) {
 		case "driverEvent":
@@ -340,70 +320,25 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 		case "sessionOpened":
 			return state.sessionOpen ? state : { ...state, sessionOpen: true }
 		case "sessionReset":
-			return {
-				...state,
-				epoch: action.epoch,
-				turn: "idle",
-				sessionOpen: false,
-				sessionId: action.sessionId,
-				permission: null,
-				deltaSeqs: {},
-				messages: finalizeStreaming(state.messages, "failed"),
-			}
-		case "sessionRestored":
-			return state.messages.length > 0
+			return applySessionReset(state, action.epoch, action.sessionId)
+		case "conversationOpened":
+			return state.conversationId === action.conversationId
 				? state
-				: {
-						...state,
-						sessionId: action.snapshot.sessionId,
-						messages: action.snapshot.messages,
-						activities: action.snapshot.activities,
-					}
+				: { ...state, conversationId: action.conversationId }
+		case "transcriptChanged":
+			return applyTranscriptChanged(state, action.messages, action.hasOlder)
+		case "olderLoading":
+			return state.loadingOlder === action.loading
+				? state
+				: { ...state, loadingOlder: action.loading }
 		case "promptSubmitted":
-			return setTurn(
-				{ ...state, messages: [...state.messages, action.message] },
-				"submitting",
-			)
-		case "promptRejected": {
-			const next = pushError(state, action.error)
-			const index = next.messages.findIndex(
-				(message) => message.id === action.id,
-			)
-			const messages =
-				index === -1
-					? next.messages
-					: next.messages.with(index, {
-							...next.messages[index],
-							completion: "failed",
-						})
-			return {
-				...next,
-				messages,
-				turn: next.turn === "submitting" ? "failed" : next.turn,
-			}
-		}
-		case "promptRetried": {
-			const index = state.messages.findIndex(
-				(message) => message.id === action.id,
-			)
-			if (index === -1) {
-				return state
-			}
-			return setTurn(
-				{
-					...state,
-					messages: state.messages.with(index, {
-						...state.messages[index],
-						completion: "complete",
-					}),
-				},
-				"submitting",
-			)
-		}
-		case "stopRejected": {
-			const next = pushError(state, action.error)
-			return next.turn === "stopping" ? { ...next, turn: "failed" } : next
-		}
+			return setTurn({ ...state, rejectedPromptId: null }, "submitting")
+		case "promptRejected":
+			return applyPromptRejected(state, action.id, action.error)
+		case "promptRetried":
+			return applyPromptRetried(state, action.id)
+		case "stopRejected":
+			return applyStopRejected(state, action.error)
 		case "binaryVersion":
 			return { ...state, binaryVersion: action.version }
 	}

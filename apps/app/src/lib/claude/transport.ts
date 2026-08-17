@@ -7,7 +7,6 @@ import type {
 	ClaudeEvent,
 	PermissionDecision,
 	SessionHandle,
-	SessionSnapshot,
 } from "./contract"
 
 const EVENT_CHANNEL = "claude://event"
@@ -20,11 +19,6 @@ export const claudeTransport: ChatDriver = {
 			resume: resume ?? null,
 			cwd: cwd ?? null,
 		}),
-
-	loadSession: () => invoke<SessionSnapshot>("claude_load_session"),
-
-	saveSession: (snapshot: SessionSnapshot) =>
-		invoke<void>("claude_save_session", { snapshot }),
 
 	submitPrompt: (text: string) => invoke<void>("claude_submit_prompt", { text }),
 

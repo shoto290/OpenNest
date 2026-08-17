@@ -225,12 +225,6 @@ export function createFakeChatDriver(
 			return Promise.resolve({ resumed: Boolean(resume) })
 		},
 
-		/** The web fake has no disk, so it boots on an empty transcript every time. */
-		loadSession: () =>
-			Promise.resolve({ sessionId: null, messages: [], activities: [] }),
-
-		saveSession: () => Promise.resolve(),
-
 		submitPrompt: (text: string) => {
 			if (!sessionId) {
 				return Promise.reject({ kind: "notStarted" })

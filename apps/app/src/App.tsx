@@ -10,10 +10,12 @@ import {
 	sidebarActivityFor,
 } from "@/lib/chat/screen-model"
 import { useChat } from "@/lib/chat/use-chat"
+import { createTranscriptStore } from "@/lib/conversations/create-store"
 
 export function App() {
 	const driver = useMemo(createChatDriver, [])
-	const chat = useChat(driver)
+	const store = useMemo(createTranscriptStore, [])
+	const chat = useChat(driver, store)
 
 	useEffect(() => {
 		void chat.controller.boot()
