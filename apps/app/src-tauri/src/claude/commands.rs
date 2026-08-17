@@ -204,14 +204,6 @@ fn stale(scope: &RuntimeScope) -> TransportError {
 	TransportError::StaleRuntimeSession { runtime_session_id: scope.runtime_session_id.clone() }
 }
 
-fn run_sink<R: Runtime>(
-	app: &AppHandle<R>,
-	scope: RuntimeScope,
-	live: Arc<Live>,
-) -> Arc<dyn EventSink> {
-	Arc::new(RunSink { app: app.clone(), scope, live })
-}
-
 /// The scope is the caller's own and is echoed rather than checked: a check asks
 /// about the install, which is true whatever run is on the frontend's mind — and
 /// the first check of a launch happens before there is a run at all.
@@ -264,7 +256,8 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 		.or_else(|| app.path().home_dir().ok())
 		.unwrap_or_else(|| PathBuf::from("."));
 
-	let sink = run_sink(&app, scope.clone(), state.live.clone());
+	let sink: Arc<dyn EventSink> =
+		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
 	let options = SessionOptions::new(binary, working_dir);
 
 	let started = match start_with_fallback(options, resume, sink.clone()).await {

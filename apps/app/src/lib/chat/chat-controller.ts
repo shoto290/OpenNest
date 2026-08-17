@@ -139,22 +139,17 @@ export function createChatController(
 		}
 	}
 
-	/** The controller speaking for the run it holds. What it reports is about this
-	 * launch's own session, so it is scoped with it and reaches the reducer under
-	 * the same rule every event from the host does. */
+	/** The controller speaking for the run it holds, in the vocabulary the host
+	 * speaks: what it says about this launch's own session is scoped with it and
+	 * meets the same gate as everything the session reports. */
+	const announce = (event: ClaudeEvent) =>
+		dispatch({ type: "driverEvent", scope: state.runtime, event })
+
 	const report = (reason: unknown) =>
-		dispatch({
-			type: "driverEvent",
-			scope: state.runtime,
-			event: { type: "failed", error: toTransportError(reason) },
-		})
+		announce({ type: "failed", error: toTransportError(reason) })
 
 	const reportStore = (reason: unknown) =>
-		dispatch({
-			type: "driverEvent",
-			scope: state.runtime,
-			event: { type: "failed", error: toStoreError(reason) },
-		})
+		announce({ type: "failed", error: toStoreError(reason) })
 
 	const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
 		const result = writes.then(operation)
@@ -353,11 +348,7 @@ export function createChatController(
 		try {
 			const result = await driver.check(state.runtime)
 			dispatch({ type: "binaryVersion", version: result.binaryVersion })
-			dispatch({
-				type: "driverEvent",
-				scope: state.runtime,
-				event: { type: "connectionChanged", state: result.connection },
-			})
+			announce({ type: "connectionChanged", state: result.connection })
 			if (result.error) {
 				report(result.error)
 			}
@@ -375,13 +366,9 @@ export function createChatController(
 	 * still a run the record can name. */
 	const openRun = async (
 		conversationId: string,
-		participant: string,
+		bot: string,
 	): Promise<RuntimeScope> => {
-		const opened = await store.openRuntimeSession(
-			conversationId,
-			participant,
-			now(),
-		)
+		const opened = await store.openRuntimeSession(conversationId, bot, now())
 		return {
 			conversationId: opened.conversationId,
 			botId: opened.botId,
@@ -401,8 +388,8 @@ export function createChatController(
 	 * instead of being handed an unattributable session. */
 	const start = async (resume?: string) => {
 		const conversationId = state.conversationId
-		const participant = botId
-		if (!conversationId || !participant) {
+		const bot = botId
+		if (!conversationId || !bot) {
 			reportStore({ kind: "unavailable" })
 			return null
 		}
@@ -411,7 +398,7 @@ export function createChatController(
 
 		let runtime: RuntimeScope
 		try {
-			runtime = await openRun(conversationId, participant)
+			runtime = await openRun(conversationId, bot)
 		} catch (reason) {
 			reportStore(reason)
 			return null
@@ -580,11 +567,7 @@ export function createChatController(
 		if (!runtime || !canStopTurn(state.turn)) {
 			return
 		}
-		dispatch({
-			type: "driverEvent",
-			scope: runtime,
-			event: { type: "turnChanged", state: "stopping" },
-		})
+		announce({ type: "turnChanged", state: "stopping" })
 		try {
 			await driver.cancelTurn(runtime)
 		} catch (reason) {

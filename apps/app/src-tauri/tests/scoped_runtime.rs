@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::claude::commands::EVENT_CHANNEL;
-use opennest_app::claude::contract::{ClaudeEvent, ScopedEvent, TurnOutcome};
+use opennest_app::claude::contract::{ClaudeEvent, RuntimeScope, ScopedEvent, TurnOutcome};
 use opennest_app::claude::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use serde_json::{json, Value};
@@ -213,6 +213,9 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 
 	let harness = launch();
 	let run = a_run(1);
+	// The run as it comes home, so every assertion below compares one value rather
+	// than serializing each event's scope back to JSON to look at it.
+	let named: RuntimeScope = serde_json::from_value(run.clone()).expect("the scope parses");
 
 	harness.call("claude_check", json!({ "scope": Value::Null })).expect("the check reports");
 	assert!(
@@ -223,13 +226,9 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 
 	harness.forget_events();
 	harness.call("claude_check", json!({ "scope": run })).expect("the check reports");
-	let echoed: Vec<Value> = harness
-		.events()
-		.iter()
-		.map(|scoped| serde_json::to_value(&scoped.scope).expect("the scope serializes"))
-		.collect();
+	let echoed = harness.events();
 	assert!(
-		!echoed.is_empty() && echoed.iter().all(|scope| scope == &run),
+		!echoed.is_empty() && echoed.iter().all(|scoped| scoped.scope.as_ref() == Some(&named)),
 		"a check answered under a run the caller never named: {echoed:#?}"
 	);
 
@@ -239,9 +238,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	harness.wait_for("the turn to end", turn_outcome);
 	let streamed = harness.events();
 	assert!(
-		streamed.iter().all(|scoped| {
-			serde_json::to_value(&scoped.scope).expect("the scope serializes") == run
-		}),
+		streamed.iter().all(|scoped| scoped.scope.as_ref() == Some(&named)),
 		"an event crossed under another run than the one that produced it: {streamed:#?}"
 	);
 	assert!(
