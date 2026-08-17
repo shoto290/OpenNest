@@ -90,8 +90,135 @@ fn a_user_message(id: &str, conversation_id: &str, content: &str, created_at: i6
 	}})
 }
 
+/// The same message, pointed at the one it answers. `repliedToMessageId` is the
+/// only field a prompt adds to a plain one, and the shape stays spelled once.
+fn an_answer_to(
+	target: &str,
+	id: &str,
+	conversation_id: &str,
+	content: &str,
+	created_at: i64,
+) -> Value {
+	let mut message = a_user_message(id, conversation_id, content, created_at);
+	message["message"]["repliedToMessageId"] = json!(target);
+	message
+}
+
+/// A reply as the transport writes one before it ends: opened empty and streamed
+/// into. Left exactly there is what a host dying under a stream leaves behind, so
+/// the ending belongs to the caller and not here. Answers the id it wrote under.
+fn a_streaming_reply(
+	window: &WebviewWindow<MockRuntime>,
+	conversation_id: &str,
+	index: i64,
+) -> String {
+	let id = format!("m{index}");
+	call(
+		window,
+		"conversation_open_assistant_message",
+		json!({ "message": {
+			"id": id,
+			"conversationId": conversation_id,
+			"turnId": TURN,
+			"authorBotId": "default",
+			"repliedToMessageId": null,
+			"createdAt": index
+		}}),
+	)
+	.expect("the reply is opened");
+	call(
+		window,
+		"conversation_append_text",
+		json!({ "id": id, "delta": format!("message {index}") }),
+	)
+	.expect("the reply streams");
+	id
+}
+
+/// One message under an id the assertions can name, alternating speakers so a
+/// rebuilt tail reads as a conversation rather than a monologue.
+fn said(window: &WebviewWindow<MockRuntime>, conversation_id: &str, index: i64) {
+	if index % 2 == 1 {
+		call(
+			window,
+			"conversation_append_user_message",
+			a_user_message(
+				&format!("m{index}"),
+				conversation_id,
+				&format!("message {index}"),
+				index,
+			),
+		)
+		.expect("the message is appended");
+		return;
+	}
+	let id = a_streaming_reply(window, conversation_id, index);
+	call(window, "conversation_finalize_message", json!({ "id": id, "completion": "complete" }))
+		.expect("the reply ends");
+}
+
+/// The run the frontend opens against the durable lineage before it asks for a
+/// process. No `reason`: it is the caller's word for the run this one replaces, and
+/// nothing here has a policy to describe.
+fn a_run(conversation_id: &str, bot: &Value, started_at: i64) -> Value {
+	json!({ "conversationId": conversation_id, "botId": bot["id"], "startedAt": started_at })
+}
+
+/// The fold the app takes before a run depends on one. `null` comes back when
+/// there was nothing new to fold, which is an answer rather than a failure.
+fn checkpoint(
+	window: &WebviewWindow<MockRuntime>,
+	conversation_id: &str,
+	bot: &Value,
+	created_at: i64,
+) -> Value {
+	call(
+		window,
+		"conversation_capture_checkpoint",
+		json!({
+			"conversationId": conversation_id,
+			"botId": bot["id"],
+			"runtimeSessionId": null,
+			"createdAt": created_at
+		}),
+	)
+	.expect("the checkpoint is considered")
+}
+
 fn a_page(conversation_id: &str, before_seq: Option<i64>, limit: u32) -> Value {
 	json!({ "conversationId": conversation_id, "beforeSeq": before_seq, "limit": limit })
+}
+
+fn occurrences(text: &str, needle: &str) -> usize {
+	text.matches(needle).count()
+}
+
+/// Every message the reader can reach, oldest first, walked the way the frontend
+/// walks it: the newest page, then the one above it named by the lowest `seq`
+/// already held — and what the walk cost in crossings. A gap or a repeat here is a
+/// message the user never sees or sees twice.
+fn walked_back(
+	window: &WebviewWindow<MockRuntime>,
+	conversation_id: &str,
+	page: u32,
+) -> (Vec<i64>, usize) {
+	let mut reached: Vec<i64> = Vec::new();
+	let mut cursor: Option<i64> = None;
+	let mut crossings = 0;
+	loop {
+		let crossing =
+			call(window, "conversation_message_page", a_page(conversation_id, cursor, page))
+				.expect("the page");
+		let mut held = seqs(&crossing);
+		assert!(!held.is_empty(), "a page that claimed there was more came back empty");
+		crossings += 1;
+		cursor = held.first().copied();
+		held.append(&mut reached);
+		reached = held;
+		if crossing["hasMore"] == json!(false) {
+			return (reached, crossings);
+		}
+	}
 }
 
 fn seqs(page: &Value) -> Vec<i64> {
@@ -231,18 +358,11 @@ fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
 	let window = window(&app);
 
 	let (bot, conversation) = a_bot_and_its_chat(&window);
-	let opened = call(
-		&window,
-		"conversation_open_runtime_session",
-		json!({ "conversationId": conversation, "botId": bot["id"], "startedAt": 17 }),
-	)
-	.expect("the run opens");
-	let replacement = call(
-		&window,
-		"conversation_open_runtime_session",
-		json!({ "conversationId": conversation, "botId": bot["id"], "startedAt": 18 }),
-	)
-	.expect("the next run opens");
+	let opened = call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 17))
+		.expect("the run opens");
+	let replacement =
+		call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 18))
+			.expect("the next run opens");
 
 	assert_eq!(opened["conversationId"], json!(conversation));
 	assert_eq!(opened["botId"], bot["id"]);
@@ -254,6 +374,37 @@ fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
 	);
 	assert_eq!(replacement["seq"], json!(2), "the restart did not continue the lineage");
 	assert_ne!(replacement["id"], opened["id"], "the restart reused the replaced run's id");
+
+	cleanup(&app);
+}
+
+/// The same scope, across the crash that ended the run before it. A host that died
+/// left its run `active` on the record, and the next launch has to step over that
+/// row rather than start the lineage again — a `seq` back at 1 would give the run
+/// answering now the very name a caller from before the crash is still holding, and
+/// every refusal the scope buys would land on the wrong process.
+#[test]
+fn a_run_opened_after_a_crash_continues_the_lineage_instead_of_reusing_its_names() {
+	const IDENTIFIER: &str = "com.opennest.conversation-commands-8";
+
+	let crashed = {
+		let app = app(IDENTIFIER);
+		let window = window(&app);
+		let (bot, conversation) = a_bot_and_its_chat(&window);
+		call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 1))
+			.expect("the run the host dies under opens")
+	};
+
+	let app = app(IDENTIFIER);
+	let window = window(&app);
+	let (bot, conversation) = a_bot_and_its_chat(&window);
+	let recovered =
+		call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 2))
+			.expect("the run after the crash opens");
+
+	assert_eq!(crashed["seq"], json!(1), "the lineage did not start at 1");
+	assert_eq!(recovered["seq"], json!(2), "the launch after the crash restarted the lineage");
+	assert_ne!(recovered["id"], crashed["id"], "the run after the crash took the crashed one's id");
 
 	cleanup(&app);
 }
@@ -401,22 +552,7 @@ fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch(
 	let window = window(&app);
 	let (_, conversation) = a_bot_and_its_chat(&window);
 
-	let mut reached: Vec<i64> = Vec::new();
-	let mut cursor: Option<i64> = None;
-	let mut crossings = 0;
-	loop {
-		let page = call(&window, "conversation_message_page", a_page(&conversation, cursor, PAGE))
-			.expect("the page");
-		let mut held = seqs(&page);
-		assert!(!held.is_empty(), "a page that claimed there was more came back empty");
-		crossings += 1;
-		cursor = held.first().copied();
-		held.append(&mut reached);
-		reached = held;
-		if page["hasMore"] == json!(false) {
-			break;
-		}
-	}
+	let (reached, crossings) = walked_back(&window, &conversation, PAGE);
 
 	assert_eq!(
 		reached,
@@ -424,6 +560,147 @@ fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch(
 		"the walk back skipped, repeated or reordered a message the reader had seen"
 	);
 	assert_eq!(crossings, 13, "the reader paid for more crossings than the history needed");
+
+	cleanup(&app);
+}
+
+/// The chat as it really gets long, at the boundary the frontend crosses: more
+/// messages than one fold can reach, a host that died under the last reply, folds
+/// taken over what it left, and a prompt answering something no tail still holds.
+///
+/// One claim throughout, and it is the whole point of a durable chat — nothing is
+/// lost and nothing is said twice. Not by the sweep that closes out the dead host's
+/// reply, not by the two folds, not by the pages the reader walks, and not by the
+/// context the next run is told.
+#[test]
+fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled() {
+	const IDENTIFIER: &str = "com.opennest.conversation-commands-7";
+	/// Past what one checkpoint folds, so the first one cannot reach the beginning
+	/// and has to say so where the summary is read.
+	const HISTORY: i64 = 230;
+	/// The count of messages a context carries word for word, mirrored from the host:
+	/// it is what decides where every fold below stops.
+	const TAIL: i64 = 20;
+	const PAGE: u32 = 20;
+	/// Answered by the prompt, and far enough back that neither the tail nor either
+	/// fold still holds it.
+	const ANSWERED: &str = "m3";
+	const PROMPT: &str = "p1";
+	const PROMPT_TEXT: &str = "so where does that leave the roof?";
+
+	// The host that dies: it writes the whole history and goes under the last reply,
+	// which is left open exactly as it was being streamed.
+	{
+		let app = app(IDENTIFIER);
+		let window = window(&app);
+		let (_, conversation) = a_bot_and_its_chat(&window);
+		call(&window, "conversation_start_turn", a_turn(&conversation))
+			.expect("the turn is started");
+		for index in 1..HISTORY {
+			said(&window, &conversation, index);
+		}
+		a_streaming_reply(&window, &conversation, HISTORY);
+	}
+
+	let app = app(IDENTIFIER);
+	let window = window(&app);
+	let (bot, conversation) = a_bot_and_its_chat(&window);
+
+	// What the dead host left is on the record as what it was: the words it had
+	// reached, and an ending that says the stream stopped rather than one still
+	// being written.
+	let newest = call(&window, "conversation_message_page", a_page(&conversation, None, 1))
+		.expect("the newest page");
+	assert_eq!(
+		newest["messages"][0],
+		json!({
+			"id": format!("m{HISTORY}"),
+			"conversationId": conversation,
+			"turnId": TURN,
+			"seq": HISTORY,
+			"role": "assistant",
+			"content": format!("message {HISTORY}"),
+			"completion": "interrupted",
+			"createdAt": HISTORY
+		}),
+		"the reply the dead host left came back as something else"
+	);
+
+	let folded = checkpoint(&window, &conversation, &bot, 1);
+	assert_eq!(
+		folded["lastMessageSeq"],
+		json!(HISTORY - TAIL),
+		"the first fold stopped somewhere other than the edge of the tail"
+	);
+	assert!(folded["tokenCount"].as_i64().is_some_and(|count| count > 0));
+
+	// The prompt reaches the transcript first, and it answers a message the fold
+	// could not even reach.
+	call(
+		&window,
+		"conversation_append_user_message",
+		an_answer_to(ANSWERED, PROMPT, &conversation, PROMPT_TEXT, HISTORY + 1),
+	)
+	.expect("the prompt is appended");
+
+	// The second fold, the way the app takes one: before a run that was told nothing
+	// is told everything, so that no stretch falls between the summary and the tail.
+	let again = checkpoint(&window, &conversation, &bot, 2);
+	assert_eq!(
+		again["lastMessageSeq"],
+		json!(HISTORY + 1 - TAIL),
+		"the recovery point did not follow the messages the tail could no longer reach"
+	);
+
+	let context = call(
+		&window,
+		"conversation_bounded_context",
+		json!({
+			"conversationId": conversation,
+			"botId": bot["id"],
+			"promptMessageId": PROMPT
+		}),
+	)
+	.expect("the context is rebuilt");
+	let context = context.as_str().expect("the context crosses as text").to_owned();
+
+	assert!(
+		context.contains("The conversation so far:\n…"),
+		"a fold that could not reach the beginning did not say so: {context}"
+	);
+	assert_eq!(
+		occurrences(&context, "message 211\n"),
+		1,
+		"the message between the two folds is in neither the summary nor the tail"
+	);
+	assert_eq!(occurrences(&context, "message 212\n"), 1, "the tail lost the message it opens on");
+	assert_eq!(
+		occurrences(&context, &format!("message {HISTORY}\n")),
+		1,
+		"the tail lost what the dead host had been saying"
+	);
+	assert!(
+		context.contains("The message this one replies to:\nuser: message 3"),
+		"an answer to a message no fold still holds lost its target: {context}"
+	);
+	assert_eq!(occurrences(&context, "message 3\n"), 1, "the answered message was carried twice");
+	assert_eq!(occurrences(&context, PROMPT_TEXT), 1, "the prompt was carried twice");
+	assert!(context.ends_with(PROMPT_TEXT), "the prompt was not the last thing the run is told");
+
+	// Nothing the folds read moved anything the reader can see: the transcript is
+	// still every message that was ever written, once each, with the prompt at the end.
+	let (reached, _) = walked_back(&window, &conversation, PAGE);
+	assert_eq!(
+		reached,
+		(1..=HISTORY + 1).collect::<Vec<_>>(),
+		"the walk back skipped, repeated or reordered a message the reader had seen"
+	);
+	assert_eq!(
+		call(&window, "conversation_message_page", a_page(&conversation, None, 1))
+			.expect("the newest page")["messages"][0]["id"],
+		json!(PROMPT),
+		"the prompt is not where the reader last left it"
+	);
 
 	cleanup(&app);
 }
