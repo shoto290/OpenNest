@@ -8,13 +8,12 @@ import type {
 	NewUserMessage,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
-import type {
-	TerminalCompletion,
-	TranscriptCursor,
-	TranscriptPage,
+import {
+	type TerminalCompletion,
+	TRANSCRIPT_PAGE_SIZE,
+	type TranscriptCursor,
+	type TranscriptPage,
 } from "./transcript-contract"
-
-export const TRANSCRIPT_PAGE_SIZE = 20
 
 /** The host owns the page and the failure: nothing here reshapes what came back
  * and nothing catches, so a `TranscriptStoreError` reaches the caller as sent. */

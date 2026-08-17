@@ -311,12 +311,14 @@ pub struct MessagePageQuery {
 	pub limit: u32,
 }
 
-/// `messages` in display order, oldest first. `next_before_seq` is the lowest
-/// `seq` the page held, and `None` once there is nothing older to ask for.
+/// `messages` in display order, oldest first. `has_more` says whether anything
+/// older than this page is on file, which is the one thing a caller cannot read off
+/// the page it holds: it names the next page by the lowest `seq` of this one, so the
+/// store hands out no cursor of its own.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessagePage {
 	pub messages: Vec<StoredMessage>,
-	pub next_before_seq: Option<i64>,
+	pub has_more: bool,
 }
 
 pub struct NewActivity {
@@ -479,25 +481,34 @@ impl MessagesRepository {
 				let before_seq = query.before_seq.unwrap_or(i64::MAX);
 				let limit = query.limit as usize;
 				let mut statement = connection.prepare_cached(MESSAGE_PAGE)?;
-				let mut messages = statement
-					.query_map(
-						params![query.conversation_id, before_seq, i64::from(query.limit) + 1],
-						read_message,
-					)?
-					.collect::<Result<Vec<_>, _>>()?;
+				let mut rows = statement.query(params![
+					query.conversation_id,
+					before_seq,
+					i64::from(query.limit) + 1
+				])?;
 				// A page that filled says nothing about what is behind it — a conversation
 				// of exactly `limit` messages fills one and has nothing older — so one row
-				// beyond what the caller asked for is read, and its arrival is the only
-				// evidence older messages exist. The read is newest first, so that row is
-				// the oldest of what came back and dropping it leaves the page asked for.
-				let older_exists = messages.len() > limit;
-				messages.truncate(limit);
+				// beyond what the caller asked for is asked of SQLite, and its arrival is
+				// the only evidence older messages exist. Nothing else is taken from it: the
+				// read is newest first, so it is the oldest row of the answer, and decoding
+				// it would pull a whole streamed reply off the file only to drop it a line
+				// later.
+				//
+				// Deliberately not `Vec::with_capacity(limit)`: `limit` arrives from the
+				// frontend, and reserving from it would let a caller name the size of an
+				// allocation. Growing on the rows that are really there is bounded by the
+				// conversation.
+				let mut messages = Vec::new();
+				let mut has_more = false;
+				while let Some(row) = rows.next()? {
+					if messages.len() == limit {
+						has_more = true;
+						break;
+					}
+					messages.push(read_message(row)?);
+				}
 				messages.reverse();
-				let next_before_seq = match messages.first() {
-					Some(oldest) if older_exists => Some(oldest.seq),
-					_ => None,
-				};
-				Ok(MessagePage { messages, next_before_seq })
+				Ok(MessagePage { messages, has_more })
 			})
 			.await?)
 	}
@@ -976,6 +987,18 @@ mod tests {
 			.expect("the turn is started")
 	}
 
+	/// The transcript a paging test needs before it can page: `count` user messages
+	/// on `t1` of `c1`, told apart by their ids alone.
+	async fn some_user_messages(database: &Database, count: usize) {
+		for index in 0..count {
+			database
+				.messages()
+				.append_user_message(a_user_message(&format!("m{index}"), "hello", 1))
+				.await
+				.expect("the message is appended");
+		}
+	}
+
 	fn a_user_message(id: &str, content: &str, created_at: i64) -> NewUserMessage {
 		NewUserMessage {
 			id: id.into(),
@@ -1018,20 +1041,29 @@ mod tests {
 			.expect("the page is read")
 	}
 
-	/// Walks the whole transcript the way a caller would: newest page first, each
-	/// one prepended to what is already known, until nothing older is offered.
+	/// Walks the whole transcript the way a caller would: newest page first, each one
+	/// prepended to what is already known, the next asked for by the lowest `seq` the
+	/// last one held. It stops on a page that says nothing is older, and on a page that
+	/// came back empty — there is no `seq` in one of those to ask the next by.
 	async fn whole_transcript(database: &Database, limit: u32) -> Vec<StoredMessage> {
 		let mut collected: Vec<StoredMessage> = Vec::new();
 		let mut before_seq = None;
 		loop {
 			let page = page(database, before_seq, limit).await;
-			let next_before_seq = page.next_before_seq;
+			let oldest_held = oldest_seq(&page);
+			let has_more = page.has_more;
 			collected.splice(0..0, page.messages);
-			match next_before_seq {
-				Some(seq) => before_seq = Some(seq),
-				None => return collected,
+			match oldest_held {
+				Some(seq) if has_more => before_seq = Some(seq),
+				_ => return collected,
 			}
 		}
+	}
+
+	/// What the frontend's own `selectOldestSeq` works out, and the only cursor there
+	/// is: the page names the one before it by the lowest `seq` it holds.
+	fn oldest_seq(page: &MessagePage) -> Option<i64> {
+		page.messages.first().map(|message| message.seq)
 	}
 
 	fn seqs(messages: &[StoredMessage]) -> Vec<i64> {
@@ -1258,43 +1290,34 @@ mod tests {
 	}
 
 	/// The edges of the cursor, where a gap or a repeat would come from: a page
-	/// that fills exactly, the short one after it, the empty one after that, and a
-	/// cursor already past the oldest message.
+	/// that fills exactly, the short one after it, and a cursor already past the
+	/// oldest message.
 	#[tokio::test]
 	async fn the_cursor_leaves_no_gap_and_no_duplicate_at_its_edges() {
 		let dir = temp_dir();
 		let database = seeded(&dir).await;
 		a_turn(&database, "t1", "c1").await;
-		for index in 0..6 {
-			database
-				.messages()
-				.append_user_message(a_user_message(&format!("m{index}"), "hello", 1))
-				.await
-				.expect("the message is appended");
-		}
+		some_user_messages(&database, 6).await;
 
 		let newest = page(&database, None, 3).await;
-		let older = page(&database, newest.next_before_seq, 3).await;
-		let exhausted = page(&database, Some(1), 3).await;
-		let past_the_start = page(&database, Some(1), 10).await;
+		let older = page(&database, oldest_seq(&newest), 3).await;
+		let past_the_start = page(&database, Some(1), 3).await;
 		let short = page(&database, Some(3), 4).await;
 
 		assert_eq!(seqs(&newest.messages), vec![4, 5, 6]);
-		assert_eq!(newest.next_before_seq, Some(4), "a full page offered no cursor");
+		assert!(newest.has_more, "a full page said there was nothing older");
 		assert_eq!(
 			seqs(&older.messages),
 			vec![1, 2, 3],
 			"the second page skipped or repeated a seq"
 		);
-		assert_eq!(
-			older.next_before_seq, None,
-			"the last page offered a cursor because it happened to fill"
+		assert!(!older.has_more, "the last page promised more because it happened to fill");
+		assert!(
+			past_the_start.messages.is_empty() && !past_the_start.has_more,
+			"a cursor past the oldest message came back with rows or promised more"
 		);
-		assert!(exhausted.messages.is_empty(), "a page past the oldest message held rows");
-		assert_eq!(exhausted.next_before_seq, None, "an empty page offered a cursor");
-		assert!(past_the_start.messages.is_empty(), "the cursor is not exclusive");
 		assert_eq!(seqs(&short.messages), vec![1, 2], "a partial page did not stop at the start");
-		assert_eq!(short.next_before_seq, None, "a partial page offered a cursor");
+		assert!(!short.has_more, "a partial page promised more");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1309,13 +1332,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = seeded(&dir).await;
 		a_turn(&database, "t1", "c1").await;
-		for index in 0..4 {
-			database
-				.messages()
-				.append_user_message(a_user_message(&format!("m{index}"), "hello", 1))
-				.await
-				.expect("the message is appended");
-		}
+		some_user_messages(&database, 4).await;
 
 		let only = page(&database, None, 4).await;
 
@@ -1324,8 +1341,8 @@ mod tests {
 			vec![1, 2, 3, 4],
 			"a page the size of the conversation came back short or out of display order"
 		);
-		assert_eq!(
-			only.next_before_seq, None,
+		assert!(
+			!only.has_more,
 			"a page that filled exactly sent the reader after messages that are not there"
 		);
 		assert_eq!(
@@ -1346,39 +1363,25 @@ mod tests {
 		let dir = temp_dir();
 		let database = seeded(&dir).await;
 		a_turn(&database, "t1", "c1").await;
-		for index in 0..5 {
-			database
-				.messages()
-				.append_user_message(a_user_message(&format!("m{index}"), "hello", 1))
-				.await
-				.expect("the message is appended");
-		}
+		some_user_messages(&database, 5).await;
 
 		let newest = page(&database, None, 4).await;
-		let older = page(&database, newest.next_before_seq, 4).await;
+		let older = page(&database, oldest_seq(&newest), 4).await;
 
 		assert_eq!(
 			seqs(&newest.messages),
 			vec![2, 3, 4, 5],
 			"the first page was not the newest four messages"
 		);
-		assert_eq!(
-			newest.next_before_seq,
-			Some(2),
-			"a full page with a message behind it offered no cursor"
-		);
+		assert!(newest.has_more, "a full page with a message behind it promised nothing older");
 		assert_eq!(
 			seqs(&older.messages),
 			vec![1],
 			"the page behind the cursor did not hold the one message left"
 		);
-		assert_eq!(
-			older.next_before_seq, None,
-			"the page holding the oldest message offered a cursor behind it"
-		);
 		assert!(
-			seqs(&newest.messages).iter().all(|seq| !seqs(&older.messages).contains(seq)),
-			"a message came back on both pages"
+			!older.has_more,
+			"the page holding the oldest message promised something behind it"
 		);
 		assert_eq!(
 			[seqs(&older.messages), seqs(&newest.messages)].concat(),

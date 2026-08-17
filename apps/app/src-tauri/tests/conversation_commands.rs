@@ -103,15 +103,6 @@ fn seqs(page: &Value) -> Vec<i64> {
 		.collect()
 }
 
-fn ids(page: &Value) -> Vec<String> {
-	page["messages"]
-		.as_array()
-		.expect("the page holds messages")
-		.iter()
-		.map(|message| message["id"].as_str().expect("an id").to_owned())
-		.collect()
-}
-
 fn cleanup(app: &App<MockRuntime>) {
 	let dir = app.path().app_data_dir().expect("data dir");
 	std::fs::remove_dir_all(&dir).expect("cleanup");
@@ -256,10 +247,6 @@ fn the_newest_page_comes_first_and_its_oldest_seq_walks_back_to_the_rest() {
 	assert_eq!(newest["hasMore"], json!(true), "a full page claimed there was nothing older");
 	assert_eq!(seqs(&older), vec![1, 2], "the cursor skipped or repeated a seq");
 	assert_eq!(older["hasMore"], json!(false), "a partial page offered more");
-	assert!(
-		ids(&newest).iter().all(|id| !ids(&older).contains(id)),
-		"a message came back on both pages"
-	);
 
 	cleanup(&app);
 }

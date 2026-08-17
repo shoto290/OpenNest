@@ -9,6 +9,12 @@
 //! back exactly as they were written. A `#[serde(rename)]` on a stored enum would
 //! have made the same change a migration.
 //!
+//! Its sibling [`crate::claude::contract`] already spells a `MessageRole` with the
+//! same two words, and the two are kept apart for the same reason: the vocabulary of
+//! a live session and the vocabulary of a durable transcript answer to different
+//! boundaries, and sharing one enum would make a rename asked for by either a rename
+//! forced on both.
+//!
 //! It is also why the mirror is written by hand. The storage vocabularies convert
 //! themselves to SQLite through helpers that are private to their module, so the
 //! conversions below `match` on the public variants: a variant added to either
@@ -161,11 +167,11 @@ impl TranscriptMessage {
 	}
 }
 
-/// `messages` in display order, oldest first. `has_more` stands in for the
-/// cursor [`messages::MessagePage`] offers: the frontend asks for the page before
-/// the one it holds by the lowest `seq` it already has, so the cursor would be a
-/// second copy of a number already in `messages`, and the one thing that cannot
-/// be read off the page is whether anything older is there at all.
+/// `messages` in display order, oldest first. `has_more` is [`messages::MessagePage`]'s
+/// own answer carried through: the frontend asks for the page before the one it
+/// holds by the lowest `seq` it already has, so no cursor crosses — it would be a
+/// second copy of a number already in `messages` — and whether anything older is
+/// there at all is the one thing that cannot be read off the page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptPage {
@@ -176,13 +182,12 @@ pub struct TranscriptPage {
 
 impl TranscriptPage {
 	pub fn of(conversation_id: String, page: messages::MessagePage) -> Self {
-		let has_more = page.next_before_seq.is_some();
 		let messages = page
 			.messages
 			.into_iter()
 			.map(|stored| TranscriptMessage::of(&conversation_id, stored))
 			.collect();
-		Self { conversation_id, messages, has_more }
+		Self { conversation_id, messages, has_more: page.has_more }
 	}
 }
 

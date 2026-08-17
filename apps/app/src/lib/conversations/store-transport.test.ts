@@ -7,8 +7,12 @@ import type {
 	NewUserMessage,
 	TranscriptStoreError,
 } from "./store-contract"
-import { conversationStore, TRANSCRIPT_PAGE_SIZE } from "./store-transport"
-import type { TerminalCompletion, TranscriptPage } from "./transcript-contract"
+import { conversationStore } from "./store-transport"
+import {
+	type TerminalCompletion,
+	TRANSCRIPT_PAGE_SIZE,
+	type TranscriptPage,
+} from "./transcript-contract"
 import { CONVERSATION, message } from "./transcript-fixtures"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
@@ -128,7 +132,6 @@ describe("conversationStore reads", () => {
 
 		const loaded = await conversationStore.loadPage(CONVERSATION, null)
 
-		expect(TRANSCRIPT_PAGE_SIZE).toBe(20)
 		expect(hostInvoke).toHaveBeenCalledWith("conversation_message_page", {
 			conversationId: CONVERSATION,
 			beforeSeq: null,

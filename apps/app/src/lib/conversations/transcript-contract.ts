@@ -30,6 +30,10 @@ export type TranscriptCursor = {
 	beforeSeq: number
 }
 
+/** The size of one crossing: the fake port reads the same number, so a test
+ * pages the way production does. */
+export const TRANSCRIPT_PAGE_SIZE = 20
+
 export type TranscriptPage = {
 	conversationId: string
 	messages: TranscriptMessage[]
