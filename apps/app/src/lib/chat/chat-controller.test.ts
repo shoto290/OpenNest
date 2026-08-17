@@ -4,6 +4,7 @@ import { type ChatController, createChatController } from "./chat-controller"
 import { isSessionReady } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
+import { ASKED_FOR, NEARING_THE_BOUND, REFUSED, STOPPED } from "./rotation"
 
 import type {
 	ChatMessage,
@@ -68,6 +69,8 @@ type HarnessOptions = {
 	store?: TranscriptStore
 	replyFor?: (prompt: string) => string
 	driver?: (fake: FakeChatDriver) => ChatDriver
+	promptsPerRun?: number
+	botId?: string
 }
 
 let launches = 0
@@ -83,7 +86,19 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
 		stepMs: STEP_MS,
 		replyFor: options.replyFor ?? (() => REPLY),
 	})
-	const store = options.store ?? createFakeTranscriptStore()
+	const base = options.store ?? createFakeTranscriptStore()
+	const store = options.botId
+		? {
+				...base,
+				defaultBot: () =>
+					Promise.resolve({
+						id: options.botId ?? "",
+						name: "Second",
+						model: "sonnet",
+						createdAt: 0,
+					}),
+			}
+		: base
 	const driver = options.driver ? options.driver(fake) : fake
 	const controller = createChatController(driver, store, {
 		newId: () => {
@@ -94,6 +109,7 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
 			clock += 1
 			return clock
 		},
+		promptsPerRun: options.promptsPerRun,
 	})
 	return { driver: fake, store, controller, detach: controller.attach() }
 }
@@ -1101,6 +1117,421 @@ describe("history above the transcript", () => {
 
 		expect(overlapped).toBe(false)
 		expect(controller.getState().messages).toHaveLength(40)
+	})
+})
+
+describe("a run replaced under a conversation that carries on", () => {
+	/** Long enough that a checkpoint has something to fold under the tail, and that
+	 * the tail cannot reach the beginning of the chat. */
+	const HISTORY = 30
+	const REFUSAL = {
+		kind: "storage",
+		failure: { kind: "poisonedConnection" },
+	}
+
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	const withHistory = () =>
+		createFakeTranscriptStore({ messages: seeded(HISTORY) })
+
+	const occurrences = (text: string, needle: string) =>
+		text.split(needle).length - 1
+
+	/** A store that answers as the host would until it is told to refuse one of the
+	 * two calls a reconstruction is made of. The switch is the point: the same
+	 * conversation is shown before the refusal, under it, and after it, which is the
+	 * only way to prove a refusal cost nothing the recovery could not put back. */
+	const refusingStoreAt = (
+		member: "captureCheckpoint" | "boundedContext",
+	): TranscriptStore & { refuse: (on: boolean) => void } => {
+		const base = withHistory()
+		let refusing = false
+		const refused = () => Promise.reject(REFUSAL)
+		return {
+			...base,
+			refuse: (on: boolean) => {
+				refusing = on
+			},
+			captureCheckpoint: (conversationId, botId, runtimeSessionId, at) =>
+				refusing && member === "captureCheckpoint"
+					? refused()
+					: base.captureCheckpoint(conversationId, botId, runtimeSessionId, at),
+			boundedContext: (conversationId, botId, promptMessageId) =>
+				refusing && member === "boundedContext"
+					? refused()
+					: base.boundedContext(conversationId, botId, promptMessageId),
+		}
+	}
+
+	/** Everything the chat has ever said, in a context made of a summary and a tail
+	 * alone. What the tail cannot reach has to have been folded, so a message in
+	 * neither is a stretch of the conversation the reconstruction lost — which is
+	 * exactly what a refused fold would take with it if a run were replaced anyway. */
+	const expectWholeChat = (context: string, alsoSaid: string[]) => {
+		for (let index = 1; index <= HISTORY; index += 1) {
+			expect(context).toContain(`stored ${index}\n`)
+		}
+		for (const said of alsoSaid) {
+			expect(context).toContain(`${said}\n`)
+		}
+	}
+
+	/** What the run was really told, which is not what the reader typed: the first
+	 * prompt of a run carries the whole context rebuilt for it. */
+	const told = (submitted: { mock: { calls: unknown[][] } }) =>
+		String(submitted.mock.calls.at(-1)?.[1] ?? "")
+
+	/** Every run this bot opened, in order, and why it replaced the one before it.
+	 * The first is always `null`: it replaces nothing. */
+	const reasons = (opened: { mock: { calls: unknown[][] } }, botId: string) =>
+		opened.mock.calls
+			.filter((call) => call[1] === botId)
+			.map((call) => call[3] ?? null)
+
+	// The preventive rotation: the run is replaced while it still answers, and the
+	// prompt that triggered it is written once, submitted once, and carried into the
+	// new process with everything it needs to answer.
+	it("replaces a run that has carried its share and hands the new one the conversation", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const captured = vi.spyOn(store, "captureCheckpoint")
+		const { controller, driver } = await bootedHarness({
+			store,
+			promptsPerRun: 1,
+		})
+		const submitted = vi.spyOn(driver, "submitPrompt")
+		const first = runOf(controller)
+		const before = controller.getState().messages
+
+		await controller.send("first")
+		await vi.runAllTimersAsync()
+		const carried = runOf(controller)
+		await controller.send("second")
+		await vi.runAllTimersAsync()
+
+		expect(carried).toEqual(first)
+		expect(reasons(opened, "default")).toEqual([null, NEARING_THE_BOUND])
+		expect(captured.mock.calls.map((call) => call[2])).toContain(
+			first.runtimeSessionId,
+		)
+		expect(runOf(controller).epoch).toBe(first.epoch + 1)
+		expect(told(submitted)).toContain("The new message:\nsecond")
+		expect(occurrences(told(submitted), "second")).toBe(1)
+
+		const state = controller.getState()
+		expect(state.messages.slice(0, before.length)).toEqual(before)
+		expect(spoken(state.messages).slice(-4)).toEqual([
+			["user", "first", "complete"],
+			["assistant", REPLY, "complete"],
+			["user", "second", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		expect(spoken(await reload(store)).slice(-4)).toEqual(
+			spoken(state.messages).slice(-4),
+		)
+	})
+
+	// A provider session refused: the host put a fresh child behind the same run, so
+	// the conversation has to reach it some other way. The next prompt is what
+	// rotates, and what it carries is the transcript rebuilt from the store.
+	it("replaces a run whose provider session was refused, on the next prompt", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver } = await bootedHarness({ store })
+		const submitted = vi.spyOn(driver, "submitPrompt")
+		const refused = runOf(controller)
+
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "resumeFailed", forgotSessionId: true },
+		})
+		await vi.runAllTimersAsync()
+		expect(runOf(controller)).toEqual(refused)
+
+		await controller.send("where were we?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, "default")).toEqual([null, REFUSED])
+		expect(runOf(controller).runtimeSessionId).not.toBe(
+			refused.runtimeSessionId,
+		)
+		expect(told(submitted)).toContain(`stored ${HISTORY}`)
+		expect(occurrences(told(submitted), "where were we?")).toBe(1)
+		expect(controller.getState().messages.at(-1)?.completion).toBe("complete")
+	})
+
+	// The child exited, which is what a provider refusing to carry a session any
+	// further looks like from here — the CLI ends the process rather than the turn.
+	// The run is spent, and the next prompt is answered by its replacement.
+	it("replaces a run the provider stopped answering in", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver } = await bootedHarness({ store })
+		const submitted = vi.spyOn(driver, "submitPrompt")
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+		const spent = runOf(controller)
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "crashed", code: 9, detail: "claude exited unexpectedly" },
+		})
+		await vi.runAllTimersAsync()
+
+		await controller.send("still there?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, "default")).toEqual([null, STOPPED])
+		expect(runOf(controller).runtimeSessionId).not.toBe(spent.runtimeSessionId)
+		expect(told(submitted)).toContain("The new message:\nstill there?")
+		expect(told(submitted)).toContain("user: hello")
+		expect(controller.getState().turn).toBe("idle")
+		expect(spoken(controller.getState().messages).at(-1)).toEqual([
+			"assistant",
+			REPLY,
+			"complete",
+		])
+	})
+
+	// Asked for by hand, with nothing wrong: the fold lands, the run is closed out
+	// under the reason, and the reader sees the same transcript before and after.
+	it("replaces a run on request without moving anything the reader can see", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller } = await bootedHarness({ store })
+		const replaced = runOf(controller)
+		const before = controller.getState()
+
+		await controller.rotate()
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, "default")).toEqual([null, ASKED_FOR])
+		expect(runOf(controller).epoch).toBe(replaced.epoch + 1)
+		expect(controller.getState().messages).toEqual(before.messages)
+		expect(controller.getState().hasOlder).toBe(before.hasOlder)
+		expect(controller.getState().errors).toEqual([])
+	})
+
+	// A handover the store cannot fold for is not a handover. The run answering the
+	// conversation is the only place it is still whole — a successor would be told
+	// the summary that did land and the tail, and everything between them would be
+	// gone from the answer while staying on the reader's screen. So the run stays,
+	// keeps answering the prompts it can, and is replaced once the fold lands.
+	it("retires no run while the fold its successor needs is refused", async () => {
+		const store = refusingStoreAt("captureCheckpoint")
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver } = await bootedHarness({
+			store,
+			promptsPerRun: 1,
+		})
+		const submitted = vi.spyOn(driver, "submitPrompt")
+
+		await controller.send("first")
+		await vi.runAllTimersAsync()
+		const holding = runOf(controller)
+		store.refuse(true)
+		await controller.send("second")
+		await vi.runAllTimersAsync()
+
+		// Nothing retired, nothing opened, and the run that holds the conversation
+		// answered the prompt itself — it needs no context to be rebuilt for it.
+		expect(runOf(controller)).toEqual(holding)
+		expect(reasons(opened, "default")).toEqual([null])
+		expect(told(submitted)).toBe("second")
+		expect(controller.getState().errors.at(-1)?.error).toEqual({
+			kind: "writeFailed",
+			detail: "the transcript store refused it (storage)",
+		})
+		expect(spoken(controller.getState().messages).at(-1)).toEqual([
+			"assistant",
+			REPLY,
+			"complete",
+		])
+
+		store.refuse(false)
+		await controller.send("third")
+		await vi.runAllTimersAsync()
+
+		// The handover the refusal held back, once the store answers: the successor is
+		// told the whole chat, the stretch no tail could reach included.
+		expect(reasons(opened, "default")).toEqual([null, NEARING_THE_BOUND])
+		expect(runOf(controller).epoch).toBe(holding.epoch + 1)
+		expectWholeChat(told(submitted), ["first", "second"])
+		expect(occurrences(told(submitted), "third")).toBe(1)
+	})
+
+	// The other half of the same rule, on the two calls a reconstruction is made of.
+	// A run that was told nothing and cannot be told the conversation is given no
+	// prompt at all: answered on its own, in the middle of a chat, it would reply as
+	// if none of it had happened and nothing on the screen would say why. The prompt
+	// stays on the record, and sending it again once the store answers carries the
+	// whole of it, once.
+	it.each(["captureCheckpoint", "boundedContext"] as const)(
+		"gives a run that was told nothing no prompt of its own when %s is refused",
+		async (member) => {
+			const store = refusingStoreAt(member)
+			const { controller, driver } = await bootedHarness({ store })
+			const submitted = vi.spyOn(driver, "submitPrompt")
+			store.refuse(true)
+
+			await controller.send("where were we?")
+			await vi.runAllTimersAsync()
+
+			const refused = controller.getState()
+			expect(submitted).not.toHaveBeenCalled()
+			expect(refused.turn).toBe("failed")
+			expect(refused.errors.at(-1)?.error).toEqual({
+				kind: "writeFailed",
+				detail: "the transcript store refused it (storage)",
+			})
+			// Written, shown, and the one the reader may send again.
+			expect(spoken(refused.messages).at(-1)).toEqual([
+				"user",
+				"where were we?",
+				"complete",
+			])
+			expect(refused.rejectedPromptId).toBe(refused.messages.at(-1)?.id)
+
+			store.refuse(false)
+			await controller.retry(refused.rejectedPromptId ?? "")
+			await vi.runAllTimersAsync()
+
+			expect(submitted).toHaveBeenCalledTimes(1)
+			expectWholeChat(told(submitted), [])
+			expect(occurrences(told(submitted), "where were we?")).toBe(1)
+			const state = controller.getState()
+			expect(state.turn).toBe("idle")
+			expect(spoken(state.messages).slice(-2)).toEqual([
+				["user", "where were we?", "complete"],
+				["assistant", REPLY, "complete"],
+			])
+			expect(spoken(await reload(store)).slice(-2)).toEqual(
+				spoken(state.messages).slice(-2),
+			)
+		},
+	)
+
+	// The dangerous one: a refused resume leaves a fresh child answering under the
+	// same run, alive and knowing none of the chat. The run cannot be replaced while
+	// the fold is refused, and that child must not be handed the question anyway.
+	it("never lets a spent run answer on its own while the fold is refused", async () => {
+		const store = refusingStoreAt("captureCheckpoint")
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver } = await bootedHarness({ store })
+		const submitted = vi.spyOn(driver, "submitPrompt")
+
+		await controller.send("first")
+		await vi.runAllTimersAsync()
+		const spent = runOf(controller)
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "resumeFailed", forgotSessionId: true },
+		})
+		await vi.runAllTimersAsync()
+		store.refuse(true)
+		submitted.mockClear()
+
+		await controller.send("where were we?")
+		await vi.runAllTimersAsync()
+
+		expect(runOf(controller)).toEqual(spent)
+		expect(reasons(opened, "default")).toEqual([null])
+		expect(submitted).not.toHaveBeenCalled()
+		expect(controller.getState().rejectedPromptId).toBe(
+			controller.getState().messages.at(-1)?.id,
+		)
+
+		store.refuse(false)
+		await controller.send("and now?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, "default")).toEqual([null, REFUSED])
+		expect(runOf(controller).epoch).toBe(spent.epoch + 1)
+		expect(submitted).toHaveBeenCalledTimes(1)
+		expectWholeChat(told(submitted), ["first", "where were we?"])
+		expect(occurrences(told(submitted), "and now?")).toBe(1)
+	})
+
+	// A chat longer than any tail, on a launch that never rotated: what the tail
+	// cannot reach is folded before the context is built, so the reconstruction is
+	// the summary and the tail with nothing between them left out.
+	it("leaves no stretch of the chat between the summary and the tail", async () => {
+		const store = withHistory()
+		const { controller, driver } = await bootedHarness({ store })
+		const submitted = vi.spyOn(driver, "submitPrompt")
+
+		await controller.send("where were we?")
+		await vi.runAllTimersAsync()
+
+		expect(told(submitted)).toContain("stored 1\n")
+		expect(told(submitted)).toContain(`stored ${HISTORY}`)
+		for (let index = 1; index <= HISTORY; index += 1) {
+			expect(told(submitted)).toContain(`stored ${index}\n`)
+		}
+		expect(occurrences(told(submitted), "where were we?")).toBe(1)
+	})
+
+	// A launch that never saw any of it. The run it opens is told nothing by the
+	// process it starts, so the first prompt of that run carries the conversation —
+	// summary, tail and question — out of the file the previous launch left.
+	it("carries the stored conversation into the first prompt of a cold launch", async () => {
+		const store = withHistory()
+		const first = await bootedHarness({ store })
+		await first.controller.rotate()
+		await vi.runAllTimersAsync()
+		first.detach()
+
+		const second = await bootedHarness({ store })
+		const submitted = vi.spyOn(second.driver, "submitPrompt")
+		await second.controller.send("where were we?")
+		await vi.runAllTimersAsync()
+
+		expect(told(submitted)).toContain("The conversation so far:")
+		expect(told(submitted)).toContain(`stored ${HISTORY}`)
+		expect(told(submitted)).toContain("The new message:\nwhere were we?")
+		expect(occurrences(told(submitted), "where were we?")).toBe(1)
+		second.detach()
+	})
+
+	// Two bots in one chat keep two lineages and two recovery points. One rotating
+	// numbers its own runs and folds its own history; the other is left exactly
+	// where it was, and is rebuilt from what it has itself.
+	it("keeps two bots' runs and recovery points apart in one chat", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const captured = vi.spyOn(store, "captureCheckpoint")
+		const first = await bootedHarness({ store })
+		const second = await bootedHarness({ store, botId: "second" })
+		const spoke = vi.spyOn(second.driver, "submitPrompt")
+		const replaced = runOf(first.controller)
+
+		await first.controller.rotate()
+		await vi.runAllTimersAsync()
+		await second.controller.send("and me?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, "default")).toEqual([null, ASKED_FOR])
+		expect(reasons(opened, "second")).toEqual([null])
+		expect(runOf(first.controller).epoch).toBe(2)
+		expect(runOf(second.controller).epoch).toBe(1)
+		expect(runOf(second.controller).botId).toBe("second")
+		// Each bot folds its own recovery point, naming a run of its own: one bot
+		// rotating leaves the other exactly where it was.
+		expect(captured.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+			["default", replaced.runtimeSessionId],
+			["second", runOf(second.controller).runtimeSessionId],
+		])
+		expect(told(spoke)).toContain(`stored ${HISTORY}`)
+		expect(occurrences(told(spoke), "and me?")).toBe(1)
+
+		first.detach()
+		second.detach()
 	})
 })
 

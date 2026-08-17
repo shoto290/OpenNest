@@ -1,6 +1,7 @@
 import type {
 	Bot,
 	Chat,
+	ContextCheckpoint,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -17,12 +18,32 @@ export type TranscriptStore = TranscriptPort & {
 	mainChat: (botId: string) => Promise<Chat>
 	/** Opens the run a Claude process is about to be started for. The live run it
 	 * replaces is rotated by the same call, so a participant is never left with two
-	 * of them or with none. */
+	 * of them or with none. `reason` is why that replaced run was left behind, and
+	 * `null` only for the first run of a lineage, which replaces nothing. */
 	openRuntimeSession: (
 		conversationId: string,
 		botId: string,
 		startedAt: number,
+		reason: string | null,
 	) => Promise<RuntimeSession>
+	/** Everything a run has to be told to carry on a conversation it never saw,
+	 * bounded and composed by the host. The prompt is named rather than sent: it is
+	 * already on the record, and reading it from there is what keeps it out of its
+	 * own context and at the end of it exactly once. */
+	boundedContext: (
+		conversationId: string,
+		botId: string,
+		promptMessageId: string,
+	) => Promise<string>
+	/** Folds what a context can no longer afford to carry word for word into the
+	 * recovery point the next one resumes from. `null` says there was nothing new to
+	 * fold, which leaves the previous checkpoint answering for the conversation. */
+	captureCheckpoint: (
+		conversationId: string,
+		botId: string,
+		runtimeSessionId: string | null,
+		createdAt: number,
+	) => Promise<ContextCheckpoint | null>
 	startTurn: (turn: NewTurn) => Promise<number>
 	completeTurn: (id: string, completedAt: number) => Promise<void>
 	appendUserMessage: (message: NewUserMessage) => Promise<number>

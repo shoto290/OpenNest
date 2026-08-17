@@ -23,7 +23,12 @@
 //!
 //! Nothing here carries what a conversation said except
 //! [`TranscriptMessage::content`], which is the transcript itself and the whole
-//! reason a page was asked for. The `detail` of [`StorageFailure::Sqlite`] is
+//! reason a page was asked for, and the context
+//! [`crate::conversations::commands::conversation_bounded_context`] answers with,
+//! which is that transcript rebuilt for the run that is about to be told it. A
+//! checkpoint's summary is left out for the same reason the rest is in: nothing on
+//! the other side displays or submits it, so it stays in the file. The `detail` of
+//! [`StorageFailure::Sqlite`] is
 //! SQLite's own account of a statement — a constraint, a column, a schema — and
 //! never a row's content: a transcript is personal data, and an error on its way
 //! to the UI is the last place it may leak into.
@@ -89,6 +94,36 @@ impl From<runtime_context::RuntimeSession> for RuntimeSession {
 			bot_id: session.participant.bot_id,
 			seq: session.seq,
 			started_at: session.started_at,
+		}
+	}
+}
+
+/// A recovery point as the frontend meets it: which run took it, how far into the
+/// transcript it reaches, and what it is estimated to cost to replay. The summary
+/// itself does not cross — the context that carries it is built on this side, and
+/// the caller only has to know a checkpoint landed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextCheckpoint {
+	pub id: String,
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub runtime_session_id: Option<String>,
+	pub last_message_seq: i64,
+	pub token_count: i64,
+	pub created_at: i64,
+}
+
+impl From<runtime_context::ContextCheckpoint> for ContextCheckpoint {
+	fn from(checkpoint: runtime_context::ContextCheckpoint) -> Self {
+		Self {
+			id: checkpoint.id,
+			conversation_id: checkpoint.participant.conversation_id,
+			bot_id: checkpoint.participant.bot_id,
+			runtime_session_id: checkpoint.runtime_session_id,
+			last_message_seq: checkpoint.last_message_seq,
+			token_count: checkpoint.token_count,
+			created_at: checkpoint.created_at,
 		}
 	}
 }
@@ -500,6 +535,38 @@ mod tests {
 				"seq": 2,
 				"startedAt": 17
 			}),
+		);
+	}
+
+	/// What a caller learns about the recovery point it just paid for. The summary is
+	/// deliberately not among the fields: it is the conversation's own words, and the
+	/// only thing that reads them is the context builder on this side.
+	#[test]
+	fn a_stored_checkpoint_crosses_as_camel_case_without_its_summary() {
+		let wire = json!({
+			"id": "k1",
+			"conversationId": "c1",
+			"botId": "default",
+			"runtimeSessionId": "r1",
+			"lastMessageSeq": 12,
+			"tokenCount": 30,
+			"createdAt": 17
+		});
+		assert_crosses_as(
+			ContextCheckpoint {
+				id: "k1".into(),
+				conversation_id: "c1".into(),
+				bot_id: "default".into(),
+				runtime_session_id: Some("r1".into()),
+				last_message_seq: 12,
+				token_count: 30,
+				created_at: 17,
+			},
+			wire.clone(),
+		);
+		assert!(
+			!wire.to_string().contains("summary"),
+			"a checkpoint carried the conversation's own words across"
 		);
 	}
 

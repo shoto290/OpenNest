@@ -91,9 +91,11 @@ notarization credential belongs in the repo.
    `conversations.sqlite3`, in order and each exactly once — including the
    stopped reply from step 7, which comes back stopped rather than as a message
    still being written. Ask `What number did I ask you to remember?`
-   → the bot does **not** know. The transcript is durable; the Claude session
-   that produced it is not, and nothing resumes it across a launch. Only the
-   reading is restored, not the model's context.
+   → the bot **does** know, and nothing about the transcript moves while it
+   answers: no message is repeated, hidden or reordered, and the question
+   appears once. The Claude session that heard the number is gone — this launch
+   started a fresh one — and what it is answering from is the conversation
+   rebuilt out of `conversations.sqlite3` and carried in its first prompt.
 
 10. Send `Count from 1 to 500, one number per line.` and quit with Cmd+Q while
     it is still streaming, then relaunch.
@@ -143,6 +145,19 @@ Repeat the pair for each way out of the app:
   within one launch carries is legitimately a different one. That is the resume
   chain working, not a bug — the check is that the answer carries on, never that
   the id is stable.
-- A **relaunch does not carry the model's context**: the transcript is read back
-  from the database, and Claude is started fresh. Step 9 asserts that as the
-  behaviour it is, so that whoever changes it has to change the checklist too.
+- A **relaunch rebuilds the model's context rather than resuming it**: Claude is
+  started fresh, and the first prompt of every run it never answered in carries
+  the conversation reconstructed from the database — the bot's instructions and
+  memory, the summary of what was folded away, the messages since it, an older
+  message the prompt explicitly answers, and the prompt. Step 9 asserts that as
+  the behaviour it is, so that whoever changes it has to change the checklist
+  too.
+- The reconstruction is **bounded**, so a conversation far longer than step 5's
+  will not come back word for word: only the most recent stretch does, and
+  everything before it through the summary a checkpoint folded. What a long chat
+  loses in detail is expected, not a failure of the recovery.
+- **Rotation is invisible by design and has no control of its own**, so nothing
+  here drives one on purpose. It happens under the reader — at the preventive
+  threshold, or once a provider session is refused or stops answering — and the
+  only thing to check is what step 9 checks: the chat carries on and the
+  transcript does not move.

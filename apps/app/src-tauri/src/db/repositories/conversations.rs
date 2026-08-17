@@ -98,11 +98,16 @@ pub struct Participant {
 	pub joined_at: i64,
 }
 
+/// `instructions` and `memory` are what the bot brings to a context rebuilt for
+/// it. Both are empty until something says otherwise, and empty is a part a
+/// context leaves out rather than a value it prints.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Bot {
 	pub id: String,
 	pub name: String,
 	pub model: String,
+	pub instructions: String,
+	pub memory: String,
 	pub created_at: i64,
 }
 
@@ -161,6 +166,15 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(ensured_chat(connection, &bot_id))).await?
 	}
 
+	/// Any bot by its id, read and not seeded: a context is rebuilt for the bot a
+	/// participant names, which is not always the one this build ships. `None` is a
+	/// bot the file does not hold, and the caller says what that means for it.
+	pub async fn bot(&self, id: String) -> Result<Option<Bot>, ConversationError> {
+		Ok(self
+			.call(move |connection| Ok(connection.query_row(SELECT_BOT, [id], bot).optional()?))
+			.await?)
+	}
+
 	pub async fn participants(
 		&self,
 		conversation_id: String,
@@ -179,7 +193,8 @@ impl ConversationsRepository {
 	}
 }
 
-const SELECT_BOT: &str = "SELECT id, name, model, created_at FROM bots WHERE id = ?1";
+const SELECT_BOT: &str =
+	"SELECT id, name, model, instructions, memory, created_at FROM bots WHERE id = ?1";
 
 /// A bot holds one chat, and the participant link is what says which. The order
 /// and the limit are for the case nothing here can create: a file that somehow
@@ -327,7 +342,14 @@ fn participant(row: &Row<'_>) -> rusqlite::Result<Participant> {
 }
 
 fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
-	Ok(Bot { id: row.get(0)?, name: row.get(1)?, model: row.get(2)?, created_at: row.get(3)? })
+	Ok(Bot {
+		id: row.get(0)?,
+		name: row.get(1)?,
+		model: row.get(2)?,
+		instructions: row.get(3)?,
+		memory: row.get(4)?,
+		created_at: row.get(5)?,
+	})
 }
 
 /// Unix millis, the unit the schema stores. A clock behind the epoch answers zero
@@ -359,6 +381,8 @@ mod tests {
 					id: id.to_owned(),
 					name: name.to_owned(),
 					model: model.to_owned(),
+					instructions: String::new(),
+					memory: String::new(),
 					created_at: 1,
 				};
 				connection.execute(

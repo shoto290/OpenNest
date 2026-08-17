@@ -12,6 +12,19 @@ export type RuntimeSession = {
 	startedAt: number
 }
 
+/** The recovery point a later context is rebuilt from. Its summary stays in the
+ * file: nothing on this side displays or submits it — the context that carries it
+ * is composed by the host. */
+export type ContextCheckpoint = {
+	id: string
+	conversationId: string
+	botId: string
+	runtimeSessionId: string | null
+	lastMessageSeq: number
+	tokenCount: number
+	createdAt: number
+}
+
 export type NewTurn = { id: string; conversationId: string; startedAt: number }
 
 export type NewUserMessage = {

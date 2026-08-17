@@ -15,7 +15,10 @@ struct Migration {
 	statements: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration { version: 1, statements: CONVERSATIONS_SCHEMA }];
+const MIGRATIONS: &[Migration] = &[
+	Migration { version: 1, statements: CONVERSATIONS_SCHEMA },
+	Migration { version: 2, statements: BOT_CONTEXT },
+];
 
 /// Timestamps are unix millis, ids are UUID v4 text: both are what the host
 /// already produces, so nothing has to be converted on the way in or out.
@@ -171,6 +174,21 @@ CREATE TABLE app_settings (
 );
 ";
 
+/// What a bot brings to a context rebuilt for it, beside the transcript:
+/// `instructions` is how it was asked to answer, `memory` is what it carries from
+/// one run to the next. Both belong to the bot rather than to a conversation or a
+/// run — a session rotated away takes neither with it.
+///
+/// A step of its own rather than two more columns in [`CONVERSATIONS_SCHEMA`]:
+/// version 1 is shipped, and an installed file has already run its text. `NOT NULL
+/// DEFAULT ''` is what lets `ALTER TABLE` answer for the rows already on disk, and
+/// empty is the honest value for a bot that was never given either — a context
+/// leaves out a part that has no words in it.
+const BOT_CONTEXT: &str = "
+ALTER TABLE bots ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
+ALTER TABLE bots ADD COLUMN memory TEXT NOT NULL DEFAULT '';
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -301,6 +319,47 @@ mod tests {
 		assert!(
 			!has_table(&connection, "half_landed"),
 			"a failed step left a table the schema does not know"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The one thing a step appended to a shipped schema has to prove: a file that
+	/// stopped at the version before it comes up whole, with the rows it already held
+	/// and the columns the new build reads them through. Empty rather than absent —
+	/// nothing has been said to this bot yet, and a context leaves such a part out.
+	#[test]
+	fn a_file_installed_before_the_last_step_keeps_its_rows_and_gains_its_columns() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..1]).expect("the shipped schema installs");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, name, model, created_at)
+					VALUES ('b1', 'First', 'sonnet', 1);",
+			)
+			.expect("a bot written by the older build");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			connection
+				.query_row(
+					"SELECT instructions, memory, name FROM bots WHERE id = 'b1'",
+					[],
+					|row| {
+						Ok((
+							row.get::<_, String>(0)?,
+							row.get::<_, String>(1)?,
+							row.get::<_, String>(2)?,
+						))
+					}
+				)
+				.expect("query"),
+			(String::new(), String::new(), "First".to_owned()),
+			"a bot from the older build did not survive the step that reads it"
 		);
 
 		drop(connection);

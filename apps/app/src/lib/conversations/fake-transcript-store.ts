@@ -2,6 +2,7 @@ import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
 	Bot,
 	Chat,
+	ContextCheckpoint,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -35,6 +36,18 @@ export const FAKE_CHAT_ID = "chat-default"
 
 const OPEN: TranscriptCompletion[] = ["pending", "streaming"]
 
+/** The bound the host holds, mirrored here: how many messages a rebuilt context
+ * carries word for word, and where a checkpoint stops folding. */
+const RECENT_TAIL = 20
+
+const SUMMARY_LABEL = "The conversation so far:"
+const REPLY_LABEL = "The message this one replies to:"
+const RECENT_LABEL = "The most recent messages:"
+const PROMPT_LABEL = "The new message:"
+
+const spoken = (message: TranscriptMessage) =>
+	`${message.role}: ${message.content}`
+
 const refuse = (error: TranscriptStoreError) => Promise.reject(error)
 
 /** The durable transcript without a database: the same rules, in memory, so a test
@@ -52,6 +65,25 @@ export const createFakeTranscriptStore = (
 	/** One lineage per participant, the way `runtime_sessions` numbers them: the
 	 * pair is the key, and the count is what the next run takes as its seq. */
 	const runs = new Map<string, number>()
+	/** One recovery point per participant, replaced only by one that reaches
+	 * further: a capture that never lands leaves the previous one answering. */
+	const checkpoints = new Map<
+		string,
+		{ summary: string; lastMessageSeq: number }
+	>()
+
+	/** Which message a row explicitly answers. Kept beside the rows because it is a
+	 * column the file holds and the reader is never shown — the transcript the
+	 * screen displays has no link on it, and a rebuilt context does. */
+	const answered = new Map<string, string>()
+
+	const participantKey = (conversationId: string, botId: string) =>
+		`${conversationId}/${botId}`
+
+	const ordered = (conversationId: string) =>
+		[...rows.values()]
+			.filter((row) => row.conversationId === conversationId)
+			.sort((left, right) => left.seq - right.seq)
 
 	for (const seeded of [...(options.messages ?? [])].sort(
 		(left, right) => left.seq - right.seq,
@@ -82,6 +114,12 @@ export const createFakeTranscriptStore = (
 		if (message.role === "user" && stored.content !== message.content)
 			return "content"
 		return null
+	}
+
+	const remember = (id: string, target: string | null) => {
+		if (target) {
+			answered.set(id, target)
+		}
 	}
 
 	const append = (message: TranscriptDraft): Promise<number> => {
@@ -119,8 +157,9 @@ export const createFakeTranscriptStore = (
 			conversationId: string,
 			botId: string,
 			startedAt: number,
+			_reason: string | null,
 		) => {
-			const participant = `${conversationId}/${botId}`
+			const participant = participantKey(conversationId, botId)
 			const seq = (runs.get(participant) ?? 0) + 1
 			runs.set(participant, seq)
 			return Promise.resolve<RuntimeSession>({
@@ -129,6 +168,79 @@ export const createFakeTranscriptStore = (
 				botId,
 				seq,
 				startedAt,
+			})
+		},
+
+		/** The host's composition, mirrored: the summary, the target of an explicit
+		 * reply the tail no longer holds, the tail itself, and the prompt last — read
+		 * from the row rather than taken from a caller, which is what makes carrying it
+		 * twice impossible. A conversation with nothing behind it is the prompt alone. */
+		boundedContext: (
+			conversationId: string,
+			botId: string,
+			promptMessageId: string,
+		) => {
+			const prompt = rows.get(promptMessageId)
+			if (!prompt) {
+				return refuse({
+					kind: "storage",
+					failure: { kind: "sqlite", detail: "no such message" },
+				})
+			}
+			const checkpoint = checkpoints.get(participantKey(conversationId, botId))
+			const baseline = checkpoint?.lastMessageSeq ?? 0
+			const recent = ordered(conversationId)
+				.filter((row) => row.seq > baseline && row.seq < prompt.seq)
+				.slice(-RECENT_TAIL)
+			const answeredId = answered.get(prompt.id)
+			const target = answeredId ? rows.get(answeredId) : undefined
+			const sections: string[] = []
+			if (checkpoint) {
+				sections.push(`${SUMMARY_LABEL}\n${checkpoint.summary}`)
+			}
+			if (target && !recent.includes(target)) {
+				sections.push(`${REPLY_LABEL}\n${spoken(target)}`)
+			}
+			if (recent.length > 0) {
+				sections.push(`${RECENT_LABEL}\n${recent.map(spoken).join("\n")}`)
+			}
+			if (sections.length === 0) {
+				return Promise.resolve(prompt.content)
+			}
+			sections.push(`${PROMPT_LABEL}\n${prompt.content}`)
+			return Promise.resolve(sections.join("\n\n"))
+		},
+
+		/** Folds everything but the tail, carrying the previous summary forward. A
+		 * capture with nothing new to fold answers `null` and leaves the recovery
+		 * point where it was. */
+		captureCheckpoint: (
+			conversationId: string,
+			botId: string,
+			runtimeSessionId: string | null,
+			createdAt: number,
+		) => {
+			const participant = participantKey(conversationId, botId)
+			const previous = checkpoints.get(participant)
+			const baseline = previous?.lastMessageSeq ?? 0
+			const spokenSoFar = ordered(conversationId)
+			const cutoff = (spokenSoFar.at(-1)?.seq ?? 0) - RECENT_TAIL
+			if (cutoff <= baseline) {
+				return Promise.resolve(null)
+			}
+			const folded = spokenSoFar
+				.filter((row) => row.seq > baseline && row.seq <= cutoff)
+				.map(spoken)
+			const summary = [previous?.summary, ...folded].filter(Boolean).join("\n")
+			checkpoints.set(participant, { summary, lastMessageSeq: cutoff })
+			return Promise.resolve<ContextCheckpoint>({
+				id: `checkpoint-${participant}-${cutoff}`,
+				conversationId,
+				botId,
+				runtimeSessionId,
+				lastMessageSeq: cutoff,
+				tokenCount: summary.length,
+				createdAt,
 			})
 		},
 
@@ -149,16 +261,20 @@ export const createFakeTranscriptStore = (
 
 		completeTurn: () => Promise.resolve(),
 
-		appendUserMessage: (message: NewUserMessage) =>
-			append({ ...message, role: "user", completion: "complete" }),
+		appendUserMessage: (message: NewUserMessage) => {
+			remember(message.id, message.repliedToMessageId)
+			return append({ ...message, role: "user", completion: "complete" })
+		},
 
-		openAssistantMessage: (message: NewAssistantMessage) =>
-			append({
+		openAssistantMessage: (message: NewAssistantMessage) => {
+			remember(message.id, message.repliedToMessageId)
+			return append({
 				...message,
 				role: "assistant",
 				content: "",
 				completion: "pending",
-			}),
+			})
+		},
 
 		/** Silently dropped once the message has ended, the way the statement that
 		 * writes it matches nothing. */
