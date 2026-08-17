@@ -1147,6 +1147,45 @@ describe("a run replaced under a conversation that carries on", () => {
 	const occurrences = (text: string, needle: string) =>
 		text.split(needle).length - 1
 
+	/** A store that answers as the host would until it is told to refuse one of the
+	 * two calls a reconstruction is made of. The switch is the point: the same
+	 * conversation is shown before the refusal, under it, and after it, which is the
+	 * only way to prove a refusal cost nothing the recovery could not put back. */
+	const refusingStoreAt = (
+		member: "captureCheckpoint" | "boundedContext",
+	): TranscriptStore & { refuse: (on: boolean) => void } => {
+		const base = withHistory()
+		let refusing = false
+		const refused = () => Promise.reject(REFUSAL)
+		return {
+			...base,
+			refuse: (on: boolean) => {
+				refusing = on
+			},
+			captureCheckpoint: (conversationId, botId, runtimeSessionId, at) =>
+				refusing && member === "captureCheckpoint"
+					? refused()
+					: base.captureCheckpoint(conversationId, botId, runtimeSessionId, at),
+			boundedContext: (conversationId, botId, promptMessageId) =>
+				refusing && member === "boundedContext"
+					? refused()
+					: base.boundedContext(conversationId, botId, promptMessageId),
+		}
+	}
+
+	/** Everything the chat has ever said, in a context made of a summary and a tail
+	 * alone. What the tail cannot reach has to have been folded, so a message in
+	 * neither is a stretch of the conversation the reconstruction lost — which is
+	 * exactly what a refused fold would take with it if a run were replaced anyway. */
+	const expectWholeChat = (context: string, alsoSaid: string[]) => {
+		for (let index = 1; index <= HISTORY; index += 1) {
+			expect(context).toContain(`stored ${index}\n`)
+		}
+		for (const said of alsoSaid) {
+			expect(context).toContain(`${said}\n`)
+		}
+	}
+
 	/** What the run was really told, which is not what the reader typed: the first
 	 * prompt of a run carries the whole context rebuilt for it. */
 	const told = (submitted: { mock: { calls: unknown[][] } }) =>
@@ -1283,44 +1322,144 @@ describe("a run replaced under a conversation that carries on", () => {
 		expect(controller.getState().errors).toEqual([])
 	})
 
-	// A fold the store refuses costs the conversation nothing it cannot read back:
-	// the previous recovery point still answers for it, the messages the refused one
-	// would have folded are still on the record, and the rotation goes ahead.
-	it("keeps the previous checkpoint answering when a capture is refused", async () => {
-		const base = withHistory()
-		let refuse = false
-		const store: TranscriptStore = {
-			...base,
-			captureCheckpoint: (conversationId, botId, runtimeSessionId, at) =>
-				refuse
-					? Promise.reject(REFUSAL)
-					: base.captureCheckpoint(conversationId, botId, runtimeSessionId, at),
-		}
-		const { controller, driver } = await bootedHarness({ store })
+	// A handover the store cannot fold for is not a handover. The run answering the
+	// conversation is the only place it is still whole — a successor would be told
+	// the summary that did land and the tail, and everything between them would be
+	// gone from the answer while staying on the reader's screen. So the run stays,
+	// keeps answering the prompts it can, and is replaced once the fold lands.
+	it("retires no run while the fold its successor needs is refused", async () => {
+		const store = refusingStoreAt("captureCheckpoint")
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver } = await bootedHarness({
+			store,
+			promptsPerRun: 1,
+		})
 		const submitted = vi.spyOn(driver, "submitPrompt")
 
-		await controller.rotate()
+		await controller.send("first")
 		await vi.runAllTimersAsync()
-		refuse = true
-		await controller.rotate()
-		await vi.runAllTimersAsync()
-		await controller.send("and now?")
+		const holding = runOf(controller)
+		store.refuse(true)
+		await controller.send("second")
 		await vi.runAllTimersAsync()
 
-		const state = controller.getState()
-		expect(state.errors.at(-1)?.error).toEqual({
+		// Nothing retired, nothing opened, and the run that holds the conversation
+		// answered the prompt itself — it needs no context to be rebuilt for it.
+		expect(runOf(controller)).toEqual(holding)
+		expect(reasons(opened, "default")).toEqual([null])
+		expect(told(submitted)).toBe("second")
+		expect(controller.getState().errors.at(-1)?.error).toEqual({
 			kind: "writeFailed",
 			detail: "the transcript store refused it (storage)",
 		})
-		expect(told(submitted)).toContain("The conversation so far:")
-		expect(told(submitted)).toContain("stored 1\n")
-		expect(told(submitted)).toContain(`stored ${HISTORY}`)
-		expect(occurrences(told(submitted), "and now?")).toBe(1)
-		expect(spoken(state.messages).at(-1)).toEqual([
+		expect(spoken(controller.getState().messages).at(-1)).toEqual([
 			"assistant",
 			REPLY,
 			"complete",
 		])
+
+		store.refuse(false)
+		await controller.send("third")
+		await vi.runAllTimersAsync()
+
+		// The handover the refusal held back, once the store answers: the successor is
+		// told the whole chat, the stretch no tail could reach included.
+		expect(reasons(opened, "default")).toEqual([null, NEARING_THE_BOUND])
+		expect(runOf(controller).epoch).toBe(holding.epoch + 1)
+		expectWholeChat(told(submitted), ["first", "second"])
+		expect(occurrences(told(submitted), "third")).toBe(1)
+	})
+
+	// The other half of the same rule, on the two calls a reconstruction is made of.
+	// A run that was told nothing and cannot be told the conversation is given no
+	// prompt at all: answered on its own, in the middle of a chat, it would reply as
+	// if none of it had happened and nothing on the screen would say why. The prompt
+	// stays on the record, and sending it again once the store answers carries the
+	// whole of it, once.
+	it.each(["captureCheckpoint", "boundedContext"] as const)(
+		"gives a run that was told nothing no prompt of its own when %s is refused",
+		async (member) => {
+			const store = refusingStoreAt(member)
+			const { controller, driver } = await bootedHarness({ store })
+			const submitted = vi.spyOn(driver, "submitPrompt")
+			store.refuse(true)
+
+			await controller.send("where were we?")
+			await vi.runAllTimersAsync()
+
+			const refused = controller.getState()
+			expect(submitted).not.toHaveBeenCalled()
+			expect(refused.turn).toBe("failed")
+			expect(refused.errors.at(-1)?.error).toEqual({
+				kind: "writeFailed",
+				detail: "the transcript store refused it (storage)",
+			})
+			// Written, shown, and the one the reader may send again.
+			expect(spoken(refused.messages).at(-1)).toEqual([
+				"user",
+				"where were we?",
+				"complete",
+			])
+			expect(refused.rejectedPromptId).toBe(refused.messages.at(-1)?.id)
+
+			store.refuse(false)
+			await controller.retry(refused.rejectedPromptId ?? "")
+			await vi.runAllTimersAsync()
+
+			expect(submitted).toHaveBeenCalledTimes(1)
+			expectWholeChat(told(submitted), [])
+			expect(occurrences(told(submitted), "where were we?")).toBe(1)
+			const state = controller.getState()
+			expect(state.turn).toBe("idle")
+			expect(spoken(state.messages).slice(-2)).toEqual([
+				["user", "where were we?", "complete"],
+				["assistant", REPLY, "complete"],
+			])
+			expect(spoken(await reload(store)).slice(-2)).toEqual(
+				spoken(state.messages).slice(-2),
+			)
+		},
+	)
+
+	// The dangerous one: a refused resume leaves a fresh child answering under the
+	// same run, alive and knowing none of the chat. The run cannot be replaced while
+	// the fold is refused, and that child must not be handed the question anyway.
+	it("never lets a spent run answer on its own while the fold is refused", async () => {
+		const store = refusingStoreAt("captureCheckpoint")
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver } = await bootedHarness({ store })
+		const submitted = vi.spyOn(driver, "submitPrompt")
+
+		await controller.send("first")
+		await vi.runAllTimersAsync()
+		const spent = runOf(controller)
+		driver.pushEvent({
+			type: "failed",
+			error: { kind: "resumeFailed", forgotSessionId: true },
+		})
+		await vi.runAllTimersAsync()
+		store.refuse(true)
+		submitted.mockClear()
+
+		await controller.send("where were we?")
+		await vi.runAllTimersAsync()
+
+		expect(runOf(controller)).toEqual(spent)
+		expect(reasons(opened, "default")).toEqual([null])
+		expect(submitted).not.toHaveBeenCalled()
+		expect(controller.getState().rejectedPromptId).toBe(
+			controller.getState().messages.at(-1)?.id,
+		)
+
+		store.refuse(false)
+		await controller.send("and now?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, "default")).toEqual([null, REFUSED])
+		expect(runOf(controller).epoch).toBe(spent.epoch + 1)
+		expect(submitted).toHaveBeenCalledTimes(1)
+		expectWholeChat(told(submitted), ["first", "where were we?"])
+		expect(occurrences(told(submitted), "and now?")).toBe(1)
 	})
 
 	// A chat longer than any tail, on a launch that never rotated: what the tail

@@ -367,12 +367,22 @@ export function createChatController(
 	 * nobody asked for anything, and a rotation nothing is waiting for would spawn a
 	 * process no prompt is coming to. The next prompt is what rotates, and the first
 	 * reason recorded is the one that stands — what came after it happened to a run
-	 * that was already spent. */
+	 * that was already spent.
+	 *
+	 * Whatever answers under the run from here was told none of this conversation —
+	 * a refused resume leaves a fresh child in the same run, and a run that lost its
+	 * child has nothing at all. So the run stops claiming to have carried the chat,
+	 * and the next prompt is rebuilt in full rather than sent on its own. */
 	const noteFailure = (event: ClaudeEvent) => {
 		if (event.type !== "failed") {
 			return
 		}
-		run.spent ??= rotationReasonForFailure(event.error)
+		const reason = rotationReasonForFailure(event.error)
+		if (!reason) {
+			return
+		}
+		run.spent ??= reason
+		run.carried = false
 	}
 
 	const attach = () => {
@@ -505,36 +515,46 @@ export function createChatController(
 	 * moments a conversation is about to depend on one: before the run that produced
 	 * it is closed out, and before a run that was told nothing is told everything.
 	 * The second is what leaves no stretch out — a context reads the summary and the
-	 * tail, so whatever falls between them has to be folded first.
+	 * tail, and whatever falls between them exists only in the fold.
 	 *
-	 * Nothing is deleted by it and nothing depends on it landing: a capture the store
-	 * refuses leaves the previous checkpoint answering for the chat, and the messages
-	 * this one would have folded are still on the record to be read word for word. */
+	 * A refusal is raised rather than reported, because nothing that calls this may
+	 * go on as though the recovery point had moved: a store that will not fold has
+	 * left the conversation reachable only through the run that already holds it.
+	 * Answering `null` is not a refusal — there was nothing new to fold, so the
+	 * previous checkpoint already stands for everything but the tail. */
 	const capture = async () => {
 		const conversationId = state.conversationId
 		const runtime = state.runtime
 		if (!conversationId || !botId || !runtime) {
 			return
 		}
-		try {
-			await store.captureCheckpoint(
-				conversationId,
-				botId,
-				runtime.runtimeSessionId,
-				now(),
-			)
-		} catch (reason) {
-			reportStore(reason)
-		}
+		await store.captureCheckpoint(
+			conversationId,
+			botId,
+			runtime.runtimeSessionId,
+			now(),
+		)
 	}
 
 	/** The handover, in the order it has to happen: what the conversation is worth
 	 * keeping is folded and stored first, and only then is the run answering in it
 	 * closed out by the one that replaces it. The new run is never resumed — a
 	 * rotation exists because the provider session is spent, and what the fresh
-	 * process is told arrives with the next prompt instead. */
+	 * process is told arrives with the next prompt instead.
+	 *
+	 * A fold the store refuses stops the handover where it is. The run holding the
+	 * conversation is the only place it is still whole — a successor would be told
+	 * the summary that did land and the tail, and the stretch between them would be
+	 * gone from the answer while staying on the reader's screen. So nothing is
+	 * retired, nothing is opened, and the run stays exactly as it was: still spent if
+	 * it was, so the prompt after this one tries the handover again. */
 	const rotateFor = async (reason: RotationReason) => {
-		await capture()
+		try {
+			await capture()
+		} catch (refusal) {
+			reportStore(refusal)
+			return null
+		}
 		return start(undefined, reason)
 	}
 
@@ -559,33 +579,43 @@ export function createChatController(
 	 * around the prompt row rather than around the text — so the prompt is in it
 	 * exactly once, wherever the bounds fell.
 	 *
-	 * A store that cannot answer costs the context and not the prompt: the reader is
-	 * told the transcript is not being read, and the question still reaches Claude. */
+	 * There is no third answer. A run that was told nothing and cannot be told the
+	 * conversation is not given the question on its own: it would be answered as if
+	 * the chat had never happened, in the middle of the chat, and nothing on the
+	 * screen would say why. The refusal travels to the caller, which leaves the
+	 * prompt on the record for the reader to send again once the store answers. */
 	const carried = async (promptId: string, text: string) => {
 		const conversationId = state.conversationId
 		if (run.carried || !conversationId || !botId) {
 			return text
 		}
 		await capture()
-		try {
-			return await store.boundedContext(conversationId, botId, promptId)
-		} catch (reason) {
-			reportStore(reason)
-			return text
-		}
+		return store.boundedContext(conversationId, botId, promptId)
 	}
 
 	/** Every runtime call names the run this controller holds, so one issued while a
 	 * restart is in flight is refused by the host rather than aimed at whatever
-	 * process happens to be installed by the time it lands. */
+	 * process happens to be installed by the time it lands.
+	 *
+	 * The two refusals are kept apart because they are different failures: the store
+	 * would not give up the conversation, or Claude would not take the prompt. Both
+	 * leave the prompt where it is — written, shown, and the one the reader may send
+	 * again. */
 	const submit = async (id: string, text: string) => {
 		const runtime = state.runtime
 		if (!runtime) {
 			dispatch({ type: "promptRejected", id, error: { kind: "notStarted" } })
 			return
 		}
+		let told: string
 		try {
-			await driver.submitPrompt(runtime, await carried(id, text))
+			told = await carried(id, text)
+		} catch (refusal) {
+			dispatch({ type: "promptRejected", id, error: toStoreError(refusal) })
+			return
+		}
+		try {
+			await driver.submitPrompt(runtime, told)
 			run.carried = true
 			run.prompts += 1
 		} catch (reason) {
