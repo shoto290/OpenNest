@@ -365,9 +365,6 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	assert_eq!(dropped["sessionId"], Value::Null);
 	assert_eq!(dropped["messages"], snapshot["messages"]);
 
-	assert_eq!(
-		second.call("claude_shutdown", json!({ "scope": second.scope() })),
-		Ok(Value::Null)
-	);
+	assert_eq!(second.call("claude_shutdown", json!({ "scope": second.scope() })), Ok(Value::Null));
 	std::fs::remove_dir_all(&data_dir).expect("cleanup");
 }

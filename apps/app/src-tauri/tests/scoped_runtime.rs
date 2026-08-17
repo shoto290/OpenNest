@@ -245,9 +245,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 		"an event crossed under another run than the one that produced it: {streamed:#?}"
 	);
 	assert!(
-		streamed
-			.iter()
-			.any(|scoped| matches!(scoped.event, ClaudeEvent::MessageDelta { .. })),
+		streamed.iter().any(|scoped| matches!(scoped.event, ClaudeEvent::MessageDelta { .. })),
 		"the turn produced nothing to be scoped: {streamed:#?}"
 	);
 

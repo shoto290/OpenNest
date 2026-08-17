@@ -404,7 +404,11 @@ pub async fn claude_shutdown<R: Runtime>(
 	}
 	shutdown_session(&state).await;
 	state.live.clear();
-	announce(&app, Some(scope), ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking });
+	announce(
+		&app,
+		Some(scope),
+		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking },
+	);
 	Ok(())
 }
 
@@ -457,7 +461,10 @@ mod tests {
 			RuntimeScope { bot_id: "b2".into(), ..a_scope() },
 			RuntimeScope { conversation_id: "c2".into(), ..a_scope() },
 		] {
-			assert!(live.is_foreign(&other), "a run the host never held was taken for it: {other:?}");
+			assert!(
+				live.is_foreign(&other),
+				"a run the host never held was taken for it: {other:?}"
+			);
 			assert!(!live.holds(&other), "a run the host never held was taken for it: {other:?}");
 		}
 	}
