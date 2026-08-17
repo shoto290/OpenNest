@@ -32,7 +32,12 @@ struct StoredSession {
 /// What the last read found. `Unreadable` is kept apart from `Missing` because
 /// only one of the two may be written over: bytes this build cannot parse may
 /// still be a transcript, and an absent file holds nothing to lose.
-enum Stored {
+///
+/// Public because that distinction belongs to whoever decides what happens to the
+/// file next, and there is only one file to decide about: the legacy import writes
+/// nothing and records nothing on `Unreadable`, so the bytes are still there for a
+/// build that can read them.
+pub enum Stored {
 	Missing,
 	Snapshot(SessionSnapshot),
 	Unreadable,
@@ -46,7 +51,12 @@ pub fn file<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(dir.join(FILE_NAME))
 }
 
-fn read(path: &Path) -> Stored {
+/// The three-way answer, for a caller that cannot afford [`load`]'s collapse:
+/// `load` answers a display, where an unreadable file and an absent one are both
+/// an empty transcript, while anything deciding what becomes of the file itself
+/// has to tell them apart — unreadable bytes may still be a whole conversation,
+/// and treating them as nothing is how one gets written over.
+pub fn read(path: &Path) -> Stored {
 	let raw = match fs::read_to_string(path) {
 		Ok(raw) => raw,
 		Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Stored::Missing,

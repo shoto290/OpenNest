@@ -229,7 +229,12 @@ fn ensured_chat(connection: &mut Connection, bot_id: &str) -> Result<Chat, Conve
 	Ok(held)
 }
 
-fn chat_of(connection: &Connection, bot_id: &str) -> Result<Option<Chat>, ConversationError> {
+/// Reachable across `db` because a caller holding a transaction of its own has to
+/// be able to ask the same question inside it — see [`insert_chat`].
+pub(in crate::db) fn chat_of(
+	connection: &Connection,
+	bot_id: &str,
+) -> Result<Option<Chat>, ConversationError> {
 	Ok(connection.query_row(SELECT_CHAT_OF_BOT, [bot_id], chat).optional()?)
 }
 
@@ -247,7 +252,14 @@ fn write_transaction(connection: &mut Connection) -> Result<Transaction<'_>, Dat
 /// owns, and its fixed id is the only one that can already be taken by another
 /// build's row. A chat asked for any other bot needs that bot on the record
 /// already, which the participant's foreign key is what enforces.
-fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, ConversationError> {
+///
+/// Reachable across `db` because it takes the caller's transaction: the legacy
+/// import writes the chat, the seed, the seat and a whole transcript as one unit,
+/// and this is the only place the first three are written together at all.
+pub(in crate::db) fn insert_chat(
+	transaction: &Transaction<'_>,
+	bot_id: &str,
+) -> Result<Chat, ConversationError> {
 	if bot_id == DEFAULT_BOT_ID {
 		seed_default_bot(transaction)?;
 	}
