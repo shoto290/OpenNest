@@ -46,8 +46,7 @@ const EMPTY_CONVERSATION: TranscriptConversation = {
 
 const TERMINAL_RANK = 2
 
-/** How far a message has travelled. One table, so the ending a state counts as and
- * the order the states are merged in can never disagree. */
+/** How far a message has travelled. */
 const COMPLETION_RANK: Record<TranscriptCompletion, number> = {
 	pending: 0,
 	streaming: 1,
@@ -72,11 +71,16 @@ export const selectHasMore = (
 	conversationId: string,
 ): boolean => state.conversations[conversationId]?.hasMore ?? false
 
+/** Messages are held in ascending order, so the front of the list is as far back
+ * as the transcript goes. */
+const oldestSeq = (messages: TranscriptMessage[]): number | null =>
+	messages[0]?.seq ?? null
+
 /** Where the next page of older messages starts. Null while nothing is loaded. */
 export const selectOldestSeq = (
 	state: TranscriptState,
 	conversationId: string,
-): number | null => selectMessages(state, conversationId)[0]?.seq ?? null
+): number | null => oldestSeq(selectMessages(state, conversationId))
 
 const byPosition = (
 	left: TranscriptMessage,
@@ -179,10 +183,12 @@ const nextHasMore = (
 	if (page.messages.length === 0) {
 		return page.hasMore
 	}
-	const loadedOldest = current.messages[0]?.seq
-	return loadedOldest === undefined || merged[0].seq < loadedOldest
-		? page.hasMore
-		: current.hasMore
+	const loadedOldest = oldestSeq(current.messages)
+	const mergedOldest = oldestSeq(merged)
+	if (loadedOldest === null || mergedOldest === null) {
+		return page.hasMore
+	}
+	return mergedOldest < loadedOldest ? page.hasMore : current.hasMore
 }
 
 const withConversation = (
@@ -198,6 +204,9 @@ const applyPageLoaded = (
 	page: TranscriptPage,
 ): TranscriptState => {
 	const current = state.conversations[page.conversationId] ?? EMPTY_CONVERSATION
+	if (page.messages.length === 0 && page.hasMore === current.hasMore) {
+		return state
+	}
 	const messages = mergePage(current.messages, page.messages)
 	return withConversation(state, page.conversationId, {
 		messages,

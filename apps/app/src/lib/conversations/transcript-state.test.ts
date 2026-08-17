@@ -7,6 +7,11 @@ import type {
 	TranscriptPage,
 } from "./transcript-contract"
 import {
+	CONVERSATION,
+	message,
+	OTHER_CONVERSATION,
+} from "./transcript-fixtures"
+import {
 	initialTranscriptState,
 	isTerminalCompletion,
 	selectHasMore,
@@ -15,24 +20,6 @@ import {
 	type TranscriptState,
 	transcriptReducer,
 } from "./transcript-state"
-
-const CONVERSATION = "c-1"
-
-const OTHER_CONVERSATION = "c-2"
-
-const message = (
-	overrides: Partial<TranscriptMessage> = {},
-): TranscriptMessage => ({
-	id: "m-1",
-	conversationId: CONVERSATION,
-	turnId: "t-1",
-	seq: 1,
-	role: "assistant",
-	content: "",
-	completion: "complete",
-	createdAt: 0,
-	...overrides,
-})
 
 const page = (
 	messages: TranscriptMessage[],
@@ -137,6 +124,14 @@ describe("transcriptReducer", () => {
 		expect(idsOf(reloaded)).toEqual(["m-2"])
 		expect(selectHasMore(loaded, CONVERSATION)).toBe(false)
 		expect(selectHasMore(reloaded, CONVERSATION)).toBe(false)
+	})
+
+	it("returns the same state when a page carries nothing new", () => {
+		const loaded = load(SEEDED, page([message({ id: "m-1", seq: 1 })]))
+		const empty = load(loaded, page([]))
+
+		expect(empty).toBe(loaded)
+		expectOtherUntouched(empty)
 	})
 
 	it("reconciles an optimistic message with the durable row of the same id", () => {

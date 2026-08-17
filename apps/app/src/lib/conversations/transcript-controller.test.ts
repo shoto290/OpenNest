@@ -6,26 +6,15 @@ import {
 	createTranscriptController,
 	type TranscriptController,
 } from "./transcript-controller"
+import {
+	CONVERSATION,
+	message,
+	OTHER_CONVERSATION,
+} from "./transcript-fixtures"
 import type { TranscriptPort } from "./transcript-port"
 import { selectHasMore, selectMessages } from "./transcript-state"
 
-const CONVERSATION = "c-1"
-
-const OTHER_CONVERSATION = "c-2"
-
 const PAGE_SIZE = 2
-
-const message = (overrides: Partial<TranscriptMessage>): TranscriptMessage => ({
-	id: "m-1",
-	conversationId: CONVERSATION,
-	turnId: "t-1",
-	seq: 1,
-	role: "assistant",
-	content: "",
-	completion: "complete",
-	createdAt: 0,
-	...overrides,
-})
 
 const STORED: TranscriptMessage[] = [
 	message({ id: "m-1", seq: 1 }),

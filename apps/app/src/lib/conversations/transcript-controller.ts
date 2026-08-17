@@ -1,4 +1,4 @@
-import type { TranscriptDraft } from "./transcript-contract"
+import type { TranscriptCursor, TranscriptDraft } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 import {
 	initialTranscriptState,
@@ -39,18 +39,22 @@ export const createTranscriptController = (
 		}
 	}
 
-	const load = async (conversationId: string) => {
-		const page = await port.loadPage(conversationId, null)
+	const readPage = async (
+		conversationId: string,
+		cursor: TranscriptCursor | null,
+	) => {
+		const page = await port.loadPage(conversationId, cursor)
 		dispatch({ type: "pageLoaded", page })
 	}
+
+	const load = (conversationId: string) => readPage(conversationId, null)
 
 	const loadOlder = async (conversationId: string) => {
 		const beforeSeq = selectOldestSeq(state, conversationId)
 		if (beforeSeq === null || !selectHasMore(state, conversationId)) {
 			return
 		}
-		const page = await port.loadPage(conversationId, { beforeSeq })
-		dispatch({ type: "pageLoaded", page })
+		await readPage(conversationId, { beforeSeq })
 	}
 
 	return {
