@@ -1,7 +1,10 @@
 import type { ReactNode } from "react"
 
 import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
-import { MessageScroller } from "@workspace/ui/components/message-scroller"
+import {
+	MessageScroller,
+	type MessageScrollerOlder,
+} from "@workspace/ui/components/message-scroller"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface ChatLayoutProps {
@@ -15,6 +18,9 @@ interface ChatLayoutProps {
 	busy?: boolean
 	/** Accessible name of the scrollable transcript. */
 	label?: string
+	/** Cursor pagination for the history above the transcript, handed straight to
+	 * the scroller. Omit it and no pagination affordance is rendered at all. */
+	older?: MessageScrollerOlder
 	/** The transcript. Stretches to the full height between header and composer,
 	 * so a lone child can centre itself with `m-auto`. Rows here share one mark
 	 * identity, so the bot's mark travels between them rather than reappearing. */
@@ -29,6 +35,7 @@ function ChatLayout({
 	composer,
 	busy,
 	label = "Conversation",
+	older,
 	children,
 	className,
 	contentClassName,
@@ -47,6 +54,7 @@ function ChatLayout({
 				className="flex-1"
 				busy={busy}
 				label={label}
+				older={older}
 				contentClassName={cn(
 					"flex min-h-full w-full flex-col gap-6 px-6 py-8",
 					contentClassName,
