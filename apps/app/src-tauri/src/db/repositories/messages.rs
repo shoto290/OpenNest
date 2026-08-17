@@ -550,23 +550,40 @@ impl MessagesRepository {
 			.await?)
 	}
 
-	/// What a host that died under a turn left behind, closed out at the next
-	/// launch. A message keeps the text it had streamed so far — the point of
-	/// `interrupted` is that a reader can be told the stream stopped without
-	/// losing what came before it — and a step nobody is running any more is
-	/// `terminated` rather than failed, because nothing observed it fail. Safe on
-	/// every boot: a file with nothing open reports two zeroes.
+	/// The same sweep the launch already ran, for a caller that holds the repository
+	/// rather than the opener's connection.
+	///
+	/// Nothing on the boot path needs it — [`crate::db::Database`] runs the sweep
+	/// itself, while the connection is still nobody's but the opener's. It belongs to
+	/// a launch and not to a session: run while a turn is live it would close out the
+	/// reply that turn is streaming.
 	pub async fn recover_unfinished(&self) -> Result<RecoveryReport, TranscriptError> {
-		Ok(self
-			.call_mut(|connection| {
-				let transaction = write_transaction(connection)?;
-				let interrupted_messages = transaction.execute(INTERRUPT_OPEN_MESSAGES, [])?;
-				let terminated_activities = transaction.execute(TERMINATE_OPEN_ACTIVITIES, [])?;
-				transaction.commit()?;
-				Ok(RecoveryReport { interrupted_messages, terminated_activities })
-			})
-			.await?)
+		Ok(self.call_mut(sweep_unfinished).await?)
 	}
+}
+
+/// What a host that died under a turn left behind, closed out at the next launch.
+/// A message keeps the text it had streamed so far — the point of `interrupted` is
+/// that a reader can be told the stream stopped without losing what came before it
+/// — and a step nobody is running any more is `terminated` rather than failed,
+/// because nothing observed it fail.
+///
+/// Takes a plain connection so the launch can run it on the opener's own, before
+/// [`Access`] exists and before a command can read a row: a reply the host died
+/// under is already `interrupted` on disk by the time anything asks for the page it
+/// sits in.
+///
+/// Both statements are one transaction, so a transcript is never half swept. Safe on
+/// every boot: the two `WHERE` clauses match nothing a previous sweep closed out, so
+/// a file with nothing open reports two zeroes and writes nothing.
+pub(in crate::db) fn sweep_unfinished(
+	connection: &mut Connection,
+) -> Result<RecoveryReport, DatabaseError> {
+	let transaction = write_transaction(connection)?;
+	let interrupted_messages = transaction.execute(INTERRUPT_OPEN_MESSAGES, [])?;
+	let terminated_activities = transaction.execute(TERMINATE_OPEN_ACTIVITIES, [])?;
+	transaction.commit()?;
+	Ok(RecoveryReport { interrupted_messages, terminated_activities })
 }
 
 /// The stored side of a turn's identity, read before an append answers. Every
@@ -1454,6 +1471,98 @@ mod tests {
 		);
 
 		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The sweep as a launch actually runs it: nobody asks for it, opening the file is
+	/// what closes out the turn a dead host left, and the first thing any command can
+	/// read is already honest.
+	///
+	/// `m2` is the row a frontend that normalises streaming replies in memory can never
+	/// repair — the host died between opening the reply and its first delta, so what is
+	/// on disk is `pending`, and it would come back `pending` at every launch after.
+	/// `m3` is the one that had streamed.
+	///
+	/// The second relaunch is the same file with nothing left open, and it has to come
+	/// back byte for byte: the sweep is on the boot path for the life of the install, so
+	/// a launch that rewrote anything would rewrite it every time.
+	#[tokio::test]
+	async fn opening_the_database_closes_out_what_a_dead_host_left_open() {
+		let dir = temp_dir();
+		{
+			let dying = seeded(&dir).await;
+			a_turn(&dying, "t1", "c1").await;
+			dying
+				.messages()
+				.append_user_message(a_user_message("m1", "hello", 1))
+				.await
+				.expect("the message is appended");
+			dying
+				.messages()
+				.open_assistant_message(a_reply("m2", Some("m1")))
+				.await
+				.expect("the reply nothing ever streamed into is opened");
+			dying
+				.messages()
+				.open_assistant_message(a_reply("m3", Some("m1")))
+				.await
+				.expect("the streaming reply is opened");
+			dying.messages().append_text("m3".into(), "half a ".into()).await.expect("a delta");
+			dying.messages().append_text("m3".into(), "thought".into()).await.expect("a delta");
+			dying
+				.messages()
+				.append_activity(an_activity("a1", InitialStatus::Pending))
+				.await
+				.expect("the waiting step is appended");
+			dying
+				.messages()
+				.append_activity(an_activity("a2", InitialStatus::Running))
+				.await
+				.expect("the running step is appended");
+			dying
+				.messages()
+				.append_activity(an_activity("a3", InitialStatus::Running))
+				.await
+				.expect("the finished step is appended");
+			dying
+				.messages()
+				.finish_activity("a3".into(), TerminalStatus::Succeeded)
+				.await
+				.expect("the step ends");
+		}
+
+		let relaunched = open(&dir);
+
+		let restored = whole_transcript(&relaunched, PAGE).await;
+		assert_eq!(
+			states(&restored),
+			vec![MessageState::Complete, MessageState::Interrupted, MessageState::Interrupted],
+			"a launch handed out a reply still recorded as being written"
+		);
+		assert_eq!(restored[1].content, "", "a reply that never streamed a word gained text");
+		assert_eq!(restored[2].content, "half a thought", "the partial text was not kept");
+		let restored_activities = statuses(&relaunched).await;
+		assert_eq!(
+			restored_activities,
+			vec![ActivityStatus::Terminated, ActivityStatus::Terminated, ActivityStatus::Succeeded],
+			"a step nobody is running any more came back open, or a finished one was swept"
+		);
+		drop(relaunched);
+
+		let again = open(&dir);
+
+		assert_eq!(
+			whole_transcript(&again, PAGE).await,
+			restored,
+			"a second launch rewrote a transcript that had nothing left open"
+		);
+		assert_eq!(
+			statuses(&again).await,
+			restored_activities,
+			"a second launch swept a step again"
+		);
+
+		drop(again);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 

@@ -1,10 +1,11 @@
 //! The local SQLite database that will hold the conversations.
 //!
-//! Opening and migrating happen once, at launch, and the outcome is managed as a
+//! Opening, migrating, importing the legacy snapshot and closing out what a dead
+//! host left open all happen once, at launch, and the outcome is managed as a
 //! whole: a file that cannot be opened or migrated must not stop the host from
 //! starting, and whoever asks for the database later has to be told there is none
-//! rather than handed a half-migrated one. Nothing reads or writes rows yet — the
-//! repositories below are the seams the conversation features are built on.
+//! rather than handed a half-migrated one — or one still holding a reply recorded
+//! as being written by a process that is gone.
 //!
 //! Every one of those seams reaches the file through [`Access`] and nothing else:
 //! the connection is a `Mutex` no name outside this module can reach, and the
@@ -26,7 +27,9 @@ use tauri::{AppHandle, Runtime};
 
 use bootstrap::LegacyImport;
 pub use connection::DatabaseError;
-use repositories::{ConversationsRepository, MessagesRepository, RuntimeContextRepository};
+use repositories::{
+	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository,
+};
 
 /// One connection, shared: SQLite serializes writers anyway, and a desktop host
 /// with a single window has no read concurrency to win by opening more.
@@ -102,10 +105,17 @@ impl Database {
 	/// is still exclusively this call's, so the import needs no lock and no runtime.
 	/// Its failures are outcomes rather than errors — the host boots without the
 	/// migration just as it boots without the database.
+	///
+	/// The sweep runs last, on that same exclusive connection, and its failure is not
+	/// an outcome: a launch that could not close out what the dead host left would hand
+	/// the frontend a reply still recorded as being written, which is the one thing a
+	/// durable transcript must never claim. So there is no database rather than a
+	/// dishonest one — the host still boots, and the state says why.
 	fn open(path: &Path, legacy: Option<&Path>) -> DatabaseState {
 		let mut connection = connection::open(path)?;
 		migrations::apply(&mut connection)?;
 		let legacy_import = bootstrap::import(&mut connection, legacy);
+		messages::sweep_unfinished(&mut connection)?;
 		let access = Access::new(connection);
 		Ok(Self {
 			conversations: ConversationsRepository::new(access.clone()),
