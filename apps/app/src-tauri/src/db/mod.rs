@@ -143,6 +143,28 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
 	Database::open(&connection::file(app)?)
 }
 
+/// Every test module under `db` opens a database the same way, on a directory of
+/// its own from [`connection::temp_dir`]. Lives here rather than in each of them
+/// because `Database::open` is private to this module.
+#[cfg(test)]
+pub(in crate::db) fn open(dir: &Path) -> Database {
+	Database::open(&dir.join(connection::FILE_NAME)).expect("the database opens")
+}
+
+/// Counting rows is how those modules check that a write landed, or that a
+/// refused one left nothing behind. The table is a literal, never a value from
+/// outside: it is interpolated, not bound.
+#[cfg(test)]
+pub(in crate::db) async fn count_of(database: &Database, table: &'static str) -> u32 {
+	database
+		.call(move |connection| {
+			Ok(connection
+				.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0))?)
+		})
+		.await
+		.expect("query")
+}
+
 #[cfg(test)]
 mod tests {
 	use std::fs;
@@ -162,10 +184,6 @@ mod tests {
 	/// impossible — so it is long enough to be nobody's flake.
 	const DEADLINE: Duration = Duration::from_secs(10);
 
-	fn open(dir: &Path) -> Database {
-		Database::open(&dir.join(FILE_NAME)).expect("the database opens")
-	}
-
 	async fn version(database: &Database) -> u32 {
 		database.call(migrations::version).await.expect("version")
 	}
@@ -184,16 +202,6 @@ mod tests {
 			.call(|connection| {
 				Ok(connection
 					.query_row("SELECT count(*) FROM sqlite_master", [], |row| row.get(0))?)
-			})
-			.await
-			.expect("query")
-	}
-
-	async fn count_of(database: &Database, table: &'static str) -> u32 {
-		database
-			.call(move |connection| {
-				Ok(connection
-					.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0))?)
 			})
 			.await
 			.expect("query")
