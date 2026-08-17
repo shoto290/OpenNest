@@ -13,7 +13,10 @@ macOS quit sequence.
 - Quit any running `bun run dev` first. `tauri.dev.conf.json` overrides only
   `bundle.icon`, so the identifier, the single-instance lock and the data
   directory are shared with the packaged app — the two builds fight over both.
-- Store path: `~/Library/Application Support/com.opennest.app/session.json`.
+- Store paths, both under `~/Library/Application Support/com.opennest.app/`:
+  `conversations.sqlite3` holds the transcript the app reads and writes, and
+  `session.json` is the legacy file the first launch imports once and never
+  writes again.
 
 ## Signing
 
@@ -84,21 +87,31 @@ notarization credential belongs in the repo.
    quit is unverified until this step runs.
 
 9. Relaunch.
-   → the transcript is back. Ask `What number did I ask you to remember?`
-   → `4271`.
+   → every message of the session above is back, read from
+   `conversations.sqlite3`, in order and each exactly once — including the
+   stopped reply from step 7, which comes back stopped rather than as a message
+   still being written. Ask `What number did I ask you to remember?`
+   → the bot does **not** know. The transcript is durable; the Claude session
+   that produced it is not, and nothing resumes it across a launch. Only the
+   reading is restored, not the model's context.
 
-10. Quit, then `echo '{' > ~/Library/Application\ Support/com.opennest.app/session.json`
+10. Send `Count from 1 to 500, one number per line.` and quit with Cmd+Q while
+    it is still streaming, then relaunch.
+    → the partial reply is there with the words it had reached, marked stopped.
+    Nothing is left looking like a message still being written.
+
+11. Scroll to the top of a transcript longer than 20 messages.
+    → `Load older messages` appears; use it — with the keyboard as well as the
+    mouse. The page lands above the reader without moving the row they were
+    looking at, the control keeps focus while it loads, and once the beginning
+    is reached it is replaced by `Beginning of the conversation`. No message
+    appears twice and none is skipped.
+
+12. Quit, then `echo '{' > ~/Library/Application\ Support/com.opennest.app/session.json`
     and relaunch.
-    → empty transcript, no crash, and the file is untouched — a read never
-    deletes an unreadable store. Send one prompt, then list the directory
-    → `session.json.bak` holds the original `{` and `session.json` is a fresh
-    snapshot: the first save moves bytes it cannot parse aside, never over.
-
-11. Quit, then set `"sessionId":"00000000-0000-0000-0000-000000000000"` in
-    `session.json` and relaunch.
-    → a warning notice appears ("That conversation could not be resumed…"), the
-    session is usable, and the transcript is preserved. Relaunch **again**
-    → no warning: the dead id was dropped on the first failure.
+    → the transcript is unchanged and there is no crash: nothing reads that file
+    any more once the import has run, and the import never destroys bytes it
+    cannot parse.
 
 ## Orphan-group check
 
@@ -126,7 +139,10 @@ Repeat the pair for each way out of the app:
   uncatchable, so no handler runs — this is not a failure of the shutdown path.
 - A WKWebView content-process crash is not covered. Tauri v2 exposes no portable
   hook for it.
-- Real Claude Code **mints a new session id on `--resume`**, so `session.json`
-  legitimately carries a different id after each restart. That is the resume
-  chain working, not a bug — the check is that the conversation is remembered,
-  never that the id is stable.
+- Real Claude Code **mints a new session id on `--resume`**, so the id a restart
+  within one launch carries is legitimately a different one. That is the resume
+  chain working, not a bug — the check is that the answer carries on, never that
+  the id is stable.
+- A **relaunch does not carry the model's context**: the transcript is read back
+  from the database, and Claude is started fresh. Step 9 asserts that as the
+  behaviour it is, so that whoever changes it has to change the checklist too.
