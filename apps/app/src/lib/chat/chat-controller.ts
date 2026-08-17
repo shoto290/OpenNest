@@ -139,6 +139,12 @@ export function createChatController(
 	let activeTurn: { id: string; promptId: string } | null = null
 	let detach: Promise<() => void> | null = null
 	let pendingPreflight: Promise<SessionHandle | null> | null = null
+	/** The reply the session has announced and nothing has been written down for
+	 * yet. A protocol message that only ever called a tool says nothing, so it is
+	 * held here instead of opened: the row is written by the first word it says, or
+	 * by an ending that is not a completion, and dropped whole when neither comes.
+	 * One at a time — a message the next one starts over has said all it ever will. */
+	let heldReply: ChatMessage | null = null
 	/** The replies this controller opened and has not settled, and how far each has
 	 * streamed. A message leaves both the moment it ends, which is what makes a
 	 * replayed ending, and every delta behind it, a no-op. */
@@ -210,15 +216,26 @@ export function createChatController(
 	/** Out-of-order and replayed deltas are dropped on the sequence the transport
 	 * numbers them with, before either the store or the screen sees them. The
 	 * bookkeeping stays here, ahead of the write: a duplicate has to be refused
-	 * the moment it arrives, not once the store has answered the one before it. */
+	 * the moment it arrives, not once the store has answered the one before it.
+	 *
+	 * The first word is also what opens the row: until one arrives there is nothing
+	 * to write down, and a message that never says any is never written at all. */
 	const streamReply = (
 		id: string,
 		seq: number,
 		text: string,
 		conversationId: string,
 	) => {
+		if (text.length === 0) {
+			return
+		}
+		if (heldReply?.id === id) {
+			const held = heldReply
+			heldReply = null
+			openReply(held, conversationId)
+		}
 		const streamed = openMessages.get(id)
-		if (streamed === undefined || seq <= streamed || text.length === 0) {
+		if (streamed === undefined || seq <= streamed) {
 			return
 		}
 		openMessages.set(id, seq)
@@ -226,6 +243,20 @@ export function createChatController(
 			() => store.appendText(id, text),
 			() => transcript.stream({ conversationId, id, text }),
 		)
+	}
+
+	/** Takes the announced reply for what it is so far: a message with no words yet.
+	 * Nothing is written and nothing reaches the screen — a reply is only ever shown
+	 * once the store holds it. */
+	const holdReply = (message: ChatMessage) => {
+		if (
+			!activeTurn ||
+			openMessages.has(message.id) ||
+			settledMessages.has(message.id)
+		) {
+			return
+		}
+		heldReply = message
 	}
 
 	const openReply = (message: ChatMessage, conversationId: string) => {
@@ -282,25 +313,64 @@ export function createChatController(
 		)
 	}
 
+	const writeReply = (
+		message: ChatMessage,
+		completion: TerminalCompletion,
+		conversationId: string,
+	) => {
+		openReply(message, conversationId)
+		settleReply(message.id, completion, conversationId)
+	}
+
+	/** Whether a reply belongs in the transcript at all. It does the moment it has
+	 * words, and whatever it has, when it ends any way but well: a reply cut off is
+	 * the reader's to see, empty or not. A message that only carried tool calls has
+	 * neither — it says nothing and its turn ends fine — so nothing is kept for it. */
+	const isWorthKeeping = (
+		message: ChatMessage,
+		completion: TerminalCompletion,
+	) => message.text.length > 0 || completion !== "complete"
+
+	/** The ending of the reply nothing has been written for yet. A held reply the
+	 * store never heard of leaves no trace when there is nothing in it to keep. */
+	const settleHeldReply = (
+		completion: TerminalCompletion,
+		conversationId: string,
+	) => {
+		const held = heldReply
+		heldReply = null
+		if (held && isWorthKeeping(held, completion)) {
+			writeReply(held, completion, conversationId)
+		}
+	}
+
 	/** The text a reply ends with is the text its deltas wrote: the column is
 	 * append-only, so what has already landed is the answer, and the completion
 	 * frame repeats it rather than adding to it. A reply that ends without ever
 	 * having been opened is still a reply — it is opened on what it says, and
-	 * closed in the same breath. */
+	 * closed in the same breath, unless there is nothing in it worth a row. */
 	const settleCompleted = (message: ChatMessage, conversationId: string) => {
 		const completion = ENDING_FOR[message.completion]
 		if (!completion || settledMessages.has(message.id)) {
 			return
 		}
-		openReply(message, conversationId)
-		settleReply(message.id, completion, conversationId)
+		if (heldReply?.id === message.id) {
+			heldReply = null
+			if (!isWorthKeeping(message, completion)) {
+				return
+			}
+		}
+		writeReply(message, completion, conversationId)
 	}
 
-	/** Copied before it is walked: settling a reply takes it out of the map. */
+	/** Every reply the turn was still carrying, ended the same way — the one nothing
+	 * has been written for included. Copied before it is walked: settling a reply
+	 * takes it out of the map. */
 	const settleOpenReplies = (
 		completion: TerminalCompletion,
 		conversationId: string,
 	) => {
+		settleHeldReply(completion, conversationId)
 		for (const id of [...openMessages.keys()]) {
 			settleReply(id, completion, conversationId)
 		}
@@ -352,7 +422,7 @@ export function createChatController(
 			case "sessionReady":
 				return recordProviderSession(scope, event.sessionId)
 			case "messageStarted":
-				return openReply(event.message, conversationId)
+				return holdReply(event.message)
 			case "messageDelta":
 				return streamReply(event.id, event.seq, event.text, conversationId)
 			case "messageCompleted":
