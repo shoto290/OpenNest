@@ -96,11 +96,12 @@ const SEARCH_TOOLS = new Set([
 
 const WRITE_TOOLS = new Set(["edit", "multiedit", "notebookedit", "write"])
 
-/** Paragraphs the bot has finished. A live answer keeps its trailing text
- * private until a blank line closes it, so nothing is published mid-sentence. */
-function toParagraphs(text: string, streaming: boolean): string[] {
+/** Paragraphs the bot has finished. An answer that has not ended keeps its
+ * trailing text private until a blank line closes it, so nothing is published
+ * mid-sentence. */
+function toParagraphs(text: string, unfinished: boolean): string[] {
 	const parts = text.split(PARAGRAPH_BREAK)
-	const closed = streaming ? parts.slice(0, -1) : parts
+	const closed = unfinished ? parts.slice(0, -1) : parts
 	return closed.map((part) => part.trim()).filter((part) => part.length > 0)
 }
 

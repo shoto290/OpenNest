@@ -1,3 +1,4 @@
+import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
 	Bot,
 	Chat,
@@ -12,8 +13,8 @@ import {
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptCompletion,
 	type TranscriptCursor,
+	type TranscriptDraft,
 	type TranscriptMessage,
-	type TranscriptPage,
 } from "./transcript-contract"
 
 export type FakeTranscriptStoreOptions = {
@@ -45,7 +46,7 @@ export const createFakeTranscriptStore = (
 ): TranscriptStore => {
 	const pageSize = options.pageSize ?? TRANSCRIPT_PAGE_SIZE
 	const rows = new Map<string, TranscriptMessage>()
-	const turns = new Map<string, NewTurn>()
+	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
 
 	for (const seeded of [...(options.messages ?? [])].sort(
@@ -61,9 +62,13 @@ export const createFakeTranscriptStore = (
 		return seq
 	}
 
+	/** Every column a row is written with and never updated, so an append that
+	 * describes any of them differently is describing another message. A reply's
+	 * text is not among them on purpose: it is written after the row, delta by
+	 * delta, and the append that created it carried none of it. */
 	const divergingField = (
 		stored: TranscriptMessage,
-		message: TranscriptMessage,
+		message: TranscriptDraft,
 	): string | null => {
 		if (stored.conversationId !== message.conversationId)
 			return "conversation_id"
@@ -75,12 +80,10 @@ export const createFakeTranscriptStore = (
 		return null
 	}
 
-	const append = (
-		message: Omit<TranscriptMessage, "seq">,
-	): Promise<number> => {
+	const append = (message: TranscriptDraft): Promise<number> => {
 		const stored = rows.get(message.id)
 		if (stored) {
-			const field = divergingField(stored, { ...message, seq: stored.seq })
+			const field = divergingField(stored, message)
 			return field
 				? refuse({ kind: "conflict", id: message.id, field })
 				: Promise.resolve(stored.seq)
@@ -91,36 +94,32 @@ export const createFakeTranscriptStore = (
 	}
 
 	return {
-		loadPage: (conversationId: string, cursor: TranscriptCursor | null) => {
-			const owned = [...rows.values()]
-				.filter((message) => message.conversationId === conversationId)
-				.sort((left, right) => left.seq - right.seq)
-			const older = cursor
-				? owned.filter((message) => message.seq < cursor.beforeSeq)
-				: owned
-			const messages = older.slice(-pageSize)
-			return Promise.resolve<TranscriptPage>({
-				conversationId,
-				messages,
-				hasMore: older.length > messages.length,
-			})
-		},
+		/** Read through the port the transcript tests already page with, so both
+		 * fakes answer a cursor the same way and only one of them defines how. */
+		loadPage: (conversationId: string, cursor: TranscriptCursor | null) =>
+			createFakeTranscriptPort({
+				messages: [...rows.values()],
+				pageSize,
+			}).loadPage(conversationId, cursor),
 
 		defaultBot: () => Promise.resolve(DEFAULT_BOT),
 
 		mainChat: (_botId: string) =>
 			Promise.resolve<Chat>({ id: FAKE_CHAT_ID, createdAt: 0, updatedAt: 0 }),
 
+		/** A replay answers with the place the turn already has, the way an append
+		 * does: a caller cannot tell its own duplicate from a refusal otherwise. */
 		startTurn: (turn: NewTurn) => {
 			const stored = turns.get(turn.id)
 			if (stored) {
 				return stored.startedAt === turn.startedAt &&
 					stored.conversationId === turn.conversationId
-					? Promise.resolve(1)
+					? Promise.resolve(stored.seq)
 					: refuse({ kind: "conflict", id: turn.id, field: "started_at" })
 			}
-			turns.set(turn.id, turn)
-			return Promise.resolve(turns.size)
+			const seq = turns.size + 1
+			turns.set(turn.id, { ...turn, seq })
+			return Promise.resolve(seq)
 		},
 
 		completeTurn: () => Promise.resolve(),

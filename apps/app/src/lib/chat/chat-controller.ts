@@ -274,10 +274,18 @@ export function createChatController(
 		settleReply(message.id, completion, conversationId)
 	}
 
-	const endTurn = (completion: TerminalCompletion, conversationId: string) => {
+	/** Copied before it is walked: settling a reply takes it out of the map. */
+	const settleOpenReplies = (
+		completion: TerminalCompletion,
+		conversationId: string,
+	) => {
 		for (const id of [...openMessages.keys()]) {
 			settleReply(id, completion, conversationId)
 		}
+	}
+
+	const endTurn = (completion: TerminalCompletion, conversationId: string) => {
+		settleOpenReplies(completion, conversationId)
 		const turn = activeTurn
 		activeTurn = null
 		if (turn) {
@@ -352,13 +360,13 @@ export function createChatController(
 	}
 
 	/** A reply the session was streaming when it went away is closed as interrupted:
-	 * nothing on disk can resume a stream, and it neither failed nor was cancelled. */
+	 * nothing on disk can resume a stream, and it neither failed nor was cancelled.
+	 * The turn it belonged to is left open on purpose — it never completed, and
+	 * nothing is going to complete it. */
 	const start = async (resume?: string) => {
 		const conversationId = state.conversationId
 		if (conversationId) {
-			for (const id of [...openMessages.keys()]) {
-				settleReply(id, INTERRUPTED, conversationId)
-			}
+			settleOpenReplies(INTERRUPTED, conversationId)
 		}
 		activeTurn = null
 		epoch += 1

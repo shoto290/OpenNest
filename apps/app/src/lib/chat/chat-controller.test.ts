@@ -113,8 +113,8 @@ describe("createChatController", () => {
 	it("runs a happy-path turn and stores everything the reader can see", async () => {
 		const { controller, store, detach } = await bootedHarness()
 
-		const sending = controller.send("hello")
-		await sending
+		// Submitted, and the turn still on its way: the driver answers on a timer.
+		await controller.send("hello")
 		expect(controller.getState().turn).toBe("submitting")
 
 		await vi.runAllTimersAsync()
