@@ -119,6 +119,27 @@ impl From<TerminalState> for MessageState {
 	}
 }
 
+/// The openings on their own, and the only thing
+/// [`MessagesRepository::append_message`] will take. A message is born open and
+/// ends through [`MessagesRepository::finalize_message`], so a row that already
+/// ended cannot be claimed to have been written that way — which is what leaves
+/// a replay of the opening something the stored row can still be checked
+/// against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InitialState {
+	Pending,
+	Streaming,
+}
+
+impl From<InitialState> for MessageState {
+	fn from(state: InitialState) -> Self {
+		match state {
+			InitialState::Pending => MessageState::Pending,
+			InitialState::Streaming => MessageState::Streaming,
+		}
+	}
+}
+
 /// The same shape as [`MessageState`], for the step a turn hangs off: `Pending`
 /// and `Running` are open, the three others are endings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,6 +170,24 @@ impl ActivityStatus {
 			"failed" => Some(ActivityStatus::Failed),
 			"terminated" => Some(ActivityStatus::Terminated),
 			_ => None,
+		}
+	}
+}
+
+/// The open statuses on their own, and the only thing
+/// [`MessagesRepository::append_activity`] will take — the same rule as
+/// [`InitialState`], over the step a turn hangs off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InitialStatus {
+	Pending,
+	Running,
+}
+
+impl From<InitialStatus> for ActivityStatus {
+	fn from(status: InitialStatus) -> Self {
+		match status {
+			InitialStatus::Pending => ActivityStatus::Pending,
+			InitialStatus::Running => ActivityStatus::Running,
 		}
 	}
 }
@@ -222,7 +261,7 @@ pub struct NewMessage {
 	pub replied_to_message_id: Option<String>,
 	pub role: MessageRole,
 	pub content: String,
-	pub state: MessageState,
+	pub state: InitialState,
 	pub created_at: i64,
 }
 
@@ -261,7 +300,7 @@ pub struct NewActivity {
 	pub id: String,
 	pub turn_id: String,
 	pub kind: String,
-	pub status: ActivityStatus,
+	pub status: InitialStatus,
 	pub payload: String,
 	pub created_at: i64,
 }
@@ -284,7 +323,7 @@ pub struct RecoveryReport {
 	pub terminated_activities: usize,
 }
 
-const TURN_KEY: &str = "SELECT seq, conversation_id FROM turns WHERE id = ?1";
+const TURN_KEY: &str = "SELECT seq, conversation_id, started_at FROM turns WHERE id = ?1";
 const NEXT_TURN_SEQ: &str =
 	"SELECT COALESCE(MAX(seq), 0) + 1 FROM turns WHERE conversation_id = ?1";
 const INSERT_TURN: &str = "INSERT INTO turns (id, conversation_id, seq, started_at)
@@ -293,7 +332,7 @@ const COMPLETE_TURN: &str =
 	"UPDATE turns SET completed_at = ?2 WHERE id = ?1 AND completed_at IS NULL";
 
 const MESSAGE_KEY: &str = "SELECT seq, conversation_id, turn_id, author_bot_id,
-		replied_to_message_id, role
+		replied_to_message_id, role, content, completion_state, created_at
 	FROM messages WHERE id = ?1";
 const MESSAGE_STATE: &str = "SELECT completion_state FROM messages WHERE id = ?1";
 const NEXT_MESSAGE_SEQ: &str =
@@ -310,7 +349,8 @@ const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id, replied_to_messag
 		content, completion_state, created_at
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 
-const ACTIVITY_KEY: &str = "SELECT seq, turn_id, kind, payload FROM activities WHERE id = ?1";
+const ACTIVITY_KEY: &str =
+	"SELECT seq, turn_id, kind, status, payload, created_at FROM activities WHERE id = ?1";
 const ACTIVITY_STATUS: &str = "SELECT status FROM activities WHERE id = ?1";
 const NEXT_ACTIVITY_SEQ: &str =
 	"SELECT COALESCE(MAX(seq), 0) + 1 FROM activities WHERE turn_id = ?1";
@@ -490,15 +530,24 @@ impl MessagesRepository {
 	}
 }
 
-/// The stored side of a turn's identity, read before an append answers.
+/// The stored side of a turn's identity, read before an append answers. Every
+/// column here is written once and never updated, so an append that describes
+/// any of them differently is describing another turn.
 struct StoredTurnKey {
 	seq: i64,
 	conversation_id: String,
+	started_at: i64,
 }
 
 impl StoredTurnKey {
 	fn diverging_field(&self, turn: &NewTurn) -> Option<&'static str> {
-		(self.conversation_id != turn.conversation_id).then_some("conversation_id")
+		if self.conversation_id != turn.conversation_id {
+			return Some("conversation_id");
+		}
+		if self.started_at != turn.started_at {
+			return Some("started_at");
+		}
+		None
 	}
 }
 
@@ -509,13 +558,19 @@ struct StoredMessageKey {
 	author_bot_id: Option<String>,
 	replied_to_message_id: Option<String>,
 	role: MessageRole,
+	content: String,
+	state: MessageState,
+	created_at: i64,
 }
 
 impl StoredMessageKey {
-	// content and created_at are left out of the comparison on purpose: content
-	// grows through append_text after the insert and created_at is whatever moment
-	// the replaying caller carried, so comparing either would read a mid-stream
-	// replay as a conflict.
+	// content is the one field the stored row may legitimately have moved past:
+	// append_text concatenates every delta onto it, so what a true replay submits
+	// is by construction the beginning of what the row now holds. Hence a prefix
+	// check rather than equality. The honest limit of it is the empty opening an
+	// assistant message is appended with — an empty string is a prefix of
+	// everything, so that one case is checked by the fields around it and not by
+	// this one.
 	fn diverging_field(&self, message: &NewMessage) -> Option<&'static str> {
 		if self.conversation_id != message.conversation_id {
 			return Some("conversation_id");
@@ -532,6 +587,15 @@ impl StoredMessageKey {
 		if self.role != message.role {
 			return Some("role");
 		}
+		if !self.content.starts_with(&message.content) {
+			return Some("content");
+		}
+		if message_stage(message.state.into()) > message_stage(self.state) {
+			return Some("state");
+		}
+		if self.created_at != message.created_at {
+			return Some("created_at");
+		}
 		None
 	}
 }
@@ -540,7 +604,9 @@ struct StoredActivityKey {
 	seq: i64,
 	turn_id: String,
 	kind: String,
+	status: ActivityStatus,
 	payload: String,
+	created_at: i64,
 }
 
 impl StoredActivityKey {
@@ -551,10 +617,42 @@ impl StoredActivityKey {
 		if self.kind != activity.kind {
 			return Some("kind");
 		}
+		if activity_stage(activity.status.into()) > activity_stage(self.status) {
+			return Some("status");
+		}
 		if self.payload != activity.payload {
 			return Some("payload");
 		}
+		if self.created_at != activity.created_at {
+			return Some("created_at");
+		}
 		None
+	}
+}
+
+/// How far along its life a message is, so an opening can be compared against a
+/// row that has moved on since. A replay is allowed to be behind what the row
+/// now holds — that is what a second copy of an event looks like once the stream
+/// has run — but never ahead of it: a row still `pending` was not opened
+/// `streaming`.
+fn message_stage(state: MessageState) -> u8 {
+	match state {
+		MessageState::Pending => 0,
+		MessageState::Streaming => 1,
+		MessageState::Complete
+		| MessageState::Cancelled
+		| MessageState::Failed
+		| MessageState::Interrupted => 2,
+	}
+}
+
+/// The same order over the statuses of a step: `pending` before `running`,
+/// `running` before any ending.
+fn activity_stage(status: ActivityStatus) -> u8 {
+	match status {
+		ActivityStatus::Pending => 0,
+		ActivityStatus::Running => 1,
+		ActivityStatus::Succeeded | ActivityStatus::Failed | ActivityStatus::Terminated => 2,
 	}
 }
 
@@ -593,7 +691,7 @@ fn store_message(connection: &mut Connection, message: NewMessage) -> Result<i64
 			seq,
 			message.role,
 			message.content,
-			message.state,
+			MessageState::from(message.state),
 			message.created_at,
 		],
 	)?;
@@ -619,7 +717,7 @@ fn store_activity(
 			activity.id,
 			activity.turn_id,
 			activity.kind,
-			activity.status,
+			ActivityStatus::from(activity.status),
 			activity.payload,
 			seq,
 			activity.created_at,
@@ -738,7 +836,11 @@ fn stored_turn_key(
 ) -> Result<Option<StoredTurnKey>, DatabaseError> {
 	Ok(transaction
 		.query_row(TURN_KEY, params![id], |row| {
-			Ok(StoredTurnKey { seq: row.get(0)?, conversation_id: row.get(1)? })
+			Ok(StoredTurnKey {
+				seq: row.get(0)?,
+				conversation_id: row.get(1)?,
+				started_at: row.get(2)?,
+			})
 		})
 		.optional()?)
 }
@@ -756,6 +858,9 @@ fn stored_message_key(
 				author_bot_id: row.get(3)?,
 				replied_to_message_id: row.get(4)?,
 				role: row.get(5)?,
+				content: row.get(6)?,
+				state: row.get(7)?,
+				created_at: row.get(8)?,
 			})
 		})
 		.optional()?)
@@ -771,7 +876,9 @@ fn stored_activity_key(
 				seq: row.get(0)?,
 				turn_id: row.get(1)?,
 				kind: row.get(2)?,
-				payload: row.get(3)?,
+				status: row.get(3)?,
+				payload: row.get(4)?,
+				created_at: row.get(5)?,
 			})
 		})
 		.optional()?)
@@ -884,7 +991,7 @@ mod tests {
 			replied_to_message_id: None,
 			role: MessageRole::User,
 			content: content.into(),
-			state: MessageState::Complete,
+			state: InitialState::Pending,
 			created_at,
 		}
 	}
@@ -898,12 +1005,12 @@ mod tests {
 			replied_to_message_id: replied_to.map(Into::into),
 			role: MessageRole::Assistant,
 			content: String::new(),
-			state: MessageState::Pending,
+			state: InitialState::Pending,
 			created_at: 2,
 		}
 	}
 
-	fn an_activity(id: &str, status: ActivityStatus) -> NewActivity {
+	fn an_activity(id: &str, status: InitialStatus) -> NewActivity {
 		NewActivity {
 			id: id.into(),
 			turn_id: "t1".into(),
@@ -961,15 +1068,15 @@ mod tests {
 			.collect()
 	}
 
-	/// The conversation a turn belongs to, which no read of this repository hands
-	/// back on its own: what a refused replay must have left untouched.
-	async fn turn_conversation(database: &Database, id: &'static str) -> String {
+	/// What a turn holds, which no read of this repository hands back on its own:
+	/// what a refused replay must have left untouched.
+	async fn stored_turn(database: &Database, id: &'static str) -> (String, i64) {
 		database
 			.call(move |connection| {
 				Ok(connection.query_row(
-					"SELECT conversation_id FROM turns WHERE id = ?1",
+					"SELECT conversation_id, started_at FROM turns WHERE id = ?1",
 					params![id],
-					|row| row.get(0),
+					|row| Ok((row.get(0)?, row.get(1)?)),
 				)?)
 			})
 			.await
@@ -1157,6 +1264,11 @@ mod tests {
 			.expect("the message is appended");
 		database
 			.messages()
+			.finalize_message("m1".into(), TerminalState::Complete)
+			.await
+			.expect("the message is finalized");
+		database
+			.messages()
 			.append_message(a_reply("m2", Some("m1")))
 			.await
 			.expect("the reply is appended");
@@ -1164,14 +1276,19 @@ mod tests {
 		database.messages().append_text("m2".into(), "thought".into()).await.expect("a delta");
 		database
 			.messages()
-			.append_activity(an_activity("a1", ActivityStatus::Running))
+			.append_activity(an_activity("a1", InitialStatus::Running))
 			.await
 			.expect("the activity is appended");
 		database
 			.messages()
-			.append_activity(an_activity("a2", ActivityStatus::Succeeded))
+			.append_activity(an_activity("a2", InitialStatus::Running))
 			.await
 			.expect("the finished activity is appended");
+		database
+			.messages()
+			.set_activity_status("a2".into(), ActivityStatus::Succeeded)
+			.await
+			.expect("the activity ends");
 
 		let report = database.messages().recover_unfinished().await.expect("the sweep runs");
 		let again = database.messages().recover_unfinished().await.expect("the sweep runs again");
@@ -1225,7 +1342,7 @@ mod tests {
 				.expect("the message is finalized");
 			database
 				.messages()
-				.append_activity(an_activity("a1", ActivityStatus::Running))
+				.append_activity(an_activity("a1", InitialStatus::Running))
 				.await
 				.expect("the activity is appended");
 			database
@@ -1279,19 +1396,19 @@ mod tests {
 		database.messages().append_text("m2".into(), "hi".into()).await.expect("a delta");
 		database
 			.messages()
-			.append_activity(an_activity("a1", ActivityStatus::Running))
+			.append_activity(an_activity("a1", InitialStatus::Running))
 			.await
 			.expect("the activity is appended");
 
 		let replayed_turn = a_turn(&database, "t1", "c1").await;
 		let replayed = database
 			.messages()
-			.append_message(a_user_message("m1", "something else", 2))
+			.append_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("a replayed append was refused");
 		let replayed_activity = database
 			.messages()
-			.append_activity(an_activity("a1", ActivityStatus::Running))
+			.append_activity(an_activity("a1", InitialStatus::Running))
 			.await
 			.expect("a replayed activity was refused");
 		for ending in [TerminalState::Complete, TerminalState::Complete] {
@@ -1415,7 +1532,7 @@ mod tests {
 		let mut expected = Vec::new();
 		database
 			.messages()
-			.append_activity(an_activity("walked", ActivityStatus::Pending))
+			.append_activity(an_activity("walked", InitialStatus::Pending))
 			.await
 			.expect("the activity is appended");
 		database
@@ -1431,8 +1548,8 @@ mod tests {
 		expected.push(ActivityStatus::Succeeded);
 		for (index, termination) in TERMINATIONS.into_iter().enumerate() {
 			for (id, opening) in [
-				(format!("p{index}"), ActivityStatus::Pending),
-				(format!("r{index}"), ActivityStatus::Running),
+				(format!("p{index}"), InitialStatus::Pending),
+				(format!("r{index}"), InitialStatus::Running),
 			] {
 				database
 					.messages()
@@ -1449,7 +1566,7 @@ mod tests {
 		}
 		database
 			.messages()
-			.append_activity(an_activity("running", ActivityStatus::Running))
+			.append_activity(an_activity("running", InitialStatus::Running))
 			.await
 			.expect("the activity is appended");
 		expected.push(ActivityStatus::Running);
@@ -1496,7 +1613,7 @@ mod tests {
 			.expect("the message is appended");
 		database
 			.messages()
-			.append_activity(an_activity("a1", ActivityStatus::Running))
+			.append_activity(an_activity("a1", InitialStatus::Running))
 			.await
 			.expect("the activity is appended");
 
@@ -1541,21 +1658,21 @@ mod tests {
 			.messages()
 			.append_activity(NewActivity {
 				turn_id: "t3".into(),
-				..an_activity("a1", ActivityStatus::Running)
+				..an_activity("a1", InitialStatus::Running)
 			})
 			.await;
 		let another_kind = database
 			.messages()
 			.append_activity(NewActivity {
 				kind: "thought".into(),
-				..an_activity("a1", ActivityStatus::Running)
+				..an_activity("a1", InitialStatus::Running)
 			})
 			.await;
 		let another_payload = database
 			.messages()
 			.append_activity(NewActivity {
 				payload: "{\"tool\":\"read\"}".into(),
-				..an_activity("a1", ActivityStatus::Running)
+				..an_activity("a1", InitialStatus::Running)
 			})
 			.await;
 
@@ -1574,7 +1691,11 @@ mod tests {
 		);
 		assert!(is_conflict(&another_kind, "a1", "kind"), "{another_kind:?}");
 		assert!(is_conflict(&another_payload, "a1", "payload"), "{another_payload:?}");
-		assert_eq!(turn_conversation(&database, "t1").await, "c1", "a refused turn moved the row");
+		assert_eq!(
+			stored_turn(&database, "t1").await,
+			("c1".into(), 1),
+			"a refused turn moved the row"
+		);
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(seqs(&transcript), vec![1], "a refused append left a row behind");
 		assert_eq!(transcript[0].turn_id, "t1");
@@ -1592,12 +1713,13 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The replay an event loop actually produces: the same event again, after the
-	/// stream it opened has already written onto the row. Nothing about what the
-	/// message is has changed, so it answers the place it holds — the text it has
-	/// grown and the moment the second caller carried are not what identifies it.
+	/// The other half of the same rule: an id that matches on everything naming
+	/// which row it is, and disagrees about how that row was created. The moment a
+	/// turn started, the text a message opened with, the state it opened in and
+	/// the moment it was stamped are all part of the event, so a second event
+	/// carrying other ones is two accounts of one thing rather than one twice.
 	#[tokio::test]
-	async fn replaying_an_append_mid_stream_answers_the_place_the_message_already_holds() {
+	async fn an_id_appended_again_carrying_other_creation_data_is_refused_and_writes_nothing() {
 		let dir = temp_dir();
 		let database = seeded(&dir).await;
 		a_turn(&database, "t1", "c1").await;
@@ -1606,26 +1728,136 @@ mod tests {
 			.append_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("the message is appended");
-		let first = database
+		database
+			.messages()
+			.append_activity(an_activity("a1", InitialStatus::Pending))
+			.await
+			.expect("the activity is appended");
+
+		let another_start = database
+			.messages()
+			.start_turn(NewTurn { id: "t1".into(), conversation_id: "c1".into(), started_at: 5 })
+			.await;
+		let another_content =
+			database.messages().append_message(a_user_message("m1", "something else", 1)).await;
+		let a_state_ahead = database
+			.messages()
+			.append_message(NewMessage {
+				state: InitialState::Streaming,
+				..a_user_message("m1", "hello", 1)
+			})
+			.await;
+		let another_moment =
+			database.messages().append_message(a_user_message("m1", "hello", 99)).await;
+		let a_status_ahead =
+			database.messages().append_activity(an_activity("a1", InitialStatus::Running)).await;
+		let another_activity_moment = database
+			.messages()
+			.append_activity(NewActivity {
+				created_at: 99,
+				..an_activity("a1", InitialStatus::Pending)
+			})
+			.await;
+
+		assert!(is_conflict(&another_start, "t1", "started_at"), "{another_start:?}");
+		assert!(is_conflict(&another_content, "m1", "content"), "{another_content:?}");
+		assert!(is_conflict(&a_state_ahead, "m1", "state"), "{a_state_ahead:?}");
+		assert!(is_conflict(&another_moment, "m1", "created_at"), "{another_moment:?}");
+		assert!(is_conflict(&a_status_ahead, "a1", "status"), "{a_status_ahead:?}");
+		assert!(
+			is_conflict(&another_activity_moment, "a1", "created_at"),
+			"{another_activity_moment:?}"
+		);
+		assert_eq!(
+			stored_turn(&database, "t1").await,
+			("c1".into(), 1),
+			"a refused turn restamped the row"
+		);
+		let transcript = whole_transcript(&database, PAGE).await;
+		assert_eq!(seqs(&transcript), vec![1], "a refused append left a row behind");
+		assert_eq!(transcript[0].content, "hello", "a refused append rewrote the text");
+		assert_eq!(transcript[0].state, MessageState::Pending, "a refused append moved the state");
+		assert_eq!(transcript[0].created_at, 1, "a refused append restamped the message");
+		let activities =
+			database.messages().activities_for_turn("t1".into()).await.expect("the activities");
+		assert_eq!(activities.len(), 1, "a refused append left an activity behind");
+		assert_eq!(
+			activities[0].status,
+			ActivityStatus::Pending,
+			"a refused append moved the step"
+		);
+		assert_eq!(activities[0].created_at, 2, "a refused append restamped the step");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The replay an event loop actually produces: the same event again, after the
+	/// row it opened has moved on. The text has grown past the opening it was
+	/// written with, the state has walked to its ending, the step has walked its
+	/// whole graph — none of which is what the event said, so an exact replay
+	/// still answers the place it holds.
+	#[tokio::test]
+	async fn replaying_an_append_after_the_row_moved_on_answers_the_place_it_already_holds() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let streamed = database
+			.messages()
+			.append_message(a_user_message("m1", "half a ", 1))
+			.await
+			.expect("the message is appended");
+		database.messages().append_text("m1".into(), "thought".into()).await.expect("a delta");
+		let ended = database
 			.messages()
 			.append_message(a_reply("m2", Some("m1")))
 			.await
 			.expect("the reply is appended");
-		database.messages().append_text("m2".into(), "half a ".into()).await.expect("a delta");
-		database.messages().append_text("m2".into(), "thought".into()).await.expect("a delta");
-
-		let replayed = database
+		database.messages().append_text("m2".into(), "hi there".into()).await.expect("a delta");
+		database
 			.messages()
-			.append_message(NewMessage { created_at: 99, ..a_reply("m2", Some("m1")) })
+			.finalize_message("m2".into(), TerminalState::Complete)
+			.await
+			.expect("the message is finalized");
+		let walked = database
+			.messages()
+			.append_activity(an_activity("a1", InitialStatus::Pending))
+			.await
+			.expect("the activity is appended");
+		for status in [ActivityStatus::Running, ActivityStatus::Succeeded] {
+			database
+				.messages()
+				.set_activity_status("a1".into(), status)
+				.await
+				.expect("a step refused to walk its graph");
+		}
+
+		let mid_stream = database
+			.messages()
+			.append_message(a_user_message("m1", "half a ", 1))
 			.await
 			.expect("a replay of a message being streamed was refused");
+		let after_the_ending = database
+			.messages()
+			.append_message(a_reply("m2", Some("m1")))
+			.await
+			.expect("a replay of a message that had ended was refused");
+		let after_the_walk = database
+			.messages()
+			.append_activity(an_activity("a1", InitialStatus::Pending))
+			.await
+			.expect("a replay of a step that had ended was refused");
 
-		assert_eq!(replayed, first, "a replay mid-stream took a second place");
+		assert_eq!(mid_stream, streamed, "a replay mid-stream took a second place");
+		assert_eq!(after_the_ending, ended, "a replay after the ending took a second place");
+		assert_eq!(after_the_walk, walked, "a replay after the walk took a second place");
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(seqs(&transcript), vec![1, 2], "a replay wrote a second row");
-		assert_eq!(transcript[1].content, "half a thought", "a replay reset the streamed text");
-		assert_eq!(transcript[1].state, MessageState::Streaming);
-		assert_eq!(transcript[1].created_at, 2, "a replay restamped the message");
+		assert_eq!(transcript[0].content, "half a thought", "a replay reset the streamed text");
+		assert_eq!(transcript[0].state, MessageState::Streaming);
+		assert_eq!(transcript[1].content, "hi there");
+		assert_eq!(transcript[1].state, MessageState::Complete, "a replay reopened the ending");
+		assert_eq!(statuses(&database).await, vec![ActivityStatus::Succeeded]);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
