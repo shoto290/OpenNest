@@ -20,7 +20,7 @@ use opennest_app::claude::commands::{
 	claude_shutdown, claude_start_or_resume_session, claude_submit_prompt, shutdown_session,
 	terminate_session,
 };
-use opennest_app::claude::contract::{SessionHandle, TransportError};
+use opennest_app::claude::contract::{RuntimeScope, SessionHandle, TransportError};
 use opennest_app::claude::session::live_groups;
 use opennest_app::claude::ClaudeState;
 use opennest_app::commands::invoke_handler;
@@ -52,11 +52,23 @@ fn runtime() -> tokio::runtime::Runtime {
 	tokio::runtime::Runtime::new().expect("runtime")
 }
 
+/// One conversation restarting its own runtime, so what is under test stays the
+/// transition and never the scope: every call below names the same run.
+fn scope() -> RuntimeScope {
+	RuntimeScope {
+		conversation_id: "c1".to_owned(),
+		bot_id: "default".to_owned(),
+		runtime_session_id: "r1".to_owned(),
+		epoch: 1,
+	}
+}
+
 /// Never `$HOME`: the child inherits this as its working directory.
 async fn start(app: &App<MockRuntime>) -> Result<SessionHandle, TransportError> {
 	claude_start_or_resume_session(
 		app.handle().clone(),
 		app.state::<ClaudeState>(),
+		scope(),
 		None,
 		Some(std::env::temp_dir().to_string_lossy().into_owned()),
 	)
@@ -64,7 +76,7 @@ async fn start(app: &App<MockRuntime>) -> Result<SessionHandle, TransportError> 
 }
 
 async fn shutdown(app: &App<MockRuntime>) -> Result<(), TransportError> {
-	claude_shutdown(app.handle().clone(), app.state::<ClaudeState>()).await
+	claude_shutdown(app.handle().clone(), app.state::<ClaudeState>(), scope()).await
 }
 
 fn is_refused<T>(outcome: &Result<T, TransportError>) -> bool {
@@ -186,7 +198,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 		);
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		assert_eq!(
-			claude_submit_prompt(app.state::<ClaudeState>(), "salut".into()).await,
+			claude_submit_prompt(app.state::<ClaudeState>(), scope(), "salut".into()).await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
@@ -229,7 +241,7 @@ fn a_quit_inside_a_restart_never_installs_the_child_it_was_building() {
 		);
 		assert!(live_groups().is_empty(), "the child built after the sweep outlived it");
 		assert_eq!(
-			claude_submit_prompt(app.state::<ClaudeState>(), "salut".into()).await,
+			claude_submit_prompt(app.state::<ClaudeState>(), scope(), "salut".into()).await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);

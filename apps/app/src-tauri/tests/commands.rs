@@ -7,7 +7,7 @@ use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::claude::commands::{
 	claude_start_or_resume_session, shutdown_session, terminate_session, EVENT_CHANNEL,
 };
-use opennest_app::claude::contract::{ClaudeEvent, ConnectionState};
+use opennest_app::claude::contract::{ClaudeEvent, ConnectionState, RuntimeScope, ScopedEvent};
 use opennest_app::claude::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
@@ -20,6 +20,22 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 fn app() -> tauri::App<MockRuntime> {
 	build(mock_context(noop_assets()))
+}
+
+/// The scope a frontend holds after opening a run against the durable lineage.
+/// Written out as JSON because that is how it crosses: a field the host spells
+/// differently is a command refused before any code of ours runs.
+fn a_scope() -> Value {
+	json!({
+		"conversationId": "c1",
+		"botId": "default",
+		"runtimeSessionId": "r1",
+		"epoch": 1
+	})
+}
+
+fn a_scope_value() -> RuntimeScope {
+	serde_json::from_value(a_scope()).expect("the scope parses")
 }
 
 fn build(context: tauri::Context<MockRuntime>) -> tauri::App<MockRuntime> {
@@ -54,21 +70,44 @@ fn commands_are_registered_and_report_typed_errors_without_a_session() {
 		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
 	assert_eq!(
-		call(&window, "claude_cancel_turn", json!({})),
+		call(&window, "claude_cancel_turn", json!({ "scope": a_scope() })),
 		Err(json!({ "kind": "notStarted" }))
 	);
 	assert_eq!(
-		call(&window, "claude_submit_prompt", json!({ "text": "salut" })),
+		call(&window, "claude_submit_prompt", json!({ "scope": a_scope(), "text": "salut" })),
 		Err(json!({ "kind": "notStarted" }))
 	);
 	assert_eq!(
 		call(
 			&window,
 			"claude_respond_to_permission",
-			json!({ "id": "x", "decision": "allowOnce" })
+			json!({ "scope": a_scope(), "id": "x", "decision": "allowOnce" })
 		),
 		Err(json!({ "kind": "notStarted" }))
 	);
+}
+
+/// A host holding no run has no other run to protect, so it answers about the
+/// session it does not have rather than about the scope it was handed. The
+/// distinction is the whole point: `notStarted` is recoverable by starting one,
+/// while a stale refusal would send the frontend looking for a run that never was.
+#[test]
+fn a_command_reaching_a_host_that_runs_nothing_says_so_whatever_run_it_names() {
+	let app = app();
+	let window =
+		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
+	let another = json!({
+		"conversationId": "c2",
+		"botId": "other",
+		"runtimeSessionId": "r9",
+		"epoch": 7
+	});
+
+	assert_eq!(
+		call(&window, "claude_submit_prompt", json!({ "scope": another, "text": "salut" })),
+		Err(json!({ "kind": "notStarted" }))
+	);
+	assert_eq!(call(&window, "claude_shutdown", json!({ "scope": another })), Ok(Value::Null));
 }
 
 #[test]
@@ -77,20 +116,21 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	let window =
 		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
-	let seen: Arc<Mutex<Vec<ClaudeEvent>>> = Arc::new(Mutex::new(Vec::new()));
+	let seen: Arc<Mutex<Vec<ScopedEvent>>> = Arc::new(Mutex::new(Vec::new()));
 	let sink = seen.clone();
 	app.listen(EVENT_CHANNEL, move |event| {
-		if let Ok(parsed) = serde_json::from_str::<ClaudeEvent>(event.payload()) {
+		if let Ok(parsed) = serde_json::from_str::<ScopedEvent>(event.payload()) {
 			sink.lock().expect("log").push(parsed);
 		}
 	});
 
-	assert_eq!(call(&window, "claude_shutdown", json!({})), Ok(Value::Null));
+	assert_eq!(call(&window, "claude_shutdown", json!({ "scope": a_scope() })), Ok(Value::Null));
 
 	let events = seen.lock().expect("log").clone();
-	assert!(events.iter().any(|event| matches!(
-		event,
-		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking }
+	assert!(events.iter().any(|scoped| matches!(
+		(&scoped.scope, &scoped.event),
+		(Some(scope), ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking })
+			if scope == &a_scope_value()
 	)));
 }
 
@@ -114,6 +154,7 @@ fn shutting_down_frees_the_state_before_waiting_on_the_child() {
 		claude_start_or_resume_session(
 			app.handle().clone(),
 			app.state::<ClaudeState>(),
+			a_scope_value(),
 			None,
 			Some(std::env::temp_dir().to_string_lossy().into_owned()),
 		)

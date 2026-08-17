@@ -4,6 +4,7 @@ import {
 	canStopTurn,
 	chatReducer,
 	initialChatState,
+	isSameRuntimeScope,
 	isTurnBusy,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
@@ -14,6 +15,7 @@ import type {
 	ClaudeEvent,
 	MessageCompletion,
 	PermissionDecision,
+	RuntimeScope,
 	SessionHandle,
 	TransportError,
 	TurnOutcome,
@@ -110,7 +112,6 @@ export function createChatController(
 	const transcript = createTranscriptController(store)
 
 	let state = initialChatState
-	let epoch = 0
 	let botId: string | null = null
 	let activeTurn: { id: string; promptId: string } | null = null
 	let detach: Promise<() => void> | null = null
@@ -138,17 +139,20 @@ export function createChatController(
 		}
 	}
 
+	/** The controller speaking for the run it holds. What it reports is about this
+	 * launch's own session, so it is scoped with it and reaches the reducer under
+	 * the same rule every event from the host does. */
 	const report = (reason: unknown) =>
 		dispatch({
 			type: "driverEvent",
-			epoch,
+			scope: state.runtime,
 			event: { type: "failed", error: toTransportError(reason) },
 		})
 
 	const reportStore = (reason: unknown) =>
 		dispatch({
 			type: "driverEvent",
-			epoch,
+			scope: state.runtime,
 			event: { type: "failed", error: toStoreError(reason) },
 		})
 
@@ -321,13 +325,18 @@ export function createChatController(
 	}
 
 	/** Resolves once the subscription is live. Tauri registers listeners over IPC,
-	 * so a command issued before this settles loses the events it emits. */
+	 * so a command issued before this settles loses the events it emits.
+	 *
+	 * The run an event names is what decides, never the subscription it arrived on:
+	 * a replaced session keeps streaming until its child is gone, and the host
+	 * delivers on one channel. So the durable write is refused here on the same
+	 * comparison the reducer makes for the screen — a frame from a run this
+	 * controller no longer holds mutates neither. */
 	const connect = () => {
-		const captured = epoch
 		disconnect()
-		detach = driver.subscribe((event) => {
-			dispatch({ type: "driverEvent", epoch: captured, event })
-			if (captured !== epoch) {
+		detach = driver.subscribe(({ scope, event }) => {
+			dispatch({ type: "driverEvent", scope, event })
+			if (!isSameRuntimeScope(scope, state.runtime)) {
 				return
 			}
 			persist(event)
@@ -342,11 +351,11 @@ export function createChatController(
 
 	const check = async () => {
 		try {
-			const result = await driver.check()
+			const result = await driver.check(state.runtime)
 			dispatch({ type: "binaryVersion", version: result.binaryVersion })
 			dispatch({
 				type: "driverEvent",
-				epoch,
+				scope: state.runtime,
 				event: { type: "connectionChanged", state: result.connection },
 			})
 			if (result.error) {
@@ -359,23 +368,61 @@ export function createChatController(
 		}
 	}
 
+	/** The run this launch is about to ask for a process, taken from the durable
+	 * lineage: the row it opens rotates the one it replaces, and the number it comes
+	 * back with is the epoch every command and event of that process is scoped by.
+	 * Opened before the child rather than after, so a session that never comes up is
+	 * still a run the record can name. */
+	const openRun = async (
+		conversationId: string,
+		participant: string,
+	): Promise<RuntimeScope> => {
+		const opened = await store.openRuntimeSession(
+			conversationId,
+			participant,
+			now(),
+		)
+		return {
+			conversationId: opened.conversationId,
+			botId: opened.botId,
+			runtimeSessionId: opened.id,
+			epoch: opened.seq,
+		}
+	}
+
 	/** A reply the session was streaming when it went away is closed as interrupted:
 	 * nothing on disk can resume a stream, and it neither failed nor was cancelled.
 	 * The turn it belonged to is left open on purpose — it never completed, and
-	 * nothing is going to complete it. */
+	 * nothing is going to complete it.
+	 *
+	 * A process is never started unscoped: without a conversation and a bot there is
+	 * no run to open, and a session nothing can attribute is one whose every event
+	 * would be somebody's guess. So the reader is told the store is not answering
+	 * instead of being handed an unattributable session. */
 	const start = async (resume?: string) => {
 		const conversationId = state.conversationId
-		if (conversationId) {
-			settleOpenReplies(INTERRUPTED, conversationId)
+		const participant = botId
+		if (!conversationId || !participant) {
+			reportStore({ kind: "unavailable" })
+			return null
 		}
+		settleOpenReplies(INTERRUPTED, conversationId)
 		activeTurn = null
-		epoch += 1
-		dispatch({ type: "sessionReset", epoch, sessionId: resume ?? null })
+
+		let runtime: RuntimeScope
+		try {
+			runtime = await openRun(conversationId, participant)
+		} catch (reason) {
+			reportStore(reason)
+			return null
+		}
+
+		dispatch({ type: "sessionReset", runtime, sessionId: resume ?? null })
 		try {
 			if (detach) {
 				await connect()
 			}
-			const handle = await driver.startOrResumeSession(resume)
+			const handle = await driver.startOrResumeSession(runtime, resume)
 			dispatch({ type: "sessionOpened" })
 			return handle
 		} catch (reason) {
@@ -433,9 +480,17 @@ export function createChatController(
 		}
 	}
 
+	/** Every runtime call names the run this controller holds, so one issued while a
+	 * restart is in flight is refused by the host rather than aimed at whatever
+	 * process happens to be installed by the time it lands. */
 	const submit = async (id: string, text: string) => {
+		const runtime = state.runtime
+		if (!runtime) {
+			dispatch({ type: "promptRejected", id, error: { kind: "notStarted" } })
+			return
+		}
 		try {
-			await driver.submitPrompt(text)
+			await driver.submitPrompt(runtime, text)
 		} catch (reason) {
 			dispatch({
 				type: "promptRejected",
@@ -521,27 +576,39 @@ export function createChatController(
 	}
 
 	const stop = async () => {
-		if (!canStopTurn(state.turn)) {
+		const runtime = state.runtime
+		if (!runtime || !canStopTurn(state.turn)) {
 			return
 		}
 		dispatch({
 			type: "driverEvent",
-			epoch,
+			scope: runtime,
 			event: { type: "turnChanged", state: "stopping" },
 		})
 		try {
-			await driver.cancelTurn()
+			await driver.cancelTurn(runtime)
 		} catch (reason) {
 			dispatch({ type: "stopRejected", error: toTransportError(reason) })
 		}
 	}
 
 	const respond = async (id: string, decision: PermissionDecision) => {
-		await driver.respondToPermission(id, decision).catch(report)
+		const runtime = state.runtime
+		if (!runtime) {
+			return
+		}
+		await driver.respondToPermission(runtime, id, decision).catch(report)
 	}
 
+	/** Names the run this launch holds, and asks for nothing when it holds none.
+	 * A second shutdown is as safe as the first: by then the host holds no session
+	 * either, and a caller it has no other run to protect from is not refused. */
 	const shutdown = async () => {
-		await driver.shutdown().catch(report)
+		const runtime = state.runtime
+		if (!runtime) {
+			return
+		}
+		await driver.shutdown(runtime).catch(report)
 	}
 
 	return {

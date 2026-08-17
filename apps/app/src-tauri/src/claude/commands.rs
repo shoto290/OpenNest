@@ -6,19 +6,71 @@ use tokio::sync::Mutex;
 
 use super::binary;
 use super::contract::{
-	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, SessionHandle, SessionSnapshot,
-	TransportError,
+	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
+	SessionHandle, SessionSnapshot, TransportError,
 };
 use super::session::{self, EventSink, GatedSink, Session, SessionOptions};
 use super::store;
 
 pub const EVENT_CHANNEL: &str = "claude://event";
 
-struct AppSink<R: Runtime>(AppHandle<R>);
+/// The one way anything reaches the frontend, and the reason every event on the
+/// channel names a run: the envelope is built here, so no caller can emit without
+/// saying which run it is speaking for.
+fn announce<R: Runtime>(app: &AppHandle<R>, scope: Option<RuntimeScope>, event: ClaudeEvent) {
+	let _ = app.emit(EVENT_CHANNEL, ScopedEvent { scope, event });
+}
 
-impl<R: Runtime> EventSink for AppSink<R> {
+/// The run the host answers to right now, or none between two of them.
+///
+/// A `std::sync::Mutex` because [`EventSink::emit`] is synchronous and runs inside
+/// the read loop: awaiting a lock there would stall the task feeding it. It is only
+/// ever held long enough to read or replace one value.
+#[derive(Default)]
+struct LiveScope(std::sync::Mutex<Option<RuntimeScope>>);
+
+impl LiveScope {
+	/// Taken by a start the moment it claims the transition, before the previous
+	/// child is even torn down: from here the replaced run is no longer the host's,
+	/// and everything it still has to say is somebody else's account of a process
+	/// that has already been handed over.
+	fn take_over(&self, scope: RuntimeScope) {
+		*self.0.lock().expect("live scope") = Some(scope);
+	}
+
+	fn clear(&self) {
+		*self.0.lock().expect("live scope") = None;
+	}
+
+	fn holds(&self, scope: &RuntimeScope) -> bool {
+		self.0.lock().expect("live scope").as_ref() == Some(scope)
+	}
+
+	/// Whether the host is holding a *different* run. Holding none is not a
+	/// disagreement: the caller and the host agree there is nothing running, which
+	/// is what makes a second shutdown a no-op rather than a refusal.
+	fn is_foreign(&self, scope: &RuntimeScope) -> bool {
+		matches!(&*self.0.lock().expect("live scope"), Some(live) if live != scope)
+	}
+}
+
+/// One session's stream, stamped with the run it comes from and cut off once that
+/// run is no longer the host's. The cut is the half a session cannot make for
+/// itself: a child that lost its slot is still alive, still streaming and still
+/// answering, and every frame it emits from then on describes a process the reader
+/// has already been handed a replacement for.
+struct RunSink<R: Runtime> {
+	app: AppHandle<R>,
+	scope: RuntimeScope,
+	live: Arc<LiveScope>,
+}
+
+impl<R: Runtime> EventSink for RunSink<R> {
 	fn emit(&self, event: ClaudeEvent) {
-		let _ = self.0.emit(EVENT_CHANNEL, event);
+		if !self.live.holds(&self.scope) {
+			return;
+		}
+		announce(&self.app, Some(self.scope.clone()), event);
 	}
 }
 
@@ -44,10 +96,23 @@ pub struct ClaudeState {
 	/// seconds spent holding a lock. What keeps the other callers out is the
 	/// claim they fail to take, not a lock they would queue behind.
 	transition: std::sync::Mutex<Transition>,
+	/// Which run the single child in `session` is. Held apart from the session
+	/// itself because it outlives both ends of it: it is taken before the child
+	/// exists, so a start already knows which run it is building, and it is what
+	/// every command is measured against long before that child is reachable.
+	live: Arc<LiveScope>,
 }
 
 impl ClaudeState {
-	async fn current(&self) -> Result<Arc<Session>, TransportError> {
+	/// The session, for a caller that is talking about the run the host is actually
+	/// holding. A named run that is not the live one is refused before the slot is
+	/// even read: whether a child happens to be installed says nothing about whose
+	/// it is, and answering such a caller would let a dead epoch cancel, approve or
+	/// shut down the session that replaced it.
+	async fn current(&self, scope: &RuntimeScope) -> Result<Arc<Session>, TransportError> {
+		if self.live.is_foreign(scope) {
+			return Err(stale(scope));
+		}
 		self.session.lock().await.clone().ok_or(TransportError::NotStarted)
 	}
 
@@ -93,23 +158,44 @@ impl Drop for Claim<'_> {
 	}
 }
 
-fn sink<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn EventSink> {
-	Arc::new(AppSink(app.clone()))
+fn stale(scope: &RuntimeScope) -> TransportError {
+	TransportError::StaleRuntimeSession { runtime_session_id: scope.runtime_session_id.clone() }
 }
 
+fn run_sink<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: RuntimeScope,
+	live: Arc<LiveScope>,
+) -> Arc<dyn EventSink> {
+	Arc::new(RunSink { app: app.clone(), scope, live })
+}
+
+/// The scope is the caller's own and is echoed rather than checked: a check asks
+/// about the install, which is true whatever run is on the frontend's mind — and
+/// the first check of a launch happens before there is a run at all.
 #[tauri::command]
-pub async fn claude_check<R: Runtime>(app: AppHandle<R>) -> CheckReport {
-	let sink = sink(&app);
-	sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking });
+pub async fn claude_check<R: Runtime>(
+	app: AppHandle<R>,
+	scope: Option<RuntimeScope>,
+) -> CheckReport {
+	announce(
+		&app,
+		scope.clone(),
+		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking },
+	);
 	let report = binary::check().await;
-	sink.emit(ClaudeEvent::ConnectionChanged { state: report.connection });
+	announce(&app, scope, ClaudeEvent::ConnectionChanged { state: report.connection });
 	report
 }
 
+/// The scope is opened by the frontend against the durable lineage before this is
+/// called, so the run has a row and a number before it has a process: a child that
+/// crashes on its first breath is still a run somebody can name afterwards.
 #[tauri::command]
 pub async fn claude_start_or_resume_session<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, ClaudeState>,
+	scope: RuntimeScope,
 	resume: Option<String>,
 	cwd: Option<String>,
 ) -> Result<SessionHandle, TransportError> {
@@ -119,6 +205,12 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 	// win. A refused start returns without emitting anything — announcing
 	// `Unavailable` there would be a lie, since a session is on its way up.
 	let _claim = state.claim(Transition::Starting)?;
+
+	// Under the claim and before anything is torn down: the run the host answers to
+	// changes here, so the previous session is silenced by the same statement that
+	// names its replacement, rather than at some point during the seconds its child
+	// is given to die in.
+	state.live.take_over(scope.clone());
 
 	// Taken out of the scrutinee on purpose: in edition 2021 a guard there lives
 	// to the end of the block, which would hold every other command behind the
@@ -134,7 +226,7 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 		.or_else(|| app.path().home_dir().ok())
 		.unwrap_or_else(|| PathBuf::from("."));
 
-	let sink = sink(&app);
+	let sink = run_sink(&app, scope.clone(), state.live.clone());
 	let options = SessionOptions::new(binary, working_dir);
 
 	let started = match start_with_fallback(options, resume, sink.clone()).await {
@@ -236,23 +328,28 @@ pub async fn start_with_fallback(
 #[tauri::command]
 pub async fn claude_submit_prompt(
 	state: State<'_, ClaudeState>,
+	scope: RuntimeScope,
 	text: String,
 ) -> Result<(), TransportError> {
-	state.current().await?.submit_prompt(&text).await
+	state.current(&scope).await?.submit_prompt(&text).await
 }
 
 #[tauri::command]
-pub async fn claude_cancel_turn(state: State<'_, ClaudeState>) -> Result<(), TransportError> {
-	state.current().await?.cancel_turn().await
+pub async fn claude_cancel_turn(
+	state: State<'_, ClaudeState>,
+	scope: RuntimeScope,
+) -> Result<(), TransportError> {
+	state.current(&scope).await?.cancel_turn().await
 }
 
 #[tauri::command]
 pub async fn claude_respond_to_permission(
 	state: State<'_, ClaudeState>,
+	scope: RuntimeScope,
 	id: String,
 	decision: PermissionDecision,
 ) -> Result<(), TransportError> {
-	state.current().await?.respond_to_permission(&id, decision).await
+	state.current(&scope).await?.respond_to_permission(&id, decision).await
 }
 
 /// The unguarded primitive. The lifecycle gate belongs to the command layer, so
@@ -275,6 +372,9 @@ pub async fn shutdown_session(state: &ClaudeState) {
 /// returned yet is not in the state and has a live process group all the same.
 pub async fn terminate_session(state: &ClaudeState) {
 	state.enter_quit();
+	// The host answers to no run from here on, so nothing a dying child still has
+	// to say reaches a frontend that is going away with it.
+	state.live.clear();
 	let session = state.session.lock().await.take();
 	if let Some(session) = session {
 		session.terminate().await;
@@ -282,14 +382,29 @@ pub async fn terminate_session(state: &ClaudeState) {
 	session::sweep_live_groups();
 }
 
+/// Refused for a run the host has already replaced: a shutdown is the one command
+/// whose whole effect is on the session it does not name, and a late one would end
+/// the run that took its place. Asking to shut down when the host holds nothing is
+/// not that — there is no other run to end, so it says so and stays a no-op, which
+/// is what makes a second shutdown as safe as the first.
+///
+/// The announcement is stamped with the run it is about and emitted after the
+/// child is gone, straight to the channel: it is the host speaking about the
+/// session, not the session speaking, and the sink that carried the latter has
+/// stopped forwarding by then.
 #[tauri::command]
 pub async fn claude_shutdown<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, ClaudeState>,
+	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
 	let _claim = state.claim(Transition::Stopping)?;
+	if state.live.is_foreign(&scope) {
+		return Err(stale(&scope));
+	}
 	shutdown_session(&state).await;
-	sink(&app).emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking });
+	state.live.clear();
+	announce(&app, Some(scope), ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
 }
 
@@ -314,6 +429,54 @@ mod tests {
 
 	fn stored_id(path: &Path) -> Option<String> {
 		store::load(path).session_id
+	}
+
+	fn a_scope() -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: "c1".into(),
+			bot_id: "b1".into(),
+			runtime_session_id: "r1".into(),
+			epoch: 1,
+		}
+	}
+
+	/// Every field is part of which run this is, so each one alone is enough to
+	/// make a scope somebody else's: the same lineage a turn later, the same number
+	/// under another bot, the same row named by another conversation. A scope
+	/// compared on its id alone would take all three for the live run.
+	#[test]
+	fn a_scope_differing_anywhere_is_a_run_the_host_is_not_holding() {
+		let live = LiveScope::default();
+		live.take_over(a_scope());
+
+		assert!(live.holds(&a_scope()), "the host stopped recognising the run it holds");
+		assert!(!live.is_foreign(&a_scope()), "the live run was refused as somebody else's");
+		for other in [
+			RuntimeScope { epoch: 2, ..a_scope() },
+			RuntimeScope { runtime_session_id: "r2".into(), ..a_scope() },
+			RuntimeScope { bot_id: "b2".into(), ..a_scope() },
+			RuntimeScope { conversation_id: "c2".into(), ..a_scope() },
+		] {
+			assert!(live.is_foreign(&other), "a run the host never held was taken for it: {other:?}");
+			assert!(!live.holds(&other), "a run the host never held was taken for it: {other:?}");
+		}
+	}
+
+	/// The handover, and the silence after it: the replaced run is refused from the
+	/// moment its successor is named, and once the host holds nothing at all there
+	/// is no other run left for a late caller to reach past.
+	#[test]
+	fn a_replaced_run_is_refused_and_a_host_holding_none_refuses_nobody() {
+		let replaced = a_scope();
+		let live = LiveScope::default();
+		live.take_over(replaced.clone());
+
+		live.take_over(RuntimeScope { runtime_session_id: "r2".into(), epoch: 2, ..a_scope() });
+		assert!(live.is_foreign(&replaced), "a replaced run still reached the host");
+
+		live.clear();
+		assert!(!live.is_foreign(&replaced), "a host holding no run refused a caller anyway");
+		assert!(!live.holds(&replaced), "a host holding no run claimed to hold one");
 	}
 
 	/// The fallback runs on both, and only one of the two says anything about

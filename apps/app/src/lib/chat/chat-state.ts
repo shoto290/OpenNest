@@ -6,6 +6,7 @@ import type {
 	MessageCompletion,
 	PermissionDecision,
 	PermissionRequest,
+	RuntimeScope,
 	TransportError,
 	TurnEnded,
 	TurnOutcome,
@@ -25,7 +26,10 @@ export type ChatError = {
  * none of them is written down. What was said is the transcript's business, and
  * the transcript is SQLite's. */
 export type ChatState = {
-	epoch: number
+	/** The run this state is about, opened against the durable lineage before the
+	 * process was asked for. Null before the first one: a launch that has not
+	 * opened a run yet is one nothing may be attributed to. */
+	runtime: RuntimeScope | null
 	connection: ConnectionState
 	turn: TurnState
 	/** The host holds a live child process. Set when the session opens, not when
@@ -50,14 +54,18 @@ export type ChatState = {
 }
 
 export type ChatAction =
-	| { type: "driverEvent"; epoch: number; event: ClaudeEvent }
+	/** An event and the run the host says it came from. Anything but the run this
+	 * state is about is dropped: a replaced session is still alive for as long as
+	 * its child takes to die, and every frame it emits meanwhile describes a
+	 * process the reader has already been handed a replacement for. */
+	| { type: "driverEvent"; scope: RuntimeScope | null; event: ClaudeEvent }
 	/** A session died or was replaced. Clears what belonged to that process — its
 	 * steps included, because a step is a thing a running provider was doing and
 	 * nothing is running any more — and keeps the transcript, which was never that
 	 * process's to begin with. `sessionId` is the id the new session resumes: the
 	 * child only re-announces it on the first prompt, so dropping it here would
 	 * write `null` over a session that is very much alive. */
-	| { type: "sessionReset"; epoch: number; sessionId: string | null }
+	| { type: "sessionReset"; runtime: RuntimeScope; sessionId: string | null }
 	| { type: "sessionOpened" }
 	| { type: "conversationOpened"; conversationId: string }
 	/** The durable transcript moved. The controller hands the whole selection
@@ -75,7 +83,7 @@ export type ChatAction =
 	| { type: "binaryVersion"; version: string | null }
 
 export const initialChatState: ChatState = {
-	epoch: 0,
+	runtime: null,
 	connection: "checking",
 	turn: "idle",
 	sessionOpen: false,
@@ -122,6 +130,26 @@ export function canStopTurn(turn: TurnState): boolean {
 /** A live session able to take a prompt. The id Claude reports arrives later. */
 export function isSessionReady(state: ChatState): boolean {
 	return state.connection === "ready" && state.sessionOpen
+}
+
+/** Whether two scopes name the same run. Compared field by field rather than on
+ * the id alone: the id says which row, and the participant says whose, so a run
+ * of another bot or another conversation is refused on what it says instead of on
+ * a lookup nobody here can make. Two runs that have none — a launch before its
+ * first one — are the same absence and match. */
+export function isSameRuntimeScope(
+	left: RuntimeScope | null,
+	right: RuntimeScope | null,
+): boolean {
+	if (left === null || right === null) {
+		return left === right
+	}
+	return (
+		left.runtimeSessionId === right.runtimeSessionId &&
+		left.epoch === right.epoch &&
+		left.conversationId === right.conversationId &&
+		left.botId === right.botId
+	)
 }
 
 export function completionForOutcome(outcome: TurnOutcome): MessageCompletion {
@@ -268,12 +296,12 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 
 function applySessionReset(
 	state: ChatState,
-	epoch: number,
+	runtime: RuntimeScope,
 	sessionId: string | null,
 ): ChatState {
 	return {
 		...state,
-		epoch,
+		runtime,
 		turn: "idle",
 		sessionOpen: false,
 		sessionId,
@@ -324,13 +352,13 @@ function applyStopRejected(state: ChatState, error: TransportError): ChatState {
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 	switch (action.type) {
 		case "driverEvent":
-			return action.epoch === state.epoch
+			return isSameRuntimeScope(action.scope, state.runtime)
 				? applyEvent(state, action.event)
 				: state
 		case "sessionOpened":
 			return state.sessionOpen ? state : { ...state, sessionOpen: true }
 		case "sessionReset":
-			return applySessionReset(state, action.epoch, action.sessionId)
+			return applySessionReset(state, action.runtime, action.sessionId)
 		case "conversationOpened":
 			return state.conversationId === action.conversationId
 				? state
