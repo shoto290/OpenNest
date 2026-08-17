@@ -15,9 +15,10 @@
 
 use tauri::State;
 
+use super::context;
 use super::contract::{
-	Bot, Chat, NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession, TerminalCompletion,
-	TranscriptPage, TranscriptStoreError,
+	Bot, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession,
+	TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
 use crate::db;
 use crate::db::repositories::messages::MessagePageQuery;
@@ -51,18 +52,52 @@ pub async fn conversation_main_chat(
 ///
 /// The handover is the repository's, whole: the live row this one replaces is
 /// rotated inside the same transaction, so a caller cannot leave a participant with
-/// two live runs or with none. No rotation reason crosses — why a run was replaced
-/// is a policy nothing here has yet, and a reason invented at this layer would be
-/// this layer's guess on the record.
+/// two live runs or with none. `reason` describes that replaced row and never this
+/// one — why a run was rotated is the caller's policy, and `None` is the honest
+/// answer for the first run of a lineage, which replaces nothing.
 #[tauri::command]
 pub async fn conversation_open_runtime_session(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 	bot_id: String,
 	started_at: i64,
+	reason: Option<String>,
 ) -> Result<RuntimeSession, TranscriptStoreError> {
 	let participant = ParticipantKey { conversation_id, bot_id };
-	Ok(ready(&state)?.runtime_context().open(participant, started_at, None).await?.into())
+	Ok(ready(&state)?.runtime_context().open(participant, started_at, reason).await?.into())
+}
+
+/// Everything a run about to take over has to be told, as one piece of text. The
+/// prompt is named rather than sent: it is already on the record, and reading it
+/// from there is what makes it the upper bound of its own context instead of
+/// something appended beside a tail that may already hold it.
+#[tauri::command]
+pub async fn conversation_bounded_context(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+	prompt_message_id: String,
+) -> Result<String, TranscriptStoreError> {
+	let participant = ParticipantKey { conversation_id, bot_id };
+	context::bounded_context(ready(&state)?, participant, prompt_message_id).await
+}
+
+/// The recovery point a later context resumes from, folded and stored before the
+/// run that produced the conversation is retired. `None` says there was nothing new
+/// to fold, which is not a failure: the previous checkpoint already stands for
+/// everything but the tail a context reads verbatim anyway.
+#[tauri::command]
+pub async fn conversation_capture_checkpoint(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+	runtime_session_id: Option<String>,
+	created_at: i64,
+) -> Result<Option<ContextCheckpoint>, TranscriptStoreError> {
+	let participant = ParticipantKey { conversation_id, bot_id };
+	Ok(context::capture_checkpoint(ready(&state)?, participant, runtime_session_id, created_at)
+		.await?
+		.map(Into::into))
 }
 
 /// `before_seq` is exclusive, and `None` asks for the newest page: that is the end

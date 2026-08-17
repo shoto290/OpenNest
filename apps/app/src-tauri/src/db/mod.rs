@@ -170,14 +170,15 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
 	Database::open(&connection::file(app)?, crate::claude::store::file(app).as_deref())
 }
 
-/// Every test module under `db` opens a database the same way, on a directory of
-/// its own from [`connection::temp_dir`]. Lives here rather than in each of them
-/// because `Database::open` is private to this module.
+/// Every test that needs a file opens it the same way, on a directory of its own
+/// from [`connection::temp_dir`]. Lives here rather than in each of them because
+/// `Database::open` is private to this module — and it is reachable from the whole
+/// crate because a rule that spans two repositories is not written in either.
 ///
 /// No legacy path: an import is a boot step of its own, and the tests around it are
 /// the ones that ask for it.
 #[cfg(test)]
-pub(in crate::db) fn open(dir: &Path) -> Database {
+pub(crate) fn open(dir: &Path) -> Database {
 	Database::open(&dir.join(connection::FILE_NAME), None).expect("the database opens")
 }
 
