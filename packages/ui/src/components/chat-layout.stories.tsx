@@ -32,6 +32,22 @@ const READY_HEADER = (
 	<AppHeader trailing={<ConnectionStatus state="ready" version="2.1.233" />} />
 )
 
+const CONVERSATION = (
+	<>
+		<UserTurn>How is this workspace laid out?</UserTurn>
+		<AssistantTurn
+			copyText={ANSWER}
+			avatar={<BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />}
+		>
+			{ANSWER}
+		</AssistantTurn>
+	</>
+)
+
+const SCROLLING_TRANSCRIPT = LONG_TRANSCRIPT.map((question) => (
+	<UserTurn key={question}>{question}</UserTurn>
+))
+
 const meta = preview.meta({
 	title: "Layout/ChatLayout",
 	component: ChatLayout,
@@ -51,19 +67,7 @@ const meta = preview.meta({
 })
 
 export const Default = meta.story({
-	args: {
-		children: (
-			<>
-				<UserTurn>How is this workspace laid out?</UserTurn>
-				<AssistantTurn
-					copyText={ANSWER}
-					avatar={<BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />}
-				>
-					{ANSWER}
-				</AssistantTurn>
-			</>
-		),
-	},
+	args: { children: CONVERSATION },
 	parameters: {
 		docs: {
 			description: {
@@ -72,9 +76,12 @@ export const Default = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("banner")).toBeVisible()
 		await expect(canvas.getByRole("textbox", { name: "Prompt" })).toBeVisible()
+		await expect(
+			canvasElement.querySelector('[data-slot="message-scroller-older"]'),
+		).toBeNull()
 	},
 })
 
@@ -96,12 +103,7 @@ export const Empty = meta.story({
 })
 
 export const LongContent = meta.story({
-	args: {
-		busy: true,
-		children: LONG_TRANSCRIPT.map((question) => (
-			<UserTurn key={question}>{question}</UserTurn>
-		)),
-	},
+	args: { busy: true, children: SCROLLING_TRANSCRIPT },
 	parameters: {
 		docs: {
 			description: {
@@ -109,6 +111,69 @@ export const LongContent = meta.story({
 					"Reach for this once the transcript is taller than the viewport. Check that only the transcript scrolls — the header and the composer must stay put — and that the rows wrap inside the full-width transcript however wide the window gets, without pushing the layout sideways. Pick `Default` for a transcript that fits.",
 			},
 		},
+	},
+})
+
+export const OlderMessages = meta.story({
+	args: { older: { has: true, onLoad: fn() }, children: SCROLLING_TRANSCRIPT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the host pages the transcript by cursor. The layout owns nothing here — `older` is handed straight to MessageScroller, so the control sits above the first row inside the scrolling transcript and scrolls with it, never between the header and the transcript. Check that the header and the composer are untouched by it, and pick `Default` for a host that loads the whole conversation at once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Load older messages" }),
+		)
+		await expect(args.older?.onLoad).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const LoadingOlderMessages = meta.story({
+	args: {
+		older: { has: true, isLoading: true, onLoad: fn() },
+		children: SCROLLING_TRANSCRIPT,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while a page request is in flight through the layout. Check that the loading half of the contract survives the hop: the control announces itself busy, refuses a second request, and keeps its name and its focus — a keyboard reader who fired it must not be dropped back to the top of the transcript. Pick `OlderMessages` for the idle control.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const loadOlder = canvas.getByRole("button", {
+			name: "Load older messages",
+		})
+
+		await expect(loadOlder).toHaveAttribute("aria-busy", "true")
+		await expect(loadOlder).toHaveAttribute("aria-disabled", "true")
+
+		await userEvent.click(loadOlder)
+
+		await expect(args.older?.onLoad).not.toHaveBeenCalled()
+		await expect(loadOlder).toHaveFocus()
+	},
+})
+
+export const StartOfOlderMessages = meta.story({
+	args: { older: { has: false, onLoad: fn() }, children: CONVERSATION },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this once the last page has landed. Check that the control is replaced by the start-of-history copy rather than disappearing — the reader needs to know the history above them is finished, not still loading. Pick `OlderMessages` while pages remain.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("Beginning of the conversation"),
+		).toBeVisible()
 	},
 })
 
