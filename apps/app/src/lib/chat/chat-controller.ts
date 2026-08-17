@@ -584,7 +584,7 @@ export function createChatController(
 	 * the chat had never happened, in the middle of the chat, and nothing on the
 	 * screen would say why. The refusal travels to the caller, which leaves the
 	 * prompt on the record for the reader to send again once the store answers. */
-	const carried = async (promptId: string, text: string) => {
+	const contextFor = async (promptId: string, text: string) => {
 		const conversationId = state.conversationId
 		if (run.carried || !conversationId || !botId) {
 			return text
@@ -607,15 +607,15 @@ export function createChatController(
 			dispatch({ type: "promptRejected", id, error: { kind: "notStarted" } })
 			return
 		}
-		let told: string
+		let carried: string
 		try {
-			told = await carried(id, text)
+			carried = await contextFor(id, text)
 		} catch (refusal) {
 			dispatch({ type: "promptRejected", id, error: toStoreError(refusal) })
 			return
 		}
 		try {
-			await driver.submitPrompt(runtime, told)
+			await driver.submitPrompt(runtime, carried)
 			run.carried = true
 			run.prompts += 1
 		} catch (reason) {

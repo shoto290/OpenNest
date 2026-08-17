@@ -37,7 +37,7 @@ use super::contract::TranscriptStoreError;
 /// How many messages a context carries word for word. The bound belongs at the
 /// recent end: what a reconstruction can afford to hold as a summary is what was
 /// said long ago, never what was just said.
-pub const RECENT_TAIL: u32 = 20;
+const RECENT_TAIL: u32 = 20;
 
 /// How many messages one checkpoint folds into its summary. A checkpoint is taken
 /// at every rotation, so the stretch between two of them is normally far shorter
@@ -293,10 +293,10 @@ fn estimated_tokens(summary: &str) -> i64 {
 #[cfg(test)]
 mod tests {
 	use std::fs;
-	use std::path::Path;
 
 	use super::*;
 	use crate::db::connection::temp_dir;
+	use crate::db::open;
 	use crate::db::repositories::messages::{
 		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState,
 	};
@@ -597,10 +597,6 @@ mod tests {
 		}
 	}
 
-	fn opened(dir: &Path) -> Database {
-		crate::db::open(dir)
-	}
-
 	fn occurrences(context: &str, needle: &str) -> usize {
 		context.matches(needle).count()
 	}
@@ -612,7 +608,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_rebuilt_context_carries_the_summary_the_tail_and_the_prompt_once() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		told(&database, "default", "Answer briefly.").await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
@@ -656,7 +652,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_reply_carries_its_target_only_when_the_tail_has_left_it_behind() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
 		prompt(&database, &conversation, "p1", Some("m2")).await;
@@ -697,7 +693,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_second_checkpoint_folds_what_the_first_left_and_keeps_what_it_held() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		let participant = participant_of(&conversation, "default");
 		spoken_so_far(&database, &conversation, SPOKEN).await;
@@ -744,7 +740,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_refused_capture_leaves_the_previous_checkpoint_answering_for_the_chat() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		let participant = participant_of(&conversation, "default");
 		spoken_so_far(&database, &conversation, SPOKEN).await;
@@ -798,7 +794,7 @@ mod tests {
 	#[tokio::test]
 	async fn two_bots_in_one_conversation_are_rebuilt_from_their_own_recovery_points() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		another_bot(&database, &conversation, "second").await;
 		told(&database, "default", "Answer briefly.").await;
@@ -850,7 +846,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_context_for_a_prompt_the_file_does_not_hold_is_refused() {
 		let dir = temp_dir();
-		let database = opened(&dir);
+		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 
 		let refused = bounded_context(

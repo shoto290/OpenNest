@@ -4,6 +4,7 @@ import { type ChatController, createChatController } from "./chat-controller"
 import { isSessionReady } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
+import { ASKED_FOR, NEARING_THE_BOUND, REFUSED, STOPPED } from "./rotation"
 
 import type {
 	ChatMessage,
@@ -1123,11 +1124,6 @@ describe("a run replaced under a conversation that carries on", () => {
 	/** Long enough that a checkpoint has something to fold under the tail, and that
 	 * the tail cannot reach the beginning of the chat. */
 	const HISTORY = 30
-	const ASKED_FOR = "asked for by hand"
-	const REFUSED = "the provider session was refused"
-	const STOPPED = "the provider stopped answering in it"
-	const NEARING_THE_BOUND = "the context was nearing its bound"
-
 	const REFUSAL = {
 		kind: "storage",
 		failure: { kind: "poisonedConnection" },

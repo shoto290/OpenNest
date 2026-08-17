@@ -1,20 +1,21 @@
 import type { TransportError } from "../claude/contract"
 
-/** Why a run was left behind, in the words the durable lineage keeps. Every
- * rotation records one: a replaced row with no reason is a handover nobody can
- * account for afterwards, and the only row that legitimately has none is the first
- * of a lineage, which replaces nothing. */
-export type RotationReason =
-	| "asked for by hand"
-	| "the provider session was refused"
-	| "the provider stopped answering in it"
-	| "the context was nearing its bound"
+/** The words a rotation goes on the record under. They are written to the
+ * lineage and read by whoever asks it later why a run was left behind, so each
+ * is spelled once, here. */
+export const ASKED_FOR = "asked for by hand"
+export const REFUSED = "the provider session was refused"
+export const STOPPED = "the provider stopped answering in it"
+export const NEARING_THE_BOUND = "the context was nearing its bound"
 
-export const ASKED_FOR: RotationReason = "asked for by hand"
-export const REFUSED: RotationReason = "the provider session was refused"
-export const STOPPED: RotationReason = "the provider stopped answering in it"
-export const NEARING_THE_BOUND: RotationReason =
-	"the context was nearing its bound"
+/** Why a run was left behind. Every rotation records one: a replaced row with no
+ * reason is a handover nobody can account for afterwards, and the only row that
+ * legitimately has none is the first of a lineage, which replaces nothing. */
+export type RotationReason =
+	| typeof ASKED_FOR
+	| typeof REFUSED
+	| typeof STOPPED
+	| typeof NEARING_THE_BOUND
 
 /** How many prompts one provider session carries before it is replaced on
  * purpose. The threshold is preventive: a session is rotated while it still
@@ -29,9 +30,9 @@ export const PROMPTS_PER_RUN = 24
  * screen: the row is the host's, and what is here is only what decides whether the
  * next prompt may be given to this process as it stands. */
 export type LiveRun = {
-	/** Whether the process behind this run has already been told the conversation.
-	 * A resumed session was never told and does not need to be — it is the same
-	 * process, still holding what it was told before. */
+	/** Whether the process behind this run holds the conversation already. A
+	 * resumed session does, without ever having been told it here: it is the same
+	 * process, still holding what it heard the first time. */
 	carried: boolean
 	/** How many prompts this run has carried, which is what the preventive
 	 * threshold is measured against. */
@@ -72,8 +73,5 @@ export function rotationFor(
 	run: LiveRun,
 	promptsPerRun: number,
 ): RotationReason | null {
-	if (run.spent) {
-		return run.spent
-	}
-	return run.prompts >= promptsPerRun ? NEARING_THE_BOUND : null
+	return run.spent ?? (run.prompts >= promptsPerRun ? NEARING_THE_BOUND : null)
 }
