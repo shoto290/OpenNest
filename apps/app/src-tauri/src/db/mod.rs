@@ -417,16 +417,23 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	/// The file and the two SQLite writes beside it. The `-wal` is the one that
+	/// matters as much as the database: until a checkpoint folds it back, it holds
+	/// the newest stretch of the transcript in plain text, so restricting the
+	/// database alone would leave the last thing that was said out in the open.
 	#[cfg(unix)]
 	#[test]
-	fn the_database_file_is_reachable_by_its_owner_only() {
+	fn the_database_and_what_it_journals_through_are_reachable_by_their_owner_only() {
 		use std::os::unix::fs::PermissionsExt;
 
 		let dir = temp_dir();
 		let database = open(&dir);
 
-		let mode = fs::metadata(dir.join(FILE_NAME)).expect("metadata").permissions().mode();
-		assert_eq!(mode & 0o777, 0o600, "the transcript must not be world readable");
+		for sibling in ["", "-wal", "-shm"] {
+			let path = dir.join(format!("{FILE_NAME}{sibling}"));
+			let mode = fs::metadata(&path).expect("metadata").permissions().mode();
+			assert_eq!(mode & 0o777, 0o600, "{path:?} must not be world readable");
+		}
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
