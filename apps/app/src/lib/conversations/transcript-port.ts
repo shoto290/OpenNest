@@ -1,4 +1,4 @@
-import type { TranscriptCursor, TranscriptPage } from "./contract"
+import type { TranscriptCursor, TranscriptPage } from "./transcript-contract"
 
 /** Reads one page of a conversation, newest first: a `null` cursor asks for the
  * tail, a cursor asks for what precedes it. `hasMore` is the page's own answer

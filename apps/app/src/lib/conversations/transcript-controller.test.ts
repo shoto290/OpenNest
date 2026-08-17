@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import type { TranscriptDraft, TranscriptMessage } from "./contract"
 import { createFakeTranscriptPort } from "./fake-transcript-port"
+import type { TranscriptDraft, TranscriptMessage } from "./transcript-contract"
 import {
 	createTranscriptController,
 	type TranscriptController,

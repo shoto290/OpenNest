@@ -4,7 +4,7 @@ import type {
 	TranscriptDraft,
 	TranscriptMessage,
 	TranscriptPage,
-} from "./contract"
+} from "./transcript-contract"
 
 export type TranscriptDelta = {
 	conversationId: string

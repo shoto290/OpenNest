@@ -1,4 +1,4 @@
-import type { TranscriptDraft } from "./contract"
+import type { TranscriptDraft } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 import {
 	initialTranscriptState,

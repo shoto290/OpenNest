@@ -5,7 +5,7 @@ import type {
 	TranscriptCompletion,
 	TranscriptMessage,
 	TranscriptPage,
-} from "./contract"
+} from "./transcript-contract"
 import {
 	initialTranscriptState,
 	isTerminalCompletion,

@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from "./contract"
+import type { TranscriptMessage } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 
 export type FakeTranscriptPortOptions = {
