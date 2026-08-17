@@ -7,14 +7,10 @@ import {
 	initialChatState,
 	isSessionReady,
 	isTurnBusy,
-	toSessionSnapshot,
 } from "./chat-state"
 
-import type {
-	ChatMessage,
-	ClaudeEvent,
-	SessionSnapshot,
-} from "../claude/contract"
+import type { ChatMessage, ClaudeEvent } from "../claude/contract"
+import { CONVERSATION, message } from "../conversations/transcript-fixtures"
 
 function applyEvents(state: ChatState, events: ClaudeEvent[]): ChatState {
 	return events.reduce(
@@ -47,44 +43,16 @@ const streamedTurn: ClaudeEvent[] = [
 	{ type: "messageDelta", id: "msg-1", seq: 2, text: " world" },
 ]
 
+const opened: ChatState = chatReducer(initialChatState, {
+	type: "conversationOpened",
+	conversationId: CONVERSATION,
+})
+
 describe("chatReducer", () => {
-	it("assembles a streamed assistant message", () => {
-		const state = applyEvents(initialChatState, streamedTurn)
-		expect(state.turn).toBe("running")
-		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Hello world")
-	})
-
-	it("ignores a replayed messageStarted without resetting text", () => {
-		const state = applyEvents(initialChatState, [
-			...streamedTurn,
-			{ type: "messageStarted", message: assistantMessage() },
-		])
-		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Hello world")
-	})
-
-	it("applies a replayed delta only once, even non-consecutively", () => {
-		const state = applyEvents(initialChatState, [
-			...streamedTurn,
-			{ type: "messageDelta", id: "msg-1", seq: 3, text: "!" },
-			{ type: "messageDelta", id: "msg-1", seq: 2, text: " world" },
-			{ type: "messageDelta", id: "msg-1", seq: 1, text: "Hello" },
-		])
-		expect(state.messages[0].text).toBe("Hello world!")
-	})
-
-	it("keeps two consecutive chunks with identical text", () => {
-		const state = applyEvents(initialChatState, [
-			...streamedTurn,
-			{ type: "messageDelta", id: "msg-1", seq: 3, text: " again" },
-			{ type: "messageDelta", id: "msg-1", seq: 4, text: " again" },
-		])
-		expect(state.messages[0].text).toBe("Hello world again again")
-	})
-
-	it("drops deltas for unknown or completed messages", () => {
-		const completed = applyEvents(initialChatState, [
+	// What was said belongs to the transcript, which is read back from the store.
+	// A reducer that also held it would be a second answer to the same question.
+	it("leaves every message event to the durable transcript", () => {
+		const state = applyEvents(opened, [
 			...streamedTurn,
 			{
 				type: "messageCompleted",
@@ -93,63 +61,68 @@ describe("chatReducer", () => {
 					completion: "complete",
 				}),
 			},
-			{ type: "messageDelta", id: "msg-1", seq: 3, text: " late" },
-			{ type: "messageDelta", id: "msg-unknown", seq: 4, text: "phantom" },
 		])
-		expect(completed.messages).toHaveLength(1)
-		expect(completed.messages[0].text).toBe("Hello world")
+
+		expect(state.turn).toBe("running")
+		expect(state.messages).toEqual([])
 	})
 
-	it("preserves streamed text when messageCompleted arrives empty", () => {
-		const state = applyEvents(initialChatState, [
-			...streamedTurn,
-			{
-				type: "messageCompleted",
-				message: assistantMessage({
-					text: "",
-					completion: "cancelled",
-					timestamp: 42,
-				}),
-			},
-		])
-		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Hello world")
-		expect(state.messages[0].completion).toBe("cancelled")
-		expect(state.messages[0].timestamp).toBe(42)
-	})
+	it("mirrors the transcript it is handed, and settles for the same selection", () => {
+		const messages = [message({ id: "m-1", content: "Hello" })]
+		const mirrored = chatReducer(opened, {
+			type: "transcriptChanged",
+			messages,
+			hasOlder: true,
+		})
 
-	it("keeps messageCompleted idempotent when replayed", () => {
-		const done: ClaudeEvent = {
-			type: "messageCompleted",
-			message: assistantMessage({
-				text: "Hello world",
-				completion: "complete",
+		expect(mirrored.messages).toBe(messages)
+		expect(mirrored.hasOlder).toBe(true)
+		expect(
+			chatReducer(mirrored, {
+				type: "transcriptChanged",
+				messages,
+				hasOlder: true,
 			}),
-		}
-		const state = applyEvents(initialChatState, [...streamedTurn, done, done])
-		expect(state.messages).toHaveLength(1)
-		expect(state.messages[0].text).toBe("Hello world")
+		).toBe(mirrored)
 	})
 
-	it("keeps turnEnded idempotent and finalizes streaming messages", () => {
+	it("keeps the mirrored transcript across a session reset", () => {
+		const mirrored = chatReducer(opened, {
+			type: "transcriptChanged",
+			messages: [message({ id: "m-1" })],
+			hasOlder: true,
+		})
+		const reset = chatReducer(mirrored, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: null,
+		})
+
+		expect(reset.messages).toBe(mirrored.messages)
+		expect(reset.hasOlder).toBe(true)
+		expect(reset.conversationId).toBe(CONVERSATION)
+	})
+
+	it("keeps turnEnded idempotent", () => {
 		const ended: ClaudeEvent = {
 			type: "turnEnded",
 			ended: { sessionId: "s-1", outcome: "cancelled" },
 		}
-		const state = applyEvents(initialChatState, [...streamedTurn, ended, ended])
+		const state = applyEvents(opened, [...streamedTurn, ended, ended])
+
 		expect(state.turn).toBe("idle")
 		expect(state.sessionId).toBe("s-1")
-		expect(state.messages[0].completion).toBe("cancelled")
 	})
 
 	it("rejects illegal turn transitions from stale events", () => {
-		const ended = applyEvents(initialChatState, [
+		const ended = applyEvents(opened, [
 			...streamedTurn,
 			{ type: "turnEnded", ended: { sessionId: "s-1", outcome: "completed" } },
 		])
 		const stale = applyEvents(ended, [
 			{ type: "turnChanged", state: "running" },
 		])
+
 		expect(stale.turn).toBe("idle")
 	})
 
@@ -162,10 +135,10 @@ describe("chatReducer", () => {
 		const stale = chatReducer(reset, {
 			type: "driverEvent",
 			epoch: 1,
-			event: { type: "messageStarted", message: assistantMessage() },
+			event: { type: "turnChanged", state: "running" },
 		})
+
 		expect(stale).toBe(reset)
-		expect(stale.messages).toHaveLength(0)
 	})
 
 	it("never regresses an activity status", () => {
@@ -189,6 +162,7 @@ describe("chatReducer", () => {
 				},
 			},
 		])
+
 		expect(state.activities).toHaveLength(1)
 		expect(state.activities[0].status).toBe("succeeded")
 	})
@@ -196,14 +170,10 @@ describe("chatReducer", () => {
 	it("only accepts permission requests while a turn is active", () => {
 		const request: ClaudeEvent = {
 			type: "permissionRequested",
-			request: {
-				id: "perm-1",
-				toolName: "Bash",
-				title: "Run",
-				detail: null,
-			},
+			request: { id: "perm-1", toolName: "Bash", title: "Run", detail: null },
 		}
 		expect(applyEvents(initialChatState, [request]).permission).toBeNull()
+
 		const active = applyEvents(initialChatState, [
 			{ type: "turnChanged", state: "submitting" },
 			request,
@@ -216,45 +186,59 @@ describe("chatReducer", () => {
 			{ type: "turnChanged", state: "submitting" },
 			{
 				type: "permissionRequested",
-				request: {
-					id: "perm-1",
-					toolName: "Bash",
-					title: "Run",
-					detail: null,
-				},
+				request: { id: "perm-1", toolName: "Bash", title: "Run", detail: null },
 			},
 			{ type: "turnEnded", ended: { sessionId: null, outcome: "cancelled" } },
 		])
+
 		expect(state.permission).toBeNull()
 	})
 
-	it("marks the optimistic message failed when the prompt is rejected", () => {
-		const message: ChatMessage = {
-			id: "local-1",
-			role: "user",
-			text: "hi",
-			completion: "complete",
-			timestamp: 0,
-		}
-		const submitted = chatReducer(initialChatState, {
-			type: "promptSubmitted",
-			message,
-		})
+	// The stored prompt is whole whatever Claude did with it, so the refusal is
+	// held here and never written onto the row.
+	it("marks the refused prompt on the screen alone, and clears it on retry", () => {
+		const submitted = chatReducer(opened, { type: "promptSubmitted" })
 		expect(submitted.turn).toBe("submitting")
+
 		const rejected = chatReducer(submitted, {
 			type: "promptRejected",
-			id: "local-1",
+			id: "m-1",
 			error: { kind: "notStarted" },
 		})
 		expect(rejected.turn).toBe("failed")
-		expect(rejected.messages[0].completion).toBe("failed")
+		expect(rejected.rejectedPromptId).toBe("m-1")
 		expect(rejected.errors).toHaveLength(1)
-		const retried = chatReducer(rejected, {
-			type: "promptRetried",
-			id: "local-1",
-		})
+
+		const retried = chatReducer(rejected, { type: "promptRetried", id: "m-1" })
 		expect(retried.turn).toBe("submitting")
-		expect(retried.messages[0].completion).toBe("complete")
+		expect(retried.rejectedPromptId).toBeNull()
+	})
+
+	it("ignores a retry of a prompt that was never refused", () => {
+		const rejected = chatReducer(
+			chatReducer(opened, { type: "promptSubmitted" }),
+			{ type: "promptRejected", id: "m-1", error: { kind: "notStarted" } },
+		)
+
+		expect(chatReducer(rejected, { type: "promptRetried", id: "m-2" })).toBe(
+			rejected,
+		)
+	})
+
+	// A prompt the store refused has no row to point at, so nothing is marked.
+	it("fails the turn without a row when the store refused the prompt", () => {
+		const rejected = chatReducer(
+			chatReducer(opened, { type: "promptSubmitted" }),
+			{
+				type: "promptRejected",
+				id: null,
+				error: { kind: "writeFailed", detail: "the store refused it" },
+			},
+		)
+
+		expect(rejected.turn).toBe("failed")
+		expect(rejected.rejectedPromptId).toBeNull()
+		expect(rejected.errors.at(-1)?.error.kind).toBe("writeFailed")
 	})
 
 	it("keeps connection and version across a session reset", () => {
@@ -270,9 +254,23 @@ describe("chatReducer", () => {
 			epoch: 1,
 			sessionId: null,
 		})
+
 		expect(reset.connection).toBe("ready")
 		expect(reset.binaryVersion).toBe("1.2.3")
 		expect(reset.epoch).toBe(1)
+	})
+
+	it("tracks the page in flight above the transcript", () => {
+		const loading = chatReducer(opened, { type: "olderLoading", loading: true })
+
+		expect(loading.loadingOlder).toBe(true)
+		expect(chatReducer(loading, { type: "olderLoading", loading: true })).toBe(
+			loading,
+		)
+		expect(
+			chatReducer(loading, { type: "olderLoading", loading: false })
+				.loadingOlder,
+		).toBe(false)
 	})
 })
 
@@ -323,6 +321,7 @@ describe("turn predicates", () => {
 		const ready: ChatState = { ...initialChatState, connection: "ready" }
 		const open = chatReducer(ready, { type: "sessionOpened" })
 		expect(isSessionReady(open)).toBe(true)
+
 		const reset = chatReducer(open, {
 			type: "sessionReset",
 			epoch: 1,
@@ -361,6 +360,7 @@ describe("permission resolution", () => {
 			...pending,
 			{ type: "permissionResolved", id: "perm-1", decision: "allowOnce" },
 		])
+
 		expect(state.permission).toBeNull()
 		expect(state.activities).toHaveLength(1)
 		expect(state.activities[0].status).toBe("succeeded")
@@ -371,6 +371,7 @@ describe("permission resolution", () => {
 			...pending,
 			{ type: "permissionResolved", id: "perm-1", decision: "deny" },
 		])
+
 		expect(state.permission).toBeNull()
 		expect(state.activities[0].status).toBe("failed")
 	})
@@ -389,6 +390,7 @@ describe("permission resolution", () => {
 			},
 			{ type: "permissionResolved", id: "perm-1", decision: "deny" },
 		])
+
 		expect(state.activities[0].status).toBe("succeeded")
 	})
 })
@@ -406,32 +408,67 @@ describe("session reset", () => {
 				status: "succeeded",
 			},
 		},
-		{
-			type: "messageCompleted",
-			message: assistantMessage({ text: "Hello", completion: "complete" }),
-		},
 		{ type: "turnEnded", ended: { sessionId: "s-1", outcome: "completed" } },
 	]
 
-	it("keeps the transcript and clears only what the dead session owned", () => {
+	it("clears everything the dead session owned, steps included", () => {
 		const live = applyEvents(
 			{ ...initialChatState, connection: "ready" },
 			conversation,
 		)
 		const open = chatReducer(live, { type: "sessionOpened" })
+		expect(open.activities).toHaveLength(1)
+
 		const reset = chatReducer(open, {
 			type: "sessionReset",
 			epoch: 1,
 			sessionId: null,
 		})
 
-		expect(reset.messages).toEqual(open.messages)
-		expect(reset.activities).toEqual(open.activities)
+		expect(reset.activities).toEqual([])
 		expect(reset.sessionOpen).toBe(false)
 		expect(reset.sessionId).toBeNull()
 		expect(reset.permission).toBeNull()
 		expect(reset.turn).toBe("idle")
 		expect(reset.epoch).toBe(1)
+	})
+
+	// A step is something a running provider was doing. Carrying a pending one
+	// across the restart leaves the screen reporting work with nothing behind it,
+	// and a cold launch — which reads no step at all — would disagree.
+	it("leaves no step running once the provider that was running it is gone", () => {
+		const working = applyEvents({ ...initialChatState, connection: "ready" }, [
+			{ type: "turnChanged", state: "submitting" },
+			{ type: "turnChanged", state: "running" },
+			{
+				type: "activity",
+				activity: {
+					id: "act-1",
+					title: "Bash · npm test",
+					kind: "tool",
+					status: "running",
+				},
+			},
+			{
+				type: "activity",
+				activity: {
+					id: "perm-1",
+					title: "Run a command",
+					kind: "permission",
+					status: "pending",
+				},
+			},
+		])
+		expect(working.activities).toHaveLength(2)
+
+		const reset = chatReducer(working, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: "s-1",
+		})
+
+		expect(reset.activities).toEqual([])
+		expect(reset.turn).toBe("idle")
 	})
 
 	// The child re-announces its id only on the first prompt of the new session,
@@ -448,136 +485,5 @@ describe("session reset", () => {
 		})
 
 		expect(reset.sessionId).toBe("s-1")
-	})
-
-	it("settles a message left mid-stream by the session that died", () => {
-		const streaming = applyEvents(initialChatState, streamedTurn)
-		const reset = chatReducer(streaming, {
-			type: "sessionReset",
-			epoch: 1,
-			sessionId: null,
-		})
-
-		expect(reset.messages[0].text).toBe("Hello world")
-		expect(reset.messages[0].completion).toBe("failed")
-	})
-})
-
-describe("session restore", () => {
-	const snapshot: SessionSnapshot = {
-		sessionId: "s-1",
-		messages: [assistantMessage({ text: "Hello", completion: "complete" })],
-		activities: [
-			{ id: "act-1", title: "Read", kind: "tool", status: "succeeded" },
-		],
-	}
-
-	function restore(state: ChatState): ChatState {
-		return chatReducer(state, { type: "sessionRestored", snapshot })
-	}
-
-	it("hydrates the stored transcript, activities and session id", () => {
-		const restored = restore(initialChatState)
-
-		expect(restored.messages).toEqual(snapshot.messages)
-		expect(restored.activities).toEqual(snapshot.activities)
-		expect(restored.sessionId).toBe("s-1")
-	})
-
-	it("is a no-op once anything is already on screen", () => {
-		const live = applyEvents(initialChatState, streamedTurn)
-		expect(restore(live)).toBe(live)
-
-		// StrictMode mounts twice, so the second hydration must not replay either.
-		const hydrated = restore(initialChatState)
-		expect(restore(hydrated)).toBe(hydrated)
-	})
-
-	it("keeps the hydrated transcript across the session reset that follows", () => {
-		const reset = chatReducer(restore(initialChatState), {
-			type: "sessionReset",
-			epoch: 1,
-			sessionId: null,
-		})
-
-		expect(reset.messages).toEqual(snapshot.messages)
-		expect(reset.activities).toEqual(snapshot.activities)
-	})
-
-	// Quitting mid-answer writes a message the reducer never settled. It comes back
-	// stopped, which is what happened, and the reset that follows the boot must not
-	// turn it into a failure the reader never saw.
-	it("brings a transcript interrupted mid-stream back as stopped", () => {
-		const interrupted = toSessionSnapshot(
-			applyEvents(initialChatState, streamedTurn),
-		)
-		expect(interrupted.messages[0].completion).toBe("cancelled")
-
-		const restored = chatReducer(initialChatState, {
-			type: "sessionRestored",
-			snapshot: interrupted,
-		})
-		const reset = chatReducer(restored, {
-			type: "sessionReset",
-			epoch: 1,
-			sessionId: null,
-		})
-
-		expect(reset.messages[0]).toMatchObject({
-			text: "Hello world",
-			completion: "cancelled",
-		})
-	})
-
-	it("leaves errors and pending permissions out of the snapshot it writes", () => {
-		const live = applyEvents(initialChatState, [
-			{ type: "turnChanged", state: "submitting" },
-			{ type: "messageStarted", message: assistantMessage() },
-			{
-				type: "permissionRequested",
-				request: {
-					id: "perm-1",
-					toolName: "Bash",
-					title: "Run",
-					detail: null,
-				},
-			},
-			{ type: "failed", error: { kind: "notStarted" } },
-		])
-		expect(live.errors).toHaveLength(1)
-		expect(live.permission).not.toBeNull()
-
-		expect(toSessionSnapshot(live)).toEqual({
-			sessionId: live.sessionId,
-			messages: [assistantMessage({ completion: "cancelled" })],
-			activities: live.activities,
-		})
-	})
-
-	// A turn rewrites the whole file once a second, so what goes on disk has to be
-	// bounded even though what stays on screen is not.
-	it("writes only the most recent messages and activities", () => {
-		const state: ChatState = {
-			...initialChatState,
-			messages: Array.from({ length: 250 }, (_, index) =>
-				assistantMessage({ id: `msg-${index + 1}`, completion: "complete" }),
-			),
-			activities: Array.from({ length: 250 }, (_, index) => ({
-				id: `act-${index + 1}`,
-				title: "Read",
-				kind: "tool" as const,
-				status: "succeeded" as const,
-			})),
-		}
-
-		const snapshot = toSessionSnapshot(state)
-
-		expect(snapshot.messages).toHaveLength(200)
-		expect(snapshot.messages[0].id).toBe("msg-51")
-		expect(snapshot.messages.at(-1)?.id).toBe("msg-250")
-		expect(snapshot.activities).toHaveLength(200)
-		expect(snapshot.activities[0].id).toBe("act-51")
-		expect(snapshot.activities.at(-1)?.id).toBe("act-250")
-		expect(state.messages).toHaveLength(250)
 	})
 })

@@ -14,7 +14,9 @@ import {
 	workingStateFor,
 } from "./screen-model"
 
-import type { ActivityEvent, ChatMessage } from "../claude/contract"
+import type { ActivityEvent } from "../claude/contract"
+import type { TranscriptMessage } from "../conversations/transcript-contract"
+import { message as storedMessage } from "../conversations/transcript-fixtures"
 
 function activity(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
 	return {
@@ -26,21 +28,14 @@ function activity(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
 	}
 }
 
-function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
-	return {
-		id: "msg-1",
-		role: "assistant",
-		text: "",
-		completion: "streaming",
-		timestamp: 0,
-		...overrides,
-	}
+function message(overrides: Partial<TranscriptMessage> = {}): TranscriptMessage {
+	return storedMessage({ id: "msg-1", completion: "streaming", ...overrides })
 }
 
-function prompt(overrides: Partial<ChatMessage> = {}): ChatMessage {
+function prompt(overrides: Partial<TranscriptMessage> = {}): TranscriptMessage {
 	return message({
 		role: "user",
-		text: "And?",
+		content: "And?",
 		completion: "complete",
 		...overrides,
 	})
@@ -78,7 +73,7 @@ describe("toActivityItems", () => {
 describe("toTranscriptRows", () => {
 	it("publishes a paragraph only once a blank line has closed it", () => {
 		const rows = toTranscriptRows([
-			message({ text: "First paragraph.\n\nSecond one, still bei" }),
+			message({ content: "First paragraph.\n\nSecond one, still bei" }),
 		])
 
 		expect(rows.map((row) => row.text)).toEqual(["First paragraph."])
@@ -86,11 +81,11 @@ describe("toTranscriptRows", () => {
 	})
 
 	it("hands back the same rows for a message that has not moved", () => {
-		const settled = message({ id: "a", text: "One.", completion: "complete" })
-		const live = message({ id: "b", text: "Two.\n\n" })
+		const settled = message({ id: "a", content: "One.", completion: "complete" })
+		const live = message({ id: "b", content: "Two.\n\n" })
 
 		const first = toTranscriptRows([settled, live])
-		const second = toTranscriptRows([settled, { ...live, text: "Two.\n\nThr" }])
+		const second = toTranscriptRows([settled, { ...live, content: "Two.\n\nThr" }])
 
 		// The row the reader is already looking at must keep its identity, or the
 		// memoised transcript re-renders every row on every delta.
@@ -99,7 +94,7 @@ describe("toTranscriptRows", () => {
 
 	it("releases the trailing paragraph when the turn ends", () => {
 		const rows = toTranscriptRows([
-			message({ text: "One.\n\nTwo.", completion: "complete" }),
+			message({ content: "One.\n\nTwo.", completion: "complete" }),
 		])
 
 		expect(rows.map((row) => row.text)).toEqual(["One.", "Two."])
@@ -109,7 +104,7 @@ describe("toTranscriptRows", () => {
 	it("carries how the turn ended on its closing row alone", () => {
 		const rows = toTranscriptRows([
 			message({
-				text: "Half an answer.\n\nStopped here.",
+				content: "Half an answer.\n\nStopped here.",
 				completion: "cancelled",
 			}),
 		])
@@ -138,7 +133,7 @@ describe("toTranscriptRows", () => {
 			message({
 				id: "local-1",
 				role: "user",
-				text: "One.\n\nTwo.",
+				content: "One.\n\nTwo.",
 				completion: "complete",
 			}),
 		])
@@ -152,15 +147,15 @@ describe("toRuns", () => {
 	it("gathers consecutive rows from the same speaker", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				message({ id: "a", text: "One.\n\nTwo.", completion: "complete" }),
+				message({ id: "a", content: "One.\n\nTwo.", completion: "complete" }),
 				message({
 					id: "local-1",
 					role: "user",
-					text: "And?",
+					content: "And?",
 					completion: "complete",
 				}),
-				message({ id: "b", text: "Three.", completion: "complete" }),
-				message({ id: "c", text: "Four.", completion: "complete" }),
+				message({ id: "b", content: "Three.", completion: "complete" }),
+				message({ id: "c", content: "Four.", completion: "complete" }),
 			]),
 		)
 
@@ -175,8 +170,8 @@ describe("toRuns", () => {
 	it("gathers prompts sent within minutes of each other", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				prompt({ id: "local-1", timestamp: 0 }),
-				prompt({ id: "local-2", timestamp: 60_000 }),
+				prompt({ id: "local-1", createdAt:0 }),
+				prompt({ id: "local-2", createdAt:60_000 }),
 			]),
 		)
 
@@ -186,8 +181,8 @@ describe("toRuns", () => {
 	it("opens a new block after a long pause", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				prompt({ id: "local-1", timestamp: 0 }),
-				prompt({ id: "local-2", timestamp: 6 * 60_000 }),
+				prompt({ id: "local-1", createdAt:0 }),
+				prompt({ id: "local-2", createdAt:6 * 60_000 }),
 			]),
 		)
 
@@ -197,9 +192,9 @@ describe("toRuns", () => {
 	it("holds a long burst together while every pause stays short", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				prompt({ id: "local-1", timestamp: 0 }),
-				prompt({ id: "local-2", timestamp: 4 * 60_000 }),
-				prompt({ id: "local-3", timestamp: 8 * 60_000 }),
+				prompt({ id: "local-1", createdAt:0 }),
+				prompt({ id: "local-2", createdAt:4 * 60_000 }),
+				prompt({ id: "local-3", createdAt:8 * 60_000 }),
 			]),
 		)
 
@@ -209,7 +204,7 @@ describe("toRuns", () => {
 	it("keeps the paragraphs of one answer together", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				message({ text: "One.\n\nTwo.\n\nThree.", completion: "complete" }),
+				message({ content: "One.\n\nTwo.\n\nThree.", completion: "complete" }),
 			]),
 		)
 
@@ -268,7 +263,7 @@ describe("workingStateFor", () => {
 	it("thinks until the first token, then writes", () => {
 		expect(workingStateFor(chatState())?.kind).toBe("thinking")
 		expect(
-			workingStateFor(chatState({ messages: [message({ text: "Well" })] }))
+			workingStateFor(chatState({ messages: [message({ content: "Well" })] }))
 				?.kind,
 		).toBe("writing")
 	})
@@ -338,7 +333,7 @@ describe("lastAssistantTextFor", () => {
 		expect(
 			lastAssistantTextFor(
 				chatState({
-					messages: [message({ text: "  ", completion: "complete" })],
+					messages: [message({ content: "  ", completion: "complete" })],
 				}),
 			),
 		).toBeUndefined()
@@ -347,22 +342,22 @@ describe("lastAssistantTextFor", () => {
 	it("holds the last settled reply while the next one streams", () => {
 		const state = chatState({
 			messages: [
-				message({ id: "a", text: "Done", completion: "complete" }),
-				message({ id: "b", text: "Still wri" }),
+				message({ id: "a", content: "Done", completion: "complete" }),
+				message({ id: "b", content: "Still wri" }),
 			],
 		})
 
 		expect(lastAssistantTextFor(state)).toBe("Done")
 		expect(
-			lastAssistantTextFor(chatState({ messages: [message({ text: "Wri" })] })),
+			lastAssistantTextFor(chatState({ messages: [message({ content: "Wri" })] })),
 		).toBeUndefined()
 	})
 
 	it("keeps the newest reply, not the one before it", () => {
 		const state = chatState({
 			messages: [
-				message({ id: "a", text: "First", completion: "complete" }),
-				message({ id: "b", text: "Second", completion: "complete" }),
+				message({ id: "a", content: "First", completion: "complete" }),
+				message({ id: "b", content: "Second", completion: "complete" }),
 			],
 		})
 
@@ -372,7 +367,7 @@ describe("lastAssistantTextFor", () => {
 	it("survives a prompt sent after the reply", () => {
 		const state = chatState({
 			messages: [
-				message({ id: "a", text: "Done", completion: "complete" }),
+				message({ id: "a", content: "Done", completion: "complete" }),
 				prompt({ id: "b" }),
 			],
 		})

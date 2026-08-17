@@ -5,6 +5,7 @@ import { createFakeChatDriver } from "./fake-driver"
 import { type SidebarActivity, sidebarActivityFor } from "./screen-model"
 
 import type { TurnState } from "../claude/contract"
+import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 
 const STEP_MS = 10
 const TURN_STEPS = 12
@@ -18,9 +19,9 @@ const startedHarness = async (): Promise<ChatController> => {
 		stepMs: STEP_MS,
 		replyFor: () => REPLY,
 	})
-	const controller = createChatController(driver)
+	const controller = createChatController(driver, createFakeTranscriptStore())
 	controller.attach()
-	await controller.start()
+	await controller.boot()
 	await vi.runAllTimersAsync()
 	return controller
 }

@@ -5,14 +5,21 @@ import { isSessionReady } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
 
+import type { ChatMessage, ClaudeEvent } from "../claude/contract"
+import {
+	createFakeTranscriptStore,
+	FAKE_CHAT_ID,
+} from "../conversations/fake-transcript-store"
+import type { TranscriptStore } from "../conversations/store-port"
 import type {
-	ChatMessage,
-	ClaudeEvent,
-	SessionSnapshot,
-} from "../claude/contract"
+	TranscriptCompletion,
+	TranscriptMessage,
+} from "../conversations/transcript-contract"
+import { message as storedMessage } from "../conversations/transcript-fixtures"
+import { isTerminalCompletion } from "../conversations/transcript-state"
 
 const STEP_MS = 10
-const PERSIST_MS = 1000
+const REPLY = "one two three four five six"
 
 const STREAMING_MESSAGE: ChatMessage = {
 	id: "msg-1",
@@ -22,79 +29,77 @@ const STREAMING_MESSAGE: ChatMessage = {
 	timestamp: 0,
 }
 
-const EMPTY_SNAPSHOT: SessionSnapshot = {
-	sessionId: null,
-	messages: [],
-	activities: [],
-}
-
-const STORED_SNAPSHOT: SessionSnapshot = {
-	sessionId: "s-stored",
-	messages: [
-		{
-			id: "local-3",
-			role: "user",
-			text: "hello",
-			completion: "complete",
-			timestamp: 0,
-		},
-		{
-			id: "fake-msg-9",
-			role: "assistant",
-			text: "hi",
-			completion: "complete",
-			timestamp: 0,
-		},
-	],
-	activities: [
-		{ id: "act-1", title: "Read", kind: "tool", status: "succeeded" },
-	],
-}
-
 type Harness = {
 	driver: FakeChatDriver
+	store: TranscriptStore
 	controller: ChatController
 	detach: () => void
 }
 
-type StoredHarness = Harness & {
-	saved: SessionSnapshot[]
+type HarnessOptions = {
+	store?: TranscriptStore
+	replyFor?: (prompt: string) => string
+	driver?: (fake: FakeChatDriver) => ChatDriver
 }
 
-function createHarness(): Harness {
-	const driver = createFakeChatDriver({
-		stepMs: STEP_MS,
-		replyFor: () => "one two three four five six",
-	})
-	const controller = createChatController(driver)
-	const detach = controller.attach()
-	return { driver, controller, detach }
-}
+let launches = 0
 
-function storedHarness(snapshot: SessionSnapshot): StoredHarness {
+/** One controller over one store, with ids of its own so a second launch on the
+ * same store can never mint an id the first one already wrote. */
+const createHarness = (options: HarnessOptions = {}): Harness => {
+	launches += 1
+	const launch = launches
+	let minted = 0
+	let clock = 1000
 	const fake = createFakeChatDriver({
 		stepMs: STEP_MS,
-		replyFor: () => "one two three",
+		replyFor: options.replyFor ?? (() => REPLY),
 	})
-	const saved: SessionSnapshot[] = []
-	const driver: FakeChatDriver = {
-		...fake,
-		loadSession: () => Promise.resolve(snapshot),
-		saveSession: (next) => {
-			saved.push(next)
-			return Promise.resolve()
+	const store = options.store ?? createFakeTranscriptStore()
+	const driver = options.driver ? options.driver(fake) : fake
+	const controller = createChatController(driver, store, {
+		newId: () => {
+			minted += 1
+			return `launch-${launch}-${minted}`
 		},
-	}
-	const controller = createChatController(driver)
-	return { driver, controller, detach: controller.attach(), saved }
+		now: () => {
+			clock += 1
+			return clock
+		},
+	})
+	return { driver: fake, store, controller, detach: controller.attach() }
 }
 
-async function startedHarness(): Promise<Harness> {
-	const harness = createHarness()
-	await harness.controller.start()
+const bootedHarness = async (
+	options: HarnessOptions = {},
+): Promise<Harness> => {
+	const harness = createHarness(options)
+	await harness.controller.boot()
 	await vi.runAllTimersAsync()
 	return harness
 }
+
+/** What a cold start paints: a controller that has only ever read the store. */
+const reload = async (store: TranscriptStore): Promise<TranscriptMessage[]> => {
+	const harness = await bootedHarness({ store })
+	const { messages } = harness.controller.getState()
+	harness.detach()
+	return messages
+}
+
+const spoken = (messages: TranscriptMessage[]) =>
+	messages.map((message) => [message.role, message.content, message.completion])
+
+const seeded = (count: number): TranscriptMessage[] =>
+	Array.from({ length: count }, (_, index) =>
+		storedMessage({
+			id: `stored-${index + 1}`,
+			conversationId: FAKE_CHAT_ID,
+			seq: index + 1,
+			role: index % 2 === 0 ? "user" : "assistant",
+			content: `stored ${index + 1}`,
+		}),
+	)
 
 describe("createChatController", () => {
 	beforeEach(() => {
@@ -105,36 +110,176 @@ describe("createChatController", () => {
 		vi.useRealTimers()
 	})
 
-	it("runs a happy-path turn with an optimistic user message", async () => {
-		const { controller, detach } = await startedHarness()
+	it("runs a happy-path turn and stores everything the reader can see", async () => {
+		const { controller, store, detach } = await bootedHarness()
 
-		const sending = controller.send("hello")
-		const optimistic = controller.getState()
-		expect(optimistic.messages).toHaveLength(1)
-		expect(optimistic.messages[0]).toMatchObject({
-			role: "user",
-			text: "hello",
-		})
-		expect(optimistic.turn).toBe("submitting")
+		// Submitted, and the turn still on its way: the driver answers on a timer.
+		await controller.send("hello")
+		expect(controller.getState().turn).toBe("submitting")
 
-		await sending
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
 		expect(state.turn).toBe("idle")
-		expect(state.messages).toHaveLength(2)
-		expect(state.messages[1]).toMatchObject({
-			role: "assistant",
-			completion: "complete",
-			text: "one two three four five six",
-		})
+		expect(spoken(state.messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", REPLY, "complete"],
+		])
 		expect(state.activities.at(-1)?.status).toBe("succeeded")
-		expect(state.errors).toHaveLength(0)
+		expect(state.errors).toEqual([])
+		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 		detach()
 	})
 
+	// The prompt is on the record before Claude is asked anything: an answer to a
+	// question no reload could show is worse than a prompt that never left.
+	it("writes the prompt down before it submits it", async () => {
+		const order: string[] = []
+		const store = createFakeTranscriptStore()
+		const { controller } = await bootedHarness({
+			store: {
+				...store,
+				appendUserMessage: (message) => {
+					order.push("stored")
+					return store.appendUserMessage(message)
+				},
+			},
+			driver: (fake) => ({
+				...fake,
+				submitPrompt: (text) => {
+					order.push("submitted")
+					return fake.submitPrompt(text)
+				},
+			}),
+		})
+
+		await controller.send("hello")
+
+		expect(order).toEqual(["stored", "submitted"])
+	})
+
+	it.each(["startTurn", "appendUserMessage"] as const)(
+		"never submits a prompt the store refused at %s",
+		async (member) => {
+			const store = createFakeTranscriptStore()
+			const refusal = {
+				kind: "storage",
+				failure: { kind: "poisonedConnection" },
+			}
+			const { controller, driver } = await bootedHarness({
+				store: { ...store, [member]: () => Promise.reject(refusal) },
+			})
+			const submitSpy = vi.spyOn(driver, "submitPrompt")
+
+			await controller.send("hello")
+			await vi.runAllTimersAsync()
+
+			const state = controller.getState()
+			expect(submitSpy).not.toHaveBeenCalled()
+			expect(state.messages).toEqual([])
+			expect(state.turn).toBe("failed")
+			expect(state.errors.at(-1)?.error).toEqual({
+				kind: "writeFailed",
+				detail: "the transcript store refused it (storage)",
+			})
+			expect(await reload(store)).toEqual([])
+		},
+	)
+
+	/** The reader may be shown less than the store holds — a write still in flight
+	 * is not a lie — but never more: no id, no word and no ending on screen that a
+	 * relaunch would fail to bring back. */
+	const neverAheadOfStorage = (
+		visible: TranscriptMessage[],
+		stored: TranscriptMessage[],
+	) => {
+		expect(visible.map((message) => message.id)).toEqual(
+			stored.map((message) => message.id),
+		)
+		expect(visible.map((message) => message.content)).toEqual(
+			stored.map((message) => message.content),
+		)
+		for (const [index, message] of visible.entries()) {
+			if (isTerminalCompletion(message.completion)) {
+				expect(message.completion).toBe(stored[index].completion)
+			}
+		}
+	}
+
+	const refusingStore = (
+		member: "openAssistantMessage" | "appendText" | "finalizeMessage",
+	) => {
+		const store = createFakeTranscriptStore()
+		return {
+			...store,
+			[member]: () =>
+				Promise.reject({
+					kind: "storage",
+					failure: { kind: "poisonedConnection" },
+				}),
+		}
+	}
+
+	// A reply the store never took has nothing on screen to lose: the row is not
+	// shown, and the deltas and the ending that follow it find nothing to move.
+	it("shows no reply at all when the store refuses to open it", async () => {
+		const store = refusingStore("openAssistantMessage")
+		const { controller } = await bootedHarness({ store })
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(spoken(state.messages)).toEqual([["user", "hello", "complete"]])
+		expect(state.errors.at(-1)?.error).toEqual({
+			kind: "writeFailed",
+			detail: "the transcript store refused it (storage)",
+		})
+		neverAheadOfStorage(state.messages, await reload(store))
+	})
+
+	// The words are the write. One the store refused is one the reader must not be
+	// reading, however far the stream got.
+	it("shows no word of a reply the store refused to write", async () => {
+		const store = refusingStore("appendText")
+		const { controller } = await bootedHarness({ store })
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.messages.at(-1)).toMatchObject({
+			role: "assistant",
+			content: "",
+		})
+		expect(state.errors.at(-1)?.error.kind).toBe("writeFailed")
+		neverAheadOfStorage(state.messages, await reload(store))
+	})
+
+	// An ending the store refused leaves the message open on disk. The screen says
+	// the same: still unfinished, which is what the next launch reads back.
+	it("never settles a reply the store refused to close", async () => {
+		const store = refusingStore("finalizeMessage")
+		const { controller } = await bootedHarness({ store })
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		const answer = state.messages.at(-1)
+		expect(answer).toMatchObject({ content: REPLY, completion: "streaming" })
+		expect(state.errors.at(-1)?.error.kind).toBe("writeFailed")
+
+		const stored = await reload(store)
+		expect(stored.at(-1)).toMatchObject({
+			content: REPLY,
+			completion: "interrupted",
+		})
+		neverAheadOfStorage(state.messages, stored)
+	})
+
 	it("refuses a second prompt while a turn is running", async () => {
-		const { controller } = await startedHarness()
+		const { controller } = await bootedHarness()
 		await controller.send("first")
 		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
 		await controller.send("second")
@@ -146,8 +291,8 @@ describe("createChatController", () => {
 		expect(state.errors.at(-1)?.error.kind).toBe("turnAlreadyRunning")
 	})
 
-	it("stops a streaming turn and marks the message cancelled", async () => {
-		const { controller } = await startedHarness()
+	it("stores a stopped turn as cancelled, with the words it had", async () => {
+		const { controller, store } = await bootedHarness()
 		await controller.send("hello")
 		await vi.advanceTimersByTimeAsync(STEP_MS * 5)
 		expect(controller.getState().turn).toBe("running")
@@ -155,17 +300,19 @@ describe("createChatController", () => {
 		await controller.stop()
 		await vi.runAllTimersAsync()
 
-		const state = controller.getState()
-		expect(state.turn).toBe("idle")
-		const assistant = state.messages.at(-1)
-		expect(assistant?.completion).toBe("cancelled")
-		expect(assistant?.text.length).toBeLessThan(
-			"one two three four five six".length,
+		const answer = controller.getState().messages.at(-1)
+		expect(controller.getState().turn).toBe("idle")
+		expect(answer?.completion).toBe("cancelled")
+		expect(answer?.content.length).toBeGreaterThan(0)
+		expect(answer?.content.length).toBeLessThan(REPLY.length)
+		expect(spoken(await reload(store))).toEqual(
+			spoken(controller.getState().messages),
 		)
 	})
 
-	it("surfaces a failed turn and keeps partial text", async () => {
-		const { controller } = await startedHarness()
+	it("stores a failed turn as failed, with the words it had", async () => {
+		const { controller, store } = await bootedHarness()
+
 		await controller.send("explain /fail")
 		await vi.runAllTimersAsync()
 
@@ -173,11 +320,229 @@ describe("createChatController", () => {
 		expect(state.turn).toBe("failed")
 		expect(state.errors.at(-1)?.error.kind).toBe("crashed")
 		expect(state.messages.at(-1)?.completion).toBe("failed")
-		expect(state.activities.at(-1)?.status).toBe("failed")
+		expect(state.messages.at(-1)?.content.length).toBeGreaterThan(0)
+		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
+	})
+
+	// The process went away under the stream. Nothing observed it fail and nobody
+	// stopped it, so it is neither failed nor cancelled.
+	it("stores a reply the session died under as interrupted", async () => {
+		const { driver, controller, store } = await bootedHarness()
+		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+		await controller.send("hello")
+		driver.pushEvent({ type: "turnChanged", state: "running" })
+		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+		driver.pushEvent({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 1,
+			text: "Half",
+		})
+
+		await controller.restart()
+		await vi.runAllTimersAsync()
+
+		expect(spoken(controller.getState().messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "Half", "interrupted"],
+		])
+		expect(spoken(await reload(store))).toEqual(
+			spoken(controller.getState().messages),
+		)
+	})
+
+	// Nothing on disk can resume a stream, so a launch that finds one reads it as
+	// the interruption it is, rather than as a message still being written.
+	it("reads a reply left mid-stream by a dead host back as interrupted", async () => {
+		const store = createFakeTranscriptStore({
+			messages: [
+				storedMessage({
+					id: "m-1",
+					conversationId: FAKE_CHAT_ID,
+					seq: 1,
+					role: "user",
+					content: "hello",
+				}),
+				storedMessage({
+					id: "m-2",
+					conversationId: FAKE_CHAT_ID,
+					seq: 2,
+					content: "Half an ans",
+					completion: "streaming",
+				}),
+			],
+		})
+
+		expect(spoken(await reload(store))).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "Half an ans", "interrupted"],
+		])
+	})
+
+	it("keeps a replayed start, a late delta and a second ending harmless", async () => {
+		const { driver, controller, store } = await bootedHarness()
+		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+		await controller.send("hello")
+
+		driver.pushEvent({ type: "turnChanged", state: "running" })
+		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Hel" })
+		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 2, text: "lo" })
+		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Hel" })
+		driver.pushEvent({
+			type: "turnEnded",
+			ended: { sessionId: "s-1", outcome: "completed" },
+		})
+		driver.pushEvent({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 9,
+			text: " late",
+		})
+		driver.pushEvent({
+			type: "turnEnded",
+			ended: { sessionId: "s-1", outcome: "failed" },
+		})
+		driver.pushEvent({
+			type: "messageCompleted",
+			message: { ...STREAMING_MESSAGE, text: "", completion: "cancelled" },
+		})
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(spoken(state.messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "Hello", "complete"],
+		])
+		expect(state.errors).toEqual([])
+		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
+	})
+
+	// A restart re-subscribes, so a frame the dead session emits late reaches the
+	// listener it was registered with, which still carries the old epoch.
+	it("writes nothing for events from the session that died", async () => {
+		const listeners: Array<(event: ClaudeEvent) => void> = []
+		const { controller, store } = await bootedHarness({
+			driver: (fake) => ({
+				...fake,
+				subscribe: (onEvent) => {
+					listeners.push(onEvent)
+					return fake.subscribe(onEvent)
+				},
+			}),
+		})
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		await controller.restart()
+		await vi.runAllTimersAsync()
+		const restarted = controller.getState().messages
+		const deadListener = listeners[0]
+
+		deadListener({ type: "turnChanged", state: "running" })
+		deadListener({
+			type: "messageStarted",
+			message: { ...STREAMING_MESSAGE, id: "ghost" },
+		})
+		deadListener({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 99,
+			text: "phantom",
+		})
+		deadListener({
+			type: "turnEnded",
+			ended: { sessionId: "dead", outcome: "failed" },
+		})
+		await vi.runAllTimersAsync()
+
+		expect(controller.getState().messages).toEqual(restarted)
+		expect(controller.getState().turn).toBe("idle")
+		expect(spoken(await reload(store))).toEqual(spoken(restarted))
+	})
+
+	it("marks the prompt Claude refused without touching the row it stored", async () => {
+		const store = createFakeTranscriptStore()
+		let failNext = true
+		const { controller } = await bootedHarness({
+			store,
+			replyFor: () => "one two three",
+			driver: (fake) => ({
+				...fake,
+				submitPrompt: (text) => {
+					if (failNext) {
+						failNext = false
+						return Promise.reject({
+							kind: "writeFailed",
+							detail: "network down",
+						})
+					}
+					return fake.submitPrompt(text)
+				},
+			}),
+		})
+
+		await controller.send("hello")
+		const failed = controller.getState()
+		expect(failed.turn).toBe("failed")
+		expect(failed.rejectedPromptId).toBe(failed.messages[0].id)
+		expect(failed.messages[0].completion).toBe("complete")
+		expect(failed.errors.at(-1)?.error.kind).toBe("writeFailed")
+
+		await controller.retry(failed.messages[0].id)
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.turn).toBe("idle")
+		expect(state.rejectedPromptId).toBeNull()
+		expect(spoken(state.messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "one two three", "complete"],
+		])
+		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
+	})
+
+	it("retries nothing but the prompt that was refused", async () => {
+		const { controller } = await bootedHarness()
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+		const settled = controller.getState()
+
+		await controller.retry(settled.messages[0].id)
+
+		expect(controller.getState()).toBe(settled)
+	})
+
+	it("leaves stopping deterministically when cancelTurn is rejected", async () => {
+		const { controller } = await bootedHarness({
+			replyFor: () => "one two three",
+			driver: (fake) => ({
+				...fake,
+				cancelTurn: () =>
+					Promise.reject({ kind: "writeFailed", detail: "pipe closed" }),
+			}),
+		})
+		await controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
+		expect(controller.getState().turn).toBe("running")
+
+		await controller.stop()
+		const rejected = controller.getState()
+		expect(rejected.turn).toBe("failed")
+		expect(rejected.errors.at(-1)?.error.kind).toBe("writeFailed")
+
+		await vi.runAllTimersAsync()
+		expect(controller.getState().turn).not.toBe("stopping")
+
+		await controller.send("here we go again")
+		await vi.runAllTimersAsync()
+		expect(controller.getState().turn).toBe("idle")
+		expect(controller.getState().messages.at(-1)?.completion).toBe("complete")
 	})
 
 	it("pauses on a permission request and resumes on allowOnce", async () => {
-		const { controller } = await startedHarness()
+		const { controller } = await bootedHarness()
 		await controller.send("list the files /permission")
 		await vi.runAllTimersAsync()
 
@@ -194,17 +559,30 @@ describe("createChatController", () => {
 		expect(state.messages.at(-1)?.completion).toBe("complete")
 	})
 
+	it("cancels the turn when the permission is denied", async () => {
+		const { controller, store } = await bootedHarness()
+		await controller.send("delete everything /permission")
+		await vi.runAllTimersAsync()
+
+		const paused = controller.getState()
+		await controller.respond(paused.permission?.id ?? "", "deny")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.permission).toBeNull()
+		expect(state.turn).toBe("idle")
+		expect(state.messages.at(-1)?.completion).toBe("cancelled")
+		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
+	})
+
 	it("leaves no permission activity pending after either decision", async () => {
 		for (const decision of ["allowOnce", "deny"] as const) {
-			const { controller } = await startedHarness()
+			const { controller } = await bootedHarness()
 			await controller.send("list the files /permission")
 			await vi.runAllTimersAsync()
 
 			const paused = controller.getState()
 			expect(paused.permission).not.toBeNull()
-			expect(
-				paused.activities.some((entry) => entry.status === "pending"),
-			).toBe(true)
 
 			await controller.respond(paused.permission?.id ?? "", decision)
 			await vi.runAllTimersAsync()
@@ -221,201 +599,42 @@ describe("createChatController", () => {
 		}
 	})
 
-	it("cancels the turn when the permission is denied", async () => {
-		const { controller } = await startedHarness()
-		await controller.send("delete everything /permission")
-		await vi.runAllTimersAsync()
-
-		const paused = controller.getState()
-		await controller.respond(paused.permission?.id ?? "", "deny")
-		await vi.runAllTimersAsync()
-
-		const state = controller.getState()
-		expect(state.permission).toBeNull()
-		expect(state.turn).toBe("idle")
-		expect(state.messages.at(-1)?.completion).toBe("cancelled")
-	})
-
 	it("rejects a prompt sent before the session starts", async () => {
-		const { controller } = createHarness()
-		await controller.send("hello")
+		const harness = createHarness()
+		await harness.controller.boot()
+		vi.spyOn(harness.driver, "submitPrompt").mockRejectedValue({
+			kind: "notStarted",
+		})
 
-		const failed = controller.getState()
-		expect(failed.turn).toBe("failed")
-		expect(failed.messages[0].completion).toBe("failed")
-		expect(failed.errors.at(-1)?.error.kind).toBe("notStarted")
+		await harness.controller.send("hello")
+
+		const state = harness.controller.getState()
+		expect(state.turn).toBe("failed")
+		expect(state.errors.at(-1)?.error.kind).toBe("notStarted")
+		// It was written down all the same: the reader wrote it, and the store took it.
+		expect(spoken(state.messages)).toEqual([["user", "hello", "complete"]])
 	})
 
-	it("retries a rejected optimistic message with the same text", async () => {
-		const fake = createFakeChatDriver({
-			stepMs: STEP_MS,
-			replyFor: () => "one two three",
-		})
-		let failNext = true
-		const flaky: ChatDriver = {
-			...fake,
-			submitPrompt: (text) => {
-				if (failNext) {
-					failNext = false
-					return Promise.reject({ kind: "writeFailed", detail: "network down" })
-				}
-				return fake.submitPrompt(text)
-			},
-		}
-		const controller = createChatController(flaky)
-		controller.attach()
-		await controller.start()
-
-		await controller.send("hello")
-		const failed = controller.getState()
-		expect(failed.turn).toBe("failed")
-		expect(failed.messages[0].completion).toBe("failed")
-		expect(failed.errors.at(-1)?.error.kind).toBe("writeFailed")
-
-		await controller.retry(failed.messages[0].id)
-		await vi.runAllTimersAsync()
-
-		const state = controller.getState()
-		expect(state.turn).toBe("idle")
-		expect(state.messages[0]).toMatchObject({
-			text: "hello",
-			completion: "complete",
-		})
-		expect(state.messages.at(-1)).toMatchObject({
-			role: "assistant",
-			completion: "complete",
-		})
-	})
-
-	it("keeps the transcript across a restart that succeeds", async () => {
-		const { controller } = await startedHarness()
-		await controller.send("hello")
-		await vi.runAllTimersAsync()
-		const before = controller.getState()
-		expect(before.messages.length).toBeGreaterThan(1)
-
-		await controller.preflight()
-		await vi.runAllTimersAsync()
-
-		const after = controller.getState()
-		expect(after.messages).toEqual(before.messages)
-		expect(after.activities).toEqual(before.activities)
-		expect(isSessionReady(after)).toBe(true)
-		expect(after.turn).toBe("idle")
-	})
-
-	it("keeps the transcript when the restart itself fails", async () => {
-		const { driver, controller } = await startedHarness()
-		await controller.send("hello")
-		await vi.runAllTimersAsync()
-		const before = controller.getState()
-		vi.spyOn(driver, "startOrResumeSession").mockRejectedValue({
-			kind: "spawnFailed",
-			detail: "binary not found",
-		})
-
-		await controller.preflight()
-		await vi.runAllTimersAsync()
-
-		const after = controller.getState()
-		expect(after.messages).toEqual(before.messages)
-		expect(after.activities).toEqual(before.activities)
-		expect(after.errors.at(-1)?.error.kind).toBe("spawnFailed")
-		expect(isSessionReady(after)).toBe(false)
-	})
-
-	// A restart re-subscribes, so a frame the dead session emits late reaches the
-	// listener it was registered with, which still carries the old epoch.
-	it("ignores late events from the session that died", async () => {
-		const fake = createFakeChatDriver({ stepMs: STEP_MS })
-		const listeners: Array<(event: ClaudeEvent) => void> = []
-		const driver: ChatDriver = {
-			...fake,
-			subscribe: (onEvent) => {
-				listeners.push(onEvent)
-				return fake.subscribe(onEvent)
-			},
-		}
-		const controller = createChatController(driver)
-		controller.attach()
-		await controller.preflight()
-		await controller.send("hello")
-		await vi.runAllTimersAsync()
-
-		await controller.preflight()
-		await vi.runAllTimersAsync()
-		const restarted = controller.getState()
-		const deadListener = listeners[0]
-
-		deadListener({ type: "turnChanged", state: "running" })
-		deadListener({
-			type: "messageDelta",
-			id: "fake-msg-1",
-			seq: 99,
-			text: "phantom",
-		})
-		deadListener({
-			type: "messageStarted",
-			message: {
-				id: "ghost",
-				role: "assistant",
-				text: "",
-				completion: "streaming",
-				timestamp: 0,
+	it("says so instead of writing when the store never opened the conversation", async () => {
+		const store = createFakeTranscriptStore()
+		const { controller, driver } = createHarness({
+			store: {
+				...store,
+				mainChat: () => Promise.reject({ kind: "unavailable" }),
 			},
 		})
-		deadListener({
-			type: "turnEnded",
-			ended: { sessionId: "dead", outcome: "failed" },
-		})
+		const submitSpy = vi.spyOn(driver, "submitPrompt")
+		await controller.boot()
+		await vi.runAllTimersAsync()
 
-		const state = controller.getState()
-		expect(state.messages).toEqual(restarted.messages)
-		expect(state.turn).toBe("idle")
-	})
-
-	it("leaves stopping deterministically when cancelTurn is rejected", async () => {
-		const fake = createFakeChatDriver({
-			stepMs: STEP_MS,
-			replyFor: () => "one two three",
-		})
-		const brokenCancel: ChatDriver = {
-			...fake,
-			cancelTurn: () =>
-				Promise.reject({ kind: "writeFailed", detail: "pipe closed" }),
-		}
-		const controller = createChatController(brokenCancel)
-		controller.attach()
-		await controller.start()
 		await controller.send("hello")
-		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
-		expect(controller.getState().turn).toBe("running")
 
-		await controller.stop()
-		const rejected = controller.getState()
-		expect(rejected.turn).toBe("failed")
-		expect(rejected.errors.at(-1)?.error.kind).toBe("writeFailed")
-
-		await vi.runAllTimersAsync()
-		expect(controller.getState().turn).not.toBe("stopping")
-
-		await controller.send("here we go again")
-		await vi.runAllTimersAsync()
-		const state = controller.getState()
-		expect(state.turn).toBe("idle")
-		expect(state.messages.at(-1)).toMatchObject({
-			role: "assistant",
-			completion: "complete",
+		expect(controller.getState().conversationId).toBeNull()
+		expect(controller.getState().errors.at(0)?.error).toEqual({
+			kind: "writeFailed",
+			detail: "the transcript store refused it (unavailable)",
 		})
-	})
-
-	it("resumes the same session with a clean slate", async () => {
-		const { controller } = await startedHarness()
-		const first = controller.getState().sessionId
-		await controller.start(first ?? undefined)
-		const state = controller.getState()
-		expect(state.sessionId).toBe(first)
-		expect(state.messages).toHaveLength(0)
+		expect(submitSpy).not.toHaveBeenCalled()
 	})
 
 	it("opens a session on preflight and collapses concurrent calls into one", async () => {
@@ -433,8 +652,6 @@ describe("createChatController", () => {
 		const state = controller.getState()
 		expect(state.connection).toBe("ready")
 		expect(state.binaryVersion).toBe("fake-0.0.1")
-		// The CLI reports its session id on the first prompt, so the composer must
-		// open on `sessionOpen` alone or the first prompt could never be sent.
 		expect(state.sessionOpen).toBe(true)
 		expect(state.sessionId).toBeNull()
 	})
@@ -457,271 +674,235 @@ describe("createChatController", () => {
 		expect(state.errors.at(-1)?.error.kind).toBe("notAuthenticated")
 	})
 
-	it("runs a fresh preflight once the previous one settled", async () => {
-		const { driver, controller } = createHarness()
-		const startSpy = vi.spyOn(driver, "startOrResumeSession")
-
-		await controller.preflight()
-		await controller.preflight()
-
-		expect(startSpy).toHaveBeenCalledTimes(2)
-	})
-
 	// Tauri registers event listeners over IPC, so a subscription is not live the
 	// moment `subscribe()` is called. A session that emits from inside
 	// `startOrResumeSession` is exactly the window this guards.
 	it("waits for the subscription before starting, so startup events are not lost", async () => {
 		let listener: ((event: ClaudeEvent) => void) | null = null
-		const driver: ChatDriver = {
-			...createFakeChatDriver({ stepMs: STEP_MS }),
-			startOrResumeSession: () => {
-				listener?.({ type: "sessionReady", sessionId: "s-1", resumed: false })
-				return Promise.resolve({ resumed: false })
-			},
-			subscribe: (onEvent) =>
-				Promise.resolve()
-					.then(() => undefined)
-					.then(() => {
-						listener = onEvent
-						return () => {
-							listener = null
-						}
-					}),
-		}
-		const controller = createChatController(driver)
-		controller.attach()
+		const { controller } = createHarness({
+			driver: (fake) => ({
+				...fake,
+				startOrResumeSession: () => {
+					listener?.({ type: "sessionReady", sessionId: "s-1", resumed: false })
+					return Promise.resolve({ resumed: false })
+				},
+				subscribe: (onEvent) =>
+					Promise.resolve()
+						.then(() => undefined)
+						.then(() => {
+							listener = onEvent
+							return () => {
+								listener = null
+							}
+						}),
+			}),
+		})
 
 		await controller.preflight()
 
 		expect(controller.getState().sessionId).toBe("s-1")
 	})
 
-	it("restores the stored transcript and resumes its session on boot", async () => {
-		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
-		const loadSpy = vi.spyOn(driver, "loadSession")
+	// The transcript is durable; the session that produced it is not. Resuming a
+	// provider session across launches is a runtime concern this no longer keeps.
+	it("boots on the stored transcript without resuming anything", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(4) })
+		const { driver, controller } = createHarness({ store })
 		const startSpy = vi.spyOn(driver, "startOrResumeSession")
 
 		await controller.boot()
 		await vi.runAllTimersAsync()
 
-		expect(loadSpy).toHaveBeenCalledTimes(1)
-		expect(startSpy).toHaveBeenCalledWith("s-stored")
 		const state = controller.getState()
-		expect(state.sessionId).toBe("s-stored")
-		expect(state.messages).toEqual(STORED_SNAPSHOT.messages)
-		expect(state.activities).toEqual(STORED_SNAPSHOT.activities)
+		expect(startSpy).toHaveBeenCalledWith(undefined)
+		expect(state.conversationId).toBe(FAKE_CHAT_ID)
+		expect(state.messages.map((message) => message.id)).toEqual([
+			"stored-1",
+			"stored-2",
+			"stored-3",
+			"stored-4",
+		])
+		expect(state.hasOlder).toBe(false)
 		expect(isSessionReady(state)).toBe(true)
 	})
 
-	// The id comes back from the child on the first prompt, never on the resume
-	// itself, so the write that precedes that prompt is the one that used to erase
-	// it — and a crash right there boots the next launch amnesiac.
-	it("never writes a null session id over the one it just resumed", async () => {
-		const { controller, saved } = storedHarness(STORED_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
-
-		await controller.send("and then?")
-
-		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
-	})
-
-	// The host forgets the id on disk the moment the child refuses it, so keeping
-	// it here would write it back and retry a dead session on every launch.
-	it("stops carrying a stored id the child refused to resume", async () => {
-		const { driver, controller, saved } = storedHarness(STORED_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
-		expect(controller.getState().sessionId).toBe("s-stored")
-
-		driver.pushEvent({
-			type: "failed",
-			error: { kind: "resumeFailed", forgotSessionId: true },
+	it("still opens a session when the stored transcript cannot be read", async () => {
+		const store = createFakeTranscriptStore()
+		const { controller } = createHarness({
+			store: { ...store, loadPage: () => Promise.reject({ kind: "storage" }) },
 		})
-		expect(controller.getState().sessionId).toBeNull()
 
-		await controller.send("and then?")
-
-		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual([null])
-	})
-
-	// A resume that only ran out of time proves nothing, so the host keeps the id
-	// on disk. The prompt that follows is what would write a null over it.
-	it("keeps a stored id the host refused to give up on", async () => {
-		const { driver, controller, saved } = storedHarness(STORED_SNAPSHOT)
 		await controller.boot()
 		await vi.runAllTimersAsync()
 
-		driver.pushEvent({
-			type: "failed",
-			error: { kind: "resumeFailed", forgotSessionId: false },
-		})
-		expect(controller.getState().sessionId).toBe("s-stored")
-
-		await controller.send("and then?")
-
-		expect(saved.map((snapshot) => snapshot.sessionId)).toEqual(["s-stored"])
+		const state = controller.getState()
+		expect(state.messages).toEqual([])
+		expect(state.errors.at(-1)?.error.kind).toBe("writeFailed")
+		expect(isSessionReady(state)).toBe(true)
 	})
 
-	it("resumes the stored session when the restart affordance is used", async () => {
-		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
-		await controller.boot()
+	it("resumes the id this launch learned when the restart affordance is used", async () => {
+		const { driver, controller } = await bootedHarness()
+		await controller.send("hello")
 		await vi.runAllTimersAsync()
+		const sessionId = controller.getState().sessionId
+		expect(sessionId).not.toBeNull()
 		const startSpy = vi.spyOn(driver, "startOrResumeSession")
 
 		await controller.restart()
 		await vi.runAllTimersAsync()
 
-		expect(startSpy).toHaveBeenCalledWith("s-stored")
-		expect(controller.getState().sessionId).toBe("s-stored")
+		expect(startSpy).toHaveBeenCalledWith(sessionId)
 	})
 
-	it("boots without a resume id when nothing was stored", async () => {
-		const { driver, controller } = storedHarness(EMPTY_SNAPSHOT)
-		const startSpy = vi.spyOn(driver, "startOrResumeSession")
-
-		await controller.boot()
+	it("stops notifying detached listeners", async () => {
+		const { controller, detach } = await bootedHarness()
+		detach()
 		await vi.runAllTimersAsync()
-
-		expect(startSpy).toHaveBeenCalledWith(undefined)
-		expect(controller.getState().messages).toHaveLength(0)
-		expect(isSessionReady(controller.getState())).toBe(true)
-	})
-
-	it("still opens a session when the stored transcript cannot be read", async () => {
-		const { driver, controller } = storedHarness(STORED_SNAPSHOT)
-		vi.spyOn(driver, "loadSession").mockRejectedValue({
-			kind: "writeFailed",
-			detail: "unreadable disk",
-		})
-
-		await controller.boot()
-		await vi.runAllTimersAsync()
-
-		const state = controller.getState()
-		expect(state.messages).toHaveLength(0)
-		expect(isSessionReady(state)).toBe(true)
-	})
-
-	it("persists the prompt on the way out, then the settled turn", async () => {
-		const { controller, saved } = storedHarness(EMPTY_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
-		expect(saved).toHaveLength(0)
-
-		const sending = controller.send("hello")
-		expect(saved).toHaveLength(1)
-		expect(saved[0].messages).toEqual([
-			expect.objectContaining({ role: "user", text: "hello" }),
-		])
-
-		await sending
-		await vi.runAllTimersAsync()
-
-		const state = controller.getState()
-		expect(saved).toHaveLength(2)
-		expect(saved[1].messages).toEqual(state.messages)
-		expect(saved[1].activities).toEqual(state.activities)
-	})
-
-	// Quitting while Claude answers used to lose the prompt and the partial reply
-	// alike, since nothing was written before the turn ended.
-	it("keeps the prompt and the partial answer of a turn that never ends", async () => {
-		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
-		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
 
 		await controller.send("hello")
-		driver.pushEvent({ type: "turnChanged", state: "running" })
-		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
-		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Hel" })
-		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 2, text: "lo" })
-		await vi.advanceTimersByTimeAsync(PERSIST_MS)
+		await vi.runAllTimersAsync()
 
-		expect(controller.getState().turn).toBe("running")
-		expect(saved.at(-1)?.messages).toEqual([
-			expect.objectContaining({ role: "user", text: "hello" }),
-			expect.objectContaining({ text: "Hello", completion: "cancelled" }),
+		expect(spoken(controller.getState().messages)).toEqual([
+			["user", "hello", "complete"],
 		])
 	})
+})
 
-	it("throttles the streaming write to once a second, not once per delta", async () => {
-		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
-		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
+describe("history above the transcript", () => {
+	const HISTORY = 250
 
-		await controller.send("hello")
-		driver.pushEvent({ type: "turnChanged", state: "running" })
-		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
 
-		const deltas = 40
-		for (let seq = 1; seq <= deltas; seq += 1) {
-			driver.pushEvent({ type: "messageDelta", id: "msg-1", seq, text: "x" })
-			await vi.advanceTimersByTimeAsync(PERSIST_MS / 20)
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("walks back through a history far longer than one page, once each", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
+		const { controller } = await bootedHarness({ store })
+
+		const tail = controller.getState()
+		expect(tail.messages).toHaveLength(20)
+		expect(tail.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
+		expect(tail.hasOlder).toBe(true)
+
+		let pages = 0
+		while (controller.getState().hasOlder && pages < HISTORY) {
+			pages += 1
+			await controller.loadOlder()
 		}
 
-		expect(controller.getState().messages.at(-1)?.text).toHaveLength(deltas)
-		expect(saved).toHaveLength(3)
+		const state = controller.getState()
+		const ids = state.messages.map((message) => message.id)
+		expect(state.hasOlder).toBe(false)
+		expect(state.loadingOlder).toBe(false)
+		expect(ids).toHaveLength(HISTORY)
+		expect(new Set(ids).size).toBe(HISTORY)
+		expect(state.messages.map((message) => message.seq)).toEqual(
+			Array.from({ length: HISTORY }, (_, index) => index + 1),
+		)
+		expect(ids[0]).toBe("stored-1")
 	})
 
-	// The persisted snapshot is what a cold start paints, so a message left
-	// mid-stream would come back as a failed bubble the reader never saw fail.
-	it("persists a settled transcript, never a message mid-stream", async () => {
-		const { driver, controller, saved } = storedHarness(EMPTY_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
-
-		driver.pushEvent({ type: "turnChanged", state: "submitting" })
-		driver.pushEvent({
-			type: "messageStarted",
-			message: {
-				id: "msg-1",
-				role: "assistant",
-				text: "Hello",
-				completion: "streaming",
-				timestamp: 0,
+	it("asks for nothing more once the beginning has been reached", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(4) })
+		let reads = 0
+		const { controller } = await bootedHarness({
+			store: {
+				...store,
+				loadPage: (conversationId, cursor) => {
+					reads += 1
+					return store.loadPage(conversationId, cursor)
+				},
 			},
 		})
-		driver.pushEvent({
-			type: "turnEnded",
-			ended: { sessionId: "s-live", outcome: "completed" },
-		})
+		expect(reads).toBe(1)
 
-		expect(saved).toHaveLength(1)
-		expect(saved[0].sessionId).toBe("s-live")
-		expect(saved[0].messages).toEqual([
-			expect.objectContaining({ id: "msg-1", completion: "complete" }),
-		])
+		await controller.loadOlder()
+		await controller.loadOlder()
+
+		expect(reads).toBe(1)
+		expect(controller.getState().messages).toHaveLength(4)
 	})
 
-	it("never reuses a restored message id on the next prompt", async () => {
-		const { controller } = storedHarness(STORED_SNAPSHOT)
-		await controller.boot()
-		await vi.runAllTimersAsync()
+	it("keeps a prompt sent after paging at the end of the transcript", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
+		const { controller } = await bootedHarness({ store })
+		await controller.loadOlder()
 
 		await controller.send("and then?")
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
+		expect(state.messages).toHaveLength(42)
+		expect(spoken(state.messages).slice(-2)).toEqual([
+			["user", "and then?", "complete"],
+			["assistant", REPLY, "complete"],
+		])
 		expect(
-			state.messages
-				.filter((message) => message.role === "user")
-				.map((message) => message.id),
-		).toEqual(["local-3", "local-4"])
+			state.messages.every(
+				(message, index) =>
+					index === 0 || message.seq > state.messages[index - 1].seq,
+			),
+		).toBe(true)
 	})
 
-	it("stops notifying detached listeners", async () => {
-		const { controller, detach } = await startedHarness()
-		detach()
-		await vi.runAllTimersAsync()
-		const before = controller.getState()
-		await controller.send("hello")
-		await vi.runAllTimersAsync()
-		expect(controller.getState().messages).toHaveLength(
-			before.messages.length + 1,
-		)
-		expect(controller.getState().messages.at(-1)?.role).toBe("user")
+	it("reads one page at a time, however often it is asked", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
+		let inFlight = 0
+		let overlapped = false
+		const { controller } = await bootedHarness({
+			store: {
+				...store,
+				loadPage: async (conversationId, cursor) => {
+					inFlight += 1
+					overlapped ||= inFlight > 1
+					const page = await store.loadPage(conversationId, cursor)
+					inFlight -= 1
+					return page
+				},
+			},
+		})
+
+		await Promise.all([
+			controller.loadOlder(),
+			controller.loadOlder(),
+			controller.loadOlder(),
+		])
+
+		expect(overlapped).toBe(false)
+		expect(controller.getState().messages).toHaveLength(40)
 	})
+})
+
+describe("every ending survives a launch", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	const endings: [string, string, TranscriptCompletion][] = [
+		["a turn that finished", "hello", "complete"],
+		["a turn that crashed", "explain /fail", "failed"],
+	]
+
+	it.each(endings)(
+		"brings %s back as it ended",
+		async (_name, prompt, ending) => {
+			const { controller, store } = await bootedHarness()
+
+			await controller.send(prompt)
+			await vi.runAllTimersAsync()
+
+			const live = controller.getState().messages
+			expect(live.at(-1)?.completion).toBe(ending)
+			expect(spoken(await reload(store))).toEqual(spoken(live))
+		},
+	)
 })

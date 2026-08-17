@@ -5,17 +5,26 @@ import {
 	chatReducer,
 	initialChatState,
 	isTurnBusy,
-	toSessionSnapshot,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
 
 import type {
 	ChatMessage,
 	CheckReport,
+	ClaudeEvent,
+	MessageCompletion,
 	PermissionDecision,
 	SessionHandle,
 	TransportError,
+	TurnOutcome,
 } from "../claude/contract"
+import type { TranscriptStore } from "../conversations/store-port"
+import type { TerminalCompletion } from "../conversations/transcript-contract"
+import { createTranscriptController } from "../conversations/transcript-controller"
+import {
+	selectHasMore,
+	selectMessages,
+} from "../conversations/transcript-state"
 
 export type ChatController = {
 	getState: () => ChatState
@@ -25,13 +34,17 @@ export type ChatController = {
 	start: (resume?: string) => Promise<SessionHandle | null>
 	/** Checks the binary and opens a session when it answers. Deduplicated while in flight. */
 	preflight: (resume?: string) => Promise<SessionHandle | null>
-	/** Hydrates the stored transcript, then resumes its session. Sequential by
-	 * construction: two parallel effects would open a brand-new session while the
-	 * transcript is still loading, and the resume id would be lost. */
+	/** Opens the stored conversation, paints its tail, then starts Claude. Sequential
+	 * by construction: nothing may be written before the conversation it belongs to
+	 * is on the record. The session itself is not resumed from disk — a provider
+	 * session belongs to the launch that opened it. */
 	boot: () => Promise<SessionHandle | null>
-	/** Reopens the session the transcript belongs to. The recovery affordance the
-	 * reader is offered, so it resumes rather than starting Claude amnesiac. */
+	/** Reopens the session for the reader after it died. Resumes the id this launch
+	 * learned, so the answer carries on rather than starting Claude amnesiac. */
 	restart: () => Promise<SessionHandle | null>
+	/** Reads the page above the transcript. Deduplicated while in flight, and a
+	 * no-op once the beginning has been reached. */
+	loadOlder: () => Promise<void>
 	send: (text: string) => Promise<void>
 	stop: () => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
@@ -39,9 +52,32 @@ export type ChatController = {
 	shutdown: () => Promise<void>
 }
 
-const LOCAL_ID_PREFIX = "local-"
+export type ChatControllerOptions = {
+	/** Identity for the rows this launch writes. Ids reach a primary key, so they
+	 * are unique per message and never derived from a position in the transcript. */
+	newId?: () => string
+	now?: () => number
+}
 
-const STREAMING_PERSIST_MS = 1000
+/** The ending a message reaches when the process it was streaming from goes away.
+ * Nothing observed it fail and nobody cancelled it — the stream simply stopped. */
+const INTERRUPTED: TerminalCompletion = "interrupted"
+
+/** What a live message state means once it can no longer change. `streaming` has
+ * no ending, so a completion event still carrying it settles nothing. */
+const ENDING_FOR: Record<MessageCompletion, TerminalCompletion | null> = {
+	streaming: null,
+	complete: "complete",
+	cancelled: "cancelled",
+	failed: "failed",
+}
+
+/** How a turn ending settles the reply it was streaming. */
+const ENDING_FOR_OUTCOME: Record<TurnOutcome, TerminalCompletion> = {
+	completed: "complete",
+	cancelled: "cancelled",
+	failed: "failed",
+}
 
 function toTransportError(reason: unknown): TransportError {
 	if (typeof reason === "object" && reason !== null && "kind" in reason) {
@@ -50,31 +86,46 @@ function toTransportError(reason: unknown): TransportError {
 	return { kind: "writeFailed", detail: String(reason) }
 }
 
-function localSeqOf(id: string): number {
-	if (!id.startsWith(LOCAL_ID_PREFIX)) {
-		return 0
+/** A store refusal in the vocabulary the notice speaks. It is reported as a write
+ * that did not land, which is what it is, and it carries the store's own word for
+ * why — never a row's content. */
+function toStoreError(reason: unknown): TransportError {
+	const kind =
+		typeof reason === "object" && reason !== null && "kind" in reason
+			? String((reason as { kind: unknown }).kind)
+			: String(reason)
+	return {
+		kind: "writeFailed",
+		detail: `the transcript store refused it (${kind})`,
 	}
-	const seq = Number(id.slice(LOCAL_ID_PREFIX.length))
-	return Number.isInteger(seq) ? seq : 0
 }
 
-/** Restored messages already carry minted ids, so the counter has to pick up where
- * the stored transcript left off or the next prompt reuses an id on screen. */
-function highestLocalSeq(messages: ChatMessage[]): number {
-	return messages.reduce(
-		(highest, message) => Math.max(highest, localSeqOf(message.id)),
-		0,
-	)
-}
+export function createChatController(
+	driver: ChatDriver,
+	store: TranscriptStore,
+	options: ChatControllerOptions = {},
+): ChatController {
+	const newId = options.newId ?? (() => crypto.randomUUID())
+	const now = options.now ?? (() => Date.now())
+	const transcript = createTranscriptController(store)
 
-export function createChatController(driver: ChatDriver): ChatController {
 	let state = initialChatState
 	let epoch = 0
-	let localSeq = 0
+	let botId: string | null = null
+	let activeTurn: { id: string; promptId: string } | null = null
 	let detach: Promise<() => void> | null = null
 	let pendingPreflight: Promise<SessionHandle | null> | null = null
-	let scheduledPersist: ReturnType<typeof setTimeout> | null = null
+	/** The replies this controller opened and has not settled, and how far each has
+	 * streamed. A message leaves both the moment it ends, which is what makes a
+	 * replayed ending, and every delta behind it, a no-op. */
+	const openMessages = new Map<string, number>()
+	const settledMessages = new Set<string>()
 	const listeners = new Set<() => void>()
+
+	/** Every write in the order it was issued. Two deltas racing on the same row
+	 * would concatenate in whichever order the host answered, which is the one
+	 * thing an append-only column cannot be asked to forgive. */
+	let writes: Promise<unknown> = Promise.resolve()
 
 	const dispatch = (action: ChatAction) => {
 		const next = chatReducer(state, action)
@@ -94,35 +145,177 @@ export function createChatController(driver: ChatDriver): ChatController {
 			event: { type: "failed", error: toTransportError(reason) },
 		})
 
-	const writeSnapshot = () => {
-		void driver.saveSession(toSessionSnapshot(state)).catch(() => undefined)
+	const reportStore = (reason: unknown) =>
+		dispatch({
+			type: "driverEvent",
+			epoch,
+			event: { type: "failed", error: toStoreError(reason) },
+		})
+
+	const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
+		const result = writes.then(operation)
+		writes = result.then(
+			() => undefined,
+			() => undefined,
+		)
+		return result
 	}
 
-	const cancelScheduledPersist = () => {
-		if (scheduledPersist === null) {
+	/** A write and what it lets the reader see, in that order. `shown` runs only
+	 * once the store has taken the write, so nothing reaches the screen that a
+	 * reload would not bring back; a refusal shows nothing and says so. Callbacks
+	 * settle in the order their writes were issued, because each one is attached
+	 * to its own link of the chain. */
+	const write = (operation: () => Promise<unknown>, shown?: () => void) => {
+		void enqueue(operation).then(() => shown?.(), reportStore)
+	}
+
+	const syncTranscript = () => {
+		const conversationId = state.conversationId
+		if (!conversationId) {
 			return
 		}
-		clearTimeout(scheduledPersist)
-		scheduledPersist = null
+		const current = transcript.getState()
+		dispatch({
+			type: "transcriptChanged",
+			messages: selectMessages(current, conversationId),
+			hasOlder: selectHasMore(current, conversationId),
+		})
 	}
 
-	const persistNow = () => {
-		cancelScheduledPersist()
-		writeSnapshot()
+	transcript.subscribe(syncTranscript)
+
+	/** Out-of-order and replayed deltas are dropped on the sequence the transport
+	 * numbers them with, before either the store or the screen sees them. The
+	 * bookkeeping stays here, ahead of the write: a duplicate has to be refused
+	 * the moment it arrives, not once the store has answered the one before it. */
+	const streamReply = (
+		id: string,
+		seq: number,
+		text: string,
+		conversationId: string,
+	) => {
+		const streamed = openMessages.get(id)
+		if (streamed === undefined || seq <= streamed || text.length === 0) {
+			return
+		}
+		openMessages.set(id, seq)
+		write(
+			() => store.appendText(id, text),
+			() => transcript.stream({ conversationId, id, text }),
+		)
 	}
 
-	/** A turn in flight is worth keeping — quitting mid-answer must not lose it —
-	 * but it emits one delta per token, and a write per delta would rewrite the
-	 * whole transcript per token. */
-	const persistSoon = () => {
-		scheduledPersist ??= setTimeout(() => {
-			scheduledPersist = null
-			writeSnapshot()
-		}, STREAMING_PERSIST_MS)
+	const openReply = (message: ChatMessage, conversationId: string) => {
+		const turn = activeTurn
+		if (
+			!turn ||
+			openMessages.has(message.id) ||
+			settledMessages.has(message.id)
+		) {
+			return
+		}
+		openMessages.set(message.id, 0)
+		write(
+			() =>
+				store.openAssistantMessage({
+					id: message.id,
+					conversationId,
+					turnId: turn.id,
+					authorBotId: botId,
+					repliedToMessageId: turn.promptId,
+					createdAt: message.timestamp,
+				}),
+			() =>
+				transcript.append({
+					id: message.id,
+					conversationId,
+					turnId: turn.id,
+					role: "assistant",
+					content: "",
+					completion: "streaming",
+					createdAt: message.timestamp,
+				}),
+		)
+		streamReply(message.id, 1, message.text, conversationId)
+	}
+
+	/** An ending is claimed here once and only once, so a replayed one and every
+	 * delta behind it stop at the guard above. A store that refuses the ending
+	 * leaves the message open on disk, and the screen shows it exactly that way:
+	 * still unfinished, which is what the next launch will read back. */
+	const settleReply = (
+		id: string,
+		completion: TerminalCompletion,
+		conversationId: string,
+	) => {
+		if (!openMessages.has(id)) {
+			return
+		}
+		openMessages.delete(id)
+		settledMessages.add(id)
+		write(
+			() => store.finalizeMessage(id, completion),
+			() => transcript.settle({ conversationId, id, completion }),
+		)
+	}
+
+	/** The text a reply ends with is the text its deltas wrote: the column is
+	 * append-only, so what has already landed is the answer, and the completion
+	 * frame repeats it rather than adding to it. A reply that ends without ever
+	 * having been opened is still a reply — it is opened on what it says, and
+	 * closed in the same breath. */
+	const settleCompleted = (message: ChatMessage, conversationId: string) => {
+		const completion = ENDING_FOR[message.completion]
+		if (!completion || settledMessages.has(message.id)) {
+			return
+		}
+		openReply(message, conversationId)
+		settleReply(message.id, completion, conversationId)
+	}
+
+	/** Copied before it is walked: settling a reply takes it out of the map. */
+	const settleOpenReplies = (
+		completion: TerminalCompletion,
+		conversationId: string,
+	) => {
+		for (const id of [...openMessages.keys()]) {
+			settleReply(id, completion, conversationId)
+		}
+	}
+
+	const endTurn = (completion: TerminalCompletion, conversationId: string) => {
+		settleOpenReplies(completion, conversationId)
+		const turn = activeTurn
+		activeTurn = null
+		if (turn) {
+			write(() => store.completeTurn(turn.id, now()))
+		}
+	}
+
+	/** The durable half of a transport event. Nothing here decides anything the
+	 * reducer decides: it writes down what the session reported, in the order it
+	 * reported it. */
+	const persist = (event: ClaudeEvent) => {
+		const conversationId = state.conversationId
+		if (!conversationId) {
+			return
+		}
+		switch (event.type) {
+			case "messageStarted":
+				return openReply(event.message, conversationId)
+			case "messageDelta":
+				return streamReply(event.id, event.seq, event.text, conversationId)
+			case "messageCompleted":
+				return settleCompleted(event.message, conversationId)
+			case "turnEnded":
+				return endTurn(ENDING_FOR_OUTCOME[event.ended.outcome], conversationId)
+			default:
+				return
+		}
 	}
 
 	const disconnect = () => {
-		cancelScheduledPersist()
 		detach?.then((unlisten) => unlisten())
 		detach = null
 	}
@@ -137,13 +330,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 			if (captured !== epoch) {
 				return
 			}
-			if (event.type === "turnEnded") {
-				persistNow()
-				return
-			}
-			if (isTurnBusy(state.turn)) {
-				persistSoon()
-			}
+			persist(event)
 		})
 		return detach
 	}
@@ -172,7 +359,16 @@ export function createChatController(driver: ChatDriver): ChatController {
 		}
 	}
 
+	/** A reply the session was streaming when it went away is closed as interrupted:
+	 * nothing on disk can resume a stream, and it neither failed nor was cancelled.
+	 * The turn it belonged to is left open on purpose — it never completed, and
+	 * nothing is going to complete it. */
 	const start = async (resume?: string) => {
+		const conversationId = state.conversationId
+		if (conversationId) {
+			settleOpenReplies(INTERRUPTED, conversationId)
+		}
+		activeTurn = null
 		epoch += 1
 		dispatch({ type: "sessionReset", epoch, sessionId: resume ?? null })
 		try {
@@ -203,29 +399,55 @@ export function createChatController(driver: ChatDriver): ChatController {
 		return pendingPreflight
 	}
 
-	const boot = async () => {
-		const snapshot = await driver.loadSession().catch(() => null)
-		if (snapshot) {
-			dispatch({ type: "sessionRestored", snapshot })
-			localSeq = Math.max(localSeq, highestLocalSeq(snapshot.messages))
+	const openConversation = async () => {
+		try {
+			const bot = await store.defaultBot()
+			const chat = await store.mainChat(bot.id)
+			botId = bot.id
+			dispatch({ type: "conversationOpened", conversationId: chat.id })
+			await transcript.load(chat.id)
+		} catch (reason) {
+			reportStore(reason)
 		}
-		return preflight(snapshot?.sessionId ?? undefined)
+	}
+
+	const boot = async () => {
+		await openConversation()
+		return preflight()
 	}
 
 	const restart = () => preflight(state.sessionId ?? undefined)
 
-	const submit = async (message: ChatMessage) => {
+	const loadOlder = async () => {
+		const conversationId = state.conversationId
+		if (!conversationId || !state.hasOlder || state.loadingOlder) {
+			return
+		}
+		dispatch({ type: "olderLoading", loading: true })
 		try {
-			await driver.submitPrompt(message.text)
+			await transcript.loadOlder(conversationId)
+		} catch (reason) {
+			reportStore(reason)
+		} finally {
+			dispatch({ type: "olderLoading", loading: false })
+		}
+	}
+
+	const submit = async (id: string, text: string) => {
+		try {
+			await driver.submitPrompt(text)
 		} catch (reason) {
 			dispatch({
 				type: "promptRejected",
-				id: message.id,
+				id,
 				error: toTransportError(reason),
 			})
 		}
 	}
 
+	/** The prompt reaches the transcript before it reaches Claude. A prompt that
+	 * could not be written down is not submitted at all: the answer would arrive
+	 * against a question no reload could show. */
 	const send = async (text: string) => {
 		const trimmed = text.trim()
 		if (trimmed.length === 0) {
@@ -235,26 +457,67 @@ export function createChatController(driver: ChatDriver): ChatController {
 			report({ kind: "turnAlreadyRunning" })
 			return
 		}
-		localSeq += 1
-		const message: ChatMessage = {
-			id: `${LOCAL_ID_PREFIX}${localSeq}`,
-			role: "user",
-			text: trimmed,
-			completion: "complete",
-			timestamp: Date.now(),
+		const conversationId = state.conversationId
+		if (!conversationId) {
+			reportStore({ kind: "unavailable" })
+			return
 		}
-		dispatch({ type: "promptSubmitted", message })
-		persistNow()
-		await submit(message)
+		dispatch({ type: "promptSubmitted" })
+
+		const turnId = newId()
+		const promptId = newId()
+		const createdAt = now()
+		try {
+			await enqueue(async () => {
+				await store.startTurn({
+					id: turnId,
+					conversationId,
+					startedAt: createdAt,
+				})
+				await store.appendUserMessage({
+					id: promptId,
+					conversationId,
+					turnId,
+					authorBotId: null,
+					repliedToMessageId: null,
+					content: trimmed,
+					createdAt,
+				})
+			})
+		} catch (reason) {
+			dispatch({
+				type: "promptRejected",
+				id: null,
+				error: toStoreError(reason),
+			})
+			return
+		}
+
+		transcript.append({
+			id: promptId,
+			conversationId,
+			turnId,
+			role: "user",
+			content: trimmed,
+			completion: "complete",
+			createdAt,
+		})
+		activeTurn = { id: turnId, promptId }
+		await submit(promptId, trimmed)
 	}
 
+	/** Resubmits a prompt the store already holds. Only the one Claude refused: it
+	 * is on the record, so nothing is written again. */
 	const retry = async (id: string) => {
+		if (state.rejectedPromptId !== id) {
+			return
+		}
 		const target = state.messages.find((message) => message.id === id)
-		if (target?.role !== "user" || target.completion !== "failed") {
+		if (target?.role !== "user") {
 			return
 		}
 		dispatch({ type: "promptRetried", id })
-		await submit(target)
+		await submit(id, target.content)
 	}
 
 	const stop = async () => {
@@ -295,6 +558,7 @@ export function createChatController(driver: ChatDriver): ChatController {
 		preflight,
 		boot,
 		restart,
+		loadOlder,
 		send,
 		stop,
 		respond,

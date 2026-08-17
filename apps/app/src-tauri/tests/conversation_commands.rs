@@ -303,3 +303,61 @@ fn a_refused_write_keeps_the_shape_that_says_what_disagreed() {
 
 	cleanup(&app);
 }
+
+/// The launch the app now boots on, at the boundary it really crosses. One host
+/// writes a transcript longer than the snapshot the old store kept whole, and is
+/// gone before the next one opens the file it left — nothing is carried over in
+/// memory. What the reader can reach afterwards is every message of it, in the
+/// crossings the frontend pages with, each exactly once.
+#[test]
+fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch() {
+	const IDENTIFIER: &str = "com.opennest.conversation-commands-4";
+	const HISTORY: i64 = 250;
+	const PAGE: u32 = 20;
+
+	{
+		let app = app(IDENTIFIER);
+		let window = window(&app);
+		let (_, conversation) = a_bot_and_its_chat(&window);
+		call(&window, "conversation_start_turn", a_turn(&conversation))
+			.expect("the turn is started");
+		for index in 1..=HISTORY {
+			call(
+				&window,
+				"conversation_append_user_message",
+				a_user_message(&format!("m{index}"), &conversation, "hello", index),
+			)
+			.expect("the message is appended");
+		}
+	}
+
+	let app = app(IDENTIFIER);
+	let window = window(&app);
+	let (_, conversation) = a_bot_and_its_chat(&window);
+
+	let mut reached: Vec<i64> = Vec::new();
+	let mut cursor: Option<i64> = None;
+	let mut crossings = 0;
+	loop {
+		let page = call(&window, "conversation_message_page", a_page(&conversation, cursor, PAGE))
+			.expect("the page");
+		let mut held = seqs(&page);
+		assert!(!held.is_empty(), "a page that claimed there was more came back empty");
+		crossings += 1;
+		cursor = held.first().copied();
+		held.append(&mut reached);
+		reached = held;
+		if page["hasMore"] == json!(false) {
+			break;
+		}
+	}
+
+	assert_eq!(
+		reached,
+		(1..=HISTORY).collect::<Vec<_>>(),
+		"the walk back skipped, repeated or reordered a message the reader had seen"
+	);
+	assert_eq!(crossings, 13, "the reader paid for more crossings than the history needed");
+
+	cleanup(&app);
+}

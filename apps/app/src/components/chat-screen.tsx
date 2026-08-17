@@ -53,16 +53,20 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	controller,
 	run,
 	avatar,
+	rejected,
 }: {
 	row: TranscriptRow
 	controller: ChatController
 	run?: ChatTurnRun
 	avatar: boolean
+	/** Claude refused this prompt. The stored row is whole either way — the reader
+	 * wrote it and the store took it — so the retry lives on the screen alone. */
+	rejected?: boolean
 }) {
 	if (row.role === "user") {
 		return (
 			<UserTurn
-				state={row.completion}
+				state={rejected ? "failed" : row.completion}
 				run={run}
 				copyText={row.text}
 				onRetry={() => {
@@ -206,6 +210,10 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 		void controller.restart()
 	}, [controller])
 
+	const loadOlder = useCallback(() => {
+		void controller.loadOlder()
+	}, [controller])
+
 	useEffect(() => {
 		if (acceptsInput) {
 			composerRef.current?.focus({ preventScroll: true })
@@ -216,6 +224,17 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 		<ChatLayout
 			busy={isTurnBusy(state.turn)}
 			label="Claude Code conversation"
+			// Offered only once there is a transcript to sit above: an empty
+			// conversation has no beginning to announce.
+			older={
+				state.messages.length > 0
+					? {
+							has: state.hasOlder,
+							isLoading: state.loadingOlder,
+							onLoad: loadOlder,
+						}
+					: undefined
+			}
 			header={
 				<AppHeader
 					insetWindowControls
@@ -281,6 +300,7 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 								row={row}
 								controller={controller}
 								avatar={index === avatarIndex}
+								rejected={row.messageId === state.rejectedPromptId}
 							/>
 						))}
 					</ChatTurnGroup>
