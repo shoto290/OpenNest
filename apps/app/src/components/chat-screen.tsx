@@ -210,6 +210,10 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 		void controller.restart()
 	}, [controller])
 
+	const loadOlder = useCallback(() => {
+		void controller.loadOlder()
+	}, [controller])
+
 	useEffect(() => {
 		if (acceptsInput) {
 			composerRef.current?.focus({ preventScroll: true })
@@ -220,6 +224,17 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 		<ChatLayout
 			busy={isTurnBusy(state.turn)}
 			label="Claude Code conversation"
+			// Offered only once there is a transcript to sit above: an empty
+			// conversation has no beginning to announce.
+			older={
+				state.messages.length > 0
+					? {
+							has: state.hasOlder,
+							isLoading: state.loadingOlder,
+							onLoad: loadOlder,
+						}
+					: undefined
+			}
 			header={
 				<AppHeader
 					insetWindowControls
