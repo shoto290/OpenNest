@@ -221,12 +221,28 @@ fn ensured_chat(connection: &mut Connection, bot_id: &str) -> Result<Chat, Conve
 		return Ok(held);
 	}
 	let transaction = write_transaction(connection)?;
-	let held = match chat_of(&transaction, bot_id)? {
-		Some(found) => found,
-		None => insert_chat(&transaction, bot_id)?,
-	};
+	let held = ensure_chat_in(&transaction, bot_id)?;
 	transaction.commit()?;
 	Ok(held)
+}
+
+/// Which chat the bot has, and — when it has none yet — the bot, the chat and the
+/// seat written together. One decision, so it reads inside the same transaction
+/// that would write: between a read outside and a write inside, another connection
+/// may have written the very row this was about to.
+///
+/// Takes the caller's transaction rather than opening one, which is the whole reason
+/// it is reachable across `db`: a caller with more to land in the same unit — the
+/// legacy import, which writes a whole transcript beside it — meets these rules
+/// instead of composing them again from the outside.
+pub(in crate::db) fn ensure_chat_in(
+	transaction: &Transaction<'_>,
+	bot_id: &str,
+) -> Result<Chat, ConversationError> {
+	match chat_of(transaction, bot_id)? {
+		Some(found) => Ok(found),
+		None => insert_chat(transaction, bot_id),
+	}
 }
 
 fn chat_of(connection: &Connection, bot_id: &str) -> Result<Option<Chat>, ConversationError> {

@@ -559,7 +559,7 @@ mod tests {
 	}
 
 	fn opened(dir: &Path) -> Database {
-		Database::open(&dir.join(FILE_NAME)).expect("the database opens")
+		Database::open(&dir.join(FILE_NAME), None).expect("the database opens")
 	}
 
 	/// `bots`, `conversations` and `conversation_participants` are written as raw SQL

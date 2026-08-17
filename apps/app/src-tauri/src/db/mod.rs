@@ -13,6 +13,7 @@
 //! statement waiting on a busy file would otherwise stall every other task
 //! sharing that thread — the event stream carrying a Claude turn included.
 
+pub mod bootstrap;
 pub mod connection;
 pub mod migrations;
 pub mod repositories;
@@ -23,6 +24,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rusqlite::Connection;
 use tauri::{AppHandle, Runtime};
 
+use bootstrap::LegacyImport;
 pub use connection::DatabaseError;
 use repositories::{ConversationsRepository, MessagesRepository, RuntimeContextRepository};
 
@@ -91,17 +93,25 @@ pub struct Database {
 	conversations: ConversationsRepository,
 	messages: MessagesRepository,
 	runtime_context: RuntimeContextRepository,
+	legacy_import: LegacyImport,
 }
 
 impl Database {
-	fn open(path: &Path) -> DatabaseState {
+	/// The legacy snapshot is imported here, straight after migrating and before
+	/// [`Access`] exists: the schema it writes into is installed, and the connection
+	/// is still exclusively this call's, so the import needs no lock and no runtime.
+	/// Its failures are outcomes rather than errors — the host boots without the
+	/// migration just as it boots without the database.
+	fn open(path: &Path, legacy: Option<&Path>) -> DatabaseState {
 		let mut connection = connection::open(path)?;
 		migrations::apply(&mut connection)?;
+		let legacy_import = bootstrap::import(&mut connection, legacy);
 		let access = Access::new(connection);
 		Ok(Self {
 			conversations: ConversationsRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			runtime_context: RuntimeContextRepository::new(access.clone()),
+			legacy_import,
 			access,
 		})
 	}
@@ -137,18 +147,33 @@ impl Database {
 	pub fn runtime_context(&self) -> &RuntimeContextRepository {
 		&self.runtime_context
 	}
+
+	/// What the launch that opened this file did about the legacy `session.json`. Read
+	/// off the state like everything else here: it happened once, before anything
+	/// could ask.
+	pub fn legacy_import(&self) -> &LegacyImport {
+		&self.legacy_import
+	}
 }
 
 pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
-	Database::open(&connection::file(app)?)
+	Database::open(&connection::file(app)?, crate::claude::store::file(app).as_deref())
 }
 
 /// Every test module under `db` opens a database the same way, on a directory of
 /// its own from [`connection::temp_dir`]. Lives here rather than in each of them
 /// because `Database::open` is private to this module.
+///
+/// No legacy path: an import is a boot step of its own, and the tests around it are
+/// the ones that ask for it.
 #[cfg(test)]
 pub(in crate::db) fn open(dir: &Path) -> Database {
-	Database::open(&dir.join(connection::FILE_NAME)).expect("the database opens")
+	Database::open(&dir.join(connection::FILE_NAME), None).expect("the database opens")
+}
+
+#[cfg(test)]
+pub(in crate::db) fn open_with_legacy(dir: &Path, legacy: &Path) -> Database {
+	Database::open(&dir.join(connection::FILE_NAME), Some(legacy)).expect("the database opens")
 }
 
 /// Counting rows is how those modules check that a write landed, or that a
