@@ -9,7 +9,7 @@
 		"baseColor": "neutral",
 		"cssVariables": true
 	},
-	"iconLibrary": "hugeicons",
+	"iconLibrary": "lucide",
 	"registries": {
 		"@beui": "https://beui.dev/r/{name}.json"
 	},

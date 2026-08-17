@@ -283,7 +283,7 @@ export function ToolResult({
 					transition={reduce ? { duration: 0 } : SPRING_SWAP}
 					className="shrink-0 text-muted-foreground"
 				>
-					<Icons.ArrowDown className="size-4" />
+					<Icons.Expand className="size-4" />
 				</motion.span>
 			</button>
 

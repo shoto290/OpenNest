@@ -1,7 +1,6 @@
 "use client"
 // beui.dev/components/agents/agent-activity
 
-import { ChevronDown, TriangleAlert } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
 	type ReactNode,
@@ -15,6 +14,7 @@ import {
 
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
+import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -236,7 +236,7 @@ export function AgentActivity({
 					)}
 				>
 					{failed ? (
-						<TriangleAlert
+						<Icons.Alert
 							aria-hidden="true"
 							className="size-3.5 shrink-0"
 							strokeWidth={2}
@@ -253,7 +253,7 @@ export function AgentActivity({
 						transition={reduce ? { duration: 0 } : SPRING_SWAP}
 						className="inline-flex shrink-0 group-hover:text-foreground"
 					>
-						<ChevronDown className="size-3.5" />
+						<Icons.Expand className="size-3.5" />
 					</motion.span>
 				</button>
 			)}

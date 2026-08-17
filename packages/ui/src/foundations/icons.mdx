@@ -6,7 +6,7 @@ import { IconCount, IconGrid } from "@workspace/ui/foundations/icon-grid"
 
 # Icons
 
-<IconCount /> icons, exported as one `Icons` object from `src/components/icons.tsx`, wrapping [Hugeicons](https://hugeicons.com) (`@hugeicons/core-free-icons` rendered through `@hugeicons/react`). Never import from `@hugeicons/*` directly — the wrapper is what keeps names semantic (`Icons.Delete`, not `Delete02Icon`) and keeps sizing consistent.
+<IconCount /> icons, exported as one `Icons` object from `src/components/icons.tsx`, mapping purpose names onto [Lucide](https://lucide.dev) (`lucide-react`). Never import from `lucide-react` directly — the map is what keeps names semantic (`Icons.Delete`, not `Trash2Icon`) and gives every consumer one place to swap a glyph.
 
 ```tsx
 import { Icons } from "@workspace/ui/components/icons"
@@ -14,12 +14,15 @@ import { Icons } from "@workspace/ui/components/icons"
 <Icons.Add className="size-4" />
 ```
 
-Each icon takes the Hugeicons SVG props. Size with `size-*`, colour with `text-*`. Decorative icons need `aria-hidden="true"`; an icon-only control needs an `aria-label` on the control, not on the icon.
+Each icon takes the Lucide SVG props (`size`, `strokeWidth`, `absoluteStrokeWidth`, plus any SVG attribute). Size with `size-*`, colour with `text-*`. Decorative icons need `aria-hidden="true"`; an icon-only control needs an `aria-label` on the control, not on the icon.
 
 ## Adding an icon
 
-1. Import the Hugeicons icon at the top of `icons.tsx`.
-2. Wrap it: `Foo: createIcon(Foo01Icon)`.
-3. Name it after its **purpose**, not its shape.
+1. Import the Lucide icon at the top of `icons.tsx`: `import { Trash2Icon } from "lucide-react"`.
+2. Add one key to the `Icons` object, keeping it alphabetically sorted: `Delete: Trash2Icon`.
+3. Name it after its **purpose**, not its shape — `Delete`, not `Trash2`; `Expand`, not `ChevronDown`.
+4. One key, one glyph — no two keys map to the same Lucide icon. If a second role needs an existing glyph, reuse that key.
+
+A brand mark Lucide does not ship (`Icons.Claude`) is declared as an inline `<svg>` component in `icons.tsx` itself, following Lucide's own conventions — a 24x24 `viewBox`, `stroke="currentColor"`, round caps and joins, `size` mapped onto `width`/`height` — so it sizes and colours identically to every other key.
 
 <IconGrid />

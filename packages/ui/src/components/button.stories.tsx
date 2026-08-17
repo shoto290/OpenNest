@@ -126,7 +126,7 @@ export const WithIcons = meta.story({
 			</Button>
 			<Button variant="outline">
 				Continue
-				<Icons.ArrowRight data-icon="inline-end" />
+				<Icons.Next data-icon="inline-end" />
 			</Button>
 			<Button variant="destructive">
 				<Icons.Delete data-icon="inline-start" />

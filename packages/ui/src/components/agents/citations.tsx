@@ -1,10 +1,10 @@
 "use client"
 
-import { BookOpenText, ChevronDown, ExternalLink, Globe2 } from "lucide-react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useId, useState } from "react"
 
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
+import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { getFaviconUrl } from "@workspace/ui/lib/favicon"
 import { cn } from "@workspace/ui/lib/utils"
@@ -99,7 +99,7 @@ export function CitationFavicon({
 					className="size-4 rounded-sm object-contain"
 				/>
 			) : (
-				<Globe2 className="size-3.5" />
+				<Icons.Web className="size-3.5" />
 			)}
 		</span>
 	)
@@ -150,7 +150,7 @@ function CitationRow({
 					{index}
 				</span>
 				{citation.url ? (
-					<ExternalLink className="size-3.5 text-muted-foreground/40 transition-colors group-hover/citation:text-muted-foreground" />
+					<Icons.ExternalLink className="size-3.5 text-muted-foreground/40 transition-colors group-hover/citation:text-muted-foreground" />
 				) : null}
 			</span>
 		</>
@@ -249,7 +249,7 @@ export function Citations({
 				onClick={() => setOpen(!currentOpen)}
 				className="group -ml-1 flex min-h-8 items-center gap-2 rounded-lg px-1 text-left text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 			>
-				<BookOpenText className="size-4" />
+				<Icons.Docs className="size-4" />
 				<span className="font-medium">{title}</span>
 				<span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
 					{citations.length}
@@ -260,7 +260,7 @@ export function Citations({
 					transition={reduce ? { duration: 0 } : SPRING_SWAP}
 					className="text-muted-foreground/60"
 				>
-					<ChevronDown className="size-3.5" />
+					<Icons.Expand className="size-3.5" />
 				</motion.span>
 			</button>
 
