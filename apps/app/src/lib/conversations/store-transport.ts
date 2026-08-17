@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core"
 import type {
 	Bot,
 	Chat,
+	ContextCheckpoint,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -35,11 +36,37 @@ export const conversationStore: TranscriptStore = {
 		conversationId: string,
 		botId: string,
 		startedAt: number,
+		reason: string | null,
 	) =>
 		invoke<RuntimeSession>("conversation_open_runtime_session", {
 			conversationId,
 			botId,
 			startedAt,
+			reason,
+		}),
+
+	boundedContext: (
+		conversationId: string,
+		botId: string,
+		promptMessageId: string,
+	) =>
+		invoke<string>("conversation_bounded_context", {
+			conversationId,
+			botId,
+			promptMessageId,
+		}),
+
+	captureCheckpoint: (
+		conversationId: string,
+		botId: string,
+		runtimeSessionId: string | null,
+		createdAt: number,
+	) =>
+		invoke<ContextCheckpoint | null>("conversation_capture_checkpoint", {
+			conversationId,
+			botId,
+			runtimeSessionId,
+			createdAt,
 		}),
 
 	startTurn: (turn: NewTurn) =>

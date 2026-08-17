@@ -8,6 +8,15 @@ import {
 	isTurnBusy,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
+import {
+	ASKED_FOR,
+	type LiveRun,
+	openedRun,
+	PROMPTS_PER_RUN,
+	type RotationReason,
+	rotationFor,
+	rotationReasonForFailure,
+} from "./rotation"
 
 import type {
 	ChatMessage,
@@ -44,10 +53,17 @@ export type ChatController = {
 	/** Reopens the session for the reader after it died. Resumes the id this launch
 	 * learned, so the answer carries on rather than starting Claude amnesiac. */
 	restart: () => Promise<SessionHandle | null>
+	/** Replaces the run by hand: the conversation is folded into a checkpoint, the
+	 * run answering in it is closed out with the reason, and a fresh process takes
+	 * over. Nothing on the screen moves — the next prompt is what tells the new
+	 * process what it is answering. */
+	rotate: () => Promise<SessionHandle | null>
 	/** Reads the page above the transcript. Deduplicated while in flight, and a
 	 * no-op once the beginning has been reached. */
 	loadOlder: () => Promise<void>
-	send: (text: string) => Promise<void>
+	/** `repliedToMessageId` is the message this prompt explicitly answers. It travels
+	 * with the prompt into every context rebuilt for it, however far back it is. */
+	send: (text: string, repliedToMessageId?: string) => Promise<void>
 	stop: () => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	retry: (id: string) => Promise<void>
@@ -59,6 +75,9 @@ export type ChatControllerOptions = {
 	 * are unique per message and never derived from a position in the transcript. */
 	newId?: () => string
 	now?: () => number
+	/** The preventive threshold: how many prompts one run carries before it is
+	 * replaced while it still answers. */
+	promptsPerRun?: number
 }
 
 /** The ending a message reaches when the process it was streaming from goes away.
@@ -109,10 +128,14 @@ export function createChatController(
 ): ChatController {
 	const newId = options.newId ?? (() => crypto.randomUUID())
 	const now = options.now ?? (() => Date.now())
+	const promptsPerRun = options.promptsPerRun ?? PROMPTS_PER_RUN
 	const transcript = createTranscriptController(store)
 
 	let state = initialChatState
 	let botId: string | null = null
+	/** What this launch knows about the process it is holding. Replaced whole by
+	 * every start, because none of it describes anything but that one process. */
+	let run: LiveRun = openedRun(false)
 	let activeTurn: { id: string; promptId: string } | null = null
 	let detach: Promise<() => void> | null = null
 	let pendingPreflight: Promise<SessionHandle | null> | null = null
@@ -334,9 +357,22 @@ export function createChatController(
 			if (!isSameRuntimeScope(scope, state.runtime)) {
 				return
 			}
+			noteFailure(event)
 			persist(event)
 		})
 		return detach
+	}
+
+	/** A run whose provider session is gone is marked, not replaced on the spot:
+	 * nobody asked for anything, and a rotation nothing is waiting for would spawn a
+	 * process no prompt is coming to. The next prompt is what rotates, and the first
+	 * reason recorded is the one that stands — what came after it happened to a run
+	 * that was already spent. */
+	const noteFailure = (event: ClaudeEvent) => {
+		if (event.type !== "failed") {
+			return
+		}
+		run.spent ??= rotationReasonForFailure(event.error)
 	}
 
 	const attach = () => {
@@ -367,8 +403,14 @@ export function createChatController(
 	const openRun = async (
 		conversationId: string,
 		bot: string,
+		reason: RotationReason | null,
 	): Promise<RuntimeScope> => {
-		const opened = await store.openRuntimeSession(conversationId, bot, now())
+		const opened = await store.openRuntimeSession(
+			conversationId,
+			bot,
+			now(),
+			reason,
+		)
 		return {
 			conversationId: opened.conversationId,
 			botId: opened.botId,
@@ -386,7 +428,10 @@ export function createChatController(
 	 * no run to open, and a session nothing can attribute is one whose every event
 	 * would be somebody's guess. So the reader is told the store is not answering
 	 * instead of being handed an unattributable session. */
-	const start = async (resume?: string) => {
+	const start = async (
+		resume?: string,
+		rotatedFor: RotationReason | null = null,
+	) => {
 		const conversationId = state.conversationId
 		const bot = botId
 		if (!conversationId || !bot) {
@@ -398,12 +443,16 @@ export function createChatController(
 
 		let runtime: RuntimeScope
 		try {
-			runtime = await openRun(conversationId, bot)
+			runtime = await openRun(conversationId, bot, rotatedFor)
 		} catch (reason) {
 			reportStore(reason)
 			return null
 		}
 
+		// A resumed session is the same process still holding what it was told; a
+		// fresh one has been told nothing, and the first prompt it takes is what
+		// carries the conversation to it.
+		run = openedRun(Boolean(resume))
 		dispatch({ type: "sessionReset", runtime, sessionId: resume ?? null })
 		try {
 			if (detach) {
@@ -452,6 +501,43 @@ export function createChatController(
 
 	const restart = () => preflight(state.sessionId ?? undefined)
 
+	/** The recovery point the next context resumes from. It is taken at the two
+	 * moments a conversation is about to depend on one: before the run that produced
+	 * it is closed out, and before a run that was told nothing is told everything.
+	 * The second is what leaves no stretch out — a context reads the summary and the
+	 * tail, so whatever falls between them has to be folded first.
+	 *
+	 * Nothing is deleted by it and nothing depends on it landing: a capture the store
+	 * refuses leaves the previous checkpoint answering for the chat, and the messages
+	 * this one would have folded are still on the record to be read word for word. */
+	const capture = async () => {
+		const conversationId = state.conversationId
+		const runtime = state.runtime
+		if (!conversationId || !botId || !runtime) {
+			return
+		}
+		try {
+			await store.captureCheckpoint(
+				conversationId,
+				botId,
+				runtime.runtimeSessionId,
+				now(),
+			)
+		} catch (reason) {
+			reportStore(reason)
+		}
+	}
+
+	/** The handover, in the order it has to happen: what the conversation is worth
+	 * keeping is folded and stored first, and only then is the run answering in it
+	 * closed out by the one that replaces it. The new run is never resumed — a
+	 * rotation exists because the provider session is spent, and what the fresh
+	 * process is told arrives with the next prompt instead. */
+	const rotateFor = async (reason: RotationReason) => {
+		await capture()
+		return start(undefined, reason)
+	}
+
 	const loadOlder = async () => {
 		const conversationId = state.conversationId
 		if (!conversationId || !state.hasOlder || state.loadingOlder) {
@@ -467,6 +553,28 @@ export function createChatController(
 		}
 	}
 
+	/** What the run is really told. A process that has already been told this
+	 * conversation is answering in it and takes the prompt alone; one that has not
+	 * is handed the whole context rebuilt from the file, which the host composes
+	 * around the prompt row rather than around the text — so the prompt is in it
+	 * exactly once, wherever the bounds fell.
+	 *
+	 * A store that cannot answer costs the context and not the prompt: the reader is
+	 * told the transcript is not being read, and the question still reaches Claude. */
+	const carried = async (promptId: string, text: string) => {
+		const conversationId = state.conversationId
+		if (run.carried || !conversationId || !botId) {
+			return text
+		}
+		await capture()
+		try {
+			return await store.boundedContext(conversationId, botId, promptId)
+		} catch (reason) {
+			reportStore(reason)
+			return text
+		}
+	}
+
 	/** Every runtime call names the run this controller holds, so one issued while a
 	 * restart is in flight is refused by the host rather than aimed at whatever
 	 * process happens to be installed by the time it lands. */
@@ -477,7 +585,9 @@ export function createChatController(
 			return
 		}
 		try {
-			await driver.submitPrompt(runtime, text)
+			await driver.submitPrompt(runtime, await carried(id, text))
+			run.carried = true
+			run.prompts += 1
 		} catch (reason) {
 			dispatch({
 				type: "promptRejected",
@@ -489,8 +599,13 @@ export function createChatController(
 
 	/** The prompt reaches the transcript before it reaches Claude. A prompt that
 	 * could not be written down is not submitted at all: the answer would arrive
-	 * against a question no reload could show. */
-	const send = async (text: string) => {
+	 * against a question no reload could show.
+	 *
+	 * A run that cannot take it is replaced first, before the prompt is written: a
+	 * checkpoint taken over a transcript that already held the question would fold
+	 * the very words about to be asked, and the context built afterwards would carry
+	 * them twice. */
+	const send = async (text: string, repliedToMessageId?: string) => {
 		const trimmed = text.trim()
 		if (trimmed.length === 0) {
 			return
@@ -503,6 +618,10 @@ export function createChatController(
 		if (!conversationId) {
 			reportStore({ kind: "unavailable" })
 			return
+		}
+		const rotation = rotationFor(run, promptsPerRun)
+		if (rotation) {
+			await rotateFor(rotation)
 		}
 		dispatch({ type: "promptSubmitted" })
 
@@ -521,7 +640,7 @@ export function createChatController(
 					conversationId,
 					turnId,
 					authorBotId: null,
-					repliedToMessageId: null,
+					repliedToMessageId: repliedToMessageId ?? null,
 					content: trimmed,
 					createdAt,
 				})
@@ -608,6 +727,7 @@ export function createChatController(
 		preflight,
 		boot,
 		restart,
+		rotate: () => rotateFor(ASKED_FOR),
 		loadOlder,
 		send,
 		stop,
