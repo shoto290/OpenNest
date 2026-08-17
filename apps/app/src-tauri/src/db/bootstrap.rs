@@ -4,10 +4,15 @@
 //! Exactly-once is a row rather than a look at the disk: the marker in
 //! `app_settings` is written inside the same transaction as the rows it stands
 //! for, so no crash can leave a half-imported transcript nothing will ever
-//! recognise. Deciding by whether `session.json` is still there would be wrong
-//! twice over — the file is deliberately left where it is, and the legacy writer
-//! is still live and may create a fresh one the moment this boot is over. That
-//! file is the conversation the app is having now, not history to migrate again.
+//! recognise. Reading it takes no transaction at all — every boot after the first
+//! answers from one lookup on a primary key, and that key is also what keeps the
+//! decision exclusive: a marker appearing after the read makes the insert fail and
+//! takes the whole import back with it.
+//!
+//! Deciding by whether `session.json` is still there would be wrong twice over —
+//! the file is deliberately left where it is, and the legacy writer is still live
+//! and may create a fresh one the moment this boot is over. That file is the
+//! conversation the app is having now, not history to migrate again.
 //!
 //! Nothing here destroys the source, on any path. Bytes this build cannot parse
 //! leave the file byte-identical and no marker behind, so a build that can parse
@@ -36,9 +41,7 @@ use uuid::Uuid;
 
 use crate::claude::contract::{self, ActivityEvent, ChatMessage, SessionSnapshot};
 use crate::claude::store::{self, Stored};
-use crate::db::repositories::conversations::{
-	chat_of, insert_chat, ConversationError, DEFAULT_BOT_ID,
-};
+use crate::db::repositories::conversations::{ensure_chat_in, ConversationError, DEFAULT_BOT_ID};
 use crate::db::repositories::messages::{ActivityStatus, MessageRole, MessageState};
 
 /// Where the source is copied once it is safe in the database. Deliberately not
@@ -86,7 +89,7 @@ const INSERT_ACTIVITY: &str = "INSERT INTO activities
 /// recoverable ones are never collapsed: `Unreadable` and `Unpreserved` are about
 /// the file, `Refused` is about the database, and a boot that reported one for
 /// another would send whoever reads it to the wrong place.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum LegacyImport {
 	/// No path to look at, so nothing was examined and nothing decided. No marker
 	/// either: a later boot asks again.
@@ -115,9 +118,9 @@ pub enum LegacyImport {
 	Refused,
 }
 
-/// Runs on the opener's connection, before anything else can reach the file: the
-/// marker read and every row it stands for are one transaction, and there is no
-/// second writer to lose a race with.
+/// Runs on the opener's connection, before anything else can reach the file: every
+/// row this writes and the marker that stands for them are one transaction, and
+/// there is no second writer to lose a race with.
 ///
 /// An import that cannot happen is an outcome, never an error: the host boots
 /// either way, and what went wrong is read off the state.
@@ -128,9 +131,16 @@ pub fn import(connection: &mut Connection, legacy: Option<&Path>) -> LegacyImpor
 	decided(connection, path).unwrap_or(LegacyImport::Refused)
 }
 
-/// The marker is read before the file rather than after: a boot that has already
-/// decided must not so much as look at what the legacy writer has left there
-/// since, whether or not this build can read it.
+/// Three steps, in this order and no other. The marker is read first — a boot that
+/// has already decided must not so much as look at what the legacy writer has left
+/// on the disk since, whether or not this build can read it. Then the file. The
+/// write lock is taken last, only on the paths that write: the steady state is a
+/// marker that is already there, and every launch for the life of the install would
+/// otherwise queue for a lock to run one lookup and roll it back.
+///
+/// Nothing is lost by reading outside the transaction. The insert below is what
+/// makes the decision exclusive, on the primary key `app_settings` already has, so a
+/// marker that appears in between is refused there and takes the import with it.
 ///
 /// The copy is secured between the rows and the marker, and the marker is what the
 /// commit turns irrevocable: an import that cannot preserve its source has to be
@@ -140,8 +150,7 @@ pub fn import(connection: &mut Connection, legacy: Option<&Path>) -> LegacyImpor
 /// file, an unpreservable one and a refused write all leave the database as they
 /// found it.
 fn decided(connection: &mut Connection, path: &Path) -> Result<LegacyImport, ConversationError> {
-	let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-	if stored_marker(&transaction)?.is_some() {
+	if stored_marker(connection)?.is_some() {
 		return Ok(LegacyImport::AlreadyImported);
 	}
 	let snapshot = match store::read(path) {
@@ -150,6 +159,7 @@ fn decided(connection: &mut Connection, path: &Path) -> Result<LegacyImport, Con
 		Stored::Snapshot(snapshot) if snapshot == SessionSnapshot::default() => None,
 		Stored::Snapshot(snapshot) => Some(snapshot),
 	};
+	let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
 	let outcome = match snapshot {
 		Some(snapshot) => {
 			let counted = imported(&transaction, snapshot)?;
@@ -169,61 +179,51 @@ fn decided(connection: &mut Connection, path: &Path) -> Result<LegacyImport, Con
 }
 
 /// Everything the snapshot becomes. The bot, the chat and the seat come from
-/// [`insert_chat`] rather than from SQL of our own, so this path meets the same
+/// [`ensure_chat_in`] rather than from SQL of our own, so this path meets the same
 /// identity rule as every other one — a default bot another build wrote refuses
 /// the import whole instead of running the transcript on a bot nobody here agreed
 /// to.
+///
+/// Only the last turn is kept as it goes: the activities are filed under it, because
+/// a step belongs to the exchange it was taken during and the snapshot says nothing
+/// finer than that.
 fn imported(
 	transaction: &Transaction<'_>,
 	snapshot: SessionSnapshot,
 ) -> Result<LegacyImport, ConversationError> {
-	let chat = match chat_of(transaction, DEFAULT_BOT_ID)? {
-		Some(held) => held,
-		None => insert_chat(transaction, DEFAULT_BOT_ID)?,
-	};
+	let chat = ensure_chat_in(transaction, DEFAULT_BOT_ID)?;
 	let opened_at = snapshot.messages.first().map_or_else(now, |message| message.timestamp);
 	open_runtime_session(transaction, &chat.id, snapshot.session_id.as_deref(), opened_at)?;
-	let mut turns = Vec::new();
+	let mut turns = 0;
+	let mut last_turn = None;
 	for messages in turns_of(&snapshot.messages) {
 		let turn = insert_turn(transaction, &chat.id, messages)?;
 		for message in messages {
 			insert_message(transaction, &chat.id, &turn.id, message)?;
 		}
-		turns.push(turn);
+		turns += 1;
+		last_turn = Some(turn);
 	}
-	if let Some(turn) = host_turn(transaction, &chat.id, &mut turns, &snapshot.activities)? {
+	if !snapshot.activities.is_empty() {
+		// A snapshot carrying activities and no messages has no turn to file them under,
+		// so one is opened rather than the material dropped for tidiness — and the count
+		// reports it as the turn it is.
+		let turn = match last_turn {
+			Some(last) => last,
+			None => {
+				turns += 1;
+				insert_turn(transaction, &chat.id, &[])?
+			}
+		};
 		for activity in &snapshot.activities {
-			insert_activity(transaction, turn, activity)?;
+			insert_activity(transaction, &turn, activity)?;
 		}
 	}
 	Ok(LegacyImport::Imported {
-		turns: turns.len(),
+		turns,
 		messages: snapshot.messages.len(),
 		activities: snapshot.activities.len(),
 	})
-}
-
-/// The turn the activities are filed under: the last one, because a step belongs
-/// to the exchange it was taken during and the snapshot says nothing finer than
-/// that.
-///
-/// A snapshot carrying activities and no messages has no turn at all, so one is
-/// opened for them — the material is worth more than the tidiness of importing no
-/// turn, and the reported count says the turn is there. A snapshot with no
-/// activities answers `None` and opens nothing.
-fn host_turn<'turns>(
-	transaction: &Transaction<'_>,
-	conversation_id: &str,
-	turns: &'turns mut Vec<ImportedTurn>,
-	activities: &[ActivityEvent],
-) -> Result<Option<&'turns ImportedTurn>, ConversationError> {
-	if activities.is_empty() {
-		return Ok(None);
-	}
-	if turns.is_empty() {
-		turns.push(insert_turn(transaction, conversation_id, &[])?);
-	}
-	Ok(turns.last())
 }
 
 /// A turn as it landed, kept for the activities: an [`ActivityEvent`] carries no
@@ -268,13 +268,22 @@ fn insert_turn(
 	let started_at = messages.first().map_or_else(now, |message| message.timestamp);
 	let completed_at = messages.last().map_or(started_at, |message| message.timestamp);
 	let id = Uuid::new_v4().to_string();
-	transaction.execute(INSERT_TURN, params![id, conversation_id, started_at, completed_at])?;
+	transaction.prepare_cached(INSERT_TURN)?.execute(params![
+		id,
+		conversation_id,
+		started_at,
+		completed_at
+	])?;
 	Ok(ImportedTurn { id, started_at })
 }
 
 /// The id is the snapshot's own, never a fresh one: it is what the frontend has
 /// already rendered, and keeping it is what makes the migration invisible to
 /// whoever is reading the chat.
+///
+/// Taken from the connection's cache, like every other statement this crate runs
+/// once per row: a long transcript is a few hundred of these, and compiling the same
+/// text again for each one would be spent inside the write transaction.
 fn insert_message(
 	transaction: &Transaction<'_>,
 	conversation_id: &str,
@@ -283,19 +292,16 @@ fn insert_message(
 ) -> Result<(), ConversationError> {
 	let role = role_of(message.role);
 	let author = (role == MessageRole::Assistant).then_some(DEFAULT_BOT_ID);
-	transaction.execute(
-		INSERT_MESSAGE,
-		params![
-			message.id,
-			conversation_id,
-			turn_id,
-			author,
-			role,
-			message.text,
-			state_of(message.completion),
-			message.timestamp,
-		],
-	)?;
+	transaction.prepare_cached(INSERT_MESSAGE)?.execute(params![
+		message.id,
+		conversation_id,
+		turn_id,
+		author,
+		role,
+		message.text,
+		state_of(message.completion),
+		message.timestamp,
+	])?;
 	Ok(())
 }
 
@@ -307,17 +313,14 @@ fn insert_activity(
 	activity: &ActivityEvent,
 ) -> Result<(), ConversationError> {
 	let payload = serde_json::to_string(activity).map_err(unserializable)?;
-	transaction.execute(
-		INSERT_ACTIVITY,
-		params![
-			activity.id,
-			turn.id,
-			kind_of(activity.kind),
-			status_of(activity.status),
-			payload,
-			turn.started_at,
-		],
-	)?;
+	transaction.prepare_cached(INSERT_ACTIVITY)?.execute(params![
+		activity.id,
+		turn.id,
+		kind_of(activity.kind),
+		status_of(activity.status),
+		payload,
+		turn.started_at,
+	])?;
 	Ok(())
 }
 
@@ -343,8 +346,11 @@ fn open_runtime_session(
 	Ok(())
 }
 
-fn stored_marker(transaction: &Transaction<'_>) -> Result<Option<String>, ConversationError> {
-	Ok(transaction.query_row(STORED_MARKER, params![MARKER_KEY], |row| row.get(0)).optional()?)
+/// Takes a plain `&Connection`, which a `Transaction` also derefs to: the same
+/// question is asked before the write lock is taken and inside a transaction by the
+/// tests, and there is nothing about it that needs the lock.
+fn stored_marker(connection: &Connection) -> Result<Option<String>, ConversationError> {
+	Ok(connection.query_row(STORED_MARKER, params![MARKER_KEY], |row| row.get(0)).optional()?)
 }
 
 fn mark(transaction: &Transaction<'_>, outcome: &'static str) -> Result<(), ConversationError> {
@@ -404,9 +410,11 @@ fn unserializable(error: serde_json::Error) -> ConversationError {
 /// Answers only once the copy is on the disk for good, because the marker commits
 /// on the strength of that answer.
 ///
-/// The `exists` check is a shortcut, not the guarantee: a target appearing after it
-/// has looked is caught by [`install_copy`], which cannot create a name that is
-/// already taken.
+/// The `exists` check is not what makes any of this safe — [`install_copy`] cannot
+/// take a name that is already taken, and that is the guarantee. It is there for the
+/// retry: a boot that already preserved this snapshot answers from one read, instead
+/// of writing and fsyncing a temporary only to find the name occupied, and it still
+/// answers in a directory that has gone read-only since.
 fn secure_a_copy(path: &Path) -> std::io::Result<()> {
 	let target = preserved(path);
 	let body = fs::read(path)?;
@@ -456,14 +464,15 @@ fn accept_identical(target: &Path, body: &[u8]) -> std::io::Result<()> {
 /// which is the safe direction: nothing is destroyed and a later boot tries again.
 ///
 /// The temporary is dropped either way. On success it is a second name for bytes the
-/// target now holds; on failure it is a leftover. The parent is synced last, so both
-/// the name that appeared and the one that went are durable.
+/// target now holds; on failure it is a leftover. The parent is synced after both
+/// moves, because the link is only recorded once the directory's own entry is
+/// durable — and that one sync covers the name that appeared and the one that went.
 fn install_copy(target: &Path, body: &[u8]) -> std::io::Result<()> {
 	let temp = temporary(target);
 	let linked = write_then_link(target, &temp, body);
 	let _ = fs::remove_file(&temp);
 	match linked {
-		Ok(()) => sync_parent(target),
+		Ok(()) => store::sync_parent(target),
 		Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
 			accept_identical(target, body)
 		}
@@ -477,7 +486,7 @@ fn install_copy(target: &Path, body: &[u8]) -> std::io::Result<()> {
 /// content still in the page cache would survive a power cut as an empty file.
 fn write_then_link(target: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()> {
 	let mut file = fs::File::create(temp)?;
-	restrict_to_owner(&file)?;
+	store::restrict_to_owner(&file)?;
 	file.write_all(body)?;
 	file.sync_all()?;
 	fs::hard_link(temp, target)
@@ -502,32 +511,6 @@ fn suffixed(path: &Path, suffix: &str) -> PathBuf {
 	PathBuf::from(name)
 }
 
-/// The flushed sibling only becomes the target once the directory entry itself is
-/// durable; a power cut in between leaves the rename unrecorded.
-#[cfg(unix)]
-fn sync_parent(path: &Path) -> std::io::Result<()> {
-	let Some(parent) = path.parent() else {
-		return Ok(());
-	};
-	fs::File::open(parent)?.sync_all()
-}
-
-#[cfg(not(unix))]
-fn sync_parent(_path: &Path) -> std::io::Result<()> {
-	Ok(())
-}
-
-#[cfg(unix)]
-fn restrict_to_owner(file: &fs::File) -> std::io::Result<()> {
-	use std::os::unix::fs::PermissionsExt;
-	file.set_permissions(fs::Permissions::from_mode(0o600))
-}
-
-#[cfg(not(unix))]
-fn restrict_to_owner(_file: &fs::File) -> std::io::Result<()> {
-	Ok(())
-}
-
 /// Unix millis, the unit the schema stores, and only ever a fallback here: every
 /// row the snapshot can date is dated by the snapshot.
 fn now() -> i64 {
@@ -537,6 +520,8 @@ fn now() -> i64 {
 #[cfg(test)]
 mod tests {
 	use std::path::Path;
+
+	use rusqlite::Row;
 
 	use super::*;
 	/// The two contract vocabularies that share no name with the stored ones above.
@@ -669,13 +654,6 @@ mod tests {
 		);
 	}
 
-	fn marker(connection: &Connection) -> Option<String> {
-		connection
-			.query_row(STORED_MARKER, params![MARKER_KEY], |row| row.get(0))
-			.optional()
-			.expect("query")
-	}
-
 	#[derive(Debug, PartialEq, Eq)]
 	struct MessageRow {
 		id: String,
@@ -712,15 +690,25 @@ mod tests {
 		started_at: i64,
 	}
 
+	/// The `prepare`, `query_map` and `collect` every reader below needs, so each one
+	/// is only the query it asks and the row it builds. Every one of them orders by
+	/// `seq`: the order the import wrote is what they are all about.
+	fn rows_of<T>(
+		connection: &Connection,
+		query: &str,
+		read: fn(&Row<'_>) -> rusqlite::Result<T>,
+	) -> Vec<T> {
+		let mut statement = connection.prepare(query).expect("prepare");
+		let rows = statement.query_map([], read).expect("query");
+		rows.collect::<rusqlite::Result<Vec<_>>>().expect("rows")
+	}
+
 	fn messages_in(connection: &Connection) -> Vec<MessageRow> {
-		let mut statement = connection
-			.prepare(
-				"SELECT id, turn_id, author_bot_id, role, content, completion_state, created_at
-					FROM messages ORDER BY seq",
-			)
-			.expect("prepare");
-		let rows = statement
-			.query_map([], |row| {
+		rows_of(
+			connection,
+			"SELECT id, turn_id, author_bot_id, role, content, completion_state, created_at
+				FROM messages ORDER BY seq",
+			|row| {
 				Ok(MessageRow {
 					id: row.get(0)?,
 					turn_id: row.get(1)?,
@@ -730,36 +718,21 @@ mod tests {
 					state: row.get(5)?,
 					created_at: row.get(6)?,
 				})
-			})
-			.expect("query")
-			.collect::<rusqlite::Result<Vec<_>>>()
-			.expect("rows");
-		rows
+			},
+		)
 	}
 
 	fn turns_in(connection: &Connection) -> Vec<TurnRow> {
-		let mut statement = connection
-			.prepare("SELECT id, started_at, completed_at FROM turns ORDER BY seq")
-			.expect("prepare");
-		let rows = statement
-			.query_map([], |row| {
-				Ok(TurnRow { id: row.get(0)?, started_at: row.get(1)?, completed_at: row.get(2)? })
-			})
-			.expect("query")
-			.collect::<rusqlite::Result<Vec<_>>>()
-			.expect("rows");
-		rows
+		rows_of(connection, "SELECT id, started_at, completed_at FROM turns ORDER BY seq", |row| {
+			Ok(TurnRow { id: row.get(0)?, started_at: row.get(1)?, completed_at: row.get(2)? })
+		})
 	}
 
 	fn activities_in(connection: &Connection) -> Vec<ActivityRow> {
-		let mut statement = connection
-			.prepare(
-				"SELECT id, turn_id, kind, status, payload, created_at
-					FROM activities ORDER BY seq",
-			)
-			.expect("prepare");
-		let rows = statement
-			.query_map([], |row| {
+		rows_of(
+			connection,
+			"SELECT id, turn_id, kind, status, payload, created_at FROM activities ORDER BY seq",
+			|row| {
 				Ok(ActivityRow {
 					id: row.get(0)?,
 					turn_id: row.get(1)?,
@@ -768,33 +741,24 @@ mod tests {
 					payload: row.get(4)?,
 					created_at: row.get(5)?,
 				})
-			})
-			.expect("query")
-			.collect::<rusqlite::Result<Vec<_>>>()
-			.expect("rows");
-		rows
+			},
+		)
 	}
 
 	fn sessions_in(connection: &Connection) -> Vec<SessionRow> {
-		let mut statement = connection
-			.prepare(
-				"SELECT provider_session_id, seq, status, started_at
-					FROM runtime_sessions ORDER BY seq",
-			)
-			.expect("prepare");
-		let rows = statement
-			.query_map([], |row| {
+		rows_of(
+			connection,
+			"SELECT provider_session_id, seq, status, started_at
+				FROM runtime_sessions ORDER BY seq",
+			|row| {
 				Ok(SessionRow {
 					provider_session_id: row.get(0)?,
 					seq: row.get(1)?,
 					status: row.get(2)?,
 					started_at: row.get(3)?,
 				})
-			})
-			.expect("query")
-			.collect::<rusqlite::Result<Vec<_>>>()
-			.expect("rows");
-		rows
+			},
+		)
 	}
 
 	/// A launch with no legacy file has still decided: the marker is what stops the
@@ -808,7 +772,7 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, LegacyImport::NothingToImport);
-		assert_eq!(marker(&connection).as_deref(), Some(MARKER_NOTHING));
+		assert_eq!(stored_marker(&connection).expect("query").as_deref(), Some(MARKER_NOTHING));
 		assert_nothing_landed(&connection);
 		assert!(!preserved(&path).exists(), "a copy was kept of a file that was never there");
 
@@ -828,7 +792,7 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, LegacyImport::NothingToImport);
-		assert_eq!(marker(&connection).as_deref(), Some(MARKER_NOTHING));
+		assert_eq!(stored_marker(&connection).expect("query").as_deref(), Some(MARKER_NOTHING));
 		assert_nothing_landed(&connection);
 		assert!(!preserved(&path).exists(), "a copy was kept of a snapshot holding nothing");
 		assert!(path.exists(), "the source was not left where the visible chat reads it");
@@ -853,7 +817,7 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, IMPORTED_SAMPLE);
-		assert_eq!(marker(&connection).as_deref(), Some(MARKER_IMPORTED));
+		assert_eq!(stored_marker(&connection).expect("query").as_deref(), Some(MARKER_IMPORTED));
 		assert_eq!(rows_in(&connection, "bots"), 1);
 		assert_eq!(rows_in(&connection, "conversations"), 1);
 		assert_eq!(rows_in(&connection, "conversation_participants"), 1);
@@ -976,7 +940,11 @@ mod tests {
 			let outcome = import(&mut connection, Some(&path));
 
 			assert_eq!(outcome, LegacyImport::Unreadable, "`{body}` answered something else");
-			assert_eq!(marker(&connection), None, "`{body}` was decided about anyway");
+			assert_eq!(
+				stored_marker(&connection).expect("query"),
+				None,
+				"`{body}` was decided about anyway"
+			);
 			assert_nothing_landed(&connection);
 			assert_eq!(fs::read_to_string(&path).expect("read"), body, "`{body}` was rewritten");
 			assert!(!preserved(&path).exists(), "a copy was kept of bytes nothing could read");
@@ -1005,7 +973,11 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, LegacyImport::Refused);
-		assert_eq!(marker(&connection), None, "a refused import decided anyway");
+		assert_eq!(
+			stored_marker(&connection).expect("query"),
+			None,
+			"a refused import decided anyway"
+		);
 		assert_nothing_landed(&connection);
 		assert_eq!(fs::read(&path).expect("read"), source, "a refused import touched the source");
 		assert!(!preserved(&path).exists(), "a copy was kept of an import that never landed");
@@ -1041,7 +1013,11 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, LegacyImport::Unpreserved);
-		assert_eq!(marker(&connection), None, "an import that preserved nothing decided anyway");
+		assert_eq!(
+			stored_marker(&connection).expect("query"),
+			None,
+			"an import that preserved nothing decided anyway"
+		);
 		assert_nothing_landed(&connection);
 		assert_eq!(fs::read(&path).expect("read"), source, "the source was touched");
 		assert!(!preserved(&path).exists(), "a target was left behind by a copy that failed");
@@ -1067,7 +1043,11 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, LegacyImport::Unpreserved);
-		assert_eq!(marker(&connection), None, "an import that preserved nothing decided anyway");
+		assert_eq!(
+			stored_marker(&connection).expect("query"),
+			None,
+			"an import that preserved nothing decided anyway"
+		);
 		assert_nothing_landed(&connection);
 		assert_eq!(
 			fs::read_to_string(preserved(&path)).expect("the copy"),
@@ -1139,7 +1119,7 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, LegacyImport::Unpreserved);
-		assert_eq!(marker(&connection), None);
+		assert_eq!(stored_marker(&connection).expect("query"), None);
 		assert_nothing_landed(&connection);
 		assert_eq!(
 			fs::read(preserved(&path)).expect("the copy"),
@@ -1166,7 +1146,7 @@ mod tests {
 		let outcome = import(&mut connection, Some(&path));
 
 		assert_eq!(outcome, IMPORTED_SAMPLE, "the retry was refused its own copy");
-		assert_eq!(marker(&connection).as_deref(), Some(MARKER_IMPORTED));
+		assert_eq!(stored_marker(&connection).expect("query").as_deref(), Some(MARKER_IMPORTED));
 		assert_eq!(rows_in(&connection, "messages"), 7);
 		assert_eq!(fs::read(preserved(&path)).expect("the copy"), source);
 		assert_eq!(fs::read(&path).expect("read"), source, "the source was touched");
@@ -1259,7 +1239,11 @@ mod tests {
 		let outcome = import(&mut connection, None);
 
 		assert_eq!(outcome, LegacyImport::Unavailable);
-		assert_eq!(marker(&connection), None, "a boot that examined nothing decided anyway");
+		assert_eq!(
+			stored_marker(&connection).expect("query"),
+			None,
+			"a boot that examined nothing decided anyway"
+		);
 		assert_nothing_landed(&connection);
 
 		drop(connection);

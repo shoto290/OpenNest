@@ -33,11 +33,11 @@ struct StoredSession {
 /// only one of the two may be written over: bytes this build cannot parse may
 /// still be a transcript, and an absent file holds nothing to lose.
 ///
-/// Public because that distinction belongs to whoever decides what happens to the
-/// file next, and there is only one file to decide about: the legacy import writes
-/// nothing and records nothing on `Unreadable`, so the bytes are still there for a
-/// build that can read them.
-pub enum Stored {
+/// Reachable across the crate because that distinction belongs to whoever decides
+/// what happens to the file next, and there is only one file to decide about: the
+/// legacy import writes nothing and records nothing on `Unreadable`, so the bytes
+/// are still there for a build that can read them.
+pub(crate) enum Stored {
 	Missing,
 	Snapshot(SessionSnapshot),
 	Unreadable,
@@ -56,7 +56,7 @@ pub fn file<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 /// an empty transcript, while anything deciding what becomes of the file itself
 /// has to tell them apart — unreadable bytes may still be a whole conversation,
 /// and treating them as nothing is how one gets written over.
-pub fn read(path: &Path) -> Stored {
+pub(crate) fn read(path: &Path) -> Stored {
 	let raw = match fs::read_to_string(path) {
 		Ok(raw) => raw,
 		Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Stored::Missing,
@@ -232,8 +232,12 @@ fn write_atomically(path: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()
 
 /// The flushed sibling only becomes the target once the directory entry itself
 /// is durable; a power cut in between leaves the rename unrecorded.
+///
+/// Reachable across the crate, with [`restrict_to_owner`] below: writing a file
+/// beside `session.json` durably and owner-only is this file's discipline, and a
+/// second copy of it elsewhere would be a second thing to keep right.
 #[cfg(unix)]
-fn sync_parent(path: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_parent(path: &Path) -> std::io::Result<()> {
 	let Some(parent) = path.parent() else {
 		return Ok(());
 	};
@@ -241,18 +245,18 @@ fn sync_parent(path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(not(unix))]
-fn sync_parent(_path: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_parent(_path: &Path) -> std::io::Result<()> {
 	Ok(())
 }
 
 #[cfg(unix)]
-fn restrict_to_owner(file: &fs::File) -> std::io::Result<()> {
+pub(crate) fn restrict_to_owner(file: &fs::File) -> std::io::Result<()> {
 	use std::os::unix::fs::PermissionsExt;
 	file.set_permissions(fs::Permissions::from_mode(0o600))
 }
 
 #[cfg(not(unix))]
-fn restrict_to_owner(_file: &fs::File) -> std::io::Result<()> {
+pub(crate) fn restrict_to_owner(_file: &fs::File) -> std::io::Result<()> {
 	Ok(())
 }
 

@@ -221,20 +221,31 @@ fn ensured_chat(connection: &mut Connection, bot_id: &str) -> Result<Chat, Conve
 		return Ok(held);
 	}
 	let transaction = write_transaction(connection)?;
-	let held = match chat_of(&transaction, bot_id)? {
-		Some(found) => found,
-		None => insert_chat(&transaction, bot_id)?,
-	};
+	let held = ensure_chat_in(&transaction, bot_id)?;
 	transaction.commit()?;
 	Ok(held)
 }
 
-/// Reachable across `db` because a caller holding a transaction of its own has to
-/// be able to ask the same question inside it — see [`insert_chat`].
-pub(in crate::db) fn chat_of(
-	connection: &Connection,
+/// Which chat the bot has, and — when it has none yet — the bot, the chat and the
+/// seat written together. One decision, so it reads inside the same transaction
+/// that would write: between a read outside and a write inside, another connection
+/// may have written the very row this was about to.
+///
+/// Takes the caller's transaction rather than opening one, which is the whole reason
+/// it is reachable across `db`: a caller with more to land in the same unit — the
+/// legacy import, which writes a whole transcript beside it — meets these rules
+/// instead of composing them again from the outside.
+pub(in crate::db) fn ensure_chat_in(
+	transaction: &Transaction<'_>,
 	bot_id: &str,
-) -> Result<Option<Chat>, ConversationError> {
+) -> Result<Chat, ConversationError> {
+	match chat_of(transaction, bot_id)? {
+		Some(found) => Ok(found),
+		None => insert_chat(transaction, bot_id),
+	}
+}
+
+fn chat_of(connection: &Connection, bot_id: &str) -> Result<Option<Chat>, ConversationError> {
 	Ok(connection.query_row(SELECT_CHAT_OF_BOT, [bot_id], chat).optional()?)
 }
 
@@ -252,14 +263,7 @@ fn write_transaction(connection: &mut Connection) -> Result<Transaction<'_>, Dat
 /// owns, and its fixed id is the only one that can already be taken by another
 /// build's row. A chat asked for any other bot needs that bot on the record
 /// already, which the participant's foreign key is what enforces.
-///
-/// Reachable across `db` because it takes the caller's transaction: the legacy
-/// import writes the chat, the seed, the seat and a whole transcript as one unit,
-/// and this is the only place the first three are written together at all.
-pub(in crate::db) fn insert_chat(
-	transaction: &Transaction<'_>,
-	bot_id: &str,
-) -> Result<Chat, ConversationError> {
+fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, ConversationError> {
 	if bot_id == DEFAULT_BOT_ID {
 		seed_default_bot(transaction)?;
 	}
