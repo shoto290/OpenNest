@@ -321,6 +321,20 @@ pub struct MessagePage {
 	pub has_more: bool,
 }
 
+/// A stretch of one conversation, bounded at both ends and by a count. Both bounds
+/// are exclusive: `after_seq` is the last message something else already stands for
+/// — a checkpoint's summary — and `before_seq` is the message the window is being
+/// built for, which is never part of its own context.
+///
+/// `limit` keeps the newest rows of that stretch, so what comes back is bounded by
+/// the count however long the stretch is.
+pub struct MessageWindowQuery {
+	pub conversation_id: String,
+	pub after_seq: i64,
+	pub before_seq: i64,
+	pub limit: u32,
+}
+
 pub struct NewActivity {
 	pub id: String,
 	pub turn_id: String,
@@ -376,6 +390,15 @@ const FINALIZE_MESSAGE: &str = "UPDATE messages SET completion_state = ?2
 const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
 		content, completion_state, created_at
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
+const MESSAGE_BY_ID: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
+		content, completion_state, created_at
+	FROM messages WHERE conversation_id = ?1 AND id = ?2";
+const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
+		content, completion_state, created_at
+	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
+	ORDER BY seq DESC LIMIT ?4";
+const LAST_MESSAGE_SEQ: &str =
+	"SELECT COALESCE(MAX(seq), 0) FROM messages WHERE conversation_id = ?1";
 
 const ACTIVITY_KEY: &str = "SELECT id, kind, status, payload, seq, created_at, turn_id
 	FROM activities WHERE id = ?1";
@@ -509,6 +532,66 @@ impl MessagesRepository {
 				}
 				messages.reverse();
 				Ok(MessagePage { messages, has_more })
+			})
+			.await?)
+	}
+
+	/// One message of one conversation, by the id something else is holding: a reply
+	/// names its target, and a context is built for a prompt already on the record.
+	/// The conversation is part of the lookup rather than trusted from the id — an id
+	/// alone names any row in the file.
+	pub async fn message(
+		&self,
+		conversation_id: String,
+		id: String,
+	) -> Result<Option<StoredMessage>, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				Ok(connection
+					.prepare_cached(MESSAGE_BY_ID)?
+					.query_row(params![conversation_id, id], read_message)
+					.optional()?)
+			})
+			.await?)
+	}
+
+	/// The newest messages of a bounded stretch, handed back oldest first. Read
+	/// newest first because the bound belongs at the recent end: what a context can
+	/// afford to leave out is the beginning of the stretch, never the words just
+	/// spoken.
+	pub async fn window_messages(
+		&self,
+		query: MessageWindowQuery,
+	) -> Result<Vec<StoredMessage>, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(MESSAGE_WINDOW)?;
+				let mut messages = statement
+					.query_map(
+						params![
+							query.conversation_id,
+							query.after_seq,
+							query.before_seq,
+							query.limit
+						],
+						read_message,
+					)?
+					.collect::<Result<Vec<_>, _>>()?;
+				messages.reverse();
+				Ok(messages)
+			})
+			.await?)
+	}
+
+	/// How far the transcript reaches, in the one order that counts. Zero for a
+	/// conversation with nothing in it, which is the same number a participant with
+	/// no checkpoint resumes from.
+	pub async fn last_seq(&self, conversation_id: String) -> Result<i64, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				Ok(connection
+					.prepare_cached(LAST_MESSAGE_SEQ)?
+					.query_row(params![conversation_id], |row| row.get(0))?)
 			})
 			.await?)
 	}
