@@ -12,8 +12,14 @@
 //! Nothing here destroys the source, on any path. Bytes this build cannot parse
 //! leave the file byte-identical and no marker behind, so a build that can parse
 //! them still finds them; a database that refuses the write leaves the same
-//! nothing. [`LegacyImport`] keeps those two apart because both are recoverable
-//! and only one of them is about the file.
+//! nothing. [`LegacyImport`] keeps those apart because they are all recoverable
+//! and each says where to look.
+//!
+//! The recovery copy beside the source is part of what the marker stands for, not
+//! an afterthought to it: it is on the disk whole and durable *before* the marker
+//! is allowed to commit. A marker is irrevocable — no later boot reads the file
+//! again — so an import recorded as complete with no copy next to it would have
+//! spent the one chance anybody had to keep that material.
 //!
 //! What a dead host left is recorded as what it was rather than as what it would
 //! have become: a reply the process died under is `interrupted`, keeping the text
@@ -76,10 +82,10 @@ const INSERT_ACTIVITY: &str = "INSERT INTO activities
 	VALUES (?1, ?2, ?3, ?4, ?5,
 		(SELECT COALESCE(MAX(seq), 0) + 1 FROM activities WHERE turn_id = ?2), ?6)";
 
-/// What a boot did about the legacy snapshot, as six different facts. The two
-/// recoverable ones are never collapsed: `Unreadable` is about the file and
-/// `Refused` about the database, and a boot that reported one for the other would
-/// send whoever reads it to the wrong place.
+/// What a boot did about the legacy snapshot, as seven different facts. The
+/// recoverable ones are never collapsed: `Unreadable` and `Unpreserved` are about
+/// the file, `Refused` is about the database, and a boot that reported one for
+/// another would send whoever reads it to the wrong place.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LegacyImport {
 	/// No path to look at, so nothing was examined and nothing decided. No marker
@@ -98,6 +104,12 @@ pub enum LegacyImport {
 	/// build that numbers the file higher. No marker, no rows, and the file is left
 	/// exactly as it was found.
 	Unreadable,
+	/// The rows were ready and the source could not be preserved: the copy would not
+	/// write, or one is already there holding other bytes. Kept apart from `Refused`
+	/// because it is a fact about the file rather than about the database — that is
+	/// where whoever reads this has to look. No marker, no rows, the source untouched,
+	/// so a later boot tries again.
+	Unpreserved,
 	/// The database refused the write. Nothing landed, the source is untouched, and
 	/// a later boot tries again.
 	Refused,
@@ -113,19 +125,20 @@ pub fn import(connection: &mut Connection, legacy: Option<&Path>) -> LegacyImpor
 	let Some(path) = legacy else {
 		return LegacyImport::Unavailable;
 	};
-	let outcome = decided(connection, path).unwrap_or(LegacyImport::Refused);
-	if matches!(outcome, LegacyImport::Imported { .. }) {
-		let _ = keep_a_copy(path);
-	}
-	outcome
+	decided(connection, path).unwrap_or(LegacyImport::Refused)
 }
 
 /// The marker is read before the file rather than after: a boot that has already
 /// decided must not so much as look at what the legacy writer has left there
 /// since, whether or not this build can read it.
 ///
+/// The copy is secured between the rows and the marker, and the marker is what the
+/// commit turns irrevocable: an import that cannot preserve its source has to be
+/// undone here, while undoing it is still free.
+///
 /// Every early return drops the transaction, which rolls it back: an unreadable
-/// file and a refused write both leave the database as they found it.
+/// file, an unpreservable one and a refused write all leave the database as they
+/// found it.
 fn decided(connection: &mut Connection, path: &Path) -> Result<LegacyImport, ConversationError> {
 	let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
 	if stored_marker(&transaction)?.is_some() {
@@ -140,6 +153,9 @@ fn decided(connection: &mut Connection, path: &Path) -> Result<LegacyImport, Con
 	let outcome = match snapshot {
 		Some(snapshot) => {
 			let counted = imported(&transaction, snapshot)?;
+			if secure_a_copy(path).is_err() {
+				return Ok(LegacyImport::Unpreserved);
+			}
 			mark(&transaction, MARKER_IMPORTED)?;
 			counted
 		}
@@ -382,23 +398,98 @@ fn unserializable(error: serde_json::Error) -> ConversationError {
 }
 
 /// Copied, never renamed: `claude_load_session` still reads `session.json` and the
-/// chat somebody is looking at must not change under them. `create_new` is what
-/// refuses to write over a copy that is already there — those bytes are an earlier
-/// import's source, and this one has no claim on them.
+/// chat somebody is looking at must not change under them. The source is never
+/// moved, truncated or removed by any path through here.
 ///
-/// Owner-only for the same reason the source is: on disk a transcript is plain
-/// text.
-fn keep_a_copy(path: &Path) -> std::io::Result<()> {
+/// Answers only once the copy is on the disk for good, because the marker commits
+/// on the strength of that answer.
+fn secure_a_copy(path: &Path) -> std::io::Result<()> {
+	let target = preserved(path);
 	let body = fs::read(path)?;
-	let mut copy = fs::OpenOptions::new().write(true).create_new(true).open(preserved(path))?;
-	restrict_to_owner(&copy)?;
-	copy.write_all(&body)
+	if target.exists() {
+		return accept_identical(&target, &body);
+	}
+	install_copy(&target, &body)
+}
+
+/// A copy already sitting there is either this very import's, installed by a boot
+/// that crashed before it could commit, or another one's. Identical bytes are the
+/// first case and the import carries on from where that boot left off — which is
+/// what makes a crash between the copy and the commit a retry rather than a loss.
+///
+/// Anything else is refused, and refused for good: those bytes are somebody else's
+/// recovery material, and trading them for ours would destroy the only copy that
+/// import has left. So this import stops instead — nothing is destroyed, the
+/// outcome says which file to look at, and a human or a later build can clear the
+/// stale copy and let it through.
+fn accept_identical(target: &Path, body: &[u8]) -> std::io::Result<()> {
+	if fs::read(target)?.as_slice() == body {
+		return Ok(());
+	}
+	Err(std::io::Error::new(
+		std::io::ErrorKind::AlreadyExists,
+		"a preserved copy of another import is already there",
+	))
+}
+
+/// The same discipline `store.rs` writes the snapshot with, and for the same
+/// reason: a half-written file must never be able to become the target, so the
+/// bytes are flushed into a uniquely named sibling first and only a whole file is
+/// ever renamed onto the name. A failure takes the sibling with it.
+fn install_copy(target: &Path, body: &[u8]) -> std::io::Result<()> {
+	let temp = temporary(target);
+	let installed = write_then_rename(target, &temp, body);
+	if installed.is_err() {
+		let _ = fs::remove_file(&temp);
+	}
+	installed
+}
+
+/// Owner-only before a single byte is written, for the reason the source is: on
+/// disk a transcript is plain text. `sync_all` is what makes the copy survive the
+/// power cut this whole ordering is about — a rename of bytes still in the page
+/// cache would leave a name pointing at nothing.
+fn write_then_rename(target: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()> {
+	let mut file = fs::File::create(temp)?;
+	restrict_to_owner(&file)?;
+	file.write_all(body)?;
+	file.sync_all()?;
+	fs::rename(temp, target)?;
+	sync_parent(target)
 }
 
 fn preserved(path: &Path) -> PathBuf {
+	suffixed(path, IMPORTED_SUFFIX)
+}
+
+/// Unique per attempt, so two writers cannot interleave into one sibling, and
+/// suffixed like everything else here: replacing the extension instead would name
+/// the file `session.<something>.tmp`, which is the shape `store.rs` sweeps.
+fn temporary(target: &Path) -> PathBuf {
+	suffixed(target, &format!(".{}.tmp", Uuid::new_v4()))
+}
+
+/// Appended to the whole name rather than through `with_extension`, which would
+/// replace `.json` instead of following it.
+fn suffixed(path: &Path, suffix: &str) -> PathBuf {
 	let mut name = path.as_os_str().to_owned();
-	name.push(IMPORTED_SUFFIX);
+	name.push(suffix);
 	PathBuf::from(name)
+}
+
+/// The flushed sibling only becomes the target once the directory entry itself is
+/// durable; a power cut in between leaves the rename unrecorded.
+#[cfg(unix)]
+fn sync_parent(path: &Path) -> std::io::Result<()> {
+	let Some(parent) = path.parent() else {
+		return Ok(());
+	};
+	fs::File::open(parent)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) -> std::io::Result<()> {
+	Ok(())
 }
 
 #[cfg(unix)]
@@ -532,6 +623,25 @@ mod tests {
 		for table in EVERY_TABLE {
 			assert_eq!(rows_in(connection, table), 0, "{table} kept a row the import left behind");
 		}
+	}
+
+	/// A temporary this module left behind, by the only name it gives one. The
+	/// database's own `-wal` and `-shm` siblings are not `.tmp` and never match.
+	fn temporaries_in(dir: &Path) -> Vec<PathBuf> {
+		fs::read_dir(dir)
+			.expect("read dir")
+			.flatten()
+			.map(|entry| entry.path())
+			.filter(|path| path.extension().is_some_and(|extension| extension == "tmp"))
+			.collect()
+	}
+
+	fn assert_no_temporaries(dir: &Path) {
+		assert_eq!(
+			temporaries_in(dir),
+			Vec::<PathBuf>::new(),
+			"a temporary outlived the copy that wrote it"
+		);
 	}
 
 	fn marker(connection: &Connection) -> Option<String> {
@@ -821,6 +931,7 @@ mod tests {
 			source,
 			"the file the visible chat reads was touched"
 		);
+		assert_no_temporaries(&dir);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -873,6 +984,125 @@ mod tests {
 		assert_nothing_landed(&connection);
 		assert_eq!(fs::read(&path).expect("read"), source, "a refused import touched the source");
 		assert!(!preserved(&path).exists(), "a copy was kept of an import that never landed");
+		assert_no_temporaries(&dir);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The copy is what the marker stands for, so a copy that cannot be written takes
+	/// the whole import down with it — otherwise the marker would record material as
+	/// preserved that nothing preserved, and no later boot would ever look again.
+	///
+	/// The failure is a real one, not a mocked one: the legacy file sits in a
+	/// directory of its own that is made unwritable, so creating the temporary next to
+	/// it fails the way a permission error does in the field. The database is in the
+	/// parent directory and stays writable, which is what keeps the refusal about the
+	/// copy alone.
+	#[cfg(unix)]
+	#[test]
+	fn a_copy_that_cannot_be_written_undoes_the_whole_import() {
+		use std::os::unix::fs::PermissionsExt;
+
+		let dir = temp_dir();
+		let mut connection = migrated(&dir);
+		let legacy_dir = dir.join("legacy");
+		fs::create_dir_all(&legacy_dir).expect("the legacy directory");
+		let path = legacy_dir.join(store::FILE_NAME);
+		store::save(&path, &sample());
+		let source = fs::read(&path).expect("the legacy bytes");
+		fs::set_permissions(&legacy_dir, fs::Permissions::from_mode(0o500)).expect("read only");
+
+		let outcome = import(&mut connection, Some(&path));
+
+		assert_eq!(outcome, LegacyImport::Unpreserved);
+		assert_eq!(marker(&connection), None, "an import that preserved nothing decided anyway");
+		assert_nothing_landed(&connection);
+		assert_eq!(fs::read(&path).expect("read"), source, "the source was touched");
+		assert!(!preserved(&path).exists(), "a target was left behind by a copy that failed");
+
+		fs::set_permissions(&legacy_dir, fs::Permissions::from_mode(0o700)).expect("cleanup mode");
+		assert_no_temporaries(&legacy_dir);
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// A copy already there holding other bytes is another import's recovery material.
+	/// Taking the name would destroy the only copy that import has left, so this one
+	/// stops instead and says so — see [`accept_identical`].
+	#[test]
+	fn a_preserved_copy_of_another_import_is_never_traded_for_this_one() {
+		let dir = temp_dir();
+		let mut connection = migrated(&dir);
+		let path = dir.join(store::FILE_NAME);
+		store::save(&path, &sample());
+		let source = fs::read(&path).expect("the legacy bytes");
+		fs::write(preserved(&path), "another import's source").expect("the copy already there");
+
+		let outcome = import(&mut connection, Some(&path));
+
+		assert_eq!(outcome, LegacyImport::Unpreserved);
+		assert_eq!(marker(&connection), None, "an import that preserved nothing decided anyway");
+		assert_nothing_landed(&connection);
+		assert_eq!(
+			fs::read_to_string(preserved(&path)).expect("the copy"),
+			"another import's source",
+			"another import's copy was written over"
+		);
+		assert_eq!(fs::read(&path).expect("read"), source, "the source was touched");
+		assert_no_temporaries(&dir);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// Half a copy is not a copy, however much of the source it happens to hold: the
+	/// import is refused rather than allowed to commit against material nothing can
+	/// restore from.
+	#[test]
+	fn a_half_written_copy_left_by_something_else_is_never_accepted() {
+		let dir = temp_dir();
+		let mut connection = migrated(&dir);
+		let path = dir.join(store::FILE_NAME);
+		store::save(&path, &sample());
+		let source = fs::read(&path).expect("the legacy bytes");
+		fs::write(preserved(&path), &source[..source.len() / 2]).expect("half a copy");
+
+		let outcome = import(&mut connection, Some(&path));
+
+		assert_eq!(outcome, LegacyImport::Unpreserved);
+		assert_eq!(marker(&connection), None);
+		assert_nothing_landed(&connection);
+		assert_eq!(
+			fs::read(preserved(&path)).expect("the copy"),
+			source[..source.len() / 2],
+			"the half copy was completed or replaced"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The crash this ordering is built for: a boot installed the copy and died before
+	/// it could commit. The next one finds no marker, reads the same snapshot, finds
+	/// the same bytes already preserved and carries on from there.
+	#[test]
+	fn a_copy_this_import_had_already_installed_lets_the_retry_through() {
+		let dir = temp_dir();
+		let mut connection = migrated(&dir);
+		let path = dir.join(store::FILE_NAME);
+		store::save(&path, &sample());
+		let source = fs::read(&path).expect("the legacy bytes");
+		fs::write(preserved(&path), &source).expect("the copy the crashed boot installed");
+
+		let outcome = import(&mut connection, Some(&path));
+
+		assert_eq!(outcome, IMPORTED_SAMPLE, "the retry was refused its own copy");
+		assert_eq!(marker(&connection).as_deref(), Some(MARKER_IMPORTED));
+		assert_eq!(rows_in(&connection, "messages"), 7);
+		assert_eq!(fs::read(preserved(&path)).expect("the copy"), source);
+		assert_eq!(fs::read(&path).expect("read"), source, "the source was touched");
+		assert_no_temporaries(&dir);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
