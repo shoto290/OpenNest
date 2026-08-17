@@ -202,13 +202,16 @@ export const createFakeTranscriptStore = (
 					failure: { kind: "sqlite", detail: "no such runtime session" },
 				})
 			}
-			if (!row.live || row.providerSessionId !== null) {
-				return row.live && row.providerSessionId === providerSessionId
-					? Promise.resolve()
-					: refuse({ kind: "storage", failure: { kind: "staleWrite" } })
+			if (row.live && row.providerSessionId === null) {
+				row.providerSessionId = providerSessionId
+				return Promise.resolve()
 			}
-			row.providerSessionId = providerSessionId
-			return Promise.resolve()
+			// What the write skipped, read back the way the statement's caller reads it:
+			// the same id on a live run is the callback repeating itself, anything else
+			// is a write the row has already moved past.
+			return row.live && row.providerSessionId === providerSessionId
+				? Promise.resolve()
+				: refuse({ kind: "storage", failure: { kind: "staleWrite" } })
 		},
 
 		/** The host's composition, mirrored: the summary, the target of an explicit

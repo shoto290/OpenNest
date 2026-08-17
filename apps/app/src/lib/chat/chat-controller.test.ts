@@ -127,6 +127,32 @@ const ended = (outcome: "completed" | "cancelled" | "failed"): ClaudeEvent => ({
 	ended: { sessionId: ANNOUNCED, outcome },
 })
 
+/** The store, and every provider session it was asked to write down as the pair a
+ * lineage is made of: the run named, and the id named for it. The write itself is
+ * the real one — what the store does with a replay or a disagreement is the store's
+ * to answer, here as anywhere. */
+const recordingStore = (base: TranscriptStore) => {
+	const recorded: [string, string][] = []
+	const store: TranscriptStore = {
+		...base,
+		recordProviderSession: (
+			conversationId,
+			botId,
+			runtimeSessionId,
+			providerSessionId,
+		) => {
+			recorded.push([runtimeSessionId, providerSessionId])
+			return base.recordProviderSession(
+				conversationId,
+				botId,
+				runtimeSessionId,
+				providerSessionId,
+			)
+		},
+	}
+	return { store, recorded }
+}
+
 /** A promise a test releases by hand. The window a race lives in is only ever a
  * few microtasks wide, so it is held open here instead of waited for. */
 const deferred = () => {
@@ -1665,24 +1691,7 @@ describe("a turn Claude answered with tools", () => {
 	// cost the announcement its write, and the announcement must not put a row back.
 	it("records the session it answered under while keeping the tools out of the transcript", async () => {
 		const base = createFakeTranscriptStore()
-		const recorded: [string, string][] = []
-		const store: TranscriptStore = {
-			...base,
-			recordProviderSession: (
-				conversationId,
-				botId,
-				runtimeSessionId,
-				providerSessionId,
-			) => {
-				recorded.push([runtimeSessionId, providerSessionId])
-				return base.recordProviderSession(
-					conversationId,
-					botId,
-					runtimeSessionId,
-					providerSessionId,
-				)
-			},
-		}
+		const { store, recorded } = recordingStore(base)
 		const harness = await bootedHarness({ store })
 		const run = runOf(harness.controller)
 
@@ -1835,30 +1844,6 @@ describe("the provider session a run answered under", () => {
 		vi.useRealTimers()
 	})
 
-	/** The store, and every write it was asked for as the pair a lineage is made
-	 * of: the run named, and the provider id named for it. */
-	const recording = (base: TranscriptStore) => {
-		const calls: [string, string][] = []
-		const store: TranscriptStore = {
-			...base,
-			recordProviderSession: (
-				conversationId,
-				botId,
-				runtimeSessionId,
-				providerSessionId,
-			) => {
-				calls.push([runtimeSessionId, providerSessionId])
-				return base.recordProviderSession(
-					conversationId,
-					botId,
-					runtimeSessionId,
-					providerSessionId,
-				)
-			},
-		}
-		return { store, calls }
-	}
-
 	const announced = (sessionId: string): ClaudeEvent => ({
 		type: "sessionReady",
 		sessionId,
@@ -1869,7 +1854,7 @@ describe("the provider session a run answered under", () => {
 	// answered in kept no word of the process it was holding.
 	it("writes the id the child announces against the run it is answering in", async () => {
 		const base = createFakeTranscriptStore()
-		const { store, calls } = recording(base)
+		const { store, recorded } = recordingStore(base)
 		const { controller } = await bootedHarness({ store })
 
 		await controller.send("hello")
@@ -1878,7 +1863,7 @@ describe("the provider session a run answered under", () => {
 		const run = runOf(controller)
 		const state = controller.getState()
 		expect(state.sessionId).not.toBeNull()
-		expect(calls).toEqual([[run.runtimeSessionId, state.sessionId]])
+		expect(recorded).toEqual([[run.runtimeSessionId, state.sessionId]])
 		expect(state.errors).toEqual([])
 		// The row holds it: one that did not would take any id at all.
 		await expect(
@@ -1893,7 +1878,7 @@ describe("the provider session a run answered under", () => {
 
 	it("takes the same announcement twice as the one write it is", async () => {
 		const base = createFakeTranscriptStore()
-		const { store, calls } = recording(base)
+		const { store, recorded } = recordingStore(base)
 		const { controller, driver } = await bootedHarness({ store })
 		await controller.send("hello")
 		await vi.runAllTimersAsync()
@@ -1904,7 +1889,7 @@ describe("the provider session a run answered under", () => {
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
-		expect(calls).toEqual([
+		expect(recorded).toEqual([
 			[run.runtimeSessionId, sessionId],
 			[run.runtimeSessionId, sessionId],
 		])
@@ -1917,7 +1902,7 @@ describe("the provider session a run answered under", () => {
 	// disagreement the store settles, and the reader is told it was not written.
 	it("reports a second, different id without moving the run it holds", async () => {
 		const base = createFakeTranscriptStore()
-		const { store } = recording(base)
+		const { store } = recordingStore(base)
 		const { controller, driver } = await bootedHarness({ store })
 		await controller.send("hello")
 		await vi.runAllTimersAsync()
@@ -1937,22 +1922,18 @@ describe("the provider session a run answered under", () => {
 	// controller holds by the time the store answers.
 	it("cannot write a replaced run's id onto the run that took its place", async () => {
 		const base = createFakeTranscriptStore()
-		const calls: [string, string][] = []
-		let release: () => void = () => undefined
-		const held = new Promise<void>((resolve) => {
-			release = resolve
-		})
+		const { store: recording, recorded } = recordingStore(base)
+		const settled = deferred()
 		const store: TranscriptStore = {
-			...base,
+			...recording,
 			recordProviderSession: async (
 				conversationId,
 				botId,
 				runtimeSessionId,
 				providerSessionId,
 			) => {
-				calls.push([runtimeSessionId, providerSessionId])
-				await held
-				return base.recordProviderSession(
+				await settled.promise
+				return recording.recordProviderSession(
 					conversationId,
 					botId,
 					runtimeSessionId,
@@ -1968,12 +1949,12 @@ describe("the provider session a run answered under", () => {
 		await controller.restart()
 		await vi.runAllTimersAsync()
 		const replacement = runOf(controller)
-		release()
+		settled.release()
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
 		expect(replacement.runtimeSessionId).not.toBe(replaced.runtimeSessionId)
-		expect(calls).toEqual([[replaced.runtimeSessionId, "stale-process"]])
+		expect(recorded).toEqual([[replaced.runtimeSessionId, "stale-process"]])
 		expect(state.runtime).toEqual(replacement)
 		expect(state.errors.at(-1)?.error).toEqual(REFUSED_BY_THE_STORE)
 		// The replacement never took the replaced run's word for it: its own id
@@ -2010,11 +1991,9 @@ describe("a handover nothing may run twice", () => {
 	/** The driver as the controller reaches it, with every start and every prompt
 	 * written down under the run it named — and a start that can be made to fail the
 	 * way a child that never comes up fails. */
-	const watchedDriver = (
-		watched: Watched,
-		failing: () => boolean,
-	): ((fake: FakeChatDriver) => ChatDriver) => {
-		return (fake) => ({
+	const watchedDriver =
+		(watched: Watched, failing: () => boolean) =>
+		(fake: FakeChatDriver): ChatDriver => ({
 			...fake,
 			startOrResumeSession: (scope, resume) => {
 				watched.starts.push(scope)
@@ -2027,7 +2006,6 @@ describe("a handover nothing may run twice", () => {
 				return fake.submitPrompt(scope, text)
 			},
 		})
-	}
 
 	const watching = (): Watched => ({ starts: [], submits: [] })
 
@@ -2286,25 +2264,7 @@ describe("a handover nothing may run twice", () => {
 	// other, every tool it ran is still on the screen, and the transcript keeps the
 	// one row that said something.
 	it("keeps the provider id, the activities and the empty rows out under one handover", async () => {
-		const base = createFakeTranscriptStore()
-		const recorded: [string, string][] = []
-		const store: TranscriptStore = {
-			...base,
-			recordProviderSession: (
-				conversationId,
-				botId,
-				runtimeSessionId,
-				providerSessionId,
-			) => {
-				recorded.push([runtimeSessionId, providerSessionId])
-				return base.recordProviderSession(
-					conversationId,
-					botId,
-					runtimeSessionId,
-					providerSessionId,
-				)
-			},
-		}
+		const { store, recorded } = recordingStore(createFakeTranscriptStore())
 		const harness = await bootedHarness({ store })
 		const replaced = runOf(harness.controller)
 

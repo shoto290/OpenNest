@@ -255,15 +255,17 @@ export function createChatController(
 		)
 	}
 
+	/** A reply this controller has written nothing for yet. One it has opened is
+	 * being streamed into, and one it has settled is finished — a frame announcing
+	 * either is the same message arriving twice. */
+	const isUnwritten = (id: string) =>
+		!openMessages.has(id) && !settledMessages.has(id)
+
 	/** Takes the announced reply for what it is so far: a message with no words yet.
 	 * Nothing is written and nothing reaches the screen — a reply is only ever shown
 	 * once the store holds it. */
 	const holdReply = (message: ChatMessage) => {
-		if (
-			!activeTurn ||
-			openMessages.has(message.id) ||
-			settledMessages.has(message.id)
-		) {
+		if (!activeTurn || !isUnwritten(message.id)) {
 			return
 		}
 		heldReply = message
@@ -271,11 +273,7 @@ export function createChatController(
 
 	const openReply = (message: ChatMessage, conversationId: string) => {
 		const turn = activeTurn
-		if (
-			!turn ||
-			openMessages.has(message.id) ||
-			settledMessages.has(message.id)
-		) {
+		if (!turn || !isUnwritten(message.id)) {
 			return
 		}
 		openMessages.set(message.id, 0)
@@ -583,7 +581,7 @@ export function createChatController(
 			// here, so the next prompt replaces it rather than being handed to a run
 			// that has a place in the lineage and no child at all.
 			const error = toTransportError(reason)
-			run.spent = rotationReasonForStartFailure(error)
+			run.spent ??= rotationReasonForStartFailure(error)
 			announce({ type: "failed", error })
 			return null
 		}
@@ -767,14 +765,6 @@ export function createChatController(
 		}
 	}
 
-	/** The prompt reaches the transcript before it reaches Claude. A prompt that
-	 * could not be written down is not submitted at all: the answer would arrive
-	 * against a question no reload could show.
-	 *
-	 * A run that cannot take it is replaced first, before the prompt is written: a
-	 * checkpoint taken over a transcript that already held the question would fold
-	 * the very words about to be asked, and the context built afterwards would carry
-	 * them twice. */
 	/** One prompt at a time, claimed before the first await. The turn a caller is
 	 * refused on only becomes busy once the prompt has been written down, and
 	 * everything a handover does happens before that — so the busy check alone lets
@@ -793,6 +783,14 @@ export function createChatController(
 		}
 	}
 
+	/** The prompt reaches the transcript before it reaches Claude. A prompt that
+	 * could not be written down is not submitted at all: the answer would arrive
+	 * against a question no reload could show.
+	 *
+	 * A run that cannot take it is replaced first, before the prompt is written: a
+	 * checkpoint taken over a transcript that already held the question would fold
+	 * the very words about to be asked, and the context built afterwards would carry
+	 * them twice. */
 	const sendPrompt = async (trimmed: string, repliedToMessageId?: string) => {
 		const conversationId = state.conversationId
 		if (!conversationId) {
