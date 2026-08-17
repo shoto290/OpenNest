@@ -477,18 +477,24 @@ impl MessagesRepository {
 				// No cursor is every seq there is: the first page is the one before the end
 				// of a sequence that only ever counts up from 1.
 				let before_seq = query.before_seq.unwrap_or(i64::MAX);
+				let limit = query.limit as usize;
 				let mut statement = connection.prepare_cached(MESSAGE_PAGE)?;
 				let mut messages = statement
 					.query_map(
-						params![query.conversation_id, before_seq, query.limit],
+						params![query.conversation_id, before_seq, i64::from(query.limit) + 1],
 						read_message,
 					)?
 					.collect::<Result<Vec<_>, _>>()?;
+				// A page that filled says nothing about what is behind it — a conversation
+				// of exactly `limit` messages fills one and has nothing older — so one row
+				// beyond what the caller asked for is read, and its arrival is the only
+				// evidence older messages exist. The read is newest first, so that row is
+				// the oldest of what came back and dropping it leaves the page asked for.
+				let older_exists = messages.len() > limit;
+				messages.truncate(limit);
 				messages.reverse();
-				// A page short of what it asked for is the last one there is: offering a
-				// cursor for it would send the caller after messages that are not there.
 				let next_before_seq = match messages.first() {
-					Some(oldest) if messages.len() as u32 == query.limit => Some(oldest.seq),
+					Some(oldest) if older_exists => Some(oldest.seq),
 					_ => None,
 				};
 				Ok(MessagePage { messages, next_before_seq })
@@ -1269,7 +1275,7 @@ mod tests {
 
 		let newest = page(&database, None, 3).await;
 		let older = page(&database, newest.next_before_seq, 3).await;
-		let exhausted = page(&database, older.next_before_seq, 3).await;
+		let exhausted = page(&database, Some(1), 3).await;
 		let past_the_start = page(&database, Some(1), 10).await;
 		let short = page(&database, Some(3), 4).await;
 
@@ -1280,12 +1286,105 @@ mod tests {
 			vec![1, 2, 3],
 			"the second page skipped or repeated a seq"
 		);
-		assert_eq!(older.next_before_seq, Some(1));
+		assert_eq!(
+			older.next_before_seq, None,
+			"the last page offered a cursor because it happened to fill"
+		);
 		assert!(exhausted.messages.is_empty(), "a page past the oldest message held rows");
 		assert_eq!(exhausted.next_before_seq, None, "an empty page offered a cursor");
 		assert!(past_the_start.messages.is_empty(), "the cursor is not exclusive");
 		assert_eq!(seqs(&short.messages), vec![1, 2], "a partial page did not stop at the start");
 		assert_eq!(short.next_before_seq, None, "a partial page offered a cursor");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// A conversation of exactly one page, which is what filling to the brim without
+	/// anything behind it looks like: the whole transcript comes back in display
+	/// order and the walk back ends there, because the row that would have proved
+	/// there is more was never there to read.
+	#[tokio::test]
+	async fn a_conversation_of_exactly_one_page_comes_back_whole_and_offers_no_cursor() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		for index in 0..4 {
+			database
+				.messages()
+				.append_user_message(a_user_message(&format!("m{index}"), "hello", 1))
+				.await
+				.expect("the message is appended");
+		}
+
+		let only = page(&database, None, 4).await;
+
+		assert_eq!(
+			seqs(&only.messages),
+			vec![1, 2, 3, 4],
+			"a page the size of the conversation came back short or out of display order"
+		);
+		assert_eq!(
+			only.next_before_seq, None,
+			"a page that filled exactly sent the reader after messages that are not there"
+		);
+		assert_eq!(
+			seqs(&whole_transcript(&database, 4).await),
+			vec![1, 2, 3, 4],
+			"the walk back over a page that filled exactly lost or repeated a message"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The other side of that boundary, one message further: the row beyond the page
+	/// is there this time, so the same full page does offer a cursor, and what it
+	/// leads to is the one message left behind it.
+	#[tokio::test]
+	async fn one_message_more_than_a_page_offers_a_cursor_onto_the_rest() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		for index in 0..5 {
+			database
+				.messages()
+				.append_user_message(a_user_message(&format!("m{index}"), "hello", 1))
+				.await
+				.expect("the message is appended");
+		}
+
+		let newest = page(&database, None, 4).await;
+		let older = page(&database, newest.next_before_seq, 4).await;
+
+		assert_eq!(
+			seqs(&newest.messages),
+			vec![2, 3, 4, 5],
+			"the first page was not the newest four messages"
+		);
+		assert_eq!(
+			newest.next_before_seq,
+			Some(2),
+			"a full page with a message behind it offered no cursor"
+		);
+		assert_eq!(
+			seqs(&older.messages),
+			vec![1],
+			"the page behind the cursor did not hold the one message left"
+		);
+		assert_eq!(
+			older.next_before_seq, None,
+			"the page holding the oldest message offered a cursor behind it"
+		);
+		assert!(
+			seqs(&newest.messages).iter().all(|seq| !seqs(&older.messages).contains(seq)),
+			"a message came back on both pages"
+		);
+		assert_eq!(
+			[seqs(&older.messages), seqs(&newest.messages)].concat(),
+			vec![1, 2, 3, 4, 5],
+			"the two pages did not join up into the whole transcript in order"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
