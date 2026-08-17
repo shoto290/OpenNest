@@ -67,6 +67,30 @@ pub async fn conversation_open_runtime_session(
 	Ok(ready(&state)?.runtime_context().open(participant, started_at, reason).await?.into())
 }
 
+/// The name the provider gave the process answering in a run, written down against
+/// that run. It is Claude's and only ever Claude's: the row keeps the id this side
+/// minted for it, and a caller naming a run by the provider's word for it would be
+/// pointing a lineage at a process nothing here opened.
+///
+/// Write-once and only while the run is live, which is the repository's rule and
+/// stays there: a callback repeating itself is the one write it already was, and a
+/// second id — or any id once the run has been replaced — is a process talking
+/// about a session this row no longer stands for.
+#[tauri::command]
+pub async fn conversation_record_provider_session(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+	runtime_session_id: String,
+	provider_session_id: String,
+) -> Result<(), TranscriptStoreError> {
+	let participant = ParticipantKey { conversation_id, bot_id };
+	Ok(ready(&state)?
+		.runtime_context()
+		.record_provider_session(participant, runtime_session_id, provider_session_id)
+		.await?)
+}
+
 /// Everything a run about to take over has to be told, as one piece of text. The
 /// prompt is named rather than sent: it is already on the record, and reading it
 /// from there is what makes it the upper bound of its own context instead of

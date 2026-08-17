@@ -16,6 +16,7 @@ import {
 	type RotationReason,
 	rotationFor,
 	rotationReasonForFailure,
+	rotationReasonForStartFailure,
 } from "./rotation"
 
 import type {
@@ -139,6 +140,21 @@ export function createChatController(
 	let activeTurn: { id: string; promptId: string } | null = null
 	let detach: Promise<() => void> | null = null
 	let pendingPreflight: Promise<SessionHandle | null> | null = null
+	/** The handover in flight, if there is one. A second caller joins it instead of
+	 * starting another: two would open two rows in one lineage and ask the host for
+	 * two processes, and the host takes one transition at a time — so the run this
+	 * launch believes it holds would be whichever child lost the seat. */
+	let pendingRotation: Promise<SessionHandle | null> | null = null
+	/** A prompt on its way. Claimed before anything is awaited, because the turn a
+	 * second caller checks only becomes busy once the prompt has been written down,
+	 * and the whole handover happens before that. */
+	let sending = false
+	/** The reply the session has announced and nothing has been written down for
+	 * yet. A protocol message that only ever called a tool says nothing, so it is
+	 * held here instead of opened: the row is written by the first word it says, or
+	 * by an ending that is not a completion, and dropped whole when neither comes.
+	 * One at a time — a message the next one starts over has said all it ever will. */
+	let heldReply: ChatMessage | null = null
 	/** The replies this controller opened and has not settled, and how far each has
 	 * streamed. A message leaves both the moment it ends, which is what makes a
 	 * replayed ending, and every delta behind it, a no-op. */
@@ -210,15 +226,26 @@ export function createChatController(
 	/** Out-of-order and replayed deltas are dropped on the sequence the transport
 	 * numbers them with, before either the store or the screen sees them. The
 	 * bookkeeping stays here, ahead of the write: a duplicate has to be refused
-	 * the moment it arrives, not once the store has answered the one before it. */
+	 * the moment it arrives, not once the store has answered the one before it.
+	 *
+	 * The first word is also what opens the row: until one arrives there is nothing
+	 * to write down, and a message that never says any is never written at all. */
 	const streamReply = (
 		id: string,
 		seq: number,
 		text: string,
 		conversationId: string,
 	) => {
+		if (text.length === 0) {
+			return
+		}
+		if (heldReply?.id === id) {
+			const held = heldReply
+			heldReply = null
+			openReply(held, conversationId)
+		}
 		const streamed = openMessages.get(id)
-		if (streamed === undefined || seq <= streamed || text.length === 0) {
+		if (streamed === undefined || seq <= streamed) {
 			return
 		}
 		openMessages.set(id, seq)
@@ -228,13 +255,25 @@ export function createChatController(
 		)
 	}
 
+	/** A reply this controller has written nothing for yet. One it has opened is
+	 * being streamed into, and one it has settled is finished — a frame announcing
+	 * either is the same message arriving twice. */
+	const isUnwritten = (id: string) =>
+		!openMessages.has(id) && !settledMessages.has(id)
+
+	/** Takes the announced reply for what it is so far: a message with no words yet.
+	 * Nothing is written and nothing reaches the screen — a reply is only ever shown
+	 * once the store holds it. */
+	const holdReply = (message: ChatMessage) => {
+		if (!activeTurn || !isUnwritten(message.id)) {
+			return
+		}
+		heldReply = message
+	}
+
 	const openReply = (message: ChatMessage, conversationId: string) => {
 		const turn = activeTurn
-		if (
-			!turn ||
-			openMessages.has(message.id) ||
-			settledMessages.has(message.id)
-		) {
+		if (!turn || !isUnwritten(message.id)) {
 			return
 		}
 		openMessages.set(message.id, 0)
@@ -282,25 +321,64 @@ export function createChatController(
 		)
 	}
 
+	const writeReply = (
+		message: ChatMessage,
+		completion: TerminalCompletion,
+		conversationId: string,
+	) => {
+		openReply(message, conversationId)
+		settleReply(message.id, completion, conversationId)
+	}
+
+	/** Whether a reply belongs in the transcript at all. It does the moment it has
+	 * words, and whatever it has, when it ends any way but well: a reply cut off is
+	 * the reader's to see, empty or not. A message that only carried tool calls has
+	 * neither — it says nothing and its turn ends fine — so nothing is kept for it. */
+	const isWorthKeeping = (
+		message: ChatMessage,
+		completion: TerminalCompletion,
+	) => message.text.length > 0 || completion !== "complete"
+
+	/** The ending of the reply nothing has been written for yet. A held reply the
+	 * store never heard of leaves no trace when there is nothing in it to keep. */
+	const settleHeldReply = (
+		completion: TerminalCompletion,
+		conversationId: string,
+	) => {
+		const held = heldReply
+		heldReply = null
+		if (held && isWorthKeeping(held, completion)) {
+			writeReply(held, completion, conversationId)
+		}
+	}
+
 	/** The text a reply ends with is the text its deltas wrote: the column is
 	 * append-only, so what has already landed is the answer, and the completion
 	 * frame repeats it rather than adding to it. A reply that ends without ever
 	 * having been opened is still a reply — it is opened on what it says, and
-	 * closed in the same breath. */
+	 * closed in the same breath, unless there is nothing in it worth a row. */
 	const settleCompleted = (message: ChatMessage, conversationId: string) => {
 		const completion = ENDING_FOR[message.completion]
 		if (!completion || settledMessages.has(message.id)) {
 			return
 		}
-		openReply(message, conversationId)
-		settleReply(message.id, completion, conversationId)
+		if (heldReply?.id === message.id) {
+			heldReply = null
+			if (!isWorthKeeping(message, completion)) {
+				return
+			}
+		}
+		writeReply(message, completion, conversationId)
 	}
 
-	/** Copied before it is walked: settling a reply takes it out of the map. */
+	/** Every reply the turn was still carrying, ended the same way — the one nothing
+	 * has been written for included. Copied before it is walked: settling a reply
+	 * takes it out of the map. */
 	const settleOpenReplies = (
 		completion: TerminalCompletion,
 		conversationId: string,
 	) => {
+		settleHeldReply(completion, conversationId)
 		for (const id of [...openMessages.keys()]) {
 			settleReply(id, completion, conversationId)
 		}
@@ -315,17 +393,44 @@ export function createChatController(
 		}
 	}
 
+	/** The provider's own name for the process, written down against the run it
+	 * announced itself in. The run is the one the event named, taken now rather than
+	 * when the store answers: a rotation in between would otherwise hand the run that
+	 * took over the id of the process it replaced.
+	 *
+	 * Nothing is decided here. One run answers under one provider session, and which
+	 * writes that leaves — the first, a replay of it, or a refusal — is the store's
+	 * to settle inside the transaction that writes them. */
+	const recordProviderSession = (
+		scope: RuntimeScope | null,
+		sessionId: string,
+	) => {
+		if (!scope) {
+			return
+		}
+		write(() =>
+			store.recordProviderSession(
+				scope.conversationId,
+				scope.botId,
+				scope.runtimeSessionId,
+				sessionId,
+			),
+		)
+	}
+
 	/** The durable half of a transport event. Nothing here decides anything the
 	 * reducer decides: it writes down what the session reported, in the order it
 	 * reported it. */
-	const persist = (event: ClaudeEvent) => {
+	const persist = (scope: RuntimeScope | null, event: ClaudeEvent) => {
 		const conversationId = state.conversationId
 		if (!conversationId) {
 			return
 		}
 		switch (event.type) {
+			case "sessionReady":
+				return recordProviderSession(scope, event.sessionId)
 			case "messageStarted":
-				return openReply(event.message, conversationId)
+				return holdReply(event.message)
 			case "messageDelta":
 				return streamReply(event.id, event.seq, event.text, conversationId)
 			case "messageCompleted":
@@ -358,7 +463,7 @@ export function createChatController(
 				return
 			}
 			noteFailure(event)
-			persist(event)
+			persist(scope, event)
 		})
 		return detach
 	}
@@ -472,7 +577,12 @@ export function createChatController(
 			dispatch({ type: "sessionOpened" })
 			return handle
 		} catch (reason) {
-			report(reason)
+			// The row is open and nothing came up behind it. The run is spent from
+			// here, so the next prompt replaces it rather than being handed to a run
+			// that has a place in the lineage and no child at all.
+			const error = toTransportError(reason)
+			run.spent ??= rotationReasonForStartFailure(error)
+			announce({ type: "failed", error })
 			return null
 		}
 	}
@@ -548,7 +658,7 @@ export function createChatController(
 	 * gone from the answer while staying on the reader's screen. So nothing is
 	 * retired, nothing is opened, and the run stays exactly as it was: still spent if
 	 * it was, so the prompt after this one tries the handover again. */
-	const rotateFor = async (reason: RotationReason) => {
+	const runRotation = async (reason: RotationReason) => {
 		try {
 			await capture()
 		} catch (refusal) {
@@ -556,6 +666,27 @@ export function createChatController(
 			return null
 		}
 		return start(undefined, reason)
+	}
+
+	/** One handover at a time, whoever asked for it: a prompt that found the run
+	 * spent and a reader who asked for a fresh one are the same handover when they
+	 * overlap, and the second is answered with the first rather than with a run of
+	 * its own. */
+	const rotateFor = (reason: RotationReason) => {
+		pendingRotation ??= runRotation(reason).finally(() => {
+			pendingRotation = null
+		})
+		return pendingRotation
+	}
+
+	/** The handover the next prompt needs, if it needs one. A run still answering is
+	 * left exactly where it is; one that is spent, or that has carried its share, is
+	 * replaced before it is asked anything. */
+	const rotateIfDue = async () => {
+		const reason = rotationFor(run, promptsPerRun)
+		if (reason) {
+			await rotateFor(reason)
+		}
 	}
 
 	const loadOlder = async () => {
@@ -593,6 +724,13 @@ export function createChatController(
 		return store.boundedContext(conversationId, botId, promptId)
 	}
 
+	/** Whether the run this launch holds has a process to answer in it. A run whose
+	 * child never came up, or stopped, has a row in the lineage and nothing behind
+	 * it: the prompt would be a question with nobody listening, and the refusal it
+	 * earns from the host names a session rather than the handover the reader needs.
+	 * A run that is merely due for replacement is answerable until it is replaced. */
+	const isAnswerable = () => state.sessionOpen && run.spent === null
+
 	/** Every runtime call names the run this controller holds, so one issued while a
 	 * restart is in flight is refused by the host rather than aimed at whatever
 	 * process happens to be installed by the time it lands.
@@ -603,7 +741,7 @@ export function createChatController(
 	 * again. */
 	const submit = async (id: string, text: string) => {
 		const runtime = state.runtime
-		if (!runtime) {
+		if (!runtime || !isAnswerable()) {
 			dispatch({ type: "promptRejected", id, error: { kind: "notStarted" } })
 			return
 		}
@@ -627,6 +765,24 @@ export function createChatController(
 		}
 	}
 
+	/** One prompt at a time, claimed before the first await. The turn a caller is
+	 * refused on only becomes busy once the prompt has been written down, and
+	 * everything a handover does happens before that — so the busy check alone lets
+	 * a second caller in through the window the first one is still opening, and both
+	 * replace the run. */
+	const admit = async (submission: () => Promise<void>) => {
+		if (sending || isTurnBusy(state.turn)) {
+			report({ kind: "turnAlreadyRunning" })
+			return
+		}
+		sending = true
+		try {
+			await submission()
+		} finally {
+			sending = false
+		}
+	}
+
 	/** The prompt reaches the transcript before it reaches Claude. A prompt that
 	 * could not be written down is not submitted at all: the answer would arrive
 	 * against a question no reload could show.
@@ -635,24 +791,13 @@ export function createChatController(
 	 * checkpoint taken over a transcript that already held the question would fold
 	 * the very words about to be asked, and the context built afterwards would carry
 	 * them twice. */
-	const send = async (text: string, repliedToMessageId?: string) => {
-		const trimmed = text.trim()
-		if (trimmed.length === 0) {
-			return
-		}
-		if (isTurnBusy(state.turn)) {
-			report({ kind: "turnAlreadyRunning" })
-			return
-		}
+	const sendPrompt = async (trimmed: string, repliedToMessageId?: string) => {
 		const conversationId = state.conversationId
 		if (!conversationId) {
 			reportStore({ kind: "unavailable" })
 			return
 		}
-		const rotation = rotationFor(run, promptsPerRun)
-		if (rotation) {
-			await rotateFor(rotation)
-		}
+		await rotateIfDue()
 		dispatch({ type: "promptSubmitted" })
 
 		const turnId = newId()
@@ -697,9 +842,25 @@ export function createChatController(
 		await submit(promptId, trimmed)
 	}
 
+	const send = (text: string, repliedToMessageId?: string) => {
+		const trimmed = text.trim()
+		if (trimmed.length === 0) {
+			return Promise.resolve()
+		}
+		return admit(() => sendPrompt(trimmed, repliedToMessageId))
+	}
+
 	/** Resubmits a prompt the store already holds. Only the one Claude refused: it
-	 * is on the record, so nothing is written again. */
-	const retry = async (id: string) => {
+	 * is on the record, so nothing is written again.
+	 *
+	 * The run it goes to is the one the next prompt would go to, handover included:
+	 * a prompt refused because the run behind it was spent would otherwise be sent
+	 * again to that same spent run, however many times the reader asked.
+	 *
+	 * The turn is named from the row rather than kept from the send that failed: a
+	 * handover starts the run over and leaves no open turn behind it, and a reply
+	 * arriving with none belongs to nothing this launch could write it under. */
+	const retryPrompt = async (id: string) => {
 		if (state.rejectedPromptId !== id) {
 			return
 		}
@@ -708,8 +869,12 @@ export function createChatController(
 			return
 		}
 		dispatch({ type: "promptRetried", id })
+		await rotateIfDue()
+		activeTurn = { id: target.turnId, promptId: id }
 		await submit(id, target.content)
 	}
+
+	const retry = (id: string) => admit(() => retryPrompt(id))
 
 	const stop = async () => {
 		const runtime = state.runtime

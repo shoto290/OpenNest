@@ -27,6 +27,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		conversations::commands::conversation_default_bot,
 		conversations::commands::conversation_main_chat,
 		conversations::commands::conversation_open_runtime_session,
+		conversations::commands::conversation_record_provider_session,
 		conversations::commands::conversation_bounded_context,
 		conversations::commands::conversation_capture_checkpoint,
 		conversations::commands::conversation_message_page,

@@ -164,6 +164,23 @@ fn a_run(conversation_id: &str, bot: &Value, started_at: i64) -> Value {
 	json!({ "conversationId": conversation_id, "botId": bot["id"], "startedAt": started_at })
 }
 
+/// The name the provider gave the process answering in a run, addressed to that
+/// run and to the participant holding it. Claude's id travels here and nowhere
+/// else: the run keeps its own id, which no caller may name it by out there.
+fn a_provider_session(
+	conversation_id: &str,
+	bot_id: &Value,
+	run: &Value,
+	provider_session_id: &str,
+) -> Value {
+	json!({
+		"conversationId": conversation_id,
+		"botId": bot_id,
+		"runtimeSessionId": run["id"],
+		"providerSessionId": provider_session_id
+	})
+}
+
 /// The fold the app takes before a run depends on one. `null` comes back when
 /// there was nothing new to fold, which is an answer rather than a failure.
 fn checkpoint(
@@ -374,6 +391,60 @@ fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
 	);
 	assert_eq!(replacement["seq"], json!(2), "the restart did not continue the lineage");
 	assert_ne!(replacement["id"], opened["id"], "the restart reused the replaced run's id");
+
+	cleanup(&app);
+}
+
+/// The id the child announces, over the boundary the frontend really crosses. The
+/// lineage rules are the repository's and are proven there; what can only fail here
+/// is the crossing — the command registered, the four words the frontend spells its
+/// arguments with, and a refusal reaching the reader as the storage failure it is.
+///
+/// The whole callback is walked because each answer means something different to
+/// the caller: the live run takes the id, the same callback again is the one write
+/// it already was, a second different id is refused, and a run that has been
+/// replaced takes nothing — least of all onto the run that replaced it, which is
+/// still free to record its own. A run named under another bot is refused for the
+/// same reason: an id landing there would file a process under a participant that
+/// never ran it.
+#[test]
+fn the_id_a_run_answers_under_is_recorded_once_and_only_while_it_is_live() {
+	const ANNOUNCED: &str = "claude-9f3c";
+
+	let app = app("com.opennest.conversation-commands-9");
+	let window = window(&app);
+
+	let (bot, conversation) = a_bot_and_its_chat(&window);
+	let run = call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 1))
+		.expect("the run opens");
+	let record = |body: Value| call(&window, "conversation_record_provider_session", body);
+
+	let recorded = record(a_provider_session(&conversation, &bot["id"], &run, ANNOUNCED));
+	let replayed = record(a_provider_session(&conversation, &bot["id"], &run, ANNOUNCED));
+	let disagreed = record(a_provider_session(&conversation, &bot["id"], &run, "claude-0000"));
+	let outsider = record(a_provider_session(&conversation, &json!("nobody"), &run, "claude-1111"));
+
+	let replacement =
+		call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 2))
+			.expect("the run that replaces it opens");
+	let late = record(a_provider_session(&conversation, &bot["id"], &run, ANNOUNCED));
+	let fresh = record(a_provider_session(&conversation, &bot["id"], &replacement, "claude-4d2a"));
+
+	let stale_write = Err(json!({ "kind": "storage", "failure": { "kind": "staleWrite" } }));
+	assert_eq!(recorded, Ok(Value::Null), "the live run would not take the id it answers under");
+	assert_eq!(replayed, Ok(Value::Null), "the same callback twice was not answered as one write");
+	assert_eq!(disagreed, stale_write, "a second, different id was not refused: {disagreed:?}");
+	assert_eq!(
+		outsider.as_ref().err().and_then(|failure| failure["kind"].as_str()),
+		Some("storage"),
+		"a run named under another bot was refused as something else: {outsider:?}"
+	);
+	assert_eq!(late, stale_write, "a replaced run still took an id: {late:?}");
+	assert_eq!(
+		fresh,
+		Ok(Value::Null),
+		"the replacement had been written by the run it replaced: {fresh:?}"
+	);
 
 	cleanup(&app);
 }

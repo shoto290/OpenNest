@@ -65,6 +65,13 @@ export const createFakeTranscriptStore = (
 	/** One lineage per participant, the way `runtime_sessions` numbers them: the
 	 * pair is the key, and the count is what the next run takes as its seq. */
 	const runs = new Map<string, number>()
+	/** Every run a lineage holds, live or already replaced, and the provider session
+	 * it answered under. The column starts empty and is written once while the run is
+	 * live, which is what keeps a late callback off a row that has moved on. */
+	const runRows = new Map<
+		string,
+		{ participant: string; live: boolean; providerSessionId: string | null }
+	>()
 	/** One recovery point per participant, replaced only by one that reaches
 	 * further: a capture that never lands leaves the previous one answering. */
 	const checkpoints = new Map<
@@ -162,13 +169,49 @@ export const createFakeTranscriptStore = (
 			const participant = participantKey(conversationId, botId)
 			const seq = (runs.get(participant) ?? 0) + 1
 			runs.set(participant, seq)
+			const id = `run-${participant}-${seq}`
+			for (const row of runRows.values()) {
+				if (row.participant === participant) {
+					row.live = false
+				}
+			}
+			runRows.set(id, { participant, live: true, providerSessionId: null })
 			return Promise.resolve<RuntimeSession>({
-				id: `run-${participant}-${seq}`,
+				id,
 				conversationId,
 				botId,
 				seq,
 				startedAt,
 			})
+		},
+
+		/** Write-once while the run is live, the way the column is: the same id again
+		 * is the callback arriving twice and changes nothing, and a second id — or any
+		 * id once the run has been replaced — is refused as the stale write it is. A
+		 * run the participant does not hold is not theirs to name at all. */
+		recordProviderSession: (
+			conversationId: string,
+			botId: string,
+			runtimeSessionId: string,
+			providerSessionId: string,
+		) => {
+			const row = runRows.get(runtimeSessionId)
+			if (!row || row.participant !== participantKey(conversationId, botId)) {
+				return refuse({
+					kind: "storage",
+					failure: { kind: "sqlite", detail: "no such runtime session" },
+				})
+			}
+			if (row.live && row.providerSessionId === null) {
+				row.providerSessionId = providerSessionId
+				return Promise.resolve()
+			}
+			// What the write skipped, read back the way the statement's caller reads it:
+			// the same id on a live run is the callback repeating itself, anything else
+			// is a write the row has already moved past.
+			return row.live && row.providerSessionId === providerSessionId
+				? Promise.resolve()
+				: refuse({ kind: "storage", failure: { kind: "staleWrite" } })
 		},
 
 		/** The host's composition, mirrored: the summary, the target of an explicit

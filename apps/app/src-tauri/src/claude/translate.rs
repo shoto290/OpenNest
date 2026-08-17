@@ -59,11 +59,32 @@ fn permission_detail(name: &str, input: &Value) -> Option<String> {
 	Some(redact::text(&raw))
 }
 
+/// The assistant message the stream is in the middle of, and whether it has said
+/// a word yet. A message carrying nothing but tool calls says none: it is over the
+/// moment the next one starts, and there is no answer in it to finish.
+#[derive(Debug)]
+struct StreamingMessage {
+	id: String,
+	spoke: bool,
+}
+
+/// The ending a message the stream never closed reaches. A turn that ended well
+/// leaves nothing of one that never spoke — reporting it as complete would put a
+/// finished reply with no words on the record. Any other ending is the reader's to
+/// see, empty or not: the reply was cut off.
+fn ending_for(outcome: TurnOutcome, spoke: bool) -> Option<MessageCompletion> {
+	match outcome {
+		TurnOutcome::Cancelled => Some(MessageCompletion::Cancelled),
+		TurnOutcome::Failed => Some(MessageCompletion::Failed),
+		TurnOutcome::Completed => spoke.then_some(MessageCompletion::Complete),
+	}
+}
+
 #[derive(Debug, Default)]
 pub struct Translator {
 	session_id: Option<String>,
 	resumed: bool,
-	streaming_message: Option<String>,
+	streaming_message: Option<StreamingMessage>,
 	delta_seq: u64,
 	cancelling: bool,
 	pending_permissions: HashMap<String, Value>,
@@ -129,7 +150,7 @@ impl Translator {
 		match event {
 			StreamEvent::MessageStart { message } => {
 				let id = message.and_then(|header| header.id).unwrap_or_else(new_id);
-				self.streaming_message = Some(id.clone());
+				self.streaming_message = Some(StreamingMessage { id: id.clone(), spoke: false });
 				vec![ClaudeEvent::MessageStarted {
 					message: ChatMessage {
 						id,
@@ -141,13 +162,13 @@ impl Translator {
 				}]
 			}
 			StreamEvent::ContentBlockDelta { delta: Some(ContentDelta::TextDelta { text }) } => {
-				self.streaming_message
-					.clone()
-					.map(|id| {
-						self.delta_seq += 1;
-						vec![ClaudeEvent::MessageDelta { id, seq: self.delta_seq, text }]
-					})
-					.unwrap_or_default()
+				let Some(message) = self.streaming_message.as_mut() else {
+					return Vec::new();
+				};
+				message.spoke = true;
+				let id = message.id.clone();
+				self.delta_seq += 1;
+				vec![ClaudeEvent::MessageDelta { id, seq: self.delta_seq, text }]
 			}
 			StreamEvent::ContentBlockStart {
 				content_block: Some(ContentBlock::ToolUse { id, name, input }),
@@ -207,7 +228,7 @@ impl Translator {
 		}
 
 		if !text.is_empty() {
-			let id = self.streaming_message.take().unwrap_or_else(new_id);
+			let id = self.streaming_message.take().map(|message| message.id).unwrap_or_else(new_id);
 			events.push(ClaudeEvent::MessageCompleted {
 				message: ChatMessage {
 					id,
@@ -232,20 +253,18 @@ impl Translator {
 		};
 
 		let mut events = Vec::new();
-		if let Some(id) = self.streaming_message.take() {
-			events.push(ClaudeEvent::MessageCompleted {
-				message: ChatMessage {
-					id,
-					role: MessageRole::Assistant,
-					text: String::new(),
-					completion: match outcome {
-						TurnOutcome::Cancelled => MessageCompletion::Cancelled,
-						TurnOutcome::Failed => MessageCompletion::Failed,
-						TurnOutcome::Completed => MessageCompletion::Complete,
+		if let Some(message) = self.streaming_message.take() {
+			if let Some(completion) = ending_for(outcome, message.spoke) {
+				events.push(ClaudeEvent::MessageCompleted {
+					message: ChatMessage {
+						id: message.id,
+						role: MessageRole::Assistant,
+						text: String::new(),
+						completion,
+						timestamp: now_ms(),
 					},
-					timestamp: now_ms(),
-				},
-			});
+				});
+			}
 		}
 
 		// A turn that ends mid-tool or mid-prompt leaves entries behind, and an
@@ -297,4 +316,194 @@ impl Translator {
 
 fn new_id() -> String {
 	uuid::Uuid::new_v4().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+	use serde_json::json;
+
+	use super::*;
+
+	const ANSWER: &str = "Both files are in place.";
+
+	fn ingest(translator: &mut Translator, frames: Vec<Value>) -> Vec<ClaudeEvent> {
+		frames
+			.into_iter()
+			.flat_map(|frame| {
+				let frame = serde_json::from_value(frame).expect("a frame the transport parses");
+				translator.ingest(frame)
+			})
+			.collect()
+	}
+
+	/// One tool call in the four frames the CLI spends on it: the assistant message
+	/// it opens, the block, the message itself carrying nothing but the call, and the
+	/// result coming back as a user frame.
+	fn tool_round(round: usize) -> Vec<Value> {
+		let message_id = format!("msg_tool_{round}");
+		let tool_id = format!("toolu_{round}");
+		let call = json!({
+			"type": "tool_use", "id": tool_id, "name": "Read",
+			"input": { "file_path": "/tmp/notes.txt" }
+		});
+		vec![
+			json!({
+				"type": "stream_event",
+				"event": { "type": "message_start", "message": { "id": message_id } }
+			}),
+			json!({
+				"type": "stream_event",
+				"event": { "type": "content_block_start", "index": 0, "content_block": call }
+			}),
+			json!({
+				"type": "assistant",
+				"message": { "id": message_id, "role": "assistant", "content": [call] }
+			}),
+			json!({
+				"type": "user",
+				"message": {
+					"role": "user",
+					"content": [{ "type": "tool_result", "tool_use_id": tool_id, "is_error": false }]
+				}
+			}),
+		]
+	}
+
+	fn spoken_answer(text: &str) -> Vec<Value> {
+		let mut frames = vec![json!({
+			"type": "stream_event",
+			"event": { "type": "message_start", "message": { "id": "msg_answer" } }
+		})];
+		for chunk in text.split_inclusive(' ') {
+			frames.push(json!({
+				"type": "stream_event",
+				"event": {
+					"type": "content_block_delta", "index": 0,
+					"delta": { "type": "text_delta", "text": chunk }
+				}
+			}));
+		}
+		frames.push(json!({
+			"type": "assistant",
+			"message": {
+				"id": "msg_answer", "role": "assistant",
+				"content": [{ "type": "text", "text": text }]
+			}
+		}));
+		frames
+	}
+
+	fn result(subtype: &str, is_error: bool) -> Value {
+		json!({ "type": "result", "subtype": subtype, "is_error": is_error, "session_id": "s-1" })
+	}
+
+	fn completed(events: &[ClaudeEvent]) -> Vec<&ChatMessage> {
+		events
+			.iter()
+			.filter_map(|event| match event {
+				ClaudeEvent::MessageCompleted { message } => Some(message),
+				_ => None,
+			})
+			.collect()
+	}
+
+	fn streamed(events: &[ClaudeEvent]) -> String {
+		events
+			.iter()
+			.filter_map(|event| match event {
+				ClaudeEvent::MessageDelta { text, .. } => Some(text.as_str()),
+				_ => None,
+			})
+			.collect()
+	}
+
+	fn statuses(events: &[ClaudeEvent]) -> Vec<ActivityStatus> {
+		events
+			.iter()
+			.filter_map(|event| match event {
+				ClaudeEvent::Activity { activity } => Some(activity.status),
+				_ => None,
+			})
+			.collect()
+	}
+
+	fn outcome(events: &[ClaudeEvent]) -> Option<TurnOutcome> {
+		events.iter().find_map(|event| match event {
+			ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),
+			_ => None,
+		})
+	}
+
+	/// The shape one live prompt was measured to have: fourteen assistant messages
+	/// that only ever called a tool, and the answer in the message after them. Every
+	/// tool round is an activity, and the only message the turn finished is the one
+	/// that said something.
+	#[test]
+	fn tools_are_activities_and_the_answer_is_the_only_message_that_ends() {
+		let mut translator = Translator::new(false);
+		let mut frames: Vec<Value> = (1..=14).flat_map(tool_round).collect();
+		frames.extend(spoken_answer(ANSWER));
+		frames.push(result("success", false));
+
+		let events = ingest(&mut translator, frames);
+
+		assert_eq!(streamed(&events), ANSWER);
+		assert_eq!(
+			completed(&events)
+				.iter()
+				.map(|message| (message.text.as_str(), message.completion))
+				.collect::<Vec<_>>(),
+			vec![(ANSWER, MessageCompletion::Complete)]
+		);
+		// The block and the message both announce the call, under the one tool id the
+		// reader's activity log keys on.
+		assert_eq!(
+			statuses(&events),
+			[ActivityStatus::Running, ActivityStatus::Running, ActivityStatus::Succeeded]
+				.repeat(14)
+		);
+		assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
+	}
+
+	/// A turn that ends well straight after a tool call has no answer in it. The
+	/// message the stream opened for that call said nothing, so nothing is reported
+	/// as finished — a message with no text and a completed ending is a row the
+	/// transcript would keep forever for a turn that only ran a tool.
+	#[test]
+	fn a_turn_that_ends_well_after_a_tool_finishes_no_message() {
+		let mut translator = Translator::new(false);
+		let mut frames = tool_round(1);
+		frames.push(result("success", false));
+
+		let events = ingest(&mut translator, frames);
+
+		assert_eq!(completed(&events), Vec::<&ChatMessage>::new());
+		assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
+	}
+
+	/// The other half of the same rule: a turn cut off before a word still owes the
+	/// reader the ending it reached. Nothing was said, and that is exactly what the
+	/// reply has to be shown as.
+	#[test]
+	fn a_turn_cut_off_before_a_word_still_finishes_its_message() {
+		for (subtype, is_error, cancelling, expected) in [
+			("error_during_execution", false, true, MessageCompletion::Cancelled),
+			("error_during_execution", true, false, MessageCompletion::Failed),
+		] {
+			let mut translator = Translator::new(false);
+			let mut events = ingest(&mut translator, tool_round(1));
+			if cancelling {
+				translator.mark_cancelling();
+			}
+			events.extend(ingest(&mut translator, vec![result(subtype, is_error)]));
+
+			assert_eq!(
+				completed(&events)
+					.iter()
+					.map(|message| (message.text.as_str(), message.completion))
+					.collect::<Vec<_>>(),
+				vec![("", expected)]
+			);
+		}
+	}
 }

@@ -4,10 +4,12 @@ import {
 	ASKED_FOR,
 	type LiveRun,
 	NEARING_THE_BOUND,
+	NEVER_STARTED,
 	openedRun,
 	REFUSED,
 	rotationFor,
 	rotationReasonForFailure,
+	rotationReasonForStartFailure,
 	STOPPED,
 } from "./rotation"
 
@@ -20,10 +22,17 @@ describe("when a run has to be replaced", () => {
 	// lineage, so whoever reads a rotated row a month later reads them — a rename
 	// leaves the rows already on disk saying something this build no longer says.
 	it("records a handover under the words the lineage keeps", () => {
-		expect([ASKED_FOR, REFUSED, STOPPED, NEARING_THE_BOUND]).toEqual([
+		expect([
+			ASKED_FOR,
+			REFUSED,
+			STOPPED,
+			NEVER_STARTED,
+			NEARING_THE_BOUND,
+		]).toEqual([
 			"asked for by hand",
 			"the provider session was refused",
 			"the provider stopped answering in it",
+			"the provider never came up in it",
 			"the context was nearing its bound",
 		])
 	})
@@ -62,4 +71,21 @@ describe("when a run has to be replaced", () => {
 	] as [TransportError, string | null][])("reads %o as %s", (error, reason) => {
 		expect(rotationReasonForFailure(error)).toBe(reason)
 	})
+
+	// A start is the other half: the row was opened before the process was asked
+	// for, so a failure there always leaves a run to replace, whatever it says. The
+	// two failures that name the session keep their word; everything else says what
+	// actually happened — nothing ever came up in that run.
+	it.each([
+		[{ kind: "resumeFailed", forgotSessionId: false }, REFUSED],
+		[{ kind: "crashed", code: 1, detail: null }, STOPPED],
+		[{ kind: "spawnFailed", detail: "no child" }, NEVER_STARTED],
+		[{ kind: "startupTimeout", timeoutMs: 30_000 }, NEVER_STARTED],
+		[{ kind: "transitionInProgress" }, NEVER_STARTED],
+	] as [TransportError, string][])(
+		"replaces a run whose start failed with %o for %s",
+		(error, reason) => {
+			expect(rotationReasonForStartFailure(error)).toBe(reason)
+		},
+	)
 })
