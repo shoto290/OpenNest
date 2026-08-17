@@ -429,8 +429,8 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 
-		for sibling in ["", "-wal", "-shm"] {
-			let path = dir.join(format!("{FILE_NAME}{sibling}"));
+		for suffix in ["", "-wal", "-shm"] {
+			let path = dir.join(format!("{FILE_NAME}{suffix}"));
 			let mode = fs::metadata(&path).expect("metadata").permissions().mode();
 			assert_eq!(mode & 0o777, 0o600, "{path:?} must not be world readable");
 		}

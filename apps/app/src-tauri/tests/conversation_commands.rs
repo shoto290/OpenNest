@@ -90,17 +90,29 @@ fn a_user_message(id: &str, conversation_id: &str, content: &str, created_at: i6
 	}})
 }
 
-/// A reply written the way the transport writes one: opened empty, streamed into,
-/// and closed at its ending. `finished` is what a host dying under the stream takes
-/// away — the row stays open, and only the next launch decides what it was.
-fn a_reply(
-	window: &WebviewWindow<MockRuntime>,
-	conversation_id: &str,
+/// The same message, pointed at the one it answers. `repliedToMessageId` is the
+/// only field a prompt adds to a plain one, and the shape stays spelled once.
+fn an_answer_to(
+	target: &str,
 	id: &str,
+	conversation_id: &str,
 	content: &str,
 	created_at: i64,
-	finished: bool,
-) {
+) -> Value {
+	let mut message = a_user_message(id, conversation_id, content, created_at);
+	message["message"]["repliedToMessageId"] = json!(target);
+	message
+}
+
+/// A reply as the transport writes one before it ends: opened empty and streamed
+/// into. Left exactly there is what a host dying under a stream leaves behind, so
+/// the ending belongs to the caller and not here. Answers the id it wrote under.
+fn a_streaming_reply(
+	window: &WebviewWindow<MockRuntime>,
+	conversation_id: &str,
+	index: i64,
+) -> String {
+	let id = format!("m{index}");
 	call(
 		window,
 		"conversation_open_assistant_message",
@@ -110,37 +122,39 @@ fn a_reply(
 			"turnId": TURN,
 			"authorBotId": "default",
 			"repliedToMessageId": null,
-			"createdAt": created_at
+			"createdAt": index
 		}}),
 	)
 	.expect("the reply is opened");
-	call(window, "conversation_append_text", json!({ "id": id, "delta": content }))
-		.expect("the reply streams");
-	if finished {
-		call(
-			window,
-			"conversation_finalize_message",
-			json!({ "id": id, "completion": "complete" }),
-		)
-		.expect("the reply ends");
-	}
+	call(
+		window,
+		"conversation_append_text",
+		json!({ "id": id, "delta": format!("message {index}") }),
+	)
+	.expect("the reply streams");
+	id
 }
 
 /// One message under an id the assertions can name, alternating speakers so a
 /// rebuilt tail reads as a conversation rather than a monologue.
-fn said(window: &WebviewWindow<MockRuntime>, conversation_id: &str, index: i64, finished: bool) {
-	let id = format!("m{index}");
-	let content = format!("message {index}");
+fn said(window: &WebviewWindow<MockRuntime>, conversation_id: &str, index: i64) {
 	if index % 2 == 1 {
 		call(
 			window,
 			"conversation_append_user_message",
-			a_user_message(&id, conversation_id, &content, index),
+			a_user_message(
+				&format!("m{index}"),
+				conversation_id,
+				&format!("message {index}"),
+				index,
+			),
 		)
 		.expect("the message is appended");
 		return;
 	}
-	a_reply(window, conversation_id, &id, &content, index, finished);
+	let id = a_streaming_reply(window, conversation_id, index);
+	call(window, "conversation_finalize_message", json!({ "id": id, "completion": "complete" }))
+		.expect("the reply ends");
 }
 
 /// The run the frontend opens against the durable lineage before it asks for a
@@ -155,6 +169,7 @@ fn a_run(conversation_id: &str, bot: &Value, started_at: i64) -> Value {
 fn checkpoint(
 	window: &WebviewWindow<MockRuntime>,
 	conversation_id: &str,
+	bot: &Value,
 	created_at: i64,
 ) -> Value {
 	call(
@@ -162,7 +177,7 @@ fn checkpoint(
 		"conversation_capture_checkpoint",
 		json!({
 			"conversationId": conversation_id,
-			"botId": "default",
+			"botId": bot["id"],
 			"runtimeSessionId": null,
 			"createdAt": created_at
 		}),
@@ -573,22 +588,23 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	const PROMPT: &str = "p1";
 	const PROMPT_TEXT: &str = "so where does that leave the roof?";
 
-	// The host that dies: it writes the whole history and goes without ever closing
-	// the reply it was streaming.
+	// The host that dies: it writes the whole history and goes under the last reply,
+	// which is left open exactly as it was being streamed.
 	{
 		let app = app(IDENTIFIER);
 		let window = window(&app);
 		let (_, conversation) = a_bot_and_its_chat(&window);
 		call(&window, "conversation_start_turn", a_turn(&conversation))
 			.expect("the turn is started");
-		for index in 1..=HISTORY {
-			said(&window, &conversation, index, index != HISTORY);
+		for index in 1..HISTORY {
+			said(&window, &conversation, index);
 		}
+		a_streaming_reply(&window, &conversation, HISTORY);
 	}
 
 	let app = app(IDENTIFIER);
 	let window = window(&app);
-	let (_, conversation) = a_bot_and_its_chat(&window);
+	let (bot, conversation) = a_bot_and_its_chat(&window);
 
 	// What the dead host left is on the record as what it was: the words it had
 	// reached, and an ending that says the stream stopped rather than one still
@@ -610,7 +626,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 		"the reply the dead host left came back as something else"
 	);
 
-	let folded = checkpoint(&window, &conversation, 1);
+	let folded = checkpoint(&window, &conversation, &bot, 1);
 	assert_eq!(
 		folded["lastMessageSeq"],
 		json!(HISTORY - TAIL),
@@ -623,21 +639,13 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	call(
 		&window,
 		"conversation_append_user_message",
-		json!({ "message": {
-			"id": PROMPT,
-			"conversationId": conversation,
-			"turnId": TURN,
-			"authorBotId": null,
-			"repliedToMessageId": ANSWERED,
-			"content": PROMPT_TEXT,
-			"createdAt": HISTORY + 1
-		}}),
+		an_answer_to(ANSWERED, PROMPT, &conversation, PROMPT_TEXT, HISTORY + 1),
 	)
 	.expect("the prompt is appended");
 
 	// The second fold, the way the app takes one: before a run that was told nothing
 	// is told everything, so that no stretch falls between the summary and the tail.
-	let again = checkpoint(&window, &conversation, 2);
+	let again = checkpoint(&window, &conversation, &bot, 2);
 	assert_eq!(
 		again["lastMessageSeq"],
 		json!(HISTORY + 1 - TAIL),
@@ -649,7 +657,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 		"conversation_bounded_context",
 		json!({
 			"conversationId": conversation,
-			"botId": "default",
+			"botId": bot["id"],
 			"promptMessageId": PROMPT
 		}),
 	)
