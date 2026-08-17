@@ -10,6 +10,9 @@ use opennest_app::claude::commands::{
 };
 use opennest_app::claude::contract::{ClaudeEvent, ConnectionState};
 use opennest_app::claude::ClaudeState;
+use opennest_app::db;
+use opennest_app::db::connection::{open, FILE_NAME};
+use opennest_app::db::migrations;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -164,5 +167,32 @@ fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
 	assert_eq!(call(&window, "claude_load_session", json!({})), Ok(snapshot));
 
 	let dir = app.path().app_data_dir().expect("data dir");
+	std::fs::remove_dir_all(&dir).expect("cleanup");
+}
+
+/// The launch resolves the file from the app data directory, and nothing else in
+/// the suite goes through that resolution: a unit test hands `Database::open` a
+/// path it built itself. So this one drives `bootstrap`, identifier included, and
+/// claims a directory of its own the way the snapshot test above does.
+#[test]
+fn bootstrapping_leaves_a_migrated_file_in_the_app_data_directory() {
+	let mut context = mock_context(noop_assets());
+	context.config_mut().identifier = "com.opennest.db-test".into();
+	let app = build(context);
+
+	let database = db::bootstrap(app.handle()).expect("the database opens");
+
+	let dir = app.path().app_data_dir().expect("data dir");
+	let file = dir.join(FILE_NAME);
+	assert!(file.exists(), "bootstrap created no file");
+	let reopened = open(&file).expect("the file is a database");
+	assert_eq!(
+		migrations::version(&reopened).expect("version"),
+		migrations::latest_version(),
+		"the file was left short of the schema this build expects"
+	);
+
+	drop(reopened);
+	drop(database);
 	std::fs::remove_dir_all(&dir).expect("cleanup");
 }

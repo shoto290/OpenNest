@@ -1,4 +1,5 @@
 pub mod claude;
+pub mod db;
 
 use tauri::{Manager, RunEvent};
 
@@ -24,6 +25,14 @@ pub fn run() {
 				.build(),
 		)
 		.manage(ClaudeState::default())
+		// The database is opened once, here, because `app_data_dir()` needs the
+		// resolved identifier only the built app carries. A failure is managed like
+		// any other outcome: the window still opens, and the state says why there is
+		// no database.
+		.setup(|app| {
+			app.manage(db::bootstrap(app.handle()));
+			Ok(())
+		})
 		.invoke_handler(invoke_handler())
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")
