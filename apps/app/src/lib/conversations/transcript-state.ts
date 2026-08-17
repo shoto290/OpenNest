@@ -102,37 +102,56 @@ const recoveredFromPort = (message: TranscriptMessage): TranscriptMessage =>
 
 /** Two nonterminal sides are the same message caught at two moments of the same
  * stream, and the longer text is the later one. */
-const furthestContent = (
+const longerContent = (
 	local: TranscriptMessage,
 	durable: TranscriptMessage,
-	durableWins: boolean,
-): string => {
-	if (
-		!isTerminalCompletion(local.completion) &&
-		!isTerminalCompletion(durable.completion)
-	) {
-		return local.content.length >= durable.content.length
-			? local.content
-			: durable.content
-	}
-	return durableWins ? durable.content : local.content
-}
+): string =>
+	local.content.length >= durable.content.length
+		? local.content
+		: durable.content
 
-/** Structure comes from the durable row — it owns identity and order, so an
- * optimistic `seq` always gives way — while the lifecycle only moves forward: a
- * page written behind a live stream must not undo what the reader already saw. */
-const reconciled = (
+/** The first ending is the one that happened: a page carrying another one is a
+ * disagreement about the past, and the transcript keeps what it settled on. Only
+ * the very same ending brings text back, and then the stored row is the full one —
+ * a locally settled message holds no more than its deltas produced. */
+const reconciledFromEnding = (
+	local: TranscriptMessage,
+	durable: TranscriptMessage,
+): TranscriptMessage => ({
+	...durable,
+	completion: local.completion,
+	content:
+		durable.completion === local.completion ? durable.content : local.content,
+})
+
+/** An unfinished message follows the durable row as soon as that row has travelled
+ * as far, which an ending always has. Behind a live stream it wins nothing: the
+ * write is late, not authoritative. */
+const reconciledFromUnfinished = (
 	local: TranscriptMessage,
 	durable: TranscriptMessage,
 ): TranscriptMessage => {
+	if (isTerminalCompletion(durable.completion)) {
+		return durable
+	}
 	const durableWins =
 		COMPLETION_RANK[durable.completion] >= COMPLETION_RANK[local.completion]
 	return {
 		...durable,
 		completion: durableWins ? durable.completion : local.completion,
-		content: furthestContent(local, durable, durableWins),
+		content: longerContent(local, durable),
 	}
 }
+
+/** Structure comes from the durable row in every case — it owns identity and
+ * order, so an optimistic `seq` always gives way. Only the outcome is contested. */
+const reconciled = (
+	local: TranscriptMessage,
+	durable: TranscriptMessage,
+): TranscriptMessage =>
+	isTerminalCompletion(local.completion)
+		? reconciledFromEnding(local, durable)
+		: reconciledFromUnfinished(local, durable)
 
 const mergePage = (
 	current: TranscriptMessage[],

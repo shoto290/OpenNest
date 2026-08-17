@@ -294,6 +294,100 @@ describe("transcriptReducer", () => {
 		expectOtherUntouched(late)
 	})
 
+	it("keeps the ending it settled on when a page carries another one", () => {
+		const cancelled = transcriptReducer(
+			load(
+				SEEDED,
+				page([
+					message({
+						id: "m-1",
+						seq: 1,
+						content: "Hello",
+						completion: "pending",
+					}),
+				]),
+			),
+			{
+				type: "messageSettled",
+				settlement: {
+					conversationId: CONVERSATION,
+					id: "m-1",
+					completion: "cancelled",
+				},
+			},
+		)
+		const contested = load(
+			cancelled,
+			page([
+				message({
+					id: "m-1",
+					seq: 1,
+					content: "Hello world",
+					completion: "complete",
+				}),
+			]),
+		)
+
+		expect(selectMessages(contested, CONVERSATION)[0]).toMatchObject({
+			content: "Hello",
+			completion: "cancelled",
+		})
+		expectOtherUntouched(contested)
+	})
+
+	it("keeps every settled outcome against a page that disagrees", () => {
+		const settled = load(
+			SEEDED,
+			page([
+				message({ id: "m-f", seq: 1, content: "half", completion: "failed" }),
+				message({ id: "m-c", seq: 2, content: "done", completion: "complete" }),
+			]),
+		)
+		const contested = load(
+			settled,
+			page([
+				message({
+					id: "m-f",
+					seq: 1,
+					content: "recovered",
+					completion: "interrupted",
+				}),
+				message({ id: "m-c", seq: 2, content: "lost", completion: "failed" }),
+			]),
+		)
+
+		expect(selectMessages(contested, CONVERSATION)[0]).toMatchObject({
+			content: "half",
+			completion: "failed",
+		})
+		expect(selectMessages(contested, CONVERSATION)[1]).toMatchObject({
+			content: "done",
+			completion: "complete",
+		})
+		expectOtherUntouched(contested)
+	})
+
+	it("takes the stored text when a page replays the ending a message already has", () => {
+		const replayed = page([
+			message({ id: "m-1", seq: 1, content: "Hello world" }),
+		])
+		const local = load(
+			SEEDED,
+			page([message({ id: "m-1", seq: 1, content: "Hello" })]),
+		)
+		const adopted = load(local, replayed)
+		const again = load(adopted, replayed)
+
+		expect(selectMessages(adopted, CONVERSATION)[0]).toMatchObject({
+			content: "Hello world",
+			completion: "complete",
+		})
+		expect(selectMessages(again, CONVERSATION)).toEqual(
+			selectMessages(adopted, CONVERSATION),
+		)
+		expectOtherUntouched(again)
+	})
+
 	it("ignores a settlement repeating the ending a message already has", () => {
 		const complete = transcriptReducer(
 			load(
