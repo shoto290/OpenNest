@@ -16,6 +16,7 @@ import {
 	type RotationReason,
 	rotationFor,
 	rotationReasonForFailure,
+	rotationReasonForStartFailure,
 } from "./rotation"
 
 import type {
@@ -139,6 +140,15 @@ export function createChatController(
 	let activeTurn: { id: string; promptId: string } | null = null
 	let detach: Promise<() => void> | null = null
 	let pendingPreflight: Promise<SessionHandle | null> | null = null
+	/** The handover in flight, if there is one. A second caller joins it instead of
+	 * starting another: two would open two rows in one lineage and ask the host for
+	 * two processes, and the host takes one transition at a time — so the run this
+	 * launch believes it holds would be whichever child lost the seat. */
+	let pendingRotation: Promise<SessionHandle | null> | null = null
+	/** A prompt on its way. Claimed before anything is awaited, because the turn a
+	 * second caller checks only becomes busy once the prompt has been written down,
+	 * and the whole handover happens before that. */
+	let sending = false
 	/** The reply the session has announced and nothing has been written down for
 	 * yet. A protocol message that only ever called a tool says nothing, so it is
 	 * held here instead of opened: the row is written by the first word it says, or
@@ -569,7 +579,12 @@ export function createChatController(
 			dispatch({ type: "sessionOpened" })
 			return handle
 		} catch (reason) {
-			report(reason)
+			// The row is open and nothing came up behind it. The run is spent from
+			// here, so the next prompt replaces it rather than being handed to a run
+			// that has a place in the lineage and no child at all.
+			const error = toTransportError(reason)
+			run.spent = rotationReasonForStartFailure(error)
+			announce({ type: "failed", error })
 			return null
 		}
 	}
@@ -645,7 +660,7 @@ export function createChatController(
 	 * gone from the answer while staying on the reader's screen. So nothing is
 	 * retired, nothing is opened, and the run stays exactly as it was: still spent if
 	 * it was, so the prompt after this one tries the handover again. */
-	const rotateFor = async (reason: RotationReason) => {
+	const runRotation = async (reason: RotationReason) => {
 		try {
 			await capture()
 		} catch (refusal) {
@@ -653,6 +668,27 @@ export function createChatController(
 			return null
 		}
 		return start(undefined, reason)
+	}
+
+	/** One handover at a time, whoever asked for it: a prompt that found the run
+	 * spent and a reader who asked for a fresh one are the same handover when they
+	 * overlap, and the second is answered with the first rather than with a run of
+	 * its own. */
+	const rotateFor = (reason: RotationReason) => {
+		pendingRotation ??= runRotation(reason).finally(() => {
+			pendingRotation = null
+		})
+		return pendingRotation
+	}
+
+	/** The handover the next prompt needs, if it needs one. A run still answering is
+	 * left exactly where it is; one that is spent, or that has carried its share, is
+	 * replaced before it is asked anything. */
+	const rotateIfDue = async () => {
+		const reason = rotationFor(run, promptsPerRun)
+		if (reason) {
+			await rotateFor(reason)
+		}
 	}
 
 	const loadOlder = async () => {
@@ -690,6 +726,13 @@ export function createChatController(
 		return store.boundedContext(conversationId, botId, promptId)
 	}
 
+	/** Whether the run this launch holds has a process to answer in it. A run whose
+	 * child never came up, or stopped, has a row in the lineage and nothing behind
+	 * it: the prompt would be a question with nobody listening, and the refusal it
+	 * earns from the host names a session rather than the handover the reader needs.
+	 * A run that is merely due for replacement is answerable until it is replaced. */
+	const isAnswerable = () => state.sessionOpen && run.spent === null
+
 	/** Every runtime call names the run this controller holds, so one issued while a
 	 * restart is in flight is refused by the host rather than aimed at whatever
 	 * process happens to be installed by the time it lands.
@@ -700,7 +743,7 @@ export function createChatController(
 	 * again. */
 	const submit = async (id: string, text: string) => {
 		const runtime = state.runtime
-		if (!runtime) {
+		if (!runtime || !isAnswerable()) {
 			dispatch({ type: "promptRejected", id, error: { kind: "notStarted" } })
 			return
 		}
@@ -732,24 +775,31 @@ export function createChatController(
 	 * checkpoint taken over a transcript that already held the question would fold
 	 * the very words about to be asked, and the context built afterwards would carry
 	 * them twice. */
-	const send = async (text: string, repliedToMessageId?: string) => {
-		const trimmed = text.trim()
-		if (trimmed.length === 0) {
-			return
-		}
-		if (isTurnBusy(state.turn)) {
+	/** One prompt at a time, claimed before the first await. The turn a caller is
+	 * refused on only becomes busy once the prompt has been written down, and
+	 * everything a handover does happens before that — so the busy check alone lets
+	 * a second caller in through the window the first one is still opening, and both
+	 * replace the run. */
+	const admit = async (submission: () => Promise<void>) => {
+		if (sending || isTurnBusy(state.turn)) {
 			report({ kind: "turnAlreadyRunning" })
 			return
 		}
+		sending = true
+		try {
+			await submission()
+		} finally {
+			sending = false
+		}
+	}
+
+	const sendPrompt = async (trimmed: string, repliedToMessageId?: string) => {
 		const conversationId = state.conversationId
 		if (!conversationId) {
 			reportStore({ kind: "unavailable" })
 			return
 		}
-		const rotation = rotationFor(run, promptsPerRun)
-		if (rotation) {
-			await rotateFor(rotation)
-		}
+		await rotateIfDue()
 		dispatch({ type: "promptSubmitted" })
 
 		const turnId = newId()
@@ -794,9 +844,25 @@ export function createChatController(
 		await submit(promptId, trimmed)
 	}
 
+	const send = (text: string, repliedToMessageId?: string) => {
+		const trimmed = text.trim()
+		if (trimmed.length === 0) {
+			return Promise.resolve()
+		}
+		return admit(() => sendPrompt(trimmed, repliedToMessageId))
+	}
+
 	/** Resubmits a prompt the store already holds. Only the one Claude refused: it
-	 * is on the record, so nothing is written again. */
-	const retry = async (id: string) => {
+	 * is on the record, so nothing is written again.
+	 *
+	 * The run it goes to is the one the next prompt would go to, handover included:
+	 * a prompt refused because the run behind it was spent would otherwise be sent
+	 * again to that same spent run, however many times the reader asked.
+	 *
+	 * The turn is named from the row rather than kept from the send that failed: a
+	 * handover starts the run over and leaves no open turn behind it, and a reply
+	 * arriving with none belongs to nothing this launch could write it under. */
+	const retryPrompt = async (id: string) => {
 		if (state.rejectedPromptId !== id) {
 			return
 		}
@@ -805,8 +871,12 @@ export function createChatController(
 			return
 		}
 		dispatch({ type: "promptRetried", id })
+		await rotateIfDue()
+		activeTurn = { id: target.turnId, promptId: id }
 		await submit(id, target.content)
 	}
+
+	const retry = (id: string) => admit(() => retryPrompt(id))
 
 	const stop = async () => {
 		const runtime = state.runtime

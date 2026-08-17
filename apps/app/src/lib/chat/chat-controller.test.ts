@@ -58,6 +58,85 @@ const STALE_TURN: ClaudeEvent[] = [
 	{ type: "turnEnded", ended: { sessionId: "dead", outcome: "failed" } },
 ]
 
+/** How many tool-only assistant messages one live prompt was measured to produce
+ * before the message that answered it. */
+const ROUNDS = 14
+
+/** The name the child gives itself, announced once and repeated by the ending of
+ * every turn it answers. */
+const ANNOUNCED = "s-1"
+
+/** What the host reports for a tool call: an assistant message of its own,
+ * announced and never spoken in, and the tool it ran. */
+const toolRounds = (rounds: number): ClaudeEvent[] =>
+	Array.from({ length: rounds }, (_, index) => index + 1).flatMap(
+		(round): ClaudeEvent[] => [
+			{
+				type: "messageStarted",
+				message: { ...STREAMING_MESSAGE, id: `msg-tool-${round}` },
+			},
+			{
+				type: "activity",
+				activity: {
+					id: `tool-${round}`,
+					title: "Read",
+					kind: "tool",
+					status: "running",
+				},
+			},
+			{
+				type: "activity",
+				activity: {
+					id: `tool-${round}`,
+					title: "Read",
+					kind: "tool",
+					status: "succeeded",
+				},
+			},
+		],
+	)
+
+/** The message that does say something, streamed word by word the way the
+ * transport numbers its deltas. */
+const spokenAnswer = (text: string): ClaudeEvent[] => [
+	{
+		type: "messageStarted",
+		message: { ...STREAMING_MESSAGE, id: "msg-answer" },
+	},
+	...text.split(" ").map(
+		(word, index): ClaudeEvent => ({
+			type: "messageDelta",
+			id: "msg-answer",
+			seq: index + 1,
+			text: index === 0 ? word : ` ${word}`,
+		}),
+	),
+	{
+		type: "messageCompleted",
+		message: {
+			...STREAMING_MESSAGE,
+			id: "msg-answer",
+			text,
+			completion: "complete",
+		},
+	},
+]
+
+const ended = (outcome: "completed" | "cancelled" | "failed"): ClaudeEvent => ({
+	type: "turnEnded",
+	ended: { sessionId: ANNOUNCED, outcome },
+})
+
+/** A promise a test releases by hand. The window a race lives in is only ever a
+ * few microtasks wide, so it is held open here instead of waited for. */
+const deferred = () => {
+	let release: () => void = () => undefined
+	const promise = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	return { promise, release: () => release() }
+}
+
 type Harness = {
 	driver: FakeChatDriver
 	store: TranscriptStore
@@ -1536,83 +1615,12 @@ describe("a run replaced under a conversation that carries on", () => {
 })
 
 describe("a turn Claude answered with tools", () => {
-	/** How many tool-only assistant messages one live prompt was measured to
-	 * produce before the message that answered it. */
-	const ROUNDS = 14
-
-	/** The name the child gives itself, announced once and repeated by the ending
-	 * of every turn it answers. */
-	const ANNOUNCED = "s-1"
-
 	beforeEach(() => {
 		vi.useFakeTimers()
 	})
 
 	afterEach(() => {
 		vi.useRealTimers()
-	})
-
-	/** What the host reports for a tool call: an assistant message of its own,
-	 * announced and never spoken in, and the tool it ran. */
-	const toolRounds = (rounds: number): ClaudeEvent[] =>
-		Array.from({ length: rounds }, (_, index) => index + 1).flatMap(
-			(round): ClaudeEvent[] => [
-				{
-					type: "messageStarted",
-					message: { ...STREAMING_MESSAGE, id: `msg-tool-${round}` },
-				},
-				{
-					type: "activity",
-					activity: {
-						id: `tool-${round}`,
-						title: "Read",
-						kind: "tool",
-						status: "running",
-					},
-				},
-				{
-					type: "activity",
-					activity: {
-						id: `tool-${round}`,
-						title: "Read",
-						kind: "tool",
-						status: "succeeded",
-					},
-				},
-			],
-		)
-
-	/** The message that does say something, streamed word by word the way the
-	 * transport numbers its deltas. */
-	const spokenAnswer = (text: string): ClaudeEvent[] => [
-		{
-			type: "messageStarted",
-			message: { ...STREAMING_MESSAGE, id: "msg-answer" },
-		},
-		...text.split(" ").map(
-			(word, index): ClaudeEvent => ({
-				type: "messageDelta",
-				id: "msg-answer",
-				seq: index + 1,
-				text: index === 0 ? word : ` ${word}`,
-			}),
-		),
-		{
-			type: "messageCompleted",
-			message: {
-				...STREAMING_MESSAGE,
-				id: "msg-answer",
-				text,
-				completion: "complete",
-			},
-		},
-	]
-
-	const ended = (
-		outcome: "completed" | "cancelled" | "failed",
-	): ClaudeEvent => ({
-		type: "turnEnded",
-		ended: { sessionId: ANNOUNCED, outcome },
 	})
 
 	const streamed = async (harness: Harness, events: ClaudeEvent[]) => {
@@ -1978,5 +1986,364 @@ describe("the provider session a run answered under", () => {
 				"its-own-process",
 			),
 		).resolves.toBeUndefined()
+	})
+})
+
+/** The handover as a thing that happens once. Everything here holds one of its
+ * three steps open — the fold, the row, the process — and asks for a second prompt
+ * or a second rotation while it is: a lineage the reader cannot see is exactly
+ * where two of anything goes unnoticed. */
+describe("a handover nothing may run twice", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	type Watched = {
+		starts: RuntimeScope[]
+		submits: [RuntimeScope, string][]
+	}
+
+	/** The driver as the controller reaches it, with every start and every prompt
+	 * written down under the run it named — and a start that can be made to fail the
+	 * way a child that never comes up fails. */
+	const watchedDriver = (
+		watched: Watched,
+		failing: () => boolean,
+	): ((fake: FakeChatDriver) => ChatDriver) => {
+		return (fake) => ({
+			...fake,
+			startOrResumeSession: (scope, resume) => {
+				watched.starts.push(scope)
+				return failing()
+					? Promise.reject({ kind: "spawnFailed", detail: "no child came up" })
+					: fake.startOrResumeSession(scope, resume)
+			},
+			submitPrompt: (scope, text) => {
+				watched.submits.push([scope, text])
+				return fake.submitPrompt(scope, text)
+			},
+		})
+	}
+
+	const watching = (): Watched => ({ starts: [], submits: [] })
+
+	/** The store, with the fold a handover begins with held open on demand. */
+	const foldingStore = (base: TranscriptStore, held: Promise<void>) => {
+		let holding = false
+		return {
+			store: {
+				...base,
+				captureCheckpoint: async (
+					conversationId: string,
+					botId: string,
+					runtimeSessionId: string | null,
+					createdAt: number,
+				) => {
+					if (holding) {
+						await held
+					}
+					return base.captureCheckpoint(
+						conversationId,
+						botId,
+						runtimeSessionId,
+						createdAt,
+					)
+				},
+			} as TranscriptStore,
+			hold: (on: boolean) => {
+				holding = on
+			},
+		}
+	}
+
+	// The gap the audit found: the row was opened, the process behind it never came
+	// up, and the prompt went to it anyway — to a run with a place in the lineage and
+	// nothing running in it. The reader's words stay on the record, and the next send
+	// is what tries the handover again rather than aiming at the dead row once more.
+	it("gives no prompt to a run whose process never came up, and hands over again next time", async () => {
+		const store = createFakeTranscriptStore()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const watched = watching()
+		let failing = false
+		const harness = await bootedHarness({
+			store,
+			promptsPerRun: 1,
+			driver: watchedDriver(watched, () => failing),
+		})
+		await harness.controller.send("first")
+		await vi.runAllTimersAsync()
+		const carried = runOf(harness.controller)
+
+		failing = true
+		await harness.controller.send("second")
+		await vi.runAllTimersAsync()
+
+		const dead = runOf(harness.controller)
+		const refused = harness.controller.getState()
+		expect(dead.runtimeSessionId).not.toBe(carried.runtimeSessionId)
+		expect(watched.submits.map(([scope]) => scope)).not.toContainEqual(dead)
+		expect(refused.turn).toBe("failed")
+		// Written and shown: the reader's words are not what a failed start costs.
+		expect(spoken(refused.messages).at(-1)).toEqual([
+			"user",
+			"second",
+			"complete",
+		])
+		expect(refused.rejectedPromptId).toBe(refused.messages.at(-1)?.id)
+
+		failing = false
+		await harness.controller.send("third")
+		await vi.runAllTimersAsync()
+
+		const live = runOf(harness.controller)
+		expect(live.runtimeSessionId).not.toBe(dead.runtimeSessionId)
+		expect(opened).toHaveBeenCalledTimes(3)
+		expect(watched.submits.at(-1)?.[0]).toEqual(live)
+		// Nothing the reader said was lost with the run that could not take it.
+		expect(watched.submits.at(-1)?.[1]).toContain("second")
+		expect(watched.submits.at(-1)?.[1]).toContain("third")
+		expect(harness.controller.getState().turn).toBe("idle")
+		harness.detach()
+	})
+
+	// The same dead row, reached the other way. Retry is the button the reader is
+	// actually offered on a prompt that did not go through, and it resubmits a prompt
+	// the store already holds — so without the handover it would aim the same words
+	// at the same run with no child, for as long as the reader kept asking.
+	it("hands over before retrying a prompt the dead run refused", async () => {
+		const store = createFakeTranscriptStore()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const watched = watching()
+		let failing = false
+		const harness = await bootedHarness({
+			store,
+			promptsPerRun: 1,
+			driver: watchedDriver(watched, () => failing),
+		})
+		await harness.controller.send("first")
+		await vi.runAllTimersAsync()
+
+		failing = true
+		await harness.controller.send("second")
+		await vi.runAllTimersAsync()
+		const dead = runOf(harness.controller)
+		const rejected = harness.controller.getState().rejectedPromptId ?? ""
+		const written = harness.controller.getState().messages.length
+
+		failing = false
+		await harness.controller.retry(rejected)
+		await vi.runAllTimersAsync()
+
+		const live = runOf(harness.controller)
+		const state = harness.controller.getState()
+		expect(opened).toHaveBeenCalledTimes(3)
+		expect(live.runtimeSessionId).not.toBe(dead.runtimeSessionId)
+		expect(watched.submits.map(([scope]) => scope)).not.toContainEqual(dead)
+		expect(watched.submits.at(-1)?.[0]).toEqual(live)
+		expect(watched.submits.at(-1)?.[1]).toContain("second")
+		// Retried, not written again: the prompt was on the record all along.
+		expect(state.messages).toHaveLength(written + 1)
+		expect(state.rejectedPromptId).toBeNull()
+		expect(spoken(state.messages).at(-1)).toEqual([
+			"assistant",
+			REPLY,
+			"complete",
+		])
+		harness.detach()
+	})
+
+	// The handover that could not happen, on a run that is perfectly well: the store
+	// would not open the successor, and the process holding the conversation is still
+	// there and still carrying it. It answers, exactly as it did before — a prompt
+	// refused here would cost the reader an answer nothing was wrong with.
+	it("lets the live run it could not replace answer the prompt itself", async () => {
+		const base = createFakeTranscriptStore()
+		let refusing = false
+		const store: TranscriptStore = {
+			...base,
+			openRuntimeSession: (conversationId, botId, startedAt, reason) =>
+				refusing
+					? Promise.reject({
+							kind: "storage",
+							failure: { kind: "poisonedConnection" },
+						})
+					: base.openRuntimeSession(conversationId, botId, startedAt, reason),
+		}
+		const watched = watching()
+		const harness = await bootedHarness({
+			store,
+			promptsPerRun: 1,
+			driver: watchedDriver(watched, () => false),
+		})
+		await harness.controller.send("first")
+		await vi.runAllTimersAsync()
+		const holding = runOf(harness.controller)
+
+		refusing = true
+		await harness.controller.send("second")
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(runOf(harness.controller)).toEqual(holding)
+		expect(watched.starts).toHaveLength(1)
+		expect(watched.submits.at(-1)).toEqual([holding, "second"])
+		expect(spoken(state.messages).at(-1)).toEqual([
+			"assistant",
+			REPLY,
+			"complete",
+		])
+		expect(state.turn).toBe("idle")
+		harness.detach()
+	})
+
+	// Two prompts arriving at the threshold. Both pass a busy check that is only ever
+	// true once a turn has started, and the turn starts after the handover — so
+	// without an admission taken before the first await, each opens a run of its own
+	// and asks the host for a process the host will refuse one of.
+	it("lets one of two prompts at the threshold hand over, and refuses the other", async () => {
+		const base = createFakeTranscriptStore()
+		const released = deferred()
+		const { store, hold } = foldingStore(base, released.promise)
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const watched = watching()
+		const harness = await bootedHarness({
+			store,
+			promptsPerRun: 1,
+			driver: watchedDriver(watched, () => false),
+		})
+		await harness.controller.send("first")
+		await vi.runAllTimersAsync()
+		const carried = runOf(harness.controller)
+
+		hold(true)
+		const second = harness.controller.send("second")
+		await vi.advanceTimersByTimeAsync(0)
+		const third = harness.controller.send("third")
+		await vi.advanceTimersByTimeAsync(0)
+		released.release()
+		await Promise.all([second, third])
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(opened).toHaveBeenCalledTimes(2)
+		expect(watched.starts).toHaveLength(2)
+		expect(runOf(harness.controller).epoch).toBe(carried.epoch + 1)
+		expect(watched.submits).toHaveLength(2)
+		expect(watched.submits.at(-1)?.[1]).toContain("second")
+		expect(watched.submits.some(([, text]) => text.includes("third"))).toBe(
+			false,
+		)
+		expect(spoken(state.messages)).toEqual([
+			["user", "first", "complete"],
+			["assistant", REPLY, "complete"],
+			["user", "second", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		expect(state.errors.at(-1)?.error).toEqual({ kind: "turnAlreadyRunning" })
+		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
+		harness.detach()
+	})
+
+	// The same rule, asked for by hand: two rotations in flight are one handover.
+	// A second row here is a run the reader never sees, opened and left behind.
+	it("takes two rotations asked for at once as the one handover they are", async () => {
+		const base = createFakeTranscriptStore()
+		const released = deferred()
+		const { store, hold } = foldingStore(base, released.promise)
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const watched = watching()
+		const harness = await bootedHarness({
+			store,
+			driver: watchedDriver(watched, () => false),
+		})
+		const replaced = runOf(harness.controller)
+		const before = harness.controller.getState().messages
+
+		hold(true)
+		const first = harness.controller.rotate()
+		await vi.advanceTimersByTimeAsync(0)
+		const second = harness.controller.rotate()
+		await vi.advanceTimersByTimeAsync(0)
+		released.release()
+		const handles = await Promise.all([first, second])
+		await vi.runAllTimersAsync()
+
+		expect(opened).toHaveBeenCalledTimes(2)
+		expect(watched.starts).toHaveLength(2)
+		expect(runOf(harness.controller).epoch).toBe(replaced.epoch + 1)
+		expect(handles[0]).toBe(handles[1])
+		expect(harness.controller.getState().messages).toEqual(before)
+		expect(harness.controller.getState().errors).toEqual([])
+		harness.detach()
+	})
+
+	// What the two waves before this one proved, under the run that won a handover
+	// two callers asked for: the id its child announces lands on that run and no
+	// other, every tool it ran is still on the screen, and the transcript keeps the
+	// one row that said something.
+	it("keeps the provider id, the activities and the empty rows out under one handover", async () => {
+		const base = createFakeTranscriptStore()
+		const recorded: [string, string][] = []
+		const store: TranscriptStore = {
+			...base,
+			recordProviderSession: (
+				conversationId,
+				botId,
+				runtimeSessionId,
+				providerSessionId,
+			) => {
+				recorded.push([runtimeSessionId, providerSessionId])
+				return base.recordProviderSession(
+					conversationId,
+					botId,
+					runtimeSessionId,
+					providerSessionId,
+				)
+			},
+		}
+		const harness = await bootedHarness({ store })
+		const replaced = runOf(harness.controller)
+
+		await Promise.all([
+			harness.controller.rotate(),
+			harness.controller.rotate(),
+		])
+		await vi.runAllTimersAsync()
+		const winner = runOf(harness.controller)
+
+		vi.spyOn(harness.driver, "submitPrompt").mockResolvedValue()
+		await harness.controller.send("hello")
+		harness.driver.pushEvent({ type: "turnChanged", state: "running" })
+		for (const event of [
+			{ type: "sessionReady", sessionId: ANNOUNCED, resumed: false } as const,
+			...toolRounds(ROUNDS),
+			...spokenAnswer(REPLY),
+			ended("completed"),
+		]) {
+			harness.driver.pushEvent(event)
+		}
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(winner.epoch).toBe(replaced.epoch + 1)
+		expect(recorded).toEqual([[winner.runtimeSessionId, ANNOUNCED]])
+		expect(
+			state.activities.filter((entry) => entry.status === "succeeded"),
+		).toHaveLength(ROUNDS)
+		const stored = await reload(store)
+		expect(spoken(stored)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		expect(
+			stored.filter(
+				(message) => message.role === "assistant" && message.content === "",
+			),
+		).toEqual([])
+		harness.detach()
 	})
 })

@@ -6,6 +6,10 @@ import type { TransportError } from "../claude/contract"
 export const ASKED_FOR = "asked for by hand"
 export const REFUSED = "the provider session was refused"
 export const STOPPED = "the provider stopped answering in it"
+/** The row was opened and the process behind it never came up. It is its own word
+ * because it is its own state: the run has a place in the lineage and has never
+ * held anything, which is not a session that stopped and not one that was refused. */
+export const NEVER_STARTED = "the provider never came up in it"
 export const NEARING_THE_BOUND = "the context was nearing its bound"
 
 /** Why a run was left behind. Every rotation records one: a replaced row with no
@@ -15,6 +19,7 @@ export type RotationReason =
 	| typeof ASKED_FOR
 	| typeof REFUSED
 	| typeof STOPPED
+	| typeof NEVER_STARTED
 	| typeof NEARING_THE_BOUND
 
 /** How many prompts one provider session carries before it is replaced on
@@ -64,6 +69,15 @@ export function rotationReasonForFailure(
 		return STOPPED
 	}
 	return null
+}
+
+/** Why a run whose start failed has to be replaced. It always has to be: the row
+ * is on the record and nothing is answering in it, so the only question the error
+ * settles is which word the row is left behind under. */
+export function rotationReasonForStartFailure(
+	error: TransportError,
+): RotationReason {
+	return rotationReasonForFailure(error) ?? NEVER_STARTED
 }
 
 /** Whether the next prompt has to be given to a new run, and why. A run already
