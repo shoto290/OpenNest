@@ -18,12 +18,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::claude::commands::{invoke_handler, EVENT_CHANNEL};
+use opennest_app::claude::commands::EVENT_CHANNEL;
 use opennest_app::claude::contract::{
 	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, PermissionRequest,
 	TransportError, TurnOutcome,
 };
 use opennest_app::claude::ClaudeState;
+use opennest_app::commands::invoke_handler;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;

@@ -5,11 +5,11 @@ use std::sync::{Arc, Mutex};
 
 use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::claude::commands::{
-	claude_start_or_resume_session, invoke_handler, shutdown_session, terminate_session,
-	EVENT_CHANNEL,
+	claude_start_or_resume_session, shutdown_session, terminate_session, EVENT_CHANNEL,
 };
 use opennest_app::claude::contract::{ClaudeEvent, ConnectionState};
 use opennest_app::claude::ClaudeState;
+use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use opennest_app::db::connection::{open, FILE_NAME};
 use opennest_app::db::migrations;

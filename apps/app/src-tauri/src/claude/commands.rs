@@ -14,20 +14,6 @@ use super::store;
 
 pub const EVENT_CHANNEL: &str = "claude://event";
 
-pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static
-{
-	tauri::generate_handler![
-		claude_check,
-		claude_start_or_resume_session,
-		claude_submit_prompt,
-		claude_cancel_turn,
-		claude_respond_to_permission,
-		claude_shutdown,
-		claude_load_session,
-		claude_save_session,
-	]
-}
-
 struct AppSink<R: Runtime>(AppHandle<R>);
 
 impl<R: Runtime> EventSink for AppSink<R> {

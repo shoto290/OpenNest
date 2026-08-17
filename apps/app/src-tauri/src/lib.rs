@@ -1,10 +1,13 @@
 pub mod claude;
+pub mod commands;
+pub mod conversations;
 pub mod db;
 
 use tauri::{Manager, RunEvent};
 
-use claude::commands::{invoke_handler, terminate_session};
+use claude::commands::terminate_session;
 use claude::ClaudeState;
+use commands::invoke_handler;
 
 pub fn run() {
 	tauri::Builder::default()
