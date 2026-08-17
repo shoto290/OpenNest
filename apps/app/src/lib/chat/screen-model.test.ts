@@ -83,7 +83,6 @@ describe("toTranscriptRows", () => {
 
 		expect(rows.map((row) => row.text)).toEqual(["First paragraph."])
 		expect(rows[0].completion).toBe("complete")
-		expect(rows[0].copyText).toBeUndefined()
 	})
 
 	it("hands back the same rows for a message that has not moved", () => {
@@ -105,7 +104,6 @@ describe("toTranscriptRows", () => {
 
 		expect(rows.map((row) => row.text)).toEqual(["One.", "Two."])
 		expect(rows.map((row) => row.id)).toEqual(["msg-1#0", "msg-1#1"])
-		expect(rows[1].copyText).toBe("One.\n\nTwo.")
 	})
 
 	it("carries how the turn ended on its closing row alone", () => {
@@ -117,13 +115,18 @@ describe("toTranscriptRows", () => {
 		])
 
 		expect(rows.map((row) => row.completion)).toEqual(["complete", "cancelled"])
-		expect(rows[1].copyText).toBe("Half an answer.\n\nStopped here.")
+		expect(rows.map((row) => row.text)).toEqual([
+			"Half an answer.",
+			"Stopped here.",
+		])
 	})
 
 	it("keeps a row for a turn that ended before writing anything", () => {
-		expect(toTranscriptRows([message({ completion: "failed" })])).toHaveLength(
-			1,
-		)
+		const stopped = toTranscriptRows([message({ completion: "failed" })])
+
+		expect(stopped).toHaveLength(1)
+		// The screen reads the emptiness back to withhold a copy action.
+		expect(stopped[0].text).toBe("")
 		expect(
 			toTranscriptRows([message({ completion: "complete" })]),
 		).toHaveLength(0)

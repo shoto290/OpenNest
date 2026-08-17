@@ -139,6 +139,35 @@ export const WithIcons = meta.story({
 	),
 })
 
+export const WithTooltip = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`tooltip` wraps the button in a `Tooltip` and costs nothing when it is omitted — no wrapper, no listeners. Reach for it on an icon-only control, and give that control an `aria-label` too: the tooltip describes on hover and focus, it does not name. Check that the label opens on hover and on Tab, and that the plain button beside it renders exactly as it did before.",
+			},
+		},
+	},
+	render: () => (
+		<Row>
+			<Button variant="ghost" size="icon-sm" aria-label="Copy" tooltip="Copy">
+				<Icons.Copy />
+			</Button>
+			<Button variant="outline" tooltip="Sends the prompt to Claude">
+				Send
+			</Button>
+			<Button variant="outline">No tooltip</Button>
+		</Row>
+	),
+	play: async ({ canvas }) => {
+		const wrapper = canvas.getByRole("button", { name: "Copy" }).parentElement
+		const plain = canvas.getByRole("button", { name: "No tooltip" })
+
+		await expect(wrapper?.tagName).toBe("SPAN")
+		await expect(wrapper?.parentElement).toBe(plain.parentElement)
+	},
+})
+
 export const AsLink = meta.story({
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 	render: () => (

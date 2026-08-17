@@ -64,6 +64,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 			<UserTurn
 				state={row.completion}
 				run={run}
+				copyText={row.text}
 				onRetry={() => {
 					void controller.retry(row.messageId)
 				}}
@@ -77,7 +78,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 		<AssistantTurn
 			state={row.completion}
 			run={run}
-			copyText={row.copyText}
+			copyText={row.text}
 			avatar={
 				avatar ? <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} /> : null
 			}

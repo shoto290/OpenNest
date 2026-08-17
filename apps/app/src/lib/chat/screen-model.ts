@@ -28,9 +28,6 @@ export type TranscriptRow = {
 	text: string
 	timestamp: number
 	completion: MessageCompletion
-	/** The whole message, set on its closing row so a copy takes the answer
-	 * entire rather than the paragraph the reader happened to hover. */
-	copyText?: string
 }
 
 /** What the bot is busy with, and what it is busy on. */
@@ -92,7 +89,7 @@ function toParagraphs(text: string, streaming: boolean): string[] {
 
 function toRow(
 	message: ChatMessage,
-	fields: Pick<TranscriptRow, "text" | "completion" | "copyText"> & {
+	fields: Pick<TranscriptRow, "text" | "completion"> & {
 		index?: number
 	},
 ): TranscriptRow {
@@ -123,7 +120,6 @@ function assistantRows(message: ChatMessage): TranscriptRow[] {
 			index,
 			text,
 			completion: closes ? message.completion : "complete",
-			copyText: closes ? message.text.trim() : undefined,
 		})
 	})
 }

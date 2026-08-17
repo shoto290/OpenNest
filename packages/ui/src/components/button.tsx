@@ -1,6 +1,7 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
+import { Tooltip } from "@workspace/ui/components/motion/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 
 const buttonVariants = cva(
@@ -38,19 +39,31 @@ const buttonVariants = cva(
 	},
 )
 
+type ButtonProps = ButtonPrimitive.Props &
+	VariantProps<typeof buttonVariants> & {
+		/** Label shown on hover and focus. Pair it with `aria-label` on an
+		 * icon-only button: a tooltip describes, it does not name. */
+		tooltip?: string
+	}
+
 function Button({
 	className,
 	variant = "default",
 	size = "default",
+	tooltip,
 	...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
-	return (
+}: ButtonProps) {
+	const button = (
 		<ButtonPrimitive
 			data-slot="button"
 			className={cn(buttonVariants({ variant, size, className }))}
 			{...props}
 		/>
 	)
+
+	if (!tooltip) return button
+
+	return <Tooltip content={tooltip}>{button}</Tooltip>
 }
 
 export { Button, buttonVariants }

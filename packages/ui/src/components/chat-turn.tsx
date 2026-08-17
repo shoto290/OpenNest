@@ -9,7 +9,6 @@ import {
 	useState,
 } from "react"
 
-import { Button } from "@workspace/ui/components/button"
 import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -17,6 +16,10 @@ import {
 	MessageContent,
 	MessageFooter,
 } from "@workspace/ui/components/message"
+import {
+	MessageAction,
+	MessageActions,
+} from "@workspace/ui/components/message-actions"
 import {
 	MessageBubble,
 	MessageBubbleContent,
@@ -54,6 +57,9 @@ interface UserTurnProps {
 	/** Set by the surrounding `ChatTurnGroup`; only override it to render a row
 	 * out of its group. */
 	run?: ChatTurnRun
+	/** This bubble's own text, behind its copy action. Leave it out — or hand it
+	 * an empty string — and the bubble offers nothing to copy. */
+	copyText?: string
 	/** Offered only on a `failed` turn, whose prompt never reached Claude. */
 	onRetry?: () => void
 	className?: string
@@ -65,8 +71,10 @@ interface AssistantTurnProps {
 	/** Set by the surrounding `ChatTurnGroup`; only override it to render a row
 	 * out of its group. */
 	run?: ChatTurnRun
-	/** Plain text behind the copy action, so it copies the whole answer rather
-	 * than the one paragraph this row carries. */
+	/** This bubble's own paragraph, behind its copy action. Every bubble of a run
+	 * carries its own, so a copy takes the part the reader pointed at rather than
+	 * the whole answer. Leave it out — or hand it an empty string, as a turn that
+	 * stopped before writing does — and the bubble offers nothing to copy. */
 	copyText?: string
 	/** The bot's mark, in the left gutter. Pass it on the row that closes a run
 	 * so one avatar stands for every message the bot sent in a row. */
@@ -81,10 +89,10 @@ interface AssistantTurnProps {
 	className?: string
 }
 
-const TURN_FOOTER = {
+const TURN_FOOTER: Partial<Record<ChatTurnState, string>> = {
 	cancelled: "Stopped",
 	failed: "This response failed",
-} satisfies Partial<Record<ChatTurnState, string>>
+}
 
 /** Corners facing a neighbour in the same run tighten, so a run reads as one
  * column of speech rather than four unrelated bubbles. */
@@ -113,20 +121,14 @@ function CopyAction({ text }: { text: string }) {
 	const { copied, copy } = useCopyText(text)
 
 	return (
-		<Button
-			size="xs"
-			variant="ghost"
+		<MessageAction
+			label={copied ? "Copied" : "Copy"}
 			onClick={() => {
 				void copy()
 			}}
 		>
-			{copied ? (
-				<Icons.Check data-icon="inline-start" />
-			) : (
-				<Icons.Copy data-icon="inline-start" />
-			)}
-			{copied ? "Copied" : "Copy"}
-		</Button>
+			{copied ? <Icons.Check /> : <Icons.Copy />}
+		</MessageAction>
 	)
 }
 
@@ -162,6 +164,7 @@ function UserTurn({
 	children,
 	state = "complete",
 	run = "single",
+	copyText,
 	onRetry,
 	className,
 }: UserTurnProps) {
@@ -169,20 +172,27 @@ function UserTurn({
 		<Message from="user" animateIn className={className}>
 			<MessageContent>
 				<MessageBubble variant="solid">
-					<MessageBubbleContent
-						className={cn("whitespace-pre-wrap", RUN_RADIUS.user[run])}
+					<MessageActions
+						actions={
+							<>
+								{copyText ? <CopyAction text={copyText} /> : null}
+								{state === "failed" && onRetry ? (
+									// Pinned: a prompt that never landed has to show its way out
+									// without waiting to be pointed at.
+									<MessageAction alwaysVisible label="Retry" onClick={onRetry}>
+										<Icons.Retry />
+									</MessageAction>
+								) : null}
+							</>
+						}
 					>
-						{children}
-					</MessageBubbleContent>
+						<MessageBubbleContent
+							className={cn("whitespace-pre-wrap", RUN_RADIUS.user[run])}
+						>
+							{children}
+						</MessageBubbleContent>
+					</MessageActions>
 				</MessageBubble>
-				{state === "failed" && onRetry ? (
-					<MessageFooter>
-						<Button size="xs" variant="ghost" onClick={onRetry}>
-							<Icons.Retry data-icon="inline-start" />
-							Retry
-						</Button>
-					</MessageFooter>
-				) : null}
 			</MessageContent>
 		</Message>
 	)
@@ -199,7 +209,7 @@ function AssistantTurn({
 }: AssistantTurnProps) {
 	const transcriptMarkId = useChatMarkId()
 	const markId = carriesMark ? transcriptMarkId : undefined
-	const footer = state === "cancelled" || state === "failed"
+	const footer = TURN_FOOTER[state]
 	// This row mounts in the commit that hands it the mark, and its own entrance
 	// fades from nothing — which would blank the mark mid-flight. The bubble
 	// carries the entrance instead, leaving the gutter alone. Frozen at mount:
@@ -226,18 +236,19 @@ function AssistantTurn({
 					animateIn={receivesMark}
 					className="col-start-2 row-start-1 min-w-0"
 				>
-					<MessageBubbleContent
-						className={cn("whitespace-pre-wrap", RUN_RADIUS.assistant[run])}
+					<MessageActions
+						actions={copyText ? <CopyAction text={copyText} /> : null}
 					>
-						{children}
-					</MessageBubbleContent>
+						<MessageBubbleContent
+							className={cn("whitespace-pre-wrap", RUN_RADIUS.assistant[run])}
+						>
+							{children}
+						</MessageBubbleContent>
+					</MessageActions>
 				</MessageBubble>
-				{footer || copyText ? (
+				{footer ? (
 					<MessageFooter className="col-start-2 row-start-2">
-						{footer ? TURN_FOOTER[state] : null}
-						{copyText && state !== "failed" ? (
-							<CopyAction text={copyText} />
-						) : null}
+						{footer}
 					</MessageFooter>
 				) : null}
 			</MessageContent>
