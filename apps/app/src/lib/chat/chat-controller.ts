@@ -94,7 +94,10 @@ function toStoreError(reason: unknown): TransportError {
 		typeof reason === "object" && reason !== null && "kind" in reason
 			? String((reason as { kind: unknown }).kind)
 			: String(reason)
-	return { kind: "writeFailed", detail: `the transcript store refused it (${kind})` }
+	return {
+		kind: "writeFailed",
+		detail: `the transcript store refused it (${kind})`,
+	}
 }
 
 export function createChatController(
@@ -158,8 +161,13 @@ export function createChatController(
 		return result
 	}
 
-	const write = (operation: () => Promise<unknown>) => {
-		void enqueue(operation).catch(reportStore)
+	/** A write and what it lets the reader see, in that order. `shown` runs only
+	 * once the store has taken the write, so nothing reaches the screen that a
+	 * reload would not bring back; a refusal shows nothing and says so. Callbacks
+	 * settle in the order their writes were issued, because each one is attached
+	 * to its own link of the chain. */
+	const write = (operation: () => Promise<unknown>, shown?: () => void) => {
+		void enqueue(operation).then(() => shown?.(), reportStore)
 	}
 
 	const syncTranscript = () => {
@@ -178,9 +186,9 @@ export function createChatController(
 	transcript.subscribe(syncTranscript)
 
 	/** Out-of-order and replayed deltas are dropped on the sequence the transport
-	 * numbers them with, before either the store or the screen sees them. A message
-	 * that has ended is no longer open, so anything arriving late for it lands here
-	 * and stops. */
+	 * numbers them with, before either the store or the screen sees them. The
+	 * bookkeeping stays here, ahead of the write: a duplicate has to be refused
+	 * the moment it arrives, not once the store has answered the one before it. */
 	const streamReply = (
 		id: string,
 		seq: number,
@@ -192,8 +200,10 @@ export function createChatController(
 			return
 		}
 		openMessages.set(id, seq)
-		write(() => store.appendText(id, text))
-		transcript.stream({ conversationId, id, text })
+		write(
+			() => store.appendText(id, text),
+			() => transcript.stream({ conversationId, id, text }),
+		)
 	}
 
 	const openReply = (message: ChatMessage, conversationId: string) => {
@@ -206,28 +216,34 @@ export function createChatController(
 			return
 		}
 		openMessages.set(message.id, 0)
-		write(() =>
-			store.openAssistantMessage({
-				id: message.id,
-				conversationId,
-				turnId: turn.id,
-				authorBotId: botId,
-				repliedToMessageId: turn.promptId,
-				createdAt: message.timestamp,
-			}),
+		write(
+			() =>
+				store.openAssistantMessage({
+					id: message.id,
+					conversationId,
+					turnId: turn.id,
+					authorBotId: botId,
+					repliedToMessageId: turn.promptId,
+					createdAt: message.timestamp,
+				}),
+			() =>
+				transcript.append({
+					id: message.id,
+					conversationId,
+					turnId: turn.id,
+					role: "assistant",
+					content: "",
+					completion: "streaming",
+					createdAt: message.timestamp,
+				}),
 		)
-		transcript.append({
-			id: message.id,
-			conversationId,
-			turnId: turn.id,
-			role: "assistant",
-			content: "",
-			completion: "streaming",
-			createdAt: message.timestamp,
-		})
 		streamReply(message.id, 1, message.text, conversationId)
 	}
 
+	/** An ending is claimed here once and only once, so a replayed one and every
+	 * delta behind it stop at the guard above. A store that refuses the ending
+	 * leaves the message open on disk, and the screen shows it exactly that way:
+	 * still unfinished, which is what the next launch will read back. */
 	const settleReply = (
 		id: string,
 		completion: TerminalCompletion,
@@ -238,8 +254,10 @@ export function createChatController(
 		}
 		openMessages.delete(id)
 		settledMessages.add(id)
-		write(() => store.finalizeMessage(id, completion))
-		transcript.settle({ conversationId, id, completion })
+		write(
+			() => store.finalizeMessage(id, completion),
+			() => transcript.settle({ conversationId, id, completion }),
+		)
 	}
 
 	/** The text a reply ends with is the text its deltas wrote: the column is
@@ -283,10 +301,7 @@ export function createChatController(
 			case "messageCompleted":
 				return settleCompleted(event.message, conversationId)
 			case "turnEnded":
-				return endTurn(
-					ENDING_FOR_OUTCOME[event.ended.outcome],
-					conversationId,
-				)
+				return endTurn(ENDING_FOR_OUTCOME[event.ended.outcome], conversationId)
 			default:
 				return
 		}
@@ -446,7 +461,11 @@ export function createChatController(
 		const createdAt = now()
 		try {
 			await enqueue(async () => {
-				await store.startTurn({ id: turnId, conversationId, startedAt: createdAt })
+				await store.startTurn({
+					id: turnId,
+					conversationId,
+					startedAt: createdAt,
+				})
 				await store.appendUserMessage({
 					id: promptId,
 					conversationId,
@@ -458,7 +477,11 @@ export function createChatController(
 				})
 			})
 		} catch (reason) {
-			dispatch({ type: "promptRejected", id: null, error: toStoreError(reason) })
+			dispatch({
+				type: "promptRejected",
+				id: null,
+				error: toStoreError(reason),
+			})
 			return
 		}
 

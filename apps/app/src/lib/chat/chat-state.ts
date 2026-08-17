@@ -51,16 +51,22 @@ export type ChatState = {
 
 export type ChatAction =
 	| { type: "driverEvent"; epoch: number; event: ClaudeEvent }
-	/** A session died or was replaced. Clears what belonged to that process and
-	 * keeps the transcript the reader can still see. `sessionId` is the id the new
-	 * session resumes: the child only re-announces it on the first prompt, so
-	 * dropping it here would write `null` over a session that is very much alive. */
+	/** A session died or was replaced. Clears what belonged to that process — its
+	 * steps included, because a step is a thing a running provider was doing and
+	 * nothing is running any more — and keeps the transcript, which was never that
+	 * process's to begin with. `sessionId` is the id the new session resumes: the
+	 * child only re-announces it on the first prompt, so dropping it here would
+	 * write `null` over a session that is very much alive. */
 	| { type: "sessionReset"; epoch: number; sessionId: string | null }
 	| { type: "sessionOpened" }
 	| { type: "conversationOpened"; conversationId: string }
 	/** The durable transcript moved. The controller hands the whole selection
 	 * rather than a patch: the transcript reducer owns order and identity. */
-	| { type: "transcriptChanged"; messages: TranscriptMessage[]; hasOlder: boolean }
+	| {
+			type: "transcriptChanged"
+			messages: TranscriptMessage[]
+			hasOlder: boolean
+	  }
 	| { type: "olderLoading"; loading: boolean }
 	| { type: "promptSubmitted" }
 	| { type: "promptRejected"; id: string | null; error: TransportError }
@@ -272,6 +278,10 @@ function applySessionReset(
 		sessionOpen: false,
 		sessionId,
 		permission: null,
+		// Nothing here outlives the process that reported it, and a cold launch
+		// starts with none: a step left pending would go on claiming work that no
+		// longer has anything doing it.
+		activities: [],
 	}
 }
 

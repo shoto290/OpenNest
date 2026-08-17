@@ -56,7 +56,10 @@ describe("chatReducer", () => {
 			...streamedTurn,
 			{
 				type: "messageCompleted",
-				message: assistantMessage({ text: "Hello world", completion: "complete" }),
+				message: assistantMessage({
+					text: "Hello world",
+					completion: "complete",
+				}),
 			},
 		])
 
@@ -116,7 +119,9 @@ describe("chatReducer", () => {
 			...streamedTurn,
 			{ type: "turnEnded", ended: { sessionId: "s-1", outcome: "completed" } },
 		])
-		const stale = applyEvents(ended, [{ type: "turnChanged", state: "running" }])
+		const stale = applyEvents(ended, [
+			{ type: "turnChanged", state: "running" },
+		])
 
 		expect(stale.turn).toBe("idle")
 	})
@@ -263,7 +268,8 @@ describe("chatReducer", () => {
 			loading,
 		)
 		expect(
-			chatReducer(loading, { type: "olderLoading", loading: false }).loadingOlder,
+			chatReducer(loading, { type: "olderLoading", loading: false })
+				.loadingOlder,
 		).toBe(false)
 	})
 })
@@ -405,24 +411,64 @@ describe("session reset", () => {
 		{ type: "turnEnded", ended: { sessionId: "s-1", outcome: "completed" } },
 	]
 
-	it("clears only what the dead session owned", () => {
+	it("clears everything the dead session owned, steps included", () => {
 		const live = applyEvents(
 			{ ...initialChatState, connection: "ready" },
 			conversation,
 		)
 		const open = chatReducer(live, { type: "sessionOpened" })
+		expect(open.activities).toHaveLength(1)
+
 		const reset = chatReducer(open, {
 			type: "sessionReset",
 			epoch: 1,
 			sessionId: null,
 		})
 
-		expect(reset.activities).toEqual(open.activities)
+		expect(reset.activities).toEqual([])
 		expect(reset.sessionOpen).toBe(false)
 		expect(reset.sessionId).toBeNull()
 		expect(reset.permission).toBeNull()
 		expect(reset.turn).toBe("idle")
 		expect(reset.epoch).toBe(1)
+	})
+
+	// A step is something a running provider was doing. Carrying a pending one
+	// across the restart leaves the screen reporting work with nothing behind it,
+	// and a cold launch — which reads no step at all — would disagree.
+	it("leaves no step running once the provider that was running it is gone", () => {
+		const working = applyEvents({ ...initialChatState, connection: "ready" }, [
+			{ type: "turnChanged", state: "submitting" },
+			{ type: "turnChanged", state: "running" },
+			{
+				type: "activity",
+				activity: {
+					id: "act-1",
+					title: "Bash · npm test",
+					kind: "tool",
+					status: "running",
+				},
+			},
+			{
+				type: "activity",
+				activity: {
+					id: "perm-1",
+					title: "Run a command",
+					kind: "permission",
+					status: "pending",
+				},
+			},
+		])
+		expect(working.activities).toHaveLength(2)
+
+		const reset = chatReducer(working, {
+			type: "sessionReset",
+			epoch: 1,
+			sessionId: "s-1",
+		})
+
+		expect(reset.activities).toEqual([])
+		expect(reset.turn).toBe("idle")
 	})
 
 	// The child re-announces its id only on the first prompt of the new session,

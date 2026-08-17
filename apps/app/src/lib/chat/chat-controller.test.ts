@@ -16,6 +16,7 @@ import type {
 	TranscriptMessage,
 } from "../conversations/transcript-contract"
 import { message as storedMessage } from "../conversations/transcript-fixtures"
+import { isTerminalCompletion } from "../conversations/transcript-state"
 
 const STEP_MS = 10
 const REPLY = "one two three four five six"
@@ -69,7 +70,9 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
 	return { driver: fake, store, controller, detach: controller.attach() }
 }
 
-const bootedHarness = async (options: HarnessOptions = {}): Promise<Harness> => {
+const bootedHarness = async (
+	options: HarnessOptions = {},
+): Promise<Harness> => {
 	const harness = createHarness(options)
 	await harness.controller.boot()
 	await vi.runAllTimersAsync()
@@ -85,11 +88,7 @@ const reload = async (store: TranscriptStore): Promise<TranscriptMessage[]> => {
 }
 
 const spoken = (messages: TranscriptMessage[]) =>
-	messages.map((message) => [
-		message.role,
-		message.content,
-		message.completion,
-	])
+	messages.map((message) => [message.role, message.content, message.completion])
 
 const seeded = (count: number): TranscriptMessage[] =>
 	Array.from({ length: count }, (_, index) =>
@@ -163,7 +162,10 @@ describe("createChatController", () => {
 		"never submits a prompt the store refused at %s",
 		async (member) => {
 			const store = createFakeTranscriptStore()
-			const refusal = { kind: "storage", failure: { kind: "poisonedConnection" } }
+			const refusal = {
+				kind: "storage",
+				failure: { kind: "poisonedConnection" },
+			}
 			const { controller, driver } = await bootedHarness({
 				store: { ...store, [member]: () => Promise.reject(refusal) },
 			})
@@ -183,6 +185,98 @@ describe("createChatController", () => {
 			expect(await reload(store)).toEqual([])
 		},
 	)
+
+	/** The reader may be shown less than the store holds — a write still in flight
+	 * is not a lie — but never more: no id, no word and no ending on screen that a
+	 * relaunch would fail to bring back. */
+	const neverAheadOfStorage = (
+		visible: TranscriptMessage[],
+		stored: TranscriptMessage[],
+	) => {
+		expect(visible.map((message) => message.id)).toEqual(
+			stored.map((message) => message.id),
+		)
+		expect(visible.map((message) => message.content)).toEqual(
+			stored.map((message) => message.content),
+		)
+		for (const [index, message] of visible.entries()) {
+			if (isTerminalCompletion(message.completion)) {
+				expect(message.completion).toBe(stored[index].completion)
+			}
+		}
+	}
+
+	const refusingStore = (
+		member: "openAssistantMessage" | "appendText" | "finalizeMessage",
+	) => {
+		const store = createFakeTranscriptStore()
+		return {
+			...store,
+			[member]: () =>
+				Promise.reject({
+					kind: "storage",
+					failure: { kind: "poisonedConnection" },
+				}),
+		}
+	}
+
+	// A reply the store never took has nothing on screen to lose: the row is not
+	// shown, and the deltas and the ending that follow it find nothing to move.
+	it("shows no reply at all when the store refuses to open it", async () => {
+		const store = refusingStore("openAssistantMessage")
+		const { controller } = await bootedHarness({ store })
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(spoken(state.messages)).toEqual([["user", "hello", "complete"]])
+		expect(state.errors.at(-1)?.error).toEqual({
+			kind: "writeFailed",
+			detail: "the transcript store refused it (storage)",
+		})
+		neverAheadOfStorage(state.messages, await reload(store))
+	})
+
+	// The words are the write. One the store refused is one the reader must not be
+	// reading, however far the stream got.
+	it("shows no word of a reply the store refused to write", async () => {
+		const store = refusingStore("appendText")
+		const { controller } = await bootedHarness({ store })
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.messages.at(-1)).toMatchObject({
+			role: "assistant",
+			content: "",
+		})
+		expect(state.errors.at(-1)?.error.kind).toBe("writeFailed")
+		neverAheadOfStorage(state.messages, await reload(store))
+	})
+
+	// An ending the store refused leaves the message open on disk. The screen says
+	// the same: still unfinished, which is what the next launch reads back.
+	it("never settles a reply the store refused to close", async () => {
+		const store = refusingStore("finalizeMessage")
+		const { controller } = await bootedHarness({ store })
+
+		await controller.send("hello")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		const answer = state.messages.at(-1)
+		expect(answer).toMatchObject({ content: REPLY, completion: "streaming" })
+		expect(state.errors.at(-1)?.error.kind).toBe("writeFailed")
+
+		const stored = await reload(store)
+		expect(stored.at(-1)).toMatchObject({
+			content: REPLY,
+			completion: "interrupted",
+		})
+		neverAheadOfStorage(state.messages, stored)
+	})
 
 	it("refuses a second prompt while a turn is running", async () => {
 		const { controller } = await bootedHarness()
@@ -238,7 +332,12 @@ describe("createChatController", () => {
 		await controller.send("hello")
 		driver.pushEvent({ type: "turnChanged", state: "running" })
 		driver.pushEvent({ type: "messageStarted", message: STREAMING_MESSAGE })
-		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 1, text: "Half" })
+		driver.pushEvent({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 1,
+			text: "Half",
+		})
 
 		await controller.restart()
 		await vi.runAllTimersAsync()
@@ -295,7 +394,12 @@ describe("createChatController", () => {
 			type: "turnEnded",
 			ended: { sessionId: "s-1", outcome: "completed" },
 		})
-		driver.pushEvent({ type: "messageDelta", id: "msg-1", seq: 9, text: " late" })
+		driver.pushEvent({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 9,
+			text: " late",
+		})
 		driver.pushEvent({
 			type: "turnEnded",
 			ended: { sessionId: "s-1", outcome: "failed" },
@@ -341,7 +445,12 @@ describe("createChatController", () => {
 			type: "messageStarted",
 			message: { ...STREAMING_MESSAGE, id: "ghost" },
 		})
-		deadListener({ type: "messageDelta", id: "msg-1", seq: 99, text: "phantom" })
+		deadListener({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 99,
+			text: "phantom",
+		})
 		deadListener({
 			type: "turnEnded",
 			ended: { sessionId: "dead", outcome: "failed" },
@@ -364,7 +473,10 @@ describe("createChatController", () => {
 				submitPrompt: (text) => {
 					if (failNext) {
 						failNext = false
-						return Promise.reject({ kind: "writeFailed", detail: "network down" })
+						return Promise.reject({
+							kind: "writeFailed",
+							detail: "network down",
+						})
 					}
 					return fake.submitPrompt(text)
 				},
@@ -506,7 +618,10 @@ describe("createChatController", () => {
 	it("says so instead of writing when the store never opened the conversation", async () => {
 		const store = createFakeTranscriptStore()
 		const { controller, driver } = createHarness({
-			store: { ...store, mainChat: () => Promise.reject({ kind: "unavailable" }) },
+			store: {
+				...store,
+				mainChat: () => Promise.reject({ kind: "unavailable" }),
+			},
 		})
 		const submitSpy = vi.spyOn(driver, "submitPrompt")
 		await controller.boot()
@@ -777,14 +892,17 @@ describe("every ending survives a launch", () => {
 		["a turn that crashed", "explain /fail", "failed"],
 	]
 
-	it.each(endings)("brings %s back as it ended", async (_name, prompt, ending) => {
-		const { controller, store } = await bootedHarness()
+	it.each(endings)(
+		"brings %s back as it ended",
+		async (_name, prompt, ending) => {
+			const { controller, store } = await bootedHarness()
 
-		await controller.send(prompt)
-		await vi.runAllTimersAsync()
+			await controller.send(prompt)
+			await vi.runAllTimersAsync()
 
-		const live = controller.getState().messages
-		expect(live.at(-1)?.completion).toBe(ending)
-		expect(spoken(await reload(store))).toEqual(spoken(live))
-	})
+			const live = controller.getState().messages
+			expect(live.at(-1)?.completion).toBe(ending)
+			expect(spoken(await reload(store))).toEqual(spoken(live))
+		},
+	)
 })
