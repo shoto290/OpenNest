@@ -14,6 +14,13 @@
 //! what happened, and dropping one of them silently is how a transcript stops
 //! matching what the reader saw.
 //!
+//! For that comparison to mean anything, a message is written the way it actually
+//! comes into being, and the two ways are not one. A reply is opened with no text
+//! and grows a delta at a time; a message authored here is whole the moment it
+//! exists and never streams. So a reply's creation carries no text at all, and an
+//! authored message's text is the one it keeps for life — which is what leaves
+//! every field a replay submits comparable exactly, with nothing left to guess at.
+//!
 //! The place a row takes is allocated here rather than by the caller. `seq` is
 //! `MAX + 1` inside the same transaction as the insert it stands for, so the
 //! order a transcript comes back in is decided by the database that holds it and
@@ -119,27 +126,6 @@ impl From<TerminalState> for MessageState {
 	}
 }
 
-/// The openings on their own, and the only thing
-/// [`MessagesRepository::append_message`] will take. A message is born open and
-/// ends through [`MessagesRepository::finalize_message`], so a row that already
-/// ended cannot be claimed to have been written that way — which is what leaves
-/// a replay of the opening something the stored row can still be checked
-/// against.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InitialState {
-	Pending,
-	Streaming,
-}
-
-impl From<InitialState> for MessageState {
-	fn from(state: InitialState) -> Self {
-		match state {
-			InitialState::Pending => MessageState::Pending,
-			InitialState::Streaming => MessageState::Streaming,
-		}
-	}
-}
-
 /// The same shape as [`MessageState`], for the step a turn hangs off: `Pending`
 /// and `Running` are open, the three others are endings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,8 +161,9 @@ impl ActivityStatus {
 }
 
 /// The open statuses on their own, and the only thing
-/// [`MessagesRepository::append_activity`] will take — the same rule as
-/// [`InitialState`], over the step a turn hangs off.
+/// [`MessagesRepository::append_activity`] will take. A step is appended open and
+/// ends through [`MessagesRepository::set_activity_status`], so a step that has
+/// already ended cannot be claimed to have been written that way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InitialStatus {
 	Pending,
@@ -253,15 +240,28 @@ pub struct NewTurn {
 	pub started_at: i64,
 }
 
-pub struct NewMessage {
+/// A reply about to be streamed into. It has no content field: the host learns
+/// the id of an assistant message before a single word of it exists, so the row
+/// is created empty and every word reaches it through
+/// [`MessagesRepository::append_text`].
+pub struct NewAssistantMessage {
 	pub id: String,
 	pub conversation_id: String,
 	pub turn_id: String,
 	pub author_bot_id: Option<String>,
 	pub replied_to_message_id: Option<String>,
-	pub role: MessageRole,
+	pub created_at: i64,
+}
+
+/// A message authored here, whole. It is written complete in one go, so nothing
+/// is ever appended to it afterwards.
+pub struct NewUserMessage {
+	pub id: String,
+	pub conversation_id: String,
+	pub turn_id: String,
+	pub author_bot_id: Option<String>,
+	pub replied_to_message_id: Option<String>,
 	pub content: String,
-	pub state: InitialState,
 	pub created_at: i64,
 }
 
@@ -332,7 +332,7 @@ const COMPLETE_TURN: &str =
 	"UPDATE turns SET completed_at = ?2 WHERE id = ?1 AND completed_at IS NULL";
 
 const MESSAGE_KEY: &str = "SELECT seq, conversation_id, turn_id, author_bot_id,
-		replied_to_message_id, role, content, completion_state, created_at
+		replied_to_message_id, role, content, created_at
 	FROM messages WHERE id = ?1";
 const MESSAGE_STATE: &str = "SELECT completion_state FROM messages WHERE id = ?1";
 const NEXT_MESSAGE_SEQ: &str =
@@ -413,12 +413,27 @@ impl MessagesRepository {
 			.await?)
 	}
 
-	/// Answers the place the message took in its conversation. Appending an id the
-	/// conversation already holds writes nothing and answers the place it holds, so
-	/// a caller replaying its own event cannot make a second copy of a message —
-	/// and cannot quietly turn the stored one into another message either.
-	pub async fn append_message(&self, message: NewMessage) -> Result<i64, TranscriptError> {
-		self.call_mut(move |connection| Ok(store_message(connection, message))).await?
+	/// Answers the place the reply took in its conversation. The row is created
+	/// empty and `pending`, so an id the conversation already holds writes nothing
+	/// and answers the place it holds: what the host knows when a reply starts is
+	/// which message it is, not what it will say, and that is the whole of what a
+	/// second copy of the event can be checked against.
+	pub async fn open_assistant_message(
+		&self,
+		message: NewAssistantMessage,
+	) -> Result<i64, TranscriptError> {
+		self.call_mut(move |connection| Ok(store_message(connection, message.into()))).await?
+	}
+
+	/// Answers the place the message took in its conversation. The row is created
+	/// `complete` with the text it was authored with, and nothing may be appended to
+	/// a message that has ended — so that text is what a replay is compared against,
+	/// word for word.
+	pub async fn append_user_message(
+		&self,
+		message: NewUserMessage,
+	) -> Result<i64, TranscriptError> {
+		self.call_mut(move |connection| Ok(store_message(connection, message.into()))).await?
 	}
 
 	/// A delta is concatenated by SQLite onto what the row already holds, so no
@@ -551,6 +566,56 @@ impl StoredTurnKey {
 	}
 }
 
+/// A message resolved to the row it will be inserted as, whichever of the two
+/// paths it arrived by. `role`, `state` and the presence of `content` are decided
+/// here rather than submitted, which is what stops any of them from being part of
+/// what a caller could get wrong twice.
+struct AppendedMessage {
+	id: String,
+	conversation_id: String,
+	turn_id: String,
+	author_bot_id: Option<String>,
+	replied_to_message_id: Option<String>,
+	role: MessageRole,
+	/// `None` on the assistant path: the row is created empty there, so its
+	/// creation has no text for a replay to carry or to be checked against.
+	content: Option<String>,
+	state: MessageState,
+	created_at: i64,
+}
+
+impl From<NewAssistantMessage> for AppendedMessage {
+	fn from(message: NewAssistantMessage) -> Self {
+		Self {
+			id: message.id,
+			conversation_id: message.conversation_id,
+			turn_id: message.turn_id,
+			author_bot_id: message.author_bot_id,
+			replied_to_message_id: message.replied_to_message_id,
+			role: MessageRole::Assistant,
+			content: None,
+			state: MessageState::Pending,
+			created_at: message.created_at,
+		}
+	}
+}
+
+impl From<NewUserMessage> for AppendedMessage {
+	fn from(message: NewUserMessage) -> Self {
+		Self {
+			id: message.id,
+			conversation_id: message.conversation_id,
+			turn_id: message.turn_id,
+			author_bot_id: message.author_bot_id,
+			replied_to_message_id: message.replied_to_message_id,
+			role: MessageRole::User,
+			content: Some(message.content),
+			state: MessageState::Complete,
+			created_at: message.created_at,
+		}
+	}
+}
+
 struct StoredMessageKey {
 	seq: i64,
 	conversation_id: String,
@@ -559,19 +624,16 @@ struct StoredMessageKey {
 	replied_to_message_id: Option<String>,
 	role: MessageRole,
 	content: String,
-	state: MessageState,
 	created_at: i64,
 }
 
 impl StoredMessageKey {
-	// content is the one field the stored row may legitimately have moved past:
-	// append_text concatenates every delta onto it, so what a true replay submits
-	// is by construction the beginning of what the row now holds. Hence a prefix
-	// check rather than equality. The honest limit of it is the empty opening an
-	// assistant message is appended with — an empty string is a prefix of
-	// everything, so that one case is checked by the fields around it and not by
-	// this one.
-	fn diverging_field(&self, message: &NewMessage) -> Option<&'static str> {
+	/// Every field compared here is written once and never updated, so equality is
+	/// the whole rule. `completion_state` is absent because no caller states it, and
+	/// `content` is only compared when the message was authored whole: a reply's
+	/// text is written after its creation and belongs to `append_text`, not to the
+	/// event that created the row.
+	fn diverging_field(&self, message: &AppendedMessage) -> Option<&'static str> {
 		if self.conversation_id != message.conversation_id {
 			return Some("conversation_id");
 		}
@@ -587,11 +649,8 @@ impl StoredMessageKey {
 		if self.role != message.role {
 			return Some("role");
 		}
-		if !self.content.starts_with(&message.content) {
+		if message.content.as_ref().is_some_and(|authored| &self.content != authored) {
 			return Some("content");
-		}
-		if message_stage(message.state.into()) > message_stage(self.state) {
-			return Some("state");
 		}
 		if self.created_at != message.created_at {
 			return Some("created_at");
@@ -630,24 +689,11 @@ impl StoredActivityKey {
 	}
 }
 
-/// How far along its life a message is, so an opening can be compared against a
-/// row that has moved on since. A replay is allowed to be behind what the row
-/// now holds — that is what a second copy of an event looks like once the stream
-/// has run — but never ahead of it: a row still `pending` was not opened
-/// `streaming`.
-fn message_stage(state: MessageState) -> u8 {
-	match state {
-		MessageState::Pending => 0,
-		MessageState::Streaming => 1,
-		MessageState::Complete
-		| MessageState::Cancelled
-		| MessageState::Failed
-		| MessageState::Interrupted => 2,
-	}
-}
-
-/// The same order over the statuses of a step: `pending` before `running`,
-/// `running` before any ending.
+/// How far along its life a step is, so an opening can be compared against a row
+/// that has moved on since: `pending` before `running`, `running` before any
+/// ending. A replay is allowed to be behind what the row now holds — that is what
+/// a second copy of an event looks like once the step has run — but never ahead
+/// of it.
 fn activity_stage(status: ActivityStatus) -> u8 {
 	match status {
 		ActivityStatus::Pending => 0,
@@ -671,7 +717,10 @@ fn store_turn(connection: &mut Connection, turn: NewTurn) -> Result<i64, Transcr
 	Ok(seq)
 }
 
-fn store_message(connection: &mut Connection, message: NewMessage) -> Result<i64, TranscriptError> {
+fn store_message(
+	connection: &mut Connection,
+	message: AppendedMessage,
+) -> Result<i64, TranscriptError> {
 	let transaction = write_transaction(connection)?;
 	if let Some(stored) = stored_message_key(&transaction, &message.id)? {
 		if let Some(field) = stored.diverging_field(&message) {
@@ -690,8 +739,8 @@ fn store_message(connection: &mut Connection, message: NewMessage) -> Result<i64
 			message.replied_to_message_id,
 			seq,
 			message.role,
-			message.content,
-			MessageState::from(message.state),
+			message.content.unwrap_or_default(),
+			message.state,
 			message.created_at,
 		],
 	)?;
@@ -859,8 +908,7 @@ fn stored_message_key(
 				replied_to_message_id: row.get(4)?,
 				role: row.get(5)?,
 				content: row.get(6)?,
-				state: row.get(7)?,
-				created_at: row.get(8)?,
+				created_at: row.get(7)?,
 			})
 		})
 		.optional()?)
@@ -982,30 +1030,25 @@ mod tests {
 			.expect("the turn is started")
 	}
 
-	fn a_user_message(id: &str, content: &str, created_at: i64) -> NewMessage {
-		NewMessage {
+	fn a_user_message(id: &str, content: &str, created_at: i64) -> NewUserMessage {
+		NewUserMessage {
 			id: id.into(),
 			conversation_id: "c1".into(),
 			turn_id: "t1".into(),
 			author_bot_id: None,
 			replied_to_message_id: None,
-			role: MessageRole::User,
 			content: content.into(),
-			state: InitialState::Pending,
 			created_at,
 		}
 	}
 
-	fn a_reply(id: &str, replied_to: Option<&str>) -> NewMessage {
-		NewMessage {
+	fn a_reply(id: &str, replied_to: Option<&str>) -> NewAssistantMessage {
+		NewAssistantMessage {
 			id: id.into(),
 			conversation_id: "c1".into(),
 			turn_id: "t1".into(),
 			author_bot_id: Some("b1".into()),
 			replied_to_message_id: replied_to.map(Into::into),
-			role: MessageRole::Assistant,
-			content: String::new(),
-			state: InitialState::Pending,
 			created_at: 2,
 		}
 	}
@@ -1068,6 +1111,51 @@ mod tests {
 			.collect()
 	}
 
+	/// Every column of a message as the file holds it, `conversation_id` and
+	/// `completion_state` included — what [`StoredMessage`] leaves out, and what a
+	/// refused replay has to have left byte for byte where it was.
+	#[derive(Debug, Clone, PartialEq, Eq)]
+	struct StoredRow {
+		id: String,
+		conversation_id: String,
+		turn_id: String,
+		author_bot_id: Option<String>,
+		replied_to_message_id: Option<String>,
+		seq: i64,
+		role: String,
+		content: String,
+		completion_state: String,
+		created_at: i64,
+	}
+
+	async fn stored_row(database: &Database, id: &'static str) -> StoredRow {
+		database
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT id, conversation_id, turn_id, author_bot_id, replied_to_message_id,
+						seq, role, content, completion_state, created_at
+					FROM messages WHERE id = ?1",
+					params![id],
+					|row| {
+						Ok(StoredRow {
+							id: row.get(0)?,
+							conversation_id: row.get(1)?,
+							turn_id: row.get(2)?,
+							author_bot_id: row.get(3)?,
+							replied_to_message_id: row.get(4)?,
+							seq: row.get(5)?,
+							role: row.get(6)?,
+							content: row.get(7)?,
+							completion_state: row.get(8)?,
+							created_at: row.get(9)?,
+						})
+					},
+				)?)
+			})
+			.await
+			.expect("the message row is read")
+	}
+
 	/// What a turn holds, which no read of this repository hands back on its own:
 	/// what a refused replay must have left untouched.
 	async fn stored_turn(database: &Database, id: &'static str) -> (String, i64) {
@@ -1109,7 +1197,11 @@ mod tests {
 		for index in 0..LONG_CONVERSATION {
 			let seq = database
 				.messages()
-				.append_message(a_user_message(&format!("m{index}"), &format!("line {index}"), 1))
+				.append_user_message(a_user_message(
+					&format!("m{index}"),
+					&format!("line {index}"),
+					1,
+				))
 				.await
 				.expect("the message is appended");
 			assert_eq!(seq, index as i64 + 1, "the database allocated a place out of order");
@@ -1144,7 +1236,11 @@ mod tests {
 		for index in 0..5 {
 			database
 				.messages()
-				.append_message(a_user_message(&format!("m{index}"), &format!("line {index}"), 7))
+				.append_user_message(a_user_message(
+					&format!("m{index}"),
+					&format!("line {index}"),
+					7,
+				))
 				.await
 				.expect("the message is appended");
 		}
@@ -1176,12 +1272,12 @@ mod tests {
 		a_turn(&database, "t2", "c2").await;
 		database
 			.messages()
-			.append_message(a_user_message("m1", "hello", 1))
+			.append_user_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("the message is appended");
 		database
 			.messages()
-			.append_message(NewMessage {
+			.append_user_message(NewUserMessage {
 				conversation_id: "c2".into(),
 				turn_id: "t2".into(),
 				..a_user_message("elsewhere", "hello", 1)
@@ -1191,10 +1287,11 @@ mod tests {
 
 		database
 			.messages()
-			.append_message(a_reply("m2", Some("m1")))
+			.open_assistant_message(a_reply("m2", Some("m1")))
 			.await
 			.expect("a reply inside its own conversation was refused");
-		let across = database.messages().append_message(a_reply("m3", Some("elsewhere"))).await;
+		let across =
+			database.messages().open_assistant_message(a_reply("m3", Some("elsewhere"))).await;
 
 		assert!(across.is_err(), "a message quoted another conversation's message");
 		let transcript = whole_transcript(&database, PAGE).await;
@@ -1218,7 +1315,7 @@ mod tests {
 		for index in 0..6 {
 			database
 				.messages()
-				.append_message(a_user_message(&format!("m{index}"), "hello", 1))
+				.append_user_message(a_user_message(&format!("m{index}"), "hello", 1))
 				.await
 				.expect("the message is appended");
 		}
@@ -1259,17 +1356,12 @@ mod tests {
 		a_turn(&database, "t1", "c1").await;
 		database
 			.messages()
-			.append_message(a_user_message("m1", "hello", 1))
+			.append_user_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("the message is appended");
 		database
 			.messages()
-			.finalize_message("m1".into(), TerminalState::Complete)
-			.await
-			.expect("the message is finalized");
-		database
-			.messages()
-			.append_message(a_reply("m2", Some("m1")))
+			.open_assistant_message(a_reply("m2", Some("m1")))
 			.await
 			.expect("the reply is appended");
 		database.messages().append_text("m2".into(), "half a ".into()).await.expect("a delta");
@@ -1326,12 +1418,12 @@ mod tests {
 			a_turn(&database, "t1", "c1").await;
 			database
 				.messages()
-				.append_message(a_user_message("m1", "hello", 1))
+				.append_user_message(a_user_message("m1", "hello", 1))
 				.await
 				.expect("the message is appended");
 			database
 				.messages()
-				.append_message(a_reply("m2", Some("m1")))
+				.open_assistant_message(a_reply("m2", Some("m1")))
 				.await
 				.expect("the reply is appended");
 			database.messages().append_text("m2".into(), "hi there".into()).await.expect("a delta");
@@ -1385,12 +1477,12 @@ mod tests {
 		let turn = a_turn(&database, "t1", "c1").await;
 		let first = database
 			.messages()
-			.append_message(a_user_message("m1", "hello", 1))
+			.append_user_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("the message is appended");
 		database
 			.messages()
-			.append_message(a_reply("m2", None))
+			.open_assistant_message(a_reply("m2", None))
 			.await
 			.expect("the reply is appended");
 		database.messages().append_text("m2".into(), "hi".into()).await.expect("a delta");
@@ -1403,7 +1495,7 @@ mod tests {
 		let replayed_turn = a_turn(&database, "t1", "c1").await;
 		let replayed = database
 			.messages()
-			.append_message(a_user_message("m1", "hello", 1))
+			.append_user_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("a replayed append was refused");
 		let replayed_activity = database
@@ -1463,7 +1555,7 @@ mod tests {
 			for id in [format!("p{index}"), format!("s{index}")] {
 				database
 					.messages()
-					.append_message(a_reply(&id, None))
+					.open_assistant_message(a_reply(&id, None))
 					.await
 					.expect("the reply is appended");
 				if id.starts_with('s') {
@@ -1608,7 +1700,7 @@ mod tests {
 		a_turn(&database, "t3", "c1").await;
 		database
 			.messages()
-			.append_message(a_user_message("m1", "hello", 1))
+			.append_user_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("the message is appended");
 		database
@@ -1616,6 +1708,7 @@ mod tests {
 			.append_activity(an_activity("a1", InitialStatus::Running))
 			.await
 			.expect("the activity is appended");
+		let before = stored_row(&database, "m1").await;
 
 		let turn_elsewhere = database
 			.messages()
@@ -1623,7 +1716,7 @@ mod tests {
 			.await;
 		let another_conversation = database
 			.messages()
-			.append_message(NewMessage {
+			.append_user_message(NewUserMessage {
 				conversation_id: "c2".into(),
 				turn_id: "t2".into(),
 				..a_user_message("m1", "hello", 1)
@@ -1631,27 +1724,31 @@ mod tests {
 			.await;
 		let another_turn = database
 			.messages()
-			.append_message(NewMessage { turn_id: "t3".into(), ..a_user_message("m1", "hello", 1) })
+			.append_user_message(NewUserMessage {
+				turn_id: "t3".into(),
+				..a_user_message("m1", "hello", 1)
+			})
 			.await;
 		let another_author = database
 			.messages()
-			.append_message(NewMessage {
+			.append_user_message(NewUserMessage {
 				author_bot_id: Some("b1".into()),
 				..a_user_message("m1", "hello", 1)
 			})
 			.await;
 		let another_quote = database
 			.messages()
-			.append_message(NewMessage {
+			.append_user_message(NewUserMessage {
 				replied_to_message_id: Some("m1".into()),
 				..a_user_message("m1", "hello", 1)
 			})
 			.await;
 		let another_role = database
 			.messages()
-			.append_message(NewMessage {
-				role: MessageRole::Assistant,
-				..a_user_message("m1", "hello", 1)
+			.open_assistant_message(NewAssistantMessage {
+				author_bot_id: None,
+				created_at: 1,
+				..a_reply("m1", None)
 			})
 			.await;
 		let activity_of_another_turn = database
@@ -1698,11 +1795,7 @@ mod tests {
 		);
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(seqs(&transcript), vec![1], "a refused append left a row behind");
-		assert_eq!(transcript[0].turn_id, "t1");
-		assert_eq!(transcript[0].author_bot_id, None);
-		assert_eq!(transcript[0].replied_to_message_id, None);
-		assert_eq!(transcript[0].role, MessageRole::User);
-		assert_eq!(transcript[0].content, "hello");
+		assert_eq!(stored_row(&database, "m1").await, before, "a refused append rewrote the row");
 		let activities =
 			database.messages().activities_for_turn("t1".into()).await.expect("the activities");
 		assert_eq!(activities.len(), 1, "a refused append left an activity behind");
@@ -1715,9 +1808,11 @@ mod tests {
 
 	/// The other half of the same rule: an id that matches on everything naming
 	/// which row it is, and disagrees about how that row was created. The moment a
-	/// turn started, the text a message opened with, the state it opened in and
-	/// the moment it was stamped are all part of the event, so a second event
-	/// carrying other ones is two accounts of one thing rather than one twice.
+	/// turn started, the text a message was authored with and the moment it was
+	/// stamped are all part of the event, so a second event carrying other ones is
+	/// two accounts of one thing rather than one twice. The state a message was
+	/// created in is not among them: no caller states it, so there is nothing to
+	/// disagree about.
 	#[tokio::test]
 	async fn an_id_appended_again_carrying_other_creation_data_is_refused_and_writes_nothing() {
 		let dir = temp_dir();
@@ -1725,7 +1820,7 @@ mod tests {
 		a_turn(&database, "t1", "c1").await;
 		database
 			.messages()
-			.append_message(a_user_message("m1", "hello", 1))
+			.append_user_message(a_user_message("m1", "hello", 1))
 			.await
 			.expect("the message is appended");
 		database
@@ -1733,22 +1828,18 @@ mod tests {
 			.append_activity(an_activity("a1", InitialStatus::Pending))
 			.await
 			.expect("the activity is appended");
+		let before = stored_row(&database, "m1").await;
 
 		let another_start = database
 			.messages()
 			.start_turn(NewTurn { id: "t1".into(), conversation_id: "c1".into(), started_at: 5 })
 			.await;
-		let another_content =
-			database.messages().append_message(a_user_message("m1", "something else", 1)).await;
-		let a_state_ahead = database
+		let another_content = database
 			.messages()
-			.append_message(NewMessage {
-				state: InitialState::Streaming,
-				..a_user_message("m1", "hello", 1)
-			})
+			.append_user_message(a_user_message("m1", "something else", 1))
 			.await;
 		let another_moment =
-			database.messages().append_message(a_user_message("m1", "hello", 99)).await;
+			database.messages().append_user_message(a_user_message("m1", "hello", 99)).await;
 		let a_status_ahead =
 			database.messages().append_activity(an_activity("a1", InitialStatus::Running)).await;
 		let another_activity_moment = database
@@ -1761,7 +1852,6 @@ mod tests {
 
 		assert!(is_conflict(&another_start, "t1", "started_at"), "{another_start:?}");
 		assert!(is_conflict(&another_content, "m1", "content"), "{another_content:?}");
-		assert!(is_conflict(&a_state_ahead, "m1", "state"), "{a_state_ahead:?}");
 		assert!(is_conflict(&another_moment, "m1", "created_at"), "{another_moment:?}");
 		assert!(is_conflict(&a_status_ahead, "a1", "status"), "{a_status_ahead:?}");
 		assert!(
@@ -1775,9 +1865,7 @@ mod tests {
 		);
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(seqs(&transcript), vec![1], "a refused append left a row behind");
-		assert_eq!(transcript[0].content, "hello", "a refused append rewrote the text");
-		assert_eq!(transcript[0].state, MessageState::Pending, "a refused append moved the state");
-		assert_eq!(transcript[0].created_at, 1, "a refused append restamped the message");
+		assert_eq!(stored_row(&database, "m1").await, before, "a refused append rewrote the row");
 		let activities =
 			database.messages().activities_for_turn("t1".into()).await.expect("the activities");
 		assert_eq!(activities.len(), 1, "a refused append left an activity behind");
@@ -1793,10 +1881,10 @@ mod tests {
 	}
 
 	/// The replay an event loop actually produces: the same event again, after the
-	/// row it opened has moved on. The text has grown past the opening it was
-	/// written with, the state has walked to its ending, the step has walked its
-	/// whole graph — none of which is what the event said, so an exact replay
-	/// still answers the place it holds.
+	/// row it opened has moved on. The text has grown from nothing, the state has
+	/// walked to its ending, the step has walked its whole graph — none of which
+	/// the event ever carried, so an exact replay still answers the place it holds
+	/// and leaves every column of the row where it was.
 	#[tokio::test]
 	async fn replaying_an_append_after_the_row_moved_on_answers_the_place_it_already_holds() {
 		let dir = temp_dir();
@@ -1804,13 +1892,14 @@ mod tests {
 		a_turn(&database, "t1", "c1").await;
 		let streamed = database
 			.messages()
-			.append_message(a_user_message("m1", "half a ", 1))
+			.open_assistant_message(a_reply("m1", None))
 			.await
-			.expect("the message is appended");
+			.expect("the reply is appended");
+		database.messages().append_text("m1".into(), "half a ".into()).await.expect("a delta");
 		database.messages().append_text("m1".into(), "thought".into()).await.expect("a delta");
 		let ended = database
 			.messages()
-			.append_message(a_reply("m2", Some("m1")))
+			.open_assistant_message(a_reply("m2", Some("m1")))
 			.await
 			.expect("the reply is appended");
 		database.messages().append_text("m2".into(), "hi there".into()).await.expect("a delta");
@@ -1831,15 +1920,17 @@ mod tests {
 				.await
 				.expect("a step refused to walk its graph");
 		}
+		let mid_stream_row = stored_row(&database, "m1").await;
+		let ended_row = stored_row(&database, "m2").await;
 
 		let mid_stream = database
 			.messages()
-			.append_message(a_user_message("m1", "half a ", 1))
+			.open_assistant_message(a_reply("m1", None))
 			.await
 			.expect("a replay of a message being streamed was refused");
 		let after_the_ending = database
 			.messages()
-			.append_message(a_reply("m2", Some("m1")))
+			.open_assistant_message(a_reply("m2", Some("m1")))
 			.await
 			.expect("a replay of a message that had ended was refused");
 		let after_the_walk = database
@@ -1853,11 +1944,134 @@ mod tests {
 		assert_eq!(after_the_walk, walked, "a replay after the walk took a second place");
 		let transcript = whole_transcript(&database, PAGE).await;
 		assert_eq!(seqs(&transcript), vec![1, 2], "a replay wrote a second row");
+		assert_eq!(
+			stored_row(&database, "m1").await,
+			mid_stream_row,
+			"a replay mid-stream rewrote the row"
+		);
+		assert_eq!(
+			stored_row(&database, "m2").await,
+			ended_row,
+			"a replay after the ending rewrote the row"
+		);
 		assert_eq!(transcript[0].content, "half a thought", "a replay reset the streamed text");
 		assert_eq!(transcript[0].state, MessageState::Streaming);
 		assert_eq!(transcript[1].content, "hi there");
 		assert_eq!(transcript[1].state, MessageState::Complete, "a replay reopened the ending");
 		assert_eq!(statuses(&database).await, vec![ActivityStatus::Succeeded]);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The hole a prefix comparison used to leave, closed by construction. A reply
+	/// is created with no text at all, so the beginning of a half-streamed word is
+	/// not something [`MessagesRepository::open_assistant_message`] can be called
+	/// with — [`NewAssistantMessage`] has no content field, and the compiler refuses
+	/// the call. What is left of the creation is compared exactly, column by
+	/// column.
+	#[tokio::test]
+	async fn a_streamed_reply_is_replayed_on_what_created_it_and_never_on_the_text_it_grew() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		a_turn(&database, "t3", "c1").await;
+		database
+			.messages()
+			.append_user_message(a_user_message("m0", "hello", 1))
+			.await
+			.expect("the message is appended");
+		let opened = database
+			.messages()
+			.open_assistant_message(a_reply("m1", None))
+			.await
+			.expect("the reply is appended");
+		database.messages().append_text("m1".into(), "some".into()).await.expect("a delta");
+		database.messages().append_text("m1".into(), "thing".into()).await.expect("a delta");
+		let before = stored_row(&database, "m1").await;
+
+		let replayed = database
+			.messages()
+			.open_assistant_message(a_reply("m1", None))
+			.await
+			.expect("a replay of a streamed reply was refused");
+		let another_turn = database
+			.messages()
+			.open_assistant_message(NewAssistantMessage {
+				turn_id: "t3".into(),
+				..a_reply("m1", None)
+			})
+			.await;
+		let another_author = database
+			.messages()
+			.open_assistant_message(NewAssistantMessage {
+				author_bot_id: None,
+				..a_reply("m1", None)
+			})
+			.await;
+		let another_quote =
+			database.messages().open_assistant_message(a_reply("m1", Some("m0"))).await;
+		let another_role = database
+			.messages()
+			.append_user_message(NewUserMessage {
+				author_bot_id: Some("b1".into()),
+				..a_user_message("m1", "something", 2)
+			})
+			.await;
+		let another_moment = database
+			.messages()
+			.open_assistant_message(NewAssistantMessage { created_at: 99, ..a_reply("m1", None) })
+			.await;
+
+		assert_eq!(replayed, opened, "a replay of a streamed reply took a second place");
+		assert!(is_conflict(&another_turn, "m1", "turn_id"), "{another_turn:?}");
+		assert!(is_conflict(&another_author, "m1", "author_bot_id"), "{another_author:?}");
+		assert!(is_conflict(&another_quote, "m1", "replied_to_message_id"), "{another_quote:?}");
+		assert!(is_conflict(&another_role, "m1", "role"), "{another_role:?}");
+		assert!(is_conflict(&another_moment, "m1", "created_at"), "{another_moment:?}");
+		assert_eq!(before.content, "something", "the fixture did not stream the whole word");
+		assert_eq!(stored_row(&database, "m1").await, before, "a refused replay rewrote the row");
+		let transcript = whole_transcript(&database, PAGE).await;
+		assert_eq!(seqs(&transcript), vec![1, 2], "a refused replay left a row behind");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The other side of that: a message authored here is written whole and ends
+	/// the moment it is written, so nothing may be appended to it and its text is
+	/// part of what created it. The same text again is the same event; the
+	/// beginning of it is another message claiming an id that is taken.
+	#[tokio::test]
+	async fn an_authored_message_is_replayed_on_its_whole_text_and_never_grows() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let authored = database
+			.messages()
+			.append_user_message(a_user_message("m1", "something", 1))
+			.await
+			.expect("the message is appended");
+		let before = stored_row(&database, "m1").await;
+
+		let replayed = database
+			.messages()
+			.append_user_message(a_user_message("m1", "something", 1))
+			.await
+			.expect("a replay of an authored message was refused");
+		let a_prefix =
+			database.messages().append_user_message(a_user_message("m1", "somethin", 1)).await;
+		let longer = database
+			.messages()
+			.append_user_message(a_user_message("m1", "something else", 1))
+			.await;
+		database.messages().append_text("m1".into(), " else".into()).await.expect("a late delta");
+
+		assert_eq!(replayed, authored, "a replay of an authored message took a second place");
+		assert!(is_conflict(&a_prefix, "m1", "content"), "{a_prefix:?}");
+		assert!(is_conflict(&longer, "m1", "content"), "{longer:?}");
+		assert_eq!(before.completion_state, "complete", "an authored message was left open");
+		assert_eq!(stored_row(&database, "m1").await, before, "the authored text did not hold");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
