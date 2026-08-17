@@ -403,6 +403,10 @@ fn unserializable(error: serde_json::Error) -> ConversationError {
 ///
 /// Answers only once the copy is on the disk for good, because the marker commits
 /// on the strength of that answer.
+///
+/// The `exists` check is a shortcut, not the guarantee: a target appearing after it
+/// has looked is caught by [`install_copy`], which cannot create a name that is
+/// already taken.
 fn secure_a_copy(path: &Path) -> std::io::Result<()> {
 	let target = preserved(path);
 	let body = fs::read(path)?;
@@ -422,6 +426,11 @@ fn secure_a_copy(path: &Path) -> std::io::Result<()> {
 /// import has left. So this import stops instead — nothing is destroyed, the
 /// outcome says which file to look at, and a human or a later build can clear the
 /// stale copy and let it through.
+///
+/// Reached from both sides of the install for that reason: from the shortcut, when
+/// the target was already there, and from the refused link, when it appeared while
+/// the copy was being written. The same rule has to hold either way, or the answer
+/// would depend on how late the other copy arrived.
 fn accept_identical(target: &Path, body: &[u8]) -> std::io::Result<()> {
 	if fs::read(target)?.as_slice() == body {
 		return Ok(());
@@ -432,30 +441,46 @@ fn accept_identical(target: &Path, body: &[u8]) -> std::io::Result<()> {
 	))
 }
 
-/// The same discipline `store.rs` writes the snapshot with, and for the same
-/// reason: a half-written file must never be able to become the target, so the
-/// bytes are flushed into a uniquely named sibling first and only a whole file is
-/// ever renamed onto the name. A failure takes the sibling with it.
+/// Two promises at once, which is why the bytes are written to a sibling and only
+/// then given the name.
+///
+/// A half-written file must never be able to become the target, so nothing is ever
+/// written at the target itself — `create_new` there would be no-clobber but would
+/// leave half a copy behind if the write died halfway.
+///
+/// And the name can only ever be created, never replaced: the install is a hard
+/// link, which answers `AlreadyExists` instead of overwriting. `fs::rename` would
+/// have destroyed whatever appeared under it, silently, which is the one thing
+/// [`accept_identical`] exists to prevent — so a target that arrives late is sent
+/// there rather than run over. A filesystem that cannot link refuses the install,
+/// which is the safe direction: nothing is destroyed and a later boot tries again.
+///
+/// The temporary is dropped either way. On success it is a second name for bytes the
+/// target now holds; on failure it is a leftover. The parent is synced last, so both
+/// the name that appeared and the one that went are durable.
 fn install_copy(target: &Path, body: &[u8]) -> std::io::Result<()> {
 	let temp = temporary(target);
-	let installed = write_then_rename(target, &temp, body);
-	if installed.is_err() {
-		let _ = fs::remove_file(&temp);
+	let linked = write_then_link(target, &temp, body);
+	let _ = fs::remove_file(&temp);
+	match linked {
+		Ok(()) => sync_parent(target),
+		Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+			accept_identical(target, body)
+		}
+		Err(error) => Err(error),
 	}
-	installed
 }
 
-/// Owner-only before a single byte is written, for the reason the source is: on
-/// disk a transcript is plain text. `sync_all` is what makes the copy survive the
-/// power cut this whole ordering is about — a rename of bytes still in the page
-/// cache would leave a name pointing at nothing.
-fn write_then_rename(target: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()> {
+/// Owner-only before a single byte is written, for the reason the source is: on disk
+/// a transcript is plain text. `sync_all` comes before the link so the bytes are
+/// durable before the name that will outlive the temporary exists — a link to
+/// content still in the page cache would survive a power cut as an empty file.
+fn write_then_link(target: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()> {
 	let mut file = fs::File::create(temp)?;
 	restrict_to_owner(&file)?;
 	file.write_all(body)?;
 	file.sync_all()?;
-	fs::rename(temp, target)?;
-	sync_parent(target)
+	fs::hard_link(temp, target)
 }
 
 fn preserved(path: &Path) -> PathBuf {
@@ -1053,6 +1078,49 @@ mod tests {
 		assert_no_temporaries(&dir);
 
 		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The window the `exists` shortcut cannot cover: a target that appears after it
+	/// looked and before the copy is installed. Calling the install step directly puts
+	/// the test inside that window with no threads and nothing mocked — and
+	/// `fs::rename` would have destroyed those bytes there, silently, which is why the
+	/// install links instead.
+	#[test]
+	fn a_target_appearing_at_install_time_is_never_replaced() {
+		let dir = temp_dir();
+		let target = preserved(&dir.join(store::FILE_NAME));
+		fs::write(&target, "another import's source").expect("the target that appeared");
+
+		let refused = install_copy(&target, b"this import's source");
+
+		assert!(refused.is_err(), "the install took a name that was already taken: {refused:?}");
+		assert_eq!(
+			fs::read_to_string(&target).expect("the target"),
+			"another import's source",
+			"the bytes that appeared under the install were destroyed"
+		);
+		assert_no_temporaries(&dir);
+
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The same window, with the bytes this import was about to write already under the
+	/// name: a boot that installed the copy and died before committing. The install has
+	/// nothing left to do and says so, which is what carries the retry through.
+	#[test]
+	fn an_identical_target_appearing_at_install_time_is_accepted() {
+		let dir = temp_dir();
+		let target = preserved(&dir.join(store::FILE_NAME));
+		let body: &[u8] = b"this import's source";
+		fs::write(&target, body).expect("the target that appeared");
+
+		let accepted = install_copy(&target, body);
+
+		assert!(accepted.is_ok(), "the install refused its own bytes: {accepted:?}");
+		assert_eq!(fs::read(&target).expect("the target"), body);
+		assert_no_temporaries(&dir);
+
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
