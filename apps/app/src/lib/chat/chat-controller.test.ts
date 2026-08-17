@@ -1535,6 +1535,179 @@ describe("a run replaced under a conversation that carries on", () => {
 	})
 })
 
+describe("a turn Claude answered with tools", () => {
+	/** How many tool-only assistant messages one live prompt was measured to
+	 * produce before the message that answered it. */
+	const ROUNDS = 14
+
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	/** What the host reports for a tool call: an assistant message of its own,
+	 * announced and never spoken in, and the tool it ran. */
+	const toolRounds = (rounds: number): ClaudeEvent[] =>
+		Array.from({ length: rounds }, (_, index) => index + 1).flatMap(
+			(round): ClaudeEvent[] => [
+				{
+					type: "messageStarted",
+					message: { ...STREAMING_MESSAGE, id: `msg-tool-${round}` },
+				},
+				{
+					type: "activity",
+					activity: {
+						id: `tool-${round}`,
+						title: "Read",
+						kind: "tool",
+						status: "running",
+					},
+				},
+				{
+					type: "activity",
+					activity: {
+						id: `tool-${round}`,
+						title: "Read",
+						kind: "tool",
+						status: "succeeded",
+					},
+				},
+			],
+		)
+
+	/** The message that does say something, streamed word by word the way the
+	 * transport numbers its deltas. */
+	const spokenAnswer = (text: string): ClaudeEvent[] => [
+		{
+			type: "messageStarted",
+			message: { ...STREAMING_MESSAGE, id: "msg-answer" },
+		},
+		...text.split(" ").map(
+			(word, index): ClaudeEvent => ({
+				type: "messageDelta",
+				id: "msg-answer",
+				seq: index + 1,
+				text: index === 0 ? word : ` ${word}`,
+			}),
+		),
+		{
+			type: "messageCompleted",
+			message: {
+				...STREAMING_MESSAGE,
+				id: "msg-answer",
+				text,
+				completion: "complete",
+			},
+		},
+	]
+
+	const ended = (
+		outcome: "completed" | "cancelled" | "failed",
+	): ClaudeEvent => ({
+		type: "turnEnded",
+		ended: { sessionId: "s-1", outcome },
+	})
+
+	const streamed = async (harness: Harness, events: ClaudeEvent[]) => {
+		vi.spyOn(harness.driver, "submitPrompt").mockResolvedValue()
+		await harness.controller.send("hello")
+		harness.driver.pushEvent({ type: "turnChanged", state: "running" })
+		for (const event of events) {
+			harness.driver.pushEvent(event)
+		}
+		await vi.runAllTimersAsync()
+	}
+
+	// The defect this covers: every tool-only message was opened, left empty, and
+	// closed as complete by the turn ending — fourteen rows taking fourteen places in
+	// the transcript, in its pages and in every context rebuilt from it.
+	it("stores the answer alone, and nothing for the tools before it", async () => {
+		const harness = await bootedHarness()
+		await streamed(harness, [
+			...toolRounds(ROUNDS),
+			...spokenAnswer(REPLY),
+			ended("completed"),
+		])
+
+		const state = harness.controller.getState()
+		expect(spoken(state.messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		const stored = await reload(harness.store)
+		expect(spoken(stored)).toEqual(spoken(state.messages))
+		// Two rows, two places: nothing empty took a seq, a page slot or a tail place.
+		expect(stored.map((message) => message.seq)).toEqual([1, 2])
+		expect(
+			state.activities.filter((entry) => entry.status === "succeeded"),
+		).toHaveLength(ROUNDS)
+		harness.detach()
+	})
+
+	it("stores nothing at all for a turn that ends well without a word", async () => {
+		const harness = await bootedHarness()
+		await streamed(harness, [...toolRounds(3), ended("completed")])
+
+		expect(spoken(harness.controller.getState().messages)).toEqual([
+			["user", "hello", "complete"],
+		])
+		expect(spoken(await reload(harness.store))).toEqual([
+			["user", "hello", "complete"],
+		])
+		harness.detach()
+	})
+
+	// Honesty is the other half: a reply cut off before it said anything is still the
+	// reader's to see, and the row that says so is the only one the turn leaves.
+	it.each(["cancelled", "failed"] as const)(
+		"keeps one honest row for a turn that %s before a word",
+		async (outcome) => {
+			const harness = await bootedHarness()
+			await streamed(harness, [
+				...toolRounds(3),
+				{
+					type: "messageStarted",
+					message: { ...STREAMING_MESSAGE, id: "msg-cut" },
+				},
+				{
+					type: "messageCompleted",
+					message: { ...STREAMING_MESSAGE, id: "msg-cut", completion: outcome },
+				},
+				ended(outcome),
+			])
+
+			const state = harness.controller.getState()
+			expect(spoken(state.messages)).toEqual([
+				["user", "hello", "complete"],
+				["assistant", "", outcome],
+			])
+			expect(spoken(await reload(harness.store))).toEqual(
+				spoken(state.messages),
+			)
+			harness.detach()
+		},
+	)
+
+	// The process went away between two tools, so nothing observed the reply fail and
+	// nobody stopped it. It is still an answer that stopped, and it is written down.
+	it("keeps one honest row when the session dies between two tools", async () => {
+		const harness = await bootedHarness()
+		await streamed(harness, toolRounds(2))
+
+		await harness.controller.restart()
+		await vi.runAllTimersAsync()
+
+		expect(spoken(harness.controller.getState().messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "", "interrupted"],
+		])
+		harness.detach()
+	})
+})
+
 describe("every ending survives a launch", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
