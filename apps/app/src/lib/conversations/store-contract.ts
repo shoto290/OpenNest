@@ -2,6 +2,16 @@ export type Bot = { id: string; name: string; model: string; createdAt: number }
 
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
+/** A run just opened in a participant's lineage. `seq` is the number the lineage
+ * counts handovers with, and what a runtime scope carries as its epoch. */
+export type RuntimeSession = {
+	id: string
+	conversationId: string
+	botId: string
+	seq: number
+	startedAt: number
+}
+
 export type NewTurn = { id: string; conversationId: string; startedAt: number }
 
 export type NewUserMessage = {

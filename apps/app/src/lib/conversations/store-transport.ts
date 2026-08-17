@@ -6,6 +6,7 @@ import type {
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
+	RuntimeSession,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import {
@@ -29,6 +30,17 @@ export const conversationStore: TranscriptStore = {
 
 	mainChat: (botId: string) =>
 		invoke<Chat>("conversation_main_chat", { botId }),
+
+	openRuntimeSession: (
+		conversationId: string,
+		botId: string,
+		startedAt: number,
+	) =>
+		invoke<RuntimeSession>("conversation_open_runtime_session", {
+			conversationId,
+			botId,
+			startedAt,
+		}),
 
 	startTurn: (turn: NewTurn) =>
 		invoke<number>("conversation_start_turn", { turn }),

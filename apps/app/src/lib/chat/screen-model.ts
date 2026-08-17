@@ -75,6 +75,10 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	turnAlreadyRunning: false,
 	transitionInProgress: false,
 	noActiveTurn: false,
+	// The run the caller named is gone, but the one that replaced it is the
+	// session this launch is already on: nothing to recover, and a setup card
+	// offered here would be about a process nobody is waiting for.
+	staleRuntimeSession: false,
 	unknownPermission: false,
 	writeFailed: false,
 }

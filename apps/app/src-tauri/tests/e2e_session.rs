@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::claude::commands::EVENT_CHANNEL;
 use opennest_app::claude::contract::{
-	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, PermissionRequest,
-	TransportError, TurnOutcome,
+	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
+	ScopedEvent, TransportError, TurnOutcome,
 };
 use opennest_app::claude::ClaudeState;
 use opennest_app::commands::invoke_handler;
@@ -39,7 +39,20 @@ const POLL: Duration = Duration::from_millis(25);
 struct Harness {
 	app: App<MockRuntime>,
 	window: WebviewWindow<MockRuntime>,
-	log: Arc<Mutex<Vec<ClaudeEvent>>>,
+	log: Arc<Mutex<Vec<ScopedEvent>>>,
+	/// The run every command below names. The frontend opens a row in the durable
+	/// lineage before it asks for a process, so a start here mints the next one the
+	/// same way — same participant, next number.
+	run: Mutex<RuntimeScope>,
+}
+
+fn a_run(epoch: i64) -> RuntimeScope {
+	RuntimeScope {
+		conversation_id: "c1".to_owned(),
+		bot_id: "default".to_owned(),
+		runtime_session_id: format!("r{epoch}"),
+		epoch,
+	}
 }
 
 /// The identifier decides the app data directory, so this suite claims one of
@@ -56,15 +69,15 @@ fn launch() -> Harness {
 	let window =
 		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
-	let log: Arc<Mutex<Vec<ClaudeEvent>>> = Arc::new(Mutex::new(Vec::new()));
+	let log: Arc<Mutex<Vec<ScopedEvent>>> = Arc::new(Mutex::new(Vec::new()));
 	let sink = log.clone();
 	app.listen(EVENT_CHANNEL, move |event| {
-		if let Ok(parsed) = serde_json::from_str::<ClaudeEvent>(event.payload()) {
+		if let Ok(parsed) = serde_json::from_str::<ScopedEvent>(event.payload()) {
 			sink.lock().expect("event log").push(parsed);
 		}
 	});
 
-	Harness { app, window, log }
+	Harness { app, window, log, run: Mutex::new(a_run(0)) }
 }
 
 impl Harness {
@@ -85,19 +98,34 @@ impl Harness {
 		.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 	}
 
+	fn scope(&self) -> Value {
+		serde_json::to_value(&*self.run.lock().expect("run")).expect("the scope serializes")
+	}
+
 	/// Never `$HOME`: the child inherits this as its working directory.
 	fn start(&self, resume: Option<&str>) -> Result<Value, Value> {
+		{
+			let mut run = self.run.lock().expect("run");
+			*run = a_run(run.epoch + 1);
+		}
 		self.call(
 			"claude_start_or_resume_session",
-			json!({ "resume": resume, "cwd": std::env::temp_dir() }),
+			json!({ "scope": self.scope(), "resume": resume, "cwd": std::env::temp_dir() }),
 		)
 	}
 
 	fn prompt(&self, text: &str) -> Result<Value, Value> {
-		self.call("claude_submit_prompt", json!({ "text": text }))
+		self.call("claude_submit_prompt", json!({ "scope": self.scope(), "text": text }))
 	}
 
 	fn events(&self) -> Vec<ClaudeEvent> {
+		self.log.lock().expect("event log").iter().map(|scoped| scoped.event.clone()).collect()
+	}
+
+	/// Every event the host emitted since the log was last cleared, with the run it
+	/// named. What crosses the channel is the envelope, so this is what a frontend
+	/// really has to decide on.
+	fn scoped_events(&self) -> Vec<ScopedEvent> {
 		self.log.lock().expect("event log").clone()
 	}
 
@@ -209,7 +237,10 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 		.expect("pid is a number");
 	assert!(is_alive(orphan), "the grandchild must be running before the shutdown");
 
-	assert_eq!(harness.call("claude_shutdown", json!({})), Ok(Value::Null));
+	assert_eq!(
+		harness.call("claude_shutdown", json!({ "scope": harness.scope() })),
+		Ok(Value::Null)
+	);
 	harness.wait_for("the grandchild to be gone", |_| (!is_alive(orphan)).then_some(()));
 
 	std::env::remove_var("FAKE_CLAUDE_PID_FILE");
@@ -218,7 +249,10 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 
 #[cfg(not(unix))]
 fn shut_down_leaving_no_orphan(harness: &Harness) {
-	assert_eq!(harness.call("claude_shutdown", json!({})), Ok(Value::Null));
+	assert_eq!(
+		harness.call("claude_shutdown", json!({ "scope": harness.scope() })),
+		Ok(Value::Null)
+	);
 }
 
 /// Launch, stream, persist, permission, stop, shutdown, then a second app over
@@ -234,9 +268,10 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	let data_dir = first.app.path().app_data_dir().expect("data dir");
 	let _ = std::fs::remove_dir_all(&data_dir);
 
-	let report: CheckReport =
-		serde_json::from_value(first.call("claude_check", json!({})).expect("check reports"))
-			.expect("a check report");
+	let report: CheckReport = serde_json::from_value(
+		first.call("claude_check", json!({ "scope": Value::Null })).expect("check reports"),
+	)
+	.expect("a check report");
 	assert_eq!(report.connection, ConnectionState::Ready);
 	assert!(report.authenticated);
 	assert_eq!(report.binary_version.as_deref(), Some("2.0.0-fake"));
@@ -253,6 +288,13 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	let (session_id, resumed) = session_ready(&streamed).expect("the child announced its session");
 	assert_eq!(session_id, "fake-session-0001");
 	assert!(!resumed, "a fresh launch must not claim a resume");
+	// The whole turn crossed under the run it came from. A frontend has nothing else
+	// to tell this stream from the one a restart will put in its place.
+	assert!(
+		first.scoped_events().iter().all(|scoped| scoped.scope.as_ref() == Some(&a_run(1))),
+		"an event crossed without naming the run it came from: {:#?}",
+		first.scoped_events()
+	);
 
 	let snapshot = json!({
 		"sessionId": session_id,
@@ -277,7 +319,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	assert_eq!(
 		first.call(
 			"claude_respond_to_permission",
-			json!({ "id": request.id, "decision": "allowOnce" })
+			json!({ "scope": first.scope(), "id": request.id, "decision": "allowOnce" })
 		),
 		Ok(Value::Null)
 	);
@@ -292,7 +334,10 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	first.forget_events();
 	first.prompt("compte jusqu'a mille").expect("prompt accepted");
 	first.wait_for("the slow turn to start streaming", message_started);
-	assert_eq!(first.call("claude_cancel_turn", json!({})), Ok(Value::Null));
+	assert_eq!(
+		first.call("claude_cancel_turn", json!({ "scope": first.scope() })),
+		Ok(Value::Null)
+	);
 	assert_eq!(first.wait_for("the cancelled turn to end", turn_outcome), TurnOutcome::Cancelled);
 	first.prompt("encore").expect("a cancelled session still accepts a prompt");
 
@@ -320,6 +365,6 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	assert_eq!(dropped["sessionId"], Value::Null);
 	assert_eq!(dropped["messages"], snapshot["messages"]);
 
-	assert_eq!(second.call("claude_shutdown", json!({})), Ok(Value::Null));
+	assert_eq!(second.call("claude_shutdown", json!({ "scope": second.scope() })), Ok(Value::Null));
 	std::fs::remove_dir_all(&data_dir).expect("cleanup");
 }

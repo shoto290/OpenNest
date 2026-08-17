@@ -147,6 +147,14 @@ pub enum TransportError {
 	/// first one's back.
 	TransitionInProgress,
 	NoActiveTurn,
+	/// The call named a run the host is not the one holding any more. Transient in
+	/// the same way [`TransportError::TransitionInProgress`] is, and refused for a
+	/// stronger reason: the process the caller is talking about is gone, and the one
+	/// that took its place is somebody else's turn to cancel, answer or shut down.
+	#[serde(rename_all = "camelCase")]
+	StaleRuntimeSession {
+		runtime_session_id: String,
+	},
 	#[serde(rename_all = "camelCase")]
 	UnknownPermission {
 		id: String,
@@ -191,6 +199,9 @@ impl std::fmt::Display for TransportError {
 				write!(f, "a session transition is already in progress")
 			}
 			TransportError::NoActiveTurn => write!(f, "no active turn"),
+			TransportError::StaleRuntimeSession { runtime_session_id } => {
+				write!(f, "runtime session {runtime_session_id} is no longer the live one")
+			}
 			TransportError::UnknownPermission { id } => write!(f, "unknown permission {id}"),
 			TransportError::WriteFailed { detail } => write!(f, "write failed: {detail}"),
 		}
@@ -198,6 +209,41 @@ impl std::fmt::Display for TransportError {
 }
 
 impl std::error::Error for TransportError {}
+
+/// Which run a command is about, and which run an event came from. Every field is
+/// a durable one: the participant is `conversation_participants`' own pair, the id
+/// is the `runtime_sessions` row the frontend opened for this process, and the
+/// epoch is that row's `seq` — the number the lineage already counts handovers
+/// with. Nothing here is minted for the runtime alone, because a second identity
+/// for one run is a second thing that can disagree.
+///
+/// Carried whole rather than as an id: the id says which row, and the participant
+/// says whose, so a scope that names another bot's run is refused on what it says
+/// rather than on what a lookup would have to go and find.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeScope {
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub runtime_session_id: String,
+	pub epoch: i64,
+}
+
+/// One event and the run it belongs to. The scope is an envelope rather than a
+/// field on every variant: it says where the event came from, which is not part of
+/// what any of them says.
+///
+/// `None` is what a caller holding no run gets its own answer under — a check
+/// asks about the install, and the first one of a launch happens before there is a
+/// lineage to name. The host never invents a scope for those: it echoes the
+/// caller's, so a reader can compare what came back against what it holds without
+/// a second rule for the one event that would otherwise have none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopedEvent {
+	pub scope: Option<RuntimeScope>,
+	pub event: ClaudeEvent,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

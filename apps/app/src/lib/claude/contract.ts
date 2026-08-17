@@ -41,6 +41,26 @@ export type TurnEnded = {
 	outcome: TurnOutcome
 }
 
+/** Which run a command is about, and which run an event came from. Every field
+ * comes from the durable lineage the frontend opened before asking for a process:
+ * the participant is the conversation and the bot, the id is the `runtime_sessions`
+ * row, and the epoch is that row's `seq`. Nothing here is minted for the runtime
+ * alone — a second identity for one run is a second thing that can disagree. */
+export type RuntimeScope = {
+	conversationId: string
+	botId: string
+	runtimeSessionId: string
+	epoch: number
+}
+
+/** One event and the run it belongs to. `scope` is `null` only for what the host
+ * says about the install itself, which is the check — it echoes the run the caller
+ * named, and a launch that has not opened one yet names none. */
+export type ScopedEvent = {
+	scope: RuntimeScope | null
+	event: ClaudeEvent
+}
+
 export type TransportError =
 	| { kind: "binaryNotFound"; searched: string[] }
 	| { kind: "notAuthenticated" }
@@ -54,6 +74,7 @@ export type TransportError =
 	| { kind: "turnAlreadyRunning" }
 	| { kind: "transitionInProgress" }
 	| { kind: "noActiveTurn" }
+	| { kind: "staleRuntimeSession"; runtimeSessionId: string }
 	| { kind: "unknownPermission"; id: string }
 	| { kind: "writeFailed"; detail: string }
 

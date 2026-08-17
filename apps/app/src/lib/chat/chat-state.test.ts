@@ -5,19 +5,31 @@ import {
 	canStopTurn,
 	chatReducer,
 	initialChatState,
+	isSameRuntimeScope,
 	isSessionReady,
 	isTurnBusy,
 } from "./chat-state"
 
-import type { ChatMessage, ClaudeEvent } from "../claude/contract"
+import type { ChatMessage, ClaudeEvent, RuntimeScope } from "../claude/contract"
 import { CONVERSATION, message } from "../conversations/transcript-fixtures"
+
+/** One participant's lineage, a run at a time: the number and the row change
+ * together, the way a restart takes the next one. */
+function run(epoch: number): RuntimeScope {
+	return {
+		conversationId: CONVERSATION,
+		botId: "default",
+		runtimeSessionId: `r${epoch}`,
+		epoch,
+	}
+}
 
 function applyEvents(state: ChatState, events: ClaudeEvent[]): ChatState {
 	return events.reduce(
 		(current, event) =>
 			chatReducer(current, {
 				type: "driverEvent",
-				epoch: current.epoch,
+				scope: current.runtime,
 				event,
 			}),
 		state,
@@ -94,7 +106,7 @@ describe("chatReducer", () => {
 		})
 		const reset = chatReducer(mirrored, {
 			type: "sessionReset",
-			epoch: 1,
+			runtime: run(1),
 			sessionId: null,
 		})
 
@@ -126,19 +138,51 @@ describe("chatReducer", () => {
 		expect(stale.turn).toBe("idle")
 	})
 
-	it("drops events from a stale epoch", () => {
+	// A replaced run is still alive for as long as its child takes to die, and it
+	// keeps reporting. None of it may move the screen — not the run before this
+	// one, not another bot's, not one carrying this row's id under another number.
+	it("drops every event from a run this state is not about", () => {
 		const reset = chatReducer(initialChatState, {
 			type: "sessionReset",
-			epoch: 2,
+			runtime: run(2),
 			sessionId: null,
 		})
-		const stale = chatReducer(reset, {
+
+		for (const scope of [
+			run(1),
+			null,
+			{ ...run(2), epoch: 3 },
+			{ ...run(2), botId: "other" },
+			{ ...run(2), conversationId: "another" },
+		]) {
+			expect(
+				chatReducer(reset, {
+					type: "driverEvent",
+					scope,
+					event: { type: "turnChanged", state: "running" },
+				}),
+			).toBe(reset)
+		}
+
+		expect(
+			chatReducer(reset, {
+				type: "driverEvent",
+				scope: run(2),
+				event: { type: "turnChanged", state: "submitting" },
+			}).turn,
+		).toBe("submitting")
+	})
+
+	// The check a launch makes before it has opened a run: it names none, the host
+	// echoes none, and the reader must still be told what the install answered.
+	it("takes an unscoped event while it holds no run of its own", () => {
+		const checked = chatReducer(initialChatState, {
 			type: "driverEvent",
-			epoch: 1,
-			event: { type: "turnChanged", state: "running" },
+			scope: null,
+			event: { type: "connectionChanged", state: "ready" },
 		})
 
-		expect(stale).toBe(reset)
+		expect(checked.connection).toBe("ready")
 	})
 
 	it("never regresses an activity status", () => {
@@ -251,13 +295,13 @@ describe("chatReducer", () => {
 		})
 		const reset = chatReducer(versioned, {
 			type: "sessionReset",
-			epoch: 1,
+			runtime: run(1),
 			sessionId: null,
 		})
 
 		expect(reset.connection).toBe("ready")
 		expect(reset.binaryVersion).toBe("1.2.3")
-		expect(reset.epoch).toBe(1)
+		expect(reset.runtime).toEqual(run(1))
 	})
 
 	it("tracks the page in flight above the transcript", () => {
@@ -270,6 +314,25 @@ describe("chatReducer", () => {
 		expect(
 			chatReducer(loading, { type: "olderLoading", loading: false })
 				.loadingOlder,
+		).toBe(false)
+	})
+})
+
+describe("runtime scope", () => {
+	it("is the same run only when every field of it agrees", () => {
+		expect(isSameRuntimeScope(run(1), { ...run(1) })).toBe(true)
+		expect(isSameRuntimeScope(null, null)).toBe(true)
+		expect(isSameRuntimeScope(run(1), null)).toBe(false)
+		expect(isSameRuntimeScope(null, run(1))).toBe(false)
+		expect(isSameRuntimeScope(run(1), run(2))).toBe(false)
+		// The id alone is not which run this is: the same row named under another
+		// number, another bot or another conversation is somebody else's.
+		expect(isSameRuntimeScope(run(1), { ...run(1), epoch: 2 })).toBe(false)
+		expect(isSameRuntimeScope(run(1), { ...run(1), botId: "other" })).toBe(
+			false,
+		)
+		expect(
+			isSameRuntimeScope(run(1), { ...run(1), conversationId: "another" }),
 		).toBe(false)
 	})
 })
@@ -324,7 +387,7 @@ describe("turn predicates", () => {
 
 		const reset = chatReducer(open, {
 			type: "sessionReset",
-			epoch: 1,
+			runtime: run(1),
 			sessionId: null,
 		})
 		expect(reset.sessionOpen).toBe(false)
@@ -421,7 +484,7 @@ describe("session reset", () => {
 
 		const reset = chatReducer(open, {
 			type: "sessionReset",
-			epoch: 1,
+			runtime: run(1),
 			sessionId: null,
 		})
 
@@ -430,7 +493,7 @@ describe("session reset", () => {
 		expect(reset.sessionId).toBeNull()
 		expect(reset.permission).toBeNull()
 		expect(reset.turn).toBe("idle")
-		expect(reset.epoch).toBe(1)
+		expect(reset.runtime).toEqual(run(1))
 	})
 
 	// A step is something a running provider was doing. Carrying a pending one
@@ -463,7 +526,7 @@ describe("session reset", () => {
 
 		const reset = chatReducer(working, {
 			type: "sessionReset",
-			epoch: 1,
+			runtime: run(1),
 			sessionId: "s-1",
 		})
 
@@ -480,7 +543,7 @@ describe("session reset", () => {
 		)
 		const reset = chatReducer(live, {
 			type: "sessionReset",
-			epoch: 1,
+			runtime: run(1),
 			sessionId: "s-1",
 		})
 

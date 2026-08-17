@@ -1,15 +1,24 @@
-import { completionForOutcome, turnForOutcome } from "./chat-state"
+import {
+	completionForOutcome,
+	isSameRuntimeScope,
+	turnForOutcome,
+} from "./chat-state"
 import type { ChatDriver } from "./driver"
 
 import type {
 	ChatMessage,
 	ClaudeEvent,
 	PermissionDecision,
+	RuntimeScope,
+	ScopedEvent,
 	TurnOutcome,
 } from "../claude/contract"
 
 export type FakeChatDriver = ChatDriver & {
-	pushEvent: (event: ClaudeEvent) => void
+	/** Emits under the run the fake is holding, or under any run a caller names —
+	 * which is how a test reproduces the one thing a driver cannot do to itself:
+	 * speak for a session that has already been replaced. */
+	pushEvent: (event: ClaudeEvent, scope?: RuntimeScope | null) => void
 }
 
 export type FakeChatDriverOptions = {
@@ -41,8 +50,9 @@ export function createFakeChatDriver(
 ): FakeChatDriver {
 	const stepMs = options.stepMs ?? 120
 	const replyFor = options.replyFor ?? defaultReply
-	const listeners = new Set<(event: ClaudeEvent) => void>()
+	const listeners = new Set<(event: ScopedEvent) => void>()
 
+	let run: RuntimeScope | null = null
 	let sessionId: string | null = null
 	let sessionSeq = 0
 	let messageSeq = 0
@@ -56,11 +66,26 @@ export function createFakeChatDriver(
 	let queue: Array<() => void> = []
 	let timer: ReturnType<typeof setTimeout> | null = null
 
-	const emit = (event: ClaudeEvent) => {
+	/** Everything crosses under the run it came from, the way the host stamps its
+	 * channel. */
+	const emit = (event: ClaudeEvent, scope: RuntimeScope | null = run) => {
 		for (const listener of listeners) {
-			listener(event)
+			listener({ scope, event })
 		}
 	}
+
+	/** The host refuses a command that names a run it is not holding, and so does
+	 * this: a fake that answered anyway would let a test pass on a boundary
+	 * production does not have. Holding no run refuses nobody — there is no other
+	 * session for a late caller to reach past. */
+	const isForeign = (scope: RuntimeScope) =>
+		run !== null && !isSameRuntimeScope(scope, run)
+
+	const refuseStale = (scope: RuntimeScope) =>
+		Promise.reject({
+			kind: "staleRuntimeSession",
+			runtimeSessionId: scope.runtimeSessionId,
+		})
 
 	const pump = () => {
 		if (timer || waiting || queue.length === 0) {
@@ -212,7 +237,7 @@ export function createFakeChatDriver(
 				error: null,
 			}),
 
-		startOrResumeSession: (resume?: string) => {
+		startOrResumeSession: (scope: RuntimeScope, resume?: string) => {
 			clearQueue()
 			turnActive = false
 			waiting = false
@@ -220,12 +245,16 @@ export function createFakeChatDriver(
 			pendingPermissionId = null
 			sessionSeq += 1
 			announced = false
+			run = scope
 			sessionId = resume ?? `fake-session-${sessionSeq}`
 			emit({ type: "connectionChanged", state: "ready" })
 			return Promise.resolve({ resumed: Boolean(resume) })
 		},
 
-		submitPrompt: (text: string) => {
+		submitPrompt: (scope: RuntimeScope, text: string) => {
+			if (isForeign(scope)) {
+				return refuseStale(scope)
+			}
 			if (!sessionId) {
 				return Promise.reject({ kind: "notStarted" })
 			}
@@ -244,7 +273,10 @@ export function createFakeChatDriver(
 			return Promise.resolve()
 		},
 
-		cancelTurn: () => {
+		cancelTurn: (scope: RuntimeScope) => {
+			if (isForeign(scope)) {
+				return refuseStale(scope)
+			}
 			if (!turnActive) {
 				return Promise.reject({ kind: "noActiveTurn" })
 			}
@@ -254,7 +286,14 @@ export function createFakeChatDriver(
 			return Promise.resolve()
 		},
 
-		respondToPermission: (id: string, decision: PermissionDecision) => {
+		respondToPermission: (
+			scope: RuntimeScope,
+			id: string,
+			decision: PermissionDecision,
+		) => {
+			if (isForeign(scope)) {
+				return refuseStale(scope)
+			}
 			if (pendingPermissionId !== id) {
 				return Promise.reject({ kind: "unknownPermission", id })
 			}
@@ -270,12 +309,18 @@ export function createFakeChatDriver(
 			return Promise.resolve()
 		},
 
-		shutdown: () => {
+		/** Refused for a run the fake no longer holds, and a no-op when it holds
+		 * none: shutting down twice is as safe as shutting down once. */
+		shutdown: (scope: RuntimeScope) => {
+			if (isForeign(scope)) {
+				return refuseStale(scope)
+			}
 			clearQueue()
 			if (turnActive) {
 				finishTurn("cancelled")
 			}
 			sessionId = null
+			run = null
 			return Promise.resolve()
 		},
 

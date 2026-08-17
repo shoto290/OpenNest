@@ -4,6 +4,7 @@ import type {
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
+	RuntimeSession,
 } from "./store-contract"
 import type { TerminalCompletion } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
@@ -14,6 +15,14 @@ import type { TranscriptPort } from "./transcript-port"
 export type TranscriptStore = TranscriptPort & {
 	defaultBot: () => Promise<Bot>
 	mainChat: (botId: string) => Promise<Chat>
+	/** Opens the run a Claude process is about to be started for. The live run it
+	 * replaces is rotated by the same call, so a participant is never left with two
+	 * of them or with none. */
+	openRuntimeSession: (
+		conversationId: string,
+		botId: string,
+		startedAt: number,
+	) => Promise<RuntimeSession>
 	startTurn: (turn: NewTurn) => Promise<number>
 	completeTurn: (id: string, completedAt: number) => Promise<void>
 	appendUserMessage: (message: NewUserMessage) => Promise<number>

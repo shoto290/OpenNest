@@ -26,6 +26,8 @@ export function describeTransportError(error: TransportError): string {
 			return "A session change is already in progress."
 		case "noActiveTurn":
 			return "There is no turn to interrupt."
+		case "staleRuntimeSession":
+			return "That session has been replaced. The one running now took its place."
 		case "unknownPermission":
 			return `Unknown permission request (${error.id}).`
 		case "writeFailed":
