@@ -5,6 +5,7 @@ import type {
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
+	RuntimeSession,
 	TranscriptStoreError,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -48,6 +49,9 @@ export const createFakeTranscriptStore = (
 	const rows = new Map<string, TranscriptMessage>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
+	/** One lineage per participant, the way `runtime_sessions` numbers them: the
+	 * pair is the key, and the count is what the next run takes as its seq. */
+	const runs = new Map<string, number>()
 
 	for (const seeded of [...(options.messages ?? [])].sort(
 		(left, right) => left.seq - right.seq,
@@ -106,6 +110,27 @@ export const createFakeTranscriptStore = (
 
 		mainChat: (_botId: string) =>
 			Promise.resolve<Chat>({ id: FAKE_CHAT_ID, createdAt: 0, updatedAt: 0 }),
+
+		/** The row the frontend scopes a process with, numbered per participant the
+		 * way the file numbers it. The id is derived from the pair and the number
+		 * rather than minted at random: a run named the same twice would be a
+		 * handover no reader could see. */
+		openRuntimeSession: (
+			conversationId: string,
+			botId: string,
+			startedAt: number,
+		) => {
+			const participant = `${conversationId}/${botId}`
+			const seq = (runs.get(participant) ?? 0) + 1
+			runs.set(participant, seq)
+			return Promise.resolve<RuntimeSession>({
+				id: `run-${participant}-${seq}`,
+				conversationId,
+				botId,
+				seq,
+				startedAt,
+			})
+		},
 
 		/** A replay answers with the place the turn already has, the way an append
 		 * does: a caller cannot tell its own duplicate from a refusal otherwise. */

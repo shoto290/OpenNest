@@ -30,7 +30,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::db::repositories::{conversations, messages};
+use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +59,37 @@ pub struct Chat {
 impl From<conversations::Chat> for Chat {
 	fn from(chat: conversations::Chat) -> Self {
 		Self { id: chat.id, created_at: chat.created_at, updated_at: chat.updated_at }
+	}
+}
+
+/// A run just opened in a participant's lineage, as the frontend meets it. It
+/// carries what a runtime scope is made of and nothing else: `status` is `active`
+/// or the call would not have answered, `ended_at` and `rotation_reason` belong to
+/// the row this one replaced, and `provider_session_id` is a name the process has
+/// not given yet.
+///
+/// `seq` keeps the storage's word rather than borrowing the runtime's: it is the
+/// number the lineage counts with, and what the runtime does with it — take it for
+/// the epoch of the scope it stamps every event with — is the runtime's business.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSession {
+	pub id: String,
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub seq: i64,
+	pub started_at: i64,
+}
+
+impl From<runtime_context::RuntimeSession> for RuntimeSession {
+	fn from(session: runtime_context::RuntimeSession) -> Self {
+		Self {
+			id: session.id,
+			conversation_id: session.participant.conversation_id,
+			bot_id: session.participant.bot_id,
+			seq: session.seq,
+			started_at: session.started_at,
+		}
 	}
 }
 
@@ -351,6 +382,15 @@ impl From<messages::TranscriptError> for TranscriptStoreError {
 	}
 }
 
+/// The runtime lineage answers in [`DatabaseError`] directly: its rules are the
+/// schema's — a live row per participant, a number per handover — so there is no
+/// vocabulary of its own between it and the file.
+impl From<DatabaseError> for TranscriptStoreError {
+	fn from(error: DatabaseError) -> Self {
+		TranscriptStoreError::Storage { failure: (&error).into() }
+	}
+}
+
 impl From<conversations::ConversationError> for TranscriptStoreError {
 	fn from(error: conversations::ConversationError) -> Self {
 		match error {
@@ -438,6 +478,39 @@ mod tests {
 		assert_crosses_as(
 			Chat { id: "c1".into(), created_at: 1, updated_at: 2 },
 			json!({ "id": "c1", "createdAt": 1, "updatedAt": 2 }),
+		);
+	}
+
+	/// What the frontend builds a runtime scope out of. A rename here is a launch
+	/// that scopes its events with `undefined` and rejects every one of them.
+	#[test]
+	fn an_opened_run_crosses_as_camel_case() {
+		assert_crosses_as(
+			RuntimeSession {
+				id: "r1".into(),
+				conversation_id: "c1".into(),
+				bot_id: "default".into(),
+				seq: 2,
+				started_at: 17,
+			},
+			json!({
+				"id": "r1",
+				"conversationId": "c1",
+				"botId": "default",
+				"seq": 2,
+				"startedAt": 17
+			}),
+		);
+	}
+
+	/// The lineage answers in the file's own vocabulary, so what a caller reads is
+	/// the same `storage` refusal every other write speaks — a run refused because
+	/// the row moved on must not arrive under a word the frontend has no branch for.
+	#[test]
+	fn a_lineage_failure_crosses_as_a_storage_refusal() {
+		assert_eq!(
+			TranscriptStoreError::from(DatabaseError::Conflict),
+			TranscriptStoreError::Storage { failure: StorageFailure::StaleWrite }
 		);
 	}
 

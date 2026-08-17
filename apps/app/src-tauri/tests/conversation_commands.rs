@@ -216,6 +216,72 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 	cleanup(&app);
 }
 
+/// What the frontend scopes a Claude process with, over the boundary it really
+/// crosses. The lineage rules are the repository's and are proven there; what can
+/// only fail here is the crossing — the command registered, the participant named
+/// under the two words the frontend spells, and a row coming back with the id and
+/// the number a runtime scope is built out of.
+///
+/// The second open is the restart every scope test downstream depends on: it has to
+/// answer with another id and the next number, or a replaced run and its
+/// replacement would be indistinguishable to every reader of an event.
+#[test]
+fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
+	let app = app("com.opennest.conversation-commands-5");
+	let window = window(&app);
+
+	let (bot, conversation) = a_bot_and_its_chat(&window);
+	let opened = call(
+		&window,
+		"conversation_open_runtime_session",
+		json!({ "conversationId": conversation, "botId": bot["id"], "startedAt": 17 }),
+	)
+	.expect("the run opens");
+	let replacement = call(
+		&window,
+		"conversation_open_runtime_session",
+		json!({ "conversationId": conversation, "botId": bot["id"], "startedAt": 18 }),
+	)
+	.expect("the next run opens");
+
+	assert_eq!(opened["conversationId"], json!(conversation));
+	assert_eq!(opened["botId"], bot["id"]);
+	assert_eq!(opened["seq"], json!(1), "the lineage did not start at 1");
+	assert_eq!(opened["startedAt"], json!(17));
+	assert!(
+		opened["id"].as_str().is_some_and(|id| !id.is_empty()),
+		"a run crossed without an id of its own: {opened}"
+	);
+	assert_eq!(replacement["seq"], json!(2), "the restart did not continue the lineage");
+	assert_ne!(replacement["id"], opened["id"], "the restart reused the replaced run's id");
+
+	cleanup(&app);
+}
+
+/// A run cannot be opened for a bot the conversation does not hold, and the
+/// refusal has to reach the frontend as the storage failure it is: a launch that
+/// meets a string here has nothing to say about why it never got a scope.
+#[test]
+fn opening_a_run_for_a_bot_the_conversation_does_not_hold_is_refused_as_storage() {
+	let app = app("com.opennest.conversation-commands-6");
+	let window = window(&app);
+
+	let (_, conversation) = a_bot_and_its_chat(&window);
+	let refused = call(
+		&window,
+		"conversation_open_runtime_session",
+		json!({ "conversationId": conversation, "botId": "nobody", "startedAt": 1 }),
+	);
+
+	assert_eq!(
+		refused.as_ref().err().and_then(|failure| failure["kind"].as_str()),
+		Some("storage"),
+		"a run opened for an outsider was refused as something else: {refused:?}"
+	);
+
+	cleanup(&app);
+}
+
 /// The read a long chat is opened with, over the boundary the cursor crosses:
 /// the newest page first, then the one before it, named by the lowest `seq` the
 /// reader already holds. A gap or a repeat here is a message the user never sees

@@ -16,11 +16,12 @@
 use tauri::State;
 
 use super::contract::{
-	Bot, Chat, NewAssistantMessage, NewTurn, NewUserMessage, TerminalCompletion, TranscriptPage,
-	TranscriptStoreError,
+	Bot, Chat, NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession, TerminalCompletion,
+	TranscriptPage, TranscriptStoreError,
 };
 use crate::db;
 use crate::db::repositories::messages::MessagePageQuery;
+use crate::db::repositories::runtime_context::ParticipantKey;
 
 /// The database, or why the launch never got one. Borrowed rather than cloned:
 /// [`db::DatabaseState`] owns the outcome for the whole run.
@@ -41,6 +42,27 @@ pub async fn conversation_main_chat(
 	bot_id: String,
 ) -> Result<Chat, TranscriptStoreError> {
 	Ok(ready(&state)?.conversations().ensure_chat(bot_id).await?.into())
+}
+
+/// Opens the run a Claude process is about to be started for, and hands back the
+/// row it took in the participant's lineage. The runtime is scoped by what comes
+/// back — its id and its `seq` — so the process has a place on the record before it
+/// has a pid, and a launch that never comes up is still a run somebody can name.
+///
+/// The handover is the repository's, whole: the live row this one replaces is
+/// rotated inside the same transaction, so a caller cannot leave a participant with
+/// two live runs or with none. No rotation reason crosses — why a run was replaced
+/// is a policy nothing here has yet, and a reason invented at this layer would be
+/// this layer's guess on the record.
+#[tauri::command]
+pub async fn conversation_open_runtime_session(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+	started_at: i64,
+) -> Result<RuntimeSession, TranscriptStoreError> {
+	let participant = ParticipantKey { conversation_id, bot_id };
+	Ok(ready(&state)?.runtime_context().open(participant, started_at, None).await?.into())
 }
 
 /// `before_seq` is exclusive, and `None` asks for the newest page: that is the end
