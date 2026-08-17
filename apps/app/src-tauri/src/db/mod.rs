@@ -143,6 +143,14 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
 	Database::open(&connection::file(app)?)
 }
 
+/// The database a test works on, opened where `temp_dir` put it. Lives beside
+/// `open` rather than in a test module because `Database::open` is private and
+/// every test module around the database needs it.
+#[cfg(test)]
+pub fn opened(dir: &Path) -> Database {
+	Database::open(&dir.join(connection::FILE_NAME)).expect("the database opens")
+}
+
 #[cfg(test)]
 mod tests {
 	use std::fs;
@@ -161,10 +169,6 @@ mod tests {
 	/// Only ever reached by a call that hangs, which is the failure this proves
 	/// impossible — so it is long enough to be nobody's flake.
 	const DEADLINE: Duration = Duration::from_secs(10);
-
-	fn open(dir: &Path) -> Database {
-		Database::open(&dir.join(FILE_NAME)).expect("the database opens")
-	}
 
 	async fn version(database: &Database) -> u32 {
 		database.call(migrations::version).await.expect("version")
@@ -207,7 +211,7 @@ mod tests {
 	async fn a_fresh_path_becomes_a_database_at_the_latest_version() {
 		let dir = temp_dir();
 
-		let database = open(&dir);
+		let database = opened(&dir);
 
 		assert!(dir.join(FILE_NAME).exists(), "no file was created");
 		assert_eq!(version(&database).await, migrations::latest_version());
@@ -226,12 +230,12 @@ mod tests {
 	#[tokio::test]
 	async fn reopening_leaves_the_schema_and_the_version_as_they_were() {
 		let dir = temp_dir();
-		let first = open(&dir);
+		let first = opened(&dir);
 		let version_after_install = version(&first).await;
 		let objects_after_install = object_count(&first).await;
 		drop(first);
 
-		let second = open(&dir);
+		let second = opened(&dir);
 
 		assert_eq!(version(&second).await, version_after_install, "a step ran twice");
 		assert_eq!(
@@ -253,7 +257,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_waiting_on_the_file_leaves_the_runtime_free() {
 		let dir = temp_dir();
-		let database = open(&dir);
+		let database = opened(&dir);
 		database
 			.call(|connection| Ok(connection.busy_timeout(CONTENDED_TIMEOUT)?))
 			.await
@@ -303,7 +307,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_write_spanning_two_statements_lands_whole_or_not_at_all() {
 		let dir = temp_dir();
-		let database = open(&dir);
+		let database = opened(&dir);
 
 		let landed = database
 			.call_mut(|connection| {
@@ -354,7 +358,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_that_panics_is_reported_instead_of_taking_the_host_down() {
 		let dir = temp_dir();
-		let database = open(&dir);
+		let database = opened(&dir);
 
 		let interrupted: Result<(), DatabaseError> =
 			database.call(|_| panic!("a query gave up under the lock")).await;
@@ -379,7 +383,7 @@ mod tests {
 		use std::os::unix::fs::PermissionsExt;
 
 		let dir = temp_dir();
-		let database = open(&dir);
+		let database = opened(&dir);
 
 		let mode = fs::metadata(dir.join(FILE_NAME)).expect("metadata").permissions().mode();
 		assert_eq!(mode & 0o777, 0o600, "the transcript must not be world readable");
