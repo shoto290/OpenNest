@@ -34,6 +34,11 @@ pub enum DatabaseError {
 	PoisonedConnection,
 	/// The blocking task carrying a call never delivered its result.
 	CallInterrupted,
+	/// A write the row it names has already moved past. Kept apart from a busy file
+	/// and from a row that is simply not there: those are worth another attempt,
+	/// while this one is the answer — somebody else recorded the ending first, and
+	/// the caller is late rather than unlucky.
+	Conflict,
 	Sqlite(rusqlite::Error),
 }
 
