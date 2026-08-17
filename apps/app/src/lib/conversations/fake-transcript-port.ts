@@ -1,4 +1,7 @@
-import type { TranscriptMessage } from "./transcript-contract"
+import {
+	TRANSCRIPT_PAGE_SIZE,
+	type TranscriptMessage,
+} from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 
 export type FakeTranscriptPortOptions = {
@@ -6,14 +9,12 @@ export type FakeTranscriptPortOptions = {
 	pageSize?: number
 }
 
-const DEFAULT_PAGE_SIZE = 20
-
 /** An in-memory stand-in for the stored conversation: the same rows in, the same
  * pages out, so a test reads what a query would have returned. */
 export const createFakeTranscriptPort = (
 	options: FakeTranscriptPortOptions,
 ): TranscriptPort => {
-	const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE
+	const pageSize = options.pageSize ?? TRANSCRIPT_PAGE_SIZE
 	const stored = [...options.messages].sort(
 		(left, right) => left.seq - right.seq,
 	)

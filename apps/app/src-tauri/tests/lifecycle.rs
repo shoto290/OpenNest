@@ -17,12 +17,13 @@ use std::time::Duration;
 
 use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::claude::commands::{
-	claude_shutdown, claude_start_or_resume_session, claude_submit_prompt, invoke_handler,
-	shutdown_session, terminate_session,
+	claude_shutdown, claude_start_or_resume_session, claude_submit_prompt, shutdown_session,
+	terminate_session,
 };
 use opennest_app::claude::contract::{SessionHandle, TransportError};
 use opennest_app::claude::session::live_groups;
 use opennest_app::claude::ClaudeState;
+use opennest_app::commands::invoke_handler;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, Manager};
 
