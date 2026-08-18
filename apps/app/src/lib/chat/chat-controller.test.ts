@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { type ChatController, createChatController } from "./chat-controller"
-import { isSessionReady } from "./chat-state"
+import { isSessionReady, isTurnBusy } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
 import { ASKED_FOR, NEARING_THE_BOUND, REFUSED, STOPPED } from "./rotation"
@@ -943,6 +943,9 @@ describe("createChatController", () => {
 			error: { kind: "notAuthenticated" },
 		})
 
+		// The bot is opened first: what a preflight reports is reported about a bot,
+		// and before one is selected there is no screen for it to land on.
+		await controller.open(BOT)
 		expect(await controller.preflight()).toBeNull()
 		expect(startSpy).not.toHaveBeenCalled()
 		const state = controller.getState()
@@ -1035,10 +1038,11 @@ describe("createChatController", () => {
 	})
 
 	// The one thing a switch may never do: put a bot's words in another bot's
-	// transcript. What the leaving run was streaming is closed out where it was
-	// written, and whatever it says after the handover is a frame from a run this
-	// launch no longer holds — so it reaches neither conversation.
-	it("leaves a stream in the conversation it was written to when the reader switches", async () => {
+	// transcript — and the one thing it may never cost: the answer a bot was in the
+	// middle of. The bot the reader leaves keeps its process, goes on streaming into
+	// the conversation it was started for, and is found finished there on the way
+	// back.
+	it("keeps a bot streaming into its own conversation after the reader switches", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
 		const harness = await bootedHarness({ store })
@@ -1060,10 +1064,20 @@ describe("createChatController", () => {
 
 		await harness.controller.open(other.id)
 		await vi.runAllTimersAsync()
-		harness.driver.pushEvent(
+		for (const event of [
 			{ type: "messageDelta", id: "msg-1", seq: 2, text: " an answer" },
-			leaving,
-		)
+			{
+				type: "messageCompleted",
+				message: {
+					...STREAMING_MESSAGE,
+					text: "Half an answer",
+					completion: "complete",
+				},
+			},
+			{ type: "turnEnded", ended: { sessionId: ANNOUNCED, outcome: "completed" } },
+		] satisfies ClaudeEvent[]) {
+			harness.driver.pushEvent(event, leaving)
+		}
 		await vi.runAllTimersAsync()
 
 		expect(harness.controller.getState().messages).toEqual([])
@@ -1072,8 +1086,89 @@ describe("createChatController", () => {
 			left.messages.map((row) => [row.role, row.content, row.completion]),
 		).toEqual([
 			["user", "hello", "complete"],
-			["assistant", "Half", "interrupted"],
+			["assistant", "Half an answer", "complete"],
 		])
+
+		await harness.controller.open(BOT)
+		await vi.runAllTimersAsync()
+		expect(spoken(harness.controller.getState().messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "Half an answer", "complete"],
+		])
+		expect(runOf(harness.controller)).toEqual(leaving)
+		harness.detach()
+	})
+
+	// Two bots, two processes, one reader. Neither turn is refused because the other
+	// is running, and each answer lands in the conversation of the bot that gave it.
+	it("lets two bots answer at once, each into its own conversation", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+
+		await harness.controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 4)
+		expect(isTurnBusy(harness.controller.getState().turn)).toBe(true)
+
+		await harness.controller.open(other.id)
+		await harness.controller.send("salut")
+		expect(isTurnBusy(harness.controller.getState().turn)).toBe(true)
+		expect(harness.controller.getState().errors).toEqual([])
+		await vi.runAllTimersAsync()
+
+		const first = await store.loadPage((await store.mainChat(BOT)).id, null)
+		const second = await store.loadPage((await store.mainChat(other.id)).id, null)
+		expect(spoken(first.messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		expect(spoken(second.messages)).toEqual([
+			["user", "salut", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		harness.detach()
+	})
+
+	// A bot holds one process at a time. Selecting it again — which is what the app
+	// does on every switch — shows the one it has rather than replacing it, because
+	// a second process would leave the first answering with nobody holding it.
+	it("opens no second process for a bot that already holds one", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		const held = runOf(harness.controller)
+		const startSpy = vi.spyOn(harness.driver, "startOrResumeSession")
+
+		expect(await harness.controller.open(BOT)).toBeNull()
+		await harness.controller.open(other.id)
+		await harness.controller.open(BOT)
+		await vi.runAllTimersAsync()
+
+		expect(startSpy).toHaveBeenCalledTimes(1)
+		expect(startSpy).toHaveBeenCalledWith(
+			expect.objectContaining({ botId: other.id }),
+			undefined,
+		)
+		expect(runOf(harness.controller)).toEqual(held)
+		harness.detach()
+	})
+
+	// A bot that is going away takes its process with it: one left running would go
+	// on answering into a conversation the delete is about to remove.
+	it("ends the runtime of a bot that is deleted while it streams", async () => {
+		const harness = await bootedHarness()
+		const shutdownSpy = vi.spyOn(harness.driver, "shutdown")
+		await harness.controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 4)
+		const running = runOf(harness.controller)
+
+		await harness.controller.close(BOT)
+
+		expect(shutdownSpy).toHaveBeenCalledWith(running)
+		expect(harness.controller.getState().conversationId).toBeNull()
+		await expect(
+			harness.driver.submitPrompt(running, "anybody there?"),
+		).rejects.toEqual({ kind: "notStarted" })
 		harness.detach()
 	})
 

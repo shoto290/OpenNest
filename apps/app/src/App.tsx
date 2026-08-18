@@ -42,12 +42,21 @@ export function App() {
 	}, [roster.controller])
 
 	// The conversation follows the selection: opening a bot paints its transcript and
-	// puts the one process this build runs behind it.
+	// puts a process of its own behind it. Coming back to one that is already
+	// answering shows it as it is — every bot keeps its runtime until it is deleted
+	// or the app quits.
 	useEffect(() => {
 		if (selectedBotId) {
 			void chat.controller.open(selectedBotId)
 		}
 	}, [chat.controller, selectedBotId])
+
+	// The runtime goes first: a process left running would answer into a conversation
+	// the delete is about to take away.
+	const deleteBot = async (id: string) => {
+		await chat.controller.close(id)
+		await roster.controller.remove(id)
+	}
 
 	const activity = sidebarActivityFor(chat.state)
 	const lastMessage = lastAssistantTextFor(chat.state)
@@ -90,7 +99,7 @@ export function App() {
 							}
 						}}
 						onDelete={() => {
-							void roster.controller.remove(selected.id)
+							void deleteBot(selected.id)
 						}}
 						onValueChange={(value) =>
 							roster.controller.describe(selected.id, value)
