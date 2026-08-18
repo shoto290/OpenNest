@@ -24,7 +24,7 @@ import {
 import { createPortal } from "react-dom"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { EASE_OUT, SPRING_LAYOUT, SPRING_PANEL } from "@workspace/ui/lib/ease"
+import { EASE_OUT, SPRING_PANEL } from "@workspace/ui/lib/ease"
 import {
 	holdSelection,
 	TOUCH_GESTURE_CONTENT_CLASS,
@@ -616,7 +616,11 @@ function ContextMenuItemBase({
 							? "bg-destructive/10"
 							: "bg-foreground/[0.065]",
 					)}
-					transition={context.reduce ? { duration: 0 } : SPRING_LAYOUT}
+					// Local deviation from the beUI default, which springs the shared
+					// pill from one item to the next: a highlight that travels reads
+					// as a delay under the pointer, so it lands where the pointer is
+					// at once. The shared `layoutId` stays — only its travel is zero.
+					transition={{ duration: 0 }}
 				/>
 			) : null}
 			{children}

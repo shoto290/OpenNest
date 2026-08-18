@@ -179,6 +179,10 @@ const rowHeights = (rows: HTMLElement[]) =>
 
 const isClipped = (node: HTMLElement) => node.scrollWidth > node.clientWidth
 
+/** The highlight behind a menu item, which belongs to the highlighted item and
+ * to no other — it is drawn where the pointer is rather than travelling there. */
+const highlightIn = (item: HTMLElement) => item.querySelector("span")
+
 const railWidth = () => {
 	const probe = document.createElement("div")
 	probe.style.width = "var(--sidebar-width-icon)"
@@ -595,7 +599,7 @@ export const RowContextMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which is what this story presses. Check that the menu offers edit and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page. The row says it carries a menu through `aria-haspopup`, and says whether it is open. The menu is left open here so the panel can be read with it up. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
+					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which is what this story presses. Check that the menu offers edit and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page. The highlight is drawn on the item under the pointer and nowhere else: it does not slide across from the item before it, which is a deliberate local deviation from the registry component's gliding row — travel under a pointer reads as lag. The row says it carries a menu through `aria-haspopup`, and says whether it is open. The menu is left open here so the panel can be read with it up. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
 			},
 		},
 	},
@@ -624,12 +628,15 @@ export const RowContextMenu = meta.story({
 		await waitFor(async () => {
 			await expect(edit).toHaveFocus()
 		}, FRAME_POLL)
+		await expect(highlightIn(edit)).not.toBeNull()
 		await expect(getComputedStyle(remove).color).not.toBe(
 			getComputedStyle(edit).color,
 		)
 
 		await userEvent.keyboard("{ArrowDown}")
 		await expect(remove).toHaveFocus()
+		await expect(highlightIn(remove)).not.toBeNull()
+		await expect(highlightIn(edit)).toBeNull()
 		await userEvent.keyboard("{Escape}")
 		await waitFor(async () => {
 			await expect(overlay.queryByRole("menu")).toBeNull()
