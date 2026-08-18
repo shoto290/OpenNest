@@ -185,4 +185,65 @@ describe("createFakeTranscriptStore", () => {
 
 		expect(await store.bots()).toEqual([])
 	})
+
+	it("dresses a bot in an uploaded picture and answers a path for it", async () => {
+		const store = createFakeTranscriptStore()
+
+		const worn = await store.setBotAvatarImage("default", aPng())
+
+		expect(worn.avatarImagePath).toMatch(/\.png$/)
+		expect((await store.bots())[0].avatarImagePath).toBe(worn.avatarImagePath)
+	})
+
+	/** The refusal the host decides on the bytes and nothing else, so the fake decides
+	 * it the same way: a caller that handled a rejection here handles the real one. */
+	it("refuses bytes that are not one of the formats a picture may arrive as", async () => {
+		const store = createFakeTranscriptStore()
+
+		await expect(
+			store.setBotAvatarImage("default", new Uint8Array([0x47, 0x49, 0x46])),
+		).rejects.toEqual({
+			kind: "rejectedAvatarImage",
+			reason: { kind: "unknownFormat" },
+		})
+		expect((await store.bots())[0].avatarImagePath).toBeNull()
+	})
+
+	it("refuses a picture over the limit with the limit it broke", async () => {
+		const store = createFakeTranscriptStore()
+		const limit = 5 * 1024 * 1024
+
+		await expect(
+			store.setBotAvatarImage("default", new Uint8Array(limit + 1)),
+		).rejects.toEqual({
+			kind: "rejectedAvatarImage",
+			reason: { kind: "tooLarge", bytes: limit + 1, limit },
+		})
+	})
+
+	it("refuses a picture for a bot it no longer holds", async () => {
+		const store = createFakeTranscriptStore()
+		await store.deleteBot("default")
+
+		await expect(store.setBotAvatarImage("default", aPng())).rejects.toEqual({
+			kind: "unknownBot",
+			id: "default",
+		})
+	})
+
+	/** Taking a picture off is an identity write, the same one that puts an animal
+	 * back — there is no second call for it on either side of the boundary. */
+	it("takes the picture off a bot described again without a path", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setBotAvatarImage("default", aPng())
+
+		const bare = await store.updateBot("default", botIdentity())
+
+		expect(bare.avatarImagePath).toBeNull()
+	})
 })
+
+/** A png signature and nothing behind it: the fake reads the leading bytes, which is
+ * what the host reads to decide the same thing. */
+const aPng = () =>
+	new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])

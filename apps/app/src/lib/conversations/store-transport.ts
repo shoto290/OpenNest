@@ -40,6 +40,9 @@ export const conversationStore: TranscriptStore = {
 
 	deleteBot: (id: string) => invoke<void>("conversation_delete_bot", { id }),
 
+	setBotAvatarImage: (id: string, bytes: Uint8Array) =>
+		invoke<Bot>("conversation_set_bot_avatar_image", { id, bytes }),
+
 	mainChat: (botId: string) =>
 		invoke<Chat>("conversation_main_chat", { botId }),
 

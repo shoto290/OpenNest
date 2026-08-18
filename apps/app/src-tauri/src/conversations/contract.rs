@@ -33,8 +33,11 @@
 //! never a row's content: a transcript is personal data, and an error on its way
 //! to the UI is the last place it may leak into.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
+use crate::avatars;
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
@@ -181,8 +184,23 @@ pub struct Bot {
 	pub created_at: i64,
 }
 
-impl From<conversations::Bot> for Bot {
-	fn from(bot: conversations::Bot) -> Self {
+impl Bot {
+	/// The stored row as the frontend meets it. `avatars` is the one directory a
+	/// picture may live in, and the projection is where the recorded path stops being
+	/// a column and becomes something a webview will be pointed at: anything
+	/// [`avatars::readable`] refuses — outside the directory, gone, not a file — comes
+	/// back as no picture at all, which is a bot wearing its animal rather than a
+	/// fetch the UI has to recover from.
+	///
+	/// `None` for the directory is a run with nowhere to keep avatars. Same answer:
+	/// every bot wears its animal.
+	pub fn of(bot: conversations::Bot, avatars: Option<&Path>) -> Self {
+		let avatar_image_path = bot
+			.avatar_image_path
+			.as_deref()
+			.zip(avatars)
+			.and_then(|(recorded, dir)| avatars::readable(dir, recorded))
+			.map(|path| path.to_string_lossy().into_owned());
 		Self {
 			id: bot.id,
 			name: bot.name,
@@ -191,7 +209,7 @@ impl From<conversations::Bot> for Bot {
 			model: bot.model.into(),
 			avatar_animal: bot.avatar_animal.into(),
 			avatar_pose: bot.avatar_pose.into(),
-			avatar_image_path: bot.avatar_image_path,
+			avatar_image_path,
 			working_dir: bot.working_dir,
 			created_at: bot.created_at,
 		}
@@ -575,6 +593,45 @@ pub enum TranscriptStoreError {
 	/// what puts them back together.
 	#[serde(rename_all = "camelCase")]
 	UnknownBot { id: String },
+	/// The bytes offered as an avatar were not stored, and nothing on the disk or on
+	/// the bot changed. Carries which of the four things went wrong, because three of
+	/// them are the user's to fix by picking another file.
+	#[serde(rename_all = "camelCase")]
+	RejectedAvatarImage { reason: AvatarRejection },
+}
+
+/// Why an avatar was not stored, in the frontend's vocabulary. `tooLarge` carries
+/// both numbers so the UI can say the limit without holding a copy of it, and the
+/// two `detail` strings are the decoder's and the filesystem's own accounts — never
+/// a path, which is the host's business and not the webview's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum AvatarRejection {
+	/// The leading bytes are not png, jpeg or webp — whatever the file was called.
+	UnknownFormat,
+	#[serde(rename_all = "camelCase")]
+	TooLarge { bytes: u64, limit: u64 },
+	#[serde(rename_all = "camelCase")]
+	Undecodable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	Unwritable { detail: String },
+}
+
+impl From<avatars::Rejection> for TranscriptStoreError {
+	fn from(rejection: avatars::Rejection) -> Self {
+		TranscriptStoreError::RejectedAvatarImage {
+			reason: match rejection {
+				avatars::Rejection::UnknownFormat => AvatarRejection::UnknownFormat,
+				avatars::Rejection::TooLarge { bytes, limit } => {
+					AvatarRejection::TooLarge { bytes, limit }
+				}
+				avatars::Rejection::Undecodable { detail } => {
+					AvatarRejection::Undecodable { detail }
+				}
+				avatars::Rejection::Unwritable { detail } => AvatarRejection::Unwritable { detail },
+			},
+		}
+	}
 }
 
 impl From<messages::TranscriptError> for TranscriptStoreError {
@@ -988,9 +1045,95 @@ mod tests {
 				TranscriptStoreError::UnknownBot { id: "b1".into() },
 				json!({ "kind": "unknownBot", "id": "b1" }),
 			),
+			(
+				TranscriptStoreError::RejectedAvatarImage {
+					reason: AvatarRejection::UnknownFormat,
+				},
+				json!({ "kind": "rejectedAvatarImage", "reason": { "kind": "unknownFormat" } }),
+			),
+			(
+				TranscriptStoreError::RejectedAvatarImage {
+					reason: AvatarRejection::TooLarge { bytes: 6_000_000, limit: 5_242_880 },
+				},
+				json!({
+					"kind": "rejectedAvatarImage",
+					"reason": { "kind": "tooLarge", "bytes": 6_000_000, "limit": 5_242_880 }
+				}),
+			),
+			(
+				TranscriptStoreError::RejectedAvatarImage {
+					reason: AvatarRejection::Undecodable { detail: "unexpected end".into() },
+				},
+				json!({
+					"kind": "rejectedAvatarImage",
+					"reason": { "kind": "undecodable", "detail": "unexpected end" }
+				}),
+			),
+			(
+				TranscriptStoreError::RejectedAvatarImage {
+					reason: AvatarRejection::Unwritable { detail: "no space left".into() },
+				},
+				json!({
+					"kind": "rejectedAvatarImage",
+					"reason": { "kind": "unwritable", "detail": "no space left" }
+				}),
+			),
 		] {
 			assert_crosses_as(refusal, wire);
 		}
+	}
+
+	/// The limit crossing as a number rather than as prose: it is the frontend that
+	/// tells a user how big a picture may be, and it reads that off the refusal
+	/// instead of holding a second copy of the number.
+	#[test]
+	fn every_reason_a_picture_is_refused_keeps_its_shape_on_the_way_out() {
+		for (rejection, reason) in [
+			(avatars::Rejection::UnknownFormat, AvatarRejection::UnknownFormat),
+			(
+				avatars::Rejection::TooLarge { bytes: 9, limit: 8 },
+				AvatarRejection::TooLarge { bytes: 9, limit: 8 },
+			),
+			(
+				avatars::Rejection::Undecodable { detail: "torn".into() },
+				AvatarRejection::Undecodable { detail: "torn".into() },
+			),
+			(
+				avatars::Rejection::Unwritable { detail: "read only".into() },
+				AvatarRejection::Unwritable { detail: "read only".into() },
+			),
+		] {
+			assert_eq!(
+				TranscriptStoreError::from(rejection),
+				TranscriptStoreError::RejectedAvatarImage { reason }
+			);
+		}
+	}
+
+	/// The projection every read of a bot goes through, on the two answers that are
+	/// not a picture: a path pointing out of the directory, and a run with no
+	/// directory at all. Both come back as no picture, which is the bot in its animal.
+	#[test]
+	fn a_bot_wearing_a_path_the_host_will_not_serve_crosses_without_one() {
+		let stored = |path: Option<&str>| conversations::Bot {
+			id: "b1".into(),
+			name: "Nyx".into(),
+			title: String::new(),
+			description: String::new(),
+			model: conversations::BotModel::Sonnet,
+			avatar_animal: conversations::AvatarAnimal::Owl,
+			avatar_pose: conversations::AvatarPose::Idle,
+			avatar_image_path: path.map(str::to_owned),
+			working_dir: None,
+			instructions: String::new(),
+			memory: String::new(),
+			created_at: 1,
+		};
+		let dir = std::env::temp_dir();
+
+		assert_eq!(Bot::of(stored(Some("/etc/passwd")), Some(&dir)).avatar_image_path, None);
+		assert_eq!(Bot::of(stored(Some("/etc/passwd")), None).avatar_image_path, None);
+		assert_eq!(Bot::of(stored(None), Some(&dir)).avatar_image_path, None);
 	}
 
 	/// The ending a caller reports is the one the file records: a mapping that

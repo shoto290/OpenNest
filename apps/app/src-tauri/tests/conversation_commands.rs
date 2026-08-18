@@ -11,6 +11,8 @@
 //! of its own rather than writing where a real install would — or where its
 //! neighbour is reading.
 
+use std::path::{Path, PathBuf};
+
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -935,4 +937,386 @@ fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 	);
 
 	cleanup(&app);
+}
+
+/// The avatar directory as the host resolves it, from the same app handle the
+/// commands resolve it from: an assertion built on any other path would prove
+/// something about this test rather than about where pictures go.
+fn avatar_dir(app: &App<MockRuntime>) -> PathBuf {
+	app.path().app_data_dir().expect("data dir").join("avatars")
+}
+
+/// What is in that directory, sorted. Absent counts as empty: nothing has stored a
+/// picture yet, which is the same fact as nothing being left behind.
+fn stored_avatars(app: &App<MockRuntime>) -> Vec<String> {
+	let Ok(entries) = std::fs::read_dir(avatar_dir(app)) else {
+		return Vec::new();
+	};
+	let mut names: Vec<String> =
+		entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+	names.sort();
+	names
+}
+
+/// Built rather than checked in, so the bytes and the decoder that has to read them
+/// cannot drift apart. Deliberately not square and not 512: what is asserted on the
+/// far side is that the host squared and resized it, not that it copied a file.
+fn a_picture(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
+	let mut canvas = image::RgbImage::new(width, height);
+	for (x, y, pixel) in canvas.enumerate_pixels_mut() {
+		*pixel = image::Rgb([(x % 256) as u8, (y % 256) as u8, 64]);
+	}
+	let mut encoded = std::io::Cursor::new(Vec::new());
+	image::DynamicImage::ImageRgb8(canvas)
+		.write_to(&mut encoded, format)
+		.expect("the fixture encodes");
+	encoded.into_inner()
+}
+
+fn a_png(width: u32, height: u32) -> Vec<u8> {
+	a_picture(width, height, image::ImageFormat::Png)
+}
+
+/// The upload as the frontend sends it: `Uint8Array` reaches the host as a JSON
+/// array of numbers, so the crossing is spelled that way here too.
+fn an_upload(id: &str, bytes: &[u8]) -> Value {
+	json!({ "id": id, "bytes": bytes })
+}
+
+fn a_bot(window: &WebviewWindow<MockRuntime>, name: &str) -> String {
+	call(
+		window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity(name, "sonnet", "owl", "curious") }),
+	)
+	.expect("the bot is created")["id"]
+		.as_str()
+		.expect("the bot holds an id")
+		.to_owned()
+}
+
+fn wearing(window: &WebviewWindow<MockRuntime>, id: &str) -> Value {
+	call(window, "conversation_bots", json!({}))
+		.expect("the bots")
+		.as_array()
+		.expect("a list")
+		.iter()
+		.find(|bot| bot["id"] == json!(id))
+		.expect("the bot is listed")["avatarImagePath"]
+		.clone()
+}
+
+/// The whole point of the feature, over IPC: bytes in, one normalised file beside
+/// the database, and a path the webview can be pointed at. The stored file is
+/// decoded rather than measured, because "512×512 png" is what the UI is allowed to
+/// assume and a copy of the upload would have satisfied every other assertion here.
+#[test]
+fn an_uploaded_picture_is_stored_squared_beside_the_database_and_crosses_as_a_path() {
+	let app = app("com.opennest.conversation-commands-13");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+
+	let worn = call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(200, 80)))
+		.expect("the picture is stored");
+
+	let recorded = worn["avatarImagePath"].as_str().expect("a path crossed").to_owned();
+	assert_eq!(
+		Path::new(&recorded).parent(),
+		Some(avatar_dir(&app).as_path()),
+		"a picture was stored somewhere other than the directory the asset scope covers"
+	);
+	assert_eq!(Path::new(&recorded).extension().and_then(|it| it.to_str()), Some("png"));
+	assert_eq!(stored_avatars(&app).len(), 1, "one upload left more than one file");
+	let stored = image::load_from_memory_with_format(
+		&std::fs::read(&recorded).expect("the stored file is readable"),
+		image::ImageFormat::Png,
+	)
+	.expect("the stored file decodes as png");
+	assert_eq!(
+		image::GenericImageView::dimensions(&stored),
+		(512, 512),
+		"a picture reached the disk without being squared and resized"
+	);
+	assert_eq!(wearing(&window, &id), json!(recorded), "the list answers another path");
+	assert_eq!(
+		worn["avatarAnimal"],
+		json!("owl"),
+		"an uploaded picture took the animal the bot falls back to with it"
+	);
+
+	cleanup(&app);
+}
+
+/// A jpeg goes in and a png comes out, which is the whole of what "every avatar
+/// renders identically" costs the UI: it never learns what was uploaded.
+#[test]
+fn a_jpeg_is_accepted_and_stored_as_the_one_format() {
+	let app = app("com.opennest.conversation-commands-14");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+
+	let worn = call(
+		&window,
+		"conversation_set_bot_avatar_image",
+		an_upload(&id, &a_picture(64, 90, image::ImageFormat::Jpeg)),
+	)
+	.expect("the picture is stored");
+
+	let recorded = worn["avatarImagePath"].as_str().expect("a path crossed");
+	assert_eq!(
+		image::guess_format(&std::fs::read(recorded).expect("readable")).expect("a format"),
+		image::ImageFormat::Png
+	);
+
+	cleanup(&app);
+}
+
+/// The acceptance the whole ordering exists for: nothing this host refuses may leave
+/// a file in that directory or a path on the bot. Three refusals, three reasons, and
+/// the same nothing behind each of them.
+#[test]
+fn a_picture_the_host_refuses_leaves_nothing_on_the_disk_and_nothing_on_the_bot() {
+	let app = app("com.opennest.conversation-commands-15");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+
+	assert_eq!(
+		call(&window, "conversation_set_bot_avatar_image", an_upload(&id, b"GIF89a\0\0\0\0\0\0")),
+		Err(json!({ "kind": "rejectedAvatarImage", "reason": { "kind": "unknownFormat" } })),
+		"a format this build cannot decode was accepted"
+	);
+	assert_eq!(
+		call(
+			&window,
+			"conversation_set_bot_avatar_image",
+			an_upload(&id, b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>")
+		),
+		Err(json!({ "kind": "rejectedAvatarImage", "reason": { "kind": "unknownFormat" } })),
+		"markup named an image was accepted"
+	);
+	let torn =
+		call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(40, 40)[..24]));
+	assert!(
+		matches!(&torn, Err(refusal) if refusal["kind"] == json!("rejectedAvatarImage")
+			&& refusal["reason"]["kind"] == json!("undecodable")),
+		"bytes that claimed a format and were not one crossed as something else: {torn:?}"
+	);
+
+	assert_eq!(stored_avatars(&app), Vec::<String>::new(), "a refused picture reached the disk");
+	assert_eq!(wearing(&window, &id), json!(null), "a refused picture reached the bot");
+
+	cleanup(&app);
+}
+
+/// The limit, on the path a user actually crosses. Asserted here and not only in
+/// the unit around `normalised` because the number is part of the contract: the UI
+/// tells the user what it is by reading it off this refusal.
+#[test]
+fn a_picture_over_the_limit_is_refused_with_the_limit_it_broke() {
+	let app = app("com.opennest.conversation-commands-16");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+	let limit = 5 * 1024 * 1024;
+
+	let refused =
+		call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &vec![0u8; limit + 1]));
+
+	assert_eq!(
+		refused,
+		Err(json!({
+			"kind": "rejectedAvatarImage",
+			"reason": { "kind": "tooLarge", "bytes": limit + 1, "limit": limit }
+		}))
+	);
+	assert_eq!(stored_avatars(&app), Vec::<String>::new());
+
+	cleanup(&app);
+}
+
+/// Exactly one file, not two. The new picture is written before the old one is
+/// swept, so this also proves the sweep took the right one — a sweep reading the
+/// table a moment too early would have taken the new one.
+#[test]
+fn replacing_a_picture_leaves_exactly_one_file_behind() {
+	let app = app("com.opennest.conversation-commands-17");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+
+	let first = call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(30, 30)))
+		.expect("the first picture is stored")["avatarImagePath"]
+		.as_str()
+		.expect("a path")
+		.to_owned();
+	let second = call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(48, 20)))
+		.expect("the second picture is stored")["avatarImagePath"]
+		.as_str()
+		.expect("a path")
+		.to_owned();
+
+	assert_ne!(first, second, "a replacement was written over the file it replaced");
+	assert!(!Path::new(&first).exists(), "the replaced picture stayed behind");
+	assert!(Path::new(&second).exists(), "the replacement is not there");
+	assert_eq!(stored_avatars(&app).len(), 1);
+	assert_eq!(wearing(&window, &id), json!(second));
+
+	cleanup(&app);
+}
+
+/// A bot is thrown away with everything it wore. The other bot's picture is in the
+/// same directory on purpose: a sweep that answered "delete everything" would pass
+/// the first assertion and fail this one.
+#[test]
+fn deleting_a_bot_leaves_no_picture_behind_and_leaves_every_other_bot_its_own() {
+	let app = app("com.opennest.conversation-commands-18");
+	let window = window(&app);
+	let doomed = a_bot(&window, "Nyx");
+	let spared = a_bot(&window, "Ada");
+	call(&window, "conversation_set_bot_avatar_image", an_upload(&doomed, &a_png(30, 30)))
+		.expect("the doomed bot's picture is stored");
+	let kept =
+		call(&window, "conversation_set_bot_avatar_image", an_upload(&spared, &a_png(30, 30)))
+			.expect("the spared bot's picture is stored")["avatarImagePath"]
+			.as_str()
+			.expect("a path")
+			.to_owned();
+
+	call(&window, "conversation_delete_bot", json!({ "id": doomed })).expect("the bot is deleted");
+
+	assert_eq!(stored_avatars(&app).len(), 1, "a deleted bot left its picture behind");
+	assert!(Path::new(&kept).exists(), "deleting one bot took another bot's picture");
+
+	cleanup(&app);
+}
+
+/// Putting an animal back on is an identity write with no path, and the file goes
+/// with it. Echoing the path back is the other half of the same rule and the one a
+/// frontend does on every unrelated edit — it must keep the picture, not re-upload it.
+#[test]
+fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with_it_keeps_it() {
+	let app = app("com.opennest.conversation-commands-19");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+	let worn = call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(30, 30)))
+		.expect("the picture is stored")["avatarImagePath"]
+		.as_str()
+		.expect("a path")
+		.to_owned();
+
+	let mut echoed = an_identity("Nyx", "sonnet", "owl", "curious");
+	echoed["avatarImagePath"] = json!(worn);
+	let unchanged =
+		call(&window, "conversation_update_bot", json!({ "id": id, "identity": echoed }))
+			.expect("the bot is updated");
+
+	assert_eq!(unchanged["avatarImagePath"], json!(worn), "an unrelated edit dropped the picture");
+	assert!(Path::new(&worn).exists(), "an unrelated edit swept the picture");
+
+	let bare = call(
+		&window,
+		"conversation_update_bot",
+		json!({ "id": id, "identity": an_identity("Nyx", "sonnet", "owl", "curious") }),
+	)
+	.expect("the bot is updated");
+
+	assert_eq!(bare["avatarImagePath"], json!(null));
+	assert_eq!(stored_avatars(&app), Vec::<String>::new(), "the picture taken off stayed on disk");
+
+	cleanup(&app);
+}
+
+/// A path is a column until something says it names a file in the one directory the
+/// host serves from. The file outside is left exactly as it was — the point is that
+/// it is refused rather than read, and rather than swept.
+#[test]
+fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
+	let app = app("com.opennest.conversation-commands-20");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+	let outside = app.path().app_data_dir().expect("data dir").join("elsewhere.png");
+	std::fs::write(&outside, a_png(20, 20)).expect("the file outside exists");
+	std::fs::create_dir_all(avatar_dir(&app)).expect("the avatar directory exists");
+
+	for escaping in [
+		outside.to_string_lossy().into_owned(),
+		avatar_dir(&app).join("..").join("elsewhere.png").to_string_lossy().into_owned(),
+		"/etc/passwd".to_owned(),
+	] {
+		let mut identity = an_identity("Nyx", "sonnet", "owl", "curious");
+		identity["avatarImagePath"] = json!(escaping);
+		let updated =
+			call(&window, "conversation_update_bot", json!({ "id": id, "identity": identity }))
+				.expect("the bot is updated");
+
+		assert_eq!(
+			updated["avatarImagePath"],
+			json!(null),
+			"a path out of the avatar directory was handed to the webview: {escaping}"
+		);
+		assert_eq!(wearing(&window, &id), json!(null));
+	}
+
+	assert!(outside.exists(), "a refused path was read and swept anyway");
+	assert!(Path::new("/etc/passwd").exists(), "the sweep reached outside its own directory");
+
+	cleanup(&app);
+}
+
+/// What an install whose data directory moved leaves behind: a row naming a file
+/// that is not there. The bot comes back with no picture, which is the animal, and
+/// nothing about the read fails.
+#[test]
+fn a_picture_missing_from_the_disk_reads_as_no_picture_rather_than_a_broken_one() {
+	let app = app("com.opennest.conversation-commands-21");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+	let worn = call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(30, 30)))
+		.expect("the picture is stored")["avatarImagePath"]
+		.as_str()
+		.expect("a path")
+		.to_owned();
+
+	std::fs::remove_file(&worn).expect("the picture is removed from under the row");
+
+	assert_eq!(wearing(&window, &id), json!(null));
+	assert_eq!(
+		call(&window, "conversation_default_bot", json!({}))
+			.map(|bot| bot["avatarImagePath"].clone()),
+		Ok(json!(null)),
+		"a read of the seeded bot did not survive a missing file"
+	);
+
+	cleanup(&app);
+}
+
+/// A picture is written for a bot that exists or for nobody. The column write is
+/// what refuses, and it runs before the bytes do — so an upload naming a bot that is
+/// gone leaves the directory as empty as it found it.
+#[test]
+fn an_upload_naming_a_bot_that_is_gone_is_refused_before_any_file_is_written() {
+	let app = app("com.opennest.conversation-commands-22");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+	call(&window, "conversation_delete_bot", json!({ "id": id })).expect("the bot is deleted");
+
+	assert_eq!(
+		call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(30, 30))),
+		Err(json!({ "kind": "unknownBot", "id": id }))
+	);
+	assert_eq!(stored_avatars(&app), Vec::<String>::new());
+
+	cleanup(&app);
+}
+
+/// A host with no database refuses an upload the way it refuses every other write,
+/// and refuses it before it has anywhere to write: the picture is normalised in
+/// memory, so nothing is on the disk to take back.
+#[test]
+fn a_host_without_a_database_refuses_an_upload_with_why_there_is_none() {
+	let app = app_without_a_database();
+	let window = window(&app);
+
+	assert_eq!(
+		call(&window, "conversation_set_bot_avatar_image", an_upload("default", &a_png(20, 20))),
+		Err(json!({ "kind": "unavailable", "failure": { "kind": "appDataDir" } }))
+	);
 }

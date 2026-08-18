@@ -31,7 +31,15 @@ export type AvatarPose =
 /** Who a bot is, as the store is told it — whole, both to create one and to
  * change one. No `id` or `createdAt`: neither is a caller's to choose.
  * `avatarImagePath` and `workingDir` are `null` rather than empty, since both name
- * something outside the database. */
+ * something outside the database.
+ *
+ * `avatarImagePath` is the host's to hand out and never a caller's to invent: it
+ * comes back as an absolute path inside the one directory the host keeps avatars
+ * in, and only while the file is still there — a picture that is gone reads as
+ * `null`, which is a bot back in its animal. Echo it to keep the picture, send
+ * `null` to take it off; a path from anywhere else is stored and then refused on
+ * every read, which is the same `null`. `setBotAvatarImage` is how a new one is
+ * put on. */
 export type BotIdentity = {
 	name: string
 	title: string
@@ -103,9 +111,22 @@ export type StorageFailure =
 	| { kind: "staleWrite" }
 	| { kind: "sqlite"; detail: string }
 
+/** Why an uploaded picture was not stored. `unknownFormat` is the bytes not being
+ * png, jpeg or webp — whatever the file was called — and `undecodable` is the bytes
+ * saying they were and then not being. Only `unwritable` is not the user's to fix by
+ * picking another file. */
+export type AvatarRejection =
+	| { kind: "unknownFormat" }
+	| { kind: "tooLarge"; bytes: number; limit: number }
+	| { kind: "undecodable"; detail: string }
+	| { kind: "unwritable"; detail: string }
+
 export type TranscriptStoreError =
 	| { kind: "unavailable"; failure: StorageFailure }
 	| { kind: "storage"; failure: StorageFailure }
 	| { kind: "conflict"; id: string; field: string }
 	| { kind: "invalidTransition"; id: string; from: string; to: string }
 	| { kind: "unknownBot"; id: string }
+	/** Nothing was written and nothing on the bot changed: it still wears whatever it
+	 * wore before the upload. */
+	| { kind: "rejectedAvatarImage"; reason: AvatarRejection }
