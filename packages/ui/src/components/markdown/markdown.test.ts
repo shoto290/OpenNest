@@ -6,6 +6,9 @@ import { Markdown } from "@workspace/ui/components/markdown"
 
 const FOOTNOTE_SOURCE = "Claim[^1]\n\n[^1]: the proof\n"
 
+const ALIGNED_TABLE =
+	"| left | centre | right | default |\n| :--- | :---: | ---: | --- |\n| a | b | c | d |"
+
 const MALFORMED_TABLE = "| a | b\n| ---\n| 1"
 
 const render = (source: string) =>
@@ -71,7 +74,8 @@ describe("markdown constructions", () => {
 
 		expect(html).toContain("<blockquote>")
 		expect(html).toContain("<hr/>")
-		expect(html).toContain("<table><thead><tr><th>a</th>")
+		expect(html).toContain('data-slot="markdown-table"')
+		expect(html).toContain("<thead><tr><th")
 	})
 
 	it("links a footnote to its definition", () => {
@@ -134,6 +138,23 @@ describe("markdown constructions", () => {
 		expect(new Set(tokenColours(html, "light"))).toEqual(
 			new Set(["currentColor"]),
 		)
+	})
+})
+
+describe("markdown tables", () => {
+	it("keeps every declared column alignment", () => {
+		const html = render(ALIGNED_TABLE)
+
+		expect(html.match(/text-align:left/g)).toHaveLength(2)
+		expect(html.match(/text-align:center/g)).toHaveLength(2)
+		expect(html.match(/text-align:right/g)).toHaveLength(2)
+	})
+
+	it("frames the table in a scrollable region with a copy action", () => {
+		const html = render(ALIGNED_TABLE)
+
+		expect(html).toContain('aria-label="Table"')
+		expect(html).toContain('aria-label="Copy table"')
 	})
 })
 

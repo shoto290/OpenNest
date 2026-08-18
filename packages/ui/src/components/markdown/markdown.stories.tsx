@@ -1,4 +1,4 @@
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fn, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Markdown } from "@workspace/ui/components/markdown"
@@ -65,11 +65,40 @@ const TABLE_IN_BLOCKQUOTE = `> Counts as of the last sync:
 >
 > Two rows changed since yesterday.`
 
-const TABLE = `| nest | occupants | archived |
-| --- | ---: | :---: |
-| nest_42 | 3 | no |
-| nest_43 | 0 | yes |
-| nest_44 | 12 | no |`
+const TABLE = `| nest | occupants | status | archived |
+| :--- | ---: | :---: | --- |
+| nest_42 | 3 | active | no |
+| nest_43 | 0 | empty | yes |
+| nest_44 | 12 | active | no |`
+
+const WIDE_TABLE = `| nest | occupants | joined | left | role | invited by | last sync | note |
+| --- | ---: | --- | --- | --- | --- | --- | --- |
+| nest_42 | 3 | 2026-01-04 | — | resident | nest_01 | 2026-08-18 09:12 | rejoined after the archive pass |
+| nest_43 | 0 | 2025-11-27 | 2026-02-02 | visitor | nest_42 | 2026-08-18 09:12 | last occupant left before the sync |
+| nest_44 | 12 | 2024-07-19 | — | resident | nest_01 | 2026-08-17 23:58 | the widest roster on record |`
+
+const NARROW_TABLE = `| nest | occupants |
+| --- | ---: |
+| nest_42 | 3 |`
+
+/** Every cell a spreadsheet could choke on. The `\t` is a real tab inside one
+ * cell — the character that separates fields, sitting inside one of them. */
+const AWKWARD_TABLE = `| cell | copies as |
+| --- | --- |
+| **bold** with \`code\` | inline markdown, flattened |
+| left\tright | one field, not two |
+| ![nest crest](nest-crest.png) | the alt text |
+| pipe \\| inside | the escaped pipe |
+|  | an empty field |`
+
+const AWKWARD_TSV = [
+	"cell\tcopies as",
+	"bold with code\tinline markdown, flattened",
+	"left right\tone field, not two",
+	"nest crest\tthe alt text",
+	"pipe | inside\tthe escaped pipe",
+	"\tan empty field",
+].join("\n")
 
 const CODE = `Inline \`bun run storybook\` starts it, the fence carries the file:
 
@@ -221,6 +250,15 @@ const USER_BLOCK = `Run \`bun run test\` before merging — the dedupe now lives
 bun run test --project=unit
 \`\`\``
 
+const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
+
+/** The box the bubble clips against: if the table frame ever loses its clamp,
+ * this is what starts scrolling. */
+const bubbleContentOf = (canvasElement: HTMLElement) =>
+	canvasElement.querySelector(
+		'[data-slot="message-bubble-content"]',
+	) as HTMLElement
+
 const fragmentOf = (reference: HTMLElement) =>
 	reference.getAttribute("href")?.slice(1) ?? ""
 
@@ -241,7 +279,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control; table styling and link cards are still deliberately absent, each waiting in its own renderer module at `markdown/table.tsx` and `markdown/link.tsx`.",
+					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`; link cards are the one construction still deliberately absent, waiting in their own renderer module at `markdown/link.tsx`.",
 			},
 		},
 	},
@@ -350,7 +388,7 @@ export const TableInBlockquote = meta.story({
 		docs: {
 			description: {
 				story:
-					"The mixed case that breaks naive renderers: a GFM table nested in a quote, between two quoted paragraphs. Check that the table stays inside the quote rule and that the quote keeps its dimmed colour across the table. The table itself is unstyled on purpose — `markdown/table.tsx` owns that next.",
+					"The mixed case that breaks naive renderers: a GFM table nested in a quote, between two quoted paragraphs. Check that the framed table stays inside the quote rule, that the quote keeps its dimmed colour across the cells, and that the frame shrinks to the table rather than filling the quote.",
 			},
 		},
 	},
@@ -362,9 +400,112 @@ export const Table = meta.story({
 		docs: {
 			description: {
 				story:
-					"A standalone table with default, right and centre alignment. Check that the header row is a real `th` row and that the alignment declared in the delimiter row survives sanitizing. Styling is deferred to the dedicated table renderer, so expect browser defaults here.",
+					"All three declared alignments — left, right, centre — plus a column that declares none. Check that each column body follows its own header, that the undeclared column reads left rather than centred, and that the rules and the header fill hold in both themes: they are mixed from the foreground, so the same table reads on the page and on a solid bubble. Hover the table to raise the copy button.",
 			},
 		},
+	},
+	play: async ({ canvas }) => {
+		const [left, right, centre, plain] = canvas.getAllByRole("columnheader")
+
+		await expect(alignmentOf(left)).toBe("left")
+		await expect(alignmentOf(right)).toBe("right")
+		await expect(alignmentOf(centre)).toBe("center")
+		await expect(alignmentOf(plain)).toBe("left")
+	},
+})
+
+export const TableWide = meta.story({
+	args: { children: WIDE_TABLE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Eight columns in a column built for prose. The table keeps every cell on one line and scrolls on its own axis instead of squeezing each column into wrapped fragments. Check that the frame stops at the container edge, that the scroll ends flush with the last column, and that `Tab` reaches the table itself — the viewport is a tab stop with a visible ring, so the arrow keys scroll it without a mouse.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("group", { name: "Table" })
+
+		await expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth)
+
+		await userEvent.tab()
+		await expect(viewport).toHaveFocus()
+
+		await userEvent.tab()
+		await expect(
+			canvas.getByRole("button", { name: "Copy table" }),
+		).toHaveFocus()
+	},
+})
+
+export const TableNarrow = meta.story({
+	args: { children: NARROW_TABLE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The other end: two short columns. The frame shrinks to the table rather than stretching a hairline box across the whole bubble, so a small table reads as a small object. Check that nothing scrolls here.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const viewport = canvas.getByRole("group", { name: "Table" })
+
+		await expect(viewport.scrollWidth).toBe(viewport.clientWidth)
+	},
+})
+
+export const TableCopy = meta.story({
+	args: { children: AWKWARD_TABLE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The copy action against the cells that break a naive extraction: inline markdown, an escaped pipe, an image with no text of its own, an empty cell, and a literal tab sitting inside a field. The clipboard is stubbed so the story never touches the real one. Every row must copy as exactly two fields — the tab inside a cell flattens to a space rather than opening a third column, and the image yields its alt text rather than a hole. Check that the button is reachable by keyboard, that the icon swaps to a check, and that the result is announced in the polite live region rather than by the icon alone.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Copy table" }))
+
+		await expect(writeText).toHaveBeenCalledWith(AWKWARD_TSV)
+		await expect(
+			await canvas.findByText("Table copied to clipboard"),
+		).toBeInTheDocument()
+
+		writeText.mockRestore()
+	},
+})
+
+export const TableInBubble = meta.story({
+	args: { children: WIDE_TABLE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The host case: a table wider than the bubble that carries it. The bubble must not grow to fit the table and must not spill it — the table scrolls inside it. Check that the frame sits inside the bubble padding and that the copy button clears the bubble edge.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const viewport = canvas.getByRole("group", { name: "Table" })
+		const content = bubbleContentOf(canvasElement)
+
+		await expect(content.scrollWidth).toBe(content.clientWidth)
+		await expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth)
 	},
 })
 
