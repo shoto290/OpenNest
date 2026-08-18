@@ -18,6 +18,7 @@ import {
 	UserTurn,
 } from "@workspace/ui/components/chat-turn"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
+import { Markdown } from "@workspace/ui/components/markdown"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import {
 	ToolApproval,
@@ -63,6 +64,8 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	 * wrote it and the store took it — so the retry lives on the screen alone. */
 	rejected?: boolean
 }) {
+	const content = <Markdown>{row.text}</Markdown>
+
 	if (row.role === "user") {
 		return (
 			<UserTurn
@@ -73,7 +76,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 					void controller.retry(row.messageId)
 				}}
 			>
-				{row.text}
+				{content}
 			</UserTurn>
 		)
 	}
@@ -87,7 +90,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 				avatar ? <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} /> : null
 			}
 		>
-			{row.text}
+			{content}
 		</AssistantTurn>
 	)
 })

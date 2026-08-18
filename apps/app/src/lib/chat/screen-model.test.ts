@@ -15,7 +15,10 @@ import {
 } from "./screen-model"
 
 import type { ActivityEvent } from "../claude/contract"
-import type { TranscriptMessage } from "../conversations/transcript-contract"
+import type {
+	TranscriptCompletion,
+	TranscriptMessage,
+} from "../conversations/transcript-contract"
 import { message as storedMessage } from "../conversations/transcript-fixtures"
 
 function activity(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
@@ -28,7 +31,9 @@ function activity(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
 	}
 }
 
-function message(overrides: Partial<TranscriptMessage> = {}): TranscriptMessage {
+function message(
+	overrides: Partial<TranscriptMessage> = {},
+): TranscriptMessage {
 	return storedMessage({ id: "msg-1", completion: "streaming", ...overrides })
 }
 
@@ -39,6 +44,16 @@ function prompt(overrides: Partial<TranscriptMessage> = {}): TranscriptMessage {
 		completion: "complete",
 		...overrides,
 	})
+}
+
+/** The bubbles one message becomes, for the tests that read nothing else. */
+function bubbles(
+	content: string,
+	completion: TranscriptCompletion = "complete",
+): string[] {
+	return toTranscriptRows([message({ content, completion })]).map(
+		(row) => row.text,
+	)
 }
 
 function chatState(overrides: Partial<ChatState> = {}): ChatState {
@@ -81,11 +96,18 @@ describe("toTranscriptRows", () => {
 	})
 
 	it("hands back the same rows for a message that has not moved", () => {
-		const settled = message({ id: "a", content: "One.", completion: "complete" })
+		const settled = message({
+			id: "a",
+			content: "One.",
+			completion: "complete",
+		})
 		const live = message({ id: "b", content: "Two.\n\n" })
 
 		const first = toTranscriptRows([settled, live])
-		const second = toTranscriptRows([settled, { ...live, content: "Two.\n\nThr" }])
+		const second = toTranscriptRows([
+			settled,
+			{ ...live, content: "Two.\n\nThr" },
+		])
 
 		// The row the reader is already looking at must keep its identity, or the
 		// memoised transcript re-renders every row on every delta.
@@ -126,6 +148,82 @@ describe("toTranscriptRows", () => {
 			toTranscriptRows([message({ completion: "complete" })]),
 		).toHaveLength(0)
 		expect(toTranscriptRows([message()])).toHaveLength(0)
+	})
+
+	it("keeps a fenced block whole through the blank lines inside it", () => {
+		expect(
+			bubbles("Here it is:\n\n```ts\nconst a = 1\n\nconst b = 2\n```\n\nDone."),
+		).toEqual([
+			"Here it is:",
+			"```ts\nconst a = 1\n\nconst b = 2\n```",
+			"Done.",
+		])
+	})
+
+	it("withholds a fence the answer has not closed yet", () => {
+		expect(
+			bubbles("Here it is:\n\n```ts\nconst a = 1\n\nconst b", "streaming"),
+		).toEqual(["Here it is:"])
+	})
+
+	it("keeps the items of a loose list in one bubble", () => {
+		expect(
+			bubbles("Steps:\n\n- one\n\n- two\n\n1. first\n\n2. second"),
+		).toEqual(["Steps:", "- one\n\n- two", "1. first\n\n2. second"])
+	})
+
+	it("holds the block a single newline left unfinished", () => {
+		expect(bubbles("Intro line:\n", "streaming")).toEqual([])
+		expect(bubbles("Intro line:\nsecond line.", "streaming")).toEqual([])
+	})
+
+	it("keeps a paragraph and the list under it in one bubble", () => {
+		expect(bubbles("Steps:\n- one\n\n- two")).toEqual([
+			"Steps:\n- one\n\n- two",
+		])
+	})
+
+	it("keeps an item and its indented continuation in one bubble", () => {
+		expect(bubbles("1. one\n\n   more about one\n\n2. two")).toEqual([
+			"1. one\n\n   more about one\n\n2. two",
+		])
+	})
+
+	it("hands a block its own indentation, so indented code stays code", () => {
+		expect(bubbles("Here:\n\n    const a = 1\n\nDone.")).toEqual([
+			"Here:",
+			"    const a = 1",
+			"Done.",
+		])
+	})
+
+	it("never rewrites or drops a bubble it has already published", () => {
+		const written = [
+			"Intro.",
+			"- one\n\n  more about one\n\n- two",
+			"```ts\nconst a = 1\n\nconst b = 2\n```",
+			"Done.",
+		]
+		const answer = written.join("\n\n")
+		let published: string[] = []
+
+		for (let length = 1; length <= answer.length; length += 1) {
+			const texts = bubbles(answer.slice(0, length), "streaming")
+
+			// Everything already on screen has to still be there, word for word.
+			expect(texts.slice(0, published.length)).toEqual(published)
+			published = texts
+		}
+
+		// Every block but the last, which only the end of the turn releases.
+		expect(published).toEqual(written.slice(0, -1))
+	})
+
+	it("splits text without markdown on its blank lines alone", () => {
+		expect(bubbles("One.\nStill one.\n\n\nTwo.")).toEqual([
+			"One.\nStill one.",
+			"Two.",
+		])
 	})
 
 	it("never splits the reader's own prompt", () => {
@@ -170,8 +268,8 @@ describe("toRuns", () => {
 	it("gathers prompts sent within minutes of each other", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				prompt({ id: "local-1", createdAt:0 }),
-				prompt({ id: "local-2", createdAt:60_000 }),
+				prompt({ id: "local-1", createdAt: 0 }),
+				prompt({ id: "local-2", createdAt: 60_000 }),
 			]),
 		)
 
@@ -181,8 +279,8 @@ describe("toRuns", () => {
 	it("opens a new block after a long pause", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				prompt({ id: "local-1", createdAt:0 }),
-				prompt({ id: "local-2", createdAt:6 * 60_000 }),
+				prompt({ id: "local-1", createdAt: 0 }),
+				prompt({ id: "local-2", createdAt: 6 * 60_000 }),
 			]),
 		)
 
@@ -192,9 +290,9 @@ describe("toRuns", () => {
 	it("holds a long burst together while every pause stays short", () => {
 		const runs = toRuns(
 			toTranscriptRows([
-				prompt({ id: "local-1", createdAt:0 }),
-				prompt({ id: "local-2", createdAt:4 * 60_000 }),
-				prompt({ id: "local-3", createdAt:8 * 60_000 }),
+				prompt({ id: "local-1", createdAt: 0 }),
+				prompt({ id: "local-2", createdAt: 4 * 60_000 }),
+				prompt({ id: "local-3", createdAt: 8 * 60_000 }),
 			]),
 		)
 
@@ -280,9 +378,9 @@ describe("sidebarActivityFor", () => {
 	})
 
 	it("stays awake for every stage of a busy turn", () => {
-		expect(sidebarActivityFor(chatState({ turn: "submitting" })).isWorking).toBe(
-			true,
-		)
+		expect(
+			sidebarActivityFor(chatState({ turn: "submitting" })).isWorking,
+		).toBe(true)
 		expect(sidebarActivityFor(chatState({ turn: "running" })).isWorking).toBe(
 			true,
 		)
@@ -349,7 +447,9 @@ describe("lastAssistantTextFor", () => {
 
 		expect(lastAssistantTextFor(state)).toBe("Done")
 		expect(
-			lastAssistantTextFor(chatState({ messages: [message({ content: "Wri" })] })),
+			lastAssistantTextFor(
+				chatState({ messages: [message({ content: "Wri" })] }),
+			),
 		).toBeUndefined()
 	})
 
