@@ -2,6 +2,7 @@ import type { BotSettingsValue } from "@workspace/ui/components/bot-settings-pan
 
 import { newBotIdentity, toIdentity } from "./bot-settings"
 
+import { createQueue } from "../queue"
 import type { Bot } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -81,7 +82,7 @@ export const createRosterController = (
 	 * while the first read was in flight would otherwise be overwritten by an answer
 	 * that predates it, and two writes on one bot would land in whichever order the
 	 * host happened to answer. */
-	let calls: Promise<unknown> = Promise.resolve()
+	const enqueue = createQueue()
 
 	/** The bots a write loop is running for, and the newest value waiting behind each
 	 * one. Typing is faster than a round trip: only the last value of a burst is
@@ -98,15 +99,6 @@ export const createRosterController = (
 	const set = (fields: Partial<RosterState>) => {
 		state = { ...state, ...fields }
 		publish()
-	}
-
-	const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
-		const result = calls.then(operation)
-		calls = result.then(
-			() => undefined,
-			() => undefined,
-		)
-		return result
 	}
 
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)

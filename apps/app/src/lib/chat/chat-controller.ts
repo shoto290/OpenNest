@@ -19,6 +19,7 @@ import {
 	rotationReasonForStartFailure,
 } from "./rotation"
 
+import { createQueue } from "../queue"
 import type {
 	ChatMessage,
 	CheckReport,
@@ -172,7 +173,7 @@ export function createChatController(
 	/** Every write in the order it was issued. Two deltas racing on the same row
 	 * would concatenate in whichever order the host answered, which is the one
 	 * thing an append-only column cannot be asked to forgive. */
-	let writes: Promise<unknown> = Promise.resolve()
+	const enqueue = createQueue()
 
 	const dispatch = (action: ChatAction) => {
 		const next = chatReducer(state, action)
@@ -196,15 +197,6 @@ export function createChatController(
 
 	const reportStore = (reason: unknown) =>
 		announce({ type: "failed", error: toStoreError(reason) })
-
-	const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
-		const result = writes.then(operation)
-		writes = result.then(
-			() => undefined,
-			() => undefined,
-		)
-		return result
-	}
 
 	/** A write and what it lets the reader see, in that order. `shown` runs only
 	 * once the store has taken the write, so nothing reaches the screen that a

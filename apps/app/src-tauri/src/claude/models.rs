@@ -191,7 +191,7 @@ impl Candidates {
 	/// Every word the file uses as a tier, learned from the identifiers that are a
 	/// word and versions and nothing else.
 	fn tiers(&self) -> BTreeSet<String> {
-		self.ids.iter().filter_map(|id| declared_tier(id)).collect()
+		self.ids.iter().filter_map(|id| declared_tier(id)).map(str::to_owned).collect()
 	}
 
 	/// The alias tables, told apart from every other list of words by how many of
@@ -255,11 +255,17 @@ fn bare_array(window: &[u8], at: usize) -> Option<(Vec<String>, usize)> {
 	(items.len() >= 2).then_some((items, cursor + 1))
 }
 
+/// A label without the bracketed suffix a long-context variant is spelled with:
+/// `opus[1m]` is the `opus` tier, and it groups and reads as one.
+fn stem(label: &str) -> &str {
+	label.split('[').next().unwrap_or(label)
+}
+
 /// A word that could be an alias: one word, with digits only inside the bracketed
 /// suffix that marks a long-context variant. `opus41` is an internal key for a model
 /// and not something a caller may pass; `opus[1m]` is.
 fn is_bare(token: &str) -> bool {
-	let stem = token.split('[').next().unwrap_or(token);
+	let stem = stem(token);
 	!stem.is_empty()
 		&& !stem.contains('-')
 		&& !stem.contains('.')
@@ -269,7 +275,7 @@ fn is_bare(token: &str) -> bool {
 /// The tier an identifier declares by being nothing but a word and versions. `None`
 /// for everything else, which is most of what a bundle spells `claude-…`: a document
 /// slug, a plugin name, a telemetry key.
-fn declared_tier(id: &str) -> Option<String> {
+fn declared_tier(id: &str) -> Option<&str> {
 	let rest = id.strip_prefix(PREFIX)?;
 	if rest.is_empty() || rest.ends_with('-') {
 		return None;
@@ -282,22 +288,21 @@ fn declared_tier(id: &str) -> Option<String> {
 	if !word.chars().all(|letter| letter.is_ascii_lowercase()) {
 		return None;
 	}
-	let versions: Vec<&&str> =
-		parts.iter().enumerate().filter(|(at, _)| *at != index).map(|(_, part)| part).collect();
-	is_version(&versions).then(|| (*word).to_owned())
+	let versions: Vec<&str> =
+		parts.iter().enumerate().filter(|(at, _)| *at != index).map(|(_, part)| *part).collect();
+	is_version(&versions).then_some(*word)
 }
 
 /// `major`, `major-minor`, and either of those followed by a release date. Two digits
 /// at most per version, exactly eight for a date: it is what keeps a dated slug like
 /// `claude-code-20250219` from declaring `code` a tier.
-fn is_version(parts: &[&&str]) -> bool {
+fn is_version(parts: &[&str]) -> bool {
 	if parts.is_empty() || !parts.iter().all(|part| part.chars().all(|l| l.is_ascii_digit())) {
 		return false;
 	}
 	let versions = match parts.split_last() {
 		Some((last, head)) if last.len() == 8 && !head.is_empty() => head,
-		Some(_) => parts,
-		None => return false,
+		_ => parts,
 	};
 	versions.len() <= 2 && versions.iter().all(|part| (1..=2).contains(&part.len()))
 }
@@ -306,7 +311,7 @@ fn is_version(parts: &[&&str]) -> bool {
 /// sits with the tier it is named after and a bare tier name sits with itself. `None`
 /// is an alias that names no tier at all.
 fn tier_named_by<'a>(tiers: &'a BTreeSet<String>, alias: &str) -> Option<&'a str> {
-	let stem = alias.split('[').next().unwrap_or(alias);
+	let stem = stem(alias);
 	tiers
 		.iter()
 		.filter(|tier| stem.starts_with(tier.as_str()))
@@ -322,19 +327,21 @@ fn tier_of_id<'a>(tiers: &'a BTreeSet<String>, id: &str) -> Option<&'a str> {
 	if rest.ends_with('-') {
 		return None;
 	}
-	let head = rest.split('-').next().unwrap_or(rest);
-	let head = head.split('[').next().unwrap_or(head);
+	let head = stem(rest.split('-').next().unwrap_or(rest));
 	if let Some(tier) = tiers.get(head) {
 		return Some(tier.as_str());
 	}
-	declared_tier(id).and_then(|declared| tiers.get(&declared).map(String::as_str))
+	declared_tier(id).and_then(|declared| tiers.get(declared).map(String::as_str))
 }
 
 /// Where a value sits inside its tier's group: the tier's own alias first, then its
 /// other aliases, then its identifiers newest first — and a dated identifier after
 /// the evergreen one it dates, since the evergreen is the one a bot should usually
 /// be left on.
-fn ordering_key(tier: &str, value: &str) -> (u8, Vec<i64>, usize, String) {
+///
+/// Two values that tie on all of that keep the order they were collected in, which is
+/// sorted: the sort is stable and both sets it draws from are ordered.
+fn ordering_key(tier: &str, value: &str) -> (u8, Vec<i64>, usize) {
 	let is_id = value.starts_with(PREFIX);
 	let rank = match (is_id, value == tier) {
 		(false, true) => 0,
@@ -346,7 +353,7 @@ fn ordering_key(tier: &str, value: &str) -> (u8, Vec<i64>, usize, String) {
 		.filter_map(|part| part.parse::<i64>().ok())
 		.map(|number| -number)
 		.collect();
-	(rank, versions, value.len(), value.to_owned())
+	(rank, versions, value.len())
 }
 
 #[cfg(test)]
