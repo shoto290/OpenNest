@@ -97,7 +97,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. `Delete bot` opens a confirmation this panel owns, and `confirmingDelete` lets a host stand that same dialog up from anywhere else it offers to delete a bot. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight identity poses, `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. An identity pose is a still character: the avatar holds one frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
+					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. `Delete bot` opens a confirmation this panel owns, and `confirmingDelete` lets a host stand that same dialog up from anywhere else it offers to delete a bot. It is open whenever it is mounted: there is no rail to fold to, and closing it is the host unmounting the column, so a reader who put it away gets the whole width back rather than a strip of it. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight identity poses, `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. An identity pose is a still character: the avatar holds one frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
 			},
 		},
 	},
@@ -108,11 +108,10 @@ const meta = preview.meta({
 		onAvatarUpload: fn(),
 		onBrowseWorkingDirectory: fn(),
 		onDelete: fn(),
-		onCollapsedChange: fn(),
+		onClose: fn(),
 	},
 	argTypes: {
 		working: { control: "boolean" },
-		defaultCollapsed: { control: "boolean" },
 	},
 	render: (args) => <PanelHost {...args} />,
 	decorators: [
@@ -214,28 +213,22 @@ export const StillUntilWorking = meta.story({
 	},
 })
 
-export const Collapsed = meta.story({
-	args: { defaultCollapsed: true },
+export const Closing = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this when the reader wants the chat to have the width. The panel folds to a rail that keeps only the avatar and the affordance to bring it back; the fields unmount rather than being hidden, so nothing in the rail is tabbable by accident. The play here walks the collapse both ways.",
+					"The way out. The panel has no closed state of its own — it does not fold to a rail, and it keeps no avatar anywhere outside itself — so the close button reports the ask and the host unmounts the column. Reach for this to check that closing is one control, that it is reachable by Tab before the fields, and that the panel changes nothing on its own when it is pressed. The reader gets the width back because the column is gone, not because it shrank.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
-		await expect(canvas.queryByLabelText("Name")).not.toBeInTheDocument()
+	play: async ({ args, canvas, userEvent }) => {
+		const close = canvas.getByRole("button", { name: "Close Bot settings" })
 
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Expand Bot settings" }),
-		)
+		await userEvent.click(close)
+		await expect(args.onClose).toHaveBeenCalledTimes(1)
+		// Still whole: what the reader sees is the host's to take away.
 		await expect(canvas.getByLabelText("Name")).toBeVisible()
-
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Collapse Bot settings" }),
-		)
-		await expect(canvas.queryByLabelText("Name")).not.toBeInTheDocument()
 	},
 })
 

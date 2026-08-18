@@ -68,19 +68,18 @@ export function App() {
 	return (
 		<WorkspaceShell
 			defaultOpen
+			// Mounted only while it is open: a closed panel is no column at all, so the
+			// conversation has the whole width and the gear in its header is the way back.
 			panel={
-				selected ? (
+				selected && isEditing ? (
 					<BotSettingsPanel
-						collapsed={!isEditing}
 						confirmingDelete={isConfirmingDelete}
 						models={MODEL_OPTIONS}
 						onAvatarUpload={(file) => {
 							void roster.controller.uploadAvatar(selected.id, file)
 						}}
 						onBrowseWorkingDirectory={browseWorkingDirectory}
-						onCollapsedChange={(collapsed) =>
-							roster.controller.setEditing(!collapsed)
-						}
+						onClose={() => roster.controller.setEditing(false)}
 						onConfirmingDeleteChange={(confirming) => {
 							if (confirming) {
 								roster.controller.askToDelete(selected.id)
@@ -113,7 +112,12 @@ export function App() {
 			}
 		>
 			{selected ? (
-				<ChatScreen bot={selected} chat={chat} />
+				<ChatScreen
+					bot={selected}
+					chat={chat}
+					isSettingsOpen={isEditing}
+					onToggleSettings={() => roster.controller.setEditing(!isEditing)}
+				/>
 			) : (
 				// No bot, so no chat: the roster's create button is the way out of here,
 				// and the header is what keeps the window draggable in the meantime.

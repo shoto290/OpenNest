@@ -7,6 +7,7 @@ import {
 	BotWorking,
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-working"
+import { Button } from "@workspace/ui/components/button"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import { ChatNotice } from "@workspace/ui/components/chat-notice"
@@ -18,6 +19,7 @@ import {
 	UserTurn,
 } from "@workspace/ui/components/chat-turn"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
+import { Icons } from "@workspace/ui/components/icons"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import {
 	ToolApproval,
@@ -206,14 +208,27 @@ const Composer = memo(function Composer({
 	)
 })
 
+/** The bot's settings are not a page of their own, so the way into them is the one
+ * control in the bar above the conversation they belong to. */
+const SETTINGS_LABEL = "Bot settings"
+
 type ChatScreenProps = {
 	/** The bot this conversation belongs to. Its face is the one the replies wear —
 	 * an uploaded picture is not among them: the transcript draws the animal. */
 	bot: Bot
 	chat: Chat
+	/** Whether the settings column stands open beside this one. The gear says so, and
+	 * pressing it is what closes the column again. */
+	isSettingsOpen: boolean
+	onToggleSettings: () => void
 }
 
-export function ChatScreen({ bot, chat }: ChatScreenProps) {
+export function ChatScreen({
+	bot,
+	chat,
+	isSettingsOpen,
+	onToggleSettings,
+}: ChatScreenProps) {
 	const { state, controller } = chat
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
@@ -260,10 +275,22 @@ export function ChatScreen({ bot, chat }: ChatScreenProps) {
 					insetWindowControls
 					data-tauri-drag-region="deep"
 					trailing={
-						<ConnectionStatus
-							state={state.connection}
-							version={state.binaryVersion}
-						/>
+						<>
+							<ConnectionStatus
+								state={state.connection}
+								version={state.binaryVersion}
+							/>
+							<Button
+								aria-expanded={isSettingsOpen}
+								aria-label={SETTINGS_LABEL}
+								onClick={onToggleSettings}
+								size="icon-sm"
+								tooltip={SETTINGS_LABEL}
+								variant="ghost"
+							>
+								<Icons.Settings aria-hidden="true" />
+							</Button>
+						</>
 					}
 				/>
 			}

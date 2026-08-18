@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -17,6 +17,7 @@ import {
 	BotSettingsPanel,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-panel"
+import { Button } from "@workspace/ui/components/button"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import {
 	AssistantTurn,
@@ -93,12 +94,17 @@ const SIDEBAR = (
 	</AnimatedSidebar>
 )
 
-const chat = (leading?: ReactNode) => (
+const chat = (leading?: ReactNode, trailing?: ReactNode) => (
 	<ChatLayout
 		header={
 			<AppHeader
 				leading={leading}
-				trailing={<ConnectionStatus state="ready" version="2.1.233" />}
+				trailing={
+					<>
+						<ConnectionStatus state="ready" version="2.1.233" />
+						{trailing}
+					</>
+				}
 			/>
 		}
 		composer={<PromptInput onSubmit={fn()} />}
@@ -116,6 +122,50 @@ const chat = (leading?: ReactNode) => (
 const CHAT = chat()
 
 const CHAT_WITH_TRIGGER = chat(<SidebarToggle />)
+
+const SETTINGS_LABEL = "Bot settings"
+
+const settingsPanel = (onClose: () => void) => (
+	<BotSettingsPanel
+		models={[{ label: "Claude Sonnet", value: "sonnet" }]}
+		onAvatarUpload={fn()}
+		onBrowseWorkingDirectory={fn()}
+		onClose={onClose}
+		onConfirmingDeleteChange={fn()}
+		onDelete={fn()}
+		onValueChange={fn()}
+		value={SETTINGS}
+	/>
+)
+
+/** The composition the desktop app runs. The settings column exists only while it
+ * is open — there is no rail — so the gear that brings it back lives in the
+ * conversation's own bar, where the reader is looking when they want it. */
+const SettingsWorkspace = () => {
+	const [isOpen, setIsOpen] = useState(false)
+
+	return (
+		<WorkspaceShell
+			defaultOpen
+			panel={isOpen ? settingsPanel(() => setIsOpen(false)) : null}
+			sidebar={<AgentSidebar bots={ROSTER} selectedBotId="atlas" />}
+		>
+			{chat(
+				undefined,
+				<Button
+					aria-expanded={isOpen}
+					aria-label={SETTINGS_LABEL}
+					onClick={() => setIsOpen(!isOpen)}
+					size="icon-sm"
+					tooltip={SETTINGS_LABEL}
+					variant="ghost"
+				>
+					<Icons.Settings aria-hidden="true" />
+				</Button>,
+			)}
+		</WorkspaceShell>
+	)
+}
 
 const meta = preview.meta({
 	title: "Layout/WorkspaceShell",
@@ -263,17 +313,7 @@ export const Empty = meta.story({
 export const WithPanel = meta.story({
 	args: {
 		sidebar: <AgentSidebar bots={ROSTER} selectedBotId="atlas" />,
-		panel: (
-			<BotSettingsPanel
-				models={[{ label: "Claude Sonnet", value: "sonnet" }]}
-				onAvatarUpload={fn()}
-				onBrowseWorkingDirectory={fn()}
-				onConfirmingDeleteChange={fn()}
-				onDelete={fn()}
-				onValueChange={fn()}
-				value={SETTINGS}
-			/>
-		),
+		panel: settingsPanel(fn()),
 	},
 	parameters: {
 		// The destructive button the settings panel ends on, and the same open question
@@ -301,5 +341,48 @@ export const WithPanel = meta.story({
 		await expect(settings.getBoundingClientRect().height).toBe(
 			main.getBoundingClientRect().height,
 		)
+	},
+})
+
+export const PanelToggle = meta.story({
+	render: () => <SettingsWorkspace />,
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The settings column coming and going. Closed, it is not a rail and not a strip — it is not there, so the conversation has every pixel to the right of the roster and there is no second bot avatar on the screen beside the one in the list. The gear in the conversation's bar is the only way back in, and it says whether the column is open. Check that opening it takes exactly the panel's width off the conversation and gives it back on close, and that the close button inside the panel and the gear outside it are the same switch. Pick `WithPanel` for the open column measured on its own.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const gear = canvas.getByRole("button", { name: SETTINGS_LABEL })
+		const main = canvas.getByRole("main")
+		const closedWidth = main.getBoundingClientRect().width
+
+		await expect(gear).toHaveAttribute("aria-expanded", "false")
+		await expect(
+			canvas.queryByRole("complementary", { name: SETTINGS_LABEL }),
+		).toBeNull()
+		// The roster draws the only bot on the screen while the settings are away.
+		await expect(
+			canvasElement.querySelectorAll('[data-slot="bot-identity-preview"]'),
+		).toHaveLength(0)
+
+		await userEvent.click(gear)
+		const panel = canvas.getByRole("complementary", { name: SETTINGS_LABEL })
+		await expect(gear).toHaveAttribute("aria-expanded", "true")
+		await expect(main.getBoundingClientRect().width).toBeCloseTo(
+			closedWidth - panel.getBoundingClientRect().width,
+			0,
+		)
+
+		await userEvent.click(
+			within(panel).getByRole("button", { name: `Close ${SETTINGS_LABEL}` }),
+		)
+		await expect(
+			canvas.queryByRole("complementary", { name: SETTINGS_LABEL }),
+		).toBeNull()
+		await expect(main.getBoundingClientRect().width).toBeCloseTo(closedWidth, 0)
 	},
 })
