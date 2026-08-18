@@ -343,7 +343,9 @@ export const WithPanel = meta.story({
 		)
 		// The row is what makes a column full height, so the panel reaches the bottom
 		// of the window rather than the bottom of its own content.
-		await expect(settings.getBoundingClientRect().height).toBe(window.innerHeight)
+		await expect(settings.getBoundingClientRect().height).toBe(
+			window.innerHeight,
+		)
 		await expect(settings.getBoundingClientRect().bottom).toBe(
 			window.innerHeight,
 		)
@@ -377,9 +379,10 @@ export const PanelToggle = meta.story({
 
 		await userEvent.click(gear)
 		const panel = canvas.getByRole("complementary", { name: SETTINGS_LABEL })
+		const panelWidth = panel.getBoundingClientRect().width
 		await expect(gear).toHaveAttribute("aria-expanded", "true")
 		await expect(main.getBoundingClientRect().width).toBeCloseTo(
-			closedWidth - panel.getBoundingClientRect().width,
+			closedWidth - panelWidth,
 			0,
 		)
 
@@ -390,5 +393,26 @@ export const PanelToggle = meta.story({
 			canvas.queryByRole("complementary", { name: SETTINGS_LABEL }),
 		).toBeNull()
 		await expect(main.getBoundingClientRect().width).toBeCloseTo(closedWidth, 0)
+
+		// Reduced motion, which is what this browser reports: the column is at its full
+		// width in the frame it is asked for, with nothing to wait out.
+		await userEvent.click(gear)
+		const instant = canvas.getByRole("complementary", { name: SETTINGS_LABEL })
+		await expect(instant.getBoundingClientRect().width).toBe(panelWidth)
+
+		// And the width is not a debt that accumulates. A dozen toggles later the
+		// conversation is exactly as wide as it was before the first one, with no
+		// exiting column left in the tree holding a sliver of it.
+		for (const _ of Array.from({ length: 6 })) {
+			await userEvent.click(gear)
+			await userEvent.click(gear)
+		}
+		await userEvent.click(gear)
+		await waitFor(async () => {
+			await expect(
+				canvasElement.querySelectorAll('[data-slot="bot-settings-panel"]'),
+			).toHaveLength(0)
+			await expect(main.getBoundingClientRect().width).toBe(closedWidth)
+		})
 	},
 })
