@@ -1,4 +1,4 @@
-import { expect, spyOn } from "storybook/test"
+import { expect, fn, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Markdown } from "@workspace/ui/components/markdown"
@@ -109,6 +109,76 @@ export const summarise = async (id: string) => {
 }
 \`\`\``
 
+const CODE_RUST = `\`\`\`rust
+pub fn summarise(nest: &Nest) -> Summary {
+	let occupants = nest.occupants.iter().filter(|o| o.active).count();
+	Summary { id: nest.id.clone(), occupants }
+}
+\`\`\``
+
+const CODE_PYTHON = `\`\`\`python
+def summarise(nest_id: str) -> dict:
+	nest = read_nest(nest_id)
+	return {"id": nest.id, "occupants": len(nest.occupants)}
+\`\`\``
+
+const CODE_CSS = `\`\`\`css
+.nest-card {
+	display: grid;
+	gap: 0.5rem;
+	color: var(--foreground);
+}
+\`\`\``
+
+const CODE_HTML = `\`\`\`html
+<article class="nest-card">
+	<h2>Nest 42</h2>
+	<p>3 occupants</p>
+</article>
+\`\`\``
+
+const CODE_YAML = `\`\`\`yaml
+nest: nest_42
+occupants: 3
+archived: false
+\`\`\``
+
+const CODE_MARKDOWN = `\`\`\`md
+# Nest 42
+
+- 3 occupants
+- archived: **no**
+\`\`\``
+
+const CODE_UNKNOWN = `\`\`\`elixir
+def summarise(nest_id) do
+	nest = Nest.read(nest_id)
+	%{id: nest.id, occupants: length(nest.occupants)}
+end
+\`\`\`
+
+A fence with no label at all:
+
+\`\`\`
+nest_42 archived at 18:04
+\`\`\``
+
+const CODE_COPY_SOURCE = `bun run test --project=unit\n\n\tbun run lint`
+
+const CODE_COPY = `\`\`\`bash\n${CODE_COPY_SOURCE}\n\`\`\``
+
+const CODE_LONG_SOURCE = `\`\`\`ts
+${Array.from(
+	{ length: 240 },
+	(_, index) =>
+		`export const nest${index} = { id: "nest_${index}", occupants: ${index % 7} }`,
+).join("\n")}
+\`\`\``
+
+const CODE_LONG_LINE = `\`\`\`ts
+const migration = { table: "nest_occupants", columns: ["id", "nest_id", "display_name", "joined_at", "left_at", "role"], indexes: ["nest_id_joined_at"] }
+\`\`\``
+
 const THEMATIC_BREAK = `The first pass finished.
 
 ---
@@ -195,6 +265,13 @@ const fragmentOf = (reference: HTMLElement) =>
 const definitionFor = (canvasElement: HTMLElement, fragment: string) =>
 	canvasElement.querySelector(`[id="${fragment}"]`)
 
+/** What the code viewport leaves between its own edge and the copy control. */
+const clearanceOf = (viewport: HTMLElement, copy: HTMLElement) =>
+	copy.getBoundingClientRect().left - viewport.getBoundingClientRect().right
+
+const paintedTokens = (fence: HTMLElement) =>
+	fence.querySelectorAll("[style*='--code-token-light']").length
+
 const meta = preview.meta({
 	title: "AI/Markdown",
 	component: Markdown,
@@ -202,7 +279,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. Tables are framed, scrollable and copyable through `markdown/table.tsx`; syntax highlighting in the flow and link cards are still deliberately absent, each waiting on its own renderer module at `markdown/code.tsx` and `markdown/link.tsx`.",
+					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`; link cards are the one construction still deliberately absent, waiting in their own renderer module at `markdown/link.tsx`.",
 			},
 		},
 	},
@@ -438,9 +515,175 @@ export const CodeFence = meta.story({
 		docs: {
 			description: {
 				story:
-					"Inline code next to a fenced block. The fence keeps its `language-ts` class so the highlighting ticket can pick it up in `markdown/code.tsx`; today it renders monochrome. Check that a long line scrolls inside the block instead of stretching the column, and that the code inside the fence drops the inline chip background.",
+					"Inline code next to a fenced block. The fence label picks the grammar and the block is tokenised through the same bundled highlighter the standalone `CodeBlock` uses — no grammar is fetched, so the same source always paints the same colours. Check that the tokens read in both themes, that inline code keeps its chip while the fence drops it, and that the code viewport stops before the copy control instead of running under it.",
 			},
 		},
+	},
+})
+
+export const CodeFenceRust = meta.story({
+	args: { children: CODE_RUST },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Rust, the language of the Tauri host. Check that `pub fn`, the borrow and the closure are coloured apart from the identifiers, and that the sample keeps its shape at chat size.",
+			},
+		},
+	},
+})
+
+export const CodeFencePython = meta.story({
+	args: { children: CODE_PYTHON },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Python, the most common fence a model reaches for after TypeScript. Check that the keyword, the type hints and the dict literal separate, and that the indentation survives the token spans.",
+			},
+		},
+	},
+})
+
+export const CodeFenceCss = meta.story({
+	args: { children: CODE_CSS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"CSS, the language a bot answers styling questions in. Check that the selector, the properties and the `var()` reference are told apart, so a custom property is readable at a glance.",
+			},
+		},
+	},
+})
+
+export const CodeFenceHtml = meta.story({
+	args: { children: CODE_HTML },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Markup inside a fence — the case where highlighting and sanitizing meet. The tags are code, never elements: check that the snippet renders as text with coloured tags and attributes, and that nothing in it reaches the DOM as markup.",
+			},
+		},
+	},
+})
+
+export const CodeFenceYaml = meta.story({
+	args: { children: CODE_YAML },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"YAML, the shape a config answer takes. Check that keys, string values and booleans separate, and that the two-space rhythm of the source is preserved.",
+			},
+		},
+	},
+})
+
+export const CodeFenceMarkdown = meta.story({
+	args: { children: CODE_MARKDOWN },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Markdown inside markdown, written with the `md` alias. Check that the fence shows the source — heading marker, list markers and the literal asterisks — instead of rendering it as a heading and a list.",
+			},
+		},
+	},
+})
+
+export const CodeFenceUnknownLanguage = meta.story({
+	args: { children: CODE_UNKNOWN },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A fence for a grammar we do not bundle. Check that the block renders the source verbatim in the foreground colour instead of blanking or throwing on the missing grammar — a fence with no label at all lands here too.",
+			},
+		},
+	},
+})
+
+export const CodeFenceOverflow = meta.story({
+	args: { children: CODE_LONG_LINE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One line far wider than the bubble. Check that the fence scrolls on its own instead of stretching the bubble, that the scroll region takes focus from the keyboard with a visible ring, and that arrow keys move it.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvas, userEvent }) => {
+		const fence = canvas.getByRole("group", { name: /^Code snippet/ })
+		const copy = canvas.getByRole("button", { name: "Copy code" })
+		const bubble = fence.closest("[data-slot='message-bubble']")
+		const resting = getComputedStyle(fence).boxShadow
+
+		await expect(fence.scrollWidth).toBeGreaterThan(fence.clientWidth)
+		await expect(bubble?.scrollWidth).toBe(bubble?.clientWidth)
+		await expect(clearanceOf(fence, copy)).toBeGreaterThan(0)
+
+		fence.scrollLeft = fence.scrollWidth
+
+		await expect(fence.scrollLeft).toBeGreaterThan(0)
+		await expect(clearanceOf(fence, copy)).toBeGreaterThan(0)
+
+		await userEvent.tab()
+
+		await expect(fence).toHaveFocus()
+		await expect(getComputedStyle(fence).boxShadow).not.toBe(resting)
+	},
+})
+
+export const CodeFenceCopy = meta.story({
+	args: { children: CODE_COPY },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The copy affordance a fence carries, driven here through a stubbed clipboard so the story never touches the real one. The source keeps a blank line and a tab so the assertion is byte-level: check that the button is reachable by keyboard, that its name swaps to Copied, and that what leaves is exactly what the author typed — not the highlighted markup, not a retabbed line, not the trailing newline the parser adds.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const writeText = fn()
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText },
+		})
+
+		await userEvent.click(canvas.getByRole("button", { name: "Copy code" }))
+		await canvas.findByRole("button", { name: "Copied" })
+		Reflect.deleteProperty(navigator, "clipboard")
+
+		await expect(writeText).toHaveBeenCalledWith(CODE_COPY_SOURCE)
+	},
+})
+
+export const CodeFenceLongSource = meta.story({
+	args: { children: CODE_LONG_SOURCE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"240 lines — past the budget where tokenising the whole fence would hold the first frame. Such a fence paints its source text first and takes its colours on the pass after, so a long answer appears at once instead of after the highlighter. Check that every line is there from the start and that the colours land without the block jumping.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const fence = canvas.getByRole("group", { name: /^Code snippet/ })
+
+		await expect(fence.textContent).toContain("nest239")
+		await waitFor(() => expect(paintedTokens(fence)).toBeGreaterThan(0))
 	},
 })
 

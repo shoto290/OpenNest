@@ -2,22 +2,12 @@ import {
 	ANIMALS,
 	type BotAvatarAnimal,
 } from "@workspace/ui/components/bot-avatar-animals"
-import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
+import {
+	BOT_IDENTITY_POSES,
+	type BotIdentityPose,
+} from "@workspace/ui/components/bot-identity-avatar"
 
 const BOT_IDENTITY_ANIMALS = Object.keys(ANIMALS) as BotAvatarAnimal[]
-
-const BOT_IDENTITY_POSES = [
-	"idle",
-	"happy",
-	"curious",
-	"proud",
-	"shy",
-	"playful",
-	"bored",
-	"sleeping",
-] as const satisfies readonly BotAvatarState[]
-
-type BotIdentityPose = (typeof BOT_IDENTITY_POSES)[number]
 
 type BotIdentity = {
 	animal: BotAvatarAnimal

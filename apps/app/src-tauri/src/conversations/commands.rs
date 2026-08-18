@@ -51,18 +51,13 @@ async fn sweep_avatars(repository: &ConversationsRepository, dir: Option<&Path>)
 	}
 }
 
+/// Every bot on the record, and nothing is seeded on the way: a launch reads the
+/// roster it finds, so a user who deleted their last bot opens on none rather than
+/// on one this build wrote back. Creating one is the only way a bot appears.
+///
 /// Every command answering a bot resolves the avatar directory first and projects
 /// through it — see [`Bot::of`]. A path is a column until something says it names a
 /// file inside that one directory, and that is the only place it is said.
-#[tauri::command]
-pub async fn conversation_default_bot<R: Runtime>(
-	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
-) -> Result<Bot, TranscriptStoreError> {
-	let stored = ready(&state)?.conversations().ensure_default_bot().await?;
-	Ok(Bot::of(stored, avatars::dir(&app).as_deref()))
-}
-
 #[tauri::command]
 pub async fn conversation_bots<R: Runtime>(
 	app: AppHandle<R>,

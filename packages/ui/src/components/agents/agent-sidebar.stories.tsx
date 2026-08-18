@@ -21,6 +21,10 @@ const NARROW_VIEWPORT = {
 	narrow: { name: "Narrow", styles: { width: "800px", height: "900px" } },
 }
 
+/** A picture the reader uploaded, inline so the story needs no host to load it. */
+const UPLOADED_IMAGE =
+	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
+
 const ROSTER: AgentSidebarBot[] = [
 	{
 		id: "atlas",
@@ -237,7 +241,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. Edit and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
+					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. A bot wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Edit and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
 			},
 		},
 	},
@@ -294,6 +298,49 @@ export const Roster = meta.story({
 		await expect(args.onSelectBot).toHaveBeenCalledWith("beacon")
 
 		await expect(rowButton(rows[0])).toHaveAttribute("aria-haspopup", "menu")
+	},
+})
+
+export const CreateLabel = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The one label in this panel that cannot open upwards. The create control is pinned in the region that clears the window controls, against the top of the window, so a label above it would be drawn off the screen — it opens under the button instead, on hover and on focus alike. Check both, and check that the bubble sits inside the window on every edge: a label a reader cannot read is the same as no label.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const create = canvas.getByRole("button", { name: "New bot" })
+		const label = () => document.body.querySelector('[role="tooltip"]')
+
+		const opensBelow = async () => {
+			await waitFor(async () => {
+				await expect(label()).toBeVisible()
+				await expect(label()).toHaveTextContent("New bot")
+			})
+			const bubble = label()?.getBoundingClientRect()
+			const button = create.getBoundingClientRect()
+			if (!bubble) throw new Error("The create control drew no label")
+
+			await expect(bubble.top).toBeGreaterThanOrEqual(button.bottom)
+			await expect(bubble.top).toBeGreaterThanOrEqual(0)
+			await expect(bubble.left).toBeGreaterThanOrEqual(0)
+			await expect(bubble.bottom).toBeLessThanOrEqual(window.innerHeight)
+			await expect(bubble.right).toBeLessThanOrEqual(window.innerWidth)
+		}
+
+		await userEvent.hover(create)
+		await opensBelow()
+
+		await userEvent.unhover(create)
+		await waitFor(async () => expect(label()).toBeNull())
+
+		// The same label, reached the other way: Tab is what a reader who never
+		// touches the mouse gets, and it must not be drawn where hover was not.
+		await userEvent.tab()
+		await expect(create).toHaveFocus()
+		await opensBelow()
 	},
 })
 
@@ -401,6 +448,48 @@ export const Selected = meta.story({
 	},
 })
 
+export const UploadedPictures = meta.story({
+	args: {
+		bots: [
+			{ ...ROSTER[0], image: UPLOADED_IMAGE },
+			{
+				...ROSTER[2],
+				image: UPLOADED_IMAGE,
+				status: "working",
+				pose: "writing",
+			},
+			ROSTER[1],
+		],
+		selectedBotId: "atlas",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two bots wearing a picture their reader uploaded, beside one wearing its animal. A picture is a still image whatever the bot is doing, so the row that is running says so with its activity dot and its message line rather than by moving — and it lands in the same slot as a drawing, so the names and the timestamps stay on the column the rest of the roster holds. Check that a row with a picture draws no animal at all, and that the picture is decorative: the row is already named by its own text. Pick `Identities` for the animals a bot wears when it has no picture.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+		const [wearing, running, drawn] = rows
+
+		// Queried off the DOM rather than by role: the picture says nothing a screen
+		// reader needs, so it is hidden from the tree the roles are read from.
+		await expect(wearing.querySelector("img")).toHaveAttribute(
+			"src",
+			UPLOADED_IMAGE,
+		)
+		await expect(wearing.querySelector("svg")).toBeNull()
+		await expect(drawn.querySelector("img")).toBeNull()
+		await expect(within(drawn).getByRole("img")).toBeVisible()
+		await expect(
+			running.querySelector('[data-slot="bot-activity-dot"]'),
+		).not.toBeNull()
+		await expectAlignedRows(rows)
+	},
+})
+
 export const Identities = meta.story({
 	args: {
 		bots: IDENTITY_ROSTER,
@@ -427,7 +516,7 @@ export const Identities = meta.story({
 		}
 
 		await expect(
-			canvasElement.querySelectorAll('[data-slot="roster-row-activity"]'),
+			canvasElement.querySelectorAll('[data-slot="bot-activity-dot"]'),
 		).toHaveLength(0)
 		await expect(
 			canvas.getByRole("complementary", { name: "Conversations" }),
@@ -461,18 +550,20 @@ export const Working = meta.story({
 
 		const running = rowFor(canvasElement, "Cinder")
 		await expect(
-			running.querySelector('[data-slot="roster-row-activity"]'),
+			running.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
 		await expect(slotIn(running, "roster-row-preview")).toHaveTextContent(
 			"writing…",
 		)
+		// Cinder's own dog is what performs the work. A run that drew the engine's
+		// default animal would put a different bot in the row than the reader chose.
 		await expect(
-			within(running).getByRole("img", { name: /writing$/ }),
+			within(running).getByRole("img", { name: "Bot avatar dog, writing" }),
 		).toBeVisible()
 
 		const resting = rowFor(canvasElement, "Ember")
 		await expect(
-			resting.querySelector('[data-slot="roster-row-activity"]'),
+			resting.querySelector('[data-slot="bot-activity-dot"]'),
 		).toBeNull()
 		await expect(
 			within(resting).getByRole("img", { name: /shy$/ }),
@@ -526,7 +617,7 @@ export const PermissionPending = meta.story({
 			"waiting…",
 		)
 		await expect(
-			row.querySelector('[data-slot="roster-row-activity"]'),
+			row.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
 
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
@@ -777,7 +868,7 @@ export const ReducedMotion = meta.story({
 		const row = rowFor(canvasElement, "Cinder")
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
 		await expect(
-			row.querySelector('[data-slot="roster-row-activity"]'),
+			row.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Cinder selected, working",

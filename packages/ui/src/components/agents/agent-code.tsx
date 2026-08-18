@@ -4,7 +4,11 @@
 import { Fragment } from "react"
 
 import { CodeLine } from "@workspace/ui/components/code-block"
-import { type CodeLanguage, highlightCode } from "@workspace/ui/lib/code-highlight"
+import {
+	type CodeLanguage,
+	highlightCode,
+	toCodeLines,
+} from "@workspace/ui/lib/code-highlight"
 import { cn } from "@workspace/ui/lib/utils"
 
 export type AgentCodeLanguage = CodeLanguage
@@ -20,13 +24,7 @@ export function AgentCode({
 	language = "bash",
 	className,
 }: AgentCodeProps) {
-	const tokens = highlightCode(code, language)
-	let offset = 0
-	const lines = code.split("\n").map((content) => {
-		const line = { content, offset }
-		offset += content.length + 1
-		return line
-	})
+	const lines = toCodeLines(code, highlightCode(code, language))
 
 	return (
 		<pre
@@ -38,7 +36,7 @@ export function AgentCode({
 			<code>
 				{lines.map((line, index) => (
 					<Fragment key={line.offset}>
-						<CodeLine content={line.content} tokens={tokens[index]} />
+						<CodeLine content={line.content} tokens={line.tokens} />
 						{index < lines.length - 1 ? "\n" : null}
 					</Fragment>
 				))}

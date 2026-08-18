@@ -1,7 +1,10 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
-import { Tooltip } from "@workspace/ui/components/motion/tooltip"
+import {
+	Tooltip,
+	type TooltipProps,
+} from "@workspace/ui/components/motion/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 
 const buttonVariants = cva(
@@ -44,6 +47,10 @@ type ButtonProps = ButtonPrimitive.Props &
 		/** Label shown on hover and focus. Pair it with `aria-label` on an
 		 * icon-only button: a tooltip describes, it does not name. */
 		tooltip?: string
+		/** Which side of the button the label opens on. Defaults to above it, which is
+		 * wrong for a control pinned to the top of a window: there is nothing above it
+		 * to open into. */
+		tooltipSide?: TooltipProps["side"]
 	}
 
 function Button({
@@ -51,6 +58,7 @@ function Button({
 	variant = "default",
 	size = "default",
 	tooltip,
+	tooltipSide,
 	...props
 }: ButtonProps) {
 	const button = (
@@ -63,7 +71,11 @@ function Button({
 
 	if (!tooltip) return button
 
-	return <Tooltip content={tooltip}>{button}</Tooltip>
+	return (
+		<Tooltip content={tooltip} side={tooltipSide}>
+			{button}
+		</Tooltip>
+	)
 }
 
 export { Button, buttonVariants }

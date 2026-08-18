@@ -15,8 +15,10 @@ import type { TranscriptPort } from "./transcript-port"
  * store stay interchangeable. An append answers with the `seq` the store gave the
  * row: the caller never picks its own place in the transcript. */
 export type TranscriptStore = TranscriptPort & {
-	defaultBot: () => Promise<Bot>
-	/** Every bot on the record, oldest first. */
+	/** Every bot on the record, oldest first, and nothing seeded on the way: a
+	 * launch opens on the roster it finds, so an empty answer is a reader who owns
+	 * no bot rather than one the store owes them. `createBot` is the only reason a
+	 * bot exists. */
 	bots: () => Promise<Bot[]>
 	/** A bot and the chat it will be spoken to in, written as one unit: what comes
 	 * back is a thread the caller can open straight away. */
