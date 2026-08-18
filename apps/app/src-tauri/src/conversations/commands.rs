@@ -44,9 +44,9 @@ pub async fn conversation_bots(
 	Ok(ready(&state)?.conversations().bots().await?.into_iter().map(Into::into).collect())
 }
 
-/// A bot and the chat it will be spoken to in, written as one unit, so what comes
-/// back is a bot the frontend can open immediately rather than one it has to seat
-/// in a second call.
+/// A bot and the chat it will be spoken to in, written as one unit. The chat is
+/// not in the answer — a caller asks for it the way every other caller does, and
+/// finds the one this write already seated rather than creating it.
 ///
 /// A word outside a closed vocabulary is refused before this runs: `model`,
 /// `avatarAnimal` and `avatarPose` each hold a fixed set, and anything else fails

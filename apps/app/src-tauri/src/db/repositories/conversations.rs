@@ -340,7 +340,7 @@ impl ConversationsRepository {
 	/// order both times.
 	pub async fn bots(&self) -> Result<Vec<Bot>, DatabaseError> {
 		self.call(|connection| {
-			let mut statement = connection.prepare(SELECT_BOTS)?;
+			let mut statement = connection.prepare_cached(SELECT_BOTS)?;
 			let rows = statement.query_map([], bot)?;
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 		})
@@ -351,7 +351,7 @@ impl ConversationsRepository {
 	/// thread is a row the product has nowhere to show, so the two land as one unit
 	/// or neither does.
 	pub async fn create_bot(&self, identity: BotIdentity) -> Result<Bot, ConversationError> {
-		self.call_mut(move |connection| Ok(created_bot(connection, identity))).await?
+		self.call_mut(move |connection| Ok(created_bot(connection, &identity))).await?
 	}
 
 	/// Who the bot is, replaced whole — see [`BotIdentity`]. What it was told and
@@ -505,7 +505,7 @@ fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, Conv
 /// seated exactly the way the launch seats the one the app ships with.
 fn created_bot(
 	connection: &mut Connection,
-	identity: BotIdentity,
+	identity: &BotIdentity,
 ) -> Result<Bot, ConversationError> {
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
@@ -556,9 +556,7 @@ fn updated_bot(
 			identity.working_dir,
 		],
 	)?;
-	if written == 0 {
-		return Err(ConversationError::UnknownBot { id: id.to_owned() });
-	}
+	refuse_if_untouched(written, id)?;
 	let stored = transaction.query_row(SELECT_BOT, [id], bot)?;
 	transaction.commit()?;
 	Ok(stored)
@@ -583,11 +581,19 @@ fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), Conversation
 		[id],
 	)?;
 	let deleted = transaction.execute("DELETE FROM bots WHERE id = ?1", [id])?;
-	if deleted == 0 {
-		return Err(ConversationError::UnknownBot { id: id.to_owned() });
-	}
+	refuse_if_untouched(deleted, id)?;
 	transaction.commit()?;
 	Ok(())
+}
+
+/// What a write that matched no row means, spelled once for the two that can
+/// meet it — see [`ConversationError::UnknownBot`]. Called inside the
+/// transaction, so the refusal takes the rest of the write back with it.
+fn refuse_if_untouched(rows: usize, id: &str) -> Result<(), ConversationError> {
+	match rows {
+		0 => Err(ConversationError::UnknownBot { id: id.to_owned() }),
+		_ => Ok(()),
+	}
 }
 
 /// The only way the default bot is written, and `INSERT OR IGNORE` is the whole

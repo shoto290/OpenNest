@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
-	BotIdentity,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -14,7 +13,7 @@ import {
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptPage,
 } from "./transcript-contract"
-import { CONVERSATION, message } from "./transcript-fixtures"
+import { botIdentity, CONVERSATION, message } from "./transcript-fixtures"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
@@ -61,16 +60,7 @@ type WriteCase = {
 	call: [command: string, args?: Record<string, unknown>]
 }
 
-const IDENTITY: BotIdentity = {
-	name: "Nyx",
-	title: "Reviewer",
-	description: "Reads a diff and says what it would change.",
-	model: "opus",
-	avatarAnimal: "owl",
-	avatarPose: "curious",
-	avatarImagePath: null,
-	workingDir: "/work/opennest",
-}
+const IDENTITY = botIdentity({ workingDir: "/work/opennest" })
 
 const WRITES: WriteCase[] = [
 	{

@@ -4,12 +4,8 @@ import {
 	createFakeTranscriptStore,
 	FAKE_CHAT_ID,
 } from "./fake-transcript-store"
-import type {
-	BotIdentity,
-	NewAssistantMessage,
-	NewUserMessage,
-} from "./store-contract"
-import { message } from "./transcript-fixtures"
+import type { NewAssistantMessage, NewUserMessage } from "./store-contract"
+import { botIdentity, message } from "./transcript-fixtures"
 
 const TURN = { id: "t-1", conversationId: FAKE_CHAT_ID, startedAt: 1 }
 
@@ -43,17 +39,6 @@ const contentOf = async (
 /** The fake stands in for the host in every controller test, so the rules it is
  * trusted to hold are asserted here rather than assumed. Each one mirrors a rule
  * `messages.rs` holds inside the transaction that writes it. */
-const IDENTITY: BotIdentity = {
-	name: "Nyx",
-	title: "Reviewer",
-	description: "Reads a diff and says what it would change.",
-	model: "opus",
-	avatarAnimal: "owl",
-	avatarPose: "curious",
-	avatarImagePath: null,
-	workingDir: null,
-}
-
 describe("createFakeTranscriptStore", () => {
 	it("answers a replayed write with the place it already gave the row", async () => {
 		const store = createFakeTranscriptStore()
@@ -150,7 +135,7 @@ describe("createFakeTranscriptStore", () => {
 	it("lists the bot it ships with, then the ones it is told to make", async () => {
 		const store = createFakeTranscriptStore()
 
-		const created = await store.createBot(IDENTITY)
+		const created = await store.createBot(botIdentity())
 
 		expect((await store.bots()).map((bot) => bot.id)).toEqual([
 			"default",
@@ -163,14 +148,12 @@ describe("createFakeTranscriptStore", () => {
 
 	it("replaces who a bot is and leaves its id and its moment alone", async () => {
 		const store = createFakeTranscriptStore()
-		const created = await store.createBot(IDENTITY)
+		const created = await store.createBot(botIdentity())
 
-		const updated = await store.updateBot(created.id, {
-			...IDENTITY,
-			name: "Ada",
-			model: "haiku",
-			avatarPose: "sleeping",
-		})
+		const updated = await store.updateBot(
+			created.id,
+			botIdentity({ name: "Ada", model: "haiku", avatarPose: "sleeping" }),
+		)
 
 		expect(updated.id).toBe(created.id)
 		expect(updated.createdAt).toBe(created.createdAt)
@@ -181,14 +164,14 @@ describe("createFakeTranscriptStore", () => {
 
 	it("refuses a write on a bot it no longer holds", async () => {
 		const store = createFakeTranscriptStore()
-		const created = await store.createBot(IDENTITY)
+		const created = await store.createBot(botIdentity())
 		await store.deleteBot(created.id)
 
 		await expect(store.deleteBot(created.id)).rejects.toEqual({
 			kind: "unknownBot",
 			id: created.id,
 		})
-		await expect(store.updateBot(created.id, IDENTITY)).rejects.toEqual({
+		await expect(store.updateBot(created.id, botIdentity())).rejects.toEqual({
 			kind: "unknownBot",
 			id: created.id,
 		})
