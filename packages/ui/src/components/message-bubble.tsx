@@ -17,6 +17,7 @@ import {
 
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Icons } from "@workspace/ui/components/icons"
+import { MARKDOWN_PROSE_CLASS } from "@workspace/ui/components/markdown/prose"
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
@@ -138,7 +139,7 @@ function bubbleContentClass(
 ) {
 	return cn(
 		"relative z-0 min-w-9 max-w-full break-words rounded-2xl px-3.5 py-2.5 text-sm leading-6 text-foreground",
-		"[&_a]:font-medium [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:bg-background/60 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p+p]:mt-2 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-background/60 [&_pre]:p-3 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5",
+		MARKDOWN_PROSE_CLASS,
 		variant === "solid" && "text-primary-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
 		variant === "danger" && "text-destructive",
