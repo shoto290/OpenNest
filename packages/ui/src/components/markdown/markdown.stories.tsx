@@ -194,6 +194,34 @@ const AUTOLINKS = `Docs live at https://opennest.dev and issues go to nest@openn
 
 An explicit [link](https://opennest.dev/changelog) reads the same.`
 
+const DESTINATIONS = `Every link carries where it goes: [the changelog](https://opennest.dev/changelog), [our roadmap](https://www.opennest.dev/roadmap), and a URL typed bare, https://opennest.dev/docs.
+
+Mail stays with the reader: nest@opennest.dev.`
+
+const DECEPTIVE_LINKS = `Userinfo hides the host: [https://opennest.dev@evil.test/reports](https://opennest.dev@evil.test/reports).
+
+A text with no scheme parses as nothing: [opennest.dev/download](https://evil.test/payload).
+
+A homograph reads as latin: [https://\u043Epennest.dev/login](https://\u043Epennest.dev/login).
+
+Emphasis is an element, not a string: [**https://opennest.dev**](https://evil.test/steal).
+
+A protocol-relative href would move this very window: [https://opennest.dev](//evil.test/steal).
+
+A mailto under a web address opens a draft, not a page: [https://opennest.dev](mailto:steal@evil.test).`
+
+const INERT_SCHEMES = `A scheme this app cannot open is not a link: [join the channel](irc://opennest.dev/nest).
+
+Neither is a path that would resolve against this window: [settings](/settings).
+
+Neither is a script: [looks like a link](javascript:alert('nest')).`
+
+const LONG_URL = `https://opennest.dev/reports/2026/08/nest_42/occupants?include=arrivals%2Cdepartures&sort=timestamp&cursor=eyJvZmZzZXQiOjEyMCwibGltaXQiOjQwfQ&signature=9f2c1ad4e7b8c05a`
+
+const FRAGMENT_LINK = `The counts come from the last sync[^count], and the method sits in the [summary](#summary) closing this answer.
+
+[^count]: Measured on the client, after the cache merge.`
+
 const HOSTILE = `<script>alert("nest")</script>
 
 <style>body { display: none }</style>
@@ -244,7 +272,7 @@ Run \`bun run test\` — docs at https://opennest.dev.
 
 [^1]: nest_43 lost its last occupant.`
 
-const USER_BLOCK = `Run \`bun run test\` before merging — the dedupe now lives in \`useTranscriptSocket\`, next to the cache merge, and not in the store:
+const USER_BLOCK = `Run \`bun run test\` before merging — the dedupe now lives in \`useTranscriptSocket\`, next to the cache merge, and not in the store, see [the changelog](https://opennest.dev/changelog):
 
 \`\`\`bash
 bun run test --project=unit
@@ -279,7 +307,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`; link cards are the one construction still deliberately absent, waiting in their own renderer module at `markdown/link.tsx`.",
+					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`. Links are read as destinations, never as text: every web link opens outside the app with no referrer and carries the host taken from its href alone, a fragment stays in the answer, a scheme the app cannot open renders as plain text, and a long link is clipped at the bubble width rather than widening it — its destination the last thing to go.",
 			},
 		},
 	},
@@ -750,9 +778,154 @@ export const Autolinks = meta.story({
 		docs: {
 			description: {
 				story:
-					"A bare URL, a bare email and an explicit link. Check that all three underline identically — a reader should not be able to tell which one was typed as markdown — and that they stay reachable by keyboard with a visible focus ring.",
+					"A bare URL, a bare email and an explicit link. What the parser inferred gets the same treatment as what an author typed: both web links leave in a new window with no referrer and state their host, while the email opens a mail client in place rather than an empty tab. Check that all three underline identically — a reader should not be able to tell which one was typed as markdown — and that they stay reachable by keyboard with a visible focus ring.",
 			},
 		},
+	},
+	play: async ({ canvas }) => {
+		const autolink = canvas.getByRole("link", {
+			name: "https://opennest.dev (opennest.dev)",
+		})
+
+		await expect(autolink).toHaveAttribute("target", "_blank")
+		await expect(autolink).toHaveAttribute("rel", "noreferrer noopener")
+		await expect(
+			canvas.getByRole("link", { name: "nest@opennest.dev" }),
+		).not.toHaveAttribute("target")
+	},
+})
+
+export const Destinations = meta.story({
+	args: { children: DESTINATIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The rule, stated plainly: a web link always ends with the host its href resolves to, whether the text is a label, a subdomain or the URL itself. Nothing is compared, so nothing can be fooled — the repetition on a bare URL is the price of never guessing. The host separates itself by weight and parentheses rather than by a dimmer colour: a destination is what a reader checks before clicking, so it never trades contrast for hierarchy, least of all on a solid bubble. Ahead of it sits the favicon, asked of one service for every host and never of the host itself — a link must not tell its destination that a message was read, from which address, at what time. The icon is decoration and nothing more: it is artwork the destination controls, and a site imitating another serves the icon it imitates, so the host spelled out beside it stays the part that cannot lie. Check that mail keeps the reader inside their own client, and that the mark reaches neither a screen reader nor a copied transcript.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByRole("link", { name: "the changelog (opennest.dev)" }),
+		).toHaveAttribute("target", "_blank")
+		await expect(
+			canvas.getByRole("link", { name: "our roadmap (www.opennest.dev)" }),
+		).toBeInTheDocument()
+	},
+})
+
+export const DestinationsWithoutIcons = meta.story({
+	args: { children: DESTINATIONS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same links with the icon service unreachable — offline, behind a CSP, or simply slow. Each icon leaves the tree the moment it fails and gives the host initial back its place: a broken image paints a broken image, and a transcript is not the place for one. Check that the mark keeps its size so no line shifts as icons arrive or fail, and that the destination is unchanged either way.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		for (const link of canvas.getAllByRole("link")) {
+			link.querySelector("img")?.dispatchEvent(new Event("error"))
+		}
+
+		await waitFor(() =>
+			expect(canvasElement.querySelectorAll("a img")).toHaveLength(0),
+		)
+		await expect(
+			canvas.getByRole("link", { name: "the changelog (opennest.dev)" }),
+		).toBeInTheDocument()
+	},
+})
+
+export const DeceptiveLinks = meta.story({
+	args: { children: DECEPTIVE_LINKS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The six pairs a review used to defeat comparing text with href. Userinfo, a missing scheme, a punycode homograph, emphasis instead of a plain string, a protocol-relative href aimed at this very window, and a mailto wearing a web address — each one reads truthfully now, because the host comes from the href and the text is never consulted. Check that the homograph reports its punycode form, and that the protocol-relative link leaves in a new window instead of replacing the app.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getAllByText("(evil.test)")).toHaveLength(4)
+		await expect(canvas.getByText("(xn--pennest-8ig.dev)")).toBeInTheDocument()
+		await expect(
+			canvas.getByRole("link", { name: "https://opennest.dev" }),
+		).not.toHaveAttribute("target")
+	},
+})
+
+export const InertSchemes = meta.story({
+	args: { children: INERT_SCHEMES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Only http, https, mailto, tel and a same-document fragment stay clickable. An unknown scheme, a path that would resolve against the app window and a script URL all keep their words and lose their anchor. Check that the text reads as prose — no underline, no pointer, nothing to click — and that the sentence around it is untouched.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByRole("link")).not.toBeInTheDocument()
+		await expect(canvas.getByText(/join the channel/)).toBeInTheDocument()
+	},
+})
+
+export const LongUrl = meta.story({
+	args: { children: LONG_URL },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A signed report URL pasted alone, the shape that stretches a bubble across the transcript. The URL is clipped with an ellipsis at the bubble width and the destination follows it, wrapping to a second line rather than being cut: the one part a reader cannot afford to lose is where the link goes. Check that the bubble keeps the width of the surrounding turns and that the host reads in full.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const link = canvas.getByRole("link")
+		const host = canvas.getByText("(opennest.dev)")
+		const text = link.firstElementChild as HTMLElement
+		const bubble = canvasElement.querySelector(
+			'[data-slot="message-bubble-content"]',
+		) as HTMLElement
+
+		await expect(text.scrollWidth).toBeGreaterThan(text.clientWidth)
+		await expect(host.scrollWidth).toBe(host.clientWidth)
+		await expect(host.getBoundingClientRect().right).toBeLessThanOrEqual(
+			Math.ceil(bubble.getBoundingClientRect().right),
+		)
+	},
+})
+
+export const FragmentLink = meta.story({
+	args: { children: FRAGMENT_LINK },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A footnote reference, its backlink and an explicit `#` link. None of them leaves the app, so none opens a window and none states a host: they move the reader inside the answer they are already reading. Check that the footnote reference and the return arrow both scroll within the block.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const inDocument = canvas
+			.getAllByRole("link")
+			.filter((link) => link.getAttribute("href")?.startsWith("#"))
+
+		await expect(inDocument.length).toBeGreaterThan(1)
+		for (const link of inDocument) {
+			await expect(link).not.toHaveAttribute("target")
+		}
 	},
 })
 
@@ -811,7 +984,7 @@ export const InSolidBubble = meta.story({
 		docs: {
 			description: {
 				story:
-					"What a reader types, in the solid bubble that carries their own turn. The bubble surface is `bg-primary`, the hardest case for a code chip: the renderer tints code from the foreground rather than the background, so the chip stays visible on amber in both themes instead of dissolving into it. Flip the theme layout toolbar to side-by-side and check the inline chip and the fence against the bubble.",
+					"What a reader types, in the solid bubble that carries their own turn. The bubble surface is `bg-primary`, the hardest case for a code chip and for a link destination: both are tinted from the foreground rather than the background, so the chip and the host stay visible on amber in both themes instead of dissolving into it. Flip the theme layout toolbar to side-by-side and check the inline chip, the fence and the dimmed host against the bubble.",
 			},
 		},
 	},
