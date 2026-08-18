@@ -343,20 +343,77 @@ export const PickerUploadTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second tab: a dropzone that takes a drag, a drop or a paste, and a browse button for readers who want a file dialog. The panel never reads the file — it hands the host a `File` and waits for the picture to come back as `value.identity.image`. Check that the dashed edge lights up on drag over and that the browse button is reachable by Tab, since paste only works once focus is inside the zone.",
+					"The second tab: one dashed zone that is the whole control. A reader holding a file drops or pastes it; a reader who has to go find one presses the same target and gets the file dialog — there is no separate browse button to aim at, and nothing inside the zone that is a target of its own. It is a real button, so Enter and Space open the dialog too and it is the tab stop a paste needs focus in. The panel never reads the file: it hands the host a `File` and waits for the picture to come back as `value.identity.image`. Check that the dashed edge lights up on drag over and that focus lands on the zone itself.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const picker = await openPicker(canvas, userEvent)
-
 		await userEvent.click(within(picker).getByRole("tab", { name: "Upload" }))
+
+		const dropzone = within(picker).getByRole("button", {
+			name: /Drag, drop or paste an image/,
+		})
+		await expect(dropzone).toBeVisible()
 		await expect(
-			within(picker).getByText("Drag, drop, or paste an image"),
-		).toBeVisible()
-		await expect(
-			within(picker).getByRole("button", { name: "Browse files" }),
-		).toBeVisible()
+			within(picker).queryByRole("button", { name: "Browse files" }),
+		).toBeNull()
+
+		// A native file dialog is not something a test can dismiss, so the input's own
+		// click is caught and stopped here. What is under test is that the zone reaches
+		// for it — by pointer, and by both keys a button answers to.
+		const asked = fn()
+		within(picker)
+			.getByLabelText("Avatar image file")
+			.addEventListener("click", (event) => {
+				event.preventDefault()
+				asked()
+			})
+
+		await userEvent.click(dropzone)
+		await expect(asked).toHaveBeenCalledTimes(1)
+
+		dropzone.focus()
+		await expect(dropzone).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+		await expect(asked).toHaveBeenCalledTimes(2)
+		await userEvent.keyboard(" ")
+		await expect(asked).toHaveBeenCalledTimes(3)
+	},
+})
+
+export const PickerUploadDrop = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The two paths that do not touch the file dialog at all, which is what makes the zone worth pressing rather than aiming past: a file dropped on it, and a file pasted into it while it holds focus. Both hand the host the same `File` and neither is changed by the zone having become the trigger. Reach for this after touching the dropzone; pick `PickerUploadTab` for the dialog it opens.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const picker = await openPicker(canvas, userEvent)
+		await userEvent.click(within(picker).getByRole("tab", { name: "Upload" }))
+		const dropzone = within(picker).getByRole("button", {
+			name: /Drag, drop or paste an image/,
+		})
+
+		const dropped = new File(["dropped"], "dropped.png", { type: "image/png" })
+		const transfer = new DataTransfer()
+		transfer.items.add(dropped)
+		dropzone.dispatchEvent(
+			new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
+		)
+		await expect(args.onAvatarUpload).toHaveBeenCalledWith(dropped)
+
+		const pasted = new File(["pasted"], "pasted.png", { type: "image/png" })
+		const clipboard = new DataTransfer()
+		clipboard.items.add(pasted)
+		dropzone.focus()
+		dropzone.dispatchEvent(
+			new ClipboardEvent("paste", { bubbles: true, clipboardData: clipboard }),
+		)
+		await expect(args.onAvatarUpload).toHaveBeenCalledWith(pasted)
 	},
 })
 
