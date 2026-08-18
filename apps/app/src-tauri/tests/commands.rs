@@ -164,7 +164,7 @@ fn shutting_down_frees_the_state_before_waiting_on_the_child() {
 		let state = app.state::<ClaudeState>();
 		tokio::join!(
 			async {
-				shutdown_session(&state).await;
+				shutdown_session(&state, &a_scope_value()).await;
 				finished.lock().expect("order").push("shutdown");
 			},
 			async {

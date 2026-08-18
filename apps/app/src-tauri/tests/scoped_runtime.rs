@@ -135,6 +135,34 @@ impl Harness {
 	}
 }
 
+/// A second participant: another bot, in a chat of its own. Both fields differ
+/// because both are what makes a run somebody else's.
+fn another_bots_run() -> Value {
+	json!({
+		"conversationId": "c2",
+		"botId": "second",
+		"runtimeSessionId": "r9",
+		"epoch": 1
+	})
+}
+
+fn named(run: &Value) -> RuntimeScope {
+	serde_json::from_value(run.clone()).expect("the scope parses")
+}
+
+fn outcome_under(seen: &[ScopedEvent], run: &RuntimeScope) -> Option<TurnOutcome> {
+	seen.iter().find_map(|scoped| match (&scoped.scope, &scoped.event) {
+		(Some(scope), ClaudeEvent::TurnEnded { ended }) if scope == run => Some(ended.outcome),
+		_ => None,
+	})
+}
+
+fn spoke_under(seen: &[ScopedEvent], run: &RuntimeScope) -> bool {
+	seen.iter().any(|scoped| {
+		matches!((&scoped.scope, &scoped.event), (Some(scope), ClaudeEvent::MessageDelta { .. }) if scope == run)
+	})
+}
+
 fn turn_outcome(seen: &[ScopedEvent]) -> Option<TurnOutcome> {
 	seen.iter().find_map(|scoped| match scoped.event {
 		ClaudeEvent::TurnEnded { ref ended } => Some(ended.outcome),
@@ -247,6 +275,61 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	);
 
 	assert_eq!(harness.call("claude_shutdown", json!({ "scope": run })), Ok(Value::Null));
+
+	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
+	std::env::remove_var(BINARY_OVERRIDE_ENV);
+}
+
+/// The whole point of a runtime per participant: one reader, two bots, and both of
+/// them answering at once. Starting the second hands nothing back to be shut down,
+/// each turn crosses under the run that produced it, and ending one bot's session
+/// leaves the other one answering — which is what a reader who walks away from a
+/// working bot is owed.
+#[test]
+fn two_bots_answer_at_once_and_each_stream_stays_under_its_own_run() {
+	let _serial = serial();
+	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var("FAKE_CLAUDE_SCENARIO", "normal");
+
+	let harness = launch();
+	let first = a_run(1);
+	let second = another_bots_run();
+	assert_eq!(harness.start(&first), Ok(json!({ "resumed": false })));
+	assert_eq!(harness.start(&second), Ok(json!({ "resumed": false })));
+
+	let one = named(&first);
+	let other = named(&second);
+	harness.forget_events();
+	harness.prompt_is_taken(&first);
+	harness.prompt_is_taken(&second);
+
+	harness.wait_for("both bots to finish their turn", |seen| {
+		outcome_under(seen, &one).zip(outcome_under(seen, &other))
+	});
+	let streamed = harness.events();
+	assert!(
+		spoke_under(&streamed, &one) && spoke_under(&streamed, &other),
+		"a bot answered under a run that was not its own: {streamed:#?}"
+	);
+	assert!(
+		streamed
+			.iter()
+			.all(|scoped| scoped.scope.as_ref() == Some(&one)
+				|| scoped.scope.as_ref() == Some(&other)),
+		"an event crossed under a run neither bot was started for: {streamed:#?}"
+	);
+
+	assert_eq!(harness.call("claude_shutdown", json!({ "scope": first })), Ok(Value::Null));
+	harness.forget_events();
+	harness.prompt_is_taken(&second);
+	assert_eq!(
+		harness.wait_for("the bot left running to finish its turn", |seen| {
+			outcome_under(seen, &other)
+		}),
+		TurnOutcome::Completed,
+		"ending one bot's session stopped the bot beside it"
+	);
+	assert_eq!(harness.call("claude_shutdown", json!({ "scope": second })), Ok(Value::Null));
 
 	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
 	std::env::remove_var(BINARY_OVERRIDE_ENV);

@@ -63,16 +63,34 @@ fn scope() -> RuntimeScope {
 	}
 }
 
+/// A second bot, in a chat of its own: the other participant a child may be live
+/// for while the first one is answering.
+fn another_bots_scope() -> RuntimeScope {
+	RuntimeScope {
+		conversation_id: "c2".to_owned(),
+		bot_id: "second".to_owned(),
+		runtime_session_id: "r2".to_owned(),
+		epoch: 1,
+	}
+}
+
 /// Never `$HOME`: the child inherits this as its working directory.
-async fn start(app: &App<MockRuntime>) -> Result<SessionHandle, TransportError> {
+async fn start_run(
+	app: &App<MockRuntime>,
+	scope: RuntimeScope,
+) -> Result<SessionHandle, TransportError> {
 	claude_start_or_resume_session(
 		app.handle().clone(),
 		app.state::<ClaudeState>(),
-		scope(),
+		scope,
 		None,
 		Some(std::env::temp_dir().to_string_lossy().into_owned()),
 	)
 	.await
+}
+
+async fn start(app: &App<MockRuntime>) -> Result<SessionHandle, TransportError> {
+	start_run(app, scope()).await
 }
 
 async fn shutdown(app: &App<MockRuntime>) -> Result<(), TransportError> {
@@ -129,7 +147,7 @@ fn two_concurrent_starts_leave_one_session_and_one_group() {
 		);
 		assert_eq!(live_groups().len(), 1, "the refused start spawned a child of its own");
 
-		shutdown_session(app.state::<ClaudeState>().inner()).await;
+		shutdown_session(app.state::<ClaudeState>().inner(), &scope()).await;
 		assert!(live_groups().is_empty(), "the surviving session outlived its shutdown");
 	});
 
@@ -157,7 +175,7 @@ fn a_start_racing_a_shutdown_is_refused_rather_than_interleaved() {
 		);
 		assert!(live_groups().len() <= 1, "the two transitions each left a group behind");
 
-		shutdown_session(app.state::<ClaudeState>().inner()).await;
+		shutdown_session(app.state::<ClaudeState>().inner(), &scope()).await;
 		assert!(live_groups().is_empty(), "a child outlived both transitions");
 	});
 
@@ -245,6 +263,43 @@ fn a_quit_inside_a_restart_never_installs_the_child_it_was_building() {
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
+	});
+
+	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
+	std::env::remove_var(BINARY_OVERRIDE_ENV);
+}
+
+/// The reader owns several bots and more than one of them is answering. A start for
+/// one of them is not a handover of the other: two children, two groups, and a
+/// transition on one that never keeps the other from coming up.
+///
+/// Then the one event that has to reach all of them — the host's exit. Every child
+/// here is deaf to the EOF its stdin is handed, so a polite close alone would leave
+/// both of them running; what ends them is the escalation behind it.
+#[test]
+fn a_quit_ends_every_bots_child_and_not_only_the_last_one_started() {
+	let _serial = serial();
+	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
+
+	let app = app();
+	runtime().block_on(async {
+		start(&app).await.expect("the first bot starts");
+		start_run(&app, another_bots_scope()).await.expect("the second bot starts");
+
+		let running = live_groups();
+		assert_eq!(running.len(), 2, "starting the second bot replaced the first one's child");
+		assert!(
+			running.iter().all(|pid| is_alive(*pid as i32)),
+			"a bot the host believes it holds is not running: {running:?}"
+		);
+
+		terminate_session(app.state::<ClaudeState>().inner()).await;
+
+		assert!(live_groups().is_empty(), "the quit left a group behind");
+		for pid in running {
+			poll_until("every child of the quit to be gone", || !is_alive(pid as i32)).await;
+		}
 	});
 
 	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
