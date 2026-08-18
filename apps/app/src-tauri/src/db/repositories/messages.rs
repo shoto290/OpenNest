@@ -225,6 +225,10 @@ stored_as_text!(MessageRole);
 stored_as_text!(MessageState);
 stored_as_text!(ActivityStatus);
 
+/// Reachable across `db` so a sibling repository spelling its own vocabulary
+/// reaches SQLite through the same conversion rather than a second copy of it.
+pub(in crate::db) use stored_as_text;
+
 /// Why a write the transcript could not take was refused. Kept apart from
 /// [`DatabaseError`], which says why the file is unusable: these two say the file
 /// is fine and the caller is holding two versions of one event.

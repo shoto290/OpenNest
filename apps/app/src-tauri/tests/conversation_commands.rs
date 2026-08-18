@@ -775,3 +775,155 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 
 	cleanup(&app);
 }
+
+/// An identity as the frontend submits one. Spelled here in JSON rather than
+/// built from a Rust type, because what is under test is exactly the crossing: a
+/// field the host reads under another name is a bot created with half a face.
+fn an_identity(name: &str, animal: &str, pose: &str) -> Value {
+	json!({
+		"name": name,
+		"title": "Reviewer",
+		"description": "Reads a diff and says what it would change.",
+		"avatarAnimal": animal,
+		"avatarPose": pose,
+		"avatarImagePath": null,
+		"workingDir": "/work/opennest"
+	})
+}
+
+/// The whole of a bot's life over IPC: created with a chat of its own, listed,
+/// described again, and deleted with everything said in it. The chat is what
+/// makes a created bot immediately a thread the frontend can open, so it is
+/// asked for rather than assumed.
+#[test]
+fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
+	let app = app("com.opennest.conversation-commands-10");
+	let window = window(&app);
+
+	let created = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "owl", "curious") }),
+	)
+	.expect("the bot is created");
+	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
+
+	assert_eq!(created["name"], json!("Nyx"));
+	assert_eq!(created["title"], json!("Reviewer"));
+	assert_eq!(created["avatarAnimal"], json!("owl"));
+	assert_eq!(created["avatarPose"], json!("curious"));
+	assert_eq!(created["avatarImagePath"], json!(null));
+	assert_eq!(created["workingDir"], json!("/work/opennest"));
+	assert!(created["createdAt"].is_i64(), "a bot crossed without a camelCase moment: {created}");
+
+	let chat = call(&window, "conversation_main_chat", json!({ "botId": id }))
+		.expect("the chat the bot was created with");
+	let conversation = chat["id"].as_str().expect("the chat holds an id").to_owned();
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn is started");
+	call(
+		&window,
+		"conversation_append_user_message",
+		a_user_message("m1", &conversation, "hello", 2),
+	)
+	.expect("the message is appended");
+
+	let listed = call(&window, "conversation_bots", json!({})).expect("the bots");
+	assert_eq!(
+		listed.as_array().expect("a list").iter().map(|bot| bot["id"].clone()).collect::<Vec<_>>(),
+		vec![json!(id)],
+		"the bot that was created is not the one the list holds"
+	);
+
+	let updated = call(
+		&window,
+		"conversation_update_bot",
+		json!({ "id": id, "identity": an_identity("Ada", "koala", "sleeping") }),
+	)
+	.expect("the bot is updated");
+	assert_eq!(updated["name"], json!("Ada"));
+	assert_eq!(updated["avatarAnimal"], json!("koala"));
+	assert_eq!(updated["avatarPose"], json!("sleeping"));
+	assert_eq!(updated["createdAt"], created["createdAt"], "an update moved the moment");
+
+	assert_eq!(call(&window, "conversation_delete_bot", json!({ "id": id })), Ok(Value::Null));
+	assert_eq!(call(&window, "conversation_bots", json!({})), Ok(json!([])));
+	assert_eq!(
+		call(
+			&window,
+			"conversation_message_page",
+			json!({
+				"conversationId": conversation,
+				"beforeSeq": null,
+				"limit": 20
+			})
+		),
+		Ok(json!({ "conversationId": conversation, "messages": [], "hasMore": false })),
+		"the transcript of a deleted bot is still reachable"
+	);
+
+	cleanup(&app);
+}
+
+/// The boundary is where a face is checked, not the file: a word the avatar
+/// engine cannot draw fails to parse, so the command is never entered and no bot
+/// is written. What the caller gets back is Tauri's own account of the argument
+/// it could not read — the point being that nothing landed, in either shape.
+#[test]
+fn a_bot_described_with_a_face_the_engine_cannot_draw_is_refused_before_it_is_written() {
+	let app = app("com.opennest.conversation-commands-11");
+	let window = window(&app);
+
+	let animal = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "dragon", "curious") }),
+	);
+	let pose = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "owl", "furious") }),
+	);
+
+	assert!(animal.is_err(), "an animal the engine cannot draw was accepted: {animal:?}");
+	assert!(pose.is_err(), "a pose the engine cannot draw was accepted: {pose:?}");
+	assert_eq!(
+		call(&window, "conversation_bots", json!({})),
+		Ok(json!([])),
+		"a bot the boundary refused reached the file anyway"
+	);
+
+	cleanup(&app);
+}
+
+/// The one refusal a caller can act on: the list it is holding is behind the
+/// file. Both writes have to say it, and the second delete is the honest case —
+/// the bot really is gone, and saying so is not the same as saying it worked.
+#[test]
+fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
+	let app = app("com.opennest.conversation-commands-12");
+	let window = window(&app);
+
+	let created = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "cat", "idle") }),
+	)
+	.expect("the bot is created");
+	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
+	call(&window, "conversation_delete_bot", json!({ "id": id })).expect("the bot is deleted");
+
+	assert_eq!(
+		call(&window, "conversation_delete_bot", json!({ "id": id })),
+		Err(json!({ "kind": "unknownBot", "id": id }))
+	);
+	assert_eq!(
+		call(
+			&window,
+			"conversation_update_bot",
+			json!({ "id": id, "identity": an_identity("Ada", "cat", "idle") })
+		),
+		Err(json!({ "kind": "unknownBot", "id": id }))
+	);
+
+	cleanup(&app);
+}

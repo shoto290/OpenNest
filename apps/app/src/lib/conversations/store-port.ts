@@ -1,5 +1,6 @@
 import type {
 	Bot,
+	BotIdentity,
 	Chat,
 	ContextCheckpoint,
 	NewAssistantMessage,
@@ -15,6 +16,18 @@ import type { TranscriptPort } from "./transcript-port"
  * row: the caller never picks its own place in the transcript. */
 export type TranscriptStore = TranscriptPort & {
 	defaultBot: () => Promise<Bot>
+	/** Every bot on the record, oldest first. */
+	bots: () => Promise<Bot[]>
+	/** A bot and the chat it will be spoken to in, written as one unit: what comes
+	 * back is a thread the caller can open straight away. */
+	createBot: (identity: BotIdentity) => Promise<Bot>
+	/** Who the bot is, replaced whole — a field left out of `identity` is a bot only
+	 * half described, not one the store leaves alone. What the bot was told and what
+	 * it has said are untouched. */
+	updateBot: (id: string, identity: BotIdentity) => Promise<Bot>
+	/** The bot, its chat and everything said in it. The last bot goes like any
+	 * other, and what is left is the empty state a fresh install opens on. */
+	deleteBot: (id: string) => Promise<void>
 	mainChat: (botId: string) => Promise<Chat>
 	/** Opens the run a Claude process is about to be started for. The live run it
 	 * replaces is rotated by the same call, so a participant is never left with two

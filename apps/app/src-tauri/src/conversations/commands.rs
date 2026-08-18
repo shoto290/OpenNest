@@ -17,8 +17,8 @@ use tauri::State;
 
 use super::context;
 use super::contract::{
-	Bot, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession,
-	TerminalCompletion, TranscriptPage, TranscriptStoreError,
+	Bot, BotIdentity, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage,
+	RuntimeSession, TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
 use crate::db;
 use crate::db::repositories::messages::MessagePageQuery;
@@ -35,6 +35,52 @@ pub async fn conversation_default_bot(
 	state: State<'_, db::DatabaseState>,
 ) -> Result<Bot, TranscriptStoreError> {
 	Ok(ready(&state)?.conversations().ensure_default_bot().await?.into())
+}
+
+#[tauri::command]
+pub async fn conversation_bots(
+	state: State<'_, db::DatabaseState>,
+) -> Result<Vec<Bot>, TranscriptStoreError> {
+	Ok(ready(&state)?.conversations().bots().await?.into_iter().map(Into::into).collect())
+}
+
+/// A bot and the chat it will be spoken to in, written as one unit, so what comes
+/// back is a bot the frontend can open immediately rather than one it has to seat
+/// in a second call.
+///
+/// The face is refused before this runs: `avatarAnimal` and `avatarPose` are
+/// closed vocabularies, and a word outside them fails deserialization — the
+/// command is never entered and nothing reaches the file.
+#[tauri::command]
+pub async fn conversation_create_bot(
+	state: State<'_, db::DatabaseState>,
+	identity: BotIdentity,
+) -> Result<Bot, TranscriptStoreError> {
+	Ok(ready(&state)?.conversations().create_bot(identity.into()).await?.into())
+}
+
+/// Who the bot is, replaced whole: every field of [`BotIdentity`] is written, so
+/// one left out of the payload is a bot the caller only half described rather
+/// than a field it meant to keep. What the bot was told and what it has said are
+/// not touched.
+#[tauri::command]
+pub async fn conversation_update_bot(
+	state: State<'_, db::DatabaseState>,
+	id: String,
+	identity: BotIdentity,
+) -> Result<Bot, TranscriptStoreError> {
+	Ok(ready(&state)?.conversations().update_bot(id, identity.into()).await?.into())
+}
+
+/// The bot, its chat and the whole transcript under it. The last bot may be
+/// deleted like any other: what is left is a file with no bots and no
+/// conversations, which is the state a fresh install comes up in.
+#[tauri::command]
+pub async fn conversation_delete_bot(
+	state: State<'_, db::DatabaseState>,
+	id: String,
+) -> Result<(), TranscriptStoreError> {
+	Ok(ready(&state)?.conversations().delete_bot(id).await?)
 }
 
 #[tauri::command]

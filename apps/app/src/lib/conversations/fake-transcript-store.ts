@@ -1,6 +1,7 @@
 import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
 	Bot,
+	BotIdentity,
 	Chat,
 	ContextCheckpoint,
 	NewAssistantMessage,
@@ -27,9 +28,19 @@ export type FakeTranscriptStoreOptions = {
 const DEFAULT_BOT: Bot = {
 	id: "default",
 	name: "Claude",
+	title: "",
+	description: "",
 	model: "sonnet",
+	avatarAnimal: "cat",
+	avatarPose: "idle",
+	avatarImagePath: null,
+	workingDir: null,
 	createdAt: 0,
 }
+
+/** The model column is a label the host writes and nothing picks, so a bot made
+ * here carries the same one every bot in the file carries. */
+const BOT_MODEL = DEFAULT_BOT.model
 
 /** The one visible chat, the way `ensure_chat` answers for it. */
 export const FAKE_CHAT_ID = "chat-default"
@@ -59,6 +70,10 @@ export const createFakeTranscriptStore = (
 	options: FakeTranscriptStoreOptions = {},
 ): TranscriptStore => {
 	const pageSize = options.pageSize ?? TRANSCRIPT_PAGE_SIZE
+	/** The bot the app ships with is already on the record, the way a launch finds
+	 * it seeded. Insertion order is what `bots` answers in. */
+	const bots = new Map<string, Bot>([[DEFAULT_BOT.id, DEFAULT_BOT]])
+	let minted = 0
 	const rows = new Map<string, TranscriptMessage>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
@@ -151,7 +166,47 @@ export const createFakeTranscriptStore = (
 				pageSize,
 			}).loadPage(conversationId, cursor),
 
-		defaultBot: () => Promise.resolve(DEFAULT_BOT),
+		defaultBot: () => Promise.resolve(bots.get(DEFAULT_BOT.id) ?? DEFAULT_BOT),
+
+		bots: () => Promise.resolve([...bots.values()]),
+
+		/** Insertion order is creation order here, which is what the file answers
+		 * with too. The chat is not minted alongside: this fake holds the one thread
+		 * every bot in it is spoken to in. */
+		createBot: (identity: BotIdentity) => {
+			minted += 1
+			const created: Bot = {
+				...identity,
+				id: `bot-${minted}`,
+				model: BOT_MODEL,
+				createdAt: minted,
+			}
+			bots.set(created.id, created)
+			return Promise.resolve(created)
+		},
+
+		/** Who the bot is, replaced whole. Its id and the moment it was written are
+		 * not a caller's to change, so they are carried over rather than taken. */
+		updateBot: (id: string, identity: BotIdentity) => {
+			const stored = bots.get(id)
+			if (!stored) {
+				return refuse({ kind: "unknownBot", id })
+			}
+			const updated: Bot = { ...stored, ...identity }
+			bots.set(id, updated)
+			return Promise.resolve(updated)
+		},
+
+		/** A bot that is already gone is refused rather than silently accepted: a
+		 * caller told its delete landed would go on showing a list that is behind the
+		 * store. The transcript is not touched — every bot here is spoken to in the
+		 * one thread this fake holds, so there is no chat of its own to take with it. */
+		deleteBot: (id: string) => {
+			if (!bots.delete(id)) {
+				return refuse({ kind: "unknownBot", id })
+			}
+			return Promise.resolve()
+		},
 
 		mainChat: (_botId: string) =>
 			Promise.resolve<Chat>({ id: FAKE_CHAT_ID, createdAt: 0, updatedAt: 0 }),

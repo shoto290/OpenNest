@@ -38,18 +38,161 @@ use serde::{Deserialize, Serialize};
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
+/// The eight animals the avatar engine draws, as the frontend spells them. It is
+/// the deserializer that makes a ninth impossible: a word outside this list is
+/// refused before a statement runs, so the `CHECK` on the column is the second
+/// answer to the same question rather than the only one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AvatarAnimal {
+	Cat,
+	Rabbit,
+	Bear,
+	Chick,
+	Dog,
+	Mouse,
+	Owl,
+	Koala,
+}
+
+impl From<conversations::AvatarAnimal> for AvatarAnimal {
+	fn from(animal: conversations::AvatarAnimal) -> Self {
+		match animal {
+			conversations::AvatarAnimal::Cat => AvatarAnimal::Cat,
+			conversations::AvatarAnimal::Rabbit => AvatarAnimal::Rabbit,
+			conversations::AvatarAnimal::Bear => AvatarAnimal::Bear,
+			conversations::AvatarAnimal::Chick => AvatarAnimal::Chick,
+			conversations::AvatarAnimal::Dog => AvatarAnimal::Dog,
+			conversations::AvatarAnimal::Mouse => AvatarAnimal::Mouse,
+			conversations::AvatarAnimal::Owl => AvatarAnimal::Owl,
+			conversations::AvatarAnimal::Koala => AvatarAnimal::Koala,
+		}
+	}
+}
+
+impl From<AvatarAnimal> for conversations::AvatarAnimal {
+	fn from(animal: AvatarAnimal) -> Self {
+		match animal {
+			AvatarAnimal::Cat => conversations::AvatarAnimal::Cat,
+			AvatarAnimal::Rabbit => conversations::AvatarAnimal::Rabbit,
+			AvatarAnimal::Bear => conversations::AvatarAnimal::Bear,
+			AvatarAnimal::Chick => conversations::AvatarAnimal::Chick,
+			AvatarAnimal::Dog => conversations::AvatarAnimal::Dog,
+			AvatarAnimal::Mouse => conversations::AvatarAnimal::Mouse,
+			AvatarAnimal::Owl => conversations::AvatarAnimal::Owl,
+			AvatarAnimal::Koala => conversations::AvatarAnimal::Koala,
+		}
+	}
+}
+
+/// The eight poses a bot is identified by. The engine animates many more — what a
+/// bot is doing right now is the runtime's, and none of it is stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AvatarPose {
+	Idle,
+	Happy,
+	Curious,
+	Proud,
+	Shy,
+	Playful,
+	Bored,
+	Sleeping,
+}
+
+impl From<conversations::AvatarPose> for AvatarPose {
+	fn from(pose: conversations::AvatarPose) -> Self {
+		match pose {
+			conversations::AvatarPose::Idle => AvatarPose::Idle,
+			conversations::AvatarPose::Happy => AvatarPose::Happy,
+			conversations::AvatarPose::Curious => AvatarPose::Curious,
+			conversations::AvatarPose::Proud => AvatarPose::Proud,
+			conversations::AvatarPose::Shy => AvatarPose::Shy,
+			conversations::AvatarPose::Playful => AvatarPose::Playful,
+			conversations::AvatarPose::Bored => AvatarPose::Bored,
+			conversations::AvatarPose::Sleeping => AvatarPose::Sleeping,
+		}
+	}
+}
+
+impl From<AvatarPose> for conversations::AvatarPose {
+	fn from(pose: AvatarPose) -> Self {
+		match pose {
+			AvatarPose::Idle => conversations::AvatarPose::Idle,
+			AvatarPose::Happy => conversations::AvatarPose::Happy,
+			AvatarPose::Curious => conversations::AvatarPose::Curious,
+			AvatarPose::Proud => conversations::AvatarPose::Proud,
+			AvatarPose::Shy => conversations::AvatarPose::Shy,
+			AvatarPose::Playful => conversations::AvatarPose::Playful,
+			AvatarPose::Bored => conversations::AvatarPose::Bored,
+			AvatarPose::Sleeping => conversations::AvatarPose::Sleeping,
+		}
+	}
+}
+
+/// A bot as the frontend meets it. `instructions` and `memory` are stored and not
+/// projected, for the reason the rest of this file leaves things out: they are
+/// what a context is rebuilt from on this side, and nothing over there displays
+/// or submits them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bot {
 	pub id: String,
 	pub name: String,
+	pub title: String,
+	pub description: String,
 	pub model: String,
+	pub avatar_animal: AvatarAnimal,
+	pub avatar_pose: AvatarPose,
+	pub avatar_image_path: Option<String>,
+	pub working_dir: Option<String>,
 	pub created_at: i64,
 }
 
 impl From<conversations::Bot> for Bot {
 	fn from(bot: conversations::Bot) -> Self {
-		Self { id: bot.id, name: bot.name, model: bot.model, created_at: bot.created_at }
+		Self {
+			id: bot.id,
+			name: bot.name,
+			title: bot.title,
+			description: bot.description,
+			model: bot.model,
+			avatar_animal: bot.avatar_animal.into(),
+			avatar_pose: bot.avatar_pose.into(),
+			avatar_image_path: bot.avatar_image_path,
+			working_dir: bot.working_dir,
+			created_at: bot.created_at,
+		}
+	}
+}
+
+/// Who a bot is, as a caller submits it — whole, both to create one and to change
+/// one. `id`, `model` and `createdAt` are absent because none of them is a
+/// caller's to choose: the first two are minted and fixed by the host, the third
+/// is when it did so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BotIdentity {
+	pub name: String,
+	pub title: String,
+	pub description: String,
+	pub avatar_animal: AvatarAnimal,
+	pub avatar_pose: AvatarPose,
+	pub avatar_image_path: Option<String>,
+	pub working_dir: Option<String>,
+}
+
+impl From<BotIdentity> for conversations::BotIdentity {
+	fn from(identity: BotIdentity) -> Self {
+		Self {
+			name: identity.name,
+			title: identity.title,
+			description: identity.description,
+			avatar_animal: identity.avatar_animal.into(),
+			avatar_pose: identity.avatar_pose.into(),
+			avatar_image_path: identity.avatar_image_path,
+			working_dir: identity.working_dir,
+		}
 	}
 }
 
@@ -395,6 +538,11 @@ pub enum TranscriptStoreError {
 	InvalidTransition { id: String, from: String, to: String },
 	#[serde(rename_all = "camelCase")]
 	IdentityConflict { id: String, field: String, expected: String, stored: String },
+	/// A write named a bot that is not on the record. The one refusal here a caller
+	/// can act on: the list it is holding is behind the file, and reloading it is
+	/// what puts them back together.
+	#[serde(rename_all = "camelCase")]
+	UnknownBot { id: String },
 }
 
 impl From<messages::TranscriptError> for TranscriptStoreError {
@@ -436,6 +584,9 @@ impl From<conversations::ConversationError> for TranscriptStoreError {
 					expected,
 					stored,
 				}
+			}
+			conversations::ConversationError::UnknownBot { id } => {
+				TranscriptStoreError::UnknownBot { id }
 			}
 			conversations::ConversationError::Database(failure) => {
 				TranscriptStoreError::Storage { failure: (&failure).into() }
@@ -505,14 +656,98 @@ mod tests {
 			Bot {
 				id: "default".into(),
 				name: "Claude".into(),
+				title: "Reviewer".into(),
+				description: "Reads a diff and says what it would change.".into(),
 				model: "sonnet".into(),
+				avatar_animal: AvatarAnimal::Owl,
+				avatar_pose: AvatarPose::Curious,
+				avatar_image_path: Some("/pictures/owl.png".into()),
+				working_dir: Some("/work/opennest".into()),
 				created_at: 1,
 			},
-			json!({ "id": "default", "name": "Claude", "model": "sonnet", "createdAt": 1 }),
+			json!({
+				"id": "default",
+				"name": "Claude",
+				"title": "Reviewer",
+				"description": "Reads a diff and says what it would change.",
+				"model": "sonnet",
+				"avatarAnimal": "owl",
+				"avatarPose": "curious",
+				"avatarImagePath": "/pictures/owl.png",
+				"workingDir": "/work/opennest",
+				"createdAt": 1
+			}),
 		);
 		assert_crosses_as(
 			Chat { id: "c1".into(), created_at: 1, updated_at: 2 },
 			json!({ "id": "c1", "createdAt": 1, "updatedAt": 2 }),
+		);
+	}
+
+	/// What a bot nobody has described looks like on the wire: empty where the
+	/// column is `NOT NULL DEFAULT ''`, `null` where it names something outside the
+	/// database. The two are not the same fact, and neither may arrive as the other.
+	#[test]
+	fn a_bot_with_nothing_said_about_it_crosses_with_its_absences_intact() {
+		assert_crosses_as(
+			BotIdentity {
+				name: "Claude".into(),
+				title: String::new(),
+				description: String::new(),
+				avatar_animal: AvatarAnimal::Cat,
+				avatar_pose: AvatarPose::Idle,
+				avatar_image_path: None,
+				working_dir: None,
+			},
+			json!({
+				"name": "Claude",
+				"title": "",
+				"description": "",
+				"avatarAnimal": "cat",
+				"avatarPose": "idle",
+				"avatarImagePath": null,
+				"workingDir": null
+			}),
+		);
+	}
+
+	/// The eight animals and the eight poses, each crossing as the one word the
+	/// avatar engine draws it under. A ninth is not a value this vocabulary can
+	/// express, so the deserializer refuses it before any code runs — which is the
+	/// whole reason a face never reaches the file misspelled.
+	#[test]
+	fn every_face_crosses_as_one_word_and_nothing_else_parses() {
+		for (animal, wire) in [
+			(AvatarAnimal::Cat, "cat"),
+			(AvatarAnimal::Rabbit, "rabbit"),
+			(AvatarAnimal::Bear, "bear"),
+			(AvatarAnimal::Chick, "chick"),
+			(AvatarAnimal::Dog, "dog"),
+			(AvatarAnimal::Mouse, "mouse"),
+			(AvatarAnimal::Owl, "owl"),
+			(AvatarAnimal::Koala, "koala"),
+		] {
+			assert_crosses_as(animal, json!(wire));
+		}
+		for (pose, wire) in [
+			(AvatarPose::Idle, "idle"),
+			(AvatarPose::Happy, "happy"),
+			(AvatarPose::Curious, "curious"),
+			(AvatarPose::Proud, "proud"),
+			(AvatarPose::Shy, "shy"),
+			(AvatarPose::Playful, "playful"),
+			(AvatarPose::Bored, "bored"),
+			(AvatarPose::Sleeping, "sleeping"),
+		] {
+			assert_crosses_as(pose, json!(wire));
+		}
+		assert!(
+			serde_json::from_value::<AvatarAnimal>(json!("dragon")).is_err(),
+			"an animal the avatar engine cannot draw parsed at the boundary"
+		);
+		assert!(
+			serde_json::from_value::<AvatarPose>(json!("furious")).is_err(),
+			"a pose the avatar engine cannot draw parsed at the boundary"
 		);
 	}
 

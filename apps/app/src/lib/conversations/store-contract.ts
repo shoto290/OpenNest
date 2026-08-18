@@ -1,4 +1,54 @@
-export type Bot = { id: string; name: string; model: string; createdAt: number }
+/** The eight animals the avatar engine draws. The host holds the same eight and
+ * refuses anything else at the boundary, so a value outside this union never
+ * reaches the file. */
+export type AvatarAnimal =
+	| "cat"
+	| "rabbit"
+	| "bear"
+	| "chick"
+	| "dog"
+	| "mouse"
+	| "owl"
+	| "koala"
+
+/** The eight poses a bot is identified by. The engine animates many more — what a
+ * bot is doing right now belongs to the runtime and is not stored. */
+export type AvatarPose =
+	| "idle"
+	| "happy"
+	| "curious"
+	| "proud"
+	| "shy"
+	| "playful"
+	| "bored"
+	| "sleeping"
+
+export type Bot = {
+	id: string
+	name: string
+	title: string
+	description: string
+	model: string
+	avatarAnimal: AvatarAnimal
+	avatarPose: AvatarPose
+	avatarImagePath: string | null
+	workingDir: string | null
+	createdAt: number
+}
+
+/** Who a bot is, as the store is told it — whole, both to create one and to
+ * change one. No `id`, `model` or `createdAt`: none of the three is a caller's to
+ * choose. `avatarImagePath` and `workingDir` are `null` rather than empty, since
+ * both name something outside the database. */
+export type BotIdentity = {
+	name: string
+	title: string
+	description: string
+	avatarAnimal: AvatarAnimal
+	avatarPose: AvatarPose
+	avatarImagePath: string | null
+	workingDir: string | null
+}
 
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
@@ -68,3 +118,4 @@ export type TranscriptStoreError =
 			expected: string
 			stored: string
 	  }
+	| { kind: "unknownBot"; id: string }

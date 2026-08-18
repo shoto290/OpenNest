@@ -195,13 +195,11 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
 	const store = options.botId
 		? {
 				...base,
-				defaultBot: () =>
-					Promise.resolve({
-						id: options.botId ?? "",
-						name: "Second",
-						model: "sonnet",
-						createdAt: 0,
-					}),
+				defaultBot: async () => ({
+					...(await base.defaultBot()),
+					id: options.botId ?? "",
+					name: "Second",
+				}),
 			}
 		: base
 	const driver = options.driver ? options.driver(fake) : fake
