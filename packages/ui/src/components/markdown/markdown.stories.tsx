@@ -179,6 +179,68 @@ const CODE_LONG_LINE = `\`\`\`ts
 const migration = { table: "nest_occupants", columns: ["id", "nest_id", "display_name", "joined_at", "left_at", "role"], indexes: ["nest_id_joined_at"] }
 \`\`\``
 
+const INLINE_MATH = `The dedupe window is $\\Delta t < 250\\,\\text{ms}$, so a retry inside $2^{-2}$ of a second collapses into the first — and a plan at $5 a month keeps its dollar sign.`
+
+const DISPLAY_MATH = `The cost of a sync grows with the roster:
+
+$$
+c(n) = \\sum_{i=1}^{n} \\frac{o_i}{2^{i}} + \\log_2 n
+$$
+
+Past $n = 40$ the term on the right stops mattering.`
+
+const MALFORMED_MATH = `An expression that never closes its brace: $\\frac{1}{$.
+
+$$
+\\begin{bmatrix} 1 & 2 \\\\ 3
+$$
+
+The next one still typesets: $e^{i\\pi} + 1 = 0$.`
+
+/** 1.8 KB of source for 96 KB of DOM — the shape that costs a bubble more than it can
+ * ever show a reader. */
+const OVERSIZED_MATRIX = (() => {
+	const row = Array.from({ length: 20 }, (_, column) => column).join(" & ")
+	return Array.from({ length: 20 }, () => row).join(" \\\\ ")
+})()
+
+const OVERSIZED_MATH = `A matrix past what an expression may cost:
+
+$$
+\\begin{matrix} ${OVERSIZED_MATRIX} \\end{matrix}
+$$
+
+The next one still typesets: $e^{i\\pi} + 1 = 0$.`
+
+const MERMAID_FLOWCHART = `\`\`\`mermaid
+flowchart TD
+	A[Read the nest] --> B{Occupants?}
+	B -- yes --> C[Summarise]
+	B -- no --> D[Archive]
+	C --> E[Notify the owner]
+	D --> E
+\`\`\``
+
+const MERMAID_WIDE = `\`\`\`mermaid
+flowchart LR
+	A[Read the nest] --> B[Merge the cache] --> C[Dedupe on client id] --> D[Summarise occupants] --> E[Archive the record] --> F[Notify the owner]
+\`\`\``
+
+const MALFORMED_MERMAID = `A diagram that never states its edges:
+
+\`\`\`mermaid
+flowchart TD
+	A[Read the nest] -->
+	--> {{
+\`\`\`
+
+The next one still draws:
+
+\`\`\`mermaid
+flowchart LR
+	A[Read] --> B[Archive]
+\`\`\``
+
 const THEMATIC_BREAK = `The first pass finished.
 
 ---
@@ -231,6 +293,11 @@ const HOSTILE = `<script>alert("nest")</script>
 <img src="x" onerror="alert('nest')" />
 
 [looks like a link](javascript:alert('nest'))
+
+\`\`\`mermaid
+flowchart TD
+	A["<script>alert(1)</script>"] --> B["<span onclick='alert(1)'>tap</span>"]
+\`\`\`
 
 Prose after the payload still renders.`
 
@@ -300,6 +367,46 @@ const clearanceOf = (viewport: HTMLElement, copy: HTMLElement) =>
 const paintedTokens = (fence: HTMLElement) =>
 	fence.querySelectorAll("[style*='--code-token-light']").length
 
+/** The first block of its kind on a page pays for fetching KaTeX or mermaid before it
+ * can show anything, which is longer than a wait for something already loaded. */
+const RENDERER_ARRIVES = { timeout: 10_000 }
+
+/** What KaTeX and mermaid put on screen, read the way a reader meets it: the typeset
+ * output itself, and the diagram inside the frame that names it. */
+const typesetIn = (canvasElement: HTMLElement) =>
+	canvasElement.querySelectorAll(".katex")
+
+const diagramFramesIn = (canvasElement: HTMLElement) => [
+	...canvasElement.querySelectorAll('[role="group"][aria-label="Diagram"]'),
+]
+
+const diagramsIn = (canvasElement: HTMLElement) =>
+	diagramFramesIn(canvasElement).flatMap((frame) => [
+		...(frame.shadowRoot?.querySelectorAll("svg") ?? []),
+	])
+
+/** Nothing mermaid ships may end up in the page itself — its stylesheet least of all. */
+const loosePayloadIn = (canvasElement: HTMLElement) =>
+	canvasElement.querySelectorAll(
+		":is(script, style, iframe, [onerror], [onclick])",
+	)
+
+const rulesOf = (sheet: CSSStyleSheet) => {
+	try {
+		return [...sheet.cssRules]
+	} catch {
+		return []
+	}
+}
+
+/** Animation names are looked up per tree, so a diagram drawn into the page would put
+ * mermaid's own names where every animation in the app resolves them. */
+const globalKeyframeNames = () =>
+	[...document.styleSheets]
+		.flatMap(rulesOf)
+		.filter((rule) => rule instanceof CSSKeyframesRule)
+		.map((rule) => rule.name)
+
 const meta = preview.meta({
 	title: "AI/Markdown",
 	component: Markdown,
@@ -307,7 +414,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`. Links are read as destinations, never as text: every web link opens outside the app with no referrer and carries the host taken from its href alone, a fragment stays in the answer, a scheme the app cannot open renders as plain text, and a long link is clipped at the bubble width rather than widening it — its destination the last thing to go.",
+					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`. Links are read as destinations, never as text: every web link opens outside the app with no referrer and carries the host taken from its href alone, a fragment stays in the answer, a scheme the app cannot open renders as plain text, and a long link is clipped at the bubble width rather than widening it — its destination the last thing to go. Math and diagrams are the two blocks that need code this renderer does not carry: `$…$`, `$$…$$` and a `mermaid` fence each fetch their renderer the first time a document holds one, keep the source on screen until it lands, and keep that same source when it cannot be parsed.",
 			},
 		},
 	},
@@ -715,6 +822,162 @@ export const CodeFenceLongSource = meta.story({
 	},
 })
 
+export const MathInline = meta.story({
+	args: { children: INLINE_MATH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`$…$` inside running prose. The typesetter is fetched the first time a block carries math and never before, so the expression appears as the source the author typed and is replaced in place a moment later — the paragraph keeps its box throughout. Glyphs paint in `currentColor`, so one render reads in both themes; flip the theme layout toolbar to side-by-side. Check that a bare dollar amount in the same sentence stays prose.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await waitFor(
+			() => expect(typesetIn(canvasElement)).toHaveLength(2),
+			RENDERER_ARRIVES,
+		)
+		await expect(canvas.getByText(/keeps its dollar sign/)).toBeInTheDocument()
+	},
+})
+
+export const MathDisplay = meta.story({
+	args: { children: DISPLAY_MATH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`$$…$$` as a block of its own, centred between the paragraphs it belongs to. A sum wider than the bubble scrolls on its own axis rather than widening the block. Check that the block rhythm above and below matches the other block elements, and that the inline `$n = 40$` in the closing line sits on the text baseline instead of pushing the line box open.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(
+			() =>
+				expect(canvasElement.querySelector(".katex-display")).toBeInTheDocument(),
+			RENDERER_ARRIVES,
+		)
+		await expect(typesetIn(canvasElement)).toHaveLength(2)
+	},
+})
+
+export const MathMalformed = meta.story({
+	args: { children: MALFORMED_MATH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An unclosed fraction and a matrix with no end — what a stream mid-flight produces. Neither throws and neither blanks the bubble: each keeps the source the author typed, flagged in the destructive tone, and the expression after them still typesets. Check that the failed expressions read as text rather than as a gap.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(
+			() =>
+				expect(
+					canvasElement.querySelectorAll(".katex-error").length,
+				).toBeGreaterThan(0),
+			RENDERER_ARRIVES,
+		)
+		await expect(canvasElement.textContent).toContain("\\frac{1}{")
+	},
+})
+
+export const MathOversized = meta.story({
+	args: { children: OVERSIZED_MATH },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An expression is bounded by what it costs, not only by whether it parses. This 20×20 matrix is under two kilobytes to type and typesets to ninety-six of DOM; a 100×100 one reaches 2.2 MB. Past the bound the source stands as text — the same thing shown for an expression that cannot be parsed — and the expression after it still typesets. Check that the bubble stays scrollable and responsive instead of paying for a matrix nobody can read.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await waitFor(
+			() => expect(typesetIn(canvasElement)).toHaveLength(1),
+			RENDERER_ARRIVES,
+		)
+		await expect(canvas.getByText(/begin{matrix}/)).toBeInTheDocument()
+	},
+})
+
+export const MermaidFlowchart = meta.story({
+	args: { children: MERMAID_FLOWCHART },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A fence labelled `mermaid` is a drawing, not code: it takes no highlighter and no copy control, and mermaid itself is fetched only once a document declares one. The palette follows the `--diagram-scheme` token, so the diagram is drawn for the theme of the surface it sits on and is redrawn when that theme changes — flip the theme layout toolbar to side-by-side and check both. The source holds the block until the diagram replaces it. Mermaid ships a stylesheet with every diagram, prefixed selectors and unprefixed keyframes alike, so the drawing goes into a shadow root: the CSS reaches this diagram and nothing else, while the type and the tokens it inherits still cross the boundary.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(
+			() => expect(diagramsIn(canvasElement)).toHaveLength(1),
+			RENDERER_ARRIVES,
+		)
+
+		const [diagram] = diagramsIn(canvasElement)
+		const keyframes = globalKeyframeNames()
+
+		await expect(diagram.textContent).toContain("Read the nest")
+		await expect(loosePayloadIn(canvasElement)).toHaveLength(0)
+		await expect(keyframes).not.toContain("edge-animation-frame")
+		await expect(keyframes).not.toContain("dash")
+	},
+})
+
+export const MermaidMalformed = meta.story({
+	args: { children: MALFORMED_MERMAID },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"An edge that points nowhere. The diagram cannot be drawn, so its source stays on screen exactly as written and the diagram below it still draws — one bad fence never costs the reader the rest of the answer. Check that nothing throws and that the failed source keeps the code surface rather than collapsing.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await waitFor(
+			() => expect(diagramsIn(canvasElement)).toHaveLength(1),
+			RENDERER_ARRIVES,
+		)
+		await expect(canvas.getByText(/--> {{/)).toBeInTheDocument()
+	},
+})
+
+export const MermaidInBubble = meta.story({
+	args: { children: MERMAID_WIDE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The host case: a diagram wider than the bubble that carries it. The bubble must not grow to fit it and must not spill it — the diagram scrolls inside its frame, which is a tab stop so a keyboard reaches the far end. Check that the frame sits inside the bubble padding and that the labels keep their size instead of being scaled down to fit.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await waitFor(
+			() => expect(diagramsIn(canvasElement)).toHaveLength(1),
+			RENDERER_ARRIVES,
+		)
+
+		const viewport = canvas.getByRole("group", { name: "Diagram" })
+		const content = bubbleContentOf(canvasElement)
+
+		await expect(content.scrollWidth).toBe(content.clientWidth)
+		await expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth)
+	},
+})
+
 export const ThematicBreak = meta.story({
 	args: { children: THEMATIC_BREAK },
 	parameters: {
@@ -935,15 +1198,21 @@ export const HostileMarkup = meta.story({
 		docs: {
 			description: {
 				story:
-					"The security contract, rendered. A script, a style, an iframe, an `onerror` image and a `javascript:` link go in; nothing but the trailing paragraph and the inert link text comes out. Check that no layout collapses — a surviving `style` block would hide the page — and that the last paragraph still renders, proving the payload was dropped rather than aborting the block.",
+					"The security contract, rendered. A script, a style, an iframe, an `onerror` image, a `javascript:` link and a diagram whose labels are markup all go in; nothing but the trailing paragraph, the inert link text and a diagram of two empty boxes comes out. The diagram is the one place markup is injected rather than built from the tree, so mermaid draws it under its strict level: the script and the event handlers are gone by the time the SVG reaches the DOM, and what a label may still carry is what the allowlist already grants ordinary markdown — an element, never a handler on it. Check that no layout collapses — a surviving `style` block would hide the page — and that the last paragraph still renders, proving the payload was dropped rather than aborting the block.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(
 			canvas.getByText("Prose after the payload still renders."),
 		).toBeInTheDocument()
 		await expect(canvas.queryByRole("link")).not.toBeInTheDocument()
+
+		await waitFor(
+			() => expect(diagramsIn(canvasElement)).toHaveLength(1),
+			RENDERER_ARRIVES,
+		)
+		await expect(loosePayloadIn(canvasElement)).toHaveLength(0)
 	},
 })
 

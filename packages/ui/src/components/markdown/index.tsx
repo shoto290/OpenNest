@@ -2,6 +2,7 @@ import { useId } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeSanitize from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math"
 
 import { MARKDOWN_COMPONENTS } from "@workspace/ui/components/markdown/components"
 import {
@@ -38,7 +39,7 @@ export const Markdown = ({ children, className }: MarkdownProps) => {
 					[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 					[rehypeScopeIds, { scope }],
 				]}
-				remarkPlugins={[remarkGfm]}
+				remarkPlugins={[remarkGfm, remarkMath]}
 			>
 				{children}
 			</ReactMarkdown>

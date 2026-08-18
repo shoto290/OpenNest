@@ -141,6 +141,35 @@ describe("markdown constructions", () => {
 	})
 })
 
+describe("markdown math and diagrams", () => {
+	it("holds an inline expression as its source until the typesetter lands", () => {
+		const html = render("The window is $\\Delta t < 250$ ms.")
+
+		expect(html).toContain(">\\Delta t &lt; 250<")
+		expect(html).not.toContain("<code")
+	})
+
+	it("gives a display expression a block of its own", () => {
+		const html = render("$$\nc(n) = \\sum_{i=1}^{n} o_i\n$$")
+
+		expect(html).toContain("c(n) = \\sum_{i=1}^{n} o_i")
+		expect(html).not.toContain("<p>")
+	})
+
+	it("leaves a lone dollar sign in the prose", () => {
+		expect(render("The plan costs $5 a month.")).toContain(
+			"The plan costs $5 a month.",
+		)
+	})
+
+	it("holds a diagram as its source until mermaid lands, never as code", () => {
+		const html = render("```mermaid\nflowchart TD\n\tA --> B\n```")
+
+		expect(html).toContain("flowchart TD")
+		expect(html).not.toContain("Code snippet")
+	})
+})
+
 describe("markdown tables", () => {
 	it("keeps every declared column alignment", () => {
 		const html = render(ALIGNED_TABLE)
@@ -346,6 +375,8 @@ describe("markdown resilience", () => {
 		"- [x unclosed task\n\t- [ ]",
 		"```ts\nconst never = closed",
 		":::unknown-block\ncontent\n:::",
+		"$\\frac{1}{$ and $$\\begin{bmatrix} 1 & 2 \\\\ 3$$",
+		"```mermaid\nflowchart TD\n\tA[Read] -->\n\t--> {{\n```",
 	]
 
 	it.each(MALFORMED)("does not throw on %j", (source) => {

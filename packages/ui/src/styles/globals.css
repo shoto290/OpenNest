@@ -10,6 +10,7 @@
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.141 0.005 285.823);
 	--bot-avatar-ink: oklch(0.08 0 0);
+	--diagram-scheme: light;
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.141 0.005 285.823);
 	--popover: oklch(1 0 0);
@@ -49,6 +50,7 @@
 	--background: oklch(0.141 0.005 285.823);
 	--foreground: oklch(0.985 0 0);
 	--bot-avatar-ink: oklch(0.995 0 0);
+	--diagram-scheme: dark;
 	--card: oklch(0.21 0.006 285.885);
 	--card-foreground: oklch(0.985 0 0);
 	--popover: oklch(0.21 0.006 285.885);
