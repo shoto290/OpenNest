@@ -69,6 +69,10 @@ export type TransportError =
 	| { kind: "startupTimeout"; timeoutMs: number }
 	| { kind: "crashed"; code: number | null; detail: string | null }
 	| { kind: "resumeFailed"; forgotSessionId: boolean }
+	/** The bot names a folder the machine no longer has, so the run was started
+	 * where one is started for a bot naming none. The process is up and answering —
+	 * somewhere else. */
+	| { kind: "workingDirectoryRefused"; path: string }
 	| { kind: "invalidFrame"; detail: string }
 	| { kind: "notStarted" }
 	| { kind: "turnAlreadyRunning" }

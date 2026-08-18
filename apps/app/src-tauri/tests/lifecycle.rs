@@ -24,6 +24,7 @@ use opennest_app::claude::contract::{RuntimeScope, SessionHandle, TransportError
 use opennest_app::claude::session::live_groups;
 use opennest_app::claude::ClaudeState;
 use opennest_app::commands::invoke_handler;
+use opennest_app::db;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, Manager};
 
@@ -43,6 +44,9 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
 fn app() -> App<MockRuntime> {
 	mock_builder()
 		.manage(ClaudeState::default())
+		// A host that never opened a file: the bots these tests start are bots it can
+		// read nothing about, so every child comes up as one carrying nothing.
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(mock_context(noop_assets()))
 		.expect("app builds")
@@ -82,6 +86,7 @@ async fn start_run(
 	claude_start_or_resume_session(
 		app.handle().clone(),
 		app.state::<ClaudeState>(),
+		app.state::<db::DatabaseState>(),
 		scope,
 		None,
 		Some(std::env::temp_dir().to_string_lossy().into_owned()),

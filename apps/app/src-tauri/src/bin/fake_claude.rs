@@ -41,6 +41,22 @@ fn resumed() -> bool {
 	std::env::args().any(|arg| arg == "--resume")
 }
 
+/// What the host started this child as, in the child's own words: the system
+/// prompt it was handed on the command line, and the directory it was started in.
+/// Nothing else here answers about the process rather than about the conversation,
+/// which is why it is a scenario of its own.
+fn identity() -> String {
+	let args: Vec<String> = std::env::args().collect();
+	let told = args
+		.iter()
+		.position(|arg| arg == "--append-system-prompt")
+		.and_then(|index| args.get(index + 1))
+		.cloned()
+		.unwrap_or_else(|| "none".into());
+	let here = std::env::current_dir().map(|dir| dir.display().to_string()).unwrap_or_default();
+	format!("system<{told}> cwd<{here}>")
+}
+
 /// A child deaf to the EOF on its stdin, so only a signal can end it. Set apart
 /// from the scenarios because it composes with any of them.
 fn ignores_eof() -> bool {
@@ -331,6 +347,10 @@ fn main() {
 						emit_raw("this is not json");
 						emit_raw("{\"type\":");
 						emit_text_turn("recovered");
+						emit_result("success", false);
+					}
+					"identity" => {
+						emit_text_turn(&identity());
 						emit_result("success", false);
 					}
 					"tool" => {

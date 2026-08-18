@@ -16,6 +16,8 @@ export function describeTransportError(error: TransportError): string {
 			return `Claude Code exited (code ${error.code ?? "unknown"}).`
 		case "resumeFailed":
 			return "That conversation could not be resumed. Claude Code started a new one; your messages are still here."
+		case "workingDirectoryRefused":
+			return `${error.path} is not there any more. This bot is answering from the usual place instead.`
 		case "invalidFrame":
 			return `An unreadable frame was skipped: ${error.detail}`
 		case "notStarted":

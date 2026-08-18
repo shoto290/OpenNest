@@ -25,6 +25,7 @@ use opennest_app::claude::contract::{
 };
 use opennest_app::claude::ClaudeState;
 use opennest_app::commands::invoke_handler;
+use opennest_app::db;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -63,6 +64,9 @@ fn launch() -> Harness {
 
 	let app = mock_builder()
 		.manage(ClaudeState::default())
+		// A host that never opened a file: the session lifecycle is what this suite
+		// drives, and a bot it can read nothing about starts the way one always has.
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(context)
 		.expect("app builds");
