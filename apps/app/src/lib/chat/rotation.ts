@@ -11,6 +11,10 @@ export const STOPPED = "the provider stopped answering in it"
  * held anything, which is not a session that stopped and not one that was refused. */
 export const NEVER_STARTED = "the provider never came up in it"
 export const NEARING_THE_BOUND = "the context was nearing its bound"
+/** The bot was described again. A process is started as the bot reads at that
+ * moment — its instructions are the system prompt it was given, its directory is
+ * where it was put — and neither can be said to a child that is already running. */
+export const REDESCRIBED = "the bot was described again"
 
 /** Why a run was left behind. Every rotation records one: a replaced row with no
  * reason is a handover nobody can account for afterwards, and the only row that
@@ -21,6 +25,7 @@ export type RotationReason =
 	| typeof STOPPED
 	| typeof NEVER_STARTED
 	| typeof NEARING_THE_BOUND
+	| typeof REDESCRIBED
 
 /** How many prompts one provider session carries before it is replaced on
  * purpose. The threshold is preventive: a session is rotated while it still

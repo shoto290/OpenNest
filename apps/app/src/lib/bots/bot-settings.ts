@@ -124,6 +124,19 @@ export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	instructions: value.instructions,
 })
 
+/** Whether this value would start a process differently from the one already
+ * answering for the bot. Only two fields do: the instructions a child is given as
+ * its system prompt, and the directory it is started in. Both are settled at spawn,
+ * so a bot that changes either is a bot whose live runtime has to be replaced —
+ * everything else about it is read where it is shown, or travels with the next
+ * prompt. */
+export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {
+	const next = toIdentity(value, bot)
+	return (
+		next.instructions !== bot.instructions || next.workingDir !== bot.workingDir
+	)
+}
+
 /** What the chat knows about the bots it lists. Every bot runs a process of its
  * own, so what is working is read per row rather than granted to the open one: the
  * reader who walks away from a bot that is answering is owed the sight of it still

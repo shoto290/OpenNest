@@ -4,7 +4,13 @@ import { type ChatController, createChatController } from "./chat-controller"
 import { isSessionReady, isTurnBusy } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
-import { ASKED_FOR, NEARING_THE_BOUND, REFUSED, STOPPED } from "./rotation"
+import {
+	ASKED_FOR,
+	NEARING_THE_BOUND,
+	REDESCRIBED,
+	REFUSED,
+	STOPPED,
+} from "./rotation"
 
 import type {
 	ChatMessage,
@@ -1820,6 +1826,74 @@ describe("a run replaced under a conversation that carries on", () => {
 			expect(told(submitted)).toContain(`stored ${index}\n`)
 		}
 		expect(occurrences(told(submitted), "where were we?")).toBe(1)
+	})
+
+	// The bot was described again while a process was answering for it. A child is
+	// given its system prompt and its directory at spawn and there is no frame that
+	// changes either, so the run is spent from there and the next prompt is carried
+	// by a process started as the bot reads now. The reader sees none of it.
+	it("replaces the run of a bot that was described again, on the next prompt", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver, detach } = await bootedHarness({ store })
+		const submitted = vi.spyOn(driver, "submitPrompt")
+		const started = vi.spyOn(driver, "startOrResumeSession")
+		const described = runOf(controller)
+		const before = controller.getState().messages
+
+		controller.redescribe(BOT)
+		await vi.runAllTimersAsync()
+
+		// Nothing yet: a reader still typing into the settings would otherwise spend a
+		// process per keystroke, and nothing is waiting on the one it would spawn.
+		expect(started).not.toHaveBeenCalled()
+		expect(reasons(opened, BOT)).toEqual([null])
+
+		await controller.send("and now?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, BOT)).toEqual([null, REDESCRIBED])
+		expect(runOf(controller).epoch).toBe(described.epoch + 1)
+		expectWholeChat(told(submitted), [])
+		expect(told(submitted)).toContain("The new message:\nand now?")
+		expect(occurrences(told(submitted), "and now?")).toBe(1)
+		expect(controller.getState().messages.slice(0, before.length)).toEqual(before)
+		expect(spoken(controller.getState().messages).slice(-2)).toEqual([
+			["user", "and now?", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		detach()
+	})
+
+	// Every bot holds a runtime of its own, so being told one bot is not what its
+	// process was started as says nothing about any other — and a bot with no
+	// process at all has nothing to retire.
+	it("retires the run of the bot that was described and no other", async () => {
+		const store = withHistory()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, detach } = await bootedHarness({ store })
+		await controller.open(other.id)
+		await vi.runAllTimersAsync()
+
+		// A bot this launch never opened, and one that is not the bot being edited.
+		controller.redescribe("nobody")
+		controller.redescribe(BOT)
+		await controller.send("and me?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, "nobody")).toEqual([])
+		expect(reasons(opened, other.id)).toEqual([null])
+
+		// Back to the bot that was described: the process answering for it is replaced
+		// under the reason it was retired for, and the run it takes is the next of its
+		// own lineage.
+		await controller.open(BOT)
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, BOT)).toEqual([null, REDESCRIBED])
+		expect(reasons(opened, other.id)).toEqual([null])
+		detach()
 	})
 
 	// A launch that never saw any of it. The run it opens is told nothing by the

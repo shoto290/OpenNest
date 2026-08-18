@@ -7,6 +7,7 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { ChatScreen } from "@/components/chat-screen"
 import {
+	changesRuntime,
 	modelOptionsFor,
 	toRosterBots,
 	toSettingsValue,
@@ -96,9 +97,15 @@ export function App() {
 						onDelete={() => {
 							void deleteBot(selected.id)
 						}}
-						onValueChange={(value) =>
+						// The record first, then the runtime: a bot that changed what a
+						// process is started as retires the one answering for it, and the
+						// next prompt is carried by a process started as it reads now.
+						onValueChange={(value) => {
 							roster.controller.describe(selected.id, value)
-						}
+							if (changesRuntime(selected, value)) {
+								chat.controller.redescribe(selected.id)
+							}
+						}}
 						value={toSettingsValue(selected)}
 						working={activity?.isWorking ?? false}
 						workingKind={activity?.kind}
