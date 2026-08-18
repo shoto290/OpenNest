@@ -6,6 +6,7 @@ import {
 	AgentSidebar,
 	type AgentSidebarBot,
 	type AgentSidebarProps,
+	type BotIdentityPose,
 } from "@workspace/ui/components/agents/agent-sidebar"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
@@ -127,6 +128,23 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 ]
 
+/** Every pose a bot can be given in its settings, one bot each and none of them
+ * running, so the rows and the assertions read off the same list. */
+const IDENTITY_POSES: BotIdentityPose[] = [
+	"idle",
+	"happy",
+	"curious",
+	"proud",
+	"shy",
+	"playful",
+	"bored",
+	"sleeping",
+]
+
+const IDENTITY_ROSTER: AgentSidebarBot[] = IDENTITY_POSES.map(
+	(identity, index) => ({ ...ROSTER[index], identity, status: "idle" }),
+)
+
 const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	...bot,
 	title: undefined,
@@ -155,29 +173,38 @@ const rowFor = (canvasElement: HTMLElement, name: string) => {
 
 const rowButton = (row: HTMLElement) => slotIn(row, "sidebar-menu-button")
 
-/** Where a slot starts inside its own row, so every row can be compared to
- * every other one whatever its content is. */
-const startOffsets = (rows: HTMLElement[], slot: string) =>
-	rows.map((row) => {
-		const rowBox = row.getBoundingClientRect()
-		const box = slotIn(row, slot).getBoundingClientRect()
-		return `${Math.round(box.left - rowBox.left)}/${Math.round(box.top - rowBox.top)}`
-	})
+/** Where a slot sits inside its own row, measured from one edge, so every row
+ * can be compared to every other one whatever its content is. */
+const offsetsFrom =
+	(edge: (rowBox: DOMRect, box: DOMRect) => number) =>
+	(rows: HTMLElement[], slot: string) =>
+		rows.map((row) => {
+			const rowBox = row.getBoundingClientRect()
+			const box = slotIn(row, slot).getBoundingClientRect()
+			return `${Math.round(edge(rowBox, box))}/${Math.round(box.top - rowBox.top)}`
+		})
 
-/** The same for a slot measured from the trailing edge of its row. */
-const endOffsets = (rows: HTMLElement[], slot: string) =>
-	rows.map((row) => {
-		const rowBox = row.getBoundingClientRect()
-		const box = slotIn(row, slot).getBoundingClientRect()
-		return `${Math.round(rowBox.right - box.right)}/${Math.round(box.top - rowBox.top)}`
-	})
+const startOffsets = offsetsFrom((rowBox, box) => box.left - rowBox.left)
 
-const uniqueCount = (values: string[]) => new Set(values).size
+const endOffsets = offsetsFrom((rowBox, box) => rowBox.right - box.right)
+
+const uniqueCount = (values: unknown[]) => new Set(values).size
 
 const rowHeights = (rows: HTMLElement[]) =>
 	rows.map((row) => Math.round(row.getBoundingClientRect().height))
 
 const isClipped = (node: HTMLElement) => node.scrollWidth > node.clientWidth
+
+/** The columns a roster stands on: name, preview and timestamp each sit at the
+ * same offset inside every row, the timestamp holds both its edges, and no row
+ * is taller than another — whatever any of them carries. */
+const expectAlignedRows = async (rows: HTMLElement[]) => {
+	await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
+	await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
+	await expect(uniqueCount(startOffsets(rows, "roster-row-timestamp"))).toBe(1)
+	await expect(uniqueCount(endOffsets(rows, "roster-row-timestamp"))).toBe(1)
+	await expect(uniqueCount(rowHeights(rows))).toBe(1)
+}
 
 /** The highlight behind a menu item, which belongs to the highlighted item and
  * to no other — it is drawn where the pointer is rather than travelling there. */
@@ -240,13 +267,7 @@ export const Roster = meta.story({
 		const rows = rowsIn(canvasElement)
 		await expect(rows).toHaveLength(ROSTER.length)
 
-		await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
-		await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
-		await expect(uniqueCount(endOffsets(rows, "roster-row-timestamp"))).toBe(1)
-		await expect(uniqueCount(startOffsets(rows, "roster-row-timestamp"))).toBe(
-			1,
-		)
-		await expect(uniqueCount(rowHeights(rows).map(String))).toBe(1)
+		await expectAlignedRows(rows)
 
 		const badged = rows.filter((row) =>
 			row.querySelector('[data-slot="roster-row-badge"]'),
@@ -347,9 +368,7 @@ export const NoTitles = meta.story({
 		await expect(
 			canvasElement.querySelectorAll('[data-slot="roster-row-badge"]'),
 		).toHaveLength(0)
-		await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
-		await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
-		await expect(uniqueCount(rowHeights(rows).map(String))).toBe(1)
+		await expectAlignedRows(rows)
 	},
 })
 
@@ -384,17 +403,8 @@ export const Selected = meta.story({
 
 export const Identities = meta.story({
 	args: {
-		bots: [
-			{ ...ROSTER[6], identity: "idle" },
-			{ ...ROSTER[1], identity: "happy" },
-			{ ...ROSTER[0], identity: "curious" },
-			{ ...ROSTER[2], identity: "proud", status: "idle" },
-			{ ...ROSTER[4], identity: "shy" },
-			{ ...ROSTER[5], identity: "playful" },
-			{ ...ROSTER[3], identity: "bored" },
-			{ ...ROSTER[7], identity: "sleeping" },
-		],
-		selectedBotId: "grove",
+		bots: IDENTITY_ROSTER,
+		selectedBotId: IDENTITY_ROSTER[0].id,
 	},
 	parameters: {
 		docs: {
@@ -406,19 +416,9 @@ export const Identities = meta.story({
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const rows = rowsIn(canvasElement)
-		const poses = [
-			"idle",
-			"happy",
-			"curious",
-			"proud",
-			"shy",
-			"playful",
-			"bored",
-			"sleeping",
-		]
 
-		await expect(rows).toHaveLength(poses.length)
-		for (const [index, pose] of poses.entries()) {
+		await expect(rows).toHaveLength(IDENTITY_POSES.length)
+		for (const [index, pose] of IDENTITY_POSES.entries()) {
 			await expect(
 				within(rows[index]).getByRole("img", {
 					name: new RegExp(`${pose}$`),
@@ -432,7 +432,7 @@ export const Identities = meta.story({
 		await expect(
 			canvas.getByRole("complementary", { name: "Conversations" }),
 		).toHaveAttribute("aria-busy", "false")
-		await expect(uniqueCount(rowHeights(rows).map(String))).toBe(1)
+		await expect(uniqueCount(rowHeights(rows))).toBe(1)
 	},
 })
 
@@ -494,9 +494,7 @@ export const Working = meta.story({
 			}),
 		).toBeVisible()
 
-		await expect(
-			uniqueCount(rowHeights(rowsIn(canvasElement)).map(String)),
-		).toBe(1)
+		await expect(uniqueCount(rowHeights(rowsIn(canvasElement)))).toBe(1)
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Cinder selected, writing",
 		)
@@ -586,9 +584,7 @@ export const LongContent = meta.story({
 		)
 		await expect(slotIn(long, "roster-row-badge")).toBeVisible()
 
-		await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
-		await expect(uniqueCount(endOffsets(rows, "roster-row-timestamp"))).toBe(1)
-		await expect(uniqueCount(rowHeights(rows).map(String))).toBe(1)
+		await expectAlignedRows(rows)
 	},
 })
 

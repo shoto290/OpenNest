@@ -23,7 +23,6 @@ import {
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
 
-const ROW_AVATAR_SIZE = 40
 const PANEL_LABEL = "Conversations"
 const CREATE_LABEL = "New bot"
 const EMPTY_LABEL = "No bots yet"
@@ -33,7 +32,9 @@ const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
 
 /** Fixed slots: the avatar box and the timestamp box never resize, so a name,
- * a badge and a timestamp land on the same x on every row. */
+ * a badge and a timestamp land on the same x on every row. The box and the
+ * drawing inside it are the same 40px, and have to be changed together. */
+const ROW_AVATAR_SIZE = 40
 const AVATAR_SLOT = "relative block size-10 shrink-0"
 const TIMESTAMP_SLOT =
 	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
