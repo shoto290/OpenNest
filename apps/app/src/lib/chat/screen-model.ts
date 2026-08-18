@@ -8,6 +8,7 @@ import type { ChatEmptyStateStatus } from "@workspace/ui/components/chat-empty-s
 import type { ChatTurnState } from "@workspace/ui/components/chat-turn"
 
 import { type ChatState, isTurnBusy } from "./chat-state"
+import { toPublishedBlocks } from "./markdown-blocks"
 
 import type {
 	ActivityEvent,
@@ -23,8 +24,9 @@ import type {
 } from "../conversations/transcript-contract"
 import { isTerminalCompletion } from "../conversations/transcript-state"
 
-/** One bubble in the transcript. An answer is published paragraph by paragraph,
- * so a long reply reads as a run of messages rather than one growing block. */
+/** One bubble in the transcript. An answer is published markdown block by
+ * markdown block, so a long reply reads as a run of messages rather than one
+ * growing block. */
 export type TranscriptRow = {
 	id: string
 	messageId: string
@@ -83,8 +85,6 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	writeFailed: false,
 }
 
-const PARAGRAPH_BREAK = /\n{2,}/
-
 const RUN_GAP_MS = 5 * 60_000
 
 /** Tools that read rather than change something, keyed by the leading word of
@@ -99,15 +99,6 @@ const SEARCH_TOOLS = new Set([
 ])
 
 const WRITE_TOOLS = new Set(["edit", "multiedit", "notebookedit", "write"])
-
-/** Paragraphs the bot has finished. An answer that has not ended keeps its
- * trailing text private until a blank line closes it, so nothing is published
- * mid-sentence. */
-function toParagraphs(text: string, unfinished: boolean): string[] {
-	const parts = text.split(PARAGRAPH_BREAK)
-	const closed = unfinished ? parts.slice(0, -1) : parts
-	return closed.map((part) => part.trim()).filter((part) => part.length > 0)
-}
 
 function toRow(
 	message: TranscriptMessage,
@@ -128,17 +119,17 @@ function toRow(
 function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 	const unfinished = !isTerminalCompletion(message.completion)
 	const ending = TURN_STATE[message.completion]
-	const paragraphs = toParagraphs(message.content, unfinished)
+	const blocks = toPublishedBlocks(message.content, unfinished)
 
-	if (paragraphs.length === 0) {
-		// A turn stopped or failed before its first paragraph still has to say so.
+	if (blocks.length === 0) {
+		// A turn stopped or failed before its first block still has to say so.
 		return unfinished || ending === "complete"
 			? []
 			: [toRow(message, { index: 0, text: "", completion: ending })]
 	}
 
-	return paragraphs.map((text, index) => {
-		const closes = index === paragraphs.length - 1 && !unfinished
+	return blocks.map((text, index) => {
+		const closes = index === blocks.length - 1 && !unfinished
 		return toRow(message, {
 			index,
 			text,
@@ -152,7 +143,9 @@ function assistantRows(message: TranscriptMessage): TranscriptRow[] {
  * memoised transcript rows stay put through a stream. */
 const rowsByMessage = new WeakMap<TranscriptMessage, TranscriptRow[]>()
 
-export function toTranscriptRows(messages: TranscriptMessage[]): TranscriptRow[] {
+export function toTranscriptRows(
+	messages: TranscriptMessage[],
+): TranscriptRow[] {
 	return messages.flatMap((message) => {
 		const cached = rowsByMessage.get(message)
 		if (cached) {
