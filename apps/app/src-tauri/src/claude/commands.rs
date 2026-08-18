@@ -117,8 +117,11 @@ impl<S: Clone> Live<S> {
 			.collect()
 	}
 
+	/// Asked on every frame a session emits, so it never builds a key to throw away:
+	/// a scope equal to a run's names that run's participant by construction, which
+	/// makes looking for the scope itself the same question as a lookup by key.
 	fn holds(&self, scope: &RuntimeScope) -> bool {
-		matches!(self.runs.lock().expect("live runs").get(&participant(scope)), Some(run) if &run.scope == scope)
+		self.runs.lock().expect("live runs").values().any(|run| &run.scope == scope)
 	}
 
 	/// Whether the participant this scope names is on a *different* run. Standing for
@@ -126,7 +129,11 @@ impl<S: Clone> Live<S> {
 	/// running for it, which is what makes a second shutdown a no-op rather than a
 	/// refusal.
 	fn is_foreign(&self, scope: &RuntimeScope) -> bool {
-		matches!(self.runs.lock().expect("live runs").get(&participant(scope)), Some(run) if &run.scope != scope)
+		self.runs
+			.lock()
+			.expect("live runs")
+			.get(&participant(scope))
+			.is_some_and(|run| &run.scope != scope)
 	}
 
 	/// The child a caller naming `scope` may act on: the one its participant is

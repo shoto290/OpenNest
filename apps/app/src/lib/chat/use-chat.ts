@@ -30,27 +30,30 @@ export function useChat(driver: ChatDriver, store: TranscriptStore): Chat {
  * snapshot on every publish and a fresh object each time would re-render the roster
  * on every token of every bot. It changes when a bot starts, stops, or changes what
  * it is doing, and not once in between. */
+type BotActivity = Record<string, SidebarActivity>
+
+const signatureOf = (busy: [string, SidebarActivity][]): string =>
+	busy
+		.map(
+			([id, activity]) => `${id}:${activity.isWorking}:${activity.kind ?? ""}`,
+		)
+		.join("|")
+
 export function useBotActivity(
 	controller: ChatController,
 	botIds: string[],
-): Record<string, SidebarActivity> {
+): BotActivity {
 	const held = useRef<{ signature: string; activity: BotActivity } | null>(null)
 
 	return useSyncExternalStore(controller.subscribe, () => {
-		const activity = Object.fromEntries(
-			botIds.map((id) => [id, sidebarActivityFor(controller.stateFor(id))]),
-		)
-		const signature = signatureOf(activity)
+		const busy: [string, SidebarActivity][] = botIds.map((id) => [
+			id,
+			sidebarActivityFor(controller.stateFor(id)),
+		])
+		const signature = signatureOf(busy)
 		if (held.current?.signature !== signature) {
-			held.current = { signature, activity }
+			held.current = { signature, activity: Object.fromEntries(busy) }
 		}
 		return held.current.activity
 	})
 }
-
-type BotActivity = Record<string, SidebarActivity>
-
-const signatureOf = (activity: BotActivity): string =>
-	Object.entries(activity)
-		.map(([id, busy]) => `${id}:${busy.isWorking}:${busy.kind ?? ""}`)
-		.join("|")

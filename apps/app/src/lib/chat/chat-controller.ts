@@ -553,27 +553,31 @@ export function createChatController(
 		detach = null
 	}
 
-	/** The bots an event is for. The run it names decides, never the subscription it
-	 * arrived on: the host delivers every bot's stream on one channel, and a replaced
-	 * session keeps talking until its child is gone. So a frame reaches the bot whose
-	 * run produced it and no other — and a frame from a run nobody holds any more
-	 * reaches none at all. */
-	const routed = (scope: RuntimeScope | null) =>
-		[...bots.values()].filter((bot) =>
-			isSameRuntimeScope(scope, bot.state.runtime),
-		)
+	/** Hands an event to the bot it is for. The run it names decides, never the
+	 * subscription it arrived on: the host delivers every bot's stream on one
+	 * channel, and a replaced session keeps talking until its child is gone. So a
+	 * frame reaches the bot whose run produced it and no other — and a frame from a
+	 * run nobody holds any more reaches none at all.
+	 *
+	 * Walked rather than filtered: this runs on every word of every answer, and a
+	 * list built to be thrown away per token is the kind of work a stream multiplies.
+	 */
+	const route = (scope: RuntimeScope | null, event: ClaudeEvent) => {
+		for (const bot of bots.values()) {
+			if (!isSameRuntimeScope(scope, bot.state.runtime)) {
+				continue
+			}
+			dispatch(bot, { type: "driverEvent", scope, event })
+			noteFailure(bot, event)
+			persist(bot, scope, event)
+		}
+	}
 
 	/** Resolves once the subscription is live. Tauri registers listeners over IPC,
 	 * so a command issued before this settles loses the events it emits. */
 	const connect = () => {
 		disconnect()
-		detach = driver.subscribe(({ scope, event }) => {
-			for (const bot of routed(scope)) {
-				dispatch(bot, { type: "driverEvent", scope, event })
-				noteFailure(bot, event)
-				persist(bot, scope, event)
-			}
-		})
+		detach = driver.subscribe(({ scope, event }) => route(scope, event))
 		return detach
 	}
 
@@ -1071,7 +1075,7 @@ export function createChatController(
 	/** Everything the reader asks for is asked of the bot on the screen. There is no
 	 * default one: before a bot is opened there is nothing to ask, and nowhere an
 	 * answer could be shown. */
-	const onSelected = <T,>(
+	const onSelected = <T>(
 		ask: (bot: BotChat) => Promise<T>,
 		nothing: T,
 	): Promise<T> => (selected ? ask(selected) : Promise.resolve(nothing))

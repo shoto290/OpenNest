@@ -96,7 +96,8 @@ export function createFakeChatDriver(
 
 	const emitFor = (run: FakeRun, event: ClaudeEvent) => emit(event, run.scope)
 
-	const heldFor = (scope: RuntimeScope) => runs.get(participantOf(scope)) ?? null
+	const heldFor = (scope: RuntimeScope) =>
+		runs.get(participantOf(scope)) ?? null
 
 	/** The host refuses a command that names a run it is not holding for that bot,
 	 * and so does this: a fake that answered anyway would let a test pass on a
@@ -371,7 +372,6 @@ export function createFakeChatDriver(
 			if (run.turnActive) {
 				finishTurn(run, "cancelled")
 			}
-			run.sessionId = null
 			runs.delete(participantOf(scope))
 			if (latest === run) {
 				latest = null
