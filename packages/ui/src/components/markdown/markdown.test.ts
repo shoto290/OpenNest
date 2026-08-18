@@ -97,8 +97,8 @@ describe("markdown constructions", () => {
 	it("renders autolinks", () => {
 		const html = render("Docs at https://opennest.dev and me@opennest.dev")
 
-		expect(html).toContain('<a href="https://opennest.dev">')
-		expect(html).toContain('<a href="mailto:me@opennest.dev">')
+		expect(html).toContain('<a href="https://opennest.dev"')
+		expect(html).toContain('<a href="mailto:me@opennest.dev"')
 	})
 
 	/** One-line fences, so every colour captured belongs to the same line: a grammar that
@@ -185,6 +185,156 @@ describe("markdown sanitizing", () => {
 		expect(html).not.toContain("javascript:")
 		expect(html).toContain("go")
 		expect(html).toContain('href="https://ok.test"')
+	})
+})
+
+describe("markdown links", () => {
+	const EXTERNAL = 'target="_blank" rel="noreferrer noopener"'
+
+	const shownHost = (html: string) =>
+		capturedValues(html, /data-slot="markdown-link-host"[^>]*>\(([^)]+)\)/g)
+
+	/** The pairs an independent review used to defeat comparing the link text
+	 * with the href. Each one now reports the same destination as any other. */
+	const DECEIVING = [
+		{
+			case: "userinfo before the host",
+			source:
+				"[https://opennest.dev@evil.test/reports](https://opennest.dev@evil.test/reports)",
+			host: "evil.test",
+		},
+		{
+			case: "text without a scheme",
+			source: "[opennest.dev/download](https://evil.test/payload)",
+			host: "evil.test",
+		},
+		{
+			case: "punycode homograph",
+			source:
+				"[https://\u043Epennest.dev/login](https://\u043Epennest.dev/login)",
+			host: "xn--pennest-8ig.dev",
+		},
+		{
+			case: "emphasis instead of a plain string",
+			source: "[**https://opennest.dev**](https://evil.test/steal)",
+			host: "evil.test",
+		},
+		{
+			case: "protocol-relative href",
+			source: "[https://opennest.dev](//evil.test/steal)",
+			host: "evil.test",
+		},
+	]
+
+	it.each(DECEIVING)(
+		"shows the destination past a $case",
+		({ source, host }) => {
+			const html = render(source)
+
+			expect(shownHost(html)).toEqual([host])
+			expect(html).toContain(EXTERNAL)
+		},
+	)
+
+	it("keeps a mailto under url text in the mail client, not in a window", () => {
+		const html = render("[https://opennest.dev](mailto:steal@evil.test)")
+
+		expect(html).toContain('href="mailto:steal@evil.test"')
+		expect(html).not.toContain("target=")
+		expect(shownHost(html)).toEqual([])
+	})
+
+	it("shows the destination of an ordinary link and of an autolink alike", () => {
+		expect(
+			shownHost(render("[the changelog](https://opennest.dev/changelog)")),
+		).toEqual(["opennest.dev"])
+		expect(shownHost(render("Docs at https://opennest.dev/docs"))).toEqual([
+			"opennest.dev",
+		])
+	})
+
+	it("keeps the link text whatever the destination says", () => {
+		expect(render("[the changelog](https://evil.test)")).toContain(
+			">the changelog</span>",
+		)
+	})
+
+	it("opens an external link in a new window without leaking the referrer", () => {
+		expect(render("[docs](https://opennest.dev)")).toContain(EXTERNAL)
+	})
+
+	it("shows a subdomain as it stands", () => {
+		expect(
+			shownHost(render("[roadmap](https://www.opennest.dev/roadmap)")),
+		).toEqual(["www.opennest.dev"])
+	})
+
+	it("keeps a fragment in the document", () => {
+		const html = render("[summary](#summary)")
+
+		expect(html).toContain('href="#summary"')
+		expect(html).not.toContain("target=")
+	})
+
+	it("keeps a footnote reference and its backlink in the document", () => {
+		expect(render(FOOTNOTE_SOURCE)).not.toContain("target=")
+	})
+
+	it("keeps a mailto autolink in place", () => {
+		const html = render("Write to me@opennest.dev")
+
+		expect(html).toContain('href="mailto:me@opennest.dev"')
+		expect(html).not.toContain("target=")
+	})
+
+	/** `tel:` is anchored by this component but never reaches it: the allowlist
+	 * upstream drops the href, so the text arrives inert. */
+	it("renders a tel link as plain text while the allowlist drops it", () => {
+		expect(render("[call us](tel:+33123456789)")).not.toContain("<a")
+	})
+
+	it("renders a scheme it cannot open as plain text", () => {
+		expect(render("[join](irc://opennest.dev/nest)")).not.toContain("<a")
+	})
+
+	it("renders a path that would resolve against this window as plain text", () => {
+		expect(render("[settings](/settings)")).not.toContain("<a")
+	})
+
+	it("truncates the text of a link and never its destination", () => {
+		const html = render("https://opennest.dev/a/very/long/path")
+
+		expect(html).toContain("truncate")
+		expect(html).toContain("whitespace-nowrap")
+	})
+
+	it("marks a destination with an initial drawn from the host itself", () => {
+		const html = render("[roadmap](https://www.opennest.dev/roadmap)")
+
+		expect(html).toContain(">o<")
+		expect(html).toContain('aria-hidden="true"')
+		expect(html).toContain("select-none")
+	})
+
+	it("asks one service for every icon and never the destination itself", () => {
+		const html = render("[steal](https://evil.test/payload)")
+
+		expect(html).toContain(
+			"https://www.google.com/s2/favicons?sz=64&amp;domain=evil.test",
+		)
+		expect(html).not.toContain("https://evil.test/favicon")
+		expect(html).toContain('referrerPolicy="no-referrer"')
+	})
+
+	it("keeps the icon out of the reading and off the critical path", () => {
+		const html = render("[docs](https://opennest.dev)")
+
+		expect(html).toContain('alt=""')
+		expect(html).toContain('loading="lazy"')
+	})
+
+	it("separates the text from its destination with a real space", () => {
+		expect(render("[roadmap](https://opennest.dev)")).toContain("</span> <span")
 	})
 })
 
