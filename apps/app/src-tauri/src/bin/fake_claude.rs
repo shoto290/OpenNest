@@ -28,17 +28,29 @@ fn scenario() -> String {
 	std::env::var("FAKE_CLAUDE_SCENARIO").unwrap_or_else(|_| "normal".into())
 }
 
-fn session_id() -> String {
+/// What the host put after a flag on the command line, if it put anything there.
+fn flag(name: &str) -> Option<String> {
 	let args: Vec<String> = std::env::args().collect();
-	args.iter()
-		.position(|arg| arg == "--resume")
-		.and_then(|index| args.get(index + 1))
-		.cloned()
-		.unwrap_or_else(|| DEFAULT_SESSION.into())
+	let index = args.iter().position(|arg| arg == name)?;
+	args.get(index + 1).cloned()
+}
+
+fn session_id() -> String {
+	flag("--resume").unwrap_or_else(|| DEFAULT_SESSION.into())
 }
 
 fn resumed() -> bool {
 	std::env::args().any(|arg| arg == "--resume")
+}
+
+/// What the host started this child as, in the child's own words: the system
+/// prompt it was handed on the command line, and the directory it was started in.
+/// Nothing else here answers about the process rather than about the conversation,
+/// which is why it is a scenario of its own.
+fn identity() -> String {
+	let told = flag("--append-system-prompt").unwrap_or_else(|| "none".into());
+	let here = std::env::current_dir().map(|dir| dir.display().to_string()).unwrap_or_default();
+	format!("system<{told}> cwd<{here}>")
 }
 
 /// A child deaf to the EOF on its stdin, so only a signal can end it. Set apart
@@ -331,6 +343,10 @@ fn main() {
 						emit_raw("this is not json");
 						emit_raw("{\"type\":");
 						emit_text_turn("recovered");
+						emit_result("success", false);
+					}
+					"identity" => {
+						emit_text_turn(&identity());
 						emit_result("success", false);
 					}
 					"tool" => {

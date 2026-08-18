@@ -3,11 +3,16 @@
 //!
 //! A durable chat outlives every process that ever answered in it, so a new run
 //! starts knowing nothing. What it is given is rebuilt here, out of the file alone
-//! and in plain text: the bot's own instructions and memory, the summary of what
-//! came before, the messages since that summary, the older message this prompt
-//! explicitly answers, and the prompt. Nothing in it is a provider's feature —
-//! there is no transcript replay and no session to resume, so the same words would
-//! serve any model that reads.
+//! and in plain text: what the bot remembers, the summary of what came before, the
+//! messages since that summary, the older message this prompt explicitly answers,
+//! and the prompt. Nothing in it is a provider's feature — there is no transcript
+//! replay and no session to resume, so the same words would serve any model that
+//! reads.
+//!
+//! What the bot was told to be is not in it. Instructions reach the process as its
+//! system prompt, spelled on the command line that starts it — see
+//! [`crate::claude::session::SessionOptions`] — so a context that also printed them
+//! would say the same thing twice, once with less standing than the other.
 //!
 //! Bounded is the whole point. Every part has a limit that does not grow with the
 //! conversation: the tail is a count of messages, the summary is a count of
@@ -62,7 +67,6 @@ const CHARS_PER_TOKEN: i64 = 4;
 /// What stands in for the words a bound left out, wherever one did.
 const ELIDED: &str = "…";
 
-const INSTRUCTIONS_LABEL: &str = "Instructions:";
 const MEMORY_LABEL: &str = "What you remember:";
 const SUMMARY_LABEL: &str = "The conversation so far:";
 const REPLY_LABEL: &str = "The message this one replies to:";
@@ -201,7 +205,6 @@ struct Parts<'a> {
 fn compose(parts: Parts<'_>) -> String {
 	let mut sections: Vec<String> = Vec::new();
 	if let Some(bot) = parts.bot {
-		push_section(&mut sections, INSTRUCTIONS_LABEL, &bot.instructions);
 		push_section(&mut sections, MEMORY_LABEL, &bot.memory);
 	}
 	if let Some(summary) = parts.summary {
@@ -347,8 +350,12 @@ mod tests {
 	}
 
 	/// Every part in its place, once each, with the prompt last. The order is what a
-	/// reader of the context meets: who it is, what it remembers, what came before,
-	/// what is being answered, what was just said, and only then the question.
+	/// reader of the context meets: what it remembers, what came before, what is
+	/// being answered, what was just said, and only then the question.
+	///
+	/// The instructions are not among them, however loudly the bot carries them: they
+	/// are the process's system prompt, and a context that repeated them would be the
+	/// weaker of two copies of the same thing.
 	#[test]
 	fn every_part_is_printed_once_and_the_prompt_comes_last() {
 		let bot = a_bot("Answer briefly.", "The reader prefers French.");
@@ -368,14 +375,14 @@ mod tests {
 
 		assert_eq!(
 			context,
-			"Instructions:\nAnswer briefly.\n\n\
-			What you remember:\nThe reader prefers French.\n\n\
+			"What you remember:\nThe reader prefers French.\n\n\
 			The conversation so far:\nuser: we are building a house\n\n\
 			The message this one replies to:\nuser: what about the roof?\n\n\
 			The most recent messages:\nuser: and the walls?\nassistant: they are up\n\n\
 			The new message:\nand now?"
 		);
 		assert_eq!(context.matches("and now?").count(), 1, "the prompt was printed twice");
+		assert!(!context.contains("Answer briefly."), "the system prompt was said twice");
 	}
 
 	/// A part nobody filled in is left out whole. A heading with nothing under it
@@ -389,7 +396,6 @@ mod tests {
 			..only("and now?")
 		});
 
-		assert!(!context.contains(INSTRUCTIONS_LABEL), "an empty instruction was announced");
 		assert!(!context.contains(MEMORY_LABEL), "an empty memory was announced");
 		assert!(!context.contains(SUMMARY_LABEL), "an empty summary was announced");
 		assert!(context.contains(RECENT_LABEL), "the tail that was there went missing");
@@ -629,7 +635,12 @@ mod tests {
 				.await
 				.expect("the context is rebuilt");
 
-		assert!(context.starts_with("Instructions:\nAnswer briefly."));
+		assert!(context.starts_with(SUMMARY_LABEL), "the context did not open on the summary");
+		assert_eq!(
+			occurrences(&context, "Answer briefly."),
+			0,
+			"the instructions the process carries were printed into its context too"
+		);
 		assert_eq!(occurrences(&context, SUMMARY_LABEL), 1, "the summary went missing");
 		assert_eq!(
 			occurrences(&context, "message 3\n"),
@@ -796,8 +807,9 @@ mod tests {
 	}
 
 	/// Two bots in one conversation read the same transcript and nothing else in
-	/// common: a checkpoint is a participant's own, and so is what it is told about
-	/// itself. One rotating has no effect on what the other is rebuilt from.
+	/// common: a checkpoint is a participant's own, and one rotating has no effect on
+	/// what the other is rebuilt from. What either of them was told to be is in
+	/// neither context — that reaches each process as its own system prompt.
 	#[tokio::test]
 	async fn two_bots_in_one_conversation_are_rebuilt_from_their_own_recovery_points() {
 		let dir = temp_dir();
@@ -822,12 +834,9 @@ mod tests {
 				.await
 				.expect("the context is rebuilt");
 
-		assert!(first.contains("Answer briefly."), "a bot was rebuilt without its instructions");
-		assert!(
-			second.contains("Answer at length."),
-			"a bot was handed another one's instructions"
-		);
-		assert!(!second.contains("Answer briefly."), "a bot was handed another one's instructions");
+		for (context, told) in [(&first, "Answer briefly."), (&second, "Answer at length.")] {
+			assert!(!context.contains(told), "a bot's instructions were printed into its context");
+		}
 		assert!(first.contains(SUMMARY_LABEL), "the bot that folded its own history lost it");
 		assert!(
 			!second.contains(SUMMARY_LABEL),

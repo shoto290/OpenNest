@@ -136,6 +136,14 @@ pub enum TransportError {
 	ResumeFailed {
 		forgot_session_id: bool,
 	},
+	/// The bot names a working directory that is not there any more, so the run was
+	/// started where one is started for a bot that names none. Not fatal and not a
+	/// session to replace: the process is up and answering — somewhere else. The
+	/// path is carried so the reader can be shown which one was refused.
+	#[serde(rename_all = "camelCase")]
+	WorkingDirectoryRefused {
+		path: String,
+	},
 	#[serde(rename_all = "camelCase")]
 	InvalidFrame {
 		detail: String,
@@ -191,6 +199,9 @@ impl std::fmt::Display for TransportError {
 			TransportError::Crashed { code, .. } => write!(f, "claude exited with {code:?}"),
 			TransportError::ResumeFailed { .. } => {
 				write!(f, "the stored session could not be resumed")
+			}
+			TransportError::WorkingDirectoryRefused { path } => {
+				write!(f, "the working directory {path} is not there")
 			}
 			TransportError::InvalidFrame { detail } => write!(f, "invalid frame: {detail}"),
 			TransportError::NotStarted => write!(f, "session not started"),

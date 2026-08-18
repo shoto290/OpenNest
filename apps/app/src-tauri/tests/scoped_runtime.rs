@@ -20,6 +20,7 @@ use opennest_app::claude::commands::EVENT_CHANNEL;
 use opennest_app::claude::contract::{ClaudeEvent, RuntimeScope, ScopedEvent, TurnOutcome};
 use opennest_app::claude::ClaudeState;
 use opennest_app::commands::invoke_handler;
+use opennest_app::db;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -58,6 +59,9 @@ struct Harness {
 fn launch() -> Harness {
 	let app = mock_builder()
 		.manage(ClaudeState::default())
+		// A host that never opened a file: what a bot was described as is another
+		// suite's subject, and here every child comes up carrying nothing.
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(mock_context(noop_assets()))
 		.expect("app builds");

@@ -99,6 +99,11 @@ pub struct SessionOptions {
 	pub binary: PathBuf,
 	pub cwd: PathBuf,
 	pub resume: Option<String>,
+	/// What the bot this process answers for was told to be, handed to the child as
+	/// a system prompt of its own. A process is given it once, at spawn: there is no
+	/// frame that changes it afterwards, which is why editing it rotates the runtime
+	/// instead of reaching into the one that is running.
+	pub append_system_prompt: Option<String>,
 	pub startup_timeout: Duration,
 	/// Extra variables handed to the child only. The ambient environment is
 	/// inherited untouched so Claude Code can reach its own credential store.
@@ -111,6 +116,7 @@ impl SessionOptions {
 			binary,
 			cwd,
 			resume: None,
+			append_system_prompt: None,
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
 		}
@@ -118,6 +124,14 @@ impl SessionOptions {
 
 	pub fn resuming(mut self, session_id: Option<String>) -> Self {
 		self.resume = session_id;
+		self
+	}
+
+	/// A bot with nothing to say for itself is started with no system prompt at all
+	/// rather than with an empty one: an empty flag is a value Claude Code has to
+	/// read past, and a bot carrying only spaces has said nothing.
+	pub fn instructed(mut self, instructions: Option<String>) -> Self {
+		self.append_system_prompt = instructions.filter(|text| !text.trim().is_empty());
 		self
 	}
 
@@ -141,6 +155,10 @@ impl SessionOptions {
 		if let Some(session_id) = &self.resume {
 			args.push("--resume".into());
 			args.push(session_id.clone());
+		}
+		if let Some(instructions) = &self.append_system_prompt {
+			args.push("--append-system-prompt".into());
+			args.push(instructions.clone());
 		}
 		args
 	}
@@ -621,5 +639,39 @@ async fn on_exit(
 	});
 	if let Some(event) = failing {
 		sink.emit(event);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn options() -> SessionOptions {
+		SessionOptions::new(PathBuf::from("claude"), PathBuf::from("/tmp"))
+	}
+
+	fn appended(options: &SessionOptions) -> Option<String> {
+		let args = options.args();
+		let index = args.iter().position(|arg| arg == "--append-system-prompt")?;
+		args.get(index + 1).cloned()
+	}
+
+	/// The bot's own instructions reach the child as the one thing a running process
+	/// cannot be told: a system prompt, spelled on the command line that starts it.
+	#[test]
+	fn a_bot_with_instructions_starts_with_them_as_a_system_prompt() {
+		let told = options().instructed(Some("Answer briefly.".to_owned()));
+		assert_eq!(appended(&told).as_deref(), Some("Answer briefly."));
+	}
+
+	/// Nothing to say for itself is nothing on the command line either: a bot with
+	/// no instructions is started exactly as every bot was started before there were
+	/// any.
+	#[test]
+	fn a_bot_carrying_no_instructions_starts_with_no_system_prompt() {
+		for nothing in [None, Some(String::new()), Some("  \n ".to_owned())] {
+			let plain = options().instructed(nothing);
+			assert_eq!(appended(&plain), None, "an empty system prompt reached the child");
+		}
 	}
 }

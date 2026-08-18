@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	changesRuntime,
 	FALLBACK_MODELS,
 	modelOptionsFor,
 	newBotIdentity,
@@ -50,6 +51,52 @@ describe("toSettingsValue", () => {
 	// working at the empty path, and the field shows its own placeholder instead.
 	it("reads a directory the bot does not have as no text at all", () => {
 		expect(toSettingsValue(bot({ workingDir: null })).workingDirectory).toBe("")
+	})
+})
+
+describe("changesRuntime", () => {
+	const stored = bot({
+		instructions: "Answer briefly.",
+		workingDir: "/work/opennest",
+	})
+	const value = toSettingsValue(stored)
+
+	// The two a child is started with and can never be told afterwards.
+	it("says so for the instructions and for the directory", () => {
+		expect(
+			changesRuntime(stored, { ...value, instructions: "Answer at length." }),
+		).toBe(true)
+		expect(
+			changesRuntime(stored, { ...value, workingDirectory: "/work/other" }),
+		).toBe(true)
+	})
+
+	// Everything else about a bot is read where it is shown, or travels with the
+	// next prompt: none of it is worth a process.
+	it("says nothing for a field the process was never started with", () => {
+		expect(changesRuntime(stored, value)).toBe(false)
+		expect(changesRuntime(stored, { ...value, name: "Nyx" })).toBe(false)
+		expect(changesRuntime(stored, { ...value, model: "haiku" })).toBe(false)
+		expect(
+			changesRuntime(stored, {
+				...value,
+				identity: { animal: "owl", pose: "proud" },
+			}),
+		).toBe(false)
+	})
+
+	// The field is text and the column is an absence: a directory emptied to spaces
+	// is a bot naming none, and one that never named any is unchanged by them.
+	it("reads a directory emptied to spaces the way the store stores it", () => {
+		expect(
+			changesRuntime(stored, { ...value, workingDirectory: "   " }),
+		).toBe(true)
+		expect(
+			changesRuntime(bot({ workingDir: null }), {
+				...toSettingsValue(bot({ workingDir: null })),
+				workingDirectory: "   ",
+			}),
+		).toBe(false)
 	})
 })
 

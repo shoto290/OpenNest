@@ -73,6 +73,9 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	crashed: true,
 	notStarted: true,
 	resumeFailed: false,
+	// The process came up and is answering: what it could not do was start in the
+	// folder the bot names, and a fresh session would land in the same place.
+	workingDirectoryRefused: false,
 	invalidFrame: false,
 	turnAlreadyRunning: false,
 	transitionInProgress: false,
@@ -287,6 +290,9 @@ export function noticeTitleFor(error: TransportError): string {
 	}
 	if (error.kind === "resumeFailed") {
 		return "Previous conversation could not be resumed"
+	}
+	if (error.kind === "workingDirectoryRefused") {
+		return "The bot's folder was not found"
 	}
 	if (needsFreshSession(error)) {
 		return "Claude Code is unavailable"

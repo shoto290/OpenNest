@@ -11,7 +11,8 @@ claude -p \
   --input-format stream-json --output-format stream-json \
   --verbose --include-partial-messages \
   --permission-prompt-tool stdio \
-  [--resume <session_id>]
+  [--resume <session_id>] \
+  [--append-system-prompt <instructions>]
 ```
 
 One long-lived child per session. stdin stays open, so **a single process serves
@@ -55,6 +56,16 @@ rather than a hang.
 second process answered a question that only the first process had been told,
 and reported the same `session_id`. Covered by
 `tests/real_claude.rs::two_turns_stream_and_the_second_resumes_the_first`.
+
+## System prompt — verified
+
+`--append-system-prompt <text>` is added to Claude Code's own system prompt for
+the life of the process; there is no frame that changes it afterwards, and the
+same holds for the working directory the child is spawned in. A child started
+with instructions that no model would follow on its own obeyed them, and a
+second process started with different ones obeyed those and not the first's.
+Covered by
+`tests/real_claude.rs::a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now`.
 
 ## Permissions — real, kept in V0.1
 

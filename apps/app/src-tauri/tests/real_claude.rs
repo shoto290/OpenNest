@@ -3,6 +3,7 @@
 //! Ignored by default: these tests need a signed-in binary and the network.
 //! Run them with `cargo test --test real_claude -- --ignored --test-threads=1`.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -22,12 +23,20 @@ struct Live {
 }
 
 async fn live(resume: Option<String>) -> Live {
+	started(resume, None, std::env::temp_dir()).await
+}
+
+/// One child, started the way the host starts one for a bot: resuming what it was
+/// given, carrying the instructions the bot was described with, in the directory the
+/// bot names.
+async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBuf) -> Live {
 	let path = binary::resolve().expect("claude binary is installed");
 	assert!(binary::is_authenticated(&path).await.expect("auth probe"), "claude must be signed in");
 
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
-	let options = SessionOptions::new(path, std::env::temp_dir()).resuming(resume);
+	let options =
+		SessionOptions::new(path, cwd).resuming(resume).instructed(instructions.map(str::to_owned));
 	let session = Session::start(options, sink).await.expect("session starts");
 	Live { session, events }
 }
@@ -90,6 +99,77 @@ fn session_id(events: &[ClaudeEvent]) -> Option<String> {
 		ClaudeEvent::SessionReady { session_id, .. } => Some(session_id.clone()),
 		_ => None,
 	})
+}
+
+/// The two instructions below are nonsense on purpose: a bot obeying them is
+/// obeying its own system prompt rather than answering the way any model would.
+const BANANA: &str = "Whatever you are asked, end every reply with the word BANANA.";
+const ORANGE: &str = "Whatever you are asked, end every reply with the word ORANGE.";
+const WHERE_AND_WHO: &str = "Run the bash command `pwd` and reply with nothing but its output.";
+
+/// A directory of this suite's own. macOS hands the temporary one out through a
+/// symlink and resolves it on the way in, so it is resolved here too — the child
+/// reports where it really is.
+fn a_directory(name: &str) -> PathBuf {
+	let dir = std::env::temp_dir().join(format!("opennest-real-{name}"));
+	std::fs::create_dir_all(&dir).expect("the directory is created");
+	dir.canonicalize().expect("the directory resolves")
+}
+
+fn seen_as(dir: &Path) -> String {
+	dir.display().to_string()
+}
+
+/// The runtime identity against the real CLI: a bot's instructions are the system
+/// prompt of the process answering for it, and the directory it names is where that
+/// process runs. Rotating it is a second process — started as the bot reads by
+/// then, obeying that and no longer what the first one was given.
+#[tokio::test]
+#[ignore = "needs a signed-in claude and the network"]
+async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now() {
+	let workshop = a_directory("workshop");
+	let mut first = started(None, Some(BANANA), workshop.clone()).await;
+	let opening = first.run_turn(WHERE_AND_WHO).await;
+	let retired = first.session.pid();
+
+	assert!(
+		text(&opening).contains("BANANA"),
+		"the instructions were not obeyed: {:?}",
+		text(&opening)
+	);
+	assert!(
+		text(&opening).contains(&seen_as(&workshop)),
+		"the child did not run where the bot works: {:?}",
+		text(&opening)
+	);
+	first.session.shutdown().await;
+
+	// The bot was described again. Neither of the two can be said to a child that is
+	// already running, so the run is replaced by one started as the bot reads now.
+	let studio = a_directory("studio");
+	let mut second = started(None, Some(ORANGE), studio.clone()).await;
+	let after = second.run_turn(WHERE_AND_WHO).await;
+
+	assert_ne!(second.session.pid(), retired, "the new identity landed in the same process");
+	assert!(
+		text(&after).contains("ORANGE"),
+		"the new instructions were not obeyed: {:?}",
+		text(&after)
+	);
+	assert!(
+		!text(&after).contains("BANANA"),
+		"the retired instructions outlived the process they were given to: {:?}",
+		text(&after)
+	);
+	assert!(
+		text(&after).contains(&seen_as(&studio)),
+		"the child did not follow the bot to its new directory: {:?}",
+		text(&after)
+	);
+
+	second.session.shutdown().await;
+	let _ = std::fs::remove_dir_all(&workshop);
+	let _ = std::fs::remove_dir_all(&studio);
 }
 
 /// The check report is what the frontend receives first, and it is built from a

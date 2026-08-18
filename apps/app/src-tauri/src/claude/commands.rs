@@ -10,8 +10,10 @@ use super::contract::{
 	SessionHandle, SessionSnapshot, TransportError,
 };
 use super::models;
+use super::redact;
 use super::session::{self, EventSink, GatedSink, Session, SessionOptions};
 use super::store;
+use crate::db;
 
 pub const EVENT_CHANNEL: &str = "claude://event";
 
@@ -269,13 +271,67 @@ pub async fn claude_check<R: Runtime>(
 	report
 }
 
+/// What the bot a run answers for is started as: its own instructions, and the
+/// directory it works in. Both are fixed for the life of a process, so both are
+/// read at the moment one is spawned.
+#[derive(Default)]
+struct RuntimeIdentity {
+	instructions: Option<String>,
+	working_dir: Option<String>,
+}
+
+/// Read from the record rather than taken from the caller: the file is what the
+/// context is rebuilt from too, and a start that trusted whatever the frontend was
+/// holding when it asked would put a bot's old self behind its new one.
+///
+/// A host with no database, or a bot the file no longer holds, is started as a bot
+/// carrying nothing — which is the runtime this app started every process in before
+/// a bot could be described at all.
+async fn runtime_identity(state: &db::DatabaseState, bot_id: &str) -> RuntimeIdentity {
+	let Ok(database) = state.as_ref() else {
+		return RuntimeIdentity::default();
+	};
+	let Ok(Some(bot)) = database.conversations().bot(bot_id.to_owned()).await else {
+		return RuntimeIdentity::default();
+	};
+	RuntimeIdentity { instructions: Some(bot.instructions), working_dir: bot.working_dir }
+}
+
+/// Where the child is started, and the directory that was refused if one was. A
+/// stored directory that is no longer a directory is not a reason to leave a reader
+/// without a process: the run starts where a bot naming none starts, and the path it
+/// asked for travels back so the reader is told which one this is not.
+///
+/// The refusal is reported with the home prefix collapsed, like every other path
+/// that crosses to the frontend.
+fn where_it_runs(stored: Option<String>, anywhere: PathBuf) -> (PathBuf, Option<String>) {
+	let Some(stored) = stored.filter(|path| !path.trim().is_empty()) else {
+		return (anywhere, None);
+	};
+	let asked = PathBuf::from(&stored);
+	if asked.is_dir() {
+		return (asked, None);
+	}
+	(anywhere, Some(redact::path(&asked)))
+}
+
 /// The scope is opened by the frontend against the durable lineage before this is
 /// called, so the run has a row and a number before it has a process: a child that
 /// crashes on its first breath is still a run somebody can name afterwards.
+///
+/// The scope also says which bot the child is, and that is read off the record here
+/// rather than asked of the caller: the process is spawned with the bot's
+/// instructions as its system prompt and in the directory the bot works in, and
+/// neither can be changed in a child that is already running.
+///
+/// `cwd` is what is left when the bot names no directory of its own, and what a
+/// refused one falls back to. The bot's own always wins — a caller cannot put a
+/// process somewhere its bot does not work.
 #[tauri::command]
 pub async fn claude_start_or_resume_session<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, ClaudeState>,
+	database: State<'_, db::DatabaseState>,
 	scope: RuntimeScope,
 	resume: Option<String>,
 	cwd: Option<String>,
@@ -300,14 +356,16 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 	}
 
 	let binary = binary::resolve()?;
-	let working_dir = cwd
+	let identity = runtime_identity(&database, &scope.bot_id).await;
+	let anywhere = cwd
 		.map(PathBuf::from)
 		.or_else(|| app.path().home_dir().ok())
 		.unwrap_or_else(|| PathBuf::from("."));
+	let (working_dir, refused_dir) = where_it_runs(identity.working_dir, anywhere);
 
 	let sink: Arc<dyn EventSink> =
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
-	let options = SessionOptions::new(binary, working_dir);
+	let options = SessionOptions::new(binary, working_dir).instructed(identity.instructions);
 
 	let started = match start_with_fallback(options, resume, sink.clone()).await {
 		Ok(started) => started,
@@ -317,6 +375,13 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 			return Err(error);
 		}
 	};
+
+	// Said once the process is up, the way a refused resume is: both are a launch
+	// that succeeded with something less than it was asked for, and neither is worth
+	// telling a reader about ahead of the session it happened in.
+	if let Some(path) = refused_dir {
+		sink.emit(ClaudeEvent::Failed { error: TransportError::WorkingDirectoryRefused { path } });
+	}
 
 	if let Some(refusal) = &started.resume_refusal {
 		let forgot_session_id =
@@ -528,6 +593,64 @@ mod tests {
 
 	fn stored_id(path: &Path) -> Option<String> {
 		store::load(path).session_id
+	}
+
+	/// A directory the bot names and the machine still has is where its child runs,
+	/// whatever the caller would have picked.
+	#[test]
+	fn a_bot_that_names_a_directory_runs_in_it() {
+		let asked = std::env::temp_dir();
+		let (running_in, refused) = where_it_runs(
+			Some(asked.to_string_lossy().into_owned()),
+			PathBuf::from("/somewhere/else"),
+		);
+
+		assert_eq!(running_in, asked);
+		assert_eq!(refused, None, "a directory that is there was refused");
+	}
+
+	/// A bot naming nothing — and one naming only spaces, which is what an emptied
+	/// field can leave behind — is started exactly where one was started before a
+	/// bot could name a directory at all.
+	#[test]
+	fn a_bot_that_names_none_runs_where_one_always_did() {
+		let anywhere = PathBuf::from("/somewhere/else");
+		for nothing in [None, Some(String::new()), Some("   ".to_owned())] {
+			let (running_in, refused) = where_it_runs(nothing, anywhere.clone());
+			assert_eq!(running_in, anywhere);
+			assert_eq!(refused, None);
+		}
+	}
+
+	/// The directory is gone — renamed, unmounted, deleted since the bot was
+	/// described. The run still happens, and the reader is told which directory it
+	/// did not happen in.
+	#[test]
+	fn a_directory_that_is_gone_is_reported_and_the_run_happens_anyway() {
+		let anywhere = std::env::temp_dir();
+		let missing = anywhere.join("opennest-no-such-directory-3f2b");
+		let _ = std::fs::remove_dir_all(&missing);
+
+		let (running_in, refused) =
+			where_it_runs(Some(missing.to_string_lossy().into_owned()), anywhere.clone());
+
+		assert_eq!(running_in, anywhere, "a missing directory left the reader without a process");
+		assert_eq!(refused.as_deref(), Some(redact::path(&missing).as_str()));
+	}
+
+	/// A file is not a directory, and a child cannot be started in one.
+	#[test]
+	fn a_path_that_is_not_a_directory_is_refused_like_one_that_is_gone() {
+		let anywhere = std::env::temp_dir();
+		let file = anywhere.join("opennest-not-a-directory-3f2b");
+		std::fs::write(&file, b"i am a file").expect("the file is written");
+
+		let (running_in, refused) =
+			where_it_runs(Some(file.to_string_lossy().into_owned()), anywhere.clone());
+
+		assert_eq!(running_in, anywhere);
+		assert_eq!(refused.as_deref(), Some(redact::path(&file).as_str()));
+		std::fs::remove_file(&file).expect("cleanup");
 	}
 
 	/// A session stands in for the child a start would have built: what the rules

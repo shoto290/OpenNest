@@ -13,6 +13,7 @@ import {
 	type LiveRun,
 	openedRun,
 	PROMPTS_PER_RUN,
+	REDESCRIBED,
 	type RotationReason,
 	rotationFor,
 	rotationReasonForFailure,
@@ -67,6 +68,16 @@ export type ChatController = {
 	 * launch held for it. Called before the row is deleted: a process left running
 	 * would answer into a conversation that no longer exists. */
 	close: (botId: string) => Promise<void>
+	/** Says a bot is not what the process answering for it was started as. A child
+	 * is given its system prompt and its directory at spawn and there is no frame
+	 * that changes either, so the run holding it is spent from here and the next
+	 * prompt is carried by a process started as the bot reads now.
+	 *
+	 * The handover waits for that prompt rather than happening on the spot: a reader
+	 * still typing into the settings would otherwise be spending a process per
+	 * keystroke, and nothing is waiting on the one it would spawn. A bot with no live
+	 * run has nothing to retire, and no other bot is touched. */
+	redescribe: (botId: string) => void
 	/** Reopens the session for the reader after it died. Resumes the id this launch
 	 * learned, so the answer carries on rather than starting Claude amnesiac. */
 	restart: () => Promise<SessionHandle | null>
@@ -702,12 +713,16 @@ export function createChatController(
 		}
 	}
 
+	/** The reason travels with the start: a run that is spent is left behind for what
+	 * spent it, whether the prompt that needed a fresh process asked for the handover
+	 * or a reader coming back to the bot did. A row replaced under no reason at all is
+	 * a handover nobody can account for afterwards. */
 	const runPreflight = async (bot: BotChat, resume?: string) => {
 		const checked = await checkFor(bot)
 		if (checked?.connection !== "ready") {
 			return null
 		}
-		return startFor(bot, resume)
+		return startFor(bot, resume, bot.run.spent)
 	}
 
 	const preflightFor = (bot: BotChat, resume?: string) => {
@@ -731,6 +746,18 @@ export function createChatController(
 		} catch (reason) {
 			reportStore(bot, reason)
 		}
+	}
+
+	/** The bot is no longer what its process was started as. Marked rather than
+	 * replaced, for the reason a failed run is — see `noteFailure`. What it holds is
+	 * left alone: the child that is running still carries the conversation, and it
+	 * goes on carrying it until the prompt that replaces it. */
+	const redescribe = (botId: string) => {
+		const bot = bots.get(botId)
+		if (!bot || !bot.state.sessionOpen) {
+			return
+		}
+		bot.run.spent ??= REDESCRIBED
 	}
 
 	/** Whether the bot has a process of its own to go on answering in. A run whose
@@ -1095,6 +1122,7 @@ export function createChatController(
 		preflight: (resume) => onSelected((bot) => preflightFor(bot, resume), null),
 		open,
 		close,
+		redescribe,
 		restart: () =>
 			onSelected(
 				(bot) => preflightFor(bot, bot.state.sessionId ?? undefined),

@@ -41,6 +41,9 @@ fn a_scope_value() -> RuntimeScope {
 fn build(context: tauri::Context<MockRuntime>) -> tauri::App<MockRuntime> {
 	mock_builder()
 		.manage(ClaudeState::default())
+		// A host that never opened a file: every bot it is asked to start is a bot it
+		// can read nothing about, which is the runtime this suite is about.
+		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(context)
 		.expect("app builds")
@@ -154,6 +157,7 @@ fn shutting_down_frees_the_state_before_waiting_on_the_child() {
 		claude_start_or_resume_session(
 			app.handle().clone(),
 			app.state::<ClaudeState>(),
+			app.state::<db::DatabaseState>(),
 			a_scope_value(),
 			None,
 			Some(std::env::temp_dir().to_string_lossy().into_owned()),
