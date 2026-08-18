@@ -41,38 +41,6 @@ use crate::avatars;
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
-/// The model labels a bot may answer under, as the frontend spells them. Closed
-/// for the reason the two below are: the deserializer is what keeps a label
-/// nothing recognises out of the column, and it refuses one before a statement
-/// runs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum BotModel {
-	Opus,
-	Sonnet,
-	Haiku,
-}
-
-impl From<conversations::BotModel> for BotModel {
-	fn from(model: conversations::BotModel) -> Self {
-		match model {
-			conversations::BotModel::Opus => BotModel::Opus,
-			conversations::BotModel::Sonnet => BotModel::Sonnet,
-			conversations::BotModel::Haiku => BotModel::Haiku,
-		}
-	}
-}
-
-impl From<BotModel> for conversations::BotModel {
-	fn from(model: BotModel) -> Self {
-		match model {
-			BotModel::Opus => conversations::BotModel::Opus,
-			BotModel::Sonnet => conversations::BotModel::Sonnet,
-			BotModel::Haiku => conversations::BotModel::Haiku,
-		}
-	}
-}
-
 /// The eight animals the avatar engine draws, as the frontend spells them. It is
 /// the deserializer that makes a ninth impossible: a word outside this list is
 /// refused before a statement runs, so the `CHECK` on the column is the second
@@ -177,7 +145,12 @@ pub struct Bot {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: BotModel,
+	/// The model label the bot answers under. Free text at this boundary, unlike the
+	/// two faces below: which aliases exist is Claude Code's to change and nothing
+	/// here can list them, so a label this build has never heard of crosses, is
+	/// stored, and comes back the way it went in. The frontend offers the aliases it
+	/// knows and shows anything else as it stands.
+	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -208,7 +181,7 @@ impl Bot {
 			name: bot.name,
 			title: bot.title,
 			description: bot.description,
-			model: bot.model.into(),
+			model: bot.model,
 			avatar_animal: bot.avatar_animal.into(),
 			avatar_pose: bot.avatar_pose.into(),
 			avatar_image_path,
@@ -232,7 +205,8 @@ pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: BotModel,
+	/// See [`Bot::model`]: a label, not a vocabulary.
+	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -246,7 +220,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			name: identity.name,
 			title: identity.title,
 			description: identity.description,
-			model: identity.model.into(),
+			model: identity.model,
 			avatar_animal: identity.avatar_animal.into(),
 			avatar_pose: identity.avatar_pose.into(),
 			avatar_image_path: identity.avatar_image_path,
@@ -747,7 +721,7 @@ mod tests {
 				name: "Claude".into(),
 				title: "Reviewer".into(),
 				description: "Reads a diff and says what it would change.".into(),
-				model: BotModel::Opus,
+				model: "opus".into(),
 				avatar_animal: AvatarAnimal::Owl,
 				avatar_pose: AvatarPose::Curious,
 				avatar_image_path: Some("/pictures/owl.png".into()),
@@ -785,7 +759,7 @@ mod tests {
 				name: "Claude".into(),
 				title: String::new(),
 				description: String::new(),
-				model: BotModel::Sonnet,
+				model: "sonnet".into(),
 				avatar_animal: AvatarAnimal::Cat,
 				avatar_pose: AvatarPose::Idle,
 				avatar_image_path: None,
@@ -812,11 +786,6 @@ mod tests {
 	/// whole reason a face never reaches the file misspelled.
 	#[test]
 	fn every_face_crosses_as_one_word_and_nothing_else_parses() {
-		for (model, wire) in
-			[(BotModel::Opus, "opus"), (BotModel::Sonnet, "sonnet"), (BotModel::Haiku, "haiku")]
-		{
-			assert_crosses_as(model, json!(wire));
-		}
 		for (animal, wire) in [
 			(AvatarAnimal::Cat, "cat"),
 			(AvatarAnimal::Rabbit, "rabbit"),
@@ -848,10 +817,6 @@ mod tests {
 		assert!(
 			serde_json::from_value::<AvatarPose>(json!("furious")).is_err(),
 			"a pose the avatar engine cannot draw parsed at the boundary"
-		);
-		assert!(
-			serde_json::from_value::<BotModel>(json!("gpt")).is_err(),
-			"a model label the host does not accept parsed at the boundary"
 		);
 	}
 
@@ -1132,7 +1097,7 @@ mod tests {
 			name: "Nyx".into(),
 			title: String::new(),
 			description: String::new(),
-			model: conversations::BotModel::Sonnet,
+			model: "sonnet".to_owned(),
 			avatar_animal: conversations::AvatarAnimal::Owl,
 			avatar_pose: conversations::AvatarPose::Idle,
 			avatar_image_path: path.map(str::to_owned),

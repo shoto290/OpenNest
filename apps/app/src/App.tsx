@@ -7,7 +7,7 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { ChatScreen } from "@/components/chat-screen"
 import {
-	MODEL_OPTIONS,
+	modelOptionsFor,
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
@@ -74,7 +74,7 @@ export function App() {
 				selected && isEditing ? (
 					<BotSettingsPanel
 						confirmingDelete={isConfirmingDelete}
-						models={MODEL_OPTIONS}
+						models={modelOptionsFor(selected.model)}
 						onAvatarUpload={(file) => {
 							void roster.controller.uploadAvatar(selected.id, file)
 						}}

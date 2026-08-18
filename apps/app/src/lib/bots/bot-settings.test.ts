@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import {
 	avatarSrc,
-	MODEL_OPTIONS,
+	MODEL_ALIASES,
+	modelOptionsFor,
 	newBotIdentity,
 	toIdentity,
 	toRosterBots,
@@ -84,17 +85,43 @@ describe("toIdentity", () => {
 		).toBeNull()
 	})
 
-	// The select is built from `MODEL_OPTIONS`, so it can only emit a word the store
-	// accepts. Anything else is a caller that did not go through the panel at all.
-	it("keeps a bot on a model the store knows", () => {
+	// A model label is not a vocabulary this side polices: there is no listing to
+	// check one against, so what the panel emitted is what the store is told —
+	// alias, versioned name or something this build has never seen.
+	it("writes the model label it was given, whatever it is", () => {
 		const value = toSettingsValue(stored)
 
-		for (const option of MODEL_OPTIONS) {
+		for (const option of MODEL_ALIASES) {
 			expect(toIdentity({ ...value, model: option.value }, stored).model).toBe(
 				option.value,
 			)
 		}
-		expect(toIdentity({ ...value, model: "gpt" }, stored).model).toBe("sonnet")
+		expect(
+			toIdentity({ ...value, model: "claude-opus-4-1-20250805" }, stored).model,
+		).toBe("claude-opus-4-1-20250805")
+	})
+})
+
+describe("modelOptionsFor", () => {
+	it("offers the four aliases", () => {
+		expect(modelOptionsFor("sonnet").map((option) => option.value)).toEqual([
+			"fable",
+			"opus",
+			"sonnet",
+			"haiku",
+		])
+	})
+
+	// A bot on a label nothing offers still has to be readable in its own settings,
+	// and selecting another field must not be what moves it off that label.
+	it("offers a label of its own back so the bot can be seen on it", () => {
+		const options = modelOptionsFor("claude-opus-4-1-20250805")
+
+		expect(options).toHaveLength(MODEL_ALIASES.length + 1)
+		expect(options.at(-1)).toEqual({
+			label: "claude-opus-4-1-20250805",
+			value: "claude-opus-4-1-20250805",
+		})
 	})
 })
 
@@ -110,6 +137,15 @@ describe("newBotIdentity", () => {
 			avatarImagePath: null,
 			workingDir: null,
 		})
+	})
+
+	// An alias follows its tier; a versioned name pins the bot to whatever was
+	// current the day it was made.
+	it("records an alias rather than a versioned name", () => {
+		const { model } = newBotIdentity([])
+
+		expect(MODEL_ALIASES.map((alias) => alias.value)).toContain(model)
+		expect(model).not.toMatch(/\d/)
 	})
 })
 

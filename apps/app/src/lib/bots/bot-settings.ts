@@ -12,17 +12,38 @@ import type {
 	AvatarAnimal,
 	Bot,
 	BotIdentity,
-	BotModel,
 } from "../conversations/store-contract"
 
-/** The three labels a bot may answer under, in the order the picker offers them.
- * The values are the host's own closed vocabulary, so the select can only ever emit
- * one the store accepts. */
-export const MODEL_OPTIONS: BotModelOption[] = [
+/** The aliases the settings offer, largest tier first. Aliases rather than versioned
+ * names on purpose: Claude Code resolves one to the latest model of its tier, so a
+ * bot left on `sonnet` follows the tier instead of being pinned to whatever was
+ * current the day it was created.
+ *
+ * A hardcoded list because there is nothing to read one from: there is no
+ * `claude models`, the init frame of a session names only the model already
+ * answering, and parsing `--help` would make the product's vocabulary a side effect
+ * of somebody's usage text. So this is the list the product stands behind, and
+ * anything outside it is still a value the store keeps — see [`modelOptionsFor`]. */
+export const MODEL_ALIASES: BotModelOption[] = [
+	{ label: "Claude Fable", value: "fable" },
 	{ label: "Claude Opus", value: "opus" },
 	{ label: "Claude Sonnet", value: "sonnet" },
 	{ label: "Claude Haiku", value: "haiku" },
 ]
+
+/** What a new bot is created on. An alias, so it follows its tier. */
+const NEW_BOT_MODEL = "sonnet"
+
+/** The options for one bot: the aliases, plus the label it already carries when that
+ * is not one of them. A bot on a versioned name, or on an alias this build has not
+ * heard of yet, is a bot whose model the reader has to be able to see — offering it
+ * back is what keeps the select from showing an empty box over a value the file
+ * holds, and what keeps a rename of some other field from quietly moving the bot to
+ * a model somebody else chose. */
+export const modelOptionsFor = (model: string): BotModelOption[] =>
+	MODEL_ALIASES.some((alias) => alias.value === model)
+		? MODEL_ALIASES
+		: [...MODEL_ALIASES, { label: model, value: model }]
 
 /** The faces the app hands out, in the order the picker shows them. The list is
  * spelled here because giving a new bot a face is this side's decision — the host
@@ -42,15 +63,6 @@ const FACES = [
 /** What a bot is called before it is named. The panel opens on it, so it is copy a
  * reader replaces rather than a placeholder they have to fill in to see a row. */
 const NEW_BOT_NAME = "New bot"
-
-const MODEL_VALUES = MODEL_OPTIONS.map((option) => option.value)
-
-/** The label the select emitted, back in the store's vocabulary. The list the
- * select is built from holds nothing else, so the fallback is unreachable rather
- * than a policy — and it is the seeded model, which is what a bot answers under
- * until somebody moves it. */
-const toBotModel = (model: string): BotModel =>
-	MODEL_VALUES.includes(model) ? (model as BotModel) : "sonnet"
 
 /** The one way a stored path becomes something the webview may load: the asset
  * protocol, scoped by the host to the single directory avatars live in. A bot with
@@ -84,7 +96,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 	name: NEW_BOT_NAME,
 	title: "",
 	description: "",
-	model: "sonnet",
+	model: NEW_BOT_MODEL,
 	avatarAnimal: nextFace(bots),
 	avatarPose: "idle",
 	avatarImagePath: null,
@@ -119,7 +131,7 @@ export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	name: value.name,
 	title: value.title,
 	description: value.description,
-	model: toBotModel(value.model),
+	model: value.model,
 	avatarAnimal: value.identity.animal,
 	avatarPose: value.identity.pose,
 	avatarImagePath: value.identity.image ? bot.avatarImagePath : null,

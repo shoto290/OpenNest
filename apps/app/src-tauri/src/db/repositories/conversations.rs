@@ -20,10 +20,11 @@
 //! [`ConversationError::UnknownBot`]. Everything else SQLite already refuses on
 //! its own — the eight animals and the eight poses included, which the
 //! vocabularies below and the `CHECK` on those two columns spell the same way on
-//! purpose. [`BotModel`] is the vocabulary without a `CHECK` behind it: the column
-//! is shipped as free text, and adding one to it would mean rebuilding a table
-//! three foreign keys point at. The boundary refuses an unknown label first, and
-//! nothing else writes here.
+//! purpose. `model` is the one field with no vocabulary at all: the column is
+//! shipped as free text and stays that way, because what a model may be called is
+//! the provider's to change. The aliases the product offers are a list the frontend
+//! holds, and a label outside it is a label this side stores and reads back
+//! unchanged rather than one it refuses.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -39,9 +40,11 @@ use crate::db::{Access, DatabaseError};
 /// would make impossible.
 pub const DEFAULT_BOT_ID: &str = "default";
 const DEFAULT_BOT_NAME: &str = "Claude";
-/// What a bot is seeded on. Which model a bot answers under is a user's to change
-/// from there — see [`BotModel`].
-const DEFAULT_BOT_MODEL: BotModel = BotModel::Sonnet;
+/// What a bot is seeded on: an alias, never a versioned name. Claude Code resolves
+/// an alias to the latest model of its tier, so a row that holds one keeps answering
+/// under the current model without anything here being rewritten. Which alias a bot
+/// answers under is a user's to change from there.
+const DEFAULT_BOT_MODEL: &str = "sonnet";
 /// The only role a participant takes today. It stays free text in the schema —
 /// which words are allowed is this module's business, and the schema is shipped.
 const PARTICIPANT_ROLE: &str = "assistant";
@@ -52,37 +55,6 @@ const CHAT_TITLE: &str = "Chat";
 /// `conversations.kind` is `CHECK`-constrained to two words the product no longer
 /// tells apart. One of them has to be written, nothing here reads it back.
 const CHAT_KIND: &str = "main";
-
-/// The model labels the host accepts, which are Claude Code's own aliases: the
-/// column holds one of these three words or the row is not one this build wrote.
-/// Nothing is passed to the process today — the host spawns Claude Code without
-/// `--model` — but which model a bot answers under is the user's choice, so it is
-/// stored as a closed vocabulary rather than as free text a typo could enter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BotModel {
-	Opus,
-	Sonnet,
-	Haiku,
-}
-
-impl BotModel {
-	fn as_sql(self) -> &'static str {
-		match self {
-			BotModel::Opus => "opus",
-			BotModel::Sonnet => "sonnet",
-			BotModel::Haiku => "haiku",
-		}
-	}
-
-	fn parse(text: &str) -> Option<Self> {
-		match text {
-			"opus" => Some(BotModel::Opus),
-			"sonnet" => Some(BotModel::Sonnet),
-			"haiku" => Some(BotModel::Haiku),
-			_ => None,
-		}
-	}
-}
 
 /// The eight animals the avatar engine draws, and the only ones a row may hold.
 /// The words are the engine's own, so a face read out of the file names a shape
@@ -172,7 +144,6 @@ impl AvatarPose {
 	}
 }
 
-stored_as_text!(BotModel);
 stored_as_text!(AvatarAnimal);
 stored_as_text!(AvatarPose);
 
@@ -240,7 +211,9 @@ pub struct Bot {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: BotModel,
+	/// An alias, or whatever else a caller wrote: free text, on purpose. See
+	/// [`DEFAULT_BOT_MODEL`].
+	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -266,7 +239,9 @@ pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: BotModel,
+	/// An alias, or whatever else a caller wrote: free text, on purpose. See
+	/// [`DEFAULT_BOT_MODEL`].
+	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -716,7 +691,7 @@ mod tests {
 			name: name.to_owned(),
 			title: String::new(),
 			description: String::new(),
-			model: DEFAULT_BOT_MODEL,
+			model: DEFAULT_BOT_MODEL.to_owned(),
 			avatar_animal: DEFAULT_BOT_ANIMAL,
 			avatar_pose: DEFAULT_BOT_POSE,
 			avatar_image_path: None,
@@ -924,7 +899,7 @@ mod tests {
 			name: "Nyx".to_owned(),
 			title: "Reviewer".to_owned(),
 			description: "Reads a diff and says what it would change.".to_owned(),
-			model: BotModel::Haiku,
+			model: "haiku".to_owned(),
 			avatar_animal: AvatarAnimal::Owl,
 			avatar_pose: AvatarPose::Curious,
 			avatar_image_path: Some("/pictures/owl.png".to_owned()),
@@ -940,7 +915,7 @@ mod tests {
 		assert_eq!(listed[0].name, described.name);
 		assert_eq!(listed[0].title, described.title);
 		assert_eq!(listed[0].description, described.description);
-		assert_eq!(listed[0].model, BotModel::Haiku);
+		assert_eq!(listed[0].model, "haiku");
 		assert_eq!(listed[0].avatar_animal, AvatarAnimal::Owl);
 		assert_eq!(listed[0].avatar_pose, AvatarPose::Curious);
 		assert_eq!(listed[0].avatar_image_path.as_deref(), Some("/pictures/owl.png"));
@@ -983,7 +958,7 @@ mod tests {
 					name: "Ada".to_owned(),
 					title: "Reviewer".to_owned(),
 					description: "Reads a diff.".to_owned(),
-					model: BotModel::Opus,
+					model: "opus".to_owned(),
 					avatar_animal: AvatarAnimal::Koala,
 					avatar_pose: AvatarPose::Sleeping,
 					avatar_image_path: Some("/pictures/koala.png".to_owned()),
@@ -999,7 +974,7 @@ mod tests {
 		assert_eq!(updated.avatar_animal, AvatarAnimal::Koala);
 		assert_eq!(updated.avatar_pose, AvatarPose::Sleeping);
 		assert_eq!(updated.working_dir.as_deref(), Some("/work/opennest"));
-		assert_eq!(updated.model, BotModel::Opus, "an update left the bot on its old model");
+		assert_eq!(updated.model, "opus", "an update left the bot on its old model");
 		assert_eq!(
 			updated.instructions, "answer at length",
 			"an update left the bot on its old instructions"
@@ -1132,7 +1107,7 @@ mod tests {
 			repository
 				.update_bot(
 					DEFAULT_BOT_ID.to_owned(),
-					BotIdentity { model: BotModel::Opus, ..an_identity(DEFAULT_BOT_NAME) },
+					BotIdentity { model: "opus".to_owned(), ..an_identity(DEFAULT_BOT_NAME) },
 				)
 				.await
 				.expect("the bot is moved to another model")
@@ -1144,7 +1119,7 @@ mod tests {
 		let seeded = repository.ensure_default_bot().await.expect("the default bot");
 		let held = repository.ensure_chat(DEFAULT_BOT_ID.into()).await.expect("the chat");
 
-		assert_eq!(moved.model, BotModel::Opus);
+		assert_eq!(moved.model, "opus");
 		assert_eq!(read.as_ref(), Some(&moved), "a launch could not read its own default bot");
 		assert_eq!(seeded, moved, "a launch wrote the shipped model back over the user's");
 		assert_eq!(count_of(&database, "bots").await, 1);

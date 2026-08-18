@@ -884,9 +884,14 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 /// The boundary is where a closed vocabulary is checked, not the file: a word
 /// outside one fails to parse, so the command is never entered and no bot is
 /// written. What the caller gets back is Tauri's own account of the argument it
-/// could not read — the point being that nothing landed, in any of the three.
+/// could not read — the point being that nothing landed, in either of the two.
+///
+/// The face is closed and the model is not, which is the whole distinction: the
+/// engine draws eight animals and eight poses and a ninth of either is a bot the UI
+/// could not show, while what a model may be called belongs to Claude Code and
+/// nothing here can list it.
 #[test]
-fn a_bot_described_outside_a_closed_vocabulary_is_refused_before_it_is_written() {
+fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
 	let app = app("com.opennest.conversation-commands-11");
 	let window = window(&app);
 
@@ -900,19 +905,53 @@ fn a_bot_described_outside_a_closed_vocabulary_is_refused_before_it_is_written()
 		"conversation_create_bot",
 		json!({ "identity": an_identity("Nyx", "sonnet", "owl", "furious") }),
 	);
-	let model = call(
-		&window,
-		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "gpt", "owl", "curious") }),
-	);
 
 	assert!(animal.is_err(), "an animal the engine cannot draw was accepted: {animal:?}");
 	assert!(pose.is_err(), "a pose the engine cannot draw was accepted: {pose:?}");
-	assert!(model.is_err(), "a model label the host does not accept was accepted: {model:?}");
 	assert_eq!(
 		call(&window, "conversation_bots", json!({})),
 		Ok(json!([])),
 		"a bot the boundary refused reached the file anyway"
+	);
+
+	cleanup(&app);
+}
+
+/// A model label this build has never heard of, stored and read back as it was
+/// given. There is no listing to check it against — no `claude models`, and the
+/// init frame only names the model already answering — so a label the host refused
+/// would be a bot the provider could run and this app could not describe. An alias
+/// the product does not offer yet and a versioned name a user pasted are the same
+/// case, and both survive the round trip.
+#[test]
+fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
+	let app = app("com.opennest.conversation-commands-24");
+	let window = window(&app);
+
+	let created = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "claude-opus-4-1-20250805", "owl", "curious") }),
+	)
+	.expect("a bot on a label the host does not know");
+	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
+
+	assert_eq!(created["model"], json!("claude-opus-4-1-20250805"));
+	assert_eq!(
+		call(&window, "conversation_bots", json!({})).map(|bots| bots[0]["model"].clone()),
+		Ok(json!("claude-opus-4-1-20250805")),
+		"a label the file holds came back changed"
+	);
+
+	// And it is still a field a caller replaces whole, alias or not.
+	assert_eq!(
+		call(
+			&window,
+			"conversation_update_bot",
+			json!({ "id": id, "identity": an_identity("Nyx", "fable", "owl", "curious") })
+		)
+		.map(|bot| bot["model"].clone()),
+		Ok(json!("fable"))
 	);
 
 	cleanup(&app);
