@@ -180,7 +180,7 @@ describe("toRosterBots", () => {
 	it("reads the name, the title and the face off the record", () => {
 		const [atlas, beacon] = toRosterBots(roster, {
 			selectedBotId: null,
-			isWorking: false,
+			working: {},
 		})
 
 		expect(atlas).toMatchObject({
@@ -195,13 +195,16 @@ describe("toRosterBots", () => {
 		expect(beacon.title).toBeUndefined()
 	})
 
-	// One process answers at a time, so the live half of the roster is the open bot's
-	// and nobody else's row may claim it.
-	it("gives the working state to the open bot alone", () => {
+	// Every bot runs a process of its own, so every row reads its own: the bot the
+	// reader is not looking at is shown answering when it is. The preview line stays
+	// the open bot's — it is the conversation on the screen.
+	it("gives every bot the working state of its own process", () => {
 		const [atlas, beacon] = toRosterBots(roster, {
 			selectedBotId: "b-1",
-			isWorking: true,
-			kind: "writing",
+			working: {
+				"b-1": { isWorking: true, kind: "writing" },
+				"b-2": { isWorking: true, kind: "searching" },
+			},
 			lastMessage: "Pulled the three papers.",
 		})
 
@@ -210,8 +213,18 @@ describe("toRosterBots", () => {
 			pose: "writing",
 			lastMessage: "Pulled the three papers.",
 		})
-		expect(beacon).toMatchObject({ status: "idle", pose: undefined })
+		expect(beacon).toMatchObject({ status: "working", pose: "searching" })
 		expect(beacon.lastMessage).toBeUndefined()
+	})
+
+	it("leaves a bot with no process of its own idle", () => {
+		const [atlas, beacon] = toRosterBots(roster, {
+			selectedBotId: "b-1",
+			working: { "b-1": { isWorking: false } },
+		})
+
+		expect(atlas).toMatchObject({ status: "idle", pose: undefined })
+		expect(beacon).toMatchObject({ status: "idle", pose: undefined })
 	})
 
 	it("passes an uploaded picture through and leaves a bot without one to its animal", () => {
@@ -220,7 +233,7 @@ describe("toRosterBots", () => {
 				bot({ id: "b-1", avatarImagePath: "/pictures/owl.png" }),
 				bot({ id: "b-2", avatarImagePath: null }),
 			],
-			{ selectedBotId: null, isWorking: false },
+			{ selectedBotId: null, working: {} },
 		)
 
 		expect(worn.image).toBe(avatarSrc("/pictures/owl.png"))
