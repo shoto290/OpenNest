@@ -170,3 +170,16 @@ bun run build-storybook
 ```
 
 A story is done only when `lint`, `test:storybook` and `build-storybook` all pass.
+
+### The invocation that reports a green it never ran
+
+On bun 1.3.13 `bun --cwd packages/ui run test:storybook` runs nothing: the flag in
+front of `run` makes bun print this package's script list and exit `0`, so the gate
+looks green without a single story having rendered. `bun --filter '@workspace/ui'
+run test:storybook` exits `0` on `No packages matched the filter` for the same
+reason. Run the gate from inside `packages/ui` as above, or keep the flag behind
+`run`:
+
+```bash
+bun run --cwd packages/ui test:storybook
+```

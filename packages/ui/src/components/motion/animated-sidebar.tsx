@@ -8,6 +8,7 @@ import {
 	type Variants,
 } from "motion/react"
 import {
+	type AriaAttributes,
 	type ButtonHTMLAttributes,
 	type CSSProperties,
 	createContext,
@@ -1044,7 +1045,23 @@ export function AnimatedSidebarMenuSubButton({
 	)
 }
 
-export interface AnimatedSidebarMenuButtonProps {
+/** What a row can be handed to act as something else's trigger: a context menu
+ * clones its child and gives it press and key listeners, a ref, and the
+ * `aria-haspopup` state of the popup it opens. They land on the row element
+ * itself, after the props the row sets for itself. */
+type MenuButtonElementProps = AriaAttributes &
+	Pick<
+		HTMLAttributes<HTMLElement>,
+		| "onContextMenu"
+		| "onKeyDown"
+		| "onPointerCancel"
+		| "onPointerDown"
+		| "onPointerMove"
+		| "onPointerUp"
+	>
+
+export interface AnimatedSidebarMenuButtonProps extends MenuButtonElementProps {
+	ref?: Ref<HTMLElement>
 	children: ReactNode
 	/** Leading visual. The only thing left visible once the panel collapses. */
 	icon?: ReactNode
@@ -1086,6 +1103,8 @@ export function AnimatedSidebarMenuButton({
 	rel,
 	onSelect,
 	className,
+	ref,
+	...elementProps
 }: AnimatedSidebarMenuButtonProps) {
 	const context = useAnimatedSidebar()
 	const panel = useAnimatedSidebarPanel()
@@ -1178,6 +1197,7 @@ export function AnimatedSidebarMenuButton({
 	return href ? (
 		<motion.a
 			href={href}
+			ref={ref as Ref<HTMLAnchorElement>}
 			target={target}
 			rel={rel ?? (target === "_blank" ? "noreferrer noopener" : undefined)}
 			aria-current={isActive ? "page" : undefined}
@@ -1191,12 +1211,14 @@ export function AnimatedSidebarMenuButton({
 			whileTap={context.reduce || disabled ? undefined : { scale: 0.98 }}
 			transition={SPRING_PRESS}
 			className={interactiveClassName}
+			{...elementProps}
 		>
 			{content}
 		</motion.a>
 	) : (
 		<motion.button
 			type="button"
+			ref={ref as Ref<HTMLButtonElement>}
 			disabled={disabled}
 			aria-current={isActive ? "page" : undefined}
 			aria-expanded={ariaExpanded}
@@ -1207,6 +1229,7 @@ export function AnimatedSidebarMenuButton({
 			whileTap={context.reduce || disabled ? undefined : { scale: 0.98 }}
 			transition={SPRING_PRESS}
 			className={interactiveClassName}
+			{...elementProps}
 		>
 			{content}
 		</motion.button>
