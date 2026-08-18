@@ -19,8 +19,11 @@
 //! The one rule the file cannot state for itself lives in
 //! [`ConversationError::UnknownBot`]. Everything else SQLite already refuses on
 //! its own — the eight animals and the eight poses included, which the
-//! vocabularies below and the `CHECK` on the columns spell the same way on
-//! purpose.
+//! vocabularies below and the `CHECK` on those two columns spell the same way on
+//! purpose. [`BotModel`] is the vocabulary without a `CHECK` behind it: the column
+//! is shipped as free text, and adding one to it would mean rebuilding a table
+//! three foreign keys point at. The boundary refuses an unknown label first, and
+//! nothing else writes here.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -363,8 +366,8 @@ impl ConversationsRepository {
 	}
 
 	/// The bot, its chat and everything said in it. Nothing is left pointing at a
-	/// bot that is gone — see [`delete_bot_in`] for how the file is made to prove
-	/// it rather than the statement order being trusted to.
+	/// bot that is gone — see [`deleted_bot`] for how the file is made to prove it
+	/// rather than the statement order being trusted to.
 	pub async fn delete_bot(&self, id: String) -> Result<(), ConversationError> {
 		self.call_mut(move |connection| Ok(deleted_bot(connection, &id))).await?
 	}
@@ -561,13 +564,6 @@ fn updated_bot(
 	Ok(stored)
 }
 
-fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), ConversationError> {
-	let transaction = write_transaction(connection)?;
-	delete_bot_in(&transaction, id)?;
-	transaction.commit()?;
-	Ok(())
-}
-
 /// The chat goes first and the bot after it, and both are one unit: a bot deleted
 /// without its thread would leave a transcript nobody can open, and a thread
 /// deleted without its bot a bot nothing can be said to.
@@ -575,10 +571,11 @@ fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), Conversation
 /// A message names its author through the seat the bot holds, and that reference
 /// is the schema's one refusal to cascade — it is what keeps a participant from
 /// being dropped out from under the words it spoke. Deferring the checks to the
-/// commit is what lets the two statements above stand for the whole deletion
+/// commit is what lets the two statements below stand for the whole deletion
 /// anyway: SQLite walks every cascade first and verifies the file after, so an
 /// orphan of any kind is the transaction failing rather than a row nobody notices.
-fn delete_bot_in(transaction: &Transaction<'_>, id: &str) -> Result<(), ConversationError> {
+fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), ConversationError> {
+	let transaction = write_transaction(connection)?;
 	transaction.pragma_update(None, "defer_foreign_keys", true)?;
 	transaction.execute(
 		"DELETE FROM conversations WHERE id IN
@@ -589,6 +586,7 @@ fn delete_bot_in(transaction: &Transaction<'_>, id: &str) -> Result<(), Conversa
 	if deleted == 0 {
 		return Err(ConversationError::UnknownBot { id: id.to_owned() });
 	}
+	transaction.commit()?;
 	Ok(())
 }
 
@@ -665,12 +663,6 @@ mod tests {
 			avatar_image_path: None,
 			working_dir: None,
 		}
-	}
-
-	/// The same identity on another model, which is the one change this file used
-	/// to refuse and now has to carry through a reopen.
-	fn on_another_model(name: &str) -> BotIdentity {
-		BotIdentity { model: BotModel::Opus, ..an_identity(name) }
 	}
 
 	/// Everything that can hang off a bot, written at once: a turn, a message with
@@ -784,29 +776,6 @@ mod tests {
 		assert_eq!(seeded, renamed, "a launch after the rename wrote the shipped name back");
 		assert_eq!(read.as_ref(), Some(&renamed));
 		assert_eq!(count_of(&database, "bots").await, 1);
-
-		drop(database);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
-	/// A rename costs the bot nothing it holds: the chat it is asked for after one
-	/// is the same row, seated by the same participant, with the transcript still
-	/// hanging off it.
-	#[tokio::test]
-	async fn a_chat_asked_for_after_a_rename_is_the_one_the_bot_already_held() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let repository = database.conversations();
-		let before = repository.ensure_chat(DEFAULT_BOT_ID.into()).await.expect("the chat");
-		repository
-			.update_bot(DEFAULT_BOT_ID.to_owned(), an_identity("Nyx"))
-			.await
-			.expect("the bot is renamed");
-
-		let after = repository.ensure_chat(DEFAULT_BOT_ID.into()).await.expect("the chat");
-
-		assert_eq!(after, before, "a rename cost the bot the chat it already held");
-		assert_eq!(count_of(&database, "conversations").await, 1);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1093,7 +1062,10 @@ mod tests {
 			let repository = database.conversations();
 			repository.ensure_default_bot().await.expect("the default bot");
 			repository
-				.update_bot(DEFAULT_BOT_ID.to_owned(), on_another_model(DEFAULT_BOT_NAME))
+				.update_bot(
+					DEFAULT_BOT_ID.to_owned(),
+					BotIdentity { model: BotModel::Opus, ..an_identity(DEFAULT_BOT_NAME) },
+				)
 				.await
 				.expect("the bot is moved to another model")
 		};

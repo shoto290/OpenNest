@@ -48,9 +48,9 @@ pub async fn conversation_bots(
 /// back is a bot the frontend can open immediately rather than one it has to seat
 /// in a second call.
 ///
-/// The face is refused before this runs: `avatarAnimal` and `avatarPose` are
-/// closed vocabularies, and a word outside them fails deserialization — the
-/// command is never entered and nothing reaches the file.
+/// A word outside a closed vocabulary is refused before this runs: `model`,
+/// `avatarAnimal` and `avatarPose` each hold a fixed set, and anything else fails
+/// deserialization — the command is never entered and nothing reaches the file.
 #[tauri::command]
 pub async fn conversation_create_bot(
 	state: State<'_, db::DatabaseState>,

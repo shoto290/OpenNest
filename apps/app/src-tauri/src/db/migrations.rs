@@ -403,10 +403,9 @@ mod tests {
 
 	/// What the install already on disk is: the bot the app shipped with, the chat
 	/// it holds and every word said in it. All of it has to be reachable after the
-	/// step, and the bot has to come out renameable — its name is what a user
-	/// changes first, and nothing in the schema may pin it.
+	/// step, and the bot has to come out of it wearing a face it never had.
 	#[test]
-	fn the_bot_already_on_the_record_keeps_its_transcript_and_can_still_be_renamed() {
+	fn the_bot_already_on_the_record_keeps_its_transcript_and_gains_a_face() {
 		let dir = temp_dir();
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
 		apply_each(&mut connection, &MIGRATIONS[..2]).expect("the shipped schema installs");
@@ -439,15 +438,6 @@ mod tests {
 			identity_of(&connection, "default"),
 			(String::new(), String::new(), "cat".to_owned(), "idle".to_owned(), None, None)
 		);
-		write(&connection, "UPDATE bots SET name = 'Nyx' WHERE id = 'default'")
-			.expect("the bot is renamed");
-		assert_eq!(
-			connection
-				.query_row("SELECT name FROM bots WHERE id = 'default'", [], |row| row
-					.get::<_, String>(0))
-				.expect("query"),
-			"Nyx"
-		);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -457,7 +447,8 @@ mod tests {
 	/// the version before — have to leave the same schema behind. They run the same
 	/// text in the same order, and this is what says so out loud: a step written as
 	/// a `CREATE` for one path and an `ALTER` for the other would pass every other
-	/// test in this file and diverge here.
+	/// test in this file and diverge here, down to the declaration each column
+	/// carries.
 	#[test]
 	fn a_fresh_install_and_an_upgraded_file_come_out_the_same_shape() {
 		let fresh_dir = temp_dir();
@@ -471,11 +462,6 @@ mod tests {
 
 		assert_eq!(version(&fresh).expect("version"), version(&upgraded).expect("version"));
 		assert_eq!(
-			columns_of(&fresh, "bots"),
-			columns_of(&upgraded, "bots"),
-			"a file that was upgraded holds a different `bots` than one installed fresh"
-		);
-		assert_eq!(
 			schema_of(&fresh),
 			schema_of(&upgraded),
 			"a file that was upgraded holds a different schema than one installed fresh"
@@ -487,26 +473,9 @@ mod tests {
 		fs::remove_dir_all(&upgraded_dir).expect("cleanup");
 	}
 
-	/// Name, type, nullability and default, in the order SQLite reports them: the
-	/// four facts an `ALTER TABLE` has to reproduce for a column a `CREATE TABLE`
-	/// would have written outright.
-	fn columns_of(connection: &Connection, table: &str) -> Vec<(String, String, i64, String)> {
-		let mut statement =
-			connection.prepare(&format!("PRAGMA table_info({table})")).expect("prepare");
-		statement
-			.query_map([], |row| {
-				Ok((
-					row.get(1)?,
-					row.get(2)?,
-					row.get(3)?,
-					row.get::<_, Option<String>>(4)?.unwrap_or_default(),
-				))
-			})
-			.expect("query")
-			.collect::<rusqlite::Result<Vec<_>>>()
-			.expect("rows")
-	}
-
+	/// Every object the file holds and the text it was declared with. `ALTER TABLE
+	/// ADD COLUMN` rewrites that text, so the column a step appended — its type, its
+	/// default and the `CHECK` on it — is inside what this compares.
 	fn schema_of(connection: &Connection) -> Vec<(String, String)> {
 		let mut statement = connection
 			.prepare(

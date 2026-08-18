@@ -28,19 +28,6 @@ export type AvatarPose =
 	| "bored"
 	| "sleeping"
 
-export type Bot = {
-	id: string
-	name: string
-	title: string
-	description: string
-	model: BotModel
-	avatarAnimal: AvatarAnimal
-	avatarPose: AvatarPose
-	avatarImagePath: string | null
-	workingDir: string | null
-	createdAt: number
-}
-
 /** Who a bot is, as the store is told it — whole, both to create one and to
  * change one. No `id` or `createdAt`: neither is a caller's to choose.
  * `avatarImagePath` and `workingDir` are `null` rather than empty, since both name
@@ -55,6 +42,10 @@ export type BotIdentity = {
 	avatarImagePath: string | null
 	workingDir: string | null
 }
+
+/** A bot as the host answers it: everything it was described with, plus the two
+ * the host owns — the id it minted and the moment it wrote the row. */
+export type Bot = BotIdentity & { id: string; createdAt: number }
 
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
