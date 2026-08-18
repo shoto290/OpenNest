@@ -1,10 +1,10 @@
 "use client"
 
-import { Menu } from "@base-ui/react/menu"
-import { memo, useState } from "react"
+import { memo } from "react"
 
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
+import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
 import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -16,7 +16,12 @@ import {
 	AnimatedSidebarMenuButton,
 	AnimatedSidebarMenuItem,
 } from "@workspace/ui/components/motion/animated-sidebar"
-import { cn } from "@workspace/ui/lib/utils"
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuTrigger,
+} from "@workspace/ui/components/motion/context-menu"
 
 const ROW_AVATAR_SIZE = 40
 const PANEL_LABEL = "Conversations"
@@ -31,7 +36,7 @@ const WINDOW_CONTROLS_INSET =
  * a badge and a timestamp land on the same x on every row. */
 const AVATAR_SLOT = "relative block size-10 shrink-0"
 const TIMESTAMP_SLOT =
-	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums transition-opacity group-focus-within/roster-row:opacity-0 group-hover/roster-row:opacity-0"
+	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
 
 /** The name line keeps its height with or without a badge, which is what holds
  * the second line — and the row below it — on the same baseline. */
@@ -43,18 +48,9 @@ const PREVIEW_LINE = "h-4 truncate text-sidebar-foreground/80 text-xs leading-4"
 const ACTIVITY_DOT =
 	"absolute right-0 bottom-0 size-2.5 rounded-full bg-sidebar-primary ring-2 ring-sidebar motion-safe:animate-pulse"
 
-const MENU_TRIGGER = cn(
-	"absolute top-1.5 right-2 grid size-7 place-items-center rounded-lg text-sidebar-foreground/70 opacity-0 outline-none transition-opacity",
-	"hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-	"group-focus-within/roster-row:opacity-100 group-hover/roster-row:opacity-100",
-	"group-data-[state=collapsed]/sidebar:hidden",
-)
-const MENU_POPUP =
-	"min-w-40 rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none"
-const MENU_ITEM =
-	"flex h-8 cursor-default select-none items-center gap-2 rounded-lg px-2.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-const MENU_ITEM_DESTRUCTIVE =
-	"text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive"
+/** The row is the only trigger the actions have, so it says it carries them
+ * and lights up while they are open. */
+const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
 
 /** The mobile drawer opens by transitioning the `visibility` of the layer above
  * this button, and `transition-all` would make the button inherit that
@@ -67,6 +63,20 @@ const EMPTY_COPY =
 
 type AgentSidebarStatus = "idle" | "working"
 
+/** The pose a bot holds when it is doing nothing — its own, chosen in its
+ * settings, and held perfectly still. */
+type BotIdentityPose = Extract<
+	BotAvatarState,
+	| "idle"
+	| "happy"
+	| "curious"
+	| "proud"
+	| "shy"
+	| "playful"
+	| "bored"
+	| "sleeping"
+>
+
 interface AgentSidebarBot {
 	id: string
 	name: string
@@ -78,6 +88,8 @@ interface AgentSidebarBot {
 	/** Already formatted by the host — the panel never reads a clock. */
 	timestamp?: string
 	animal?: BotAvatarAnimal
+	/** The pose the bot keeps at rest. Rendered as a still frame. */
+	identity?: BotIdentityPose
 	status?: AgentSidebarStatus
 	/** What the bot is busy with while `status` is `working`. */
 	pose?: BotWorkingKind
@@ -88,60 +100,14 @@ const busyStateFor = (pose: BotWorkingKind) =>
 
 const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
 
+const identityOf = (bot: AgentSidebarBot) => bot.identity ?? "idle"
+
 const isBusy = (bot: AgentSidebarBot) => bot.status === "working"
 
 const announcementFor = (bot?: AgentSidebarBot) => {
 	if (!bot) return "No bot selected"
 	return `${bot.name} selected, ${isBusy(bot) ? poseOf(bot) : "idle"}`
 }
-
-interface BotRosterMenuProps {
-	bot: AgentSidebarBot
-	isOpen: boolean
-	onOpenChange: (open: boolean) => void
-	onEdit?: (id: string) => void
-	onDelete?: (id: string) => void
-}
-
-const BotRosterMenu = ({
-	bot,
-	isOpen,
-	onOpenChange,
-	onEdit,
-	onDelete,
-}: BotRosterMenuProps) => (
-	<Menu.Root modal={false} onOpenChange={onOpenChange} open={isOpen}>
-		<Menu.Trigger
-			aria-label={`Actions for ${bot.name}`}
-			className={MENU_TRIGGER}
-			data-slot="roster-row-actions"
-		>
-			<Icons.More aria-hidden="true" className="size-4" />
-		</Menu.Trigger>
-		<Menu.Portal>
-			<Menu.Positioner
-				align="end"
-				className="z-[9999] outline-none"
-				side="bottom"
-				sideOffset={4}
-			>
-				<Menu.Popup className={MENU_POPUP}>
-					<Menu.Item className={MENU_ITEM} onClick={() => onEdit?.(bot.id)}>
-						<Icons.Edit aria-hidden="true" className="size-3.5" />
-						Edit
-					</Menu.Item>
-					<Menu.Item
-						className={cn(MENU_ITEM, MENU_ITEM_DESTRUCTIVE)}
-						onClick={() => onDelete?.(bot.id)}
-					>
-						<Icons.Delete aria-hidden="true" className="size-3.5" />
-						Delete
-					</Menu.Item>
-				</Menu.Popup>
-			</Menu.Positioner>
-		</Menu.Portal>
-	</Menu.Root>
-)
 
 interface BotRosterRowProps {
 	bot: AgentSidebarBot
@@ -158,66 +124,73 @@ const BotRosterRow = ({
 	onEdit,
 	onDelete,
 }: BotRosterRowProps) => {
-	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const pose = poseOf(bot)
 	const working = isBusy(bot)
 
 	return (
-		<AnimatedSidebarMenuItem className="group/roster-row">
-			<AnimatedSidebarMenuButton
-				className="py-2"
-				icon={
-					<span className={AVATAR_SLOT}>
-						<BotAvatar
-							animal={bot.animal}
-							size={ROW_AVATAR_SIZE}
-							state={working ? busyStateFor(pose) : "waiting"}
-						/>
-						{working ? (
-							<span
-								aria-hidden="true"
-								className={ACTIVITY_DOT}
-								data-slot="roster-row-activity"
-							/>
-						) : null}
-					</span>
-				}
-				isActive={isSelected}
-				isIconDecorative={false}
-				label={bot.name}
-				onSelect={() => onSelect?.(bot.id)}
-			>
-				<span className="flex min-w-0 items-start gap-2">
-					<span className="flex min-w-0 flex-1 flex-col">
-						<span className={NAME_LINE}>
-							<span className="truncate" data-slot="roster-row-name">
-								{bot.name}
+		<AnimatedSidebarMenuItem>
+			<ContextMenu>
+				<ContextMenuTrigger>
+					<AnimatedSidebarMenuButton
+						className={ROW}
+						icon={
+							<span className={AVATAR_SLOT}>
+								<BotAvatar
+									animal={bot.animal}
+									animated={working}
+									size={ROW_AVATAR_SIZE}
+									state={working ? busyStateFor(pose) : identityOf(bot)}
+								/>
+								{working ? (
+									<span
+										aria-hidden="true"
+										className={ACTIVITY_DOT}
+										data-slot="roster-row-activity"
+									/>
+								) : null}
 							</span>
-							{bot.title ? (
-								<span className={TITLE_BADGE} data-slot="roster-row-badge">
-									{bot.title}
-								</span>
-							) : null}
-						</span>
-						<span className={PREVIEW_LINE} data-slot="roster-row-preview">
-							{working ? `${pose}…` : bot.lastMessage}
-						</span>
-					</span>
-					<span
-						className={cn(TIMESTAMP_SLOT, isMenuOpen && "opacity-0")}
-						data-slot="roster-row-timestamp"
+						}
+						isActive={isSelected}
+						isIconDecorative={false}
+						label={bot.name}
+						onSelect={() => onSelect?.(bot.id)}
 					>
-						{bot.timestamp}
-					</span>
-				</span>
-			</AnimatedSidebarMenuButton>
-			<BotRosterMenu
-				bot={bot}
-				isOpen={isMenuOpen}
-				onDelete={onDelete}
-				onEdit={onEdit}
-				onOpenChange={setIsMenuOpen}
-			/>
+						<span className="flex min-w-0 items-start gap-2">
+							<span className="flex min-w-0 flex-1 flex-col">
+								<span className={NAME_LINE}>
+									<span className="truncate" data-slot="roster-row-name">
+										{bot.name}
+									</span>
+									{bot.title ? (
+										<span className={TITLE_BADGE} data-slot="roster-row-badge">
+											{bot.title}
+										</span>
+									) : null}
+								</span>
+								<span className={PREVIEW_LINE} data-slot="roster-row-preview">
+									{working ? `${pose}…` : bot.lastMessage}
+								</span>
+							</span>
+							<span className={TIMESTAMP_SLOT} data-slot="roster-row-timestamp">
+								{bot.timestamp}
+							</span>
+						</span>
+					</AnimatedSidebarMenuButton>
+				</ContextMenuTrigger>
+				<ContextMenuContent ariaLabel={`Actions for ${bot.name}`}>
+					<ContextMenuItem onSelect={() => onEdit?.(bot.id)}>
+						<Icons.Edit aria-hidden="true" className="size-3.5" />
+						Edit
+					</ContextMenuItem>
+					<ContextMenuItem
+						onSelect={() => onDelete?.(bot.id)}
+						tone="destructive"
+					>
+						<Icons.Delete aria-hidden="true" className="size-3.5" />
+						Delete
+					</ContextMenuItem>
+				</ContextMenuContent>
+			</ContextMenu>
 		</AnimatedSidebarMenuItem>
 	)
 }
@@ -305,4 +278,9 @@ const AgentSidebarBase = ({
 /** Hosts render this from a streaming store, so a shallow compare keeps every token from re-measuring the Motion layout projections inside the panel. */
 const AgentSidebar = memo(AgentSidebarBase)
 
-export { AgentSidebar, type AgentSidebarBot, type AgentSidebarProps }
+export {
+	AgentSidebar,
+	type AgentSidebarBot,
+	type AgentSidebarProps,
+	type BotIdentityPose,
+}

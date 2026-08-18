@@ -1,6 +1,7 @@
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
 import {
 	AgentSidebar,
 	type AgentSidebarBot,
@@ -15,15 +16,6 @@ const SINGLE_LINE_HEIGHT = 20
 
 const FRAME_POLL = { interval: 10 }
 
-/** Base UI parks a focusable sentinel either side of an open popup to keep Tab
- * inside it. They are `aria-hidden` and focusable by design, so the rule is
- * downgraded to a review rather than failing the story on a sentinel. */
-const BASE_UI_FOCUS_GUARDS = {
-	config: {
-		rules: [{ id: "aria-hidden-focus", reviewOnFail: true }],
-	},
-}
-
 const NARROW_VIEWPORT = {
 	narrow: { name: "Narrow", styles: { width: "800px", height: "900px" } },
 }
@@ -31,6 +23,7 @@ const NARROW_VIEWPORT = {
 const ROSTER: AgentSidebarBot[] = [
 	{
 		id: "atlas",
+		identity: "curious",
 		name: "Atlas",
 		title: "Research",
 		animal: "owl",
@@ -39,6 +32,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "beacon",
+		identity: "happy",
 		name: "Beacon",
 		animal: "cat",
 		lastMessage: LAST_MESSAGE,
@@ -46,6 +40,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "cinder",
+		identity: "proud",
 		name: "Cinder",
 		title: "Build",
 		animal: "dog",
@@ -56,6 +51,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "dune",
+		identity: "bored",
 		name: "Dune",
 		animal: "bear",
 		lastMessage: "Nothing since the migration landed.",
@@ -63,6 +59,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "ember",
+		identity: "shy",
 		name: "Ember",
 		title: "Review",
 		animal: "rabbit",
@@ -71,6 +68,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "flint",
+		identity: "playful",
 		name: "Flint",
 		animal: "mouse",
 		lastMessage: "Ran the suite twice, both green.",
@@ -78,6 +76,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "grove",
+		identity: "idle",
 		name: "Grove",
 		title: "Docs",
 		animal: "koala",
@@ -86,6 +85,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "harbor",
+		identity: "sleeping",
 		name: "Harbor",
 		animal: "chick",
 		lastMessage: "Waiting on the credentials you promised.",
@@ -93,6 +93,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "iris",
+		identity: "happy",
 		name: "Iris",
 		title: "Design",
 		animal: "cat",
@@ -101,6 +102,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "juno",
+		identity: "curious",
 		name: "Juno",
 		animal: "owl",
 		lastMessage: "Summarised yesterday's session into six bullets.",
@@ -108,6 +110,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "kite",
+		identity: "proud",
 		name: "Kite",
 		title: "Ops",
 		animal: "dog",
@@ -116,6 +119,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "lumen",
+		identity: "sleeping",
 		name: "Lumen",
 		animal: "bear",
 		lastMessage: "Nothing yet.",
@@ -150,9 +154,6 @@ const rowFor = (canvasElement: HTMLElement, name: string) => {
 }
 
 const rowButton = (row: HTMLElement) => slotIn(row, "sidebar-menu-button")
-
-const rowActions = (row: HTMLElement) =>
-	within(row).getByRole("button", { name: /^Actions for/ })
 
 /** Where a slot starts inside its own row, so every row can be compared to
  * every other one whatever its content is. */
@@ -205,7 +206,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message; a bot that is running holds its pose and wears an activity dot. Selection and running state are props — the panel keeps nothing but the open state of a row menu, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
+					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. Edit and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
 			},
 		},
 	},
@@ -227,7 +228,7 @@ export const Roster = meta.story({
 		docs: {
 			description: {
 				story:
-					"A dozen bots, some with a title badge and some without. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The list is walked with Tab: the create button first, then each row and the actions button beside it, and Enter on a row reports the selection rather than taking it, since the panel never selects on its own. Pick `LongContent` for the same list under names and messages that do not fit, `RowMenu` for the actions behind a row.",
+					"A dozen bots, some with a title badge and some without, each holding the identity pose it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The list is walked with Tab and a row is its own only stop, since the actions carry no button: the create button first, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the poses at rest.",
 			},
 		},
 	},
@@ -262,12 +263,12 @@ export const Roster = meta.story({
 		await userEvent.tab()
 		await expect(rowButton(rows[0])).toHaveFocus()
 		await userEvent.tab()
-		await expect(rowActions(rows[0])).toHaveFocus()
-		await userEvent.tab()
 		await expect(rowButton(rows[1])).toHaveFocus()
 
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onSelectBot).toHaveBeenCalledWith("beacon")
+
+		await expect(rowButton(rows[0])).toHaveAttribute("aria-haspopup", "menu")
 	},
 })
 
@@ -377,6 +378,60 @@ export const Selected = meta.story({
 	},
 })
 
+export const Identities = meta.story({
+	args: {
+		bots: [
+			{ ...ROSTER[6], identity: "idle" },
+			{ ...ROSTER[1], identity: "happy" },
+			{ ...ROSTER[0], identity: "curious" },
+			{ ...ROSTER[2], identity: "proud", status: "idle" },
+			{ ...ROSTER[4], identity: "shy" },
+			{ ...ROSTER[5], identity: "playful" },
+			{ ...ROSTER[3], identity: "bored" },
+			{ ...ROSTER[7], identity: "sleeping" },
+		],
+		selectedBotId: "grove",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The eight poses a bot can be given in its settings, one per row, with nothing running. Every avatar here is a still frame: an idle bot is drawn once and left alone, so a panel of bots that are doing nothing is a panel that does not move — and the one row that does move is doing work. Check that each row wears the pose its bot chose rather than a shared resting one, that no row carries an activity dot, and that the panel does not report itself busy. The test browser renders every story with reduced motion, so the stillness is read here rather than measured; open the story in Storybook beside `Working` to see the difference. Pick `Working` for the state that animates.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+		const poses = [
+			"idle",
+			"happy",
+			"curious",
+			"proud",
+			"shy",
+			"playful",
+			"bored",
+			"sleeping",
+		]
+
+		await expect(rows).toHaveLength(poses.length)
+		for (const [index, pose] of poses.entries()) {
+			await expect(
+				within(rows[index]).getByRole("img", {
+					name: new RegExp(`${pose}$`),
+				}),
+			).toBeVisible()
+		}
+
+		await expect(
+			canvasElement.querySelectorAll('[data-slot="roster-row-activity"]'),
+		).toHaveLength(0)
+		await expect(
+			canvas.getByRole("complementary", { name: "Conversations" }),
+		).toHaveAttribute("aria-busy", "false")
+		await expect(uniqueCount(rowHeights(rows).map(String))).toBe(1)
+	},
+})
+
 export const Working = meta.story({
 	args: {
 		bots: [
@@ -392,7 +447,7 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four bots running at once and one at rest. Check that each running row holds its own pose in the avatar and wears the activity dot, that the verb takes over the message line while it runs, and that the row at rest wears neither — the dot is the difference read at a glance across a long list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `PermissionPending` for the one running state that looks like rest.",
+					"Four bots running at once and one at rest. Check that each running row holds its own work pose in the avatar and wears the activity dot, that the verb takes over the message line while it runs, and that the row at rest wears neither and keeps its own identity pose instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `Identities` for the poses that hold still, `PermissionPending` for the one running state that looks like rest.",
 			},
 		},
 	},
@@ -416,7 +471,7 @@ export const Working = meta.story({
 			resting.querySelector('[data-slot="roster-row-activity"]'),
 		).toBeNull()
 		await expect(
-			within(resting).getByRole("img", { name: /waiting$/ }),
+			within(resting).getByRole("img", { name: /shy$/ }),
 		).toBeVisible()
 
 		await expect(
@@ -453,7 +508,7 @@ export const PermissionPending = meta.story({
 		docs: {
 			description: {
 				story:
-					'A turn blocked on a permission prompt, which a host maps to `status="working"` with `pose="waiting"` — the turn is waiting on the reader, not over. Check that the avatar holds its listening pose and never the resting one it wears when nothing runs, and that the dot is there: the panel reports itself busy and the announcement says the bot is waiting, so a row that looked idle here would contradict both at once. Pick `Working` for the poses that cannot be mistaken for rest.',
+					'A turn blocked on a permission prompt, which a host maps to `status="working"` with `pose="waiting"` — the turn is waiting on the reader, not over. Check that the avatar holds its listening pose rather than the identity pose it wears at rest, that it is still animating, and that the dot is there: the panel reports itself busy and the announcement says the bot is waiting, so a row that looked idle here would contradict both at once. Pick `Working` for the poses that cannot be mistaken for rest, `Identities` for the still frame this state must not fall back to.',
 			},
 		},
 	},
@@ -463,7 +518,7 @@ export const PermissionPending = meta.story({
 			within(row).getByRole("img", { name: /listening$/ }),
 		).toBeVisible()
 		await expect(
-			within(row).queryByRole("img", { name: /waiting$/ }),
+			within(row).queryByRole("img", { name: /curious$/ }),
 		).toBeNull()
 		await expect(slotIn(row, "roster-row-preview")).toHaveTextContent(
 			"waiting…",
@@ -533,64 +588,68 @@ export const LongContent = meta.story({
 	},
 })
 
-export const RowMenu = meta.story({
+export const RowContextMenu = meta.story({
 	args: { bots: ROSTER.slice(0, 4), selectedBotId: "beacon" },
 	parameters: {
-		a11y: BASE_UI_FOCUS_GUARDS,
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The actions behind a row, opened on the third one. Check that the button appears on hover or focus and takes the timestamp's slot rather than a slot of its own — the columns must not move to make room for it — that the menu offers edit and delete with delete reading as destructive, and that both are reachable with the arrow keys. Escape closes the menu and puts focus back on the button that opened it. The menu is left open here so the panel can be read with it up.",
+					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which is what this story presses. Check that the menu offers edit and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page. The row says it carries a menu through `aria-haspopup`, and says whether it is open. The menu is left open here so the panel can be read with it up. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const row = rowFor(canvasElement, "Cinder")
-		const trigger = rowActions(row)
+		const trigger = rowButton(row)
 		const overlay = within(document.body)
 
-		await userEvent.click(trigger)
-		const menu = await overlay.findByRole("menu")
+		await expect(within(row).getAllByRole("button")).toHaveLength(1)
+		await expect(trigger).toHaveAttribute("aria-haspopup", "menu")
+		await expect(trigger).toHaveAttribute("aria-expanded", "false")
+
+		await userEvent.tab()
+		await userEvent.tab()
+		await userEvent.tab()
+		await userEvent.tab()
+		await expect(trigger).toHaveFocus()
+
+		await userEvent.keyboard("{Shift>}{F10}{/Shift}")
+		const menu = await overlay.findByRole("menu", {
+			name: "Actions for Cinder",
+		})
 		const edit = within(menu).getByRole("menuitem", { name: "Edit" })
 		const remove = within(menu).getByRole("menuitem", { name: "Delete" })
-		await expect(edit).toBeVisible()
+		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+		await waitFor(async () => {
+			await expect(edit).toHaveFocus()
+		}, FRAME_POLL)
 		await expect(getComputedStyle(remove).color).not.toBe(
 			getComputedStyle(edit).color,
 		)
 
 		await userEvent.keyboard("{ArrowDown}")
-		await expect(edit).toHaveAttribute("data-highlighted")
-		await userEvent.keyboard("{ArrowDown}")
-		await expect(remove).toHaveAttribute("data-highlighted")
-
+		await expect(remove).toHaveFocus()
 		await userEvent.keyboard("{Escape}")
 		await waitFor(async () => {
 			await expect(overlay.queryByRole("menu")).toBeNull()
 		}, FRAME_POLL)
 		await expect(trigger).toHaveFocus()
 
-		await userEvent.click(trigger)
+		await userEvent.pointer({ keys: "[MouseRight]", target: trigger })
 		await userEvent.click(
 			await overlay.findByRole("menuitem", { name: "Edit" }),
 		)
 		await expect(args.onEditBot).toHaveBeenCalledWith("cinder")
 
-		await userEvent.click(trigger)
+		await userEvent.pointer({ keys: "[MouseRight]", target: trigger })
 		await userEvent.click(
 			await overlay.findByRole("menuitem", { name: "Delete" }),
 		)
 		await expect(args.onDeleteBot).toHaveBeenCalledWith("cinder")
 
-		await userEvent.click(trigger)
+		await userEvent.pointer({ keys: "[MouseRight]", target: trigger })
 		await expect(await overlay.findByRole("menu")).toBeVisible()
-
-		const timestamp = slotIn(row, "roster-row-timestamp")
-		await waitFor(async () => {
-			await expect(getComputedStyle(timestamp).opacity).toBe("0")
-		}, FRAME_POLL)
-		await expect(trigger.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-			timestamp.getBoundingClientRect().left,
-		)
 		await expect(
 			uniqueCount(endOffsets(rowsIn(canvasElement), "roster-row-timestamp")),
 		).toBe(1)
@@ -603,7 +662,7 @@ export const Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel opened on its icon rail, which is how a host restores a remembered choice through `defaultOpen`. Check that the rail is one avatar wide with the avatars sitting centred in it and nothing clipped against either edge, that the create button rides down with it, and that the names, badges, timestamps and row actions are gone from the picture and from the accessibility tree — each row keeps its name through `aria-label` instead. Pick `Toggle` to watch the panel travel between the two widths.",
+					"The panel opened on its icon rail, which is how a host restores a remembered choice through `defaultOpen`. Check that the rail is one avatar wide with the avatars sitting centred in it and nothing clipped against either edge, that the create button rides down with it, and that the names, badges and timestamps are gone from the picture and from the accessibility tree — each row keeps its name through `aria-label` instead. A row is still one button and one only, and right-clicking it still reaches its actions. Pick `Toggle` to watch the panel travel between the two widths.",
 			},
 		},
 	},
@@ -623,13 +682,11 @@ export const Collapsed = meta.story({
 		await expect(rowButton(row)).toHaveFocus()
 		await expect(rowButton(row).matches(":focus-visible")).toBe(true)
 		await expect(rowButton(row)).toHaveAccessibleName("Atlas")
-		await expect(
-			within(row).queryByRole("button", { name: /^Actions for/ }),
-		).toBeNull()
+		await expect(within(row).getAllByRole("button")).toHaveLength(1)
 
 		const panelBox = panel.getBoundingClientRect()
 		const avatarBox = within(row)
-			.getByRole("img", { name: /waiting$/ })
+			.getByRole("img", { name: /curious$/ })
 			.getBoundingClientRect()
 		await expect(avatarBox.left).toBeGreaterThanOrEqual(panelBox.left)
 		await expect(avatarBox.right).toBeLessThanOrEqual(panelBox.right)
