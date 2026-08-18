@@ -165,14 +165,24 @@ export const WithUploadedAvatar = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bot wears a picture instead of an animal. Check that the image renders static and round, and that the dot at its corner is grey while the bot is idle — the animal carries liveness in its pose, a photograph has to borrow it. Pick `Working` for the same avatar with the dot lit.",
+					"The bot wears a picture instead of an animal. Check that the image renders static and round, that no animal is drawn behind or beside it, and that nothing marks activity while the bot is idle — the dot says work, and this bot is not working. It is the same avatar the roster row and the replies draw, at this column's size. Pick `Working` for the same picture with the dot lit.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Nest Keeper is idle",
 		)
+
+		const avatar = avatarIn(canvasElement)
+		await expect(avatar.querySelector("img")).toHaveAttribute(
+			"src",
+			UPLOADED_IMAGE,
+		)
+		await expect(avatar.querySelector("svg")).toBeNull()
+		await expect(
+			avatar.querySelector('[data-slot="bot-activity-dot"]'),
+		).toBeNull()
 	},
 })
 
@@ -182,14 +192,24 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this while a run is in flight on a bot that wears a picture: the activity dot turns green and pulses, and a screen reader is told the bot is working. The dot exists only because a photograph cannot move — pick `StillUntilWorking` for what the same flag does to an animal identity.",
+					"Reach for this while a run is in flight on a bot that wears a picture: the picture stays — it is the bot, and swapping it for an animal that can move would be showing the reader somebody else — so the work is said with the dot at its corner, and a screen reader is told in words. The dot exists only because a photograph cannot act. Pick `StillUntilWorking` for what the same flag does to an animal identity.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Nest Keeper is working",
 		)
+
+		const avatar = avatarIn(canvasElement)
+		await expect(avatar.querySelector("img")).toHaveAttribute(
+			"src",
+			UPLOADED_IMAGE,
+		)
+		await expect(avatar.querySelector("svg")).toBeNull()
+		await expect(
+			avatar.querySelector('[data-slot="bot-activity-dot"]'),
+		).not.toBeNull()
 	},
 })
 
@@ -199,7 +219,7 @@ export const StillUntilWorking = meta.story({
 		docs: {
 			description: {
 				story:
-					"The product rule, side by side: one identity, one pose, and motion as the only difference. Every one of the eight poses has an expression and a blink cadence, so a pose left animating would never sit still — the avatar therefore animates when `working` is set and holds a single frame when it is not. Open this in Storybook to check it by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play can only guard the wiring, not the movement.",
+					"The product rule, side by side: one identity, one pose, and motion as the only difference. Every one of the eight poses has an expression and a blink cadence, so a pose left animating would never sit still — the avatar therefore animates when `working` is set and holds a single frame when it is not. The animal is the bot's either way. Open this in Storybook to check the movement by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play guards the wiring instead.",
 			},
 		},
 	},
@@ -208,7 +228,7 @@ export const StillUntilWorking = meta.story({
 			canvas.getByRole("img", { name: "Bot avatar owl, curious" }),
 		).toBeVisible()
 		await expect(
-			canvas.getByRole("img", { name: "Bot avatar owl, working" }),
+			canvas.getByRole("img", { name: "Bot avatar owl, thinking" }),
 		).toBeVisible()
 	},
 })
@@ -231,6 +251,15 @@ export const Closing = meta.story({
 		await expect(canvas.getByLabelText("Name")).toBeVisible()
 	},
 })
+
+/** The one avatar the column draws, whatever it draws inside it. */
+const avatarIn = (canvasElement: HTMLElement) => {
+	const avatar = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="bot-identity-avatar"]',
+	)
+	if (!avatar) throw new Error("The panel is missing its avatar")
+	return avatar
+}
 
 const fieldsIn = (canvasElement: HTMLElement) => {
 	const fields = canvasElement.querySelector<HTMLElement>(

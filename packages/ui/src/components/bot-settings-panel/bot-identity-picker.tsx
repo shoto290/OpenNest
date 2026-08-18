@@ -13,7 +13,7 @@ import {
 } from "react"
 
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
-import { BotIdentityPreview } from "@workspace/ui/components/bot-settings-panel/bot-identity-preview"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { POPUP_CLASS } from "@workspace/ui/components/bot-settings-panel/styles"
 import {
 	BOT_IDENTITY_ANIMALS,
@@ -61,7 +61,6 @@ const PickerGroup = ({ label, className, children }: PickerGroupProps) => (
 
 type BotIdentityPickerProps = {
 	identity: BotIdentity
-	name: string
 	working: boolean
 	onIdentityChange: (identity: BotIdentity) => void
 	onAvatarUpload: (file: File) => void
@@ -69,7 +68,6 @@ type BotIdentityPickerProps = {
 
 const BotIdentityPicker = ({
 	identity,
-	name,
 	working,
 	onIdentityChange,
 	onAvatarUpload,
@@ -108,9 +106,10 @@ const BotIdentityPicker = ({
 					aria-label={`Change avatar. Current: ${currentLabel}.`}
 					className="group relative rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
 				>
-					<BotIdentityPreview
-						identity={identity}
-						name={name}
+					<BotIdentityAvatar
+						animal={identity.animal}
+						image={identity.image}
+						pose={identity.pose}
 						size={PREVIEW_SIZE}
 						working={working}
 					/>

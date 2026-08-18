@@ -484,7 +484,7 @@ export const UploadedPictures = meta.story({
 		await expect(drawn.querySelector("img")).toBeNull()
 		await expect(within(drawn).getByRole("img")).toBeVisible()
 		await expect(
-			running.querySelector('[data-slot="roster-row-activity"]'),
+			running.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
 		await expectAlignedRows(rows)
 	},
@@ -516,7 +516,7 @@ export const Identities = meta.story({
 		}
 
 		await expect(
-			canvasElement.querySelectorAll('[data-slot="roster-row-activity"]'),
+			canvasElement.querySelectorAll('[data-slot="bot-activity-dot"]'),
 		).toHaveLength(0)
 		await expect(
 			canvas.getByRole("complementary", { name: "Conversations" }),
@@ -550,7 +550,7 @@ export const Working = meta.story({
 
 		const running = rowFor(canvasElement, "Cinder")
 		await expect(
-			running.querySelector('[data-slot="roster-row-activity"]'),
+			running.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
 		await expect(slotIn(running, "roster-row-preview")).toHaveTextContent(
 			"writing…",
@@ -561,7 +561,7 @@ export const Working = meta.story({
 
 		const resting = rowFor(canvasElement, "Ember")
 		await expect(
-			resting.querySelector('[data-slot="roster-row-activity"]'),
+			resting.querySelector('[data-slot="bot-activity-dot"]'),
 		).toBeNull()
 		await expect(
 			within(resting).getByRole("img", { name: /shy$/ }),
@@ -615,7 +615,7 @@ export const PermissionPending = meta.story({
 			"waiting…",
 		)
 		await expect(
-			row.querySelector('[data-slot="roster-row-activity"]'),
+			row.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
 
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
@@ -866,7 +866,7 @@ export const ReducedMotion = meta.story({
 		const row = rowFor(canvasElement, "Cinder")
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
 		await expect(
-			row.querySelector('[data-slot="roster-row-activity"]'),
+			row.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Cinder selected, working",

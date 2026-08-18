@@ -372,10 +372,12 @@ export const PanelToggle = meta.story({
 		await expect(
 			canvas.queryByRole("complementary", { name: SETTINGS_LABEL }),
 		).toBeNull()
-		// The roster draws the only bot on the screen while the settings are away.
-		await expect(
-			canvasElement.querySelectorAll('[data-slot="bot-identity-preview"]'),
-		).toHaveLength(0)
+		// The roster draws the only bots on the screen while the settings are away:
+		// every avatar there is belongs to a row of it.
+		const outside = Array.from(
+			canvasElement.querySelectorAll('[data-slot="bot-identity-avatar"]'),
+		).filter((avatar) => !avatar.closest('[data-slot="sidebar"]'))
+		await expect(outside).toHaveLength(0)
 
 		await userEvent.click(gear)
 		const panel = canvas.getByRole("complementary", { name: SETTINGS_LABEL })

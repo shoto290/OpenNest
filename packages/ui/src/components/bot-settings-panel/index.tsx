@@ -111,6 +111,12 @@ const BotSettingsPanel = ({
 				data-slot="bot-settings-column"
 			>
 				<header className="flex h-12 shrink-0 items-center gap-1 border-sidebar-border border-b px-3">
+					{/* One live region for the whole column, here rather than on the avatar:
+					the same avatar is drawn in a dozen roster rows at once, and a live
+					region inside it would announce a dozen times over. */}
+					<span className="sr-only" role="status">
+						{`${value.name.trim() || "This bot"} is ${working ? "working" : "idle"}`}
+					</span>
 					<h2 className="min-w-0 flex-1 truncate font-medium text-sm">
 						{label}
 					</h2>
@@ -137,7 +143,6 @@ const BotSettingsPanel = ({
 				>
 					<BotIdentityPicker
 						identity={value.identity}
-						name={value.name}
 						onAvatarUpload={onAvatarUpload}
 						onIdentityChange={(identity) => patch({ identity })}
 						working={working}

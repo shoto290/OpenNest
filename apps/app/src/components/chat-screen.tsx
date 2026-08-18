@@ -2,7 +2,7 @@ import { memo, type Ref, useCallback, useEffect, useRef, useState } from "react"
 
 import { AgentActivity } from "@workspace/ui/components/agent-activity"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import {
 	BotWorking,
 	type BotWorkingKind,
@@ -26,6 +26,7 @@ import {
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
 
+import { avatarSrc } from "@/lib/bots/bot-settings"
 import type { ChatController } from "@/lib/chat/chat-controller"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import {
@@ -52,10 +53,18 @@ import type {
 	Bot,
 } from "@/lib/conversations/store-contract"
 
+/** The bot's face as the memoised rows below take it: three strings rather than a
+ * node, so a streamed delta still shallow-compares equal. */
+type BotFace = {
+	animal: AvatarAnimal
+	pose: AvatarPose
+	image?: string
+}
+
 /** Memoised: a streamed delta rewrites one message, and the view model hands
  * back the same rows for the rest. `run` arrives from the enclosing group and
  * `avatar` stays a boolean, so the shallow compare holds through a stream — which
- * is also why the bot's face arrives as its two words rather than as a node. */
+ * is also why the bot's face arrives spread rather than as an object. */
 const TranscriptTurn = memo(function TranscriptTurn({
 	row,
 	controller,
@@ -63,14 +72,13 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	avatar,
 	animal,
 	pose,
+	image,
 	rejected,
-}: {
+}: BotFace & {
 	row: TranscriptRow
 	controller: ChatController
 	run?: ChatTurnRun
 	avatar: boolean
-	animal: AvatarAnimal
-	pose: AvatarPose
 	/** Claude refused this prompt. The stored row is whole either way — the reader
 	 * wrote it and the store took it — so the retry lives on the screen alone. */
 	rejected?: boolean
@@ -97,11 +105,11 @@ const TranscriptTurn = memo(function TranscriptTurn({
 			copyText={row.text}
 			avatar={
 				avatar ? (
-					<BotAvatar
+					<BotIdentityAvatar
 						animal={animal}
-						animated={false}
+						image={image}
+						pose={pose}
 						size={CHAT_AVATAR_SIZE}
-						state={pose}
 					/>
 				) : null
 			}
@@ -233,6 +241,9 @@ export function ChatScreen({
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
+	// The picture the bot wears, as something a webview may load. Resolved once per
+	// render and handed down: every avatar on this screen is the same bot's.
+	const face = avatarSrc(bot.avatarImagePath)
 	const disabled = !isSessionReady(state)
 	const acceptsInput = !disabled && !isTurnBusy(state.turn)
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
@@ -348,6 +359,7 @@ export function ChatScreen({
 								controller={controller}
 								avatar={index === avatarIndex}
 								animal={bot.avatarAnimal}
+								image={face}
 								pose={bot.avatarPose}
 								rejected={row.messageId === state.rejectedPromptId}
 							/>

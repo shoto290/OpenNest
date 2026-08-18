@@ -2,10 +2,12 @@
 
 import { memo } from "react"
 
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
-import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
-import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
+import {
+	BotIdentityAvatar,
+	type BotIdentityPose,
+	type BotWorkingKind,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -26,19 +28,13 @@ import {
 const PANEL_LABEL = "Conversations"
 const CREATE_LABEL = "New bot"
 const EMPTY_LABEL = "No bots yet"
-const AWAITING_READER_STATE = "listening"
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
 
 /** Fixed slots: the avatar box and the timestamp box never resize, so a name,
- * a badge and a timestamp land on the same x on every row. The box and the
- * drawing inside it are the same 40px, and have to be changed together. */
+ * a badge and a timestamp land on the same x on every row. The avatar keeps this
+ * size whatever it draws — an animal, or a picture the reader uploaded. */
 const ROW_AVATAR_SIZE = 40
-const AVATAR_SLOT = "relative block size-10 shrink-0"
-/** An uploaded picture fills the same slot the drawing does, so a row wearing one
- * lands on the same column as a row wearing its animal. */
-const AVATAR_IMAGE =
-	"size-full rounded-full border border-sidebar-border object-cover"
 const TIMESTAMP_SLOT =
 	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
 
@@ -48,9 +44,6 @@ const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
 const TITLE_BADGE =
 	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
 const PREVIEW_LINE = "h-4 truncate text-sidebar-foreground/80 text-xs leading-4"
-
-const ACTIVITY_DOT =
-	"absolute right-0 bottom-0 size-2.5 rounded-full bg-sidebar-primary ring-2 ring-sidebar motion-safe:animate-pulse"
 
 /** The row is the only trigger the actions have, so it says it carries them
  * and lights up while they are open. */
@@ -66,20 +59,6 @@ const EMPTY_COPY =
 	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
 
 type AgentSidebarStatus = "idle" | "working"
-
-/** The pose a bot holds when it is doing nothing — its own, chosen in its
- * settings, and held perfectly still. */
-type BotIdentityPose = Extract<
-	BotAvatarState,
-	| "idle"
-	| "happy"
-	| "curious"
-	| "proud"
-	| "shy"
-	| "playful"
-	| "bored"
-	| "sleeping"
->
 
 interface AgentSidebarBot {
 	id: string
@@ -102,9 +81,6 @@ interface AgentSidebarBot {
 	/** What the bot is busy with while `status` is `working`. */
 	pose?: BotWorkingKind
 }
-
-const busyStateFor = (pose: BotWorkingKind) =>
-	pose === "waiting" ? AWAITING_READER_STATE : pose
 
 const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
 
@@ -142,30 +118,14 @@ const BotRosterRow = ({
 					<AnimatedSidebarMenuButton
 						className={ROW}
 						icon={
-							<span className={AVATAR_SLOT}>
-								{bot.image ? (
-									<img
-										alt=""
-										aria-hidden="true"
-										className={AVATAR_IMAGE}
-										src={bot.image}
-									/>
-								) : (
-									<BotAvatar
-										animal={bot.animal}
-										animated={working}
-										size={ROW_AVATAR_SIZE}
-										state={working ? busyStateFor(pose) : identityOf(bot)}
-									/>
-								)}
-								{working ? (
-									<span
-										aria-hidden="true"
-										className={ACTIVITY_DOT}
-										data-slot="roster-row-activity"
-									/>
-								) : null}
-							</span>
+							<BotIdentityAvatar
+								animal={bot.animal}
+								image={bot.image}
+								kind={pose}
+								pose={identityOf(bot)}
+								size={ROW_AVATAR_SIZE}
+								working={working}
+							/>
 						}
 						isActive={isSelected}
 						isIconDecorative={false}
