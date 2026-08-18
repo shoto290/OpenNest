@@ -17,6 +17,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 {
 	tauri::generate_handler![
 		claude::commands::claude_check,
+		claude::commands::claude_models,
 		claude::commands::claude_start_or_resume_session,
 		claude::commands::claude_submit_prompt,
 		claude::commands::claude_cancel_turn,

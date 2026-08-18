@@ -14,36 +14,37 @@ import type {
 	BotIdentity,
 } from "../conversations/store-contract"
 
-/** The aliases the settings offer, largest tier first. Aliases rather than versioned
- * names on purpose: Claude Code resolves one to the latest model of its tier, so a
- * bot left on `sonnet` follows the tier instead of being pinned to whatever was
- * current the day it was created.
+/** What is offered when the catalogue is empty — a machine whose Claude Code could
+ * not be found, or one whose executable carries no catalogue, or `bun dev:web`, which
+ * has no executable at all. The four tier aliases and nothing else: they are the
+ * labels Claude Code has resolved for as long as it has had tiers, and an alias
+ * follows its tier rather than pinning a bot to one release of it.
  *
- * A hardcoded list because there is nothing to read one from: there is no
- * `claude models`, the init frame of a session names only the model already
- * answering, and parsing `--help` would make the product's vocabulary a side effect
- * of somebody's usage text. So this is the list the product stands behind, and
- * anything outside it is still a value the store keeps — see [`modelOptionsFor`]. */
-export const MODEL_ALIASES: BotModelOption[] = [
-	{ label: "Claude Fable", value: "fable" },
-	{ label: "Claude Opus", value: "opus" },
-	{ label: "Claude Sonnet", value: "sonnet" },
-	{ label: "Claude Haiku", value: "haiku" },
-]
+ * It is a floor, not a vocabulary. What a machine really knows is read from the
+ * machine — see [`readModelCatalogue`] — and a value outside either list is still a
+ * value the store keeps. */
+export const FALLBACK_MODELS = ["fable", "opus", "sonnet", "haiku"]
 
 /** What a new bot is created on. An alias, so it follows its tier. */
 const NEW_BOT_MODEL = "sonnet"
 
-/** The options for one bot: the aliases, plus the label it already carries when that
- * is not one of them. A bot on a versioned name, or on an alias this build has not
- * heard of yet, is a bot whose model the reader has to be able to see — offering it
- * back is what keeps the select from showing an empty box over a value the file
- * holds, and what keeps a rename of some other field from quietly moving the bot to
- * a model somebody else chose. */
-export const modelOptionsFor = (model: string): BotModelOption[] =>
-	MODEL_ALIASES.some((alias) => alias.value === model)
-		? MODEL_ALIASES
-		: [...MODEL_ALIASES, { label: model, value: model }]
+/** The options for one bot: what this machine's executable carries, or the fallback
+ * when it carries nothing, plus the label the bot already holds when that is in
+ * neither. Offering a bot's own value back is what keeps the select from showing an
+ * empty box over a value the file holds, and what keeps an edit to some other field
+ * from quietly moving the bot to a model somebody else chose.
+ *
+ * Every label is its value, verbatim. These are the words Claude Code accepts — a
+ * tier alias, a long-context variant, a dated identifier — and dressing them up would
+ * be inventing a vocabulary on top of the one the executable declares. */
+export const modelOptionsFor = (
+	model: string,
+	catalogue: string[],
+): BotModelOption[] => {
+	const offered = catalogue.length > 0 ? catalogue : FALLBACK_MODELS
+	const values = offered.includes(model) ? offered : [...offered, model]
+	return values.map((value) => ({ label: value, value }))
+}
 
 /** The faces the app hands out, in the order the picker shows them. The list is
  * spelled here because giving a new bot a face is this side's decision — the host

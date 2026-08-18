@@ -11,6 +11,7 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
+import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import {
@@ -31,6 +32,7 @@ export function App() {
 	const store = useMemo(createTranscriptStore, [])
 	const chat = useChat(driver, store)
 	const roster = useRoster(store)
+	const catalogue = useModelCatalogue()
 
 	const { bots, selectedBotId, isEditing, isConfirmingDelete } = roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
@@ -74,7 +76,7 @@ export function App() {
 				selected && isEditing ? (
 					<BotSettingsPanel
 						confirmingDelete={isConfirmingDelete}
-						models={modelOptionsFor(selected.model)}
+						models={modelOptionsFor(selected.model, catalogue)}
 						onAvatarUpload={(file) => {
 							void roster.controller.uploadAvatar(selected.id, file)
 						}}

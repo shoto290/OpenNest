@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
 	avatarSrc,
-	MODEL_ALIASES,
+	FALLBACK_MODELS,
 	modelOptionsFor,
 	newBotIdentity,
 	toIdentity,
@@ -91,37 +91,59 @@ describe("toIdentity", () => {
 	it("writes the model label it was given, whatever it is", () => {
 		const value = toSettingsValue(stored)
 
-		for (const option of MODEL_ALIASES) {
-			expect(toIdentity({ ...value, model: option.value }, stored).model).toBe(
-				option.value,
-			)
+		for (const model of [...FALLBACK_MODELS, "claude-opus-4-1-20250805"]) {
+			expect(toIdentity({ ...value, model }, stored).model).toBe(model)
 		}
-		expect(
-			toIdentity({ ...value, model: "claude-opus-4-1-20250805" }, stored).model,
-		).toBe("claude-opus-4-1-20250805")
 	})
 })
 
 describe("modelOptionsFor", () => {
-	it("offers the four aliases", () => {
-		expect(modelOptionsFor("sonnet").map((option) => option.value)).toEqual([
-			"fable",
-			"opus",
-			"sonnet",
-			"haiku",
-		])
+	/** What a machine answers: grouped by tier with the tier's alias first, and a tier
+	 * nothing in this repository names. The point is that nothing here has to. */
+	const CATALOGUE = [
+		"quasar",
+		"quasar[1m]",
+		"claude-quasar-5",
+		"claude-quasar-4-1",
+		"sonnet",
+		"claude-sonnet-5",
+		"best",
+	]
+
+	it("offers what the machine carries, in the order it was given", () => {
+		expect(
+			modelOptionsFor("sonnet", CATALOGUE).map((option) => option.value),
+		).toEqual(CATALOGUE)
+	})
+
+	// Every label is its value: these are the words Claude Code takes, and a tier this
+	// build never heard of has no friendly name to be given.
+	it("labels every value with itself", () => {
+		expect(modelOptionsFor("quasar", CATALOGUE)).toContainEqual({
+			label: "claude-quasar-5",
+			value: "claude-quasar-5",
+		})
+	})
+
+	// The floor, for a machine with no executable to read: the four tier aliases.
+	it("falls back to the aliases every build knows when nothing was read", () => {
+		expect(modelOptionsFor("sonnet", []).map((option) => option.value)).toEqual(
+			FALLBACK_MODELS,
+		)
 	})
 
 	// A bot on a label nothing offers still has to be readable in its own settings,
 	// and selecting another field must not be what moves it off that label.
 	it("offers a label of its own back so the bot can be seen on it", () => {
-		const options = modelOptionsFor("claude-opus-4-1-20250805")
+		const read = modelOptionsFor("claude-mythos-preview", CATALOGUE)
+		const fallen = modelOptionsFor("claude-mythos-preview", [])
 
-		expect(options).toHaveLength(MODEL_ALIASES.length + 1)
-		expect(options.at(-1)).toEqual({
-			label: "claude-opus-4-1-20250805",
-			value: "claude-opus-4-1-20250805",
+		expect(read).toHaveLength(CATALOGUE.length + 1)
+		expect(read.at(-1)).toEqual({
+			label: "claude-mythos-preview",
+			value: "claude-mythos-preview",
 		})
+		expect(fallen.at(-1)?.value).toBe("claude-mythos-preview")
 	})
 })
 
@@ -144,7 +166,7 @@ describe("newBotIdentity", () => {
 	it("records an alias rather than a versioned name", () => {
 		const { model } = newBotIdentity([])
 
-		expect(MODEL_ALIASES.map((alias) => alias.value)).toContain(model)
+		expect(FALLBACK_MODELS).toContain(model)
 		expect(model).not.toMatch(/\d/)
 	})
 })

@@ -43,7 +43,11 @@ fn is_executable(path: &Path) -> bool {
 	}
 }
 
-fn candidates() -> Vec<PathBuf> {
+/// Where a `claude` may be, in the order it is looked for. Reachable across the
+/// module so [`super::models`] can read the executable rather than only run it: the
+/// first candidate that answers `--version` is not always the file that carries the
+/// catalogue — a launcher script answers for one it execs.
+pub(super) fn candidates() -> Vec<PathBuf> {
 	let name = binary_name();
 	let mut found = Vec::new();
 
