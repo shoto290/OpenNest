@@ -64,11 +64,6 @@ const IDENTITY = botIdentity({ workingDir: "/work/opennest" })
 
 const WRITES: WriteCase[] = [
 	{
-		member: "defaultBot",
-		write: () => conversationStore.defaultBot(),
-		call: ["conversation_default_bot"],
-	},
-	{
 		member: "bots",
 		write: () => conversationStore.bots(),
 		call: ["conversation_bots"],

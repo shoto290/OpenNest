@@ -41,38 +41,6 @@ use crate::avatars;
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
-/// The model labels a bot may answer under, as the frontend spells them. Closed
-/// for the reason the two below are: the deserializer is what keeps a label
-/// nothing recognises out of the column, and it refuses one before a statement
-/// runs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum BotModel {
-	Opus,
-	Sonnet,
-	Haiku,
-}
-
-impl From<conversations::BotModel> for BotModel {
-	fn from(model: conversations::BotModel) -> Self {
-		match model {
-			conversations::BotModel::Opus => BotModel::Opus,
-			conversations::BotModel::Sonnet => BotModel::Sonnet,
-			conversations::BotModel::Haiku => BotModel::Haiku,
-		}
-	}
-}
-
-impl From<BotModel> for conversations::BotModel {
-	fn from(model: BotModel) -> Self {
-		match model {
-			BotModel::Opus => conversations::BotModel::Opus,
-			BotModel::Sonnet => conversations::BotModel::Sonnet,
-			BotModel::Haiku => conversations::BotModel::Haiku,
-		}
-	}
-}
-
 /// The eight animals the avatar engine draws, as the frontend spells them. It is
 /// the deserializer that makes a ninth impossible: a word outside this list is
 /// refused before a statement runs, so the `CHECK` on the column is the second
@@ -165,10 +133,11 @@ impl From<AvatarPose> for conversations::AvatarPose {
 	}
 }
 
-/// A bot as the frontend meets it. `instructions` and `memory` are stored and not
-/// projected, for the reason the rest of this file leaves things out: they are
-/// what a context is rebuilt from on this side, and nothing over there displays
-/// or submits them.
+/// A bot as the frontend meets it. `instructions` is projected because the
+/// settings panel is where a bot is told how to answer: it is displayed, edited and
+/// submitted back, so a reload that could not read it would show an empty field over
+/// a stored prompt. `memory` is not — it is what a run leaves behind for the next
+/// one, and nothing over there displays or writes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bot {
@@ -176,11 +145,17 @@ pub struct Bot {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: BotModel,
+	/// The model label the bot answers under. Free text at this boundary, unlike the
+	/// two faces below: which aliases exist is Claude Code's to change and nothing
+	/// here can list them, so a label this build has never heard of crosses, is
+	/// stored, and comes back the way it went in. The frontend offers the aliases it
+	/// knows and shows anything else as it stands.
+	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
+	pub instructions: String,
 	pub created_at: i64,
 }
 
@@ -206,11 +181,12 @@ impl Bot {
 			name: bot.name,
 			title: bot.title,
 			description: bot.description,
-			model: bot.model.into(),
+			model: bot.model,
 			avatar_animal: bot.avatar_animal.into(),
 			avatar_pose: bot.avatar_pose.into(),
 			avatar_image_path,
 			working_dir: bot.working_dir,
+			instructions: bot.instructions,
 			created_at: bot.created_at,
 		}
 	}
@@ -219,18 +195,23 @@ impl Bot {
 /// Who a bot is, as a caller submits it — whole, both to create one and to change
 /// one. `id` and `createdAt` are absent because neither is a caller's to choose:
 /// one is minted by the host, the other is when it did so. `model` is here — a
-/// bot is moved between models from its own settings.
+/// bot is moved between models from its own settings — and so is `instructions`,
+/// which the settings panel edits in the same form as the name: one value the
+/// caller emits whole, one write that replaces it. `memory` stays out: nothing over
+/// there shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: BotModel,
+	/// See [`Bot::model`]: a label, not a vocabulary.
+	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
+	pub instructions: String,
 }
 
 impl From<BotIdentity> for conversations::BotIdentity {
@@ -239,11 +220,12 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			name: identity.name,
 			title: identity.title,
 			description: identity.description,
-			model: identity.model.into(),
+			model: identity.model,
 			avatar_animal: identity.avatar_animal.into(),
 			avatar_pose: identity.avatar_pose.into(),
 			avatar_image_path: identity.avatar_image_path,
 			working_dir: identity.working_dir,
+			instructions: identity.instructions,
 		}
 	}
 }
@@ -739,11 +721,12 @@ mod tests {
 				name: "Claude".into(),
 				title: "Reviewer".into(),
 				description: "Reads a diff and says what it would change.".into(),
-				model: BotModel::Opus,
+				model: "opus".into(),
 				avatar_animal: AvatarAnimal::Owl,
 				avatar_pose: AvatarPose::Curious,
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				working_dir: Some("/work/opennest".into()),
+				instructions: "Answer briefly.".into(),
 				created_at: 1,
 			},
 			json!({
@@ -756,6 +739,7 @@ mod tests {
 				"avatarPose": "curious",
 				"avatarImagePath": "/pictures/owl.png",
 				"workingDir": "/work/opennest",
+				"instructions": "Answer briefly.",
 				"createdAt": 1
 			}),
 		);
@@ -775,11 +759,12 @@ mod tests {
 				name: "Claude".into(),
 				title: String::new(),
 				description: String::new(),
-				model: BotModel::Sonnet,
+				model: "sonnet".into(),
 				avatar_animal: AvatarAnimal::Cat,
 				avatar_pose: AvatarPose::Idle,
 				avatar_image_path: None,
 				working_dir: None,
+				instructions: String::new(),
 			},
 			json!({
 				"name": "Claude",
@@ -789,7 +774,8 @@ mod tests {
 				"avatarAnimal": "cat",
 				"avatarPose": "idle",
 				"avatarImagePath": null,
-				"workingDir": null
+				"workingDir": null,
+				"instructions": ""
 			}),
 		);
 	}
@@ -800,11 +786,6 @@ mod tests {
 	/// whole reason a face never reaches the file misspelled.
 	#[test]
 	fn every_face_crosses_as_one_word_and_nothing_else_parses() {
-		for (model, wire) in
-			[(BotModel::Opus, "opus"), (BotModel::Sonnet, "sonnet"), (BotModel::Haiku, "haiku")]
-		{
-			assert_crosses_as(model, json!(wire));
-		}
 		for (animal, wire) in [
 			(AvatarAnimal::Cat, "cat"),
 			(AvatarAnimal::Rabbit, "rabbit"),
@@ -836,10 +817,6 @@ mod tests {
 		assert!(
 			serde_json::from_value::<AvatarPose>(json!("furious")).is_err(),
 			"a pose the avatar engine cannot draw parsed at the boundary"
-		);
-		assert!(
-			serde_json::from_value::<BotModel>(json!("gpt")).is_err(),
-			"a model label the host does not accept parsed at the boundary"
 		);
 	}
 
@@ -1120,7 +1097,7 @@ mod tests {
 			name: "Nyx".into(),
 			title: String::new(),
 			description: String::new(),
-			model: conversations::BotModel::Sonnet,
+			model: "sonnet".to_owned(),
 			avatar_animal: conversations::AvatarAnimal::Owl,
 			avatar_pose: conversations::AvatarPose::Idle,
 			avatar_image_path: path.map(str::to_owned),

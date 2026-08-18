@@ -8,6 +8,7 @@ use super::contract::{
 	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
 	SessionHandle, SessionSnapshot, TransportError,
 };
+use super::models;
 use super::session::{self, EventSink, GatedSink, Session, SessionOptions};
 use super::store;
 
@@ -202,6 +203,19 @@ impl Drop for Claim<'_> {
 
 fn stale(scope: &RuntimeScope) -> TransportError {
 	TransportError::StaleRuntimeSession { runtime_session_id: scope.runtime_session_id.clone() }
+}
+
+/// Every model label the installed executable knows how to name, in the order it is
+/// offered — see [`super::models`]. Answered from one read of the file per launch, so
+/// a caller may ask whenever it likes and the second ask costs nothing.
+///
+/// An empty answer is a host that found no catalogue: no executable, or one that
+/// carries none. It is not a failure and does not say the install is broken — what to
+/// offer instead is the frontend's to decide, and a bot's model was never restricted
+/// to what this list holds.
+#[tauri::command]
+pub async fn claude_models() -> Vec<String> {
+	models::read().await
 }
 
 /// The scope is the caller's own and is echoed rather than checked: a check asks

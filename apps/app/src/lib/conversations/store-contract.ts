@@ -1,7 +1,10 @@
-/** The model labels the host accepts, which are Claude Code's own aliases. A bot
- * is moved between them from its own settings; nothing outside this union reaches
- * the column. */
-export type BotModel = "opus" | "sonnet" | "haiku"
+/** The label a bot answers under — an alias like `sonnet`, or any other name a
+ * model is known by. Free text, and deliberately not a union: which aliases Claude
+ * Code resolves is its own to change, there is no listing to read them from, and a
+ * label this build refused would be a bot the provider could run and this app could
+ * not describe. The aliases the settings offer are a list the frontend holds; a
+ * value outside it is stored, read back and displayed as it stands. */
+export type BotModel = string
 
 /** The eight animals the avatar engine draws. The host holds the same eight and
  * refuses anything else at the boundary, so a value outside this union never
@@ -49,6 +52,12 @@ export type BotIdentity = {
 	avatarPose: AvatarPose
 	avatarImagePath: string | null
 	workingDir: string | null
+	/** The system prompt the bot always runs with. Part of the identity because the
+	 * settings panel edits it beside the name and emits the two as one value: a
+	 * write replaces both, and a field left out is a bot only half described. What a
+	 * run leaves behind for the next one is not here — the host keeps it and nothing
+	 * on this side reads or writes it. */
+	instructions: string
 }
 
 /** A bot as the host answers it: everything it was described with, plus the two

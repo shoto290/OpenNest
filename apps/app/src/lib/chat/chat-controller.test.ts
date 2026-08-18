@@ -21,11 +21,17 @@ import type {
 	TranscriptCompletion,
 	TranscriptMessage,
 } from "../conversations/transcript-contract"
-import { message as storedMessage } from "../conversations/transcript-fixtures"
+import {
+	botIdentity,
+	message as storedMessage,
+} from "../conversations/transcript-fixtures"
 import { isTerminalCompletion } from "../conversations/transcript-state"
 
 const STEP_MS = 10
 const REPLY = "one two three four five six"
+/** The bot every launch below opens on: the one the fake store already holds, and
+ * the only one a test names when it does not care which bot is speaking. */
+const BOT = "default"
 
 const STREAMING_MESSAGE: ChatMessage = {
 	id: "msg-1",
@@ -191,17 +197,7 @@ const createHarness = (options: HarnessOptions = {}): Harness => {
 		stepMs: STEP_MS,
 		replyFor: options.replyFor ?? (() => REPLY),
 	})
-	const base = options.store ?? createFakeTranscriptStore()
-	const store = options.botId
-		? {
-				...base,
-				defaultBot: async () => ({
-					...(await base.defaultBot()),
-					id: options.botId ?? "",
-					name: "Second",
-				}),
-			}
-		: base
+	const store = options.store ?? createFakeTranscriptStore()
 	const driver = options.driver ? options.driver(fake) : fake
 	const controller = createChatController(driver, store, {
 		newId: () => {
@@ -221,7 +217,7 @@ const bootedHarness = async (
 	options: HarnessOptions = {},
 ): Promise<Harness> => {
 	const harness = createHarness(options)
-	await harness.controller.boot()
+	await harness.controller.open(options.botId ?? BOT)
 	await vi.runAllTimersAsync()
 	return harness
 }
@@ -828,7 +824,7 @@ describe("createChatController", () => {
 
 	it("rejects a prompt sent before the session starts", async () => {
 		const harness = createHarness()
-		await harness.controller.boot()
+		await harness.controller.open(BOT)
 		vi.spyOn(harness.driver, "submitPrompt").mockRejectedValue({
 			kind: "notStarted",
 		})
@@ -851,7 +847,7 @@ describe("createChatController", () => {
 			},
 		})
 		const submitSpy = vi.spyOn(driver, "submitPrompt")
-		await controller.boot()
+		await controller.open(BOT)
 		await vi.runAllTimersAsync()
 
 		await controller.send("hello")
@@ -895,7 +891,7 @@ describe("createChatController", () => {
 		})
 		const startSpy = vi.spyOn(driver, "startOrResumeSession")
 
-		expect(await controller.boot()).toBeNull()
+		expect(await controller.open(BOT)).toBeNull()
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
@@ -924,7 +920,7 @@ describe("createChatController", () => {
 		})
 		const startSpy = vi.spyOn(driver, "startOrResumeSession")
 
-		expect(await controller.boot()).toBeNull()
+		expect(await controller.open(BOT)).toBeNull()
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
@@ -982,7 +978,7 @@ describe("createChatController", () => {
 			}),
 		})
 
-		await controller.boot()
+		await controller.open(BOT)
 
 		expect(controller.getState().sessionId).toBe("s-1")
 	})
@@ -994,7 +990,7 @@ describe("createChatController", () => {
 		const { driver, controller } = createHarness({ store })
 		const startSpy = vi.spyOn(driver, "startOrResumeSession")
 
-		await controller.boot()
+		await controller.open(BOT)
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
@@ -1010,13 +1006,84 @@ describe("createChatController", () => {
 		expect(isSessionReady(state)).toBe(true)
 	})
 
+	// Selecting a bot is the same three steps a launch takes: the other bot's
+	// transcript is painted, and the one process this build runs is put behind it.
+	// Coming back finds the first conversation exactly where it was left, because the
+	// switch moved the screen and the run rather than the record.
+	it("switches the visible conversation and the run to the bot it is opened on", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		await harness.controller.send("hello")
+		await vi.runAllTimersAsync()
+		const before = spoken(harness.controller.getState().messages)
+		expect(before.length).toBe(2)
+
+		await harness.controller.open(other.id)
+		await vi.runAllTimersAsync()
+
+		const switched = harness.controller.getState()
+		expect(switched.conversationId).toBe((await store.mainChat(other.id)).id)
+		expect(switched.messages).toEqual([])
+		expect(runOf(harness.controller).botId).toBe(other.id)
+
+		await harness.controller.open(BOT)
+		await vi.runAllTimersAsync()
+		expect(spoken(harness.controller.getState().messages)).toEqual(before)
+		expect(runOf(harness.controller).botId).toBe(BOT)
+		harness.detach()
+	})
+
+	// The one thing a switch may never do: put a bot's words in another bot's
+	// transcript. What the leaving run was streaming is closed out where it was
+	// written, and whatever it says after the handover is a frame from a run this
+	// launch no longer holds — so it reaches neither conversation.
+	it("leaves a stream in the conversation it was written to when the reader switches", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		vi.spyOn(harness.driver, "submitPrompt").mockResolvedValue()
+		await harness.controller.send("hello")
+		harness.driver.pushEvent({ type: "turnChanged", state: "running" })
+		harness.driver.pushEvent({
+			type: "messageStarted",
+			message: STREAMING_MESSAGE,
+		})
+		harness.driver.pushEvent({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 1,
+			text: "Half",
+		})
+		await vi.runAllTimersAsync()
+		const leaving = runOf(harness.controller)
+
+		await harness.controller.open(other.id)
+		await vi.runAllTimersAsync()
+		harness.driver.pushEvent(
+			{ type: "messageDelta", id: "msg-1", seq: 2, text: " an answer" },
+			leaving,
+		)
+		await vi.runAllTimersAsync()
+
+		expect(harness.controller.getState().messages).toEqual([])
+		const left = await store.loadPage((await store.mainChat(BOT)).id, null)
+		expect(
+			left.messages.map((row) => [row.role, row.content, row.completion]),
+		).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "Half", "interrupted"],
+		])
+		harness.detach()
+	})
+
 	it("still opens a session when the stored transcript cannot be read", async () => {
 		const store = createFakeTranscriptStore()
 		const { controller } = createHarness({
 			store: { ...store, loadPage: () => Promise.reject({ kind: "storage" }) },
 		})
 
-		await controller.boot()
+		await controller.open(BOT)
 		await vi.runAllTimersAsync()
 
 		const state = controller.getState()
@@ -1606,7 +1673,15 @@ describe("a run replaced under a conversation that carries on", () => {
 	// numbers its own runs and folds its own history; the other is left exactly
 	// where it was, and is rebuilt from what it has itself.
 	it("keeps two bots' runs and recovery points apart in one chat", async () => {
-		const store = withHistory()
+		// The chat two bots share. A bot holds a chat of its own today — the store
+		// names a thread after the bot that was seated in it — so the one conversation
+		// both of these are spoken to in is arranged here rather than assumed, and what
+		// is left telling their runs apart is the participant and nothing else.
+		const held = withHistory()
+		const store: TranscriptStore = {
+			...held,
+			mainChat: () => held.mainChat(BOT),
+		}
 		const opened = vi.spyOn(store, "openRuntimeSession")
 		const captured = vi.spyOn(store, "captureCheckpoint")
 		const first = await bootedHarness({ store })

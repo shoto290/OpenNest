@@ -28,8 +28,6 @@ export const conversationStore: TranscriptStore = {
 			limit: TRANSCRIPT_PAGE_SIZE,
 		}),
 
-	defaultBot: () => invoke<Bot>("conversation_default_bot"),
-
 	bots: () => invoke<Bot[]>("conversation_bots"),
 
 	createBot: (identity: BotIdentity) =>
