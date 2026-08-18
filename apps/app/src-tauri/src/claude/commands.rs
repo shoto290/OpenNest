@@ -323,6 +323,10 @@ fn where_it_runs(stored: Option<String>, anywhere: PathBuf) -> (PathBuf, Option<
 /// rather than asked of the caller: the process is spawned with the bot's
 /// instructions as its system prompt and in the directory the bot works in, and
 /// neither can be changed in a child that is already running.
+///
+/// `cwd` is what is left when the bot names no directory of its own, and what a
+/// refused one falls back to. The bot's own always wins — a caller cannot put a
+/// process somewhere its bot does not work.
 #[tauri::command]
 pub async fn claude_start_or_resume_session<R: Runtime>(
 	app: AppHandle<R>,

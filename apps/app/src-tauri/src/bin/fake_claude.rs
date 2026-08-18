@@ -28,13 +28,15 @@ fn scenario() -> String {
 	std::env::var("FAKE_CLAUDE_SCENARIO").unwrap_or_else(|_| "normal".into())
 }
 
-fn session_id() -> String {
+/// What the host put after a flag on the command line, if it put anything there.
+fn flag(name: &str) -> Option<String> {
 	let args: Vec<String> = std::env::args().collect();
-	args.iter()
-		.position(|arg| arg == "--resume")
-		.and_then(|index| args.get(index + 1))
-		.cloned()
-		.unwrap_or_else(|| DEFAULT_SESSION.into())
+	let index = args.iter().position(|arg| arg == name)?;
+	args.get(index + 1).cloned()
+}
+
+fn session_id() -> String {
+	flag("--resume").unwrap_or_else(|| DEFAULT_SESSION.into())
 }
 
 fn resumed() -> bool {
@@ -46,13 +48,7 @@ fn resumed() -> bool {
 /// Nothing else here answers about the process rather than about the conversation,
 /// which is why it is a scenario of its own.
 fn identity() -> String {
-	let args: Vec<String> = std::env::args().collect();
-	let told = args
-		.iter()
-		.position(|arg| arg == "--append-system-prompt")
-		.and_then(|index| args.get(index + 1))
-		.cloned()
-		.unwrap_or_else(|| "none".into());
+	let told = flag("--append-system-prompt").unwrap_or_else(|| "none".into());
 	let here = std::env::current_dir().map(|dir| dir.display().to_string()).unwrap_or_default();
 	format!("system<{told}> cwd<{here}>")
 }

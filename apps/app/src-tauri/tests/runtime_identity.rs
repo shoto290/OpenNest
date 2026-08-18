@@ -226,17 +226,18 @@ fn an_identity(instructions: Option<&str>, working_dir: Option<&Path>) -> Value 
 	})
 }
 
-/// A directory of this suite's own, created fresh: what a bot names has to be there
-/// for the child to be started in it.
+/// A directory of this suite's own, created fresh and named the way a reader would
+/// type it: what a bot names has to be there for the child to be started in it.
 fn a_directory(name: &str) -> PathBuf {
 	let dir = std::env::temp_dir().join(format!("opennest-runtime-identity-{name}"));
 	let _ = std::fs::remove_dir_all(&dir);
 	std::fs::create_dir_all(&dir).expect("the directory is created");
-	dir.canonicalize().expect("the directory resolves")
+	dir
 }
 
 /// The path as the child sees it. macOS hands a symlinked temporary directory out
-/// and resolves it on the way in, so the two are only comparable resolved.
+/// and resolves it on the way in, so what a bot stores and what a child reports are
+/// only comparable resolved — which is why nothing above resolves anything.
 fn as_the_child_sees_it(dir: &Path) -> String {
 	dir.canonicalize().unwrap_or_else(|_| dir.to_owned()).display().to_string()
 }
