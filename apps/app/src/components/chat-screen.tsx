@@ -44,21 +44,31 @@ import type {
 	TurnState,
 } from "@/lib/claude/contract"
 import { describeTransportError } from "@/lib/claude/messages"
+import type {
+	AvatarAnimal,
+	AvatarPose,
+	Bot,
+} from "@/lib/conversations/store-contract"
 
 /** Memoised: a streamed delta rewrites one message, and the view model hands
  * back the same rows for the rest. `run` arrives from the enclosing group and
- * `avatar` stays a boolean, so the shallow compare holds through a stream. */
+ * `avatar` stays a boolean, so the shallow compare holds through a stream — which
+ * is also why the bot's face arrives as its two words rather than as a node. */
 const TranscriptTurn = memo(function TranscriptTurn({
 	row,
 	controller,
 	run,
 	avatar,
+	animal,
+	pose,
 	rejected,
 }: {
 	row: TranscriptRow
 	controller: ChatController
 	run?: ChatTurnRun
 	avatar: boolean
+	animal: AvatarAnimal
+	pose: AvatarPose
 	/** Claude refused this prompt. The stored row is whole either way — the reader
 	 * wrote it and the store took it — so the retry lives on the screen alone. */
 	rejected?: boolean
@@ -84,7 +94,14 @@ const TranscriptTurn = memo(function TranscriptTurn({
 			run={run}
 			copyText={row.text}
 			avatar={
-				avatar ? <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} /> : null
+				avatar ? (
+					<BotAvatar
+						animal={animal}
+						animated={false}
+						size={CHAT_AVATAR_SIZE}
+						state={pose}
+					/>
+				) : null
 			}
 		>
 			{row.text}
@@ -190,10 +207,13 @@ const Composer = memo(function Composer({
 })
 
 type ChatScreenProps = {
+	/** The bot this conversation belongs to. Its face is the one the replies wear —
+	 * an uploaded picture is not among them: the transcript draws the animal. */
+	bot: Bot
 	chat: Chat
 }
 
-export function ChatScreen({ chat }: ChatScreenProps) {
+export function ChatScreen({ bot, chat }: ChatScreenProps) {
 	const { state, controller } = chat
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
@@ -300,6 +320,8 @@ export function ChatScreen({ chat }: ChatScreenProps) {
 								row={row}
 								controller={controller}
 								avatar={index === avatarIndex}
+								animal={bot.avatarAnimal}
+								pose={bot.avatarPose}
 								rejected={row.messageId === state.rejectedPromptId}
 							/>
 						))}

@@ -2,13 +2,21 @@ import type { ReactNode } from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
+import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import {
+	AgentSidebar,
+	type AgentSidebarBot,
+} from "@workspace/ui/components/agents/agent-sidebar"
 import {
 	AISidebar,
 	type SidebarResource,
 } from "@workspace/ui/components/agents/ai-sidebar"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import {
+	BotSettingsPanel,
+	type BotSettingsValue,
+} from "@workspace/ui/components/bot-settings-panel"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import {
 	AssistantTurn,
@@ -33,6 +41,29 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
+
+/** One bot, which is what a roster panel needs to render a row rather than its
+ * empty copy. */
+const ROSTER: AgentSidebarBot[] = [
+	{
+		id: "atlas",
+		name: "Atlas",
+		title: "Research",
+		animal: "owl",
+		identity: "curious",
+		lastMessage: ANSWER,
+	},
+]
+
+const SETTINGS: BotSettingsValue = {
+	identity: { animal: "owl", pose: "curious" },
+	name: "Atlas",
+	title: "Research",
+	description: "Reads the monorepo before it answers.",
+	instructions: "Say which file you would touch, then the change.",
+	model: "sonnet",
+	workingDirectory: "/Users/ada/Projects/opennest",
+}
 
 const SESSIONS: SidebarResource[] = [
 	{
@@ -94,7 +125,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two-column application shell: a full-height sidebar column and the main column beside it. It is a thin composition over the sidebar foundation — the provider owns the open state and the Cmd/Ctrl+B shortcut, the panel owns its collapse, and the shell only hands the room that is left to the main slot. Whatever fills that slot keeps its own scroll boundary, so a `ChatLayout` still scrolls its transcript alone while the sidebar stays put.",
+					"The application shell: a full-height sidebar column, the main column beside it, and an optional panel column after it. It is a thin composition over the sidebar foundation — the provider owns the open state and the Cmd/Ctrl+B shortcut, each panel owns its own collapse, and the shell only hands the room that is left to the main slot. Whatever fills that slot keeps its own scroll boundary, so a `ChatLayout` still scrolls its transcript alone while the columns on either side stay put.",
 			},
 		},
 	},
@@ -162,7 +193,7 @@ export const OffCanvas = meta.story({
 	globals: { viewport: { value: "mobile" } },
 	args: {
 		children: CHAT_WITH_TRIGGER,
-		sidebar: <AgentSidebar lastMessage={ANSWER} name="No Name" />,
+		sidebar: <AgentSidebar bots={ROSTER} selectedBotId="atlas" />,
 	},
 	parameters: {
 		docs: {
@@ -226,5 +257,49 @@ export const Empty = meta.story({
 		const main = canvas.getByRole("main")
 		await expect(main).toBeVisible()
 		await expect(canvas.queryByRole("complementary")).toBeNull()
+	},
+})
+
+export const WithPanel = meta.story({
+	args: {
+		sidebar: <AgentSidebar bots={ROSTER} selectedBotId="atlas" />,
+		panel: (
+			<BotSettingsPanel
+				models={[{ label: "Claude Sonnet", value: "sonnet" }]}
+				onAvatarUpload={fn()}
+				onBrowseWorkingDirectory={fn()}
+				onConfirmingDeleteChange={fn()}
+				onDelete={fn()}
+				onValueChange={fn()}
+				value={SETTINGS}
+			/>
+		),
+	},
+	parameters: {
+		// The destructive button the settings panel ends on, and the same open question
+		// its own stories carry: the palette's `destructive` foreground does not clear
+		// 4.5:1 on its tinted background yet.
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Three columns: the roster, the conversation, and the settings of the bot it is open on. This is the shape the desktop app runs in. Check that all three reach the full height of the window with no gap under any of them, that the main column gives room to the panel rather than scrolling under it, and that the transcript is still the only thing that scrolls. Pick `Default` for the same shell without a trailing column.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const roster = canvas.getByRole("complementary", { name: "Conversations" })
+		const settings = canvas.getByRole("complementary", { name: "Bot settings" })
+		const main = canvas.getByRole("main")
+
+		await expect(main.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			roster.getBoundingClientRect().right,
+		)
+		await expect(settings.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			main.getBoundingClientRect().right,
+		)
+		await expect(settings.getBoundingClientRect().height).toBe(
+			main.getBoundingClientRect().height,
+		)
 	},
 })

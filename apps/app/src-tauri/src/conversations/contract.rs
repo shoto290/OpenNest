@@ -165,10 +165,11 @@ impl From<AvatarPose> for conversations::AvatarPose {
 	}
 }
 
-/// A bot as the frontend meets it. `instructions` and `memory` are stored and not
-/// projected, for the reason the rest of this file leaves things out: they are
-/// what a context is rebuilt from on this side, and nothing over there displays
-/// or submits them.
+/// A bot as the frontend meets it. `instructions` is projected because the
+/// settings panel is where a bot is told how to answer: it is displayed, edited and
+/// submitted back, so a reload that could not read it would show an empty field over
+/// a stored prompt. `memory` is not — it is what a run leaves behind for the next
+/// one, and nothing over there displays or writes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bot {
@@ -181,6 +182,7 @@ pub struct Bot {
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
+	pub instructions: String,
 	pub created_at: i64,
 }
 
@@ -211,6 +213,7 @@ impl Bot {
 			avatar_pose: bot.avatar_pose.into(),
 			avatar_image_path,
 			working_dir: bot.working_dir,
+			instructions: bot.instructions,
 			created_at: bot.created_at,
 		}
 	}
@@ -219,7 +222,10 @@ impl Bot {
 /// Who a bot is, as a caller submits it — whole, both to create one and to change
 /// one. `id` and `createdAt` are absent because neither is a caller's to choose:
 /// one is minted by the host, the other is when it did so. `model` is here — a
-/// bot is moved between models from its own settings.
+/// bot is moved between models from its own settings — and so is `instructions`,
+/// which the settings panel edits in the same form as the name: one value the
+/// caller emits whole, one write that replaces it. `memory` stays out: nothing over
+/// there shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BotIdentity {
@@ -231,6 +237,7 @@ pub struct BotIdentity {
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
+	pub instructions: String,
 }
 
 impl From<BotIdentity> for conversations::BotIdentity {
@@ -244,6 +251,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			avatar_pose: identity.avatar_pose.into(),
 			avatar_image_path: identity.avatar_image_path,
 			working_dir: identity.working_dir,
+			instructions: identity.instructions,
 		}
 	}
 }
@@ -744,6 +752,7 @@ mod tests {
 				avatar_pose: AvatarPose::Curious,
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				working_dir: Some("/work/opennest".into()),
+				instructions: "Answer briefly.".into(),
 				created_at: 1,
 			},
 			json!({
@@ -756,6 +765,7 @@ mod tests {
 				"avatarPose": "curious",
 				"avatarImagePath": "/pictures/owl.png",
 				"workingDir": "/work/opennest",
+				"instructions": "Answer briefly.",
 				"createdAt": 1
 			}),
 		);
@@ -780,6 +790,7 @@ mod tests {
 				avatar_pose: AvatarPose::Idle,
 				avatar_image_path: None,
 				working_dir: None,
+				instructions: String::new(),
 			},
 			json!({
 				"name": "Claude",
@@ -789,7 +800,8 @@ mod tests {
 				"avatarAnimal": "cat",
 				"avatarPose": "idle",
 				"avatarImagePath": null,
-				"workingDir": null
+				"workingDir": null,
+				"instructions": ""
 			}),
 		);
 	}

@@ -231,9 +231,9 @@ pub struct Participant {
 
 /// `instructions` and `memory` are what the bot brings to a context rebuilt for
 /// it. Both are empty until something says otherwise, and empty is a part a
-/// context leaves out rather than a value it prints. Neither is part of
-/// [`BotIdentity`]: they are what the bot was told, not who it is, and no write
-/// here touches them.
+/// context leaves out rather than a value it prints. `instructions` is part of
+/// [`BotIdentity`] — it is written from the same panel as the name — and `memory`
+/// is not: no write here touches it.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Bot {
 	pub id: String,
@@ -256,10 +256,11 @@ pub struct Bot {
 /// would have to tell "leave this alone" from "clear this", which for the two
 /// nullable columns is a distinction no wire shape carries for free.
 ///
-/// `model` is in here because a bot is moved between models from its own settings.
-/// `created_at` is not, and neither are `instructions` and `memory`: the first is
-/// when the row was written, the other two are what the bot was told, and none of
-/// the three is who it is.
+/// `model` is in here because a bot is moved between models from its own settings,
+/// and so is `instructions`: the settings panel edits it beside the name, and a
+/// write that replaces the identity replaces the prompt with it. `created_at` and
+/// `memory` are not — the first is when the row was written, the second is what a
+/// run left behind for the next one, and neither is a caller's to set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BotIdentity {
 	pub name: String,
@@ -270,6 +271,7 @@ pub struct BotIdentity {
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
+	pub instructions: String,
 }
 
 pub struct ConversationsRepository {
@@ -354,9 +356,9 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(created_bot(connection, &identity))).await?
 	}
 
-	/// Who the bot is, replaced whole — see [`BotIdentity`]. What it was told and
-	/// what it has said are untouched: `instructions`, `memory` and the transcript
-	/// belong to the bot across every rename it lives through.
+	/// Who the bot is, replaced whole — see [`BotIdentity`]. What it has said is
+	/// untouched: `memory` and the transcript belong to the bot across every rename
+	/// it lives through.
 	pub async fn update_bot(
 		&self,
 		id: String,
@@ -542,8 +544,8 @@ fn created_bot(
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
 		"INSERT INTO bots (id, name, title, description, model, avatar_animal, avatar_pose,
-				avatar_image_path, working_dir, created_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+				avatar_image_path, working_dir, instructions, created_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
 		params![
 			id,
 			identity.name,
@@ -554,6 +556,7 @@ fn created_bot(
 			identity.avatar_pose,
 			identity.avatar_image_path,
 			identity.working_dir,
+			identity.instructions,
 			now(),
 		],
 	)?;
@@ -573,7 +576,8 @@ fn updated_bot(
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
 		"UPDATE bots SET name = ?2, title = ?3, description = ?4, model = ?5,
-				avatar_animal = ?6, avatar_pose = ?7, avatar_image_path = ?8, working_dir = ?9
+				avatar_animal = ?6, avatar_pose = ?7, avatar_image_path = ?8, working_dir = ?9,
+				instructions = ?10
 			WHERE id = ?1",
 		params![
 			id,
@@ -585,6 +589,7 @@ fn updated_bot(
 			identity.avatar_pose,
 			identity.avatar_image_path,
 			identity.working_dir,
+			identity.instructions,
 		],
 	)?;
 	refuse_if_untouched(written, id)?;
@@ -716,6 +721,7 @@ mod tests {
 			avatar_pose: DEFAULT_BOT_POSE,
 			avatar_image_path: None,
 			working_dir: None,
+			instructions: String::new(),
 		}
 	}
 
@@ -923,6 +929,7 @@ mod tests {
 			avatar_pose: AvatarPose::Curious,
 			avatar_image_path: Some("/pictures/owl.png".to_owned()),
 			working_dir: Some("/work/opennest".to_owned()),
+			instructions: "Answer briefly.".to_owned(),
 		};
 
 		let created =
@@ -938,17 +945,20 @@ mod tests {
 		assert_eq!(listed[0].avatar_pose, AvatarPose::Curious);
 		assert_eq!(listed[0].avatar_image_path.as_deref(), Some("/pictures/owl.png"));
 		assert_eq!(listed[0].working_dir.as_deref(), Some("/work/opennest"));
+		assert_eq!(listed[0].instructions, described.instructions);
 		assert_eq!(listed[0].id, created.id);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Who the bot is is replaced whole; what it was told and when it was written
-	/// are not. A rename that cleared the instructions would be a bot that forgot
-	/// how to answer the moment it was given a nicer face.
+	/// Who the bot is is replaced whole, instructions included; its memory and the
+	/// moment it was written are not. The panel edits the prompt beside the name, so
+	/// a write that left the old instructions standing would be a bot that ignored
+	/// what it was just told — and one that cleared the memory would be a bot that
+	/// forgot the user to be renamed.
 	#[tokio::test]
-	async fn updating_a_bot_replaces_who_it_is_and_leaves_what_it_was_told() {
+	async fn updating_a_bot_replaces_who_it_is_and_what_it_was_told_but_not_its_memory() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
@@ -978,6 +988,7 @@ mod tests {
 					avatar_pose: AvatarPose::Sleeping,
 					avatar_image_path: Some("/pictures/koala.png".to_owned()),
 					working_dir: Some("/work/opennest".to_owned()),
+					instructions: "answer at length".to_owned(),
 				},
 			)
 			.await
@@ -989,7 +1000,10 @@ mod tests {
 		assert_eq!(updated.avatar_pose, AvatarPose::Sleeping);
 		assert_eq!(updated.working_dir.as_deref(), Some("/work/opennest"));
 		assert_eq!(updated.model, BotModel::Opus, "an update left the bot on its old model");
-		assert_eq!(updated.instructions, "answer briefly", "an update cleared the instructions");
+		assert_eq!(
+			updated.instructions, "answer at length",
+			"an update left the bot on its old instructions"
+		);
 		assert_eq!(updated.memory, "they use bun", "an update cleared the memory");
 		assert_eq!(updated.created_at, created.created_at, "an update moved the moment");
 

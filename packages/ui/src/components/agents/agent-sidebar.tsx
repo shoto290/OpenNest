@@ -26,7 +26,6 @@ import {
 const PANEL_LABEL = "Conversations"
 const CREATE_LABEL = "New bot"
 const EMPTY_LABEL = "No bots yet"
-const SOLO_BOT_ID = "agent"
 const AWAITING_READER_STATE = "listening"
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
@@ -36,6 +35,10 @@ const WINDOW_CONTROLS_INSET =
  * drawing inside it are the same 40px, and have to be changed together. */
 const ROW_AVATAR_SIZE = 40
 const AVATAR_SLOT = "relative block size-10 shrink-0"
+/** An uploaded picture fills the same slot the drawing does, so a row wearing one
+ * lands on the same column as a row wearing its animal. */
+const AVATAR_IMAGE =
+	"size-full rounded-full border border-sidebar-border object-cover"
 const TIMESTAMP_SLOT =
 	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
 
@@ -91,6 +94,10 @@ interface AgentSidebarBot {
 	animal?: BotAvatarAnimal
 	/** The pose the bot keeps at rest. Rendered as a still frame. */
 	identity?: BotIdentityPose
+	/** A picture the reader uploaded, already a URL the host is happy to load. It
+	 * wins over the animal and never animates — the activity dot is what says the
+	 * bot is busy. */
+	image?: string
 	status?: AgentSidebarStatus
 	/** What the bot is busy with while `status` is `working`. */
 	pose?: BotWorkingKind
@@ -136,12 +143,21 @@ const BotRosterRow = ({
 						className={ROW}
 						icon={
 							<span className={AVATAR_SLOT}>
-								<BotAvatar
-									animal={bot.animal}
-									animated={working}
-									size={ROW_AVATAR_SIZE}
-									state={working ? busyStateFor(pose) : identityOf(bot)}
-								/>
+								{bot.image ? (
+									<img
+										alt=""
+										aria-hidden="true"
+										className={AVATAR_IMAGE}
+										src={bot.image}
+									/>
+								) : (
+									<BotAvatar
+										animal={bot.animal}
+										animated={working}
+										size={ROW_AVATAR_SIZE}
+										state={working ? busyStateFor(pose) : identityOf(bot)}
+									/>
+								)}
 								{working ? (
 									<span
 										aria-hidden="true"
@@ -197,38 +213,25 @@ const BotRosterRow = ({
 }
 
 interface AgentSidebarProps {
-	/** The roster, in the order it is read. */
-	bots?: AgentSidebarBot[]
+	/** The roster, in the order it is read. Empty is a reader who owns no bot, and
+	 * the panel says so: there is no bot of its own to fall back on. */
+	bots: AgentSidebarBot[]
 	/** The selected row. Controlled: the panel never selects on its own. */
 	selectedBotId?: string
 	onSelectBot?: (id: string) => void
 	onCreateBot?: () => void
 	onEditBot?: (id: string) => void
 	onDeleteBot?: (id: string) => void
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	status?: AgentSidebarStatus
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	pose?: BotWorkingKind
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	name?: string
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	lastMessage?: string
 }
 
 const AgentSidebarBase = ({
-	bots,
-	selectedBotId,
+	bots: roster,
+	selectedBotId: selectedId,
 	onSelectBot,
 	onCreateBot,
 	onEditBot,
 	onDeleteBot,
-	status = "idle",
-	pose = "thinking",
-	name = "No Name",
-	lastMessage,
 }: AgentSidebarProps) => {
-	const roster = bots ?? [{ id: SOLO_BOT_ID, name, status, pose, lastMessage }]
-	const selectedId = bots ? selectedBotId : SOLO_BOT_ID
 	const selectedBot = roster.find((bot) => bot.id === selectedId)
 
 	return (

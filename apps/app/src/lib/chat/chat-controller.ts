@@ -46,11 +46,18 @@ export type ChatController = {
 	start: (resume?: string) => Promise<SessionHandle | null>
 	/** Checks the binary and opens a session when it answers. Deduplicated while in flight. */
 	preflight: (resume?: string) => Promise<SessionHandle | null>
-	/** Opens the stored conversation, paints its tail, then starts Claude. Sequential
-	 * by construction: nothing may be written before the conversation it belongs to
-	 * is on the record. The session itself is not resumed from disk — a provider
-	 * session belongs to the launch that opened it. */
-	boot: () => Promise<SessionHandle | null>
+	/** Opens a bot's stored conversation, paints its tail, then starts Claude in it.
+	 * Sequential by construction: nothing may be written before the conversation it
+	 * belongs to is on the record. The session itself is not resumed from disk — a
+	 * provider session belongs to the launch that opened it.
+	 *
+	 * This is also how the reader switches bots, because a switch is the same three
+	 * steps: the conversation the reader is leaving is closed out — whatever was
+	 * streaming into it is interrupted, since the one process this build runs is
+	 * about to answer for somebody else — and the run the host holds is replaced by
+	 * one scoped to the bot that just took the seat. Nothing is opened for a bot the
+	 * caller did not name: there is no default bot on this side. */
+	open: (botId: string) => Promise<SessionHandle | null>
 	/** Reopens the session for the reader after it died. Resumes the id this launch
 	 * learned, so the answer carries on rather than starting Claude amnesiac. */
 	restart: () => Promise<SessionHandle | null>
@@ -420,9 +427,15 @@ export function createChatController(
 
 	/** The durable half of a transport event. Nothing here decides anything the
 	 * reducer decides: it writes down what the session reported, in the order it
-	 * reported it. */
+	 * reported it.
+	 *
+	 * The conversation is the run's own rather than the one on the screen. They are
+	 * the same until the reader switches bots, and for the moment they are not, what
+	 * a process is still saying belongs to the conversation it was started for —
+	 * writing it under the bot that just took the seat would put one bot's words in
+	 * another's transcript. */
 	const persist = (scope: RuntimeScope | null, event: ClaudeEvent) => {
-		const conversationId = state.conversationId
+		const conversationId = scope?.conversationId
 		if (!conversationId) {
 			return
 		}
@@ -602,21 +615,44 @@ export function createChatController(
 		return pendingPreflight
 	}
 
-	const openConversation = async () => {
+	const openConversation = async (nextBotId: string) => {
 		try {
-			const bot = await store.defaultBot()
-			const chat = await store.mainChat(bot.id)
-			botId = bot.id
+			const chat = await store.mainChat(nextBotId)
+			botId = nextBotId
 			dispatch({ type: "conversationOpened", conversationId: chat.id })
+			// Said twice on purpose. The screen holds whatever the last conversation
+			// left on it, and the subscription only fires when a page moves the
+			// transcript — a conversation with nothing in it moves nothing, so the
+			// reader would go on looking at another bot's words. The first call empties
+			// the screen the moment the conversation changes, or fills it from what has
+			// already been read; the second paints the page this load went for.
+			syncTranscript()
 			await transcript.load(chat.id)
+			syncTranscript()
 		} catch (reason) {
 			reportStore(reason)
 		}
 	}
 
-	const boot = async () => {
-		await openConversation()
-		return preflight()
+	/** The run the launch holds is the named bot's, or the process is replaced until
+	 * it is. A start already in flight when a switch arrives is a session coming up
+	 * for the bot before it, and joining that one would leave the reader typing into
+	 * a conversation the host is holding another bot's process for. */
+	const openedFor = async (bot: string) => {
+		const handle = await preflight()
+		const held = state.runtime
+		return held && held.botId !== bot ? preflight() : handle
+	}
+
+	const open = async (nextBotId: string) => {
+		if (botId !== null && botId !== nextBotId && state.conversationId) {
+			// Left mid-stream: the process is about to be handed over, so nothing is
+			// going to finish what it was writing. The turn stays open for the reason
+			// `start` leaves one open — it never completed either.
+			settleOpenReplies(INTERRUPTED, state.conversationId)
+		}
+		await openConversation(nextBotId)
+		return openedFor(nextBotId)
 	}
 
 	const restart = () => preflight(state.sessionId ?? undefined)
@@ -920,7 +956,7 @@ export function createChatController(
 		check,
 		start,
 		preflight,
-		boot,
+		open,
 		restart,
 		rotate: () => rotateFor(ASKED_FOR),
 		loadOlder,

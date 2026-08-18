@@ -32,6 +32,9 @@ const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
 
 const TURN: &str = "t1";
+/// The bot every scope in this file names. Its id is the one the host writes for
+/// the bot it seats itself, so a test can stamp a participant without minting one.
+const BOT: &str = "default";
 /// Long enough that the tail cannot reach the beginning: the first messages have
 /// to be recoverable through the summary or not at all.
 const SPOKEN: usize = 30;
@@ -131,7 +134,7 @@ impl Harness {
 				"conversation_open_runtime_session",
 				json!({
 					"conversationId": conversation,
-					"botId": "default",
+					"botId": BOT,
 					"startedAt": started_at,
 					"reason": reason
 				}),
@@ -201,11 +204,13 @@ fn occurrences(text: &str, needle: &str) -> usize {
 	text.matches(needle).count()
 }
 
-/// The conversation as the app opens it, and a history longer than any tail.
+/// A chat with a history longer than any tail, held by the one bot with an id this
+/// file can name: asking for its chat is what seats it, the way the legacy import
+/// seats it on an install that predates the roster. Every scope below stamps
+/// `BOT`, so the participant is a constant here rather than something threaded
+/// through nine call sites of a test about context.
 fn a_chat_with_a_history(harness: &Harness) -> String {
-	let bot = harness.call("conversation_default_bot", json!({})).expect("the default bot");
-	let chat =
-		harness.call("conversation_main_chat", json!({ "botId": bot["id"] })).expect("the chat");
+	let chat = harness.call("conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let conversation = chat["id"].as_str().expect("the chat holds an id").to_owned();
 
 	harness
@@ -249,7 +254,7 @@ fn said(harness: &Harness, conversation: &str, index: usize) {
 				"id": id,
 				"conversationId": conversation,
 				"turnId": TURN,
-				"authorBotId": "default",
+				"authorBotId": BOT,
 				"repliedToMessageId": null,
 				"createdAt": index
 			}}),
@@ -298,7 +303,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 			"conversation_capture_checkpoint",
 			json!({
 				"conversationId": conversation,
-				"botId": "default",
+				"botId": BOT,
 				"runtimeSessionId": refused_run.runtime_session_id,
 				"createdAt": 2
 			}),
@@ -338,7 +343,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 			"conversation_capture_checkpoint",
 			json!({
 				"conversationId": conversation,
-				"botId": "default",
+				"botId": BOT,
 				"runtimeSessionId": live.runtime_session_id,
 				"createdAt": 5
 			}),
@@ -355,7 +360,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 			"conversation_bounded_context",
 			json!({
 				"conversationId": conversation,
-				"botId": "default",
+				"botId": BOT,
 				"promptMessageId": PROMPT
 			}),
 		)

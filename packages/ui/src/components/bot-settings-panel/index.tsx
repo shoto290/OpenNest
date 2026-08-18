@@ -35,6 +35,11 @@ type BotSettingsPanelProps = {
 	onBrowseWorkingDirectory: () => void
 	/** Fired only once the confirmation is accepted. */
 	onDelete: () => void
+	/** Whether the delete confirmation stands. Controlled, so a host with another way
+	 * to ask — a row's context menu, a shortcut — lands on this one dialog instead of
+	 * building a second one. Leave it out and the panel's own button owns it. */
+	confirmingDelete?: boolean
+	onConfirmingDeleteChange?: (confirming: boolean) => void
 	/** The only thing that makes the avatar move: the animal animates in its
 	 * working pose, an uploaded picture lights its activity dot. An identity pose
 	 * holds a single frame the rest of the time. */
@@ -55,6 +60,8 @@ const BotSettingsPanel = ({
 	onAvatarUpload,
 	onBrowseWorkingDirectory,
 	onDelete,
+	confirmingDelete,
+	onConfirmingDeleteChange,
 	working = false,
 	label = "Bot settings",
 	collapsed,
@@ -63,8 +70,10 @@ const BotSettingsPanel = ({
 	className,
 }: BotSettingsPanelProps) => {
 	const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed)
+	const [internalConfirming, setInternalConfirming] = useState(false)
 	const directoryId = useId()
 	const isCollapsed = collapsed ?? internalCollapsed
+	const isConfirming = confirmingDelete ?? internalConfirming
 	const collapseLabel = `${isCollapsed ? "Expand" : "Collapse"} ${label}`
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
@@ -74,6 +83,11 @@ const BotSettingsPanel = ({
 		const next = !isCollapsed
 		if (collapsed === undefined) setInternalCollapsed(next)
 		onCollapsedChange?.(next)
+	}
+
+	const setConfirming = (next: boolean) => {
+		if (confirmingDelete === undefined) setInternalConfirming(next)
+		onConfirmingDeleteChange?.(next)
 	}
 
 	return (
@@ -252,7 +266,7 @@ const BotSettingsPanel = ({
 					</div>
 
 					<div className="mt-auto border-sidebar-border border-t pt-4">
-						<AlertDialog.Root>
+						<AlertDialog.Root onOpenChange={setConfirming} open={isConfirming}>
 							<AlertDialog.Trigger
 								className={cn(
 									buttonVariants({ variant: "destructive", size: "sm" }),

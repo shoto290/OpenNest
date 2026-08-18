@@ -49,6 +49,12 @@ export type BotIdentity = {
 	avatarPose: AvatarPose
 	avatarImagePath: string | null
 	workingDir: string | null
+	/** The system prompt the bot always runs with. Part of the identity because the
+	 * settings panel edits it beside the name and emits the two as one value: a
+	 * write replaces both, and a field left out is a bot only half described. What a
+	 * run leaves behind for the next one is not here — the host keeps it and nothing
+	 * on this side reads or writes it. */
+	instructions: string
 }
 
 /** A bot as the host answers it: everything it was described with, plus the two

@@ -97,7 +97,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight identity poses, `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. An identity pose is a still character: the avatar holds one frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
+					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. `Delete bot` opens a confirmation this panel owns, and `confirmingDelete` lets a host stand that same dialog up from anywhere else it offers to delete a bot. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight identity poses, `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. An identity pose is a still character: the avatar holds one frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
 			},
 		},
 	},
@@ -280,6 +280,33 @@ export const PickerUploadTab = meta.story({
 		await expect(
 			within(picker).getByRole("button", { name: "Browse files" }),
 		).toBeVisible()
+	},
+})
+
+export const DeleteAskedFromElsewhere = meta.story({
+	args: { confirmingDelete: true, onConfirmingDeleteChange: fn() },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The same confirmation, stood up by the host rather than by the button beside it: a roster row's context menu, a shortcut, anything that asks to delete a bot from outside this column lands here instead of building a dialog of its own. Reach for it to check that the dialog is open on arrival, that it still names the bot, and that dismissing it reports the change rather than closing behind the host's back — `confirmingDelete` is controlled, so the panel never closes it on its own. Pick `DeleteConfirmation` for the path that starts at the button.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const dialog = await screen.findByRole("alertdialog")
+		await waitFor(() => expect(dialog).toBeVisible())
+		await expect(
+			within(dialog).getByRole("heading", { name: "Delete Nest Keeper?" }),
+		).toBeVisible()
+
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: "Cancel" }),
+		)
+		await expect(args.onConfirmingDeleteChange).toHaveBeenCalledWith(false)
+		await expect(args.onDelete).not.toHaveBeenCalled()
+		await expect(canvas.getByLabelText("Name")).toBeVisible()
 	},
 })
 
