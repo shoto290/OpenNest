@@ -18,6 +18,7 @@ export const MARKDOWN_PROSE_CLASS = `${INLINE_PROSE} ${BLOCK_PROSE} ${LIST_PROSE
  * background-tinted chip disappears on the page background and darkens a solid bubble
  * past its contrast budget, so code surfaces derive from the foreground and lean on a
  * hairline: the chip reads on every bubble variant, in both themes, without dimming
- * the text on it. */
+ * the text on it. Here a fence is wrapped for its copy control, so the block rhythm
+ * moves to that wrapper while the fence keeps the surface it scrolls inside. */
 export const MARKDOWN_CODE_SURFACE_CLASS =
-	"[&_code]:bg-foreground/5 [&_code]:ring-1 [&_code]:ring-foreground/15 [&_pre]:bg-foreground/5 [&_pre]:ring-1 [&_pre]:ring-foreground/10 [&_pre_code]:ring-0"
+	"[&_code]:bg-foreground/5 [&_code]:ring-1 [&_code]:ring-foreground/15 [&_pre]:my-0 [&_pre]:bg-foreground/5 [&_pre]:ring-1 [&_pre]:ring-foreground/10 [&_pre_code]:ring-0"

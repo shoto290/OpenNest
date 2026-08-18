@@ -2,10 +2,12 @@
 
 import { memo } from "react"
 
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
-import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
-import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
+import {
+	BotIdentityAvatar,
+	type BotIdentityPose,
+	type BotWorkingKind,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -26,16 +28,13 @@ import {
 const PANEL_LABEL = "Conversations"
 const CREATE_LABEL = "New bot"
 const EMPTY_LABEL = "No bots yet"
-const SOLO_BOT_ID = "agent"
-const AWAITING_READER_STATE = "listening"
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
 
 /** Fixed slots: the avatar box and the timestamp box never resize, so a name,
- * a badge and a timestamp land on the same x on every row. The box and the
- * drawing inside it are the same 40px, and have to be changed together. */
+ * a badge and a timestamp land on the same x on every row. The avatar keeps this
+ * size whatever it draws — an animal, or a picture the reader uploaded. */
 const ROW_AVATAR_SIZE = 40
-const AVATAR_SLOT = "relative block size-10 shrink-0"
 const TIMESTAMP_SLOT =
 	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
 
@@ -45,9 +44,6 @@ const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
 const TITLE_BADGE =
 	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
 const PREVIEW_LINE = "h-4 truncate text-sidebar-foreground/80 text-xs leading-4"
-
-const ACTIVITY_DOT =
-	"absolute right-0 bottom-0 size-2.5 rounded-full bg-sidebar-primary ring-2 ring-sidebar motion-safe:animate-pulse"
 
 /** The row is the only trigger the actions have, so it says it carries them
  * and lights up while they are open. */
@@ -64,20 +60,6 @@ const EMPTY_COPY =
 
 type AgentSidebarStatus = "idle" | "working"
 
-/** The pose a bot holds when it is doing nothing — its own, chosen in its
- * settings, and held perfectly still. */
-type BotIdentityPose = Extract<
-	BotAvatarState,
-	| "idle"
-	| "happy"
-	| "curious"
-	| "proud"
-	| "shy"
-	| "playful"
-	| "bored"
-	| "sleeping"
->
-
 interface AgentSidebarBot {
 	id: string
 	name: string
@@ -91,17 +73,16 @@ interface AgentSidebarBot {
 	animal?: BotAvatarAnimal
 	/** The pose the bot keeps at rest. Rendered as a still frame. */
 	identity?: BotIdentityPose
+	/** A picture the reader uploaded, already a URL the host is happy to load. It
+	 * wins over the animal and never animates — the activity dot is what says the
+	 * bot is busy. */
+	image?: string
 	status?: AgentSidebarStatus
 	/** What the bot is busy with while `status` is `working`. */
 	pose?: BotWorkingKind
 }
 
-const busyStateFor = (pose: BotWorkingKind) =>
-	pose === "waiting" ? AWAITING_READER_STATE : pose
-
 const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
-
-const identityOf = (bot: AgentSidebarBot) => bot.identity ?? "idle"
 
 const isBusy = (bot: AgentSidebarBot) => bot.status === "working"
 
@@ -135,21 +116,14 @@ const BotRosterRow = ({
 					<AnimatedSidebarMenuButton
 						className={ROW}
 						icon={
-							<span className={AVATAR_SLOT}>
-								<BotAvatar
-									animal={bot.animal}
-									animated={working}
-									size={ROW_AVATAR_SIZE}
-									state={working ? busyStateFor(pose) : identityOf(bot)}
-								/>
-								{working ? (
-									<span
-										aria-hidden="true"
-										className={ACTIVITY_DOT}
-										data-slot="roster-row-activity"
-									/>
-								) : null}
-							</span>
+							<BotIdentityAvatar
+								animal={bot.animal}
+								image={bot.image}
+								kind={pose}
+								pose={bot.identity}
+								size={ROW_AVATAR_SIZE}
+								working={working}
+							/>
 						}
 						isActive={isSelected}
 						isIconDecorative={false}
@@ -197,38 +171,25 @@ const BotRosterRow = ({
 }
 
 interface AgentSidebarProps {
-	/** The roster, in the order it is read. */
-	bots?: AgentSidebarBot[]
+	/** The roster, in the order it is read. Empty is a reader who owns no bot, and
+	 * the panel says so: there is no bot of its own to fall back on. */
+	bots: AgentSidebarBot[]
 	/** The selected row. Controlled: the panel never selects on its own. */
 	selectedBotId?: string
 	onSelectBot?: (id: string) => void
 	onCreateBot?: () => void
 	onEditBot?: (id: string) => void
 	onDeleteBot?: (id: string) => void
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	status?: AgentSidebarStatus
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	pose?: BotWorkingKind
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	name?: string
-	/** @deprecated Pass a one-entry `bots` roster instead. */
-	lastMessage?: string
 }
 
 const AgentSidebarBase = ({
-	bots,
-	selectedBotId,
+	bots: roster,
+	selectedBotId: selectedId,
 	onSelectBot,
 	onCreateBot,
 	onEditBot,
 	onDeleteBot,
-	status = "idle",
-	pose = "thinking",
-	name = "No Name",
-	lastMessage,
 }: AgentSidebarProps) => {
-	const roster = bots ?? [{ id: SOLO_BOT_ID, name, status, pose, lastMessage }]
-	const selectedId = bots ? selectedBotId : SOLO_BOT_ID
 	const selectedBot = roster.find((bot) => bot.id === selectedId)
 
 	return (
@@ -245,6 +206,9 @@ const AgentSidebarBase = ({
 						onClick={onCreateBot}
 						size="icon-sm"
 						tooltip={CREATE_LABEL}
+						// The header is against the top of the window and the label is taller
+						// than the gap above it, so above is off the screen.
+						tooltipSide="bottom"
 						variant="ghost"
 					>
 						<Icons.Add aria-hidden="true" />

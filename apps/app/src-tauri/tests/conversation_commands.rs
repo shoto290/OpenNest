@@ -21,6 +21,9 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const TURN: &str = "t1";
+/// The one bot whose id this side knows before it is written: the host seats it
+/// itself, under a fixed id, so a message can name its author as a constant.
+const BOT: &str = "default";
 
 /// The host as it launches: the same `bootstrap`, resolved from the same app
 /// handle, and the outcome managed whole. `lib.rs` runs it from the setup hook
@@ -66,13 +69,20 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str, body: Value) -> Result<V
 	.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 }
 
-/// The bot and the id of the one chat it holds, asked for the way the app asks:
-/// nothing can be written to a transcript until both are on the record.
+/// The bot and the id of the one chat it holds. Nothing is seeded at launch any
+/// more, so the seat comes from asking for the chat of the one bot whose id the host
+/// writes itself — the path the legacy import takes on an install that predates the
+/// roster — and the roster is read back for the row that left. A fixed id is what
+/// lets every message below name its author without threading one through.
 fn a_bot_and_its_chat(window: &WebviewWindow<MockRuntime>) -> (Value, String) {
-	let bot = call(window, "conversation_default_bot", json!({})).expect("the default bot");
-	let chat =
-		call(window, "conversation_main_chat", json!({ "botId": bot["id"] })).expect("the chat");
+	let chat = call(window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let conversation_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
+	let listed = call(window, "conversation_bots", json!({})).expect("the bots");
+	let bot = listed
+		.as_array()
+		.and_then(|bots| bots.iter().find(|bot| bot["id"] == json!(BOT)))
+		.cloned()
+		.expect("the chat seated the bot it was asked for");
 	(bot, conversation_id)
 }
 
@@ -122,7 +132,7 @@ fn a_streaming_reply(
 			"id": id,
 			"conversationId": conversation_id,
 			"turnId": TURN,
-			"authorBotId": "default",
+			"authorBotId": BOT,
 			"repliedToMessageId": null,
 			"createdAt": index
 		}}),
@@ -265,7 +275,7 @@ fn a_host_without_a_database_answers_a_registered_command_with_why_there_is_none
 	let window = window(&app);
 
 	assert_eq!(
-		call(&window, "conversation_main_chat", json!({ "botId": "default" })),
+		call(&window, "conversation_main_chat", json!({ "botId": BOT })),
 		Err(json!({ "kind": "unavailable", "failure": { "kind": "appDataDir" } }))
 	);
 }
@@ -279,7 +289,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 	let window = window(&app);
 
 	let (bot, conversation) = a_bot_and_its_chat(&window);
-	assert_eq!(bot["id"], json!("default"));
+	assert_eq!(bot["id"], json!(BOT));
 	assert_eq!(bot["name"], json!("Claude"));
 	assert_eq!(bot["model"], json!("sonnet"));
 	assert!(bot["createdAt"].is_i64(), "the bot crossed without a camelCase moment: {bot}");
@@ -301,7 +311,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 				"id": "m2",
 				"conversationId": conversation,
 				"turnId": TURN,
-				"authorBotId": "default",
+				"authorBotId": BOT,
 				"repliedToMessageId": "m1",
 				"createdAt": 3
 			}})
@@ -790,7 +800,8 @@ fn an_identity(name: &str, model: &str, animal: &str, pose: &str) -> Value {
 		"avatarAnimal": animal,
 		"avatarPose": pose,
 		"avatarImagePath": null,
-		"workingDir": "/work/opennest"
+		"workingDir": "/work/opennest",
+		"instructions": "Answer with the file you would touch."
 	})
 }
 
@@ -818,6 +829,7 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	assert_eq!(created["avatarPose"], json!("curious"));
 	assert_eq!(created["avatarImagePath"], json!(null));
 	assert_eq!(created["workingDir"], json!("/work/opennest"));
+	assert_eq!(created["instructions"], json!("Answer with the file you would touch."));
 	assert!(created["createdAt"].is_i64(), "a bot crossed without a camelCase moment: {created}");
 
 	let chat = call(&window, "conversation_main_chat", json!({ "botId": id }))
@@ -872,9 +884,14 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 /// The boundary is where a closed vocabulary is checked, not the file: a word
 /// outside one fails to parse, so the command is never entered and no bot is
 /// written. What the caller gets back is Tauri's own account of the argument it
-/// could not read — the point being that nothing landed, in any of the three.
+/// could not read — the point being that nothing landed, in either of the two.
+///
+/// The face is closed and the model is not, which is the whole distinction: the
+/// engine draws eight animals and eight poses and a ninth of either is a bot the UI
+/// could not show, while what a model may be called belongs to Claude Code and
+/// nothing here can list it.
 #[test]
-fn a_bot_described_outside_a_closed_vocabulary_is_refused_before_it_is_written() {
+fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
 	let app = app("com.opennest.conversation-commands-11");
 	let window = window(&app);
 
@@ -888,19 +905,53 @@ fn a_bot_described_outside_a_closed_vocabulary_is_refused_before_it_is_written()
 		"conversation_create_bot",
 		json!({ "identity": an_identity("Nyx", "sonnet", "owl", "furious") }),
 	);
-	let model = call(
-		&window,
-		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "gpt", "owl", "curious") }),
-	);
 
 	assert!(animal.is_err(), "an animal the engine cannot draw was accepted: {animal:?}");
 	assert!(pose.is_err(), "a pose the engine cannot draw was accepted: {pose:?}");
-	assert!(model.is_err(), "a model label the host does not accept was accepted: {model:?}");
 	assert_eq!(
 		call(&window, "conversation_bots", json!({})),
 		Ok(json!([])),
 		"a bot the boundary refused reached the file anyway"
+	);
+
+	cleanup(&app);
+}
+
+/// A model label this build has never heard of, stored and read back as it was
+/// given. There is no listing to check it against — no `claude models`, and the
+/// init frame only names the model already answering — so a label the host refused
+/// would be a bot the provider could run and this app could not describe. An alias
+/// the product does not offer yet and a versioned name a user pasted are the same
+/// case, and both survive the round trip.
+#[test]
+fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
+	let app = app("com.opennest.conversation-commands-24");
+	let window = window(&app);
+
+	let created = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "claude-opus-4-1-20250805", "owl", "curious") }),
+	)
+	.expect("a bot on a label the host does not know");
+	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
+
+	assert_eq!(created["model"], json!("claude-opus-4-1-20250805"));
+	assert_eq!(
+		call(&window, "conversation_bots", json!({})).map(|bots| bots[0]["model"].clone()),
+		Ok(json!("claude-opus-4-1-20250805")),
+		"a label the file holds came back changed"
+	);
+
+	// And it is still a field a caller replaces whole, alias or not.
+	assert_eq!(
+		call(
+			&window,
+			"conversation_update_bot",
+			json!({ "id": id, "identity": an_identity("Nyx", "fable", "owl", "curious") })
+		)
+		.map(|bot| bot["model"].clone()),
+		Ok(json!("fable"))
 	);
 
 	cleanup(&app);
@@ -1278,11 +1329,9 @@ fn a_picture_missing_from_the_disk_reads_as_no_picture_rather_than_a_broken_one(
 	std::fs::remove_file(&worn).expect("the picture is removed from under the row");
 
 	assert_eq!(wearing(&window, &id), json!(null));
-	assert_eq!(
-		call(&window, "conversation_default_bot", json!({}))
-			.map(|bot| bot["avatarImagePath"].clone()),
-		Ok(json!(null)),
-		"a read of the seeded bot did not survive a missing file"
+	assert!(
+		call(&window, "conversation_bots", json!({})).is_ok(),
+		"a read of the roster did not survive a missing file"
 	);
 
 	cleanup(&app);
@@ -1316,7 +1365,55 @@ fn a_host_without_a_database_refuses_an_upload_with_why_there_is_none() {
 	let window = window(&app);
 
 	assert_eq!(
-		call(&window, "conversation_set_bot_avatar_image", an_upload("default", &a_png(20, 20))),
+		call(&window, "conversation_set_bot_avatar_image", an_upload(BOT, &a_png(20, 20))),
 		Err(json!({ "kind": "unavailable", "failure": { "kind": "appDataDir" } }))
 	);
+}
+
+/// The launch as it now opens: it reads the roster and seeds nothing. A fresh
+/// install answers with no bots, a bot created is the only reason there is one, and
+/// deleting the last one leaves a host that comes back up empty — which is the whole
+/// of the empty state being real. A launch that insisted on a bot would write the
+/// shipped one back here, and a user would find the bot they deleted alive again.
+#[test]
+fn a_launch_reads_the_roster_it_finds_and_never_writes_a_bot_back_into_it() {
+	const IDENTIFIER: &str = "com.opennest.conversation-commands-23";
+
+	let id = {
+		let app = app(IDENTIFIER);
+		let window = window(&app);
+		assert_eq!(
+			call(&window, "conversation_bots", json!({})),
+			Ok(json!([])),
+			"a fresh install came up with a bot nobody created"
+		);
+		let id = a_bot(&window, "Nyx");
+		assert_eq!(
+			call(&window, "conversation_bots", json!({})).map(|bots| bots.as_array().map(Vec::len)),
+			Ok(Some(1))
+		);
+		id
+	};
+
+	{
+		let app = app(IDENTIFIER);
+		let window = window(&app);
+		assert_eq!(
+			call(&window, "conversation_bots", json!({})).map(|bots| bots[0]["id"].clone()),
+			Ok(json!(id)),
+			"a relaunch did not find the bot the last one wrote"
+		);
+		call(&window, "conversation_delete_bot", json!({ "id": id })).expect("the last bot goes");
+		assert_eq!(call(&window, "conversation_bots", json!({})), Ok(json!([])));
+	}
+
+	let app = app(IDENTIFIER);
+	let window = window(&app);
+	assert_eq!(
+		call(&window, "conversation_bots", json!({})),
+		Ok(json!([])),
+		"a launch after the last bot was deleted brought one back"
+	);
+
+	cleanup(&app);
 }

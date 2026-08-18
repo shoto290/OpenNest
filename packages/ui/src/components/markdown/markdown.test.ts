@@ -32,6 +32,9 @@ const definitionIds = (html: string) => capturedValues(html, /id="([^"]+)"/g)
 const referenceFragments = (html: string) =>
 	capturedValues(html, /href="#([^"]+)"/g)
 
+const tokenColours = (html: string, theme: "light" | "dark") =>
+	capturedValues(html, new RegExp(`--code-token-${theme}:([^;"]+)`, "g"))
+
 describe("markdown constructions", () => {
 	it("renders headings, emphasis and inline code", () => {
 		const html = render(
@@ -94,10 +97,43 @@ describe("markdown constructions", () => {
 		expect(html).toContain('<a href="mailto:me@opennest.dev">')
 	})
 
-	it("renders fenced code with its language", () => {
-		const html = render("```ts\nconst nest = 1\n```")
+	/** One-line fences, so every colour captured belongs to the same line: a grammar that
+	 * failed to resolve paints that line in one colour and fails the count. */
+	const HIGHLIGHTED_FENCES = [
+		"```ts\nconst nest = 1\n```",
+		"```rust\nlet nest: usize = 1;\n```",
+		"```python\nnest = read_nest(42)\n```",
+		"```css\n.nest { color: red; }\n```",
+		'```html\n<p class="nest">hi</p>\n```',
+		"```yaml\nnest: 42\n```",
+		"```md\n# Nest **42**\n```",
+	]
 
-		expect(html).toContain('<pre><code class="language-ts">')
+	it.each(HIGHLIGHTED_FENCES)("paints more than one colour in %j", (source) => {
+		const html = render(source)
+
+		expect(new Set(tokenColours(html, "light")).size).toBeGreaterThan(1)
+		expect(new Set(tokenColours(html, "dark")).size).toBeGreaterThan(1)
+	})
+
+	it("shows a long fence as source text before painting it", () => {
+		const source = Array.from(
+			{ length: 240 },
+			(_, index) => `const nest${index} = ${index}`,
+		).join("\n")
+		const html = render(`\`\`\`ts\n${source}\n\`\`\``)
+
+		expect(html).toContain("const nest239 = 239")
+		expect(tokenColours(html, "light")).toEqual([])
+	})
+
+	it("renders an unknown fence label as its source text, unpainted", () => {
+		const html = render("```elixir\n%{id: nest.id}\n```")
+
+		expect(html).toContain("%{id: nest.id}")
+		expect(new Set(tokenColours(html, "light"))).toEqual(
+			new Set(["currentColor"]),
+		)
 	})
 })
 

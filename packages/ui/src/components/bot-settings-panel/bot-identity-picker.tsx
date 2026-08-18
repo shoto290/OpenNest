@@ -13,7 +13,10 @@ import {
 } from "react"
 
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
-import { BotIdentityPreview } from "@workspace/ui/components/bot-settings-panel/bot-identity-preview"
+import {
+	BotIdentityAvatar,
+	type BotWorkingKind,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { POPUP_CLASS } from "@workspace/ui/components/bot-settings-panel/styles"
 import {
 	BOT_IDENTITY_ANIMALS,
@@ -21,7 +24,6 @@ import {
 	type BotIdentity,
 	titleCase,
 } from "@workspace/ui/components/bot-settings-panel/types"
-import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -34,6 +36,13 @@ const TAB_CLASS =
 
 const OPTION_CLASS =
 	"flex cursor-pointer flex-col items-center gap-1 rounded-xl border border-transparent p-1.5 transition-colors hover:bg-muted has-[:checked]:border-primary/40 has-[:checked]:bg-primary/10 has-[:checked]:ring-2 has-[:checked]:ring-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring motion-reduce:transition-none"
+
+/** The whole zone is the control: a reader who has a file already drops or pastes
+ * it, and one who does not presses the same target to go looking for it. A button
+ * rather than a div with a handler, so Enter and Space open the picker for free and
+ * the target is a tab stop paste can land in. */
+const DROPZONE_CLASS =
+	"flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border border-border border-dashed p-6 text-center outline-none transition-colors hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
 
 const POSE_OPTION_CLASS = cn(OPTION_CLASS, "p-1")
 
@@ -55,16 +64,18 @@ const PickerGroup = ({ label, className, children }: PickerGroupProps) => (
 
 type BotIdentityPickerProps = {
 	identity: BotIdentity
-	name: string
 	working: boolean
+	/** What the bot is busy with, so the preview performs the work the rest of the
+	 * app is showing rather than a work of its own. */
+	workingKind?: BotWorkingKind
 	onIdentityChange: (identity: BotIdentity) => void
 	onAvatarUpload: (file: File) => void
 }
 
 const BotIdentityPicker = ({
 	identity,
-	name,
 	working,
+	workingKind,
 	onIdentityChange,
 	onAvatarUpload,
 }: BotIdentityPickerProps) => {
@@ -80,13 +91,13 @@ const BotIdentityPicker = ({
 		if (file) onAvatarUpload(file)
 	}
 
-	const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+	const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
 		event.preventDefault()
 		setDragging(false)
 		emitFile(event.dataTransfer.files[0])
 	}
 
-	const handlePaste = (event: ClipboardEvent<HTMLDivElement>) =>
+	const handlePaste = (event: ClipboardEvent<HTMLButtonElement>) =>
 		emitFile(event.clipboardData.files[0])
 
 	// Clearing the input lets the same file be picked twice in a row.
@@ -102,9 +113,11 @@ const BotIdentityPicker = ({
 					aria-label={`Change avatar. Current: ${currentLabel}.`}
 					className="group relative rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
 				>
-					<BotIdentityPreview
-						identity={identity}
-						name={name}
+					<BotIdentityAvatar
+						animal={identity.animal}
+						image={identity.image}
+						kind={workingKind}
+						pose={identity.pose}
 						size={PREVIEW_SIZE}
 						working={working}
 					/>
@@ -214,12 +227,12 @@ const BotIdentityPicker = ({
 								</Tabs.Panel>
 
 								<Tabs.Panel className="outline-none" value="upload">
-									<div
-										aria-label="Avatar image dropzone"
+									<button
 										className={cn(
-											"flex flex-col items-center gap-2 rounded-xl border border-border border-dashed p-6 text-center transition-colors motion-reduce:transition-none",
+											DROPZONE_CLASS,
 											dragging && "border-primary bg-primary/10",
 										)}
+										onClick={() => fileRef.current?.click()}
 										onDragLeave={() => setDragging(false)}
 										onDragOver={(event) => {
 											event.preventDefault()
@@ -227,32 +240,29 @@ const BotIdentityPicker = ({
 										}}
 										onDrop={handleDrop}
 										onPaste={handlePaste}
-										role="group"
+										type="button"
 									>
 										<Icons.Image
 											aria-hidden="true"
 											className="size-5 text-muted-foreground"
 										/>
-										<p className="text-foreground text-sm">
-											Drag, drop, or paste an image
-										</p>
-										<p className="text-muted-foreground text-xs">or</p>
-										<Button
-											onClick={() => fileRef.current?.click()}
-											size="sm"
-											variant="outline"
-										>
-											Browse files
-										</Button>
-										<input
-											accept="image/*"
-											aria-label="Avatar image file"
-											className="hidden"
-											onChange={handleBrowsed}
-											ref={fileRef}
-											type="file"
-										/>
-									</div>
+										<span className="block text-foreground text-sm">
+											Drag, drop or paste an image
+										</span>
+										<span className="block text-muted-foreground text-xs">
+											or click to choose a file
+										</span>
+									</button>
+									{/* Outside the control it belongs to: a button may not hold an
+									input, and this one is only ever opened by that button. */}
+									<input
+										accept="image/*"
+										aria-label="Avatar image file"
+										className="hidden"
+										onChange={handleBrowsed}
+										ref={fileRef}
+										type="file"
+									/>
 								</Tabs.Panel>
 							</Tabs.Root>
 						</Popover.Popup>

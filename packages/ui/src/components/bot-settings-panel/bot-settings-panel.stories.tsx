@@ -73,7 +73,12 @@ const PanelHost = (props: BotSettingsPanelProps) => {
 const StillnessPair = (props: BotSettingsPanelProps) => (
 	<div className="flex h-full gap-px bg-border">
 		<PanelHost {...props} label="Bot settings — idle" />
-		<PanelHost {...props} label="Bot settings — working" working />
+		<PanelHost
+			{...props}
+			label="Bot settings — working"
+			working
+			workingKind="writing"
+		/>
 	</div>
 )
 
@@ -97,7 +102,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight identity poses, `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. An identity pose is a still character: the avatar holds one frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
+					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. `Delete bot` opens a confirmation this panel owns, and `confirmingDelete` lets a host stand that same dialog up from anywhere else it offers to delete a bot. It is open whenever it is mounted: there is no rail to fold to, and closing it is the host unmounting the column, so a reader who put it away gets the whole width back rather than a strip of it. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight identity poses, `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. An identity pose is a still character: the avatar holds one frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
 			},
 		},
 	},
@@ -108,11 +113,10 @@ const meta = preview.meta({
 		onAvatarUpload: fn(),
 		onBrowseWorkingDirectory: fn(),
 		onDelete: fn(),
-		onCollapsedChange: fn(),
+		onClose: fn(),
 	},
 	argTypes: {
 		working: { control: "boolean" },
-		defaultCollapsed: { control: "boolean" },
 	},
 	render: (args) => <PanelHost {...args} />,
 	decorators: [
@@ -166,14 +170,24 @@ export const WithUploadedAvatar = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bot wears a picture instead of an animal. Check that the image renders static and round, and that the dot at its corner is grey while the bot is idle — the animal carries liveness in its pose, a photograph has to borrow it. Pick `Working` for the same avatar with the dot lit.",
+					"The bot wears a picture instead of an animal. Check that the image renders static and round, that no animal is drawn behind or beside it, and that nothing marks activity while the bot is idle — the dot says work, and this bot is not working. It is the same avatar the roster row and the replies draw, at this column's size. Pick `Working` for the same picture with the dot lit.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Nest Keeper is idle",
 		)
+
+		const avatar = avatarIn(canvasElement)
+		await expect(avatar.querySelector("img")).toHaveAttribute(
+			"src",
+			UPLOADED_IMAGE,
+		)
+		await expect(avatar.querySelector("svg")).toBeNull()
+		await expect(
+			avatar.querySelector('[data-slot="bot-activity-dot"]'),
+		).toBeNull()
 	},
 })
 
@@ -183,14 +197,24 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this while a run is in flight on a bot that wears a picture: the activity dot turns green and pulses, and a screen reader is told the bot is working. The dot exists only because a photograph cannot move — pick `StillUntilWorking` for what the same flag does to an animal identity.",
+					"Reach for this while a run is in flight on a bot that wears a picture: the picture stays — it is the bot, and swapping it for an animal that can move would be showing the reader somebody else — so the work is said with the dot at its corner, and a screen reader is told in words. The dot exists only because a photograph cannot act. Pick `StillUntilWorking` for what the same flag does to an animal identity.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Nest Keeper is working",
 		)
+
+		const avatar = avatarIn(canvasElement)
+		await expect(avatar.querySelector("img")).toHaveAttribute(
+			"src",
+			UPLOADED_IMAGE,
+		)
+		await expect(avatar.querySelector("svg")).toBeNull()
+		await expect(
+			avatar.querySelector('[data-slot="bot-activity-dot"]'),
+		).not.toBeNull()
 	},
 })
 
@@ -200,7 +224,7 @@ export const StillUntilWorking = meta.story({
 		docs: {
 			description: {
 				story:
-					"The product rule, side by side: one identity, one pose, and motion as the only difference. Every one of the eight poses has an expression and a blink cadence, so a pose left animating would never sit still — the avatar therefore animates when `working` is set and holds a single frame when it is not. Open this in Storybook to check it by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play can only guard the wiring, not the movement.",
+					"The product rule, side by side: one identity, one pose, and motion as the only difference. Every one of the eight poses has an expression and a blink cadence, so a pose left animating would never sit still — the avatar therefore animates when `working` is set and holds a single frame when it is not. The animal is the bot's either way: the working half performs the work with the owl its reader chose, in the pose the work is named after, never with the animal the engine draws when nobody names one. Open this in Storybook to check the movement by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play guards the wiring instead.",
 			},
 		},
 	},
@@ -208,34 +232,123 @@ export const StillUntilWorking = meta.story({
 		await expect(
 			canvas.getByRole("img", { name: "Bot avatar owl, curious" }),
 		).toBeVisible()
+		// The bot's own owl, doing the work the host named — not the animal the engine
+		// draws when nobody names one, and not a stand-in pose.
 		await expect(
-			canvas.getByRole("img", { name: "Bot avatar owl, working" }),
+			canvas.getByRole("img", { name: "Bot avatar owl, writing" }),
 		).toBeVisible()
 	},
 })
 
-export const Collapsed = meta.story({
-	args: { defaultCollapsed: true },
+export const Closing = meta.story({
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this when the reader wants the chat to have the width. The panel folds to a rail that keeps only the avatar and the affordance to bring it back; the fields unmount rather than being hidden, so nothing in the rail is tabbable by accident. The play here walks the collapse both ways.",
+					"The way out. The panel has no closed state of its own — it does not fold to a rail, and it keeps no avatar anywhere outside itself — so the close button reports the ask and the host unmounts the column. Reach for this to check that closing is one control, that it is reachable by Tab before the fields, and that the panel changes nothing on its own when it is pressed. The reader gets the width back because the column is gone, not because it shrank.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
-		await expect(canvas.queryByLabelText("Name")).not.toBeInTheDocument()
+	play: async ({ args, canvas, userEvent }) => {
+		const close = canvas.getByRole("button", { name: "Close Bot settings" })
 
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Expand Bot settings" }),
-		)
+		await userEvent.click(close)
+		await expect(args.onClose).toHaveBeenCalledTimes(1)
+		// Still whole: what the reader sees is the host's to take away.
 		await expect(canvas.getByLabelText("Name")).toBeVisible()
+	},
+})
 
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Collapse Bot settings" }),
+/** The one avatar the column draws, whatever it draws inside it. */
+const avatarIn = (canvasElement: HTMLElement) => {
+	const avatar = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="bot-identity-avatar"]',
+	)
+	if (!avatar) throw new Error("The panel is missing its avatar")
+	return avatar
+}
+
+const fieldsIn = (canvasElement: HTMLElement) => {
+	const fields = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="bot-settings-fields"]',
+	)
+	if (!fields) throw new Error("The panel is missing its fields")
+	return fields
+}
+
+const panelIn = (canvasElement: HTMLElement) => {
+	const panel = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="bot-settings-panel"]',
+	)
+	if (!panel) throw new Error("The panel is not mounted")
+	return panel
+}
+
+export const RoomToSpare = meta.story({
+	decorators: [
+		(Story) => (
+			<div className="flex h-[64rem] justify-end bg-background">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A column taller than the fields, which is what a tall window gives it. Reach for this to check the two things a settings column must not do on a big screen: stop short of the bottom, and leave the delete action floating in the middle of the panel under the last field. The panel takes the whole height it is given and the destructive action sits against the bottom edge, one padding away, with the slack above it — where a reader looking for the way to get rid of a bot expects it. Pick `ScrollsToTheDelete` for the same panel with less room than it needs.",
+			},
+		},
+	},
+	play: async ({ canvasElement, canvas }) => {
+		const panel = panelIn(canvasElement)
+		const fields = fieldsIn(canvasElement)
+		const column = panel.parentElement
+		if (!column) throw new Error("The panel has no column to fill")
+
+		await expect(panel.getBoundingClientRect().height).toBe(
+			column.getBoundingClientRect().height,
 		)
-		await expect(canvas.queryByLabelText("Name")).not.toBeInTheDocument()
+		await expect(fields.scrollHeight).toBeLessThanOrEqual(fields.clientHeight)
+
+		const remove = canvas.getByRole("button", { name: "Delete bot" })
+		const gap =
+			panel.getBoundingClientRect().bottom -
+			remove.getBoundingClientRect().bottom
+		// One padding, and nothing more: the action is at the edge rather than under
+		// the last field it happens to follow.
+		await expect(gap).toBeGreaterThan(0)
+		await expect(gap).toBeLessThanOrEqual(24)
+	},
+})
+
+export const ScrollsToTheDelete = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The same panel in a column shorter than its fields, which is what a laptop gives it. The fields scroll inside the panel — the panel itself never grows past the height it was given, so nothing is left under the bottom of the window with no way to reach it — and the delete action scrolls with them rather than being pinned over the content. Check that the destructive action is out of view until the reader goes looking for it, and that it is reachable when they do. Pick `RoomToSpare` for the tall column where it rests at the bottom.",
+			},
+		},
+	},
+	play: async ({ canvasElement, canvas }) => {
+		const panel = panelIn(canvasElement)
+		const fields = fieldsIn(canvasElement)
+		const remove = canvas.getByRole("button", { name: "Delete bot" })
+
+		await expect(fields.scrollHeight).toBeGreaterThan(fields.clientHeight)
+		await expect(remove.getBoundingClientRect().bottom).toBeGreaterThan(
+			panel.getBoundingClientRect().bottom,
+		)
+
+		fields.scrollTop = fields.scrollHeight
+		await waitFor(async () =>
+			expect(remove.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+				panel.getBoundingClientRect().bottom,
+			),
+		)
 	},
 })
 
@@ -266,20 +379,104 @@ export const PickerUploadTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second tab: a dropzone that takes a drag, a drop or a paste, and a browse button for readers who want a file dialog. The panel never reads the file — it hands the host a `File` and waits for the picture to come back as `value.identity.image`. Check that the dashed edge lights up on drag over and that the browse button is reachable by Tab, since paste only works once focus is inside the zone.",
+					"The second tab: one dashed zone that is the whole control. A reader holding a file drops or pastes it; a reader who has to go find one presses the same target and gets the file dialog — there is no separate browse button to aim at, and nothing inside the zone that is a target of its own. It is a real button, so Enter and Space open the dialog too and it is the tab stop a paste needs focus in. The panel never reads the file: it hands the host a `File` and waits for the picture to come back as `value.identity.image`. Check that the dashed edge lights up on drag over and that focus lands on the zone itself.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const picker = await openPicker(canvas, userEvent)
-
 		await userEvent.click(within(picker).getByRole("tab", { name: "Upload" }))
+
+		const dropzone = within(picker).getByRole("button", {
+			name: /Drag, drop or paste an image/,
+		})
+		await expect(dropzone).toBeVisible()
 		await expect(
-			within(picker).getByText("Drag, drop, or paste an image"),
-		).toBeVisible()
+			within(picker).queryByRole("button", { name: "Browse files" }),
+		).toBeNull()
+
+		// A native file dialog is not something a test can dismiss, so the input's own
+		// click is caught and stopped here. What is under test is that the zone reaches
+		// for it — by pointer, and by both keys a button answers to.
+		const asked = fn()
+		within(picker)
+			.getByLabelText("Avatar image file")
+			.addEventListener("click", (event) => {
+				event.preventDefault()
+				asked()
+			})
+
+		await userEvent.click(dropzone)
+		await expect(asked).toHaveBeenCalledTimes(1)
+
+		dropzone.focus()
+		await expect(dropzone).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+		await expect(asked).toHaveBeenCalledTimes(2)
+		await userEvent.keyboard(" ")
+		await expect(asked).toHaveBeenCalledTimes(3)
+	},
+})
+
+export const PickerUploadDrop = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The two paths that do not touch the file dialog at all, which is what makes the zone worth pressing rather than aiming past: a file dropped on it, and a file pasted into it while it holds focus. Both hand the host the same `File` and neither is changed by the zone having become the trigger. Reach for this after touching the dropzone; pick `PickerUploadTab` for the dialog it opens.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const picker = await openPicker(canvas, userEvent)
+		await userEvent.click(within(picker).getByRole("tab", { name: "Upload" }))
+		const dropzone = within(picker).getByRole("button", {
+			name: /Drag, drop or paste an image/,
+		})
+
+		const dropped = new File(["dropped"], "dropped.png", { type: "image/png" })
+		const transfer = new DataTransfer()
+		transfer.items.add(dropped)
+		dropzone.dispatchEvent(
+			new DragEvent("drop", { bubbles: true, dataTransfer: transfer }),
+		)
+		await expect(args.onAvatarUpload).toHaveBeenCalledWith(dropped)
+
+		const pasted = new File(["pasted"], "pasted.png", { type: "image/png" })
+		const clipboard = new DataTransfer()
+		clipboard.items.add(pasted)
+		dropzone.focus()
+		dropzone.dispatchEvent(
+			new ClipboardEvent("paste", { bubbles: true, clipboardData: clipboard }),
+		)
+		await expect(args.onAvatarUpload).toHaveBeenCalledWith(pasted)
+	},
+})
+
+export const DeleteAskedFromElsewhere = meta.story({
+	args: { confirmingDelete: true, onConfirmingDeleteChange: fn() },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The same confirmation, stood up by the host rather than by the button beside it: a roster row's context menu, a shortcut, anything that asks to delete a bot from outside this column lands here instead of building a dialog of its own. Reach for it to check that the dialog is open on arrival, that it still names the bot, and that dismissing it reports the change rather than closing behind the host's back — `confirmingDelete` is controlled, so the panel never closes it on its own. Pick `DeleteConfirmation` for the path that starts at the button.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const dialog = await screen.findByRole("alertdialog")
+		await waitFor(() => expect(dialog).toBeVisible())
 		await expect(
-			within(picker).getByRole("button", { name: "Browse files" }),
+			within(dialog).getByRole("heading", { name: "Delete Nest Keeper?" }),
 		).toBeVisible()
+
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: "Cancel" }),
+		)
+		await expect(args.onConfirmingDeleteChange).toHaveBeenCalledWith(false)
+		await expect(args.onDelete).not.toHaveBeenCalled()
+		await expect(canvas.getByLabelText("Name")).toBeVisible()
 	},
 })
 

@@ -1,20 +1,32 @@
 import { createHighlighterCoreSync, type HighlighterCore } from "shiki/core"
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript"
 import bash from "shiki/langs/bash.mjs"
+import css from "shiki/langs/css.mjs"
 import diff from "shiki/langs/diff.mjs"
+import html from "shiki/langs/html.mjs"
 import json from "shiki/langs/json.mjs"
+import markdown from "shiki/langs/markdown.mjs"
+import python from "shiki/langs/python.mjs"
+import rust from "shiki/langs/rust.mjs"
 import tsx from "shiki/langs/tsx.mjs"
 import typescript from "shiki/langs/typescript.mjs"
+import yaml from "shiki/langs/yaml.mjs"
 import darkTheme from "shiki/themes/github-dark-high-contrast.mjs"
 import lightTheme from "shiki/themes/github-light-high-contrast.mjs"
 
 export const CODE_LANGUAGES = [
 	"bash",
+	"css",
 	"diff",
+	"html",
 	"json",
+	"markdown",
+	"python",
+	"rust",
 	"text",
 	"tsx",
 	"typescript",
+	"yaml",
 ] as const
 
 export type CodeLanguage = (typeof CODE_LANGUAGES)[number]
@@ -28,6 +40,12 @@ export interface CodeToken {
 
 export type CodeTokenLines = CodeToken[][]
 
+export interface CodeSourceLine {
+	content: string
+	offset: number
+	tokens?: CodeToken[]
+}
+
 const LIGHT_THEME = "github-light-high-contrast"
 const DARK_THEME = "github-dark-high-contrast"
 const TOKEN_CACHE_LIMIT = 256
@@ -38,14 +56,18 @@ const LANGUAGE_ALIASES: Record<string, CodeLanguage> = {
 	js: "typescript",
 	jsonc: "json",
 	jsx: "tsx",
+	md: "markdown",
 	mjs: "typescript",
 	patch: "diff",
 	plain: "text",
 	plaintext: "text",
+	py: "python",
+	rs: "rust",
 	sh: "bash",
 	shell: "bash",
 	ts: "typescript",
 	txt: "text",
+	yml: "yaml",
 	zsh: "bash",
 }
 
@@ -66,7 +88,19 @@ function getHighlighter() {
 		highlighter = createHighlighterCoreSync({
 			engine: createJavaScriptRegexEngine({ forgiving: true }),
 			themes: [lightTheme, darkTheme],
-			langs: [bash, diff, json, tsx, typescript],
+			langs: [
+				bash,
+				css,
+				diff,
+				html,
+				json,
+				markdown,
+				python,
+				rust,
+				tsx,
+				typescript,
+				yaml,
+			],
 		})
 	}
 	return highlighter
@@ -108,4 +142,18 @@ export function highlightCode(
 		)
 
 	return remember(key, lines)
+}
+
+/** Pairs every source line with the tokens painted for it. Tokens are optional so a
+ * caller can show the source first and hand the highlighting over on a later pass. */
+export function toCodeLines(
+	code: string,
+	tokens?: CodeTokenLines,
+): CodeSourceLine[] {
+	let offset = 0
+	return code.split("\n").map((content, index) => {
+		const line = { content, offset, tokens: tokens?.[index] }
+		offset += content.length + 1
+		return line
+	})
 }

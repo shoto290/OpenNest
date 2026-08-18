@@ -2,10 +2,11 @@
 
 import { AlertDialog } from "@base-ui/react/alert-dialog"
 import { Select } from "@base-ui/react/select"
+import { motion, useReducedMotion } from "motion/react"
 import { useId, useState } from "react"
 
+import type { BotWorkingKind } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityPicker } from "@workspace/ui/components/bot-settings-panel/bot-identity-picker"
-import { BotIdentityPreview } from "@workspace/ui/components/bot-settings-panel/bot-identity-preview"
 import { SettingsField } from "@workspace/ui/components/bot-settings-panel/settings-field"
 import {
 	FIELD_CONTROL_CLASS,
@@ -19,9 +20,15 @@ import type {
 } from "@workspace/ui/components/bot-settings-panel/types"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { SPRING_LAYOUT, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
-const RAIL_PREVIEW_SIZE = 32
+/** The width the column opens to, and the width the fields are laid out at. Said
+ * once because the two have to agree: the outer element animates between zero and
+ * this, and the panel inside it holds this width throughout — a column whose content
+ * reflowed on the way in would re-wrap every label twice per toggle. */
+const PANEL_WIDTH = "20rem"
+const PANEL_CLOSED_WIDTH = "0rem"
 
 type BotSettingsPanelProps = {
 	value: BotSettingsValue
@@ -35,16 +42,26 @@ type BotSettingsPanelProps = {
 	onBrowseWorkingDirectory: () => void
 	/** Fired only once the confirmation is accepted. */
 	onDelete: () => void
+	/** Whether the delete confirmation stands. Controlled, so a host with another way
+	 * to ask — a row's context menu, a shortcut — lands on this one dialog instead of
+	 * building a second one. Leave it out and the panel's own button owns it. */
+	confirmingDelete?: boolean
+	onConfirmingDeleteChange?: (confirming: boolean) => void
 	/** The only thing that makes the avatar move: the animal animates in its
 	 * working pose, an uploaded picture lights its activity dot. An identity pose
 	 * holds a single frame the rest of the time. */
 	working?: boolean
+	/** What the bot is busy with while `working`. Its own animal performs it, which is
+	 * what keeps this avatar and the roster's showing the same bot doing the same
+	 * thing. */
+	workingKind?: BotWorkingKind
 	/** Accessible name of the panel landmark, and the heading it shows. Two
 	 * panels on one screen need distinct ones. */
 	label?: string
-	collapsed?: boolean
-	defaultCollapsed?: boolean
-	onCollapsedChange?: (collapsed: boolean) => void
+	/** Puts the panel away. It has no closed state of its own — a host mounts it
+	 * while the reader is in it and unmounts it after, which is what leaves the
+	 * column beside it the whole width. */
+	onClose: () => void
 	className?: string
 }
 
@@ -55,79 +72,87 @@ const BotSettingsPanel = ({
 	onAvatarUpload,
 	onBrowseWorkingDirectory,
 	onDelete,
+	confirmingDelete,
+	onConfirmingDeleteChange,
 	working = false,
+	workingKind,
 	label = "Bot settings",
-	collapsed,
-	defaultCollapsed = false,
-	onCollapsedChange,
+	onClose,
 	className,
 }: BotSettingsPanelProps) => {
-	const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed)
+	const [internalConfirming, setInternalConfirming] = useState(false)
 	const directoryId = useId()
-	const isCollapsed = collapsed ?? internalCollapsed
-	const collapseLabel = `${isCollapsed ? "Expand" : "Collapse"} ${label}`
+	const reduce = useReducedMotion() ?? false
+	const isConfirming = confirmingDelete ?? internalConfirming
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
-	const toggleCollapsed = () => {
-		const next = !isCollapsed
-		if (collapsed === undefined) setInternalCollapsed(next)
-		onCollapsedChange?.(next)
+	const setConfirming = (next: boolean) => {
+		if (confirmingDelete === undefined) setInternalConfirming(next)
+		onConfirmingDeleteChange?.(next)
 	}
 
 	return (
-		<aside
+		// Two elements for one column. The outer one is a width track: it animates
+		// between nothing and the panel's width, on the way out as well as in, which is
+		// what the `AnimatePresence` in the shell above holds the column mounted for.
+		// The inner one is the panel, laid out at that width the whole time. The spring
+		// is overdamped, so the track cannot overshoot the zero it closes onto and
+		// bounce the conversation beside it.
+		<motion.aside
+			animate={{ width: PANEL_WIDTH }}
 			aria-label={label}
-			className={cn(
-				"flex h-full shrink-0 flex-col overflow-hidden border-sidebar-border border-l bg-sidebar text-sidebar-foreground transition-[width] duration-300 ease-out motion-reduce:transition-none",
-				isCollapsed ? "w-14" : "w-80",
-				className,
-			)}
-			data-collapsed={isCollapsed || undefined}
+			className="h-full shrink-0 overflow-hidden will-change-[width]"
 			data-slot="bot-settings-panel"
+			exit={{ width: PANEL_CLOSED_WIDTH }}
+			initial={{ width: PANEL_CLOSED_WIDTH }}
+			transition={reduce ? TRANSITION_NONE : SPRING_LAYOUT}
 		>
-			<header
+			<div
 				className={cn(
-					"flex h-12 shrink-0 items-center gap-1 border-sidebar-border border-b",
-					isCollapsed ? "justify-center px-1" : "px-3",
+					"flex h-full w-80 flex-col overflow-hidden border-sidebar-border border-l bg-sidebar text-sidebar-foreground",
+					className,
 				)}
+				data-slot="bot-settings-column"
 			>
-				{isCollapsed ? null : (
+				<header className="flex h-12 shrink-0 items-center gap-1 border-sidebar-border border-b px-3">
+					{/* One live region for the whole column, here rather than on the avatar:
+					the same avatar is drawn in a dozen roster rows at once, and a live
+					region inside it would announce a dozen times over. */}
+					<span className="sr-only" role="status">
+						{`${value.name.trim() || "This bot"} is ${working ? "working" : "idle"}`}
+					</span>
 					<h2 className="min-w-0 flex-1 truncate font-medium text-sm">
 						{label}
 					</h2>
-				)}
-				<button
-					aria-label={collapseLabel}
-					className={cn(
-						buttonVariants({ variant: "ghost", size: "icon-sm" }),
-						"text-muted-foreground hover:text-foreground",
-					)}
-					onClick={toggleCollapsed}
-					type="button"
-				>
-					<Icons.Next className={cn(isCollapsed && "rotate-180")} />
-				</button>
-			</header>
+					<button
+						aria-label={`Close ${label}`}
+						className={cn(
+							buttonVariants({ variant: "ghost", size: "icon-sm" }),
+							"text-muted-foreground hover:text-foreground",
+						)}
+						onClick={onClose}
+						type="button"
+					>
+						<Icons.Close />
+					</button>
+				</header>
 
-			{isCollapsed ? (
-				<div className="flex flex-1 flex-col items-center py-3">
-					<BotIdentityPreview
-						identity={value.identity}
-						name={value.name}
-						size={RAIL_PREVIEW_SIZE}
-						working={working}
-					/>
-				</div>
-			) : (
-				<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
+				{/* The one scroll boundary in the column: the fields take the height the
+			panel has left and scroll inside it, which is what keeps the delete action
+			at the bottom edge when there is room and lets it leave with the content
+			when there is not. */}
+				<div
+					className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-5"
+					data-slot="bot-settings-fields"
+				>
 					<BotIdentityPicker
 						identity={value.identity}
-						name={value.name}
 						onAvatarUpload={onAvatarUpload}
 						onIdentityChange={(identity) => patch({ identity })}
 						working={working}
+						workingKind={workingKind}
 					/>
 
 					<div className="flex flex-col gap-4">
@@ -252,7 +277,7 @@ const BotSettingsPanel = ({
 					</div>
 
 					<div className="mt-auto border-sidebar-border border-t pt-4">
-						<AlertDialog.Root>
+						<AlertDialog.Root onOpenChange={setConfirming} open={isConfirming}>
 							<AlertDialog.Trigger
 								className={cn(
 									buttonVariants({ variant: "destructive", size: "sm" }),
@@ -303,8 +328,8 @@ const BotSettingsPanel = ({
 						</AlertDialog.Root>
 					</div>
 				</div>
-			)}
-		</aside>
+			</div>
+		</motion.aside>
 	)
 }
 

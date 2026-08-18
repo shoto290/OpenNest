@@ -35,11 +35,17 @@ const DEFAULT_BOT: Bot = {
 	avatarPose: "idle",
 	avatarImagePath: null,
 	workingDir: null,
+	instructions: "",
 	createdAt: 0,
 }
 
-/** The one visible chat, the way `ensure_chat` answers for it. */
-export const FAKE_CHAT_ID = "chat-default"
+/** A bot holds one chat and the chat is named after it, the way `ensure_chat`
+ * answers the same thread for the same bot every time it is asked. Derived rather
+ * than minted so a caller can name the chat of a bot it created. */
+const chatIdOf = (botId: string) => `chat-${botId}`
+
+/** The chat of the bot a launch finds already on the record here. */
+export const FAKE_CHAT_ID = chatIdOf(DEFAULT_BOT.id)
 
 const OPEN: TranscriptCompletion[] = ["pending", "streaming"]
 
@@ -80,7 +86,9 @@ const isStorableImage = (bytes: Uint8Array) =>
 const isWebp = (bytes: Uint8Array) => {
 	const text = (from: number, to: number) =>
 		String.fromCharCode(...bytes.slice(from, to))
-	return bytes.byteLength >= 12 && text(0, 4) === "RIFF" && text(8, 12) === "WEBP"
+	return (
+		bytes.byteLength >= 12 && text(0, 4) === "RIFF" && text(8, 12) === "WEBP"
+	)
 }
 
 /** The durable transcript without a database: the same rules, in memory, so a test
@@ -188,13 +196,12 @@ export const createFakeTranscriptStore = (
 				pageSize,
 			}).loadPage(conversationId, cursor),
 
-		defaultBot: () => Promise.resolve(bots.get(DEFAULT_BOT.id) ?? DEFAULT_BOT),
-
 		bots: () => Promise.resolve([...bots.values()]),
 
-		/** Insertion order is creation order here, which is what the file answers
-		 * with too. The chat is not minted alongside: this fake holds the one thread
-		 * every bot in it is spoken to in. */
+		/** Insertion order is creation order here, which is what the file answers with
+		 * too. The chat is not written alongside because it does not have to be: a
+		 * bot's thread is named after it, so the one it was created with is the one
+		 * `mainChat` answers. */
 		createBot: (identity: BotIdentity) => {
 			minted += 1
 			const created: Bot = {
@@ -220,12 +227,19 @@ export const createFakeTranscriptStore = (
 
 		/** A bot that is already gone is refused rather than silently accepted: a
 		 * caller told its delete landed would go on showing a list that is behind the
-		 * store. The transcript is not touched — every bot here is spoken to in the
-		 * one thread this fake holds, so there is no chat of its own to take with it. */
+		 * store. Everything said in its chat goes with it, the way the file cascades
+		 * the thread and the transcript under the bot that held them. */
 		deleteBot: (id: string) => {
 			if (!bots.delete(id)) {
 				return refuse({ kind: "unknownBot", id })
 			}
+			const conversationId = chatIdOf(id)
+			for (const [rowId, row] of rows) {
+				if (row.conversationId === conversationId) {
+					rows.delete(rowId)
+				}
+			}
+			seqs.delete(conversationId)
 			return Promise.resolve()
 		},
 
@@ -265,8 +279,12 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve(worn)
 		},
 
-		mainChat: (_botId: string) =>
-			Promise.resolve<Chat>({ id: FAKE_CHAT_ID, createdAt: 0, updatedAt: 0 }),
+		mainChat: (botId: string) =>
+			Promise.resolve<Chat>({
+				id: chatIdOf(botId),
+				createdAt: 0,
+				updatedAt: 0,
+			}),
 
 		/** The row the frontend scopes a process with, numbered per participant the
 		 * way the file numbers it. The id is derived from the pair and the number
