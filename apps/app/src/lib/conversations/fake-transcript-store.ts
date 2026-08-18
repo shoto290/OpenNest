@@ -38,10 +38,6 @@ const DEFAULT_BOT: Bot = {
 	createdAt: 0,
 }
 
-/** The model column is a label the host writes and nothing picks, so a bot made
- * here carries the same one every bot in the file carries. */
-const BOT_MODEL = DEFAULT_BOT.model
-
 /** The one visible chat, the way `ensure_chat` answers for it. */
 export const FAKE_CHAT_ID = "chat-default"
 
@@ -178,7 +174,6 @@ export const createFakeTranscriptStore = (
 			const created: Bot = {
 				...identity,
 				id: `bot-${minted}`,
-				model: BOT_MODEL,
 				createdAt: minted,
 			}
 			bots.set(created.id, created)

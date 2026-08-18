@@ -16,11 +16,11 @@
 //! sites reading their own clock would disagree about which row came first, and
 //! an id handed in is an id something outside this module could reuse.
 //!
-//! The two rules the file cannot state for itself live in
-//! [`ConversationError::IdentityConflict`] and [`ConversationError::UnknownBot`].
-//! Everything else SQLite already refuses on its own — the eight animals and the
-//! eight poses included, which the vocabularies below and the `CHECK` on the
-//! columns spell the same way on purpose.
+//! The one rule the file cannot state for itself lives in
+//! [`ConversationError::UnknownBot`]. Everything else SQLite already refuses on
+//! its own — the eight animals and the eight poses included, which the
+//! vocabularies below and the `CHECK` on the columns spell the same way on
+//! purpose.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -36,9 +36,9 @@ use crate::db::{Access, DatabaseError};
 /// would make impossible.
 pub const DEFAULT_BOT_ID: &str = "default";
 const DEFAULT_BOT_NAME: &str = "Claude";
-/// A label the row carries, not a setting anything acts on: the host spawns
-/// Claude Code without `--model` and lets it pick.
-const DEFAULT_BOT_MODEL: &str = "sonnet";
+/// What a bot is seeded on. Which model a bot answers under is a user's to change
+/// from there — see [`BotModel`].
+const DEFAULT_BOT_MODEL: BotModel = BotModel::Sonnet;
 /// The only role a participant takes today. It stays free text in the schema —
 /// which words are allowed is this module's business, and the schema is shipped.
 const PARTICIPANT_ROLE: &str = "assistant";
@@ -49,6 +49,37 @@ const CHAT_TITLE: &str = "Chat";
 /// `conversations.kind` is `CHECK`-constrained to two words the product no longer
 /// tells apart. One of them has to be written, nothing here reads it back.
 const CHAT_KIND: &str = "main";
+
+/// The model labels the host accepts, which are Claude Code's own aliases: the
+/// column holds one of these three words or the row is not one this build wrote.
+/// Nothing is passed to the process today — the host spawns Claude Code without
+/// `--model` — but which model a bot answers under is the user's choice, so it is
+/// stored as a closed vocabulary rather than as free text a typo could enter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BotModel {
+	Opus,
+	Sonnet,
+	Haiku,
+}
+
+impl BotModel {
+	fn as_sql(self) -> &'static str {
+		match self {
+			BotModel::Opus => "opus",
+			BotModel::Sonnet => "sonnet",
+			BotModel::Haiku => "haiku",
+		}
+	}
+
+	fn parse(text: &str) -> Option<Self> {
+		match text {
+			"opus" => Some(BotModel::Opus),
+			"sonnet" => Some(BotModel::Sonnet),
+			"haiku" => Some(BotModel::Haiku),
+			_ => None,
+		}
+	}
+}
 
 /// The eight animals the avatar engine draws, and the only ones a row may hold.
 /// The words are the engine's own, so a face read out of the file names a shape
@@ -138,6 +169,7 @@ impl AvatarPose {
 	}
 }
 
+stored_as_text!(BotModel);
 stored_as_text!(AvatarAnimal);
 stored_as_text!(AvatarPose);
 
@@ -154,18 +186,6 @@ const DEFAULT_BOT_POSE: AvatarPose = AvatarPose::Idle;
 #[derive(Debug)]
 pub enum ConversationError {
 	Database(DatabaseError),
-	/// A row already sits at an id this module writes by hand, and it does not say
-	/// what this build would have written. Finding that id taken is no proof the
-	/// seed wrote it — another build's row is another build's bot, and adopting it
-	/// would run the chat on something nobody here agreed to. So it is refused and
-	/// left as it was found, with both sides carried so the caller can say what
-	/// disagreed instead of guessing which build wrote first.
-	IdentityConflict {
-		id: &'static str,
-		field: &'static str,
-		expected: String,
-		stored: String,
-	},
 	/// A write named a bot the file does not hold. SQLite answers a `WHERE` that
 	/// matches nothing with success and no rows, which is the one refusal a caller
 	/// must not be told twice about: an update that changed nothing and a delete
@@ -217,7 +237,7 @@ pub struct Bot {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: String,
+	pub model: BotModel,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -233,14 +253,16 @@ pub struct Bot {
 /// would have to tell "leave this alone" from "clear this", which for the two
 /// nullable columns is a distinction no wire shape carries for free.
 ///
-/// `model` is absent for the same reason it is absent from the product: the host
-/// spawns Claude Code without `--model`, so the column is a label and nothing
-/// picks it.
+/// `model` is in here because a bot is moved between models from its own settings.
+/// `created_at` is not, and neither are `instructions` and `memory`: the first is
+/// when the row was written, the other two are what the bot was told, and none of
+/// the three is who it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
 	pub description: String,
+	pub model: BotModel,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -280,14 +302,13 @@ impl ConversationsRepository {
 
 	/// Idempotent by the primary key: a second call neither duplicates the bot nor
 	/// rewrites what the first one wrote, and the row that is actually in the file
-	/// is what comes back — unless it is not this build's, per
-	/// [`ConversationError::IdentityConflict`].
+	/// is what comes back — including every change a user has made to it since,
+	/// which is all of it.
 	pub async fn ensure_default_bot(&self) -> Result<Bot, ConversationError> {
 		self.call_mut(|connection| Ok(ensured_default_bot(connection))).await?
 	}
 
-	/// The rule above is the row's, not the write path's: a caller that only reads
-	/// is owed the same refusal as one that seeds.
+	/// The same row, read and never seeded.
 	pub async fn default_bot(&self) -> Result<Option<Bot>, ConversationError> {
 		self.call(|connection| Ok(stored_default_bot(connection))).await?
 	}
@@ -403,11 +424,7 @@ fn ensured_default_bot(connection: &mut Connection) -> Result<Bot, ConversationE
 }
 
 fn stored_default_bot(connection: &Connection) -> Result<Option<Bot>, ConversationError> {
-	let Some(stored) = connection.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot).optional()? else {
-		return Ok(None);
-	};
-	verify_default_bot(&stored)?;
-	Ok(Some(stored))
+	Ok(connection.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot).optional()?)
 }
 
 /// Same shape as [`ensured_default_bot`], for the same reason: every launch asks
@@ -498,7 +515,7 @@ fn created_bot(
 			identity.name,
 			identity.title,
 			identity.description,
-			DEFAULT_BOT_MODEL,
+			identity.model,
 			identity.avatar_animal,
 			identity.avatar_pose,
 			identity.avatar_image_path,
@@ -521,14 +538,15 @@ fn updated_bot(
 ) -> Result<Bot, ConversationError> {
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
-		"UPDATE bots SET name = ?2, title = ?3, description = ?4, avatar_animal = ?5,
-				avatar_pose = ?6, avatar_image_path = ?7, working_dir = ?8
+		"UPDATE bots SET name = ?2, title = ?3, description = ?4, model = ?5,
+				avatar_animal = ?6, avatar_pose = ?7, avatar_image_path = ?8, working_dir = ?9
 			WHERE id = ?1",
 		params![
 			id,
 			identity.name,
 			identity.title,
 			identity.description,
+			identity.model,
 			identity.avatar_animal,
 			identity.avatar_pose,
 			identity.avatar_image_path,
@@ -574,10 +592,10 @@ fn delete_bot_in(transaction: &Transaction<'_>, id: &str) -> Result<(), Conversa
 	Ok(())
 }
 
-/// The only way the default bot is written, so no path can insert it without
-/// meeting the check. Runs inside the caller's transaction: a refusal here takes
-/// down whatever that transaction was in the middle of, which is what leaves the
-/// file exactly as it was found.
+/// The only way the default bot is written, and `INSERT OR IGNORE` is the whole
+/// of it: a row already sitting at that id is the seed's own work from an earlier
+/// launch, changed since by the only thing that changes it, which is a user. It is
+/// read back rather than compared — every field of it is now theirs to set.
 fn seed_default_bot(transaction: &Transaction<'_>) -> Result<Bot, ConversationError> {
 	transaction.execute(
 		"INSERT OR IGNORE INTO bots (id, name, model, avatar_animal, avatar_pose, created_at)
@@ -591,27 +609,7 @@ fn seed_default_bot(transaction: &Transaction<'_>) -> Result<Bot, ConversationEr
 			now(),
 		],
 	)?;
-	let stored = transaction.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot)?;
-	verify_default_bot(&stored)?;
-	Ok(stored)
-}
-
-/// What this build would have written, compared against what is there — and only
-/// over what a user cannot change. `name` is the whole reason the list is this
-/// short: renaming a bot is the first thing the product lets anyone do, so a name
-/// that is no longer `Claude` is the feature working, not another build's row.
-/// `created_at` is left out for its own reason: it says when the row was written,
-/// not which bot it is.
-fn verify_default_bot(stored: &Bot) -> Result<(), ConversationError> {
-	if DEFAULT_BOT_MODEL != stored.model {
-		return Err(ConversationError::IdentityConflict {
-			id: DEFAULT_BOT_ID,
-			field: "model",
-			expected: DEFAULT_BOT_MODEL.to_owned(),
-			stored: stored.model.clone(),
-		});
-	}
-	Ok(())
+	Ok(transaction.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot)?)
 }
 
 fn chat(row: &Row<'_>) -> rusqlite::Result<Chat> {
@@ -653,54 +651,26 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::{count_of, open, Database};
 
-	/// A bot the repository did not write, so a build with another idea of what
-	/// lives at an id can be put in the file and the seed made to meet it.
-	async fn insert_bot(
-		database: &Database,
-		id: &'static str,
-		name: &'static str,
-		model: &'static str,
-	) -> Bot {
-		database
-			.conversations()
-			.call(move |connection| {
-				let written = Bot {
-					id: id.to_owned(),
-					name: name.to_owned(),
-					title: String::new(),
-					description: String::new(),
-					model: model.to_owned(),
-					avatar_animal: DEFAULT_BOT_ANIMAL,
-					avatar_pose: DEFAULT_BOT_POSE,
-					avatar_image_path: None,
-					working_dir: None,
-					instructions: String::new(),
-					memory: String::new(),
-					created_at: 1,
-				};
-				connection.execute(
-					"INSERT INTO bots (id, name, model, created_at) VALUES (?1, ?2, ?3, ?4)",
-					params![written.id, written.name, written.model, written.created_at],
-				)?;
-				Ok(written)
-			})
-			.await
-			.expect("the bot is inserted")
-	}
-
-	/// The plainest identity there is: a name and the face the shipped bot wears.
-	/// Every test that only cares about one field says that field and takes the
-	/// rest from here.
+	/// The plainest identity there is: a name, the model a bot is seeded on and the
+	/// face the shipped one wears. Every test that only cares about one field says
+	/// that field and takes the rest from here.
 	fn an_identity(name: &str) -> BotIdentity {
 		BotIdentity {
 			name: name.to_owned(),
 			title: String::new(),
 			description: String::new(),
+			model: DEFAULT_BOT_MODEL,
 			avatar_animal: DEFAULT_BOT_ANIMAL,
 			avatar_pose: DEFAULT_BOT_POSE,
 			avatar_image_path: None,
 			working_dir: None,
 		}
+	}
+
+	/// The same identity on another model, which is the one change this file used
+	/// to refuse and now has to carry through a reopen.
+	fn on_another_model(name: &str) -> BotIdentity {
+		BotIdentity { model: BotModel::Opus, ..an_identity(name) }
 	}
 
 	/// Everything that can hang off a bot, written at once: a turn, a message with
@@ -754,60 +724,6 @@ mod tests {
 		] {
 			assert_eq!(count_of(database, table).await, 0, "`{table}` was left holding a row");
 		}
-	}
-
-	/// A conflict is only useful if it says what disagreed, so every field of it is
-	/// asserted rather than the variant alone. Generic over what the refused call
-	/// would have returned: the same rule guards the bot and the chat seated by it.
-	fn assert_conflict<T: std::fmt::Debug>(
-		outcome: &Result<T, ConversationError>,
-		mismatched: &str,
-		wanted: &str,
-		found: &str,
-	) {
-		assert!(
-			matches!(
-				outcome,
-				Err(ConversationError::IdentityConflict { id, field, expected, stored })
-					if *id == DEFAULT_BOT_ID
-						&& *field == mismatched
-						&& expected.as_str() == wanted
-						&& stored.as_str() == found
-			),
-			"the call answered something other than a conflict on {mismatched}: {outcome:?}"
-		);
-	}
-
-	/// A refusal must cost nothing at all: not the chat, not the seat that would
-	/// have been written with it, and not the bot the refusal was about.
-	async fn assert_nothing_landed(database: &Database, stored: &Bot) {
-		assert_eq!(
-			count_of(database, "conversations").await,
-			0,
-			"a refused chat was written anyway"
-		);
-		assert_eq!(
-			count_of(database, "conversation_participants").await,
-			0,
-			"a refused chat left a seat behind"
-		);
-		assert_eq!(
-			stored_bot(database).await.as_ref(),
-			Some(stored),
-			"a refusal rewrote the row it was refused over"
-		);
-	}
-
-	/// Reads the row past the rule `default_bot` applies: after a conflict, what is
-	/// in the file is exactly what the assertion is about.
-	async fn stored_bot(database: &Database) -> Option<Bot> {
-		database
-			.conversations()
-			.call(|connection| {
-				Ok(connection.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot).optional()?)
-			})
-			.await
-			.expect("query")
 	}
 
 	/// A launch on a fresh file asks before anything has been written, and neither
@@ -873,40 +789,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The rule the row is still known by: the model a bot answers under is not a
-	/// caller's to change, so a different one at this id is another build's bot.
-	#[tokio::test]
-	async fn a_stored_default_bot_on_another_model_makes_the_seed_conflict() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let stored = insert_bot(&database, DEFAULT_BOT_ID, DEFAULT_BOT_NAME, "opus").await;
-
-		let refused = database.conversations().ensure_default_bot().await;
-
-		assert_conflict(&refused, "model", DEFAULT_BOT_MODEL, "opus");
-		assert_nothing_landed(&database, &stored).await;
-
-		drop(database);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
-	/// Reading is not a way around the rule: a caller that never seeds would
-	/// otherwise be handed another build's bot as a plain answer.
-	#[tokio::test]
-	async fn reading_the_default_bot_refuses_another_builds_row_just_as_seeding_does() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let stored = insert_bot(&database, DEFAULT_BOT_ID, DEFAULT_BOT_NAME, "opus").await;
-
-		let refused = database.conversations().default_bot().await;
-
-		assert_conflict(&refused, "model", DEFAULT_BOT_MODEL, "opus");
-		assert_nothing_landed(&database, &stored).await;
-
-		drop(database);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
 	/// A rename costs the bot nothing it holds: the chat it is asked for after one
 	/// is the same row, seated by the same participant, with the transcript still
 	/// hanging off it.
@@ -925,23 +807,6 @@ mod tests {
 
 		assert_eq!(after, before, "a rename cost the bot the chat it already held");
 		assert_eq!(count_of(&database, "conversations").await, 1);
-
-		drop(database);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
-	/// The rule through the chat rather than through the seed: both paths reach it,
-	/// and both must leave the same nothing behind.
-	#[tokio::test]
-	async fn a_chat_asked_for_against_a_default_bot_on_another_model_is_refused_whole() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let stored = insert_bot(&database, DEFAULT_BOT_ID, DEFAULT_BOT_NAME, "opus").await;
-
-		let refused = database.conversations().ensure_chat(DEFAULT_BOT_ID.into()).await;
-
-		assert_conflict(&refused, "model", DEFAULT_BOT_MODEL, "opus");
-		assert_nothing_landed(&database, &stored).await;
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1030,6 +895,7 @@ mod tests {
 			name: "Nyx".to_owned(),
 			title: "Reviewer".to_owned(),
 			description: "Reads a diff and says what it would change.".to_owned(),
+			model: BotModel::Haiku,
 			avatar_animal: AvatarAnimal::Owl,
 			avatar_pose: AvatarPose::Curious,
 			avatar_image_path: Some("/pictures/owl.png".to_owned()),
@@ -1044,6 +910,7 @@ mod tests {
 		assert_eq!(listed[0].name, described.name);
 		assert_eq!(listed[0].title, described.title);
 		assert_eq!(listed[0].description, described.description);
+		assert_eq!(listed[0].model, BotModel::Haiku);
 		assert_eq!(listed[0].avatar_animal, AvatarAnimal::Owl);
 		assert_eq!(listed[0].avatar_pose, AvatarPose::Curious);
 		assert_eq!(listed[0].avatar_image_path.as_deref(), Some("/pictures/owl.png"));
@@ -1083,6 +950,7 @@ mod tests {
 					name: "Ada".to_owned(),
 					title: "Reviewer".to_owned(),
 					description: "Reads a diff.".to_owned(),
+					model: BotModel::Opus,
 					avatar_animal: AvatarAnimal::Koala,
 					avatar_pose: AvatarPose::Sleeping,
 					avatar_image_path: Some("/pictures/koala.png".to_owned()),
@@ -1097,10 +965,10 @@ mod tests {
 		assert_eq!(updated.avatar_animal, AvatarAnimal::Koala);
 		assert_eq!(updated.avatar_pose, AvatarPose::Sleeping);
 		assert_eq!(updated.working_dir.as_deref(), Some("/work/opennest"));
+		assert_eq!(updated.model, BotModel::Opus, "an update left the bot on its old model");
 		assert_eq!(updated.instructions, "answer briefly", "an update cleared the instructions");
 		assert_eq!(updated.memory, "they use bun", "an update cleared the memory");
 		assert_eq!(updated.created_at, created.created_at, "an update moved the moment");
-		assert_eq!(updated.model, created.model, "an update changed the model");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1207,6 +1075,40 @@ mod tests {
 		assert_eq!(count_of(&database, "bots").await, 2);
 		assert_eq!(count_of(&database, "conversations").await, 2, "two bots share one chat");
 		assert_eq!(count_of(&database, "conversation_participants").await, 2);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The boot path, over a model the user changed. Every launch reads the default
+	/// bot before anything else can, so a build that recognised its own row by the
+	/// model would meet `opus` on the second launch and refuse to hand the app its
+	/// own bot. Reopening is the whole point: the row is read off the disk by a
+	/// connection that never saw it written.
+	#[tokio::test]
+	async fn a_default_bot_moved_to_another_model_still_reads_back_after_a_reopen() {
+		let dir = temp_dir();
+		let moved = {
+			let database = open(&dir);
+			let repository = database.conversations();
+			repository.ensure_default_bot().await.expect("the default bot");
+			repository
+				.update_bot(DEFAULT_BOT_ID.to_owned(), on_another_model(DEFAULT_BOT_NAME))
+				.await
+				.expect("the bot is moved to another model")
+		};
+
+		let database = open(&dir);
+		let repository = database.conversations();
+		let read = repository.default_bot().await.expect("the default bot");
+		let seeded = repository.ensure_default_bot().await.expect("the default bot");
+		let held = repository.ensure_chat(DEFAULT_BOT_ID.into()).await.expect("the chat");
+
+		assert_eq!(moved.model, BotModel::Opus);
+		assert_eq!(read.as_ref(), Some(&moved), "a launch could not read its own default bot");
+		assert_eq!(seeded, moved, "a launch wrote the shipped model back over the user's");
+		assert_eq!(count_of(&database, "bots").await, 1);
+		assert!(!held.id.is_empty(), "the chat was refused over a model the user chose");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

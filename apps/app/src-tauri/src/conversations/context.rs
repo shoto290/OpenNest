@@ -297,7 +297,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::open;
-	use crate::db::repositories::conversations::{AvatarAnimal, AvatarPose};
+	use crate::db::repositories::conversations::{AvatarAnimal, AvatarPose, BotModel};
 	use crate::db::repositories::messages::{
 		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState,
 	};
@@ -322,7 +322,7 @@ mod tests {
 			name: "Claude".to_owned(),
 			title: String::new(),
 			description: String::new(),
-			model: "sonnet".to_owned(),
+			model: BotModel::Sonnet,
 			avatar_animal: AvatarAnimal::Cat,
 			avatar_pose: AvatarPose::Idle,
 			avatar_image_path: None,

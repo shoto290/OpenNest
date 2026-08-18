@@ -65,6 +65,7 @@ const IDENTITY: BotIdentity = {
 	name: "Nyx",
 	title: "Reviewer",
 	description: "Reads a diff and says what it would change.",
+	model: "opus",
 	avatarAnimal: "owl",
 	avatarPose: "curious",
 	avatarImagePath: null,

@@ -47,6 +47,7 @@ const IDENTITY: BotIdentity = {
 	name: "Nyx",
 	title: "Reviewer",
 	description: "Reads a diff and says what it would change.",
+	model: "opus",
 	avatarAnimal: "owl",
 	avatarPose: "curious",
 	avatarImagePath: null,
@@ -156,6 +157,7 @@ describe("createFakeTranscriptStore", () => {
 			created.id,
 		])
 		expect(created.name).toBe("Nyx")
+		expect(created.model).toBe("opus")
 		expect(created.avatarAnimal).toBe("owl")
 	})
 
@@ -166,12 +168,14 @@ describe("createFakeTranscriptStore", () => {
 		const updated = await store.updateBot(created.id, {
 			...IDENTITY,
 			name: "Ada",
+			model: "haiku",
 			avatarPose: "sleeping",
 		})
 
 		expect(updated.id).toBe(created.id)
 		expect(updated.createdAt).toBe(created.createdAt)
 		expect(updated.name).toBe("Ada")
+		expect(updated.model).toBe("haiku")
 		expect(updated.avatarPose).toBe("sleeping")
 	})
 

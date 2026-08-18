@@ -779,11 +779,12 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 /// An identity as the frontend submits one. Spelled here in JSON rather than
 /// built from a Rust type, because what is under test is exactly the crossing: a
 /// field the host reads under another name is a bot created with half a face.
-fn an_identity(name: &str, animal: &str, pose: &str) -> Value {
+fn an_identity(name: &str, model: &str, animal: &str, pose: &str) -> Value {
 	json!({
 		"name": name,
 		"title": "Reviewer",
 		"description": "Reads a diff and says what it would change.",
+		"model": model,
 		"avatarAnimal": animal,
 		"avatarPose": pose,
 		"avatarImagePath": null,
@@ -803,13 +804,14 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	let created = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "owl", "curious") }),
+		json!({ "identity": an_identity("Nyx", "sonnet", "owl", "curious") }),
 	)
 	.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 
 	assert_eq!(created["name"], json!("Nyx"));
 	assert_eq!(created["title"], json!("Reviewer"));
+	assert_eq!(created["model"], json!("sonnet"));
 	assert_eq!(created["avatarAnimal"], json!("owl"));
 	assert_eq!(created["avatarPose"], json!("curious"));
 	assert_eq!(created["avatarImagePath"], json!(null));
@@ -837,10 +839,11 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	let updated = call(
 		&window,
 		"conversation_update_bot",
-		json!({ "id": id, "identity": an_identity("Ada", "koala", "sleeping") }),
+		json!({ "id": id, "identity": an_identity("Ada", "opus", "koala", "sleeping") }),
 	)
 	.expect("the bot is updated");
 	assert_eq!(updated["name"], json!("Ada"));
+	assert_eq!(updated["model"], json!("opus"), "a bot was not moved between models");
 	assert_eq!(updated["avatarAnimal"], json!("koala"));
 	assert_eq!(updated["avatarPose"], json!("sleeping"));
 	assert_eq!(updated["createdAt"], created["createdAt"], "an update moved the moment");
@@ -864,28 +867,34 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	cleanup(&app);
 }
 
-/// The boundary is where a face is checked, not the file: a word the avatar
-/// engine cannot draw fails to parse, so the command is never entered and no bot
-/// is written. What the caller gets back is Tauri's own account of the argument
-/// it could not read — the point being that nothing landed, in either shape.
+/// The boundary is where a closed vocabulary is checked, not the file: a word
+/// outside one fails to parse, so the command is never entered and no bot is
+/// written. What the caller gets back is Tauri's own account of the argument it
+/// could not read — the point being that nothing landed, in any of the three.
 #[test]
-fn a_bot_described_with_a_face_the_engine_cannot_draw_is_refused_before_it_is_written() {
+fn a_bot_described_outside_a_closed_vocabulary_is_refused_before_it_is_written() {
 	let app = app("com.opennest.conversation-commands-11");
 	let window = window(&app);
 
 	let animal = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "dragon", "curious") }),
+		json!({ "identity": an_identity("Nyx", "sonnet", "dragon", "curious") }),
 	);
 	let pose = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "owl", "furious") }),
+		json!({ "identity": an_identity("Nyx", "sonnet", "owl", "furious") }),
+	);
+	let model = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "gpt", "owl", "curious") }),
 	);
 
 	assert!(animal.is_err(), "an animal the engine cannot draw was accepted: {animal:?}");
 	assert!(pose.is_err(), "a pose the engine cannot draw was accepted: {pose:?}");
+	assert!(model.is_err(), "a model label the host does not accept was accepted: {model:?}");
 	assert_eq!(
 		call(&window, "conversation_bots", json!({})),
 		Ok(json!([])),
@@ -906,7 +915,7 @@ fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 	let created = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "cat", "idle") }),
+		json!({ "identity": an_identity("Nyx", "sonnet", "cat", "idle") }),
 	)
 	.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
@@ -920,7 +929,7 @@ fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 		call(
 			&window,
 			"conversation_update_bot",
-			json!({ "id": id, "identity": an_identity("Ada", "cat", "idle") })
+			json!({ "id": id, "identity": an_identity("Ada", "sonnet", "cat", "idle") })
 		),
 		Err(json!({ "kind": "unknownBot", "id": id }))
 	);

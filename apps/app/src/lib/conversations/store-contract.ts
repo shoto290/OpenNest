@@ -1,3 +1,8 @@
+/** The model labels the host accepts, which are Claude Code's own aliases. A bot
+ * is moved between them from its own settings; nothing outside this union reaches
+ * the column. */
+export type BotModel = "opus" | "sonnet" | "haiku"
+
 /** The eight animals the avatar engine draws. The host holds the same eight and
  * refuses anything else at the boundary, so a value outside this union never
  * reaches the file. */
@@ -28,7 +33,7 @@ export type Bot = {
 	name: string
 	title: string
 	description: string
-	model: string
+	model: BotModel
 	avatarAnimal: AvatarAnimal
 	avatarPose: AvatarPose
 	avatarImagePath: string | null
@@ -37,13 +42,14 @@ export type Bot = {
 }
 
 /** Who a bot is, as the store is told it — whole, both to create one and to
- * change one. No `id`, `model` or `createdAt`: none of the three is a caller's to
- * choose. `avatarImagePath` and `workingDir` are `null` rather than empty, since
- * both name something outside the database. */
+ * change one. No `id` or `createdAt`: neither is a caller's to choose.
+ * `avatarImagePath` and `workingDir` are `null` rather than empty, since both name
+ * something outside the database. */
 export type BotIdentity = {
 	name: string
 	title: string
 	description: string
+	model: BotModel
 	avatarAnimal: AvatarAnimal
 	avatarPose: AvatarPose
 	avatarImagePath: string | null
@@ -111,11 +117,4 @@ export type TranscriptStoreError =
 	| { kind: "storage"; failure: StorageFailure }
 	| { kind: "conflict"; id: string; field: string }
 	| { kind: "invalidTransition"; id: string; from: string; to: string }
-	| {
-			kind: "identityConflict"
-			id: string
-			field: string
-			expected: string
-			stored: string
-	  }
 	| { kind: "unknownBot"; id: string }

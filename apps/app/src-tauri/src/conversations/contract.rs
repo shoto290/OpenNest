@@ -38,6 +38,38 @@ use serde::{Deserialize, Serialize};
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
+/// The model labels a bot may answer under, as the frontend spells them. Closed
+/// for the reason the two below are: the deserializer is what keeps a label
+/// nothing recognises out of the column, and it refuses one before a statement
+/// runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BotModel {
+	Opus,
+	Sonnet,
+	Haiku,
+}
+
+impl From<conversations::BotModel> for BotModel {
+	fn from(model: conversations::BotModel) -> Self {
+		match model {
+			conversations::BotModel::Opus => BotModel::Opus,
+			conversations::BotModel::Sonnet => BotModel::Sonnet,
+			conversations::BotModel::Haiku => BotModel::Haiku,
+		}
+	}
+}
+
+impl From<BotModel> for conversations::BotModel {
+	fn from(model: BotModel) -> Self {
+		match model {
+			BotModel::Opus => conversations::BotModel::Opus,
+			BotModel::Sonnet => conversations::BotModel::Sonnet,
+			BotModel::Haiku => conversations::BotModel::Haiku,
+		}
+	}
+}
+
 /// The eight animals the avatar engine draws, as the frontend spells them. It is
 /// the deserializer that makes a ninth impossible: a word outside this list is
 /// refused before a statement runs, so the `CHECK` on the column is the second
@@ -141,7 +173,7 @@ pub struct Bot {
 	pub name: String,
 	pub title: String,
 	pub description: String,
-	pub model: String,
+	pub model: BotModel,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -156,7 +188,7 @@ impl From<conversations::Bot> for Bot {
 			name: bot.name,
 			title: bot.title,
 			description: bot.description,
-			model: bot.model,
+			model: bot.model.into(),
 			avatar_animal: bot.avatar_animal.into(),
 			avatar_pose: bot.avatar_pose.into(),
 			avatar_image_path: bot.avatar_image_path,
@@ -167,15 +199,16 @@ impl From<conversations::Bot> for Bot {
 }
 
 /// Who a bot is, as a caller submits it — whole, both to create one and to change
-/// one. `id`, `model` and `createdAt` are absent because none of them is a
-/// caller's to choose: the first two are minted and fixed by the host, the third
-/// is when it did so.
+/// one. `id` and `createdAt` are absent because neither is a caller's to choose:
+/// one is minted by the host, the other is when it did so. `model` is here — a
+/// bot is moved between models from its own settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
 	pub description: String,
+	pub model: BotModel,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_pose: AvatarPose,
 	pub avatar_image_path: Option<String>,
@@ -188,6 +221,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			name: identity.name,
 			title: identity.title,
 			description: identity.description,
+			model: identity.model.into(),
 			avatar_animal: identity.avatar_animal.into(),
 			avatar_pose: identity.avatar_pose.into(),
 			avatar_image_path: identity.avatar_image_path,
@@ -536,8 +570,6 @@ pub enum TranscriptStoreError {
 	Conflict { id: String, field: String },
 	#[serde(rename_all = "camelCase")]
 	InvalidTransition { id: String, from: String, to: String },
-	#[serde(rename_all = "camelCase")]
-	IdentityConflict { id: String, field: String, expected: String, stored: String },
 	/// A write named a bot that is not on the record. The one refusal here a caller
 	/// can act on: the list it is holding is behind the file, and reloading it is
 	/// what puts them back together.
@@ -577,14 +609,6 @@ impl From<DatabaseError> for TranscriptStoreError {
 impl From<conversations::ConversationError> for TranscriptStoreError {
 	fn from(error: conversations::ConversationError) -> Self {
 		match error {
-			conversations::ConversationError::IdentityConflict { id, field, expected, stored } => {
-				TranscriptStoreError::IdentityConflict {
-					id: id.to_owned(),
-					field: field.to_owned(),
-					expected,
-					stored,
-				}
-			}
 			conversations::ConversationError::UnknownBot { id } => {
 				TranscriptStoreError::UnknownBot { id }
 			}
@@ -658,7 +682,7 @@ mod tests {
 				name: "Claude".into(),
 				title: "Reviewer".into(),
 				description: "Reads a diff and says what it would change.".into(),
-				model: "sonnet".into(),
+				model: BotModel::Opus,
 				avatar_animal: AvatarAnimal::Owl,
 				avatar_pose: AvatarPose::Curious,
 				avatar_image_path: Some("/pictures/owl.png".into()),
@@ -670,7 +694,7 @@ mod tests {
 				"name": "Claude",
 				"title": "Reviewer",
 				"description": "Reads a diff and says what it would change.",
-				"model": "sonnet",
+				"model": "opus",
 				"avatarAnimal": "owl",
 				"avatarPose": "curious",
 				"avatarImagePath": "/pictures/owl.png",
@@ -694,6 +718,7 @@ mod tests {
 				name: "Claude".into(),
 				title: String::new(),
 				description: String::new(),
+				model: BotModel::Sonnet,
 				avatar_animal: AvatarAnimal::Cat,
 				avatar_pose: AvatarPose::Idle,
 				avatar_image_path: None,
@@ -703,6 +728,7 @@ mod tests {
 				"name": "Claude",
 				"title": "",
 				"description": "",
+				"model": "sonnet",
 				"avatarAnimal": "cat",
 				"avatarPose": "idle",
 				"avatarImagePath": null,
@@ -717,6 +743,11 @@ mod tests {
 	/// whole reason a face never reaches the file misspelled.
 	#[test]
 	fn every_face_crosses_as_one_word_and_nothing_else_parses() {
+		for (model, wire) in
+			[(BotModel::Opus, "opus"), (BotModel::Sonnet, "sonnet"), (BotModel::Haiku, "haiku")]
+		{
+			assert_crosses_as(model, json!(wire));
+		}
 		for (animal, wire) in [
 			(AvatarAnimal::Cat, "cat"),
 			(AvatarAnimal::Rabbit, "rabbit"),
@@ -748,6 +779,10 @@ mod tests {
 		assert!(
 			serde_json::from_value::<AvatarPose>(json!("furious")).is_err(),
 			"a pose the avatar engine cannot draw parsed at the boundary"
+		);
+		assert!(
+			serde_json::from_value::<BotModel>(json!("gpt")).is_err(),
+			"a model label the host does not accept parsed at the boundary"
 		);
 	}
 
@@ -950,19 +985,8 @@ mod tests {
 				}),
 			),
 			(
-				TranscriptStoreError::IdentityConflict {
-					id: "default".into(),
-					field: "name".into(),
-					expected: "Claude".into(),
-					stored: "Someone else".into(),
-				},
-				json!({
-					"kind": "identityConflict",
-					"id": "default",
-					"field": "name",
-					"expected": "Claude",
-					"stored": "Someone else"
-				}),
+				TranscriptStoreError::UnknownBot { id: "b1".into() },
+				json!({ "kind": "unknownBot", "id": "b1" }),
 			),
 		] {
 			assert_crosses_as(refusal, wire);
