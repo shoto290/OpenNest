@@ -29,8 +29,10 @@ use image::{DynamicImage, GenericImageView, ImageFormat, ImageReader, Limits};
 const SIDE: u32 = 512;
 
 /// The largest upload accepted, counted on the bytes as they arrived. Checked
-/// before the decoder is built: the point of a limit is to not do the work.
-pub const MAX_BYTES: u64 = 5 * 1024 * 1024;
+/// before the decoder is built: the point of a limit is to not do the work. It
+/// leaves this module only inside a [`Rejection::TooLarge`], which is how the
+/// frontend learns it without holding a second copy of the number.
+const MAX_BYTES: u64 = 5 * 1024 * 1024;
 
 /// What the decoder is allowed to allocate for one picture. A few megabytes of
 /// PNG can describe a gigapixel canvas, so the input limit above bounds the file
@@ -70,26 +72,6 @@ pub enum Rejection {
 	},
 }
 
-/// The three formats a stored avatar may arrive as. Deliberately the same three
-/// the `image` dependency is compiled with: a fourth here would reach a decoder
-/// that is not in the binary.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Sniffed {
-	Png,
-	Jpeg,
-	Webp,
-}
-
-impl Sniffed {
-	fn format(self) -> ImageFormat {
-		match self {
-			Sniffed::Png => ImageFormat::Png,
-			Sniffed::Jpeg => ImageFormat::Jpeg,
-			Sniffed::Webp => ImageFormat::WebP,
-		}
-	}
-}
-
 /// The bytes an avatar is stored as: sniffed, bounded, decoded, squared, resized
 /// and re-encoded. Nothing on the way through touches the filesystem, so a
 /// caller may run this before it has decided where the file goes — or whether
@@ -104,19 +86,23 @@ pub fn normalised(bytes: &[u8]) -> Result<Vec<u8>, Rejection> {
 	encode(squared(&decoded))
 }
 
-/// The format the leading bytes say it is. WebP takes two windows because RIFF is
-/// a container: `RIFF....WEBP` is the only one of its payloads this accepts, and
-/// checking only the `RIFF` half would hand a WAV file to an image decoder.
-fn sniff(bytes: &[u8]) -> Option<Sniffed> {
+/// The format the leading bytes say it is, and the only three this can ever answer:
+/// they are the three the `image` dependency is compiled with, so a format nothing
+/// here decodes cannot be named, let alone reached.
+///
+/// WebP takes two windows because RIFF is a container: `RIFF....WEBP` is the only one
+/// of its payloads this accepts, and checking only the `RIFF` half would hand a WAV
+/// file to an image decoder.
+fn sniff(bytes: &[u8]) -> Option<ImageFormat> {
 	let head = bytes.get(..SIGNATURE_LENGTH)?;
 	if head.starts_with(PNG_SIGNATURE) {
-		return Some(Sniffed::Png);
+		return Some(ImageFormat::Png);
 	}
 	if head.starts_with(JPEG_SIGNATURE) {
-		return Some(Sniffed::Jpeg);
+		return Some(ImageFormat::Jpeg);
 	}
 	if head.starts_with(RIFF_SIGNATURE) && &head[8..12] == WEBP_SIGNATURE {
-		return Some(Sniffed::Webp);
+		return Some(ImageFormat::WebP);
 	}
 	None
 }
@@ -124,10 +110,10 @@ fn sniff(bytes: &[u8]) -> Option<Sniffed> {
 /// The format is handed over rather than guessed, and the limits are set before
 /// the first allocation: a decoder that is told what it is reading cannot be
 /// talked into another format by the bytes it reads.
-fn decode(bytes: &[u8], sniffed: Sniffed) -> Result<DynamicImage, Rejection> {
+fn decode(bytes: &[u8], sniffed: ImageFormat) -> Result<DynamicImage, Rejection> {
 	let mut limits = Limits::no_limits();
 	limits.max_alloc = Some(MAX_DECODED_BYTES);
-	let mut reader = ImageReader::with_format(Cursor::new(bytes), sniffed.format());
+	let mut reader = ImageReader::with_format(Cursor::new(bytes), sniffed);
 	reader.limits(limits);
 	reader.decode().map_err(|error| Rejection::Undecodable { detail: error.to_string() })
 }
@@ -210,7 +196,7 @@ mod tests {
 		bytes.extend_from_slice(&[0, 0, 0, 0]);
 		bytes.extend_from_slice(WEBP_SIGNATURE);
 
-		assert_eq!(sniff(&bytes), Some(Sniffed::Webp));
+		assert_eq!(sniff(&bytes), Some(ImageFormat::WebP));
 		assert!(
 			matches!(normalised(&bytes), Err(Rejection::Undecodable { .. })),
 			"a truncated webp was refused as something other than undecodable"

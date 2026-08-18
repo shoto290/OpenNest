@@ -43,15 +43,26 @@ const DIR_NAME: &str = "avatars";
 /// is also what the webview is allowed to ask for.
 const EXTENSION: &str = "png";
 
-/// The directory, created if this is the first avatar this install stores. `None`
-/// is a host that has no app data directory to put one in — the same outcome the
-/// database reports, and it means avatars are unavailable for the run rather than
-/// that the launch failed.
+/// The same reason the database file is `0600`: what a user uploaded is theirs, and
+/// the app data directory is not a place to publish it from. Named per kind rather
+/// than decided from the path, so nothing has to ask the disk what it is about to
+/// restrict.
+const DIR_MODE: u32 = 0o700;
+const FILE_MODE: u32 = 0o600;
+
+/// Where avatars live for this install: a path, and nothing on the disk. Every read
+/// of a bot resolves this to project the column it holds, and a read has no business
+/// creating a directory or writing a mode — [`write`] makes the place, on the one
+/// path that is about to put a file in it.
+///
+/// A directory that is not there yet is therefore normal, and both callers already
+/// answer it: [`readable`] reports no picture, and [`sweep`] has nothing to sweep.
+///
+/// `None` is a host that has no app data directory to put one in — the same outcome
+/// the database reports, and it means avatars are unavailable for the run rather
+/// than that the launch failed.
 pub fn dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-	let dir = app.path().app_data_dir().ok()?.join(DIR_NAME);
-	fs::create_dir_all(&dir).ok()?;
-	restrict_to_owner(&dir).ok()?;
-	Some(dir)
+	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
 }
 
 /// Where a new avatar goes. The name is minted here and carries no part of the
@@ -62,11 +73,17 @@ pub fn minted_path(dir: &Path) -> PathBuf {
 	dir.join(format!("{}.{EXTENSION}", Uuid::new_v4()))
 }
 
-/// The bytes on the disk, owner-only. The picture is already normalised and
-/// already in memory, so this is one write of a whole file: there is no state
-/// where half a picture has been accepted.
+/// The bytes on the disk, owner-only, in a directory made if this is the first
+/// avatar this install stores. The picture is already normalised and already in
+/// memory, so this is one write of a whole file: there is no state where half a
+/// picture has been accepted.
 pub fn write(path: &Path, bytes: &[u8]) -> Result<(), Rejection> {
-	fs::write(path, bytes).and_then(|()| restrict_to_owner(path)).map_err(unwritable)
+	if let Some(dir) = path.parent() {
+		fs::create_dir_all(dir)
+			.and_then(|()| restrict_to_owner(dir, DIR_MODE))
+			.map_err(unwritable)?;
+	}
+	fs::write(path, bytes).and_then(|()| restrict_to_owner(path, FILE_MODE)).map_err(unwritable)
 }
 
 /// The absolute path a recorded one stands for, or `None` if the UI must not be
@@ -128,17 +145,14 @@ fn unwritable(error: std::io::Error) -> Rejection {
 	Rejection::Unwritable { detail: error.to_string() }
 }
 
-/// The same reason the database file is `0600`: what a user uploaded is theirs,
-/// and the app data directory is not a place to publish it from.
 #[cfg(unix)]
-fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
+fn restrict_to_owner(path: &Path, mode: u32) -> std::io::Result<()> {
 	use std::os::unix::fs::PermissionsExt;
-	let mode = if path.is_dir() { 0o700 } else { 0o600 };
 	fs::set_permissions(path, fs::Permissions::from_mode(mode))
 }
 
 #[cfg(not(unix))]
-fn restrict_to_owner(_path: &Path) -> std::io::Result<()> {
+fn restrict_to_owner(_path: &Path, _mode: u32) -> std::io::Result<()> {
 	Ok(())
 }
 
@@ -316,6 +330,9 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	/// The directory is asserted beside the file because writing one is what creates
+	/// the other: a picture nobody else can read, sitting in a directory anybody can
+	/// list, still tells them what a user uploaded and when.
 	#[cfg(unix)]
 	#[test]
 	fn what_a_user_uploaded_is_reachable_by_its_owner_only() {
@@ -324,9 +341,30 @@ mod tests {
 		let dir = temp_dir();
 		let recorded = a_stored_avatar(&dir);
 
-		let mode = fs::metadata(&recorded).expect("metadata").permissions().mode();
+		let mode = |path: &Path| fs::metadata(path).expect("metadata").permissions().mode() & 0o777;
 
-		assert_eq!(mode & 0o777, 0o600, "an uploaded picture must not be world readable");
+		assert_eq!(mode(Path::new(&recorded)), 0o600, "an uploaded picture is world readable");
+		assert_eq!(mode(&dir), 0o700, "the directory of uploaded pictures is world listable");
 		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// `dir` is resolved by every read of a bot, so it must not be the thing that
+	/// creates the directory — and the write path must not depend on it having.
+	#[test]
+	fn the_first_picture_makes_the_directory_that_no_read_created() {
+		let dir = temp_dir().join("not-yet");
+
+		assert_eq!(readable(&dir, "anything.png"), None, "a read of a missing directory failed");
+		sweep(&dir, &[]);
+		assert!(!dir.exists(), "resolving or sweeping a directory created it");
+
+		let recorded = a_stored_avatar(&dir);
+
+		assert!(dir.is_dir(), "the first picture did not make the place it goes");
+		assert_eq!(
+			readable(&dir, &recorded),
+			Some(PathBuf::from(&recorded).canonicalize().unwrap())
+		);
+		fs::remove_dir_all(dir.parent().expect("a parent")).expect("cleanup");
 	}
 }

@@ -145,7 +145,10 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 		detail: "there is no application data directory to store avatars in".to_owned(),
 	})?;
 	let path = avatars::minted_path(&dir);
-	let updated = repository.set_avatar_image_path(id.clone(), Some(recorded(&path))).await?;
+	// Lossy because a column is text and a path is not: the name is this host's own
+	// UUID either way, so nothing here can arrive as bytes no encoding survives.
+	let recorded = path.to_string_lossy().into_owned();
+	let updated = repository.set_avatar_image_path(id.clone(), Some(recorded)).await?;
 	if let Err(rejection) = avatars::write(&path, &normalised) {
 		let _ = repository.set_avatar_image_path(id, None).await;
 		sweep_avatars(repository, Some(&dir)).await;
@@ -153,13 +156,6 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 	}
 	sweep_avatars(repository, Some(&dir)).await;
 	Ok(Bot::of(updated, Some(&dir)))
-}
-
-/// The absolute path as the column holds it. Lossy because a column is text and a
-/// path is not: the name is this host's own UUID either way, so nothing here can
-/// arrive as bytes no encoding survives.
-fn recorded(path: &Path) -> String {
-	path.to_string_lossy().into_owned()
 }
 
 /// The bot, its chat and the whole transcript under it. The last bot may be
