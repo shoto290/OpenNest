@@ -88,7 +88,7 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 
 	return (
 		<div data-slot="markdown-fence" className="relative my-2">
-			<pre className="whitespace-pre">
+			<pre>
 				<span
 					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable
 					tabIndex={0}

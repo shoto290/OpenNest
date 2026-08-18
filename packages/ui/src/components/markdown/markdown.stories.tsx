@@ -1,6 +1,7 @@
 import { expect, fn, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { AssistantTurn, UserTurn } from "@workspace/ui/components/chat-turn"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	MessageBubble,
@@ -278,6 +279,66 @@ const USER_BLOCK = `Run \`bun run test\` before merging — the dedupe now lives
 bun run test --project=unit
 \`\`\``
 
+/** One block of each kind, back to back, opened by a paragraph long enough to wrap:
+ * every boundary the parser puts a newline across, in one bubble. */
+const ADJACENT_BLOCKS = `The archive pass finished at 09:12, and every block below follows the one before it with nothing between them but the margin the prose rules declare.
+
+- read the nest
+- summarise the occupants
+- archive the record
+
+\`\`\`ts
+export const summarise = async (id: string) => {
+	const nest = await readNest(id)
+	return { id: nest.id, occupants: nest.occupants.length }
+}
+\`\`\`
+
+| nest | occupants |
+| :--- | ---: |
+| nest_42 | 3 |
+| nest_43 | 0 |
+
+Two nests archived since the last pass.`
+
+/** A quote and a list item that each hold blocks of their own — the boundaries a rule
+ * placed on the root alone would reach, and one placed on the leaves alone would miss. */
+const NESTED_BLOCKS = `> The sync ran twice.
+>
+> The second pass found nothing.
+
+1. Read the nest.
+
+   Then summarise what it holds.
+
+   - resident
+   - visitor
+
+2. Archive the record.`
+
+/** Every host that carries an author's own spacing: a pasted paragraph, a padded column,
+ * a list item wrapped by hand, a code span, a table cell and a quote. */
+const PRESERVED_WHITESPACE = `Walk me through every package.
+
+Start with the design system,
+then the Tauri shell,
+and anything crossing between them.
+
+nest_42   active
+nest_43       empty
+
+A code span keeps its own run: \`a     b\` beside \`a b\`.
+
+- one item, pasted
+  across two lines
+
+| cell | padded |
+| --- | --- |
+| a     b | a b |
+
+> quoted line one
+> and quoted line two`
+
 const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
 
 /** The box the bubble clips against: if the table frame ever loses its clamp,
@@ -296,6 +357,72 @@ const definitionFor = (canvasElement: HTMLElement, fragment: string) =>
 /** What the code viewport leaves between its own edge and the copy control. */
 const clearanceOf = (viewport: HTMLElement, copy: HTMLElement) =>
 	copy.getBoundingClientRect().left - viewport.getBoundingClientRect().right
+
+/** `leading-6` at chat size: the height a stray newline between two blocks would add. */
+const BLANK_LINE = 24
+
+/** What four extra spaces measure at chat size. A collapsed run measures nothing. */
+const SPACE_RUN = 8
+
+const markdownRootsOf = (canvasElement: HTMLElement) =>
+	canvasElement.querySelectorAll<HTMLElement>('[data-slot="markdown"]')
+
+const gapsBetweenChildren = (element: Element) => {
+	const rects = [...element.children].map((child) =>
+		child.getBoundingClientRect(),
+	)
+
+	return rects.slice(1).map((rect, index) => rect.top - rects[index].bottom)
+}
+
+/** Every space the renderer left between two blocks, at any depth: a stray newline inside
+ * anything holding blocks rather than words is what paints as a blank line. */
+const blockGapsIn = (root: HTMLElement) =>
+	[root, ...root.querySelectorAll("blockquote, li, ul, ol")].flatMap(
+		gapsBetweenChildren,
+	)
+
+const contentRangeOf = (element: Element) => {
+	const range = document.createRange()
+	range.selectNodeContents(element)
+
+	return range
+}
+
+/** How many lines the browser painted for this element's text, whatever the source said. */
+const renderedLinesOf = (element: Element) =>
+	new Set(
+		[...contentRangeOf(element).getClientRects()].map(({ top }) =>
+			Math.round(top),
+		),
+	).size
+
+/** The width the text of an element actually took, spaces included. */
+const textWidthOf = (element: Element) =>
+	contentRangeOf(element).getBoundingClientRect().width
+
+const textNodesOf = (element: Element) => {
+	const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+	const nodes: Text[] = []
+
+	while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+
+	return nodes
+}
+
+/** Where a word landed, whatever markup the renderer wrapped it in. Measured on the
+ * glyph itself, so whitespace ahead of it is exactly what moves it. */
+const wordLeftOf = (element: Element, word: string) => {
+	const text = textNodesOf(element).find(({ data }) =>
+		data.includes(word),
+	) as Text
+	const start = text.data.indexOf(word)
+	const range = document.createRange()
+	range.setStart(text, start)
+	range.setEnd(text, start + word.length)
+
+	return range.getBoundingClientRect().left
+}
 
 const paintedTokens = (fence: HTMLElement) =>
 	fence.querySelectorAll("[style*='--code-token-light']").length
@@ -995,4 +1122,107 @@ export const InSolidBubble = meta.story({
 			</MessageBubbleContent>
 		</MessageBubble>
 	),
+})
+
+export const AdjacentBlocks = meta.story({
+	args: { children: ADJACENT_BLOCKS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Paragraph, list, fence and table one after another, in the two turns a transcript is made of. A turn sets `whitespace-pre-wrap` so a pasted prompt keeps what its author typed, and the parser leaves a newline between every two blocks — inherited by the container holding them, each of those newlines paints as a blank line. The containers collapse it instead, so the only space between two blocks is the margin the prose rules declare, while the opening paragraph still wraps on words at the bubble edge and the fence keeps its tabs from `pre` alone. Check that the rhythm is identical on the solid bubble and the muted one.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex flex-col gap-6">
+			<UserTurn>
+				<Markdown {...args} />
+			</UserTurn>
+			<AssistantTurn>
+				<Markdown {...args} />
+			</AssistantTurn>
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const roots = markdownRootsOf(canvasElement)
+
+		await expect(roots).toHaveLength(2)
+
+		for (const root of roots) {
+			const [opening] = root.querySelectorAll("p")
+			const [code] = root.querySelectorAll('[data-slot="markdown-fence"] code')
+			const [signature, body] = code.children
+
+			await expect(Math.max(...blockGapsIn(root))).toBeLessThan(BLANK_LINE)
+			await expect(renderedLinesOf(opening)).toBeGreaterThan(1)
+			await expect(opening.scrollWidth).toBe(opening.clientWidth)
+			await expect(renderedLinesOf(code)).toBe(4)
+			await expect(wordLeftOf(body, "const")).toBeGreaterThan(
+				wordLeftOf(signature, "export"),
+			)
+		}
+	},
+})
+
+export const NestedBlocks = meta.story({
+	args: { children: NESTED_BLOCKS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same boundary one level down: a quote holding two paragraphs, and a numbered item holding a paragraph and a list of its own. A list item is the one element that is both a container and a leaf — it collapses only once it wraps its content in blocks, which is exactly when a newline inside it would show. Check that the quote reads as two paragraphs rather than four, and that the nested list sits under its item at the same rhythm as any other pair of blocks.",
+			},
+		},
+	},
+	render: (args) => (
+		<AssistantTurn>
+			<Markdown {...args} />
+		</AssistantTurn>
+	),
+	play: async ({ canvasElement }) => {
+		const [root] = markdownRootsOf(canvasElement)
+
+		await expect(root.querySelectorAll("blockquote p")).toHaveLength(2)
+		await expect(Math.max(...blockGapsIn(root))).toBeLessThan(BLANK_LINE)
+	},
+})
+
+export const PreservedWhitespace = meta.story({
+	args: { children: PRESERVED_WHITESPACE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"What the reader typed, kept: a paste broken across three lines, a column padded to line up, a list item wrapped by hand, a code span holding a run of spaces, a table cell holding another, and a quote written across two lines. Whitespace is markup between blocks and text inside them, so only what holds blocks collapses it — every leaf here reads it as the author's. A proportional face cannot make padded columns meet, but it must not swallow the padding either. Check that nothing reflows into fewer lines than it was written on.",
+			},
+		},
+	},
+	render: (args) => (
+		<UserTurn>
+			<Markdown {...args} />
+		</UserTurn>
+	),
+	play: async ({ canvasElement }) => {
+		const [root] = markdownRootsOf(canvasElement)
+		const [, pasted, padded, spans] = root.querySelectorAll("p")
+		const [item] = root.querySelectorAll("li")
+		const [paddedCode, plainCode] = spans.querySelectorAll("code")
+		const [paddedCell, plainCell] = root.querySelectorAll("td")
+		const [quoted] = root.querySelectorAll("blockquote p")
+
+		await expect(renderedLinesOf(pasted)).toBe(3)
+		await expect(renderedLinesOf(padded)).toBe(2)
+		await expect(
+			wordLeftOf(padded, "empty") - wordLeftOf(padded, "active"),
+		).toBeGreaterThan(SPACE_RUN)
+		await expect(renderedLinesOf(item)).toBe(2)
+		await expect(
+			textWidthOf(paddedCode) - textWidthOf(plainCode),
+		).toBeGreaterThan(SPACE_RUN)
+		await expect(
+			textWidthOf(paddedCell) - textWidthOf(plainCell),
+		).toBeGreaterThan(SPACE_RUN)
+		await expect(renderedLinesOf(quoted)).toBe(2)
+	},
 })
