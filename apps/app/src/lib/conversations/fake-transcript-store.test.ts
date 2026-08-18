@@ -5,7 +5,7 @@ import {
 	FAKE_CHAT_ID,
 } from "./fake-transcript-store"
 import type { NewAssistantMessage, NewUserMessage } from "./store-contract"
-import { message } from "./transcript-fixtures"
+import { botIdentity, message } from "./transcript-fixtures"
 
 const TURN = { id: "t-1", conversationId: FAKE_CHAT_ID, startedAt: 1 }
 
@@ -130,5 +130,59 @@ describe("createFakeTranscriptStore", () => {
 		})
 
 		expect(await store.appendUserMessage(PROMPT)).toBe(8)
+	})
+
+	it("lists the bot it ships with, then the ones it is told to make", async () => {
+		const store = createFakeTranscriptStore()
+
+		const created = await store.createBot(botIdentity())
+
+		expect((await store.bots()).map((bot) => bot.id)).toEqual([
+			"default",
+			created.id,
+		])
+		expect(created.name).toBe("Nyx")
+		expect(created.model).toBe("opus")
+		expect(created.avatarAnimal).toBe("owl")
+	})
+
+	it("replaces who a bot is and leaves its id and its moment alone", async () => {
+		const store = createFakeTranscriptStore()
+		const created = await store.createBot(botIdentity())
+
+		const updated = await store.updateBot(
+			created.id,
+			botIdentity({ name: "Ada", model: "haiku", avatarPose: "sleeping" }),
+		)
+
+		expect(updated.id).toBe(created.id)
+		expect(updated.createdAt).toBe(created.createdAt)
+		expect(updated.name).toBe("Ada")
+		expect(updated.model).toBe("haiku")
+		expect(updated.avatarPose).toBe("sleeping")
+	})
+
+	it("refuses a write on a bot it no longer holds", async () => {
+		const store = createFakeTranscriptStore()
+		const created = await store.createBot(botIdentity())
+		await store.deleteBot(created.id)
+
+		await expect(store.deleteBot(created.id)).rejects.toEqual({
+			kind: "unknownBot",
+			id: created.id,
+		})
+		await expect(store.updateBot(created.id, botIdentity())).rejects.toEqual({
+			kind: "unknownBot",
+			id: created.id,
+		})
+		expect((await store.bots()).map((bot) => bot.id)).toEqual(["default"])
+	})
+
+	it("lets the last bot go and answers an empty list after it", async () => {
+		const store = createFakeTranscriptStore()
+
+		await store.deleteBot("default")
+
+		expect(await store.bots()).toEqual([])
 	})
 })

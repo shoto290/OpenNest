@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 
 import type {
 	Bot,
+	BotIdentity,
 	Chat,
 	ContextCheckpoint,
 	NewAssistantMessage,
@@ -28,6 +29,16 @@ export const conversationStore: TranscriptStore = {
 		}),
 
 	defaultBot: () => invoke<Bot>("conversation_default_bot"),
+
+	bots: () => invoke<Bot[]>("conversation_bots"),
+
+	createBot: (identity: BotIdentity) =>
+		invoke<Bot>("conversation_create_bot", { identity }),
+
+	updateBot: (id: string, identity: BotIdentity) =>
+		invoke<Bot>("conversation_update_bot", { id, identity }),
+
+	deleteBot: (id: string) => invoke<void>("conversation_delete_bot", { id }),
 
 	mainChat: (botId: string) =>
 		invoke<Chat>("conversation_main_chat", { botId }),

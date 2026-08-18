@@ -13,7 +13,7 @@ import {
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptPage,
 } from "./transcript-contract"
-import { CONVERSATION, message } from "./transcript-fixtures"
+import { botIdentity, CONVERSATION, message } from "./transcript-fixtures"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
@@ -60,11 +60,33 @@ type WriteCase = {
 	call: [command: string, args?: Record<string, unknown>]
 }
 
+const IDENTITY = botIdentity({ workingDir: "/work/opennest" })
+
 const WRITES: WriteCase[] = [
 	{
 		member: "defaultBot",
 		write: () => conversationStore.defaultBot(),
 		call: ["conversation_default_bot"],
+	},
+	{
+		member: "bots",
+		write: () => conversationStore.bots(),
+		call: ["conversation_bots"],
+	},
+	{
+		member: "createBot",
+		write: () => conversationStore.createBot(IDENTITY),
+		call: ["conversation_create_bot", { identity: IDENTITY }],
+	},
+	{
+		member: "updateBot",
+		write: () => conversationStore.updateBot("b-1", IDENTITY),
+		call: ["conversation_update_bot", { id: "b-1", identity: IDENTITY }],
+	},
+	{
+		member: "deleteBot",
+		write: () => conversationStore.deleteBot("b-1"),
+		call: ["conversation_delete_bot", { id: "b-1" }],
 	},
 	{
 		member: "mainChat",
@@ -138,6 +160,7 @@ const ENDINGS: TerminalCompletion[] = [
 const FAILURES: TranscriptStoreError[] = [
 	{ kind: "conflict", id: "m1", field: "content" },
 	{ kind: "unavailable", failure: { kind: "appDataDir" } },
+	{ kind: "unknownBot", id: "b-1" },
 ]
 
 beforeEach(() => {

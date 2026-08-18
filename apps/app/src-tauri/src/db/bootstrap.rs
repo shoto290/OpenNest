@@ -179,10 +179,10 @@ fn decided(connection: &mut Connection, path: &Path) -> Result<LegacyImport, Con
 }
 
 /// Everything the snapshot becomes. The bot, the chat and the seat come from
-/// [`ensure_chat_in`] rather than from SQL of our own, so this path meets the same
-/// identity rule as every other one — a default bot another build wrote refuses
-/// the import whole instead of running the transcript on a bot nobody here agreed
-/// to.
+/// [`ensure_chat_in`] rather than from SQL of our own, so an import lands on the
+/// one row the seed writes and the one thread it seats — including when the user
+/// has already renamed that bot or moved it to another model, which this path
+/// neither reads nor touches.
 ///
 /// Only the last turn is kept as it goes: the activities are filed under it, because
 /// a step belongs to the exchange it was taken during and the snapshot says nothing

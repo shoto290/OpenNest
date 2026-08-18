@@ -18,6 +18,7 @@ struct Migration {
 const MIGRATIONS: &[Migration] = &[
 	Migration { version: 1, statements: CONVERSATIONS_SCHEMA },
 	Migration { version: 2, statements: BOT_CONTEXT },
+	Migration { version: 3, statements: BOT_IDENTITY },
 ];
 
 /// Timestamps are unix millis, ids are UUID v4 text: both are what the host
@@ -189,6 +190,35 @@ ALTER TABLE bots ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
 ALTER TABLE bots ADD COLUMN memory TEXT NOT NULL DEFAULT '';
 ";
 
+/// Who the bot is, beside what it was told: a short role label, a long free text,
+/// the avatar it is recognised by, and the directory its runs are meant to happen
+/// in. `title` and `description` are `NOT NULL DEFAULT ''` for the reason step 2's
+/// columns are — empty is the honest value for a bot nobody has described, and it
+/// is what `ALTER TABLE` can answer for the rows already on disk.
+///
+/// The two avatar columns are `CHECK`-constrained to the words the avatar engine
+/// draws, spelled out here rather than trusted to the writer: a row holding a
+/// ninth animal would be a bot the UI has no face for, and nothing downstream
+/// could tell it from a typo. The defaults are what the bot already on the record
+/// is given — it had no face before this step, and every row must come out of the
+/// step with one.
+///
+/// `avatar_image_path` and `working_dir` are NULLable rather than empty-defaulted:
+/// both name something outside the database, and "no picture" and "a picture at
+/// the empty path" are not the same fact.
+const BOT_IDENTITY: &str = "
+ALTER TABLE bots ADD COLUMN title TEXT NOT NULL DEFAULT '';
+ALTER TABLE bots ADD COLUMN description TEXT NOT NULL DEFAULT '';
+ALTER TABLE bots ADD COLUMN avatar_animal TEXT NOT NULL DEFAULT 'cat'
+	CHECK (avatar_animal IN
+		('cat', 'rabbit', 'bear', 'chick', 'dog', 'mouse', 'owl', 'koala'));
+ALTER TABLE bots ADD COLUMN avatar_pose TEXT NOT NULL DEFAULT 'idle'
+	CHECK (avatar_pose IN
+		('idle', 'happy', 'curious', 'proud', 'shy', 'playful', 'bored', 'sleeping'));
+ALTER TABLE bots ADD COLUMN avatar_image_path TEXT;
+ALTER TABLE bots ADD COLUMN working_dir TEXT;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -330,7 +360,7 @@ mod tests {
 	/// and the columns the new build reads them through. Empty rather than absent —
 	/// nothing has been said to this bot yet, and a context leaves such a part out.
 	#[test]
-	fn a_file_installed_before_the_last_step_keeps_its_rows_and_gains_its_columns() {
+	fn a_file_installed_before_the_later_steps_keeps_its_rows_and_gains_their_columns() {
 		let dir = temp_dir();
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
 		apply_each(&mut connection, &MIGRATIONS[..1]).expect("the shipped schema installs");
@@ -361,9 +391,212 @@ mod tests {
 			(String::new(), String::new(), "First".to_owned()),
 			"a bot from the older build did not survive the step that reads it"
 		);
+		assert_eq!(
+			identity_of(&connection, "b1"),
+			(String::new(), String::new(), "cat".to_owned(), "idle".to_owned(), None, None),
+			"a bot from the older build came out of the step without a face"
+		);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// What the install already on disk is: the bot the app shipped with, the chat
+	/// it holds and every word said in it. All of it has to be reachable after the
+	/// step, and the bot has to come out of it wearing a face it never had.
+	#[test]
+	fn the_bot_already_on_the_record_keeps_its_transcript_and_gains_a_face() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..2]).expect("the shipped schema installs");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, name, model, created_at)
+					VALUES ('default', 'Claude', 'sonnet', 1);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'main', 'Chat', 1, 1);
+				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
+					VALUES ('c1', 'default', 'assistant', 1);
+				INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'c1', 1, 1);
+				INSERT INTO messages
+					(id, conversation_id, turn_id, author_bot_id, seq, role, content,
+						completion_state, created_at)
+					VALUES ('m1', 'c1', 't1', NULL, 1, 'user', 'hello', 'complete', 1),
+						('m2', 'c1', 't1', 'default', 2, 'assistant', 'hi there', 'complete', 2);",
+			)
+			.expect("the install this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			transcript_of(&connection, "c1"),
+			vec!["hello".to_owned(), "hi there".to_owned()],
+			"the step the bot gained a face in cost it its transcript"
+		);
+		assert_eq!(
+			identity_of(&connection, "default"),
+			(String::new(), String::new(), "cat".to_owned(), "idle".to_owned(), None, None)
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The two ways a file reaches this build — installed fresh, or upgraded from
+	/// the version before — have to leave the same schema behind. They run the same
+	/// text in the same order, and this is what says so out loud: a step written as
+	/// a `CREATE` for one path and an `ALTER` for the other would pass every other
+	/// test in this file and diverge here, down to the declaration each column
+	/// carries.
+	#[test]
+	fn a_fresh_install_and_an_upgraded_file_come_out_the_same_shape() {
+		let fresh_dir = temp_dir();
+		let upgraded_dir = temp_dir();
+		let mut fresh = open(&fresh_dir.join(FILE_NAME)).expect("open");
+		let mut upgraded = open(&upgraded_dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut upgraded, &MIGRATIONS[..2]).expect("the shipped schema installs");
+
+		apply(&mut fresh).expect("the schema installs");
+		apply(&mut upgraded).expect("the file comes up to this build");
+
+		assert_eq!(version(&fresh).expect("version"), version(&upgraded).expect("version"));
+		assert_eq!(
+			schema_of(&fresh),
+			schema_of(&upgraded),
+			"a file that was upgraded holds a different schema than one installed fresh"
+		);
+
+		drop(fresh);
+		drop(upgraded);
+		fs::remove_dir_all(&fresh_dir).expect("cleanup");
+		fs::remove_dir_all(&upgraded_dir).expect("cleanup");
+	}
+
+	/// Every object the file holds and the text it was declared with. `ALTER TABLE
+	/// ADD COLUMN` rewrites that text, so the column a step appended — its type, its
+	/// default and the `CHECK` on it — is inside what this compares.
+	fn schema_of(connection: &Connection) -> Vec<(String, String)> {
+		let mut statement = connection
+			.prepare(
+				"SELECT name, COALESCE(sql, '') FROM sqlite_master
+					WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+			)
+			.expect("prepare");
+		statement
+			.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+			.expect("query")
+			.collect::<rusqlite::Result<Vec<_>>>()
+			.expect("rows")
+	}
+
+	/// A launch that has nothing to do must do nothing: the number is the whole
+	/// bookkeeping, so running the steps again on a file already at the latest
+	/// version leaves both the version and the rows exactly as they were.
+	#[test]
+	fn running_the_steps_again_on_an_up_to_date_file_changes_nothing() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply(&mut connection).expect("the schema installs");
+		write(
+			&connection,
+			"INSERT INTO bots (id, name, model, created_at, title, avatar_animal, avatar_pose)
+				VALUES ('b1', 'First', 'sonnet', 1, 'Reviewer', 'owl', 'curious')",
+		)
+		.expect("a bot written between the two runs");
+
+		apply(&mut connection).expect("the steps run a second time");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			identity_of(&connection, "b1"),
+			(
+				"Reviewer".to_owned(),
+				String::new(),
+				"owl".to_owned(),
+				"curious".to_owned(),
+				None,
+				None
+			),
+			"a second run rewrote a row it had nothing to do with"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The eight animals and the eight poses the avatar engine draws, and nothing
+	/// else: a word outside them is a bot the UI has no face for, so it never
+	/// reaches the disk to be read back.
+	#[test]
+	fn a_face_the_avatar_engine_cannot_draw_is_refused() {
+		let dir = temp_dir();
+		let connection = migrated(&dir);
+
+		for animal in ["cat", "rabbit", "bear", "chick", "dog", "mouse", "owl", "koala"] {
+			assert!(
+				write(&connection, &a_bot_shown_as(animal, "idle", animal)).is_ok(),
+				"the engine draws {animal} and the file refused it"
+			);
+		}
+		for pose in ["idle", "happy", "curious", "proud", "shy", "playful", "bored", "sleeping"] {
+			assert!(
+				write(&connection, &a_bot_shown_as("cat", pose, pose)).is_ok(),
+				"the engine draws {pose} and the file refused it"
+			);
+		}
+		assert!(
+			write(&connection, &a_bot_shown_as("dragon", "idle", "unknown-animal")).is_err(),
+			"an animal the engine cannot draw was stored"
+		);
+		assert!(
+			write(&connection, &a_bot_shown_as("cat", "furious", "unknown-pose")).is_err(),
+			"a pose the engine cannot draw was stored"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn a_bot_shown_as(animal: &str, pose: &str, id: &str) -> String {
+		format!(
+			"INSERT INTO bots (id, name, model, created_at, avatar_animal, avatar_pose)
+				VALUES ('{id}', 'A bot', 'sonnet', 1, '{animal}', '{pose}')"
+		)
+	}
+
+	type StoredIdentity = (String, String, String, String, Option<String>, Option<String>);
+
+	fn identity_of(connection: &Connection, id: &str) -> StoredIdentity {
+		connection
+			.query_row(
+				"SELECT title, description, avatar_animal, avatar_pose, avatar_image_path,
+					working_dir
+					FROM bots WHERE id = ?1",
+				[id],
+				|row| {
+					Ok((
+						row.get(0)?,
+						row.get(1)?,
+						row.get(2)?,
+						row.get(3)?,
+						row.get(4)?,
+						row.get(5)?,
+					))
+				},
+			)
+			.expect("query")
+	}
+
+	fn transcript_of(connection: &Connection, conversation_id: &str) -> Vec<String> {
+		let mut statement = connection
+			.prepare("SELECT content FROM messages WHERE conversation_id = ?1 ORDER BY seq ASC")
+			.expect("prepare");
+		statement
+			.query_map([conversation_id], |row| row.get::<_, String>(0))
+			.expect("query")
+			.collect::<rusqlite::Result<Vec<_>>>()
+			.expect("rows")
 	}
 
 	fn has_table(connection: &Connection, name: &str) -> bool {

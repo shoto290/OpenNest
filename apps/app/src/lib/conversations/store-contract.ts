@@ -1,4 +1,51 @@
-export type Bot = { id: string; name: string; model: string; createdAt: number }
+/** The model labels the host accepts, which are Claude Code's own aliases. A bot
+ * is moved between them from its own settings; nothing outside this union reaches
+ * the column. */
+export type BotModel = "opus" | "sonnet" | "haiku"
+
+/** The eight animals the avatar engine draws. The host holds the same eight and
+ * refuses anything else at the boundary, so a value outside this union never
+ * reaches the file. */
+export type AvatarAnimal =
+	| "cat"
+	| "rabbit"
+	| "bear"
+	| "chick"
+	| "dog"
+	| "mouse"
+	| "owl"
+	| "koala"
+
+/** The eight poses a bot is identified by. The engine animates many more — what a
+ * bot is doing right now belongs to the runtime and is not stored. */
+export type AvatarPose =
+	| "idle"
+	| "happy"
+	| "curious"
+	| "proud"
+	| "shy"
+	| "playful"
+	| "bored"
+	| "sleeping"
+
+/** Who a bot is, as the store is told it — whole, both to create one and to
+ * change one. No `id` or `createdAt`: neither is a caller's to choose.
+ * `avatarImagePath` and `workingDir` are `null` rather than empty, since both name
+ * something outside the database. */
+export type BotIdentity = {
+	name: string
+	title: string
+	description: string
+	model: BotModel
+	avatarAnimal: AvatarAnimal
+	avatarPose: AvatarPose
+	avatarImagePath: string | null
+	workingDir: string | null
+}
+
+/** A bot as the host answers it: everything it was described with, plus the two
+ * the host owns — the id it minted and the moment it wrote the row. */
+export type Bot = BotIdentity & { id: string; createdAt: number }
 
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
@@ -61,10 +108,4 @@ export type TranscriptStoreError =
 	| { kind: "storage"; failure: StorageFailure }
 	| { kind: "conflict"; id: string; field: string }
 	| { kind: "invalidTransition"; id: string; from: string; to: string }
-	| {
-			kind: "identityConflict"
-			id: string
-			field: string
-			expected: string
-			stored: string
-	  }
+	| { kind: "unknownBot"; id: string }
