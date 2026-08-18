@@ -189,9 +189,17 @@ export function createChatController(
 	let detach: Promise<() => void> | null = null
 	const listeners = new Set<() => void>()
 
-	/** Every write in the order it was issued. Two deltas racing on the same row
-	 * would concatenate in whichever order the host answered, which is the one
-	 * thing an append-only column cannot be asked to forgive. */
+	/** Every read and every write in the order it was issued. Two deltas racing on
+	 * the same row would concatenate in whichever order the host answered, which is
+	 * the one thing an append-only column cannot be asked to forgive.
+	 *
+	 * The reads are in it for the other half of that: a page carries a row's whole
+	 * content while a delta carries the words to add to it, so a page read while a
+	 * write is in flight is read against a screen that does not hold that write yet —
+	 * and the merge, seeing the durable row further along, takes it, after which the
+	 * delta lands on top of the words it already contains. Queued together, a write
+	 * that has reached the store has reached the screen before the read after it
+	 * begins, so the two can no longer disagree about how far the row has come. */
 	const enqueue = createQueue()
 
 	const publish = () => {
@@ -710,7 +718,7 @@ export function createChatController(
 			// first call fills the screen from what has already been read, and the
 			// second paints the page this load went for.
 			syncBot(bot)
-			await transcript.load(chat.id)
+			await enqueue(() => transcript.load(chat.id))
 			syncBot(bot)
 		} catch (reason) {
 			reportStore(bot, reason)
@@ -735,9 +743,7 @@ export function createChatController(
 		const bot = botFor(nextBotId)
 		selected = bot
 		publish()
-		if (!bot.state.conversationId) {
-			await openConversation(bot)
-		}
+		await openConversation(bot)
 		return openedFor(bot)
 	}
 
@@ -837,7 +843,7 @@ export function createChatController(
 		}
 		dispatch(bot, { type: "olderLoading", loading: true })
 		try {
-			await transcript.loadOlder(conversationId)
+			await enqueue(() => transcript.loadOlder(conversationId))
 		} catch (reason) {
 			reportStore(bot, reason)
 		} finally {

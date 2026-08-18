@@ -1099,6 +1099,66 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
+	// The way back re-reads the tail of a conversation the bot never stopped writing
+	// into, so the page carries words whose deltas have not reached the screen yet.
+	// Read and write go through the one queue for that reason: every delta the store
+	// has taken has been shown by the time the page merges, so the tail is never
+	// counted twice.
+	it("re-reads a streaming transcript on the way back without doubling its tail", async () => {
+		const base = createFakeTranscriptStore()
+		const other = await base.createBot(botIdentity({ name: "Second" }))
+		const stored = deferred()
+		let holdsTheWrite = false
+		const store: TranscriptStore = {
+			...base,
+			appendText: async (id, text) => {
+				const written = await base.appendText(id, text)
+				if (holdsTheWrite) {
+					await stored.promise
+				}
+				return written
+			},
+		}
+		const harness = await bootedHarness({ store })
+		vi.spyOn(harness.driver, "submitPrompt").mockResolvedValue()
+		await harness.controller.send("hello")
+		harness.driver.pushEvent({
+			type: "messageStarted",
+			message: STREAMING_MESSAGE,
+		})
+		harness.driver.pushEvent({
+			type: "messageDelta",
+			id: "msg-1",
+			seq: 1,
+			text: "Half",
+		})
+		await vi.runAllTimersAsync()
+		const leaving = runOf(harness.controller)
+
+		await harness.controller.open(other.id)
+		await vi.runAllTimersAsync()
+
+		// The store takes the rest of the answer and nothing shows it yet: this is the
+		// moment a re-read of the tail would see more than the screen holds.
+		holdsTheWrite = true
+		harness.driver.pushEvent(
+			{ type: "messageDelta", id: "msg-1", seq: 2, text: " an answer" },
+			leaving,
+		)
+		await vi.runAllTimersAsync()
+
+		const returning = harness.controller.open(BOT)
+		stored.release()
+		await returning
+		await vi.runAllTimersAsync()
+
+		expect(spoken(harness.controller.getState().messages)).toEqual([
+			["user", "hello", "complete"],
+			["assistant", "Half an answer", "streaming"],
+		])
+		harness.detach()
+	})
+
 	// Two bots, two processes, one reader. Neither turn is refused because the other
 	// is running, and each answer lands in the conversation of the bot that gave it.
 	it("lets two bots answer at once, each into its own conversation", async () => {
