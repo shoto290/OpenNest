@@ -12,6 +12,14 @@ import type { ExtraProps } from "react-markdown"
 import { Button } from "@workspace/ui/components/button"
 import { CodeLine } from "@workspace/ui/components/code-block"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	MarkdownMath,
+	MATH_LANGUAGE,
+} from "@workspace/ui/components/markdown/math"
+import {
+	MarkdownMermaid,
+	MERMAID_LANGUAGE,
+} from "@workspace/ui/components/markdown/mermaid"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { highlightCode, toCodeLines } from "@workspace/ui/lib/code-highlight"
 
@@ -64,12 +72,19 @@ const languageOf = (node: FenceElement) => {
 const fitsInOneFrame = (code: string) =>
 	code.split("\n", HIGHLIGHT_BUDGET_LINES + 1).length <= HIGHLIGHT_BUDGET_LINES
 
-/** Inline code: the parser output is already the markup this renderer wants. */
+/** Inline code: the parser output is already the markup this renderer wants, except for
+ * the one label `remark-math` writes — an expression is typeset, not quoted. */
 export const MarkdownCode = ({
 	node,
 	children,
 	...props
-}: MarkdownCodeProps) => <code {...props}>{children}</code>
+}: MarkdownCodeProps) => {
+	if (node && languageOf(node) === MATH_LANGUAGE) {
+		return <MarkdownMath source={sourceOf(node)} />
+	}
+
+	return <code {...props}>{children}</code>
+}
 
 /** The surface, radius and scroll come from the prose class the renderer owns, so a
  * fence keeps reading like markdown on every bubble variant; the tokens and the copy
@@ -124,10 +139,18 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 }
 
 /** A fence arrives as `pre > code`, so the source text and its label are read from the
- * node rather than from rendered children — a token tree cannot be copied back to text. */
+ * node rather than from rendered children — a token tree cannot be copied back to text.
+ * Two labels are not code at all: `math` is what a `$$` block becomes, and `mermaid` is
+ * a drawing an author asked for; both take their own renderer and neither is painted. */
 export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	const code = codeChildOf(node)
 	if (!code) return <pre {...props}>{children}</pre>
 
-	return <MarkdownFence code={sourceOf(code)} language={languageOf(code)} />
+	const source = sourceOf(code)
+	const language = languageOf(code)
+
+	if (language === MATH_LANGUAGE) return <MarkdownMath display source={source} />
+	if (language === MERMAID_LANGUAGE) return <MarkdownMermaid source={source} />
+
+	return <MarkdownFence code={source} language={language} />
 }
