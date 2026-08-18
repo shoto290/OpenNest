@@ -248,6 +248,9 @@ const AgentSidebarBase = ({
 						onClick={onCreateBot}
 						size="icon-sm"
 						tooltip={CREATE_LABEL}
+						// The header is against the top of the window and the label is taller
+						// than the gap above it, so above is off the screen.
+						tooltipSide="bottom"
 						variant="ghost"
 					>
 						<Icons.Add aria-hidden="true" />

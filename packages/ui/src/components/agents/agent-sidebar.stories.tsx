@@ -301,6 +301,49 @@ export const Roster = meta.story({
 	},
 })
 
+export const CreateLabel = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The one label in this panel that cannot open upwards. The create control is pinned in the region that clears the window controls, against the top of the window, so a label above it would be drawn off the screen — it opens under the button instead, on hover and on focus alike. Check both, and check that the bubble sits inside the window on every edge: a label a reader cannot read is the same as no label.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const create = canvas.getByRole("button", { name: "New bot" })
+		const label = () => document.body.querySelector('[role="tooltip"]')
+
+		const opensBelow = async () => {
+			await waitFor(async () => {
+				await expect(label()).toBeVisible()
+				await expect(label()).toHaveTextContent("New bot")
+			})
+			const bubble = label()?.getBoundingClientRect()
+			const button = create.getBoundingClientRect()
+			if (!bubble) throw new Error("The create control drew no label")
+
+			await expect(bubble.top).toBeGreaterThanOrEqual(button.bottom)
+			await expect(bubble.top).toBeGreaterThanOrEqual(0)
+			await expect(bubble.left).toBeGreaterThanOrEqual(0)
+			await expect(bubble.bottom).toBeLessThanOrEqual(window.innerHeight)
+			await expect(bubble.right).toBeLessThanOrEqual(window.innerWidth)
+		}
+
+		await userEvent.hover(create)
+		await opensBelow()
+
+		await userEvent.unhover(create)
+		await waitFor(async () => expect(label()).toBeNull())
+
+		// The same label, reached the other way: Tab is what a reader who never
+		// touches the mouse gets, and it must not be drawn where hover was not.
+		await userEvent.tab()
+		await expect(create).toHaveFocus()
+		await opensBelow()
+	},
+})
+
 export const Empty = meta.story({
 	args: { bots: [] },
 	parameters: {
