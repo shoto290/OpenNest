@@ -7,6 +7,7 @@ import { MARKDOWN_COMPONENTS } from "@workspace/ui/components/markdown/component
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
 	MARKDOWN_PROSE_CLASS,
+	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
 import { MARKDOWN_SANITIZE_SCHEMA } from "@workspace/ui/components/markdown/sanitize"
 import { rehypeScopeIds } from "@workspace/ui/components/markdown/scope-ids"
@@ -22,6 +23,7 @@ export interface MarkdownProps {
 const MARKDOWN_CLASS = cn(
 	MARKDOWN_PROSE_CLASS,
 	MARKDOWN_CODE_SURFACE_CLASS,
+	MARKDOWN_WHITESPACE_CLASS,
 	"text-sm leading-6",
 )
 
