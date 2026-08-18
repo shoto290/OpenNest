@@ -13,7 +13,10 @@ import {
 } from "react"
 
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
-import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	BotIdentityAvatar,
+	type BotWorkingKind,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { POPUP_CLASS } from "@workspace/ui/components/bot-settings-panel/styles"
 import {
 	BOT_IDENTITY_ANIMALS,
@@ -62,6 +65,9 @@ const PickerGroup = ({ label, className, children }: PickerGroupProps) => (
 type BotIdentityPickerProps = {
 	identity: BotIdentity
 	working: boolean
+	/** What the bot is busy with, so the preview performs the work the rest of the
+	 * app is showing rather than a work of its own. */
+	workingKind?: BotWorkingKind
 	onIdentityChange: (identity: BotIdentity) => void
 	onAvatarUpload: (file: File) => void
 }
@@ -69,6 +75,7 @@ type BotIdentityPickerProps = {
 const BotIdentityPicker = ({
 	identity,
 	working,
+	workingKind,
 	onIdentityChange,
 	onAvatarUpload,
 }: BotIdentityPickerProps) => {
@@ -109,6 +116,7 @@ const BotIdentityPicker = ({
 					<BotIdentityAvatar
 						animal={identity.animal}
 						image={identity.image}
+						kind={workingKind}
 						pose={identity.pose}
 						size={PREVIEW_SIZE}
 						working={working}

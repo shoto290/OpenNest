@@ -4,9 +4,11 @@ import { useState } from "react"
 
 import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
 import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
-import type { BotWorkingKind } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	BotIdentityAvatar,
+	type BotWorkingKind,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { CHAT_AVATAR_SIZE } from "@workspace/ui/components/chat-turn"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
@@ -18,7 +20,12 @@ interface BotWorkingProps {
 	name?: string
 	/** What it is working on right now, e.g. the running tool. Replaces the verb. */
 	label?: string
+	/** The working bot's own animal. Leave it out and the avatar draws the one it
+	 * defaults to, which is a different bot than the one doing the work. */
 	animal?: BotAvatarAnimal
+	/** The picture that bot wears, if it wears one: it keeps wearing it while it
+	 * works, and the activity dot is what says so. */
+	image?: string
 	size?: number
 	className?: string
 }
@@ -34,6 +41,7 @@ function BotWorking({
 	name = "No name",
 	label,
 	animal,
+	image,
 	size = CHAT_AVATAR_SIZE,
 	className,
 }: BotWorkingProps) {
@@ -54,7 +62,13 @@ function BotWorking({
 				onPointerEnter={() => setPointed(true)}
 				onPointerLeave={() => setPointed(false)}
 			>
-				<BotAvatar animal={animal} size={size} state={kind} />
+				<BotIdentityAvatar
+					animal={animal}
+					image={image}
+					kind={kind}
+					size={size}
+					working
+				/>
 			</SharedMark>
 			<span
 				className={cn(

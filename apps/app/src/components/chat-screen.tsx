@@ -125,10 +125,16 @@ const ActivityLog = memo(function ActivityLog({
 	activities,
 	turn,
 	workingKind,
-}: {
+	name,
+	animal,
+	image,
+}: Omit<BotFace, "pose"> & {
 	activities: ActivityEvent[]
 	turn: TurnState
 	workingKind?: BotWorkingKind
+	/** The bot doing the work: it is its own animal that performs it, and its own
+	 * name the row puts in front of the verb. */
+	name: string
 }) {
 	const items = toActivityItems(activities)
 
@@ -138,7 +144,14 @@ const ActivityLog = memo(function ActivityLog({
 			status={activityStatusFor(turn)}
 			// The rows below already name the step, so the header only says how the
 			// bot is busy.
-			renderWorkingStatus={() => <BotWorking kind={workingKind} />}
+			renderWorkingStatus={() => (
+				<BotWorking
+					animal={animal}
+					image={image}
+					kind={workingKind}
+					name={name}
+				/>
+			)}
 			summary={`Ran ${items.length} ${items.length === 1 ? "step" : "steps"}`}
 		/>
 	)
@@ -371,11 +384,20 @@ export function ChatScreen({
 			{state.activities.length > 0 ? (
 				<ActivityLog
 					activities={state.activities}
+					animal={bot.avatarAnimal}
+					image={face}
+					name={bot.name}
 					turn={state.turn}
 					workingKind={working?.kind}
 				/>
 			) : working ? (
-				<BotWorking kind={working.kind} label={working.label} />
+				<BotWorking
+					animal={bot.avatarAnimal}
+					image={face}
+					kind={working.kind}
+					label={working.label}
+					name={bot.name}
+				/>
 			) : null}
 
 			{state.permission ? (

@@ -97,6 +97,7 @@ export function App() {
 						}
 						value={toSettingsValue(selected)}
 						working={activity.isWorking}
+						workingKind={activity.kind}
 					/>
 				) : null
 			}

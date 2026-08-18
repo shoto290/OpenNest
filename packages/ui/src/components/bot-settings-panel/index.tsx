@@ -5,6 +5,7 @@ import { Select } from "@base-ui/react/select"
 import { motion, useReducedMotion } from "motion/react"
 import { useId, useState } from "react"
 
+import type { BotWorkingKind } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityPicker } from "@workspace/ui/components/bot-settings-panel/bot-identity-picker"
 import { SettingsField } from "@workspace/ui/components/bot-settings-panel/settings-field"
 import {
@@ -50,6 +51,10 @@ type BotSettingsPanelProps = {
 	 * working pose, an uploaded picture lights its activity dot. An identity pose
 	 * holds a single frame the rest of the time. */
 	working?: boolean
+	/** What the bot is busy with while `working`. Its own animal performs it, which is
+	 * what keeps this avatar and the roster's showing the same bot doing the same
+	 * thing. */
+	workingKind?: BotWorkingKind
 	/** Accessible name of the panel landmark, and the heading it shows. Two
 	 * panels on one screen need distinct ones. */
 	label?: string
@@ -70,6 +75,7 @@ const BotSettingsPanel = ({
 	confirmingDelete,
 	onConfirmingDeleteChange,
 	working = false,
+	workingKind,
 	label = "Bot settings",
 	onClose,
 	className,
@@ -146,6 +152,7 @@ const BotSettingsPanel = ({
 						onAvatarUpload={onAvatarUpload}
 						onIdentityChange={(identity) => patch({ identity })}
 						working={working}
+						workingKind={workingKind}
 					/>
 
 					<div className="flex flex-col gap-4">

@@ -555,8 +555,10 @@ export const Working = meta.story({
 		await expect(slotIn(running, "roster-row-preview")).toHaveTextContent(
 			"writing…",
 		)
+		// Cinder's own dog is what performs the work. A run that drew the engine's
+		// default animal would put a different bot in the row than the reader chose.
 		await expect(
-			within(running).getByRole("img", { name: /writing$/ }),
+			within(running).getByRole("img", { name: "Bot avatar dog, writing" }),
 		).toBeVisible()
 
 		const resting = rowFor(canvasElement, "Ember")

@@ -73,7 +73,12 @@ const PanelHost = (props: BotSettingsPanelProps) => {
 const StillnessPair = (props: BotSettingsPanelProps) => (
 	<div className="flex h-full gap-px bg-border">
 		<PanelHost {...props} label="Bot settings — idle" />
-		<PanelHost {...props} label="Bot settings — working" working />
+		<PanelHost
+			{...props}
+			label="Bot settings — working"
+			working
+			workingKind="writing"
+		/>
 	</div>
 )
 
@@ -219,7 +224,7 @@ export const StillUntilWorking = meta.story({
 		docs: {
 			description: {
 				story:
-					"The product rule, side by side: one identity, one pose, and motion as the only difference. Every one of the eight poses has an expression and a blink cadence, so a pose left animating would never sit still — the avatar therefore animates when `working` is set and holds a single frame when it is not. The animal is the bot's either way. Open this in Storybook to check the movement by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play guards the wiring instead.",
+					"The product rule, side by side: one identity, one pose, and motion as the only difference. Every one of the eight poses has an expression and a blink cadence, so a pose left animating would never sit still — the avatar therefore animates when `working` is set and holds a single frame when it is not. The animal is the bot's either way: the working half performs the work with the owl its reader chose, in the pose the work is named after, never with the animal the engine draws when nobody names one. Open this in Storybook to check the movement by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play guards the wiring instead.",
 			},
 		},
 	},
@@ -227,8 +232,10 @@ export const StillUntilWorking = meta.story({
 		await expect(
 			canvas.getByRole("img", { name: "Bot avatar owl, curious" }),
 		).toBeVisible()
+		// The bot's own owl, doing the work the host named — not the animal the engine
+		// draws when nobody names one, and not a stand-in pose.
 		await expect(
-			canvas.getByRole("img", { name: "Bot avatar owl, thinking" }),
+			canvas.getByRole("img", { name: "Bot avatar owl, writing" }),
 		).toBeVisible()
 	},
 })
