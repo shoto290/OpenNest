@@ -163,12 +163,10 @@ impl Candidates {
 		if tiers.is_empty() {
 			return Vec::new();
 		}
-		let aliases = self.aliases(&tiers);
-		let mut grouped: BTreeMap<&str, Vec<String>> =
-			tiers.iter().map(|tier| (tier.as_str(), Vec::new())).collect();
+		let mut grouped: BTreeMap<&str, Vec<String>> = BTreeMap::new();
 		let mut loose = Vec::new();
 
-		for alias in &aliases {
+		for alias in &self.aliases(&tiers) {
 			match tier_named_by(&tiers, alias) {
 				Some(tier) => grouped.entry(tier).or_default().push(alias.clone()),
 				None => loose.push(alias.clone()),
@@ -201,7 +199,7 @@ impl Candidates {
 	/// tiers and then a few things that are not — a `[1m]` variant, a plan-mode pair,
 	/// a "best available" — while a dictionary that happens to hold one of these words
 	/// holds a thousand that are not.
-	fn aliases(&self, tiers: &BTreeSet<String>) -> Vec<String> {
+	fn aliases(&self, tiers: &BTreeSet<String>) -> BTreeSet<String> {
 		let mut aliases = BTreeSet::new();
 		for items in &self.arrays {
 			let named = items.iter().filter(|item| tier_named_by(tiers, item).is_some()).count();
@@ -209,7 +207,7 @@ impl Candidates {
 				aliases.extend(items.iter().cloned());
 			}
 		}
-		aliases.into_iter().collect()
+		aliases
 	}
 }
 

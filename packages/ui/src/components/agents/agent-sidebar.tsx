@@ -84,8 +84,6 @@ interface AgentSidebarBot {
 
 const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
 
-const identityOf = (bot: AgentSidebarBot) => bot.identity ?? "idle"
-
 const isBusy = (bot: AgentSidebarBot) => bot.status === "working"
 
 const announcementFor = (bot?: AgentSidebarBot) => {
@@ -122,7 +120,7 @@ const BotRosterRow = ({
 								animal={bot.animal}
 								image={bot.image}
 								kind={pose}
-								pose={identityOf(bot)}
+								pose={bot.identity}
 								size={ROW_AVATAR_SIZE}
 								working={working}
 							/>

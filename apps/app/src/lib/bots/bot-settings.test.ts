@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import {
-	avatarSrc,
 	FALLBACK_MODELS,
 	modelOptionsFor,
 	newBotIdentity,
@@ -10,6 +9,7 @@ import {
 	toSettingsValue,
 } from "./bot-settings"
 
+import { avatarSrc } from "../host"
 import type { Bot } from "../conversations/store-contract"
 import { botIdentity } from "../conversations/transcript-fixtures"
 

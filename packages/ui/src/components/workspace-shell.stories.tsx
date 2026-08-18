@@ -396,11 +396,15 @@ export const PanelToggle = meta.story({
 		).toBeNull()
 		await expect(main.getBoundingClientRect().width).toBeCloseTo(closedWidth, 0)
 
-		// Reduced motion, which is what this browser reports: the column is at its full
-		// width in the frame it is asked for, with nothing to wait out.
+		// Reduced motion, which is what this browser reports: the column arrives at its
+		// full width with no animation to wait out. The wait here is for the browser to
+		// commit a style, not for a transition to play — an animated open would still be
+		// a fraction of the width by now.
 		await userEvent.click(gear)
 		const instant = canvas.getByRole("complementary", { name: SETTINGS_LABEL })
-		await expect(instant.getBoundingClientRect().width).toBe(panelWidth)
+		await waitFor(async () =>
+			expect(instant.getBoundingClientRect().width).toBe(panelWidth),
+		)
 
 		// And the width is not a debt that accumulates. A dozen toggles later the
 		// conversation is exactly as wide as it was before the first one, with no

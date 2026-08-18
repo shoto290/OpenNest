@@ -4,10 +4,7 @@
 import { Fragment } from "react"
 
 import { CodeLine } from "@workspace/ui/components/code-block"
-import {
-	type CodeLanguage,
-	highlightCode,
-} from "@workspace/ui/lib/code-highlight"
+import { type CodeLanguage, highlightCode } from "@workspace/ui/lib/code-highlight"
 import { cn } from "@workspace/ui/lib/utils"
 
 export type AgentCodeLanguage = CodeLanguage

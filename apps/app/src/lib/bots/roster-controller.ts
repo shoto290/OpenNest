@@ -130,11 +130,12 @@ export const createRosterController = (
 		apply({ ...bot, ...toIdentity(value, bot) })
 	}
 
-	/** A refused write leaves the roster showing what it optimistically drew, so the
-	 * record is read again and the reader is put back on the truth. Nothing else can
-	 * be done about it here: neither the roster nor the panel has anywhere to say a
-	 * save did not land. */
-	const recover = () => enqueue(() => read()).catch(() => undefined)
+	/** The record, read and shown. It is what a launch opens on and what a refused
+	 * write falls back to: either way the reader ends up on what the file holds, and
+	 * a read that fails leaves them on what they were already looking at. Nothing else
+	 * can be done about a refusal here — neither the roster nor the panel has anywhere
+	 * to say a save did not land. */
+	const reload = () => enqueue(() => read()).catch(() => undefined)
 
 	const read = async () => {
 		const bots = await store.bots()
@@ -178,7 +179,7 @@ export const createRosterController = (
 			}
 		},
 
-		load: () => enqueue(() => read()).catch(() => undefined),
+		load: reload,
 
 		select: (id: string) => {
 			if (id !== state.selectedBotId) {
@@ -195,7 +196,7 @@ export const createRosterController = (
 					isEditing: true,
 					isConfirmingDelete: false,
 				})
-			}).catch(recover),
+			}).catch(reload),
 
 		edit: (id: string) =>
 			set({ selectedBotId: id, isEditing: true, isConfirmingDelete: false }),
@@ -217,7 +218,7 @@ export const createRosterController = (
 			}
 			writing.add(id)
 			void enqueue(() => flush(id))
-				.catch(recover)
+				.catch(reload)
 				.finally(() => {
 					writing.delete(id)
 				})
@@ -227,7 +228,7 @@ export const createRosterController = (
 			enqueue(async () => {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				apply(await store.setBotAvatarImage(id, bytes))
-			}).catch(recover),
+			}).catch(reload),
 
 		askToDelete: (id: string) =>
 			set({ selectedBotId: id, isEditing: true, isConfirmingDelete: true }),
@@ -249,6 +250,6 @@ export const createRosterController = (
 					isEditing: state.isEditing && selectedBotId !== null,
 					isConfirmingDelete: false,
 				})
-			}).catch(recover),
+			}).catch(reload),
 	}
 }

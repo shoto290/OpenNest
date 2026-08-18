@@ -1,5 +1,3 @@
-import { convertFileSrc } from "@tauri-apps/api/core"
-
 import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
 import type {
 	BotModelOption,
@@ -7,7 +5,7 @@ import type {
 } from "@workspace/ui/components/bot-settings-panel"
 import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 
-import { isDesktopHost } from "../host"
+import { avatarSrc } from "../host"
 import type {
 	AvatarAnimal,
 	Bot,
@@ -64,20 +62,6 @@ const FACES = [
 /** What a bot is called before it is named. The panel opens on it, so it is copy a
  * reader replaces rather than a placeholder they have to fill in to see a row. */
 const NEW_BOT_NAME = "New bot"
-
-/** The one way a stored path becomes something the webview may load: the asset
- * protocol, scoped by the host to the single directory avatars live in. A bot with
- * no picture has no source at all, which is what leaves it wearing its animal.
- *
- * Outside the host there is no protocol to convert to — `convertFileSrc` reaches
- * for internals only a Tauri window injects — so `bun dev:web` is handed the path
- * the fake store answered, unconverted. */
-export const avatarSrc = (path: string | null): string | undefined => {
-	if (!path) {
-		return undefined
-	}
-	return isDesktopHost() ? convertFileSrc(path) : path
-}
 
 /** A face no bot in the roster is wearing, so a reader who creates three bots gets
  * three of them. Once all eight are taken the list starts over, which is the
