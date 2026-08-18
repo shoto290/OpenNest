@@ -372,6 +372,37 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(deleted_bot(connection, &id))).await?
 	}
 
+	/// The one column the picture a bot wears is named in, written on its own.
+	///
+	/// Apart from the rest of the identity because the file it names has a lifetime
+	/// the other fields do not: it is recorded here *before* the bytes are on the
+	/// disk, so that whatever sweeps the directory next already counts the name as
+	/// referenced. A bot the file does not hold is refused, which is what keeps a
+	/// picture from being written for nobody.
+	pub async fn set_avatar_image_path(
+		&self,
+		id: String,
+		path: Option<String>,
+	) -> Result<Bot, ConversationError> {
+		self.call_mut(move |connection| Ok(set_avatar_image_path(connection, &id, path.as_deref())))
+			.await?
+	}
+
+	/// Every picture the record still points at. What the caller does with it is
+	/// delete everything else, so a path is answered exactly as it is stored: the
+	/// rule about where a path may point is not this module's, and narrowing the
+	/// list here would be narrowing what survives.
+	pub async fn avatar_image_paths(&self) -> Result<Vec<String>, DatabaseError> {
+		self.call(|connection| {
+			let mut statement = connection.prepare_cached(
+				"SELECT avatar_image_path FROM bots WHERE avatar_image_path IS NOT NULL",
+			)?;
+			let rows = statement.query_map([], |row| row.get(0))?;
+			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+		})
+		.await
+	}
+
 	pub async fn participants(
 		&self,
 		conversation_id: String,
@@ -584,6 +615,23 @@ fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), Conversation
 	refuse_if_untouched(deleted, id)?;
 	transaction.commit()?;
 	Ok(())
+}
+
+/// The picture column alone, and the row as it stands after. Read back inside the
+/// same transaction for the reason every other write here is: what the caller
+/// displays is the file's answer, not the argument it passed.
+fn set_avatar_image_path(
+	connection: &mut Connection,
+	id: &str,
+	path: Option<&str>,
+) -> Result<Bot, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let written = transaction
+		.execute("UPDATE bots SET avatar_image_path = ?2 WHERE id = ?1", params![id, path])?;
+	refuse_if_untouched(written, id)?;
+	let stored = transaction.query_row(SELECT_BOT, [id], bot)?;
+	transaction.commit()?;
+	Ok(stored)
 }
 
 /// What a write that matched no row means, spelled once for the two that can

@@ -13,14 +13,18 @@
 //! is told the transcript is not being written, and why, instead of being handed a
 //! silent success it would go on appending to.
 
-use tauri::State;
+use std::path::Path;
+
+use tauri::{AppHandle, Runtime, State};
 
 use super::context;
 use super::contract::{
 	Bot, BotIdentity, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage,
 	RuntimeSession, TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
+use crate::avatars;
 use crate::db;
+use crate::db::repositories::conversations::ConversationsRepository;
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::db::repositories::runtime_context::ParticipantKey;
 
@@ -30,18 +34,43 @@ fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreErro
 	state.as_ref().map_err(|failure| TranscriptStoreError::Unavailable { failure: failure.into() })
 }
 
+/// Restores the one invariant the avatar directory has: it holds exactly the files
+/// the `bots` table still points at. Run after anything that changes a bot, so a
+/// replaced picture, a deleted bot and a file some earlier crash left behind are all
+/// answered by the same call rather than by three that have to be remembered.
+///
+/// Silent by design. A sweep is housekeeping after a write that already landed —
+/// telling a caller its bot was saved *and* that a leftover file could not be
+/// removed would be handing it a failure it has nothing to do about.
+async fn sweep_avatars(repository: &ConversationsRepository, dir: Option<&Path>) {
+	let Some(dir) = dir else {
+		return;
+	};
+	if let Ok(referenced) = repository.avatar_image_paths().await {
+		avatars::sweep(dir, &referenced);
+	}
+}
+
+/// Every command answering a bot resolves the avatar directory first and projects
+/// through it — see [`Bot::of`]. A path is a column until something says it names a
+/// file inside that one directory, and that is the only place it is said.
 #[tauri::command]
-pub async fn conversation_default_bot(
+pub async fn conversation_default_bot<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 ) -> Result<Bot, TranscriptStoreError> {
-	Ok(ready(&state)?.conversations().ensure_default_bot().await?.into())
+	let stored = ready(&state)?.conversations().ensure_default_bot().await?;
+	Ok(Bot::of(stored, avatars::dir(&app).as_deref()))
 }
 
 #[tauri::command]
-pub async fn conversation_bots(
+pub async fn conversation_bots<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
-	Ok(ready(&state)?.conversations().bots().await?.into_iter().map(Into::into).collect())
+	let dir = avatars::dir(&app);
+	let stored = ready(&state)?.conversations().bots().await?;
+	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref())).collect())
 }
 
 /// A bot and the chat it will be spoken to in, written as one unit. The chat is
@@ -52,35 +81,99 @@ pub async fn conversation_bots(
 /// `avatarAnimal` and `avatarPose` each hold a fixed set, and anything else fails
 /// deserialization — the command is never entered and nothing reaches the file.
 #[tauri::command]
-pub async fn conversation_create_bot(
+pub async fn conversation_create_bot<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
-	Ok(ready(&state)?.conversations().create_bot(identity.into()).await?.into())
+	let dir = avatars::dir(&app);
+	let repository = ready(&state)?.conversations();
+	let created = repository.create_bot(identity.into()).await?;
+	sweep_avatars(repository, dir.as_deref()).await;
+	Ok(Bot::of(created, dir.as_deref()))
 }
 
 /// Who the bot is, replaced whole: every field of [`BotIdentity`] is written, so
 /// one left out of the payload is a bot the caller only half described rather
 /// than a field it meant to keep. What the bot was told and what it has said are
 /// not touched.
+/// The picture is part of the identity a caller replaces, so this is also how one
+/// is taken off a bot: an identity written with no `avatarImagePath` leaves the
+/// column empty, and the sweep that follows takes the file the bot was wearing with
+/// it. A caller echoing back the path it was handed keeps the picture it already
+/// had — that path is still what the column holds, so the file stays referenced.
 #[tauri::command]
-pub async fn conversation_update_bot(
+pub async fn conversation_update_bot<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	id: String,
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
-	Ok(ready(&state)?.conversations().update_bot(id, identity.into()).await?.into())
+	let dir = avatars::dir(&app);
+	let repository = ready(&state)?.conversations();
+	let updated = repository.update_bot(id, identity.into()).await?;
+	sweep_avatars(repository, dir.as_deref()).await;
+	Ok(Bot::of(updated, dir.as_deref()))
+}
+
+/// The picture a bot wears, from bytes the user picked.
+///
+/// The order is the whole of the correctness here, and it runs cheapest-refusal
+/// first. The bytes are validated and normalised entirely in memory, so anything
+/// this host will not store is refused before a directory is resolved or a name is
+/// minted. The database comes next, so a host that never opened one refuses without
+/// touching the disk either. Only then is the row pointed at the new name — *before*
+/// the bytes are written, so nothing sweeping the directory in between can mistake a
+/// file that is about to exist for one nobody references. The sweep runs last and
+/// takes the picture this one replaced, which is what leaves exactly one file behind.
+///
+/// A write that fails after the row moved puts the column back and sweeps, so a
+/// half-written file is not left referenced: the bot comes back wearing its animal
+/// and the caller is told why, rather than the UI being pointed at broken bytes.
+/// That costs the picture the bot had, which is the honest reading of a disk that
+/// would not take the new one.
+#[tauri::command]
+pub async fn conversation_set_bot_avatar_image<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	id: String,
+	bytes: Vec<u8>,
+) -> Result<Bot, TranscriptStoreError> {
+	let normalised = avatars::picture::normalised(&bytes)?;
+	let repository = ready(&state)?.conversations();
+	let dir = avatars::dir(&app).ok_or(avatars::Rejection::Unwritable {
+		detail: "there is no application data directory to store avatars in".to_owned(),
+	})?;
+	let path = avatars::minted_path(&dir);
+	// Lossy because a column is text and a path is not: the name is this host's own
+	// UUID either way, so nothing here can arrive as bytes no encoding survives.
+	let recorded = path.to_string_lossy().into_owned();
+	let updated = repository.set_avatar_image_path(id.clone(), Some(recorded)).await?;
+	if let Err(rejection) = avatars::write(&path, &normalised) {
+		let _ = repository.set_avatar_image_path(id, None).await;
+		sweep_avatars(repository, Some(&dir)).await;
+		return Err(rejection.into());
+	}
+	sweep_avatars(repository, Some(&dir)).await;
+	Ok(Bot::of(updated, Some(&dir)))
 }
 
 /// The bot, its chat and the whole transcript under it. The last bot may be
 /// deleted like any other: what is left is a file with no bots and no
 /// conversations, which is the state a fresh install comes up in.
+/// The bot, its chat, the whole transcript under it — and the picture it was
+/// wearing, which the sweep takes because the row that referenced it is gone.
 #[tauri::command]
-pub async fn conversation_delete_bot(
+pub async fn conversation_delete_bot<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<(), TranscriptStoreError> {
-	Ok(ready(&state)?.conversations().delete_bot(id).await?)
+	let dir = avatars::dir(&app);
+	let repository = ready(&state)?.conversations();
+	repository.delete_bot(id).await?;
+	sweep_avatars(repository, dir.as_deref()).await;
+	Ok(())
 }
 
 #[tauri::command]

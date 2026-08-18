@@ -1,3 +1,4 @@
+pub mod avatars;
 pub mod claude;
 pub mod commands;
 pub mod conversations;

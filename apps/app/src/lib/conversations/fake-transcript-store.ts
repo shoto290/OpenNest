@@ -57,6 +57,32 @@ const spoken = (message: TranscriptMessage) =>
 
 const refuse = (error: TranscriptStoreError) => Promise.reject(error)
 
+/** Where this fake pretends the host keeps avatars. Nothing reads it — it only has
+ * to be the same shape every time, so a caller cannot come to depend on the name. */
+const FAKE_AVATAR_DIR = "/fake/avatars"
+
+/** The host's own limit, spelled here so a test can cross it without holding a
+ * number the host would have to be asked for. */
+const FAKE_AVATAR_LIMIT = 5 * 1024 * 1024
+
+const IMAGE_SIGNATURES = [
+	[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+	[0xff, 0xd8, 0xff],
+] as const
+
+/** Png and jpeg by their leading bytes, and webp by the two windows RIFF splits it
+ * across — the same three the host decodes, decided the same way. */
+const isStorableImage = (bytes: Uint8Array) =>
+	IMAGE_SIGNATURES.some((signature) =>
+		signature.every((byte, index) => bytes[index] === byte),
+	) || isWebp(bytes)
+
+const isWebp = (bytes: Uint8Array) => {
+	const text = (from: number, to: number) =>
+		String.fromCharCode(...bytes.slice(from, to))
+	return bytes.byteLength >= 12 && text(0, 4) === "RIFF" && text(8, 12) === "WEBP"
+}
+
 /** The durable transcript without a database: the same rules, in memory, so a test
  * meets what the host would have answered rather than a store that says yes to
  * everything. Replays are idempotent on identity, an ending is final, and text
@@ -201,6 +227,42 @@ export const createFakeTranscriptStore = (
 				return refuse({ kind: "unknownBot", id })
 			}
 			return Promise.resolve()
+		},
+
+		/** The two refusals a caller has to handle either way: a bot that is gone, and
+		 * bytes that are not one of the three formats the host stores. The signature is
+		 * read here too — the host reads it and nothing else, so a fake that trusted a
+		 * name would let a test pass on a path production refuses. Everything past the
+		 * signature is the host's own work and is not imitated: the path answered is a
+		 * marker, not a file. */
+		setBotAvatarImage: (id: string, bytes: Uint8Array) => {
+			const stored = bots.get(id)
+			if (!stored) {
+				return refuse({ kind: "unknownBot", id })
+			}
+			if (bytes.byteLength > FAKE_AVATAR_LIMIT) {
+				return refuse({
+					kind: "rejectedAvatarImage",
+					reason: {
+						kind: "tooLarge",
+						bytes: bytes.byteLength,
+						limit: FAKE_AVATAR_LIMIT,
+					},
+				})
+			}
+			if (!isStorableImage(bytes)) {
+				return refuse({
+					kind: "rejectedAvatarImage",
+					reason: { kind: "unknownFormat" },
+				})
+			}
+			minted += 1
+			const worn: Bot = {
+				...stored,
+				avatarImagePath: `${FAKE_AVATAR_DIR}/avatar-${minted}.png`,
+			}
+			bots.set(id, worn)
+			return Promise.resolve(worn)
 		},
 
 		mainChat: (_botId: string) =>

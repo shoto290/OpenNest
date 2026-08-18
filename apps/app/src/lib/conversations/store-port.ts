@@ -28,6 +28,15 @@ export type TranscriptStore = TranscriptPort & {
 	/** The bot, its chat and everything said in it. The last bot goes like any
 	 * other, and what is left is the empty state a fresh install opens on. */
 	deleteBot: (id: string) => Promise<void>
+	/** The picture a bot wears, from the bytes of the file the user picked. The host
+	 * validates the bytes themselves, squares them and keeps the result in its own
+	 * directory, and answers with the bot carrying a path the asset protocol can
+	 * reach. Anything it will not store is refused whole — nothing is written and the
+	 * bot keeps the avatar it had.
+	 *
+	 * Taking a picture off a bot is not here: it is `updateBot` with no
+	 * `avatarImagePath`, which is the same write that puts an animal back. */
+	setBotAvatarImage: (id: string, bytes: Uint8Array) => Promise<Bot>
 	mainChat: (botId: string) => Promise<Chat>
 	/** Opens the run a Claude process is about to be started for. The live run it
 	 * replaces is rotated by the same call, so a participant is never left with two
