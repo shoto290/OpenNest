@@ -585,7 +585,9 @@ export const RowMenu = meta.story({
 		await expect(await overlay.findByRole("menu")).toBeVisible()
 
 		const timestamp = slotIn(row, "roster-row-timestamp")
-		await expect(getComputedStyle(timestamp).opacity).toBe("0")
+		await waitFor(async () => {
+			await expect(getComputedStyle(timestamp).opacity).toBe("0")
+		}, FRAME_POLL)
 		await expect(trigger.getBoundingClientRect().left).toBeGreaterThanOrEqual(
 			timestamp.getBoundingClientRect().left,
 		)
