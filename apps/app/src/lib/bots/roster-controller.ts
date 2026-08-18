@@ -11,9 +11,9 @@ export type RosterState = {
 	/** The bot the chat is open on. `null` is a reader who owns none: there is no
 	 * bot to fall back to, which is what makes the empty state real. */
 	selectedBotId: string | null
-	/** Whether the selected bot's settings stand open. Collapsing them is how they
-	 * are dismissed — the panel has no other way out, and the rail is where a
-	 * reader who is done editing leaves it. */
+	/** Whether the selected bot's settings stand open. It is what mounts the column:
+	 * closed, there is no panel beside the conversation at all, and the gear in the
+	 * conversation's own bar is what brings it back. */
 	isEditing: boolean
 	/** A delete waiting to be confirmed. Only ever about the selected bot, because
 	 * asking to delete one is what selects it. */
@@ -200,9 +200,9 @@ export const createRosterController = (
 		edit: (id: string) =>
 			set({ selectedBotId: id, isEditing: true, isConfirmingDelete: false }),
 
-		/** Collapsing the settings is how a reader leaves them, so a confirmation they
-		 * left standing goes with it: the dialog lives inside the expanded panel, and
-		 * one still asked for behind a collapsed rail would pop the next time it opens. */
+		/** A confirmation goes with the panel that held it: the dialog lives inside the
+		 * column, so one still asked for after the reader closed it would pop the next
+		 * time they opened the settings for something else. */
 		setEditing: (isEditing: boolean) =>
 			set({
 				isEditing,
