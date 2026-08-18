@@ -323,7 +323,7 @@ export const WithPanel = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three columns: the roster, the conversation, and the settings of the bot it is open on. This is the shape the desktop app runs in. Check that all three reach the full height of the window with no gap under any of them, that the main column gives room to the panel rather than scrolling under it, and that the transcript is still the only thing that scrolls. Pick `Default` for the same shell without a trailing column.",
+					"Three columns: the roster, the conversation, and the settings of the bot it is open on. This is the shape the desktop app runs in. Check that all three reach the full height of the window with no gap under any of them — the row is definite here, so a column that asks for the full height gets the window's and not its own content's — that the main column gives room to the panel rather than scrolling under it, and that the transcript is still the only thing that scrolls. Pick `Default` for the same shell without a trailing column, `PanelToggle` for the panel coming and going.",
 			},
 		},
 	},
@@ -340,6 +340,12 @@ export const WithPanel = meta.story({
 		)
 		await expect(settings.getBoundingClientRect().height).toBe(
 			main.getBoundingClientRect().height,
+		)
+		// The row is what makes a column full height, so the panel reaches the bottom
+		// of the window rather than the bottom of its own content.
+		await expect(settings.getBoundingClientRect().height).toBe(window.innerHeight)
+		await expect(settings.getBoundingClientRect().bottom).toBe(
+			window.innerHeight,
 		)
 	},
 })

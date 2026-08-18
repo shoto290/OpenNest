@@ -232,6 +232,90 @@ export const Closing = meta.story({
 	},
 })
 
+const fieldsIn = (canvasElement: HTMLElement) => {
+	const fields = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="bot-settings-fields"]',
+	)
+	if (!fields) throw new Error("The panel is missing its fields")
+	return fields
+}
+
+const panelIn = (canvasElement: HTMLElement) => {
+	const panel = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="bot-settings-panel"]',
+	)
+	if (!panel) throw new Error("The panel is not mounted")
+	return panel
+}
+
+export const RoomToSpare = meta.story({
+	decorators: [
+		(Story) => (
+			<div className="flex h-[64rem] justify-end bg-background">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A column taller than the fields, which is what a tall window gives it. Reach for this to check the two things a settings column must not do on a big screen: stop short of the bottom, and leave the delete action floating in the middle of the panel under the last field. The panel takes the whole height it is given and the destructive action sits against the bottom edge, one padding away, with the slack above it — where a reader looking for the way to get rid of a bot expects it. Pick `ScrollsToTheDelete` for the same panel with less room than it needs.",
+			},
+		},
+	},
+	play: async ({ canvasElement, canvas }) => {
+		const panel = panelIn(canvasElement)
+		const fields = fieldsIn(canvasElement)
+		const column = panel.parentElement
+		if (!column) throw new Error("The panel has no column to fill")
+
+		await expect(panel.getBoundingClientRect().height).toBe(
+			column.getBoundingClientRect().height,
+		)
+		await expect(fields.scrollHeight).toBeLessThanOrEqual(fields.clientHeight)
+
+		const remove = canvas.getByRole("button", { name: "Delete bot" })
+		const gap =
+			panel.getBoundingClientRect().bottom -
+			remove.getBoundingClientRect().bottom
+		// One padding, and nothing more: the action is at the edge rather than under
+		// the last field it happens to follow.
+		await expect(gap).toBeGreaterThan(0)
+		await expect(gap).toBeLessThanOrEqual(24)
+	},
+})
+
+export const ScrollsToTheDelete = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The same panel in a column shorter than its fields, which is what a laptop gives it. The fields scroll inside the panel — the panel itself never grows past the height it was given, so nothing is left under the bottom of the window with no way to reach it — and the delete action scrolls with them rather than being pinned over the content. Check that the destructive action is out of view until the reader goes looking for it, and that it is reachable when they do. Pick `RoomToSpare` for the tall column where it rests at the bottom.",
+			},
+		},
+	},
+	play: async ({ canvasElement, canvas }) => {
+		const panel = panelIn(canvasElement)
+		const fields = fieldsIn(canvasElement)
+		const remove = canvas.getByRole("button", { name: "Delete bot" })
+
+		await expect(fields.scrollHeight).toBeGreaterThan(fields.clientHeight)
+		await expect(remove.getBoundingClientRect().bottom).toBeGreaterThan(
+			panel.getBoundingClientRect().bottom,
+		)
+
+		fields.scrollTop = fields.scrollHeight
+		await waitFor(async () =>
+			expect(remove.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+				panel.getBoundingClientRect().bottom,
+			),
+		)
+	},
+})
+
 export const PickerBotTab = meta.story({
 	parameters: {
 		docs: {

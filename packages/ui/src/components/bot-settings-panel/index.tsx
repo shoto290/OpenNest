@@ -101,7 +101,14 @@ const BotSettingsPanel = ({
 				</button>
 			</header>
 
-			<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-5">
+			{/* The one scroll boundary in the column: the fields take the height the
+			panel has left and scroll inside it, which is what keeps the delete action
+			at the bottom edge when there is room and lets it leave with the content
+			when there is not. */}
+			<div
+				className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-5"
+				data-slot="bot-settings-fields"
+			>
 				<BotIdentityPicker
 					identity={value.identity}
 					name={value.name}
