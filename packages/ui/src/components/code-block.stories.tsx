@@ -27,13 +27,21 @@ const LONG_LINE_SNIPPET = `const migration = { table: "nest_occupants", columns:
 
 export const plan = Object.entries(migration).map(([key, value]) => \`\${key}: \${Array.isArray(value) ? value.join(", ") : value}\`).join("\\n")`
 
+const ELIXIR_SNIPPET = `def summarise(nest_id) do\n\tnest = Nest.read(nest_id)\n\t%{id: nest.id, occupants: length(nest.occupants)}\nend`
+
 const LANGUAGE_SAMPLES: Record<CodeLanguage, string> = {
 	bash: `bun install\nbun run storybook --port 6006`,
+	css: `.nest-card {\n\tdisplay: grid;\n\tgap: 0.5rem;\n\tcolor: var(--foreground);\n}`,
 	diff: `- const occupants = nest.occupants\n+ const occupants = nest.occupants ?? []`,
+	html: `<article class="nest-card">\n\t<h2>Nest 42</h2>\n\t<p>3 occupants</p>\n</article>`,
 	json: `{\n\t"id": "nest_42",\n\t"occupants": 3,\n\t"archived": false\n}`,
+	markdown: `# Nest 42\n\n- 3 occupants\n- archived: **no**`,
+	python: `def summarise(nest_id: str) -> dict:\n\tnest = read_nest(nest_id)\n\treturn {"id": nest.id, "occupants": len(nest.occupants)}`,
+	rust: `pub fn summarise(nest: &Nest) -> usize {\n\tnest.occupants.iter().filter(|o| o.active).count()\n}`,
 	text: `Nest 42 is missing two occupants.\nRe-run the sync before archiving it.`,
 	tsx: `export const NestBadge = ({ label }: { label: string }) => (\n\t<span className="rounded-full px-2">{label}</span>\n)`,
 	typescript: `export const nestId = "nest_42" as const\nexport type NestId = typeof nestId`,
+	yaml: `nest: nest_42\noccupants: 3\narchived: false`,
 }
 
 const meta = preview.meta({
@@ -52,7 +60,7 @@ const meta = preview.meta({
 		language: "typescript",
 	},
 	argTypes: {
-		language: { control: "select", options: [...CODE_LANGUAGES, "python"] },
+		language: { control: "select", options: [...CODE_LANGUAGES, "elixir"] },
 		status: { control: "inline-radio", options: ["streaming", "complete"] },
 		showLineNumbers: { control: "boolean" },
 		wrap: { control: "boolean" },
@@ -128,10 +136,7 @@ export const Languages = meta.story({
 })
 
 export const UnknownLanguage = meta.story({
-	args: {
-		language: "python",
-		code: `def summarise(nest_id: str) -> dict:\n\tnest = read_nest(nest_id)\n\treturn {"id": nest.id, "occupants": len(nest.occupants)}`,
-	},
+	args: { language: "elixir", code: ELIXIR_SNIPPET },
 	parameters: {
 		docs: {
 			description: {

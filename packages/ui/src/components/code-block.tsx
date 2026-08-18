@@ -16,6 +16,7 @@ import {
 	type CodeToken,
 	highlightCode,
 	resolveCodeLanguage,
+	toCodeLines,
 } from "@workspace/ui/lib/code-highlight"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -93,15 +94,10 @@ export function CodeBlock({
 	const streaming = status === "streaming"
 	const label = language?.trim() || resolveCodeLanguage(language)
 
-	const lines = useMemo(() => {
-		const tokenLines = highlightCode(code, language)
-		let offset = 0
-		return code.split("\n").map((content, index) => {
-			const line = { content, offset, tokens: tokenLines[index] }
-			offset += content.length + 1
-			return line
-		})
-	}, [code, language])
+	const lines = useMemo(
+		() => toCodeLines(code, highlightCode(code, language)),
+		[code, language],
+	)
 
 	const highlighted = useMemo(() => new Set(highlightLines), [highlightLines])
 
