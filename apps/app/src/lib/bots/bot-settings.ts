@@ -3,9 +3,9 @@ import type {
 	BotModelOption,
 	BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-panel"
-import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 
 import { avatarSrc } from "../host"
+import type { SidebarActivity } from "../chat/screen-model"
 import type {
 	AvatarAnimal,
 	Bot,
@@ -124,12 +124,14 @@ export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	instructions: value.instructions,
 })
 
-/** What the chat knows about the bot it is open on. This build runs one process, so
- * it is the selected bot's row and only its row that ever reads as working. */
+/** What the chat knows about the bots it lists. Every bot runs a process of its
+ * own, so what is working is read per row rather than granted to the open one: the
+ * reader who walks away from a bot that is answering is owed the sight of it still
+ * answering. The last message stays the open bot's — it is the preview of the
+ * conversation on the screen. */
 export type RosterActivity = {
 	selectedBotId: string | null
-	isWorking: boolean
-	kind?: BotWorkingKind
+	working: Record<string, SidebarActivity>
 	lastMessage?: string
 }
 
@@ -142,6 +144,7 @@ export const toRosterBots = (
 ): AgentSidebarBot[] =>
 	bots.map((bot) => {
 		const isOpen = bot.id === activity.selectedBotId
+		const working = activity.working[bot.id]
 		return {
 			id: bot.id,
 			name: bot.name,
@@ -150,7 +153,7 @@ export const toRosterBots = (
 			identity: bot.avatarPose,
 			image: avatarSrc(bot.avatarImagePath),
 			lastMessage: isOpen ? activity.lastMessage : undefined,
-			status: isOpen && activity.isWorking ? "working" : "idle",
-			pose: isOpen ? activity.kind : undefined,
+			status: working?.isWorking ? "working" : "idle",
+			pose: working?.kind,
 		}
 	})

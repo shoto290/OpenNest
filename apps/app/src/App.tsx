@@ -14,11 +14,8 @@ import {
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { createChatDriver } from "@/lib/chat/create-driver"
-import {
-	lastAssistantTextFor,
-	sidebarActivityFor,
-} from "@/lib/chat/screen-model"
-import { useChat } from "@/lib/chat/use-chat"
+import { lastAssistantTextFor } from "@/lib/chat/screen-model"
+import { useBotActivity, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
 
 /** The folder picker the working directory field opens. There is none on this
@@ -58,7 +55,11 @@ export function App() {
 		await roster.controller.remove(id)
 	}
 
-	const activity = sidebarActivityFor(chat.state)
+	// Every bot's own, because every bot has a process of its own: the roster shows
+	// the ones answering in the background as busy, not only the one being read.
+	const botIds = useMemo(() => bots.map((bot) => bot.id), [bots])
+	const working = useBotActivity(chat.controller, botIds)
+	const activity = selectedBotId ? working[selectedBotId] : undefined
 	const lastMessage = lastAssistantTextFor(chat.state)
 
 	// The roster is memoised inside the design system so a streamed token does not
@@ -66,14 +67,8 @@ export function App() {
 	// is the same one between renders. Every input here is stable through a turn —
 	// the last settled reply included.
 	const rosterBots = useMemo(
-		() =>
-			toRosterBots(bots, {
-				selectedBotId,
-				isWorking: activity.isWorking,
-				kind: activity.kind,
-				lastMessage,
-			}),
-		[bots, selectedBotId, activity.isWorking, activity.kind, lastMessage],
+		() => toRosterBots(bots, { selectedBotId, working, lastMessage }),
+		[bots, selectedBotId, working, lastMessage],
 	)
 
 	return (
@@ -105,8 +100,8 @@ export function App() {
 							roster.controller.describe(selected.id, value)
 						}
 						value={toSettingsValue(selected)}
-						working={activity.isWorking}
-						workingKind={activity.kind}
+						working={activity?.isWorking ?? false}
+						workingKind={activity?.kind}
 					/>
 				) : null
 			}

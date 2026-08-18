@@ -1189,6 +1189,26 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
+	// What the roster reads while the reader is somewhere else: the bot left behind
+	// is still answering, and its own state is where that shows.
+	it("reports a bot answering in the background as busy", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		await harness.controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 4)
+
+		await harness.controller.open(other.id)
+
+		expect(isTurnBusy(harness.controller.getState().turn)).toBe(false)
+		expect(isTurnBusy(harness.controller.stateFor(BOT).turn)).toBe(true)
+		expect(harness.controller.stateFor("nobody").turn).toBe("idle")
+
+		await vi.runAllTimersAsync()
+		expect(isTurnBusy(harness.controller.stateFor(BOT).turn)).toBe(false)
+		harness.detach()
+	})
+
 	// A bot holds one process at a time. Selecting it again — which is what the app
 	// does on every switch — shows the one it has rather than replacing it, because
 	// a second process would leave the first answering with nobody holding it.

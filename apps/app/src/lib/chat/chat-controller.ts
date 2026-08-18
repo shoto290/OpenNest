@@ -41,6 +41,10 @@ import {
 
 export type ChatController = {
 	getState: () => ChatState
+	/** The state of any bot the reader has opened, not only the one on the screen.
+	 * A bot nobody has opened yet is answering nothing, and reads as the state a
+	 * launch starts on. */
+	stateFor: (botId: string) => ChatState
 	subscribe: (listener: () => void) => () => void
 	attach: () => () => void
 	check: () => Promise<CheckReport | null>
@@ -1074,6 +1078,7 @@ export function createChatController(
 
 	return {
 		getState: () => selected?.state ?? initialChatState,
+		stateFor: (botId) => bots.get(botId)?.state ?? initialChatState,
 		subscribe: (listener) => {
 			listeners.add(listener)
 			return () => {
