@@ -1,3 +1,4 @@
+import { relaunch } from "@tauri-apps/plugin-process"
 import { check, type DownloadEvent } from "@tauri-apps/plugin-updater"
 
 import type { UpdateProgress, UpdaterPort } from "./updater-port"
@@ -32,4 +33,6 @@ export const updaterTransport: UpdaterPort = {
 				update.downloadAndInstall(accumulate(onProgress)),
 		}
 	},
+
+	restart: () => relaunch(),
 }

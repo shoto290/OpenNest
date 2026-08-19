@@ -22,4 +22,7 @@ export type AvailableUpdate = UpdateRelease & {
  * answer for a build that is. */
 export type UpdaterPort = {
 	check: () => Promise<AvailableUpdate | null>
+	/** Quits this build and starts the one the install left behind. Nothing comes
+	 * back from it: the window is gone by the time it would. */
+	restart: () => Promise<void>
 }

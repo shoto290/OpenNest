@@ -29,6 +29,9 @@ pub fn run() {
 				.build(),
 		)
 		.plugin(tauri_plugin_updater::Builder::new().build())
+		// What finishes an update: the installed build only replaces the running one
+		// once the app is started again.
+		.plugin(tauri_plugin_process::init())
 		.manage(ClaudeState::default())
 		// The database is opened once, here, because `app_data_dir()` needs the
 		// resolved identifier only the built app carries. A failure is managed like

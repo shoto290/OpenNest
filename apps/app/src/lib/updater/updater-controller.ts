@@ -20,6 +20,10 @@ export type UpdaterState = {
 	 * reading per chunk would re-render the window thousands of times for one
 	 * download and show the reader nothing more. */
 	progress: number | null
+	/** Whether the install is done and the new build is waiting for the app to be
+	 * started again. Nothing else finishes an update: the download alone leaves the
+	 * reader on the release they launched. */
+	isRestartPending: boolean
 	error: string | null
 }
 
@@ -31,11 +35,14 @@ export type UpdaterController = {
 	check: () => Promise<void>
 	/** Takes the release the last check found. Nothing to take is not a failure. */
 	install: () => Promise<void>
+	/** Starts the installed build. Nothing installed is not a failure. */
+	restart: () => Promise<void>
 }
 
 const EMPTY: UpdaterState = {
 	available: null,
 	progress: null,
+	isRestartPending: false,
 	error: null,
 }
 
@@ -45,6 +52,7 @@ const messageOf = (error: unknown): string =>
 const isSameState = (left: UpdaterState, right: UpdaterState): boolean =>
 	left.error === right.error &&
 	left.progress === right.progress &&
+	left.isRestartPending === right.isRestartPending &&
 	left.available?.version === right.available?.version &&
 	left.available?.notes === right.available?.notes
 
@@ -99,9 +107,19 @@ export const createUpdaterController = (
 			await update.install((progress) =>
 				publish({ ...state, progress: percentOf(progress) }),
 			)
+			publish({ ...state, progress: null, isRestartPending: true })
 		} catch (error) {
 			publish({ ...state, progress: null, error: messageOf(error) })
 		}
+	}
+
+	// Asked before an install landed there is nothing to start: the build on disk is
+	// the one already running.
+	const restart = async () => {
+		if (!state.isRestartPending) {
+			return
+		}
+		await port.restart()
 	}
 
 	return {
@@ -124,5 +142,6 @@ export const createUpdaterController = (
 
 		check,
 		install,
+		restart,
 	}
 }
