@@ -6,6 +6,7 @@ import {
 	botIdentityAvatars,
 	Row,
 	slotsIn,
+	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
 import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
@@ -15,17 +16,12 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
 
-/** A picture a reader uploaded, inline so the story needs no host to load it. */
-const UPLOADED_IMAGE =
-	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
-
 /** The three sizes the product draws this at: a roster row and a reply are the
  * same 40, the settings preview is 96. */
 const SIZES = [40, 96, 24]
 
 const blotShapeOf = (avatar: HTMLElement) =>
 	slotsIn(avatar, "bot-avatar-blot")[0]?.getAttribute("transform")
-
 
 /** Every place at once, on one identity: what the roster row, the settings column
  * and the reply each draw, side by side. */
@@ -70,7 +66,7 @@ const Changing = (props: BotIdentityAvatarProps) => {
 			<EveryPlace
 				{...props}
 				animal={wearing ? "bear" : props.animal}
-				image={wearing ? UPLOADED_IMAGE : undefined}
+				image={wearing ? UPLOADED_AVATAR_IMAGE : undefined}
 			/>
 			<Button onClick={() => setWearing(!wearing)} size="sm" variant="outline">
 				Change the bot
@@ -226,7 +222,7 @@ export const Waiting = meta.story({
 })
 
 export const Uploaded = meta.story({
-	args: { image: UPLOADED_IMAGE },
+	args: { image: UPLOADED_AVATAR_IMAGE },
 	render: (args) => <EveryPlace {...args} />,
 	parameters: {
 		docs: {
@@ -240,7 +236,7 @@ export const Uploaded = meta.story({
 		for (const avatar of botIdentityAvatars(canvasElement)) {
 			await expect(avatar.querySelector("img")).toHaveAttribute(
 				"src",
-				UPLOADED_IMAGE,
+				UPLOADED_AVATAR_IMAGE,
 			)
 			await expect(avatar.querySelector("svg")).toBeNull()
 		}
@@ -248,7 +244,7 @@ export const Uploaded = meta.story({
 })
 
 export const UploadedWorking = meta.story({
-	args: { image: UPLOADED_IMAGE, working: true, kind: "searching" },
+	args: { image: UPLOADED_AVATAR_IMAGE, working: true, kind: "searching" },
 	render: (args) => <EveryPlace {...args} />,
 	parameters: {
 		docs: {
@@ -262,7 +258,7 @@ export const UploadedWorking = meta.story({
 		for (const avatar of botIdentityAvatars(canvasElement)) {
 			await expect(avatar.querySelector("img")).toHaveAttribute(
 				"src",
-				UPLOADED_IMAGE,
+				UPLOADED_AVATAR_IMAGE,
 			)
 			await expect(
 				avatar.querySelector('[data-slot="bot-activity-dot"]'),
@@ -294,7 +290,7 @@ export const BoundToOneBot = meta.story({
 		for (const avatar of drawn()) {
 			await expect(avatar.querySelector("img")).toHaveAttribute(
 				"src",
-				UPLOADED_IMAGE,
+				UPLOADED_AVATAR_IMAGE,
 			)
 			await expect(avatar.querySelector("svg")).toBeNull()
 		}
