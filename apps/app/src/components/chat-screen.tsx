@@ -44,11 +44,13 @@ import type {
 } from "@/lib/conversations/store-contract"
 import { avatarSrc } from "@/lib/host"
 
-/** The bot's face as the memoised rows below take it: three strings rather than a
+/** The bot's face as the memoised rows below take it: four strings rather than a
  * node, so a streamed delta still shallow-compares equal. */
 type BotFace = {
 	animal: AvatarAnimal
 	blot?: AvatarBlot
+	/** The bot's id, which is what the shape of its blot is derived from. */
+	seed: string
 	image?: string
 }
 
@@ -63,6 +65,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	avatar,
 	animal,
 	blot,
+	seed,
 	image,
 	rejected,
 }: BotFace & {
@@ -102,6 +105,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 						animal={animal}
 						blot={blot}
 						image={image}
+						seed={seed}
 						size={CHAT_AVATAR_SIZE}
 					/>
 				) : null
@@ -328,6 +332,7 @@ export function ChatScreen({
 								avatar={index === avatarIndex}
 								animal={bot.avatarAnimal}
 								blot={bot.avatarBlot ?? undefined}
+								seed={bot.id}
 								image={face}
 								rejected={row.messageId === state.rejectedPromptId}
 							/>
@@ -339,10 +344,12 @@ export function ChatScreen({
 			{working ? (
 				<BotWorking
 					animal={bot.avatarAnimal}
+					blot={bot.avatarBlot ?? undefined}
 					image={face}
 					name={bot.name}
 					kind={working.kind}
 					label={working.label}
+					seed={bot.id}
 				/>
 			) : null}
 

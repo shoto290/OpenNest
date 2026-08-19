@@ -133,6 +133,7 @@ const settingsPanel = (onClose: () => void) => (
 		onConfirmingDeleteChange={fn()}
 		onDelete={fn()}
 		onValueChange={fn()}
+		seed={ROSTER[0].id}
 		value={SETTINGS}
 	/>
 )

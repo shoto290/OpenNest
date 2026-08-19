@@ -30,6 +30,9 @@ interface BotWorkingProps {
 	/** The picture that bot wears, if it wears one: it keeps wearing it while it
 	 * works, and the activity dot is what says so. */
 	image?: string
+	/** The working bot's id, which is what its blot's shape is derived from. A bot
+	 * must not change shape the moment it starts working. */
+	seed?: string
 	size?: number
 	className?: string
 }
@@ -47,6 +50,7 @@ function BotWorking({
 	animal,
 	blot,
 	image,
+	seed,
 	size = CHAT_AVATAR_SIZE,
 	className,
 }: BotWorkingProps) {
@@ -72,6 +76,7 @@ function BotWorking({
 					blot={blot}
 					image={image}
 					kind={kind}
+					seed={seed}
 					size={size}
 					working
 				/>

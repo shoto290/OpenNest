@@ -53,6 +53,10 @@ type BotIdentityAvatarProps = {
 	/** The tint drawn behind the animal — what tells one bot from another at a
 	 * glance. Leave it out and the animal is drawn on nothing. */
 	blot?: BotAvatarBlot
+	/** What the blot's shape is derived from — the bot's id. Two bots wearing the
+	 * same tint are told apart by it, and it survives a rename, a new animal and a
+	 * new tint because none of those is what it is derived from. */
+	seed?: string
 	/** A picture its reader uploaded, already a URL the host will load. It wins over
 	 * the animal and never moves: a photograph cannot act, so work is said with the
 	 * dot instead. */
@@ -80,6 +84,7 @@ type BotIdentityAvatarProps = {
 function BotIdentityAvatar({
 	animal,
 	blot,
+	seed,
 	image,
 	working = false,
 	kind = "thinking",
@@ -100,6 +105,7 @@ function BotIdentityAvatar({
 					animated={working}
 					blot={blot}
 					className="block"
+					seed={seed}
 					size={size}
 					state={working ? busyStateFor(kind) : REST_STATE}
 				/>

@@ -70,6 +70,9 @@ const PickerGroup = ({ label, className, children }: PickerGroupProps) => (
 
 type BotIdentityPickerProps = {
 	identity: BotIdentity
+	/** The edited bot's id, so every avatar in here wears the blot shape that bot
+	 * will actually wear — the preview and the swatches alike. */
+	seed?: string
 	working: boolean
 	/** What the bot is busy with, so the preview performs the work the rest of the
 	 * app is showing rather than a work of its own. */
@@ -80,6 +83,7 @@ type BotIdentityPickerProps = {
 
 const BotIdentityPicker = ({
 	identity,
+	seed,
 	working,
 	workingKind,
 	onIdentityChange,
@@ -124,6 +128,7 @@ const BotIdentityPicker = ({
 						blot={identity.blot}
 						image={identity.image}
 						kind={workingKind}
+						seed={seed}
 						size={PREVIEW_SIZE}
 						working={working}
 					/>
@@ -188,6 +193,7 @@ const BotIdentityPicker = ({
 														animal={animal}
 														animated={false}
 														blot={identity.blot}
+														seed={seed}
 														size={ANIMAL_SIZE}
 														state="idle"
 													/>
@@ -224,6 +230,7 @@ const BotIdentityPicker = ({
 														animal={identity.animal}
 														animated={false}
 														blot={blot}
+														seed={seed}
 														size={BLOT_SIZE}
 														state="idle"
 													/>

@@ -17,6 +17,11 @@ import {
 	type BotAvatarEar,
 	type BotAvatarShape,
 } from "@workspace/ui/components/bot-avatar-animals"
+import {
+	BLOT_BOX,
+	BLOT_PATH,
+	blotTransform,
+} from "@workspace/ui/components/bot-avatar-blot"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
 import {
 	type BotAvatarEarLayer,
@@ -74,15 +79,11 @@ const BLOT_TINTS = [
 
 type BotAvatarBlot = (typeof BLOT_TINTS)[number]
 
-const BLOT_PATH =
-	"M118,6 C152,0 180,18 189,48 C196,72 174,86 178,104 C182,122 202,130 195,151 C187,175 158,191 130,193 C102,195 80,180 58,175 C28,168 7,147 8,115 C9,85 23,58 39,38 C57,15 86,12 118,6 Z"
-
 const VIEW_BOX = 240
-const BLOT_BOX = 200
 const BLOT_RATIO = 16 / 15
 const BLOT_SPAN = VIEW_BOX * BLOT_RATIO
 const BLOT_INSET = round2((VIEW_BOX - BLOT_SPAN) / 2)
-const BLOT_TRANSFORM = `translate(${BLOT_INSET} ${BLOT_INSET}) scale(${round2(BLOT_SPAN / BLOT_BOX)})`
+const BLOT_PLACEMENT = `translate(${BLOT_INSET} ${BLOT_INSET}) scale(${round2(BLOT_SPAN / BLOT_BOX)})`
 
 /** A blot brings its own ink. The tint is the same under `.dark`, and the near-white
  * line the dark theme draws would vanish on it — the eyes read off `currentColor`
@@ -173,6 +174,10 @@ type BotAvatarProps = {
 	ink?: BotAvatarInk
 	/** A tint drawn behind the whole animal. Leave it out and nothing is drawn. */
 	blot?: BotAvatarBlot
+	/** What the blot's shape is derived from — the bot's id, and nothing a reader
+	 * can edit. The same seed lands on the same shape on every machine and after
+	 * every restart; leave it out and the blot is drawn as authored. */
+	seed?: string
 	interactive?: boolean
 	wireframe?: boolean
 	onOrientationChange?: (orientation: BotAvatarOrientation) => void
@@ -190,6 +195,7 @@ function BotAvatar({
 	perspective = 0.55,
 	ink = "bold",
 	blot,
+	seed,
 	interactive = false,
 	wireframe = false,
 	onOrientationChange,
@@ -327,7 +333,7 @@ function BotAvatar({
 						data-slot="bot-avatar-blot"
 						fill={`var(--bot-blot-${blot})`}
 						stroke="none"
-						transform={BLOT_TRANSFORM}
+						transform={`${BLOT_PLACEMENT} ${blotTransform(seed)}`}
 					/>
 				) : null}
 				<g filter={`url(#${filterId})`}>
@@ -391,6 +397,7 @@ function BotAvatar({
 			filterId,
 			headMaskId,
 			headPathId,
+			seed,
 			splitId,
 			weight,
 			wireframe,

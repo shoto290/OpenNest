@@ -2,8 +2,13 @@ import { useState } from "react"
 import { expect, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { botIdentityAvatars, Row } from "@workspace/storybook/story-utils"
+import {
+	botIdentityAvatars,
+	Row,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
+import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
 import {
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
@@ -18,6 +23,10 @@ const UPLOADED_IMAGE =
  * same 40, the settings preview is 96. */
 const SIZES = [40, 96, 24]
 
+const blotShapeOf = (avatar: HTMLElement) =>
+	slotsIn(avatar, "bot-avatar-blot")[0]?.getAttribute("transform")
+
+
 /** Every place at once, on one identity: what the roster row, the settings column
  * and the reply each draw, side by side. */
 const EveryPlace = (props: BotIdentityAvatarProps) => (
@@ -27,6 +36,30 @@ const EveryPlace = (props: BotIdentityAvatarProps) => (
 		))}
 	</Row>
 )
+
+/** One bot, with a control that changes everything a reader is allowed to change
+ * about it. Its id is the one thing that stays. */
+const Rebranded = (props: BotIdentityAvatarProps) => {
+	const [rebranded, setRebranded] = useState(false)
+
+	return (
+		<div className="flex flex-col items-start gap-4">
+			<BotIdentityAvatar
+				{...props}
+				animal={rebranded ? "bear" : "rabbit"}
+				blot={rebranded ? "coral" : "sky"}
+				working={rebranded}
+			/>
+			<Button
+				onClick={() => setRebranded(!rebranded)}
+				size="sm"
+				variant="outline"
+			>
+				Change everything but the id
+			</Button>
+		</div>
+	)
+}
 
 /** The same three, with a control that changes the bot. */
 const Changing = (props: BotIdentityAvatarProps) => {
@@ -61,10 +94,12 @@ const meta = preview.meta({
 	args: {
 		animal: "rabbit",
 		blot: "sky",
+		seed: "bot-7",
 		size: 96,
 	},
 	argTypes: {
 		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
+		seed: { control: "text" },
 		size: { control: { type: "range", min: 16, max: 160, step: 8 } },
 		working: { control: "boolean" },
 	},
@@ -273,5 +308,43 @@ export const BoundToOneBot = meta.story({
 				within(avatar).getByRole("img", { name: "Bot avatar rabbit, idle" }),
 			).toBeVisible()
 		}
+	},
+})
+
+export const Unseeded = meta.story({
+	args: { seed: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bot drawn without an id — a preview, a story, anything with no bot behind it yet. It gets the blot exactly as it was authored, so nothing that existed before shapes did has moved. Put it beside `Default`, whose bot is seeded onto a half turn: the tint and the animal are the same and only the blot has turned. Pick `AI/BotAvatar → BlotShapes` for all eight poses at once.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+
+		await expect(blotShapeOf(avatar)?.endsWith(blotTransform())).toBe(true)
+	},
+})
+
+export const Seeded = meta.story({
+	render: (args) => <Rebranded {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"What the id buys: press the button and the bot is renamed in every way a reader can rename it — a different animal, a different tint, and mid-run rather than at rest — and its blot holds the shape it has always had. The shape is derived from the id and from nothing else, and it is drawn outside the node the animation engine rewrites, so neither an edit nor a frame of movement can touch it. Check that the blot is perfectly still while the animal works.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const [avatar] = botIdentityAvatars(canvasElement)
+		const before = blotShapeOf(avatar)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Change everything but the id" }),
+		)
+		await expect(blotShapeOf(botIdentityAvatars(canvasElement)[0])).toBe(before)
 	},
 })

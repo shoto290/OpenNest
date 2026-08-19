@@ -9,7 +9,10 @@ import {
 } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	type BotModelOption,
 	BotSettingsPanel,
@@ -19,6 +22,10 @@ import {
 
 const UPLOADED_IMAGE =
 	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
+
+/** The id the store minted for the bot this panel edits. It is what the shape of
+ * its blot is derived from, and the only thing in here a reader cannot change. */
+const BOT_ID = "bot-7"
 
 const MODELS: BotModelOption[] = [
 	{ label: "Claude Sonnet 4.5", value: "sonnet-4-5" },
@@ -106,6 +113,7 @@ const meta = preview.meta({
 	args: {
 		value: FILLED_BOT,
 		models: MODELS,
+		seed: BOT_ID,
 		onValueChange: fn(),
 		onAvatarUpload: fn(),
 		onBrowseWorkingDirectory: fn(),
@@ -499,5 +507,27 @@ export const DeleteConfirmation = meta.story({
 		await expect(
 			within(dialog).getByRole("button", { name: "Cancel" }),
 		).toBeVisible()
+	},
+})
+
+export const BlotShape = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The preview wears the blot shape this bot actually wears everywhere else, because the panel is handed the bot's id and derives it from that. Open the picker and the eight tint swatches wear it too: a reader choosing a tint is choosing a tint, and must see it laid down on their own bot's shape rather than on a stock one. Change the animal, change the tint, change the name — the shape does not move, because none of those is what it is derived from. Check that the preview and the roster row beside it in `WorkspaceShell → SettingsOpen` are the same mark.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const preview = canvas.getByRole("button", { name: /^Change avatar/ })
+		const [worn] = slotsIn(preview, "bot-avatar-blot")
+
+		const picker = await openPicker(canvas, userEvent)
+		for (const swatch of slotsIn(picker, "bot-avatar-blot")) {
+			await expect(swatch.getAttribute("transform")).toBe(
+				worn.getAttribute("transform"),
+			)
+		}
 	},
 })
