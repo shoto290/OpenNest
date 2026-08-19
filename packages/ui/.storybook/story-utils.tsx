@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ComponentType, ReactNode } from "react"
 import type { ExtraProps } from "react-markdown"
 
 import {
@@ -7,6 +7,15 @@ import {
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
 import { cn } from "@workspace/ui/lib/utils"
+
+/** Motion declares its prop types in a package this workspace cannot resolve by
+ * name, so `tsc -b` fails to emit a declaration for any story typed against
+ * them. Narrowing a motion component to the props its stories actually drive
+ * keeps the emitted types nameable, and costs nothing in the docs: the props
+ * table is generated from the component source, not from this type. Props land
+ * optional, since a story inherits whatever the meta already supplies. */
+export const withStoryProps = <Props,>(component: ComponentType<never>) =>
+	component as ComponentType<Partial<Props>>
 
 export const listExhaustively = <T extends string>(members: Record<T, true>) =>
 	Object.keys(members) as T[]
