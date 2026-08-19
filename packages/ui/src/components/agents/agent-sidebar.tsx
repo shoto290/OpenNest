@@ -38,7 +38,7 @@ const WINDOW_CONTROLS_INSET =
  * row carries a time, so it is the name that gives way, never the time. */
 const ROW_AVATAR_SIZE = 40
 const TIMESTAMP_SLOT =
-	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
+	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-muted-foreground leading-5 tabular-nums"
 
 /** The name line carries the name, the badge and the timestamp, and keeps its
  * height whichever of them the row has — which is what holds the second line
@@ -49,7 +49,7 @@ const TITLE_BADGE =
 
 /** The second line has the whole text column to itself, and keeps its height
  * with or without a message. */
-const PREVIEW_LINE = "h-4 truncate text-sidebar-foreground/80 text-xs leading-4"
+const PREVIEW_LINE = "h-4 truncate text-muted-foreground text-xs leading-4"
 
 /** The row is the only trigger the actions have, so it says it carries them
  * and lights up while they are open. */
