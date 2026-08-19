@@ -1,8 +1,3 @@
-import type {
-	AgentActivityStatus,
-	AgentActivityStep,
-	AgentStepStatus,
-} from "@workspace/ui/components/agent-activity"
 import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 import type { ChatEmptyStateStatus } from "@workspace/ui/components/chat-empty-state"
 import type { ChatTurnState } from "@workspace/ui/components/chat-turn"
@@ -10,13 +5,7 @@ import type { ChatTurnState } from "@workspace/ui/components/chat-turn"
 import { type ChatState, isTurnBusy } from "./chat-state"
 import { toPublishedBlocks } from "./markdown-blocks"
 
-import type {
-	ActivityEvent,
-	ActivityStatus,
-	ConnectionState,
-	TransportError,
-	TurnState,
-} from "../claude/contract"
+import type { ConnectionState, TransportError } from "../claude/contract"
 import type {
 	TranscriptCompletion,
 	TranscriptMessage,
@@ -53,13 +42,6 @@ const TURN_STATE: Record<TranscriptCompletion, ChatTurnState> = {
 export type WorkingState = {
 	kind: BotWorkingKind
 	label?: string
-}
-
-const STEP_STATUS: Record<ActivityStatus, AgentStepStatus> = {
-	pending: "pending",
-	running: "active",
-	succeeded: "complete",
-	failed: "complete",
 }
 
 /** Errors that leave no usable session behind, so only a fresh preflight recovers.
@@ -248,27 +230,6 @@ export function lastAssistantTextFor(state: ChatState): string | undefined {
 			message.role === "assistant" && isTerminalCompletion(message.completion),
 	)
 	return latest?.content.trim() || undefined
-}
-
-export function toActivityItems(
-	activities: ActivityEvent[],
-): AgentActivityStep[] {
-	return activities.map((activity) => ({
-		id: activity.id,
-		type: "step",
-		label: activity.title || activity.kind,
-		status: STEP_STATUS[activity.status],
-		meta: activity.status === "failed" ? "Failed" : undefined,
-	}))
-}
-
-/** The log spans the whole session, so only the latest turn decides the header.
- * A tool that failed earlier stays marked on its own row. */
-export function activityStatusFor(turn: TurnState): AgentActivityStatus {
-	if (isTurnBusy(turn)) {
-		return "working"
-	}
-	return turn === "failed" ? "failed" : "complete"
 }
 
 export function emptyStateStatusFor(
