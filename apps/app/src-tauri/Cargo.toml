@@ -3,6 +3,8 @@ name = "opennest-app"
 version = "0.1.0"
 description = "OpenNest desktop app"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/shoto290/OpenNest"
 default-run = "opennest-app"
 
 [lib]

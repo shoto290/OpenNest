@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "vite-monorepo",
+      "name": "opennest",
       "devDependencies": {
         "@biomejs/biome": "^2.4.12",
         "husky": "^9.1.7",
