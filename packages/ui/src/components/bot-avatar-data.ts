@@ -2658,7 +2658,7 @@ export const EXPRESSIONS: BotAvatarExpressionRing[][] = [
 export const STATE_POOLS = {
 	sleeping: [13, 22, 4],
 	waking: [13],
-	idle: [0, 8],
+	idle: [25],
 	listening: [10, 1, 19],
 	thinking: [8, 16, 14, 17, 5],
 	searching: [15, 9, 3, 20, 12, 18],
@@ -2793,7 +2793,7 @@ export const EXPRESSION_CADENCE: Record<BotAvatarState, [number, number]> = {
 export const BLINK_CADENCE: Record<BotAvatarState, [number, number] | null> = {
 	sleeping: null,
 	waking: null,
-	idle: [6000, 14000],
+	idle: null,
 	listening: [3000, 7000],
 	thinking: [3500, 7000],
 	searching: [1600, 4000],
@@ -2837,6 +2837,7 @@ export type BotAvatarPose = { yaw: number; pitch: number; roll: number }
 
 export const STATE_POSES: Partial<Record<BotAvatarState, BotAvatarPose>> = {
 	waiting: { yaw: -16, pitch: 23, roll: 6 },
+	idle: { yaw: -16, pitch: 23, roll: 6 },
 }
 
 export type BotAvatarEarPose = { rot: number; sy: number }
