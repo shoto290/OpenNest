@@ -1,4 +1,4 @@
-import type { BotSettingsValue } from "@workspace/ui/components/bot-settings-panel"
+import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
 
 import { newBotIdentity, toIdentity } from "./bot-settings"
 

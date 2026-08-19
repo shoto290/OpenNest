@@ -160,7 +160,7 @@ const BotRosterRow = ({
 				<ContextMenuContent ariaLabel={`Actions for ${bot.name}`}>
 					<ContextMenuItem onSelect={() => onEdit?.(bot.id)}>
 						<Icons.Settings aria-hidden="true" className="size-3.5" />
-						Bot settings
+						Settings
 					</ContextMenuItem>
 					<ContextMenuItem
 						onSelect={() => onDelete?.(bot.id)}

@@ -8,17 +8,17 @@ import {
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
-import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
-import { SettingsField } from "@workspace/ui/components/bot-settings-panel/settings-field"
 import type {
 	BotIdentity,
 	BotModelOption,
 	BotSettingsValue,
-} from "@workspace/ui/components/bot-settings-panel/types"
+} from "@workspace/ui/components/bot-settings"
+import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { Tooltip } from "@workspace/ui/components/motion/tooltip"
+import { SettingsField } from "@workspace/ui/components/settings-field"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { cn } from "@workspace/ui/lib/utils"
 

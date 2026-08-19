@@ -3,13 +3,13 @@
 import { Select } from "@base-ui/react/select"
 import { useId } from "react"
 
+import type { BotModelOption } from "@workspace/ui/components/bot-settings"
+import { Icons } from "@workspace/ui/components/icons"
 import {
 	FIELD_CONTROL_CLASS,
 	FIELD_LABEL_CLASS,
 	POPUP_CLASS,
-} from "@workspace/ui/components/bot-settings-panel/styles"
-import type { BotModelOption } from "@workspace/ui/components/bot-settings-panel/types"
-import { Icons } from "@workspace/ui/components/icons"
+} from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
 type RuntimeFieldsProps = {

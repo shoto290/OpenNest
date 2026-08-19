@@ -8,8 +8,8 @@ const FIELD_CONTROL_CLASS =
 const BACKDROP_CLASS =
 	"fixed inset-0 z-50 bg-foreground/30 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
 
-/** The surface every popup in the panel shares — the popover, the model list and
- * the delete dialog. Size, radius and padding stay with each one. */
+/** The surface every popup shares — the settings dialog, the model list and the
+ * delete confirmation. Size, radius and padding stay with each one. */
 const POPUP_CLASS =
 	"border border-border bg-popover text-popover-foreground shadow-xl outline-none transition-[scale,opacity] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none"
 

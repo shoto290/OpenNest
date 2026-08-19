@@ -2,12 +2,12 @@
 
 import { AlertDialog } from "@base-ui/react/alert-dialog"
 
+import { buttonVariants } from "@workspace/ui/components/button"
+import { Icons } from "@workspace/ui/components/icons"
 import {
 	BACKDROP_CLASS,
 	POPUP_CLASS,
-} from "@workspace/ui/components/bot-settings-panel/styles"
-import { buttonVariants } from "@workspace/ui/components/button"
-import { Icons } from "@workspace/ui/components/icons"
+} from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
 type DangerZoneProps = {

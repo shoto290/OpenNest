@@ -2,7 +2,7 @@ import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-side
 import type {
 	BotModelOption,
 	BotSettingsValue,
-} from "@workspace/ui/components/bot-settings-panel"
+} from "@workspace/ui/components/bot-settings"
 
 import { rosterTimestamp } from "./roster-timestamp"
 
