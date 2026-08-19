@@ -418,21 +418,24 @@ describe("markdown links", () => {
 		expect(html).toContain("select-none")
 	})
 
-	it("asks one service for every icon and never the destination itself", () => {
-		const html = render("[steal](https://evil.test/payload)")
+	it("marks an internationalized host with the letter its reader sees, and spells it in punycode all the same", () => {
+		const html = render("[login](https://\u043Epennest.dev/login)")
 
-		expect(html).toContain(
-			"https://www.google.com/s2/favicons?sz=64&amp;domain=evil.test",
-		)
-		expect(html).not.toContain("https://evil.test/favicon")
-		expect(html).toContain('referrerPolicy="no-referrer"')
+		expect(html).toContain(">\u043E<")
+		expect(html).toContain("(xn--pennest-8ig.dev)")
 	})
 
-	it("keeps the icon out of the reading and off the critical path", () => {
-		const html = render("[docs](https://opennest.dev)")
+	it("marks an address with a neutral glyph instead of a digit", () => {
+		expect(render("[admin](https://192.168.1.1/admin)")).toContain(">\u2022<")
+	})
 
-		expect(html).toContain('alt=""')
-		expect(html).toContain('loading="lazy"')
+	it("renders a transcript of hosts without anything that would fetch", () => {
+		const html = render(
+			"[the spec](https://html.spec.whatwg.org/multipage/links.html), [a search](https://www.google.com/search?q=nest) and [a tracker](https://tracker.internal.test/issue/42)",
+		)
+
+		expect(html).not.toMatch(/<(img|iframe|object|embed)[\s>]/)
+		expect(html).not.toContain("/favicon")
 	})
 
 	it("separates the text from its destination with a real space", () => {

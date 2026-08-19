@@ -1,7 +1,7 @@
-import { type ComponentPropsWithoutRef, useState } from "react"
+import type { ComponentPropsWithoutRef } from "react"
 import type { ExtraProps } from "react-markdown"
 
-import { getFaviconUrl } from "@workspace/ui/lib/favicon"
+import { hostInitial } from "@workspace/ui/lib/host"
 
 export type MarkdownLinkProps = ComponentPropsWithoutRef<"a"> & ExtraProps
 
@@ -20,51 +20,21 @@ const linkUrl = (href: string) => {
 	}
 }
 
-const bareHost = (host: string) => host.replace(/^www\./, "")
-
 /** The text gives way, the destination never does. The anchor itself stays
  * inline so a link flows and breaks with the sentence around it, and so a
  * transcript copied out of a bubble reads as one line of prose. */
 const TEXT_CLASS = "inline-block max-w-full truncate align-bottom"
 const HOST_CLASS = "whitespace-nowrap font-normal"
 
-/** The mark: the host initial, covered by the favicon once it arrives. Offline,
- * on a host without one, or with the service unreachable, the letter is what
- * stays — the box never collapses and the line never shifts. Decoration only,
- * and artwork the destination controls at that: the host spelled out beside it
- * carries the meaning, so the mark stays out of the accessible name and out of
- * anything copied from the transcript. */
+/** The mark: the host initial, drawn from the href and from nothing fetched.
+ * Rendering a transcript sends no request derived from a link, so no site — nor
+ * a service answering for every site — learns which hosts a private message
+ * names. Tinted from the text, it holds its box in both themes and on any
+ * bubble. Decoration only: the host spelled out beside it carries the meaning,
+ * so the mark stays out of the accessible name and out of anything copied from
+ * the transcript. */
 const MARK_CLASS =
-	"relative mr-1 inline-grid size-3.5 select-none place-items-center rounded-[3px] bg-current/10 align-middle text-[0.65em] uppercase leading-none"
-const FAVICON_CLASS = "absolute inset-0 size-full rounded-[3px] object-contain"
-
-interface HostMarkProps {
-	destination: URL
-}
-
-/** A broken image paints a broken image, so the icon leaves the tree the moment
- * it fails and gives the letter back its place. */
-const HostMark = ({ destination }: HostMarkProps) => {
-	const [hasIcon, setHasIcon] = useState(true)
-	const icon = getFaviconUrl(destination.href)
-
-	return (
-		<span aria-hidden="true" className={MARK_CLASS}>
-			{bareHost(destination.host).charAt(0)}
-			{icon && hasIcon ? (
-				<img
-					alt=""
-					className={FAVICON_CLASS}
-					decoding="async"
-					loading="lazy"
-					onError={() => setHasIcon(false)}
-					referrerPolicy="no-referrer"
-					src={icon}
-				/>
-			) : null}
-		</span>
-	)
-}
+	"mr-1 inline-grid size-3.5 select-none place-items-center rounded-[3px] bg-current/10 align-middle text-[0.65em] uppercase leading-none"
 
 /** Link text is authored — by a reader or by an agent — and no amount of reading
  * it says where it goes: userinfo, a homograph, a missing scheme all read as one
@@ -107,7 +77,13 @@ export const MarkdownLink = ({
 			rel="noreferrer noopener"
 		>
 			<span className={TEXT_CLASS}>{children}</span>{" "}
-			<HostMark key={destination.host} destination={destination} />
+			<span
+				aria-hidden="true"
+				data-slot="markdown-link-mark"
+				className={MARK_CLASS}
+			>
+				{hostInitial(destination.href)}
+			</span>
 			<span data-slot="markdown-link-host" className={HOST_CLASS}>
 				({destination.host})
 			</span>

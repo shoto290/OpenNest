@@ -261,6 +261,8 @@ const DESTINATIONS = `Every link carries where it goes: [the changelog](https://
 
 Mail stays with the reader: nest@opennest.dev.`
 
+const MANY_HOSTS = `One answer naming seven places at once: [the changelog](https://opennest.dev/changelog), [the spec](https://html.spec.whatwg.org/multipage/links.html), [a search](https://www.google.com/search?q=nest), [a paper](https://arxiv.org/abs/2401.00001), [an internal tracker](https://tracker.internal.test/issue/42), [a directory](https://пример.рф/каталог) and [the box on this desk](https://192.168.1.1/admin).`
+
 const DECEPTIVE_LINKS = `Userinfo hides the host: [https://opennest.dev@evil.test/reports](https://opennest.dev@evil.test/reports).
 
 A text with no scheme parses as nothing: [opennest.dev/download](https://evil.test/payload).
@@ -465,8 +467,73 @@ const clearanceOf = (viewport: HTMLElement, copy: HTMLElement) =>
 /** `leading-6` at chat size: the height a stray newline between two blocks would add. */
 const BLANK_LINE = 24
 
+/** What `size-3.5` paints: the box the icon used to fill, kept to the pixel so a
+ * line breaks where it always did. */
+const MARK_BOX = 14
+
 /** What four extra spaces measure at chat size. A collapsed run measures nothing. */
 const SPACE_RUN = 8
+
+/** What one letter of a host is worth: the mark carries the initial a reader of
+ * that language would recognize, so an internationalized host is decoded rather
+ * than marked `x` like every other one, and an address gets a neutral dot
+ * instead of the bracket or digit it starts with. */
+const EXPECTED_MARKS = ["o", "h", "g", "a", "t", "п", "•"]
+
+/** Anything that would fetch: a request is born when one of these enters the
+ * tree, which is where it must be caught — the element can be dropped the
+ * moment the transfer fails, so waiting for the transfer to end catches
+ * nothing. */
+const FETCHING_ELEMENTS = "img, iframe, object, embed, source, [srcset]"
+
+const offsiteTransfersSince = (start: number) =>
+	performance
+		.getEntriesByType("resource")
+		.filter((entry) => entry.startTime >= start)
+		.map(({ name }) => name)
+		.filter(
+			(name) =>
+				name.startsWith("http") && new URL(name).origin !== location.origin,
+		)
+
+/** Watches from before the story renders and reports at the end of its play, so
+ * what it finds is this render's doing and no earlier story's. Insertions catch
+ * a request while it is still in flight; resource timing catches what leaves
+ * without ever touching the tree. */
+const watchForRequests = () => {
+	const start = performance.now()
+	const inserted: string[] = []
+	const collect = (records: MutationRecord[]) => {
+		for (const { addedNodes } of records) {
+			for (const node of addedNodes) {
+				if (!(node instanceof Element)) continue
+
+				const fetching = [
+					...(node.matches(FETCHING_ELEMENTS) ? [node] : []),
+					...node.querySelectorAll(FETCHING_ELEMENTS),
+				]
+
+				inserted.push(...fetching.map(({ outerHTML }) => outerHTML))
+			}
+		}
+	}
+	const observer = new MutationObserver(collect)
+
+	observer.observe(document.body, { childList: true, subtree: true })
+
+	return () => {
+		collect(observer.takeRecords())
+		observer.disconnect()
+
+		return [...inserted, ...offsiteTransfersSince(start)]
+	}
+}
+
+let requestsSinceRender = () => ["the request watch never started"]
+
+const linkMarksOf = (canvasElement: HTMLElement) => [
+	...canvasElement.querySelectorAll('[data-slot="markdown-link-mark"]'),
+]
 
 const markdownRootsOf = (canvasElement: HTMLElement) =>
 	canvasElement.querySelectorAll<HTMLElement>('[data-slot="markdown"]')
@@ -1235,41 +1302,70 @@ export const Destinations = meta.story({
 		docs: {
 			description: {
 				story:
-					"The rule, stated plainly: a web link always ends with the host its href resolves to, whether the text is a label, a subdomain or the URL itself. Nothing is compared, so nothing can be fooled — the repetition on a bare URL is the price of never guessing. The host separates itself by weight and parentheses rather than by a dimmer colour: a destination is what a reader checks before clicking, so it never trades contrast for hierarchy, least of all on a solid bubble. Ahead of it sits the favicon, asked of one service for every host and never of the host itself — a link must not tell its destination that a message was read, from which address, at what time. The icon is decoration and nothing more: it is artwork the destination controls, and a site imitating another serves the icon it imitates, so the host spelled out beside it stays the part that cannot lie. Check that mail keeps the reader inside their own client, and that the mark reaches neither a screen reader nor a copied transcript.",
+					"The rule, stated plainly: a web link always ends with the host its href resolves to, whether the text is a label, a subdomain or the URL itself. Nothing is compared, so nothing can be fooled — the repetition on a bare URL is the price of never guessing. The host separates itself by weight and parentheses rather than by a dimmer colour: a destination is what a reader checks before clicking, so it never trades contrast for hierarchy, least of all on a solid bubble. Ahead of it sits a mark carrying the initial of that same host, drawn from the href and fetched from no one: an icon would have to be asked of the destination or of a service answering for it, and either one would learn that this message was read, from which address, at what time. The letter is decoration and the host beside it is the part that cannot lie. Check that mail keeps the reader inside their own client, and that the mark reaches neither a screen reader nor a copied transcript.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(
 			canvas.getByRole("link", { name: "the changelog (opennest.dev)" }),
 		).toHaveAttribute("target", "_blank")
 		await expect(
 			canvas.getByRole("link", { name: "our roadmap (www.opennest.dev)" }),
 		).toBeInTheDocument()
+
+		await expect(
+			linkMarksOf(canvasElement).map((mark) => mark.textContent),
+		).toEqual(["o", "o", "o"])
 	},
 })
 
-export const DestinationsWithoutIcons = meta.story({
-	args: { children: DESTINATIONS },
+export const DestinationsFetchNothing = meta.story({
+	args: { children: MANY_HOSTS },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The same links with the icon service unreachable — offline, behind a CSP, or simply slow. Each icon leaves the tree the moment it fails and gives the host initial back its place: a broken image paints a broken image, and a transcript is not the place for one. Check that the mark keeps its size so no line shifts as icons arrive or fail, and that the destination is unchanged either way.",
+					"Seven hosts in one answer, in both bubbles a transcript is made of. Rendering them sends nothing: no request goes to the sites themselves, and none to the service that used to answer for every site — which would have received the whole guest list, with the reader's address and the hour they read it. Each mark is the initial of its own host, tinted from the text so it holds on the muted surface and on the solid one, in either theme, and sized exactly as the icon was so no line moves. The last two are the ones a punycode host and an address would get wrong: the Cyrillic name is decoded for the mark and still spelled out in punycode beside it, and the IP literal takes a neutral dot rather than opening with a digit. Flip the theme layout toolbar to side-by-side, and check the marks against the amber bubble.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		for (const link of canvas.getAllByRole("link")) {
-			link.querySelector("img")?.dispatchEvent(new Event("error"))
-		}
+	render: (args) => (
+		<div className="flex flex-col gap-6">
+			<MessageBubble>
+				<MessageBubbleContent>
+					<Markdown {...args} />
+				</MessageBubbleContent>
+			</MessageBubble>
+			<MessageBubble variant="solid" align="end">
+				<MessageBubbleContent>
+					<Markdown {...args} />
+				</MessageBubbleContent>
+			</MessageBubble>
+		</div>
+	),
+	beforeEach: () => {
+		requestsSinceRender = watchForRequests()
 
-		await waitFor(() =>
-			expect(canvasElement.querySelectorAll("a img")).toHaveLength(0),
-		)
+		return () => {
+			requestsSinceRender()
+		}
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const marks = linkMarksOf(canvasElement)
+
+		await expect(marks.map((mark) => mark.textContent)).toEqual([
+			...EXPECTED_MARKS,
+			...EXPECTED_MARKS,
+		])
+		await expect([
+			...new Set(marks.map((mark) => mark.getBoundingClientRect().width)),
+		]).toEqual([MARK_BOX])
+
 		await expect(
-			canvas.getByRole("link", { name: "the changelog (opennest.dev)" }),
-		).toBeInTheDocument()
+			canvas.getAllByRole("link", { name: "a directory (xn--e1afmkfd.xn--p1ai)" }),
+		).toHaveLength(2)
+		await expect(requestsSinceRender()).toEqual([])
 	},
 })
 
