@@ -921,29 +921,33 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Who the bot is is replaced whole, instructions included; its memory and the
-	/// moment it was written are not. The panel edits the prompt beside the name, so
-	/// a write that left the old instructions standing would be a bot that ignored
-	/// what it was just told — and one that cleared the memory would be a bot that
-	/// forgot the user to be renamed.
+	/// Who the bot is is replaced whole, instructions included; its memory, the moment
+	/// it was written and the pose nothing projects any more are not. The panel edits
+	/// the prompt beside the name, so a write that left the old instructions standing
+	/// would be a bot that ignored what it was just told — and one that cleared the
+	/// memory would be a bot that forgot the user to be renamed. The pose is the third
+	/// kind of survivor: a column this build stopped listing, which an update naming
+	/// it would quietly reset on every row it touched.
 	#[tokio::test]
-	async fn updating_a_bot_replaces_who_it_is_and_what_it_was_told_but_not_its_memory() {
+	async fn updating_a_bot_replaces_who_it_is_but_not_its_memory_or_the_pose_it_dropped() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
 		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
 		let id = created.id.clone();
+		let written = id.clone();
 		repository
 			.call(move |connection| {
 				connection.execute(
-					"UPDATE bots SET instructions = 'answer briefly', memory = 'they use bun'
+					"UPDATE bots SET instructions = 'answer briefly', memory = 'they use bun',
+							avatar_pose = 'sleeping'
 						WHERE id = ?1",
-					[&id],
+					[&written],
 				)?;
 				Ok(())
 			})
 			.await
-			.expect("what the bot was told");
+			.expect("what the bot was told and the pose an older build wrote");
 
 		let updated = repository
 			.update_bot(
@@ -975,42 +979,6 @@ mod tests {
 		);
 		assert_eq!(updated.memory, "they use bun", "an update cleared the memory");
 		assert_eq!(updated.created_at, created.created_at, "an update moved the moment");
-
-		drop(database);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
-	/// The pose column outlived the vocabulary that wrote it: nothing above reads or
-	/// writes it any more, so a bot described again keeps whatever an older build
-	/// left in it. A write that listed the column would quietly reset every row it
-	/// touched, and no read here could tell.
-	#[tokio::test]
-	async fn a_bot_described_again_keeps_the_pose_an_older_build_wrote() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
-		let id = created.id.clone();
-		let written = id.clone();
-		repository
-			.call(move |connection| {
-				connection.execute(
-					"UPDATE bots SET avatar_pose = 'sleeping' WHERE id = ?1",
-					[&written],
-				)?;
-				Ok(())
-			})
-			.await
-			.expect("the pose an older build wrote");
-
-		repository
-			.update_bot(
-				id.clone(),
-				BotIdentity { avatar_blot: Some(AvatarBlot::Amber), ..an_identity("Ada") },
-			)
-			.await
-			.expect("the bot is updated");
-
 		assert_eq!(
 			repository
 				.call(move |connection| Ok(connection.query_row(
@@ -1021,7 +989,7 @@ mod tests {
 				.await
 				.expect("the stored pose"),
 			"sleeping",
-			"describing a bot again rewrote a column nothing projects"
+			"an update rewrote the pose column nothing projects any more"
 		);
 
 		drop(database);

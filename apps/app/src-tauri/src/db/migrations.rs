@@ -431,20 +431,10 @@ mod tests {
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
 		apply_each(&mut connection, &MIGRATIONS[..2]).expect("the shipped schema installs");
 		connection
-			.execute_batch(
+			.execute_batch(&a_chat_held_by(
 				"INSERT INTO bots (id, name, model, created_at)
-					VALUES ('default', 'Claude', 'sonnet', 1);
-				INSERT INTO conversations (id, kind, title, created_at, updated_at)
-					VALUES ('c1', 'main', 'Chat', 1, 1);
-				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-					VALUES ('c1', 'default', 'assistant', 1);
-				INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'c1', 1, 1);
-				INSERT INTO messages
-					(id, conversation_id, turn_id, author_bot_id, seq, role, content,
-						completion_state, created_at)
-					VALUES ('m1', 'c1', 't1', NULL, 1, 'user', 'hello', 'complete', 1),
-						('m2', 'c1', 't1', 'default', 2, 'assistant', 'hi there', 'complete', 2);",
-			)
+					VALUES ('default', 'Claude', 'sonnet', 1);",
+			))
 			.expect("the install this build upgrades from");
 
 		apply(&mut connection).expect("the file comes up to this build");
@@ -591,17 +581,17 @@ mod tests {
 
 		for blot in ["coral", "amber", "moss", "water", "sky", "lavender", "rose", "slate"] {
 			assert!(
-				write(&connection, &a_bot_marked(&format!("'{blot}'"), blot)).is_ok(),
+				write(&connection, &a_bot_marked(Some(blot), blot)).is_ok(),
 				"the palette holds {blot} and the file refused it"
 			);
 		}
 		assert!(
-			write(&connection, &a_bot_marked("NULL", "unmarked")).is_ok(),
+			write(&connection, &a_bot_marked(None, "unmarked")).is_ok(),
 			"a bot with no mark was refused"
 		);
 		assert_eq!(blot_of(&connection, "unmarked"), None);
 		assert!(
-			write(&connection, &a_bot_marked("'chartreuse'", "unknown-blot")).is_err(),
+			write(&connection, &a_bot_marked(Some("chartreuse"), "unknown-blot")).is_err(),
 			"a colour outside the palette was stored"
 		);
 
@@ -618,20 +608,10 @@ mod tests {
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
 		apply_each(&mut connection, &MIGRATIONS[..3]).expect("the shipped schema installs");
 		connection
-			.execute_batch(
+			.execute_batch(&a_chat_held_by(
 				"INSERT INTO bots (id, name, model, created_at, title, avatar_animal, avatar_pose)
-					VALUES ('default', 'Claude', 'sonnet', 1, 'Reviewer', 'owl', 'curious');
-				INSERT INTO conversations (id, kind, title, created_at, updated_at)
-					VALUES ('c1', 'main', 'Chat', 1, 1);
-				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-					VALUES ('c1', 'default', 'assistant', 1);
-				INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'c1', 1, 1);
-				INSERT INTO messages
-					(id, conversation_id, turn_id, author_bot_id, seq, role, content,
-						completion_state, created_at)
-					VALUES ('m1', 'c1', 't1', NULL, 1, 'user', 'hello', 'complete', 1),
-						('m2', 'c1', 't1', 'default', 2, 'assistant', 'hi there', 'complete', 2);",
-			)
+					VALUES ('default', 'Claude', 'sonnet', 1, 'Reviewer', 'owl', 'curious');",
+			))
 			.expect("the install this build upgrades from");
 
 		apply(&mut connection).expect("the file comes up to this build");
@@ -660,10 +640,31 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	fn a_bot_marked(blot: &str, id: &str) -> String {
+	/// The install every step below upgrades from: a bot, the one chat it holds and
+	/// the two things said in it. Only the bot row differs between the steps — it is
+	/// written with the columns its version knows — so it is the one part a caller
+	/// spells.
+	fn a_chat_held_by(bot: &str) -> String {
+		format!(
+			"{bot}
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'main', 'Chat', 1, 1);
+				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
+					VALUES ('c1', 'default', 'assistant', 1);
+				INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'c1', 1, 1);
+				INSERT INTO messages
+					(id, conversation_id, turn_id, author_bot_id, seq, role, content,
+						completion_state, created_at)
+					VALUES ('m1', 'c1', 't1', NULL, 1, 'user', 'hello', 'complete', 1),
+						('m2', 'c1', 't1', 'default', 2, 'assistant', 'hi there', 'complete', 2);"
+		)
+	}
+
+	fn a_bot_marked(blot: Option<&str>, id: &str) -> String {
+		let mark = blot.map_or("NULL".to_owned(), |blot| format!("'{blot}'"));
 		format!(
 			"INSERT INTO bots (id, name, model, created_at, avatar_blot)
-				VALUES ('{id}', 'A bot', 'sonnet', 1, {blot})"
+				VALUES ('{id}', 'A bot', 'sonnet', 1, {mark})"
 		)
 	}
 

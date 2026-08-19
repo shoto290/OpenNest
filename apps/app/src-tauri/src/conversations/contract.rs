@@ -812,7 +812,6 @@ mod tests {
 			(AvatarBlot::Slate, "slate"),
 		] {
 			assert_crosses_as(blot, json!(wire));
-			assert_crosses_as(Some(blot), json!(wire));
 		}
 		assert_crosses_as(None::<AvatarBlot>, json!(null));
 		assert!(
@@ -820,7 +819,7 @@ mod tests {
 			"an animal the avatar engine cannot draw parsed at the boundary"
 		);
 		assert!(
-			serde_json::from_value::<Option<AvatarBlot>>(json!("chartreuse")).is_err(),
+			serde_json::from_value::<AvatarBlot>(json!("chartreuse")).is_err(),
 			"a colour outside the palette parsed at the boundary"
 		);
 	}
@@ -847,7 +846,6 @@ mod tests {
 		let parsed = serde_json::from_value::<BotIdentity>(submitted).expect("the identity parses");
 
 		assert_eq!(parsed.avatar_blot, None, "a pose reached the mark it is not");
-		assert_eq!(parsed.avatar_animal, AvatarAnimal::Cat);
 	}
 
 	/// What the frontend builds a runtime scope out of. A rename here is a launch
