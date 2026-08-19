@@ -1,4 +1,3 @@
-import { AnimatePresence } from "motion/react"
 import type { ReactNode } from "react"
 
 import {
@@ -26,11 +25,10 @@ interface WorkspaceShellProps
 	 * shows a bot the roster is already showing. Whatever reopens it belongs in the
 	 * main column's own bar.
 	 *
-	 * Omitting it is animated rather than abrupt: the slot is held in an
-	 * `AnimatePresence`, so a panel that animates its own `exit` stays mounted until
-	 * that has played and the main column takes the width back as it goes. A panel
-	 * with no `exit` simply disappears, which is the old behaviour and still
-	 * correct. */
+	 * The column is a mount, not a collapse: it takes its width on the frame it
+	 * appears and gives it back on the frame it goes, deliberately unlike the
+	 * sidebar's animated rail. A panel that animates its own width would be
+	 * animating the main column's layout with it. */
 	panel?: ReactNode
 	/** The main column. Keeps its own scroll boundary beside the sidebar. */
 	children: ReactNode
@@ -64,10 +62,7 @@ const WorkspaceShell = ({
 	>
 		{sidebar}
 		<AnimatedSidebarInset>{children}</AnimatedSidebarInset>
-		{/* `initial={false}` so a shell mounted with the panel already open does not
-		play an entrance nobody asked for on the first paint. Opening it later is a
-		change of state and does animate. */}
-		<AnimatePresence initial={false}>{panel}</AnimatePresence>
+		{panel}
 	</AnimatedSidebarProvider>
 )
 

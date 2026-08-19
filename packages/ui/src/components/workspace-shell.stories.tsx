@@ -396,29 +396,20 @@ export const PanelToggle = meta.story({
 		).toBeNull()
 		await expect(main.getBoundingClientRect().width).toBeCloseTo(closedWidth, 0)
 
-		// Reduced motion, which is what this browser reports: the column arrives at its
-		// full width with no animation to wait out. The wait here is for the browser to
-		// commit a style, not for a transition to play — an animated open would still be
-		// a fraction of the width by now.
+		// Reopening lands on the same width: the column takes it on the frame it
+		// mounts, so there is no entrance to wait out and no width left owed from the
+		// close before it.
 		await userEvent.click(gear)
-		const instant = canvas.getByRole("complementary", { name: SETTINGS_LABEL })
-		await waitFor(async () =>
-			expect(instant.getBoundingClientRect().width).toBe(panelWidth),
-		)
+		await expect(
+			canvas
+				.getByRole("complementary", { name: SETTINGS_LABEL })
+				.getBoundingClientRect().width,
+		).toBe(panelWidth)
 
-		// And the width is not a debt that accumulates. A dozen toggles later the
-		// conversation is exactly as wide as it was before the first one, with no
-		// exiting column left in the tree holding a sliver of it.
-		for (const _ of Array.from({ length: 6 })) {
-			await userEvent.click(gear)
-			await userEvent.click(gear)
-		}
 		await userEvent.click(gear)
-		await waitFor(async () => {
-			await expect(
-				canvasElement.querySelectorAll('[data-slot="bot-settings-panel"]'),
-			).toHaveLength(0)
-			await expect(main.getBoundingClientRect().width).toBe(closedWidth)
-		})
+		await expect(
+			canvasElement.querySelectorAll('[data-slot="bot-settings-panel"]'),
+		).toHaveLength(0)
+		await expect(main.getBoundingClientRect().width).toBe(closedWidth)
 	},
 })
