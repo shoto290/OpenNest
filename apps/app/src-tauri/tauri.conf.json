@@ -32,7 +32,7 @@
 	},
 	"bundle": {
 		"active": true,
-		"targets": ["app", "dmg"],
+		"targets": ["app", "dmg", "deb", "appimage", "nsis"],
 		"category": "DeveloperTool",
 		"copyright": "© 2026 OpenNest",
 		"icon": [
