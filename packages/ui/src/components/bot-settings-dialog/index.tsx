@@ -23,8 +23,11 @@ import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { cn } from "@workspace/ui/lib/utils"
 
 /** The tab a reader lands on, every time the dialog opens. Settings a bot has none
- * of yet are still the first thing to fill in. */
+ * of yet are still the first thing to fill in — unless the host opened the dialog
+ * to ask about a delete, which is a question only [`DANGER_TAB`] holds. */
 const FIRST_TAB = "general"
+
+const DANGER_TAB = "danger"
 
 const UNNAMED_BOT = "Untitled bot"
 
@@ -186,7 +189,7 @@ const BotSettingsDialog = ({
 
 				<Tabs.Root
 					className="flex min-h-0 flex-1"
-					defaultValue={FIRST_TAB}
+					defaultValue={confirmingDelete ? DANGER_TAB : FIRST_TAB}
 					orientation="vertical"
 					ref={setTabs}
 				>
@@ -201,7 +204,7 @@ const BotSettingsDialog = ({
 							icon={Icons.Settings}
 							iconsOnly={iconsOnly}
 							label="General"
-							value="general"
+							value={FIRST_TAB}
 						/>
 						<RailItem
 							icon={Icons.Image}
@@ -230,11 +233,11 @@ const BotSettingsDialog = ({
 							icon={Icons.Alert}
 							iconsOnly={iconsOnly}
 							label="Danger zone"
-							value="danger"
+							value={DANGER_TAB}
 						/>
 					</Tabs.List>
 
-					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value="general">
+					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value={FIRST_TAB}>
 						<SettingsField
 							label="Name"
 							onValueChange={(name) => patch({ name })}
@@ -280,7 +283,7 @@ const BotSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
-					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value="danger">
+					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value={DANGER_TAB}>
 						<DangerZone
 							botName={botName}
 							confirming={isConfirming}

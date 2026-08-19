@@ -199,8 +199,8 @@ type ChatScreenProps = {
 	 * an uploaded picture is not among them: the transcript draws the animal. */
 	bot: Bot
 	chat: Chat
-	/** Whether the settings column stands open beside this one. The gear says so, and
-	 * pressing it is what closes the column again. */
+	/** Whether the settings dialog stands open over this one. The gear says so, and
+	 * pressing it is what closes the dialog again. */
 	isSettingsOpen: boolean
 	onToggleSettings: () => void
 }
@@ -271,6 +271,7 @@ export function ChatScreen({
 								onClick={onToggleSettings}
 								size="icon-sm"
 								tooltip={SETTINGS_LABEL}
+								tooltipSide="bottom"
 								variant="ghost"
 							>
 								<Icons.Settings aria-hidden="true" />
@@ -319,6 +320,7 @@ export function ChatScreen({
 					blot={bot.avatarBlot ?? undefined}
 					seed={bot.id}
 					image={face}
+					onOpenSettings={onToggleSettings}
 				/>
 			) : null}
 

@@ -303,7 +303,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. A bot wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Edit and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
+					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. A bot wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Bot settings and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
 			},
 		},
 	},
@@ -812,7 +812,7 @@ export const RowContextMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which is what this story presses. Check that the menu offers edit and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page. The highlight is drawn on the item under the pointer and nowhere else: it does not slide across from the item before it, which is a deliberate local deviation from the registry component's gliding row — travel under a pointer reads as lag. The row says it carries a menu through `aria-haspopup`, and says whether it is open. The menu is left open here so the panel can be read with it up. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
+					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which is what this story presses. Check that the menu offers bot settings and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page. The highlight is drawn on the item under the pointer and nowhere else: it does not slide across from the item before it, which is a deliberate local deviation from the registry component's gliding row — travel under a pointer reads as lag. The row says it carries a menu through `aria-haspopup`, and says whether it is open. The menu is left open here so the panel can be read with it up. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
 			},
 		},
 	},
@@ -835,21 +835,21 @@ export const RowContextMenu = meta.story({
 		const menu = await overlay.findByRole("menu", {
 			name: "Actions for Cinder",
 		})
-		const edit = within(menu).getByRole("menuitem", { name: "Edit" })
+		const settings = within(menu).getByRole("menuitem", { name: "Bot settings" })
 		const remove = within(menu).getByRole("menuitem", { name: "Delete" })
 		await expect(trigger).toHaveAttribute("aria-expanded", "true")
 		await waitFor(async () => {
-			await expect(edit).toHaveFocus()
+			await expect(settings).toHaveFocus()
 		}, FRAME_POLL)
-		await expect(highlightIn(edit)).not.toBeNull()
+		await expect(highlightIn(settings)).not.toBeNull()
 		await expect(getComputedStyle(remove).color).not.toBe(
-			getComputedStyle(edit).color,
+			getComputedStyle(settings).color,
 		)
 
 		await userEvent.keyboard("{ArrowDown}")
 		await expect(remove).toHaveFocus()
 		await expect(highlightIn(remove)).not.toBeNull()
-		await expect(highlightIn(edit)).toBeNull()
+		await expect(highlightIn(settings)).toBeNull()
 		await userEvent.keyboard("{Escape}")
 		await waitFor(async () => {
 			await expect(overlay.queryByRole("menu")).toBeNull()
@@ -858,7 +858,7 @@ export const RowContextMenu = meta.story({
 
 		await userEvent.pointer({ keys: "[MouseRight]", target: trigger })
 		await userEvent.click(
-			await overlay.findByRole("menuitem", { name: "Edit" }),
+			await overlay.findByRole("menuitem", { name: "Bot settings" }),
 		)
 		await expect(args.onEditBot).toHaveBeenCalledWith("cinder")
 

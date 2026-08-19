@@ -58,6 +58,27 @@ export const Default = meta.story({
 	},
 })
 
+export const WithSettings = meta.story({
+	args: { status: "ready", onOpenSettings: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this on the empty conversation of a host that can open the bot's settings: nothing has been said yet, so describing the bot is still worth offering beside the first prompt. Check that the action sits under the copy and above the arrow hint, that it reads as secondary — the first prompt is still the point of the screen — and that it names the settings exactly as the bar above and the roster row's menu do, so the same door is not called three things. Pick `Default` for a host that offers no way in from here.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const settings = canvas.getByRole("button", { name: "Bot settings" })
+
+		await expect(
+			canvas.getByText(/Type your first prompt in the composer below/),
+		).toBeVisible()
+		await userEvent.click(settings)
+		await expect(args.onOpenSettings).toHaveBeenCalled()
+	},
+})
+
 export const WithoutBlot = meta.story({
 	args: { status: "ready", blot: undefined },
 	parameters: {

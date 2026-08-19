@@ -12,6 +12,11 @@ type ChatEmptyStateStatus = "ready" | "unavailable"
 interface ChatEmptyStateProps extends Omit<ComponentProps<"div">, "children"> {
 	status?: ChatEmptyStateStatus
 	onSetup?: () => void
+	/** Offers the way into this bot's settings, under the copy and above the hint.
+	 * An empty conversation is the one screen with room for it: nothing has been
+	 * said yet, so describing the bot is still worth offering beside the first
+	 * prompt. Omit it and the hint stands alone. */
+	onOpenSettings?: () => void
 	/** The bot this empty conversation belongs to. It titles the screen, so a reader
 	 * knows which of their bots they are about to talk to. Without it the screen
 	 * falls back to naming the product. */
@@ -46,6 +51,7 @@ const MARK_SIZE = 64
 function ChatEmptyState({
 	status = "ready",
 	onSetup,
+	onOpenSettings,
 	name,
 	animal,
 	blot,
@@ -89,10 +95,18 @@ function ChatEmptyState({
 			</div>
 
 			{isReady ? (
-				<p className="flex items-center gap-1.5 text-muted-foreground text-xs">
-					Type your first prompt in the composer below
-					<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
-				</p>
+				<>
+					{onOpenSettings ? (
+						<Button onClick={onOpenSettings} variant="outline">
+							<Icons.Settings aria-hidden="true" />
+							Bot settings
+						</Button>
+					) : null}
+					<p className="flex items-center gap-1.5 text-muted-foreground text-xs">
+						Type your first prompt in the composer below
+						<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
+					</p>
+				</>
 			) : (
 				<Button onClick={onSetup}>Set up Claude Code</Button>
 			)}
