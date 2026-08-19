@@ -32,12 +32,12 @@ describe("toSettingsValue", () => {
 					instructions: "Answer briefly.",
 					model: "haiku",
 					avatarAnimal: "owl",
-					avatarPose: "curious",
+					avatarBlot: "moss",
 					workingDir: "/work/opennest",
 				}),
 			),
 		).toEqual({
-			identity: { animal: "owl", pose: "curious", image: undefined },
+			identity: { animal: "owl", blot: "moss", image: undefined },
 			name: "Nyx",
 			title: "Reviewer",
 			description: "Reads a diff.",
@@ -51,6 +51,14 @@ describe("toSettingsValue", () => {
 	// working at the empty path, and the field shows its own placeholder instead.
 	it("reads a directory the bot does not have as no text at all", () => {
 		expect(toSettingsValue(bot({ workingDir: null })).workingDirectory).toBe("")
+	})
+
+	// A bot nobody marked is a bare animal, not an animal on a default tint: the
+	// picker opens on "No blot" and the avatar draws nothing behind it.
+	it("reads a bot nobody marked as wearing no blot", () => {
+		expect(
+			toSettingsValue(bot({ avatarBlot: null })).identity.blot,
+		).toBeUndefined()
 	})
 })
 
@@ -80,7 +88,7 @@ describe("changesRuntime", () => {
 		expect(
 			changesRuntime(stored, {
 				...value,
-				identity: { animal: "owl", pose: "proud" },
+				identity: { animal: "owl", blot: "sky" },
 			}),
 		).toBe(false)
 	})
@@ -88,9 +96,9 @@ describe("changesRuntime", () => {
 	// The field is text and the column is an absence: a directory emptied to spaces
 	// is a bot naming none, and one that never named any is unchanged by them.
 	it("reads a directory emptied to spaces the way the store stores it", () => {
-		expect(
-			changesRuntime(stored, { ...value, workingDirectory: "   " }),
-		).toBe(true)
+		expect(changesRuntime(stored, { ...value, workingDirectory: "   " })).toBe(
+			true,
+		)
 		expect(
 			changesRuntime(bot({ workingDir: null }), {
 				...toSettingsValue(bot({ workingDir: null })),
@@ -114,14 +122,24 @@ describe("toIdentity", () => {
 
 		expect(
 			toIdentity(
-				{ ...value, identity: { animal: "bear", pose: "happy" } },
+				{ ...value, identity: { animal: "bear", blot: "amber" } },
 				stored,
 			),
 		).toMatchObject({
 			avatarAnimal: "bear",
-			avatarPose: "happy",
+			avatarBlot: "amber",
 			avatarImagePath: null,
 		})
+	})
+
+	// Clearing the blot is the picker emitting an identity with none, and the store
+	// keeps that as the absence it is rather than as a tint named "none".
+	it("writes a blot the reader cleared as an absence", () => {
+		const value = toSettingsValue(stored)
+
+		expect(
+			toIdentity({ ...value, identity: { animal: "owl" } }, stored).avatarBlot,
+		).toBeNull()
 	})
 
 	it("writes a directory nobody typed as an absence rather than as empty text", () => {
@@ -202,7 +220,7 @@ describe("newBotIdentity", () => {
 			description: "",
 			instructions: "",
 			avatarAnimal: "rabbit",
-			avatarPose: "idle",
+			avatarBlot: null,
 			avatarImagePath: null,
 			workingDir: null,
 		})
@@ -235,7 +253,7 @@ describe("toRosterBots", () => {
 			name: "Atlas",
 			title: "Research",
 			animal: "owl",
-			identity: "curious",
+			blot: "moss",
 		})
 		// A bot nobody gave a role draws no badge, which is a title left out rather
 		// than an empty one passed through.
@@ -272,6 +290,15 @@ describe("toRosterBots", () => {
 
 		expect(atlas).toMatchObject({ status: "idle", pose: undefined })
 		expect(beacon).toMatchObject({ status: "idle", pose: undefined })
+	})
+
+	it("leaves a bot nobody marked without a blot rather than with a default one", () => {
+		const [bare] = toRosterBots([bot({ avatarBlot: null })], {
+			selectedBotId: null,
+			working: {},
+		})
+
+		expect(bare.blot).toBeUndefined()
 	})
 
 	it("passes an uploaded picture through and leaves a bot without one to its animal", () => {

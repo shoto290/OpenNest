@@ -32,7 +32,7 @@ const DEFAULT_BOT: Bot = {
 	description: "",
 	model: "sonnet",
 	avatarAnimal: "cat",
-	avatarPose: "idle",
+	avatarBlot: null,
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "",
