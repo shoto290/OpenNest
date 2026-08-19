@@ -15,7 +15,11 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
  * handle is not something a view can render. */
 export type UpdaterState = {
 	available: UpdateRelease | null
-	progress: UpdateProgress | null
+	/** How far the download has come, in whole percent, and null while none is
+	 * running. Whole percent because it is already finer than a bar can move: a
+	 * reading per chunk would re-render the window thousands of times for one
+	 * download and show the reader nothing more. */
+	progress: number | null
 	error: string | null
 }
 
@@ -40,10 +44,14 @@ const messageOf = (error: unknown): string =>
 
 const isSameState = (left: UpdaterState, right: UpdaterState): boolean =>
 	left.error === right.error &&
+	left.progress === right.progress &&
 	left.available?.version === right.available?.version &&
-	left.available?.notes === right.available?.notes &&
-	left.progress?.downloaded === right.progress?.downloaded &&
-	left.progress?.total === right.progress?.total
+	left.available?.notes === right.available?.notes
+
+/** A download the endpoint gave no length for has nothing to be a fraction of, and
+ * reads as started until it lands. Every GitHub asset comes with one. */
+const percentOf = ({ downloaded, total }: UpdateProgress): number =>
+	total ? Math.floor((downloaded / total) * 100) : 0
 
 export const createUpdaterController = (
 	port: UpdaterPort,
@@ -86,9 +94,11 @@ export const createUpdaterController = (
 		if (!update) {
 			return
 		}
-		publish({ ...state, progress: { downloaded: 0, total: null }, error: null })
+		publish({ ...state, progress: 0, error: null })
 		try {
-			await update.install((progress) => publish({ ...state, progress }))
+			await update.install((progress) =>
+				publish({ ...state, progress: percentOf(progress) }),
+			)
 		} catch (error) {
 			publish({ ...state, progress: null, error: messageOf(error) })
 		}

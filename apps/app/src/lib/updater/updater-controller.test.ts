@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createUpdaterController } from "./updater-controller"
-import type {
-	AvailableUpdate,
-	UpdateProgress,
-	UpdaterPort,
-} from "./updater-port"
+import type { AvailableUpdate, UpdaterPort } from "./updater-port"
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000
 
@@ -103,17 +99,11 @@ describe("createUpdaterController", () => {
 	})
 
 	it("keeps a release a later failed check could not confirm", async () => {
-		const answers: UpdaterPort["check"][] = [
-			async () => release(),
-			async () => {
-				throw new Error("offline")
-			},
-		]
-		const controller = createUpdaterController(
-			portOf(() => (answers.shift() as UpdaterPort["check"])()),
-		)
+		const port = portOf(async () => release())
+		const controller = createUpdaterController(port)
 
 		await controller.check()
+		vi.spyOn(port, "check").mockRejectedValue(new Error("offline"))
 		await controller.check()
 
 		expect(controller.getState().available).toEqual({
@@ -124,24 +114,20 @@ describe("createUpdaterController", () => {
 	})
 
 	it("clears the error once the endpoint answers again", async () => {
-		const answers: UpdaterPort["check"][] = [
-			async () => {
-				throw new Error("offline")
-			},
-			async () => null,
-		]
-		const controller = createUpdaterController(
-			portOf(() => (answers.shift() as UpdaterPort["check"])()),
-		)
+		const port = portOf(async () => {
+			throw new Error("offline")
+		})
+		const controller = createUpdaterController(port)
 
 		await controller.check()
+		vi.spyOn(port, "check").mockResolvedValue(null)
 		await controller.check()
 
 		expect(controller.getState().error).toBeNull()
 	})
 
 	it("reports the download as it comes in", async () => {
-		const seen: (UpdateProgress | null)[] = []
+		const seen: (number | null)[] = []
 		const controller = createUpdaterController(
 			portOf(async () =>
 				release({
@@ -156,11 +142,30 @@ describe("createUpdaterController", () => {
 		controller.subscribe(() => seen.push(controller.getState().progress))
 		await controller.install()
 
-		expect(seen).toEqual([
-			{ downloaded: 0, total: null },
-			{ downloaded: 40, total: 100 },
-			{ downloaded: 100, total: 100 },
-		])
+		expect(seen).toEqual([0, 40, 100])
+	})
+
+	// A chunk is a fraction of a percent of a release, and the window has nothing to
+	// show between two readings that round to the same one.
+	it("says nothing for the chunks inside a percent already shown", async () => {
+		const seen: (number | null)[] = []
+		const controller = createUpdaterController(
+			portOf(async () =>
+				release({
+					install: async (onProgress) => {
+						onProgress({ downloaded: 1, total: 1000 })
+						onProgress({ downloaded: 2, total: 1000 })
+						onProgress({ downloaded: 50, total: 1000 })
+					},
+				}),
+			),
+		)
+
+		await controller.check()
+		controller.subscribe(() => seen.push(controller.getState().progress))
+		await controller.install()
+
+		expect(seen).toEqual([0, 5])
 	})
 
 	it("installs nothing when no release was found", async () => {
