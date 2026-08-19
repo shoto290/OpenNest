@@ -5,10 +5,18 @@ import { newBotIdentity, toIdentity } from "./bot-settings"
 import { createQueue } from "../queue"
 import type { Bot } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+import { type LastWord, lastWordIn } from "../conversations/transcript-state"
 
 export type RosterState = {
 	/** Every bot on the record, oldest first, as the store answered it. */
 	bots: Bot[]
+	/** The last word in each bot's main conversation as the record held it at load,
+	 * and when it was said, keyed by bot. It is what a row previews and dates before
+	 * this launch has opened that bot: a conversation nobody has read is still a
+	 * conversation somebody had. A bot with nothing settled in it, and one whose
+	 * conversation could not be read, are both absent — the row keeps both slots empty
+	 * either way. */
+	previews: Record<string, LastWord | undefined>
 	/** The bot the chat is open on. `null` is a reader who owns none: there is no
 	 * bot to fall back to, which is what makes the empty state real. */
 	selectedBotId: string | null
@@ -26,7 +34,9 @@ export type RosterController = {
 	subscribe: (listener: () => void) => () => void
 	/** The roster as the launch finds it, and the bot the app opens on: the oldest,
 	 * or none at all. Nothing is created here — a launch that wrote a bot back would
-	 * resurrect the one a reader deleted. */
+	 * resurrect the one a reader deleted. The rows land first and their previews
+	 * follow: a reader waiting on one conversation to be read is a reader looking at
+	 * no roster at all. */
 	load: () => Promise<void>
 	select: (id: string) => void
 	/** A bot, immediately, with its settings open on it. There is no dialog to fill
@@ -51,6 +61,7 @@ export type RosterController = {
 
 export const initialRosterState: RosterState = {
 	bots: [],
+	previews: {},
 	selectedBotId: null,
 	isEditing: false,
 	isConfirmingDelete: false,
@@ -140,6 +151,32 @@ export const createRosterController = (
 		})
 	}
 
+	/** The tail of one bot's main conversation, or nothing at all. Read per bot and
+	 * refused per bot: a conversation the store will not answer for leaves that row
+	 * blank, and every other row keeps the preview it was read with. */
+	const readPreview = async (botId: string): Promise<LastWord | undefined> => {
+		try {
+			const chat = await store.mainChat(botId)
+			const page = await store.loadPage(chat.id, null)
+			return lastWordIn(page.messages)
+		} catch {
+			return undefined
+		}
+	}
+
+	/** Every row's preview, read at once: they are independent conversations, so
+	 * queueing them behind each other would only make the last row wait for the
+	 * first. */
+	const readPreviews = async (bots: Bot[]) => {
+		const previews: Record<string, LastWord | undefined> = {}
+		await Promise.all(
+			bots.map(async (bot) => {
+				previews[bot.id] = await readPreview(bot.id)
+			}),
+		)
+		set({ previews })
+	}
+
 	/** The value that is still waiting, and then whatever arrived while it was being
 	 * written. The store's answer is only applied once nothing is queued behind it:
 	 * an answer to a value the reader has already typed past would rewind the field
@@ -171,7 +208,10 @@ export const createRosterController = (
 			}
 		},
 
-		load: reload,
+		load: async () => {
+			await reload()
+			await readPreviews(state.bots)
+		},
 
 		select: (id: string) => {
 			if (id !== state.selectedBotId) {

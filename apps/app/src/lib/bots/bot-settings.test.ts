@@ -239,11 +239,16 @@ describe("toRosterBots", () => {
 		bot({ id: "b-2", name: "Beacon", title: "" }),
 	]
 
+	/** The clock the rows below are labelled from, and a moment in the day it reads. */
+	const NOW = new Date(2025, 2, 12, 21, 30).getTime()
+	const TODAY = new Date(2025, 2, 12, 9, 24).getTime()
+
 	it("reads the name, the title and the face off the record", () => {
-		const [atlas, beacon] = toRosterBots(roster, {
-			selectedBotId: null,
-			working: {},
-		})
+		const [atlas, beacon] = toRosterBots(
+			roster,
+			{ working: {}, previews: {} },
+			NOW,
+		)
 
 		expect(atlas).toMatchObject({
 			id: "b-1",
@@ -258,42 +263,107 @@ describe("toRosterBots", () => {
 	})
 
 	// Every bot runs a process of its own, so every row reads its own: the bot the
-	// reader is not looking at is shown answering when it is. The preview line stays
-	// the open bot's — it is the conversation on the screen.
+	// reader is not looking at is shown answering when it is.
 	it("gives every bot the working state of its own process", () => {
-		const [atlas, beacon] = toRosterBots(roster, {
-			selectedBotId: "b-1",
-			working: {
-				"b-1": { isWorking: true, kind: "writing" },
-				"b-2": { isWorking: true, kind: "searching" },
+		const [atlas, beacon] = toRosterBots(
+			roster,
+			{
+				working: {
+					"b-1": { isWorking: true, kind: "writing" },
+					"b-2": { isWorking: true, kind: "searching" },
+				},
+				previews: {},
 			},
-			lastMessage: "Pulled the three papers.",
-		})
+			NOW,
+		)
 
-		expect(atlas).toMatchObject({
-			status: "working",
-			pose: "writing",
-			lastMessage: "Pulled the three papers.",
-		})
+		expect(atlas).toMatchObject({ status: "working", pose: "writing" })
 		expect(beacon).toMatchObject({ status: "working", pose: "searching" })
+	})
+
+	// Every bot holds a conversation of its own, so every row previews its own last
+	// word — the row the reader is not on included.
+	it("gives every bot the last word of its own conversation", () => {
+		const [atlas, beacon] = toRosterBots(
+			roster,
+			{
+				working: {},
+				previews: { "b-1": { text: "Pulled the three papers.", at: TODAY } },
+			},
+			NOW,
+		)
+
+		expect(atlas.lastMessage).toBe("Pulled the three papers.")
+		// A bot nothing has been said to yet previews nothing, and the row keeps the
+		// height it has with a preview.
 		expect(beacon.lastMessage).toBeUndefined()
 	})
 
+	// The line and the time come off the same message, so a row can never date a
+	// preview it is not showing.
+	it("labels a row with the time of the word it previews", () => {
+		const [atlas, beacon] = toRosterBots(
+			roster,
+			{
+				working: {},
+				previews: { "b-1": { text: "Pulled the three papers.", at: TODAY } },
+			},
+			NOW,
+		)
+
+		expect(atlas.timestamp).toBe("09:24")
+		expect(beacon.timestamp).toBeUndefined()
+	})
+
+	// A turn that ended without saying anything: the row has nothing to preview and
+	// still says when the conversation last moved.
+	it("labels a row whose last message said nothing", () => {
+		const [atlas] = toRosterBots(
+			roster,
+			{ working: {}, previews: { "b-1": { at: TODAY } } },
+			NOW,
+		)
+
+		expect(atlas.lastMessage).toBeUndefined()
+		expect(atlas.timestamp).toBe("09:24")
+	})
+
+	// One reading for the whole array: two rows dated a day apart are dated against
+	// the same now, so they cannot both be read as today.
+	it("labels every row of one roster from the one clock it was given", () => {
+		const [atlas, beacon] = toRosterBots(
+			roster,
+			{
+				working: {},
+				previews: {
+					"b-1": { text: "Today", at: TODAY },
+					"b-2": { text: "Yesterday", at: new Date(2025, 2, 11).getTime() },
+				},
+			},
+			NOW,
+		)
+
+		expect(atlas.timestamp).toBe("09:24")
+		expect(beacon.timestamp).toBe("Yesterday")
+	})
+
 	it("leaves a bot with no process of its own idle", () => {
-		const [atlas, beacon] = toRosterBots(roster, {
-			selectedBotId: "b-1",
-			working: { "b-1": { isWorking: false } },
-		})
+		const [atlas, beacon] = toRosterBots(
+			roster,
+			{ working: { "b-1": { isWorking: false } }, previews: {} },
+			NOW,
+		)
 
 		expect(atlas).toMatchObject({ status: "idle", pose: undefined })
 		expect(beacon).toMatchObject({ status: "idle", pose: undefined })
 	})
 
 	it("leaves a bot nobody marked without a blot rather than with a default one", () => {
-		const [bare] = toRosterBots([bot({ avatarBlot: null })], {
-			selectedBotId: null,
-			working: {},
-		})
+		const [bare] = toRosterBots(
+			[bot({ avatarBlot: null })],
+			{ working: {}, previews: {} },
+			NOW,
+		)
 
 		expect(bare.blot).toBeUndefined()
 	})
@@ -304,7 +374,8 @@ describe("toRosterBots", () => {
 				bot({ id: "b-1", avatarImagePath: "/pictures/owl.png" }),
 				bot({ id: "b-2", avatarImagePath: null }),
 			],
-			{ selectedBotId: null, working: {} },
+			{ working: {}, previews: {} },
+			NOW,
 		)
 
 		expect(worn.image).toBe(avatarSrc("/pictures/owl.png"))

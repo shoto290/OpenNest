@@ -15,8 +15,7 @@ import {
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { createChatDriver } from "@/lib/chat/create-driver"
-import { lastAssistantTextFor } from "@/lib/chat/screen-model"
-import { useBotActivity, useChat } from "@/lib/chat/use-chat"
+import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
 
 /** The folder picker the working directory field opens. There is none on this
@@ -56,20 +55,26 @@ export function App() {
 		await roster.controller.remove(id)
 	}
 
-	// Every bot's own, because every bot has a process of its own: the roster shows
-	// the ones answering in the background as busy, not only the one being read.
+	// Every bot's own, because every bot has a process of its own and a conversation
+	// of its own: the roster shows the ones answering in the background as busy, and
+	// previews what each of them last said, not only the one being read.
 	const botIds = useMemo(() => bots.map((bot) => bot.id), [bots])
 	const working = useBotActivity(chat.controller, botIds)
+	const previews = useBotPreviews(
+		chat.controller,
+		botIds,
+		roster.state.previews,
+	)
 	const activity = selectedBotId ? working[selectedBotId] : undefined
-	const lastMessage = lastAssistantTextFor(chat.state)
 
 	// The roster is memoised inside the design system so a streamed token does not
 	// re-measure its layout projections, which only holds if the array it is handed
 	// is the same one between renders. Every input here is stable through a turn —
-	// the last settled reply included.
+	// the last settled message of every bot included — and the clock is read here,
+	// once, so every row of the array it builds is dated against the same now.
 	const rosterBots = useMemo(
-		() => toRosterBots(bots, { selectedBotId, working, lastMessage }),
-		[bots, selectedBotId, working, lastMessage],
+		() => toRosterBots(bots, { working, previews }, Date.now()),
+		[bots, working, previews],
 	)
 
 	return (

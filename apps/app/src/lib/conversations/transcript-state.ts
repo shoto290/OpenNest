@@ -71,6 +71,36 @@ export const selectHasMore = (
 	conversationId: string,
 ): boolean => state.conversations[conversationId]?.hasMore ?? false
 
+/** The last word in a conversation and when it was said, read off one message so
+ * the two can never disagree. `text` is absent for a message that ended without
+ * saying anything — a turn that stopped before its first word still happened at a
+ * time, and the row is entitled to say when. */
+export type LastWord = {
+	text?: string
+	at: number
+}
+
+/** What the last word in a conversation is, whoever said it: it is what a roster
+ * row previews, and a reader's own prompt is as much the state of the conversation
+ * as the answer to it.
+ *
+ * A message still being written is skipped. It is worth nothing on a row — the
+ * sidebar shows a working bot's pose there instead — and trimming a growing answer
+ * on every delta would churn a fresh string per token for a line nobody reads. A
+ * settled message says all it will ever say, so the value holds for the whole
+ * turn. */
+export const lastWordIn = (
+	messages: TranscriptMessage[],
+): LastWord | undefined => {
+	const settled = messages.findLast((message) =>
+		isTerminalCompletion(message.completion),
+	)
+	if (!settled) {
+		return undefined
+	}
+	return { text: settled.content.trim() || undefined, at: settled.createdAt }
+}
+
 /** Messages are held in ascending order, so the front of the list is as far back
  * as the transcript goes. */
 const oldestSeq = (messages: TranscriptMessage[]): number | null =>
