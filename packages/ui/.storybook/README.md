@@ -27,9 +27,24 @@ const meta = preview.meta({
 })
 ```
 
-One title shape, enforced by `storySort` in `preview.tsx`: `<Section>/<Component>` — two levels, never deeper.
+One title shape, enforced by `storySort` in `preview.tsx`: `<Section>/<Component>` — two levels, never deeper. `<Section>` comes from the `SECTIONS` array in `preview.tsx` — that array is the list and its sidebar order, the table below says what each entry takes. The section reflects what the component **is**, not the folder it sits in. Full rationale: **Foundations → Introduction** (`src/foundations/introduction.mdx`).
 
-Design-system sections, in sidebar order: `Foundations`, `Primitives`, `Forms`, `Overlays`, `Feedback`, `Navigation`, `Data`, `Display`, `Layout`, `Patterns`, `Branding`, `AI`. The section reflects what the component **is**, not the folder it sits in. Full rationale: **Foundations → Introduction** (`src/foundations/introduction.mdx`).
+| Section | What lands there |
+| --- | --- |
+| `Foundations` | The raw material — tokens, palette, type scale, motion, icons. Not components. |
+| `Primitives` | Single-purpose building blocks with a variant API: `Button`, `SharedMark`. |
+| `Forms` | What a reader fills in, and the fields that label it. |
+| `Overlays` | Surfaces drawn above the page: `Dialog`, `Tooltip`. |
+| `Feedback` | What the system reports about itself: status, progress, notice, error. |
+| `Navigation` | Sidebars, trees, and the controls that move a reader between places. |
+| `Data` | Tables, lists and charts that render a data set. |
+| `Display` | Read-only rendering of a payload: `Markdown`, `CodeBlock`, `CitationMark`. |
+| `Layout` | Shells and regions that hand room to their slots and draw nothing themselves. |
+| `Patterns` | A composition of the sections above that solves one recurring job end to end. |
+| `Branding` | The product's identity marks: `BotAvatar`, `BotIdentityAvatar`. |
+| `AI` | **Reserved for the conversation with an agent** — the transcript, its turns, its composer, the approvals and traces that interrupt it. |
+
+`AI` is the section authors over-reach for. Ask what the component would be in a product with no agent in it: `Markdown` still renders a payload, `AgentProgress` still reports work, `AgentSidebar` still moves between places. Only a component with no answer to that — the transcript and what happens inside it — stays in `AI`.
 
 An unknown root **throws** at sort time, so a typo fails the sidebar rather than the review.
 

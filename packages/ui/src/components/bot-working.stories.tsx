@@ -83,7 +83,7 @@ const MarkHandoff = () => {
 }
 
 const meta = preview.meta({
-	title: "AI/BotWorking",
+	title: "Feedback/BotWorking",
 	component: BotWorking,
 	parameters: {
 		layout: "padded",
@@ -150,7 +150,7 @@ export const Blot = meta.story({
 		docs: {
 			description: {
 				story:
-					"The tint a bot was marked with, held through every kind of work. The first row carries none and draws the bare animal; the rest carry the same blot, with the working dot still landing on top of it. Pick `AI/BotIdentityAvatar → EveryBlot` for the eight tints themselves.",
+					"The tint a bot was marked with, held through every kind of work. The first row carries none and draws the bare animal; the rest carry the same blot, with the working dot still landing on top of it. Pick `Branding/BotIdentityAvatar → EveryBlot` for the eight tints themselves.",
 			},
 		},
 	},

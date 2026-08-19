@@ -13,7 +13,7 @@ const CHAT_NOTICE_TONES = listExhaustively<ChatNoticeTone>({
 })
 
 const meta = preview.meta({
-	title: "AI/ChatNotice",
+	title: "Feedback/ChatNotice",
 	component: ChatNotice,
 	parameters: {
 		layout: "centered",

@@ -26,7 +26,7 @@ const FieldHost = (props: SettingsFieldProps) => {
 }
 
 const meta = preview.meta({
-	title: "Primitives/SettingsField",
+	title: "Forms/SettingsField",
 	component: SettingsField,
 	render: (args) => (
 		<div className="w-80">

@@ -9,7 +9,7 @@ import { Tooltip } from "@workspace/ui/components/motion/tooltip"
 const SIDES = ["top", "right", "bottom", "left"] as const
 
 const meta = preview.meta({
-	title: "Primitives/Tooltip",
+	title: "Overlays/Tooltip",
 	component: Tooltip,
 	parameters: {
 		layout: "centered",
