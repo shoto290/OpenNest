@@ -18,7 +18,19 @@ type BumpType = (typeof BUMP_TYPES)[number]
 const isBumpType = (value: string): value is BumpType =>
 	(BUMP_TYPES as readonly string[]).includes(value)
 
-const usage = "Usage: bun run release <patch|minor|major|X.Y.Z> [--dry-run]"
+const usage =
+	"Usage: bun run release <patch|minor|major|X.Y.Z> [--notes <path>] [--dry-run]"
+
+const readNotes = async (path: string) => {
+	const file = Bun.file(path)
+	if (!(await file.exists())) throw new Error(`Notes file not found: ${path}`)
+	const notes = (await file.text()).trim()
+	if (!notes) throw new Error(`Notes file is empty: ${path}`)
+	return notes
+}
+
+const buildTagMessage = (tag: string, notes?: string) =>
+	notes ? `Release ${tag}\n\n${notes}` : `Release ${tag}`
 
 const readCurrentVersion = async () => {
 	const text = await Bun.file(FILES.tauriConf).text()
@@ -54,18 +66,26 @@ const writeFile = async (path: string, transform: (text: string) => string) => {
 const run = async () => {
 	const args = Bun.argv.slice(2)
 	const dryRun = args.includes("--dry-run")
-	const input = args.find((arg) => !arg.startsWith("--"))
+	const notesIndex = args.indexOf("--notes")
+	const notesValueIndex = notesIndex === -1 ? -1 : notesIndex + 1
+	const notesPath = args[notesValueIndex]
+	const input = args.find(
+		(arg, index) => !arg.startsWith("--") && index !== notesValueIndex,
+	)
 
-	if (!input) {
+	if (!input || (notesIndex !== -1 && !notesPath)) {
 		console.error(usage)
 		process.exit(1)
 	}
+
+	const notes = notesPath ? await readNotes(notesPath) : undefined
 
 	const current = await readCurrentVersion()
 	const next = computeNext(current, input)
 	const tag = `v${next}`
 
 	console.log(`Release: ${current} -> ${next} (${tag})`)
+	if (notesPath) console.log(`Release notes: ${notesPath}`)
 
 	if (dryRun) {
 		console.log("Dry run — no files changed, no git operations.")
@@ -89,7 +109,7 @@ const run = async () => {
 
 	await $`git add ${FILES.tauriConf} ${FILES.appPkg} ${FILES.cargoToml} ${FILES.cargoLock} ${FILES.bunLock}`
 	await $`git commit -m ${`chore(app): release ${tag}`}`
-	await $`git tag -a ${tag} -m ${`Release ${tag}`}`
+	await $`git tag -a ${tag} --cleanup=verbatim -m ${buildTagMessage(tag, notes)}`
 	await $`git push -u origin ${branch}`
 	await $`git push origin ${tag}`
 
