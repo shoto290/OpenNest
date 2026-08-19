@@ -314,6 +314,11 @@ export function ChatScreen({
 					className="m-auto"
 					status={emptyStateStatus}
 					onSetup={restart}
+					name={bot.name}
+					animal={bot.avatarAnimal}
+					blot={bot.avatarBlot ?? undefined}
+					seed={bot.id}
+					image={face}
 				/>
 			) : null}
 

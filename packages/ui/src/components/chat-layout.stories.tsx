@@ -87,7 +87,9 @@ export const Default = meta.story({
 
 export const Empty = meta.story({
 	args: {
-		children: <ChatEmptyState className="m-auto" onSetup={fn()} />,
+		children: (
+			<ChatEmptyState className="m-auto" name="Nest Keeper" onSetup={fn()} />
+		),
 	},
 	parameters: {
 		docs: {
@@ -98,7 +100,9 @@ export const Empty = meta.story({
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByText("Start with Claude Code")).toBeVisible()
+		await expect(
+			canvas.getByRole("heading", { name: "Nest Keeper" }),
+		).toBeVisible()
 	},
 })
 
