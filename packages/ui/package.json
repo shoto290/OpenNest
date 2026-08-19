@@ -2,6 +2,11 @@
 	"name": "@workspace/ui",
 	"version": "0.0.1",
 	"private": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/shoto290/OpenNest.git"
+	},
 	"type": "module",
 	"exports": {
 		"./globals.css": "./src/styles/globals.css",
