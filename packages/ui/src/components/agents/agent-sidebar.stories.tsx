@@ -303,7 +303,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. A bot wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Bot settings and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
+					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. A bot wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Settings and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
 			},
 		},
 	},
@@ -835,7 +835,7 @@ export const RowContextMenu = meta.story({
 		const menu = await overlay.findByRole("menu", {
 			name: "Actions for Cinder",
 		})
-		const settings = within(menu).getByRole("menuitem", { name: "Bot settings" })
+		const settings = within(menu).getByRole("menuitem", { name: "Settings" })
 		const remove = within(menu).getByRole("menuitem", { name: "Delete" })
 		await expect(trigger).toHaveAttribute("aria-expanded", "true")
 		await waitFor(async () => {
@@ -858,7 +858,7 @@ export const RowContextMenu = meta.story({
 
 		await userEvent.pointer({ keys: "[MouseRight]", target: trigger })
 		await userEvent.click(
-			await overlay.findByRole("menuitem", { name: "Bot settings" }),
+			await overlay.findByRole("menuitem", { name: "Settings" }),
 		)
 		await expect(args.onEditBot).toHaveBeenCalledWith("cinder")
 

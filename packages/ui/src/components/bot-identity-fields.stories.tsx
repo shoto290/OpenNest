@@ -12,7 +12,7 @@ import {
 	BotIdentityFields,
 	type BotIdentityFieldsProps,
 } from "@workspace/ui/components/bot-identity-fields"
-import type { BotIdentity } from "@workspace/ui/components/bot-settings-panel/types"
+import type { BotIdentity } from "@workspace/ui/components/bot-settings"
 
 /** The id the store minted for the bot these fields edit. It is what the shape of
  * its blot is derived from, and the only thing in here a reader cannot change. */

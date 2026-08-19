@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import type { BotSettingsValue } from "@workspace/ui/components/bot-settings-panel"
+import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
 
 import { toSettingsValue } from "./bot-settings"
 import { createRosterController } from "./roster-controller"

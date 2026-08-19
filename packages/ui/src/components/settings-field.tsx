@@ -3,7 +3,7 @@ import { type ChangeEvent, useId } from "react"
 import {
 	FIELD_CONTROL_CLASS,
 	FIELD_LABEL_CLASS,
-} from "@workspace/ui/components/bot-settings-panel/styles"
+} from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SettingsFieldProps = {

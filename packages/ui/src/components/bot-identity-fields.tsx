@@ -21,7 +21,7 @@ import {
 	type BotAvatarBlot,
 	type BotIdentity,
 	titleCase,
-} from "@workspace/ui/components/bot-settings-panel/types"
+} from "@workspace/ui/components/bot-settings"
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
 
