@@ -31,16 +31,25 @@ const SUFFIXED_PAIRS: TokenPair[] = SEMANTIC_TOKENS.filter((token) =>
 	foreground: `${background}${FOREGROUND_SUFFIX}`,
 }))
 
-const TOKEN_PAIRS = [ROOT_PAIR, ...SUFFIXED_PAIRS]
+/** Pairs the naming convention cannot find: text drawn in one family over a
+ * surface from another. A roster row draws its secondary lines in the muted
+ * foreground over the sidebar, and over the sidebar accent once it is selected. */
+const CROSS_FAMILY_PAIRS: TokenPair[] = [
+	{ background: "--sidebar", foreground: "--muted-foreground" },
+	{ background: "--sidebar-accent", foreground: "--muted-foreground" },
+]
 
+const TOKEN_PAIRS = [ROOT_PAIR, ...SUFFIXED_PAIRS, ...CROSS_FAMILY_PAIRS]
+
+/** Keyed by the label a failure prints, since a background now carries more
+ * than one foreground and an exception belongs to one pair, not to a surface. */
 const PAIRS_AWAITING_DESIGN_DECISION: Record<string, number> = {
-	"light --muted": 4.3,
-	"light --sidebar-primary": 2.8,
-	"dark --sidebar-primary": 1.8,
+	"light --sidebar-primary-foreground on --sidebar-primary": 2.8,
+	"dark --sidebar-primary-foreground on --sidebar-primary": 1.8,
 }
 
-const requiredRatio = (theme: ThemeName, pair: TokenPair) =>
-	PAIRS_AWAITING_DESIGN_DECISION[`${theme} ${pair.background}`] ?? AA_TEXT_RATIO
+const requiredRatio = (label: string) =>
+	PAIRS_AWAITING_DESIGN_DECISION[label] ?? AA_TEXT_RATIO
 
 const toLinear = (channel: number) =>
 	channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
@@ -139,8 +148,8 @@ const auditPair = (
 	pair: TokenPair,
 ) => {
 	const ratio = measurePair(pixel, theme, pair)
-	const required = requiredRatio(theme.name, pair)
 	const label = `${theme.name} ${pair.foreground} on ${pair.background}`
+	const required = requiredRatio(label)
 
 	if (ratio < required) {
 		return `${label}: measured ${ratio.toFixed(2)}:1, needs ${required}:1`

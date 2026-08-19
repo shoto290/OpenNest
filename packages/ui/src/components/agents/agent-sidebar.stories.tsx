@@ -175,6 +175,13 @@ const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	title: undefined,
 })
 
+/** A bot nobody has talked to yet: no message to preview and no time to stamp. */
+const withoutHistory = (bot: AgentSidebarBot): AgentSidebarBot => ({
+	...bot,
+	lastMessage: undefined,
+	timestamp: undefined,
+})
+
 const rowsIn = (canvasElement: HTMLElement) =>
 	Array.from(
 		canvasElement.querySelectorAll<HTMLElement>(
@@ -220,15 +227,49 @@ const rowHeights = (rows: HTMLElement[]) =>
 
 const isClipped = (node: HTMLElement) => node.scrollWidth > node.clientWidth
 
+/** How far short of the trailing edge of the text column each preview stops.
+ * Zero is the whole width: the timestamp shares the name line above it rather
+ * than standing beside both lines and cutting the second one short. */
+const previewShortfalls = (rows: HTMLElement[]) =>
+	rows.map((row) => {
+		const preview = slotIn(row, "roster-row-preview").getBoundingClientRect()
+		const column = slotIn(row, "roster-row-timestamp").getBoundingClientRect()
+		return Math.round(column.right - preview.right)
+	})
+
 /** The columns a roster stands on: name, preview and timestamp each sit at the
- * same offset inside every row, the timestamp holds both its edges, and no row
- * is taller than another — whatever any of them carries. */
+ * same offset inside every row, the timestamp holds both its edges, the preview
+ * runs the full width under it, and no row is taller than another — whatever
+ * any of them carries. */
 const expectAlignedRows = async (rows: HTMLElement[]) => {
 	await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-timestamp"))).toBe(1)
 	await expect(uniqueCount(endOffsets(rows, "roster-row-timestamp"))).toBe(1)
+	await expect(previewShortfalls(rows)).toEqual(rows.map(() => 0))
 	await expect(uniqueCount(rowHeights(rows))).toBe(1)
+}
+
+const colorOf = (row: HTMLElement, slot: string) =>
+	getComputedStyle(slotIn(row, slot)).color
+
+/** What a token resolves to in the theme the story is rendered in, so an
+ * assertion names the token rather than a hex the theme is free to move. */
+const tokenColor = (scope: HTMLElement, token: string) => {
+	const probe = document.createElement("div")
+	probe.style.color = `var(${token})`
+	scope.append(probe)
+	const color = getComputedStyle(probe).color
+	probe.remove()
+	return color
+}
+
+/** The two secondary lines of a row read as muted and read alike: the timestamp
+ * is never louder than the message it dates, and neither is the name. */
+const expectMutedSecondaryText = async (row: HTMLElement, muted: string) => {
+	await expect(colorOf(row, "roster-row-preview")).toBe(muted)
+	await expect(colorOf(row, "roster-row-timestamp")).toBe(muted)
+	await expect(colorOf(row, "roster-row-name")).not.toBe(muted)
 }
 
 /** The highlight behind a menu item, which belongs to the highlighted item and
@@ -284,7 +325,7 @@ export const Roster = meta.story({
 		docs: {
 			description: {
 				story:
-					"A dozen bots, some with a title badge and some without, each wearing the blot it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The list is walked with Tab and a row is its own only stop, since the actions carry no button: the create button first, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the blots at rest.",
+					"A dozen bots, some with a title badge and some without, each wearing the blot it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The message and the time read as muted and read alike, on the selected row as on the rest, so a row says its name first and dates itself second; the name is the only line in the row drawn at full strength. The list is walked with Tab and a row is its own only stop, since the actions carry no button: the create button first, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the blots at rest.",
 			},
 		},
 	},
@@ -293,6 +334,10 @@ export const Roster = meta.story({
 		await expect(rows).toHaveLength(ROSTER.length)
 
 		await expectAlignedRows(rows)
+
+		const muted = tokenColor(canvasElement, "--muted-foreground")
+		await expectMutedSecondaryText(rows[0], muted)
+		await expectMutedSecondaryText(rowFor(canvasElement, "Beacon"), muted)
 
 		const badged = rows.filter((row) =>
 			row.querySelector('[data-slot="roster-row-badge"]'),
@@ -436,6 +481,38 @@ export const NoTitles = meta.story({
 		await expect(
 			canvasElement.querySelectorAll('[data-slot="roster-row-badge"]'),
 		).toHaveLength(0)
+		await expectAlignedRows(rows)
+	},
+})
+
+export const NoHistory = meta.story({
+	args: {
+		bots: [
+			ROSTER[0],
+			withoutHistory(ROSTER[1]),
+			withoutHistory(ROSTER[3]),
+			ROSTER[4],
+		],
+		selectedBotId: "beacon",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two bots nobody has talked to yet, between two that carry a message and a time. Check that a row with neither draws two empty lines rather than one — it keeps the height of a full row and holds its name exactly where its neighbours hold theirs, since the lines own their height and not the text inside them — and that the timestamp slot stays reserved at the end of the name line, so a time arriving later lands on the column the rest of the list already stands on instead of shifting it. Pick `Roster` for rows that all carry both, `LongContent` for the name that has to give way to a time on the same line.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+		const bare = rowFor(canvasElement, "Beacon")
+
+		await expect(slotIn(bare, "roster-row-timestamp")).toBeEmptyDOMElement()
+		await expect(slotIn(bare, "roster-row-preview")).toBeEmptyDOMElement()
+		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
+			"09:24",
+		)
+
 		await expectAlignedRows(rows)
 	},
 })
