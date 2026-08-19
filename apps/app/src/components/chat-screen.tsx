@@ -58,7 +58,7 @@ import type {
 import { describeTransportError } from "@/lib/claude/messages"
 import type {
 	AvatarAnimal,
-	AvatarPose,
+	AvatarBlot,
 	Bot,
 } from "@/lib/conversations/store-contract"
 import { avatarSrc } from "@/lib/host"
@@ -67,7 +67,7 @@ import { avatarSrc } from "@/lib/host"
  * node, so a streamed delta still shallow-compares equal. */
 type BotFace = {
 	animal: AvatarAnimal
-	pose: AvatarPose
+	blot?: AvatarBlot
 	image?: string
 }
 
@@ -85,7 +85,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	run,
 	avatar,
 	animal,
-	pose,
+	blot,
 	image,
 	rejected,
 }: BotFace & {
@@ -123,8 +123,8 @@ const TranscriptTurn = memo(function TranscriptTurn({
 				avatar ? (
 					<BotIdentityAvatar
 						animal={animal}
+						blot={blot}
 						image={image}
-						pose={pose}
 						size={CHAT_AVATAR_SIZE}
 					/>
 				) : null
@@ -385,8 +385,8 @@ export function ChatScreen({
 								controller={controller}
 								avatar={index === avatarIndex}
 								animal={bot.avatarAnimal}
+								blot={bot.avatarBlot ?? undefined}
 								image={face}
-								pose={bot.avatarPose}
 								rejected={row.messageId === state.rejectedPromptId}
 							/>
 						))}

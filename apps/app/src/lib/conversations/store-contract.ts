@@ -19,17 +19,18 @@ export type AvatarAnimal =
 	| "owl"
 	| "koala"
 
-/** The eight poses a bot is identified by. The engine animates many more — what a
- * bot is doing right now belongs to the runtime and is not stored. */
-export type AvatarPose =
-	| "idle"
-	| "happy"
-	| "curious"
-	| "proud"
-	| "shy"
-	| "playful"
-	| "bored"
-	| "sleeping"
+/** The eight tints a bot may be marked with. `null` is a bot marked with none,
+ * which is what a bot is until someone marks it — the host holds the same eight and
+ * the same absence, so "no mark" never has to be spelled as a ninth word. */
+export type AvatarBlot =
+	| "coral"
+	| "amber"
+	| "moss"
+	| "water"
+	| "sky"
+	| "lavender"
+	| "rose"
+	| "slate"
 
 /** Who a bot is, as the store is told it — whole, both to create one and to
  * change one. No `id` or `createdAt`: neither is a caller's to choose.
@@ -49,7 +50,7 @@ export type BotIdentity = {
 	description: string
 	model: BotModel
 	avatarAnimal: AvatarAnimal
-	avatarPose: AvatarPose
+	avatarBlot: AvatarBlot | null
 	avatarImagePath: string | null
 	workingDir: string | null
 	/** The system prompt the bot always runs with. Part of the identity because the

@@ -126,7 +126,9 @@ describe("createFakeTranscriptStore", () => {
 
 	it("keeps writing where a seeded transcript left off", async () => {
 		const store = createFakeTranscriptStore({
-			messages: [message({ id: "stored-1", conversationId: FAKE_CHAT_ID, seq: 7 })],
+			messages: [
+				message({ id: "stored-1", conversationId: FAKE_CHAT_ID, seq: 7 }),
+			],
 		})
 
 		expect(await store.appendUserMessage(PROMPT)).toBe(8)
@@ -152,14 +154,14 @@ describe("createFakeTranscriptStore", () => {
 
 		const updated = await store.updateBot(
 			created.id,
-			botIdentity({ name: "Ada", model: "haiku", avatarPose: "sleeping" }),
+			botIdentity({ name: "Ada", model: "haiku", avatarBlot: "slate" }),
 		)
 
 		expect(updated.id).toBe(created.id)
 		expect(updated.createdAt).toBe(created.createdAt)
 		expect(updated.name).toBe("Ada")
 		expect(updated.model).toBe("haiku")
-		expect(updated.avatarPose).toBe("sleeping")
+		expect(updated.avatarBlot).toBe("slate")
 	})
 
 	it("refuses a write on a bot it no longer holds", async () => {

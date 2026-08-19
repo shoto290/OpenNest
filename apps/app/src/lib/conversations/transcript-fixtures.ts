@@ -27,7 +27,7 @@ export const botIdentity = (
 	description: "Reads a diff and says what it would change.",
 	model: "opus",
 	avatarAnimal: "owl",
-	avatarPose: "curious",
+	avatarBlot: "moss",
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "Answer with the file you would touch.",
