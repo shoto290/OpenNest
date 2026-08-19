@@ -24,7 +24,6 @@ export const botIdentity = (
 ): BotIdentity => ({
 	name: "Nyx",
 	title: "Reviewer",
-	description: "Reads a diff and says what it would change.",
 	model: "opus",
 	avatarAnimal: "owl",
 	avatarBlot: "moss",

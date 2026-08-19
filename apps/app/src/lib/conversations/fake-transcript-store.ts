@@ -29,7 +29,6 @@ const DEFAULT_BOT: Bot = {
 	id: "default",
 	name: "Claude",
 	title: "",
-	description: "",
 	model: "sonnet",
 	avatarAnimal: "cat",
 	avatarBlot: null,

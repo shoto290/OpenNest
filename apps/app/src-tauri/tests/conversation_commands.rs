@@ -795,7 +795,6 @@ fn an_identity(name: &str, model: &str, animal: &str, blot: Value) -> Value {
 	json!({
 		"name": name,
 		"title": "Reviewer",
-		"description": "Reads a diff and says what it would change.",
 		"model": model,
 		"avatarAnimal": animal,
 		"avatarBlot": blot,

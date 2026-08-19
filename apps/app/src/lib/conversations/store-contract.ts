@@ -47,7 +47,6 @@ export type AvatarBlot =
 export type BotIdentity = {
 	name: string
 	title: string
-	description: string
 	model: BotModel
 	avatarAnimal: AvatarAnimal
 	avatarBlot: AvatarBlot | null

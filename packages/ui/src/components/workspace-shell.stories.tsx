@@ -60,7 +60,6 @@ const SETTINGS: BotSettingsValue = {
 	identity: { animal: "owl", blot: "sky" },
 	name: "Atlas",
 	title: "Research",
-	description: "Reads the monorepo before it answers.",
 	instructions: "Say which file you would touch, then the change.",
 	model: "sonnet",
 	workingDirectory: "/Users/ada/Projects/opennest",

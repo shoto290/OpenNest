@@ -211,7 +211,6 @@ pub struct Bot {
 	pub id: String,
 	pub name: String,
 	pub title: String,
-	pub description: String,
 	/// An alias, or whatever else a caller wrote: free text, on purpose. See
 	/// [`DEFAULT_BOT_MODEL`].
 	pub model: String,
@@ -239,7 +238,6 @@ pub struct Bot {
 pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
-	pub description: String,
 	/// An alias, or whatever else a caller wrote: free text, on purpose. See
 	/// [`DEFAULT_BOT_MODEL`].
 	pub model: String,
@@ -399,14 +397,14 @@ impl ConversationsRepository {
 	}
 }
 
-/// The projection [`bot`] maps position by position. Both statements list the
-/// columns in the same order for that reason, and a column added to one without
-/// the other is a field read out of its neighbour.
-const SELECT_BOT: &str = "SELECT id, name, title, description, model, avatar_animal, avatar_blot,
+/// [`bot`] reads the row by column name, so the two statements only have to name
+/// the same columns — the order they list them in is theirs to choose, and a
+/// column dropped from both is a line deleted rather than a projection renumbered.
+const SELECT_BOT: &str = "SELECT id, name, title, model, avatar_animal, avatar_blot,
 		avatar_image_path, working_dir, instructions, memory, created_at
 	FROM bots WHERE id = ?1";
 
-const SELECT_BOTS: &str = "SELECT id, name, title, description, model, avatar_animal, avatar_blot,
+const SELECT_BOTS: &str = "SELECT id, name, title, model, avatar_animal, avatar_blot,
 		avatar_image_path, working_dir, instructions, memory, created_at
 	FROM bots ORDER BY created_at ASC, id ASC";
 
@@ -519,14 +517,13 @@ fn created_bot(
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
-		"INSERT INTO bots (id, name, title, description, model, avatar_animal, avatar_blot,
+		"INSERT INTO bots (id, name, title, model, avatar_animal, avatar_blot,
 				avatar_image_path, working_dir, instructions, created_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
 		params![
 			id,
 			identity.name,
 			identity.title,
-			identity.description,
 			identity.model,
 			identity.avatar_animal,
 			identity.avatar_blot,
@@ -551,15 +548,14 @@ fn updated_bot(
 ) -> Result<Bot, ConversationError> {
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
-		"UPDATE bots SET name = ?2, title = ?3, description = ?4, model = ?5,
-				avatar_animal = ?6, avatar_blot = ?7, avatar_image_path = ?8, working_dir = ?9,
-				instructions = ?10
+		"UPDATE bots SET name = ?2, title = ?3, model = ?4,
+				avatar_animal = ?5, avatar_blot = ?6, avatar_image_path = ?7, working_dir = ?8,
+				instructions = ?9
 			WHERE id = ?1",
 		params![
 			id,
 			identity.name,
 			identity.title,
-			identity.description,
 			identity.model,
 			identity.avatar_animal,
 			identity.avatar_blot,
@@ -648,18 +644,17 @@ fn participant(row: &Row<'_>) -> rusqlite::Result<Participant> {
 
 fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 	Ok(Bot {
-		id: row.get(0)?,
-		name: row.get(1)?,
-		title: row.get(2)?,
-		description: row.get(3)?,
-		model: row.get(4)?,
-		avatar_animal: row.get(5)?,
-		avatar_blot: row.get(6)?,
-		avatar_image_path: row.get(7)?,
-		working_dir: row.get(8)?,
-		instructions: row.get(9)?,
-		memory: row.get(10)?,
-		created_at: row.get(11)?,
+		id: row.get("id")?,
+		name: row.get("name")?,
+		title: row.get("title")?,
+		model: row.get("model")?,
+		avatar_animal: row.get("avatar_animal")?,
+		avatar_blot: row.get("avatar_blot")?,
+		avatar_image_path: row.get("avatar_image_path")?,
+		working_dir: row.get("working_dir")?,
+		instructions: row.get("instructions")?,
+		memory: row.get("memory")?,
+		created_at: row.get("created_at")?,
 	})
 }
 
@@ -684,7 +679,6 @@ mod tests {
 		BotIdentity {
 			name: name.to_owned(),
 			title: String::new(),
-			description: String::new(),
 			model: DEFAULT_BOT_MODEL.to_owned(),
 			avatar_animal: DEFAULT_BOT_ANIMAL,
 			avatar_blot: None,
@@ -892,7 +886,6 @@ mod tests {
 		let described = BotIdentity {
 			name: "Nyx".to_owned(),
 			title: "Reviewer".to_owned(),
-			description: "Reads a diff and says what it would change.".to_owned(),
 			model: "haiku".to_owned(),
 			avatar_animal: AvatarAnimal::Owl,
 			avatar_blot: Some(AvatarBlot::Coral),
@@ -908,7 +901,6 @@ mod tests {
 		assert_eq!(listed.len(), 1);
 		assert_eq!(listed[0].name, described.name);
 		assert_eq!(listed[0].title, described.title);
-		assert_eq!(listed[0].description, described.description);
 		assert_eq!(listed[0].model, "haiku");
 		assert_eq!(listed[0].avatar_animal, AvatarAnimal::Owl);
 		assert_eq!(listed[0].avatar_blot, Some(AvatarBlot::Coral));
@@ -955,7 +947,6 @@ mod tests {
 				BotIdentity {
 					name: "Ada".to_owned(),
 					title: "Reviewer".to_owned(),
-					description: "Reads a diff.".to_owned(),
 					model: "opus".to_owned(),
 					avatar_animal: AvatarAnimal::Koala,
 					avatar_blot: Some(AvatarBlot::Slate),

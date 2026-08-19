@@ -143,13 +143,6 @@ const BotSettingsPanel = ({
 						value={value.title}
 					/>
 					<SettingsField
-						label="Description"
-						onValueChange={(description) => patch({ description })}
-						placeholder="What this bot is for"
-						rows={3}
-						value={value.description}
-					/>
-					<SettingsField
 						label="Instructions"
 						onValueChange={(instructions) => patch({ instructions })}
 						placeholder="The system prompt this bot always runs with"

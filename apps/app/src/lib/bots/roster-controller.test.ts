@@ -105,7 +105,6 @@ describe("createRosterController", () => {
 			edited(value, {
 				name: "Nyx",
 				title: "Reviewer",
-				description: "Reads a diff.",
 				instructions: "Answer briefly.",
 				model: "haiku",
 				identity: { animal: "owl", blot: "sky" },
@@ -120,7 +119,6 @@ describe("createRosterController", () => {
 		expect(stored).toMatchObject({
 			name: "Nyx",
 			title: "Reviewer",
-			description: "Reads a diff.",
 			instructions: "Answer briefly.",
 			model: "haiku",
 			avatarAnimal: "owl",

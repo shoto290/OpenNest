@@ -216,7 +216,6 @@ fn an_identity(instructions: Option<&str>, working_dir: Option<&Path>) -> Value 
 	json!({
 		"name": "Camille",
 		"title": "",
-		"description": "",
 		"model": "sonnet",
 		"avatarAnimal": "cat",
 		"avatarBlot": Value::Null,
