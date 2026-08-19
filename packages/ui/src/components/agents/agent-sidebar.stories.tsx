@@ -6,7 +6,7 @@ import {
 	AgentSidebar,
 	type AgentSidebarBot,
 	type AgentSidebarProps,
-	type BotIdentityPose,
+	type BotAvatarBlot,
 } from "@workspace/ui/components/agents/agent-sidebar"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
@@ -28,7 +28,7 @@ const UPLOADED_IMAGE =
 const ROSTER: AgentSidebarBot[] = [
 	{
 		id: "atlas",
-		identity: "curious",
+		blot: "sky",
 		name: "Atlas",
 		title: "Research",
 		animal: "owl",
@@ -37,7 +37,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "beacon",
-		identity: "happy",
+		blot: "amber",
 		name: "Beacon",
 		animal: "cat",
 		lastMessage: LAST_MESSAGE,
@@ -45,7 +45,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "cinder",
-		identity: "proud",
+		blot: "coral",
 		name: "Cinder",
 		title: "Build",
 		animal: "dog",
@@ -56,7 +56,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "dune",
-		identity: "bored",
+		blot: "moss",
 		name: "Dune",
 		animal: "bear",
 		lastMessage: "Nothing since the migration landed.",
@@ -64,7 +64,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "ember",
-		identity: "shy",
+		blot: "lavender",
 		name: "Ember",
 		title: "Review",
 		animal: "rabbit",
@@ -73,7 +73,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "flint",
-		identity: "playful",
+		blot: "rose",
 		name: "Flint",
 		animal: "mouse",
 		lastMessage: "Ran the suite twice, both green.",
@@ -81,7 +81,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "grove",
-		identity: "idle",
+		blot: "water",
 		name: "Grove",
 		title: "Docs",
 		animal: "koala",
@@ -90,7 +90,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "harbor",
-		identity: "sleeping",
+		blot: "slate",
 		name: "Harbor",
 		animal: "chick",
 		lastMessage: "Waiting on the credentials you promised.",
@@ -98,16 +98,16 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "iris",
-		identity: "happy",
+		blot: "amber",
 		name: "Iris",
 		title: "Design",
 		animal: "cat",
-		lastMessage: "Swapped the rail avatars for the new poses.",
+		lastMessage: "Swapped the rail avatars for the new blots.",
 		timestamp: "Sat",
 	},
 	{
 		id: "juno",
-		identity: "curious",
+		blot: "sky",
 		name: "Juno",
 		animal: "owl",
 		lastMessage: "Summarised yesterday's session into six bullets.",
@@ -115,7 +115,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "kite",
-		identity: "proud",
+		blot: "coral",
 		name: "Kite",
 		title: "Ops",
 		animal: "dog",
@@ -124,7 +124,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "lumen",
-		identity: "sleeping",
+		blot: "slate",
 		name: "Lumen",
 		animal: "bear",
 		lastMessage: "Nothing yet.",
@@ -132,22 +132,33 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 ]
 
-/** Every pose a bot can be given in its settings, one bot each and none of them
+/** Every blot a bot can be given in its settings, one bot each and none of them
  * running, so the rows and the assertions read off the same list. */
-const IDENTITY_POSES: BotIdentityPose[] = [
-	"idle",
-	"happy",
-	"curious",
-	"proud",
-	"shy",
-	"playful",
-	"bored",
-	"sleeping",
+const IDENTITY_BLOTS: BotAvatarBlot[] = [
+	"coral",
+	"amber",
+	"moss",
+	"water",
+	"sky",
+	"lavender",
+	"rose",
+	"slate",
 ]
 
-const IDENTITY_ROSTER: AgentSidebarBot[] = IDENTITY_POSES.map(
-	(identity, index) => ({ ...ROSTER[index], identity, status: "idle" }),
+const IDENTITY_ROSTER: AgentSidebarBot[] = IDENTITY_BLOTS.map(
+	(blot, index) => ({
+		...ROSTER[index],
+		blot,
+		status: "idle",
+	}),
 )
+
+const blotFillsIn = (canvasElement: HTMLElement) =>
+	Array.from(
+		canvasElement.querySelectorAll<SVGPathElement>(
+			'[data-slot="bot-avatar-blot"]',
+		),
+	).map((path) => path.getAttribute("fill"))
 
 const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	...bot,
@@ -263,7 +274,7 @@ export const Roster = meta.story({
 		docs: {
 			description: {
 				story:
-					"A dozen bots, some with a title badge and some without, each holding the identity pose it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The list is walked with Tab and a row is its own only stop, since the actions carry no button: the create button first, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the poses at rest.",
+					"A dozen bots, some with a title badge and some without, each wearing the blot it was given. Check that the avatars, the names and the timestamps each hold one column down the whole list — a row without a badge must not slide its name or its preview out of line with the row above it — and that every row is the same height whatever it carries. The list is walked with Tab and a row is its own only stop, since the actions carry no button: the create button first, then one stop per row, and Enter on a row reports the selection rather than taking it. Pick `LongContent` for the same list under names and messages that do not fit, `RowContextMenu` for the actions behind a row, `Identities` for the blots at rest.",
 			},
 		},
 	},
@@ -466,7 +477,7 @@ export const UploadedPictures = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two bots wearing a picture their reader uploaded, beside one wearing its animal. A picture is a still image whatever the bot is doing, so the row that is running says so with its activity dot and its message line rather than by moving — and it lands in the same slot as a drawing, so the names and the timestamps stay on the column the rest of the roster holds. Check that a row with a picture draws no animal at all, and that the picture is decorative: the row is already named by its own text. Pick `Identities` for the animals a bot wears when it has no picture.",
+					"Two bots wearing a picture their reader uploaded, beside one wearing its animal. A picture is a still image whatever the bot is doing, so the row that is running says so with its activity dot and its message line rather than by moving — and it lands in the same slot as a drawing, so the names and the timestamps stay on the column the rest of the roster holds. Check that a row with a picture draws no animal and no blot at all, and that the picture is decorative: the row is already named by its own text. Pick `Identities` for the animals a bot wears when it has no picture.",
 			},
 		},
 	},
@@ -499,19 +510,20 @@ export const Identities = meta.story({
 		docs: {
 			description: {
 				story:
-					"The eight poses a bot can be given in its settings, one per row, with nothing running. Every avatar here is a still frame: an idle bot is drawn once and left alone, so a panel of bots that are doing nothing is a panel that does not move — and the one row that does move is doing work. Check that each row wears the pose its bot chose rather than a shared resting one, that no row carries an activity dot, and that the panel does not report itself busy. The test browser renders every story with reduced motion, so the stillness is read here rather than measured; open the story in Storybook beside `Working` to see the difference. Pick `Working` for the state that animates.",
+					"The eight blots a bot can be given in its settings, one per row, with nothing running. Every avatar here draws the same idle animal — what tells the rows apart is the tint behind it, not what the bot is doing — and every one of them is a still frame, so a panel of bots that are doing nothing is a panel that does not move. Check that each row wears its own tint, that the ink line and the ear accent stay legible over all eight, that no row carries an activity dot, and that the panel does not report itself busy. The test browser renders every story with reduced motion, so the stillness is read here rather than measured; open the story in Storybook beside `Working` to see the difference. Pick `Working` for the state that animates.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
 		const rows = rowsIn(canvasElement)
 
-		await expect(rows).toHaveLength(IDENTITY_POSES.length)
-		for (const [index, pose] of IDENTITY_POSES.entries()) {
+		await expect(rows).toHaveLength(IDENTITY_BLOTS.length)
+		await expect(blotFillsIn(canvasElement)).toEqual(
+			IDENTITY_BLOTS.map((blot) => `var(--bot-blot-${blot})`),
+		)
+		for (const row of rows) {
 			await expect(
-				within(rows[index]).getByRole("img", {
-					name: new RegExp(`${pose}$`),
-				}),
+				within(row).getByRole("img", { name: /idle$/ }),
 			).toBeVisible()
 		}
 
@@ -540,7 +552,7 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four bots running at once and one at rest. Check that each running row holds its own work pose in the avatar and wears the activity dot, that the verb takes over the message line while it runs, and that the row at rest wears neither and keeps its own identity pose instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `Identities` for the poses that hold still, `PermissionPending` for the one running state that looks like rest.",
+					"Four bots running at once and one at rest. Check that each running row holds its own work pose in the avatar and wears the activity dot, that the verb takes over the message line while it runs, and that the row at rest wears neither and keeps its blot and its idle frame instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `Identities` for the rows that hold still, `PermissionPending` for the one running state that looks like rest.",
 			},
 		},
 	},
@@ -566,8 +578,9 @@ export const Working = meta.story({
 			resting.querySelector('[data-slot="bot-activity-dot"]'),
 		).toBeNull()
 		await expect(
-			within(resting).getByRole("img", { name: /shy$/ }),
+			within(resting).getByRole("img", { name: /idle$/ }),
 		).toBeVisible()
+		await expect(blotFillsIn(resting)).toEqual(["var(--bot-blot-lavender)"])
 
 		await expect(
 			within(rowFor(canvasElement, "Atlas")).getByRole("img", {
@@ -601,7 +614,7 @@ export const PermissionPending = meta.story({
 		docs: {
 			description: {
 				story:
-					'A turn blocked on a permission prompt, which a host maps to `status="working"` with `pose="waiting"` — the turn is waiting on the reader, not over. Check that the avatar holds its listening pose rather than the identity pose it wears at rest, that it is still animating, and that the dot is there: the panel reports itself busy and the announcement says the bot is waiting, so a row that looked idle here would contradict both at once. Pick `Working` for the poses that cannot be mistaken for rest, `Identities` for the still frame this state must not fall back to.',
+					'A turn blocked on a permission prompt, which a host maps to `status="working"` with `pose="waiting"` — the turn is waiting on the reader, not over. Check that the avatar holds its listening pose rather than the idle frame it wears at rest, that it is still animating, and that the dot is there: the panel reports itself busy and the announcement says the bot is waiting, so a row that looked idle here would contradict both at once. Pick `Working` for the work poses that cannot be mistaken for rest, `Identities` for the still frame this state must not fall back to.',
 			},
 		},
 	},
@@ -611,7 +624,7 @@ export const PermissionPending = meta.story({
 			within(row).getByRole("img", { name: /listening$/ }),
 		).toBeVisible()
 		await expect(
-			within(row).queryByRole("img", { name: /curious$/ }),
+			within(row).queryByRole("img", { name: /idle$/ }),
 		).toBeNull()
 		await expect(slotIn(row, "roster-row-preview")).toHaveTextContent(
 			"waiting…",
@@ -780,7 +793,7 @@ export const Collapsed = meta.story({
 
 		const panelBox = panel.getBoundingClientRect()
 		const avatarBox = within(row)
-			.getByRole("img", { name: /curious$/ })
+			.getByRole("img", { name: /idle$/ })
 			.getBoundingClientRect()
 		await expect(avatarBox.left).toBeGreaterThanOrEqual(panelBox.left)
 		await expect(avatarBox.right).toBeLessThanOrEqual(panelBox.right)

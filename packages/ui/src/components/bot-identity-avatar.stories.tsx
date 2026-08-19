@@ -3,6 +3,7 @@ import { expect, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Row } from "@workspace/storybook/story-utils"
+import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
 import {
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
@@ -60,16 +61,17 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A bot's face, wherever it is shown: the roster row, its settings column, the replies it signs, the row that says it is working. One component for all of them, because a bot that picked a rabbit is a rabbit everywhere or it is not an identity — three renderings drift the moment one of them learns something the others do not. It draws and nothing else: no name, no live region, no layout. A picture wins over the animal and never moves, so work is said with the dot at its corner; an animal performs the work itself, in the pose the work is named after, and holds a single still frame at rest. Size is the only thing a call site changes.",
+					"A bot's face, wherever it is shown: the roster row, its settings column, the replies it signs, the row that says it is working. One component for all of them, because a bot that picked a rabbit is a rabbit everywhere or it is not an identity — three renderings drift the moment one of them learns something the others do not. It draws and nothing else: no name, no live region, no layout. What tells one bot from another is its animal and the ink blot behind it; every bot at rest holds the same idle frame, so a resting panel says nothing about what anyone is doing. A picture wins over both and never moves, so work is said with the dot at its corner; an animal performs the work itself, in the pose the work is named after. Size is the only thing a call site changes.",
 			},
 		},
 	},
 	args: {
 		animal: "rabbit",
-		pose: "curious",
+		blot: "sky",
 		size: 96,
 	},
 	argTypes: {
+		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
 		size: { control: { type: "range", min: 16, max: 160, step: 8 } },
 		working: { control: "boolean" },
 	},
@@ -80,7 +82,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"One bot at rest: the animal it was given, in the pose it was given, drawn once and left alone. Check that nothing moves and that no activity dot is drawn — a bot doing nothing must look like a bot doing nothing. Pick `Working` for the same bot mid-run.",
+					"One bot at rest: the animal it was given, over the blot it was given, drawn once and left alone. Check that nothing moves, that the blot sits behind the whole animal without a stroke of its own, and that no activity dot is drawn — a bot doing nothing must look like a bot doing nothing. Pick `EveryBlot` for the other seven tints, `Working` for the same bot mid-run.",
 			},
 		},
 	},
@@ -88,7 +90,7 @@ export const Default = meta.story({
 		const [avatar] = avatars(canvasElement)
 
 		await expect(
-			within(avatar).getByRole("img", { name: "Bot avatar rabbit, curious" }),
+			within(avatar).getByRole("img", { name: "Bot avatar rabbit, idle" }),
 		).toBeVisible()
 		await expect(
 			avatar.querySelector('[data-slot="bot-activity-dot"]'),
@@ -102,7 +104,7 @@ export const EverySize = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three sizes the product asks for — a roster row, a settings column, a reply — from one component and one identity. Check that they are the same drawing at three scales and not three drawings: the same animal, the same pose, the same round frame. Nothing else may differ, because nothing else is passed.",
+					"The three sizes the product asks for — a roster row, a settings column, a reply — from one component and one identity. Check that they are the same drawing at three scales and not three drawings: the same animal, the same blot, the same round frame. Nothing else may differ, because nothing else is passed.",
 			},
 		},
 	},
@@ -116,9 +118,40 @@ export const EverySize = meta.story({
 				0,
 			)
 			await expect(
-				within(avatar).getByRole("img", { name: "Bot avatar rabbit, curious" }),
+				within(avatar).getByRole("img", { name: "Bot avatar rabbit, idle" }),
 			).toBeVisible()
 		}
+	},
+})
+
+export const EveryBlot = meta.story({
+	render: (args) => (
+		<Row>
+			<BotIdentityAvatar {...args} blot={undefined} />
+			{BLOT_TINTS.map((blot) => (
+				<BotIdentityAvatar {...args} blot={blot} key={blot} />
+			))}
+		</Row>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The eight tints a bot can be marked with, and the bot marked with none. All eight are light on purpose: the ink line is near-black and the ear accent is coral, and both stop reading over anything darker — check that the outline, the eyes and the ears hold on every tint, and that the tint is the only thing that changes from one to the next. Switch the Storybook theme to dark: the tints do not flip, because a bot's mark is the same colour wherever it is shown. The first avatar draws no blot at all and must be identical to what the component rendered before blots existed.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [none, ...tinted] = avatars(canvasElement)
+
+		await expect(none.querySelector('[data-slot="bot-avatar-blot"]')).toBeNull()
+		await expect(
+			tinted.map((avatar) =>
+				avatar
+					.querySelector('[data-slot="bot-avatar-blot"]')
+					?.getAttribute("fill"),
+			),
+		).toEqual(BLOT_TINTS.map((blot) => `var(--bot-blot-${blot})`))
 	},
 })
 
@@ -129,7 +162,7 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bot at work, in all three places. The animal doing the work is the bot's own — a run must never put a different creature on the screen than the one the reader chose — and the pose is the work: writing, searching, thinking, or listening while it waits on the reader. Every size also wears the dot, sized from the avatar so it reads the same on a 24px reply as on a 96px preview. Open this in Storybook for the movement; the test browser forces reduced motion.",
+					"The bot at work, in all three places. The animal doing the work is the bot's own and it keeps its blot throughout — a run must never put a different creature or a different mark on the screen than the one the reader chose — and the pose is the work: writing, searching, thinking, or listening while it waits on the reader. Every size also wears the dot, sized from the avatar so it reads the same on a 24px reply as on a 96px preview. Open this in Storybook for the movement; the test browser forces reduced motion.",
 			},
 		},
 	},
@@ -171,7 +204,7 @@ export const Uploaded = meta.story({
 		docs: {
 			description: {
 				story:
-					"A bot wearing a picture its reader uploaded. It wins over the animal in every place — a bot with a photograph is that photograph on the roster, in its settings and beside its replies — and it is decorative in all of them: the row, the column and the reply each name the bot in their own text, so the image says nothing twice. Check that no animal is drawn beside it. Pick `UploadedWorking` for the same picture mid-run.",
+					"A bot wearing a picture its reader uploaded. It wins over the animal and its blot in every place — a bot with a photograph is that photograph on the roster, in its settings and beside its replies — and it is decorative in all of them: the row, the column and the reply each name the bot in their own text, so the image says nothing twice. Check that no animal is drawn beside it. Pick `UploadedWorking` for the same picture mid-run.",
 			},
 		},
 	},
@@ -244,7 +277,7 @@ export const BoundToOneBot = meta.story({
 		for (const avatar of drawn()) {
 			await expect(avatar.querySelector("img")).toBeNull()
 			await expect(
-				within(avatar).getByRole("img", { name: "Bot avatar rabbit, curious" }),
+				within(avatar).getByRole("img", { name: "Bot avatar rabbit, idle" }),
 			).toBeVisible()
 		}
 	},

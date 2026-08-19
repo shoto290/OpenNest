@@ -1,25 +1,16 @@
 "use client"
 
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import {
+	BotAvatar,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** The eight poses a bot is identified by — the ones a reader picks in its settings
- * and the bot holds when it is doing nothing. The engine animates many more; those
- * describe work, and none of them is stored against a bot. */
-const BOT_IDENTITY_POSES = [
-	"idle",
-	"happy",
-	"curious",
-	"proud",
-	"shy",
-	"playful",
-	"bored",
-	"sleeping",
-] as const satisfies readonly BotAvatarState[]
-
-type BotIdentityPose = (typeof BOT_IDENTITY_POSES)[number]
+/** What a bot holds when it is not working. One frame, the same for every bot: what
+ * tells two resting bots apart is the blot behind them, not what they are doing. */
+const REST_STATE: BotAvatarState = "idle"
 
 /** What a bot is busy with, named after the pose it holds while doing it. The caller
  * reads it off the running tool. It lives here rather than beside the row that
@@ -59,8 +50,9 @@ const dotSize = (size: number) =>
 type BotIdentityAvatarProps = {
 	/** The animal the bot was given. Drawn unless it carries a picture. */
 	animal?: BotAvatarAnimal
-	/** The pose it holds at rest, as a still frame. */
-	pose?: BotIdentityPose
+	/** The tint drawn behind the animal — what tells one bot from another at a
+	 * glance. Leave it out and the animal is drawn on nothing. */
+	blot?: BotAvatarBlot
 	/** A picture its reader uploaded, already a URL the host will load. It wins over
 	 * the animal and never moves: a photograph cannot act, so work is said with the
 	 * dot instead. */
@@ -87,7 +79,7 @@ type BotIdentityAvatarProps = {
  */
 function BotIdentityAvatar({
 	animal,
-	pose = "idle",
+	blot,
 	image,
 	working = false,
 	kind = "thinking",
@@ -106,9 +98,10 @@ function BotIdentityAvatar({
 				<BotAvatar
 					animal={animal}
 					animated={working}
+					blot={blot}
 					className="block"
 					size={size}
-					state={working ? busyStateFor(kind) : pose}
+					state={working ? busyStateFor(kind) : REST_STATE}
 				/>
 			)}
 			{working ? (
@@ -123,10 +116,4 @@ function BotIdentityAvatar({
 	)
 }
 
-export {
-	BOT_IDENTITY_POSES,
-	BotIdentityAvatar,
-	type BotIdentityAvatarProps,
-	type BotIdentityPose,
-	type BotWorkingKind,
-}
+export { BotIdentityAvatar, type BotIdentityAvatarProps, type BotWorkingKind }

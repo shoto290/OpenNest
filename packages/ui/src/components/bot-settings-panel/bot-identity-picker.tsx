@@ -19,8 +19,9 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { POPUP_CLASS } from "@workspace/ui/components/bot-settings-panel/styles"
 import {
+	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
-	BOT_IDENTITY_POSES,
+	type BotAvatarBlot,
 	type BotIdentity,
 	titleCase,
 } from "@workspace/ui/components/bot-settings-panel/types"
@@ -29,7 +30,15 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const PREVIEW_SIZE = 96
 const ANIMAL_SIZE = 40
-const POSE_SIZE = 28
+const BLOT_SIZE = 24
+
+/** The eight tints and the option that takes the blot off, as one radio group. */
+const BLOT_OPTIONS = [...BLOT_TINTS, undefined] as const
+
+const NO_BLOT_LABEL = "No blot"
+
+const blotLabel = (blot?: BotAvatarBlot) =>
+	blot ? titleCase(blot) : NO_BLOT_LABEL
 
 const TAB_CLASS =
 	"relative z-10 flex h-7 flex-1 items-center justify-center rounded-lg text-muted-foreground text-sm outline-none transition-colors select-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-active:text-foreground motion-reduce:transition-none"
@@ -44,11 +53,11 @@ const OPTION_CLASS =
 const DROPZONE_CLASS =
 	"flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border border-border border-dashed p-6 text-center outline-none transition-colors hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
 
-const POSE_OPTION_CLASS = cn(OPTION_CLASS, "p-1")
+const BLOT_OPTION_CLASS = cn(OPTION_CLASS, "p-0.5")
 
 type PickerGroupProps = {
 	label: string
-	/** Grid shape of the options — the poses pack tighter than the animals. */
+	/** Grid shape of the options — the blots pack tighter than the animals. */
 	className: string
 	children: ReactNode
 }
@@ -85,7 +94,7 @@ const BotIdentityPicker = ({
 
 	const currentLabel = identity.image
 		? "Uploaded image"
-		: `${titleCase(identity.animal)}, ${titleCase(identity.pose)}`
+		: `${titleCase(identity.animal)}, ${blotLabel(identity.blot)}`
 
 	const emitFile = (file: File | undefined) => {
 		if (file) onAvatarUpload(file)
@@ -115,9 +124,9 @@ const BotIdentityPicker = ({
 				>
 					<BotIdentityAvatar
 						animal={identity.animal}
+						blot={identity.blot}
 						image={identity.image}
 						kind={workingKind}
-						pose={identity.pose}
 						size={PREVIEW_SIZE}
 						working={working}
 					/>
@@ -172,7 +181,7 @@ const BotIdentityPicker = ({
 													className="sr-only"
 													name={`${groupId}-animal`}
 													onChange={() =>
-														onIdentityChange({ animal, pose: identity.pose })
+														onIdentityChange({ animal, blot: identity.blot })
 													}
 													type="radio"
 													value={animal}
@@ -181,8 +190,9 @@ const BotIdentityPicker = ({
 													<BotAvatar
 														animal={animal}
 														animated={false}
+														blot={identity.blot}
 														size={ANIMAL_SIZE}
-														state={identity.pose}
+														state="idle"
 													/>
 												</span>
 												<span className="w-full truncate text-center text-[11px] text-muted-foreground">
@@ -192,35 +202,36 @@ const BotIdentityPicker = ({
 										))}
 									</PickerGroup>
 
-									<PickerGroup className="grid-cols-8 gap-1" label="Pose">
-										{BOT_IDENTITY_POSES.map((pose) => (
+									<PickerGroup className="grid-cols-9 gap-1" label="Blot">
+										{BLOT_OPTIONS.map((blot) => (
 											<label
-												className={POSE_OPTION_CLASS}
-												key={pose}
-												title={titleCase(pose)}
+												className={BLOT_OPTION_CLASS}
+												key={blot ?? "none"}
+												title={blotLabel(blot)}
 											>
 												<input
-													checked={identity.pose === pose}
+													checked={identity.blot === blot}
 													className="sr-only"
-													name={`${groupId}-pose`}
+													name={`${groupId}-blot`}
 													onChange={() =>
 														onIdentityChange({
 															animal: identity.animal,
-															pose,
+															blot,
 														})
 													}
 													type="radio"
-													value={pose}
+													value={blot ?? ""}
 												/>
 												<span aria-hidden="true">
 													<BotAvatar
 														animal={identity.animal}
 														animated={false}
-														size={POSE_SIZE}
-														state={pose}
+														blot={blot}
+														size={BLOT_SIZE}
+														state="idle"
 													/>
 												</span>
-												<span className="sr-only">{titleCase(pose)}</span>
+												<span className="sr-only">{blotLabel(blot)}</span>
 											</label>
 										))}
 									</PickerGroup>

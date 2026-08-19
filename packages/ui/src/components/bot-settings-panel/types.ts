@@ -1,19 +1,20 @@
 import {
+	BLOT_TINTS,
+	type BotAvatarBlot,
+} from "@workspace/ui/components/bot-avatar"
+import {
 	ANIMALS,
 	type BotAvatarAnimal,
 } from "@workspace/ui/components/bot-avatar-animals"
-import {
-	BOT_IDENTITY_POSES,
-	type BotIdentityPose,
-} from "@workspace/ui/components/bot-identity-avatar"
 
 const BOT_IDENTITY_ANIMALS = Object.keys(ANIMALS) as BotAvatarAnimal[]
 
 type BotIdentity = {
 	animal: BotAvatarAnimal
-	pose: BotIdentityPose
-	/** An uploaded picture. It wins over the animal and renders static, so the
-	 * liveness the animal carries in its pose moves to an activity dot. */
+	/** The tint drawn behind the animal. Left out, the bot wears no blot. */
+	blot?: BotAvatarBlot
+	/** An uploaded picture. It wins over the animal and hides its blot, so the
+	 * liveness the animal carries moves to an activity dot. */
 	image?: string
 }
 
@@ -39,10 +40,10 @@ const titleCase = (word: string) =>
 	`${word.charAt(0).toUpperCase()}${word.slice(1)}`
 
 export {
+	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
-	BOT_IDENTITY_POSES,
+	type BotAvatarBlot,
 	type BotIdentity,
-	type BotIdentityPose,
 	type BotModelOption,
 	type BotSettingsValue,
 	titleCase,

@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { useArgs } from "storybook/preview-api"
 
 import preview from "@workspace/storybook/preview"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import { BLOT_TINTS, BotAvatar } from "@workspace/ui/components/bot-avatar"
 import {
 	ANIMALS,
 	type BotAvatarAnimal,
@@ -111,6 +111,7 @@ const meta = preview.meta({
 			control: "inline-radio",
 			options: ["regular", "bold", "heavy"],
 		},
+		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
 		animated: { control: "boolean" },
 		wireframe: { control: "boolean" },
 		interactive: { control: "boolean" },
@@ -334,6 +335,29 @@ export const States = meta.story({
 						))}
 					</div>
 				</div>
+			))}
+		</div>
+	),
+})
+
+export const Blots = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The eight tints a bot can be marked with, drawn once behind the whole animal, plus the avatar with no blot at all. The blot sits outside the sketch filter, so it never boils with the line and never animates — the ink is what moves, the mark is what stays. All eight are light on purpose: the line is near-black and the ear accent is coral, and neither reads over anything darker. Reach for this when adding a tint, and check on both themes — the tints do not flip under `.dark`, so a bot's mark is the same colour wherever it is shown. The first cell is the markup the avatar renders without a blot and must be untouched by any of this.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="grid grid-cols-3 gap-6">
+			<LabeledCell label="none">
+				<BotAvatar {...args} animated={false} blot={undefined} size={120} />
+			</LabeledCell>
+			{BLOT_TINTS.map((blot) => (
+				<LabeledCell key={blot} label={blot}>
+					<BotAvatar {...args} animated={false} blot={blot} size={120} />
+				</LabeledCell>
 			))}
 		</div>
 	),
