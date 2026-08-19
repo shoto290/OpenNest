@@ -72,9 +72,10 @@ pub async fn conversation_bots<R: Runtime>(
 /// not in the answer — a caller asks for it the way every other caller does, and
 /// finds the one this write already seated rather than creating it.
 ///
-/// A word outside a closed vocabulary is refused before this runs: `model`,
-/// `avatarAnimal` and `avatarPose` each hold a fixed set, and anything else fails
+/// A word outside a closed vocabulary is refused before this runs: `avatarAnimal`
+/// holds a fixed set and `avatarBlot` that set or `null`, and anything else fails
 /// deserialization — the command is never entered and nothing reaches the file.
+/// `model` is the exception, and free text on purpose: see [`Bot::model`].
 #[tauri::command]
 pub async fn conversation_create_bot<R: Runtime>(
 	app: AppHandle<R>,

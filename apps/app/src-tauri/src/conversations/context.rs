@@ -300,7 +300,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::open;
-	use crate::db::repositories::conversations::{AvatarAnimal, AvatarPose};
+	use crate::db::repositories::conversations::AvatarAnimal;
 	use crate::db::repositories::messages::{
 		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState,
 	};
@@ -327,7 +327,7 @@ mod tests {
 			description: String::new(),
 			model: "sonnet".to_owned(),
 			avatar_animal: AvatarAnimal::Cat,
-			avatar_pose: AvatarPose::Idle,
+			avatar_blot: None,
 			avatar_image_path: None,
 			working_dir: None,
 			instructions: instructions.to_owned(),

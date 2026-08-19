@@ -100,58 +100,59 @@ impl AvatarAnimal {
 	}
 }
 
-/// The eight poses a bot is identified by, out of the many states the engine can
-/// animate. These are the ones a user picks to say who the bot is; the rest are
-/// the runtime's — what a bot is doing right now is not stored at all.
+/// The eight colours a bot may be marked with. A bot wears one or none, and none
+/// is the default: it is `Option::None` here and `NULL` on the disk, never a ninth
+/// word — a bot nobody marked and a bot marked "unmarked" would otherwise be the
+/// same row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AvatarPose {
-	Idle,
-	Happy,
-	Curious,
-	Proud,
-	Shy,
-	Playful,
-	Bored,
-	Sleeping,
+pub enum AvatarBlot {
+	Coral,
+	Amber,
+	Moss,
+	Water,
+	Sky,
+	Lavender,
+	Rose,
+	Slate,
 }
 
-impl AvatarPose {
+impl AvatarBlot {
 	fn as_sql(self) -> &'static str {
 		match self {
-			AvatarPose::Idle => "idle",
-			AvatarPose::Happy => "happy",
-			AvatarPose::Curious => "curious",
-			AvatarPose::Proud => "proud",
-			AvatarPose::Shy => "shy",
-			AvatarPose::Playful => "playful",
-			AvatarPose::Bored => "bored",
-			AvatarPose::Sleeping => "sleeping",
+			AvatarBlot::Coral => "coral",
+			AvatarBlot::Amber => "amber",
+			AvatarBlot::Moss => "moss",
+			AvatarBlot::Water => "water",
+			AvatarBlot::Sky => "sky",
+			AvatarBlot::Lavender => "lavender",
+			AvatarBlot::Rose => "rose",
+			AvatarBlot::Slate => "slate",
 		}
 	}
 
 	fn parse(text: &str) -> Option<Self> {
 		match text {
-			"idle" => Some(AvatarPose::Idle),
-			"happy" => Some(AvatarPose::Happy),
-			"curious" => Some(AvatarPose::Curious),
-			"proud" => Some(AvatarPose::Proud),
-			"shy" => Some(AvatarPose::Shy),
-			"playful" => Some(AvatarPose::Playful),
-			"bored" => Some(AvatarPose::Bored),
-			"sleeping" => Some(AvatarPose::Sleeping),
+			"coral" => Some(AvatarBlot::Coral),
+			"amber" => Some(AvatarBlot::Amber),
+			"moss" => Some(AvatarBlot::Moss),
+			"water" => Some(AvatarBlot::Water),
+			"sky" => Some(AvatarBlot::Sky),
+			"lavender" => Some(AvatarBlot::Lavender),
+			"rose" => Some(AvatarBlot::Rose),
+			"slate" => Some(AvatarBlot::Slate),
 			_ => None,
 		}
 	}
 }
 
 stored_as_text!(AvatarAnimal);
-stored_as_text!(AvatarPose);
+stored_as_text!(AvatarBlot);
 
 /// What the bot the app ships with is given when the step that added a face runs
 /// over it, and what a caller gets nowhere else: every other bot arrives with a
-/// face of its own.
+/// face of its own. There is no default mark — the shipped bot wears none, which
+/// is the column left out of the seed and `NULL` on the disk.
 const DEFAULT_BOT_ANIMAL: AvatarAnimal = AvatarAnimal::Cat;
-const DEFAULT_BOT_POSE: AvatarPose = AvatarPose::Idle;
 
 /// What this module refuses that SQLite would have accepted. It stays here rather
 /// than joining `DatabaseError`: it is not a database that went wrong, and a
@@ -215,7 +216,7 @@ pub struct Bot {
 	/// [`DEFAULT_BOT_MODEL`].
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
-	pub avatar_pose: AvatarPose,
+	pub avatar_blot: Option<AvatarBlot>,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
@@ -243,7 +244,7 @@ pub struct BotIdentity {
 	/// [`DEFAULT_BOT_MODEL`].
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
-	pub avatar_pose: AvatarPose,
+	pub avatar_blot: Option<AvatarBlot>,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
@@ -401,11 +402,11 @@ impl ConversationsRepository {
 /// The projection [`bot`] maps position by position. Both statements list the
 /// columns in the same order for that reason, and a column added to one without
 /// the other is a field read out of its neighbour.
-const SELECT_BOT: &str = "SELECT id, name, title, description, model, avatar_animal, avatar_pose,
+const SELECT_BOT: &str = "SELECT id, name, title, description, model, avatar_animal, avatar_blot,
 		avatar_image_path, working_dir, instructions, memory, created_at
 	FROM bots WHERE id = ?1";
 
-const SELECT_BOTS: &str = "SELECT id, name, title, description, model, avatar_animal, avatar_pose,
+const SELECT_BOTS: &str = "SELECT id, name, title, description, model, avatar_animal, avatar_blot,
 		avatar_image_path, working_dir, instructions, memory, created_at
 	FROM bots ORDER BY created_at ASC, id ASC";
 
@@ -518,7 +519,7 @@ fn created_bot(
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
-		"INSERT INTO bots (id, name, title, description, model, avatar_animal, avatar_pose,
+		"INSERT INTO bots (id, name, title, description, model, avatar_animal, avatar_blot,
 				avatar_image_path, working_dir, instructions, created_at)
 			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
 		params![
@@ -528,7 +529,7 @@ fn created_bot(
 			identity.description,
 			identity.model,
 			identity.avatar_animal,
-			identity.avatar_pose,
+			identity.avatar_blot,
 			identity.avatar_image_path,
 			identity.working_dir,
 			identity.instructions,
@@ -551,7 +552,7 @@ fn updated_bot(
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
 		"UPDATE bots SET name = ?2, title = ?3, description = ?4, model = ?5,
-				avatar_animal = ?6, avatar_pose = ?7, avatar_image_path = ?8, working_dir = ?9,
+				avatar_animal = ?6, avatar_blot = ?7, avatar_image_path = ?8, working_dir = ?9,
 				instructions = ?10
 			WHERE id = ?1",
 		params![
@@ -561,7 +562,7 @@ fn updated_bot(
 			identity.description,
 			identity.model,
 			identity.avatar_animal,
-			identity.avatar_pose,
+			identity.avatar_blot,
 			identity.avatar_image_path,
 			identity.working_dir,
 			identity.instructions,
@@ -630,16 +631,9 @@ fn refuse_if_untouched(rows: usize, id: &str) -> Result<(), ConversationError> {
 /// read back rather than compared — every field of it is now theirs to set.
 fn seed_default_bot(transaction: &Transaction<'_>) -> Result<Bot, ConversationError> {
 	transaction.execute(
-		"INSERT OR IGNORE INTO bots (id, name, model, avatar_animal, avatar_pose, created_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-		params![
-			DEFAULT_BOT_ID,
-			DEFAULT_BOT_NAME,
-			DEFAULT_BOT_MODEL,
-			DEFAULT_BOT_ANIMAL,
-			DEFAULT_BOT_POSE,
-			now(),
-		],
+		"INSERT OR IGNORE INTO bots (id, name, model, avatar_animal, created_at)
+			VALUES (?1, ?2, ?3, ?4, ?5)",
+		params![DEFAULT_BOT_ID, DEFAULT_BOT_NAME, DEFAULT_BOT_MODEL, DEFAULT_BOT_ANIMAL, now()],
 	)?;
 	Ok(transaction.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot)?)
 }
@@ -660,7 +654,7 @@ fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 		description: row.get(3)?,
 		model: row.get(4)?,
 		avatar_animal: row.get(5)?,
-		avatar_pose: row.get(6)?,
+		avatar_blot: row.get(6)?,
 		avatar_image_path: row.get(7)?,
 		working_dir: row.get(8)?,
 		instructions: row.get(9)?,
@@ -693,7 +687,7 @@ mod tests {
 			description: String::new(),
 			model: DEFAULT_BOT_MODEL.to_owned(),
 			avatar_animal: DEFAULT_BOT_ANIMAL,
-			avatar_pose: DEFAULT_BOT_POSE,
+			avatar_blot: None,
 			avatar_image_path: None,
 			working_dir: None,
 			instructions: String::new(),
@@ -901,7 +895,7 @@ mod tests {
 			description: "Reads a diff and says what it would change.".to_owned(),
 			model: "haiku".to_owned(),
 			avatar_animal: AvatarAnimal::Owl,
-			avatar_pose: AvatarPose::Curious,
+			avatar_blot: Some(AvatarBlot::Coral),
 			avatar_image_path: Some("/pictures/owl.png".to_owned()),
 			working_dir: Some("/work/opennest".to_owned()),
 			instructions: "Answer briefly.".to_owned(),
@@ -917,7 +911,7 @@ mod tests {
 		assert_eq!(listed[0].description, described.description);
 		assert_eq!(listed[0].model, "haiku");
 		assert_eq!(listed[0].avatar_animal, AvatarAnimal::Owl);
-		assert_eq!(listed[0].avatar_pose, AvatarPose::Curious);
+		assert_eq!(listed[0].avatar_blot, Some(AvatarBlot::Coral));
 		assert_eq!(listed[0].avatar_image_path.as_deref(), Some("/pictures/owl.png"));
 		assert_eq!(listed[0].working_dir.as_deref(), Some("/work/opennest"));
 		assert_eq!(listed[0].instructions, described.instructions);
@@ -960,7 +954,7 @@ mod tests {
 					description: "Reads a diff.".to_owned(),
 					model: "opus".to_owned(),
 					avatar_animal: AvatarAnimal::Koala,
-					avatar_pose: AvatarPose::Sleeping,
+					avatar_blot: Some(AvatarBlot::Slate),
 					avatar_image_path: Some("/pictures/koala.png".to_owned()),
 					working_dir: Some("/work/opennest".to_owned()),
 					instructions: "answer at length".to_owned(),
@@ -972,7 +966,7 @@ mod tests {
 		assert_eq!(updated.name, "Ada");
 		assert_eq!(updated.title, "Reviewer");
 		assert_eq!(updated.avatar_animal, AvatarAnimal::Koala);
-		assert_eq!(updated.avatar_pose, AvatarPose::Sleeping);
+		assert_eq!(updated.avatar_blot, Some(AvatarBlot::Slate));
 		assert_eq!(updated.working_dir.as_deref(), Some("/work/opennest"));
 		assert_eq!(updated.model, "opus", "an update left the bot on its old model");
 		assert_eq!(
@@ -981,6 +975,54 @@ mod tests {
 		);
 		assert_eq!(updated.memory, "they use bun", "an update cleared the memory");
 		assert_eq!(updated.created_at, created.created_at, "an update moved the moment");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The pose column outlived the vocabulary that wrote it: nothing above reads or
+	/// writes it any more, so a bot described again keeps whatever an older build
+	/// left in it. A write that listed the column would quietly reset every row it
+	/// touched, and no read here could tell.
+	#[tokio::test]
+	async fn a_bot_described_again_keeps_the_pose_an_older_build_wrote() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let id = created.id.clone();
+		let written = id.clone();
+		repository
+			.call(move |connection| {
+				connection.execute(
+					"UPDATE bots SET avatar_pose = 'sleeping' WHERE id = ?1",
+					[&written],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the pose an older build wrote");
+
+		repository
+			.update_bot(
+				id.clone(),
+				BotIdentity { avatar_blot: Some(AvatarBlot::Amber), ..an_identity("Ada") },
+			)
+			.await
+			.expect("the bot is updated");
+
+		assert_eq!(
+			repository
+				.call(move |connection| Ok(connection.query_row(
+					"SELECT avatar_pose FROM bots WHERE id = ?1",
+					[&id],
+					|row| row.get::<_, String>(0)
+				)?))
+				.await
+				.expect("the stored pose"),
+			"sleeping",
+			"describing a bot again rewrote a column nothing projects"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
