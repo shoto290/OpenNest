@@ -25,6 +25,7 @@ import {
 
 import type { ChatController } from "@/lib/chat/chat-controller"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
+import { isTableBlock } from "@/lib/chat/markdown-blocks"
 import {
 	emptyStateStatusFor,
 	needsFreshSession,
@@ -99,6 +100,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 			state={row.completion}
 			run={run}
 			copyText={row.text}
+			bare={isTableBlock(row.text)}
 			avatar={
 				avatar ? (
 					<BotIdentityAvatar

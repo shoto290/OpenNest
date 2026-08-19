@@ -21,12 +21,18 @@ import { MARKDOWN_PROSE_CLASS } from "@workspace/ui/components/markdown/prose"
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
+/** What a bubble paints behind its content. Two of them paint nothing: `ghost`
+ * fills the row for content that lays out its own surface, and `bare` hugs its
+ * content for content that arrives already framed — a table, which would
+ * otherwise be boxed twice, and whose row keeps its actions beside that frame
+ * rather than out at the edge of the transcript. */
 export type MessageBubbleVariant =
 	| "solid"
 	| "soft"
 	| "tint"
 	| "outline"
 	| "ghost"
+	| "bare"
 	| "danger"
 export type MessageBubbleAlign = "start" | "end"
 
@@ -142,6 +148,9 @@ function bubbleContentClass(
 		MARKDOWN_PROSE_CLASS,
 		variant === "solid" && "text-primary-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
+		// A framed block keeps a hair of the padding it gives up: the run's gap is
+		// measured for bubbles, which hold themselves off their neighbours by it.
+		variant === "bare" && "w-auto rounded-none px-0 py-1",
 		variant === "danger" && "text-destructive",
 		interactive &&
 			"cursor-pointer text-left outline-none transition-[background-color,color,transform] duration-150 hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
@@ -182,10 +191,11 @@ export function MessageBubbleContent({
 		[],
 	)
 	const interactive = render?.type === "button" || render?.type === "a"
+	const filled = variant !== "ghost" && variant !== "bare"
 	const classes = cn(bubbleContentClass(variant, interactive), className)
 	const composedChildren = (
 		<>
-			{variant !== "ghost" ? (
+			{filled ? (
 				<motion.span
 					aria-hidden="true"
 					layout={reduce ? false : "size"}

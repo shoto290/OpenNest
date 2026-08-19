@@ -76,6 +76,10 @@ interface AssistantTurnProps {
 	 * the whole answer. Leave it out — or hand it an empty string, as a turn that
 	 * stopped before writing does — and the bubble offers nothing to copy. */
 	copyText?: string
+	/** Drops the bubble behind this row, for content that already draws its own
+	 * frame — a table. The row keeps its place in the run, its gutter and its
+	 * actions; only the fill and the padding go, so a grid is not boxed twice. */
+	bare?: boolean
 	/** The bot's mark, in the left gutter. Pass it on the row that closes a run
 	 * so one avatar stands for every message the bot sent in a row. */
 	avatar?: ReactNode
@@ -203,6 +207,7 @@ function AssistantTurn({
 	state = "complete",
 	run = "single",
 	copyText,
+	bare = false,
 	avatar,
 	carriesMark = false,
 	className,
@@ -233,6 +238,7 @@ function AssistantTurn({
 					{avatar ? <SharedMark markId={markId}>{avatar}</SharedMark> : null}
 				</span>
 				<MessageBubble
+					variant={bare ? "bare" : "soft"}
 					animateIn={receivesMark}
 					className="col-start-2 row-start-1 min-w-0"
 				>
@@ -240,7 +246,10 @@ function AssistantTurn({
 						actions={copyText ? <CopyAction text={copyText} /> : null}
 					>
 						<MessageBubbleContent
-							className={cn("whitespace-pre-wrap", RUN_RADIUS.assistant[run])}
+							className={cn(
+								"whitespace-pre-wrap",
+								!bare && RUN_RADIUS.assistant[run],
+							)}
 						>
 							{children}
 						</MessageBubbleContent>
