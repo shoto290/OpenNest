@@ -1,6 +1,6 @@
 "use client"
 
-import { memo } from "react"
+import { memo, type ReactNode } from "react"
 
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
@@ -13,6 +13,7 @@ import { Icons } from "@workspace/ui/components/icons"
 import {
 	AnimatedSidebar,
 	AnimatedSidebarContent,
+	AnimatedSidebarFooter,
 	AnimatedSidebarHeader,
 	AnimatedSidebarMenu,
 	AnimatedSidebarMenuButton,
@@ -60,6 +61,12 @@ const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
  * transition and stay unfocusable for its whole duration — the drawer moves
  * focus to it the moment it opens, so it transitions colour only. */
 const CREATE_BUTTON = "transition-[color,background-color,box-shadow]"
+
+/** On the rail the pinned region under the list drops its side padding and
+ * centres what it is given, exactly as the header above does — the rail is one
+ * avatar wide, and padding either side of it leaves nothing to draw in. */
+const FOOTER_INSET =
+	"group-data-[state=collapsed]/sidebar:items-center group-data-[state=collapsed]/sidebar:px-0"
 
 const EMPTY_COPY =
 	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
@@ -185,6 +192,11 @@ interface AgentSidebarProps {
 	onCreateBot?: () => void
 	onEditBot?: (id: string) => void
 	onDeleteBot?: (id: string) => void
+	/** Pinned under the list, against the bottom of the column. The panel knows
+	 * nothing of what goes in it and reserves nothing for it: leave it out and the
+	 * list runs to the bottom edge as before. The list keeps the scrolling to
+	 * itself, so this stays in sight however long the roster is. */
+	footer?: ReactNode
 }
 
 const AgentSidebarBase = ({
@@ -194,6 +206,7 @@ const AgentSidebarBase = ({
 	onCreateBot,
 	onEditBot,
 	onDeleteBot,
+	footer,
 }: AgentSidebarProps) => {
 	const selectedBot = roster.find((bot) => bot.id === selectedId)
 
@@ -237,6 +250,11 @@ const AgentSidebarBase = ({
 						</AnimatedSidebarMenu>
 					)}
 				</AnimatedSidebarContent>
+				{footer ? (
+					<AnimatedSidebarFooter className={FOOTER_INSET}>
+						{footer}
+					</AnimatedSidebarFooter>
+				) : null}
 			</AnimatedSidebar>
 			<span className="sr-only" role="status">
 				{announcementFor(selectedBot)}
