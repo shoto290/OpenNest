@@ -33,16 +33,22 @@ const WINDOW_CONTROLS_INSET =
 
 /** Fixed slots: the avatar box and the timestamp box never resize, so a name,
  * a badge and a timestamp land on the same x on every row. The avatar keeps this
- * size whatever it draws — an animal, or a picture the reader uploaded. */
+ * size whatever it draws — an animal, or a picture the reader uploaded. The
+ * timestamp rides the end of the name line and holds its box whether or not the
+ * row carries a time, so it is the name that gives way, never the time. */
 const ROW_AVATAR_SIZE = 40
 const TIMESTAMP_SLOT =
-	"h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
+	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-sidebar-foreground/70 leading-5 tabular-nums"
 
-/** The name line keeps its height with or without a badge, which is what holds
- * the second line — and the row below it — on the same baseline. */
+/** The name line carries the name, the badge and the timestamp, and keeps its
+ * height whichever of them the row has — which is what holds the second line
+ * — and the row below it — on the same baseline. */
 const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
 const TITLE_BADGE =
 	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
+
+/** The second line has the whole text column to itself, and keeps its height
+ * with or without a message. */
 const PREVIEW_LINE = "h-4 truncate text-sidebar-foreground/80 text-xs leading-4"
 
 /** The row is the only trigger the actions have, so it says it carries them
@@ -130,24 +136,22 @@ const BotRosterRow = ({
 						label={bot.name}
 						onSelect={() => onSelect?.(bot.id)}
 					>
-						<span className="flex min-w-0 items-start gap-2">
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className={NAME_LINE}>
-									<span className="truncate" data-slot="roster-row-name">
-										{bot.name}
-									</span>
-									{bot.title ? (
-										<span className={TITLE_BADGE} data-slot="roster-row-badge">
-											{bot.title}
-										</span>
-									) : null}
+						<span className="flex min-w-0 flex-col">
+							<span className={NAME_LINE}>
+								<span className="truncate" data-slot="roster-row-name">
+									{bot.name}
 								</span>
-								<span className={PREVIEW_LINE} data-slot="roster-row-preview">
-									{working ? `${pose}…` : bot.lastMessage}
+								{bot.title ? (
+									<span className={TITLE_BADGE} data-slot="roster-row-badge">
+										{bot.title}
+									</span>
+								) : null}
+								<span className={TIMESTAMP_SLOT} data-slot="roster-row-timestamp">
+									{bot.timestamp}
 								</span>
 							</span>
-							<span className={TIMESTAMP_SLOT} data-slot="roster-row-timestamp">
-								{bot.timestamp}
+							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
+								{working ? `${pose}…` : bot.lastMessage}
 							</span>
 						</span>
 					</AnimatedSidebarMenuButton>

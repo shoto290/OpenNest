@@ -165,6 +165,13 @@ const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	title: undefined,
 })
 
+/** A bot nobody has talked to yet: no message to preview and no time to stamp. */
+const withoutHistory = (bot: AgentSidebarBot): AgentSidebarBot => ({
+	...bot,
+	lastMessage: undefined,
+	timestamp: undefined,
+})
+
 const rowsIn = (canvasElement: HTMLElement) =>
 	Array.from(
 		canvasElement.querySelectorAll<HTMLElement>(
@@ -210,14 +217,26 @@ const rowHeights = (rows: HTMLElement[]) =>
 
 const isClipped = (node: HTMLElement) => node.scrollWidth > node.clientWidth
 
+/** How far short of the trailing edge of the text column each preview stops.
+ * Zero is the whole width: the timestamp shares the name line above it rather
+ * than standing beside both lines and cutting the second one short. */
+const previewShortfalls = (rows: HTMLElement[]) =>
+	rows.map((row) => {
+		const preview = slotIn(row, "roster-row-preview").getBoundingClientRect()
+		const column = slotIn(row, "roster-row-timestamp").getBoundingClientRect()
+		return Math.round(column.right - preview.right)
+	})
+
 /** The columns a roster stands on: name, preview and timestamp each sit at the
- * same offset inside every row, the timestamp holds both its edges, and no row
- * is taller than another — whatever any of them carries. */
+ * same offset inside every row, the timestamp holds both its edges, the preview
+ * runs the full width under it, and no row is taller than another — whatever
+ * any of them carries. */
 const expectAlignedRows = async (rows: HTMLElement[]) => {
 	await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-timestamp"))).toBe(1)
 	await expect(uniqueCount(endOffsets(rows, "roster-row-timestamp"))).toBe(1)
+	await expect(previewShortfalls(rows)).toEqual(rows.map(() => 0))
 	await expect(uniqueCount(rowHeights(rows))).toBe(1)
 }
 
@@ -426,6 +445,38 @@ export const NoTitles = meta.story({
 		await expect(
 			canvasElement.querySelectorAll('[data-slot="roster-row-badge"]'),
 		).toHaveLength(0)
+		await expectAlignedRows(rows)
+	},
+})
+
+export const NoHistory = meta.story({
+	args: {
+		bots: [
+			ROSTER[0],
+			withoutHistory(ROSTER[1]),
+			withoutHistory(ROSTER[3]),
+			ROSTER[4],
+		],
+		selectedBotId: "beacon",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two bots nobody has talked to yet, between two that carry a message and a time. Check that a row with neither draws two empty lines rather than one — it keeps the height of a full row and holds its name exactly where its neighbours hold theirs, since the lines own their height and not the text inside them — and that the timestamp slot stays reserved at the end of the name line, so a time arriving later lands on the column the rest of the list already stands on instead of shifting it. Pick `Roster` for rows that all carry both, `LongContent` for the name that has to give way to a time on the same line.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+		const bare = rowFor(canvasElement, "Beacon")
+
+		await expect(slotIn(bare, "roster-row-timestamp")).toBeEmptyDOMElement()
+		await expect(slotIn(bare, "roster-row-preview")).toBeEmptyDOMElement()
+		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
+			"09:24",
+		)
+
 		await expectAlignedRows(rows)
 	},
 })
