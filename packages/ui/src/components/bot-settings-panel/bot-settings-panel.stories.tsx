@@ -12,6 +12,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	slotsIn,
+	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import {
 	type BotModelOption,
@@ -19,9 +20,6 @@ import {
 	type BotSettingsPanelProps,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-panel"
-
-const UPLOADED_IMAGE =
-	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
 
 /** The id the store minted for the bot this panel edits. It is what the shape of
  * its blot is derived from, and the only thing in here a reader cannot change. */
@@ -54,7 +52,7 @@ const NEW_BOT: BotSettingsValue = {
 
 const UPLOADED_BOT: BotSettingsValue = {
 	...FILLED_BOT,
-	identity: { ...FILLED_BOT.identity, image: UPLOADED_IMAGE },
+	identity: { ...FILLED_BOT.identity, image: UPLOADED_AVATAR_IMAGE },
 }
 
 /** The panel keeps no draft, so a story has to hold the value it edits. */
@@ -187,7 +185,7 @@ export const WithUploadedAvatar = meta.story({
 		const avatar = avatarIn(canvasElement)
 		await expect(avatar.querySelector("img")).toHaveAttribute(
 			"src",
-			UPLOADED_IMAGE,
+			UPLOADED_AVATAR_IMAGE,
 		)
 		await expect(avatar.querySelector("svg")).toBeNull()
 		await expect(
@@ -214,7 +212,7 @@ export const Working = meta.story({
 		const avatar = avatarIn(canvasElement)
 		await expect(avatar.querySelector("img")).toHaveAttribute(
 			"src",
-			UPLOADED_IMAGE,
+			UPLOADED_AVATAR_IMAGE,
 		)
 		await expect(avatar.querySelector("svg")).toBeNull()
 		await expect(
