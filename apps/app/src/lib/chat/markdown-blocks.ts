@@ -10,6 +10,12 @@ const LIST_ITEM = /^ {0,3}(?:([-*+])|\d{1,9}([.)]))(?:\s|$)/
 /** A line that hangs off the line above it rather than starting its own block. */
 const INDENTED = /^\s/
 
+/** The dashes under a table's header: a line of pipes, dashes and the colons that
+ * declare a column's alignment, and nothing else. It is what tells a table from a
+ * paragraph that happens to hold pipes. Opening on one of those three keeps an
+ * indented code sample out, where a leading space would let one in. */
+const TABLE_DELIMITER = /^ {0,3}[-:|][-:| ]*$/
+
 /** What a line does to the block it lands in. A blank line breaks one, unless a
  * fence is holding the block open: there a blank line is code, and the sample
  * stays in one piece. */
@@ -126,4 +132,16 @@ export const toPublishedBlocks = (
 	return closed
 		.map((block) => block.trimEnd())
 		.filter((block) => block.length > 0)
+}
+
+/** A block that is nothing but a GFM table: a header row, the dashes under it,
+ * and the rows below — every line a row of pipes. Such a block draws its own
+ * frame, so the screen has nothing left to put a bubble around. */
+export const isTableBlock = (block: string): boolean => {
+	const lines = block.split("\n")
+	return (
+		lines.length > 1 &&
+		TABLE_DELIMITER.test(lines[1]) &&
+		lines.every((line) => line.includes("|"))
+	)
 }

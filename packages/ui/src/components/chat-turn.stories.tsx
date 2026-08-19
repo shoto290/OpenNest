@@ -13,6 +13,7 @@ import {
 	type ChatTurnState,
 	UserTurn,
 } from "@workspace/ui/components/chat-turn"
+import { Markdown } from "@workspace/ui/components/markdown"
 
 const ANSWER =
 	"The workspace has two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell. Nothing crosses that line in the other direction."
@@ -25,6 +26,14 @@ const RUN = [
 
 const PASTED = `Walk me through every package.\n\nStart with the design system, then the Tauri shell, and call out anything that crosses between them.`
 
+const TABLE_INTRO = "Here is what each chapter covers."
+
+const TABLE = `| § | Subject |
+| --- | --- |
+| 1–2 | The right mental model |
+| 3 | Context as a scarce resource |
+| 4–5 | Framing a request, writing a ticket |`
+
 const TURN_STATES: ChatTurnState[] = [
 	"streaming",
 	"complete",
@@ -33,6 +42,16 @@ const TURN_STATES: ChatTurnState[] = [
 ]
 
 const Avatar = () => <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />
+
+/** The padding of the bubble a node sits in, which is what a bare row gives up. */
+const bubblePaddingOf = (node: Element) => {
+	const bubble = node.closest<HTMLElement>(
+		'[data-slot="message-bubble-content"]',
+	)
+	// `Error` names a story in this file, and that shadows the constructor.
+	if (!bubble) throw new globalThis.Error("This node sits in no bubble")
+	return getComputedStyle(bubble).paddingLeft
+}
 
 /** The handoff the app performs: a run withholds its closing paragraph until
  * the turn lands, so that row mounts in the very commit that hands it the mark. */
@@ -108,7 +127,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `ChatTurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `ChatTurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -285,6 +304,37 @@ export const Variants = meta.story({
 		await expect(canvas.getAllByRole("button", { name: "Copy" })).toHaveLength(
 			4,
 		)
+	},
+})
+
+export const Table = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<UserTurn copyText="What does the guide cover?">
+				What does the guide cover?
+			</UserTurn>
+			<ChatTurnGroup>
+				<AssistantTurn copyText={TABLE_INTRO}>{TABLE_INTRO}</AssistantTurn>
+				<AssistantTurn bare copyText={TABLE} avatar={<Avatar />}>
+					<Markdown>{TABLE}</Markdown>
+				</AssistantTurn>
+			</ChatTurnGroup>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the row a table lands in. A table frames and fills itself, so the row is `bare`: no bubble behind it, no padding around it, and one box around the grid instead of two. Check that the sentence above it keeps its bubble, that the table sits flush against the gutter and still marks the run with its avatar, and that the row's copy stays beside the frame rather than out at the edge of the transcript.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const table = canvas.getByRole("group", { name: "Table" })
+
+		await expect(table).toBeVisible()
+		await expect(bubblePaddingOf(canvas.getByText(TABLE_INTRO))).not.toBe("0px")
+		await expect(bubblePaddingOf(table)).toBe("0px")
 	},
 })
 

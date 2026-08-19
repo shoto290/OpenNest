@@ -20,6 +20,7 @@ const MESSAGE_BUBBLE_VARIANTS = listExhaustively<MessageBubbleVariant>({
 	tint: true,
 	outline: true,
 	ghost: true,
+	bare: true,
 	danger: true,
 })
 
