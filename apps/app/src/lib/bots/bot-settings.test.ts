@@ -239,7 +239,8 @@ describe("toRosterBots", () => {
 		bot({ id: "b-2", name: "Beacon", title: "" }),
 	]
 
-	/** The clock the rows below are labelled from, and a moment in the day it reads. */
+	/** The clock the rows below are labelled from, and a moment twelve hours behind
+	 * the reading it takes. */
 	const NOW = new Date(2025, 2, 12, 21, 30).getTime()
 	const TODAY = new Date(2025, 2, 12, 9, 24).getTime()
 
@@ -301,7 +302,7 @@ describe("toRosterBots", () => {
 
 	// The line and the time come off the same message, so a row can never date a
 	// preview it is not showing.
-	it("labels a row with the time of the word it previews", () => {
+	it("labels a row with the age of the word it previews", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,
 			{
@@ -311,7 +312,7 @@ describe("toRosterBots", () => {
 			NOW,
 		)
 
-		expect(atlas.timestamp).toBe("09:24")
+		expect(atlas.timestamp).toBe("12h")
 		expect(beacon.timestamp).toBeUndefined()
 	})
 
@@ -325,11 +326,11 @@ describe("toRosterBots", () => {
 		)
 
 		expect(atlas.lastMessage).toBeUndefined()
-		expect(atlas.timestamp).toBe("09:24")
+		expect(atlas.timestamp).toBe("12h")
 	})
 
-	// One reading for the whole array: two rows dated a day apart are dated against
-	// the same now, so they cannot both be read as today.
+	// One reading for the whole array: two rows a day apart are aged against the same
+	// now, so they cannot both be read as hours old.
 	it("labels every row of one roster from the one clock it was given", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,
@@ -337,14 +338,14 @@ describe("toRosterBots", () => {
 				working: {},
 				previews: {
 					"b-1": { text: "Today", at: TODAY },
-					"b-2": { text: "Yesterday", at: new Date(2025, 2, 11).getTime() },
+					"b-2": { text: "A day back", at: new Date(2025, 2, 11).getTime() },
 				},
 			},
 			NOW,
 		)
 
-		expect(atlas.timestamp).toBe("09:24")
-		expect(beacon.timestamp).toBe("Yesterday")
+		expect(atlas.timestamp).toBe("12h")
+		expect(beacon.timestamp).toBe("1d")
 	})
 
 	it("leaves a bot with no process of its own idle", () => {

@@ -12,57 +12,77 @@ const at = (
 	minute = 0,
 ): number => new Date(year, month - 1, day, hour, minute).getTime()
 
-/** A Wednesday, late enough in the day that yesterday is a calendar day away rather
- * than a handful of hours. */
+/** A Wednesday, late enough in the day that the distances below are read against a
+ * clock that has already run. */
 const NOW = at(2025, 3, 12, 21, 30)
 
+const MINUTE_MS = 60 * 1000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+const WEEK_MS = 7 * DAY_MS
+
+/** A message that landed a given distance before the reading it is labelled from. */
+const ago = (distance: number): string => rosterTimestamp(NOW - distance, NOW)
+
 describe("rosterTimestamp", () => {
-	it("gives the hour and the minute to a message from today", () => {
-		expect(rosterTimestamp(at(2025, 3, 12, 9, 24), NOW)).toBe("09:24")
-		// Both ends of the day: the small hours are not the afternoon, and a clock
-		// that ran to noon is still on the same page as one that ran to midnight.
-		expect(rosterTimestamp(at(2025, 3, 12, 0, 5), NOW)).toBe("00:05")
-		expect(rosterTimestamp(at(2025, 3, 12, 13, 7), NOW)).toBe("13:07")
+	// The minute a message lands in is the one a reader is still in: it is not a
+	// distance yet, it is the present.
+	it("reads a message from the last minute as now", () => {
+		expect(ago(0)).toBe("now")
+		expect(ago(59 * 1000)).toBe("now")
 	})
 
-	// Ten minutes before midnight and ten minutes after it are hours apart and days
-	// apart, and it is the calendar that a row is read against.
-	it("counts the days by the calendar and not by the hours between them", () => {
-		expect(
-			rosterTimestamp(at(2025, 3, 12, 0, 10), at(2025, 3, 12, 23, 50)),
-		).toBe("00:10")
-		expect(
-			rosterTimestamp(at(2025, 3, 11, 23, 50), at(2025, 3, 12, 0, 10)),
-		).toBe("Yesterday")
+	it("counts the whole minutes of the hour behind it", () => {
+		expect(ago(MINUTE_MS)).toBe("1m")
+		expect(ago(MINUTE_MS + 59 * 1000)).toBe("1m")
+		expect(ago(12 * MINUTE_MS)).toBe("12m")
+		expect(ago(59 * MINUTE_MS)).toBe("59m")
 	})
 
-	it("names yesterday rather than dating it", () => {
-		expect(rosterTimestamp(at(2025, 3, 11, 9, 24), NOW)).toBe("Yesterday")
+	it("counts the whole hours of the day behind it", () => {
+		expect(ago(HOUR_MS)).toBe("1h")
+		expect(ago(HOUR_MS + 59 * MINUTE_MS)).toBe("1h")
+		expect(ago(23 * HOUR_MS)).toBe("23h")
 	})
 
-	// The six days before yesterday: the weekday still locates them, and the last of
-	// them is the furthest one that does.
-	it("names the weekday of the six days before yesterday", () => {
-		expect(rosterTimestamp(at(2025, 3, 10), NOW)).toBe("Mon")
-		expect(rosterTimestamp(at(2025, 3, 9), NOW)).toBe("Sun")
-		expect(rosterTimestamp(at(2025, 3, 6), NOW)).toBe("Thu")
+	it("counts the whole days of the week behind it", () => {
+		expect(ago(DAY_MS)).toBe("1d")
+		expect(ago(DAY_MS + 23 * HOUR_MS)).toBe("1d")
+		expect(ago(6 * DAY_MS)).toBe("6d")
 	})
 
-	// A week back, the weekday it names is the one the row already shows for this
-	// week, so it dates it instead.
-	it("dates a message older than that", () => {
-		expect(rosterTimestamp(at(2025, 3, 5), NOW)).toBe("3/5/25")
-		expect(rosterTimestamp(at(2024, 12, 31), NOW)).toBe("12/31/24")
+	it("counts the whole weeks of the four behind it", () => {
+		expect(ago(WEEK_MS)).toBe("1w")
+		expect(ago(WEEK_MS + 6 * DAY_MS)).toBe("1w")
+		expect(ago(3 * WEEK_MS)).toBe("3w")
 	})
 
-	// The night a clock changes is an hour short, and the day before it is still a
-	// whole day before it.
-	it("counts a day a clock change fell in as a whole day", () => {
-		expect(rosterTimestamp(at(2025, 3, 29), at(2025, 3, 31, 9, 0))).toBe("Sat")
+	// Past four weeks a count of weeks stops locating anything, so the row dates the
+	// message instead.
+	it("dates a message older than four weeks", () => {
+		expect(ago(4 * WEEK_MS)).toBe("2/12")
+		expect(rosterTimestamp(at(2024, 12, 31), NOW)).toBe("12/31")
+	})
+
+	// Every label the row can draw, at its widest, is short enough to be read whole
+	// in a 44px slot.
+	it("keeps every label it draws narrow enough for the row", () => {
+		const widest = [
+			ago(0),
+			ago(59 * MINUTE_MS),
+			ago(23 * HOUR_MS),
+			ago(6 * DAY_MS),
+			ago(3 * WEEK_MS),
+			rosterTimestamp(at(2024, 12, 31), NOW),
+		]
+
+		for (const label of widest) {
+			expect(label.length).toBeLessThanOrEqual(5)
+		}
 	})
 
 	// A host whose clock moved under this launch. It is not the future, it is now.
-	it("reads a message stamped ahead of the clock as today", () => {
-		expect(rosterTimestamp(at(2025, 3, 13, 8, 15), NOW)).toBe("08:15")
+	it("reads a message stamped ahead of the clock as now", () => {
+		expect(rosterTimestamp(at(2025, 3, 13, 8, 15), NOW)).toBe("now")
 	})
 })
