@@ -285,13 +285,50 @@ const FRAGMENT_LINK = `The counts come from the last sync[^count], and the metho
 
 [^count]: Measured on the client, after the cache merge.`
 
-const HOSTILE = `<script>alert("nest")</script>
+const RAW_HTML = `The agent answered with <b>bold</b> in the middle of a sentence, and the **markdown** around it still reads as markdown.
 
-<style>body { display: none }</style>
+The block below is what is being discussed, not the layout of this answer:
 
-<iframe src="https://evil.test"></iframe>
+<section class="report" data-nest="42">
+  <h2>Occupants</h2>
+  <p>Three, one of them new.</p>
+</section>
 
-<img src="x" onerror="alert('nest')" />
+Every character it was written with is on screen, its indentation included.`
+
+const RAW_HTML_IN_LIST = `- \`\`\`ts
+  const nest = readNest(42)
+  \`\`\`
+  <section class="report">
+    <h2>Occupants</h2>
+  </section>
+- | nest | occupants |
+  | --- | --- |
+  | nest_42 | 3 |
+  <section class="report">
+    <h2>Arrivals</h2>
+  </section>
+- > The second pass found one change.
+  <section class="report">
+    <h2>Departures</h2>
+  </section>
+- - a nested item
+  <section class="report">
+    <h2>Pending</h2>
+  </section>`
+
+/** Each payload declares something observable: a script and a handler that would flag the
+ * document, a rule that would hide the block, a frame and an image that would call out.
+ * None of them opens a dialog, so a regression fails an assertion instead of blocking the
+ * run on a modal nothing can dismiss. */
+const HOSTILE_PAYLOADS = [
+	`<script>document.documentElement.dataset.nest = "owned"</script>`,
+	`<style>[data-slot="markdown"] { display: none }</style>`,
+	`<iframe src="https://evil.test/frame"></iframe>`,
+	`<img src="https://evil.test/pixel.png" onerror="document.documentElement.dataset.nest = 'owned'" />`,
+]
+
+const HOSTILE = `${HOSTILE_PAYLOADS.join("\n\n")}
 
 [looks like a link](javascript:alert('nest'))
 
@@ -512,6 +549,13 @@ const diagramsIn = (canvasElement: HTMLElement) =>
 		...(frame.shadowRoot?.querySelectorAll("svg") ?? []),
 	])
 
+/** Everything that names a destination, which is all a request can start from. Read on
+ * the block this story rendered rather than on a timeline the whole page writes into, and
+ * on the declaration rather than on its completion, so it answers for this payload alone
+ * and it fails while a request is still in flight. */
+const destinationsIn = (root: HTMLElement) =>
+	root.querySelectorAll("[href], [src], [srcset]")
+
 /** Nothing mermaid ships may end up in the page itself — its stylesheet least of all. */
 const loosePayloadIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelectorAll(
@@ -541,7 +585,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw `script`, `style` and `iframe` never reach the tree, `on*` attributes and `javascript:` URLs are dropped, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`. Links are read as destinations, never as text: every web link opens outside the app with no referrer and carries the host taken from its href alone, a fragment stays in the answer, a scheme the app cannot open renders as plain text, and a long link is clipped at the bubble width rather than widening it — its destination the last thing to go. Math and diagrams are the two blocks that need code this renderer does not carry: `$…$`, `$$…$$` and a `mermaid` fence each fetch their renderer the first time a document holds one, keep the source on screen until it lands, and keep that same source when it cannot be parsed.",
+					"Renders one markdown block — the payload of a single chat bubble — as GFM. Every author goes through the same allowlist: raw HTML is never turned into nodes and reads as the source text it was written with, `script`, `style` and `iframe` included, while `on*` attributes and `javascript:` URLs are dropped from everything markdown itself produced, so user prose and agent prose are equally safe. Typography comes from the prose class this module owns, which MessageBubbleContent also applies, so a block reads the same inside or outside a bubble. A fenced block goes through the bundled highlighter and carries its own copy control, and a table is framed, scrollable and copyable through `markdown/table.tsx`. Links are read as destinations, never as text: every web link opens outside the app with no referrer and carries the host taken from its href alone, a fragment stays in the answer, a scheme the app cannot open renders as plain text, and a long link is clipped at the bubble width rather than widening it — its destination the last thing to go. Math and diagrams are the two blocks that need code this renderer does not carry: `$…$`, `$$…$$` and a `mermaid` fence each fetch their renderer the first time a document holds one, keep the source on screen until it lands, and keep that same source when it cannot be parsed.",
 			},
 		},
 	},
@@ -1319,17 +1363,79 @@ export const FragmentLink = meta.story({
 	},
 })
 
+export const RawHtml = meta.story({
+	args: { children: RAW_HTML },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"HTML in a message is content being discussed, so it reads as the source it was written with. The parser never turns it into nodes: what a reader sees is the characters, inside a sentence that is still rendered as markdown around them, or as a block of its own that keeps its line breaks and its indentation. Check that the `<b>` reads as four characters while the `**markdown**` beside it is bold, and that the section below stands on four lines with its children indented under it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const source = canvas.getByText(/^<section/)
+
+		await expect(
+			canvas.getByText("markdown", { selector: "strong" }),
+		).toBeVisible()
+		await expect(canvasElement.querySelector("b, section")).toBeNull()
+
+		await expect(renderedLinesOf(source)).toBe(4)
+		await expect(wordLeftOf(source, "<h2>")).toBeGreaterThan(
+			wordLeftOf(source, "<section"),
+		)
+	},
+})
+
+export const RawHtmlInList = meta.story({
+	args: { children: RAW_HTML_IN_LIST },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same source, in the one place its line breaks were being collapsed: a tight list item holding a fence, a table, a quote or a nested list beside it. An item like that reads its whitespace from itself, and it stops preserving whitespace the moment it holds blocks — so the source keeps a block of its own instead of dissolving into the item. Check that each `<section>` stands on three lines with its heading indented, exactly as when it stands alone.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const sources = canvas.getAllByText(/^<section/)
+
+		await expect(sources).toHaveLength(4)
+
+		for (const source of sources) {
+			await expect(renderedLinesOf(source)).toBe(3)
+			await expect(wordLeftOf(source, "<h2>")).toBeGreaterThan(
+				wordLeftOf(source, "<section"),
+			)
+		}
+	},
+})
+
 export const HostileMarkup = meta.story({
 	args: { children: HOSTILE },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The security contract, rendered. A script, a style, an iframe, an `onerror` image, a `javascript:` link and a diagram whose labels are markup all go in; nothing but the trailing paragraph, the inert link text and a diagram of two empty boxes comes out. The diagram is the one place markup is injected rather than built from the tree, so mermaid draws it under its strict level: the script and the event handlers are gone by the time the SVG reaches the DOM, and what a label may still carry is what the allowlist already grants ordinary markdown — an element, never a handler on it. Check that no layout collapses — a surviving `style` block would hide the page — and that the last paragraph still renders, proving the payload was dropped rather than aborting the block.",
+					"The security contract, rendered. A script, a style, an iframe, an `onerror` image, a `javascript:` link and a diagram whose labels are markup all go in; every one of them comes out as the characters it was written with, beside the inert link text and a diagram of two empty boxes. Showing the source is not relaxing anything: the parser still never builds a node from HTML, and the allowlist behind it is unchanged. The diagram is the one place markup is injected rather than built from the tree, so mermaid draws it under its strict level: the script and the event handlers are gone by the time the SVG reaches the DOM, and what a label may still carry is what the allowlist already grants ordinary markdown — an element, never a handler on it. The play proves the three ways this could fail: no script ran, no rule applied — a surviving `style` would hide the block — and no request was attempted.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
+		const [block] = markdownRootsOf(canvasElement)
+
+		for (const payload of HOSTILE_PAYLOADS) {
+			await expect(canvas.getByText(payload)).toBeVisible()
+		}
+
+		await expect(block).toBeVisible()
+		await expect(
+			canvasElement.ownerDocument.documentElement.dataset.nest,
+		).toBeUndefined()
+		await expect(destinationsIn(block)).toHaveLength(0)
+		await expect(loosePayloadIn(canvasElement)).toHaveLength(0)
+
 		await expect(
 			canvas.getByText("Prose after the payload still renders."),
 		).toBeInTheDocument()
