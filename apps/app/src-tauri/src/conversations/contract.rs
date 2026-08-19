@@ -88,47 +88,49 @@ impl From<AvatarAnimal> for conversations::AvatarAnimal {
 	}
 }
 
-/// The eight poses a bot is identified by. The engine animates many more — what a
-/// bot is doing right now is the runtime's, and none of it is stored.
+/// The eight colours a bot may be marked with. `null` crosses for a bot marked
+/// with none, which is what a bot is until someone marks it: an `Option` rather
+/// than a ninth word, so "no mark" and a mark named "none" cannot be confused on
+/// either side.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum AvatarPose {
-	Idle,
-	Happy,
-	Curious,
-	Proud,
-	Shy,
-	Playful,
-	Bored,
-	Sleeping,
+pub enum AvatarBlot {
+	Coral,
+	Amber,
+	Moss,
+	Water,
+	Sky,
+	Lavender,
+	Rose,
+	Slate,
 }
 
-impl From<conversations::AvatarPose> for AvatarPose {
-	fn from(pose: conversations::AvatarPose) -> Self {
-		match pose {
-			conversations::AvatarPose::Idle => AvatarPose::Idle,
-			conversations::AvatarPose::Happy => AvatarPose::Happy,
-			conversations::AvatarPose::Curious => AvatarPose::Curious,
-			conversations::AvatarPose::Proud => AvatarPose::Proud,
-			conversations::AvatarPose::Shy => AvatarPose::Shy,
-			conversations::AvatarPose::Playful => AvatarPose::Playful,
-			conversations::AvatarPose::Bored => AvatarPose::Bored,
-			conversations::AvatarPose::Sleeping => AvatarPose::Sleeping,
+impl From<conversations::AvatarBlot> for AvatarBlot {
+	fn from(blot: conversations::AvatarBlot) -> Self {
+		match blot {
+			conversations::AvatarBlot::Coral => AvatarBlot::Coral,
+			conversations::AvatarBlot::Amber => AvatarBlot::Amber,
+			conversations::AvatarBlot::Moss => AvatarBlot::Moss,
+			conversations::AvatarBlot::Water => AvatarBlot::Water,
+			conversations::AvatarBlot::Sky => AvatarBlot::Sky,
+			conversations::AvatarBlot::Lavender => AvatarBlot::Lavender,
+			conversations::AvatarBlot::Rose => AvatarBlot::Rose,
+			conversations::AvatarBlot::Slate => AvatarBlot::Slate,
 		}
 	}
 }
 
-impl From<AvatarPose> for conversations::AvatarPose {
-	fn from(pose: AvatarPose) -> Self {
-		match pose {
-			AvatarPose::Idle => conversations::AvatarPose::Idle,
-			AvatarPose::Happy => conversations::AvatarPose::Happy,
-			AvatarPose::Curious => conversations::AvatarPose::Curious,
-			AvatarPose::Proud => conversations::AvatarPose::Proud,
-			AvatarPose::Shy => conversations::AvatarPose::Shy,
-			AvatarPose::Playful => conversations::AvatarPose::Playful,
-			AvatarPose::Bored => conversations::AvatarPose::Bored,
-			AvatarPose::Sleeping => conversations::AvatarPose::Sleeping,
+impl From<AvatarBlot> for conversations::AvatarBlot {
+	fn from(blot: AvatarBlot) -> Self {
+		match blot {
+			AvatarBlot::Coral => conversations::AvatarBlot::Coral,
+			AvatarBlot::Amber => conversations::AvatarBlot::Amber,
+			AvatarBlot::Moss => conversations::AvatarBlot::Moss,
+			AvatarBlot::Water => conversations::AvatarBlot::Water,
+			AvatarBlot::Sky => conversations::AvatarBlot::Sky,
+			AvatarBlot::Lavender => conversations::AvatarBlot::Lavender,
+			AvatarBlot::Rose => conversations::AvatarBlot::Rose,
+			AvatarBlot::Slate => conversations::AvatarBlot::Slate,
 		}
 	}
 }
@@ -152,7 +154,7 @@ pub struct Bot {
 	/// knows and shows anything else as it stands.
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
-	pub avatar_pose: AvatarPose,
+	pub avatar_blot: Option<AvatarBlot>,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
@@ -183,7 +185,7 @@ impl Bot {
 			description: bot.description,
 			model: bot.model,
 			avatar_animal: bot.avatar_animal.into(),
-			avatar_pose: bot.avatar_pose.into(),
+			avatar_blot: bot.avatar_blot.map(Into::into),
 			avatar_image_path,
 			working_dir: bot.working_dir,
 			instructions: bot.instructions,
@@ -208,7 +210,7 @@ pub struct BotIdentity {
 	/// See [`Bot::model`]: a label, not a vocabulary.
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
-	pub avatar_pose: AvatarPose,
+	pub avatar_blot: Option<AvatarBlot>,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
@@ -222,7 +224,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			description: identity.description,
 			model: identity.model,
 			avatar_animal: identity.avatar_animal.into(),
-			avatar_pose: identity.avatar_pose.into(),
+			avatar_blot: identity.avatar_blot.map(Into::into),
 			avatar_image_path: identity.avatar_image_path,
 			working_dir: identity.working_dir,
 			instructions: identity.instructions,
@@ -723,7 +725,7 @@ mod tests {
 				description: "Reads a diff and says what it would change.".into(),
 				model: "opus".into(),
 				avatar_animal: AvatarAnimal::Owl,
-				avatar_pose: AvatarPose::Curious,
+				avatar_blot: Some(AvatarBlot::Coral),
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				working_dir: Some("/work/opennest".into()),
 				instructions: "Answer briefly.".into(),
@@ -736,7 +738,7 @@ mod tests {
 				"description": "Reads a diff and says what it would change.",
 				"model": "opus",
 				"avatarAnimal": "owl",
-				"avatarPose": "curious",
+				"avatarBlot": "coral",
 				"avatarImagePath": "/pictures/owl.png",
 				"workingDir": "/work/opennest",
 				"instructions": "Answer briefly.",
@@ -761,7 +763,7 @@ mod tests {
 				description: String::new(),
 				model: "sonnet".into(),
 				avatar_animal: AvatarAnimal::Cat,
-				avatar_pose: AvatarPose::Idle,
+				avatar_blot: None,
 				avatar_image_path: None,
 				working_dir: None,
 				instructions: String::new(),
@@ -772,7 +774,7 @@ mod tests {
 				"description": "",
 				"model": "sonnet",
 				"avatarAnimal": "cat",
-				"avatarPose": "idle",
+				"avatarBlot": null,
 				"avatarImagePath": null,
 				"workingDir": null,
 				"instructions": ""
@@ -780,10 +782,11 @@ mod tests {
 		);
 	}
 
-	/// The eight animals and the eight poses, each crossing as the one word the
+	/// The eight animals and the eight colours, each crossing as the one word the
 	/// avatar engine draws it under. A ninth is not a value this vocabulary can
 	/// express, so the deserializer refuses it before any code runs — which is the
-	/// whole reason a face never reaches the file misspelled.
+	/// whole reason a face never reaches the file misspelled. `null` is the ninth
+	/// answer for a mark and the only one: a bot wearing no colour.
 	#[test]
 	fn every_face_crosses_as_one_word_and_nothing_else_parses() {
 		for (animal, wire) in [
@@ -798,26 +801,51 @@ mod tests {
 		] {
 			assert_crosses_as(animal, json!(wire));
 		}
-		for (pose, wire) in [
-			(AvatarPose::Idle, "idle"),
-			(AvatarPose::Happy, "happy"),
-			(AvatarPose::Curious, "curious"),
-			(AvatarPose::Proud, "proud"),
-			(AvatarPose::Shy, "shy"),
-			(AvatarPose::Playful, "playful"),
-			(AvatarPose::Bored, "bored"),
-			(AvatarPose::Sleeping, "sleeping"),
+		for (blot, wire) in [
+			(AvatarBlot::Coral, "coral"),
+			(AvatarBlot::Amber, "amber"),
+			(AvatarBlot::Moss, "moss"),
+			(AvatarBlot::Water, "water"),
+			(AvatarBlot::Sky, "sky"),
+			(AvatarBlot::Lavender, "lavender"),
+			(AvatarBlot::Rose, "rose"),
+			(AvatarBlot::Slate, "slate"),
 		] {
-			assert_crosses_as(pose, json!(wire));
+			assert_crosses_as(blot, json!(wire));
 		}
+		assert_crosses_as(None::<AvatarBlot>, json!(null));
 		assert!(
 			serde_json::from_value::<AvatarAnimal>(json!("dragon")).is_err(),
 			"an animal the avatar engine cannot draw parsed at the boundary"
 		);
 		assert!(
-			serde_json::from_value::<AvatarPose>(json!("furious")).is_err(),
-			"a pose the avatar engine cannot draw parsed at the boundary"
+			serde_json::from_value::<AvatarBlot>(json!("chartreuse")).is_err(),
+			"a colour outside the palette parsed at the boundary"
 		);
+	}
+
+	/// The boundary no longer has a word for the pose, and a caller that still spells
+	/// one is answered the way this vocabulary answers anything it has no field for:
+	/// the word carries nothing, and the mark it did not name is no mark. That is
+	/// what a caller written against the older shape gets — an unmarked bot, not a
+	/// refusal, and not a pose smuggled in under another name.
+	#[test]
+	fn an_identity_still_spelling_a_pose_crosses_as_a_bot_with_no_mark() {
+		let submitted = json!({
+			"name": "Nyx",
+			"title": "",
+			"description": "",
+			"model": "sonnet",
+			"avatarAnimal": "cat",
+			"avatarPose": "idle",
+			"avatarImagePath": null,
+			"workingDir": null,
+			"instructions": ""
+		});
+
+		let parsed = serde_json::from_value::<BotIdentity>(submitted).expect("the identity parses");
+
+		assert_eq!(parsed.avatar_blot, None, "a pose reached the mark it is not");
 	}
 
 	/// What the frontend builds a runtime scope out of. A rename here is a launch
@@ -1099,7 +1127,7 @@ mod tests {
 			description: String::new(),
 			model: "sonnet".to_owned(),
 			avatar_animal: conversations::AvatarAnimal::Owl,
-			avatar_pose: conversations::AvatarPose::Idle,
+			avatar_blot: None,
 			avatar_image_path: path.map(str::to_owned),
 			working_dir: None,
 			instructions: String::new(),

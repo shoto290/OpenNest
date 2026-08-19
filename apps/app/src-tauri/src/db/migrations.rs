@@ -19,6 +19,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 1, statements: CONVERSATIONS_SCHEMA },
 	Migration { version: 2, statements: BOT_CONTEXT },
 	Migration { version: 3, statements: BOT_IDENTITY },
+	Migration { version: 4, statements: BOT_BLOT },
 ];
 
 /// Timestamps are unix millis, ids are UUID v4 text: both are what the host
@@ -219,6 +220,26 @@ ALTER TABLE bots ADD COLUMN avatar_image_path TEXT;
 ALTER TABLE bots ADD COLUMN working_dir TEXT;
 ";
 
+/// The colour a bot is marked with, which is what replaces the pose as the second
+/// half of a face. NULLable and defaulted to nothing on purpose: no mark is what a
+/// bot is until someone gives it one, and it is a fact the file can hold rather
+/// than a ninth word standing for "none".
+///
+/// `CHECK`-constrained to the eight the palette holds, for the reason step 3's two
+/// avatar columns are — a colour nothing can paint is indistinguishable from a
+/// typo once it is on the disk. The constraint passes `NULL` on its own: `NULL IN
+/// (...)` is `NULL`, and SQLite refuses a `CHECK` only when it is false.
+///
+/// `avatar_pose` is left exactly where it is, values included. SQLite will not drop
+/// a column another constraint mentions, and nothing above reads or writes it any
+/// more, so the honest step is to stop projecting it rather than to rewrite the file
+/// around its absence.
+const BOT_BLOT: &str = "
+ALTER TABLE bots ADD COLUMN avatar_blot TEXT
+	CHECK (avatar_blot IN
+		('coral', 'amber', 'moss', 'water', 'sky', 'lavender', 'rose', 'slate'));
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -410,20 +431,10 @@ mod tests {
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
 		apply_each(&mut connection, &MIGRATIONS[..2]).expect("the shipped schema installs");
 		connection
-			.execute_batch(
+			.execute_batch(&a_chat_held_by(
 				"INSERT INTO bots (id, name, model, created_at)
-					VALUES ('default', 'Claude', 'sonnet', 1);
-				INSERT INTO conversations (id, kind, title, created_at, updated_at)
-					VALUES ('c1', 'main', 'Chat', 1, 1);
-				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-					VALUES ('c1', 'default', 'assistant', 1);
-				INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'c1', 1, 1);
-				INSERT INTO messages
-					(id, conversation_id, turn_id, author_bot_id, seq, role, content,
-						completion_state, created_at)
-					VALUES ('m1', 'c1', 't1', NULL, 1, 'user', 'hello', 'complete', 1),
-						('m2', 'c1', 't1', 'default', 2, 'assistant', 'hi there', 'complete', 2);",
-			)
+					VALUES ('default', 'Claude', 'sonnet', 1);",
+			))
 			.expect("the install this build upgrades from");
 
 		apply(&mut connection).expect("the file comes up to this build");
@@ -527,7 +538,9 @@ mod tests {
 
 	/// The eight animals and the eight poses the avatar engine draws, and nothing
 	/// else: a word outside them is a bot the UI has no face for, so it never
-	/// reaches the disk to be read back.
+	/// reaches the disk to be read back. The pose is no longer projected, and the
+	/// column keeps its `CHECK` anyway — what an older build wrote is still what
+	/// comes back out.
 	#[test]
 	fn a_face_the_avatar_engine_cannot_draw_is_refused() {
 		let dir = temp_dir();
@@ -556,6 +569,109 @@ mod tests {
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The eight colours the palette holds, and no mark at all: a bot given none is
+	/// the default, and it is `NULL` rather than a ninth word. Anything else is a
+	/// colour nothing can paint, so it never reaches the disk.
+	#[test]
+	fn a_blot_outside_the_palette_is_refused_and_no_blot_is_allowed() {
+		let dir = temp_dir();
+		let connection = migrated(&dir);
+
+		for blot in ["coral", "amber", "moss", "water", "sky", "lavender", "rose", "slate"] {
+			assert!(
+				write(&connection, &a_bot_marked(Some(blot), blot)).is_ok(),
+				"the palette holds {blot} and the file refused it"
+			);
+		}
+		assert!(
+			write(&connection, &a_bot_marked(None, "unmarked")).is_ok(),
+			"a bot with no mark was refused"
+		);
+		assert_eq!(blot_of(&connection, "unmarked"), None);
+		assert!(
+			write(&connection, &a_bot_marked(Some("chartreuse"), "unknown-blot")).is_err(),
+			"a colour outside the palette was stored"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// What the step that adds the mark owes a file already in use: the bots it
+	/// holds come out unmarked, everything said to them is still readable, and the
+	/// pose an older build wrote is exactly where it was left.
+	#[test]
+	fn the_step_that_adds_the_mark_leaves_every_bot_unmarked_and_its_transcript_whole() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..3]).expect("the shipped schema installs");
+		connection
+			.execute_batch(&a_chat_held_by(
+				"INSERT INTO bots (id, name, model, created_at, title, avatar_animal, avatar_pose)
+					VALUES ('default', 'Claude', 'sonnet', 1, 'Reviewer', 'owl', 'curious');",
+			))
+			.expect("the install this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(blot_of(&connection, "default"), None, "the step marked a bot nobody marked");
+		assert_eq!(
+			transcript_of(&connection, "c1"),
+			vec!["hello".to_owned(), "hi there".to_owned()],
+			"the step the bot gained a mark in cost it its transcript"
+		);
+		assert_eq!(
+			identity_of(&connection, "default"),
+			(
+				"Reviewer".to_owned(),
+				String::new(),
+				"owl".to_owned(),
+				"curious".to_owned(),
+				None,
+				None
+			),
+			"the step rewrote the pose it was told to leave alone"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The install every step below upgrades from: a bot, the one chat it holds and
+	/// the two things said in it. Only the bot row differs between the steps — it is
+	/// written with the columns its version knows — so it is the one part a caller
+	/// spells.
+	fn a_chat_held_by(bot: &str) -> String {
+		format!(
+			"{bot}
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'main', 'Chat', 1, 1);
+				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
+					VALUES ('c1', 'default', 'assistant', 1);
+				INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'c1', 1, 1);
+				INSERT INTO messages
+					(id, conversation_id, turn_id, author_bot_id, seq, role, content,
+						completion_state, created_at)
+					VALUES ('m1', 'c1', 't1', NULL, 1, 'user', 'hello', 'complete', 1),
+						('m2', 'c1', 't1', 'default', 2, 'assistant', 'hi there', 'complete', 2);"
+		)
+	}
+
+	fn a_bot_marked(blot: Option<&str>, id: &str) -> String {
+		let mark = blot.map_or("NULL".to_owned(), |blot| format!("'{blot}'"));
+		format!(
+			"INSERT INTO bots (id, name, model, created_at, avatar_blot)
+				VALUES ('{id}', 'A bot', 'sonnet', 1, {mark})"
+		)
+	}
+
+	fn blot_of(connection: &Connection, id: &str) -> Option<String> {
+		connection
+			.query_row("SELECT avatar_blot FROM bots WHERE id = ?1", [id], |row| row.get(0))
+			.expect("query")
 	}
 
 	fn a_bot_shown_as(animal: &str, pose: &str, id: &str) -> String {
