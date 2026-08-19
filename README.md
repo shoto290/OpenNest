@@ -12,7 +12,7 @@ Every bot runs its own `claude` process, so one can be working while you read an
 - [Rust toolchain](https://rustup.rs) — the Tauri host is Rust.
 - On Linux, the [Tauri system dependencies](https://tauri.app/start/prerequisites/#linux).
 
-macOS and Linux for now.
+macOS, Linux and Windows.
 
 ## Getting started
 
