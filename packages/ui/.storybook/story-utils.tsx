@@ -10,3 +10,10 @@ export const A11Y_CONTRAST_AWAITING_DESIGN_DECISION = {
 export const Row = ({ children }: { children: React.ReactNode }) => (
 	<div className="flex flex-wrap items-center gap-3">{children}</div>
 )
+
+export const botIdentityAvatars = (canvasElement: HTMLElement) =>
+	Array.from(
+		canvasElement.querySelectorAll<HTMLElement>(
+			'[data-slot="bot-identity-avatar"]',
+		),
+	)
