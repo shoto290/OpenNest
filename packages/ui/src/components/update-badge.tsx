@@ -2,13 +2,14 @@
 
 import { useState } from "react"
 
-import { Button } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@workspace/ui/components/motion/popover"
+import { Tooltip } from "@workspace/ui/components/motion/tooltip"
 import { ProgressRing } from "@workspace/ui/components/progress"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -25,6 +26,9 @@ interface UpdateBadgeProps {
 	version?: string
 	/** One line per change, rendered as the panel's release notes. */
 	releaseNotes?: string[]
+	/** Web address of the full release notes. Given one, the panel offers a way
+	 * out to it; without one, the summarised lines are all the reader gets. */
+	releaseNotesUrl?: string
 	/** Share of the download already on disk, 0 to 100. */
 	progress?: number
 	/** Bots still running. Above zero the restart is refused and counted. */
@@ -103,9 +107,38 @@ const UpdateAction = ({
 	)
 }
 
+/** Names the control, and says in the same breath that following it leaves the
+ * window — the glyph alone carries that only for those who can see it. */
+const RELEASE_NOTES_LABEL = "Read the full release notes in your browser"
+
+interface ReleaseNotesLinkProps {
+	href: string
+}
+
+/** The way out of the panel, held at the trailing edge so it never competes
+ * with the restart: the summary above is three lines, the changelog is a page. */
+const ReleaseNotesLink = ({ href }: ReleaseNotesLinkProps) => (
+	<Tooltip content={RELEASE_NOTES_LABEL} side="right" wrapperClassName="ml-auto">
+		<a
+			data-slot="update-release-notes"
+			aria-label={RELEASE_NOTES_LABEL}
+			href={href}
+			target="_blank"
+			rel="noreferrer noopener"
+			className={cn(
+				buttonVariants({ variant: "ghost", size: "icon-sm" }),
+				"text-muted-foreground",
+			)}
+		>
+			<Icons.ExternalLink />
+		</a>
+	</Tooltip>
+)
+
 interface UpdateReadyProps {
 	version?: string
 	releaseNotes: string[]
+	releaseNotesUrl?: string
 	activeBotCount: number
 	onRestart?: () => void
 	onPostpone?: () => void
@@ -121,6 +154,7 @@ const botsBusyCopy = (count: number) =>
 const UpdateReady = ({
 	version,
 	releaseNotes,
+	releaseNotesUrl,
 	activeBotCount,
 	onRestart,
 	onPostpone,
@@ -181,6 +215,7 @@ const UpdateReady = ({
 						<Button size="sm" variant="ghost" onClick={postpone}>
 							Later
 						</Button>
+						{releaseNotesUrl ? <ReleaseNotesLink href={releaseNotesUrl} /> : null}
 					</div>
 				</div>
 			</PopoverContent>
@@ -195,6 +230,7 @@ const UpdateBadge = ({
 	status,
 	version,
 	releaseNotes = [],
+	releaseNotesUrl,
 	progress = 0,
 	activeBotCount = 0,
 	onDownload,
@@ -209,6 +245,7 @@ const UpdateBadge = ({
 			<UpdateReady
 				version={version}
 				releaseNotes={releaseNotes}
+				releaseNotesUrl={releaseNotesUrl}
 				activeBotCount={activeBotCount}
 				onRestart={onRestart}
 				onPostpone={onPostpone}
