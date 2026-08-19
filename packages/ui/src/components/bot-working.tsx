@@ -4,6 +4,7 @@ import { useState } from "react"
 
 import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
 import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
+import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import {
 	BotIdentityAvatar,
@@ -23,6 +24,9 @@ interface BotWorkingProps {
 	/** The working bot's own animal. Leave it out and the avatar draws the one it
 	 * defaults to, which is a different bot than the one doing the work. */
 	animal?: BotAvatarAnimal
+	/** The tint that bot was marked with. It stays behind the animal while it works,
+	 * so a bot is the same colour busy as it is at rest. */
+	blot?: BotAvatarBlot
 	/** The picture that bot wears, if it wears one: it keeps wearing it while it
 	 * works, and the activity dot is what says so. */
 	image?: string
@@ -41,6 +45,7 @@ function BotWorking({
 	name = "No name",
 	label,
 	animal,
+	blot,
 	image,
 	size = CHAT_AVATAR_SIZE,
 	className,
@@ -64,6 +69,7 @@ function BotWorking({
 			>
 				<BotIdentityAvatar
 					animal={animal}
+					blot={blot}
 					image={image}
 					kind={kind}
 					size={size}

@@ -2,7 +2,7 @@ import { useState } from "react"
 import { expect, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { Row } from "@workspace/storybook/story-utils"
+import { botIdentityAvatars, Row } from "@workspace/storybook/story-utils"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
 import {
 	BotIdentityAvatar,
@@ -17,13 +17,6 @@ const UPLOADED_IMAGE =
 /** The three sizes the product draws this at: a roster row and a reply are the
  * same 40, the settings preview is 96. */
 const SIZES = [40, 96, 24]
-
-const avatars = (canvasElement: HTMLElement) =>
-	Array.from(
-		canvasElement.querySelectorAll<HTMLElement>(
-			'[data-slot="bot-identity-avatar"]',
-		),
-	)
 
 /** Every place at once, on one identity: what the roster row, the settings column
  * and the reply each draw, side by side. */
@@ -87,7 +80,7 @@ export const Default = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const [avatar] = avatars(canvasElement)
+		const [avatar] = botIdentityAvatars(canvasElement)
 
 		await expect(
 			within(avatar).getByRole("img", { name: "Bot avatar rabbit, idle" }),
@@ -109,7 +102,7 @@ export const EverySize = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const drawn = avatars(canvasElement)
+		const drawn = botIdentityAvatars(canvasElement)
 
 		await expect(drawn).toHaveLength(SIZES.length)
 		for (const [index, avatar] of drawn.entries()) {
@@ -142,7 +135,7 @@ export const EveryBlot = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const [none, ...tinted] = avatars(canvasElement)
+		const [none, ...tinted] = botIdentityAvatars(canvasElement)
 
 		await expect(none.querySelector('[data-slot="bot-avatar-blot"]')).toBeNull()
 		await expect(
@@ -167,7 +160,7 @@ export const Working = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		for (const avatar of avatars(canvasElement)) {
+		for (const avatar of botIdentityAvatars(canvasElement)) {
 			await expect(
 				within(avatar).getByRole("img", { name: "Bot avatar rabbit, writing" }),
 			).toBeVisible()
@@ -189,7 +182,7 @@ export const Waiting = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const [avatar] = avatars(canvasElement)
+		const [avatar] = botIdentityAvatars(canvasElement)
 
 		await expect(
 			within(avatar).getByRole("img", { name: "Bot avatar rabbit, listening" }),
@@ -209,7 +202,7 @@ export const Uploaded = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		for (const avatar of avatars(canvasElement)) {
+		for (const avatar of botIdentityAvatars(canvasElement)) {
 			await expect(avatar.querySelector("img")).toHaveAttribute(
 				"src",
 				UPLOADED_IMAGE,
@@ -231,7 +224,7 @@ export const UploadedWorking = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
-		for (const avatar of avatars(canvasElement)) {
+		for (const avatar of botIdentityAvatars(canvasElement)) {
 			await expect(avatar.querySelector("img")).toHaveAttribute(
 				"src",
 				UPLOADED_IMAGE,
@@ -254,7 +247,7 @@ export const BoundToOneBot = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
-		const drawn = () => avatars(canvasElement)
+		const drawn = () => botIdentityAvatars(canvasElement)
 
 		for (const avatar of drawn()) {
 			await expect(avatar.querySelector("img")).toBeNull()
