@@ -1,21 +1,8 @@
-import {
-	memo,
-	type Ref,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react"
+import { memo, type Ref, useCallback, useEffect, useRef, useState } from "react"
 
-import { AgentActivity } from "@workspace/ui/components/agent-activity"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import {
-	BotWorking,
-	type BotWorkingKind,
-	type BotWorkingProps,
-} from "@workspace/ui/components/bot-working"
+import { BotWorking } from "@workspace/ui/components/bot-working"
 import { Button } from "@workspace/ui/components/button"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
@@ -39,22 +26,16 @@ import {
 import type { ChatController } from "@/lib/chat/chat-controller"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import {
-	activityStatusFor,
 	emptyStateStatusFor,
 	needsFreshSession,
 	noticeTitleFor,
 	type TranscriptRow,
-	toActivityItems,
 	toRuns,
 	toTranscriptRows,
 	workingStateFor,
 } from "@/lib/chat/screen-model"
 import type { Chat } from "@/lib/chat/use-chat"
-import type {
-	ActivityEvent,
-	PermissionRequest,
-	TurnState,
-} from "@/lib/claude/contract"
+import type { PermissionRequest, TurnState } from "@/lib/claude/contract"
 import { describeTransportError } from "@/lib/claude/messages"
 import type {
 	AvatarAnimal,
@@ -70,10 +51,6 @@ type BotFace = {
 	blot?: AvatarBlot
 	image?: string
 }
-
-/** What the row that says a bot is working needs to be about that bot rather than
- * about a default one. Taken from the component's own props, so the two cannot drift. */
-type WorkingBot = Pick<BotWorkingProps, "animal" | "image" | "name">
 
 /** Memoised: a streamed delta rewrites one message, and the view model hands
  * back the same rows for the rest. `run` arrives from the enclosing group and
@@ -132,35 +109,6 @@ const TranscriptTurn = memo(function TranscriptTurn({
 		>
 			{content}
 		</AssistantTurn>
-	)
-})
-
-/** Memoised: the layout-animated rows re-measure on commit, and a text delta
- * leaves `activities` untouched. */
-const ActivityLog = memo(function ActivityLog({
-	activities,
-	turn,
-	workingKind,
-	bot,
-}: {
-	activities: ActivityEvent[]
-	turn: TurnState
-	workingKind?: BotWorkingKind
-	/** The bot doing the work. Held as one object so the shallow compare has one
-	 * reference to check rather than three fields — see `workingBot`. */
-	bot: WorkingBot
-}) {
-	const items = toActivityItems(activities)
-
-	return (
-		<AgentActivity
-			items={items}
-			status={activityStatusFor(turn)}
-			// The rows below already name the step, so the header only says how the
-			// bot is busy.
-			renderWorkingStatus={() => <BotWorking {...bot} kind={workingKind} />}
-			summary={`Ran ${items.length} ${items.length === 1 ? "step" : "steps"}`}
-		/>
 	)
 })
 
@@ -264,12 +212,6 @@ export function ChatScreen({
 	// The picture the bot wears, as something a webview may load. Resolved once per
 	// render and handed down: every avatar on this screen is the same bot's.
 	const face = avatarSrc(bot.avatarImagePath)
-	// One reference for the memoised rows that only need the working half of the bot,
-	// stable while the bot is, so a streamed token does not re-render them.
-	const workingBot = useMemo<WorkingBot>(
-		() => ({ animal: bot.avatarAnimal, image: face, name: bot.name }),
-		[bot.avatarAnimal, bot.name, face],
-	)
 	const disabled = !isSessionReady(state)
 	const acceptsInput = !disabled && !isTurnBusy(state.turn)
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
@@ -394,15 +336,14 @@ export function ChatScreen({
 				)
 			})}
 
-			{state.activities.length > 0 ? (
-				<ActivityLog
-					activities={state.activities}
-					bot={workingBot}
-					turn={state.turn}
-					workingKind={working?.kind}
+			{working ? (
+				<BotWorking
+					animal={bot.avatarAnimal}
+					image={face}
+					name={bot.name}
+					kind={working.kind}
+					label={working.label}
 				/>
-			) : working ? (
-				<BotWorking {...workingBot} kind={working.kind} label={working.label} />
 			) : null}
 
 			{state.permission ? (

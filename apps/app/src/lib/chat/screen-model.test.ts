@@ -2,13 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import { type ChatState, initialChatState } from "./chat-state"
 import {
-	activityStatusFor,
 	emptyStateStatusFor,
 	lastAssistantTextFor,
 	needsFreshSession,
 	noticeTitleFor,
 	sidebarActivityFor,
-	toActivityItems,
 	toRuns,
 	toTranscriptRows,
 	workingStateFor,
@@ -59,31 +57,6 @@ function bubbles(
 function chatState(overrides: Partial<ChatState> = {}): ChatState {
 	return { ...initialChatState, turn: "running", ...overrides }
 }
-
-describe("toActivityItems", () => {
-	it("keeps identity and maps transport status onto step status", () => {
-		const items = toActivityItems([
-			activity({ id: "a", status: "pending" }),
-			activity({ id: "b", status: "running" }),
-			activity({ id: "c", status: "succeeded" }),
-			activity({ id: "d", status: "failed" }),
-		])
-
-		expect(items.map((item) => item.id)).toEqual(["a", "b", "c", "d"])
-		expect(items.map((item) => item.status)).toEqual([
-			"pending",
-			"active",
-			"complete",
-			"complete",
-		])
-		expect(items[3].meta).toBe("Failed")
-		expect(items[2].meta).toBeUndefined()
-	})
-
-	it("falls back to the activity kind when the title is empty", () => {
-		expect(toActivityItems([activity({ title: "" })])[0].label).toBe("tool")
-	})
-})
 
 describe("toTranscriptRows", () => {
 	it("publishes a paragraph only once a blank line has closed it", () => {
@@ -473,15 +446,6 @@ describe("lastAssistantTextFor", () => {
 		})
 
 		expect(lastAssistantTextFor(state)).toBe("Done")
-	})
-})
-
-describe("activityStatusFor", () => {
-	it("follows the latest turn, not the whole session log", () => {
-		expect(activityStatusFor("running")).toBe("working")
-		expect(activityStatusFor("stopping")).toBe("working")
-		expect(activityStatusFor("failed")).toBe("failed")
-		expect(activityStatusFor("idle")).toBe("complete")
 	})
 })
 
