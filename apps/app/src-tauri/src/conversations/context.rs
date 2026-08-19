@@ -324,7 +324,6 @@ mod tests {
 			id: "b1".to_owned(),
 			name: "Claude".to_owned(),
 			title: String::new(),
-			description: String::new(),
 			model: "sonnet".to_owned(),
 			avatar_animal: AvatarAnimal::Cat,
 			avatar_blot: None,

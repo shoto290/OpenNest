@@ -146,7 +146,6 @@ pub struct Bot {
 	pub id: String,
 	pub name: String,
 	pub title: String,
-	pub description: String,
 	/// The model label the bot answers under. Free text at this boundary, unlike the
 	/// two faces below: which aliases exist is Claude Code's to change and nothing
 	/// here can list them, so a label this build has never heard of crosses, is
@@ -182,7 +181,6 @@ impl Bot {
 			id: bot.id,
 			name: bot.name,
 			title: bot.title,
-			description: bot.description,
 			model: bot.model,
 			avatar_animal: bot.avatar_animal.into(),
 			avatar_blot: bot.avatar_blot.map(Into::into),
@@ -206,7 +204,6 @@ impl Bot {
 pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
-	pub description: String,
 	/// See [`Bot::model`]: a label, not a vocabulary.
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
@@ -221,7 +218,6 @@ impl From<BotIdentity> for conversations::BotIdentity {
 		Self {
 			name: identity.name,
 			title: identity.title,
-			description: identity.description,
 			model: identity.model,
 			avatar_animal: identity.avatar_animal.into(),
 			avatar_blot: identity.avatar_blot.map(Into::into),
@@ -722,7 +718,6 @@ mod tests {
 				id: "default".into(),
 				name: "Claude".into(),
 				title: "Reviewer".into(),
-				description: "Reads a diff and says what it would change.".into(),
 				model: "opus".into(),
 				avatar_animal: AvatarAnimal::Owl,
 				avatar_blot: Some(AvatarBlot::Coral),
@@ -735,7 +730,6 @@ mod tests {
 				"id": "default",
 				"name": "Claude",
 				"title": "Reviewer",
-				"description": "Reads a diff and says what it would change.",
 				"model": "opus",
 				"avatarAnimal": "owl",
 				"avatarBlot": "coral",
@@ -760,7 +754,6 @@ mod tests {
 			BotIdentity {
 				name: "Claude".into(),
 				title: String::new(),
-				description: String::new(),
 				model: "sonnet".into(),
 				avatar_animal: AvatarAnimal::Cat,
 				avatar_blot: None,
@@ -771,7 +764,6 @@ mod tests {
 			json!({
 				"name": "Claude",
 				"title": "",
-				"description": "",
 				"model": "sonnet",
 				"avatarAnimal": "cat",
 				"avatarBlot": null,
@@ -824,17 +816,18 @@ mod tests {
 		);
 	}
 
-	/// The boundary no longer has a word for the pose, and a caller that still spells
-	/// one is answered the way this vocabulary answers anything it has no field for:
-	/// the word carries nothing, and the mark it did not name is no mark. That is
-	/// what a caller written against the older shape gets — an unmarked bot, not a
-	/// refusal, and not a pose smuggled in under another name.
+	/// The boundary no longer has a word for the pose or for the description, and a
+	/// caller that still spells either is answered the way this vocabulary answers
+	/// anything it has no field for: the word carries nothing, and the mark it did
+	/// not name is no mark. That is what a caller written against the older shape
+	/// gets — an unmarked bot, not a refusal, and not a pose smuggled in under
+	/// another name.
 	#[test]
-	fn an_identity_still_spelling_a_pose_crosses_as_a_bot_with_no_mark() {
+	fn an_identity_still_spelling_the_abandoned_words_crosses_as_a_bot_with_no_mark() {
 		let submitted = json!({
 			"name": "Nyx",
 			"title": "",
-			"description": "",
+			"description": "Reads a diff.",
 			"model": "sonnet",
 			"avatarAnimal": "cat",
 			"avatarPose": "idle",
@@ -1124,7 +1117,6 @@ mod tests {
 			id: "b1".into(),
 			name: "Nyx".into(),
 			title: String::new(),
-			description: String::new(),
 			model: "sonnet".to_owned(),
 			avatar_animal: conversations::AvatarAnimal::Owl,
 			avatar_blot: None,

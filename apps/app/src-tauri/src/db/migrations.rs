@@ -193,7 +193,8 @@ ALTER TABLE bots ADD COLUMN memory TEXT NOT NULL DEFAULT '';
 
 /// Who the bot is, beside what it was told: a short role label, a long free text,
 /// the avatar it is recognised by, and the directory its runs are meant to happen
-/// in. `title` and `description` are `NOT NULL DEFAULT ''` for the reason step 2's
+/// in. Two of the columns it adds are since abandoned — see the last paragraph.
+/// `title` and `description` are `NOT NULL DEFAULT ''` for the reason step 2's
 /// columns are — empty is the honest value for a bot nobody has described, and it
 /// is what `ALTER TABLE` can answer for the rows already on disk.
 ///
@@ -207,6 +208,12 @@ ALTER TABLE bots ADD COLUMN memory TEXT NOT NULL DEFAULT '';
 /// `avatar_image_path` and `working_dir` are NULLable rather than empty-defaulted:
 /// both name something outside the database, and "no picture" and "a picture at
 /// the empty path" are not the same fact.
+///
+/// `description` is left exactly where it is, values included: the settings panel
+/// stopped asking for it and nothing above reads or writes it any more, and
+/// stopping the projection is a smaller step than rewriting an installed file
+/// around its absence. `avatar_pose` is abandoned too, and stays for a reason of
+/// its own — see [`BOT_BLOT`].
 const BOT_IDENTITY: &str = "
 ALTER TABLE bots ADD COLUMN title TEXT NOT NULL DEFAULT '';
 ALTER TABLE bots ADD COLUMN description TEXT NOT NULL DEFAULT '';

@@ -28,7 +28,6 @@ describe("toSettingsValue", () => {
 				bot({
 					name: "Nyx",
 					title: "Reviewer",
-					description: "Reads a diff.",
 					instructions: "Answer briefly.",
 					model: "haiku",
 					avatarAnimal: "owl",
@@ -40,7 +39,6 @@ describe("toSettingsValue", () => {
 			identity: { animal: "owl", pose: "curious", image: undefined },
 			name: "Nyx",
 			title: "Reviewer",
-			description: "Reads a diff.",
 			instructions: "Answer briefly.",
 			model: "haiku",
 			workingDirectory: "/work/opennest",
@@ -199,7 +197,6 @@ describe("newBotIdentity", () => {
 		expect(newBotIdentity([bot({ avatarAnimal: "cat" })])).toMatchObject({
 			name: "New bot",
 			title: "",
-			description: "",
 			instructions: "",
 			avatarAnimal: "rabbit",
 			avatarPose: "idle",

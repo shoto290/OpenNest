@@ -80,7 +80,6 @@ const nextFace = (bots: Bot[]): AvatarAnimal => {
 export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 	name: NEW_BOT_NAME,
 	title: "",
-	description: "",
 	model: NEW_BOT_MODEL,
 	avatarAnimal: nextFace(bots),
 	avatarPose: "idle",
@@ -98,7 +97,6 @@ export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 	},
 	name: bot.name,
 	title: bot.title,
-	description: bot.description,
 	instructions: bot.instructions,
 	model: bot.model,
 	workingDirectory: bot.workingDir ?? "",
@@ -115,7 +113,6 @@ export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	name: value.name,
 	title: value.title,
-	description: value.description,
 	model: value.model,
 	avatarAnimal: value.identity.animal,
 	avatarPose: value.identity.pose,

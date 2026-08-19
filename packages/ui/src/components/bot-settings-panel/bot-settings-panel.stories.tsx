@@ -30,8 +30,6 @@ const FILLED_BOT: BotSettingsValue = {
 	identity: { animal: "owl", blot: "sky" },
 	name: "Nest Keeper",
 	title: "Repository archivist",
-	description:
-		"Reads the monorepo before it answers. Keeps the design system and the app on their own sides of the line, and says so when a change crosses it.",
 	instructions:
 		"You are the Nest Keeper.\n\nEvery visual belongs to packages/ui. The app composes, it never draws.\n\nBefore proposing a component, search the package for one that already does the job. Answer with the file you would touch, then the change.",
 	model: "sonnet-4-5",
@@ -42,7 +40,6 @@ const NEW_BOT: BotSettingsValue = {
 	identity: { animal: "cat" },
 	name: "",
 	title: "",
-	description: "",
 	instructions: "",
 	model: "",
 	workingDirectory: "",
@@ -133,7 +130,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal case: a bot that has been filled in and used. Reach for it to check the reading order — avatar, Name, Title, Description, Instructions, model, folder, delete — and that Instructions gets visibly more room than Description. Typing anywhere emits a change immediately; nothing here batches or waits.",
+					"The nominal case: a bot that has been filled in and used. Reach for it to check the reading order — avatar, Name, Title, Instructions, model, folder, delete — and that Instructions, the one field written at length, is the one field with room to write it in. Typing anywhere emits a change immediately; nothing here batches or waits.",
 			},
 		},
 	},

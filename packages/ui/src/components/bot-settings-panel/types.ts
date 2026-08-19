@@ -28,8 +28,6 @@ type BotSettingsValue = {
 	name: string
 	/** The short role label, one line. */
 	title: string
-	/** Long free text describing what the bot is for. */
-	description: string
 	/** The system prompt the bot always runs with. */
 	instructions: string
 	model: string
