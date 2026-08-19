@@ -12,6 +12,8 @@ import {
 	type BotAvatarBlot,
 } from "@workspace/ui/components/agents/agent-sidebar"
 import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
+import { Button } from "@workspace/ui/components/button"
+import { Icons } from "@workspace/ui/components/icons"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const LAST_MESSAGE =
@@ -170,6 +172,28 @@ const SHARED_TINT_ROSTER: AgentSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
 	blot: "sky",
 }))
 
+/** Three passes over the roster, ids kept apart, so the list is taller than any
+ * window a story is rendered in and the pinned region has something to hold
+ * against. */
+const LONG_ROSTER: AgentSidebarBot[] = [0, 1, 2].flatMap((pass) =>
+	ROSTER.map((bot) => ({ ...bot, id: `${bot.id}-${pass}` })),
+)
+
+const FOOTER_LABEL = "Workspace settings"
+
+/** Whatever a host pins under the list — the slot knows nothing of it, so one
+ * ordinary control stands in for it. */
+const FOOTER_CONTENT = (
+	<Button
+		aria-label={FOOTER_LABEL}
+		size="icon-sm"
+		tooltip={FOOTER_LABEL}
+		variant="ghost"
+	>
+		<Icons.Settings aria-hidden="true" />
+	</Button>
+)
+
 const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	...bot,
 	title: undefined,
@@ -191,7 +215,7 @@ const rowsIn = (canvasElement: HTMLElement) =>
 
 const slotIn = (row: HTMLElement, slot: string) => {
 	const node = row.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
-	if (!node) throw new Error(`Roster row is missing its ${slot}`)
+	if (!node) throw new Error(`Nothing here draws a ${slot}`)
 	return node
 }
 
@@ -204,6 +228,23 @@ const rowFor = (canvasElement: HTMLElement, name: string) => {
 }
 
 const rowButton = (row: HTMLElement) => slotIn(row, "sidebar-menu-button")
+
+const bottomOf = (node: HTMLElement) => node.getBoundingClientRect().bottom
+
+/** The whole of the pinned region's contract, whatever the list above it holds:
+ * it stands under the list rather than beside it, and its bottom edge is the
+ * bottom edge of the column. */
+const expectFooterAtColumnBottom = async (canvasElement: HTMLElement) => {
+	const footer = slotIn(canvasElement, "sidebar-footer")
+	await expect(footer.getBoundingClientRect().top).toBeCloseTo(
+		bottomOf(slotIn(canvasElement, "sidebar-content")),
+		0,
+	)
+	await expect(bottomOf(footer)).toBeCloseTo(
+		bottomOf(slotIn(canvasElement, "sidebar-panel")),
+		0,
+	)
+}
 
 /** Where a slot sits inside its own row, measured from one edge, so every row
  * can be compared to every other one whatever its content is. */
@@ -1005,5 +1046,101 @@ export const ReducedMotion = meta.story({
 		const first = rowButton(rowsIn(canvasElement)[0])
 		await expect(first).toHaveFocus()
 		await expect(first.matches(":focus-visible")).toBe(true)
+	},
+})
+
+export const Footer = meta.story({
+	args: { bots: LONG_ROSTER, selectedBotId: "beacon-0", footer: FOOTER_CONTENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pinned region under the list, given a control by the host — the panel is handed a node and draws it, it knows nothing of what it is. Check that it sits under the last row rather than beside it, that its bottom edge is the bottom edge of the column, and that a roster three times too long for the window scrolls inside the list alone: the region stays exactly where it was and the column itself never scrolls. Pick `NoFooter` for the same list with the slot left out, `FooterWithoutBots` for the slot over an empty roster.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const panel = slotIn(canvasElement, "sidebar-panel")
+		const list = slotIn(canvasElement, "sidebar-content")
+		const footer = slotIn(canvasElement, "sidebar-footer")
+
+		await expect(
+			within(footer).getByRole("button", { name: FOOTER_LABEL }),
+		).toBeVisible()
+		await expectFooterAtColumnBottom(canvasElement)
+
+		const footerTop = footer.getBoundingClientRect().top
+		await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+		list.scrollTop = list.scrollHeight
+
+		await expect(list.scrollTop).toBeGreaterThan(0)
+		await expect(panel.scrollTop).toBe(0)
+		await expect(footer.getBoundingClientRect().top).toBeCloseTo(footerTop, 0)
+	},
+})
+
+export const NoFooter = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same column with the slot left out, which is every other story here. Check that no pinned region is drawn at all — not an empty one, not a reserved strip — and that the list runs all the way to the bottom edge of the column, so a host that wants nothing under its roster pays nothing for the slot. Pick `Footer` for the same list with the slot filled.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(slotsIn(canvasElement, "sidebar-footer")).toHaveLength(0)
+		await expect(
+			bottomOf(slotIn(canvasElement, "sidebar-content")),
+		).toBeCloseTo(bottomOf(slotIn(canvasElement, "sidebar-panel")), 0)
+	},
+})
+
+export const FooterWithoutBots = meta.story({
+	args: { bots: [], footer: FOOTER_CONTENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The slot over a reader who owns no bot yet. Check that the pinned region stays against the bottom edge of the column instead of riding up under the empty copy — the list keeps the space it is not using, so the region reads as part of the column rather than as the end of a short list. Pick `Empty` for the same state without the slot.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(rowsIn(canvasElement)).toHaveLength(0)
+		await expectFooterAtColumnBottom(canvasElement)
+	},
+})
+
+export const FooterOnRail = meta.story({
+	render: renderShell(false),
+	args: { footer: FOOTER_CONTENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The slot on the icon rail. Check that the pinned region drops its side padding and centres what it holds, exactly as the create button rides down in the header — a rail one avatar wide has no room for padding either side — and that nothing is clipped against either edge of the rail. Pick `Collapsed` for the rail without the slot.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const panel = slotIn(canvasElement, "sidebar-panel")
+		const rail = railWidth()
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(rail, 0)
+		}, FRAME_POLL)
+
+		const footer = slotIn(canvasElement, "sidebar-footer")
+		const style = getComputedStyle(footer)
+		await expect(style.paddingLeft).toBe("0px")
+		await expect(style.paddingRight).toBe("0px")
+
+		const panelBox = panel.getBoundingClientRect()
+		const buttonBox = within(footer)
+			.getByRole("button", { name: FOOTER_LABEL })
+			.getBoundingClientRect()
+		await expect(buttonBox.left).toBeGreaterThanOrEqual(panelBox.left)
+		await expect(buttonBox.right).toBeLessThanOrEqual(panelBox.right)
+		await expectFooterAtColumnBottom(canvasElement)
 	},
 })
