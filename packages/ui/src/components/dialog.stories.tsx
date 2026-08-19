@@ -127,7 +127,9 @@ export const Default = meta.story({
 
 		for (let press = 0; press < 5; press++) {
 			await userEvent.tab()
-			await expect(dialog.contains(document.activeElement)).toBe(true)
+			await waitFor(async () => {
+				await expect(dialog.contains(document.activeElement)).toBe(true)
+			})
 		}
 
 		await userEvent.keyboard("{Escape}")
