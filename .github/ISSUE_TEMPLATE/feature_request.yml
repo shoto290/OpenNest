@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest a change or an addition to OpenNest
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        OpenNest follows the SIMPLE principles in
+        [AGENTS.md](https://github.com/shoto290/OpenNest/blob/main/AGENTS.md):
+        the simplest thing that solves a real problem wins, and speculative
+        features are declined. Describe the problem before the solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do today, and where does it break down?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like instead
+      description: Describe the behavior you want. Sketches or screenshots welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the project
+      options:
+        - Desktop app (apps/app)
+        - UI components or Storybook (packages/ui)
+        - Tauri host / Rust side
+        - Build, install, or tooling
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including doing nothing, or solving it outside OpenNest.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I am willing to discuss a simpler version of this.
