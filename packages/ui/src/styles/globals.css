@@ -9,7 +9,6 @@
 :root {
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.141 0.005 285.823);
-	--bot-avatar-ink: oklch(0.08 0 0);
 	--bot-blot-coral: #f4a98c;
 	--bot-blot-amber: #f2c879;
 	--bot-blot-moss: #afc99b;
@@ -19,6 +18,7 @@
 	--bot-blot-rose: #f0a9c0;
 	--bot-blot-slate: #c6cad0;
 	--bot-blot-ink: oklch(0.08 0 0);
+	--bot-avatar-ink: var(--bot-blot-ink);
 	--diagram-scheme: light;
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.141 0.005 285.823);

@@ -35,10 +35,7 @@ const BLOT_SIZE = 24
 /** The eight tints and the option that takes the blot off, as one radio group. */
 const BLOT_OPTIONS = [...BLOT_TINTS, undefined] as const
 
-const NO_BLOT_LABEL = "No blot"
-
-const blotLabel = (blot?: BotAvatarBlot) =>
-	blot ? titleCase(blot) : NO_BLOT_LABEL
+const blotLabel = (blot?: BotAvatarBlot) => (blot ? titleCase(blot) : "No blot")
 
 const TAB_CLASS =
 	"relative z-10 flex h-7 flex-1 items-center justify-center rounded-lg text-muted-foreground text-sm outline-none transition-colors select-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-active:text-foreground motion-reduce:transition-none"
