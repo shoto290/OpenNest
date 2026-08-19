@@ -19,6 +19,7 @@ import {
 import { createPortal } from "react-dom"
 
 import { usePopoverPortalPosition } from "@workspace/ui/components/motion/popover-position"
+import { POPUP_DROP_SHADOW_CLASS } from "@workspace/ui/components/settings-styles"
 import { EASE_OUT, SPRING_PANEL } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
@@ -255,7 +256,7 @@ export function MorphPopoverContent({
 						visibility: layout ? "visible" : "hidden",
 						transformOrigin: originFor(side, align),
 					}}
-					className="fixed z-[9999] [filter:drop-shadow(0_10px_18px_rgba(0,0,0,0.14))]"
+					className={cn("fixed z-[9999]", POPUP_DROP_SHADOW_CLASS)}
 				>
 					<motion.div
 						ref={ctx.contentRef}
