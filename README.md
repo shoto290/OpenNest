@@ -1,42 +1,81 @@
-# opennest
+# OpenNest
 
-Tauri desktop app (macOS and Linux for now) in a Vite monorepo with shadcn/ui.
+OpenNest is a desktop app for Claude Code: a roster of bots you name, dress and brief — each with its own model, working directory and persistent conversation — all answered by the Claude Code CLI already installed on your machine.
 
-## Development
+Every bot runs its own `claude` process, so one can be working while you read another, and every conversation is stored locally and comes back on the next launch.
+
+## Requirements
+
+- **[Claude Code](https://claude.com/claude-code), installed and signed in.** OpenNest drives that binary — it is the whole engine. Check yours with `claude --version`, and sign in with `claude` if you have not.
+- **No API key.** OpenNest never reads one, never asks for one and never talks to an API itself. Your existing Claude Code sign-in is the only credential involved.
+- [Bun](https://bun.sh) — runtime and package manager.
+- [Rust toolchain](https://rustup.rs) — the Tauri host is Rust.
+- On Linux, the [Tauri system dependencies](https://tauri.app/start/prerequisites/#linux).
+
+macOS and Linux for now.
+
+## Getting started
 
 ```bash
 bun install
 bun run dev
 ```
 
-`bun run dev` launches the Tauri app locally (Vite dev server + native window with hot reload).
+`bun run dev` launches the Tauri app locally: Vite dev server plus the native window, with hot reload.
 
-`bun run test` runs the Storybook suite in headless Chromium — install that browser once with `bunx playwright install chromium` from `packages/ui`.
+## Commands
 
-Requirements: [Bun](https://bun.sh) and the [Rust toolchain](https://rustup.rs). On Linux, install the [Tauri system dependencies](https://tauri.app/start/prerequisites/#linux).
+| Command | What it does |
+| --- | --- |
+| `bun run dev` | Launch the Tauri app — Vite dev server + native window, hot reload. |
+| `bun run storybook` | Storybook on <http://localhost:6006> — the place to build UI. |
+| `bun run test` | Vitest (unit + Storybook) and `cargo test` for the Tauri host. |
+| `bun run lint` | Biome check. |
+| `bun run lint:fix` | Biome check with fixes applied. |
+| `bun run types` | Type check across the workspaces (`tsc -b`). |
+| `bun run build` | Build every workspace. |
+| `bun run tauri:build` | Package the desktop app. |
 
-## Building
+The Storybook half of `bun run test` runs in headless Chromium — install that browser once with `bunx playwright install chromium` from `packages/ui`.
+
+## Environment
+
+| Variable | Read by | What it does |
+| --- | --- | --- |
+| `OPENNEST_CLAUDE_BIN` | the app, at every startup check | Absolute path to a `claude` executable. It is tried **before** `PATH` and the well-known install directories, so it wins over whatever is on the machine. Leave it unset to let OpenNest find the CLI on its own. |
+| `APPLE_SIGNING_IDENTITY` | `bun run tauri:build` | Developer ID to sign the macOS bundle with. Unset, the build ad-hoc signs instead. Tauri reads it directly and enables the hardened runtime on its own. |
+
+`OPENNEST_CLAUDE_BIN` is what the test suites point at a stub binary. A leftover export silently sends the app at that stub too, so `unset OPENNEST_CLAUDE_BIN` before running against a real Claude Code.
+
+Neither variable belongs in the repository: one is a local path, the other a personal certificate name.
+
+## Monorepo
+
+| Workspace | Path | Purpose |
+| --- | --- | --- |
+| `app` | `apps/app` | The desktop application — technical composition only. Tauri + React + Vite. |
+| `@workspace/ui` | `packages/ui` | Every visual: components, foundations, tokens. React + Storybook + Tailwind + Base UI. |
+
+The boundary between the two is absolute — no markup, no Tailwind class and no raw DOM element lives in `apps/app`. That rule and the rest of the conventions are in [`AGENTS.md`](AGENTS.md), which every contributor and every AI agent working here must follow.
+
+The protocol OpenNest speaks to Claude Code — the frames, the permission handshake, session resume — is documented in [`apps/app/src-tauri/src/claude/PROTOCOL.md`](apps/app/src-tauri/src/claude/PROTOCOL.md), measured against a real install rather than taken from the docs.
+
+## Releasing
 
 ```bash
 bun run tauri:build
 ```
 
-Before tagging a release, walk [`apps/app/SMOKE.md`](apps/app/SMOKE.md) — the manual checks against a real Claude Code that the automated suite cannot reach.
-
-## Adding components
-
-To add components to your app, run the following command at the root of your `app` app:
+To sign with a Developer ID rather than ad-hoc, put the identity in the environment:
 
 ```bash
-bunx --bun shadcn@latest add button -c apps/app
+APPLE_SIGNING_IDENTITY="Developer ID Application: …" bun run tauri:build
 ```
 
-This will place the ui components in the `packages/ui/src/components` directory.
+Signing is not notarization: a signed bundle is still refused by Gatekeeper until it has been submitted to Apple and stapled, which is a separate step.
 
-## Using components
+Before tagging a release, walk [`apps/app/SMOKE.md`](apps/app/SMOKE.md) — the manual checks against a real Claude Code that the automated suite cannot reach.
 
-To use the components in your app, import them from the `ui` package.
+## License
 
-```tsx
-import { Button } from "@workspace/ui/components/button";
-```
+MIT — see [`LICENSE`](LICENSE).
