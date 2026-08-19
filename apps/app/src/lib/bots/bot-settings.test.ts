@@ -242,11 +242,11 @@ describe("toRosterBots", () => {
 		bot({ id: "b-2", name: "Beacon", title: "" }),
 	]
 
+	/** A moment in the day the last word of a conversation was said. */
+	const TODAY = new Date(2025, 2, 12, 9, 24).getTime()
+
 	it("reads the name, the title and the face off the record", () => {
-		const [atlas, beacon] = toRosterBots(roster, {
-			selectedBotId: null,
-			working: {},
-		})
+		const [atlas, beacon] = toRosterBots(roster, { working: {}, previews: {} })
 
 		expect(atlas).toMatchObject({
 			id: "b-1",
@@ -261,31 +261,38 @@ describe("toRosterBots", () => {
 	})
 
 	// Every bot runs a process of its own, so every row reads its own: the bot the
-	// reader is not looking at is shown answering when it is. The preview line stays
-	// the open bot's — it is the conversation on the screen.
+	// reader is not looking at is shown answering when it is.
 	it("gives every bot the working state of its own process", () => {
 		const [atlas, beacon] = toRosterBots(roster, {
-			selectedBotId: "b-1",
 			working: {
 				"b-1": { isWorking: true, kind: "writing" },
 				"b-2": { isWorking: true, kind: "searching" },
 			},
-			lastMessage: "Pulled the three papers.",
+			previews: {},
 		})
 
-		expect(atlas).toMatchObject({
-			status: "working",
-			pose: "writing",
-			lastMessage: "Pulled the three papers.",
-		})
+		expect(atlas).toMatchObject({ status: "working", pose: "writing" })
 		expect(beacon).toMatchObject({ status: "working", pose: "searching" })
+	})
+
+	// Every bot holds a conversation of its own, so every row previews its own last
+	// word — the row the reader is not on included.
+	it("gives every bot the last word of its own conversation", () => {
+		const [atlas, beacon] = toRosterBots(roster, {
+			working: {},
+			previews: { "b-1": { text: "Pulled the three papers.", at: TODAY } },
+		})
+
+		expect(atlas.lastMessage).toBe("Pulled the three papers.")
+		// A bot nothing has been said to yet previews nothing, and the row keeps the
+		// height it has with a preview.
 		expect(beacon.lastMessage).toBeUndefined()
 	})
 
 	it("leaves a bot with no process of its own idle", () => {
 		const [atlas, beacon] = toRosterBots(roster, {
-			selectedBotId: "b-1",
 			working: { "b-1": { isWorking: false } },
+			previews: {},
 		})
 
 		expect(atlas).toMatchObject({ status: "idle", pose: undefined })
@@ -294,8 +301,8 @@ describe("toRosterBots", () => {
 
 	it("leaves a bot nobody marked without a blot rather than with a default one", () => {
 		const [bare] = toRosterBots([bot({ avatarBlot: null })], {
-			selectedBotId: null,
 			working: {},
+			previews: {},
 		})
 
 		expect(bare.blot).toBeUndefined()
@@ -307,7 +314,7 @@ describe("toRosterBots", () => {
 				bot({ id: "b-1", avatarImagePath: "/pictures/owl.png" }),
 				bot({ id: "b-2", avatarImagePath: null }),
 			],
-			{ selectedBotId: null, working: {} },
+			{ working: {}, previews: {} },
 		)
 
 		expect(worn.image).toBe(avatarSrc("/pictures/owl.png"))

@@ -31,7 +31,10 @@ import {
 	botIdentity,
 	message as storedMessage,
 } from "../conversations/transcript-fixtures"
-import { isTerminalCompletion } from "../conversations/transcript-state"
+import {
+	isTerminalCompletion,
+	lastWordIn,
+} from "../conversations/transcript-state"
 
 const STEP_MS = 10
 const REPLY = "one two three four five six"
@@ -246,6 +249,11 @@ const runOf = (controller: ChatController): RuntimeScope => {
 	}
 	return runtime
 }
+
+/** The line a roster row would preview for a bot, read where the sidebar reads it:
+ * off the bot's own state, whether the reader is on it or not. */
+const previewFor = (controller: ChatController, botId: string) =>
+	lastWordIn(controller.stateFor(botId).messages)
 
 const spoken = (messages: TranscriptMessage[]) =>
 	messages.map((message) => [message.role, message.content, message.completion])
@@ -1212,6 +1220,30 @@ describe("createChatController", () => {
 
 		await vi.runAllTimersAsync()
 		expect(isTurnBusy(harness.controller.stateFor(BOT).turn)).toBe(false)
+		harness.detach()
+	})
+
+	// The other half of what the roster reads from here: the row of the bot the
+	// reader walked away from previews what it went on to say, so a reply that lands
+	// while they are elsewhere is on the row it belongs to.
+	it("holds the last word of a bot answering in the background", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		await harness.controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 4)
+
+		await harness.controller.open(other.id)
+
+		// The prompt is settled the moment it is written, so the row previews it while
+		// the answer to it is still being streamed into the same conversation.
+		expect(previewFor(harness.controller, BOT)).toMatchObject({
+			text: "hello",
+		})
+		expect(previewFor(harness.controller, other.id)).toBeUndefined()
+
+		await vi.runAllTimersAsync()
+		expect(previewFor(harness.controller, BOT)).toMatchObject({ text: REPLY })
 		harness.detach()
 	})
 

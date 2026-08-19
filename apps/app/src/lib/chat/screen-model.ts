@@ -220,18 +220,6 @@ export function sidebarActivityFor(state: ChatState): SidebarActivity {
 	return { isWorking: true, kind: working.kind }
 }
 
-/** The reply still streaming is skipped: the sidebar hides its row while the
- * turn works, so trimming a growing answer on every delta is dead work that
- * churns a fresh string per token and defeats the row's memo. Holding the last
- * settled reply keeps the value stable for the whole turn. */
-export function lastAssistantTextFor(state: ChatState): string | undefined {
-	const latest = state.messages.findLast(
-		(message) =>
-			message.role === "assistant" && isTerminalCompletion(message.completion),
-	)
-	return latest?.content.trim() || undefined
-}
-
 export function emptyStateStatusFor(
 	connection: ConnectionState,
 ): ChatEmptyStateStatus | null {

@@ -11,6 +11,7 @@ import type {
 	Bot,
 	BotIdentity,
 } from "../conversations/store-contract"
+import type { LastWord } from "../conversations/transcript-state"
 
 /** What is offered when the catalogue is empty — a machine whose Claude Code could
  * not be found, or one whose executable carries no catalogue, or `bun dev:web`, which
@@ -137,27 +138,28 @@ export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {
 	)
 }
 
-/** What the chat knows about the bots it lists. Every bot runs a process of its
- * own, so what is working is read per row rather than granted to the open one: the
- * reader who walks away from a bot that is answering is owed the sight of it still
- * answering. The last message stays the open bot's — it is the preview of the
- * conversation on the screen. */
+/** What the chat knows about the bots it lists, both halves of it read per bot.
+ * Every bot runs a process of its own, so what is working is read per row rather
+ * than granted to the open one: the reader who walks away from a bot that is
+ * answering is owed the sight of it still answering. Every bot holds a conversation
+ * of its own for the same reason, so every row previews its own last word. */
 export type RosterActivity = {
-	selectedBotId: string | null
 	working: Record<string, SidebarActivity>
-	lastMessage?: string
+	previews: Record<string, LastWord | undefined>
 }
 
 /** The roster as the sidebar reads it: every bot from the database, and the live
- * half over the one the chat is open on. An empty title is left out rather than
- * passed through — the row draws no badge for a bot nobody gave a role. */
+ * half of each. An empty title is left out rather than passed through — the row
+ * draws no badge for a bot nobody gave a role. A bot nothing has been said to yet
+ * carries no preview — the row keeps the line empty and the height it has with
+ * one. */
 export const toRosterBots = (
 	bots: Bot[],
 	activity: RosterActivity,
 ): AgentSidebarBot[] =>
 	bots.map((bot) => {
-		const isOpen = bot.id === activity.selectedBotId
 		const working = activity.working[bot.id]
+		const preview = activity.previews[bot.id]
 		return {
 			id: bot.id,
 			name: bot.name,
@@ -165,7 +167,7 @@ export const toRosterBots = (
 			animal: bot.avatarAnimal,
 			blot: bot.avatarBlot ?? undefined,
 			image: avatarSrc(bot.avatarImagePath),
-			lastMessage: isOpen ? activity.lastMessage : undefined,
+			lastMessage: preview?.text,
 			status: working?.isWorking ? "working" : "idle",
 			pose: working?.kind,
 		}

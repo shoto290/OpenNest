@@ -14,6 +14,7 @@ import {
 import {
 	initialTranscriptState,
 	isTerminalCompletion,
+	lastWordIn,
 	selectHasMore,
 	selectMessages,
 	selectOldestSeq,
@@ -540,5 +541,75 @@ describe("transcript selectors", () => {
 		expect(isTerminalCompletion("interrupted")).toBe(true)
 		expect(isTerminalCompletion("pending")).toBe(false)
 		expect(isTerminalCompletion("streaming")).toBe(false)
+	})
+})
+
+describe("lastWordIn", () => {
+	const settled = (
+		overrides: Partial<TranscriptMessage> = {},
+	): TranscriptMessage => message({ completion: "complete", ...overrides })
+
+	it("has nothing to show for a conversation nobody has spoken in", () => {
+		expect(lastWordIn([])).toBeUndefined()
+	})
+
+	// The row previews the conversation, not the bot: a reader whose prompt is the
+	// last word in it sees their own prompt, dated when they sent it.
+	it("takes the last word whoever said it, and when it was said", () => {
+		expect(
+			lastWordIn([
+				settled({ id: "a", content: "Done", createdAt: 10 }),
+				settled({ id: "b", role: "user", content: "And?", createdAt: 20 }),
+			]),
+		).toEqual({ text: "And?", at: 20 })
+	})
+
+	it("keeps the newest message, not the one before it", () => {
+		expect(
+			lastWordIn([
+				settled({ id: "a", content: "First", createdAt: 10 }),
+				settled({ id: "b", content: "Second", createdAt: 20 }),
+			]),
+		).toEqual({ text: "Second", at: 20 })
+	})
+
+	// A growing answer is worth nothing on a row — the pose stands there instead —
+	// so the value the roster holds is the last one that finished being written.
+	it("holds the last settled message while the next one streams", () => {
+		expect(
+			lastWordIn([
+				settled({ id: "a", content: "Done", createdAt: 10 }),
+				message({
+					id: "b",
+					content: "Still wri",
+					completion: "streaming",
+					createdAt: 20,
+				}),
+			]),
+		).toEqual({ text: "Done", at: 10 })
+		expect(
+			lastWordIn([
+				message({ id: "a", content: "Wri", completion: "streaming" }),
+			]),
+		).toBeUndefined()
+	})
+
+	// A turn that ended early still said what it said before it did.
+	it("reads a turn that stopped short as settled", () => {
+		expect(
+			lastWordIn([
+				settled({ content: "Half", completion: "cancelled", createdAt: 30 }),
+			]),
+		).toEqual({ text: "Half", at: 30 })
+	})
+
+	// A turn that failed before its first word has nothing to preview and still has a
+	// time: the row says when the conversation last moved and leaves the line empty.
+	it("dates a message that ended without saying anything", () => {
+		expect(
+			lastWordIn([
+				settled({ content: "  ", completion: "failed", createdAt: 40 }),
+			]),
+		).toEqual({ text: undefined, at: 40 })
 	})
 })

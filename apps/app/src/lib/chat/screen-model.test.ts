@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import { type ChatState, initialChatState } from "./chat-state"
 import {
 	emptyStateStatusFor,
-	lastAssistantTextFor,
 	needsFreshSession,
 	noticeTitleFor,
 	sidebarActivityFor,
@@ -395,57 +394,6 @@ describe("sidebarActivityFor", () => {
 			isWorking: true,
 			kind: "waiting",
 		})
-	})
-})
-
-describe("lastAssistantTextFor", () => {
-	it("has nothing to show before the bot has answered", () => {
-		expect(lastAssistantTextFor(chatState())).toBeUndefined()
-		expect(
-			lastAssistantTextFor(
-				chatState({
-					messages: [message({ content: "  ", completion: "complete" })],
-				}),
-			),
-		).toBeUndefined()
-	})
-
-	it("holds the last settled reply while the next one streams", () => {
-		const state = chatState({
-			messages: [
-				message({ id: "a", content: "Done", completion: "complete" }),
-				message({ id: "b", content: "Still wri" }),
-			],
-		})
-
-		expect(lastAssistantTextFor(state)).toBe("Done")
-		expect(
-			lastAssistantTextFor(
-				chatState({ messages: [message({ content: "Wri" })] }),
-			),
-		).toBeUndefined()
-	})
-
-	it("keeps the newest reply, not the one before it", () => {
-		const state = chatState({
-			messages: [
-				message({ id: "a", content: "First", completion: "complete" }),
-				message({ id: "b", content: "Second", completion: "complete" }),
-			],
-		})
-
-		expect(lastAssistantTextFor(state)).toBe("Second")
-	})
-
-	it("survives a prompt sent after the reply", () => {
-		const state = chatState({
-			messages: [
-				message({ id: "a", content: "Done", completion: "complete" }),
-				prompt({ id: "b" }),
-			],
-		})
-
-		expect(lastAssistantTextFor(state)).toBe("Done")
 	})
 })
 
