@@ -14,6 +14,7 @@ import {
 } from "@/lib/bots/bot-settings"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
+import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
@@ -70,11 +71,13 @@ export function App() {
 	// The roster is memoised inside the design system so a streamed token does not
 	// re-measure its layout projections, which only holds if the array it is handed
 	// is the same one between renders. Every input here is stable through a turn —
-	// the last settled message of every bot included — and the clock is read here,
-	// once, so every row of the array it builds is dated against the same now.
+	// the last settled message of every bot included — and the clock hands down one
+	// reading a minute, so every row of the array it builds is aged against the same
+	// now and no row's age goes stale under the reader.
+	const now = useRosterClock()
 	const rosterBots = useMemo(
-		() => toRosterBots(bots, { working, previews }, Date.now()),
-		[bots, working, previews],
+		() => toRosterBots(bots, { working, previews }, now),
+		[bots, working, previews, now],
 	)
 
 	return (

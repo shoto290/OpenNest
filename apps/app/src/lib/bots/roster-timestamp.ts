@@ -3,53 +3,44 @@
  * host would be read against names and previews that did not. */
 const LOCALE = "en-US"
 
-const DAY_MS = 24 * 60 * 60 * 1000
+const MINUTE_MS = 60 * 1000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+const WEEK_MS = 7 * DAY_MS
+const FOUR_WEEKS_MS = 4 * WEEK_MS
 
-/** Built once. A formatter is expensive to make and these three never change. */
-const TIME = new Intl.DateTimeFormat(LOCALE, {
-	hour: "2-digit",
-	minute: "2-digit",
-	hourCycle: "h23",
-})
-
-const WEEKDAY = new Intl.DateTimeFormat(LOCALE, { weekday: "short" })
-
+/** Built once. A formatter is expensive to make and this one never changes.
+ * Month and day only: the row's slot is 44px and a two-digit year does not fit
+ * beside a two-digit month and a two-digit day, so the label that would clip is
+ * the one the reader never sees whole. */
 const DATE = new Intl.DateTimeFormat(LOCALE, {
 	month: "numeric",
 	day: "numeric",
-	year: "2-digit",
 })
 
-/** Midnight before a moment, in the reader's own timezone: the row says "today" the
- * way a calendar does, not the way a count of hours would. */
-const startOfDay = (at: number): number => {
-	const day = new Date(at)
-	day.setHours(0, 0, 0, 0)
-	return day.getTime()
-}
-
-/** How many calendar days back a moment falls. Rounded, because the days a clock
- * change falls in are an hour short or an hour long. */
-const daysBefore = (at: number, now: number): number =>
-	Math.round((startOfDay(now) - startOfDay(at)) / DAY_MS)
-
-/** When a bot last said something, as narrow as the row's slot and as precise as
- * that distance deserves: the hour today, the word for yesterday, the weekday for
- * the week behind it, and the date once naming the day stops locating it.
+/** How long ago a bot last said something, as narrow as the row's slot: the
+ * distance is what a reader of a roster wants, and it stays a distance until
+ * naming one stops locating the message, where the calendar takes over.
  *
  * `now` is given rather than read, so every row of one roster is labelled from one
  * reading and a test can stand the clock still. A moment ahead of that reading is a
- * host whose clock moved under this launch, and it reads as today. */
+ * host whose clock moved under this launch, and it reads as now. */
 export const rosterTimestamp = (at: number, now: number): string => {
-	const days = daysBefore(at, now)
-	if (days <= 0) {
-		return TIME.format(at)
+	const age = now - at
+	if (age < MINUTE_MS) {
+		return "now"
 	}
-	if (days === 1) {
-		return "Yesterday"
+	if (age < HOUR_MS) {
+		return `${Math.floor(age / MINUTE_MS)}m`
 	}
-	if (days < 7) {
-		return WEEKDAY.format(at)
+	if (age < DAY_MS) {
+		return `${Math.floor(age / HOUR_MS)}h`
+	}
+	if (age < WEEK_MS) {
+		return `${Math.floor(age / DAY_MS)}d`
+	}
+	if (age < FOUR_WEEKS_MS) {
+		return `${Math.floor(age / WEEK_MS)}w`
 	}
 	return DATE.format(at)
 }
