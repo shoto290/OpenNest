@@ -4,7 +4,7 @@ import { expect, waitFor } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import type { AgentActivityItem } from "@workspace/ui/components/agent-activity"
 import { AgentActivity } from "@workspace/ui/components/agent-activity"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
+import { BLOT_TINTS, BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ANIMALS } from "@workspace/ui/components/bot-avatar-animals"
 import {
 	BotWorking,
@@ -90,6 +90,7 @@ const meta = preview.meta({
 	argTypes: {
 		kind: { control: "select", options: BOT_WORKING_KINDS },
 		animal: { control: "select", options: Object.keys(ANIMALS) },
+		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
 		size: { control: { type: "range", min: 20, max: 64, step: 2 } },
 	},
 })
@@ -123,6 +124,45 @@ export const Variants = meta.story({
 					"Every kind of work, in the order a turn tends to walk through them, at rest — which is how the transcript shows them. Check that each pose reads differently at avatar size without any words to lean on. Pick `HoverLabel` for what pointing at one says.",
 			},
 		},
+	},
+})
+
+export const Blot = meta.story({
+	args: { animal: "rabbit", blot: "sky" },
+	render: (args) => (
+		<div className="flex flex-col gap-4">
+			<BotWorking {...args} blot={undefined} />
+			{BOT_WORKING_KINDS.map((kind) => (
+				<BotWorking {...args} key={kind} kind={kind} />
+			))}
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The tint a bot was marked with, held through the work. The first row carries none and draws the bare animal, the rest carry the same blot in every kind of work — check that the tint is what tells this bot apart while it is busy, exactly as it does at rest, and that the working dot still lands on top of it. Pick `AI/BotIdentityAvatar → EveryBlot` for the eight tints themselves.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [bare, ...tinted] = Array.from(
+			canvasElement.querySelectorAll('[data-slot="bot-identity-avatar"]'),
+		)
+
+		await expect(bare.querySelector('[data-slot="bot-avatar-blot"]')).toBeNull()
+		await expect(
+			tinted.map((avatar) =>
+				avatar
+					.querySelector('[data-slot="bot-avatar-blot"]')
+					?.getAttribute("fill"),
+			),
+		).toEqual(BOT_WORKING_KINDS.map(() => "var(--bot-blot-sky)"))
+		for (const avatar of tinted) {
+			await expect(
+				avatar.querySelector('[data-slot="bot-activity-dot"]'),
+			).not.toBeNull()
+		}
 	},
 })
 
