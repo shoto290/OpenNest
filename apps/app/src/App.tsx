@@ -70,9 +70,10 @@ export function App() {
 	// The roster is memoised inside the design system so a streamed token does not
 	// re-measure its layout projections, which only holds if the array it is handed
 	// is the same one between renders. Every input here is stable through a turn —
-	// the last settled message of every bot included.
+	// the last settled message of every bot included — and the clock is read here,
+	// once, so every row of the array it builds is dated against the same now.
 	const rosterBots = useMemo(
-		() => toRosterBots(bots, { working, previews }),
+		() => toRosterBots(bots, { working, previews }, Date.now()),
 		[bots, working, previews],
 	)
 

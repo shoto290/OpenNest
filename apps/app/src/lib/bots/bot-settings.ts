@@ -4,6 +4,8 @@ import type {
 	BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-panel"
 
+import { rosterTimestamp } from "./roster-timestamp"
+
 import { avatarSrc } from "../host"
 import type { SidebarActivity } from "../chat/screen-model"
 import type {
@@ -150,12 +152,16 @@ export type RosterActivity = {
 
 /** The roster as the sidebar reads it: every bot from the database, and the live
  * half of each. An empty title is left out rather than passed through — the row
- * draws no badge for a bot nobody gave a role. A bot nothing has been said to yet
- * carries no preview — the row keeps the line empty and the height it has with
- * one. */
+ * draws no badge for a bot nobody gave a role.
+ *
+ * `now` is the clock the whole array is labelled from: one reading for every row,
+ * so two rows a minute apart cannot be read against two different nows. A bot
+ * nothing has been said to yet carries neither a preview nor a time — the slots keep
+ * their place empty. */
 export const toRosterBots = (
 	bots: Bot[],
 	activity: RosterActivity,
+	now: number,
 ): AgentSidebarBot[] =>
 	bots.map((bot) => {
 		const working = activity.working[bot.id]
@@ -168,6 +174,7 @@ export const toRosterBots = (
 			blot: bot.avatarBlot ?? undefined,
 			image: avatarSrc(bot.avatarImagePath),
 			lastMessage: preview?.text,
+			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
 			status: working?.isWorking ? "working" : "idle",
 			pose: working?.kind,
 		}
