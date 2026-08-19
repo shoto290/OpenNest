@@ -17,6 +17,10 @@ const UPDATE_BADGE_STATUSES = listExhaustively<UpdateBadgeStatus>({
 
 const VERSION = "0.4.0"
 
+const RELEASE_NOTES_URL = "https://example.com/releases/0.4.0"
+
+const RELEASE_NOTES_LABEL = "Read the full release notes in your browser"
+
 const RELEASE_NOTES = [
 	"Bots keep their transcript when the window is reopened.",
 	"Faster first paint on the workspace shell.",
@@ -120,6 +124,9 @@ export const Ready = meta.story({
 		).toHaveAttribute("aria-expanded", "true")
 		await expect(await body.findByText(`Version ${VERSION}`)).toBeVisible()
 		await expect(body.getByText(RELEASE_NOTES[0])).toBeVisible()
+		await expect(
+			body.queryByRole("link", { name: RELEASE_NOTES_LABEL }),
+		).toBeNull()
 		await userEvent.click(await body.findByRole("button", { name: "Later" }))
 		await expect(args.onPostpone).toHaveBeenCalledTimes(1)
 		await expect(
@@ -146,6 +153,26 @@ export const WithActiveBots = meta.story({
 		await expect(
 			body.getByText("2 bots are still running. Stop them to restart."),
 		).toBeVisible()
+	},
+})
+
+export const WithReleaseNotes = meta.story({
+	args: { status: "ready", releaseNotesUrl: RELEASE_NOTES_URL },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the panel's three lines are a summary and the whole changelog lives on the web: a quiet icon at the trailing edge of the row opens it. Check that `Restart now` is still the one action the eye lands on, that the link names itself and says it leaves the window — no visible text carries that — and that it opens in a new tab rather than replacing the app. Pick `Ready` for the same panel when no address was handed down and the summary is all there is.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const body = within(canvasElement.ownerDocument.body)
+		const link = await body.findByRole("link", { name: RELEASE_NOTES_LABEL })
+		await expect(link).toHaveAttribute("href", RELEASE_NOTES_URL)
+		await expect(link).toHaveAttribute("target", "_blank")
+		await expect(link).toHaveAttribute("rel", "noreferrer noopener")
+		await expect(body.getByRole("button", { name: "Restart now" })).toBeEnabled()
 	},
 })
 
