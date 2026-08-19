@@ -41,13 +41,16 @@ export interface TooltipProps {
 // Gap between trigger and tooltip, in px.
 const GAP = 8
 
-// Centering transform for the fixed-positioned anchor point, per side.
-const anchorTransform: Record<Side, string> = {
-	top: "translate(-50%, -100%)",
-	bottom: "translate(-50%, 0)",
-	left: "translate(-100%, -50%)",
-	right: "translate(0, -50%)",
-}
+// How close to the edge of the window the tooltip may come, in px.
+const EDGE = 8
+
+// The centring step back, held inside the window: `-50%` and `-100%` resolve
+// against the tooltip's own box, so a trigger in the corner of the window keeps
+// its label on the screen without the label ever being measured.
+const centredInside = (centre: number, extent: number) =>
+	`min(max(-50%, ${EDGE - centre}px), calc(${extent - EDGE - centre}px - 100%))`
+
+type Placement = { top: number; left: number; transform: string }
 
 const transformOrigin: Record<Side, string> = {
 	top: "center bottom",
@@ -118,9 +121,7 @@ export function Tooltip({
 	wrapperClassName,
 }: TooltipProps) {
 	const [open, setOpen] = useState(false)
-	const [coords, setCoords] = useState<{ top: number; left: number } | null>(
-		null,
-	)
+	const [coords, setCoords] = useState<Placement | null>(null)
 	const id = useId()
 	const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const anchorRef = useRef<HTMLSpanElement>(null)
@@ -136,11 +137,29 @@ export function Tooltip({
 		const r = el.getBoundingClientRect()
 		const cx = r.left + r.width / 2
 		const cy = r.top + r.height / 2
-		const point: Record<Side, { top: number; left: number }> = {
-			top: { top: r.top - GAP, left: cx },
-			bottom: { top: r.bottom + GAP, left: cx },
-			left: { top: cy, left: r.left - GAP },
-			right: { top: cy, left: r.right + GAP },
+		const insideX = centredInside(cx, window.innerWidth)
+		const insideY = centredInside(cy, window.innerHeight)
+		const point: Record<Side, Placement> = {
+			top: {
+				top: r.top - GAP,
+				left: cx,
+				transform: `translate(${insideX}, -100%)`,
+			},
+			bottom: {
+				top: r.bottom + GAP,
+				left: cx,
+				transform: `translate(${insideX}, 0)`,
+			},
+			left: {
+				top: cy,
+				left: r.left - GAP,
+				transform: `translate(-100%, ${insideY})`,
+			},
+			right: {
+				top: cy,
+				left: r.right + GAP,
+				transform: `translate(0, ${insideY})`,
+			},
 		}
 		setCoords(point[side])
 	}, [side])
@@ -226,7 +245,7 @@ export function Tooltip({
 									style={{
 										top: coords.top,
 										left: coords.left,
-										transform: anchorTransform[side],
+										transform: coords.transform,
 									}}
 								>
 									<motion.span

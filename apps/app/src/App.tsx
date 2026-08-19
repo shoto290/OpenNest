@@ -1,8 +1,8 @@
-import { useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import { BotSettingsPanel } from "@workspace/ui/components/bot-settings-panel"
+import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { ChatScreen } from "@/components/chat-screen"
@@ -15,6 +15,7 @@ import {
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
+import { useSettingsShortcut } from "@/lib/bots/use-settings-shortcut"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
@@ -80,72 +81,86 @@ export function App() {
 		[bots, working, previews, now],
 	)
 
+	// One way to ask, whichever way it is asked: the gear in the conversation's bar
+	// and the chord below it are the same toggle. The chord is off while there is no
+	// conversation, because the settings it would open belong to the bot being read.
+	const toggleSettings = useCallback(
+		() => roster.controller.setEditing(!isEditing),
+		[roster.controller, isEditing],
+	)
+
+	useSettingsShortcut({
+		isEnabled: Boolean(selected),
+		onToggle: toggleSettings,
+	})
+
 	return (
-		<WorkspaceShell
-			defaultOpen
-			// Mounted only while it is open: a closed panel is no column at all, so the
-			// conversation has the whole width and the gear in its header is the way back.
-			panel={
-				selected && isEditing ? (
-					<BotSettingsPanel
-						confirmingDelete={isConfirmingDelete}
-						models={modelOptionsFor(selected.model, catalogue)}
-						onAvatarUpload={(file) => {
-							void roster.controller.uploadAvatar(selected.id, file)
+		<>
+			<WorkspaceShell
+				defaultOpen
+				sidebar={
+					<AgentSidebar
+						bots={rosterBots}
+						onCreateBot={() => {
+							void roster.controller.create()
 						}}
-						onBrowseWorkingDirectory={browseWorkingDirectory}
-						onClose={() => roster.controller.setEditing(false)}
-						onConfirmingDeleteChange={(confirming) => {
-							if (confirming) {
-								roster.controller.askToDelete(selected.id)
-							} else {
-								roster.controller.cancelDelete()
-							}
-						}}
-						onDelete={() => {
-							void deleteBot(selected.id)
-						}}
-						// The record first, then the runtime: a bot that changed what a
-						// process is started as retires the one answering for it, and the
-						// next prompt is carried by a process started as it reads now.
-						onValueChange={(value) => {
-							roster.controller.describe(selected.id, value)
-							if (changesRuntime(selected, value)) {
-								chat.controller.redescribe(selected.id)
-							}
-						}}
-						seed={selected.id}
-						value={toSettingsValue(selected)}
-						working={activity?.isWorking ?? false}
-						workingKind={activity?.kind}
+						onDeleteBot={roster.controller.askToDelete}
+						onEditBot={roster.controller.edit}
+						onSelectBot={roster.controller.select}
+						selectedBotId={selectedBotId ?? undefined}
 					/>
-				) : null
-			}
-			sidebar={
-				<AgentSidebar
-					bots={rosterBots}
-					onCreateBot={() => {
-						void roster.controller.create()
-					}}
-					onDeleteBot={roster.controller.askToDelete}
-					onEditBot={roster.controller.edit}
-					onSelectBot={roster.controller.select}
-					selectedBotId={selectedBotId ?? undefined}
-				/>
-			}
-		>
+				}
+			>
+				{selected ? (
+					<ChatScreen
+						bot={selected}
+						chat={chat}
+						isSettingsOpen={isEditing}
+						onToggleSettings={toggleSettings}
+					/>
+				) : (
+					// No bot, so no chat: the roster's create button is the way out of here,
+					// and the header is what keeps the window draggable in the meantime.
+					<AppHeader insetWindowControls data-tauri-drag-region="deep" />
+				)}
+			</WorkspaceShell>
+			{/* Over the conversation rather than beside it: closing the settings gives
+			the width back without touching what is selected or where it is scrolled. */}
 			{selected ? (
-				<ChatScreen
-					bot={selected}
-					chat={chat}
-					isSettingsOpen={isEditing}
-					onToggleSettings={() => roster.controller.setEditing(!isEditing)}
+				<BotSettingsDialog
+					confirmingDelete={isConfirmingDelete}
+					models={modelOptionsFor(selected.model, catalogue)}
+					onAvatarUpload={(file) => {
+						void roster.controller.uploadAvatar(selected.id, file)
+					}}
+					onBrowseWorkingDirectory={browseWorkingDirectory}
+					onClose={() => roster.controller.setEditing(false)}
+					onConfirmingDeleteChange={(confirming) => {
+						if (confirming) {
+							roster.controller.askToDelete(selected.id)
+						} else {
+							roster.controller.cancelDelete()
+						}
+					}}
+					onDelete={() => {
+						void deleteBot(selected.id)
+					}}
+					// The record first, then the runtime: a bot that changed what a
+					// process is started as retires the one answering for it, and the
+					// next prompt is carried by a process started as it reads now.
+					onValueChange={(value) => {
+						roster.controller.describe(selected.id, value)
+						if (changesRuntime(selected, value)) {
+							chat.controller.redescribe(selected.id)
+						}
+					}}
+					open={isEditing}
+					seed={selected.id}
+					value={toSettingsValue(selected)}
+					working={activity?.isWorking ?? false}
+					workingKind={activity?.kind}
 				/>
-			) : (
-				// No bot, so no chat: the roster's create button is the way out of here,
-				// and the header is what keeps the window draggable in the meantime.
-				<AppHeader insetWindowControls data-tauri-drag-region="deep" />
-			)}
-		</WorkspaceShell>
+			) : null}
+		</>
 	)
 }
