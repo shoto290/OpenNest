@@ -39,8 +39,8 @@ type BotSettingsPanelProps = {
 	confirmingDelete?: boolean
 	onConfirmingDeleteChange?: (confirming: boolean) => void
 	/** The only thing that makes the avatar move: the animal animates in its
-	 * working pose, an uploaded picture lights its activity dot. An identity pose
-	 * holds a single frame the rest of the time. */
+	 * working pose, an uploaded picture lights its activity dot. A bot at rest
+	 * holds a single idle frame. */
 	working?: boolean
 	/** What the bot is busy with while `working`. Its own animal performs it, which is
 	 * what keeps this avatar and the roster's showing the same bot doing the same

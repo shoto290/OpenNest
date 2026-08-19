@@ -1,6 +1,7 @@
 "use client"
 
 import {
+	type CSSProperties,
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
 	useId,
@@ -57,6 +58,39 @@ const ROLE_PROPS = {
 } as const
 
 const HEAD_MASK_BOUNDS = { x: -240, y: -240, width: 720, height: 720 } as const
+
+/** The eight tints a bot can be marked with. Light ones only: the ink line and the
+ * ear accent are near-black, and they stop reading over anything darker. */
+const BLOT_TINTS = [
+	"coral",
+	"amber",
+	"moss",
+	"water",
+	"sky",
+	"lavender",
+	"rose",
+	"slate",
+] as const
+
+type BotAvatarBlot = (typeof BLOT_TINTS)[number]
+
+const BLOT_PATH =
+	"M118,6 C152,0 180,18 189,48 C196,72 174,86 178,104 C182,122 202,130 195,151 C187,175 158,191 130,193 C102,195 80,180 58,175 C28,168 7,147 8,115 C9,85 23,58 39,38 C57,15 86,12 118,6 Z"
+
+const VIEW_BOX = 240
+const BLOT_BOX = 200
+const BLOT_RATIO = 16 / 15
+const BLOT_SPAN = VIEW_BOX * BLOT_RATIO
+const BLOT_INSET = round2((VIEW_BOX - BLOT_SPAN) / 2)
+const BLOT_TRANSFORM = `translate(${BLOT_INSET} ${BLOT_INSET}) scale(${round2(BLOT_SPAN / BLOT_BOX)})`
+
+/** A blot brings its own ink. The tint is the same under `.dark`, and the near-white
+ * line the dark theme draws would vanish on it — the eyes read off `currentColor`
+ * and the rest off the ink token, so both are pinned back to the dark line. */
+const BLOT_INK_STYLE = {
+	color: "var(--bot-blot-ink)",
+	"--bot-avatar-ink": "var(--bot-blot-ink)",
+} as CSSProperties
 
 const DRAG_DEGREES_PER_PIXEL = 0.6
 const DRAG_LIMIT = 60
@@ -137,6 +171,8 @@ type BotAvatarProps = {
 	roll?: number
 	perspective?: number
 	ink?: BotAvatarInk
+	/** A tint drawn behind the whole animal. Leave it out and nothing is drawn. */
+	blot?: BotAvatarBlot
 	interactive?: boolean
 	wireframe?: boolean
 	onOrientationChange?: (orientation: BotAvatarOrientation) => void
@@ -153,6 +189,7 @@ function BotAvatar({
 	roll,
 	perspective = 0.55,
 	ink = "bold",
+	blot,
 	interactive = false,
 	wireframe = false,
 	onOrientationChange,
@@ -258,7 +295,11 @@ function BotAvatar({
 						/>
 						<feDisplacementMap in="SourceGraphic" in2="n" scale={boil} />
 					</filter>
-					<path data-part={PARTS.headClip} d={definition.head} id={headPathId} />
+					<path
+						data-part={PARTS.headClip}
+						d={definition.head}
+						id={headPathId}
+					/>
 					<clipPath id={clipId}>
 						<use href={`#${headPathId}`} />
 					</clipPath>
@@ -280,6 +321,15 @@ function BotAvatar({
 						</clipPath>
 					))}
 				</defs>
+				{blot ? (
+					<path
+						d={BLOT_PATH}
+						data-slot="bot-avatar-blot"
+						fill={`var(--bot-blot-${blot})`}
+						stroke="none"
+						transform={BLOT_TRANSFORM}
+					/>
+				) : null}
 				<g filter={`url(#${filterId})`}>
 					<g data-part={PARTS.rig}>
 						<g mask={`url(#${headMaskId})`}>
@@ -334,6 +384,7 @@ function BotAvatar({
 		),
 		[
 			animal,
+			blot,
 			boil,
 			clipId,
 			definition,
@@ -349,7 +400,7 @@ function BotAvatar({
 	return (
 		<svg
 			ref={svgRef}
-			viewBox="0 0 240 240"
+			viewBox={`0 0 ${VIEW_BOX} ${VIEW_BOX}`}
 			width={size}
 			height={size}
 			role="img"
@@ -357,6 +408,7 @@ function BotAvatar({
 			onPointerDown={startDrag}
 			onPointerMove={moveDrag}
 			onPointerUp={endDrag}
+			style={blot ? BLOT_INK_STYLE : undefined}
 			className={cn(
 				"text-foreground",
 				interactive && "cursor-grab touch-none active:cursor-grabbing",
@@ -369,7 +421,9 @@ function BotAvatar({
 }
 
 export {
+	BLOT_TINTS,
 	BotAvatar,
+	type BotAvatarBlot,
 	type BotAvatarInk,
 	type BotAvatarOrientation,
 	type BotAvatarProps,

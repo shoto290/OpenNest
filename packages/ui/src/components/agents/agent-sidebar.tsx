@@ -2,10 +2,10 @@
 
 import { memo } from "react"
 
+import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import {
 	BotIdentityAvatar,
-	type BotIdentityPose,
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
@@ -71,8 +71,8 @@ interface AgentSidebarBot {
 	/** Already formatted by the host — the panel never reads a clock. */
 	timestamp?: string
 	animal?: BotAvatarAnimal
-	/** The pose the bot keeps at rest. Rendered as a still frame. */
-	identity?: BotIdentityPose
+	/** The tint drawn behind the animal — what tells two rows apart at a glance. */
+	blot?: BotAvatarBlot
 	/** A picture the reader uploaded, already a URL the host is happy to load. It
 	 * wins over the animal and never animates — the activity dot is what says the
 	 * bot is busy. */
@@ -118,9 +118,9 @@ const BotRosterRow = ({
 						icon={
 							<BotIdentityAvatar
 								animal={bot.animal}
+								blot={bot.blot}
 								image={bot.image}
 								kind={pose}
-								pose={bot.identity}
 								size={ROW_AVATAR_SIZE}
 								working={working}
 							/>
@@ -247,5 +247,5 @@ export {
 	AgentSidebar,
 	type AgentSidebarBot,
 	type AgentSidebarProps,
-	type BotIdentityPose,
+	type BotAvatarBlot,
 }

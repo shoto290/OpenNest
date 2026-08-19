@@ -27,7 +27,7 @@ const MODELS: BotModelOption[] = [
 ]
 
 const FILLED_BOT: BotSettingsValue = {
-	identity: { animal: "owl", pose: "curious" },
+	identity: { animal: "owl", blot: "sky" },
 	name: "Nest Keeper",
 	title: "Repository archivist",
 	description:
@@ -39,7 +39,7 @@ const FILLED_BOT: BotSettingsValue = {
 }
 
 const NEW_BOT: BotSettingsValue = {
-	identity: { animal: "cat", pose: "idle" },
+	identity: { animal: "cat" },
 	name: "",
 	title: "",
 	description: "",
@@ -102,7 +102,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. `Delete bot` opens a confirmation this panel owns, and `confirmingDelete` lets a host stand that same dialog up from anywhere else it offers to delete a bot. It is open whenever it is mounted: there is no rail to fold to, and closing it is the host unmounting the column, so a reader who put it away gets the whole width back rather than a strip of it. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight identity poses, `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. An identity pose is a still character: the avatar holds one frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
+					"The settings column that sits to the right of the chat and holds everything a bot is: its avatar, its words, the model behind it and the folder it works in. It is fully controlled and saves as you type — every keystroke emits `onValueChange` with the whole value, and the panel owns no draft, no debounce and no persistence. `Delete bot` opens a confirmation this panel owns, and `confirmingDelete` lets a host stand that same dialog up from anywhere else it offers to delete a bot. It is open whenever it is mounted: there is no rail to fold to, and closing it is the host unmounting the column, so a reader who put it away gets the whole width back rather than a strip of it. The avatar picker is a popover with two tabs: `Bot` picks one of the eight animals and one of the eight ink blots — or no blot at all — and `Upload` takes a dropped, pasted or browsed file and hands the host a `File`. A bot at rest is a still character: the avatar holds one idle frame and only moves while `working` is set, which is the single thing animation is allowed to mean here. An uploaded picture cannot act at all, so its liveness moves to an activity dot.",
 			},
 		},
 	},
@@ -224,16 +224,16 @@ export const StillUntilWorking = meta.story({
 		docs: {
 			description: {
 				story:
-					"The product rule, side by side: one identity, one pose, and motion as the only difference. Every one of the eight poses has an expression and a blink cadence, so a pose left animating would never sit still — the avatar therefore animates when `working` is set and holds a single frame when it is not. The animal is the bot's either way: the working half performs the work with the owl its reader chose, in the pose the work is named after, never with the animal the engine draws when nobody names one. Open this in Storybook to check the movement by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play guards the wiring instead.",
+					"The product rule, side by side: one identity and motion as the only difference. Every engine state has an expression and a blink cadence, so an avatar left animating would never sit still — it therefore animates when `working` is set and holds one idle frame when it is not. The animal and its blot are the bot's either way: the working half performs the work with the owl its reader chose, in the pose the work is named after, never with the animal the engine draws when nobody names one. Open this in Storybook to check the movement by eye: the left avatar must not blink, breathe or change expression while the right one does. The test browser forces reduced motion, so both halves are frozen under `test:storybook` and the play guards the wiring instead.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.getByRole("img", { name: "Bot avatar owl, curious" }),
+			canvas.getByRole("img", { name: "Bot avatar owl, idle" }),
 		).toBeVisible()
 		// The bot's own owl, doing the work the host named — not the animal the engine
-		// draws when nobody names one, and not a stand-in pose.
+		// draws when nobody names one.
 		await expect(
 			canvas.getByRole("img", { name: "Bot avatar owl, writing" }),
 		).toBeVisible()
@@ -357,7 +357,7 @@ export const PickerBotTab = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first tab of the avatar popover: the eight animals the avatar engine draws, then the eight poses that give the bot its resting temperament. Each grid is a real radio group, so arrow keys move within it and the current choice is announced; the ring is the same answer for the eye. Every pose thumbnail wears the animal currently chosen, so the row previews the actual outcome.",
+					"The first tab of the avatar popover: the eight animals the avatar engine draws, then the eight ink blots that mark the bot, plus the option that takes the blot off. Each grid is a real radio group, so arrow keys move within it and the current choice is announced; the ring is the same answer for the eye. Every thumbnail wears the animal and the blot currently chosen, so both rows preview the actual outcome.",
 			},
 		},
 	},
@@ -368,9 +368,9 @@ export const PickerBotTab = meta.story({
 			within(picker).getByRole("radio", { name: "Owl" }),
 		).toBeChecked()
 		await expect(
-			within(picker).getByRole("radio", { name: "Curious" }),
+			within(picker).getByRole("radio", { name: "Sky" }),
 		).toBeChecked()
-		await expect(within(picker).getAllByRole("radio")).toHaveLength(16)
+		await expect(within(picker).getAllByRole("radio")).toHaveLength(17)
 	},
 })
 

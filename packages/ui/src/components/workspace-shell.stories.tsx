@@ -51,13 +51,13 @@ const ROSTER: AgentSidebarBot[] = [
 		name: "Atlas",
 		title: "Research",
 		animal: "owl",
-		identity: "curious",
+		blot: "sky",
 		lastMessage: ANSWER,
 	},
 ]
 
 const SETTINGS: BotSettingsValue = {
-	identity: { animal: "owl", pose: "curious" },
+	identity: { animal: "owl", blot: "sky" },
 	name: "Atlas",
 	title: "Research",
 	description: "Reads the monorepo before it answers.",
