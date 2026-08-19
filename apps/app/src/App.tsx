@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo } from "react"
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
+import { UpdateBadge } from "@workspace/ui/components/update-badge"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { ChatScreen } from "@/components/chat-screen"
@@ -19,6 +20,7 @@ import { useSettingsShortcut } from "@/lib/bots/use-settings-shortcut"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
+import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
 
 /** The folder picker the working directory field opens. There is none on this
@@ -34,9 +36,9 @@ export function App() {
 	const roster = useRoster(store)
 	const catalogue = useModelCatalogue()
 
-	// Mounted for its polling alone: the release check belongs to the app being open,
-	// and what it finds is read by a notice this build does not draw yet.
-	useUpdater()
+	// Mounted at the top of the window: the release check belongs to the app being
+	// open, and the pastille under the roster is where what it found is read.
+	const updater = useUpdater()
 
 	const { bots, selectedBotId, isEditing, isConfirmingDelete } = roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
@@ -74,6 +76,35 @@ export function App() {
 	)
 	const activity = selectedBotId ? working[selectedBotId] : undefined
 
+	// Read off the same activity the roster is drawn from: a bot busy in the sidebar
+	// is a bot a restart would interrupt.
+	const busyBotCount = useMemo(
+		() => Object.values(working).filter((bot) => bot.isWorking).length,
+		[working],
+	)
+
+	// Held between renders for the reason the roster is: a streamed token must not
+	// hand the sidebar a new footer and re-measure the column behind it. Every input
+	// here settles when the download does, or when a bot starts or finishes a turn.
+	const updateBadge = useMemo(
+		() => (
+			<UpdateBadge
+				{...toUpdateBadgeProps({ state: updater.state, busyBotCount })}
+				onDownload={() => {
+					void updater.controller.install()
+				}}
+				// A restart while a bot is answering would take that answer away, and the
+				// count the badge was handed is what says so.
+				onRestart={() => {
+					if (busyBotCount === 0) {
+						void updater.controller.restart()
+					}
+				}}
+			/>
+		),
+		[updater.state, updater.controller, busyBotCount],
+	)
+
 	// The roster is memoised inside the design system so a streamed token does not
 	// re-measure its layout projections, which only holds if the array it is handed
 	// is the same one between renders. Every input here is stable through a turn —
@@ -106,6 +137,7 @@ export function App() {
 				sidebar={
 					<AgentSidebar
 						bots={rosterBots}
+						footer={updateBadge}
 						onCreateBot={() => {
 							void roster.controller.create()
 						}}

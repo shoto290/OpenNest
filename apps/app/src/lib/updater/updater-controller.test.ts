@@ -14,7 +14,10 @@ const release = (
 	...overrides,
 })
 
-const portOf = (check: UpdaterPort["check"]): UpdaterPort => ({ check })
+const portOf = (
+	check: UpdaterPort["check"],
+	restart: UpdaterPort["restart"] = async () => undefined,
+): UpdaterPort => ({ check, restart })
 
 /** Lets whatever the port answered reach the state before it is read. */
 const settle = () => Promise.resolve()
@@ -39,6 +42,7 @@ describe("createUpdaterController", () => {
 		expect(controller.getState()).toEqual({
 			available: null,
 			progress: null,
+			isRestartPending: false,
 			error: null,
 		})
 	})
@@ -94,6 +98,7 @@ describe("createUpdaterController", () => {
 		expect(controller.getState()).toEqual({
 			available: null,
 			progress: null,
+			isRestartPending: false,
 			error: "network unreachable",
 		})
 	})
@@ -142,7 +147,7 @@ describe("createUpdaterController", () => {
 		controller.subscribe(() => seen.push(controller.getState().progress))
 		await controller.install()
 
-		expect(seen).toEqual([0, 40, 100])
+		expect(seen).toEqual([0, 40, 100, null])
 	})
 
 	// A chunk is a fraction of a percent of a release, and the window has nothing to
@@ -165,7 +170,7 @@ describe("createUpdaterController", () => {
 		controller.subscribe(() => seen.push(controller.getState().progress))
 		await controller.install()
 
-		expect(seen).toEqual([0, 5])
+		expect(seen).toEqual([0, 5, null])
 	})
 
 	it("installs nothing when no release was found", async () => {
@@ -194,6 +199,59 @@ describe("createUpdaterController", () => {
 
 		expect(controller.getState().progress).toBeNull()
 		expect(controller.getState().error).toBe("signature refused")
+	})
+
+	it("waits for a restart once the install has landed", async () => {
+		const controller = createUpdaterController(portOf(async () => release()))
+
+		await controller.check()
+		await controller.install()
+
+		expect(controller.getState().isRestartPending).toBe(true)
+		expect(controller.getState().progress).toBeNull()
+	})
+
+	it("leaves nothing waiting for a restart when the install failed", async () => {
+		const controller = createUpdaterController(
+			portOf(async () =>
+				release({
+					install: async () => {
+						throw new Error("signature refused")
+					},
+				}),
+			),
+		)
+
+		await controller.check()
+		await controller.install()
+
+		expect(controller.getState().isRestartPending).toBe(false)
+	})
+
+	it("starts the installed build when asked", async () => {
+		const restart = vi.fn(async () => undefined)
+		const controller = createUpdaterController(
+			portOf(async () => release(), restart),
+		)
+
+		await controller.check()
+		await controller.install()
+		await controller.restart()
+
+		expect(restart).toHaveBeenCalledTimes(1)
+	})
+
+	// The build on disk is the one already running until an install replaces it.
+	it("starts nothing while no install has landed", async () => {
+		const restart = vi.fn(async () => undefined)
+		const controller = createUpdaterController(
+			portOf(async () => release(), restart),
+		)
+
+		await controller.check()
+		await controller.restart()
+
+		expect(restart).not.toHaveBeenCalled()
 	})
 
 	it("tells its readers only when something changed", async () => {
