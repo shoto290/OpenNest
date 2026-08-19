@@ -1,13 +1,17 @@
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	AgentSidebar,
 	type AgentSidebarBot,
 	type AgentSidebarProps,
 	type BotAvatarBlot,
 } from "@workspace/ui/components/agents/agent-sidebar"
+import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const LAST_MESSAGE =
@@ -153,12 +157,18 @@ const IDENTITY_ROSTER: AgentSidebarBot[] = IDENTITY_BLOTS.map(
 	}),
 )
 
+const blotsIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "bot-avatar-blot")
+
 const blotFillsIn = (canvasElement: HTMLElement) =>
-	Array.from(
-		canvasElement.querySelectorAll<SVGPathElement>(
-			'[data-slot="bot-avatar-blot"]',
-		),
-	).map((path) => path.getAttribute("fill"))
+	blotsIn(canvasElement).map((path) => path.getAttribute("fill"))
+
+/** The same rows as `IDENTITY_ROSTER` on one tint, so the only thing left to tell
+ * them apart is the shape each bot's id lands on. */
+const SHARED_TINT_ROSTER: AgentSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
+	...bot,
+	blot: "sky",
+}))
 
 const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	...bot,
@@ -501,6 +511,34 @@ export const UploadedPictures = meta.story({
 	},
 })
 
+export const SharedTint = meta.story({
+	args: {
+		bots: SHARED_TINT_ROSTER,
+		selectedBotId: SHARED_TINT_ROSTER[0].id,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Eight bots that all picked the same tint. Before a shape was derived from the id they were stamped from one die and a reader had to read the names to tell the rows apart; now each id lays the one authored blot down at its own quarter turn, mirrored or not. The vocabulary is deliberately small — eight poses, and eight tints over them — so two rows can still land on the same mark, and a reader who wants them apart changes a tint. What matters is that a row never changes shape: rename the bot, give it another animal, give it another tint, and the mark it wears is the one it was minted with. Pick `Identities` for the eight tints on their own.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const shapes = blotsIn(canvasElement).map((path) =>
+			path.getAttribute("transform"),
+		)
+
+		await expect(shapes).toHaveLength(SHARED_TINT_ROSTER.length)
+		for (const [at, shape] of shapes.entries()) {
+			await expect(
+				shape?.endsWith(blotTransform(SHARED_TINT_ROSTER[at].id)),
+			).toBe(true)
+		}
+		await expect(uniqueCount(shapes)).toBeGreaterThan(1)
+	},
+})
+
 export const Identities = meta.story({
 	args: {
 		bots: IDENTITY_ROSTER,
@@ -623,9 +661,7 @@ export const PermissionPending = meta.story({
 		await expect(
 			within(row).getByRole("img", { name: /listening$/ }),
 		).toBeVisible()
-		await expect(
-			within(row).queryByRole("img", { name: /idle$/ }),
-		).toBeNull()
+		await expect(within(row).queryByRole("img", { name: /idle$/ })).toBeNull()
 		await expect(slotIn(row, "roster-row-preview")).toHaveTextContent(
 			"waiting…",
 		)

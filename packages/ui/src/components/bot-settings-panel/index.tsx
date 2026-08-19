@@ -31,6 +31,9 @@ type BotSettingsPanelProps = {
 	onAvatarUpload: (file: File) => void
 	/** Opens the host's folder picker. */
 	onBrowseWorkingDirectory: () => void
+	/** The edited bot's id. It is what its blot's shape is derived from, so the
+	 * preview shows the mark the roster row beside it is already showing. */
+	seed?: string
 	/** Fired only once the confirmation is accepted. */
 	onDelete: () => void
 	/** Whether the delete confirmation stands. Controlled, so a host with another way
@@ -62,6 +65,7 @@ const BotSettingsPanel = ({
 	models,
 	onAvatarUpload,
 	onBrowseWorkingDirectory,
+	seed,
 	onDelete,
 	confirmingDelete,
 	onConfirmingDeleteChange,
@@ -125,6 +129,7 @@ const BotSettingsPanel = ({
 					identity={value.identity}
 					onAvatarUpload={onAvatarUpload}
 					onIdentityChange={(identity) => patch({ identity })}
+					seed={seed}
 					working={working}
 					workingKind={workingKind}
 				/>

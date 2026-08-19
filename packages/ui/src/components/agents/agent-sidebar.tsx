@@ -121,6 +121,7 @@ const BotRosterRow = ({
 								blot={bot.blot}
 								image={bot.image}
 								kind={pose}
+								seed={bot.id}
 								size={ROW_AVATAR_SIZE}
 								working={working}
 							/>

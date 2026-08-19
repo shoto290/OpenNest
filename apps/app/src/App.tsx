@@ -106,6 +106,7 @@ export function App() {
 								chat.controller.redescribe(selected.id)
 							}
 						}}
+						seed={selected.id}
 						value={toSettingsValue(selected)}
 						working={activity?.isWorking ?? false}
 						workingKind={activity?.kind}

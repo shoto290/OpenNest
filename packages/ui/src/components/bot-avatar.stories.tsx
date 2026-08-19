@@ -1,7 +1,9 @@
 import type { ReactNode } from "react"
 import { useArgs } from "storybook/preview-api"
+import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { slotsIn } from "@workspace/storybook/story-utils"
 import { BLOT_TINTS, BotAvatar } from "@workspace/ui/components/bot-avatar"
 import {
 	ANIMALS,
@@ -19,6 +21,17 @@ const BOT_AVATAR_STATES = Object.keys(STATE_POOLS) as BotAvatarState[]
 const YAW_SWEEP = [-60, -40, -20, 0, 20, 40, 60]
 const PITCH_SWEEP = [-40, -25, -12, 0, 12, 25, 40]
 const WELD_SIZE = 88
+/** Eight bot ids, one per pose a blot can be laid down in. */
+const BLOT_SEEDS = [
+	"bot-1",
+	"bot-2",
+	"bot-7",
+	"bot-8",
+	"bot-5",
+	"bot-6",
+	"bot-3",
+	"bot-4",
+]
 const STRESS_COUNT = 60
 
 const GROUPED_STATES = Object.entries(STATE_GROUPS).flatMap(([group, states]) =>
@@ -112,6 +125,7 @@ const meta = preview.meta({
 			options: ["regular", "bold", "heavy"],
 		},
 		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
+		seed: { control: "text" },
 		animated: { control: "boolean" },
 		wireframe: { control: "boolean" },
 		interactive: { control: "boolean" },
@@ -345,7 +359,7 @@ export const Blots = meta.story({
 		docs: {
 			description: {
 				story:
-					"The eight tints a bot can be marked with, drawn once behind the whole animal, plus the avatar with no blot at all. The blot sits outside the sketch filter, so it never boils with the line and never animates — the ink is what moves, the mark is what stays. All eight are light on purpose: the line is near-black and the ear accent is coral, and neither reads over anything darker. Reach for this when adding a tint, and check on both themes — the tints do not flip under `.dark`, so a bot's mark is the same colour wherever it is shown. The first cell is the markup the avatar renders without a blot and must be untouched by any of this.",
+					"The eight tints a bot can be marked with, drawn once behind the whole animal, plus the avatar with no blot at all. The blot sits outside the sketch filter, so it never boils with the line and never animates — the ink is what moves, the mark is what stays. All eight are light on purpose: the line is near-black and the ear accent is coral, and neither reads over anything darker. Reach for this when adding a tint, and check on both themes — the tints do not flip under `.dark`, so a bot's mark is the same colour wherever it is shown. The first cell is the markup the avatar renders without a blot and must be untouched by any of this. Pick `BlotShapes` for the shapes one tint is laid down in.",
 			},
 		},
 	},
@@ -361,6 +375,39 @@ export const Blots = meta.story({
 			))}
 		</div>
 	),
+})
+
+export const BlotShapes = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Eight bots on one tint and one animal, told apart by nothing but their id. The blot is the one authored outline in all eight — the seed only decides which quarter turn it is laid down at and whether it is mirrored, so the silhouette a reader learns is never redrawn and never warped. These ids cover all eight poses, and the first is the pose the outline was authored in, which is what an avatar with no seed draws. Reach for this when the ink or the outline changes: check that every pose still fills the same square, that none of them clips the animal or the edge of the box, and that the tint is identical across the row. Pick `Blots` for the eight tints on one shape.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="grid grid-cols-4 gap-6">
+			{BLOT_SEEDS.map((seed) => (
+				<LabeledCell key={seed} label={seed}>
+					<BotAvatar
+						{...args}
+						animated={false}
+						blot="sky"
+						seed={seed}
+						size={120}
+					/>
+				</LabeledCell>
+			))}
+		</div>
+	),
+	play: async ({ canvasElement }) => {
+		const shapes = slotsIn(canvasElement, "bot-avatar-blot").map((blot) =>
+			blot.getAttribute("transform"),
+		)
+
+		await expect(new Set(shapes).size).toBe(BLOT_SEEDS.length)
+	},
 })
 
 export const Sizes = meta.story({

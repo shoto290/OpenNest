@@ -2,7 +2,10 @@ import { useState } from "react"
 import { expect, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { botIdentityAvatars } from "@workspace/storybook/story-utils"
+import {
+	botIdentityAvatars,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import type { AgentActivityItem } from "@workspace/ui/components/agent-activity"
 import { AgentActivity } from "@workspace/ui/components/agent-activity"
 import { BLOT_TINTS, BotAvatar } from "@workspace/ui/components/bot-avatar"
@@ -17,6 +20,10 @@ import {
 	AssistantTurn,
 	CHAT_AVATAR_SIZE,
 } from "@workspace/ui/components/chat-turn"
+
+/** The bot this row is about: its animal, its tint and the id its blot shape is
+ * derived from — the three things it wears at rest and must keep while it works. */
+const BUSY_BOT = { animal: "owl", blot: "sky", seed: "bot-7" } as const
 
 const BOT_WORKING_KINDS: BotWorkingKind[] = [
 	"thinking",
@@ -92,6 +99,7 @@ const meta = preview.meta({
 		kind: { control: "select", options: BOT_WORKING_KINDS },
 		animal: { control: "select", options: Object.keys(ANIMALS) },
 		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
+		seed: { control: "text" },
 		size: { control: { type: "range", min: 20, max: 64, step: 2 } },
 	},
 })
@@ -216,5 +224,37 @@ export const HoverLabel = meta.story({
 		await userEvent.hover(canvas.getByRole("img"))
 		// The reveal is a fade, so the row is only fully readable once it lands.
 		await waitFor(() => expect(text).toBeVisible())
+	},
+})
+
+export const Marked = meta.story({
+	args: { ...BUSY_BOT, kind: "searching", name: "Atlas" },
+	render: (args) => (
+		<div className="flex flex-col gap-4">
+			{BOT_WORKING_KINDS.map((kind) => (
+				<BotWorking {...args} key={kind} kind={kind} />
+			))}
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bot doing the work, wearing exactly what it wears at rest: its own animal, its own tint, and the blot shape its id lands on. A run may change the pose and nothing else — a working row that dropped the tint or reposed the blot would put a different bot on the screen at the one moment the reader is watching it. Check that the mark is identical across all five kinds and against the roster row for the same bot, and that only the animal inside it moves.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [thinking, ...rest] = slotsIn(canvasElement, "bot-avatar-blot")
+
+		await expect(rest).toHaveLength(BOT_WORKING_KINDS.length - 1)
+		for (const blot of rest) {
+			await expect(blot.getAttribute("fill")).toBe(
+				thinking.getAttribute("fill"),
+			)
+			await expect(blot.getAttribute("transform")).toBe(
+				thinking.getAttribute("transform"),
+			)
+		}
 	},
 })
