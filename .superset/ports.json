@@ -1,0 +1,6 @@
+{
+	"ports": [
+		{ "port": 1420, "label": "Dev" },
+		{ "port": 6006, "label": "Storybook" }
+	]
+}

@@ -1,0 +1,8 @@
+{
+	"setup": [
+		"bun install",
+		"cp \"$SUPERSET_ROOT_PATH\"/.env* . 2>/dev/null || true",
+		"mkdir -p .claude && cp \"$SUPERSET_ROOT_PATH\"/.claude/settings.local.json .claude/settings.local.json 2>/dev/null || true"
+	],
+	"run": ["bun run dev"]
+}
