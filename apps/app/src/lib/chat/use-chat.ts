@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 
 import { type ChatController, createChatController } from "./chat-controller"
-import type { ChatState } from "./chat-state"
+import { type ChatState, isTurnBusy } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { type SidebarActivity, sidebarActivityFor } from "./screen-model"
 
@@ -96,4 +96,20 @@ export function useBotPreviews(
 		}
 		return held.current.previews
 	})
+}
+
+/** Whether every bot is between turns, the ones answering in the background
+ * included. Read from the controller for the reason the activity is: a bot still
+ * working while the reader is elsewhere is still working.
+ *
+ * A turn that failed is over — nothing is being written into it, and the reader has
+ * already been told. What this answers is whether interrupting the app now would
+ * take an answer away from somebody. */
+export function useBotsIdle(
+	controller: ChatController,
+	botIds: string[],
+): boolean {
+	return useSyncExternalStore(controller.subscribe, () =>
+		botIds.every((id) => !isTurnBusy(controller.stateFor(id).turn)),
+	)
 }

@@ -23,6 +23,7 @@
 	},
 	"dependencies": {
 		"@tauri-apps/api": "^2.11.1",
+		"@tauri-apps/plugin-updater": "^2.10.1",
 		"@workspace/ui": "workspace:*",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6"

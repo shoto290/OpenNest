@@ -19,6 +19,7 @@ import { useSettingsShortcut } from "@/lib/bots/use-settings-shortcut"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
+import { useUpdater } from "@/lib/updater/use-updater"
 
 /** The folder picker the working directory field opens. There is none on this
  * build: choosing a directory needs a host dialog this app does not carry yet, and
@@ -32,6 +33,10 @@ export function App() {
 	const chat = useChat(driver, store)
 	const roster = useRoster(store)
 	const catalogue = useModelCatalogue()
+
+	// Mounted for its polling alone: the release check belongs to the app being open,
+	// and what it finds is read by a notice this build does not draw yet.
+	useUpdater()
 
 	const { bots, selectedBotId, isEditing, isConfirmingDelete } = roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
