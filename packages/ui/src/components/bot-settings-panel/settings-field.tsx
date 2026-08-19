@@ -13,6 +13,9 @@ type SettingsFieldProps = {
 	placeholder?: string
 	/** Turns the control into a textarea of this many rows. */
 	rows?: number
+	/** Turns the control into a textarea that takes the height its container has
+	 * left, for a field that is the whole of what a surface shows. */
+	fill?: boolean
 }
 
 const SettingsField = ({
@@ -21,19 +24,24 @@ const SettingsField = ({
 	onValueChange,
 	placeholder,
 	rows,
+	fill = false,
 }: SettingsFieldProps) => {
 	const id = useId()
 	const emit = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
 		onValueChange(event.target.value)
 
 	return (
-		<div className="flex flex-col gap-1.5">
+		<div className={cn("flex flex-col gap-1.5", fill && "min-h-0 flex-1")}>
 			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
 				{label}
 			</label>
-			{rows ? (
+			{rows || fill ? (
 				<textarea
-					className={cn(FIELD_CONTROL_CLASS, "resize-none leading-relaxed")}
+					className={cn(
+						FIELD_CONTROL_CLASS,
+						"resize-none leading-relaxed",
+						fill && "min-h-0 flex-1",
+					)}
 					id={id}
 					onChange={emit}
 					placeholder={placeholder}

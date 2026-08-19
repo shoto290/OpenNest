@@ -2,7 +2,10 @@
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
-import { POPUP_CLASS } from "@workspace/ui/components/bot-settings-panel/styles"
+import {
+	BACKDROP_CLASS,
+	POPUP_CLASS,
+} from "@workspace/ui/components/bot-settings-panel/styles"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
@@ -19,7 +22,7 @@ type DialogContentProps = Omit<
 const Content = ({ children, className, ...props }: DialogContentProps) => (
 	<DialogPrimitive.Portal>
 		<DialogPrimitive.Backdrop
-			className="fixed inset-0 z-50 bg-foreground/30 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
+			className={BACKDROP_CLASS}
 			data-slot="dialog-backdrop"
 		/>
 		<DialogPrimitive.Popup
