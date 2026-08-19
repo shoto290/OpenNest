@@ -6,7 +6,7 @@ import { type ReactNode, useCallback, useId, useState } from "react"
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
-import { getFaviconUrl } from "@workspace/ui/lib/favicon"
+import { hostInitial } from "@workspace/ui/lib/host"
 import { cn } from "@workspace/ui/lib/utils"
 
 export interface CitationItem {
@@ -31,6 +31,11 @@ export interface CitationProps {
 	index: number
 	/** Must match the related Citations idPrefix. */
 	idPrefix: string
+	className?: string
+}
+
+export interface CitationMarkProps {
+	url?: string
 	className?: string
 }
 
@@ -70,34 +75,25 @@ export function Citation({
 	)
 }
 
-export function CitationFavicon({
-	url,
-	className,
-}: {
-	url?: string
-	className?: string
-}) {
-	const favicon = url ? getFaviconUrl(url) : null
-	const [failedUrl, setFailedUrl] = useState<string | null>(null)
+/** The source is named, never fetched: a citation asks no site for its icon, so
+ * reading an answer tells no one which sources it carries. The initial comes
+ * from the URL itself, and a citation without one keeps the generic mark. */
+export function CitationMark({ url, className }: CitationMarkProps) {
+	const initial = url ? hostInitial(url) : null
 
 	return (
 		<span
 			aria-hidden="true"
+			data-slot="citation-mark"
 			className={cn(
-				"grid size-5 shrink-0 place-items-center text-muted-foreground",
+				"grid size-5 shrink-0 select-none place-items-center text-muted-foreground",
 				className,
 			)}
 		>
-			{favicon && failedUrl !== favicon ? (
-				<img
-					src={favicon}
-					alt=""
-					width={16}
-					height={16}
-					referrerPolicy="no-referrer"
-					onError={() => setFailedUrl(favicon)}
-					className="size-4 rounded-sm object-contain"
-				/>
+			{initial ? (
+				<span className="grid size-4 place-items-center rounded-sm bg-current/10 text-[10px] font-semibold uppercase leading-none">
+					{initial}
+				</span>
 			) : (
 				<Icons.Web className="size-3.5" />
 			)}
@@ -113,10 +109,10 @@ export function CitationStack({
 	return (
 		<span aria-hidden="true" className={cn("flex -space-x-1.5", className)}>
 			{citations.slice(0, limit).map((citation) => (
-				<CitationFavicon
+				<CitationMark
 					key={citation.id}
 					url={citation.url}
-					className="size-6 rounded-full bg-background ring-2 ring-background"
+					className="size-6 rounded-full bg-background ring-2 ring-background [&>span]:size-full [&>span]:rounded-full"
 				/>
 			))}
 		</span>
@@ -134,7 +130,7 @@ function CitationRow({
 }) {
 	const content = (
 		<>
-			<CitationFavicon url={citation.url} />
+			<CitationMark url={citation.url} />
 			<span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
 				<span className="truncate text-sm font-medium text-foreground/80 transition-colors group-hover/citation:text-foreground">
 					{citation.title}
