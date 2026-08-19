@@ -10,6 +10,7 @@ import {
 	MARKDOWN_PROSE_CLASS,
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
+import { remarkLiteralHtml } from "@workspace/ui/components/markdown/raw-html"
 import { MARKDOWN_SANITIZE_SCHEMA } from "@workspace/ui/components/markdown/sanitize"
 import { rehypeScopeIds } from "@workspace/ui/components/markdown/scope-ids"
 import { cn } from "@workspace/ui/lib/utils"
@@ -28,8 +29,9 @@ const MARKDOWN_CLASS = cn(
 	"text-sm leading-6",
 )
 
-/** Raw HTML never reaches the tree: the parser skips it and the allowlist filters
- * whatever a plugin adds, so hostile markup degrades to nothing, never to script. */
+/** Raw HTML never becomes markup: the parser never turns it into nodes, `remarkLiteralHtml`
+ * keeps its source as text so the reader can read what was written, and the allowlist filters
+ * everything else — hostile markup degrades to characters, never to script. */
 export const Markdown = ({ children, className }: MarkdownProps) => {
 	const scope = useId()
 
@@ -41,7 +43,7 @@ export const Markdown = ({ children, className }: MarkdownProps) => {
 					[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 					[rehypeScopeIds, { scope }],
 				]}
-				remarkPlugins={[remarkGfm, remarkMath]}
+				remarkPlugins={[remarkGfm, remarkMath, remarkLiteralHtml]}
 			>
 				{children}
 			</ReactMarkdown>

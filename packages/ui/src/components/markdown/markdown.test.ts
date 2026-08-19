@@ -187,27 +187,100 @@ describe("markdown tables", () => {
 	})
 })
 
+describe("markdown raw html", () => {
+	/** What a browser prints for a character it must not read as markup. */
+	const ENTITIES: Record<string, string> = {
+		"&": "&amp;",
+		"<": "&lt;",
+		">": "&gt;",
+		'"': "&quot;",
+		"'": "&#x27;",
+	}
+
+	const asSourceText = (source: string) =>
+		source.replace(/[&<>"']/g, (character) => ENTITIES[character])
+
+	/** What the block holds, without the wrapper the renderer always draws around it. */
+	const bodyOf = (html: string) =>
+		html.replace(/^<div [^>]*>/, "").replace(/<\/div>$/, "")
+
+	/** Every element the renderer built. A payload that became markup shows up here;
+	 * one that stayed source text leaves nothing but the block and its paragraph. */
+	const elementsIn = (html: string) =>
+		new Set(capturedValues(html, /<\/?([a-z][\w-]*)/gi))
+
+	const HOSTILE = [
+		'<script>alert("nest")</script>',
+		"<style>body{display:none}</style>",
+		'<iframe src="https://evil.test"></iframe>',
+		'<img src="x" onerror="alert(1)" />',
+		'<p onclick="alert(1)">tap</p>',
+		'<a href="javascript:alert(1)">go</a>',
+		'<body onload="alert(1)">',
+		'<svg><animate onbegin="alert(1)" /></svg>',
+	]
+
+	/** Every payload here is nothing but HTML, so the block is nothing but its source. */
+	it.each(HOSTILE)("shows %j as the source it was written with", (source) => {
+		expect(bodyOf(render(source))).toBe(`<p>${asSourceText(source)}</p>`)
+	})
+
+	it.each(HOSTILE)("builds nothing %j declares", (source) => {
+		const html = render(source)
+
+		expect(elementsIn(html)).toEqual(new Set(["div", "p"]))
+		expect(html).not.toMatch(/\s(href|on[a-z]+|src)="/)
+	})
+
+	it("keeps the prose around raw html rendered as markdown", () => {
+		const html = render("The **tag** is <b>bold</b> in this _sentence_.")
+
+		expect(html).toContain(
+			"<p>The <strong>tag</strong> is &lt;b&gt;bold&lt;/b&gt; in this <em>sentence</em>.</p>",
+		)
+	})
+
+	it("keeps the line breaks and the indentation of a block of source", () => {
+		const source = '<section class="report">\n\t<h2>Occupants</h2>\n</section>'
+
+		expect(render(source)).toContain(asSourceText(source))
+	})
+
+	/** A tight item unwraps the paragraphs inside it, so the source lands in the item
+	 * itself — which collapses its whitespace the moment it holds one of these. */
+	const NESTED_IN_LIST_ITEM = [
+		"- <div>\n    <span>x</span>\n  </div>",
+		"- ```ts\n  const a = 1\n  ```\n  <div>\n    <span>x</span>\n  </div>",
+		"- | a |\n  | --- |\n  | 1 |\n  <div>\n    <span>x</span>\n  </div>",
+		"- > quoted\n  <div>\n    <span>x</span>\n  </div>",
+		"- - inner\n  <div>\n    <span>x</span>\n  </div>",
+	]
+
+	it.each(NESTED_IN_LIST_ITEM)(
+		"keeps the source a block of its own in %j",
+		(source) => {
+			expect(render(source)).toContain(
+				"<p>&lt;div&gt;\n  &lt;span&gt;x&lt;/span&gt;\n&lt;/div&gt;</p>",
+			)
+		},
+	)
+
+	it("leaves a list holding no raw html tight", () => {
+		expect(render("- one\n- two")).toContain("<li>one</li>")
+	})
+
+	it("shows source held by a quote, a list item and a cell alike", () => {
+		expect(render("> <b>quoted</b>")).toContain(
+			"<blockquote>\n<p>&lt;b&gt;quoted&lt;/b&gt;</p>\n</blockquote>",
+		)
+		expect(render("- <b>listed</b>")).toContain("&lt;b&gt;listed&lt;/b&gt;")
+		expect(render("| a |\n| --- |\n| <b>celled</b> |")).toContain(
+			"<td>&lt;b&gt;celled&lt;/b&gt;</td>",
+		)
+	})
+})
+
 describe("markdown sanitizing", () => {
-	it("drops script, style and iframe", () => {
-		const html = render(
-			'<script>alert(1)</script>\n\n<style>body{display:none}</style>\n\n<iframe src="https://evil.test"></iframe>',
-		)
-
-		expect(html).not.toContain("<script")
-		expect(html).not.toContain("<style")
-		expect(html).not.toContain("<iframe")
-		expect(html).not.toContain("alert(1)")
-	})
-
-	it("drops event handler attributes", () => {
-		const html = render(
-			'<img src="x" onerror="alert(1)" />\n\n<p onclick="alert(1)">tap</p>',
-		)
-
-		expect(html).not.toContain("onerror=")
-		expect(html).not.toContain("onclick=")
-	})
-
 	it("drops javascript urls while keeping the link text", () => {
 		const html = render("[go](javascript:alert(1)) and [safe](https://ok.test)")
 
