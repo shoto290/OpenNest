@@ -4,7 +4,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	Progress,
 	ProgressLabel,
-	ProgressRoot,
+	ProgressRing,
 	ProgressValue,
 } from "@workspace/ui/components/progress"
 
@@ -19,9 +19,6 @@ const DOWNLOAD_STEPS: DownloadStep[] = [
 	{ label: "Verified", value: 100 },
 ]
 
-const RING_BOX = 36
-const RING_RADIUS = 16
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 const RING_VALUE = 64
 
 const meta = preview.meta({
@@ -32,7 +29,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					'A determinate task, read as a filling bar. It is a report, never a control: it holds no action and no cancel, so pair it with whatever owns the task. `Progress` is the assembled bar — pass a `ProgressLabel` and a `ProgressValue` as children and they sit above the track, which is why the root wraps. `ProgressRoot` is the same semantics with no track at all, for a progress shaped as anything but a bar. Either way `role="progressbar"` needs a name: give it a `ProgressLabel`, which wires `aria-labelledby` for you, or an `aria-label`.',
+					'A determinate task, read as a filling bar. It is a report, never a control: it holds no action and no cancel, so pair it with whatever owns the task. `Progress` is the assembled bar — pass a `ProgressLabel` and a `ProgressValue` as children and they sit above the track, which is why the root wraps. `ProgressRoot` is the same semantics with no track at all, and `ProgressRing` is the shape built on it. Either way `role="progressbar"` needs a name: give it a `ProgressLabel`, which wires `aria-labelledby` for you, or an `aria-label`.',
 			},
 		},
 	},
@@ -121,40 +118,16 @@ export const AsRing = meta.story({
 		docs: {
 			description: {
 				story:
-					'`ProgressRoot` is the bare `role="progressbar"` — no track, no indicator — for the shapes a bar cannot make. Here the same value closes as an arc around a 36px button, which is how `Feedback/UpdateBadge` reports its download. Check that the arc starts at twelve o\'clock and that the value still reaches assistive technology from the root, since the SVG is `aria-hidden` and carries none of it.',
+					"`ProgressRing` is the same value closing as an arc instead of filling a bar, for the places a bar cannot go — this is how `Feedback/UpdateBadge` reports its download around a 36px button. Check that the arc starts at twelve o'clock, that it grows clockwise, and that the value still reaches assistive technology from the root, since the drawing itself is `aria-hidden` and carries none of it. Size it from `className`: the arc scales with the box, so it has no size prop of its own.",
 			},
 		},
 	},
 	render: () => (
-		<ProgressRoot
+		<ProgressRing
 			aria-label="Update download progress"
-			className="relative inline-flex size-9 items-center justify-center"
+			className="size-9"
 			value={RING_VALUE}
-		>
-			<svg
-				aria-hidden="true"
-				className="-rotate-90 absolute inset-0 size-full"
-				viewBox={`0 0 ${RING_BOX} ${RING_BOX}`}
-			>
-				<circle
-					className="fill-none stroke-border"
-					cx={RING_BOX / 2}
-					cy={RING_BOX / 2}
-					r={RING_RADIUS}
-					strokeWidth="2"
-				/>
-				<circle
-					className="fill-none stroke-primary"
-					cx={RING_BOX / 2}
-					cy={RING_BOX / 2}
-					r={RING_RADIUS}
-					strokeDasharray={RING_CIRCUMFERENCE}
-					strokeDashoffset={RING_CIRCUMFERENCE * (1 - RING_VALUE / 100)}
-					strokeLinecap="round"
-					strokeWidth="2"
-				/>
-			</svg>
-		</ProgressRoot>
+		/>
 	),
 	play: async ({ canvas }) => {
 		await expect(

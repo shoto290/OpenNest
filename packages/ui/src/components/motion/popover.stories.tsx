@@ -1,30 +1,35 @@
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { listExhaustively, Row } from "@workspace/storybook/story-utils"
 import { Button } from "@workspace/ui/components/button"
 import {
+	type Align,
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
+	type Side,
+	type TriggerMode,
 } from "@workspace/ui/components/motion/popover"
 
-const SIDES = ["top", "bottom"] as const
-const ALIGNS = ["start", "center", "end"] as const
+const SIDES = listExhaustively<Side>({ top: true, bottom: true })
 
-const TRIGGER_MODES = ["click", "hover"] as const
+const ALIGNS = listExhaustively<Align>({
+	start: true,
+	center: true,
+	end: true,
+})
 
-const anchorLabel = (side: string, align: string) => `${side} ${align}`
+const TRIGGER_MODES = listExhaustively<TriggerMode>({
+	click: true,
+	hover: true,
+})
+
+const anchorLabel = (side: Side, align: Align) => `${side} ${align}`
 
 const PANEL_TITLE = "Release notes"
 
 const PANEL_NOTE = "Bots keep their transcript when the window is reopened."
-
-const PanelBody = () => (
-	<div className="flex flex-col gap-1">
-		<p className="font-medium text-sm">{PANEL_TITLE}</p>
-		<p className="text-muted-foreground text-xs">{PANEL_NOTE}</p>
-	</div>
-)
 
 const PANEL = (
 	<>
@@ -32,7 +37,10 @@ const PANEL = (
 			<Button variant="outline">{PANEL_TITLE}</Button>
 		</PopoverTrigger>
 		<PopoverContent aria-label={PANEL_TITLE}>
-			<PanelBody />
+			<div className="flex flex-col gap-1">
+				<p className="font-medium text-sm">{PANEL_TITLE}</p>
+				<p className="text-muted-foreground text-xs">{PANEL_NOTE}</p>
+			</div>
 		</PopoverContent>
 	</>
 )
@@ -190,17 +198,10 @@ export const Dismiss = meta.story({
 		},
 	},
 	render: () => (
-		<div className="flex items-center gap-4">
-			<Popover>
-				<PopoverTrigger>
-					<Button variant="outline">{PANEL_TITLE}</Button>
-				</PopoverTrigger>
-				<PopoverContent aria-label={PANEL_TITLE}>
-					<PanelBody />
-				</PopoverContent>
-			</Popover>
+		<Row>
+			<Popover>{PANEL}</Popover>
 			<Button variant="ghost">Elsewhere</Button>
-		</div>
+		</Row>
 	),
 	play: async ({ canvas, userEvent }) => {
 		const trigger = canvas.getByRole("button", { name: PANEL_TITLE })

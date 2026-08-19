@@ -36,9 +36,9 @@ import {
 import { useTapGesture } from "@workspace/ui/lib/hooks/use-tap-gesture"
 import { cn } from "@workspace/ui/lib/utils"
 
-type Side = "top" | "bottom"
-type Align = "start" | "center" | "end"
-type TriggerMode = "click" | "hover"
+export type Side = "top" | "bottom"
+export type Align = "start" | "center" | "end"
+export type TriggerMode = "click" | "hover"
 
 // This morph needs less bounce than layout motion: too much overshoot makes
 // the liquid neck balloon past the final panel edges.
