@@ -15,7 +15,7 @@ const CONNECTION_STATUS_STATES = listExhaustively<ConnectionStatusState>({
 })
 
 const meta = preview.meta({
-	title: "AI/ConnectionStatus",
+	title: "Feedback/ConnectionStatus",
 	component: ConnectionStatus,
 	parameters: {
 		layout: "centered",

@@ -30,7 +30,7 @@ const renderShell = (defaultOpen: boolean) => (args: SidebarToggleProps) => (
 )
 
 const meta = preview.meta({
-	title: "Layout/SidebarToggle",
+	title: "Navigation/SidebarToggle",
 	component: SidebarToggle,
 	render: renderShell(true),
 	parameters: {

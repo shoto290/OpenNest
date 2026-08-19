@@ -76,7 +76,7 @@ const Changing = (props: BotIdentityAvatarProps) => {
 }
 
 const meta = preview.meta({
-	title: "AI/BotIdentityAvatar",
+	title: "Branding/BotIdentityAvatar",
 	component: BotIdentityAvatar,
 	parameters: {
 		layout: "centered",
@@ -313,7 +313,7 @@ export const Unseeded = meta.story({
 		docs: {
 			description: {
 				story:
-					"A bot drawn without an id — a preview, a story, anything with no bot behind it yet. It gets the blot exactly as it was authored, so nothing that existed before shapes did has moved. Put it beside `Default`, whose bot is seeded onto a half turn: the tint and the animal are the same and only the blot has turned. Pick `AI/BotAvatar → BlotShapes` for all eight poses at once.",
+					"A bot drawn without an id — a preview, a story, anything with no bot behind it yet. It gets the blot exactly as it was authored, so nothing that existed before shapes did has moved. Put it beside `Default`, whose bot is seeded onto a half turn: the tint and the animal are the same and only the blot has turned. Pick `Branding/Bot Avatar → BlotShapes` for all eight poses at once.",
 			},
 		},
 	},

@@ -4,7 +4,7 @@ import preview from "@workspace/storybook/preview"
 import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
 
 const meta = preview.meta({
-	title: "AI/AgentProgress",
+	title: "Feedback/AgentProgress",
 	component: AgentProgress,
 	parameters: {
 		layout: "padded",

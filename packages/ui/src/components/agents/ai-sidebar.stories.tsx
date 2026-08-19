@@ -120,7 +120,7 @@ const DEEP_TREE: SidebarResource[] = [
 ]
 
 const meta = preview.meta({
-	title: "AI/AISidebar",
+	title: "Navigation/AISidebar",
 	component: AISidebar,
 	parameters: {
 		layout: "padded",

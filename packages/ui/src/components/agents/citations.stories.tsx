@@ -50,7 +50,7 @@ const marksOf = (canvasElement: HTMLElement) =>
 	)
 
 const meta = preview.meta({
-	title: "AI/CitationMark",
+	title: "Display/CitationMark",
 	component: CitationMark,
 	parameters: {
 		layout: "centered",

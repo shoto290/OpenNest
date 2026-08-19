@@ -295,7 +295,7 @@ const renderShell = (defaultOpen: boolean) => (args: AgentSidebarProps) => (
 )
 
 const meta = preview.meta({
-	title: "AI/AgentSidebar",
+	title: "Navigation/AgentSidebar",
 	component: AgentSidebar,
 	render: renderShell(true),
 	parameters: {
