@@ -3,7 +3,12 @@ import { useState } from "react"
 import { expect, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively, Row } from "@workspace/storybook/story-utils"
+import {
+	FRAME_POLL,
+	listExhaustively,
+	Row,
+	settled,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	AnimatedSidebar,
@@ -30,8 +35,6 @@ import {
 
 const HOVER_HIGHLIGHT_CLASS = "hover:bg-sidebar-accent/70"
 
-const FRAME_POLL = { interval: 10 }
-
 const layerOf = (drawer: HTMLElement) => {
 	const layer = drawer.closest<HTMLElement>(
 		"[data-slot='sidebar-mobile-layer']",
@@ -40,13 +43,6 @@ const layerOf = (drawer: HTMLElement) => {
 		throw new Error("The mobile drawer is not mounted inside its portal layer.")
 	}
 	return layer
-}
-
-const settleDrawer = async (drawer: HTMLElement) => {
-	await waitFor(async () => {
-		await expect(drawer).toBeVisible()
-		await expect(getComputedStyle(drawer).opacity).toBe("1")
-	}, FRAME_POLL)
 }
 
 interface NavItem {
@@ -601,7 +597,7 @@ export const Drawer = meta.story({
 		await expect(trigger).toHaveAttribute("aria-expanded", "true")
 
 		const drawer = overlay.getByRole("dialog", { name: "Primary" })
-		await settleDrawer(drawer)
+		await settled(drawer)
 
 		await expect(drawer).toHaveAttribute("data-slot", "sidebar-mobile-panel")
 		await expect(drawer).toHaveAttribute("aria-busy", "true")
@@ -626,7 +622,7 @@ export const DrawerExit = meta.story({
 
 		await userEvent.click(trigger)
 		const drawer = overlay.getByRole("dialog", { name: "Primary" })
-		await settleDrawer(drawer)
+		await settled(drawer)
 
 		const layer = layerOf(drawer)
 		await userEvent.click(

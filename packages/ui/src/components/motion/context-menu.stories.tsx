@@ -2,6 +2,7 @@ import { useState } from "react"
 import { expect, fireEvent, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { settled } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	ContextMenu,
@@ -22,15 +23,7 @@ import {
 const SURFACE_CLASS =
 	"flex h-40 w-72 items-center justify-center rounded-xl border border-border border-dashed bg-card text-muted-foreground text-sm"
 
-/** The a11y pass reads colours straight after the play function, so the fade
- * has to be over before it runs or it measures a half-transparent menu. */
-const settledMenu = async () => {
-	const menu = await screen.findByRole("menu")
-	await waitFor(() => expect(menu).toBeVisible())
-	const fades = menu.getAnimations({ subtree: true })
-	await Promise.all(fades.map(({ finished }) => finished))
-	return menu
-}
+const settledMenu = async () => settled(await screen.findByRole("menu"))
 
 const openMenuOn = async (target: HTMLElement) => {
 	fireEvent.contextMenu(target, { clientX: 180, clientY: 140 })
@@ -108,8 +101,8 @@ const ControlledMenu = () => {
 			<ContextMenu open={open} onOpenChange={setOpen}>
 				<ContextMenuTrigger>
 					<button type="button" className={SURFACE_CLASS}>
-					Right-click this card
-				</button>
+						Right-click this card
+					</button>
 				</ContextMenuTrigger>
 				<FileMenu />
 			</ContextMenu>
@@ -196,28 +189,22 @@ export const States = meta.story({
 			<ContextMenu>
 				<ContextMenuTrigger>
 					<button type="button" className={SURFACE_CLASS}>
-					Right-click this card
-				</button>
+						Right-click this card
+					</button>
 				</ContextMenuTrigger>
 				<ContextMenuContent ariaLabel="Transcript actions">
 					<ContextMenuItem>Copy transcript</ContextMenuItem>
-					<ContextMenuItem inset>
-						Copy as Markdown
-					</ContextMenuItem>
-					<ContextMenuItem disabled>
-						Restore previous version
-					</ContextMenuItem>
+					<ContextMenuItem inset>Copy as Markdown</ContextMenuItem>
+					<ContextMenuItem disabled>Restore previous version</ContextMenuItem>
 					<ContextMenuSeparator />
-					<ContextMenuItem tone="destructive">
-						Delete
-					</ContextMenuItem>
+					<ContextMenuItem tone="destructive">Delete</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>
 			<ContextMenu>
 				<ContextMenuTrigger disabled>
 					<button type="button" className={SURFACE_CLASS}>
-					This surface has no menu
-				</button>
+						This surface has no menu
+					</button>
 				</ContextMenuTrigger>
 				<FileMenu />
 			</ContextMenu>
@@ -277,9 +264,7 @@ export const Keyboard = meta.story({
 		)
 
 		await userEvent.keyboard("{ArrowDown}")
-		await expect(
-			screen.getByRole("menuitem", { name: /Rename/ }),
-		).toHaveFocus()
+		await expect(screen.getByRole("menuitem", { name: /Rename/ })).toHaveFocus()
 
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(trigger).toHaveFocus())

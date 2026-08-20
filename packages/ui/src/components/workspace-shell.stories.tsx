@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { FRAME_POLL, settled } from "@workspace/storybook/story-utils"
 import {
 	AgentSidebar,
 	type AgentSidebarBot,
@@ -202,27 +203,23 @@ export const OffCanvas = meta.story({
 
 		const drawer = overlay.getByRole("dialog", { name: "Conversations" })
 		const scrim = overlay.getByRole("button", { name: "Close sidebar" })
-		await waitFor(
-			async () => {
-				await expect(drawer).toBeVisible()
-				await expect(scrim).toBeVisible()
-			},
-			{ interval: 10 },
-		)
+		await settled(drawer)
+		await expect(scrim).toBeVisible()
 		await expect(drawer.getBoundingClientRect().left).toBeCloseTo(0, 0)
 		await expect(main.getBoundingClientRect().height).toBe(mainHeight)
 
-		await waitFor(
-			async () => {
-				await expect(drawer.contains(document.activeElement)).toBe(true)
-			},
-			{ interval: 10 },
-		)
+		await waitFor(async () => {
+			await expect(drawer.contains(document.activeElement)).toBe(true)
+		}, FRAME_POLL)
 
 		await userEvent.keyboard("{Escape}")
 		await expect(trigger).toHaveFocus()
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(main.getBoundingClientRect().height).toBe(mainHeight)
+
+		/** The tooltip on the trigger is still fading once the drawer is gone, and the
+		 * a11y pass reads its colour the moment this returns. */
+		await settled(document.body)
 	},
 })
 
