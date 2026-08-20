@@ -10,6 +10,13 @@ const FIELD_CONTROL_CLASS =
 const FIELD_OPTION_CLASS =
 	"flex cursor-pointer flex-col items-center gap-1 rounded-xl p-1.5 text-muted-foreground transition-colors hover:bg-muted has-[:checked]:bg-muted has-[:checked]:font-medium has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring motion-reduce:transition-none"
 
+/** What a picture is dropped on, pasted into or pressed to browse from, whatever
+ * shape it wears: the dashed zone a bot's picture takes and the round control the
+ * reader's own picture is. Shape, size and padding stay with each one, and
+ * `data-dragging` is the file held over it. */
+const PICTURE_TARGET_CLASS =
+	"cursor-pointer border border-border outline-none transition-colors hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 data-dragging:border-primary data-dragging:bg-primary/10 motion-reduce:transition-none"
+
 /** The dimmed page behind every overlay — the settings dialog, the model list's
  * own popup and the delete confirmation standing over either. */
 const BACKDROP_CLASS =
@@ -31,6 +38,7 @@ export {
 	FIELD_CONTROL_CLASS,
 	FIELD_LABEL_CLASS,
 	FIELD_OPTION_CLASS,
+	PICTURE_TARGET_CLASS,
 	POPUP_CLASS,
 	POPUP_DROP_SHADOW_CLASS,
 }

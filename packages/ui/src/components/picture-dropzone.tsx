@@ -1,22 +1,18 @@
 "use client"
 
-import {
-	type ChangeEvent,
-	type ClipboardEvent,
-	type DragEvent,
-	useRef,
-	useState,
-} from "react"
-
 import { Icons } from "@workspace/ui/components/icons"
+import { PICTURE_TARGET_CLASS } from "@workspace/ui/components/settings-styles"
+import { usePicturePicker } from "@workspace/ui/hooks/use-picture-picker"
 import { cn } from "@workspace/ui/lib/utils"
 
 /** The whole zone is the control: a reader who has a file already drops or pastes
  * it, and one who does not presses the same target to go looking for it. A button
  * rather than a div with a handler, so Enter and Space open the picker for free and
  * the target is a tab stop paste can land in. */
-const DROPZONE_CLASS =
-	"flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border border-border border-dashed p-6 text-center outline-none transition-colors hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
+const DROPZONE_CLASS = cn(
+	PICTURE_TARGET_CLASS,
+	"flex w-full flex-col items-center gap-2 rounded-xl border-dashed p-6 text-center",
+)
 
 type PictureDropzoneProps = {
 	/** The accessible name of the file input behind the zone — what picture this one
@@ -33,45 +29,11 @@ type PictureDropzoneProps = {
  * this one, so drag, paste and browse behave the same wherever a picture is set.
  */
 const PictureDropzone = ({ label, onPick }: PictureDropzoneProps) => {
-	const fileRef = useRef<HTMLInputElement>(null)
-	const [dragging, setDragging] = useState(false)
-
-	const emitFile = (file: File | undefined) => {
-		if (file) onPick(file)
-	}
-
-	const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
-		event.preventDefault()
-		setDragging(false)
-		emitFile(event.dataTransfer.files[0])
-	}
-
-	const handlePaste = (event: ClipboardEvent<HTMLButtonElement>) =>
-		emitFile(event.clipboardData.files[0])
-
-	// Clearing the input lets the same file be picked twice in a row.
-	const handleBrowsed = (event: ChangeEvent<HTMLInputElement>) => {
-		emitFile(event.target.files?.[0])
-		event.target.value = ""
-	}
+	const { controlProps, inputProps } = usePicturePicker({ label, onPick })
 
 	return (
 		<>
-			<button
-				className={cn(
-					DROPZONE_CLASS,
-					dragging && "border-primary bg-primary/10",
-				)}
-				onClick={() => fileRef.current?.click()}
-				onDragLeave={() => setDragging(false)}
-				onDragOver={(event) => {
-					event.preventDefault()
-					setDragging(true)
-				}}
-				onDrop={handleDrop}
-				onPaste={handlePaste}
-				type="button"
-			>
+			<button {...controlProps} className={DROPZONE_CLASS}>
 				<Icons.Image
 					aria-hidden="true"
 					className="size-5 text-muted-foreground"
@@ -83,16 +45,7 @@ const PictureDropzone = ({ label, onPick }: PictureDropzoneProps) => {
 					or click to choose a file
 				</span>
 			</button>
-			{/* Outside the control it belongs to: a button may not hold an input, and
-			this one is only ever opened by that button. */}
-			<input
-				accept="image/*"
-				aria-label={label}
-				className="hidden"
-				onChange={handleBrowsed}
-				ref={fileRef}
-				type="file"
-			/>
+			<input {...inputProps} />
 		</>
 	)
 }

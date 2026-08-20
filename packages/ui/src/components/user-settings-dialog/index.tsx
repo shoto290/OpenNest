@@ -5,9 +5,8 @@ import { useState } from "react"
 
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
-import { PictureDropzone } from "@workspace/ui/components/picture-dropzone"
+import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsField } from "@workspace/ui/components/settings-field"
-import { SettingsGroup } from "@workspace/ui/components/settings-group"
 import {
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_SCROLLING_PANEL_CLASS,
@@ -37,6 +36,9 @@ type UserSettingsDialogProps = {
 	/** Receives the picked, dropped or pasted file. The host turns it into a URL
 	 * and writes it back as `value.image`; the dialog changes nothing it holds. */
 	onPictureUpload: (file: File) => void
+	/** Takes the reader's picture off. Left out, and the control offers no way to —
+	 * the dialog never clears `value.image` itself. */
+	onPictureRemove?: () => void
 	className?: string
 }
 
@@ -57,6 +59,7 @@ const UserSettingsDialog = ({
 	value,
 	onValueChange,
 	onPictureUpload,
+	onPictureRemove,
 	className,
 }: UserSettingsDialogProps) => {
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
@@ -115,18 +118,17 @@ const UserSettingsDialog = ({
 						className={SETTINGS_SCROLLING_PANEL_CLASS}
 						value={FIRST_TAB}
 					>
+						<ProfilePictureField
+							image={value.image}
+							onPick={onPictureUpload}
+							onRemove={onPictureRemove}
+						/>
 						<SettingsField
 							label="Display name"
 							onValueChange={(name) => patch({ name })}
 							placeholder="No name"
 							value={value.name}
 						/>
-						<SettingsGroup grid="grid-cols-1" label="Picture">
-							<PictureDropzone
-								label="Profile picture file"
-								onPick={onPictureUpload}
-							/>
-						</SettingsGroup>
 					</Tabs.Panel>
 
 					<Tabs.Panel
