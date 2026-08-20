@@ -180,6 +180,7 @@ function PermissionPrompt({
 const Composer = memo(function Composer({
 	controller,
 	composerRef,
+	botName,
 	commands,
 	disabled,
 	isOverlayOpen,
@@ -192,6 +193,8 @@ const Composer = memo(function Composer({
 }: {
 	controller: ChatController
 	composerRef: RefObject<HTMLTextAreaElement | null>
+	/** The bot the prompt is addressed to, which the placeholder names. */
+	botName: string
 	/** What the bot last answered to: the live session's own list once it has
 	 * announced one, and until then the list the store kept from the session before
 	 * it. Empty only for a bot no session has ever announced anything for. */
@@ -282,7 +285,7 @@ const Composer = memo(function Composer({
 				placeholder={
 					disabled
 						? "Waiting for Claude Code…"
-						: "Ask Claude Code to do something…"
+						: `Ask ${botName} to do something…`
 				}
 			/>
 		</PromptCommandMenu>
@@ -460,6 +463,7 @@ export function ChatScreen({
 				<Composer
 					controller={controller}
 					composerRef={composerRef}
+					botName={bot.name}
 					commands={state.commands}
 					disabled={disabled}
 					isOverlayOpen={isOverlayOpen}
