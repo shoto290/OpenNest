@@ -216,6 +216,10 @@ export const OffCanvas = meta.story({
 		await expect(trigger).toHaveFocus()
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(main.getBoundingClientRect().height).toBe(mainHeight)
+
+		/** The tooltip on the trigger is still fading once the drawer is gone, and the
+		 * a11y pass reads its colour the moment this returns. */
+		await settled(document.body)
 	},
 })
 
