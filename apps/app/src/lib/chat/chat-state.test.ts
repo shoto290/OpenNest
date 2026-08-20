@@ -115,6 +115,22 @@ describe("chatReducer", () => {
 		expect(reset.conversationId).toBe(CONVERSATION)
 	})
 
+	it("holds the commands a session announced, and drops them with it", () => {
+		const listed = applyEvents(opened, [
+			{ type: "commandsListed", commands: ["review", "compact"] },
+		])
+
+		expect(listed.commands).toEqual(["review", "compact"])
+
+		const reset = chatReducer(listed, {
+			type: "sessionReset",
+			runtime: run(1),
+			sessionId: null,
+		})
+
+		expect(reset.commands).toEqual([])
+	})
+
 	it("keeps turnEnded idempotent", () => {
 		const ended: ClaudeEvent = {
 			type: "turnEnded",
