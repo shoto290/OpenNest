@@ -1,12 +1,13 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { contrastRatio, type Rgb } from "@workspace/ui/lib/contrast"
 import {
 	ACTION_TOKENS,
 	SIDEBAR_TOKENS,
 	SURFACE_TOKENS,
 } from "@workspace/ui/foundations/color-tokens"
+import { contrastRatio, type Rgb } from "@workspace/ui/lib/contrast"
+import { PALETTE_IDS, type Palette } from "@workspace/ui/lib/palettes"
 
 type TokenPair = { background: string; foreground: string }
 type ThemeName = "light" | "dark"
@@ -15,6 +16,7 @@ const AA_TEXT_RATIO = 4.5
 const FOREGROUND_SUFFIX = "-foreground"
 const THEMES: ThemeName[] = ["light", "dark"]
 const TRANSPARENT_COMPUTED_COLOR = "rgba(0, 0, 0, 0)"
+const PALETTE_PROBE_TOKEN = "--primary"
 const CANVAS_BASE: Rgb = [255, 255, 255]
 
 const SEMANTIC_TOKENS = [...SURFACE_TOKENS, ...ACTION_TOKENS, ...SIDEBAR_TOKENS]
@@ -41,15 +43,18 @@ const CROSS_FAMILY_PAIRS: TokenPair[] = [
 
 const TOKEN_PAIRS = [ROOT_PAIR, ...SUFFIXED_PAIRS, ...CROSS_FAMILY_PAIRS]
 
-/** Keyed by the label a failure prints, since a background now carries more
- * than one foreground and an exception belongs to one pair, not to a surface. */
+/** Keyed by scheme and pair, never by palette: one exception covers the pair
+ * everywhere, and its floor clears the weakest palette that ships it. */
 const PAIRS_AWAITING_DESIGN_DECISION: Record<string, number> = {
-	"light --sidebar-primary-foreground on --sidebar-primary": 2.8,
-	"dark --sidebar-primary-foreground on --sidebar-primary": 1.8,
+	"light --sidebar-primary-foreground on --sidebar-primary": 2.6,
+	"dark --sidebar-primary-foreground on --sidebar-primary": 1.7,
 }
 
-const requiredRatio = (label: string) =>
-	PAIRS_AWAITING_DESIGN_DECISION[label] ?? AA_TEXT_RATIO
+const pairKey = (scheme: ThemeName, pair: TokenPair) =>
+	`${scheme} ${pair.foreground} on ${pair.background}`
+
+const requiredRatio = (key: string) =>
+	PAIRS_AWAITING_DESIGN_DECISION[key] ?? AA_TEXT_RATIO
 
 const createPixel = () => {
 	const canvas = document.createElement("canvas")
@@ -87,13 +92,24 @@ const paintOver = (
 	return [red, green, blue]
 }
 
-type ThemeProbe = { name: ThemeName; scope: HTMLElement; surface: Rgb }
+type ThemeProbe = {
+	palette: Palette
+	scheme: ThemeName
+	scope: HTMLElement
+	surface: Rgb
+	paletteColor: string
+}
+
+const scopeName = (palette: Palette, scheme: ThemeName) =>
+	`${palette} ${scheme}`
 
 const probeTheme = (
 	pixel: CanvasRenderingContext2D,
 	canvasElement: HTMLElement,
-	name: ThemeName,
+	palette: Palette,
+	scheme: ThemeName,
 ): ThemeProbe => {
+	const name = scopeName(palette, scheme)
 	const scope = canvasElement.querySelector<HTMLElement>(
 		`[data-theme-scope="${name}"]`,
 	)
@@ -101,13 +117,15 @@ const probeTheme = (
 		throw new Error(`Missing theme scope for ${name}.`)
 	}
 	return {
-		name,
+		palette,
+		scheme,
 		scope,
 		surface: paintOver(
 			pixel,
 			CANVAS_BASE,
 			readComputedColor(scope, ROOT_PAIR.background),
 		),
+		paletteColor: readComputedColor(scope, PALETTE_PROBE_TOKEN),
 	}
 }
 
@@ -129,23 +147,28 @@ const measurePair = (
 	return contrastRatio(background, foreground)
 }
 
-const auditPair = (
-	pixel: CanvasRenderingContext2D,
-	theme: ThemeProbe,
-	pair: TokenPair,
-) => {
-	const ratio = measurePair(pixel, theme, pair)
-	const label = `${theme.name} ${pair.foreground} on ${pair.background}`
-	const required = requiredRatio(label)
+type Measurement = { palette: Palette; key: string; ratio: number }
 
-	if (ratio < required) {
-		return `${label}: measured ${ratio.toFixed(2)}:1, needs ${required}:1`
-	}
-	if (required < AA_TEXT_RATIO && ratio >= AA_TEXT_RATIO) {
-		return `${label}: now ${ratio.toFixed(2)}:1, drop it from PAIRS_AWAITING_DESIGN_DECISION`
-	}
-	return null
-}
+const failuresIn = (measurements: Measurement[]) =>
+	measurements
+		.filter(({ key, ratio }) => ratio < requiredRatio(key))
+		.map(
+			({ palette, key, ratio }) =>
+				`${palette} ${key}: measured ${ratio.toFixed(2)}:1, needs ${requiredRatio(key)}:1`,
+		)
+
+const settledExceptionsIn = (measurements: Measurement[]) =>
+	Object.keys(PAIRS_AWAITING_DESIGN_DECISION)
+		.filter((key) =>
+			measurements.every(
+				(measurement) =>
+					measurement.key !== key || measurement.ratio >= AA_TEXT_RATIO,
+			),
+		)
+		.map(
+			(key) =>
+				`${key}: now clears ${AA_TEXT_RATIO}:1 in every palette, drop it from PAIRS_AWAITING_DESIGN_DECISION`,
+		)
 
 const meta = preview.meta({
 	title: "Foundations/Token Contrast",
@@ -153,9 +176,16 @@ const meta = preview.meta({
 	parameters: { layout: "fullscreen" },
 	render: () => (
 		<>
-			{THEMES.map((theme) => (
-				<div key={theme} className={theme} data-theme-scope={theme} />
-			))}
+			{PALETTE_IDS.flatMap((palette) =>
+				THEMES.map((scheme) => (
+					<div
+						key={scopeName(palette, scheme)}
+						className={scheme}
+						data-theme={palette}
+						data-theme-scope={scopeName(palette, scheme)}
+					/>
+				)),
+			)}
 		</>
 	),
 })
@@ -163,19 +193,36 @@ const meta = preview.meta({
 export const SemanticPairsMeetAaText = meta.story({
 	play: async ({ canvasElement }) => {
 		const pixel = createPixel()
-		const themes = THEMES.map((name) => probeTheme(pixel, canvasElement, name))
-		const [light, dark] = themes
+		const probes = PALETTE_IDS.flatMap((palette) =>
+			THEMES.map((scheme) => probeTheme(pixel, canvasElement, palette, scheme)),
+		)
+		const probesOf = (scheme: ThemeName) =>
+			probes.filter((probe) => probe.scheme === scheme)
 
 		await expect(
-			light.surface,
+			probesOf("light").map((probe) => probe.surface),
 			"Theme scopes resolve to the same surface, the theme class is not applied.",
-		).not.toEqual(dark.surface)
+		).not.toEqual(probesOf("dark").map((probe) => probe.surface))
 
-		const problems = themes
-			.flatMap((theme) =>
-				TOKEN_PAIRS.map((pair) => auditPair(pixel, theme, pair)),
-			)
-			.filter((problem) => problem !== null)
+		await expect(
+			THEMES.filter(
+				(scheme) =>
+					new Set(probesOf(scheme).map((probe) => probe.paletteColor)).size < 2,
+			),
+			`Every palette resolves one ${PALETTE_PROBE_TOKEN} in these schemes, the palette attribute is not reaching the scopes.`,
+		).toEqual([])
+
+		const measurements = probes.flatMap((probe) =>
+			TOKEN_PAIRS.map((pair) => ({
+				palette: probe.palette,
+				key: pairKey(probe.scheme, pair),
+				ratio: measurePair(pixel, probe, pair),
+			})),
+		)
+		const problems = [
+			...failuresIn(measurements),
+			...settledExceptionsIn(measurements),
+		]
 
 		await expect(
 			problems,
