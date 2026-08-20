@@ -71,6 +71,10 @@ const pasteInto = (target: HTMLElement, clipboardData: DataTransfer) =>
 		}),
 	)
 
+const draggingFile = () => ({
+	dataTransfer: filesTransfer([DROPPED_PROMPT_FILE]),
+})
+
 const named = (file: File) => [expect.objectContaining({ name: file.name })]
 
 const isExpanded = (element: HTMLElement) =>
@@ -240,7 +244,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"Nothing typed yet — the resting state of a new turn, and the narrowest the composer ever gets. Check that the placeholder stays readable against the surface and that the send button is absent rather than disabled, since there is no prompt to send yet and a blank or whitespace-only value must never reach `onSubmit`. `Default` covers the same input once a draft exists.",
+					"Nothing typed yet — the resting state of a new turn, and the narrowest the composer ever gets. Check that the placeholder stays readable against the surface and that the send button is absent rather than disabled, since there is neither a prompt nor a staged file to send yet and a blank value must never reach `onSubmit` on its own. `Default` covers the same input once a draft exists, `FilesOnly` once a chip alone carries the turn.",
 			},
 		},
 	},
@@ -393,9 +397,7 @@ export const WithAttachments = meta.story({
 		await expect(isExpanded(textarea)).toBe(true)
 		await expect(box(chip).bottom).toBeLessThanOrEqual(box(textarea).top)
 
-		const dropping = { dataTransfer: filesTransfer([DROPPED_PROMPT_FILE]) }
-
-		await expect(drag("drop", form, dropping)).toBe(true)
+		await expect(drag("drop", form, draggingFile())).toBe(true)
 		await expect(pasteInto(textarea, filesTransfer([PASTED_PROMPT_FILE]))).toBe(
 			true,
 		)
@@ -424,9 +426,7 @@ export const DragOver = meta.story({
 		const textarea = canvas.getByRole("textbox", { name: "Prompt" })
 		const form = formOf(textarea)
 
-		const dragged = { dataTransfer: filesTransfer([DROPPED_PROMPT_FILE]) }
-
-		await expect(drag("dragover", form, dragged)).toBe(true)
+		await expect(drag("dragover", form, draggingFile())).toBe(true)
 		await waitFor(() => expect(form.dataset.dropTarget).toBe("true"))
 
 		drag("dragleave", form, { relatedTarget: textarea })
@@ -435,10 +435,61 @@ export const DragOver = meta.story({
 		drag("dragleave", form, { relatedTarget: document.body })
 		await waitFor(() => expect(form.dataset.dropTarget).toBe("false"))
 
-		drag("dragover", form, dragged)
+		drag("dragover", form, draggingFile())
 		await waitFor(() => expect(form.dataset.dropTarget).toBe("true"))
 
 		drag("dragend", form)
 		await waitFor(() => expect(form.dataset.dropTarget).toBe("false"))
+	},
+})
+
+export const MarkedFromOutside = meta.story({
+	args: { defaultValue: DRAFT, leading: attachControl, dropTarget: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same highlight, asked for by the host rather than by the composer's own drag events — a file dragged anywhere over the surface around it lights the composer up as the place to drop. Check that the mark is the one `DragOver` produces, and that a drag crossing the composer and leaving it again cannot take it away while the host still asks for it. The second instance is disabled: a composer that has nowhere to put the file stays unmarked whatever the host asks, so nothing invites a drop the browser would end up opening itself.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex flex-col gap-4">
+			<PromptInput {...args} aria-label="Prompt" />
+			<PromptInput {...args} disabled aria-label="Disabled prompt" />
+		</div>
+	),
+	play: async ({ canvas }) => {
+		const form = formOf(canvas.getByRole("textbox", { name: "Prompt" }))
+		const disabled = formOf(
+			canvas.getByRole("textbox", { name: "Disabled prompt" }),
+		)
+
+		await expect(form.dataset.dropTarget).toBe("true")
+		await expect(disabled.dataset.dropTarget).toBe("false")
+
+		drag("dragover", form, draggingFile())
+		drag("dragleave", form, { relatedTarget: document.body })
+		drag("dragend", form)
+		await expect(form.dataset.dropTarget).toBe("true")
+	},
+})
+
+export const FilesOnly = meta.story({
+	args: { leading: attachControl, attachments: stagedFiles },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Files staged with nothing typed: the turn is worth sending on the chips alone, so the send button is there even though the prompt is blank and `onSubmit` receives an empty string. Check that the button appears with the first chip and that `Empty` still hides it when the composer carries neither.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const send = await canvas.findByRole("button", { name: "Send prompt" })
+
+		await expect(send).toBeEnabled()
+		await userEvent.click(send)
+		await expect(args.onSubmit).toHaveBeenCalledWith("")
 	},
 })

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactNode, Ref } from "react"
 
 import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
 import {
@@ -25,6 +25,9 @@ interface ChatLayoutProps {
 	 * so a lone child can centre itself with `m-auto`. Rows here share one mark
 	 * identity, so the bot's mark travels between them rather than reappearing. */
 	children: ReactNode
+	/** Exposes the region a conversation occupies — header, transcript and composer
+	 * — so a host can tell what landed inside it from what landed beside it. */
+	rootRef?: Ref<HTMLDivElement>
 	className?: string
 	contentClassName?: string
 }
@@ -37,11 +40,13 @@ function ChatLayout({
 	label = "Conversation",
 	older,
 	children,
+	rootRef,
 	className,
 	contentClassName,
 }: ChatLayoutProps) {
 	return (
 		<div
+			ref={rootRef}
 			data-slot="chat-layout"
 			className={cn(
 				"flex h-svh flex-col bg-background text-foreground",

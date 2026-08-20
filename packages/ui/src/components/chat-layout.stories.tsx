@@ -1,10 +1,14 @@
+import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
-import { ChatLayout } from "@workspace/ui/components/chat-layout"
+import {
+	ChatLayout,
+	type ChatLayoutProps,
+} from "@workspace/ui/components/chat-layout"
 import { ChatNotice } from "@workspace/ui/components/chat-notice"
 import {
 	AssistantTurn,
@@ -47,6 +51,27 @@ const CONVERSATION = (
 const SCROLLING_TRANSCRIPT = LONG_TRANSCRIPT.map((question) => (
 	<UserTurn key={question}>{question}</UserTurn>
 ))
+
+const RegionProbe = (props: ChatLayoutProps) => {
+	const [region, setRegion] = useState<HTMLDivElement | null>(null)
+	const [composer, setComposer] = useState<HTMLTextAreaElement | null>(null)
+	const holdsComposer = region?.contains(composer) ?? false
+
+	return (
+		<ChatLayout
+			{...props}
+			rootRef={setRegion}
+			notice={
+				<ChatNotice
+					tone="warning"
+					title={holdsComposer ? "Composer inside" : "Composer outside"}
+					description="What the handed-back region contains."
+				/>
+			}
+			composer={<PromptInput textareaRef={setComposer} onSubmit={fn()} />}
+		/>
+	)
+}
 
 const meta = preview.meta({
 	title: "Layout/ChatLayout",
@@ -212,5 +237,21 @@ export const Error = meta.story({
 			canvas.getByRole("button", { name: "Restart session" }),
 		).toBeVisible()
 		await expect(canvas.getByLabelText("user message")).toBeVisible()
+	},
+})
+
+export const ForwardedRegion = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The region a conversation occupies, handed back through `rootRef`. A host that has to tell a drop landing on the conversation from one landing beside it asks the element, not the DOM for a `data-slot`. The notice reports what the handed-back element contains: check that it reads *Composer inside*, and that the shell renders exactly as `Default` does — the handle changes nothing about the markup.",
+			},
+		},
+	},
+	args: { children: CONVERSATION },
+	render: (args) => <RegionProbe {...args} />,
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Composer inside")).toBeVisible()
 	},
 })
