@@ -19,6 +19,7 @@ import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import { useSettingsShortcut } from "@/lib/bots/use-settings-shortcut"
+import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
@@ -38,6 +39,18 @@ export function App() {
 	const driver = useMemo(createChatDriver, [])
 	const store = useMemo(createTranscriptStore, [])
 	const chat = useChat(driver, store)
+
+	// One composer holds files for every bot, so a switch does not take away what
+	// was attached, and a submission that had to store them first still names the
+	// bot it started on.
+	const attachments = useMemo(
+		() =>
+			createAttachmentsController({
+				store: chat.controller.storeAttachments,
+				send: chat.controller.sendTo,
+			}),
+		[chat.controller],
+	)
 	const roster = useRoster(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -76,6 +89,7 @@ export function App() {
 	// the delete is about to take away.
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
+		attachments.forget(id)
 		await roster.controller.remove(id)
 	}
 
@@ -182,6 +196,7 @@ export function App() {
 					<ChatScreen
 						bot={selected}
 						chat={chat}
+						attachments={attachments}
 						isSettingsOpen={isEditing}
 						isOverlayOpen={isEditing || user.state.isSettingsOpen}
 						onToggleSettings={toggleSettings}

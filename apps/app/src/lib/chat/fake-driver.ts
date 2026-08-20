@@ -1,3 +1,4 @@
+import type { SubmittedAttachment } from "./attachments-contract"
 import {
 	completionForOutcome,
 	isSameRuntimeScope,
@@ -324,6 +325,18 @@ export function createFakeChatDriver(
 			pump(run)
 			return Promise.resolve()
 		},
+
+		/** Nothing is written: an attachment reaches Claude as a path, so a plausible
+		 * one is the whole of what `bun dev:web` needs to compose the prompt. */
+		storeAttachments: (
+			conversationId: string,
+			attachments: SubmittedAttachment[],
+		) =>
+			Promise.resolve(
+				attachments.map(
+					(attachment) => `/tmp/opennest/${conversationId}/${attachment.name}`,
+				),
+			),
 
 		cancelTurn: (scope: RuntimeScope) => {
 			if (isForeign(scope)) {

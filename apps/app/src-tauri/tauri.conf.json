@@ -19,6 +19,7 @@
 		"windows": [
 			{
 				"title": "OpenNest",
+				"dragDropEnabled": false,
 				"width": 1280,
 				"height": 832,
 				"minWidth": 1024,

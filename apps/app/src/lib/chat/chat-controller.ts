@@ -1,3 +1,4 @@
+import type { SubmittedAttachment } from "./attachments-contract"
 import {
 	type ChatAction,
 	type ChatState,
@@ -93,6 +94,18 @@ export type ChatController = {
 	/** `repliedToMessageId` is the message this prompt explicitly answers. It travels
 	 * with the prompt into every context rebuilt for it, however far back it is. */
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
+	/** The same send, aimed at a named bot rather than at the selection. What a
+	 * prompt that had to be prepared first goes through: storing its files takes a
+	 * round trip, and the reader may be reading somebody else by the time it lands.
+	 * A bot this launch has not opened takes nothing. */
+	sendTo: (botId: string, text: string) => Promise<void>
+	/** Writes the files a bot's next prompt names down, and answers their absolute
+	 * paths in the order they were staged. Rejects with an `AttachmentStoreError`,
+	 * which leaves every staged file where it is: nothing was stored. */
+	storeAttachments: (
+		botId: string,
+		attachments: SubmittedAttachment[],
+	) => Promise<string[]>
 	stop: () => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	retry: (id: string) => Promise<void>
@@ -1091,6 +1104,25 @@ export function createChatController(
 		await submit(bot, promptId, trimmed)
 	}
 
+	/** The files a prompt is about to name, written down before the prompt is sent.
+	 * They belong to the conversation rather than to the run answering in it, so a
+	 * bot with none open has nowhere to put them and is refused rather than answered
+	 * with no paths at all — the composer would send the prompt without them and
+	 * throw away what it was holding. */
+	const storeAttachments = (
+		botId: string,
+		attachments: SubmittedAttachment[],
+	): Promise<string[]> => {
+		const conversationId = bots.get(botId)?.state.conversationId
+		if (!conversationId) {
+			return Promise.reject({
+				kind: "unwritable",
+				detail: "no conversation is open to attach them to",
+			})
+		}
+		return driver.storeAttachments(conversationId, attachments)
+	}
+
 	const send = (bot: BotChat, text: string, repliedToMessageId?: string) => {
 		const trimmed = text.trim()
 		if (trimmed.length === 0) {
@@ -1194,6 +1226,13 @@ export function createChatController(
 		loadOlder: () => onSelected(loadOlder, undefined),
 		send: (text, repliedToMessageId) =>
 			onSelected((bot) => send(bot, text, repliedToMessageId), undefined),
+		sendTo: async (botId, text) => {
+			const bot = bots.get(botId)
+			if (bot) {
+				await send(bot, text)
+			}
+		},
+		storeAttachments,
 		stop: () => onSelected(stop, undefined),
 		respond: (id, decision) =>
 			onSelected((bot) => respond(bot, id, decision), undefined),
