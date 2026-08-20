@@ -1,5 +1,5 @@
-//! What the person at the keyboard chose to be called and to look at: one record,
-//! held as four rows of the shipped `app_settings` table.
+//! What the person at the keyboard chose to be called, to look at and to read in:
+//! one record, held as five rows of the shipped `app_settings` table.
 //!
 //! A table of its own would be a table that can only ever hold one row, so the
 //! key/value store already in the schema is what carries it. One key per field
@@ -11,8 +11,9 @@
 //! There is no row to create and none to delete. A field nobody has set is a key
 //! that is not there, and [`Preferences::default`] is what it reads as, so the
 //! first launch and a launch after a write answer through the same path. The
-//! picture is the one field whose absence is written by removing its key: a path
-//! is what the sweep reads, and an empty string would be a path pointing nowhere.
+//! picture and the language are the two fields whose absence is written by removing
+//! their key: a path is what the sweep reads and an empty string would point
+//! nowhere, and no language is the machine's own rather than a name.
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
@@ -22,6 +23,7 @@ const DISPLAY_NAME_KEY: &str = "user.display_name";
 const AVATAR_IMAGE_PATH_KEY: &str = "user.avatar_image_path";
 const COLOR_SCHEME_KEY: &str = "user.color_scheme";
 const PALETTE_KEY: &str = "user.palette";
+const LANGUAGE_KEY: &str = "user.language";
 
 /// What the app opens on before anyone has chosen: the palette the product ships
 /// its surfaces in. A palette is a name the frontend holds the list of — see
@@ -80,6 +82,11 @@ pub struct Preferences {
 	/// frontend's to change, and a name this build refused would be a palette the UI
 	/// could paint and the file could not remember.
 	pub palette: String,
+	/// Which language the app reads in, as free text for the reason `palette` is.
+	/// `None` is nobody having chosen, which the frontend reads as the language of
+	/// the machine — a default named here would be a choice this side made for a
+	/// catalogue it does not hold.
+	pub language: Option<String>,
 }
 
 impl Default for Preferences {
@@ -89,6 +96,7 @@ impl Default for Preferences {
 			avatar_image_path: None,
 			color_scheme: ColorScheme::default(),
 			palette: DEFAULT_PALETTE.to_owned(),
+			language: None,
 		}
 	}
 }
@@ -173,6 +181,7 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		color_scheme: setting_in(connection, COLOR_SCHEME_KEY)?
 			.map_or(defaults.color_scheme, |stored| ColorScheme::of(&stored)),
 		palette: setting_in(connection, PALETTE_KEY)?.unwrap_or(defaults.palette),
+		language: setting_in(connection, LANGUAGE_KEY)?,
 	})
 }
 
@@ -185,6 +194,7 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	transaction
 		.execute(WRITE_SETTING, params![COLOR_SCHEME_KEY, preferences.color_scheme.as_stored()])?;
 	transaction.execute(WRITE_SETTING, params![PALETTE_KEY, preferences.palette])?;
+	write_optional_in(transaction, LANGUAGE_KEY, preferences.language.as_deref())?;
 	write_picture_in(transaction, preferences.avatar_image_path.as_deref())
 }
 
@@ -194,12 +204,23 @@ fn write_picture_in(
 	transaction: &Transaction<'_>,
 	path: Option<&str>,
 ) -> Result<(), DatabaseError> {
-	match path {
-		Some(path) => {
-			transaction.execute(WRITE_SETTING, params![AVATAR_IMAGE_PATH_KEY, path])?;
+	write_optional_in(transaction, AVATAR_IMAGE_PATH_KEY, path)
+}
+
+/// A field nobody has set is the key gone rather than a value that has to be read
+/// as nothing: what the file holds and what [`Preferences::default`] answers stay
+/// the same shape.
+fn write_optional_in(
+	transaction: &Transaction<'_>,
+	key: &str,
+	value: Option<&str>,
+) -> Result<(), DatabaseError> {
+	match value {
+		Some(value) => {
+			transaction.execute(WRITE_SETTING, params![key, value])?;
 		}
 		None => {
-			transaction.execute(CLEAR_SETTING, [AVATAR_IMAGE_PATH_KEY])?;
+			transaction.execute(CLEAR_SETTING, [key])?;
 		}
 	}
 	Ok(())
@@ -217,6 +238,7 @@ mod tests {
 			avatar_image_path: Some("/data/avatars/one.png".to_owned()),
 			color_scheme: ColorScheme::Dark,
 			palette: "moss".to_owned(),
+			language: Some("fr".to_owned()),
 		}
 	}
 
@@ -240,6 +262,7 @@ mod tests {
 				avatar_image_path: None,
 				color_scheme: ColorScheme::System,
 				palette: DEFAULT_PALETTE.to_owned(),
+				language: None,
 			}
 		);
 	}
@@ -274,6 +297,11 @@ mod tests {
 			setting(&database, AVATAR_IMAGE_PATH_KEY).await,
 			None,
 			"a picture taken off the record was left in the file"
+		);
+		assert_eq!(
+			setting(&database, LANGUAGE_KEY).await,
+			None,
+			"a language taken off the record was left in the file"
 		);
 	}
 
@@ -331,5 +359,49 @@ mod tests {
 		let read = database.user().preferences().await.expect("the record");
 
 		assert_eq!(read.color_scheme, ColorScheme::System);
+	}
+
+	/// A file written before the language had a key of its own answers a record with
+	/// no language, and everything the older build did write is still on it.
+	#[tokio::test]
+	async fn a_record_without_a_language_answers_the_rest_of_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				transaction.execute(WRITE_SETTING, params![DISPLAY_NAME_KEY, "Nyx"])?;
+				transaction.execute(WRITE_SETTING, params![PALETTE_KEY, "moss"])?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the older build's rows");
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.language, None);
+		assert_eq!(read.display_name, "Nyx");
+		assert_eq!(read.palette, "moss");
+	}
+
+	/// A language name is free text, exactly as a palette is: the file remembers what
+	/// the frontend chose whether or not this build ships a catalogue for it.
+	#[tokio::test]
+	async fn a_language_the_host_has_never_heard_of_is_stored_as_written() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		let stored = database
+			.user()
+			.set_preferences(Preferences { language: Some("br".to_owned()), ..a_record() })
+			.await
+			.expect("the write");
+
+		assert_eq!(stored.language, Some("br".to_owned()));
+		assert_eq!(
+			database.user().preferences().await.expect("the record").language,
+			Some("br".to_owned())
+		);
 	}
 }

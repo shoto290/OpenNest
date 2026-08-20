@@ -16,6 +16,7 @@ const RECORD: UserPreferences = {
 	profilePicturePath: "/data/avatars/one.png",
 	colorScheme: "dark",
 	palette: "moss",
+	language: "fr",
 }
 
 /** What the host answers before anything has been stored. Spelled out here rather
@@ -26,6 +27,7 @@ const DEFAULTS: UserPreferences = {
 	profilePicturePath: null,
 	colorScheme: "system",
 	palette: "amber",
+	language: null,
 }
 
 const FAILURES: UserPreferencesError[] = [

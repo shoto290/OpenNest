@@ -13,6 +13,11 @@ export type ColorScheme = "system" | "light" | "dark"
  * palette the UI could paint and the file could not remember. */
 export type Palette = string
 
+/** The language the app reads in. Free text for the reason `Palette` is, and `null`
+ * for nobody having chosen: which catalogues exist is this side's to change, and a
+ * record holding no name is one the machine's own language answers for. */
+export type Language = string | null
+
 /** The one record, in both directions: a write carries exactly what a read
  * answers, so a field left out is one the caller meant to clear rather than one it
  * meant to keep.
@@ -28,6 +33,7 @@ export type UserPreferences = {
 	profilePicturePath: string | null
 	colorScheme: ColorScheme
 	palette: Palette
+	language: Language
 }
 
 /** Why a preferences call refused. `unavailable` says nothing is being stored this
