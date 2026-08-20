@@ -157,6 +157,30 @@ pub async fn conversation_delete_bot<R: Runtime>(
 	Ok(())
 }
 
+/// The slash commands a session announced, kept against the bot it answered for.
+/// A child names them on its init frame and nowhere else, and it is only spawned by
+/// a prompt — so a bot the reader has just opened, and every bot after a restart,
+/// has no session of its own to ask. What the last one named is what the composer
+/// offers until a new one names its own.
+#[tauri::command]
+pub async fn conversation_record_bot_commands(
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	commands: Vec<String>,
+) -> Result<(), TranscriptStoreError> {
+	Ok(ready(&state)?.conversations().record_bot_commands(bot_id, commands).await?)
+}
+
+/// What was last held for the bot, which is an empty list until a session of its
+/// own has announced something.
+#[tauri::command]
+pub async fn conversation_bot_commands(
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+) -> Result<Vec<String>, TranscriptStoreError> {
+	Ok(ready(&state)?.conversations().bot_commands(bot_id).await?)
+}
+
 #[tauri::command]
 pub async fn conversation_main_chat(
 	state: State<'_, db::DatabaseState>,

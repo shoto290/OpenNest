@@ -36,9 +36,11 @@ export type ChatState = {
 	 * Claude first reports its id — `sessionReady` only lands after a prompt. */
 	sessionOpen: boolean
 	sessionId: string | null
-	/** The slash commands the live session announced, as it named them: without a
-	 * leading slash, and only for as long as that session lasts. Another one may
-	 * know others, so nothing here survives a reset. */
+	/** The slash commands last announced for this bot, as the session named them:
+	 * without a leading slash. A session only announces them on its init frame, and
+	 * it is only started by a prompt — so what a session named outlives it, both
+	 * across a reset and across a launch, and the next announcement replaces it
+	 * whole. Empty is a bot no session has ever announced anything for. */
 	commands: string[]
 	binaryVersion: string | null
 	/** The one visible chat, resolved from the store before anything is written. */
@@ -68,9 +70,15 @@ export type ChatAction =
 	 * nothing is running any more — and keeps the transcript, which was never that
 	 * process's to begin with. `sessionId` is the id the new session resumes: the
 	 * child only re-announces it on the first prompt, so dropping it here would
-	 * write `null` over a session that is very much alive. */
+	 * write `null` over a session that is very much alive. The commands are kept for
+	 * the same reason: the next child re-announces them on its init frame, and until
+	 * then the last list named is the only one there is. */
 	| { type: "sessionReset"; runtime: RuntimeScope; sessionId: string | null }
 	| { type: "sessionOpened" }
+	/** The commands the store was holding for this bot, read when it was opened.
+	 * They stand until a session of its own announces its own, which is what the
+	 * composer offers before any process has been started. */
+	| { type: "commandsRecalled"; commands: string[] }
 	| { type: "conversationOpened"; conversationId: string }
 	/** The durable transcript moved. The controller hands the whole selection
 	 * rather than a patch: the transcript reducer owns order and identity. */
@@ -154,6 +162,17 @@ export function isSameRuntimeScope(
 		left.epoch === right.epoch &&
 		left.conversationId === right.conversationId &&
 		left.botId === right.botId
+	)
+}
+
+/** Whether two lists name the same commands in the same order. The order is the
+ * child's own and the menu offers it as given, so a list rearranged is a different
+ * list. Read by the reducer to publish nothing when what arrives is what is already
+ * held, and by the controller to write nothing when it is what the store holds. */
+export function isSameCommandList(left: string[], right: string[]): boolean {
+	return (
+		left.length === right.length &&
+		left.every((command, index) => command === right[index])
 	)
 }
 
@@ -281,7 +300,7 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 		case "sessionReady":
 			return { ...state, sessionId: event.sessionId }
 		case "commandsListed":
-			return { ...state, commands: event.commands }
+			return applyCommands(state, event.commands)
 		// What a message says and how it ended reach the screen through the
 		// transcript, never through here: the reader is shown what was stored.
 		case "messageStarted":
@@ -301,6 +320,15 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 	}
 }
 
+/** The same list again — a session re-announcing what was recalled, or a recall
+ * answering what a session already named — is not a change: the state is handed
+ * back as it stands, so nothing re-renders for a menu that reads the same. */
+function applyCommands(state: ChatState, commands: string[]): ChatState {
+	return isSameCommandList(state.commands, commands)
+		? state
+		: { ...state, commands }
+}
+
 function applySessionReset(
 	state: ChatState,
 	runtime: RuntimeScope,
@@ -312,7 +340,6 @@ function applySessionReset(
 		turn: "idle",
 		sessionOpen: false,
 		sessionId,
-		commands: [],
 		permission: null,
 		// Nothing here outlives the process that reported it, and a cold launch
 		// starts with none: a step left pending would go on claiming work that no
@@ -365,6 +392,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 				: state
 		case "sessionOpened":
 			return state.sessionOpen ? state : { ...state, sessionOpen: true }
+		case "commandsRecalled":
+			return applyCommands(state, action.commands)
 		case "sessionReset":
 			return applySessionReset(state, action.runtime, action.sessionId)
 		case "conversationOpened":

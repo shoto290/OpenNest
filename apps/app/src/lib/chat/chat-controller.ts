@@ -4,6 +4,7 @@ import {
 	canStopTurn,
 	chatReducer,
 	initialChatState,
+	isSameCommandList,
 	isSameRuntimeScope,
 	isTurnBusy,
 } from "./chat-state"
@@ -150,6 +151,12 @@ type BotChat = {
 	 * replayed ending, and every delta behind it, a no-op. */
 	openMessages: Map<string, number>
 	settledMessages: Set<string>
+	/** The commands this launch believes the store holds for the bot, and whether a
+	 * session of its own has named them. Both are read when one of the two arrives:
+	 * an announcement matching what is held is a write nothing has to make, and a
+	 * recall answering after a session has spoken is the older of the two lists —
+	 * the child that just named its own is the authority on what it takes. */
+	commands: { stored: string[]; announced: boolean }
 	pendingPreflight: Promise<SessionHandle | null> | null
 	/** The handover in flight for this bot, if there is one. A second caller joins it
 	 * instead of starting another: two would open two rows in one lineage and ask the
@@ -236,6 +243,7 @@ export function createChatController(
 			heldReply: null,
 			openMessages: new Map(),
 			settledMessages: new Set(),
+			commands: { stored: [], announced: false },
 			pendingPreflight: null,
 			pendingRotation: null,
 			sending: false,
@@ -521,6 +529,33 @@ export function createChatController(
 		)
 	}
 
+	/** What the session says it can be asked for, kept against the bot rather than
+	 * the run: a run announces it once, on its init frame, and no run exists until a
+	 * prompt has started one. The bot is the one the event named, for the reason the
+	 * provider session is — a rotation in between would otherwise hand one bot the
+	 * list another announced.
+	 *
+	 * A session naming what the store already holds writes nothing: every launch of
+	 * a bot re-announces the same list, and a row rewritten with its own content is a
+	 * write the reader waits behind for nothing. The bot is marked as having spoken
+	 * either way — that is what a recall still in flight is measured against. */
+	const recordCommands = (
+		bot: BotChat,
+		scope: RuntimeScope | null,
+		commands: string[],
+	) => {
+		if (!scope) {
+			return
+		}
+		const held = bot.commands.stored
+		bot.commands.stored = commands
+		bot.commands.announced = true
+		if (isSameCommandList(held, commands)) {
+			return
+		}
+		write(bot, () => store.recordBotCommands(scope.botId, commands))
+	}
+
 	/** The durable half of a transport event. Nothing here decides anything the
 	 * reducer decides: it writes down what the session reported, in the order it
 	 * reported it.
@@ -542,6 +577,8 @@ export function createChatController(
 		switch (event.type) {
 			case "sessionReady":
 				return recordProviderSession(bot, scope, event.sessionId)
+			case "commandsListed":
+				return recordCommands(bot, scope, event.commands)
 			case "messageStarted":
 				return holdReply(bot, event.message)
 			case "messageDelta":
@@ -732,10 +769,35 @@ export function createChatController(
 		return bot.pendingPreflight
 	}
 
+	/** What the store is holding for this bot, put on the screen before a process of
+	 * its own exists — which is every bot the reader opens, since the list is only
+	 * announced by a session and a session is only started by a prompt.
+	 *
+	 * Off the write queue, which orders the transcript and has nothing to say about
+	 * this: an announcement does not travel on it either, so queueing would delay the
+	 * menu behind another bot's deltas without ordering it against the one thing that
+	 * can overtake it. What the session named wins instead, whenever this read comes
+	 * back. A refusal shows nothing and says nothing — an empty menu is what the
+	 * reader already had. */
+	const recallCommands = (bot: BotChat) =>
+		store.botCommands(bot.id).then(
+			(commands) => {
+				if (bot.commands.announced) {
+					return
+				}
+				bot.commands.stored = commands
+				dispatch(bot, { type: "commandsRecalled", commands })
+			},
+			() => undefined,
+		)
+
 	const openConversation = async (bot: BotChat) => {
 		try {
 			const chat = await store.mainChat(bot.id)
 			dispatch(bot, { type: "conversationOpened", conversationId: chat.id })
+			// Nothing waits on it: the transcript is what the reader came for, and the
+			// menu it fills is answered for by the session if one gets there first.
+			void recallCommands(bot)
 			// Said twice on purpose. The subscription only fires when a page moves the
 			// transcript — a conversation with nothing in it moves nothing — so the
 			// first call fills the screen from what has already been read, and the

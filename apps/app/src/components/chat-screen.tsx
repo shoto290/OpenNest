@@ -177,8 +177,9 @@ const Composer = memo(function Composer({
 }: {
 	controller: ChatController
 	composerRef: RefObject<HTMLTextAreaElement | null>
-	/** What the live session answers to. Empty until it says so, and empty again
-	 * once it is gone. */
+	/** What the bot last answered to: the live session's own list once it has
+	 * announced one, and until then the list the store kept from the session before
+	 * it. Empty only for a bot no session has ever announced anything for. */
 	commands: string[]
 	disabled: boolean
 	/** Something is drawn over the conversation. */

@@ -295,7 +295,8 @@ pub enum ClaudeEvent {
 	#[serde(rename_all = "camelCase")]
 	SessionReady { session_id: String, resumed: bool },
 	/// The slash commands the child announced when it started, in the order it
-	/// named them. A build exposing none announces an empty list.
+	/// named them, and never empty: a child naming none announces nothing, which
+	/// leaves the list the bot was already holding standing.
 	#[serde(rename_all = "camelCase")]
 	CommandsListed { commands: Vec<String> },
 	#[serde(rename_all = "camelCase")]

@@ -188,6 +188,17 @@ describe("createFakeTranscriptStore", () => {
 		expect(await store.bots()).toEqual([])
 	})
 
+	// The list is a column of the bot's own row, so the file drops it with the row.
+	// A bot created at the id a deleted one held is a new bot, offering nothing.
+	it("forgets what a deleted bot's sessions announced", async () => {
+		const store = createFakeTranscriptStore()
+		await store.recordBotCommands("default", ["review"])
+
+		await store.deleteBot("default")
+
+		expect(await store.botCommands("default")).toEqual([])
+	})
+
 	it("dresses a bot in an uploaded picture and answers a path for it", async () => {
 		const store = createFakeTranscriptStore()
 

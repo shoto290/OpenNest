@@ -30,6 +30,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
+use serde_json::Value;
 use uuid::Uuid;
 
 use super::messages::stored_as_text;
@@ -362,6 +363,43 @@ impl ConversationsRepository {
 	) -> Result<Bot, ConversationError> {
 		self.call_mut(move |connection| Ok(set_avatar_image_path(connection, &id, path.as_deref())))
 			.await?
+	}
+
+	/// The slash commands a session announced, written down against the bot it was
+	/// answering for. Replaced whole rather than merged: a list is what one child
+	/// named on its init frame, and a command the next one leaves out is one it will
+	/// refuse. A bot the file does not hold is refused, which keeps a list from being
+	/// written for nobody.
+	///
+	/// One statement, so no transaction: a `WHERE` that matched nothing wrote
+	/// nothing, which is the very thing the row count is read for.
+	pub async fn record_bot_commands(
+		&self,
+		id: String,
+		commands: Vec<String>,
+	) -> Result<(), ConversationError> {
+		self.call(move |connection| {
+			let listed = Value::from(commands).to_string();
+			let written = connection
+				.execute("UPDATE bots SET commands = ?2 WHERE id = ?1", params![&id, listed])?;
+			Ok(refuse_if_untouched(written, &id))
+		})
+		.await?
+	}
+
+	/// What the last session to speak for this bot announced. Empty covers the three
+	/// cases a caller answers the same way — a bot no session ever announced anything
+	/// for, a bot the file does not hold, and text this build cannot read — because
+	/// none of them has a command to offer, and a menu built from broken JSON would
+	/// be worse than the empty one.
+	pub async fn bot_commands(&self, id: String) -> Result<Vec<String>, DatabaseError> {
+		self.call(move |connection| {
+			let stored: Option<String> = connection
+				.query_row("SELECT commands FROM bots WHERE id = ?1", [id], |row| row.get(0))
+				.optional()?;
+			Ok(stored.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default())
+		})
+		.await
 	}
 
 	/// Every picture a bot still points at — one half of what a sweep keeps, the
@@ -995,6 +1033,101 @@ mod tests {
 				.expect("the stored pose"),
 			"sleeping",
 			"an update rewrote the pose column nothing projects any more"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// What a session announced outlives the process that announced it, and the next
+	/// announcement replaces it whole: a command the newest child left out is one it
+	/// would refuse, so the list is the last one named rather than everything ever
+	/// named. A bot no session has spoken for offers none — which is also what a bot
+	/// the file does not hold answers, since neither has anything to offer.
+	#[tokio::test]
+	async fn a_bot_holds_the_commands_its_last_session_announced() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let silent = repository.create_bot(an_identity("Ada")).await.expect("the other bot");
+
+		assert_eq!(
+			repository.bot_commands(created.id.clone()).await.expect("the commands"),
+			Vec::<String>::new(),
+			"a bot no session has announced anything for offers a command"
+		);
+
+		repository
+			.record_bot_commands(
+				created.id.clone(),
+				vec!["review".to_owned(), "compact".to_owned()],
+			)
+			.await
+			.expect("the first session's commands");
+
+		assert_eq!(
+			repository.bot_commands(created.id.clone()).await.expect("the commands"),
+			vec!["review".to_owned(), "compact".to_owned()],
+		);
+
+		repository
+			.record_bot_commands(created.id.clone(), vec!["status".to_owned()])
+			.await
+			.expect("the next session's commands");
+
+		assert_eq!(
+			repository.bot_commands(created.id.clone()).await.expect("the commands"),
+			vec!["status".to_owned()],
+			"an announcement was added to the one before it instead of replacing it"
+		);
+		assert_eq!(
+			repository.bot_commands(silent.id).await.expect("the commands"),
+			Vec::<String>::new(),
+			"one bot's session announced for another"
+		);
+		assert_eq!(
+			repository.bot_commands("missing".to_owned()).await.expect("the commands"),
+			Vec::<String>::new(),
+			"a bot the file does not hold offered a command"
+		);
+
+		let refused =
+			repository.record_bot_commands("missing".to_owned(), vec!["review".to_owned()]).await;
+		assert!(
+			format!("{refused:?}").contains("UnknownBot"),
+			"commands were written for a bot the file does not hold: {refused:?}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// Text no list can be read out of is no command rather than an error: the column
+	/// answers a menu, and a build that meets what another one wrote — or a row edited
+	/// by hand — offers the nothing a bot that never ran offers instead of refusing the
+	/// read the whole screen waits on.
+	#[tokio::test]
+	async fn commands_the_column_holds_unreadably_are_offered_as_none() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let id = created.id.clone();
+		repository
+			.call(move |connection| {
+				connection.execute(
+					"UPDATE bots SET commands = 'not a list at all' WHERE id = ?1",
+					[&id],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("text no build can read a list out of");
+
+		assert_eq!(
+			repository.bot_commands(created.id).await.expect("the commands"),
+			Vec::<String>::new()
 		);
 
 		drop(database);

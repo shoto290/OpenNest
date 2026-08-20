@@ -139,6 +139,11 @@ impl Translator {
 
 	/// The id is announced once; the command list belongs to the child that just
 	/// spoke, so every init frame republishes it.
+	///
+	/// A frame naming none says nothing rather than saying "none": the list is kept
+	/// against the bot from one launch to the next, and a child that leaves the key
+	/// out — or sets it to null — would otherwise erase what the bot answered to for
+	/// good. The frame is still read either way, since the session id rides on it.
 	fn on_system(&mut self, frame: SystemFrame) -> Vec<ClaudeEvent> {
 		if frame.subtype.as_deref() != Some("init") {
 			return Vec::new();
@@ -148,9 +153,9 @@ impl Translator {
 			self.session_id = Some(session_id.clone());
 			events.push(ClaudeEvent::SessionReady { session_id, resumed: self.resumed });
 		}
-		events.push(ClaudeEvent::CommandsListed {
-			commands: frame.slash_commands.unwrap_or_default(),
-		});
+		if let Some(commands) = frame.slash_commands.filter(|listed| !listed.is_empty()) {
+			events.push(ClaudeEvent::CommandsListed { commands });
+		}
 		events
 	}
 
@@ -547,22 +552,21 @@ mod tests {
 		}
 	}
 
-	/// A build exposing none says so, whether it leaves the key out or sets it to
-	/// null: the menu is empty rather than unknown, and either way the frame is still
-	/// read — a dropped init frame would take the session id down with it.
+	/// A build naming none — key left out, set to null, or an empty list — lists
+	/// nothing at all. What a bot answers to is held against it between launches, so
+	/// a frame that names none is a frame with nothing to say about it rather than
+	/// one taking the last list away. The frame is still read: a dropped init frame
+	/// would take the session id down with it.
 	#[test]
-	fn an_init_frame_carrying_no_commands_lists_none() {
-		for slash_commands in [None, Some(Value::Null)] {
+	fn an_init_frame_carrying_no_commands_lists_nothing() {
+		for slash_commands in [None, Some(Value::Null), Some(json!([]))] {
 			let mut translator = Translator::new(false);
 
 			let events = ingest(&mut translator, vec![init("s-1", slash_commands)]);
 
 			assert_eq!(
 				events,
-				vec![
-					ClaudeEvent::SessionReady { session_id: "s-1".into(), resumed: false },
-					ClaudeEvent::CommandsListed { commands: Vec::new() },
-				]
+				vec![ClaudeEvent::SessionReady { session_id: "s-1".into(), resumed: false }]
 			);
 		}
 	}

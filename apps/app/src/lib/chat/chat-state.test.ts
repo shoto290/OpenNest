@@ -115,7 +115,7 @@ describe("chatReducer", () => {
 		expect(reset.conversationId).toBe(CONVERSATION)
 	})
 
-	it("holds the commands a session announced, and drops them with it", () => {
+	it("holds the commands a session announced past the session that named them", () => {
 		const listed = applyEvents(opened, [
 			{ type: "commandsListed", commands: ["review", "compact"] },
 		])
@@ -128,7 +128,40 @@ describe("chatReducer", () => {
 			sessionId: null,
 		})
 
-		expect(reset.commands).toEqual([])
+		expect(reset.commands).toEqual(["review", "compact"])
+	})
+
+	it("replaces what it holds with what the next session named", () => {
+		const recalled = chatReducer(opened, {
+			type: "commandsRecalled",
+			commands: ["review", "compact"],
+		})
+
+		expect(recalled.commands).toEqual(["review", "compact"])
+
+		const listed = applyEvents(recalled, [
+			{ type: "commandsListed", commands: ["status"] },
+		])
+
+		expect(listed.commands).toEqual(["status"])
+	})
+
+	it("stands still when what arrives is what it already holds", () => {
+		const recalled = chatReducer(opened, {
+			type: "commandsRecalled",
+			commands: ["review", "compact"],
+		})
+
+		const again = chatReducer(recalled, {
+			type: "commandsRecalled",
+			commands: ["review", "compact"],
+		})
+		const announced = applyEvents(recalled, [
+			{ type: "commandsListed", commands: ["review", "compact"] },
+		])
+
+		expect(again).toBe(recalled)
+		expect(announced).toBe(recalled)
 	})
 
 	it("keeps turnEnded idempotent", () => {
