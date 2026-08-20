@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react"
+import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { cn } from "@workspace/ui/lib/utils"
@@ -21,6 +22,8 @@ type AppBootScreenProps = Omit<ComponentProps<"div">, "children">
  * read is in flight and replaces it with the screen the answer calls for.
  */
 function AppBootScreen({ className, ...props }: AppBootScreenProps) {
+	const { t } = useTranslation("common")
+
 	return (
 		<div
 			data-slot="app-boot-screen"
@@ -37,7 +40,7 @@ function AppBootScreen({ className, ...props }: AppBootScreenProps) {
 				working
 			/>
 			<span className="sr-only" role="status">
-				Starting OpenNest
+				{t("boot.status")}
 			</span>
 		</div>
 	)

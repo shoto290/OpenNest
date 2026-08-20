@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
+
 import { Icons } from "@workspace/ui/components/icons"
 import { PICTURE_TARGET_CLASS } from "@workspace/ui/components/settings-styles"
 import { usePicturePicker } from "@workspace/ui/hooks/use-picture-picker"
@@ -29,6 +31,7 @@ type PictureDropzoneProps = {
  * this one, so drag, paste and browse behave the same wherever a picture is set.
  */
 const PictureDropzone = ({ label, onPick }: PictureDropzoneProps) => {
+	const { t } = useTranslation("common")
 	const { controlProps, inputProps } = usePicturePicker({ label, onPick })
 
 	return (
@@ -39,10 +42,10 @@ const PictureDropzone = ({ label, onPick }: PictureDropzoneProps) => {
 					className="size-5 text-muted-foreground"
 				/>
 				<span className="block text-foreground text-sm">
-					Drag, drop or paste an image
+					{t("dropzone.drop")}
 				</span>
 				<span className="block text-muted-foreground text-xs">
-					or click to choose a file
+					{t("dropzone.browse")}
 				</span>
 			</button>
 			<input {...inputProps} />

@@ -155,6 +155,7 @@ const chat = {
 			steps_one: "Completed {{count}} step",
 			steps_other: "Completed {{count}} steps",
 		},
+		moreResults: "+{{count}} more",
 	},
 	screen: {
 		label: "Claude Code conversation",
