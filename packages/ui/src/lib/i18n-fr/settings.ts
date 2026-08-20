@@ -21,6 +21,9 @@ const settings = {
 		},
 	},
 	appearance: {
+		language: {
+			label: "Langue",
+		},
 		scheme: {
 			label: "Thème",
 			option: {

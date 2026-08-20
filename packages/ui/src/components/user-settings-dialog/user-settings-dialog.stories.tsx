@@ -69,7 +69,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face — the same avatar the sidebar chip draws, so the dialog is visibly the one that chip opened — their name and the word Settings. Down the left is a rail of two groups: Profile, what the app calls them and the picture it shows, then Appearance, how the app is painted. It opens on Profile every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence — closing it is never a question. A picture is the one thing that does not travel through the value: the file is handed to the host, which stores it and writes the URL back.",
+					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face — the same avatar the sidebar chip draws, so the dialog is visibly the one that chip opened — their name and the word Settings. Down the left is a rail of two groups: Profile, what the app calls them and the picture it shows, then Appearance, the language the app speaks and how it is painted. It opens on Profile every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence — closing it is never a question. Two things do not travel through the value: the picture, whose file is handed to the host to store and write a URL back for, and the language, which lives in the translation runtime the whole app reads from.",
 			},
 		},
 	},
@@ -80,6 +80,7 @@ const meta = preview.meta({
 		onValueChange: fn(),
 		onPictureUpload: fn(),
 		onPictureRemove: fn(),
+		onLanguageChange: fn(),
 	},
 	render: (args) => <DialogHost {...args} />,
 })
@@ -164,7 +165,7 @@ export const Appearance = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second group: the three schemes, then the six palettes as tiles three to a row. Check that each tile is painted in the palette it offers rather than in the one the window is wearing, that the chosen one carries a tick as well as an edge, and that choosing writes the whole value back through `onValueChange`. Pick `IconRail` for the width where the tiles drop to two a row.",
+					"The second group: the languages this build ships, then the three schemes, then the six palettes as tiles three to a row. Check that each tile is painted in the palette it offers rather than in the one the window is wearing, that the chosen one carries a tick as well as an edge, that choosing a scheme or a palette writes the whole value back through `onValueChange`, and that a language leaves that value alone and reports itself through `onLanguageChange` — the one field the dialog does not hold. Pick `IconRail` for the width where the tiles drop to two a row.",
 			},
 		},
 	},
@@ -188,6 +189,11 @@ export const Appearance = meta.story({
 		await expect(args.onValueChange).toHaveBeenCalledWith(
 			expect.objectContaining({ colorScheme: "dark" }),
 		)
+
+		await userEvent.click(
+			within(panel).getByRole("radio", { name: "Français" }),
+		)
+		await expect(args.onLanguageChange).toHaveBeenCalledWith("fr")
 	},
 })
 

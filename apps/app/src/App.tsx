@@ -27,6 +27,7 @@ import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
+import { storeLanguage } from "@/lib/user/language-mirror"
 import { useUser } from "@/lib/user/use-user"
 import { toUserSettingsValue } from "@/lib/user/user-settings"
 
@@ -256,6 +257,9 @@ export function App() {
 			them leaves the conversation and where it is scrolled alone. */}
 			<UserSettingsDialog
 				onClose={() => user.controller.setSettingsOpen(false)}
+				onLanguageChange={(language) => {
+					void storeLanguage(language)
+				}}
 				onPictureRemove={() => {
 					void user.controller.removePicture()
 				}}

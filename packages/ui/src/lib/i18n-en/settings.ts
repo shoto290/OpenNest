@@ -23,6 +23,9 @@ const settings = {
 		},
 	},
 	appearance: {
+		language: {
+			label: "Language",
+		},
 		scheme: {
 			label: "Scheme",
 			option: {

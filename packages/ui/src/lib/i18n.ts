@@ -10,7 +10,16 @@ const catalogues = { en, fr }
 
 export type Language = keyof typeof catalogues
 
-const LANGUAGE_IDS = Object.keys(catalogues) as Language[]
+export const LANGUAGE_IDS = Object.keys(catalogues) as Language[]
+
+/** Each language written in itself, so a reader looking for their own reads a word
+ * they already know rather than one in a language they are trying to leave. Typed
+ * against the catalogues: a catalogue shipped without a name here fails the type
+ * check instead of offering a reader its bare id. */
+export const LANGUAGE_NAMES: Record<Language, string> = {
+	en: "English",
+	fr: "Français",
+}
 
 /** The one language every other falls back to, and the one a name outside the
  * catalogues reads as. */
