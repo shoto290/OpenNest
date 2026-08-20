@@ -25,6 +25,10 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
+import {
+	UserChip,
+	type UserChipIdentity,
+} from "@workspace/ui/components/user-chip"
 
 const PANEL_LABEL = "Conversations"
 const CREATE_LABEL = "New bot"
@@ -62,11 +66,18 @@ const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
  * focus to it the moment it opens, so it transitions colour only. */
 const CREATE_BUTTON = "transition-[color,background-color,box-shadow]"
 
-/** On the rail the pinned region under the list drops its side padding and
+/** The pinned region under the list is one row: the reader's own chip, then
+ * whatever the host pinned beside it. On the rail it drops its side padding and
  * centres what it is given, exactly as the header above does — the rail is one
- * avatar wide, and padding either side of it leaves nothing to draw in. */
+ * avatar wide, and padding either side of it leaves nothing to draw in — and it
+ * stacks, the host's slot above the chip, since the chip is the row that stays. */
 const FOOTER_INSET =
-	"group-data-[state=collapsed]/sidebar:items-center group-data-[state=collapsed]/sidebar:px-0"
+	"flex-row items-center group-data-[state=collapsed]/sidebar:flex-col-reverse group-data-[state=collapsed]/sidebar:items-center group-data-[state=collapsed]/sidebar:px-0"
+
+/** The host's slot holds its size against the chip beside it, and leaves the row
+ * entirely when what it was given draws nothing — the update badge is idle most
+ * of the time, and an empty box either side of it would still take its gap. */
+const FOOTER_SLOT = "shrink-0 empty:hidden"
 
 const EMPTY_COPY =
 	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
@@ -197,6 +208,12 @@ interface AgentSidebarProps {
 	 * list runs to the bottom edge as before. The list keeps the scrolling to
 	 * itself, so this stays in sight however long the roster is. */
 	footer?: ReactNode
+	/** The reader themselves. Given one, the pinned region opens with their chip,
+	 * ahead of `footer`; left out, the region is `footer` alone as before. */
+	user?: UserChipIdentity
+	/** Fired when the chip is activated. The panel owns no settings of its own —
+	 * the chip is the way in, and the host decides what opens. */
+	onOpenUserSettings?: () => void
 }
 
 const AgentSidebarBase = ({
@@ -207,6 +224,8 @@ const AgentSidebarBase = ({
 	onEditBot,
 	onDeleteBot,
 	footer,
+	user,
+	onOpenUserSettings,
 }: AgentSidebarProps) => {
 	const selectedBot = roster.find((bot) => bot.id === selectedId)
 
@@ -250,9 +269,16 @@ const AgentSidebarBase = ({
 						</AnimatedSidebarMenu>
 					)}
 				</AnimatedSidebarContent>
-				{footer ? (
+				{user || footer ? (
 					<AnimatedSidebarFooter className={FOOTER_INSET}>
-						{footer}
+						{user ? (
+							<UserChip
+								image={user.image}
+								name={user.name}
+								onOpen={onOpenUserSettings}
+							/>
+						) : null}
+						<span className={FOOTER_SLOT}>{footer}</span>
 					</AnimatedSidebarFooter>
 				) : null}
 			</AnimatedSidebar>
@@ -271,4 +297,5 @@ export {
 	type AgentSidebarBot,
 	type AgentSidebarProps,
 	type BotAvatarBlot,
+	type UserChipIdentity,
 }
