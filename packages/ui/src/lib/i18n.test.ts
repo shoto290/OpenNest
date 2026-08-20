@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
 import {
 	activateLanguage,
@@ -10,16 +10,18 @@ import {
 describe("languageOf", () => {
 	it("answers the catalogue a name asks for", () => {
 		expect(languageOf("en")).toBe("en")
+		expect(languageOf("fr")).toBe("fr")
 	})
 
 	it("drops the region and the case a machine names its locale with", () => {
 		expect(languageOf("en-GB")).toBe("en")
 		expect(languageOf("EN")).toBe("en")
+		expect(languageOf("fr-CA")).toBe("fr")
 	})
 
 	it("answers nothing for a language this build ships no catalogue for", () => {
-		expect(languageOf("fr")).toBeNull()
-		expect(languageOf("fr-CA")).toBeNull()
+		expect(languageOf("de")).toBeNull()
+		expect(languageOf("ja-JP")).toBeNull()
 	})
 
 	it("answers nothing when there is no name to look up", () => {
@@ -30,11 +32,32 @@ describe("languageOf", () => {
 })
 
 describe("the runtime", () => {
+	afterEach(() => {
+		activateLanguage(DEFAULT_LANGUAGE)
+	})
+
 	it("opens in the default language and reads an activated one back", () => {
 		expect(i18n.language).toBe(DEFAULT_LANGUAGE)
 
-		activateLanguage("en")
+		activateLanguage("fr")
 
-		expect(i18n.language).toBe("en")
+		expect(i18n.language).toBe("fr")
+	})
+
+	it("reads French once fr is active", () => {
+		activateLanguage("fr")
+
+		expect(i18n.t("composer.send")).toBe("Envoyer l'invite")
+		expect(i18n.t("common:sidebar.close")).toBe("Fermer la barre latérale")
+	})
+
+	it("counts in the plural forms French takes", () => {
+		activateLanguage("fr")
+
+		expect(i18n.t("activity.summary.messages", { count: 1 })).toBe("1 message")
+		expect(i18n.t("activity.summary.messages", { count: 4 })).toBe("4 messages")
+		expect(i18n.t("activity.summary.messages", { count: 1_000_000 })).toBe(
+			"1000000 messages",
+		)
 	})
 })
