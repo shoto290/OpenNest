@@ -23,7 +23,7 @@ separate pipe.
 
 | `type` | Carries | Mapped to |
 | --- | --- | --- |
-| `system` / `init` | `session_id`, `cwd`, tool list | `sessionReady` |
+| `system` / `init` | `session_id`, `cwd`, tool list, `slash_commands` | `sessionReady` + `commandsListed` |
 | `system` / `hook_*`, `status`, `session_state_changed` | local hook noise | dropped |
 | `stream_event` / `message_start` | assistant message id | `messageStarted` |
 | `stream_event` / `content_block_delta` | `text_delta` | `messageDelta` |
@@ -36,7 +36,9 @@ separate pipe.
 | `rate_limit_event` | quota window | dropped |
 
 `session_id` is present on every frame; the transport takes it from `system/init`
-and confirms it on `result`.
+and confirms it on `result`. A second `system/init` on a session that already holds
+an id announces none again: it maps to `commandsListed` alone, since the commands
+belong to the child that just spoke.
 
 ## Startup handshake
 

@@ -275,6 +275,8 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 			return setTurn(state, event.state)
 		case "sessionReady":
 			return { ...state, sessionId: event.sessionId }
+		case "commandsListed":
+			return state
 		// What a message says and how it ended reach the screen through the
 		// transcript, never through here: the reader is shown what was stored.
 		case "messageStarted":

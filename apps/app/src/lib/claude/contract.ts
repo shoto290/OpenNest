@@ -97,6 +97,7 @@ export type ClaudeEvent =
 	| { type: "connectionChanged"; state: ConnectionState }
 	| { type: "turnChanged"; state: TurnState }
 	| { type: "sessionReady"; sessionId: string; resumed: boolean }
+	| { type: "commandsListed"; commands: string[] }
 	| { type: "messageStarted"; message: ChatMessage }
 	| { type: "messageDelta"; id: string; seq: number; text: string }
 	| { type: "messageCompleted"; message: ChatMessage }
