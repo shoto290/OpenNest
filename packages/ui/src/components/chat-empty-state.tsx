@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react"
+import { useTranslation } from "react-i18next"
 
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
@@ -31,19 +32,6 @@ interface ChatEmptyStateProps extends Omit<ComponentProps<"div">, "children"> {
 	image?: string
 }
 
-const CHAT_EMPTY_STATE_COPY = {
-	ready: {
-		title: "Start with Claude Code",
-		description:
-			"OpenNest runs the Claude Code CLI installed on this machine. Nothing leaves your device.",
-	},
-	unavailable: {
-		title: "Claude Code is not available",
-		description:
-			"OpenNest cannot reach the Claude Code CLI on this machine. Finish setup to start a conversation.",
-	},
-} satisfies Record<ChatEmptyStateStatus, { title: string; description: string }>
-
 /** Larger than the 40 a roster row draws, so the face reads as the ornament of the
  * heading under it rather than as a row that lost its list. */
 const MARK_SIZE = 64
@@ -60,7 +48,9 @@ function ChatEmptyState({
 	className,
 	...props
 }: ChatEmptyStateProps) {
-	const { title, description } = CHAT_EMPTY_STATE_COPY[status]
+	const { t } = useTranslation("chat")
+	const title = t(`emptyState.${status}.title`)
+	const description = t(`emptyState.${status}.description`)
 	const isReady = status === "ready"
 
 	return (
@@ -99,16 +89,16 @@ function ChatEmptyState({
 					{onOpenSettings ? (
 						<Button onClick={onOpenSettings} variant="outline">
 							<Icons.Settings aria-hidden="true" />
-							Bot settings
+							{t("emptyState.settings")}
 						</Button>
 					) : null}
 					<p className="flex items-center gap-1.5 text-muted-foreground text-xs">
-						Type your first prompt in the composer below
+						{t("emptyState.hint")}
 						<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
 					</p>
 				</>
 			) : (
-				<Button onClick={onSetup}>Set up Claude Code</Button>
+				<Button onClick={onSetup}>{t("emptyState.setup")}</Button>
 			)}
 		</div>
 	)
