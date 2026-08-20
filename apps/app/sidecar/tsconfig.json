@@ -1,0 +1,14 @@
+{
+	"extends": "../../../tsconfig.base.json",
+	"compilerOptions": {
+		"rootDir": ".",
+		"noEmit": true,
+		"composite": false,
+		"declaration": false,
+		"declarationMap": false,
+		"lib": ["ESNext"],
+		"types": ["bun"],
+		"paths": {}
+	},
+	"include": ["src", "scripts"]
+}
