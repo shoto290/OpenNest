@@ -23,7 +23,13 @@ import {
 const SURFACE_CLASS =
 	"flex h-40 w-72 items-center justify-center rounded-xl border border-border border-dashed bg-card text-muted-foreground text-sm"
 
-const settledMenu = async () => settled(await screen.findByRole("menu"))
+const settledMenu = async () => {
+	const menu = await settled(await screen.findByRole("menu"))
+	// Focus reaches the first item a frame after the menu lands, and the menu
+	// only hears a key pressed from inside itself.
+	await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+	return menu
+}
 
 const openMenuOn = async (target: HTMLElement) => {
 	fireEvent.contextMenu(target, { clientX: 180, clientY: 140 })
