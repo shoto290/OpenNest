@@ -10,6 +10,13 @@ import type {
  * it lands. */
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
+/** How stale the last answer has to be before coming back to the window is worth
+ * asking again. This is for the return after a long absence — a machine that slept
+ * through the six hours and whose timer never caught the drift up. A window someone
+ * leaves and comes back to all day is already covered by that timer, and a new
+ * release is never urgent enough to ask again on the way in. */
+const FOCUS_CHECK_MIN_GAP_MS = 4 * 60 * 60 * 1000
+
 /** Everything the window may show about the release it is not running yet. The
  * update itself is not here: what installs it is a handle the host owns, and a
  * handle is not something a view can render. */
@@ -30,7 +37,8 @@ export type UpdaterState = {
 export type UpdaterController = {
 	getState: () => UpdaterState
 	subscribe: (listener: () => void) => () => void
-	/** Asks once, then every six hours, and answers with the stop. */
+	/** Asks once, then every six hours and whenever the window is read again, and
+	 * answers with the stop. */
 	start: () => () => void
 	check: () => Promise<void>
 	/** Takes the release the last check found. Nothing to take is not a failure. */
@@ -66,6 +74,7 @@ export const createUpdaterController = (
 ): UpdaterController => {
 	let state = EMPTY
 	let pending: AvailableUpdate | null = null
+	let lastCheckAt = 0
 	const listeners = new Set<() => void>()
 
 	// A check that answers the same thing as the last one moves nothing on the
@@ -84,6 +93,7 @@ export const createUpdaterController = (
 	// and the next check is six hours away. What an earlier check found stands — the
 	// release did not stop existing because the network did.
 	const check = async () => {
+		lastCheckAt = Date.now()
 		try {
 			const update = await port.check()
 			pending = update
@@ -95,6 +105,16 @@ export const createUpdaterController = (
 		} catch (error) {
 			publish({ ...state, error: messageOf(error) })
 		}
+	}
+
+	// Coming back to a window that is downloading, or that is holding a build for the
+	// next launch, asks the endpoint about a release it has already answered for.
+	const checkOnFocus = () => {
+		const isBusy = state.progress !== null || state.isRestartPending
+		if (isBusy || Date.now() - lastCheckAt < FOCUS_CHECK_MIN_GAP_MS) {
+			return
+		}
+		void check()
 	}
 
 	const install = async () => {
@@ -137,7 +157,11 @@ export const createUpdaterController = (
 			const timer = setInterval(() => {
 				void check()
 			}, CHECK_INTERVAL_MS)
-			return () => clearInterval(timer)
+			window.addEventListener("focus", checkOnFocus)
+			return () => {
+				clearInterval(timer)
+				window.removeEventListener("focus", checkOnFocus)
+			}
 		},
 
 		check,

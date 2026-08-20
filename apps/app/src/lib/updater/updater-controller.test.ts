@@ -4,6 +4,7 @@ import { createUpdaterController } from "./updater-controller"
 import type { AvailableUpdate, UpdaterPort } from "./updater-port"
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000
+const FOUR_HOURS_MS = 4 * 60 * 60 * 1000
 
 const release = (
 	overrides: Partial<AvailableUpdate> = {},
@@ -22,13 +23,39 @@ const portOf = (
 /** Lets whatever the port answered reach the state before it is read. */
 const settle = () => Promise.resolve()
 
+/** The window the controller follows, and the one way to tell it the reader came
+ * back — answering once whatever that reading asked has landed. */
+const stubWindow = () => {
+	const listeners = new Set<() => void>()
+
+	vi.stubGlobal("window", {
+		addEventListener: (_: string, listener: () => void) => {
+			listeners.add(listener)
+		},
+		removeEventListener: (_: string, listener: () => void) => {
+			listeners.delete(listener)
+		},
+	})
+
+	return () => {
+		for (const listener of listeners) {
+			listener()
+		}
+		return settle()
+	}
+}
+
 describe("createUpdaterController", () => {
+	let focusWindow: ReturnType<typeof stubWindow>
+
 	beforeEach(() => {
 		vi.useFakeTimers()
+		focusWindow = stubWindow()
 	})
 
 	afterEach(() => {
 		vi.useRealTimers()
+		vi.unstubAllGlobals()
 	})
 
 	it("asks the endpoint once when the launch starts", async () => {
@@ -79,6 +106,93 @@ describe("createUpdaterController", () => {
 		const stop = controller.start()
 		stop()
 		await vi.advanceTimersByTimeAsync(SIX_HOURS_MS * 3)
+
+		expect(check).toHaveBeenCalledTimes(1)
+	})
+
+	// A machine that slept through the six hours wakes with a timer that never caught
+	// the drift up, and the window being read again is the only thing that says so.
+	it("asks again when the window is read after four hours", async () => {
+		const check = vi.fn(async () => null)
+		const controller = createUpdaterController(portOf(check))
+
+		controller.start()
+		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
+		await focusWindow()
+
+		expect(check).toHaveBeenCalledTimes(2)
+	})
+
+	it("says nothing to the endpoint for a window read back within the four hours", async () => {
+		const check = vi.fn(async () => null)
+		const controller = createUpdaterController(portOf(check))
+
+		controller.start()
+		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS - 1000)
+		await focusWindow()
+
+		expect(check).toHaveBeenCalledTimes(1)
+	})
+
+	// A launch is a process that has asked nothing yet, whatever the one before it
+	// asked and whenever it asked it.
+	it("asks the endpoint on a launch that follows a check straight away", async () => {
+		const check = vi.fn(async () => null)
+		createUpdaterController(portOf(check)).start()
+		await settle()
+
+		createUpdaterController(portOf(check)).start()
+		await settle()
+
+		expect(check).toHaveBeenCalledTimes(2)
+	})
+
+	it("leaves a running download alone when the window is read again", async () => {
+		let landDownload = () => {}
+		const check = vi.fn(async () =>
+			release({
+				install: () =>
+					new Promise<void>((resolve) => {
+						landDownload = resolve
+					}),
+			}),
+		)
+		const controller = createUpdaterController(portOf(check))
+
+		controller.start()
+		await settle()
+		const installing = controller.install()
+		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
+		await focusWindow()
+
+		expect(check).toHaveBeenCalledTimes(1)
+		expect(controller.getState().progress).toBe(0)
+
+		landDownload()
+		await installing
+	})
+
+	it("leaves an install waiting for a restart alone when the window is read again", async () => {
+		const check = vi.fn(async () => release())
+		const controller = createUpdaterController(portOf(check))
+
+		controller.start()
+		await settle()
+		await controller.install()
+		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
+		await focusWindow()
+
+		expect(check).toHaveBeenCalledTimes(1)
+	})
+
+	it("stops listening to the window once the launch lets go", async () => {
+		const check = vi.fn(async () => null)
+		const controller = createUpdaterController(portOf(check))
+
+		const stop = controller.start()
+		stop()
+		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
+		await focusWindow()
 
 		expect(check).toHaveBeenCalledTimes(1)
 	})
