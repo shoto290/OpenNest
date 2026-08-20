@@ -32,6 +32,9 @@ pub fn run() {
 		// What finishes an update: the installed build only replaces the running one
 		// once the app is started again.
 		.plugin(tauri_plugin_process::init())
+		// A link followed in the conversation goes to the system browser: the
+		// webview has nowhere to open it but over the app itself.
+		.plugin(tauri_plugin_opener::init())
 		.manage(ClaudeState::default())
 		// The database is opened once, here, because `app_data_dir()` needs the
 		// resolved identifier only the built app carries. A failure is managed like

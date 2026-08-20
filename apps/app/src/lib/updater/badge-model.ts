@@ -4,7 +4,12 @@ import type { UpdaterState } from "./updater-controller"
 
 type UpdateBadgeModel = Pick<
 	UpdateBadgeProps,
-	"status" | "version" | "releaseNotes" | "progress" | "activeBotCount"
+	| "status"
+	| "version"
+	| "releaseNotes"
+	| "releaseNotesUrl"
+	| "progress"
+	| "activeBotCount"
 >
 
 type UpdateBadgeInput = {
@@ -39,6 +44,13 @@ const linesOf = (notes: string | null | undefined): string[] =>
 		.map((line) => line.trim().replace(BULLET, ""))
 		.filter((line) => line.length > 0)
 
+/** The manifest carries no address, only a version, and every release is
+ * published under the tag that version was cut as. */
+const RELEASE_TAG_URL = "https://github.com/shoto290/OpenNest/releases/tag"
+
+const releaseNotesUrlOf = (version: string | undefined) =>
+	version ? `${RELEASE_TAG_URL}/v${version}` : undefined
+
 export const toUpdateBadgeProps = ({
 	state,
 	busyBotCount,
@@ -46,6 +58,7 @@ export const toUpdateBadgeProps = ({
 	status: statusOf(state),
 	version: state.available?.version,
 	releaseNotes: linesOf(state.available?.notes),
+	releaseNotesUrl: releaseNotesUrlOf(state.available?.version),
 	progress: state.progress ?? 0,
 	activeBotCount: busyBotCount,
 })
