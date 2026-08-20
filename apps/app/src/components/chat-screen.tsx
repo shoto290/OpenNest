@@ -34,6 +34,7 @@ import {
 	ToolApproval,
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
+import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import {
 	describeAttachmentError,
@@ -159,16 +160,23 @@ function PermissionPrompt({
 	controller: ChatController
 	request: PermissionRequest
 }) {
+	const t = useChatCopy()
 	const isShell = request.toolName === "Bash"
 
 	return (
 		<ToolApproval
 			tool={request.toolName}
 			title={request.title}
-			description="Claude Code is waiting on you before it runs this tool."
+			description={t("screen.permission.description")}
 			parameters={
 				request.detail && !isShell
-					? [{ id: "path", label: "Path", value: request.detail }]
+					? [
+							{
+								id: "path",
+								label: t("screen.permission.path"),
+								value: request.detail,
+							},
+						]
 					: []
 			}
 			onAllowOnce={() => {
@@ -223,6 +231,7 @@ const Composer = memo(function Composer({
 	 * it was taken: a refused store keeps the draft where the reader left it. */
 	onSubmitPrompt: (text: string) => Promise<boolean>
 }) {
+	const t = useChatCopy()
 	const [wasDismissed, setWasDismissed] = useState(false)
 	const [prompt, setPrompt] = useState("")
 	const options = useMemo(() => commandOptionsFor(commands), [commands])
@@ -293,21 +302,13 @@ const Composer = memo(function Composer({
 				value={prompt}
 				placeholder={
 					disabled
-						? "Waiting for Claude Code…"
-						: `Ask ${botName} to do something…`
+						? t("screen.waiting")
+						: t("screen.placeholder", { name: botName })
 				}
 			/>
 		</PromptCommandMenu>
 	)
 })
-
-/** The bot's settings are not a page of their own, so the way into them is the one
- * control in the bar above the conversation they belong to. */
-const SETTINGS_LABEL = "Bot settings"
-
-/** The notice a refused store wears. Nothing was written, so the files are still
- * staged and the prompt is still a draft. */
-const ATTACHMENTS_TITLE = "Files not attached"
 
 /** The one notice standing over the composer. A refused store takes the place of
  * the session's own while it stands: it is the newer fact, and the only one the
@@ -327,11 +328,13 @@ function ConversationNotice({
 	onDismissError: (id: string) => void
 	onRestart: (id: string) => void
 }) {
+	const t = useChatCopy()
+
 	if (refusal) {
 		return (
 			<ChatNotice
 				tone="warning"
-				title={ATTACHMENTS_TITLE}
+				title={t("screen.attachmentsRefused")}
 				description={describeAttachmentError(refusal)}
 				onDismiss={onDismissRefusal}
 			/>
@@ -350,7 +353,10 @@ function ConversationNotice({
 			description={describeTransportError(error.error)}
 			retry={
 				stale
-					? { label: "Restart session", onRetry: () => onRestart(error.id) }
+					? {
+							label: t("screen.restart"),
+							onRetry: () => onRestart(error.id),
+						}
 					: undefined
 			}
 			onDismiss={() => onDismissError(error.id)}
@@ -384,6 +390,7 @@ export function ChatScreen({
 	isOverlayOpen,
 	onToggleSettings,
 }: ChatScreenProps) {
+	const t = useChatCopy()
 	const { state, controller } = chat
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const conversationRef = useRef<HTMLDivElement>(null)
@@ -419,7 +426,7 @@ export function ChatScreen({
 		<ChatLayout
 			rootRef={conversationRef}
 			busy={isTurnBusy(state.turn)}
-			label="Claude Code conversation"
+			label={t("screen.label")}
 			// Offered only once there is a transcript to sit above: an empty
 			// conversation has no beginning to announce.
 			older={
@@ -443,10 +450,10 @@ export function ChatScreen({
 							/>
 							<Button
 								aria-expanded={isSettingsOpen}
-								aria-label={SETTINGS_LABEL}
+								aria-label={t("screen.settings")}
 								onClick={onToggleSettings}
 								size="icon-sm"
-								tooltip={SETTINGS_LABEL}
+								tooltip={t("screen.settings")}
 								tooltipSide="bottom"
 								variant="ghost"
 							>

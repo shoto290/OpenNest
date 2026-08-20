@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
+
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
@@ -47,11 +49,13 @@ export function PromptAttachments({
 	onRemove,
 	className,
 }: PromptAttachmentsProps) {
+	const { t } = useTranslation("chat")
+
 	if (items.length === 0) return null
 
 	return (
 		<ul
-			aria-label="Attachments"
+			aria-label={t("attachments.label")}
 			data-slot="prompt-attachments"
 			className={cn("flex w-full flex-wrap items-center gap-1.5", className)}
 		>
@@ -84,7 +88,7 @@ export function PromptAttachments({
 						type="button"
 						variant="ghost"
 						size="icon-xs"
-						aria-label={`Remove ${item.name}`}
+						aria-label={t("attachments.remove", { name: item.name })}
 						onClick={() => onRemove(item.id)}
 						className="rounded-full text-muted-foreground"
 					>

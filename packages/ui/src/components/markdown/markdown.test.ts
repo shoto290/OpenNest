@@ -2,6 +2,7 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
+import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown } from "@workspace/ui/components/markdown"
 
 const FOOTNOTE_SOURCE = "Claim[^1]\n\n[^1]: the proof\n"
@@ -11,17 +12,25 @@ const ALIGNED_TABLE =
 
 const MALFORMED_TABLE = "| a | b\n| ---\n| 1"
 
+/** The markdown surface reads its labels off the chat catalogue, so every render
+ * here needs the translation runtime above it. */
 const render = (source: string) =>
-	renderToStaticMarkup(createElement(Markdown, null, source))
+	renderToStaticMarkup(
+		createElement(I18nProvider, null, createElement(Markdown, null, source)),
+	)
 
 /** Two blocks in one tree, split back into the markup each one owns. */
 const renderTwice = (source: string) =>
 	renderToStaticMarkup(
 		createElement(
-			"div",
+			I18nProvider,
 			null,
-			createElement(Markdown, null, source),
-			createElement(Markdown, null, source),
+			createElement(
+				"div",
+				null,
+				createElement(Markdown, null, source),
+				createElement(Markdown, null, source),
+			),
 		),
 	)
 		.split('<div data-slot="markdown"')

@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -47,10 +48,11 @@ export interface CodeLineProps {
 
 const COPY_FEEDBACK_MS = 2000
 
-const COPY_ANNOUNCEMENTS: Record<CopyOutcome, string> = {
-	idle: "",
-	copied: "Code copied to clipboard",
-	failed: "Copying the code failed",
+const COPY_ANNOUNCEMENT_KEY: Partial<
+	Record<CopyOutcome, "code.copyAnnounced" | "code.copyFailed">
+> = {
+	copied: "code.copyAnnounced",
+	failed: "code.copyFailed",
 }
 
 export function CodeLine({ content, tokens, className }: CodeLineProps) {
@@ -89,10 +91,12 @@ export function CodeBlock({
 	onCopy,
 	className,
 }: CodeBlockProps) {
+	const { t } = useTranslation("chat")
 	const viewportRef = useRef<HTMLDivElement>(null)
 	const [copyOutcome, setCopyOutcome] = useState<CopyOutcome>("idle")
 	const streaming = status === "streaming"
 	const label = language?.trim() || resolveCodeLanguage(language)
+	const announcementKey = COPY_ANNOUNCEMENT_KEY[copyOutcome]
 
 	const lines = useMemo(
 		() => toCodeLines(code, highlightCode(code, language)),
@@ -161,13 +165,13 @@ export function CodeBlock({
 					) : (
 						<Icons.Check aria-hidden="true" className="size-3" />
 					)}
-					{streaming ? "Writing" : "Ready"}
+					{streaming ? t("code.writing") : t("code.ready")}
 				</span>
 				{copyable ? (
 					<Button
 						variant="ghost"
 						size="icon-xs"
-						aria-label="Copy code"
+						aria-label={t("code.copy")}
 						onClick={handleCopy}
 					>
 						{copyOutcome === "copied" ? <Icons.Check /> : <Icons.Copy />}
@@ -180,7 +184,7 @@ export function CodeBlock({
 				// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing code viewport must be keyboard scrollable
 				tabIndex={0}
 				role="group"
-				aria-label={`Code snippet, ${filename ?? label}`}
+				aria-label={t("code.namedSnippet", { name: filename ?? label })}
 				className="overflow-auto py-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
 				style={{ maxHeight }}
 			>
@@ -223,7 +227,7 @@ export function CodeBlock({
 			</div>
 
 			<span aria-live="polite" className="sr-only">
-				{COPY_ANNOUNCEMENTS[copyOutcome]}
+				{announcementKey ? t(announcementKey) : ""}
 			</span>
 		</div>
 	)

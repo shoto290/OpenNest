@@ -7,6 +7,7 @@ import {
 	type ReactNode,
 	useContext,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { EASE_OUT } from "@workspace/ui/lib/ease"
@@ -78,6 +79,7 @@ export function Message({
 	style,
 	...props
 }: MessageProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const entrance = animateIn && !reduce
 
@@ -87,7 +89,7 @@ export function Message({
 				<motion.article
 					data-slot="message"
 					data-from={from}
-					aria-label={props["aria-label"] ?? `${from} message`}
+					aria-label={props["aria-label"] ?? t(`transcript.message.${from}`)}
 					initial={
 						entrance ? { transform: "translateY(8px) scale(0.95)" } : false
 					}
@@ -118,15 +120,17 @@ export function Message({
 
 export function MessageGroup({
 	spacing = "compact",
-	label = "Conversation",
+	label,
 	className,
 	...props
 }: MessageGroupProps) {
+	const { t } = useTranslation("chat")
+
 	return (
 		<div
 			data-slot="message-group"
 			role="log"
-			aria-label={label}
+			aria-label={label ?? t("transcript.label")}
 			aria-live="polite"
 			aria-relevant="additions"
 			className={cn(
@@ -223,10 +227,11 @@ export function MessageMarker({ className, ...props }: MessageMarkerProps) {
 }
 
 export function MessageTyping({
-	label = "Responding",
+	label,
 	className,
 	...props
 }: MessageTypingProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 
 	return (
@@ -235,7 +240,7 @@ export function MessageTyping({
 			className={cn("inline-flex h-5 items-center gap-1", className)}
 			{...props}
 		>
-			<span className="sr-only">{label}</span>
+			<span className="sr-only">{label ?? t("transcript.typing")}</span>
 			{[0, 1, 2].map((index) => (
 				<motion.span
 					key={index}

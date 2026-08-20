@@ -11,6 +11,7 @@ import {
 	useLayoutEffect,
 	useRef,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -86,7 +87,7 @@ export function MessageScroller({
 	followThreshold = 56,
 	smooth = true,
 	onFollowChange,
-	label = "Conversation",
+	label,
 	busy,
 	older,
 	viewportClassName,
@@ -99,6 +100,7 @@ export function MessageScroller({
 	children,
 	...props
 }: MessageScrollerProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const viewportRef = useRef<HTMLElement>(null)
 	const contentRef = useRef<HTMLDivElement>(null)
@@ -271,7 +273,7 @@ export function MessageScroller({
 			<motion.section
 				layoutScroll
 				ref={setViewportRef}
-				aria-label={label}
+				aria-label={label ?? t("transcript.label")}
 				// A scrollable region must be reachable by keyboard.
 				tabIndex={0}
 				{...restViewportProps}
@@ -321,11 +323,11 @@ export function MessageScroller({
 										className={cn(!reduce && "animate-spin")}
 									/>
 								) : null}
-								{older.label ?? "Load older messages"}
+								{older.label ?? t("transcript.loadOlder")}
 							</Button>
 						) : (
 							<p className="text-muted-foreground text-xs">
-								{older.startOfHistoryLabel ?? "Beginning of the conversation"}
+								{older.startOfHistoryLabel ?? t("transcript.startOfHistory")}
 							</p>
 						)}
 					</div>

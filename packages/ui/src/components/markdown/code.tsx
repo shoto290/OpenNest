@@ -7,14 +7,15 @@ import {
 	useMemo,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
 import { Button } from "@workspace/ui/components/button"
 import { CodeLine } from "@workspace/ui/components/code-block"
 import { Icons } from "@workspace/ui/components/icons"
 import {
-	MarkdownMath,
 	MATH_LANGUAGE,
+	MarkdownMath,
 } from "@workspace/ui/components/markdown/math"
 import {
 	MarkdownMermaid,
@@ -54,11 +55,6 @@ const sourceOf = (node: FenceElement) =>
 		.join("")
 		.replace(/\n$/, "")
 
-const nameOf = (language?: string) => {
-	const named = language?.trim()
-	return named ? `Code snippet, ${named}` : "Code snippet"
-}
-
 const languageOf = (node: FenceElement) => {
 	const names = node.properties?.className
 	if (!Array.isArray(names)) return undefined
@@ -92,7 +88,12 @@ export const MarkdownCode = ({
  * running under it, so no line hides behind the button at any scroll position, and a
  * fence past the budget paints its source first and takes its colours a frame later. */
 const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
+	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(code)
+	const named = language?.trim()
+	const snippetLabel = named
+		? t("code.namedSnippet", { name: named })
+		: t("code.snippet")
 	const [firstPaint] = useState(() => (fitsInOneFrame(code) ? code : ""))
 	const painted = useDeferredValue(code, firstPaint)
 
@@ -108,7 +109,7 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable
 					tabIndex={0}
 					role="group"
-					aria-label={nameOf(language)}
+					aria-label={snippetLabel}
 					className="mr-8 block overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
 				>
 					<code>
@@ -125,8 +126,8 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 				<Button
 					variant="ghost"
 					size="icon-xs"
-					aria-label={copied ? "Copied" : "Copy code"}
-					tooltip={copied ? "Copied" : "Copy"}
+					aria-label={copied ? t("code.copied") : t("code.copy")}
+					tooltip={copied ? t("code.copied") : t("code.copyTooltip")}
 					onClick={() => {
 						void copy()
 					}}
@@ -149,7 +150,8 @@ export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	const source = sourceOf(code)
 	const language = languageOf(code)
 
-	if (language === MATH_LANGUAGE) return <MarkdownMath display source={source} />
+	if (language === MATH_LANGUAGE)
+		return <MarkdownMath display source={source} />
 	if (language === MERMAID_LANGUAGE) return <MarkdownMermaid source={source} />
 
 	return <MarkdownFence code={source} language={language} />

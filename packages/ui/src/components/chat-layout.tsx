@@ -37,7 +37,7 @@ function ChatLayout({
 	notice,
 	composer,
 	busy,
-	label = "Conversation",
+	label,
 	older,
 	children,
 	rootRef,

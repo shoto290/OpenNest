@@ -16,6 +16,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -97,13 +98,14 @@ export function PromptInput({
 	maxRows = 8,
 	className,
 	disabled,
-	placeholder = "Ask the agent to do something…",
-	"aria-label": ariaLabel = "Prompt",
+	placeholder,
+	"aria-label": ariaLabel,
 	onKeyDown,
 	onPaste,
 	textareaRef: externalTextareaRef,
 	...textareaProps
 }: PromptInputProps) {
+	const { t } = useTranslation("chat")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 	const measurementRef = useRef<HTMLDivElement>(null)
 	const singleLineRef = useRef<HTMLDivElement>(null)
@@ -280,8 +282,8 @@ export function PromptInput({
 					ref={setTextareaRef}
 					value={currentValue}
 					disabled={disabled}
-					placeholder={placeholder}
-					aria-label={ariaLabel}
+					placeholder={placeholder ?? t("composer.placeholder")}
+					aria-label={ariaLabel ?? t("composer.label")}
 					rows={minRows}
 					{...textareaProps}
 					onChange={(event) => setValue(event.target.value)}
@@ -314,7 +316,7 @@ export function PromptInput({
 						type={loading ? "button" : "submit"}
 						size="icon"
 						disabled={loading ? !onStop : !canSubmit}
-						aria-label={loading ? "Stop generating" : "Send prompt"}
+						aria-label={loading ? t("composer.stop") : t("composer.send")}
 						onClick={loading ? onStop : undefined}
 						className="rounded-full"
 					>

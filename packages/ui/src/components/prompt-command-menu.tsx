@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { useDismiss } from "@workspace/ui/lib/hooks/use-dismiss"
@@ -40,6 +41,7 @@ export function PromptCommandMenu({
 	children,
 	className,
 }: PromptCommandMenuProps) {
+	const { t } = useTranslation("chat")
 	const rootRef = useRef<HTMLDivElement>(null)
 	const lastPointer = useRef({ x: -1, y: -1 })
 	const reduce = useReducedMotion() ?? false
@@ -104,7 +106,7 @@ export function PromptCommandMenu({
 					>
 						<div
 							role="listbox"
-							aria-label="Commands"
+							aria-label={t("composer.commands")}
 							tabIndex={0}
 							className="max-h-64 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 						>
