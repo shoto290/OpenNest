@@ -1,6 +1,8 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 
+import { I18nProvider } from "@workspace/ui/components/i18n-provider"
+
 import { App } from "./App"
 
 import { ThemeProvider } from "@/components/theme-provider"
@@ -12,8 +14,10 @@ revealWindow()
 
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>
-		<ThemeProvider>
-			<App />
-		</ThemeProvider>
+		<I18nProvider>
+			<ThemeProvider>
+				<App />
+			</ThemeProvider>
+		</I18nProvider>
 	</StrictMode>,
 )

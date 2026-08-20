@@ -9,9 +9,17 @@ import {
 	type ReactRenderer,
 } from "@storybook/react-vite"
 
+import { I18nProvider } from "@workspace/ui/components/i18n-provider"
+
 import { THEME_CLASS_NAMES, ThemedDocsContainer } from "./themed-docs-container"
 
 const SIDE_BY_SIDE_THEMES = Object.keys(THEME_CLASS_NAMES)
+
+const withTranslations: Decorator = (Story) => (
+	<I18nProvider>
+		<Story />
+	</I18nProvider>
+)
 
 const withThemeLayout: Decorator = (Story, context) => {
 	if (context.globals.theme_layout !== "side-by-side") {
@@ -41,6 +49,7 @@ export default definePreview({
 			defaultTheme: "light",
 		}),
 		withThemeLayout,
+		withTranslations,
 	],
 	globalTypes: {
 		theme_layout: {
