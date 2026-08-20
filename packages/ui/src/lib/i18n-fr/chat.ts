@@ -158,6 +158,7 @@ const chat = {
 			steps_many: "{{count}} étapes terminées",
 			steps_other: "{{count}} étapes terminées",
 		},
+		moreResults: "+{{count}} de plus",
 	},
 	screen: {
 		label: "Conversation Claude Code",

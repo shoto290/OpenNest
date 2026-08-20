@@ -1,6 +1,17 @@
-/** The French chrome every surface shares — the sidebar, the context menu, the
- * stateful button and the update pastille. */
+/** The French chrome every surface shares — the boot screen, the sidebar, the
+ * context menu, the dialog frame, the picture dropzone, the stateful button and
+ * the update pastille. */
 const common = {
+	boot: {
+		status: "Démarrage d'OpenNest",
+	},
+	dialog: {
+		close: "Fermer",
+	},
+	dropzone: {
+		drop: "Glissez, déposez ou collez une image",
+		browse: "ou cliquez pour choisir un fichier",
+	},
 	sidebar: {
 		label: "Barre latérale",
 		toggle: "Afficher ou masquer la barre latérale",
