@@ -57,6 +57,8 @@
 	--sidebar-width: 16rem;
 	--sidebar-width-icon: 4.25rem;
 	--sidebar-width-mobile: 18rem;
+	--scrollbar: oklch(0.72 0.013 285.938);
+	--scrollbar-hover: oklch(0.6 0.014 285.938);
 }
 
 .dark,
@@ -95,6 +97,8 @@
 	--sidebar-accent-foreground: oklch(0.985 0 0);
 	--sidebar-border: oklch(1 0 0 / 10%);
 	--sidebar-ring: oklch(0.552 0.016 285.938);
+	--scrollbar: oklch(0.44 0.008 286.033);
+	--scrollbar-hover: oklch(0.55 0.01 286.033);
 }
 
 /* Palettes. Each block repaints the whole colour set; amber rides on the
@@ -504,5 +508,46 @@
 	button:not(:disabled),
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
+	}
+
+	/* The gutter is wide, the thumb is not: a transparent border clipped to the
+	 * content box leaves the bar floating inside its own padding instead of
+	 * riding the edge of the pane. */
+	::-webkit-scrollbar {
+		width: 1rem;
+		height: 1rem;
+	}
+	::-webkit-scrollbar-track,
+	::-webkit-scrollbar-corner {
+		background: transparent;
+	}
+	::-webkit-scrollbar-thumb {
+		border: 5px solid transparent;
+		border-radius: 9999px;
+		background-color: var(--scrollbar);
+		background-clip: content-box;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background-color: var(--scrollbar-hover);
+	}
+
+	/* Storybook is the one surface that opens in Gecko, which draws none of the
+	 * above and takes the colours flat. Both properties inherit, so the root
+	 * carries them. Left ungated the block would also win in Chromium and
+	 * Safari, which read `scrollbar-color` ahead of the pseudo-elements. */
+	@supports not selector(::-webkit-scrollbar) {
+		:root {
+			scrollbar-width: thin;
+			scrollbar-color: var(--scrollbar) transparent;
+		}
+	}
+}
+
+/* Claimed by a pane that hides its overflow behind a mask of its own, where a
+ * bar would sit on top of the fade. */
+@utility scrollbar-hide {
+	scrollbar-width: none;
+	&::-webkit-scrollbar {
+		display: none;
 	}
 }

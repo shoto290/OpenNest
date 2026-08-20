@@ -93,6 +93,7 @@ export default definePreview({
 					"Typography",
 					"Spacing",
 					"Radius & Shadows",
+					"Scrollbars",
 					"Motion",
 					"Icons",
 				]

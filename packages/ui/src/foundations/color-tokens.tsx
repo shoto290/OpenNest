@@ -22,6 +22,8 @@ export const FEEDBACK_TOKENS = ["--destructive"]
 
 export const CONTROL_TOKENS = ["--border", "--input", "--ring"]
 
+export const SCROLLBAR_TOKENS = ["--scrollbar", "--scrollbar-hover"]
+
 export const CHART_TOKENS = [
 	"--chart-1",
 	"--chart-2",
