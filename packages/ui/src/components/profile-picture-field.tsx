@@ -1,5 +1,7 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
+
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { PICTURE_TARGET_CLASS } from "@workspace/ui/components/settings-styles"
@@ -27,8 +29,6 @@ const REMOVE_INSET = (PICTURE_SIZE / 2) * (1 - Math.SQRT1_2) - REMOVE_SIZE / 2
  * out of the dialog the way the activity dot is punched out of the sidebar, so the
  * picture's own edge never runs through it. */
 const REMOVE_CLASS = "absolute rounded-full ring-2 ring-popover"
-
-const PICTURE_INPUT_LABEL = "Profile picture file"
 
 /** The picture is the control: a reader drops or pastes onto it, or presses it to
  * go looking. A button rather than a div with a handler, so Enter and Space open
@@ -67,8 +67,9 @@ const ProfilePictureField = ({
 	onRemove,
 	className,
 }: ProfilePictureFieldProps) => {
+	const { t } = useTranslation("settings")
 	const { controlProps, inputProps } = usePicturePicker({
-		label: PICTURE_INPUT_LABEL,
+		label: t("profile.picture.file"),
 		onPick,
 	})
 
@@ -79,7 +80,7 @@ const ProfilePictureField = ({
 		>
 			<button
 				{...controlProps}
-				aria-label={image ? "Change picture" : "Add picture"}
+				aria-label={t(image ? "profile.picture.change" : "profile.picture.add")}
 				className={cn(CONTROL_CLASS, !image && "border-dashed")}
 				style={{ width: PICTURE_SIZE, height: PICTURE_SIZE }}
 			>
@@ -94,7 +95,7 @@ const ProfilePictureField = ({
 			</button>
 			{image && onRemove ? (
 				<Button
-					aria-label="Remove picture"
+					aria-label={t("profile.picture.remove")}
 					className={REMOVE_CLASS}
 					onClick={onRemove}
 					size="icon-xs"
