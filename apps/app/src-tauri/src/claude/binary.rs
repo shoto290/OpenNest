@@ -18,14 +18,49 @@ pub const BINARY_OVERRIDE_ENV: &str = "OPENNEST_CLAUDE_BIN";
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
-const WELL_KNOWN_DIRS: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"];
+const UNIX_WELL_KNOWN_DIRS: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"];
 
-fn binary_name() -> &'static str {
-	if cfg!(windows) {
-		"claude.exe"
+const HOME_DIRS: &[&str] = &[".local/bin", ".claude/local", "bin"];
+
+/// Every name a `claude` executable can carry, the native install first. Windows
+/// needs three: the official installer drops a `claude.exe`, npm and the other
+/// package managers drop a `claude.cmd` shim, and only the extension tells them
+/// apart. Deliberately narrower than `PATHEXT`, which also lists extensions no
+/// installer uses and some this app could not spawn. The platform is an argument
+/// rather than a `cfg!` so either host can test both lists.
+fn binary_names(windows: bool) -> &'static [&'static str] {
+	if windows {
+		&["claude.exe", "claude.cmd", "claude.bat"]
 	} else {
-		"claude"
+		&["claude"]
 	}
+}
+
+/// Those names as one label, so an error names a directory once instead of once
+/// per extension. Read off the list it describes, which cannot then go stale.
+fn name_label(windows: bool) -> &'static str {
+	match binary_names(windows) {
+		[single] => single,
+		_ => "claude.*",
+	}
+}
+
+/// The directories probed beyond `PATH`, in order — one list, so the paths tried
+/// and the locations reported cannot drift apart. The Windows entry is where npm
+/// puts its shims: its installer does add it to `PATH`, but an app launched from
+/// a session older than the install never sees that.
+fn extra_dirs() -> Vec<PathBuf> {
+	let mut dirs = Vec::new();
+
+	if let Some(home) = home_dir() {
+		dirs.extend(HOME_DIRS.iter().map(|dir| home.join(dir)));
+	}
+	if cfg!(windows) {
+		dirs.extend(std::env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("npm")));
+	} else {
+		dirs.extend(UNIX_WELL_KNOWN_DIRS.iter().map(PathBuf::from));
+	}
+	dirs
 }
 
 fn is_executable(path: &Path) -> bool {
@@ -46,36 +81,30 @@ fn is_executable(path: &Path) -> bool {
 /// Where a `claude` may be, in the order it is looked for. Reachable across the
 /// module so [`super::models`] can read the executable rather than only run it: the
 /// first candidate that answers `--version` is not always the file that carries the
-/// catalogue — a launcher script answers for one it execs.
+/// catalogue — a launcher script answers for one it execs. On Windows a candidate
+/// may be such a script rather than a native executable, which is why every
+/// directory is tried for `claude.exe` before the shims that stand in for it.
 pub(super) fn candidates() -> Vec<PathBuf> {
-	let name = binary_name();
 	let mut found = Vec::new();
 
 	if let Some(explicit) = std::env::var_os(BINARY_OVERRIDE_ENV) {
 		found.push(PathBuf::from(explicit));
 	}
-	if let Some(path) = std::env::var_os("PATH") {
-		found.extend(std::env::split_paths(&path).map(|dir| dir.join(name)));
+	let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+		.map(|path| std::env::split_paths(&path).collect())
+		.unwrap_or_default();
+	dirs.extend(extra_dirs());
+	for dir in dirs {
+		found.extend(binary_names(cfg!(windows)).iter().map(|name| dir.join(name)));
 	}
-	if let Some(home) = home_dir() {
-		found.push(home.join(".local/bin").join(name));
-		found.push(home.join(".claude/local").join(name));
-		found.push(home.join("bin").join(name));
-	}
-	found.extend(WELL_KNOWN_DIRS.iter().map(|dir| Path::new(dir).join(name)));
 	found
 }
 
 /// The locations probed, as stable labels rather than raw `PATH` contents.
 fn searched_labels() -> Vec<String> {
-	let name = binary_name();
+	let name = name_label(cfg!(windows));
 	let mut labels = vec![format!("${BINARY_OVERRIDE_ENV}"), format!("$PATH/{name}")];
-	if let Some(home) = home_dir() {
-		labels.push(redact(&home.join(".local/bin").join(name)));
-		labels.push(redact(&home.join(".claude/local").join(name)));
-		labels.push(redact(&home.join("bin").join(name)));
-	}
-	labels.extend(WELL_KNOWN_DIRS.iter().map(|dir| format!("{dir}/{name}")));
+	labels.extend(extra_dirs().iter().map(|dir| redact(&dir.join(name))));
 	labels
 }
 
@@ -161,6 +190,31 @@ pub async fn check() -> CheckReport {
 mod tests {
 	use super::*;
 
+	/// The bug this module carried: Windows probed only `claude.exe`, so the
+	/// `claude.cmd` shim every package manager installs was invisible.
+	#[test]
+	fn windows_probes_the_shims_and_not_only_the_native_install() {
+		assert_eq!(binary_names(true).first(), Some(&"claude.exe"), "native install must win");
+		assert!(binary_names(true).contains(&"claude.cmd"), "npm shim never probed");
+		assert_eq!(binary_names(false), ["claude"]);
+		assert_eq!(name_label(true), "claude.*");
+		assert_eq!(name_label(false), "claude");
+	}
+
+	/// Every probed directory is probed for every name a `claude` can carry, so an
+	/// install is not missed in a directory that was only reached for another name.
+	#[test]
+	fn every_directory_is_probed_for_every_name() {
+		let candidates = candidates();
+
+		for dir in extra_dirs() {
+			for name in binary_names(cfg!(windows)) {
+				let expected = dir.join(name);
+				assert!(candidates.contains(&expected), "never probed {}", expected.display());
+			}
+		}
+	}
+
 	/// Every reported location is a placeholder, a tilde path or a constant of
 	/// this module, so `PATH` and the home directory never travel with the error.
 	#[test]
@@ -170,7 +224,7 @@ mod tests {
 		for label in &labels {
 			let known = label.starts_with('$')
 				|| label.starts_with("~/")
-				|| WELL_KNOWN_DIRS.iter().any(|dir| label.starts_with(dir));
+				|| UNIX_WELL_KNOWN_DIRS.iter().any(|dir| label.starts_with(dir));
 			assert!(known, "unexpected location reported: {label}");
 		}
 
