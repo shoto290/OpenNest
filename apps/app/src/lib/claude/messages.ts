@@ -1,38 +1,51 @@
+import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
+
 import type { TransportError } from "./contract"
 
-export function describeTransportError(error: TransportError): string {
+export function describeTransportError(
+	t: ChatCopy,
+	error: TransportError,
+): string {
 	switch (error.kind) {
 		case "binaryNotFound":
-			return `Claude Code was not found. Locations tried: ${error.searched.join(", ")}`
+			return t("screen.transport.binaryNotFound", {
+				searched: error.searched.join(", "),
+			})
 		case "notAuthenticated":
-			return "Claude Code is not signed in. Run `claude auth login`."
+			return t("screen.transport.notAuthenticated")
 		case "authCheckFailed":
-			return `The sign-in check failed: ${error.detail}`
+			return t("screen.transport.authCheckFailed", { detail: error.detail })
 		case "spawnFailed":
-			return `Claude Code could not be started: ${error.detail}`
+			return t("screen.transport.spawnFailed", { detail: error.detail })
 		case "startupTimeout":
-			return `Claude Code did not answer within ${error.timeoutMs} ms.`
+			return t("screen.transport.startupTimeout", {
+				timeoutMs: error.timeoutMs,
+			})
 		case "crashed":
-			return `Claude Code exited (code ${error.code ?? "unknown"}).`
+			return error.code === null
+				? t("screen.transport.crashedUnknownCode")
+				: t("screen.transport.crashed", { code: error.code })
 		case "resumeFailed":
-			return "That conversation could not be resumed. Claude Code started a new one; your messages are still here."
+			return t("screen.transport.resumeFailed")
 		case "workingDirectoryRefused":
-			return `${error.path} is not there any more. This bot is answering from the usual place instead.`
+			return t("screen.transport.workingDirectoryRefused", {
+				path: error.path,
+			})
 		case "invalidFrame":
-			return `An unreadable frame was skipped: ${error.detail}`
+			return t("screen.transport.invalidFrame", { detail: error.detail })
 		case "notStarted":
-			return "No session is running."
+			return t("screen.transport.notStarted")
 		case "turnAlreadyRunning":
-			return "A turn is already running."
+			return t("screen.transport.turnAlreadyRunning")
 		case "transitionInProgress":
-			return "A session change is already in progress."
+			return t("screen.transport.transitionInProgress")
 		case "noActiveTurn":
-			return "There is no turn to interrupt."
+			return t("screen.transport.noActiveTurn")
 		case "staleRuntimeSession":
-			return "That session has been replaced. The one running now took its place."
+			return t("screen.transport.staleRuntimeSession")
 		case "unknownPermission":
-			return `Unknown permission request (${error.id}).`
+			return t("screen.transport.unknownPermission", { id: error.id })
 		case "writeFailed":
-			return `The prompt could not be sent: ${error.detail}`
+			return t("screen.transport.writeFailed", { detail: error.detail })
 	}
 }

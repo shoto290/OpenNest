@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import { type ChatState, initialChatState } from "./chat-state"
 import {
 	emptyStateStatusFor,
@@ -17,6 +19,8 @@ import type {
 	TranscriptMessage,
 } from "../conversations/transcript-contract"
 import { message as storedMessage } from "../conversations/transcript-fixtures"
+
+const t = i18n.getFixedT(null, "chat")
 
 function activity(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
 	return {
@@ -413,13 +417,13 @@ describe("notices", () => {
 		)
 		expect(needsFreshSession({ kind: "turnAlreadyRunning" })).toBe(false)
 
-		expect(noticeTitleFor({ kind: "crashed", code: null, detail: null })).toBe(
-			"Claude Code stopped",
-		)
-		expect(noticeTitleFor({ kind: "binaryNotFound", searched: [] })).toBe(
+		expect(
+			noticeTitleFor(t, { kind: "crashed", code: null, detail: null }),
+		).toBe("Claude Code stopped")
+		expect(noticeTitleFor(t, { kind: "binaryNotFound", searched: [] })).toBe(
 			"Claude Code is unavailable",
 		)
-		expect(noticeTitleFor({ kind: "noActiveTurn" })).toBe(
+		expect(noticeTitleFor(t, { kind: "noActiveTurn" })).toBe(
 			"That request did not go through",
 		)
 	})
@@ -427,7 +431,7 @@ describe("notices", () => {
 	it("keeps a refused resume out of the session-ending errors", () => {
 		const refused = { kind: "resumeFailed", forgotSessionId: true } as const
 		expect(needsFreshSession(refused)).toBe(false)
-		expect(noticeTitleFor(refused)).toBe(
+		expect(noticeTitleFor(t, refused)).toBe(
 			"Previous conversation could not be resumed",
 		)
 	})

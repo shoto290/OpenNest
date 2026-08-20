@@ -1,4 +1,5 @@
 import type { PromptAttachment } from "@workspace/ui/components/prompt-attachments"
+import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type {
 	AttachmentStoreError,
@@ -17,8 +18,10 @@ export const NO_ATTACHMENTS: StagedAttachment[] = []
 
 const MEGABYTE = 1024 * 1024
 
-function inMegabytes(bytes: number): string {
-	return `${Math.round(bytes / MEGABYTE)} MB`
+function inMegabytes(t: ChatCopy, bytes: number): string {
+	return t("screen.attachment.megabytes", {
+		size: Math.round(bytes / MEGABYTE),
+	})
 }
 
 /** Only what an `img` can load gets a preview. Everything else is staged all the
@@ -83,20 +86,32 @@ export function toAttachmentStoreError(reason: unknown): AttachmentStoreError {
 
 /** Why the files stayed in the composer. The two refusals a reader can act on name
  * the limit that answered, since nothing on this side holds a copy of it. */
-export function describeAttachmentError(error: AttachmentStoreError): string {
+export function describeAttachmentError(
+	t: ChatCopy,
+	error: AttachmentStoreError,
+): string {
 	switch (error.kind) {
 		case "unavailable":
 		case "storage":
-			return `The files could not be written down (${error.failure.kind}).`
+			return t("screen.attachment.storage", { failure: error.failure.kind })
 		case "unknownConversation":
-			return "This conversation is not on the record any more. Reopen the bot and attach them again."
+			return t("screen.attachment.unknownConversation")
 		case "tooMany":
-			return `A prompt carries ${error.limit} files at most, and ${error.count} are staged.`
+			return t("screen.attachment.tooMany", {
+				limit: error.limit,
+				staged: error.count,
+			})
 		case "tooLarge":
-			return `${error.name} is over the ${inMegabytes(error.limit)} a single file may weigh.`
+			return t("screen.attachment.tooLarge", {
+				name: error.name,
+				limit: inMegabytes(t, error.limit),
+			})
 		case "tooLargeTogether":
-			return `The staged files come to ${inMegabytes(error.bytes)}, over the ${inMegabytes(error.limit)} one prompt may carry.`
+			return t("screen.attachment.tooLargeTogether", {
+				bytes: inMegabytes(t, error.bytes),
+				limit: inMegabytes(t, error.limit),
+			})
 		case "unwritable":
-			return `The files could not be written down: ${error.detail}`
+			return t("screen.attachment.unwritable", { detail: error.detail })
 	}
 }

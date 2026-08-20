@@ -335,7 +335,7 @@ function ConversationNotice({
 			<ChatNotice
 				tone="warning"
 				title={t("screen.attachmentsRefused")}
-				description={describeAttachmentError(refusal)}
+				description={describeAttachmentError(t, refusal)}
 				onDismiss={onDismissRefusal}
 			/>
 		)
@@ -349,8 +349,8 @@ function ConversationNotice({
 	return (
 		<ChatNotice
 			tone={stale ? "error" : "warning"}
-			title={noticeTitleFor(error.error)}
-			description={describeTransportError(error.error)}
+			title={noticeTitleFor(t, error.error)}
+			description={describeTransportError(t, error.error)}
 			retry={
 				stale
 					? {
