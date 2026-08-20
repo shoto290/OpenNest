@@ -2,10 +2,11 @@ import i18next, { type i18n as I18nRuntime } from "i18next"
 import { initReactI18next } from "react-i18next"
 
 import { en } from "@workspace/ui/lib/i18n-en"
+import { fr } from "@workspace/ui/lib/i18n-fr"
 
 /** Every catalogue this build ships, which is also the list of languages it can be
  * read in: a language is a key of this object or it is not one at all. */
-const catalogues = { en }
+const catalogues = { en, fr }
 
 export type Language = keyof typeof catalogues
 
@@ -26,8 +27,8 @@ declare module "i18next" {
 
 const i18n: I18nRuntime = i18next.createInstance()
 
-/** Synchronous — the catalogue is bundled, so the first render already resolves.
- * The one language it carries is also the one every other falls back to. */
+/** Synchronous — the catalogues are bundled, so the first render already resolves.
+ * A key one of them drops reads from the default language instead. */
 i18n.use(initReactI18next).init({
 	lng: DEFAULT_LANGUAGE,
 	fallbackLng: DEFAULT_LANGUAGE,

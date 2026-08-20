@@ -1,0 +1,219 @@
+/** The chat surface in French — transcript, composer, tool cards, agent
+ * activity and markdown, plus the two the host hands down as props. */
+const chat = {
+	emptyState: {
+		ready: {
+			title: "Commencer avec Claude Code",
+			description:
+				"OpenNest utilise l'outil Claude Code installé sur cette machine. Rien ne quitte votre appareil.",
+		},
+		unavailable: {
+			title: "Claude Code n'est pas disponible",
+			description:
+				"OpenNest n'atteint pas l'outil Claude Code sur cette machine. Terminez l'installation pour démarrer une conversation.",
+		},
+		settings: "Réglages du bot",
+		hint: "Saisissez votre première invite dans le champ ci-dessous",
+		setup: "Installer Claude Code",
+	},
+	connection: {
+		checking: "Vérification de Claude Code…",
+		ready: "Claude Code est prêt",
+		unavailable: "Claude Code indisponible",
+		crashed: "Claude Code s'est arrêté",
+	},
+	transcript: {
+		label: "Conversation",
+		loadOlder: "Charger les messages plus anciens",
+		startOfHistory: "Début de la conversation",
+		message: {
+			user: "message de l'utilisateur",
+			assistant: "message de l'assistant",
+		},
+		typing: "Réponse en cours",
+		showMore: "Afficher plus",
+		showLess: "Afficher moins",
+	},
+	turn: {
+		copy: "Copier",
+		copied: "Copié",
+		retry: "Réessayer",
+		footer: {
+			cancelled: "Arrêté",
+			failed: "Cette réponse a échoué",
+		},
+	},
+	working: {
+		name: "Sans nom",
+		verb: {
+			thinking: "réfléchit",
+			searching: "cherche",
+			working: "travaille",
+			writing: "écrit",
+			waiting: "vous attend",
+		},
+		state: "{{name}} {{verb}}…",
+		labelled: "{{name}} · {{label}}",
+	},
+	notice: {
+		retry: "Réessayer",
+		exhausted: "Limite de tentatives atteinte après {{attempts}} essais",
+		dismiss: "Ignorer l'avis",
+	},
+	attachments: {
+		label: "Pièces jointes",
+		open: "Ouvrir {{name}}",
+		remove: "Retirer {{name}}",
+		attach: "Joindre des fichiers",
+	},
+	composer: {
+		label: "Invite",
+		placeholder: "Demandez à l'agent de faire quelque chose…",
+		send: "Envoyer l'invite",
+		stop: "Arrêter la génération",
+		commands: "Commandes",
+	},
+	toolApproval: {
+		title: "Autoriser cet outil à s'exécuter ?",
+		status: {
+			pending: "Autorisation requise",
+			allowed: "Autorisé une fois",
+			denied: "Refusé",
+		},
+		sensitive: "Masqué",
+		input: "Entrée de l'outil",
+		allowOnce: "Autoriser une fois",
+		deny: "Refuser",
+	},
+	toolResult: {
+		status: {
+			running: "En cours",
+			success: "Terminé",
+			error: "Échoué",
+			cancelled: "Annulé",
+		},
+		output: "Sortie : {{status}}",
+		copy: "Copier le résultat",
+		copied: "Copié",
+		retry: "Relancer",
+	},
+	response: {
+		copy: "Copier la réponse",
+		copied: "Copié",
+		retry: "Régénérer la réponse",
+		helpful: "Utile",
+		notHelpful: "Pas utile",
+	},
+	code: {
+		snippet: "Extrait de code",
+		namedSnippet: "Extrait de code, {{name}}",
+		copy: "Copier le code",
+		copied: "Copié",
+		copyTooltip: "Copier",
+		copyAnnounced: "Code copié dans le presse-papiers",
+		copyFailed: "La copie du code a échoué",
+		writing: "Écriture",
+		ready: "Prêt",
+	},
+	table: {
+		label: "Tableau",
+		copy: "Copier le tableau",
+		copyAnnounced: "Tableau copié dans le presse-papiers",
+	},
+	diagram: {
+		label: "Diagramme",
+	},
+	task: {
+		done: "Fait",
+		todo: "À faire",
+	},
+	activity: {
+		duration: {
+			seconds: "{{seconds}} s",
+			minutes: "{{minutes}} min",
+			minutesAndSeconds: "{{minutes}} min {{seconds}} s",
+		},
+		active: {
+			search: "Recherche sur le web…",
+			tool: "Exécution des outils…",
+			trace: "Avancée dans l'exécution…",
+			mixed: "Travail en cours…",
+			thinking: "Réflexion…",
+		},
+		summary: {
+			failed: "Échec après <duration>{{value}}</duration>",
+			thought: "A réfléchi pendant <duration>{{value}}</duration>",
+			search: "A cherché sur le web",
+			tools_one: "A lancé {{count}} outil",
+			tools_many: "A lancé {{count}} outils",
+			tools_other: "A lancé {{count}} outils",
+			toolCalls_one: "{{count}} appel d'outil",
+			toolCalls_many: "{{count}} appels d'outil",
+			toolCalls_other: "{{count}} appels d'outil",
+			messages_one: "{{count}} message",
+			messages_many: "{{count}} messages",
+			messages_other: "{{count}} messages",
+			trace: "{{toolCalls}}, {{messages}}",
+			steps_one: "{{count}} étape terminée",
+			steps_many: "{{count}} étapes terminées",
+			steps_other: "{{count}} étapes terminées",
+		},
+	},
+	screen: {
+		label: "Conversation Claude Code",
+		settings: "Réglages du bot",
+		placeholder: "Demandez à {{name}} de faire quelque chose…",
+		waiting: "En attente de Claude Code…",
+		permission: {
+			description: "Claude Code attend votre accord avant de lancer cet outil.",
+			path: "Chemin",
+		},
+		attachmentsRefused: "Fichiers non joints",
+		restart: "Redémarrer la session",
+		notice: {
+			crashed: "Claude Code s'est arrêté",
+			resumeFailed: "La conversation précédente n'a pas pu être reprise",
+			workingDirectoryRefused: "Le dossier du bot est introuvable",
+			unavailable: "Claude Code est indisponible",
+			failed: "Cette demande n'est pas passée",
+		},
+		transport: {
+			binaryNotFound:
+				"Claude Code est introuvable. Emplacements essayés : {{searched}}",
+			notAuthenticated:
+				"Claude Code n'est pas connecté. Lancez `claude auth login`.",
+			authCheckFailed: "La vérification de la connexion a échoué : {{detail}}",
+			spawnFailed: "Claude Code n'a pas pu être démarré : {{detail}}",
+			startupTimeout: "Claude Code n'a pas répondu en {{timeoutMs}} ms.",
+			crashed: "Claude Code s'est arrêté (code {{code}}).",
+			crashedUnknownCode: "Claude Code s'est arrêté (code inconnu).",
+			resumeFailed:
+				"Cette conversation n'a pas pu être reprise. Claude Code en a démarré une nouvelle ; vos messages sont toujours là.",
+			workingDirectoryRefused:
+				"{{path}} n'existe plus. Ce bot répond depuis l'emplacement habituel à la place.",
+			invalidFrame: "Une trame illisible a été ignorée : {{detail}}",
+			notStarted: "Aucune session n'est en cours.",
+			turnAlreadyRunning: "Un tour est déjà en cours.",
+			transitionInProgress: "Un changement de session est déjà en cours.",
+			noActiveTurn: "Il n'y a aucun tour à interrompre.",
+			staleRuntimeSession:
+				"Cette session a été remplacée. Celle qui tourne maintenant a pris sa place.",
+			unknownPermission: "Demande d'autorisation inconnue ({{id}}).",
+			writeFailed: "L'invite n'a pas pu être envoyée : {{detail}}",
+		},
+		attachment: {
+			megabytes: "{{size}} Mo",
+			storage: "Les fichiers n'ont pas pu être enregistrés ({{failure}}).",
+			unknownConversation:
+				"Cette conversation n'est plus enregistrée. Rouvrez le bot et joignez-les à nouveau.",
+			tooMany:
+				"Une invite porte {{limit}} fichiers au maximum, et {{staged}} sont en attente.",
+			tooLarge: "{{name}} dépasse les {{limit}} qu'un seul fichier peut peser.",
+			tooLargeTogether:
+				"Les fichiers en attente totalisent {{bytes}}, au-delà des {{limit}} qu'une invite peut porter.",
+			unwritable: "Les fichiers n'ont pas pu être enregistrés : {{detail}}",
+		},
+	},
+} as const
+
+export { chat }

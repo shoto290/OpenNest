@@ -61,7 +61,7 @@ describe("the active language", () => {
 	})
 
 	it("is en when neither the choice nor the machine has a catalogue", () => {
-		machineReadingIn("fr-FR")
+		machineReadingIn("br-FR")
 
 		expect(activeLanguageOf("br")).toBe("en")
 	})
@@ -82,7 +82,7 @@ describe("the launch", () => {
 
 		const opening = startLanguage()
 
-		expect(i18n.language).toBe("en")
+		expect(i18n.language).toBe("fr")
 		await opening
 	})
 
