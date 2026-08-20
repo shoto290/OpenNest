@@ -3,6 +3,7 @@
 
 import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useId, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import {
 	AgentCode,
@@ -49,19 +50,11 @@ export interface ToolApprovalProps {
 	className?: string
 }
 
-const STATUS_COPY: Record<ToolApprovalStatus, string> = {
-	pending: "Approval required",
-	allowed: "Allowed once",
-	denied: "Denied",
-}
-
 const STATUS_BADGE: Record<ToolApprovalStatus, string> = {
 	pending: "border-border bg-muted text-foreground",
 	allowed: "border-border bg-muted text-foreground",
 	denied: "border-destructive/40 bg-background text-destructive",
 }
-
-const SENSITIVE_VALUE = "Hidden"
 
 function StatusIcon({ status }: { status: ToolApprovalStatus }) {
 	if (status === "allowed") return <Icons.Success className="size-4" />
@@ -88,7 +81,7 @@ export function ToolApprovalCode({
 
 export function ToolApproval({
 	tool,
-	title = "Allow this tool to run?",
+	title,
 	description,
 	parameters = [],
 	status = "pending",
@@ -100,6 +93,7 @@ export function ToolApproval({
 	children,
 	className,
 }: ToolApprovalProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const baseId = useId()
 	const titleId = `${baseId}-title`
@@ -138,7 +132,7 @@ export function ToolApproval({
 					<div className="flex min-w-0 items-start justify-between gap-3">
 						<div className="min-w-0">
 							<div id={titleId} className="font-medium text-foreground">
-								{title}
+								{title ?? t("toolApproval.title")}
 							</div>
 							<div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
 								{tool}
@@ -151,7 +145,7 @@ export function ToolApproval({
 								STATUS_BADGE[status],
 							)}
 						>
-							{STATUS_COPY[status]}
+							{t(`toolApproval.status.${status}`)}
 						</span>
 					</div>
 
@@ -172,7 +166,7 @@ export function ToolApproval({
 							onClick={toggleDetails}
 							className="mt-2 -ml-2.5 text-muted-foreground"
 						>
-							Tool input
+							{t("toolApproval.input")}
 							<motion.span
 								data-icon="inline-end"
 								animate={{ rotate: currentOpen ? 180 : 0 }}
@@ -199,7 +193,9 @@ export function ToolApproval({
 									parameter.sensitive && "text-muted-foreground italic",
 								)}
 							>
-								{parameter.sensitive ? SENSITIVE_VALUE : parameter.value}
+								{parameter.sensitive
+									? t("toolApproval.sensitive")
+									: parameter.value}
 							</dd>
 						</div>
 					))}
@@ -215,11 +211,11 @@ export function ToolApproval({
 				>
 					<Button size="sm" onClick={onAllowOnce}>
 						<Icons.Success data-icon="inline-start" />
-						Allow once
+						{t("toolApproval.allowOnce")}
 					</Button>
 					<Button variant="outline" size="sm" onClick={onDeny}>
 						<Icons.Close data-icon="inline-start" />
-						Deny
+						{t("toolApproval.deny")}
 					</Button>
 				</motion.div>
 			) : null}

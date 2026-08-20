@@ -14,6 +14,7 @@ import {
 	useId,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Icons } from "@workspace/ui/components/icons"
@@ -267,19 +268,23 @@ export function MessageBubbleCollapsible({
 	defaultOpen = false,
 	onOpenChange,
 	collapsedLines = 4,
-	moreLabel = "Show more",
-	lessLabel = "Show less",
+	moreLabel,
+	lessLabel,
 	contentClassName,
 	triggerClassName,
 	className,
 	children,
 	...props
 }: MessageBubbleCollapsibleProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const contentId = useId()
 	const notifyLayout = useContext(MessageBubbleLayoutContext)
 	const [internalOpen, setInternalOpen] = useState(defaultOpen)
 	const currentOpen = open ?? internalOpen
+	const triggerLabel = currentOpen
+		? (lessLabel ?? t("transcript.showLess"))
+		: (moreLabel ?? t("transcript.showMore"))
 
 	const setOpen = useCallback(
 		(next: boolean) => {
@@ -319,7 +324,7 @@ export function MessageBubbleCollapsible({
 					triggerClassName,
 				)}
 			>
-				<span>{currentOpen ? lessLabel : moreLabel}</span>
+				<span>{triggerLabel}</span>
 				<motion.span
 					aria-hidden="true"
 					animate={{ rotate: currentOpen ? 180 : 0 }}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import type { DiagramScheme } from "@workspace/ui/lib/render-mermaid"
 
@@ -52,6 +53,7 @@ const showDiagram = (host: HTMLElement, svg: string) => {
  * changes. A source that changes, or a block that goes away, drops the drawing it was
  * waiting on rather than paying for a diagram nobody will read. */
 export const MarkdownMermaid = ({ source }: MarkdownMermaidProps) => {
+	const { t } = useTranslation("chat")
 	const host = useRef<HTMLDivElement>(null)
 	const [isDrawn, setIsDrawn] = useState(false)
 
@@ -102,7 +104,7 @@ export const MarkdownMermaid = ({ source }: MarkdownMermaidProps) => {
 				// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing diagram must be keyboard scrollable
 				tabIndex={0}
 				role="group"
-				aria-label="Diagram"
+				aria-label={t("diagram.label")}
 				className={VIEWPORT_CLASS}
 				hidden={!isDrawn}
 				ref={host}

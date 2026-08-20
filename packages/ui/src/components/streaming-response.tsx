@@ -3,6 +3,7 @@
 
 import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_PRESS } from "@workspace/ui/lib/ease"
@@ -32,15 +33,16 @@ export interface StreamingResponseProps {
 	actionsClassName?: string
 }
 
-const FEEDBACK_LABELS = ["Helpful", "Not helpful"]
-
 function ResponseAction({
 	label,
-	active = false,
+	active,
 	onClick,
 	children,
 }: {
 	label: string
+	/** Given only by an action that holds a pressed state — the feedback pair. It
+	 * is what puts `aria-pressed` on the button, so a copy or a retry stays a
+	 * plain button rather than one that reads as unpressed. */
 	active?: boolean
 	onClick: () => void
 	children: ReactNode
@@ -52,7 +54,7 @@ function ResponseAction({
 			type="button"
 			aria-label={label}
 			title={label}
-			aria-pressed={FEEDBACK_LABELS.includes(label) ? active : undefined}
+			aria-pressed={active}
 			onClick={onClick}
 			whileTap={reduce ? undefined : { scale: 0.9 }}
 			transition={SPRING_PRESS}
@@ -81,6 +83,7 @@ export function StreamingResponse({
 	contentClassName,
 	actionsClassName,
 }: StreamingResponseProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const [copied, setCopied] = useState(false)
 	const [internalFeedback, setInternalFeedback] =
@@ -142,7 +145,7 @@ export function StreamingResponse({
 				>
 					{canCopy ? (
 						<ResponseAction
-							label={copied ? "Copied" : "Copy response"}
+							label={copied ? t("response.copied") : t("response.copy")}
 							onClick={handleCopy}
 						>
 							{copied ? (
@@ -153,21 +156,21 @@ export function StreamingResponse({
 						</ResponseAction>
 					) : null}
 					{onRetry ? (
-						<ResponseAction label="Retry response" onClick={onRetry}>
+						<ResponseAction label={t("response.retry")} onClick={onRetry}>
 							<Icons.Retry className="size-3.5" />
 						</ResponseAction>
 					) : null}
 					{complete ? (
 						<>
 							<ResponseAction
-								label="Helpful"
+								label={t("response.helpful")}
 								active={currentFeedback === "up"}
 								onClick={() => setFeedback("up")}
 							>
 								<Icons.ThumbsUp className="size-3.5" />
 							</ResponseAction>
 							<ResponseAction
-								label="Not helpful"
+								label={t("response.notHelpful")}
 								active={currentFeedback === "down"}
 								onClick={() => setFeedback("down")}
 							>

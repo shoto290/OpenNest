@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
@@ -11,13 +12,6 @@ interface ConnectionStatusProps
 	/** Version of the local CLI, shown once it has answered. */
 	version?: string | null
 }
-
-const CONNECTION_STATUS_COPY = {
-	checking: "Checking Claude Code…",
-	ready: "Claude Code ready",
-	unavailable: "Claude Code unavailable",
-	crashed: "Claude Code stopped",
-} satisfies Record<ConnectionStatusState, string>
 
 const CONNECTION_STATUS_DOT = {
 	checking: "bg-muted-foreground motion-safe:animate-pulse",
@@ -32,6 +26,8 @@ function ConnectionStatus({
 	className,
 	...props
 }: ConnectionStatusProps) {
+	const { t } = useTranslation("chat")
+
 	return (
 		<div
 			data-slot="connection-status"
@@ -48,7 +44,7 @@ function ConnectionStatus({
 				className={cn("size-1.5 rounded-full", CONNECTION_STATUS_DOT[state])}
 			/>
 			<span role="status" className="sr-only">
-				{CONNECTION_STATUS_COPY[state]}
+				{t(`connection.${state}`)}
 				{version ? ` v${version}` : null}
 			</span>
 		</div>

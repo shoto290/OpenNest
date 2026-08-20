@@ -21,6 +21,9 @@ i18n.use(initReactI18next).init({
 	fallbackLng: "en",
 	defaultNS: "chat",
 	resources: { en },
+	// React escapes what it renders. Escaping again turns a file name carrying an
+	// ampersand into an entity the reader has to decode.
+	interpolation: { escapeValue: false },
 })
 
 export { i18n }

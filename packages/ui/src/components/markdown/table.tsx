@@ -1,6 +1,7 @@
 "use client"
 
 import type { ComponentPropsWithoutRef } from "react"
+import { useTranslation } from "react-i18next"
 import type { ExtraProps } from "react-markdown"
 
 import { Button } from "@workspace/ui/components/button"
@@ -90,6 +91,7 @@ export const MarkdownTable = ({
 	className,
 	...props
 }: MarkdownTableProps) => {
+	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(tableToTsv(node))
 
 	return (
@@ -98,7 +100,7 @@ export const MarkdownTable = ({
 				// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing table must be keyboard scrollable
 				tabIndex={0}
 				role="group"
-				aria-label="Table"
+				aria-label={t("table.label")}
 				className={VIEWPORT_CLASS}
 			>
 				<table {...props} className={cn(TABLE_CLASS, className)}>
@@ -107,7 +109,7 @@ export const MarkdownTable = ({
 			</div>
 
 			<Button
-				aria-label="Copy table"
+				aria-label={t("table.copy")}
 				variant="ghost"
 				size="icon-xs"
 				className={COPY_CLASS}
@@ -119,7 +121,7 @@ export const MarkdownTable = ({
 			</Button>
 
 			<span aria-live="polite" className="sr-only">
-				{copied ? "Table copied to clipboard" : ""}
+				{copied ? t("table.copyAnnounced") : ""}
 			</span>
 		</div>
 	)

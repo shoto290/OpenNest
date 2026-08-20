@@ -11,6 +11,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import {
 	AgentCode,
@@ -48,13 +49,6 @@ export interface ToolResultOutputProps {
 	children: string
 	language?: AgentCodeLanguage
 	className?: string
-}
-
-const STATUS_LABEL: Record<ToolResultStatus, string> = {
-	running: "Running",
-	success: "Completed",
-	error: "Failed",
-	cancelled: "Cancelled",
 }
 
 const STATUS_CLASS: Record<ToolResultStatus, string> = {
@@ -160,6 +154,7 @@ export function ToolResult({
 	className,
 	contentClassName,
 }: ToolResultProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const baseId = useId()
 	const triggerId = `${baseId}-trigger`
@@ -172,7 +167,7 @@ export function ToolResult({
 	const currentOpen = open ?? internalOpen
 	const running = status === "running"
 	const canCopy = Boolean(copyText || onCopy)
-	const statusLabel = STATUS_LABEL[status]
+	const statusLabel = t(`toolResult.status.${status}`)
 
 	const setOpen = useCallback(
 		(next: boolean) => {
@@ -292,7 +287,7 @@ export function ToolResult({
 							tabIndex={0}
 							role="log"
 							aria-live="polite"
-							aria-label={`${statusLabel} output`}
+							aria-label={t("toolResult.output", { status: statusLabel })}
 							className="overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 							style={{ maxHeight }}
 						>
@@ -305,7 +300,9 @@ export function ToolResult({
 							<div className="flex items-center gap-0.5 px-2 pb-1.5">
 								{canCopy ? (
 									<ToolResultAction
-										label={copied ? "Copied" : "Copy result"}
+										label={
+											copied ? t("toolResult.copied") : t("toolResult.copy")
+										}
 										onClick={handleCopy}
 									>
 										{copied ? (
@@ -316,7 +313,10 @@ export function ToolResult({
 									</ToolResultAction>
 								) : null}
 								{onRetry ? (
-									<ToolResultAction label="Run again" onClick={onRetry}>
+									<ToolResultAction
+										label={t("toolResult.retry")}
+										onClick={onRetry}
+									>
 										<Icons.Retry className="size-4" />
 									</ToolResultAction>
 								) : null}

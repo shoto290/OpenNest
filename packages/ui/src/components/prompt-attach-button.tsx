@@ -1,12 +1,11 @@
 "use client"
 
 import { type ChangeEvent, useRef } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
-
-const LABEL = "Attach files"
 
 export interface PromptAttachButtonProps {
 	/** Receives every file picked, several at a time. The host stages them and
@@ -26,6 +25,8 @@ export function PromptAttachButton({
 	disabled,
 	className,
 }: PromptAttachButtonProps) {
+	const { t } = useTranslation("chat")
+	const label = t("attachments.attach")
 	const fileRef = useRef<HTMLInputElement>(null)
 
 	// Clearing the input lets the same file be picked twice in a row.
@@ -41,7 +42,7 @@ export function PromptAttachButton({
 				type="button"
 				variant="ghost"
 				size="icon"
-				aria-label={LABEL}
+				aria-label={label}
 				disabled={disabled}
 				onClick={() => fileRef.current?.click()}
 				className={cn("rounded-full", className)}
@@ -51,7 +52,7 @@ export function PromptAttachButton({
 			{/* Outside the control it belongs to: a button may not hold an input, and
 			this one is only ever opened by that button. */}
 			<input
-				aria-label={LABEL}
+				aria-label={label}
 				className="hidden"
 				multiple
 				onChange={handleBrowsed}

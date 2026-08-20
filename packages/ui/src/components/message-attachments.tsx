@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
@@ -39,6 +40,7 @@ export function MessageAttachments({
 	onOpen,
 	className,
 }: MessageAttachmentsProps) {
+	const { t } = useTranslation("chat")
 	const [brokenIds, setBrokenIds] = useState<ReadonlySet<string>>(new Set())
 
 	if (items.length === 0) return null
@@ -47,7 +49,7 @@ export function MessageAttachments({
 
 	return (
 		<ul
-			aria-label="Attachments"
+			aria-label={t("attachments.label")}
 			data-slot="message-attachments"
 			className={cn(
 				"mt-0! mb-2! flex list-none! flex-wrap items-start gap-1.5 pl-0! last:mb-0!",
@@ -62,7 +64,7 @@ export function MessageAttachments({
 					<li key={item.id} data-slot="message-attachment" className="my-0!">
 						<button
 							type="button"
-							aria-label={`Open ${item.name}`}
+							aria-label={t("attachments.open", { name: item.name })}
 							onClick={() => onOpen(item.id)}
 							className={cn(
 								"flex cursor-pointer items-center overflow-hidden rounded-xl border border-foreground/15 text-left outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-reduce:transition-none",

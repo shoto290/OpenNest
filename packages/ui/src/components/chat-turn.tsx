@@ -8,6 +8,7 @@ import {
 	type ReactNode,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { Icons } from "@workspace/ui/components/icons"
@@ -93,9 +94,11 @@ interface AssistantTurnProps {
 	className?: string
 }
 
-const TURN_FOOTER: Partial<Record<ChatTurnState, string>> = {
-	cancelled: "Stopped",
-	failed: "This response failed",
+const TURN_FOOTER_KEY: Partial<
+	Record<ChatTurnState, "turn.footer.cancelled" | "turn.footer.failed">
+> = {
+	cancelled: "turn.footer.cancelled",
+	failed: "turn.footer.failed",
 }
 
 /** Corners facing a neighbour in the same run tighten, so a run reads as one
@@ -122,11 +125,12 @@ function runPositionFor(index: number, length: number): ChatTurnRun {
 }
 
 function CopyAction({ text }: { text: string }) {
+	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(text)
 
 	return (
 		<MessageAction
-			label={copied ? "Copied" : "Copy"}
+			label={copied ? t("turn.copied") : t("turn.copy")}
 			onClick={() => {
 				void copy()
 			}}
@@ -172,6 +176,8 @@ function UserTurn({
 	onRetry,
 	className,
 }: UserTurnProps) {
+	const { t } = useTranslation("chat")
+
 	return (
 		<Message from="user" animateIn className={className}>
 			<MessageContent>
@@ -183,7 +189,11 @@ function UserTurn({
 								{state === "failed" && onRetry ? (
 									// Pinned: a prompt that never landed has to show its way out
 									// without waiting to be pointed at.
-									<MessageAction alwaysVisible label="Retry" onClick={onRetry}>
+									<MessageAction
+										alwaysVisible
+										label={t("turn.retry")}
+										onClick={onRetry}
+									>
 										<Icons.Retry />
 									</MessageAction>
 								) : null}
@@ -212,9 +222,11 @@ function AssistantTurn({
 	carriesMark = false,
 	className,
 }: AssistantTurnProps) {
+	const { t } = useTranslation("chat")
 	const transcriptMarkId = useChatMarkId()
 	const markId = carriesMark ? transcriptMarkId : undefined
-	const footer = TURN_FOOTER[state]
+	const footerKey = TURN_FOOTER_KEY[state]
+	const footer = footerKey ? t(footerKey) : undefined
 	// This row mounts in the commit that hands it the mark, and its own entrance
 	// fades from nothing — which would blank the mark mid-flight. The bubble
 	// carries the entrance instead, leaving the gutter alone. Frozen at mount:

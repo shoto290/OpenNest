@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
 import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
@@ -45,7 +46,7 @@ const isTimed = (kind: BotWorkingKind) =>
  * it. They stay in the DOM either way, so assistive tech never loses them. */
 function BotWorking({
 	kind = "thinking",
-	name = "No name",
+	name,
 	label,
 	animal,
 	blot,
@@ -54,10 +55,13 @@ function BotWorking({
 	size = CHAT_AVATAR_SIZE,
 	className,
 }: BotWorkingProps) {
+	const { t } = useTranslation("chat")
 	const markId = useChatMarkId()
 	const [pointed, setPointed] = useState(false)
-	const verb = kind === "waiting" ? "waiting for you" : kind
-	const text = label ? `${name} · ${label}` : `${name} is ${verb}…`
+	const named = name ?? t("working.name")
+	const text = label
+		? t("working.labelled", { name: named, label })
+		: t("working.state", { name: named, verb: t(`working.verb.${kind}`) })
 
 	return (
 		<div

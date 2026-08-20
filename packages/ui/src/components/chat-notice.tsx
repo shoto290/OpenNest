@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority"
 import type { ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -73,6 +74,7 @@ function ChatNotice({
 	onDismiss,
 	className,
 }: ChatNoticeProps) {
+	const { t } = useTranslation("chat")
 	const ToneIcon = TONE_ICON[tone]
 	const retryAvailable = retry !== undefined && isRetryAvailable(retry)
 	const exhaustedAfter =
@@ -105,7 +107,7 @@ function ChatNotice({
 					<div className="flex flex-wrap items-center gap-2">
 						{retryAvailable ? (
 							<Button size="sm" variant="outline" onClick={retry.onRetry}>
-								{retry.label ?? "Retry"}
+								{retry.label ?? t("notice.retry")}
 							</Button>
 						) : null}
 						{action ? (
@@ -115,7 +117,7 @@ function ChatNotice({
 						) : null}
 						{exhaustedAfter !== undefined ? (
 							<p className="text-foreground/80 text-xs">
-								Retry limit reached after {exhaustedAfter} attempts
+								{t("notice.exhausted", { attempts: exhaustedAfter })}
 							</p>
 						) : null}
 					</div>
@@ -125,7 +127,7 @@ function ChatNotice({
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					aria-label="Dismiss notice"
+					aria-label={t("notice.dismiss")}
 					onClick={onDismiss}
 				>
 					<Icons.Close />
