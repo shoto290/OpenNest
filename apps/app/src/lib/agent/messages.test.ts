@@ -7,13 +7,19 @@ import { describeTransportError } from "./messages"
 const t = i18n.getFixedT(null, "chat")
 
 describe("describeTransportError", () => {
-	it("names every place the binary was looked for", () => {
+	it("names the agent, not the places it was looked for", () => {
 		expect(
 			describeTransportError(t, {
 				kind: "binaryNotFound",
 				searched: ["/usr/bin", "/opt/bin"],
 			}),
-		).toBe("Claude Code was not found. Locations tried: /usr/bin, /opt/bin")
+		).toBe("OpenNest's built-in agent is unreachable.")
+	})
+
+	it("keeps a signed-out subscription apart from an unreachable agent", () => {
+		expect(describeTransportError(t, { kind: "notAuthenticated" })).not.toBe(
+			describeTransportError(t, { kind: "binaryNotFound", searched: [] }),
+		)
 	})
 
 	it("names the exit code, and says so when the process left none", () => {

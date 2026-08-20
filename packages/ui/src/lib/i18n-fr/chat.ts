@@ -5,16 +5,15 @@ const chat = {
 		ready: {
 			title: "Commencer avec Claude Code",
 			description:
-				"OpenNest utilise l'outil Claude Code installé sur cette machine. Rien ne quitte votre appareil.",
+				"OpenNest dialogue avec son agent intégré. Rien ne quitte votre appareil.",
 		},
 		unavailable: {
 			title: "Claude Code n'est pas disponible",
-			description:
-				"OpenNest n'atteint pas l'outil Claude Code sur cette machine. Terminez l'installation pour démarrer une conversation.",
+			description: "OpenNest n'atteint pas son agent intégré.",
 		},
 		settings: "Réglages du bot",
 		hint: "Saisissez votre première invite dans le champ ci-dessous",
-		setup: "Installer Claude Code",
+		setup: "Réessayer",
 	},
 	connection: {
 		checking: "Vérification de Claude Code…",
@@ -179,10 +178,9 @@ const chat = {
 			failed: "Cette demande n'est pas passée",
 		},
 		transport: {
-			binaryNotFound:
-				"Claude Code est introuvable. Emplacements essayés : {{searched}}",
+			binaryNotFound: "L'agent intégré d'OpenNest est injoignable.",
 			notAuthenticated:
-				"Claude Code n'est pas connecté. Lancez `claude auth login`.",
+				"Votre abonnement Claude n'est pas connecté. Connectez-vous à Claude, puis reprenez la conversation.",
 			authCheckFailed: "La vérification de la connexion a échoué : {{detail}}",
 			spawnFailed: "Claude Code n'a pas pu être démarré : {{detail}}",
 			startupTimeout: "Claude Code n'a pas répondu en {{timeoutMs}} ms.",

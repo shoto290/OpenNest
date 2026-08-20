@@ -8,9 +8,7 @@ export function describeTransportError(
 ): string {
 	switch (error.kind) {
 		case "binaryNotFound":
-			return t("screen.transport.binaryNotFound", {
-				searched: error.searched.join(", "),
-			})
+			return t("screen.transport.binaryNotFound")
 		case "notAuthenticated":
 			return t("screen.transport.notAuthenticated")
 		case "authCheckFailed":
