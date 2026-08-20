@@ -10,6 +10,13 @@ import {
 	COLOR_SCHEME_IDS,
 	type ColorScheme,
 } from "@workspace/ui/components/user-settings"
+import {
+	DEFAULT_LANGUAGE,
+	LANGUAGE_IDS,
+	LANGUAGE_NAMES,
+	type Language,
+	languageOf,
+} from "@workspace/ui/lib/i18n"
 import { PALETTE_IDS, type Palette } from "@workspace/ui/lib/palettes"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -19,7 +26,10 @@ const SCHEME_ICONS: Record<ColorScheme, Icon> = {
 	system: Icons.SystemScheme,
 }
 
-const SCHEME_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "gap-1.5 px-2 py-3 text-xs")
+/** One named choice on a row of them — a scheme beside its icon, a language on its
+ * own. The same tile either way, so a row of languages and a row of schemes cannot
+ * drift apart. */
+const OPTION_CLASS = cn(FIELD_OPTION_CLASS, "gap-1.5 px-2 py-3 text-xs")
 
 /** A tile drawn in the palette it offers. Its edge is that palette's own primary
  * once chosen, so the mark that says "this one" is itself a sample of the choice. */
@@ -52,6 +62,10 @@ type AppearanceFieldsProps = {
 	palette: Palette
 	onColorSchemeChange: (colorScheme: ColorScheme) => void
 	onPaletteChange: (palette: Palette) => void
+	/** Fired with the language chosen. The group reads what is active off the
+	 * translation runtime rather than a prop, so the host has nothing to hold: the
+	 * choice it hands back is what repaints the tick. */
+	onLanguageChange: (language: Language) => void
 	/** Two palettes a row instead of three — what a panel has room for once the rail
 	 * beside it has dropped to its icons. */
 	compact?: boolean
@@ -59,27 +73,49 @@ type AppearanceFieldsProps = {
 }
 
 /**
- * How the app is painted: the scheme it follows, then the six palettes as tiles
- * that each paint themselves in what they offer. Nothing is folded away behind a
- * popover — a reader comparing two palettes sees both at once, in the scheme they
- * are reading in.
+ * How the app reads and how it is painted: the language every string is in, then
+ * the scheme it follows, then the six palettes as tiles that each paint themselves
+ * in what they offer. Language comes first because it repaints every other label on
+ * the panel. Nothing is folded away behind a popover — a reader comparing two
+ * palettes sees both at once, in the scheme they are reading in.
  */
 const AppearanceFields = ({
 	colorScheme,
 	palette,
 	onColorSchemeChange,
 	onPaletteChange,
+	onLanguageChange,
 	compact = false,
 	className,
 }: AppearanceFieldsProps) => {
-	const { t } = useTranslation("settings")
+	const { t, i18n } = useTranslation("settings")
 	const groupId = useId()
+	const language = languageOf(i18n.language) ?? DEFAULT_LANGUAGE
 
 	return (
 		<div
 			className={cn("flex flex-col gap-5", className)}
 			data-slot="appearance-fields"
 		>
+			<SettingsGroup
+				grid="grid-cols-2 gap-1.5"
+				label={t("appearance.language.label")}
+			>
+				{LANGUAGE_IDS.map((id) => (
+					<label className={OPTION_CLASS} key={id}>
+						<input
+							checked={language === id}
+							className="sr-only"
+							name={`${groupId}-language`}
+							onChange={() => onLanguageChange(id)}
+							type="radio"
+							value={id}
+						/>
+						<span>{LANGUAGE_NAMES[id]}</span>
+					</label>
+				))}
+			</SettingsGroup>
+
 			<SettingsGroup
 				grid="grid-cols-3 gap-1.5"
 				label={t("appearance.scheme.label")}
@@ -88,7 +124,7 @@ const AppearanceFields = ({
 					const SchemeIcon = SCHEME_ICONS[scheme]
 
 					return (
-						<label className={SCHEME_OPTION_CLASS} key={scheme}>
+						<label className={OPTION_CLASS} key={scheme}>
 							<input
 								checked={colorScheme === scheme}
 								className="sr-only"

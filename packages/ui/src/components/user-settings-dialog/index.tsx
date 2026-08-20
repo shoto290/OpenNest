@@ -19,6 +19,7 @@ import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import { AppearanceFields } from "@workspace/ui/components/user-settings-dialog/appearance-fields"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
+import type { Language } from "@workspace/ui/lib/i18n"
 import { cn } from "@workspace/ui/lib/utils"
 
 /** The tab a reader lands on, every time the dialog opens. Who they are comes
@@ -38,6 +39,10 @@ type UserSettingsDialogProps = {
 	/** Receives the picked, dropped or pasted file. The host turns it into a URL
 	 * and writes it back as `value.image`; the dialog changes nothing it holds. */
 	onPictureUpload: (file: File) => void
+	/** Fired with the language chosen. It is the one field that does not travel in
+	 * `value`: what the interface reads in lives in the translation runtime, so the
+	 * host writes the choice down rather than holding it. */
+	onLanguageChange: (language: Language) => void
 	/** Takes the reader's picture off. Left out, and the control offers no way to —
 	 * the dialog never clears `value.image` itself. */
 	onPictureRemove?: () => void
@@ -48,12 +53,15 @@ type UserSettingsDialogProps = {
  * Everything a reader is to the app, in one overlay: a breadcrumb wearing their own
  * face, a rail of two groups down the left and one group at a time on the right.
  * Profile is who they are — the name the app calls them and the picture it shows;
- * Appearance is how the app is painted for them.
+ * Appearance is the language the app speaks to them in and how it is painted for
+ * them.
  *
  * It is the same contract as a bot's settings and for the same reason: fully
- * controlled, saving as you type. Every edit emits `onValueChange` with the whole
- * value, and the dialog owns no draft, no debounce and no persistence — closing it
- * is never a question, because there is nothing unsaved to lose.
+ * controlled, saving as you type. Every edit emits the whole value through
+ * `onValueChange` — bar the two the value does not carry, the picture and the
+ * language, which have a callback each — and the dialog owns no draft, no debounce
+ * and no persistence: closing it is never a question, because there is nothing
+ * unsaved to lose.
  */
 const UserSettingsDialog = ({
 	open,
@@ -62,6 +70,7 @@ const UserSettingsDialog = ({
 	onValueChange,
 	onPictureUpload,
 	onPictureRemove,
+	onLanguageChange,
 	className,
 }: UserSettingsDialogProps) => {
 	const { t } = useTranslation("settings")
@@ -144,6 +153,7 @@ const UserSettingsDialog = ({
 							colorScheme={value.colorScheme}
 							compact={iconsOnly}
 							onColorSchemeChange={(colorScheme) => patch({ colorScheme })}
+							onLanguageChange={onLanguageChange}
 							onPaletteChange={(palette) => patch({ palette })}
 							palette={value.palette}
 						/>
