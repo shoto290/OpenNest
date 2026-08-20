@@ -1,7 +1,11 @@
 /** Every string a reader sees on the user settings surface — the breadcrumb, the
- * rail down the left, the profile fields and the appearance tiles. Scheme and
- * palette labels are keyed by the ids the value carries, so a palette added to the
- * app without a key here fails the type check rather than rendering its own id. */
+ * rail down the left, the profile fields, the language tiles and the appearance
+ * tiles. Scheme and palette labels are keyed by the ids the value carries, so a
+ * palette added to the app without a key here fails the type check rather than
+ * rendering its own id. The languages themselves are not here: each is written in
+ * its own language, so English reads English in a French interface. The machine tile
+ * is, because following the machine is a word of the interface rather than a
+ * language. */
 const settings = {
 	breadcrumb: {
 		title: "Settings",
@@ -9,6 +13,7 @@ const settings = {
 	rail: {
 		profile: "Profile",
 		appearance: "Appearance",
+		language: "Language",
 	},
 	profile: {
 		name: {
@@ -22,10 +27,11 @@ const settings = {
 			remove: "Remove picture",
 		},
 	},
+	language: {
+		label: "Language",
+		machine: "System",
+	},
 	appearance: {
-		language: {
-			label: "Language",
-		},
 		scheme: {
 			label: "Scheme",
 			option: {

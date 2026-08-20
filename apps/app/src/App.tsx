@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
@@ -27,7 +27,7 @@ import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
-import { storeLanguage } from "@/lib/user/language-mirror"
+import { chosenLanguage, storeLanguage } from "@/lib/user/language-mirror"
 import { useUser } from "@/lib/user/use-user"
 import { toUserSettingsValue } from "@/lib/user/user-settings"
 
@@ -170,6 +170,11 @@ export function App() {
 		[user.state.profile, theme.theme, theme.palette],
 	)
 
+	// The language is the one setting the record holds and the value does not: what
+	// the interface reads in lives in the translation runtime, so the mirror is
+	// where it is read from and this only holds what the settings mark as chosen.
+	const [language, setLanguage] = useState(chosenLanguage)
+
 	useSettingsShortcut({
 		isEnabled: Boolean(selected),
 		onToggle: toggleSettings,
@@ -257,8 +262,10 @@ export function App() {
 			them leaves the conversation and where it is scrolled alone. */}
 			<UserSettingsDialog
 				onClose={() => user.controller.setSettingsOpen(false)}
-				onLanguageChange={(language) => {
-					void storeLanguage(language)
+				language={language}
+				onLanguageChange={(next) => {
+					setLanguage(next)
+					void storeLanguage(next)
 				}}
 				onPictureRemove={() => {
 					void user.controller.removePicture()

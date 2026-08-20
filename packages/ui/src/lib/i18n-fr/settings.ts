@@ -1,5 +1,5 @@
 /** The user settings surface in French — the breadcrumb, the rail down the
- * left, the profile fields and the appearance tiles. */
+ * left, the profile fields, the language tiles and the appearance tiles. */
 const settings = {
 	breadcrumb: {
 		title: "Réglages",
@@ -7,6 +7,7 @@ const settings = {
 	rail: {
 		profile: "Profil",
 		appearance: "Apparence",
+		language: "Langue",
 	},
 	profile: {
 		name: {
@@ -20,10 +21,11 @@ const settings = {
 			remove: "Retirer la photo",
 		},
 	},
+	language: {
+		label: "Langue",
+		machine: "Système",
+	},
 	appearance: {
-		language: {
-			label: "Langue",
-		},
 		scheme: {
 			label: "Thème",
 			option: {

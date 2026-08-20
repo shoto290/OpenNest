@@ -18,6 +18,7 @@ import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import { AppearanceFields } from "@workspace/ui/components/user-settings-dialog/appearance-fields"
+import { LanguageFields } from "@workspace/ui/components/user-settings-dialog/language-fields"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import type { Language } from "@workspace/ui/lib/i18n"
 import { cn } from "@workspace/ui/lib/utils"
@@ -39,10 +40,15 @@ type UserSettingsDialogProps = {
 	/** Receives the picked, dropped or pasted file. The host turns it into a URL
 	 * and writes it back as `value.image`; the dialog changes nothing it holds. */
 	onPictureUpload: (file: File) => void
-	/** Fired with the language chosen. It is the one field that does not travel in
-	 * `value`: what the interface reads in lives in the translation runtime, so the
-	 * host writes the choice down rather than holding it. */
-	onLanguageChange: (language: Language) => void
+	/** The language that was chosen, or `null` for none chosen — the machine tile,
+	 * which is what the app follows until a reader picks a language themselves. It is
+	 * the one field that does not travel in `value`: what the interface reads in
+	 * lives in the translation runtime, so the host holds the choice apart. */
+	language: Language | null
+	/** Fired with the language chosen, or `null` when the reader hands the choice
+	 * back to the machine. The dialog holds nothing: the host writes the choice down
+	 * and the tick follows. */
+	onLanguageChange: (language: Language | null) => void
 	/** Takes the reader's picture off. Left out, and the control offers no way to —
 	 * the dialog never clears `value.image` itself. */
 	onPictureRemove?: () => void
@@ -51,10 +57,10 @@ type UserSettingsDialogProps = {
 
 /**
  * Everything a reader is to the app, in one overlay: a breadcrumb wearing their own
- * face, a rail of two groups down the left and one group at a time on the right.
+ * face, a rail of three groups down the left and one group at a time on the right.
  * Profile is who they are — the name the app calls them and the picture it shows;
- * Appearance is the language the app speaks to them in and how it is painted for
- * them.
+ * Appearance is how the app is painted for them; Language is the one it speaks to
+ * them in.
  *
  * It is the same contract as a bot's settings and for the same reason: fully
  * controlled, saving as you type. Every edit emits the whole value through
@@ -70,6 +76,7 @@ const UserSettingsDialog = ({
 	onValueChange,
 	onPictureUpload,
 	onPictureRemove,
+	language,
 	onLanguageChange,
 	className,
 }: UserSettingsDialogProps) => {
@@ -126,6 +133,12 @@ const UserSettingsDialog = ({
 							label={t("rail.appearance")}
 							value="appearance"
 						/>
+						<SettingsRailItem
+							icon={Icons.Language}
+							iconsOnly={iconsOnly}
+							label={t("rail.language")}
+							value="language"
+						/>
 					</SettingsRail>
 
 					<Tabs.Panel
@@ -153,9 +166,18 @@ const UserSettingsDialog = ({
 							colorScheme={value.colorScheme}
 							compact={iconsOnly}
 							onColorSchemeChange={(colorScheme) => patch({ colorScheme })}
-							onLanguageChange={onLanguageChange}
 							onPaletteChange={(palette) => patch({ palette })}
 							palette={value.palette}
+						/>
+					</Tabs.Panel>
+
+					<Tabs.Panel
+						className={SETTINGS_SCROLLING_PANEL_CLASS}
+						value="language"
+					>
+						<LanguageFields
+							language={language}
+							onLanguageChange={onLanguageChange}
 						/>
 					</Tabs.Panel>
 				</Tabs.Root>
