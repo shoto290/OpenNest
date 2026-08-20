@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	BOT_NAMES,
 	changesRuntime,
 	FALLBACK_MODELS,
 	modelOptionsFor,
@@ -211,9 +212,14 @@ describe("modelOptionsFor", () => {
 })
 
 describe("newBotIdentity", () => {
+	const rosterCarrying = (names: readonly string[]): Bot[] =>
+		names.map((name, index) => bot({ id: `b-${index}`, name }))
+
 	it("names a bot before it is named and gives it a face nobody wears", () => {
-		expect(newBotIdentity([bot({ avatarAnimal: "cat" })])).toMatchObject({
-			name: "New bot",
+		const created = newBotIdentity([bot({ avatarAnimal: "cat" })])
+
+		expect(BOT_NAMES).toContain(created.name)
+		expect(created).toMatchObject({
 			title: "",
 			instructions: "",
 			avatarAnimal: "rabbit",
@@ -221,6 +227,20 @@ describe("newBotIdentity", () => {
 			avatarImagePath: null,
 			workingDir: null,
 		})
+	})
+
+	it("offers at least thirty names to draw from", () => {
+		expect(new Set(BOT_NAMES).size).toBeGreaterThanOrEqual(30)
+	})
+
+	it("draws a name nobody in the roster carries", () => {
+		const [spared, ...carried] = BOT_NAMES
+
+		expect(newBotIdentity(rosterCarrying(carried)).name).toBe(spared)
+	})
+
+	it("draws from the whole list once every name is carried", () => {
+		expect(BOT_NAMES).toContain(newBotIdentity(rosterCarrying(BOT_NAMES)).name)
 	})
 
 	// An alias follows its tier; a versioned name pins the bot to whatever was

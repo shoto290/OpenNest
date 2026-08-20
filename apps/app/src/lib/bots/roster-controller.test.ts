@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
 
-import { toSettingsValue } from "./bot-settings"
+import { BOT_NAMES, toSettingsValue } from "./bot-settings"
 import { createRosterController } from "./roster-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -120,7 +120,7 @@ describe("createRosterController", () => {
 		expect(state.bots).toHaveLength(2)
 		expect(state.selectedBotId).toBe(state.bots[1].id)
 		expect(state.isEditing).toBe(true)
-		expect(state.bots[1].name).toBe("New bot")
+		expect(BOT_NAMES).toContain(state.bots[1].name)
 		// It is on the record before the panel opens on it, which is what "the bot
 		// exists and then you name it" means.
 		expect((await reloaded(store)).bots).toHaveLength(2)
