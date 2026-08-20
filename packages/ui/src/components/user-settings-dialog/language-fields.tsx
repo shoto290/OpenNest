@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
-import { FIELD_OPTION_CLASS } from "@workspace/ui/components/settings-styles"
+import { FIELD_OPTION_MARKS_CLASS } from "@workspace/ui/components/settings-styles"
 import {
 	LANGUAGE_IDS,
 	LANGUAGE_NAMES,
@@ -17,8 +17,8 @@ import { cn } from "@workspace/ui/lib/utils"
  * marks a tile carries — filled when chosen, ringed when reached by keyboard — laid
  * on their side. */
 const OPTION_ROW_CLASS = cn(
-	FIELD_OPTION_CLASS,
-	"grid grid-cols-[1rem_1fr] gap-2 px-2 py-2 text-sm",
+	FIELD_OPTION_MARKS_CLASS,
+	"grid grid-cols-[1rem_1fr] items-center gap-2 px-2 py-2 text-sm",
 )
 
 type LanguageFieldsProps = {
