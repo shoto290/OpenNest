@@ -440,12 +440,23 @@ mod tests {
 			.collect()
 	}
 
-	fn init(session_id: &str, slash_commands: Option<Value>) -> Value {
-		let mut frame = json!({ "type": "system", "subtype": "init", "session_id": session_id });
-		if let Some(commands) = slash_commands {
-			frame["slash_commands"] = commands;
+	/// A key a build named, or one it left out entirely: `None` is the absent key,
+	/// `Some(Value::Null)` the one set to null.
+	fn with_field(mut object: Value, key: &str, value: Option<Value>) -> Value {
+		if let Some(value) = value {
+			object[key] = value;
 		}
-		frame
+		object
+	}
+
+	fn init(session_id: &str, slash_commands: Option<Value>) -> Value {
+		let frame = json!({ "type": "system", "subtype": "init", "session_id": session_id });
+		with_field(frame, "slash_commands", slash_commands)
+	}
+
+	fn message(kind: &str, content: Option<Value>) -> Value {
+		let body = json!({ "id": "msg_null", "role": kind });
+		json!({ "type": kind, "message": with_field(body, "content", content) })
 	}
 
 	fn outcome(events: &[ClaudeEvent]) -> Option<TurnOutcome> {
@@ -568,6 +579,88 @@ mod tests {
 				events,
 				vec![ClaudeEvent::SessionReady { session_id: "s-1".into(), resumed: false }]
 			);
+		}
+	}
+
+	/// `#[serde(default)]` answers a key left out, never one set to null, and `Frame`
+	/// is internally tagged: one null field would cost the whole frame, and the reader
+	/// would be handed an unreadable-frame failure in place of everything that frame
+	/// carried. Content set to null is content there is none of — what a frame leaving
+	/// the key out already says.
+	#[test]
+	fn a_frame_whose_content_is_null_carries_none() {
+		for kind in ["assistant", "user"] {
+			for content in [None, Some(Value::Null)] {
+				let mut translator = Translator::new(false);
+
+				let events = ingest(&mut translator, vec![message(kind, content)]);
+
+				assert!(events.is_empty(), "a {kind} frame carrying no content said something");
+			}
+		}
+	}
+
+	/// Text set to null is text never said, in the block as in the delta: nothing is
+	/// streamed and no message is finished, exactly as when the key is left out. The
+	/// frame is still read — the assistant frame it rides on may carry a tool call the
+	/// activity log is owed.
+	#[test]
+	fn a_null_text_reads_as_an_empty_one() {
+		for text in [None, Some(Value::Null)] {
+			let mut translator = Translator::new(false);
+			let block = with_field(json!({ "type": "text" }), "text", text.clone());
+			let delta = with_field(json!({ "type": "text_delta" }), "text", text);
+
+			let events = ingest(
+				&mut translator,
+				vec![
+					json!({
+						"type": "stream_event",
+						"event": { "type": "message_start", "message": { "id": "msg_null" } }
+					}),
+					json!({
+						"type": "stream_event",
+						"event": { "type": "content_block_delta", "index": 0, "delta": delta }
+					}),
+					message("assistant", Some(json!([block]))),
+				],
+			);
+
+			assert_eq!(streamed(&events), "");
+			assert_eq!(completed(&events), Vec::<&ChatMessage>::new());
+		}
+	}
+
+	/// An error flag set to null is a call that worked and a turn that ended well —
+	/// the reading a frame leaving the key out already gets. Both frames carry more
+	/// than the flag: the activity the tool result closes, and the ending the turn
+	/// reached.
+	#[test]
+	fn a_null_error_flag_reads_as_one_that_worked() {
+		for is_error in [None, Some(Value::Null)] {
+			let mut translator = Translator::new(false);
+			let tool_result = with_field(
+				json!({ "type": "tool_result", "tool_use_id": "toolu_1" }),
+				"is_error",
+				is_error.clone(),
+			);
+			let ended = with_field(
+				json!({ "type": "result", "subtype": "success", "session_id": "s-1" }),
+				"is_error",
+				is_error,
+			);
+			let mut frames = tool_round(1);
+			frames.pop();
+			frames.push(message("user", Some(json!([tool_result]))));
+			frames.push(ended);
+
+			let events = ingest(&mut translator, frames);
+
+			assert_eq!(
+				statuses(&events),
+				[ActivityStatus::Running, ActivityStatus::Running, ActivityStatus::Succeeded]
+			);
+			assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
 		}
 	}
 }
