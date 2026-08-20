@@ -33,17 +33,24 @@ const PICTURED_USER: UserSettingsValue = {
 }
 
 /** The dialog keeps no draft and has no open state of its own, so a story holds
- * both — the value it edits and whether it stands. */
+ * what the host holds — the value it edits, the language chosen apart from it, and
+ * whether it stands. */
 const DialogHost = (props: UserSettingsDialogProps) => {
 	const [value, setValue] = useState(props.value)
+	const [language, setLanguage] = useState(props.language)
 	const [open, setOpen] = useState(props.open)
 
 	return (
 		<UserSettingsDialog
 			{...props}
+			language={language}
 			onClose={() => {
 				setOpen(false)
 				props.onClose()
+			}}
+			onLanguageChange={(next) => {
+				setLanguage(next)
+				props.onLanguageChange(next)
 			}}
 			onValueChange={(next) => {
 				setValue(next)
@@ -69,7 +76,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face — the same avatar the sidebar chip draws, so the dialog is visibly the one that chip opened — their name and the word Settings. Down the left is a rail of two groups: Profile, what the app calls them and the picture it shows, then Appearance, the language the app speaks and how it is painted. It opens on Profile every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence — closing it is never a question. Two things do not travel through the value: the picture, whose file is handed to the host to store and write a URL back for, and the language, which lives in the translation runtime the whole app reads from.",
+					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face — the same avatar the sidebar chip draws, so the dialog is visibly the one that chip opened — their name and the word Settings. Down the left is a rail of three groups: Profile, what the app calls them and the picture it shows; Appearance, how the app is painted; Language, the one it speaks. It opens on Profile every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence — closing it is never a question. Two things do not travel through the value: the picture, whose file is handed to the host to store and write a URL back for, and the language, which travels as a prop of its own because the translation runtime is what the whole app reads from.",
 			},
 		},
 	},
@@ -80,6 +87,7 @@ const meta = preview.meta({
 		onValueChange: fn(),
 		onPictureUpload: fn(),
 		onPictureRemove: fn(),
+		language: null,
 		onLanguageChange: fn(),
 	},
 	render: (args) => <DialogHost {...args} />,
@@ -90,7 +98,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the scheme and the palettes, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in.",
+					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the scheme and the palettes, `LanguageTab` for the language the app is read in, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in.",
 			},
 		},
 	},
@@ -165,7 +173,7 @@ export const Appearance = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second group: the languages this build ships, then the three schemes, then the six palettes as tiles three to a row. Check that each tile is painted in the palette it offers rather than in the one the window is wearing, that the chosen one carries a tick as well as an edge, that choosing a scheme or a palette writes the whole value back through `onValueChange`, and that a language leaves that value alone and reports itself through `onLanguageChange` — the one field the dialog does not hold. Pick `IconRail` for the width where the tiles drop to two a row.",
+					"The second group: the three schemes, then the six palettes as tiles three to a row. Check that each tile is painted in the palette it offers rather than in the one the window is wearing, that the chosen one carries a tick as well as an edge, and that choosing a scheme or a palette writes the whole value back through `onValueChange`. Pick `LanguageTab` for the third group, `IconRail` for the width where the tiles drop to two a row.",
 			},
 		},
 	},
@@ -189,11 +197,37 @@ export const Appearance = meta.story({
 		await expect(args.onValueChange).toHaveBeenCalledWith(
 			expect.objectContaining({ colorScheme: "dark" }),
 		)
+	},
+})
+
+export const LanguageTab = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The third group, on a record holding no language: a list one line to a language, the machine row heading it as the chosen one and every language this build ships written in itself under it. Check that a language leaves the value alone and reports itself through `onLanguageChange` — the one field the dialog does not hold — and that handing the choice back to the machine reports `null` rather than the language the machine happens to be set to. Pick `Appearance` for the group next door.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Language" }))
+
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Language",
+		})
+		await expect(
+			within(panel).getByRole("radio", { name: "System" }),
+		).toBeChecked()
 
 		await userEvent.click(
 			within(panel).getByRole("radio", { name: "Français" }),
 		)
 		await expect(args.onLanguageChange).toHaveBeenCalledWith("fr")
+		await expect(args.onValueChange).not.toHaveBeenCalled()
+
+		await userEvent.click(within(panel).getByRole("radio", { name: "System" }))
+		await expect(args.onLanguageChange).toHaveBeenLastCalledWith(null)
 	},
 })
 
@@ -208,7 +242,7 @@ export const IconRail = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog on a window too narrow for the rail's names — the state a laptop reaches once the dialog is capped to the viewport. Check that the rail keeps both groups reachable and named to a screen reader, that hovering one names it in a tooltip, and that the palettes fall to two tiles a row so each still reads as a window rather than a sliver. Pick `Appearance` for the full-width grid.",
+					"The dialog on a window too narrow for the rail's names — the state a laptop reaches once the dialog is capped to the viewport. Check that the rail keeps all three groups reachable and named to a screen reader, that hovering one names it in a tooltip, and that the palettes fall to two tiles a row so each still reads as a window rather than a sliver. Pick `Appearance` for the full-width grid.",
 			},
 		},
 	},

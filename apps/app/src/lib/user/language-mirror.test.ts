@@ -5,6 +5,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	activeLanguageOf,
+	chosenLanguage,
 	startLanguage,
 	storeLanguage,
 } from "./language-mirror"
@@ -64,6 +65,20 @@ describe("the active language", () => {
 		machineReadingIn("br-FR")
 
 		expect(activeLanguageOf("br")).toBe("en")
+	})
+})
+
+describe("the language chosen so far", () => {
+	it("is the one the mirror holds", () => {
+		localStorage.setItem("language", "fr")
+
+		expect(chosenLanguage()).toBe("fr")
+	})
+
+	it("is none while the record follows the machine", () => {
+		machineReadingIn("fr-FR")
+
+		expect(chosenLanguage()).toBeNull()
 	})
 })
 
@@ -130,6 +145,19 @@ describe("the language chosen", () => {
 
 		expect(hostInvoke).toHaveBeenLastCalledWith("user_set_preferences", {
 			preferences: { ...RECORD, language: "en" },
+		})
+	})
+
+	it("is forgotten when the reader hands the choice back", async () => {
+		machineReadingIn("fr-FR")
+		await storeLanguage("en")
+
+		await storeLanguage(null)
+
+		expect(localStorage.getItem("language")).toBeNull()
+		expect(i18n.language).toBe("fr")
+		expect(hostInvoke).toHaveBeenLastCalledWith("user_set_preferences", {
+			preferences: { ...RECORD, language: null },
 		})
 	})
 

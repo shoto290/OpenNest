@@ -12,6 +12,12 @@ import { changePreferences, readPreferences } from "./preferences-queue"
  * itself in before the host has answered. */
 const LANGUAGE_KEY = "language"
 
+/** The language that was chosen, as the mirror holds it, and `null` for none — the
+ * record following the machine. It is what the settings show as chosen: the resolved
+ * language cannot say whether it was picked or followed. */
+export const chosenLanguage = (): Language | null =>
+	languageOf(localStorage.getItem(LANGUAGE_KEY))
+
 /** What the app reads in, from what was chosen: the language itself when this build
  * ships its catalogue, the machine's own when nothing was chosen, and en when
  * neither has a catalogue. */
@@ -45,12 +51,13 @@ export const startLanguage = async () => {
 	}
 }
 
-/** The language chosen, read in and written to the record. The record is written
- * whole, so the rest of it is read back and echoed in one turn of the queue every
- * other writer shares: a language must not clear the name, the picture, the scheme
- * or the palette. A refused call is dropped — the mirror already holds what is
- * read. */
-export const storeLanguage = async (language: Language) => {
+/** The language chosen, read in and written to the record, or `null` for the reader
+ * handing the choice back: the record forgets the language it held and follows the
+ * machine again, next launch included. The record is written whole, so the rest of it
+ * is read back and echoed in one turn of the queue every other writer shares: a
+ * language must not clear the name, the picture, the scheme or the palette. A refused
+ * call is dropped — the mirror already holds what is read. */
+export const storeLanguage = async (language: Language | null) => {
 	adopt(language)
 
 	try {

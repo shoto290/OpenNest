@@ -23,8 +23,7 @@ const CHOSEN_DARK: Appearance = {
 }
 
 /** The fields keep no scheme or palette of their own, so a story that lets a reader
- * choose holds what the choosing produces. The language is not among them: that one
- * lives in the translation runtime, which the group reads itself. */
+ * choose holds what the choosing produces. */
 const AppearanceHost = (props: AppearanceFieldsProps) => {
 	const [colorScheme, setColorScheme] = useState(props.colorScheme)
 	const [palette, setPalette] = useState(props.palette)
@@ -59,7 +58,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"How the app reads and how it is painted, flat: the languages this build ships a catalogue for, each written in itself; then the three schemes — Light, Dark and System; then the six palettes as tiles. Each tile is the app in miniature drawn in the palette it offers, and every band in it is a token read live from that palette rather than a colour copied out of it, so a palette repainted in the stylesheet is repainted here in both schemes with nothing to keep in sync. Nothing is folded behind a popover: a reader comparing two palettes sees both at once, in the scheme they are reading in. It holds nothing: a scheme and a palette go straight to the host, and the active language is read off the translation runtime rather than passed in.",
+					"How the app is painted, flat: the three schemes — Light, Dark and System — then the six palettes as tiles. Each tile is the app in miniature drawn in the palette it offers, and every band in it is a token read live from that palette rather than a colour copied out of it, so a palette repainted in the stylesheet is repainted here in both schemes with nothing to keep in sync. Nothing is folded behind a popover: a reader comparing two palettes sees both at once, in the scheme they are reading in. It holds nothing: a scheme and a palette go straight to the host. The language lives on its own tab — see `Forms/LanguageFields`.",
 			},
 		},
 	},
@@ -67,7 +66,6 @@ const meta = preview.meta({
 		...FOLLOWING_THE_MACHINE,
 		onColorSchemeChange: fn(),
 		onPaletteChange: fn(),
-		onLanguageChange: fn(),
 	},
 })
 
@@ -76,7 +74,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal panel: two languages, three schemes, six palettes, three tiles a row. Check that exactly one scheme and one palette read as chosen, that the chosen palette is marked with a tick as well as an edge — selection is never colour alone — and that choosing reports the choice immediately. Pick `Languages` for the language group, `TwoColumns` for the narrow dialog.",
+					"The nominal panel: three schemes, six palettes, three tiles a row. Check that exactly one scheme and one palette read as chosen, that the chosen palette is marked with a tick as well as an edge — selection is never colour alone — and that choosing reports the choice immediately. Pick `TwoColumns` for the narrow dialog, `InFrench` for the panel once the reader has switched language.",
 			},
 		},
 	},
@@ -93,27 +91,6 @@ export const Default = meta.story({
 	},
 })
 
-export const Languages = meta.story({
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The language group, offering exactly what this build ships a catalogue for — the list is the catalogues themselves, so there is no second list to fall out of step with them. Each is written in its own language: a reader lost in a language they cannot read still finds `Français` or `English`. Check that the active one reads as chosen and that picking one reports it immediately — the group holds nothing, so the host is what makes the switch. Pick `InFrench` for the panel once the switch has happened.",
-			},
-		},
-	},
-	play: async ({ args, canvas, userEvent }) => {
-		const languages = within(canvas.getByRole("group", { name: "Language" }))
-		await expect(languages.getAllByRole("radio")).toHaveLength(2)
-		await expect(
-			languages.getByRole("radio", { name: "English" }),
-		).toBeChecked()
-
-		await userEvent.click(languages.getByRole("radio", { name: "Français" }))
-		await expect(args.onLanguageChange).toHaveBeenCalledWith("fr")
-	},
-})
-
 export const InFrench = meta.story({
 	beforeEach: () => {
 		activateLanguage("fr")
@@ -124,22 +101,16 @@ export const InFrench = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel read in French, which is the whole point of the group above it: the switch takes hold where the reader is standing, with no restart and no reload. Check that every label around it turned — the legends, the schemes, the palettes — while the language names themselves did not, and that French now reads as the chosen one. Pick `Languages` for the group that gets here.",
+					"The panel read in French, which is the whole point of the tab next door: the switch takes hold where the reader is standing, with no restart and no reload. Check that every label turned — the legends, the schemes, the palettes. Pick `Forms/LanguageFields` for the group that gets here.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		const languages = within(
-			await canvas.findByRole("group", { name: "Langue" }),
-		)
-
-		await expect(canvas.getByRole("group", { name: "Thème" })).toBeVisible()
 		await expect(
-			languages.getByRole("radio", { name: "Français" }),
-		).toBeChecked()
-		await expect(
-			languages.getByRole("radio", { name: "English" }),
+			await canvas.findByRole("group", { name: "Thème" }),
 		).toBeVisible()
+		await expect(canvas.getByRole("group", { name: "Palette" })).toBeVisible()
+		await expect(canvas.getByRole("radio", { name: "Mousse" })).toBeVisible()
 	},
 })
 
