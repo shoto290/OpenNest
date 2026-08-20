@@ -185,6 +185,7 @@ const Composer = memo(function Composer({
 	isOverlayOpen,
 	turn,
 	attachments,
+	isDropTarget,
 	onAttach,
 	onRemoveAttachment,
 	onSubmitPrompt,
@@ -201,6 +202,9 @@ const Composer = memo(function Composer({
 	turn: TurnState
 	/** The files staged for this prompt, drawn as chips inside the composer. */
 	attachments: StagedAttachment[]
+	/** Files are being dragged over the conversation, which the composer wears even
+	 * though the drag never reached it. */
+	isDropTarget: boolean
 	onAttach: (files: File[]) => void
 	onRemoveAttachment: (id: string) => void
 	/** Stores the staged files, then sends the prompt naming them. Answers whether
@@ -268,6 +272,7 @@ const Composer = memo(function Composer({
 				}
 				leading={<PromptAttachButton disabled={disabled} onAttach={onAttach} />}
 				disabled={disabled}
+				dropTarget={isDropTarget}
 				loading={isTurnBusy(turn)}
 				onAttach={onAttach}
 				onStop={canStopTurn(turn) ? stop : undefined}
@@ -369,13 +374,14 @@ export function ChatScreen({
 }: ChatScreenProps) {
 	const { state, controller } = chat
 	const composerRef = useRef<HTMLTextAreaElement>(null)
+	const conversationRef = useRef<HTMLDivElement>(null)
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
 	// The picture the bot wears, as something a webview may load. Resolved once per
 	// render and handed down: every avatar on this screen is the same bot's.
 	const face = avatarSrc(bot.avatarImagePath)
 	const disabled = !isSessionReady(state)
-	const staged = useAttachments(attachments, bot.id, !disabled)
+	const staged = useAttachments(attachments, bot.id, !disabled, conversationRef)
 	const acceptsInput = !disabled && !isTurnBusy(state.turn)
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
 	const latestError = state.errors.at(-1)
@@ -399,6 +405,7 @@ export function ChatScreen({
 
 	return (
 		<ChatLayout
+			rootRef={conversationRef}
 			busy={isTurnBusy(state.turn)}
 			label="Claude Code conversation"
 			// Offered only once there is a transcript to sit above: an empty
@@ -458,6 +465,7 @@ export function ChatScreen({
 					isOverlayOpen={isOverlayOpen}
 					turn={state.turn}
 					attachments={staged.items}
+					isDropTarget={staged.isDropTarget}
 					onAttach={staged.stage}
 					onRemoveAttachment={staged.remove}
 					onSubmitPrompt={staged.submit}
