@@ -1,7 +1,11 @@
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotsIn, UPLOADED_AVATAR_IMAGE } from "@workspace/storybook/story-utils"
+import {
+	FRAME_POLL,
+	slotsIn,
+	UPLOADED_AVATAR_IMAGE,
+} from "@workspace/storybook/story-utils"
 import {
 	AnimatedSidebar,
 	AnimatedSidebarContent,
@@ -18,8 +22,6 @@ const LONG_NAME = "Ada Martin-Vandersteen de la Fontaine"
 const FALLBACK_NAME = "You"
 
 const SINGLE_LINE_HEIGHT = 24
-const FRAME_POLL = { interval: 10 }
-
 /** The same inset the panels give their pinned region: on the rail there is no
  * room for padding either side of one avatar. */
 const FOOTER_INSET =

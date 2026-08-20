@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react"
 import type { ExtraProps } from "react-markdown"
+import { expect, waitFor } from "storybook/test"
 
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -24,6 +25,25 @@ export const A11Y_CONTRAST_AWAITING_DESIGN_DECISION = {
 	config: {
 		rules: [{ id: "color-contrast", reviewOnFail: true }],
 	},
+}
+
+/** A play function reading an element mid-animation has to look again sooner than
+ * the default 50ms, or it measures a frame the tween has already left. */
+export const FRAME_POLL = { interval: 10 }
+
+/** The a11y pass reads colours straight after the play function, so an overlay has
+ * to have landed before it runs or it measures a half-transparent surface. Waiting
+ * on the animations the element is running beats polling a computed value, which
+ * only ever reports the frame the poll happened to catch. A tween the component
+ * cancels rejects rather than settles, and a cancelled tween is over all the same. */
+export const settled = async (element: HTMLElement) => {
+	await waitFor(() => expect(element).toBeVisible(), FRAME_POLL)
+	await Promise.all(
+		element
+			.getAnimations({ subtree: true })
+			.map(({ finished }) => finished.catch(() => undefined)),
+	)
+	return element
 }
 
 export const Row = ({ children }: { children: React.ReactNode }) => (

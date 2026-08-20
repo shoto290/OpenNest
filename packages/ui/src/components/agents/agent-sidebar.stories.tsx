@@ -3,6 +3,7 @@ import { expect, fn, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	FRAME_POLL,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import {
@@ -21,8 +22,6 @@ const LAST_MESSAGE =
 	"Renamed the transport module and updated every caller, so the second turn resumes the first one cleanly again."
 
 const SINGLE_LINE_HEIGHT = 20
-
-const FRAME_POLL = { interval: 10 }
 
 const NARROW_VIEWPORT = {
 	narrow: { name: "Narrow", styles: { width: "800px", height: "900px" } },
@@ -1078,7 +1077,11 @@ export const ReducedMotion = meta.story({
 })
 
 export const Footer = meta.story({
-	args: { bots: LONG_ROSTER, selectedBotId: "beacon-0", footer: FOOTER_CONTENT },
+	args: {
+		bots: LONG_ROSTER,
+		selectedBotId: "beacon-0",
+		footer: FOOTER_CONTENT,
+	},
 	parameters: {
 		docs: {
 			description: {
