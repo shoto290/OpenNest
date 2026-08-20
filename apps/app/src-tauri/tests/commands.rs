@@ -3,12 +3,13 @@
 
 use std::sync::{Arc, Mutex};
 
-use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::claude::commands::{
+use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
+use opennest_app::agent::commands::{
 	claude_start_or_resume_session, shutdown_session, terminate_session, EVENT_CHANNEL,
 };
-use opennest_app::claude::contract::{ClaudeEvent, ConnectionState, RuntimeScope, ScopedEvent};
-use opennest_app::claude::ClaudeState;
+use opennest_app::agent::contract::{AgentEvent, ConnectionState, RuntimeScope, ScopedEvent};
+use opennest_app::agent::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use opennest_app::db::connection::{open, FILE_NAME};
@@ -132,21 +133,22 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	let events = seen.lock().expect("log").clone();
 	assert!(events.iter().any(|scoped| matches!(
 		(&scoped.scope, &scoped.event),
-		(Some(scope), ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking })
+		(Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking })
 			if scope == &a_scope_value()
 	)));
 }
 
-/// The state lock guards a pointer, not the child behind it. Held across the
-/// shutdown of a child that is deaf to EOF, it blocks every other command for
-/// the whole grace — the quit path included, which is the one caller that has
-/// no time to spare.
+/// Ending one session is a line on the sidecar's pipe; ending the host is the
+/// whole escalation ladder against a sidecar deaf to EOF. The state lock guards a
+/// pointer, not the process behind it, so the quick one must not be made to queue
+/// behind the slow one.
 ///
 /// Both halves run on one task, so the order they finish in is decided by the
-/// lock alone: the second can only report first if the first let go of it.
+/// lock alone: the shutdown can only report first if the quit let go of it.
 #[test]
-fn shutting_down_frees_the_state_before_waiting_on_the_child() {
+fn shutting_down_a_session_never_queues_behind_the_quit() {
 	std::env::set_var(BINARY_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_claude"));
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
 	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
 
 	let app = app();
@@ -180,7 +182,7 @@ fn shutting_down_frees_the_state_before_waiting_on_the_child() {
 
 	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
 	std::env::remove_var(BINARY_OVERRIDE_ENV);
-	assert_eq!(*finished.lock().expect("order"), ["terminate", "shutdown"]);
+	assert_eq!(*finished.lock().expect("order"), ["shutdown", "terminate"]);
 }
 
 /// The identifier decides the app data directory, so this test claims one of

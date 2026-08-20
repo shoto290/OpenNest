@@ -1,4 +1,4 @@
-import type { TransportError } from "../claude/contract"
+import type { TransportError } from "../agent/contract"
 
 /** The words a rotation goes on the record under. They are written to the
  * lineage and read by whoever asks it later why a run was left behind, so each

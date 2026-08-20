@@ -39,7 +39,7 @@
 //! move and nothing to disagree with.
 //!
 //! The vocabularies below are this file's own, deliberately apart from the
-//! same-named types in [`crate::claude::contract`]: what crosses to a model and
+//! same-named types in [`crate::agent::contract`]: what crosses to a model and
 //! to the frontend may change without rewriting rows already on disk.
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};

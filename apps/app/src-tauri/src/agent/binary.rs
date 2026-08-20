@@ -1,7 +1,11 @@
 //! Resolves the local `claude` executable and confirms it is signed in.
 //!
-//! The child process inherits the ambient environment because Claude Code needs
-//! it to reach its own credential store. Nothing read here — not the
+//! The connection probe alone, since sessions moved to the sidecar: it answers
+//! what the install is and whether it can be used, and spawns nothing a turn
+//! ever travels through.
+//!
+//! The probe inherits the ambient environment because Claude Code needs it to
+//! reach its own credential store. Nothing read here — not the
 //! environment, not the auth payload — is ever logged or returned upward: the
 //! auth probe is reduced to a single boolean before it leaves this module.
 

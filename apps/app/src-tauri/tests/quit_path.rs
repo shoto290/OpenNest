@@ -12,12 +12,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use opennest_app::claude::commands::terminate_session;
-use opennest_app::claude::session::{EventSink, Session, SessionOptions};
-use opennest_app::claude::ClaudeState;
+use opennest_app::agent::commands::terminate_session;
+use opennest_app::agent::session::{EventSink, Session, SessionOptions};
+use opennest_app::agent::sidecar::{Sidecar, SidecarOptions};
+use opennest_app::agent::ClaudeState;
 use tokio::sync::mpsc;
 
-const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
+
+const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
 
@@ -51,12 +53,16 @@ fn probe_file() -> PathBuf {
 
 /// A session reaches the app's state only once its handshake has returned, and
 /// resuming a large conversation can hold that open for the whole startup
-/// window. A quit landing inside it finds nothing to terminate — and the child
-/// it cannot see has its own children by then.
+/// window. A quit landing inside it finds nothing to terminate — and the sidecar
+/// it cannot see has agents of its own by then.
 #[tokio::test]
 async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 	let pid_file = probe_file();
-	let mut options = SessionOptions::new(PathBuf::from(FAKE), std::env::temp_dir())
+	let sidecar = Sidecar::start(SidecarOptions::new(PathBuf::from(FAKE_SIDECAR)))
+		.await
+		.expect("the fake sidecar announces itself");
+
+	let mut options = SessionOptions::new(std::env::temp_dir())
 		.with_env("FAKE_CLAUDE_SCENARIO", "startup_timeout")
 		.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
 		.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1");
@@ -64,7 +70,7 @@ async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 
 	let (tx, _events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
-	let starting = tokio::spawn(Session::start(options, sink));
+	let starting = tokio::spawn(Session::start(sidecar, options, sink));
 
 	poll_until("the fake to record its grandchild", || recorded_pid(&pid_file).is_some()).await;
 	let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");

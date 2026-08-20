@@ -15,10 +15,11 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::claude::commands::EVENT_CHANNEL;
-use opennest_app::claude::contract::{ClaudeEvent, RuntimeScope, ScopedEvent, TurnOutcome};
-use opennest_app::claude::ClaudeState;
+use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
+use opennest_app::agent::commands::EVENT_CHANNEL;
+use opennest_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TurnOutcome};
+use opennest_app::agent::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -27,6 +28,7 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, WebviewWindow, WebviewWindowBuilder};
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
+const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
 
@@ -156,20 +158,20 @@ fn named(run: &Value) -> RuntimeScope {
 
 fn outcome_under(seen: &[ScopedEvent], run: &RuntimeScope) -> Option<TurnOutcome> {
 	seen.iter().find_map(|scoped| match (&scoped.scope, &scoped.event) {
-		(Some(scope), ClaudeEvent::TurnEnded { ended }) if scope == run => Some(ended.outcome),
+		(Some(scope), AgentEvent::TurnEnded { ended }) if scope == run => Some(ended.outcome),
 		_ => None,
 	})
 }
 
 fn spoke_under(seen: &[ScopedEvent], run: &RuntimeScope) -> bool {
 	seen.iter().any(|scoped| {
-		matches!((&scoped.scope, &scoped.event), (Some(scope), ClaudeEvent::MessageDelta { .. }) if scope == run)
+		matches!((&scoped.scope, &scoped.event), (Some(scope), AgentEvent::MessageDelta { .. }) if scope == run)
 	})
 }
 
 fn turn_outcome(seen: &[ScopedEvent]) -> Option<TurnOutcome> {
 	seen.iter().find_map(|scoped| match scoped.event {
-		ClaudeEvent::TurnEnded { ref ended } => Some(ended.outcome),
+		AgentEvent::TurnEnded { ref ended } => Some(ended.outcome),
 		_ => None,
 	})
 }
@@ -188,6 +190,7 @@ fn stale(runtime_session_id: &str) -> Result<Value, Value> {
 fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() {
 	let _serial = serial();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_CLAUDE_SCENARIO", "normal");
 
 	let harness = launch();
@@ -241,6 +244,7 @@ fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() 
 fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	let _serial = serial();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_CLAUDE_SCENARIO", "normal");
 
 	let harness = launch();
@@ -274,7 +278,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 		"an event crossed under another run than the one that produced it: {streamed:#?}"
 	);
 	assert!(
-		streamed.iter().any(|scoped| matches!(scoped.event, ClaudeEvent::MessageDelta { .. })),
+		streamed.iter().any(|scoped| matches!(scoped.event, AgentEvent::MessageDelta { .. })),
 		"the turn produced nothing to be scoped: {streamed:#?}"
 	);
 
@@ -293,6 +297,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 fn two_bots_answer_at_once_and_each_stream_stays_under_its_own_run() {
 	let _serial = serial();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_CLAUDE_SCENARIO", "normal");
 
 	let harness = launch();

@@ -7,19 +7,21 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use opennest_app::claude::binary;
-use opennest_app::claude::contract::{
-	ActivityKind, ClaudeEvent, PermissionDecision, SessionSnapshot, TurnOutcome,
+use opennest_app::agent::binary;
+use opennest_app::agent::contract::{
+	ActivityKind, AgentEvent, PermissionDecision, SessionSnapshot, TurnOutcome,
 };
-use opennest_app::claude::session::{EventSink, Session, SessionOptions};
-use opennest_app::claude::store;
+use opennest_app::agent::session::{EventSink, Session, SessionOptions};
+use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions};
+use opennest_app::agent::store;
 use tokio::sync::mpsc;
 
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
 
 struct Live {
 	session: Session,
-	events: mpsc::UnboundedReceiver<ClaudeEvent>,
+	sidecar: Arc<Sidecar>,
+	events: mpsc::UnboundedReceiver<AgentEvent>,
 }
 
 async fn live(resume: Option<String>) -> Live {
@@ -35,33 +37,39 @@ async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBu
 
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
+	let sidecar = Sidecar::start(SidecarOptions::new(
+		sidecar::resolve().expect("the agent sidecar ships with the host"),
+	))
+	.await
+	.expect("the sidecar announces itself");
 	let options =
-		SessionOptions::new(path, cwd).resuming(resume).instructed(instructions.map(str::to_owned));
-	let session = Session::start(options, sink).await.expect("session starts");
-	Live { session, events }
+		SessionOptions::new(cwd).resuming(resume).instructed(instructions.map(str::to_owned));
+	let session =
+		Session::start(sidecar.clone(), options, sink).await.expect("session starts");
+	Live { session, sidecar, events }
 }
 
 impl Live {
 	/// Drains one turn, auto-approving every permission so the run stays
 	/// unattended.
-	async fn run_turn(&mut self, prompt: &str) -> Vec<ClaudeEvent> {
+	async fn run_turn(&mut self, prompt: &str) -> Vec<AgentEvent> {
 		self.session.submit_prompt(prompt).await.expect("prompt accepted");
 		self.collect().await
 	}
 
-	async fn collect(&mut self) -> Vec<ClaudeEvent> {
+	async fn collect(&mut self) -> Vec<AgentEvent> {
 		let mut seen = Vec::new();
 		let deadline = tokio::time::Instant::now() + TURN_TIMEOUT;
 		loop {
 			match tokio::time::timeout_at(deadline, self.events.recv()).await {
 				Ok(Some(event)) => {
-					if let ClaudeEvent::PermissionRequested { request } = &event {
+					if let AgentEvent::PermissionRequested { request } = &event {
 						self.session
 							.respond_to_permission(&request.id, PermissionDecision::AllowOnce)
 							.await
 							.expect("approval accepted");
 					}
-					let ended = matches!(event, ClaudeEvent::TurnEnded { .. });
+					let ended = matches!(event, AgentEvent::TurnEnded { .. });
 					seen.push(event);
 					if ended {
 						return seen;
@@ -73,30 +81,30 @@ impl Live {
 	}
 }
 
-fn text(events: &[ClaudeEvent]) -> String {
+fn text(events: &[AgentEvent]) -> String {
 	events
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::MessageCompleted { message } => Some(message.text.clone()),
+			AgentEvent::MessageCompleted { message } => Some(message.text.clone()),
 			_ => None,
 		})
 		.collect::<Vec<_>>()
 		.join(" ")
 }
 
-fn streamed(events: &[ClaudeEvent]) -> String {
+fn streamed(events: &[AgentEvent]) -> String {
 	events
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::MessageDelta { text, .. } => Some(text.clone()),
+			AgentEvent::MessageDelta { text, .. } => Some(text.clone()),
 			_ => None,
 		})
 		.collect()
 }
 
-fn session_id(events: &[ClaudeEvent]) -> Option<String> {
+fn session_id(events: &[AgentEvent]) -> Option<String> {
 	events.iter().find_map(|event| match event {
-		ClaudeEvent::SessionReady { session_id, .. } => Some(session_id.clone()),
+		AgentEvent::SessionReady { session_id, .. } => Some(session_id.clone()),
 		_ => None,
 	})
 }
@@ -130,7 +138,7 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 	let workshop = a_directory("workshop");
 	let mut first = started(None, Some(BANANA), workshop.clone()).await;
 	let opening = first.run_turn(WHERE_AND_WHO).await;
-	let retired = first.session.pid();
+	let retired = first.sidecar.pid();
 
 	assert!(
 		text(&opening).contains("BANANA"),
@@ -142,7 +150,7 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 		"the child did not run where the bot works: {:?}",
 		text(&opening)
 	);
-	first.session.shutdown().await;
+	first.sidecar.shutdown().await;
 
 	// The bot was described again. Neither of the two can be said to a child that is
 	// already running, so the run is replaced by one started as the bot reads now.
@@ -150,7 +158,7 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 	let mut second = started(None, Some(ORANGE), studio.clone()).await;
 	let after = second.run_turn(WHERE_AND_WHO).await;
 
-	assert_ne!(second.session.pid(), retired, "the new identity landed in the same process");
+	assert_ne!(second.sidecar.pid(), retired, "the new identity landed in the same process");
 	assert!(
 		text(&after).contains("ORANGE"),
 		"the new instructions were not obeyed: {:?}",
@@ -167,7 +175,7 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 		text(&after)
 	);
 
-	second.session.shutdown().await;
+	second.sidecar.shutdown().await;
 	let _ = std::fs::remove_dir_all(&workshop);
 	let _ = std::fs::remove_dir_all(&studio);
 }
@@ -198,7 +206,7 @@ async fn two_turns_stream_and_the_second_resumes_the_first() {
 	assert!(!streamed(&opening).is_empty(), "partial text must reach the contract");
 	assert!(text(&opening).contains("OK"), "got {:?}", text(&opening));
 	let id = session_id(&opening).expect("session id captured from the live stream");
-	first.session.shutdown().await;
+	first.sidecar.shutdown().await;
 
 	let mut second = live(Some(id.clone())).await;
 	let recall =
@@ -210,7 +218,7 @@ async fn two_turns_stream_and_the_second_resumes_the_first() {
 	let tools: Vec<_> = tooling
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::Activity { activity } if activity.kind == ActivityKind::Tool => {
+			AgentEvent::Activity { activity } if activity.kind == ActivityKind::Tool => {
 				Some(activity)
 			}
 			_ => None,
@@ -219,7 +227,7 @@ async fn two_turns_stream_and_the_second_resumes_the_first() {
 	assert!(!tools.is_empty(), "a real tool call must surface as activity");
 	assert!(text(&tooling).contains("OPENNEST_PROBE"), "got {:?}", text(&tooling));
 
-	second.session.shutdown().await;
+	second.sidecar.shutdown().await;
 }
 
 /// Stop interrupts a live turn, the session stays usable, and shutdown leaves
@@ -228,7 +236,7 @@ async fn two_turns_stream_and_the_second_resumes_the_first() {
 #[ignore = "needs a signed-in claude and the network"]
 async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	let mut live = live(None).await;
-	let pid = live.session.pid();
+	let pid = live.sidecar.pid();
 
 	live.session
 		.submit_prompt(
@@ -241,7 +249,7 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	live.session.cancel_turn().await.expect("cancel accepted");
 	let events = live.collect().await;
 	let outcome = events.iter().find_map(|event| match event {
-		ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),
+		AgentEvent::TurnEnded { ended } => Some(ended.outcome),
 		_ => None,
 	});
 	assert_eq!(outcome, Some(TurnOutcome::Cancelled));
@@ -253,7 +261,7 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 		text(&after)
 	);
 
-	live.session.shutdown().await;
+	live.sidecar.shutdown().await;
 	tokio::time::sleep(Duration::from_secs(1)).await;
 	assert!(!group_alive(pid), "shutdown left claude processes behind");
 }
@@ -266,7 +274,7 @@ async fn an_id_stored_on_disk_resumes_the_conversation() {
 	let mut first = live(None).await;
 	let opening = first.run_turn("Remember the number 4271. Reply with exactly: OK").await;
 	let id = session_id(&opening).expect("session id captured from the live stream");
-	first.session.shutdown().await;
+	first.sidecar.shutdown().await;
 
 	let path = std::env::temp_dir().join(format!("opennest-live-{id}.json"));
 	store::save(&path, &SessionSnapshot { session_id: Some(id), ..SessionSnapshot::default() });
@@ -277,7 +285,7 @@ async fn an_id_stored_on_disk_resumes_the_conversation() {
 		second.run_turn("What number did I ask you to remember? Reply with only the digits.").await;
 	assert!(text(&recall).contains("4271"), "the stored id did not resume: {:?}", text(&recall));
 
-	second.session.shutdown().await;
+	second.sidecar.shutdown().await;
 	std::fs::remove_file(&path).expect("cleanup");
 }
 

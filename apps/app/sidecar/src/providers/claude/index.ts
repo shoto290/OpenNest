@@ -1,4 +1,5 @@
 import { resolveExecutable } from "./executable"
+import { openClaudeSession } from "./session"
 
 import type { AgentProvider } from "../provider"
 import { EMBEDDED_EXECUTABLE_VERSION, SDK_VERSION } from "./generated/embedded"
@@ -16,4 +17,5 @@ export const claudeProvider: AgentProvider = {
 	assertReady: () => {
 		resolveExecutable()
 	},
+	open: openClaudeSession,
 }

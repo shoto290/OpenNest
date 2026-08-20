@@ -8,19 +8,19 @@ import type { ChatDriver } from "./driver"
 import { storedAttachmentPath } from "./message-attachments"
 
 import type {
+	AgentEvent,
 	ChatMessage,
-	ClaudeEvent,
 	PermissionDecision,
 	RuntimeScope,
 	ScopedEvent,
 	TurnOutcome,
-} from "../claude/contract"
+} from "../agent/contract"
 
 export type FakeChatDriver = ChatDriver & {
 	/** Emits under the run the fake started last, or under any run a caller names —
 	 * which is how a test reproduces the one thing a driver cannot do to itself:
 	 * speak for a session that has already been replaced. */
-	pushEvent: (event: ClaudeEvent, scope?: RuntimeScope | null) => void
+	pushEvent: (event: AgentEvent, scope?: RuntimeScope | null) => void
 }
 
 export type FakeChatDriverOptions = {
@@ -93,7 +93,7 @@ export function createFakeChatDriver(
 	/** Everything crosses under the run it came from, the way the host stamps its
 	 * channel. */
 	const emit = (
-		event: ClaudeEvent,
+		event: AgentEvent,
 		scope: RuntimeScope | null = latest?.scope ?? null,
 	) => {
 		for (const listener of listeners) {
@@ -101,7 +101,7 @@ export function createFakeChatDriver(
 		}
 	}
 
-	const emitFor = (run: FakeRun, event: ClaudeEvent) => emit(event, run.scope)
+	const emitFor = (run: FakeRun, event: AgentEvent) => emit(event, run.scope)
 
 	const heldFor = (scope: RuntimeScope) =>
 		runs.get(participantOf(scope)) ?? null

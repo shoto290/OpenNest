@@ -14,10 +14,11 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::claude::commands::EVENT_CHANNEL;
-use opennest_app::claude::contract::{ClaudeEvent, RuntimeScope, ScopedEvent, TransportError};
-use opennest_app::claude::ClaudeState;
+use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
+use opennest_app::agent::commands::EVENT_CHANNEL;
+use opennest_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TransportError};
+use opennest_app::agent::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -26,7 +27,8 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
-const SCENARIO_ENV: &str = "FAKE_CLAUDE_SCENARIO";
+const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
+const SCENARIO_ENV: &str = "FAKE_CLAUDE_SCENARIO_FILE";
 const IDENTIFIER: &str = "com.opennest.bounded-rotation";
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -98,7 +100,7 @@ impl Harness {
 		.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 	}
 
-	fn events(&self) -> Vec<ClaudeEvent> {
+	fn events(&self) -> Vec<AgentEvent> {
 		self.log.lock().expect("event log").iter().map(|scoped| scoped.event.clone()).collect()
 	}
 
@@ -110,7 +112,7 @@ impl Harness {
 		self.log.lock().expect("event log").clear();
 	}
 
-	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[ClaudeEvent]) -> Option<T>) -> T {
+	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[AgentEvent]) -> Option<T>) -> T {
 		let deadline = Instant::now() + DEADLINE;
 		loop {
 			let seen = self.events();
@@ -171,30 +173,36 @@ impl Harness {
 	}
 }
 
+/// The sidecar's own environment is fixed when it is spawned, and one process
+/// serves every session — so a scenario that changes between two of them travels
+/// on a file the fake reads each time it opens one.
 fn scenario(name: &str) {
-	std::env::set_var(SCENARIO_ENV, name);
+	let path = std::env::temp_dir()
+		.join(format!("opennest-fake-scenario-{}.txt", std::process::id()));
+	std::fs::write(&path, name).expect("the scenario is written");
+	std::env::set_var(SCENARIO_ENV, path);
 }
 
-fn turn_ended(seen: &[ClaudeEvent]) -> Option<()> {
+fn turn_ended(seen: &[AgentEvent]) -> Option<()> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::TurnEnded { .. } => Some(()),
+		AgentEvent::TurnEnded { .. } => Some(()),
 		_ => None,
 	})
 }
 
-fn resume_failure(seen: &[ClaudeEvent]) -> Option<bool> {
+fn resume_failure(seen: &[AgentEvent]) -> Option<bool> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::Failed { error: TransportError::ResumeFailed { forgot_session_id } } => {
+		AgentEvent::Failed { error: TransportError::ResumeFailed { forgot_session_id } } => {
 			Some(*forgot_session_id)
 		}
 		_ => None,
 	})
 }
 
-fn deltas(seen: &[ClaudeEvent]) -> String {
+fn deltas(seen: &[AgentEvent]) -> String {
 	seen.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::MessageDelta { text, .. } => Some(text.clone()),
+			AgentEvent::MessageDelta { text, .. } => Some(text.clone()),
 			_ => None,
 		})
 		.collect()
@@ -275,6 +283,7 @@ fn said(harness: &Harness, conversation: &str, index: usize) {
 #[test]
 fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 
 	let harness = launch();
 	let data_dir = harness.app.path().app_data_dir().expect("data dir");

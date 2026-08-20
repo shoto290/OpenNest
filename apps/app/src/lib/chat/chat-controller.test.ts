@@ -13,11 +13,11 @@ import {
 } from "./rotation"
 
 import type {
+	AgentEvent,
 	ChatMessage,
-	ClaudeEvent,
 	RuntimeScope,
 	ScopedEvent,
-} from "../claude/contract"
+} from "../agent/contract"
 import {
 	createFakeTranscriptStore,
 	FAKE_CHAT_ID,
@@ -53,7 +53,7 @@ const STREAMING_MESSAGE: ChatMessage = {
 /** A whole turn, from a process that is still talking. Everything a late frame
  * could move is in it: the turn state, a reply of its own, words for it, the
  * provider's id and an ending. */
-const STALE_TURN: ClaudeEvent[] = [
+const STALE_TURN: AgentEvent[] = [
 	{ type: "turnChanged", state: "running" },
 	{ type: "sessionReady", sessionId: "dead", resumed: false },
 	{
@@ -83,9 +83,9 @@ const ANNOUNCED = "s-1"
 
 /** What the host reports for a tool call: an assistant message of its own,
  * announced and never spoken in, and the tool it ran. */
-const toolRounds = (rounds: number): ClaudeEvent[] =>
+const toolRounds = (rounds: number): AgentEvent[] =>
 	Array.from({ length: rounds }, (_, index) => index + 1).flatMap(
-		(round): ClaudeEvent[] => [
+		(round): AgentEvent[] => [
 			{
 				type: "messageStarted",
 				message: { ...STREAMING_MESSAGE, id: `msg-tool-${round}` },
@@ -113,13 +113,13 @@ const toolRounds = (rounds: number): ClaudeEvent[] =>
 
 /** The message that does say something, streamed word by word the way the
  * transport numbers its deltas. */
-const spokenAnswer = (text: string): ClaudeEvent[] => [
+const spokenAnswer = (text: string): AgentEvent[] => [
 	{
 		type: "messageStarted",
 		message: { ...STREAMING_MESSAGE, id: "msg-answer" },
 	},
 	...text.split(" ").map(
-		(word, index): ClaudeEvent => ({
+		(word, index): AgentEvent => ({
 			type: "messageDelta",
 			id: "msg-answer",
 			seq: index + 1,
@@ -137,7 +137,7 @@ const spokenAnswer = (text: string): ClaudeEvent[] => [
 	},
 ]
 
-const ended = (outcome: "completed" | "cancelled" | "failed"): ClaudeEvent => ({
+const ended = (outcome: "completed" | "cancelled" | "failed"): AgentEvent => ({
 	type: "turnEnded",
 	ended: { sessionId: ANNOUNCED, outcome },
 })
@@ -1092,7 +1092,7 @@ describe("createChatController", () => {
 				type: "turnEnded",
 				ended: { sessionId: ANNOUNCED, outcome: "completed" },
 			},
-		] satisfies ClaudeEvent[]) {
+		] satisfies AgentEvent[]) {
 			harness.driver.pushEvent(event, leaving)
 		}
 		await vi.runAllTimersAsync()
@@ -2011,7 +2011,7 @@ describe("a turn Claude answered with tools", () => {
 		vi.useRealTimers()
 	})
 
-	const streamed = async (harness: Harness, events: ClaudeEvent[]) => {
+	const streamed = async (harness: Harness, events: AgentEvent[]) => {
 		vi.spyOn(harness.driver, "submitPrompt").mockResolvedValue()
 		await harness.controller.send("hello")
 		harness.driver.pushEvent({ type: "turnChanged", state: "running" })
@@ -2206,7 +2206,7 @@ describe("the provider session a run answered under", () => {
 		vi.useRealTimers()
 	})
 
-	const announced = (sessionId: string): ClaudeEvent => ({
+	const announced = (sessionId: string): AgentEvent => ({
 		type: "sessionReady",
 		sessionId,
 		resumed: false,

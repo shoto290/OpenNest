@@ -4,7 +4,7 @@ import { type ChatController, createChatController } from "./chat-controller"
 import { createFakeChatDriver } from "./fake-driver"
 import { type SidebarActivity, sidebarActivityFor } from "./screen-model"
 
-import type { TurnState } from "../claude/contract"
+import type { TurnState } from "../agent/contract"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 
 const STEP_MS = 10

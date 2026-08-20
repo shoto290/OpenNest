@@ -253,7 +253,7 @@ pub struct RuntimeScope {
 #[serde(rename_all = "camelCase")]
 pub struct ScopedEvent {
 	pub scope: Option<RuntimeScope>,
-	pub event: ClaudeEvent,
+	pub event: AgentEvent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,7 +266,7 @@ pub struct CheckReport {
 }
 
 /// Deliberately carries no session id: the only trustworthy one arrives later
-/// on [`ClaudeEvent::SessionReady`], straight from the child.
+/// on [`AgentEvent::SessionReady`], straight from the child.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionHandle {
@@ -287,7 +287,7 @@ pub struct SessionSnapshot {
 /// The single stream React consumes. One tagged union, no raw Claude payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-pub enum ClaudeEvent {
+pub enum AgentEvent {
 	#[serde(rename_all = "camelCase")]
 	ConnectionChanged { state: ConnectionState },
 	#[serde(rename_all = "camelCase")]

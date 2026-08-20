@@ -15,20 +15,22 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::claude::commands::{
+use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
+use opennest_app::agent::commands::{
 	claude_shutdown, claude_start_or_resume_session, claude_submit_prompt, shutdown_session,
 	terminate_session,
 };
-use opennest_app::claude::contract::{RuntimeScope, SessionHandle, TransportError};
-use opennest_app::claude::session::live_groups;
-use opennest_app::claude::ClaudeState;
+use opennest_app::agent::contract::{RuntimeScope, SessionHandle, TransportError};
+use opennest_app::agent::sidecar::live_groups;
+use opennest_app::agent::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, Manager};
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
+const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
 /// Comfortably inside the grace a child deaf to EOF is given, so the quit lands
@@ -130,13 +132,14 @@ fn probe_file() -> PathBuf {
 	path
 }
 
-/// Two starts landing together must not both spawn. The loser's child would be
-/// reachable through nothing but the process table, and its group would outlive
-/// every shutdown the winner's session can be handed.
+/// Two starts landing together must not both take the seat. The loser's session
+/// would be reachable through nothing but the sidecar's routing table, and
+/// nothing left running would ever close it.
 #[test]
-fn two_concurrent_starts_leave_one_session_and_one_group() {
+fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 	let _serial = serial();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 
 	let app = app();
 	runtime().block_on(async {
@@ -150,23 +153,25 @@ fn two_concurrent_starts_leave_one_session_and_one_group() {
 			is_refused(&first) || is_refused(&second),
 			"the losing start reported something other than a refusal: {first:?} / {second:?}"
 		);
-		assert_eq!(live_groups().len(), 1, "the refused start spawned a child of its own");
+		assert_eq!(live_groups().len(), 1, "the refused start spawned a sidecar of its own");
 
 		shutdown_session(app.state::<ClaudeState>().inner(), &scope()).await;
-		assert!(live_groups().is_empty(), "the surviving session outlived its shutdown");
+		terminate_session(app.state::<ClaudeState>().inner()).await;
+		assert!(live_groups().is_empty(), "the sidecar outlived the host it served");
 	});
 
 	std::env::remove_var(BINARY_OVERRIDE_ENV);
 }
 
-/// A shutdown spends its seconds on a child that is deaf to EOF, and the state
-/// slot is free for every one of them. Only the claim keeps a start out of that
-/// window, and a start that got in would install its child behind the one still
-/// being torn down.
+/// A shutdown and a start on one participant are one seat, taken in turn: the
+/// loser is refused rather than queued, and neither ever ends up holding a
+/// session the other is tearing down. Whichever order they land in, the host is
+/// left with one sidecar and a state that agrees with it.
 #[test]
-fn a_start_racing_a_shutdown_is_refused_rather_than_interleaved() {
+fn a_start_racing_a_shutdown_never_interleaves() {
 	let _serial = serial();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
 
 	let app = app();
@@ -175,13 +180,14 @@ fn a_start_racing_a_shutdown_is_refused_rather_than_interleaved() {
 
 		let (stopped, started) = tokio::join!(shutdown(&app), start(&app));
 		assert!(
-			is_refused(&stopped) != is_refused(&started),
-			"exactly one of the two must be refused: {stopped:?} / {started:?}"
+			!is_refused(&stopped) || !is_refused(&started),
+			"both transitions were refused, so neither ever held the seat: {stopped:?} / {started:?}"
 		);
-		assert!(live_groups().len() <= 1, "the two transitions each left a group behind");
+		assert!(live_groups().len() <= 1, "the two transitions each spawned a sidecar");
 
 		shutdown_session(app.state::<ClaudeState>().inner(), &scope()).await;
-		assert!(live_groups().is_empty(), "a child outlived both transitions");
+		terminate_session(app.state::<ClaudeState>().inner()).await;
+		assert!(live_groups().is_empty(), "a sidecar outlived both transitions");
 	});
 
 	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
@@ -199,6 +205,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	let _serial = serial();
 	let pid_file = probe_file();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_CLAUDE_SCENARIO", "startup_timeout");
 	std::env::set_var("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1");
 	std::env::set_var("FAKE_CLAUDE_PID_FILE", &pid_file);
@@ -238,16 +245,17 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	let _ = std::fs::remove_file(&pid_file);
 }
 
-/// The one window the sweep cannot cover, because the child it would have to
-/// reach does not exist yet: a restart spends seconds shutting the previous
-/// session down, and the quit that lands inside them sweeps a group the fresh
-/// child has not joined. Only the check before the slot keeps that child from
-/// being installed into a host on its way out, and left running behind it.
+/// The one window the sweep cannot cover, because the session it would have to
+/// reach does not exist yet: a restart is still waiting on the sidecar to open
+/// one when the quit lands. Only the check before the slot keeps that session
+/// from being installed into a host on its way out, and left open behind it.
 #[test]
-fn a_quit_inside_a_restart_never_installs_the_child_it_was_building() {
+fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 	let _serial = serial();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
+	std::env::set_var("FAKE_CLAUDE_SCENARIO", "slow_open");
 
 	let app = app();
 	runtime().block_on(async {
@@ -258,11 +266,14 @@ fn a_quit_inside_a_restart_never_installs_the_child_it_was_building() {
 			terminate_session(app.state::<ClaudeState>().inner()).await;
 		});
 
+		// Either verdict is the same guarantee: the gate refused the install, or the
+		// sweep reached the sidecar first and the open died with it. What must never
+		// come back is a handle.
 		assert!(
-			is_refused(&restarted),
+			restarted.is_err(),
 			"the restart installed a session into a quitting host: {restarted:?}"
 		);
-		assert!(live_groups().is_empty(), "the child built after the sweep outlived it");
+		assert!(live_groups().is_empty(), "the sidecar outlived the sweep");
 		assert_eq!(
 			claude_submit_prompt(app.state::<ClaudeState>(), scope(), "salut".into()).await,
 			Err(TransportError::NotStarted),
@@ -270,21 +281,23 @@ fn a_quit_inside_a_restart_never_installs_the_child_it_was_building() {
 		);
 	});
 
+	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
 	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
 	std::env::remove_var(BINARY_OVERRIDE_ENV);
 }
 
 /// The reader owns several bots and more than one of them is answering. A start for
-/// one of them is not a handover of the other: two children, two groups, and a
-/// transition on one that never keeps the other from coming up.
+/// one of them is not a handover of the other: two sessions on the one sidecar, and
+/// a transition on one that never keeps the other from coming up.
 ///
-/// Then the one event that has to reach all of them — the host's exit. Every child
-/// here is deaf to the EOF its stdin is handed, so a polite close alone would leave
-/// both of them running; what ends them is the escalation behind it.
+/// Then the one event that has to reach both — the host's exit. The sidecar here is
+/// deaf to the EOF its stdin is handed, so a polite close alone would leave it
+/// running; what ends it is the escalation behind it.
 #[test]
-fn a_quit_ends_every_bots_child_and_not_only_the_last_one_started() {
+fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 	let _serial = serial();
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
 
 	let app = app();
@@ -293,17 +306,22 @@ fn a_quit_ends_every_bots_child_and_not_only_the_last_one_started() {
 		start_run(&app, another_bots_scope()).await.expect("the second bot starts");
 
 		let running = live_groups();
-		assert_eq!(running.len(), 2, "starting the second bot replaced the first one's child");
+		assert_eq!(running.len(), 1, "the second bot was served from a sidecar of its own");
 		assert!(
 			running.iter().all(|pid| is_alive(*pid as i32)),
-			"a bot the host believes it holds is not running: {running:?}"
+			"the sidecar the host believes it holds is not running: {running:?}"
+		);
+		assert_eq!(
+			claude_submit_prompt(app.state::<ClaudeState>(), scope(), "salut".into()).await,
+			Ok(()),
+			"starting the second bot replaced the first one's session"
 		);
 
 		terminate_session(app.state::<ClaudeState>().inner()).await;
 
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		for pid in running {
-			poll_until("every child of the quit to be gone", || !is_alive(pid as i32)).await;
+			poll_until("the sidecar the quit ended to be gone", || !is_alive(pid as i32)).await;
 		}
 	});
 

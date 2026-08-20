@@ -4,15 +4,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use opennest_app::claude::commands::start_with_fallback;
-use opennest_app::claude::contract::{
-	ActivityKind, ActivityStatus, ClaudeEvent, ConnectionState, MessageCompletion,
+use opennest_app::agent::commands::start_with_fallback;
+use opennest_app::agent::contract::{
+	ActivityKind, ActivityStatus, AgentEvent, ConnectionState, MessageCompletion,
 	PermissionDecision, PermissionRequest, TransportError, TurnOutcome, TurnState,
 };
-use opennest_app::claude::session::{self, EventSink, Session, SessionOptions, SHUTDOWN_GRACE};
+use opennest_app::agent::session::{EventSink, Session, SessionOptions, PARTIAL_MESSAGES};
+use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions, SHUTDOWN_GRACE};
 use tokio::sync::mpsc;
 
-const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
+const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SETTLE: Duration = Duration::from_millis(400);
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -23,21 +24,51 @@ const LADDER_CEILING: Duration = Duration::from_secs(12);
 
 struct Harness {
 	session: Session,
-	events: mpsc::UnboundedReceiver<ClaudeEvent>,
+	sidecar: Arc<Sidecar>,
+	events: mpsc::UnboundedReceiver<AgentEvent>,
 }
 
+/// The scenario travels with the session rather than with the process now: one
+/// sidecar serves every run, so what one of them is asked to be has to be said
+/// when it is opened.
 fn options(scenario: &str) -> SessionOptions {
-	let mut options = SessionOptions::new(PathBuf::from(FAKE), std::env::temp_dir())
+	let mut options = SessionOptions::new(std::env::temp_dir())
 		.with_env("FAKE_CLAUDE_SCENARIO", scenario);
 	options.startup_timeout = Duration::from_secs(2);
 	options
 }
 
+fn sidecar_options() -> SidecarOptions {
+	let mut options = SidecarOptions::new(PathBuf::from(FAKE_SIDECAR));
+	options.ready_timeout = Duration::from_secs(2);
+	options
+}
+
+async fn sidecar() -> Arc<Sidecar> {
+	Sidecar::start(sidecar_options()).await.expect("the fake sidecar announces itself")
+}
+
+/// A sidecar started under variables of its own — what the session env cannot
+/// carry, because it describes the process rather than the run.
+async fn sidecar_with(env: &[(&str, &str)]) -> Arc<Sidecar> {
+	let options = env
+		.iter()
+		.fold(sidecar_options(), |options, (key, value)| options.with_env(key, *value));
+	Sidecar::start(options).await.expect("the fake sidecar announces itself")
+}
+
 async fn start(options: SessionOptions) -> Result<Harness, TransportError> {
+	start_on(sidecar().await, options).await
+}
+
+async fn start_on(
+	sidecar: Arc<Sidecar>,
+	options: SessionOptions,
+) -> Result<Harness, TransportError> {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
-	let session = Session::start(options, sink).await?;
-	Ok(Harness { session, events })
+	let session = Session::start(sidecar.clone(), options, sink).await?;
+	Ok(Harness { session, sidecar, events })
 }
 
 impl Harness {
@@ -51,14 +82,14 @@ impl Harness {
 
 	/// Drains until the turn closes, or gives up so a hung transport fails the
 	/// test instead of hanging it.
-	async fn drain_turn(&mut self) -> Vec<ClaudeEvent> {
+	async fn drain_turn(&mut self) -> Vec<AgentEvent> {
 		let mut seen = Vec::new();
 		let deadline = tokio::time::Instant::now() + DEADLINE;
 		loop {
 			match tokio::time::timeout_at(deadline, self.events.recv()).await {
 				Ok(Some(event)) => {
-					let ended = matches!(event, ClaudeEvent::TurnEnded { .. });
-					let fatal = matches!(&event, ClaudeEvent::Failed { error } if error.is_fatal());
+					let ended = matches!(event, AgentEvent::TurnEnded { .. });
+					let fatal = matches!(&event, AgentEvent::Failed { error } if error.is_fatal());
 					seen.push(event);
 					if ended || fatal {
 						return seen;
@@ -75,8 +106,8 @@ impl Harness {
 	async fn wait_for(
 		&mut self,
 		expectation: &str,
-		is_satisfied: impl Fn(&[ClaudeEvent]) -> bool,
-	) -> Vec<ClaudeEvent> {
+		is_satisfied: impl Fn(&[AgentEvent]) -> bool,
+	) -> Vec<AgentEvent> {
 		let mut seen = Vec::new();
 		let deadline = tokio::time::Instant::now() + DEADLINE;
 		while !is_satisfied(&seen) {
@@ -100,8 +131,8 @@ impl Harness {
 /// The one wait that cannot be an expectation: proving nothing arrives needs a
 /// window for it to arrive in. Every other caller states what it awaits.
 async fn drain_after_settling(
-	events: &mut mpsc::UnboundedReceiver<ClaudeEvent>,
-) -> Vec<ClaudeEvent> {
+	events: &mut mpsc::UnboundedReceiver<AgentEvent>,
+) -> Vec<AgentEvent> {
 	tokio::time::sleep(SETTLE).await;
 	let mut seen = Vec::new();
 	while let Ok(event) = events.try_recv() {
@@ -110,50 +141,50 @@ async fn drain_after_settling(
 	seen
 }
 
-fn reports_a_crash(events: &[ClaudeEvent]) -> bool {
+fn reports_a_crash(events: &[AgentEvent]) -> bool {
 	events.iter().any(|event| {
 		matches!(
 			event,
-			ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed }
-				| ClaudeEvent::Failed { error: TransportError::Crashed { .. } }
+			AgentEvent::ConnectionChanged { state: ConnectionState::Crashed }
+				| AgentEvent::Failed { error: TransportError::Crashed { .. } }
 		)
 	})
 }
 
-fn permission_request(events: &[ClaudeEvent]) -> Option<PermissionRequest> {
+fn permission_request(events: &[AgentEvent]) -> Option<PermissionRequest> {
 	events.iter().find_map(|event| match event {
-		ClaudeEvent::PermissionRequested { request } => Some(request.clone()),
+		AgentEvent::PermissionRequested { request } => Some(request.clone()),
 		_ => None,
 	})
 }
 
-fn has_started_streaming(events: &[ClaudeEvent]) -> bool {
-	events.iter().any(|event| matches!(event, ClaudeEvent::MessageStarted { .. }))
+fn has_started_streaming(events: &[AgentEvent]) -> bool {
+	events.iter().any(|event| matches!(event, AgentEvent::MessageStarted { .. }))
 }
 
-fn assistant_text(events: &[ClaudeEvent]) -> String {
+fn assistant_text(events: &[AgentEvent]) -> String {
 	events
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::MessageCompleted { message } => Some(message.text.clone()),
+			AgentEvent::MessageCompleted { message } => Some(message.text.clone()),
 			_ => None,
 		})
 		.collect()
 }
 
-fn deltas(events: &[ClaudeEvent]) -> String {
+fn deltas(events: &[AgentEvent]) -> String {
 	events
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::MessageDelta { text, .. } => Some(text.clone()),
+			AgentEvent::MessageDelta { text, .. } => Some(text.clone()),
 			_ => None,
 		})
 		.collect()
 }
 
-fn outcome(events: &[ClaudeEvent]) -> Option<TurnOutcome> {
+fn outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
 	events.iter().find_map(|event| match event {
-		ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),
+		AgentEvent::TurnEnded { ended } => Some(ended.outcome),
 		_ => None,
 	})
 }
@@ -166,7 +197,7 @@ async fn streams_a_normal_turn_and_closes_it() {
 
 	assert!(events.iter().any(|event| matches!(
 		event,
-		ClaudeEvent::SessionReady { session_id, resumed } if session_id == "fake-session-0001" && !resumed
+		AgentEvent::SessionReady { session_id, resumed } if session_id == "fake-session-0001" && !resumed
 	)));
 	assert_eq!(deltas(&events), "echo :: bonjour");
 	assert_eq!(assistant_text(&events), "echo :: bonjour");
@@ -175,8 +206,27 @@ async fn streams_a_normal_turn_and_closes_it() {
 	harness.session.shutdown().await;
 }
 
+/// A capability the sidecar never announced is one the host never asks for. The
+/// reader is answered with the whole message instead of a stream that would never
+/// arrive — the same reply, said once.
 #[tokio::test]
-async fn a_second_turn_reuses_the_same_process() {
+async fn a_sidecar_that_names_no_deltas_answers_in_whole_messages() {
+	let plain = sidecar_with(&[("FAKE_CLAUDE_CAPABILITIES", "resume")]).await;
+	assert!(!plain.supports(PARTIAL_MESSAGES));
+
+	let mut harness = start_on(plain, options("normal")).await.expect("session starts");
+	harness.submit("bonjour").await.expect("prompt accepted");
+	let events = harness.drain_turn().await;
+
+	assert_eq!(deltas(&events), "", "a sidecar naming no deltas streamed some");
+	assert_eq!(assistant_text(&events), "echo :: bonjour");
+	assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
+}
+
+/// Every session is a lane on one process, and a lane outlives the turns it
+/// carries: the second prompt reaches the same run as the first.
+#[tokio::test]
+async fn a_second_turn_reuses_the_same_session() {
 	let mut harness = start(options("normal")).await.expect("session starts");
 	harness.submit("un").await.expect("first prompt");
 	assert_eq!(outcome(&harness.drain_turn().await), Some(TurnOutcome::Completed));
@@ -200,7 +250,7 @@ async fn resuming_passes_the_session_id_to_the_child() {
 	assert_eq!(assistant_text(&events), "resumed carried-over :: et avant ?");
 	assert!(events.iter().any(|event| matches!(
 		event,
-		ClaudeEvent::SessionReady { session_id, resumed } if session_id == "carried-over" && *resumed
+		AgentEvent::SessionReady { session_id, resumed } if session_id == "carried-over" && *resumed
 	)));
 	harness.session.shutdown().await;
 }
@@ -214,7 +264,7 @@ async fn tool_use_surfaces_as_activity() {
 	let activities: Vec<_> = events
 		.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::Activity { activity } => Some(activity),
+			AgentEvent::Activity { activity } => Some(activity),
 			_ => None,
 		})
 		.collect();
@@ -238,7 +288,7 @@ async fn invalid_frames_are_reported_without_killing_the_turn() {
 	let invalid = events
 		.iter()
 		.filter(|event| {
-			matches!(event, ClaudeEvent::Failed { error: TransportError::InvalidFrame { .. } })
+			matches!(event, AgentEvent::Failed { error: TransportError::InvalidFrame { .. } })
 		})
 		.count();
 	assert_eq!(invalid, 2);
@@ -248,11 +298,9 @@ async fn invalid_frames_are_reported_without_killing_the_turn() {
 }
 
 #[tokio::test]
-async fn a_missing_binary_is_reported_before_spawning() {
-	let mut options =
-		SessionOptions::new(PathBuf::from("/nonexistent/claude"), std::env::temp_dir());
-	options.startup_timeout = Duration::from_secs(1);
-	let error = start(options).await.err().expect("spawn fails");
+async fn a_missing_sidecar_is_reported_before_spawning() {
+	let options = SidecarOptions::new(PathBuf::from("/nonexistent/opennest-agent"));
+	let error = Sidecar::start(options).await.err().expect("spawn fails");
 	assert!(matches!(error, TransportError::SpawnFailed { .. }));
 }
 
@@ -265,13 +313,13 @@ async fn a_silent_child_trips_the_startup_timeout() {
 #[tokio::test]
 async fn a_child_dying_during_startup_is_reported_as_a_crash() {
 	let error = start(options("startup_crash")).await.err().expect("handshake fails");
-	assert!(matches!(error, TransportError::Crashed { code: Some(3), .. }));
+	assert!(matches!(error, TransportError::Crashed { .. }));
 }
 
 #[tokio::test]
 async fn a_child_can_refuse_the_resume_flag_alone() {
 	let refused = start(options("resume_crash").resuming(Some("dead-id".into()))).await;
-	assert!(matches!(refused.err(), Some(TransportError::Crashed { code: Some(4), .. })));
+	assert!(matches!(refused.err(), Some(TransportError::Crashed { .. })));
 
 	let harness = start(options("resume_crash")).await.expect("a fresh start is accepted");
 	harness.session.shutdown().await;
@@ -282,7 +330,7 @@ async fn a_refused_resume_falls_back_to_a_fresh_session() {
 	let (tx, _events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let started = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
+	let started = start_with_fallback(sidecar().await, options("resume_crash"), Some("dead-id".into()), sink)
 		.await
 		.expect("the fresh start rescues the launch");
 
@@ -300,7 +348,7 @@ async fn a_resume_that_timed_out_is_reported_as_a_timeout() {
 	let (tx, _events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let started = start_with_fallback(options("resume_timeout"), Some("slow-id".into()), sink)
+	let started = start_with_fallback(sidecar().await, options("resume_timeout"), Some("slow-id".into()), sink)
 		.await
 		.expect("the fresh start rescues the launch");
 
@@ -321,10 +369,12 @@ async fn a_refused_resume_keeps_its_crash_off_the_channel() {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let started = start_with_fallback(options("resume_crash"), Some("dead-id".into()), sink)
-		.await
-		.expect("the fresh start rescues the launch");
-	let mut harness = Harness { session: started.session, events };
+	let sidecar = sidecar().await;
+	let started =
+		start_with_fallback(sidecar.clone(), options("resume_crash"), Some("dead-id".into()), sink)
+			.await
+			.expect("the fresh start rescues the launch");
+	let mut harness = Harness { session: started.session, sidecar, events };
 	let seen = drain_after_settling(&mut harness.events).await;
 
 	assert!(!reports_a_crash(&seen), "the refused attempt reached the reader: {seen:#?}");
@@ -341,7 +391,7 @@ async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
 	let error =
-		Session::start(options("startup_timeout"), sink).await.err().expect("handshake fails");
+		Session::start(sidecar().await, options("startup_timeout"), sink).await.err().expect("handshake fails");
 	assert!(matches!(error, TransportError::StartupTimeout { .. }));
 
 	let seen = drain_after_settling(&mut events).await;
@@ -356,11 +406,17 @@ async fn an_accepted_resume_keeps_what_it_buffered() {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let started = start_with_fallback(options("early_init"), Some("carried-over".into()), sink)
-		.await
-		.expect("the stored id is accepted");
+	let sidecar = sidecar().await;
+	let started = start_with_fallback(
+		sidecar.clone(),
+		options("early_init"),
+		Some("carried-over".into()),
+		sink,
+	)
+	.await
+	.expect("the stored id is accepted");
 	assert_eq!(started.resume_refusal, None, "the stored id was never given up on");
-	let mut harness = Harness { session: started.session, events };
+	let mut harness = Harness { session: started.session, sidecar, events };
 
 	harness.submit("et avant ?").await.expect("prompt accepted");
 	let seen = harness.drain_turn().await;
@@ -370,14 +426,14 @@ async fn an_accepted_resume_keeps_what_it_buffered() {
 		.position(|event| {
 			matches!(
 				event,
-				ClaudeEvent::SessionReady { session_id, resumed }
+				AgentEvent::SessionReady { session_id, resumed }
 					if session_id == "carried-over" && *resumed
 			)
 		})
 		.expect("the buffered announcement survived the promotion");
 	let streamed = seen
 		.iter()
-		.position(|event| matches!(event, ClaudeEvent::MessageDelta { .. }))
+		.position(|event| matches!(event, AgentEvent::MessageDelta { .. }))
 		.expect("the turn streamed");
 
 	assert_eq!(announced, 0, "the flush comes before anything the session emits after it");
@@ -393,12 +449,13 @@ async fn a_start_failing_without_the_resume_flag_too_stays_a_failure() {
 	let (tx, _events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let error = start_with_fallback(options("startup_crash"), Some("dead-id".into()), sink)
-		.await
-		.err()
-		.expect("both attempts fail");
+	let error =
+		start_with_fallback(sidecar().await, options("startup_crash"), Some("dead-id".into()), sink)
+			.await
+			.err()
+			.expect("both attempts fail");
 
-	assert!(matches!(error, TransportError::Crashed { code: Some(3), .. }));
+	assert!(matches!(error, TransportError::Crashed { .. }));
 }
 
 /// When the two attempts fail differently the reader is owed the fresh one:
@@ -409,14 +466,18 @@ async fn two_different_failures_surface_the_fresh_one() {
 	let (tx, _events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let error =
-		start_with_fallback(options("resume_timeout_then_crash"), Some("slow-id".into()), sink)
-			.await
-			.err()
-			.expect("both attempts fail");
+	let error = start_with_fallback(
+		sidecar().await,
+		options("resume_timeout_then_crash"),
+		Some("slow-id".into()),
+		sink,
+	)
+	.await
+	.err()
+	.expect("both attempts fail");
 
 	assert!(
-		matches!(error, TransportError::Crashed { code: Some(3), .. }),
+		matches!(error, TransportError::Crashed { .. }),
 		"the spent resume attempt outlived the fresh one: {error:?}"
 	);
 }
@@ -429,11 +490,11 @@ async fn a_mid_turn_crash_lands_on_the_crashed_connection_state() {
 
 	assert!(events.iter().any(|event| matches!(
 		event,
-		ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed }
+		AgentEvent::ConnectionChanged { state: ConnectionState::Crashed }
 	)));
 	assert!(events.iter().any(|event| matches!(
 		event,
-		ClaudeEvent::Failed { error: TransportError::Crashed { code: Some(9), .. } }
+		AgentEvent::Failed { error: TransportError::Crashed { .. } }
 	)));
 	assert_eq!(harness.session.turn_state().await, TurnState::Failed);
 }
@@ -449,7 +510,7 @@ async fn cancelling_ends_the_turn_and_leaves_the_session_reusable() {
 	assert_eq!(outcome(&events), Some(TurnOutcome::Cancelled));
 	assert!(events.iter().any(|event| matches!(
 		event,
-		ClaudeEvent::MessageCompleted { message } if message.completion == MessageCompletion::Cancelled
+		AgentEvent::MessageCompleted { message } if message.completion == MessageCompletion::Cancelled
 	)));
 	assert_eq!(harness.session.turn_state().await, TurnState::Idle);
 
@@ -491,7 +552,7 @@ async fn a_permission_request_can_be_allowed() {
 	let events = harness.drain_turn().await;
 	assert!(events.iter().any(|event| matches!(
 		event,
-		ClaudeEvent::Activity { activity } if activity.status == ActivityStatus::Succeeded
+		AgentEvent::Activity { activity } if activity.status == ActivityStatus::Succeeded
 	)));
 	assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
 	harness.session.shutdown().await;
@@ -512,7 +573,7 @@ async fn a_permission_request_can_be_denied() {
 	let events = harness.drain_turn().await;
 	assert!(events.iter().any(|event| matches!(
 		event,
-		ClaudeEvent::Activity { activity } if activity.status == ActivityStatus::Failed
+		AgentEvent::Activity { activity } if activity.status == ActivityStatus::Failed
 	)));
 	harness.session.shutdown().await;
 }
@@ -533,11 +594,11 @@ async fn answering_an_unknown_permission_is_rejected() {
 /// its own, so the shutdown returns inside it and never reaches a signal.
 /// Anything at or past it means the escalation had to do the work.
 #[tokio::test]
-async fn closing_stdin_ends_a_healthy_child_without_reaching_the_signal() {
+async fn closing_stdin_ends_a_healthy_sidecar_without_reaching_the_signal() {
 	let harness = start(options("normal")).await.expect("session starts");
 
 	let started = Instant::now();
-	harness.session.shutdown().await;
+	harness.sidecar.shutdown().await;
 	let elapsed = started.elapsed();
 
 	assert!(elapsed < SHUTDOWN_GRACE, "shutdown waited {elapsed:?} instead of taking EOF");
@@ -547,21 +608,20 @@ async fn closing_stdin_ends_a_healthy_child_without_reaching_the_signal() {
 /// The wait that follows holds the child lock, so an unbounded one leaves the
 /// quit path blocked on the very child it exists to end.
 #[tokio::test]
-async fn a_child_that_closes_stdout_and_keeps_running_is_reported_and_still_terminable() {
-	let mut harness = start(options("stdout_eof").with_env("FAKE_CLAUDE_IGNORE_EOF", "1"))
-		.await
-		.expect("session starts");
+async fn a_sidecar_that_closes_stdout_and_keeps_running_is_reported_and_still_terminable() {
+	let deaf = sidecar_with(&[("FAKE_CLAUDE_IGNORE_EOF", "1")]).await;
+	let mut harness = start_on(deaf, options("stdout_eof")).await.expect("session starts");
 	harness.submit("tais-toi mais reste").await.expect("prompt accepted");
 
 	harness
 		.wait_for("the silent child to be reported", |events| {
 			events.iter().any(|event| {
-				matches!(event, ClaudeEvent::ConnectionChanged { state: ConnectionState::Crashed })
+				matches!(event, AgentEvent::ConnectionChanged { state: ConnectionState::Crashed })
 			})
 		})
 		.await;
 
-	tokio::time::timeout(DEADLINE, harness.session.terminate())
+	tokio::time::timeout(DEADLINE, harness.sidecar.terminate())
 		.await
 		.expect("the quit path never got the child lock back");
 }
@@ -579,12 +639,17 @@ fn probe_file(label: &str) -> PathBuf {
 /// Runs a session that has spawned a grandchild only a process-group kill can
 /// reach.
 #[cfg(unix)]
-async fn orphan_probe(label: &str, options: SessionOptions) -> (Harness, i32) {
+async fn orphan_probe(
+	label: &str,
+	sidecar: Arc<Sidecar>,
+	options: SessionOptions,
+) -> (Harness, i32) {
 	let pid_file = probe_file(label);
 
-	let harness = start(options.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy()))
-		.await
-		.expect("session starts");
+	let harness =
+		start_on(sidecar, options.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy()))
+			.await
+			.expect("session starts");
 	harness.submit("lance un enfant").await.expect("prompt accepted");
 	poll_until("the fake child to record its grandchild", || recorded_pid(&pid_file).is_some())
 		.await;
@@ -615,9 +680,9 @@ fn recorded_pid(pid_file: &std::path::Path) -> Option<i32> {
 #[cfg(unix)]
 #[tokio::test]
 async fn shutdown_takes_the_whole_process_group_down() {
-	let (harness, orphan) = orphan_probe("shutdown", options("orphan")).await;
+	let (harness, orphan) = orphan_probe("shutdown", sidecar().await, options("orphan")).await;
 
-	harness.session.shutdown().await;
+	harness.sidecar.shutdown().await;
 
 	poll_until("the shutdown to leave no orphan behind", || !is_alive(orphan)).await;
 }
@@ -627,25 +692,27 @@ async fn shutdown_takes_the_whole_process_group_down() {
 /// its way out.
 #[cfg(unix)]
 #[tokio::test]
-async fn shutdown_escalates_on_a_child_that_ignores_stdin_close() {
-	let (harness, orphan) =
-		orphan_probe("deaf", options("orphan").with_env("FAKE_CLAUDE_IGNORE_EOF", "1")).await;
+async fn shutdown_escalates_on_a_sidecar_that_ignores_stdin_close() {
+	let deaf = sidecar_with(&[("FAKE_CLAUDE_IGNORE_EOF", "1")]).await;
+	let (harness, orphan) = orphan_probe("deaf", deaf, options("orphan")).await;
 
-	tokio::time::timeout(Duration::from_secs(8), harness.session.shutdown())
+	tokio::time::timeout(Duration::from_secs(8), harness.sidecar.shutdown())
 		.await
 		.expect("the escalation keeps the shutdown bounded");
 
 	poll_until("the escalation to leave no orphan behind", || !is_alive(orphan)).await;
 }
 
-/// A start that fails still spent time as a running child, and the real CLI has
-/// its stdio MCP servers up by then. Reaping the child it left them under
-/// reaches none of them, so the group has to be swept on the way out.
+/// A start that fails still spent time as a live agent, and the real one has its
+/// stdio MCP servers up by then. Reaping the sidecar reaches none of them, so the
+/// group has to be swept on the way out.
 #[cfg(unix)]
 #[tokio::test]
-async fn a_start_that_crashes_takes_its_group_down_with_it() {
+async fn a_start_that_crashes_leaves_its_group_to_the_sweep() {
 	let pid_file = probe_file("startup-crash");
-	let error = start(
+	let host = sidecar().await;
+	let error = start_on(
+		host.clone(),
 		options("startup_crash")
 			.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
 			.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1"),
@@ -656,6 +723,7 @@ async fn a_start_that_crashes_takes_its_group_down_with_it() {
 	assert!(matches!(error, TransportError::Crashed { .. }));
 
 	let orphan = recorded_pid(&pid_file).expect("the fake recorded its grandchild");
+	host.terminate().await;
 	poll_until("the failed start to leave no orphan behind", || !is_alive(orphan)).await;
 
 	let _ = std::fs::remove_file(&pid_file);
@@ -669,22 +737,18 @@ async fn a_start_that_crashes_takes_its_group_down_with_it() {
 /// that can no longer settle.
 #[cfg(unix)]
 #[tokio::test]
-async fn shutting_down_returns_even_when_no_group_signal_reaches_the_child() {
-	let harness = start(
-		options("normal")
-			.with_env("FAKE_CLAUDE_IGNORE_EOF", "1")
-			.with_env("FAKE_CLAUDE_ESCAPE_GROUP", "1"),
-	)
-	.await
-	.expect("session starts");
-	let child = harness.session.pid() as libc::pid_t;
+async fn shutting_down_returns_even_when_no_group_signal_reaches_the_sidecar() {
+	let escaped =
+		sidecar_with(&[("FAKE_CLAUDE_IGNORE_EOF", "1"), ("FAKE_CLAUDE_ESCAPE_GROUP", "1")]).await;
+	let harness = start_on(escaped, options("normal")).await.expect("session starts");
+	let child = harness.sidecar.pid() as libc::pid_t;
 
-	poll_until("the child to leave the group the transport put it in", || unsafe {
+	poll_until("the sidecar to leave the group the host put it in", || unsafe {
 		libc::getpgid(child) != child
 	})
 	.await;
 
-	tokio::time::timeout(LADDER_CEILING, harness.session.shutdown())
+	tokio::time::timeout(LADDER_CEILING, harness.sidecar.shutdown())
 		.await
 		.expect("the shutdown never gave the child lock back");
 }
@@ -696,16 +760,16 @@ async fn shutting_down_returns_even_when_no_group_signal_reaches_the_child() {
 /// same breath as the reaping.
 #[cfg(unix)]
 #[tokio::test]
-async fn a_child_that_exits_on_its_own_spends_its_group_and_stops_tracking_it() {
+async fn a_sidecar_that_exits_on_its_own_spends_its_group_and_stops_tracking_it() {
 	let pid_file = probe_file("natural-exit");
 	let mut harness = start(
-		options("crash")
+		options("sidecar_exit")
 			.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
 			.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1"),
 	)
 	.await
 	.expect("session starts");
-	let pid = harness.session.pid();
+	let pid = harness.sidecar.pid();
 
 	poll_until("the fake to record its grandchild", || recorded_pid(&pid_file).is_some()).await;
 	let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");
@@ -715,16 +779,16 @@ async fn a_child_that_exits_on_its_own_spends_its_group_and_stops_tracking_it() 
 	harness.drain_turn().await;
 
 	assert!(
-		!session::live_groups().contains(&pid),
+		!sidecar::live_groups().contains(&pid),
 		"a reaped pid stayed on the list a later sweep signals"
 	);
 	poll_until("the reaping to take the grandchild with it", || !is_alive(orphan)).await;
 
-	tokio::time::timeout(DEADLINE, harness.session.terminate())
+	tokio::time::timeout(DEADLINE, harness.sidecar.terminate())
 		.await
 		.expect("the quit path never returned");
 	assert!(
-		!session::live_groups().contains(&pid),
+		!sidecar::live_groups().contains(&pid),
 		"the quit path put a reaped pid back on the list"
 	);
 }
@@ -732,9 +796,9 @@ async fn a_child_that_exits_on_its_own_spends_its_group_and_stops_tracking_it() 
 #[cfg(unix)]
 #[tokio::test]
 async fn terminating_takes_the_whole_process_group_down() {
-	let (harness, orphan) = orphan_probe("terminate", options("orphan")).await;
+	let (harness, orphan) = orphan_probe("terminate", sidecar().await, options("orphan")).await;
 
-	harness.session.terminate().await;
+	harness.sidecar.terminate().await;
 
 	poll_until("the exit path to leave no orphan behind", || !is_alive(orphan)).await;
 }

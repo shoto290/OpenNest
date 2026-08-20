@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 use super::contract::{
-	ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, ClaudeEvent, MessageCompletion,
+	ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, AgentEvent, MessageCompletion,
 	MessageRole, PermissionRequest, TurnEnded, TurnOutcome,
 };
 use super::protocol::{
@@ -112,7 +112,7 @@ impl Translator {
 		self.pending_permissions.remove(request_id)
 	}
 
-	pub fn ingest(&mut self, frame: Frame) -> Vec<ClaudeEvent> {
+	pub fn ingest(&mut self, frame: Frame) -> Vec<AgentEvent> {
 		match frame {
 			Frame::System(system) => self.on_system(system),
 			Frame::StreamEvent(frame) => {
@@ -133,7 +133,9 @@ impl Translator {
 			Frame::ControlRequest(request) => {
 				self.on_control_request(request.request_id, request.request)
 			}
-			Frame::ControlResponse(_) | Frame::Ignored => Vec::new(),
+			Frame::Opened | Frame::Closed(_) | Frame::ControlResponse(_) | Frame::Ignored => {
+				Vec::new()
+			}
 		}
 	}
 
@@ -144,27 +146,27 @@ impl Translator {
 	/// against the bot from one launch to the next, and a child that leaves the key
 	/// out — or sets it to null — would otherwise erase what the bot answered to for
 	/// good. The frame is still read either way, since the session id rides on it.
-	fn on_system(&mut self, frame: SystemFrame) -> Vec<ClaudeEvent> {
+	fn on_system(&mut self, frame: SystemFrame) -> Vec<AgentEvent> {
 		if frame.subtype.as_deref() != Some("init") {
 			return Vec::new();
 		}
 		let mut events = Vec::new();
 		if let Some(session_id) = frame.session_id.filter(|_| self.session_id.is_none()) {
 			self.session_id = Some(session_id.clone());
-			events.push(ClaudeEvent::SessionReady { session_id, resumed: self.resumed });
+			events.push(AgentEvent::SessionReady { session_id, resumed: self.resumed });
 		}
 		if let Some(commands) = frame.slash_commands.filter(|listed| !listed.is_empty()) {
-			events.push(ClaudeEvent::CommandsListed { commands });
+			events.push(AgentEvent::CommandsListed { commands });
 		}
 		events
 	}
 
-	fn on_stream(&mut self, event: StreamEvent) -> Vec<ClaudeEvent> {
+	fn on_stream(&mut self, event: StreamEvent) -> Vec<AgentEvent> {
 		match event {
 			StreamEvent::MessageStart { message } => {
 				let id = message.and_then(|header| header.id).unwrap_or_else(new_id);
 				self.streaming_message = Some(StreamingMessage { id: id.clone(), spoke: false });
-				vec![ClaudeEvent::MessageStarted {
+				vec![AgentEvent::MessageStarted {
 					message: ChatMessage {
 						id,
 						role: MessageRole::Assistant,
@@ -181,7 +183,7 @@ impl Translator {
 				message.spoke = true;
 				let id = message.id.clone();
 				self.delta_seq += 1;
-				vec![ClaudeEvent::MessageDelta { id, seq: self.delta_seq, text }]
+				vec![AgentEvent::MessageDelta { id, seq: self.delta_seq, text }]
 			}
 			StreamEvent::ContentBlockStart {
 				content_block: Some(ContentBlock::ToolUse { id, name, input }),
@@ -192,10 +194,10 @@ impl Translator {
 		}
 	}
 
-	fn tool_started(&mut self, id: String, name: &str, input: &Value) -> ClaudeEvent {
+	fn tool_started(&mut self, id: String, name: &str, input: &Value) -> AgentEvent {
 		let title = tool_title(name, input);
 		self.activity_titles.insert(id.clone(), title.clone());
-		ClaudeEvent::Activity {
+		AgentEvent::Activity {
 			activity: ActivityEvent {
 				id,
 				title,
@@ -205,11 +207,11 @@ impl Translator {
 		}
 	}
 
-	fn on_user(&mut self, content: Vec<ContentBlock>) -> Vec<ClaudeEvent> {
+	fn on_user(&mut self, content: Vec<ContentBlock>) -> Vec<AgentEvent> {
 		content
 			.into_iter()
 			.filter_map(|block| match block {
-				ContentBlock::ToolResult { tool_use_id, is_error } => Some(ClaudeEvent::Activity {
+				ContentBlock::ToolResult { tool_use_id, is_error } => Some(AgentEvent::Activity {
 					activity: ActivityEvent {
 						title: self.activity_titles.remove(&tool_use_id).unwrap_or_default(),
 						id: tool_use_id,
@@ -226,7 +228,7 @@ impl Translator {
 			.collect()
 	}
 
-	fn on_assistant(&mut self, content: Vec<ContentBlock>) -> Vec<ClaudeEvent> {
+	fn on_assistant(&mut self, content: Vec<ContentBlock>) -> Vec<AgentEvent> {
 		let mut events = Vec::new();
 		let mut text = String::new();
 
@@ -242,7 +244,7 @@ impl Translator {
 
 		if !text.is_empty() {
 			let id = self.streaming_message.take().map(|message| message.id).unwrap_or_else(new_id);
-			events.push(ClaudeEvent::MessageCompleted {
+			events.push(AgentEvent::MessageCompleted {
 				message: ChatMessage {
 					id,
 					role: MessageRole::Assistant,
@@ -256,7 +258,7 @@ impl Translator {
 		events
 	}
 
-	fn on_result(&mut self, subtype: Option<&str>, is_error: bool) -> Vec<ClaudeEvent> {
+	fn on_result(&mut self, subtype: Option<&str>, is_error: bool) -> Vec<AgentEvent> {
 		let outcome = if self.cancelling {
 			TurnOutcome::Cancelled
 		} else if is_error || subtype.is_some_and(|subtype| subtype != "success") {
@@ -268,7 +270,7 @@ impl Translator {
 		let mut events = Vec::new();
 		if let Some(message) = self.streaming_message.take() {
 			if let Some(completion) = ending_for(outcome, message.spoke) {
-				events.push(ClaudeEvent::MessageCompleted {
+				events.push(AgentEvent::MessageCompleted {
 					message: ChatMessage {
 						id: message.id,
 						role: MessageRole::Assistant,
@@ -287,7 +289,7 @@ impl Translator {
 		self.activity_titles.clear();
 		self.pending_permissions.clear();
 
-		events.push(ClaudeEvent::TurnEnded {
+		events.push(AgentEvent::TurnEnded {
 			ended: TurnEnded { session_id: self.session_id.clone(), outcome },
 		});
 		events
@@ -297,7 +299,7 @@ impl Translator {
 		&mut self,
 		request_id: String,
 		body: ControlRequestBody,
-	) -> Vec<ClaudeEvent> {
+	) -> Vec<AgentEvent> {
 		let ControlRequestBody::CanUseTool { tool_name, display_name, description, input } = body
 		else {
 			return Vec::new();
@@ -312,7 +314,7 @@ impl Translator {
 		self.pending_permissions.insert(request_id.clone(), input);
 
 		vec![
-			ClaudeEvent::Activity {
+			AgentEvent::Activity {
 				activity: ActivityEvent {
 					id: request_id.clone(),
 					title: title.clone(),
@@ -320,7 +322,7 @@ impl Translator {
 					status: ActivityStatus::Pending,
 				},
 			},
-			ClaudeEvent::PermissionRequested {
+			AgentEvent::PermissionRequested {
 				request: PermissionRequest { id: request_id, tool_name, title, detail },
 			},
 		]
@@ -339,7 +341,7 @@ mod tests {
 
 	const ANSWER: &str = "Both files are in place.";
 
-	fn ingest(translator: &mut Translator, frames: Vec<Value>) -> Vec<ClaudeEvent> {
+	fn ingest(translator: &mut Translator, frames: Vec<Value>) -> Vec<AgentEvent> {
 		frames
 			.into_iter()
 			.flat_map(|frame| {
@@ -410,31 +412,31 @@ mod tests {
 		json!({ "type": "result", "subtype": subtype, "is_error": is_error, "session_id": "s-1" })
 	}
 
-	fn completed(events: &[ClaudeEvent]) -> Vec<&ChatMessage> {
+	fn completed(events: &[AgentEvent]) -> Vec<&ChatMessage> {
 		events
 			.iter()
 			.filter_map(|event| match event {
-				ClaudeEvent::MessageCompleted { message } => Some(message),
+				AgentEvent::MessageCompleted { message } => Some(message),
 				_ => None,
 			})
 			.collect()
 	}
 
-	fn streamed(events: &[ClaudeEvent]) -> String {
+	fn streamed(events: &[AgentEvent]) -> String {
 		events
 			.iter()
 			.filter_map(|event| match event {
-				ClaudeEvent::MessageDelta { text, .. } => Some(text.as_str()),
+				AgentEvent::MessageDelta { text, .. } => Some(text.as_str()),
 				_ => None,
 			})
 			.collect()
 	}
 
-	fn statuses(events: &[ClaudeEvent]) -> Vec<ActivityStatus> {
+	fn statuses(events: &[AgentEvent]) -> Vec<ActivityStatus> {
 		events
 			.iter()
 			.filter_map(|event| match event {
-				ClaudeEvent::Activity { activity } => Some(activity.status),
+				AgentEvent::Activity { activity } => Some(activity.status),
 				_ => None,
 			})
 			.collect()
@@ -459,9 +461,9 @@ mod tests {
 		json!({ "type": kind, "message": with_field(body, "content", content) })
 	}
 
-	fn outcome(events: &[ClaudeEvent]) -> Option<TurnOutcome> {
+	fn outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
 		events.iter().find_map(|event| match event {
-			ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),
+			AgentEvent::TurnEnded { ended } => Some(ended.outcome),
 			_ => None,
 		})
 	}
@@ -556,8 +558,8 @@ mod tests {
 			assert_eq!(
 				events,
 				vec![
-					ClaudeEvent::SessionReady { session_id: session_id.to_owned(), resumed },
-					ClaudeEvent::CommandsListed { commands },
+					AgentEvent::SessionReady { session_id: session_id.to_owned(), resumed },
+					AgentEvent::CommandsListed { commands },
 				]
 			);
 		}
@@ -577,7 +579,7 @@ mod tests {
 
 			assert_eq!(
 				events,
-				vec![ClaudeEvent::SessionReady { session_id: "s-1".into(), resumed: false }]
+				vec![AgentEvent::SessionReady { session_id: "s-1".into(), resumed: false }]
 			);
 		}
 	}

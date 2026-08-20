@@ -1,7 +1,7 @@
 import type {
 	ActivityEvent,
 	ActivityStatus,
-	ClaudeEvent,
+	AgentEvent,
 	ConnectionState,
 	MessageCompletion,
 	PermissionDecision,
@@ -11,7 +11,7 @@ import type {
 	TurnEnded,
 	TurnOutcome,
 	TurnState,
-} from "../claude/contract"
+} from "../agent/contract"
 import type { TranscriptMessage } from "../conversations/transcript-contract"
 
 export type ChatError = {
@@ -64,7 +64,7 @@ export type ChatAction =
 	 * state is about is dropped: a replaced session is still alive for as long as
 	 * its child takes to die, and every frame it emits meanwhile describes a
 	 * process the reader has already been handed a replacement for. */
-	| { type: "driverEvent"; scope: RuntimeScope | null; event: ClaudeEvent }
+	| { type: "driverEvent"; scope: RuntimeScope | null; event: AgentEvent }
 	/** A session died or was replaced. Clears what belonged to that process — its
 	 * steps included, because a step is a thing a running provider was doing and
 	 * nothing is running any more — and keeps the transcript, which was never that
@@ -289,7 +289,7 @@ function applyFailure(state: ChatState, error: TransportError): ChatState {
 		: next
 }
 
-function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
+function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 	switch (event.type) {
 		case "connectionChanged":
 			return state.connection === event.state

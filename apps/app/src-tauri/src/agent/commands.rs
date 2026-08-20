@@ -3,15 +3,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tokio::sync::Mutex;
 
 use super::binary;
 use super::contract::{
-	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
+	CheckReport, AgentEvent, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
 	SessionHandle, SessionSnapshot, TransportError,
 };
 use super::models;
 use super::redact;
-use super::session::{self, EventSink, GatedSink, Session, SessionOptions};
+use super::session::{EventSink, GatedSink, Session, SessionOptions};
+use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::store;
 use crate::db;
 
@@ -20,7 +22,7 @@ pub const EVENT_CHANNEL: &str = "claude://event";
 /// The one way anything reaches the frontend, and the reason every event on the
 /// channel names a run: the envelope is built here, so no caller can emit without
 /// saying which run it is speaking for.
-fn announce<R: Runtime>(app: &AppHandle<R>, scope: Option<RuntimeScope>, event: ClaudeEvent) {
+fn announce<R: Runtime>(app: &AppHandle<R>, scope: Option<RuntimeScope>, event: AgentEvent) {
 	let _ = app.emit(EVENT_CHANNEL, ScopedEvent { scope, event });
 }
 
@@ -167,7 +169,7 @@ struct RunSink<R: Runtime> {
 }
 
 impl<R: Runtime> EventSink for RunSink<R> {
-	fn emit(&self, event: ClaudeEvent) {
+	fn emit(&self, event: AgentEvent) {
 		if !self.live.holds(&self.scope) {
 			return;
 		}
@@ -199,11 +201,18 @@ pub struct ClaudeState {
 	/// seconds spent holding a lock. What keeps the other callers out is the
 	/// claim they fail to take, not a lock they would queue behind.
 	gate: std::sync::Mutex<Gate>,
-	/// The live process of every participant that has one, and the run each of them
-	/// is. The run is named before the child exists — a start knows what it is
-	/// building — and the child joins it only if that run is still its
+	/// The live session of every participant that has one, and the run each of them
+	/// is. The run is named before the session exists — a start knows what it is
+	/// building — and the session joins it only if that run is still its
 	/// participant's when it comes up.
 	live: Arc<Live>,
+	/// The one sidecar every session is served from, started on the first launch
+	/// that needs it and replaced only once it has stopped talking.
+	///
+	/// A `tokio::sync::Mutex`: starting one means waiting on a spawned process to
+	/// announce itself, and the two participants that ask at the same moment must
+	/// end up on the same process rather than on two.
+	sidecar: Mutex<Option<Arc<Sidecar>>>,
 }
 
 impl ClaudeState {
@@ -221,6 +230,22 @@ impl ClaudeState {
 
 	fn enter_quit(&self) {
 		self.gate.lock().expect("gate").quitting = true;
+	}
+
+	/// The sidecar this host serves its sessions from. One process for every
+	/// participant, started on demand and kept for as long as it answers.
+	async fn sidecar(&self) -> Result<Arc<Sidecar>, TransportError> {
+		let mut slot = self.sidecar.lock().await;
+		if let Some(running) = slot.as_ref().filter(|running| running.is_live()) {
+			return Ok(running.clone());
+		}
+		let started = Sidecar::start(SidecarOptions::new(sidecar::resolve()?)).await?;
+		*slot = Some(started.clone());
+		Ok(started)
+	}
+
+	async fn take_sidecar(&self) -> Option<Arc<Sidecar>> {
+		self.sidecar.lock().await.take()
 	}
 }
 
@@ -264,10 +289,10 @@ pub async fn claude_check<R: Runtime>(
 	announce(
 		&app,
 		scope.clone(),
-		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking },
+		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
 	);
 	let report = binary::check().await;
-	announce(&app, scope, ClaudeEvent::ConnectionChanged { state: report.connection });
+	announce(&app, scope, AgentEvent::ConnectionChanged { state: report.connection });
 	report
 }
 
@@ -355,7 +380,7 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 		previous.shutdown().await;
 	}
 
-	let binary = binary::resolve()?;
+	let sidecar = state.sidecar().await?;
 	let identity = runtime_identity(&database, &scope.bot_id).await;
 	let anywhere = cwd
 		.map(PathBuf::from)
@@ -365,13 +390,13 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 
 	let sink: Arc<dyn EventSink> =
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
-	let options = SessionOptions::new(binary, working_dir).instructed(identity.instructions);
+	let options = SessionOptions::new(working_dir).instructed(identity.instructions);
 
-	let started = match start_with_fallback(options, resume, sink.clone()).await {
+	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
 		Ok(started) => started,
 		Err(error) => {
-			sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Unavailable });
-			sink.emit(ClaudeEvent::Failed { error: error.clone() });
+			sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Unavailable });
+			sink.emit(AgentEvent::Failed { error: error.clone() });
 			return Err(error);
 		}
 	};
@@ -380,13 +405,13 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 	// that succeeded with something less than it was asked for, and neither is worth
 	// telling a reader about ahead of the session it happened in.
 	if let Some(path) = refused_dir {
-		sink.emit(ClaudeEvent::Failed { error: TransportError::WorkingDirectoryRefused { path } });
+		sink.emit(AgentEvent::Failed { error: TransportError::WorkingDirectoryRefused { path } });
 	}
 
 	if let Some(refusal) = &started.resume_refusal {
 		let forgot_session_id =
 			forget_the_id_a_refusal_blames(store::file(&app).as_deref(), refusal);
-		sink.emit(ClaudeEvent::Failed {
+		sink.emit(AgentEvent::Failed {
 			error: TransportError::ResumeFailed { forgot_session_id },
 		});
 	}
@@ -400,10 +425,10 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 	// orphan group, by construction rather than by luck. Asked inside the install rather than before it, because a
 	// quit landing between the two questions is the case this is about.
 	if !state.live.install(&scope, session.clone()) {
-		session.terminate().await;
+		session.shutdown().await;
 		return Err(TransportError::TransitionInProgress);
 	}
-	sink.emit(ClaudeEvent::ConnectionChanged { state: ConnectionState::Ready });
+	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Ready });
 	Ok(handle)
 }
 
@@ -447,17 +472,19 @@ pub struct Started {
 /// step in a launch still expected to succeed, so the reader sees it only if it
 /// turns out to be the answer.
 pub async fn start_with_fallback(
+	sidecar: Arc<Sidecar>,
 	options: SessionOptions,
 	resume: Option<String>,
 	sink: Arc<dyn EventSink>,
 ) -> Result<Started, TransportError> {
 	if resume.is_none() {
-		let session = Session::start(options, sink).await?;
+		let session = Session::start(sidecar, options, sink).await?;
 		return Ok(Started { session, resume_refusal: None });
 	}
 
 	let gated = Arc::new(GatedSink::new(sink.clone()));
-	let refusal = match Session::start(options.clone().resuming(resume), gated.clone()).await {
+	let resuming = Session::start(sidecar.clone(), options.clone().resuming(resume), gated.clone());
+	let refusal = match resuming.await {
 		Ok(session) => {
 			gated.promote();
 			return Ok(Started { session, resume_refusal: None });
@@ -466,7 +493,7 @@ pub async fn start_with_fallback(
 	};
 
 	gated.discard();
-	let session = Session::start(options, sink).await?;
+	let session = Session::start(sidecar, options, sink).await?;
 	Ok(Started { session, resume_refusal: Some(refusal) })
 }
 
@@ -535,12 +562,15 @@ pub async fn terminate_session(state: &ClaudeState) {
 		.live
 		.clear_all()
 		.into_iter()
-		.map(|session| tauri::async_runtime::spawn(async move { session.terminate().await }))
+		.map(|session| tauri::async_runtime::spawn(async move { session.shutdown().await }))
 		.collect();
 	for termination in ending {
 		let _ = termination.await;
 	}
-	session::sweep_live_groups();
+	if let Some(sidecar) = state.take_sidecar().await {
+		sidecar.terminate().await;
+	}
+	sidecar::sweep_live_groups();
 }
 
 /// Refused for a run the host has already replaced: a shutdown is the one command
@@ -567,7 +597,7 @@ pub async fn claude_shutdown<R: Runtime>(
 	announce(
 		&app,
 		Some(scope),
-		ClaudeEvent::ConnectionChanged { state: ConnectionState::Checking },
+		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
 	);
 	Ok(())
 }

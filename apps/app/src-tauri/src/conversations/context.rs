@@ -11,7 +11,7 @@
 //!
 //! What the bot was told to be is not in it. Instructions reach the process as its
 //! system prompt, spelled on the command line that starts it — see
-//! [`crate::claude::session::SessionOptions`] — so a context that also printed them
+//! [`crate::agent::session::SessionOptions`] — so a context that also printed them
 //! would say the same thing twice, once with less standing than the other.
 //!
 //! Bounded is the whole point. Every part has a limit that does not grow with the

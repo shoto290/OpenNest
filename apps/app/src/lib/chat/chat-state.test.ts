@@ -10,7 +10,7 @@ import {
 	isTurnBusy,
 } from "./chat-state"
 
-import type { ChatMessage, ClaudeEvent, RuntimeScope } from "../claude/contract"
+import type { AgentEvent, ChatMessage, RuntimeScope } from "../agent/contract"
 import { CONVERSATION, message } from "../conversations/transcript-fixtures"
 
 /** One participant's lineage, a run at a time: the number and the row change
@@ -24,7 +24,7 @@ function run(epoch: number): RuntimeScope {
 	}
 }
 
-function applyEvents(state: ChatState, events: ClaudeEvent[]): ChatState {
+function applyEvents(state: ChatState, events: AgentEvent[]): ChatState {
 	return events.reduce(
 		(current, event) =>
 			chatReducer(current, {
@@ -47,7 +47,7 @@ function assistantMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
 	}
 }
 
-const streamedTurn: ClaudeEvent[] = [
+const streamedTurn: AgentEvent[] = [
 	{ type: "turnChanged", state: "submitting" },
 	{ type: "turnChanged", state: "running" },
 	{ type: "messageStarted", message: assistantMessage() },
@@ -165,7 +165,7 @@ describe("chatReducer", () => {
 	})
 
 	it("keeps turnEnded idempotent", () => {
-		const ended: ClaudeEvent = {
+		const ended: AgentEvent = {
 			type: "turnEnded",
 			ended: { sessionId: "s-1", outcome: "cancelled" },
 		}
@@ -261,7 +261,7 @@ describe("chatReducer", () => {
 	})
 
 	it("only accepts permission requests while a turn is active", () => {
-		const request: ClaudeEvent = {
+		const request: AgentEvent = {
 			type: "permissionRequested",
 			request: { id: "perm-1", toolName: "Bash", title: "Run", detail: null },
 		}
@@ -445,7 +445,7 @@ describe("turn predicates", () => {
 })
 
 describe("permission resolution", () => {
-	const pending: ClaudeEvent[] = [
+	const pending: AgentEvent[] = [
 		{ type: "turnChanged", state: "submitting" },
 		{
 			type: "activity",
@@ -508,7 +508,7 @@ describe("permission resolution", () => {
 })
 
 describe("session reset", () => {
-	const conversation: ClaudeEvent[] = [
+	const conversation: AgentEvent[] = [
 		{ type: "turnChanged", state: "submitting" },
 		{ type: "turnChanged", state: "running" },
 		{

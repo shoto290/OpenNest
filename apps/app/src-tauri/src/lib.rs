@@ -1,6 +1,6 @@
 pub mod attachments;
 pub mod avatars;
-pub mod claude;
+pub mod agent;
 pub mod commands;
 pub mod conversations;
 pub mod db;
@@ -9,8 +9,8 @@ mod private_files;
 
 use tauri::{Manager, RunEvent};
 
-use claude::commands::terminate_session;
-use claude::ClaudeState;
+use agent::commands::terminate_session;
+use agent::ClaudeState;
 use commands::invoke_handler;
 
 pub fn run() {

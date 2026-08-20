@@ -6,7 +6,7 @@ import type {
 	RuntimeScope,
 	ScopedEvent,
 	SessionHandle,
-} from "../claude/contract"
+} from "../agent/contract"
 
 export type ChatDriverUnsubscribe = () => void
 
