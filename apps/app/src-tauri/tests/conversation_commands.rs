@@ -1416,3 +1416,151 @@ fn a_launch_reads_the_roster_it_finds_and_never_writes_a_bot_back_into_it() {
 
 	cleanup(&app);
 }
+
+/// The attachments directory as the host resolves it, from the same app handle the
+/// command resolves it from — see [`avatar_dir`] for why it is not spelled out.
+fn attachment_dir(app: &App<MockRuntime>) -> PathBuf {
+	app.path().app_data_dir().expect("data dir").join("attachments")
+}
+
+/// A bot created here and the id of the one chat it holds, which is the
+/// conversation attachments hang off. Its sibling [`a_bot_and_its_chat`] answers
+/// for the one bot the host writes itself; this one is for the bots a test creates,
+/// and it hands back both ids because deleting a bot is asserted on what happens to
+/// its conversation.
+fn a_new_bot_and_its_chat(window: &WebviewWindow<MockRuntime>, name: &str) -> (String, String) {
+	let id = a_bot(window, name);
+	let conversation_id = call(window, "conversation_main_chat", json!({ "botId": id }))
+		.expect("the chat")["id"]
+		.as_str()
+		.expect("the chat holds an id")
+		.to_owned();
+	(id, conversation_id)
+}
+
+/// The submission as the frontend sends it: `Uint8Array` reaches the host as a
+/// JSON array of numbers, so the crossing is spelled that way here too.
+fn an_attachment(name: &str, bytes: &[u8]) -> Value {
+	json!({ "name": name, "bytes": bytes })
+}
+
+/// One file stored for a conversation, answered as the path it took — the shape
+/// every assertion about what a deletion sweeps is built on.
+fn an_attachment_stored_for(
+	window: &WebviewWindow<MockRuntime>,
+	conversation_id: &str,
+	bytes: &[u8],
+) -> String {
+	call(
+		window,
+		"chat_store_attachments",
+		json!({ "conversationId": conversation_id, "attachments": [an_attachment("a.txt", bytes)] }),
+	)
+	.expect("the attachment is stored")[0]
+		.as_str()
+		.expect("a path")
+		.to_owned()
+}
+
+/// The whole point of the feature, over IPC: bytes in, files under the
+/// conversation, and absolute paths back — which is the only form an attachment
+/// reaches Claude in. The name a user's file carried is submitted as a path on
+/// purpose: what comes back must be inside the conversation's directory anyway.
+#[test]
+fn attachments_submitted_for_a_chat_are_written_under_it_and_cross_as_absolute_paths() {
+	let app = app("com.opennest.conversation-commands-24");
+	let window = window(&app);
+	let (_, conversation_id) = a_new_bot_and_its_chat(&window, "Nyx");
+
+	let stored = call(
+		&window,
+		"chat_store_attachments",
+		json!({
+			"conversationId": conversation_id,
+			"attachments": [
+				an_attachment("notes.md", b"first"),
+				an_attachment("../../etc/passwd", b"second"),
+			]
+		}),
+	)
+	.expect("the attachments are stored");
+
+	let paths: Vec<String> = stored
+		.as_array()
+		.expect("a list of paths")
+		.iter()
+		.map(|path| path.as_str().expect("a path").to_owned())
+		.collect();
+	let dir = attachment_dir(&app).join(&conversation_id);
+	assert_eq!(paths.len(), 2, "the answer left a submitted file out");
+	assert!(
+		paths.iter().all(|path| Path::new(path).parent() == Some(dir.as_path())),
+		"a file was stored somewhere other than the directory of its conversation"
+	);
+	assert_eq!(
+		std::fs::read(&paths[0]).expect("the first file is readable"),
+		b"first",
+		"the answer is not in the order the files were submitted"
+	);
+	assert_eq!(std::fs::read(&paths[1]).expect("the second file is readable"), b"second");
+	assert_eq!(
+		Path::new(&paths[0]).extension().and_then(|it| it.to_str()),
+		Some("md"),
+		"a stored file lost the extension that says what it is"
+	);
+
+	cleanup(&app);
+}
+
+/// A conversation the file does not hold is refused before anything reaches the
+/// disk, which is what keeps files from accumulating under an id nothing will ever
+/// sweep — the directory is not even made. A real conversation is seated beside it
+/// so what is refused is the id rather than an empty table.
+#[test]
+fn attachments_for_a_conversation_that_is_not_on_the_record_are_refused_and_nothing_is_written() {
+	let app = app("com.opennest.conversation-commands-25");
+	let window = window(&app);
+	a_new_bot_and_its_chat(&window, "Nyx");
+
+	assert_eq!(
+		call(
+			&window,
+			"chat_store_attachments",
+			json!({
+				"conversationId": "not-a-conversation",
+				"attachments": [an_attachment("notes.md", b"first")]
+			}),
+		),
+		Err(json!({ "kind": "unknownConversation", "id": "not-a-conversation" }))
+	);
+	assert!(
+		!attachment_dir(&app).join("not-a-conversation").exists(),
+		"a refused call made the directory its files would have gone in"
+	);
+
+	cleanup(&app);
+}
+
+/// A bot is thrown away with everything attached to what was said to it. The other
+/// bot's conversation is in the same directory on purpose: a sweep that answered
+/// "delete everything" would pass the first assertion and fail the second.
+#[test]
+fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_other_one_its_own() {
+	let app = app("com.opennest.conversation-commands-26");
+	let window = window(&app);
+	let (doomed, doomed_chat) = a_new_bot_and_its_chat(&window, "Nyx");
+	let (_, spared_chat) = a_new_bot_and_its_chat(&window, "Ada");
+	let dropped = an_attachment_stored_for(&window, &doomed_chat, b"gone");
+	let kept = an_attachment_stored_for(&window, &spared_chat, b"kept");
+
+	call(&window, "conversation_delete_bot", json!({ "id": doomed })).expect("the bot is deleted");
+
+	assert!(
+		!attachment_dir(&app).join(&doomed_chat).exists(),
+		"a deleted bot left the directory of its conversation behind"
+	);
+	assert!(!Path::new(&dropped).exists(), "a deleted bot left its attachments behind");
+	assert!(Path::new(&kept).exists(), "deleting one bot took another conversation's attachments");
+
+	cleanup(&app);
+}

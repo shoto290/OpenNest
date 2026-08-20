@@ -8,7 +8,7 @@
 
 use tauri::Runtime;
 
-use crate::{claude, conversations, user};
+use crate::{attachments, claude, conversations, user};
 
 /// The commands are named by their module rather than imported: the attribute on
 /// each one leaves a macro beside it that `generate_handler!` reaches through the
@@ -16,6 +16,7 @@ use crate::{claude, conversations, user};
 pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static
 {
 	tauri::generate_handler![
+		attachments::commands::chat_store_attachments,
 		claude::commands::claude_check,
 		claude::commands::claude_models,
 		claude::commands::claude_start_or_resume_session,

@@ -20,6 +20,7 @@ use super::contract::{
 	Bot, BotIdentity, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage,
 	RuntimeSession, TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
+use crate::attachments;
 use crate::avatars;
 use crate::db;
 use crate::db::repositories::messages::MessagePageQuery;
@@ -139,7 +140,8 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 /// deleted like any other: what is left is a file with no bots and no
 /// conversations, which is the state a fresh install comes up in.
 /// The bot, its chat, the whole transcript under it — and the picture it was
-/// wearing, which the sweep takes because the row that referenced it is gone.
+/// wearing and the files attached to its conversations, which the two sweeps take
+/// because the rows that referenced them are gone.
 #[tauri::command]
 pub async fn conversation_delete_bot<R: Runtime>(
 	app: AppHandle<R>,
@@ -147,9 +149,11 @@ pub async fn conversation_delete_bot<R: Runtime>(
 	id: String,
 ) -> Result<(), TranscriptStoreError> {
 	let dir = avatars::dir(&app);
+	let attachment_dir = attachments::dir(&app);
 	let database = ready(&state)?;
 	database.conversations().delete_bot(id).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
+	attachments::sweep_referenced(database, attachment_dir.as_deref()).await;
 	Ok(())
 }
 

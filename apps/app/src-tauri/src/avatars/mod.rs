@@ -31,6 +31,8 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
+use crate::private_files;
+
 pub use picture::Rejection;
 
 /// Beside `conversations.sqlite3` rather than in it: a picture is bytes nothing
@@ -42,13 +44,6 @@ const DIR_NAME: &str = "avatars";
 /// The asset protocol scope is a glob over this directory, so the name a file takes
 /// is also what the webview is allowed to ask for.
 const EXTENSION: &str = "png";
-
-/// The same reason the database file is `0600`: what a user uploaded is theirs, and
-/// the app data directory is not a place to publish it from. Named per kind rather
-/// than decided from the path, so nothing has to ask the disk what it is about to
-/// restrict.
-const DIR_MODE: u32 = 0o700;
-const FILE_MODE: u32 = 0o600;
 
 /// Where avatars live for this install: a path, and nothing on the disk. Every read
 /// of a bot resolves this to project the column it holds, and a read has no business
@@ -78,12 +73,7 @@ pub fn minted_path(dir: &Path) -> PathBuf {
 /// memory, so this is one write of a whole file: there is no state where half a
 /// picture has been accepted.
 pub fn write(path: &Path, bytes: &[u8]) -> Result<(), Rejection> {
-	if let Some(dir) = path.parent() {
-		fs::create_dir_all(dir)
-			.and_then(|()| restrict_to_owner(dir, DIR_MODE))
-			.map_err(unwritable)?;
-	}
-	fs::write(path, bytes).and_then(|()| restrict_to_owner(path, FILE_MODE)).map_err(unwritable)
+	private_files::write(path, bytes).map_err(unwritable)
 }
 
 /// The absolute path a recorded one stands for, or `None` if the UI must not be
@@ -162,17 +152,6 @@ fn held_name(dir: &Path, recorded: &str) -> Option<OsString> {
 
 fn unwritable(error: std::io::Error) -> Rejection {
 	Rejection::Unwritable { detail: error.to_string() }
-}
-
-#[cfg(unix)]
-fn restrict_to_owner(path: &Path, mode: u32) -> std::io::Result<()> {
-	use std::os::unix::fs::PermissionsExt;
-	fs::set_permissions(path, fs::Permissions::from_mode(mode))
-}
-
-#[cfg(not(unix))]
-fn restrict_to_owner(_path: &Path, _mode: u32) -> std::io::Result<()> {
-	Ok(())
 }
 
 #[cfg(test)]
@@ -352,19 +331,24 @@ mod tests {
 	/// The directory is asserted beside the file because writing one is what creates
 	/// the other: a picture nobody else can read, sitting in a directory anybody can
 	/// list, still tells them what a user uploaded and when.
+	///
+	/// The directory is left for the write to make, which is where it comes from on
+	/// a real install — a mode is what a file and a directory are *created* with
+	/// here, never something set on them a moment after.
 	#[cfg(unix)]
 	#[test]
 	fn what_a_user_uploaded_is_reachable_by_its_owner_only() {
 		use std::os::unix::fs::PermissionsExt;
 
-		let dir = temp_dir();
+		let parent = temp_dir();
+		let dir = parent.join("made-by-the-write");
 		let recorded = a_stored_avatar(&dir);
 
 		let mode = |path: &Path| fs::metadata(path).expect("metadata").permissions().mode() & 0o777;
 
 		assert_eq!(mode(Path::new(&recorded)), 0o600, "an uploaded picture is world readable");
 		assert_eq!(mode(&dir), 0o700, "the directory of uploaded pictures is world listable");
-		fs::remove_dir_all(&dir).expect("cleanup");
+		fs::remove_dir_all(&parent).expect("cleanup");
 	}
 
 	/// `dir` is resolved by every read of a bot, so it must not be the thing that
