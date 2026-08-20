@@ -40,14 +40,22 @@ const DIR_NAME: &str = "attachments";
 /// The largest file accepted, counted on the bytes as they arrived. The whole call
 /// is refused when one file is over it — a prompt is submitted with the files it
 /// names, so storing the rest would leave the user to notice which one is missing.
-const MAX_BYTES: u64 = 20 * 1024 * 1024;
+///
+/// Ten, because a byte here is not a byte on the way: a byte array nested in an
+/// object misses Tauri's binary path, so a file crosses as JSON numbers, three to
+/// four characters a byte, and is parsed back whole on this side. Ten megabytes of
+/// file is some forty of text in transit.
+const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 /// What one call may carry. The per-file limit bounds a mistake; these two bound a
 /// prompt, which the per-file limit alone does not — twenty files just under it is
-/// four hundred megabytes, submitted as one array a webview holds in memory, sent
-/// over one IPC message and held here whole a second time.
+/// two hundred megabytes, at three to four times that once encoded.
+///
+/// Thirty keeps the worst accepted call in the tens of megabytes on each side rather
+/// than the hundreds. It is a bound, not a fix: the fix is to send dropped files as
+/// paths instead of copying their bytes across the bridge, and it is not written yet.
 const MAX_ATTACHMENTS: usize = 20;
-const MAX_TOTAL_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_TOTAL_BYTES: u64 = 30 * 1024 * 1024;
 
 /// How much of a submitted name may become an extension. Long enough for the ones
 /// that exist, short enough that the tail of a name a user typed cannot become the
