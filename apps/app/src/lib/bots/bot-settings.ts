@@ -62,9 +62,48 @@ const FACES = [
 	"koala",
 ] as const satisfies readonly AvatarAnimal[]
 
-/** What a bot is called before it is named. The panel opens on it, so it is copy a
- * reader replaces rather than a placeholder they have to fill in to see a row. */
-const NEW_BOT_NAME = "New bot"
+/** The names a new bot is called one of. Spelled here for the reason the faces are:
+ * naming a bot is this side's decision — the host names none — and a reader who
+ * wanted another word renames it in the panel that opens on it. Short and fond, so a
+ * row reads as somebody rather than as a slot. */
+export const BOT_NAMES = [
+	"Bean",
+	"Biscuit",
+	"Bramble",
+	"Bubble",
+	"Buttons",
+	"Clover",
+	"Cricket",
+	"Dimple",
+	"Doodle",
+	"Ember",
+	"Fern",
+	"Fig",
+	"Fizz",
+	"Gizmo",
+	"Honey",
+	"Jelly",
+	"Kiwi",
+	"Mango",
+	"Marble",
+	"Mittens",
+	"Mochi",
+	"Muffin",
+	"Nimbus",
+	"Noodle",
+	"Nugget",
+	"Olive",
+	"Peanut",
+	"Pebble",
+	"Pickle",
+	"Pip",
+	"Plum",
+	"Poppy",
+	"Sprout",
+	"Toast",
+	"Twig",
+	"Waffle",
+] as const
 
 /** A face no bot in the roster is wearing, so a reader who creates three bots gets
  * three of them. Once all eight are taken the list starts over, which is the
@@ -76,12 +115,23 @@ const nextFace = (bots: Bot[]): AvatarAnimal => {
 	)
 }
 
+/** A name no bot in the roster carries, drawn rather than taken in order, so a
+ * roster reads as a litter rather than as the list in the order it is written. Once
+ * every name is carried the whole list is in play again, which is the honest answer
+ * for a roster larger than the names there are. */
+const nextName = (bots: Bot[]): string => {
+	const carried = new Set(bots.map((bot) => bot.name))
+	const free = BOT_NAMES.filter((name) => !carried.has(name))
+	const pool = free.length > 0 ? free : BOT_NAMES
+	return pool[Math.floor(Math.random() * pool.length)]
+}
+
 /** Everything a bot is created with. Nothing here is asked of the reader first —
  * the bot exists, and the panel that opens on it is where it is described — so
  * every field is either the honest empty or a choice the app makes on their
  * behalf. */
 export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
-	name: NEW_BOT_NAME,
+	name: nextName(bots),
 	title: "",
 	model: NEW_BOT_MODEL,
 	avatarAnimal: nextFace(bots),
