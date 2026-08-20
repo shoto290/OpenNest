@@ -1,4 +1,4 @@
-//! Transport tests driven by the deterministic fake Claude child.
+//! Transport tests driven by the deterministic fake sidecar.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -33,7 +33,7 @@ struct Harness {
 /// when it is opened.
 fn options(scenario: &str) -> SessionOptions {
 	let mut options = SessionOptions::new(std::env::temp_dir())
-		.with_env("FAKE_CLAUDE_SCENARIO", scenario);
+		.with_env("FAKE_AGENT_SCENARIO", scenario);
 	options.startup_timeout = Duration::from_secs(2);
 	options
 }
@@ -206,12 +206,59 @@ async fn streams_a_normal_turn_and_closes_it() {
 	harness.session.shutdown().await;
 }
 
+/// The two asks about the install travel down the pipe every session shares, so
+/// both are answered by the one process the host already holds — and both come back
+/// as an answer rather than as a frame no session was owed.
+#[tokio::test]
+async fn the_install_is_asked_of_the_sidecar_the_sessions_are_served_from() {
+	let live = sidecar_with(&[("FAKE_AGENT_MODELS", "quasar,nimbus-preview")]).await;
+
+	assert!(live.authenticated().await.expect("the sign-in probe answers"));
+	assert_eq!(live.catalogue().await.expect("the catalogue answers"), ["quasar", "nimbus-preview"]);
+
+	let mut harness = start_on(live, options("normal")).await.expect("session starts");
+	harness.submit("bonjour").await.expect("prompt accepted");
+	assert_eq!(outcome(&harness.drain_turn().await), Some(TurnOutcome::Completed));
+	harness.session.shutdown().await;
+}
+
+/// Two callers asking at the same moment are both answered from the one line: the
+/// second is not left waiting on a channel the first replaced.
+#[tokio::test]
+async fn two_asks_landing_together_are_both_answered() {
+	let live = sidecar_with(&[("FAKE_AGENT_MODELS", "quasar")]).await;
+
+	let (first, second) = tokio::join!(live.catalogue(), live.catalogue());
+
+	assert_eq!(first.expect("the first ask answers"), ["quasar"]);
+	assert_eq!(second.expect("the second ask answers"), ["quasar"]);
+	live.shutdown().await;
+}
+
+/// An ask on a sidecar that has stopped talking is refused on the spot. It is the
+/// launch that waits on this answer, and a caller left hanging on a dead pipe is a
+/// reader shown nothing at all.
+#[tokio::test]
+async fn an_ask_on_a_dead_sidecar_is_refused_rather_than_left_hanging() {
+	let gone = sidecar().await;
+	gone.shutdown().await;
+
+	assert!(matches!(
+		gone.authenticated().await,
+		Err(TransportError::WriteFailed { .. }) | Err(TransportError::Crashed { .. })
+	));
+	assert!(matches!(
+		gone.catalogue().await,
+		Err(TransportError::WriteFailed { .. }) | Err(TransportError::Crashed { .. })
+	));
+}
+
 /// A capability the sidecar never announced is one the host never asks for. The
 /// reader is answered with the whole message instead of a stream that would never
 /// arrive — the same reply, said once.
 #[tokio::test]
 async fn a_sidecar_that_names_no_deltas_answers_in_whole_messages() {
-	let plain = sidecar_with(&[("FAKE_CLAUDE_CAPABILITIES", "resume")]).await;
+	let plain = sidecar_with(&[("FAKE_AGENT_CAPABILITIES", "resume")]).await;
 	assert!(!plain.supports(PARTIAL_MESSAGES));
 
 	let mut harness = start_on(plain, options("normal")).await.expect("session starts");
@@ -609,7 +656,7 @@ async fn closing_stdin_ends_a_healthy_sidecar_without_reaching_the_signal() {
 /// quit path blocked on the very child it exists to end.
 #[tokio::test]
 async fn a_sidecar_that_closes_stdout_and_keeps_running_is_reported_and_still_terminable() {
-	let deaf = sidecar_with(&[("FAKE_CLAUDE_IGNORE_EOF", "1")]).await;
+	let deaf = sidecar_with(&[("FAKE_AGENT_IGNORE_EOF", "1")]).await;
 	let mut harness = start_on(deaf, options("stdout_eof")).await.expect("session starts");
 	harness.submit("tais-toi mais reste").await.expect("prompt accepted");
 
@@ -647,7 +694,7 @@ async fn orphan_probe(
 	let pid_file = probe_file(label);
 
 	let harness =
-		start_on(sidecar, options.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy()))
+		start_on(sidecar, options.with_env("FAKE_AGENT_PID_FILE", pid_file.to_string_lossy()))
 			.await
 			.expect("session starts");
 	harness.submit("lance un enfant").await.expect("prompt accepted");
@@ -693,7 +740,7 @@ async fn shutdown_takes_the_whole_process_group_down() {
 #[cfg(unix)]
 #[tokio::test]
 async fn shutdown_escalates_on_a_sidecar_that_ignores_stdin_close() {
-	let deaf = sidecar_with(&[("FAKE_CLAUDE_IGNORE_EOF", "1")]).await;
+	let deaf = sidecar_with(&[("FAKE_AGENT_IGNORE_EOF", "1")]).await;
 	let (harness, orphan) = orphan_probe("deaf", deaf, options("orphan")).await;
 
 	tokio::time::timeout(Duration::from_secs(8), harness.sidecar.shutdown())
@@ -714,8 +761,8 @@ async fn a_start_that_crashes_leaves_its_group_to_the_sweep() {
 	let error = start_on(
 		host.clone(),
 		options("startup_crash")
-			.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
-			.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1"),
+			.with_env("FAKE_AGENT_PID_FILE", pid_file.to_string_lossy())
+			.with_env("FAKE_AGENT_ORPHAN_AT_STARTUP", "1"),
 	)
 	.await
 	.err()
@@ -731,7 +778,7 @@ async fn a_start_that_crashes_leaves_its_group_to_the_sweep() {
 
 /// The last rung of the ladder waits on a child the signal before it may never
 /// have reached — one that left the group, a platform where a group signal does
-/// nothing at all — and that wait holds the child lock. `claude_shutdown` and
+/// nothing at all — and that wait holds the child lock. `agent_shutdown` and
 /// every restart go through it, so an unbounded one leaves the command
 /// unresolved and the frontend deduplicating every later attempt into a promise
 /// that can no longer settle.
@@ -739,7 +786,7 @@ async fn a_start_that_crashes_leaves_its_group_to_the_sweep() {
 #[tokio::test]
 async fn shutting_down_returns_even_when_no_group_signal_reaches_the_sidecar() {
 	let escaped =
-		sidecar_with(&[("FAKE_CLAUDE_IGNORE_EOF", "1"), ("FAKE_CLAUDE_ESCAPE_GROUP", "1")]).await;
+		sidecar_with(&[("FAKE_AGENT_IGNORE_EOF", "1"), ("FAKE_AGENT_ESCAPE_GROUP", "1")]).await;
 	let harness = start_on(escaped, options("normal")).await.expect("session starts");
 	let child = harness.sidecar.pid() as libc::pid_t;
 
@@ -764,8 +811,8 @@ async fn a_sidecar_that_exits_on_its_own_spends_its_group_and_stops_tracking_it(
 	let pid_file = probe_file("natural-exit");
 	let mut harness = start(
 		options("sidecar_exit")
-			.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
-			.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1"),
+			.with_env("FAKE_AGENT_PID_FILE", pid_file.to_string_lossy())
+			.with_env("FAKE_AGENT_ORPHAN_AT_STARTUP", "1"),
 	)
 	.await
 	.expect("session starts");

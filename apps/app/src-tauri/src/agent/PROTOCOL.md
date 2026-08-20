@@ -1,13 +1,13 @@
 # Agent sidecar — the protocol the host speaks
 
 Every conversation turn goes through the sidecar (`apps/app/sidecar`), a single
-compiled Bun binary that drives `@anthropic-ai/claude-agent-sdk`. The host never
-spawns an agent itself: it spawns the sidecar, and the sidecar decides how its
-provider is spelled. Nothing below names a CLI flag, because the host no longer
-sets any — a second provider is one more module inside the sidecar.
+compiled Bun binary carrying its provider's own agent SDK. The host never spawns
+an agent itself: it spawns the sidecar, and the sidecar decides how its provider
+is spelled. Nothing below names a CLI flag, because the host no longer sets any —
+a second provider is one more module inside the sidecar.
 
-`binary.rs` survives for one job only: the connection probe, which still looks
-for a local `claude` to report a version and a sign-in state.
+The host resolves no executable of its own. Its connection state and its model
+catalogue are both asked of the sidecar, so nothing here reads a `PATH`.
 
 ## Process shape
 
@@ -25,7 +25,7 @@ outlives every one of them.
 The sidecar's first stdout line, before any session exists:
 
 ```json
-{"type":"ready","provider":"claude","version":"2.1.237","sdkVersion":"0.3.237",
+{"type":"ready","provider":"<id>","version":"2.1.237","sdkVersion":"0.3.237",
  "capabilities":["partialMessages","resume","interactivePermissions","modelCatalogue"]}
 ```
 
@@ -39,7 +39,21 @@ first, as `crashed`.
 
 ## Host → sidecar
 
-Every command names its session.
+Two commands name no session, because they are about the install rather than
+about a conversation. Each is asked once per launch and cached by the host.
+
+| `type` | Answered with | Becomes |
+| --- | --- | --- |
+| `check` | `{"type":"checked","authenticated":bool,"detail"?:string}` | the `CheckReport` |
+| `models` | `{"type":"catalogue","models":[…]}` | the model catalogue |
+
+`check` reads the provider's own credential store; `detail` says the question
+could not be answered at all, which reaches the frontend as `authCheckFailed`
+rather than as `notAuthenticated`. `models` is `Query.supportedModels()`, asked of
+a session opened for nothing else and closed again — there is no file to read and
+no endpoint to ask.
+
+Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
@@ -54,12 +68,10 @@ Every command names its session.
 - `resume` is the SDK's `resume`. The stored id is tried first; a refusal falls
   back to a fresh session and the id is given up on only when the refusal was a
   crash — see `commands.rs::start_with_fallback`.
-- `appendSystemPrompt` rides on `systemPrompt: { type: 'preset', preset:
-  'claude_code', append }`. The preset is named on purpose: omitting
-  `systemPrompt` drops Claude Code's own system prompt, and a bot's instructions
-  are an addition to it, never a replacement.
+- `appendSystemPrompt` rides on the provider's own preset system prompt as an
+  addition to it, never as a replacement — see the provider module in the sidecar.
 - `settingSources` is deliberately left out, which is what makes the SDK load the
-  settings on disk and the CLAUDE.md files they reach — the CLI defaults.
+  settings on disk and the instruction files they reach — the CLI defaults.
 - `env` is the SDK's `env`: variables for the agent this session runs, not for
   the sidecar.
 
@@ -116,10 +128,11 @@ permission prompt has no deadline of its own.
 ## What is deliberately not forwarded
 
 The sidecar's stderr is read so the pipe never fills and then discarded unread —
-it is the one channel that could carry an environment value. `claude auth status`
-returns an email, an org id, an org name and a subscription type; it is reduced
-to one boolean inside `binary.rs`. Search locations are reported as labels
-(`$OPENNEST_AGENT_SIDECAR`, `$PATH/claude`) rather than raw environment values,
-and `redact` collapses the home directory out of every path *and* every shell
-command before it crosses to React. There is no logging statement anywhere in
-the module.
+it is the one channel that could carry an environment value. The sign-in probe
+returns an email, an org id, an org name and a subscription type; the provider
+module reduces it to one boolean before it reaches the pipe, so the host never
+holds any of the rest. Search locations are reported as labels
+(`$OPENNEST_AGENT_SIDECAR`, the app's own directory) rather than raw environment
+values, and `redact` collapses the home directory out of every path *and* every
+shell command before it crosses to React. There is no logging statement anywhere
+in the module.

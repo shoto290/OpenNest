@@ -17,7 +17,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
 use super::contract::TransportError;
-use super::protocol::Ready;
+use super::protocol::{self, Catalogue, Checked, Ready};
 
 /// The executable the host spawns instead of the one it would find on `PATH`.
 /// Reserved for a run that ships no bundle of its own — a test, or a developer
@@ -34,6 +34,16 @@ const BUILD_COMMAND: &str = "bun run --filter sidecar build";
 /// it. A sidecar that has not said `ready` has not opened a session either, so
 /// nothing is lost by refusing it.
 pub const READY_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// How long the sidecar is given to answer the sign-in probe. It spawns the
+/// provider's own executable to read its credential store, and this is the answer
+/// the launch waits on.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long the sidecar is given to answer the catalogue. Longer than the check
+/// because the provider has to open a session to be asked at all, and nothing is
+/// waiting on it: the model list is asked for when a bot is being edited.
+const CATALOGUE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// How long a sidecar handed EOF is given to leave on its own before the ladder
 /// escalates. Public so a test can tell "it took the EOF" apart from "the
@@ -132,6 +142,12 @@ pub fn resolve() -> Result<PathBuf, TransportError> {
 
 type Routes = Arc<std::sync::Mutex<HashMap<String, mpsc::UnboundedSender<Value>>>>;
 
+/// Who is waiting for an answer that names no session, keyed by the type the
+/// sidecar answers under. A list per key rather than one sender, so two callers
+/// asking the same question at once are both answered instead of one replacing the
+/// other's channel with its own.
+type Answers = Arc<std::sync::Mutex<HashMap<String, Vec<oneshot::Sender<Value>>>>>;
+
 /// Optional only so a shutdown can drop the sender: closing this channel is what
 /// makes `write_loop` release the sidecar's stdin, and that release is the EOF it
 /// needs to exit on its own. Nothing else can deliver it — the handle was moved
@@ -143,8 +159,10 @@ type StdinChannel = std::sync::Mutex<Option<mpsc::UnboundedSender<Value>>>;
 pub struct Sidecar {
 	stdin_tx: StdinChannel,
 	routes: Routes,
+	answers: Answers,
 	child: Arc<Mutex<Option<Child>>>,
 	pid: u32,
+	version: String,
 	capabilities: Vec<String>,
 	/// Set the moment the sidecar stops talking, so the next session opens a new
 	/// process instead of writing into a pipe nobody reads.
@@ -162,6 +180,7 @@ impl Sidecar {
 		remember_group(pid);
 
 		let routes: Routes = Arc::new(std::sync::Mutex::new(HashMap::new()));
+		let answers: Answers = Arc::new(std::sync::Mutex::new(HashMap::new()));
 		let child = Arc::new(Mutex::new(Some(child)));
 
 		let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<Value>();
@@ -172,14 +191,15 @@ impl Sidecar {
 		tokio::spawn(read_loop(
 			stdout,
 			routes.clone(),
+			answers.clone(),
 			ready_tx,
 			gone.clone(),
 			child.clone(),
 			pid,
 		));
 
-		let capabilities = match tokio::time::timeout(options.ready_timeout, ready_rx).await {
-			Ok(Ok(ready)) => ready.capabilities,
+		let announced = match tokio::time::timeout(options.ready_timeout, ready_rx).await {
+			Ok(Ok(ready)) => ready,
 			Ok(Err(_)) => {
 				let code = reap(&child, pid).await;
 				return Err(TransportError::Crashed {
@@ -198,15 +218,23 @@ impl Sidecar {
 		Ok(Arc::new(Self {
 			stdin_tx: StdinChannel::new(Some(stdin_tx)),
 			routes,
+			answers,
 			child,
 			pid,
-			capabilities,
+			version: announced.version,
+			capabilities: announced.capabilities,
 			gone,
 		}))
 	}
 
 	pub fn pid(&self) -> u32 {
 		self.pid
+	}
+
+	/// What this build of the sidecar announced itself as. The host reports it as
+	/// the version of the install, and never asks how the provider spells it.
+	pub fn version(&self) -> &str {
+		&self.version
 	}
 
 	pub fn is_live(&self) -> bool {
@@ -231,6 +259,59 @@ impl Sidecar {
 		self.routes.lock().expect("routes").remove(key);
 	}
 
+	/// Whether the provider's own credentials are good for a session right now. A
+	/// sidecar that could not answer at all reports why, so a broken install is not
+	/// read as an account that is signed out.
+	pub async fn authenticated(&self) -> Result<bool, TransportError> {
+		let answer =
+			self.ask(protocol::check_command(), protocol::CHECK_ANSWER, CHECK_TIMEOUT).await?;
+		let checked: Checked = serde_json::from_value(answer)
+			.map_err(|error| TransportError::AuthCheckFailed { detail: error.to_string() })?;
+		match checked.detail {
+			Some(detail) => Err(TransportError::AuthCheckFailed { detail }),
+			None => Ok(checked.authenticated),
+		}
+	}
+
+	/// Every model label the provider offers, in the order it offers them. Empty is
+	/// an answer: what to offer instead is the frontend's to decide.
+	pub async fn catalogue(&self) -> Result<Vec<String>, TransportError> {
+		let answer = self
+			.ask(protocol::catalogue_command(), protocol::CATALOGUE_ANSWER, CATALOGUE_TIMEOUT)
+			.await?;
+		let catalogue: Catalogue = serde_json::from_value(answer)
+			.map_err(|error| TransportError::InvalidFrame { detail: error.to_string() })?;
+		Ok(catalogue.models)
+	}
+
+	/// One ask about the install, and the one line that answers it. The waiter is
+	/// registered before the command is written, so an answer that comes back
+	/// between the two statements is never dropped for having nobody to go to.
+	///
+	/// A sidecar that dies with the ask outstanding drops the sender, which is what
+	/// tells the caller the process is gone rather than slow.
+	async fn ask(
+		&self,
+		command: Value,
+		answer: &str,
+		timeout: Duration,
+	) -> Result<Value, TransportError> {
+		let (tx, rx) = oneshot::channel();
+		self.answers.lock().expect("answers").entry(answer.to_owned()).or_default().push(tx);
+		self.send(command)?;
+
+		match tokio::time::timeout(timeout, rx).await {
+			Ok(Ok(value)) => Ok(value),
+			Ok(Err(_)) => Err(TransportError::Crashed {
+				code: None,
+				detail: Some("the sidecar went away before it answered".into()),
+			}),
+			Err(_) => {
+				Err(TransportError::StartupTimeout { timeout_ms: timeout.as_millis() as u64 })
+			}
+		}
+	}
+
 	pub fn send(&self, command: Value) -> Result<(), TransportError> {
 		let delivered = self
 			.stdin_tx
@@ -251,6 +332,7 @@ impl Sidecar {
 	fn stop_talking(&self) {
 		self.gone.store(true, Ordering::Relaxed);
 		self.routes.lock().expect("routes").clear();
+		self.answers.lock().expect("answers").clear();
 		self.stdin_tx.lock().expect("stdin channel").take();
 	}
 
@@ -419,6 +501,7 @@ async fn discard_stderr(mut stderr: tokio::process::ChildStderr) {
 async fn read_loop(
 	stdout: tokio::process::ChildStdout,
 	routes: Routes,
+	answers: Answers,
 	ready_tx: oneshot::Sender<Ready>,
 	gone: Arc<AtomicBool>,
 	child: Arc<Mutex<Option<Child>>>,
@@ -441,6 +524,7 @@ async fn read_loop(
 			}
 		}
 		let Ok(envelope) = serde_json::from_str::<super::protocol::Envelope>(&line) else {
+			answer_the_host(&answers, &line);
 			continue;
 		};
 		let lane = routes.lock().expect("routes").get(&envelope.session).cloned();
@@ -451,7 +535,25 @@ async fn read_loop(
 
 	gone.store(true, Ordering::Relaxed);
 	routes.lock().expect("routes").clear();
+	answers.lock().expect("answers").clear();
 	reap(&child, pid).await;
+}
+
+/// A line naming no session is an answer to something the host asked about the
+/// install. Every waiter for that answer's type is served from the one line, and a
+/// line nobody is waiting for is dropped: an unsolicited answer is not a frame any
+/// session is owed.
+fn answer_the_host(answers: &Answers, line: &str) {
+	let Ok(value) = serde_json::from_str::<Value>(line) else {
+		return;
+	};
+	let Some(kind) = value.get("type").and_then(Value::as_str) else {
+		return;
+	};
+	let waiting = answers.lock().expect("answers").remove(kind).unwrap_or_default();
+	for waiter in waiting {
+		let _ = waiter.send(value.clone());
+	}
 }
 
 #[cfg(test)]

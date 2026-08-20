@@ -15,7 +15,7 @@ use std::time::Duration;
 use opennest_app::agent::commands::terminate_session;
 use opennest_app::agent::session::{EventSink, Session, SessionOptions};
 use opennest_app::agent::sidecar::{Sidecar, SidecarOptions};
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::AgentState;
 use tokio::sync::mpsc;
 
 
@@ -63,9 +63,9 @@ async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 		.expect("the fake sidecar announces itself");
 
 	let mut options = SessionOptions::new(std::env::temp_dir())
-		.with_env("FAKE_CLAUDE_SCENARIO", "startup_timeout")
-		.with_env("FAKE_CLAUDE_PID_FILE", pid_file.to_string_lossy())
-		.with_env("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1");
+		.with_env("FAKE_AGENT_SCENARIO", "startup_timeout")
+		.with_env("FAKE_AGENT_PID_FILE", pid_file.to_string_lossy())
+		.with_env("FAKE_AGENT_ORPHAN_AT_STARTUP", "1");
 	options.startup_timeout = UNREACHED_STARTUP_TIMEOUT;
 
 	let (tx, _events) = mpsc::unbounded_channel();
@@ -76,7 +76,7 @@ async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 	let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");
 	assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
-	let state = ClaudeState::default();
+	let state = AgentState::default();
 	terminate_session(&state).await;
 
 	poll_until("the exit sweep to leave no orphan behind", || !is_alive(orphan)).await;

@@ -14,11 +14,10 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::EVENT_CHANNEL;
 use opennest_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TransportError};
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::AgentState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -26,9 +25,8 @@ use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_K
 use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
-const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const SCENARIO_ENV: &str = "FAKE_CLAUDE_SCENARIO_FILE";
+const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const IDENTIFIER: &str = "com.opennest.bounded-rotation";
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -51,14 +49,14 @@ struct Harness {
 	log: Arc<Mutex<Vec<ScopedEvent>>>,
 }
 
-/// The host as it launches: `ClaudeState` for the runtime and the database opened
+/// The host as it launches: `AgentState` for the runtime and the database opened
 /// the way `lib.rs` opens it, from an identifier this suite has to itself.
 fn launch() -> Harness {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = IDENTIFIER.into();
 
 	let app = mock_builder()
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		.invoke_handler(invoke_handler())
 		.build(context)
 		.expect("app builds");
@@ -152,7 +150,7 @@ impl Harness {
 
 	fn start(&self, scope: &RuntimeScope, resume: Option<&str>) -> Result<Value, Value> {
 		self.call(
-			"claude_start_or_resume_session",
+			"agent_start_or_resume_session",
 			json!({
 				"scope": scope,
 				"resume": resume,
@@ -282,7 +280,6 @@ fn said(harness: &Harness, conversation: &str, index: usize) {
 /// the file.
 #[test]
 fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 
 	let harness = launch();
@@ -378,7 +375,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 
 	harness.forget_events();
 	harness
-		.call("claude_submit_prompt", json!({ "scope": live, "text": context }))
+		.call("agent_submit_prompt", json!({ "scope": live, "text": context }))
 		.expect("the prompt is accepted");
 	harness.wait_for("the rebuilt turn to end", turn_ended);
 
@@ -404,7 +401,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 		harness.scoped_events()
 	);
 	assert_eq!(
-		harness.call("claude_submit_prompt", json!({ "scope": refused_run, "text": "hello" })),
+		harness.call("agent_submit_prompt", json!({ "scope": refused_run, "text": "hello" })),
 		Err(json!({
 			"kind": "staleRuntimeSession",
 			"runtimeSessionId": refused_run.runtime_session_id
@@ -420,6 +417,6 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 	assert_eq!(after[SPOKEN]["id"], json!(PROMPT));
 	assert_eq!(after[SPOKEN]["content"], json!(PROMPT_TEXT));
 
-	assert_eq!(harness.call("claude_shutdown", json!({ "scope": live })), Ok(Value::Null));
+	assert_eq!(harness.call("agent_shutdown", json!({ "scope": live })), Ok(Value::Null));
 	std::fs::remove_dir_all(&data_dir).expect("cleanup");
 }

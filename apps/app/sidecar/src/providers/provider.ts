@@ -26,12 +26,22 @@ export type AgentSession = {
 	close: () => Promise<void>
 }
 
+/** Whether the provider's own credentials are good for a session right now.
+ * `detail` says the question could not be answered at all, which is not the same
+ * answer as a provider that is simply not signed in. */
+export type ProviderAuth = {
+	authenticated: boolean
+	detail?: string
+}
+
 export type AgentProvider = {
 	id: string
 	version: string
 	sdkVersion: string
 	capabilities: ProviderCapability[]
 	assertReady: () => void
+	authenticate: () => Promise<ProviderAuth>
+	models: () => Promise<string[]>
 	open: (request: SessionRequest, emit: EmitFrame) => Promise<AgentSession>
 }
 

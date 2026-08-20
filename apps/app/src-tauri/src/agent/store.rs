@@ -177,7 +177,7 @@ fn backup(path: &Path) -> PathBuf {
 /// is known to be abandoned: nothing this process wrote can exist yet, and the
 /// single-instance lock keeps another one from saving into the same directory.
 ///
-/// No read after it carries that promise. `claude_load_session` is a command the
+/// No read after it carries that promise. `agent_load_session` is a command the
 /// frontend may call whenever it likes, and a save caught between its
 /// `File::create` and its rename would lose the temporary underneath it and
 /// return having written nothing at all.

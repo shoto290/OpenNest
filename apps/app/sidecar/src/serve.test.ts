@@ -44,6 +44,29 @@ describe("serve", () => {
 		expect(lines.at(-1).type).toBe("unreadable")
 	})
 
+	it("answers the sign-in probe with a verdict and no identity", async () => {
+		const { lines } = await served([JSON.stringify({ type: "check" })])
+		const checked = lines.at(-1)
+
+		expect(checked.type).toBe("checked")
+		expect(typeof checked.authenticated).toBe("boolean")
+		// The probe reads an email, an organisation and a subscription type. None of
+		// them may reach the pipe: a verdict and, at most, why there is none.
+		expect(
+			Object.keys(checked).filter(
+				(key) => !["type", "authenticated", "detail"].includes(key),
+			),
+		).toEqual([])
+	})
+
+	it("answers the catalogue with the labels the provider offers", async () => {
+		const { lines } = await served([JSON.stringify({ type: "models" })])
+		const catalogue = lines.at(-1)
+
+		expect(catalogue.type).toBe("catalogue")
+		expect(Array.isArray(catalogue.models)).toBe(true)
+	})
+
 	it("leaves on the host's EOF", async () => {
 		const { exitCode } = await served([
 			JSON.stringify({ type: "prompt", session: "never-opened", text: "hi" }),

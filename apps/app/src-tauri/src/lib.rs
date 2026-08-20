@@ -10,7 +10,7 @@ mod private_files;
 use tauri::{Manager, RunEvent};
 
 use agent::commands::terminate_session;
-use agent::ClaudeState;
+use agent::AgentState;
 use commands::invoke_handler;
 
 pub fn run() {
@@ -38,7 +38,7 @@ pub fn run() {
 		// A link followed in the conversation goes to the system browser: the
 		// webview has nowhere to open it but over the app itself.
 		.plugin(tauri_plugin_opener::init())
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		// The database is opened once, here, because `app_data_dir()` needs the
 		// resolved identifier only the built app carries. A failure is managed like
 		// any other outcome: the window still opens, and the state says why there is
@@ -56,7 +56,7 @@ pub fn run() {
 		.run(|app, event| {
 			if matches!(event, RunEvent::Exit) {
 				tauri::async_runtime::block_on(terminate_session(
-					app.state::<ClaudeState>().inner(),
+					app.state::<AgentState>().inner(),
 				));
 			}
 		})

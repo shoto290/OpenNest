@@ -3,13 +3,12 @@
 
 use std::sync::{Arc, Mutex};
 
-use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::{
-	claude_start_or_resume_session, shutdown_session, terminate_session, EVENT_CHANNEL,
+	agent_start_or_resume_session, shutdown_session, terminate_session, EVENT_CHANNEL,
 };
 use opennest_app::agent::contract::{AgentEvent, ConnectionState, RuntimeScope, ScopedEvent};
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::AgentState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use opennest_app::db::connection::{open, FILE_NAME};
@@ -41,7 +40,7 @@ fn a_scope_value() -> RuntimeScope {
 
 fn build(context: tauri::Context<MockRuntime>) -> tauri::App<MockRuntime> {
 	mock_builder()
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		// A host that never opened a file: every bot it is asked to start is a bot it
 		// can read nothing about, which is the runtime this suite is about.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
@@ -74,17 +73,17 @@ fn commands_are_registered_and_report_typed_errors_without_a_session() {
 		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
 
 	assert_eq!(
-		call(&window, "claude_cancel_turn", json!({ "scope": a_scope() })),
+		call(&window, "agent_cancel_turn", json!({ "scope": a_scope() })),
 		Err(json!({ "kind": "notStarted" }))
 	);
 	assert_eq!(
-		call(&window, "claude_submit_prompt", json!({ "scope": a_scope(), "text": "salut" })),
+		call(&window, "agent_submit_prompt", json!({ "scope": a_scope(), "text": "salut" })),
 		Err(json!({ "kind": "notStarted" }))
 	);
 	assert_eq!(
 		call(
 			&window,
-			"claude_respond_to_permission",
+			"agent_respond_to_permission",
 			json!({ "scope": a_scope(), "id": "x", "decision": "allowOnce" })
 		),
 		Err(json!({ "kind": "notStarted" }))
@@ -108,10 +107,10 @@ fn a_command_reaching_a_host_that_runs_nothing_says_so_whatever_run_it_names() {
 	});
 
 	assert_eq!(
-		call(&window, "claude_submit_prompt", json!({ "scope": another, "text": "salut" })),
+		call(&window, "agent_submit_prompt", json!({ "scope": another, "text": "salut" })),
 		Err(json!({ "kind": "notStarted" }))
 	);
-	assert_eq!(call(&window, "claude_shutdown", json!({ "scope": another })), Ok(Value::Null));
+	assert_eq!(call(&window, "agent_shutdown", json!({ "scope": another })), Ok(Value::Null));
 }
 
 #[test]
@@ -128,7 +127,7 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 		}
 	});
 
-	assert_eq!(call(&window, "claude_shutdown", json!({ "scope": a_scope() })), Ok(Value::Null));
+	assert_eq!(call(&window, "agent_shutdown", json!({ "scope": a_scope() })), Ok(Value::Null));
 
 	let events = seen.lock().expect("log").clone();
 	assert!(events.iter().any(|scoped| matches!(
@@ -147,18 +146,17 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 /// lock alone: the shutdown can only report first if the quit let go of it.
 #[test]
 fn shutting_down_a_session_never_queues_behind_the_quit() {
-	std::env::set_var(BINARY_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_claude"));
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
-	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
+	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
 
 	let app = app();
 	let runtime = tokio::runtime::Runtime::new().expect("runtime");
 
 	let finished: Mutex<Vec<&str>> = Mutex::new(Vec::new());
 	runtime.block_on(async {
-		claude_start_or_resume_session(
+		agent_start_or_resume_session(
 			app.handle().clone(),
-			app.state::<ClaudeState>(),
+			app.state::<AgentState>(),
 			app.state::<db::DatabaseState>(),
 			a_scope_value(),
 			None,
@@ -167,7 +165,7 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		.await
 		.expect("session starts");
 
-		let state = app.state::<ClaudeState>();
+		let state = app.state::<AgentState>();
 		tokio::join!(
 			async {
 				shutdown_session(&state, &a_scope_value()).await;
@@ -180,8 +178,7 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		);
 	});
 
-	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
 	assert_eq!(*finished.lock().expect("order"), ["shutdown", "terminate"]);
 }
 
@@ -208,10 +205,10 @@ fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
 	});
 
 	assert_eq!(
-		call(&window, "claude_save_session", json!({ "snapshot": snapshot })),
+		call(&window, "agent_save_session", json!({ "snapshot": snapshot })),
 		Ok(Value::Null)
 	);
-	assert_eq!(call(&window, "claude_load_session", json!({})), Ok(snapshot));
+	assert_eq!(call(&window, "agent_load_session", json!({})), Ok(snapshot));
 
 	let dir = app.path().app_data_dir().expect("data dir");
 	std::fs::remove_dir_all(&dir).expect("cleanup");

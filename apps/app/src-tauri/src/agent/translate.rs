@@ -1,4 +1,4 @@
-//! Turns Claude Code wire frames into the stable OpenNest contract.
+//! Turns the sidecar's wire frames into the stable OpenNest contract.
 //!
 //! This is the only place aware of both vocabularies. Everything crossing to
 //! React is rebuilt here: no raw frame, no raw tool input, no usage or cost
@@ -106,7 +106,7 @@ impl Translator {
 		self.cancelling = true;
 	}
 
-	/// The raw tool input Claude asked about, kept so an approval can echo it
+	/// The raw tool input the agent asked about, kept so an approval can echo it
 	/// back verbatim. Removed from the map once answered.
 	pub fn take_permission_input(&mut self, request_id: &str) -> Option<Value> {
 		self.pending_permissions.remove(request_id)

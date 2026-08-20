@@ -429,7 +429,7 @@ mod tests {
 		SessionOptions::new(PathBuf::from("/tmp"))
 	}
 
-	/// The bot's own instructions reach the agent as an addition to the Claude Code
+	/// The bot's own instructions reach the agent as an addition to the provider's own
 	/// system prompt, never as a replacement for it.
 	#[test]
 	fn a_bot_with_instructions_opens_with_them_appended() {

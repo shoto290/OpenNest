@@ -5,19 +5,17 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
-use super::binary;
 use super::contract::{
 	CheckReport, AgentEvent, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
 	SessionHandle, SessionSnapshot, TransportError,
 };
-use super::models;
 use super::redact;
 use super::session::{EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::store;
 use crate::db;
 
-pub const EVENT_CHANNEL: &str = "claude://event";
+pub const EVENT_CHANNEL: &str = "agent://event";
 
 /// The one way anything reaches the frontend, and the reason every event on the
 /// channel names a run: the envelope is built here, so no caller can emit without
@@ -194,7 +192,7 @@ struct Gate {
 }
 
 #[derive(Default)]
-pub struct ClaudeState {
+pub struct AgentState {
 	/// A `std::sync::Mutex`, and never held across an `await`: it is locked only
 	/// long enough to read the claim and take it. That is the whole point — the
 	/// seconds a shutdown ladder spends waiting on a dying child must not be
@@ -213,9 +211,13 @@ pub struct ClaudeState {
 	/// announce itself, and the two participants that ask at the same moment must
 	/// end up on the same process rather than on two.
 	sidecar: Mutex<Option<Arc<Sidecar>>>,
+	/// What the sidecar answered when it was asked for its models, kept for the life
+	/// of the host: the install cannot change under a running one, so the second ask
+	/// costs a lock and no round trip.
+	models: Mutex<Option<Vec<String>>>,
 }
 
-impl ClaudeState {
+impl AgentState {
 	/// Succeeds only for a participant no transition owns. A caller that finds the
 	/// seat taken is refused on the spot rather than queued: a start made to wait
 	/// would spawn its child the moment the transition ahead of it let go, which is
@@ -247,11 +249,32 @@ impl ClaudeState {
 	async fn take_sidecar(&self) -> Option<Arc<Sidecar>> {
 		self.sidecar.lock().await.take()
 	}
+
+	/// Asked once and kept, the lock held across the ask so two callers arriving
+	/// together share one round trip rather than opening a session each.
+	///
+	/// A sidecar that could not be reached or could not answer leaves nothing
+	/// cached: the catalogue is not owed an error state of its own, and the next ask
+	/// is free to find a host that has one.
+	async fn models(&self) -> Vec<String> {
+		let mut cached = self.models.lock().await;
+		if let Some(found) = cached.as_ref() {
+			return found.clone();
+		}
+		let Ok(sidecar) = self.sidecar().await else {
+			return Vec::new();
+		};
+		let Ok(offered) = sidecar.catalogue().await else {
+			return Vec::new();
+		};
+		*cached = Some(offered.clone());
+		offered
+	}
 }
 
 /// Frees the participant's seat once the transition it stands for has ended.
 struct Claim<'a> {
-	state: &'a ClaudeState,
+	state: &'a AgentState,
 	participant: Participant,
 }
 
@@ -265,24 +288,24 @@ fn stale(scope: &RuntimeScope) -> TransportError {
 	TransportError::StaleRuntimeSession { runtime_session_id: scope.runtime_session_id.clone() }
 }
 
-/// Every model label the installed executable knows how to name, in the order it is
-/// offered — see [`super::models`]. Answered from one read of the file per launch, so
-/// a caller may ask whenever it likes and the second ask costs nothing.
+/// Every model label the sidecar offers, in the order it offers them. Asked of the
+/// one process every session is served from and kept afterwards, so a caller may ask
+/// whenever it likes and the second ask costs nothing.
 ///
-/// An empty answer is a host that found no catalogue: no executable, or one that
-/// carries none. It is not a failure and does not say the install is broken — what to
-/// offer instead is the frontend's to decide, and a bot's model was never restricted
-/// to what this list holds.
+/// An empty answer is a host with no sidecar to ask, or a provider that names no
+/// model. It is not a failure and does not say the install is broken — what to offer
+/// instead is the frontend's to decide, and a bot's model was never restricted to
+/// what this list holds.
 #[tauri::command]
-pub async fn claude_models() -> Vec<String> {
-	models::read().await
+pub async fn agent_models<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
+	app.state::<AgentState>().models().await
 }
 
 /// The scope is the caller's own and is echoed rather than checked: a check asks
 /// about the install, which is true whatever run is on the frontend's mind — and
 /// the first check of a launch happens before there is a run at all.
 #[tauri::command]
-pub async fn claude_check<R: Runtime>(
+pub async fn agent_check<R: Runtime>(
 	app: AppHandle<R>,
 	scope: Option<RuntimeScope>,
 ) -> CheckReport {
@@ -291,9 +314,56 @@ pub async fn claude_check<R: Runtime>(
 		scope.clone(),
 		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
 	);
-	let report = binary::check().await;
+	let report = check(app.state::<AgentState>().inner()).await;
 	announce(&app, scope, AgentEvent::ConnectionChanged { state: report.connection });
 	report
+}
+
+/// What the frontend is told about the install, asked of the sidecar rather than of
+/// the machine: nothing here reads a `PATH`, so a host that can serve a turn is a
+/// host that reports itself ready.
+///
+/// The two refusals stay apart. No sidecar at all is a
+/// [`TransportError::BinaryNotFound`] naming where one was looked for; a sidecar
+/// that answers but is not signed in is a [`TransportError::NotAuthenticated`] — a
+/// reader owed a login, not a build.
+///
+/// Public so the live suite can drive the whole report against the sidecar that
+/// ships with the host.
+pub async fn check(state: &AgentState) -> CheckReport {
+	let sidecar = match state.sidecar().await {
+		Ok(sidecar) => sidecar,
+		Err(error) => {
+			return CheckReport {
+				connection: ConnectionState::Unavailable,
+				binary_version: None,
+				authenticated: false,
+				error: Some(error),
+			}
+		}
+	};
+	let binary_version = Some(sidecar.version().to_owned());
+
+	match sidecar.authenticated().await {
+		Ok(true) => CheckReport {
+			connection: ConnectionState::Ready,
+			binary_version,
+			authenticated: true,
+			error: None,
+		},
+		Ok(false) => CheckReport {
+			connection: ConnectionState::Unavailable,
+			binary_version,
+			authenticated: false,
+			error: Some(TransportError::NotAuthenticated),
+		},
+		Err(error) => CheckReport {
+			connection: ConnectionState::Unavailable,
+			binary_version,
+			authenticated: false,
+			error: Some(error),
+		},
+	}
 }
 
 /// What the bot a run answers for is started as: its own instructions, and the
@@ -353,9 +423,9 @@ fn where_it_runs(stored: Option<String>, anywhere: PathBuf) -> (PathBuf, Option<
 /// refused one falls back to. The bot's own always wins — a caller cannot put a
 /// process somewhere its bot does not work.
 #[tauri::command]
-pub async fn claude_start_or_resume_session<R: Runtime>(
+pub async fn agent_start_or_resume_session<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, ClaudeState>,
+	state: State<'_, AgentState>,
 	database: State<'_, db::DatabaseState>,
 	scope: RuntimeScope,
 	resume: Option<String>,
@@ -434,8 +504,8 @@ pub async fn claude_start_or_resume_session<R: Runtime>(
 
 /// A crash is the only refusal that implicates the id itself. A startup timeout
 /// says the handshake was slow, which is what resuming a long conversation
-/// looks like — Claude replays the transcript before it acknowledges anything —
-/// and dropping the id there would cost a reader the very conversation whose
+/// looks like — the agent replays the transcript before it acknowledges anything
+/// — and dropping the id there would cost a reader the very conversation whose
 /// size caused the wait.
 ///
 /// Answers whether the id was given up on, because the frontend holds a copy of
@@ -502,8 +572,8 @@ pub async fn start_with_fallback(
 /// command goes on to act on is the child it was handed and cannot become the one
 /// that replaced it while the call is in flight.
 #[tauri::command]
-pub async fn claude_submit_prompt(
-	state: State<'_, ClaudeState>,
+pub async fn agent_submit_prompt(
+	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 	text: String,
 ) -> Result<(), TransportError> {
@@ -511,16 +581,16 @@ pub async fn claude_submit_prompt(
 }
 
 #[tauri::command]
-pub async fn claude_cancel_turn(
-	state: State<'_, ClaudeState>,
+pub async fn agent_cancel_turn(
+	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
 	state.live.session_for(&scope)?.cancel_turn().await
 }
 
 #[tauri::command]
-pub async fn claude_respond_to_permission(
-	state: State<'_, ClaudeState>,
+pub async fn agent_respond_to_permission(
+	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 	id: String,
 	decision: PermissionDecision,
@@ -531,7 +601,7 @@ pub async fn claude_respond_to_permission(
 /// The unguarded primitive, for one participant. The lifecycle gate belongs to the
 /// command layer, so reaching this directly is reserved for a caller that already
 /// holds the claim — or a test standing in for one.
-pub async fn shutdown_session(state: &ClaudeState, scope: &RuntimeScope) {
+pub async fn shutdown_session(state: &AgentState, scope: &RuntimeScope) {
 	let session = state.live.clear(scope);
 	if let Some(session) = session {
 		session.shutdown().await;
@@ -552,7 +622,7 @@ pub async fn shutdown_session(state: &ClaudeState, scope: &RuntimeScope) {
 ///
 /// The sweep runs whether or not a session was reachable: a start that has not
 /// returned yet is not in the state and has a live process group all the same.
-pub async fn terminate_session(state: &ClaudeState) {
+pub async fn terminate_session(state: &AgentState) {
 	state.enter_quit();
 	// Every run and its child are given up together: the host stands for nothing
 	// from here on, so nothing a dying child still has to say reaches a frontend
@@ -584,9 +654,9 @@ pub async fn terminate_session(state: &ClaudeState) {
 /// session, not the session speaking, and the sink that carried the latter has
 /// stopped forwarding by then.
 #[tauri::command]
-pub async fn claude_shutdown<R: Runtime>(
+pub async fn agent_shutdown<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, ClaudeState>,
+	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
 	let _claim = state.claim(participant(&scope))?;
@@ -606,12 +676,12 @@ pub async fn claude_shutdown<R: Runtime>(
 /// frontend with an empty transcript, which is exactly what it would show a
 /// first-time user, and there is no recovery it could offer.
 #[tauri::command]
-pub async fn claude_load_session<R: Runtime>(app: AppHandle<R>) -> SessionSnapshot {
+pub async fn agent_load_session<R: Runtime>(app: AppHandle<R>) -> SessionSnapshot {
 	store::file(&app).map(|path| store::load(&path)).unwrap_or_default()
 }
 
 #[tauri::command]
-pub async fn claude_save_session<R: Runtime>(app: AppHandle<R>, snapshot: SessionSnapshot) {
+pub async fn agent_save_session<R: Runtime>(app: AppHandle<R>, snapshot: SessionSnapshot) {
 	if let Some(path) = store::file(&app) {
 		store::save(&path, &snapshot);
 	}
@@ -909,7 +979,7 @@ mod tests {
 	/// at a time.
 	#[test]
 	fn a_transition_holds_one_bot_and_lets_every_other_bot_through() {
-		let state = ClaudeState::default();
+		let state = AgentState::default();
 
 		let held = state.claim(participant(&a_scope())).expect("the first claim is free");
 		assert!(
@@ -932,7 +1002,7 @@ mod tests {
 	/// whichever bot asks.
 	#[test]
 	fn nothing_starts_for_any_bot_once_the_host_is_quitting() {
-		let state = ClaudeState::default();
+		let state = AgentState::default();
 		state.enter_quit();
 
 		for scope in [a_scope(), another_bots_run()] {

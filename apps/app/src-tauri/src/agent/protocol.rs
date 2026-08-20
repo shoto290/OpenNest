@@ -267,8 +267,36 @@ pub fn deny_command(session: &str, request_id: &str, message: &str) -> Value {
 	)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthStatus {
-	#[serde(rename = "loggedIn", default)]
-	pub logged_in: bool,
+/// The two asks that are about the install rather than about a conversation, so
+/// neither names a session and neither answer arrives inside an [`Envelope`].
+pub const CHECK_ANSWER: &str = "checked";
+pub const CATALOGUE_ANSWER: &str = "catalogue";
+
+pub fn check_command() -> Value {
+	serde_json::json!({ "type": "check" })
+}
+
+pub fn catalogue_command() -> Value {
+	serde_json::json!({ "type": "models" })
+}
+
+/// The sign-in state of the provider's own credentials. `detail` says the question
+/// could not be answered at all, which a reader is owed apart from a plain refusal:
+/// a broken install is not an account that is signed out.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Checked {
+	#[serde(default, deserialize_with = "null_as_default")]
+	pub authenticated: bool,
+	#[serde(default)]
+	pub detail: Option<String>,
+}
+
+/// Every model label the provider offers, in the order it offers them. Empty is an
+/// answer, not a failure.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Catalogue {
+	#[serde(default, deserialize_with = "null_as_default")]
+	pub models: Vec<String>,
 }

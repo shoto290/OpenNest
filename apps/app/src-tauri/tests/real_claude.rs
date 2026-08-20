@@ -1,15 +1,15 @@
-//! End-to-end proof against the Claude Code install on this machine.
+//! End-to-end proof against the agent sidecar this build ships.
 //!
-//! Ignored by default: these tests need a signed-in binary and the network.
+//! Ignored by default: these tests need a signed-in subscription and the network.
 //! Run them with `cargo test --test real_claude -- --ignored --test-threads=1`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use opennest_app::agent::binary;
+use opennest_app::agent::commands::check;
 use opennest_app::agent::contract::{
-	ActivityKind, AgentEvent, PermissionDecision, SessionSnapshot, TurnOutcome,
+	ActivityKind, AgentEvent, ConnectionState, PermissionDecision, SessionSnapshot, TurnOutcome,
 };
 use opennest_app::agent::session::{EventSink, Session, SessionOptions};
 use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions};
@@ -32,9 +32,6 @@ async fn live(resume: Option<String>) -> Live {
 /// given, carrying the instructions the bot was described with, in the directory the
 /// bot names.
 async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBuf) -> Live {
-	let path = binary::resolve().expect("claude binary is installed");
-	assert!(binary::is_authenticated(&path).await.expect("auth probe"), "claude must be signed in");
-
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 	let sidecar = Sidecar::start(SidecarOptions::new(
@@ -133,7 +130,7 @@ fn seen_as(dir: &Path) -> String {
 /// process runs. Rotating it is a second process — started as the bot reads by
 /// then, obeying that and no longer what the first one was given.
 #[tokio::test]
-#[ignore = "needs a signed-in claude and the network"]
+#[ignore = "needs a signed-in subscription and the network"]
 async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now() {
 	let workshop = a_directory("workshop");
 	let mut first = started(None, Some(BANANA), workshop.clone()).await;
@@ -181,12 +178,18 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 }
 
 /// The check report is what the frontend receives first, and it is built from a
-/// probe that also carries an email, an org id and a subscription type.
+/// sign-in probe that also carries an email, an org id and a subscription type.
+///
+/// It is asked of the sidecar that ships with this build, which is the whole point:
+/// nothing on the machine's `PATH` takes part in the answer.
 #[tokio::test]
-#[ignore = "needs a signed-in claude and the network"]
+#[ignore = "needs a signed-in subscription and the network"]
 async fn the_check_report_carries_no_identity() {
-	let report = binary::check().await;
-	assert!(report.authenticated, "expected a signed-in claude");
+	let state = opennest_app::agent::AgentState::default();
+	let report = check(&state).await;
+	assert_eq!(report.connection, ConnectionState::Ready, "expected a signed-in install");
+	assert!(report.authenticated, "expected a signed-in install");
+	assert!(report.binary_version.is_some(), "the sidecar announced no version");
 
 	let serialized = serde_json::to_string(&report).expect("report serializes");
 	assert!(!serialized.contains('@'), "an email reached the contract: {serialized}");
@@ -198,7 +201,7 @@ async fn the_check_report_carries_no_identity() {
 /// Two turns across two processes: the second one resumes the first by id and
 /// still knows the number, and a real tool call shows up as activity.
 #[tokio::test]
-#[ignore = "needs a signed-in claude and the network"]
+#[ignore = "needs a signed-in subscription and the network"]
 async fn two_turns_stream_and_the_second_resumes_the_first() {
 	let mut first = live(None).await;
 	let opening = first.run_turn("Remember the number 4271. Reply with exactly: OK").await;
@@ -233,7 +236,7 @@ async fn two_turns_stream_and_the_second_resumes_the_first() {
 /// Stop interrupts a live turn, the session stays usable, and shutdown leaves
 /// nothing behind.
 #[tokio::test]
-#[ignore = "needs a signed-in claude and the network"]
+#[ignore = "needs a signed-in subscription and the network"]
 async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	let mut live = live(None).await;
 	let pid = live.sidecar.pid();
@@ -263,13 +266,13 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 
 	live.sidecar.shutdown().await;
 	tokio::time::sleep(Duration::from_secs(1)).await;
-	assert!(!group_alive(pid), "shutdown left claude processes behind");
+	assert!(!group_alive(pid), "shutdown left agent processes behind");
 }
 
 /// The restart path, minus the app: an id minted by a real child goes through
 /// the store on disk and still resumes the conversation on the way back.
 #[tokio::test]
-#[ignore = "needs a signed-in claude and the network"]
+#[ignore = "needs a signed-in subscription and the network"]
 async fn an_id_stored_on_disk_resumes_the_conversation() {
 	let mut first = live(None).await;
 	let opening = first.run_turn("Remember the number 4271. Reply with exactly: OK").await;

@@ -15,11 +15,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::EVENT_CHANNEL;
 use opennest_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TransportError};
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::AgentState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -27,9 +26,8 @@ use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_K
 use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
-const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const SCENARIO_ENV: &str = "FAKE_CLAUDE_SCENARIO_FILE";
+const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const IDENTIFIER: &str = "com.opennest.runtime-identity";
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -44,14 +42,14 @@ struct Harness {
 	log: Arc<Mutex<Vec<ScopedEvent>>>,
 }
 
-/// The host as it launches: `ClaudeState` for the runtime and the database opened
+/// The host as it launches: `AgentState` for the runtime and the database opened
 /// the way `lib.rs` opens it, from an identifier this suite has to itself.
 fn launch() -> Harness {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = IDENTIFIER.into();
 
 	let app = mock_builder()
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		.invoke_handler(invoke_handler())
 		.build(context)
 		.expect("app builds");
@@ -166,7 +164,7 @@ impl Harness {
 	fn start(&self, scope: &RuntimeScope) {
 		assert_eq!(
 			self.call(
-				"claude_start_or_resume_session",
+				"agent_start_or_resume_session",
 				json!({ "scope": scope, "resume": Value::Null, "cwd": std::env::temp_dir() }),
 			),
 			Ok(json!({ "resumed": false })),
@@ -181,7 +179,7 @@ impl Harness {
 		self.forget_events();
 		let scope = self.open_run(conversation, bot, at);
 		self.start(&scope);
-		self.call("claude_submit_prompt", json!({ "scope": scope, "text": "who are you?" }))
+		self.call("agent_submit_prompt", json!({ "scope": scope, "text": "who are you?" }))
 			.expect("the prompt is taken");
 		self.wait_for("the child to say what it was started as", answered)
 	}
@@ -258,7 +256,6 @@ fn scenario(name: &str) {
 /// one naming a directory the machine no longer has.
 #[test]
 fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	scenario("identity");
 
