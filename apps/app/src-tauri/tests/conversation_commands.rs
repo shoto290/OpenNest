@@ -7,11 +7,12 @@
 //! JSON itself and not a Rust value that happens to serialize.
 //!
 //! The database is the real one, opened through `db::bootstrap` the way the launch
-//! opens it. The identifier decides the app data directory, so each test claims one
-//! of its own rather than writing where a real install would — or where its
-//! neighbour is reading.
+//! opens it. The identifier decides the app data directory, so every test takes a
+//! `Home` of its own rather than writing where a real install would — or where its
+//! neighbour is reading — and gets it back off the disk however it ends.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
@@ -25,17 +26,53 @@ const TURN: &str = "t1";
 /// itself, under a fixed id, so a message can name its author as a constant.
 const BOT: &str = "default";
 
-/// The host as it launches: the same `bootstrap`, resolved from the same app
-/// handle, and the outcome managed whole. `lib.rs` runs it from the setup hook
-/// because only a built app carries the identifier the data directory comes from —
-/// and the hook fires with the event loop, which `MockRuntime` never starts, so
-/// here it runs immediately after the build instead.
-fn app(identifier: &str) -> App<MockRuntime> {
+/// One test's application data directory: an identifier no run and no neighbour
+/// claims twice, and the directory it resolves to taken away when the test ends —
+/// returned from or panicked out of, since `Drop` runs either way. Where the
+/// identifier lands is read from the resolver the commands read it from, rather
+/// than rebuilt from platform rules. The test holds it rather than a host, so every
+/// relaunch below comes back to the same directory.
+struct Home {
+	identifier: String,
+	dir: PathBuf,
+}
+
+impl Home {
+	fn new() -> Self {
+		static CLAIMED: AtomicUsize = AtomicUsize::new(0);
+		let identifier = format!(
+			"com.opennest.conversation-commands-{}-{}",
+			std::process::id(),
+			CLAIMED.fetch_add(1, Ordering::Relaxed)
+		);
+		let dir = host(&identifier).path().app_data_dir().expect("data dir");
+		Self { identifier, dir }
+	}
+
+	/// The host as it launches: the same `bootstrap`, resolved from the same app
+	/// handle, and the outcome managed whole. `lib.rs` runs it from the setup hook
+	/// because only a built app carries the identifier the data directory comes from —
+	/// and the hook fires with the event loop, which `MockRuntime` never starts, so
+	/// here it runs immediately after the build instead.
+	fn app(&self) -> App<MockRuntime> {
+		let app = host(&self.identifier);
+		app.manage(db::bootstrap(app.handle()));
+		app
+	}
+}
+
+impl Drop for Home {
+	fn drop(&mut self) {
+		let _ = std::fs::remove_dir_all(&self.dir);
+	}
+}
+
+/// Built and no further: it carries the identifier every path below is resolved
+/// from, and without a database under it nothing has touched the disk yet.
+fn host(identifier: &str) -> App<MockRuntime> {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = identifier.into();
-	let app = mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds");
-	app.manage(db::bootstrap(app.handle()));
-	app
+	mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds")
 }
 
 /// A host that came up without a database, managed the way a failed launch manages
@@ -259,11 +296,6 @@ fn seqs(page: &Value) -> Vec<i64> {
 		.collect()
 }
 
-fn cleanup(app: &App<MockRuntime>) {
-	let dir = app.path().app_data_dir().expect("data dir");
-	std::fs::remove_dir_all(&dir).expect("cleanup");
-}
-
 /// Two things at once, and neither is provable without the other: the command is
 /// registered — an unregistered one is not refused, it is not answered at all —
 /// and the reason there is no database survives the crossing with its shape. A
@@ -285,7 +317,8 @@ fn a_host_without_a_database_answers_a_registered_command_with_why_there_is_none
 /// first, and every field under the name the reader expects.
 #[test]
 fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
-	let app = app("com.opennest.conversation-commands-1");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let (bot, conversation) = a_bot_and_its_chat(&window);
@@ -368,8 +401,6 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 			]
 		}))
 	);
-
-	cleanup(&app);
 }
 
 /// What the frontend scopes a Claude process with, over the boundary it really
@@ -383,7 +414,8 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 /// replacement would be indistinguishable to every reader of an event.
 #[test]
 fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
-	let app = app("com.opennest.conversation-commands-5");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let (bot, conversation) = a_bot_and_its_chat(&window);
@@ -403,8 +435,6 @@ fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
 	);
 	assert_eq!(replacement["seq"], json!(2), "the restart did not continue the lineage");
 	assert_ne!(replacement["id"], opened["id"], "the restart reused the replaced run's id");
-
-	cleanup(&app);
 }
 
 /// The id the child announces, over the boundary the frontend really crosses. The
@@ -423,7 +453,8 @@ fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
 fn the_id_a_run_answers_under_is_recorded_once_and_only_while_it_is_live() {
 	const ANNOUNCED: &str = "claude-9f3c";
 
-	let app = app("com.opennest.conversation-commands-9");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let (bot, conversation) = a_bot_and_its_chat(&window);
@@ -457,8 +488,6 @@ fn the_id_a_run_answers_under_is_recorded_once_and_only_while_it_is_live() {
 		Ok(Value::Null),
 		"the replacement had been written by the run it replaced: {fresh:?}"
 	);
-
-	cleanup(&app);
 }
 
 /// The same scope, across the crash that ended the run before it. A host that died
@@ -468,17 +497,17 @@ fn the_id_a_run_answers_under_is_recorded_once_and_only_while_it_is_live() {
 /// every refusal the scope buys would land on the wrong process.
 #[test]
 fn a_run_opened_after_a_crash_continues_the_lineage_instead_of_reusing_its_names() {
-	const IDENTIFIER: &str = "com.opennest.conversation-commands-8";
+	let home = Home::new();
 
 	let crashed = {
-		let app = app(IDENTIFIER);
+		let app = home.app();
 		let window = window(&app);
 		let (bot, conversation) = a_bot_and_its_chat(&window);
 		call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 1))
 			.expect("the run the host dies under opens")
 	};
 
-	let app = app(IDENTIFIER);
+	let app = home.app();
 	let window = window(&app);
 	let (bot, conversation) = a_bot_and_its_chat(&window);
 	let recovered =
@@ -488,8 +517,6 @@ fn a_run_opened_after_a_crash_continues_the_lineage_instead_of_reusing_its_names
 	assert_eq!(crashed["seq"], json!(1), "the lineage did not start at 1");
 	assert_eq!(recovered["seq"], json!(2), "the launch after the crash restarted the lineage");
 	assert_ne!(recovered["id"], crashed["id"], "the run after the crash took the crashed one's id");
-
-	cleanup(&app);
 }
 
 /// A run cannot be opened for a bot the conversation does not hold, and the
@@ -497,7 +524,8 @@ fn a_run_opened_after_a_crash_continues_the_lineage_instead_of_reusing_its_names
 /// meets a string here has nothing to say about why it never got a scope.
 #[test]
 fn opening_a_run_for_a_bot_the_conversation_does_not_hold_is_refused_as_storage() {
-	let app = app("com.opennest.conversation-commands-6");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let (_, conversation) = a_bot_and_its_chat(&window);
@@ -512,8 +540,6 @@ fn opening_a_run_for_a_bot_the_conversation_does_not_hold_is_refused_as_storage(
 		Some("storage"),
 		"a run opened for an outsider was refused as something else: {refused:?}"
 	);
-
-	cleanup(&app);
 }
 
 /// The read a long chat is opened with, over the boundary the cursor crosses:
@@ -522,7 +548,8 @@ fn opening_a_run_for_a_bot_the_conversation_does_not_hold_is_refused_as_storage(
 /// or sees twice.
 #[test]
 fn the_newest_page_comes_first_and_its_oldest_seq_walks_back_to_the_rest() {
-	let app = app("com.opennest.conversation-commands-2");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let (_, conversation) = a_bot_and_its_chat(&window);
@@ -547,8 +574,6 @@ fn the_newest_page_comes_first_and_its_oldest_seq_walks_back_to_the_rest() {
 	assert_eq!(newest["hasMore"], json!(true), "a full page claimed there was nothing older");
 	assert_eq!(seqs(&older), vec![1, 2], "the cursor skipped or repeated a seq");
 	assert_eq!(older["hasMore"], json!(false), "a partial page offered more");
-
-	cleanup(&app);
 }
 
 /// The two rules the repositories hold, seen from the other side of the boundary.
@@ -556,7 +581,8 @@ fn the_newest_page_comes_first_and_its_oldest_seq_walks_back_to_the_rest() {
 /// no other way to tell its own duplicate from two events claiming one place.
 #[test]
 fn a_refused_write_keeps_the_shape_that_says_what_disagreed() {
-	let app = app("com.opennest.conversation-commands-3");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let (_, conversation) = a_bot_and_its_chat(&window);
@@ -600,8 +626,6 @@ fn a_refused_write_keeps_the_shape_that_says_what_disagreed() {
 		})),
 		"a message that had already ended was given a second ending"
 	);
-
-	cleanup(&app);
 }
 
 /// The launch the app now boots on, at the boundary it really crosses. One host
@@ -611,12 +635,13 @@ fn a_refused_write_keeps_the_shape_that_says_what_disagreed() {
 /// crossings the frontend pages with, each exactly once.
 #[test]
 fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch() {
-	const IDENTIFIER: &str = "com.opennest.conversation-commands-4";
 	const HISTORY: i64 = 250;
 	const PAGE: u32 = 20;
 
+	let home = Home::new();
+
 	{
-		let app = app(IDENTIFIER);
+		let app = home.app();
 		let window = window(&app);
 		let (_, conversation) = a_bot_and_its_chat(&window);
 		call(&window, "conversation_start_turn", a_turn(&conversation))
@@ -631,7 +656,7 @@ fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch(
 		}
 	}
 
-	let app = app(IDENTIFIER);
+	let app = home.app();
 	let window = window(&app);
 	let (_, conversation) = a_bot_and_its_chat(&window);
 
@@ -643,8 +668,6 @@ fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch(
 		"the walk back skipped, repeated or reordered a message the reader had seen"
 	);
 	assert_eq!(crossings, 13, "the reader paid for more crossings than the history needed");
-
-	cleanup(&app);
 }
 
 /// The chat as it really gets long, at the boundary the frontend crosses: more
@@ -657,7 +680,6 @@ fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch(
 /// context the next run is told.
 #[test]
 fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled() {
-	const IDENTIFIER: &str = "com.opennest.conversation-commands-7";
 	/// Past what one checkpoint folds, so the first one cannot reach the beginning
 	/// and has to say so where the summary is read.
 	const HISTORY: i64 = 230;
@@ -671,10 +693,12 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	const PROMPT: &str = "p1";
 	const PROMPT_TEXT: &str = "so where does that leave the roof?";
 
+	let home = Home::new();
+
 	// The host that dies: it writes the whole history and goes under the last reply,
 	// which is left open exactly as it was being streamed.
 	{
-		let app = app(IDENTIFIER);
+		let app = home.app();
 		let window = window(&app);
 		let (_, conversation) = a_bot_and_its_chat(&window);
 		call(&window, "conversation_start_turn", a_turn(&conversation))
@@ -685,7 +709,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 		a_streaming_reply(&window, &conversation, HISTORY);
 	}
 
-	let app = app(IDENTIFIER);
+	let app = home.app();
 	let window = window(&app);
 	let (bot, conversation) = a_bot_and_its_chat(&window);
 
@@ -784,8 +808,6 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 		json!(PROMPT),
 		"the prompt is not where the reader last left it"
 	);
-
-	cleanup(&app);
 }
 
 /// An identity as the frontend submits one. Spelled here in JSON rather than
@@ -810,7 +832,8 @@ fn an_identity(name: &str, model: &str, animal: &str, blot: Value) -> Value {
 /// asked for rather than assumed.
 #[test]
 fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
-	let app = app("com.opennest.conversation-commands-10");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let created = call(
@@ -876,8 +899,6 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 		Ok(json!({ "conversationId": conversation, "messages": [], "hasMore": false })),
 		"the transcript of a deleted bot is still reachable"
 	);
-
-	cleanup(&app);
 }
 
 /// The boundary is where a closed vocabulary is checked, not the file: a word
@@ -891,7 +912,8 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 /// to Claude Code and nothing here can list it.
 #[test]
 fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
-	let app = app("com.opennest.conversation-commands-11");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let animal = call(
@@ -912,8 +934,6 @@ fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
 		Ok(json!([])),
 		"a bot the boundary refused reached the file anyway"
 	);
-
-	cleanup(&app);
 }
 
 /// A model label this build has never heard of, stored and read back as it was
@@ -924,7 +944,8 @@ fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
 /// case, and both survive the round trip.
 #[test]
 fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
-	let app = app("com.opennest.conversation-commands-24");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let created = call(
@@ -952,8 +973,6 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 		.map(|bot| bot["model"].clone()),
 		Ok(json!("fable"))
 	);
-
-	cleanup(&app);
 }
 
 /// The one refusal a caller can act on: the list it is holding is behind the
@@ -961,7 +980,8 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 /// the bot really is gone, and saying so is not the same as saying it worked.
 #[test]
 fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
-	let app = app("com.opennest.conversation-commands-12");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let created = call(
@@ -985,8 +1005,6 @@ fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 		),
 		Err(json!({ "kind": "unknownBot", "id": id }))
 	);
-
-	cleanup(&app);
 }
 
 /// The avatar directory as the host resolves it, from the same app handle the
@@ -1062,7 +1080,8 @@ fn wearing(window: &WebviewWindow<MockRuntime>, id: &str) -> Value {
 /// assume and a copy of the upload would have satisfied every other assertion here.
 #[test]
 fn an_uploaded_picture_is_stored_squared_beside_the_database_and_crosses_as_a_path() {
-	let app = app("com.opennest.conversation-commands-13");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 
@@ -1093,15 +1112,14 @@ fn an_uploaded_picture_is_stored_squared_beside_the_database_and_crosses_as_a_pa
 		json!("owl"),
 		"an uploaded picture took the animal the bot falls back to with it"
 	);
-
-	cleanup(&app);
 }
 
 /// A jpeg goes in and a png comes out, which is the whole of what "every avatar
 /// renders identically" costs the UI: it never learns what was uploaded.
 #[test]
 fn a_jpeg_is_accepted_and_stored_as_the_one_format() {
-	let app = app("com.opennest.conversation-commands-14");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 
@@ -1117,8 +1135,6 @@ fn a_jpeg_is_accepted_and_stored_as_the_one_format() {
 		image::guess_format(&std::fs::read(recorded).expect("readable")).expect("a format"),
 		image::ImageFormat::Png
 	);
-
-	cleanup(&app);
 }
 
 /// The acceptance the whole ordering exists for: nothing this host refuses may leave
@@ -1126,7 +1142,8 @@ fn a_jpeg_is_accepted_and_stored_as_the_one_format() {
 /// the same nothing behind each of them.
 #[test]
 fn a_picture_the_host_refuses_leaves_nothing_on_the_disk_and_nothing_on_the_bot() {
-	let app = app("com.opennest.conversation-commands-15");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 
@@ -1154,8 +1171,6 @@ fn a_picture_the_host_refuses_leaves_nothing_on_the_disk_and_nothing_on_the_bot(
 
 	assert_eq!(stored_avatars(&app), Vec::<String>::new(), "a refused picture reached the disk");
 	assert_eq!(wearing(&window, &id), json!(null), "a refused picture reached the bot");
-
-	cleanup(&app);
 }
 
 /// The limit, on the path a user actually crosses. Asserted here and not only in
@@ -1163,7 +1178,8 @@ fn a_picture_the_host_refuses_leaves_nothing_on_the_disk_and_nothing_on_the_bot(
 /// tells the user what it is by reading it off this refusal.
 #[test]
 fn a_picture_over_the_limit_is_refused_with_the_limit_it_broke() {
-	let app = app("com.opennest.conversation-commands-16");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 	let limit = 5 * 1024 * 1024;
@@ -1179,8 +1195,6 @@ fn a_picture_over_the_limit_is_refused_with_the_limit_it_broke() {
 		}))
 	);
 	assert_eq!(stored_avatars(&app), Vec::<String>::new());
-
-	cleanup(&app);
 }
 
 /// Exactly one file, not two. The new picture is written before the old one is
@@ -1188,7 +1202,8 @@ fn a_picture_over_the_limit_is_refused_with_the_limit_it_broke() {
 /// table a moment too early would have taken the new one.
 #[test]
 fn replacing_a_picture_leaves_exactly_one_file_behind() {
-	let app = app("com.opennest.conversation-commands-17");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 
@@ -1208,8 +1223,6 @@ fn replacing_a_picture_leaves_exactly_one_file_behind() {
 	assert!(Path::new(&second).exists(), "the replacement is not there");
 	assert_eq!(stored_avatars(&app).len(), 1);
 	assert_eq!(wearing(&window, &id), json!(second));
-
-	cleanup(&app);
 }
 
 /// A bot is thrown away with everything it wore. The other bot's picture is in the
@@ -1217,7 +1230,8 @@ fn replacing_a_picture_leaves_exactly_one_file_behind() {
 /// the first assertion and fail this one.
 #[test]
 fn deleting_a_bot_leaves_no_picture_behind_and_leaves_every_other_bot_its_own() {
-	let app = app("com.opennest.conversation-commands-18");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let doomed = a_bot(&window, "Nyx");
 	let spared = a_bot(&window, "Ada");
@@ -1234,8 +1248,6 @@ fn deleting_a_bot_leaves_no_picture_behind_and_leaves_every_other_bot_its_own() 
 
 	assert_eq!(stored_avatars(&app).len(), 1, "a deleted bot left its picture behind");
 	assert!(Path::new(&kept).exists(), "deleting one bot took another bot's picture");
-
-	cleanup(&app);
 }
 
 /// Putting an animal back on is an identity write with no path, and the file goes
@@ -1243,7 +1255,8 @@ fn deleting_a_bot_leaves_no_picture_behind_and_leaves_every_other_bot_its_own() 
 /// frontend does on every unrelated edit — it must keep the picture, not re-upload it.
 #[test]
 fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with_it_keeps_it() {
-	let app = app("com.opennest.conversation-commands-19");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 	let worn = call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(30, 30)))
@@ -1270,8 +1283,6 @@ fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with
 
 	assert_eq!(bare["avatarImagePath"], json!(null));
 	assert_eq!(stored_avatars(&app), Vec::<String>::new(), "the picture taken off stayed on disk");
-
-	cleanup(&app);
 }
 
 /// A path is a column until something says it names a file in the one directory the
@@ -1279,7 +1290,8 @@ fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with
 /// it is refused rather than read, and rather than swept.
 #[test]
 fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
-	let app = app("com.opennest.conversation-commands-20");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 	let outside = app.path().app_data_dir().expect("data dir").join("elsewhere.png");
@@ -1307,8 +1319,6 @@ fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
 
 	assert!(outside.exists(), "a refused path was read and swept anyway");
 	assert!(Path::new("/etc/passwd").exists(), "the sweep reached outside its own directory");
-
-	cleanup(&app);
 }
 
 /// What an install whose data directory moved leaves behind: a row naming a file
@@ -1316,7 +1326,8 @@ fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
 /// nothing about the read fails.
 #[test]
 fn a_picture_missing_from_the_disk_reads_as_no_picture_rather_than_a_broken_one() {
-	let app = app("com.opennest.conversation-commands-21");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 	let worn = call(&window, "conversation_set_bot_avatar_image", an_upload(&id, &a_png(30, 30)))
@@ -1332,8 +1343,6 @@ fn a_picture_missing_from_the_disk_reads_as_no_picture_rather_than_a_broken_one(
 		call(&window, "conversation_bots", json!({})).is_ok(),
 		"a read of the roster did not survive a missing file"
 	);
-
-	cleanup(&app);
 }
 
 /// A picture is written for a bot that exists or for nobody. The column write is
@@ -1341,7 +1350,8 @@ fn a_picture_missing_from_the_disk_reads_as_no_picture_rather_than_a_broken_one(
 /// gone leaves the directory as empty as it found it.
 #[test]
 fn an_upload_naming_a_bot_that_is_gone_is_refused_before_any_file_is_written() {
-	let app = app("com.opennest.conversation-commands-22");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 	call(&window, "conversation_delete_bot", json!({ "id": id })).expect("the bot is deleted");
@@ -1351,8 +1361,6 @@ fn an_upload_naming_a_bot_that_is_gone_is_refused_before_any_file_is_written() {
 		Err(json!({ "kind": "unknownBot", "id": id }))
 	);
 	assert_eq!(stored_avatars(&app), Vec::<String>::new());
-
-	cleanup(&app);
 }
 
 /// A host with no database refuses an upload the way it refuses every other write,
@@ -1376,10 +1384,10 @@ fn a_host_without_a_database_refuses_an_upload_with_why_there_is_none() {
 /// shipped one back here, and a user would find the bot they deleted alive again.
 #[test]
 fn a_launch_reads_the_roster_it_finds_and_never_writes_a_bot_back_into_it() {
-	const IDENTIFIER: &str = "com.opennest.conversation-commands-23";
+	let home = Home::new();
 
 	let id = {
-		let app = app(IDENTIFIER);
+		let app = home.app();
 		let window = window(&app);
 		assert_eq!(
 			call(&window, "conversation_bots", json!({})),
@@ -1395,7 +1403,7 @@ fn a_launch_reads_the_roster_it_finds_and_never_writes_a_bot_back_into_it() {
 	};
 
 	{
-		let app = app(IDENTIFIER);
+		let app = home.app();
 		let window = window(&app);
 		assert_eq!(
 			call(&window, "conversation_bots", json!({})).map(|bots| bots[0]["id"].clone()),
@@ -1406,15 +1414,13 @@ fn a_launch_reads_the_roster_it_finds_and_never_writes_a_bot_back_into_it() {
 		assert_eq!(call(&window, "conversation_bots", json!({})), Ok(json!([])));
 	}
 
-	let app = app(IDENTIFIER);
+	let app = home.app();
 	let window = window(&app);
 	assert_eq!(
 		call(&window, "conversation_bots", json!({})),
 		Ok(json!([])),
 		"a launch after the last bot was deleted brought one back"
 	);
-
-	cleanup(&app);
 }
 
 /// The attachments directory as the host resolves it, from the same app handle the
@@ -1468,7 +1474,8 @@ fn an_attachment_stored_for(
 /// purpose: what comes back must be inside the conversation's directory anyway.
 #[test]
 fn attachments_submitted_for_a_chat_are_written_under_it_and_cross_as_absolute_paths() {
-	let app = app("com.opennest.conversation-commands-24");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let (_, conversation_id) = a_new_bot_and_its_chat(&window, "Nyx");
 
@@ -1508,8 +1515,6 @@ fn attachments_submitted_for_a_chat_are_written_under_it_and_cross_as_absolute_p
 		Some("md"),
 		"a stored file lost the extension that says what it is"
 	);
-
-	cleanup(&app);
 }
 
 /// A conversation the file does not hold is refused before anything reaches the
@@ -1518,7 +1523,8 @@ fn attachments_submitted_for_a_chat_are_written_under_it_and_cross_as_absolute_p
 /// so what is refused is the id rather than an empty table.
 #[test]
 fn attachments_for_a_conversation_that_is_not_on_the_record_are_refused_and_nothing_is_written() {
-	let app = app("com.opennest.conversation-commands-25");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	a_new_bot_and_its_chat(&window, "Nyx");
 
@@ -1537,8 +1543,6 @@ fn attachments_for_a_conversation_that_is_not_on_the_record_are_refused_and_noth
 		!attachment_dir(&app).join("not-a-conversation").exists(),
 		"a refused call made the directory its files would have gone in"
 	);
-
-	cleanup(&app);
 }
 
 /// A bot is thrown away with everything attached to what was said to it. The other
@@ -1546,7 +1550,8 @@ fn attachments_for_a_conversation_that_is_not_on_the_record_are_refused_and_noth
 /// "delete everything" would pass the first assertion and fail the second.
 #[test]
 fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_other_one_its_own() {
-	let app = app("com.opennest.conversation-commands-26");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let (doomed, doomed_chat) = a_new_bot_and_its_chat(&window, "Nyx");
 	let (_, spared_chat) = a_new_bot_and_its_chat(&window, "Ada");
@@ -1561,6 +1566,4 @@ fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_oth
 	);
 	assert!(!Path::new(&dropped).exists(), "a deleted bot left its attachments behind");
 	assert!(Path::new(&kept).exists(), "deleting one bot took another conversation's attachments");
-
-	cleanup(&app);
 }

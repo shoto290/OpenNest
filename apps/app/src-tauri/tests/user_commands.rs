@@ -6,10 +6,11 @@
 //! call goes through `get_ipc_response`, so what is asserted is the JSON itself.
 //!
 //! The database is the real one, opened through `db::bootstrap` the way the launch
-//! opens it, and each test claims an identifier of its own so it writes where no
-//! neighbour is reading.
+//! opens it, and every test takes a `Home` of its own so it writes where no
+//! neighbour is reading — and gets it back off the disk however it ends.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
@@ -20,12 +21,47 @@ use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const BOT: &str = "default";
 
-fn app(identifier: &str) -> App<MockRuntime> {
+/// One test's application data directory: an identifier no run and no neighbour
+/// claims twice, and the directory it resolves to taken away when the test ends —
+/// returned from or panicked out of, since `Drop` runs either way. Where the
+/// identifier lands is read from the resolver the commands read it from, rather
+/// than rebuilt from platform rules.
+struct Home {
+	identifier: String,
+	dir: PathBuf,
+}
+
+impl Home {
+	fn new() -> Self {
+		static CLAIMED: AtomicUsize = AtomicUsize::new(0);
+		let identifier = format!(
+			"com.opennest.user-commands-{}-{}",
+			std::process::id(),
+			CLAIMED.fetch_add(1, Ordering::Relaxed)
+		);
+		let dir = host(&identifier).path().app_data_dir().expect("data dir");
+		Self { identifier, dir }
+	}
+
+	fn app(&self) -> App<MockRuntime> {
+		let app = host(&self.identifier);
+		app.manage(db::bootstrap(app.handle()));
+		app
+	}
+}
+
+impl Drop for Home {
+	fn drop(&mut self) {
+		let _ = std::fs::remove_dir_all(&self.dir);
+	}
+}
+
+/// Built and no further: it carries the identifier every path below is resolved
+/// from, and without a database under it nothing has touched the disk yet.
+fn host(identifier: &str) -> App<MockRuntime> {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = identifier.into();
-	let app = mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds");
-	app.manage(db::bootstrap(app.handle()));
-	app
+	mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds")
 }
 
 fn app_without_a_database() -> App<MockRuntime> {
@@ -55,11 +91,6 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str, body: Value) -> Result<V
 	)
 	.map(|response| response.deserialize::<Value>().unwrap_or(Value::Null))
 	.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
-}
-
-fn cleanup(app: &App<MockRuntime>) {
-	let dir = app.path().app_data_dir().expect("data dir");
-	std::fs::remove_dir_all(&dir).expect("cleanup");
 }
 
 fn avatar_dir(app: &App<MockRuntime>) -> PathBuf {
@@ -145,7 +176,8 @@ fn a_host_without_a_database_answers_every_preferences_command_with_why_there_is
 /// The record the app opens on, before anyone has chosen anything.
 #[test]
 fn a_record_nobody_has_written_crosses_as_the_defaults() {
-	let app = app("com.opennest.user-commands-1");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	assert_eq!(
@@ -157,13 +189,12 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"palette": "amber",
 		})
 	);
-
-	cleanup(&app);
 }
 
 #[test]
 fn a_written_record_is_answered_and_read_back_whole() {
-	let app = app("com.opennest.user-commands-2");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let answered =
@@ -172,15 +203,14 @@ fn a_written_record_is_answered_and_read_back_whole() {
 
 	assert_eq!(answered, a_record(Value::Null));
 	assert_eq!(read(&window), a_record(Value::Null));
-
-	cleanup(&app);
 }
 
 /// A word outside the three is refused before the command is entered, so nothing
 /// reaches the file.
 #[test]
 fn a_scheme_outside_the_vocabulary_never_reaches_the_record() {
-	let app = app("com.opennest.user-commands-3");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let mut sepia = a_record(Value::Null);
 	sepia["colorScheme"] = json!("sepia");
@@ -190,15 +220,14 @@ fn a_scheme_outside_the_vocabulary_never_reaches_the_record() {
 		"a scheme this build cannot paint was accepted"
 	);
 	assert_eq!(read(&window)["colorScheme"], json!("system"));
-
-	cleanup(&app);
 }
 
 /// Bytes in, one normalised file beside the database, and a path the webview can
 /// be pointed at — the same guarantee a bot's picture carries.
 #[test]
 fn an_uploaded_picture_is_stored_squared_and_crosses_as_a_path() {
-	let app = app("com.opennest.user-commands-4");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 
 	let recorded = a_stored_picture(&window);
@@ -216,15 +245,14 @@ fn an_uploaded_picture_is_stored_squared_and_crosses_as_a_path() {
 	.expect("the stored file decodes as png");
 	assert_eq!(image::GenericImageView::dimensions(&stored), (512, 512));
 	assert_eq!(read(&window)["profilePicturePath"], json!(recorded));
-
-	cleanup(&app);
 }
 
 /// The rule the whole feature turns on: the sweep a bot write runs is told about
 /// the record's picture too, so writing a bot never takes it off the disk.
 #[test]
 fn a_bot_write_leaves_the_record_its_own_picture() {
-	let app = app("com.opennest.user-commands-5");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let worn = a_bot_wearing_a_picture(&window);
 	let mine = a_stored_picture(&window);
@@ -249,14 +277,13 @@ fn a_bot_write_leaves_the_record_its_own_picture() {
 	assert!(Path::new(&worn).exists(), "a bot write swept another bot's picture away");
 	assert_eq!(read(&window)["profilePicturePath"], json!(mine));
 	assert_eq!(stored_avatars(&app).len(), 2);
-
-	cleanup(&app);
 }
 
 /// Replacing leaves exactly one file, and the bot's stays where it is.
 #[test]
 fn replacing_the_picture_leaves_one_file_behind_and_spares_the_bots() {
-	let app = app("com.opennest.user-commands-6");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let worn = a_bot_wearing_a_picture(&window);
 	let first = a_stored_picture(&window);
@@ -268,15 +295,14 @@ fn replacing_the_picture_leaves_one_file_behind_and_spares_the_bots() {
 	assert!(Path::new(&second).exists(), "the replacement is not there");
 	assert!(Path::new(&worn).exists(), "the bot lost its picture to the record's write");
 	assert_eq!(stored_avatars(&app).len(), 2);
-
-	cleanup(&app);
 }
 
 /// A record written with no picture is a picture taken off, and the sweep that
 /// follows takes the file with it.
 #[test]
 fn a_record_written_without_a_picture_takes_the_file_with_it() {
-	let app = app("com.opennest.user-commands-7");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let worn = a_bot_wearing_a_picture(&window);
 	let mine = a_stored_picture(&window);
@@ -287,14 +313,13 @@ fn a_record_written_without_a_picture_takes_the_file_with_it() {
 	assert_eq!(read(&window)["profilePicturePath"], json!(null));
 	assert!(!Path::new(&mine).exists(), "a picture taken off the record stayed on the disk");
 	assert!(Path::new(&worn).exists(), "the bot lost its picture to the record's write");
-
-	cleanup(&app);
 }
 
 /// Echoing the path back is how a record keeps the picture it already had.
 #[test]
 fn a_record_written_with_the_path_it_was_handed_keeps_its_picture() {
-	let app = app("com.opennest.user-commands-8");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let mine = a_stored_picture(&window);
 
@@ -304,15 +329,14 @@ fn a_record_written_with_the_path_it_was_handed_keeps_its_picture() {
 
 	assert_eq!(answered["profilePicturePath"], json!(mine));
 	assert!(Path::new(&mine).exists(), "an echoed path lost the file it named");
-
-	cleanup(&app);
 }
 
 /// Three refusals, three reasons, and the same nothing behind each: no file, and a
 /// record still pointing where it pointed.
 #[test]
 fn a_picture_the_host_refuses_leaves_the_record_on_the_one_it_held() {
-	let app = app("com.opennest.user-commands-9");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let held = a_stored_picture(&window);
 
@@ -339,6 +363,4 @@ fn a_picture_the_host_refuses_leaves_the_record_on_the_one_it_held() {
 	assert_eq!(read(&window)["profilePicturePath"], json!(held), "a refusal moved the record");
 	assert!(Path::new(&held).exists(), "a refusal took the picture the record held");
 	assert_eq!(stored_avatars(&app).len(), 1, "a refused picture reached the disk");
-
-	cleanup(&app);
 }
