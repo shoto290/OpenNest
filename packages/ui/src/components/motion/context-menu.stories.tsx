@@ -27,7 +27,8 @@ const SURFACE_CLASS =
 const settledMenu = async () => {
 	const menu = await screen.findByRole("menu")
 	await waitFor(() => expect(menu).toBeVisible())
-	await Promise.all(menu.getAnimations().map(({ finished }) => finished))
+	const fades = menu.getAnimations({ subtree: true })
+	await Promise.all(fades.map(({ finished }) => finished))
 	return menu
 }
 
