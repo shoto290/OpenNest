@@ -13,6 +13,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
@@ -173,24 +174,26 @@ export const StatefulButton = forwardRef<
 	{
 		state = "idle",
 		children,
-		loadingText = "Loading",
-		successText = "Done",
-		errorText = "Try again",
+		loadingText,
+		successText,
+		errorText,
 		icon,
 		disabled,
 		...rest
 	},
 	ref,
 ) {
+	const { t } = useTranslation("common")
 	const isBusy = state === "loading"
+	const override = {
+		loading: loadingText,
+		success: successText,
+		error: errorText,
+	}
 	const stateText =
-		state === "loading"
-			? loadingText
-			: state === "success"
-				? successText
-				: state === "error"
-					? errorText
-					: children
+		state === "idle"
+			? children
+			: (override[state] ?? t(`statefulButton.${state}`))
 	const textKey =
 		typeof stateText === "string" ? `${state}-${stateText}` : state
 

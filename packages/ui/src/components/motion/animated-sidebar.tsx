@@ -27,6 +27,7 @@ import {
 	useState,
 } from "react"
 import { createPortal } from "react-dom"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { useMediaQuery } from "@workspace/ui/hooks/use-media-query"
@@ -308,6 +309,7 @@ function MobileSidebar({
 	side,
 	...props
 }: MobileSidebarProps) {
+	const { t } = useTranslation("common")
 	const context = useAnimatedSidebar()
 	const panelRef = useRef<HTMLDivElement>(null)
 	const drawerTransition = context.reduce ? TWEEN_REDUCED : PANEL_TRANSITION
@@ -403,7 +405,7 @@ function MobileSidebar({
 		>
 			<button
 				type="button"
-				aria-label="Close sidebar"
+				aria-label={t("sidebar.close")}
 				tabIndex={context.openMobile ? 0 : -1}
 				onClick={() => context.setOpenMobile(false)}
 				data-slot="sidebar-mobile-overlay"
@@ -485,7 +487,7 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 			side = "left",
 			variant = "sidebar",
 			collapsible = "icon",
-			ariaLabel = "Sidebar",
+			ariaLabel,
 			children,
 			className,
 			panelClassName,
@@ -494,7 +496,9 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 		},
 		forwardedRef,
 	) {
+		const { t } = useTranslation("common")
 		const context = useAnimatedSidebar()
+		const label = ariaLabel ?? t("sidebar.label")
 		const collapsed = collapsible !== "none" && !context.open
 		const offcanvas = collapsed && collapsible === "offcanvas"
 		const width = offcanvas
@@ -512,7 +516,7 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 			return (
 				<MobileSidebar
 					{...props}
-					ariaLabel={ariaLabel}
+					ariaLabel={label}
 					className={className}
 					forwardedRef={forwardedRef}
 					panelClassName={panelClassName}
@@ -529,7 +533,7 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 				{...props}
 				ref={forwardedRef}
 				initial={false}
-				aria-label={ariaLabel}
+				aria-label={label}
 				data-slot="sidebar"
 				data-state={collapsed ? "collapsed" : "expanded"}
 				data-collapsible={collapsible}
@@ -585,6 +589,7 @@ export const AnimatedSidebarTrigger = forwardRef<
 	{ className, onClick, type = "button", ...props },
 	forwardedRef,
 ) {
+	const { t } = useTranslation("common")
 	const context = useAnimatedSidebar()
 	const expanded = context.isMobile ? context.openMobile : context.open
 
@@ -595,7 +600,7 @@ export const AnimatedSidebarTrigger = forwardRef<
 				context.triggerRef.current = node
 			})}
 			type={type}
-			aria-label={props["aria-label"] ?? "Toggle sidebar"}
+			aria-label={props["aria-label"] ?? t("sidebar.toggle")}
 			aria-expanded={expanded}
 			data-slot="sidebar-trigger"
 			data-state={expanded ? "expanded" : "collapsed"}
@@ -622,6 +627,7 @@ export const AnimatedSidebarClose = forwardRef<
 	{ className, onClick, type = "button", ...props },
 	forwardedRef,
 ) {
+	const { t } = useTranslation("common")
 	const context = useAnimatedSidebar()
 
 	return (
@@ -629,7 +635,7 @@ export const AnimatedSidebarClose = forwardRef<
 			{...props}
 			ref={forwardedRef}
 			type={type}
-			aria-label={props["aria-label"] ?? "Close sidebar"}
+			aria-label={props["aria-label"] ?? t("sidebar.close")}
 			data-slot="sidebar-close"
 			onClick={(event) => {
 				onClick?.(event)
@@ -659,6 +665,7 @@ export const AnimatedSidebarRail = forwardRef<
 	{ className, onClick, type = "button", ...props },
 	forwardedRef,
 ) {
+	const { t } = useTranslation("common")
 	const context = useAnimatedSidebar()
 	const panel = useAnimatedSidebarPanel()
 
@@ -669,8 +676,8 @@ export const AnimatedSidebarRail = forwardRef<
 			type={type}
 			data-slot="sidebar-rail"
 			data-side={panel.side}
-			aria-label={props["aria-label"] ?? "Toggle sidebar"}
-			title="Toggle sidebar"
+			aria-label={props["aria-label"] ?? t("sidebar.toggle")}
+			title={t("sidebar.toggle")}
 			tabIndex={-1}
 			onClick={(event) => {
 				onClick?.(event)
