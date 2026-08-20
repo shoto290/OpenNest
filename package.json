@@ -20,6 +20,7 @@
 		"lint": "turbo run lint",
 		"lint:fix": "turbo run lint:fix",
 		"types": "turbo run types",
+		"ci": "bun run lint && bun run types && bun run test",
 		"release": "bun scripts/release.ts",
 		"prepare": "husky"
 	},
