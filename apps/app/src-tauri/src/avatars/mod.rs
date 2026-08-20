@@ -111,6 +111,25 @@ pub fn readable(dir: &Path, recorded: &str) -> Option<PathBuf> {
 	Some(resolved)
 }
 
+/// The sweep as every caller runs it: after anything that changes a row holding a
+/// picture, against the whole of what the file still references. Kept here rather
+/// than beside one of those writes because the invariant is this module's — a
+/// second copy of it would be a second answer to "which pictures survive", and the
+/// one that forgot a record would delete a picture somebody is wearing.
+///
+/// Silent by design, and `None` for the directory is a run with nowhere to keep
+/// avatars: a sweep is housekeeping after a write that already landed, so telling
+/// a caller a leftover file could not be removed would be handing it a failure it
+/// has nothing to do about.
+pub async fn sweep_referenced(database: &crate::db::Database, dir: Option<&Path>) {
+	let Some(dir) = dir else {
+		return;
+	};
+	if let Ok(referenced) = database.referenced_avatar_paths().await {
+		sweep(dir, &referenced);
+	}
+}
+
 /// Leaves the directory holding exactly the files `referenced` names, and deletes
 /// every other entry in it.
 ///

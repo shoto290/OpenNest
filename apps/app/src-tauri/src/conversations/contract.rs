@@ -597,20 +597,25 @@ pub enum AvatarRejection {
 	Unwritable { detail: String },
 }
 
+/// Written on the rejection rather than on the error, because the same four
+/// reasons refuse a bot's picture and the user's own — see
+/// [`crate::user::contract::UserPreferencesError`].
+impl From<avatars::Rejection> for AvatarRejection {
+	fn from(rejection: avatars::Rejection) -> Self {
+		match rejection {
+			avatars::Rejection::UnknownFormat => AvatarRejection::UnknownFormat,
+			avatars::Rejection::TooLarge { bytes, limit } => {
+				AvatarRejection::TooLarge { bytes, limit }
+			}
+			avatars::Rejection::Undecodable { detail } => AvatarRejection::Undecodable { detail },
+			avatars::Rejection::Unwritable { detail } => AvatarRejection::Unwritable { detail },
+		}
+	}
+}
+
 impl From<avatars::Rejection> for TranscriptStoreError {
 	fn from(rejection: avatars::Rejection) -> Self {
-		TranscriptStoreError::RejectedAvatarImage {
-			reason: match rejection {
-				avatars::Rejection::UnknownFormat => AvatarRejection::UnknownFormat,
-				avatars::Rejection::TooLarge { bytes, limit } => {
-					AvatarRejection::TooLarge { bytes, limit }
-				}
-				avatars::Rejection::Undecodable { detail } => {
-					AvatarRejection::Undecodable { detail }
-				}
-				avatars::Rejection::Unwritable { detail } => AvatarRejection::Unwritable { detail },
-			},
-		}
+		TranscriptStoreError::RejectedAvatarImage { reason: rejection.into() }
 	}
 }
 

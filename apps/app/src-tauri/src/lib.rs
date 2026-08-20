@@ -3,6 +3,7 @@ pub mod claude;
 pub mod commands;
 pub mod conversations;
 pub mod db;
+pub mod user;
 
 use tauri::{Manager, RunEvent};
 

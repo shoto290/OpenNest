@@ -13,8 +13,6 @@
 //! is told the transcript is not being written, and why, instead of being handed a
 //! silent success it would go on appending to.
 
-use std::path::Path;
-
 use tauri::{AppHandle, Runtime, State};
 
 use super::context;
@@ -24,7 +22,6 @@ use super::contract::{
 };
 use crate::avatars;
 use crate::db;
-use crate::db::repositories::conversations::ConversationsRepository;
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::db::repositories::runtime_context::ParticipantKey;
 
@@ -32,23 +29,6 @@ use crate::db::repositories::runtime_context::ParticipantKey;
 /// [`db::DatabaseState`] owns the outcome for the whole run.
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreError> {
 	state.as_ref().map_err(|failure| TranscriptStoreError::Unavailable { failure: failure.into() })
-}
-
-/// Restores the one invariant the avatar directory has: it holds exactly the files
-/// the `bots` table still points at. Run after anything that changes a bot, so a
-/// replaced picture, a deleted bot and a file some earlier crash left behind are all
-/// answered by the same call rather than by three that have to be remembered.
-///
-/// Silent by design. A sweep is housekeeping after a write that already landed —
-/// telling a caller its bot was saved *and* that a leftover file could not be
-/// removed would be handing it a failure it has nothing to do about.
-async fn sweep_avatars(repository: &ConversationsRepository, dir: Option<&Path>) {
-	let Some(dir) = dir else {
-		return;
-	};
-	if let Ok(referenced) = repository.avatar_image_paths().await {
-		avatars::sweep(dir, &referenced);
-	}
 }
 
 /// Every bot on the record, and nothing is seeded on the way: a launch reads the
@@ -83,9 +63,9 @@ pub async fn conversation_create_bot<R: Runtime>(
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
-	let repository = ready(&state)?.conversations();
-	let created = repository.create_bot(identity.into()).await?;
-	sweep_avatars(repository, dir.as_deref()).await;
+	let database = ready(&state)?;
+	let created = database.conversations().create_bot(identity.into()).await?;
+	avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(Bot::of(created, dir.as_deref()))
 }
 
@@ -106,9 +86,9 @@ pub async fn conversation_update_bot<R: Runtime>(
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
-	let repository = ready(&state)?.conversations();
-	let updated = repository.update_bot(id, identity.into()).await?;
-	sweep_avatars(repository, dir.as_deref()).await;
+	let database = ready(&state)?;
+	let updated = database.conversations().update_bot(id, identity.into()).await?;
+	avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(Bot::of(updated, dir.as_deref()))
 }
 
@@ -136,7 +116,8 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 	bytes: Vec<u8>,
 ) -> Result<Bot, TranscriptStoreError> {
 	let normalised = avatars::picture::normalised(&bytes)?;
-	let repository = ready(&state)?.conversations();
+	let database = ready(&state)?;
+	let repository = database.conversations();
 	let dir = avatars::dir(&app).ok_or(avatars::Rejection::Unwritable {
 		detail: "there is no application data directory to store avatars in".to_owned(),
 	})?;
@@ -147,10 +128,10 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 	let updated = repository.set_avatar_image_path(id.clone(), Some(recorded)).await?;
 	if let Err(rejection) = avatars::write(&path, &normalised) {
 		let _ = repository.set_avatar_image_path(id, None).await;
-		sweep_avatars(repository, Some(&dir)).await;
+		avatars::sweep_referenced(database, Some(&dir)).await;
 		return Err(rejection.into());
 	}
-	sweep_avatars(repository, Some(&dir)).await;
+	avatars::sweep_referenced(database, Some(&dir)).await;
 	Ok(Bot::of(updated, Some(&dir)))
 }
 
@@ -166,9 +147,9 @@ pub async fn conversation_delete_bot<R: Runtime>(
 	id: String,
 ) -> Result<(), TranscriptStoreError> {
 	let dir = avatars::dir(&app);
-	let repository = ready(&state)?.conversations();
-	repository.delete_bot(id).await?;
-	sweep_avatars(repository, dir.as_deref()).await;
+	let database = ready(&state)?;
+	database.conversations().delete_bot(id).await?;
+	avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(())
 }
 
