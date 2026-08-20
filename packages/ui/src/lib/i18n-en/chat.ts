@@ -1,5 +1,6 @@
 /** Every string a reader sees on the chat surface — transcript, composer, tool
- * cards and markdown — plus the two the host hands down as props. */
+ * cards, agent activity and markdown — plus the two the host hands down as
+ * props. */
 const chat = {
 	emptyState: {
 		ready: {
@@ -126,6 +127,34 @@ const chat = {
 	task: {
 		done: "Done",
 		todo: "To do",
+	},
+	activity: {
+		duration: {
+			seconds: "{{seconds}}s",
+			minutes: "{{minutes}}m",
+			minutesAndSeconds: "{{minutes}}m {{seconds}}s",
+		},
+		active: {
+			search: "Searching the web…",
+			tool: "Running tools…",
+			trace: "Working through the run…",
+			mixed: "Working through it…",
+			thinking: "Thinking…",
+		},
+		summary: {
+			failed: "Failed after <duration>{{value}}</duration>",
+			thought: "Thought for <duration>{{value}}</duration>",
+			search: "Searched the web",
+			tools_one: "Ran {{count}} tool",
+			tools_other: "Ran {{count}} tools",
+			toolCalls_one: "{{count}} tool call",
+			toolCalls_other: "{{count}} tool calls",
+			messages_one: "{{count}} message",
+			messages_other: "{{count}} messages",
+			trace: "{{toolCalls}}, {{messages}}",
+			steps_one: "Completed {{count}} step",
+			steps_other: "Completed {{count}} steps",
+		},
 	},
 	screen: {
 		label: "Claude Code conversation",

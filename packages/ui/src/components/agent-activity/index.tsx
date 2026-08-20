@@ -1,6 +1,7 @@
 "use client"
 // beui.dev/components/agents/agent-activity
 
+import type { TFunction } from "i18next"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
 	type ReactNode,
@@ -11,6 +12,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { Trans, useTranslation } from "react-i18next"
 
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
@@ -41,13 +43,18 @@ export type {
 	AgentTraceKind,
 } from "./types"
 
-function formatDuration(duration: number) {
+const formatDuration = (t: TFunction<"chat">, duration: number) => {
 	const seconds = Math.max(0, Math.round(duration))
-	if (seconds < 60) return `${seconds}s`
+	if (seconds < 60) return t("activity.duration.seconds", { seconds })
 
 	const minutes = Math.floor(seconds / 60)
 	const remainder = seconds % 60
-	return remainder === 0 ? `${minutes}m` : `${minutes}m ${remainder}s`
+	return remainder === 0
+		? t("activity.duration.minutes", { minutes })
+		: t("activity.duration.minutesAndSeconds", {
+				minutes,
+				seconds: remainder,
+			})
 }
 
 function useControllableOpen({
@@ -79,40 +86,52 @@ function getContentType(items: AgentActivityItem[]): AgentActivityContentType {
 	return first && items.every((item) => item.type === first) ? first : "mixed"
 }
 
-function getActiveLabel(type: AgentActivityContentType) {
-	if (type === "search") return "Searching the web…"
-	if (type === "tool") return "Running tools…"
-	if (type === "trace") return "Working through the run…"
-	if (type === "mixed") return "Working through it…"
-	return "Thinking…"
+const getActiveLabel = (
+	t: TFunction<"chat">,
+	type: AgentActivityContentType,
+) => {
+	if (type === "search") return t("activity.active.search")
+	if (type === "tool") return t("activity.active.tool")
+	if (type === "trace") return t("activity.active.trace")
+	if (type === "mixed") return t("activity.active.mixed")
+	return t("activity.active.thinking")
 }
 
-function getSummary(
-	type: AgentActivityContentType,
-	items: AgentActivityItem[],
+const durationSummary = (
+	t: TFunction<"chat">,
+	i18nKey: "activity.summary.failed" | "activity.summary.thought",
 	duration: number,
-	status: AgentActivityStatus,
-): ReactNode {
-	if (status === "failed") {
-		return (
-			<>
-				Failed after{" "}
-				<span className="tabular-nums">{formatDuration(duration)}</span>
-			</>
-		)
-	}
-	if (type === "step" || type === "text") {
-		return (
-			<>
-				Thought for{" "}
-				<span className="tabular-nums">{formatDuration(duration)}</span>
-			</>
-		)
-	}
-	if (type === "search") return "Searched the web"
-	if (type === "tool") {
-		return `Ran ${items.length} ${items.length === 1 ? "tool" : "tools"}`
-	}
+) => (
+	<Trans
+		ns="chat"
+		i18nKey={i18nKey}
+		values={{ value: formatDuration(t, duration) }}
+		components={{ duration: <span className="tabular-nums" /> }}
+	/>
+)
+
+type SummaryOptions = {
+	t: TFunction<"chat">
+	type: AgentActivityContentType
+	items: AgentActivityItem[]
+	duration: number
+	status: AgentActivityStatus
+}
+
+const getSummary = ({
+	t,
+	type,
+	items,
+	duration,
+	status,
+}: SummaryOptions): ReactNode => {
+	if (status === "failed")
+		return durationSummary(t, "activity.summary.failed", duration)
+	if (type === "step" || type === "text")
+		return durationSummary(t, "activity.summary.thought", duration)
+	if (type === "search") return t("activity.summary.search")
+	if (type === "tool")
+		return t("activity.summary.tools", { count: items.length })
 	if (type === "trace") {
 		const messages = items.filter(
 			(item) =>
@@ -120,9 +139,12 @@ function getSummary(
 				(item.kind === "thinking" || item.kind === "message"),
 		).length
 		const tools = items.length - messages
-		return `${tools} ${tools === 1 ? "tool call" : "tool calls"}, ${messages} ${messages === 1 ? "message" : "messages"}`
+		return t("activity.summary.trace", {
+			toolCalls: t("activity.summary.toolCalls", { count: tools }),
+			messages: t("activity.summary.messages", { count: messages }),
+		})
 	}
-	return `Completed ${items.length} ${items.length === 1 ? "step" : "steps"}`
+	return t("activity.summary.steps", { count: items.length })
 }
 
 export function AgentActivity({
@@ -142,6 +164,7 @@ export function AgentActivity({
 	className,
 	contentClassName,
 }: AgentActivityProps) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const baseId = useId()
 	const triggerId = `${baseId}-trigger`
@@ -194,9 +217,9 @@ export function AgentActivity({
 			requestAnimationFrame(() => viewportRef.current?.scrollTo({ top: 0 }))
 	}
 
-	const liveLabel = activeLabel ?? getActiveLabel(contentType)
+	const liveLabel = activeLabel ?? getActiveLabel(t, contentType)
 	const completedSummary =
-		summary ?? getSummary(contentType, items, duration, status)
+		summary ?? getSummary({ t, type: contentType, items, duration, status })
 	const maskImage = capped
 		? working
 			? "linear-gradient(to bottom, transparent, black 12px)"
