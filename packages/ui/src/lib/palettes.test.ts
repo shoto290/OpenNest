@@ -20,18 +20,32 @@ const STYLESHEET = readFileSync(
 	"utf8",
 )
 
-const colorTokensOf = (selector: string) => {
-	const block = STYLESHEET.match(
-		new RegExp(`^${selector.replace(/[\\[\]".]/g, "\\$&")} \\{$([^}]*)^\\}$`, "m"),
-	)
-	if (!block) {
-		throw new Error(`Missing token block for ${selector}.`)
-	}
-	return new Map(
-		[...block[1].matchAll(/^\t(--[\w-]+): (.+);$/gm)]
+const tokensOf = (body: string) =>
+	new Map(
+		[...body.matchAll(/^\t(--[\w-]+): (.+);$/gm)]
 			.filter(([, token]) => !EXEMPT_TOKENS.test(token))
 			.map(([, token, value]) => [token, value]),
 	)
+
+const SELECTOR_LIST_BLOCK = /^([^\n{]+(?:,\n[^\n{]+)*) \{$([^}]*)^\}$/gm
+
+const TOKEN_BLOCKS = new Map(
+	[...STYLESHEET.matchAll(SELECTOR_LIST_BLOCK)].flatMap(
+		([, selectors, body]) => {
+			const tokens = tokensOf(body)
+			return selectors
+				.split(",\n")
+				.map((selector) => [selector, tokens] as const)
+		},
+	),
+)
+
+const colorTokensOf = (selector: string) => {
+	const tokens = TOKEN_BLOCKS.get(selector)
+	if (!tokens) {
+		throw new Error(`Missing token block for ${selector}.`)
+	}
+	return tokens
 }
 
 const REQUIRED_TOKENS = [...colorTokensOf(":root").keys()]
