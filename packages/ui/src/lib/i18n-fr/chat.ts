@@ -9,8 +9,7 @@ const chat = {
 		},
 		unavailable: {
 			title: "Claude Code n'est pas disponible",
-			description:
-				"OpenNest n'atteint pas son agent intégré. Réessayez pour démarrer une conversation.",
+			description: "OpenNest n'atteint pas son agent intégré.",
 		},
 		settings: "Réglages du bot",
 		hint: "Saisissez votre première invite dans le champ ci-dessous",

@@ -10,8 +10,7 @@ const chat = {
 		},
 		unavailable: {
 			title: "Claude Code is not available",
-			description:
-				"OpenNest cannot reach its built-in agent. Try again to start a conversation.",
+			description: "OpenNest cannot reach its built-in agent.",
 		},
 		settings: "Bot settings",
 		hint: "Type your first prompt in the composer below",
