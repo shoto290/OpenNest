@@ -25,6 +25,8 @@ import {
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 import { Markdown } from "@workspace/ui/components/markdown"
+import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
+import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import {
@@ -32,7 +34,14 @@ import {
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
 
+import {
+	describeAttachmentError,
+	type StagedAttachment,
+} from "@/lib/chat/attachments"
+import type { AttachmentStoreError } from "@/lib/chat/attachments-contract"
+import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { ChatController } from "@/lib/chat/chat-controller"
+import type { ChatError } from "@/lib/chat/chat-state"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
 import {
@@ -50,6 +59,7 @@ import {
 	toTranscriptRows,
 	workingStateFor,
 } from "@/lib/chat/screen-model"
+import { useAttachments } from "@/lib/chat/use-attachments"
 import type { Chat } from "@/lib/chat/use-chat"
 import type { PermissionRequest, TurnState } from "@/lib/claude/contract"
 import { describeTransportError } from "@/lib/claude/messages"
@@ -174,6 +184,10 @@ const Composer = memo(function Composer({
 	disabled,
 	isOverlayOpen,
 	turn,
+	attachments,
+	onAttach,
+	onRemoveAttachment,
+	onSubmitPrompt,
 }: {
 	controller: ChatController
 	composerRef: RefObject<HTMLTextAreaElement | null>
@@ -184,6 +198,13 @@ const Composer = memo(function Composer({
 	/** Something is drawn over the conversation. */
 	isOverlayOpen: boolean
 	turn: TurnState
+	/** The files staged for this prompt, drawn as chips inside the composer. */
+	attachments: StagedAttachment[]
+	onAttach: (files: File[]) => void
+	onRemoveAttachment: (id: string) => void
+	/** Stores the staged files, then sends the prompt naming them. Answers whether
+	 * it was taken: a refused store keeps the draft where the reader left it. */
+	onSubmitPrompt: (text: string) => Promise<boolean>
 }) {
 	const [wasDismissed, setWasDismissed] = useState(false)
 	const [prompt, setPrompt] = useState("")
@@ -204,12 +225,16 @@ const Composer = memo(function Composer({
 		void controller.stop()
 	}, [controller])
 
+	// The draft only goes if it is still the one that was sent: storing the files
+	// takes a round trip, and whatever the reader typed meanwhile is theirs.
 	const submit = useCallback(
-		(value: string) => {
-			setPrompt("")
-			void controller.send(value)
+		async (value: string) => {
+			const sent = await onSubmitPrompt(value)
+			if (sent) {
+				setPrompt((current) => (current.trim() === value ? "" : current))
+			}
 		},
-		[controller],
+		[onSubmitPrompt],
 	)
 
 	// Held stable: the menu listens for the keyboard and for a press outside while
@@ -234,8 +259,16 @@ const Composer = memo(function Composer({
 		>
 			<PromptInput
 				textareaRef={composerRef}
+				attachments={
+					<PromptAttachments
+						items={attachments}
+						onRemove={onRemoveAttachment}
+					/>
+				}
+				leading={<PromptAttachButton disabled={disabled} onAttach={onAttach} />}
 				disabled={disabled}
 				loading={isTurnBusy(turn)}
+				onAttach={onAttach}
 				onStop={canStopTurn(turn) ? stop : undefined}
 				onSubmit={submit}
 				onValueChange={setPrompt}
@@ -254,6 +287,59 @@ const Composer = memo(function Composer({
  * control in the bar above the conversation they belong to. */
 const SETTINGS_LABEL = "Bot settings"
 
+/** The notice a refused store wears. Nothing was written, so the files are still
+ * staged and the prompt is still a draft. */
+const ATTACHMENTS_TITLE = "Files not attached"
+
+/** The one notice standing over the composer. A refused store takes the place of
+ * the session's own while it stands: it is the newer fact, and the only one the
+ * reader is still holding files for. */
+function ConversationNotice({
+	refusal,
+	onDismissRefusal,
+	error,
+	onDismissError,
+	onRestart,
+}: {
+	/** Why the staged files were not stored, while the reader still holds them. */
+	refusal: AttachmentStoreError | null
+	onDismissRefusal: () => void
+	/** The newest transport error the reader has not dismissed. */
+	error?: ChatError
+	onDismissError: (id: string) => void
+	onRestart: (id: string) => void
+}) {
+	if (refusal) {
+		return (
+			<ChatNotice
+				tone="warning"
+				title={ATTACHMENTS_TITLE}
+				description={describeAttachmentError(refusal)}
+				onDismiss={onDismissRefusal}
+			/>
+		)
+	}
+	if (!error) {
+		return null
+	}
+
+	const stale = needsFreshSession(error.error)
+
+	return (
+		<ChatNotice
+			tone={stale ? "error" : "warning"}
+			title={noticeTitleFor(error.error)}
+			description={describeTransportError(error.error)}
+			retry={
+				stale
+					? { label: "Restart session", onRetry: () => onRestart(error.id) }
+					: undefined
+			}
+			onDismiss={() => onDismissError(error.id)}
+		/>
+	)
+}
+
 type ChatScreenProps = {
 	/** The bot this conversation belongs to. Its face is the one the replies wear —
 	 * an uploaded picture is not among them: the transcript draws the animal. */
@@ -261,6 +347,9 @@ type ChatScreenProps = {
 	chat: Chat
 	/** Whether the settings dialog stands open over this one. The gear says so, and
 	 * pressing it is what closes the dialog again. */
+	/** The files staged for every bot, so the ones this reader attached survive a
+	 * switch to another bot and back. */
+	attachments: AttachmentsController
 	isSettingsOpen: boolean
 	/** Whether anything at all is drawn over the conversation, this bot's settings
 	 * included. What the composer reads: a menu of its own may not answer the
@@ -272,6 +361,7 @@ type ChatScreenProps = {
 export function ChatScreen({
 	bot,
 	chat,
+	attachments,
 	isSettingsOpen,
 	isOverlayOpen,
 	onToggleSettings,
@@ -284,6 +374,7 @@ export function ChatScreen({
 	// render and handed down: every avatar on this screen is the same bot's.
 	const face = avatarSrc(bot.avatarImagePath)
 	const disabled = !isSessionReady(state)
+	const staged = useAttachments(attachments, bot.id, !disabled)
 	const acceptsInput = !disabled && !isTurnBusy(state.turn)
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
 	const latestError = state.errors.at(-1)
@@ -346,25 +437,16 @@ export function ChatScreen({
 				/>
 			}
 			notice={
-				notice ? (
-					<ChatNotice
-						tone={needsFreshSession(notice.error) ? "error" : "warning"}
-						title={noticeTitleFor(notice.error)}
-						description={describeTransportError(notice.error)}
-						retry={
-							needsFreshSession(notice.error)
-								? {
-										label: "Restart session",
-										onRetry: () => {
-											setDismissedErrorId(notice.id)
-											restart()
-										},
-									}
-								: undefined
-						}
-						onDismiss={() => setDismissedErrorId(notice.id)}
-					/>
-				) : null
+				<ConversationNotice
+					refusal={staged.refusal}
+					onDismissRefusal={staged.dismissRefusal}
+					error={notice}
+					onDismissError={setDismissedErrorId}
+					onRestart={(id) => {
+						setDismissedErrorId(id)
+						restart()
+					}}
+				/>
 			}
 			composer={
 				<Composer
@@ -374,6 +456,10 @@ export function ChatScreen({
 					disabled={disabled}
 					isOverlayOpen={isOverlayOpen}
 					turn={state.turn}
+					attachments={staged.items}
+					onAttach={staged.stage}
+					onRemoveAttachment={staged.remove}
+					onSubmitPrompt={staged.submit}
 				/>
 			}
 		>

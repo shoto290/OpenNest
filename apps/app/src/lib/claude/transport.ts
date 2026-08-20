@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 
-import type { ChatDriver } from "../chat/driver"
 import type {
 	CheckReport,
 	PermissionDecision,
@@ -9,6 +8,9 @@ import type {
 	ScopedEvent,
 	SessionHandle,
 } from "./contract"
+
+import type { SubmittedAttachment } from "../chat/attachments-contract"
+import type { ChatDriver } from "../chat/driver"
 
 const EVENT_CHANNEL = "claude://event"
 
@@ -25,6 +27,15 @@ export const claudeTransport: ChatDriver = {
 
 	submitPrompt: (scope: RuntimeScope, text: string) =>
 		invoke<void>("claude_submit_prompt", { scope, text }),
+
+	storeAttachments: (
+		conversationId: string,
+		attachments: SubmittedAttachment[],
+	) =>
+		invoke<string[]>("chat_store_attachments", {
+			conversationId,
+			attachments,
+		}),
 
 	cancelTurn: (scope: RuntimeScope) =>
 		invoke<void>("claude_cancel_turn", { scope }),

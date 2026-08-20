@@ -1,3 +1,5 @@
+import type { SubmittedAttachment } from "./attachments-contract"
+
 import type {
 	CheckReport,
 	PermissionDecision,
@@ -26,6 +28,14 @@ export type ChatDriver = {
 		cwd?: string,
 	) => Promise<SessionHandle>
 	submitPrompt: (scope: RuntimeScope, text: string) => Promise<void>
+	/** Writes the files a prompt is about to name down, and answers the absolute
+	 * path of each one in the order they were staged. Named by conversation rather
+	 * than by run: the files belong to the chat they were staged on, and outlive
+	 * every process that answers in it. */
+	storeAttachments: (
+		conversationId: string,
+		attachments: SubmittedAttachment[],
+	) => Promise<string[]>
 	cancelTurn: (scope: RuntimeScope) => Promise<void>
 	respondToPermission: (
 		scope: RuntimeScope,
@@ -33,5 +43,7 @@ export type ChatDriver = {
 		decision: PermissionDecision,
 	) => Promise<void>
 	shutdown: (scope: RuntimeScope) => Promise<void>
-	subscribe: (onEvent: (event: ScopedEvent) => void) => Promise<ChatDriverUnsubscribe>
+	subscribe: (
+		onEvent: (event: ScopedEvent) => void,
+	) => Promise<ChatDriverUnsubscribe>
 }
