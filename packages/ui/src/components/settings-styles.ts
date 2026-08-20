@@ -1,5 +1,3 @@
-import { cn } from "@workspace/ui/lib/utils"
-
 const FIELD_LABEL_CLASS = "font-medium text-foreground text-xs"
 
 const FIELD_CONTROL_CLASS =
@@ -14,10 +12,7 @@ const FIELD_OPTION_MARKS_CLASS =
 	"cursor-pointer rounded-xl text-muted-foreground hover:bg-muted has-[:checked]:bg-muted has-[:checked]:font-medium has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
 
 /** An option laid out as a tile: its icon or swatch above its name. */
-const FIELD_OPTION_CLASS = cn(
-	FIELD_OPTION_MARKS_CLASS,
-	"flex flex-col items-center gap-1 p-1.5",
-)
+const FIELD_OPTION_CLASS = `${FIELD_OPTION_MARKS_CLASS} flex flex-col items-center gap-1 p-1.5`
 
 /** What a picture is dropped on, pasted into or pressed to browse from, whatever
  * shape it wears: the dashed zone a bot's picture takes and the round control the
