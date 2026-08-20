@@ -1,6 +1,7 @@
 "use client"
 
 import { AlertDialog } from "@base-ui/react/alert-dialog"
+import { useTranslation } from "react-i18next"
 
 import { buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -25,56 +26,63 @@ const DangerZone = ({
 	confirming,
 	onConfirmingChange,
 	onDelete,
-}: DangerZoneProps) => (
-	<div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 p-4">
-		<div className="flex flex-col gap-1">
-			<span className="font-medium text-destructive text-sm">Delete bot</span>
-			<p className="text-muted-foreground text-sm">
-				Its avatar, instructions and working directory go with it. This cannot
-				be undone.
-			</p>
-		</div>
-		<AlertDialog.Root onOpenChange={onConfirmingChange} open={confirming}>
-			<AlertDialog.Trigger
-				className={buttonVariants({ variant: "destructive", size: "sm" })}
-			>
-				<Icons.Delete aria-hidden="true" className="size-3.5" />
-				Delete bot
-			</AlertDialog.Trigger>
-			<AlertDialog.Portal>
-				<AlertDialog.Backdrop className={BACKDROP_CLASS} />
-				<AlertDialog.Popup
-					className={cn(
-						DIALOG_POPUP_CLASS,
-						"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex w-88 max-w-[calc(100vw-3rem)] flex-col gap-4 rounded-2xl p-5",
-					)}
+}: DangerZoneProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 p-4">
+			<div className="flex flex-col gap-1">
+				<span className="font-medium text-destructive text-sm">
+					{t("danger.delete")}
+				</span>
+				<p className="text-muted-foreground text-sm">
+					{t("danger.description")}
+				</p>
+			</div>
+			<AlertDialog.Root onOpenChange={onConfirmingChange} open={confirming}>
+				<AlertDialog.Trigger
+					className={buttonVariants({ variant: "destructive", size: "sm" })}
 				>
-					<div className="flex flex-col gap-1">
-						<AlertDialog.Title className="font-medium text-base">
-							Delete {botName}?
-						</AlertDialog.Title>
-						<AlertDialog.Description className="text-muted-foreground text-sm">
-							Its avatar, instructions and working directory go with it. This
-							cannot be undone.
-						</AlertDialog.Description>
-					</div>
-					<div className="flex justify-end gap-2">
-						<AlertDialog.Close
-							className={buttonVariants({ variant: "outline", size: "sm" })}
-						>
-							Cancel
-						</AlertDialog.Close>
-						<AlertDialog.Close
-							className={buttonVariants({ variant: "destructive", size: "sm" })}
-							onClick={onDelete}
-						>
-							Delete bot
-						</AlertDialog.Close>
-					</div>
-				</AlertDialog.Popup>
-			</AlertDialog.Portal>
-		</AlertDialog.Root>
-	</div>
-)
+					<Icons.Delete aria-hidden="true" className="size-3.5" />
+					{t("danger.delete")}
+				</AlertDialog.Trigger>
+				<AlertDialog.Portal>
+					<AlertDialog.Backdrop className={BACKDROP_CLASS} />
+					<AlertDialog.Popup
+						className={cn(
+							DIALOG_POPUP_CLASS,
+							"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex w-88 max-w-[calc(100vw-3rem)] flex-col gap-4 rounded-2xl p-5",
+						)}
+					>
+						<div className="flex flex-col gap-1">
+							<AlertDialog.Title className="font-medium text-base">
+								{t("danger.confirm.title", { name: botName })}
+							</AlertDialog.Title>
+							<AlertDialog.Description className="text-muted-foreground text-sm">
+								{t("danger.description")}
+							</AlertDialog.Description>
+						</div>
+						<div className="flex justify-end gap-2">
+							<AlertDialog.Close
+								className={buttonVariants({ variant: "outline", size: "sm" })}
+							>
+								{t("danger.confirm.cancel")}
+							</AlertDialog.Close>
+							<AlertDialog.Close
+								className={buttonVariants({
+									variant: "destructive",
+									size: "sm",
+								})}
+								onClick={onDelete}
+							>
+								{t("danger.delete")}
+							</AlertDialog.Close>
+						</div>
+					</AlertDialog.Popup>
+				</AlertDialog.Portal>
+			</AlertDialog.Root>
+		</div>
+	)
+}
 
 export { DangerZone, type DangerZoneProps }

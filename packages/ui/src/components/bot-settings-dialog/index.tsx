@@ -2,6 +2,7 @@
 
 import { Tabs } from "@base-ui/react/tabs"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import {
 	BotIdentityAvatar,
@@ -37,8 +38,6 @@ import { cn } from "@workspace/ui/lib/utils"
 const FIRST_TAB = "general"
 
 const DANGER_TAB = "danger"
-
-const UNNAMED_BOT = "Untitled bot"
 
 const DANGER_RAIL_ITEM_CLASS = cn(
 	RAIL_ITEM_CLASS,
@@ -102,11 +101,12 @@ const BotSettingsDialog = ({
 	workingKind,
 	className,
 }: BotSettingsDialogProps) => {
+	const { t } = useTranslation("bots")
 	const [internalConfirming, setInternalConfirming] = useState(false)
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const isConfirming = confirmingDelete ?? internalConfirming
-	const botName = value.name.trim() || UNNAMED_BOT
+	const botName = value.name.trim() || t("dialog.untitled")
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
@@ -140,7 +140,9 @@ const BotSettingsDialog = ({
 							aria-hidden="true"
 							className="size-3.5 shrink-0 text-muted-foreground"
 						/>
-						<span className="shrink-0 text-muted-foreground">Settings</span>
+						<span className="shrink-0 text-muted-foreground">
+							{t("dialog.breadcrumb")}
+						</span>
 					</Title>
 				</header>
 
@@ -154,25 +156,25 @@ const BotSettingsDialog = ({
 						<SettingsRailItem
 							icon={Icons.Settings}
 							iconsOnly={iconsOnly}
-							label="General"
+							label={t("dialog.tab.general")}
 							value={FIRST_TAB}
 						/>
 						<SettingsRailItem
 							icon={Icons.Image}
 							iconsOnly={iconsOnly}
-							label="Appearance"
+							label={t("dialog.tab.appearance")}
 							value="appearance"
 						/>
 						<SettingsRailItem
 							icon={Icons.Docs}
 							iconsOnly={iconsOnly}
-							label="Instructions"
+							label={t("dialog.tab.instructions")}
 							value="instructions"
 						/>
 						<SettingsRailItem
 							icon={Icons.Terminal}
 							iconsOnly={iconsOnly}
-							label="Runtime"
+							label={t("dialog.tab.runtime")}
 							value="runtime"
 						/>
 						<SettingsRailSeparator />
@@ -180,7 +182,7 @@ const BotSettingsDialog = ({
 							className={DANGER_RAIL_ITEM_CLASS}
 							icon={Icons.Alert}
 							iconsOnly={iconsOnly}
-							label="Danger zone"
+							label={t("dialog.tab.danger")}
 							value={DANGER_TAB}
 						/>
 					</SettingsRail>
@@ -190,15 +192,15 @@ const BotSettingsDialog = ({
 						value={FIRST_TAB}
 					>
 						<SettingsField
-							label="Name"
+							label={t("dialog.name.label")}
 							onValueChange={(name) => patch({ name })}
-							placeholder="No name"
+							placeholder={t("dialog.name.placeholder")}
 							value={value.name}
 						/>
 						<SettingsField
-							label="Title"
+							label={t("dialog.title.label")}
 							onValueChange={(title) => patch({ title })}
-							placeholder="Short role label"
+							placeholder={t("dialog.title.placeholder")}
 							value={value.title}
 						/>
 					</Tabs.Panel>
@@ -220,9 +222,9 @@ const BotSettingsDialog = ({
 					<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
 						<SettingsField
 							fill
-							label="Instructions"
+							label={t("dialog.instructions.label")}
 							onValueChange={(instructions) => patch({ instructions })}
-							placeholder="The system prompt this bot always runs with"
+							placeholder={t("dialog.instructions.placeholder")}
 							value={value.instructions}
 						/>
 					</Tabs.Panel>

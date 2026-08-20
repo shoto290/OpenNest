@@ -12,6 +12,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -363,12 +364,13 @@ function ResourceRowBase({
 	const menuRef = useRef<HTMLDivElement>(null)
 	const skipRenameBlurRef = useRef(false)
 	const draggedRef = useRef(false)
+	const { t } = useTranslation("bots")
 	const [draft, setDraft] = useState(row.item.label)
 	const [isMenuMounted, setIsMenuMounted] = useState(false)
 	const itemId = row.item.id
 	const acceptsChildren = canContain(row.item)
 	const hasMenu = !isReadOnly && !renaming && !row.item.disabled
-	const menuLabel = `Actions for ${row.item.label}`
+	const menuLabel = t("resources.actions", { name: row.item.label })
 
 	if (menuOpen && !isMenuMounted) setIsMenuMounted(true)
 
@@ -499,7 +501,7 @@ function ResourceRowBase({
 					ref={inputRef}
 					data-slot="ai-sidebar-rename-input"
 					value={draft}
-					aria-label={`Rename ${row.item.label}`}
+					aria-label={t("resources.rename", { name: row.item.label })}
 					onChange={(event) => setDraft(event.target.value)}
 					draggable={false}
 					onClick={(event) => event.stopPropagation()}
@@ -574,9 +576,10 @@ export function AISidebar({
 	renderIcon,
 	renderMenu,
 	isReadOnly = false,
-	ariaLabel = "Resources",
+	ariaLabel,
 	className,
 }: AISidebarProps) {
+	const { t } = useTranslation("bots")
 	const [internalItems, setInternalItems] = useState(items ?? defaultItems)
 	const [internalActiveId, setInternalActiveId] = useState(defaultActiveId)
 	const [expandedIds, setExpandedIds] = useState(
@@ -630,7 +633,7 @@ export function AISidebar({
 	const performMove = useCallback(
 		async (move: SidebarResourceMove) => {
 			if (movePendingRef.current) {
-				setAnnouncement("Wait for the current move to finish.")
+				setAnnouncement(t("resources.move.busy"))
 				return
 			}
 			const before = renderedItems
@@ -643,23 +646,32 @@ export function AISidebar({
 			setDraggingId(null)
 			const moved = findResource(before, move.itemId)
 			const target = move.targetId ? findResource(before, move.targetId) : null
+			const movedLabel = moved?.label ?? t("resources.item")
 			setAnnouncement(
 				target
-					? `Moved ${moved?.label ?? "item"} ${move.position} ${target.label}.`
-					: `Moved ${moved?.label ?? "item"} to the top level.`,
+					? t("resources.move.done", {
+							name: movedLabel,
+							position: t(`resources.position.${move.position}`),
+							target: target.label,
+						})
+					: t("resources.move.doneAtTopLevel", { name: movedLabel }),
 			)
 
 			try {
 				await onMove?.(move)
 			} catch (error) {
 				updateItems(before)
-				setAnnouncement(`Move failed. ${moved?.label ?? "Item"} was restored.`)
+				setAnnouncement(
+					t("resources.move.failed", {
+						name: moved?.label ?? t("resources.itemLead"),
+					}),
+				)
 				onMoveError?.(error, move)
 			} finally {
 				movePendingRef.current = false
 			}
 		},
-		[onMove, onMoveError, renderedItems, updateDropTarget, updateItems],
+		[onMove, onMoveError, renderedItems, t, updateDropTarget, updateItems],
 	)
 
 	const focusRow = useCallback((id: string) => {
@@ -709,10 +721,10 @@ export function AISidebar({
 			updateItems(renameResource(before, item.id, trimmed))
 			void Promise.resolve(onRename?.(item, trimmed)).catch(() => {
 				updateItems(before)
-				setAnnouncement(`Rename failed. ${item.label} was restored.`)
+				setAnnouncement(t("resources.renameFailed", { name: item.label }))
 			})
 		},
-		[onRename, renderedItems, updateItems],
+		[onRename, renderedItems, t, updateItems],
 	)
 
 	const handleMenuOpenChange = useCallback(
@@ -907,7 +919,7 @@ export function AISidebar({
 			<div
 				data-slot="ai-sidebar"
 				role="tree"
-				aria-label={ariaLabel}
+				aria-label={ariaLabel ?? t("resources.label")}
 				aria-multiselectable="false"
 				{...(isReadOnly ? {} : treeDragProps)}
 				className={cn(
