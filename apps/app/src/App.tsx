@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react"
 
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
+import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
@@ -64,7 +65,8 @@ export function App() {
 	// and the window is what has to stay on the view they were reading.
 	useExternalLinks()
 
-	const { bots, selectedBotId, isEditing, isConfirmingDelete } = roster.state
+	const { bots, selectedBotId, isEditing, isConfirmingDelete, hasLoaded } =
+		roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
 
 	useEffect(() => {
@@ -192,7 +194,12 @@ export function App() {
 					/>
 				}
 			>
-				{selected ? (
+				{!hasLoaded ? (
+					// The record is still being read: an empty state here would tell a
+					// reader who owns bots that they own none. The drag region is what
+					// keeps a window with nothing in it movable.
+					<AppBootScreen data-tauri-drag-region="deep" />
+				) : selected ? (
 					<ChatScreen
 						bot={selected}
 						chat={chat}

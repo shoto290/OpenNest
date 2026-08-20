@@ -27,6 +27,12 @@ export type RosterState = {
 	/** A delete waiting to be confirmed. Only ever about the selected bot, because
 	 * asking to delete one is what selects it. */
 	isConfirmingDelete: boolean
+	/** Whether the record has answered the first read. It is what tells a launch
+	 * from a reader who owns no bot: both hold no rows, and only one of them is a
+	 * reader with nothing to show for it. A read the store refused still counts as
+	 * answered — waiting on a record that will never come is worse than showing
+	 * what it failed to give. */
+	hasLoaded: boolean
 }
 
 export type RosterController = {
@@ -65,6 +71,7 @@ export const initialRosterState: RosterState = {
 	selectedBotId: null,
 	isEditing: false,
 	isConfirmingDelete: false,
+	hasLoaded: false,
 }
 
 /** Where the selection lands when a bot is deleted: the row that takes its place,
@@ -210,6 +217,10 @@ export const createRosterController = (
 
 		load: async () => {
 			await reload()
+			// Answered as soon as the rows are in, before their previews: a launch
+			// waiting on every conversation to be read would hold the boot screen up
+			// over a roster that is already there to be read.
+			set({ hasLoaded: true })
 			await readPreviews(state.bots)
 		},
 
