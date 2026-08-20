@@ -825,10 +825,10 @@ async fn a_sidecar_that_exits_on_its_own_spends_its_group_and_stops_tracking_it(
 	harness.submit("meurs").await.expect("prompt accepted");
 	harness.drain_turn().await;
 
-	assert!(
-		!sidecar::live_groups().contains(&pid),
-		"a reaped pid stayed on the list a later sweep signals"
-	);
+	poll_until("the reaped pid to leave the list a later sweep signals", || {
+		!sidecar::live_groups().contains(&pid)
+	})
+	.await;
 	poll_until("the reaping to take the grandchild with it", || !is_alive(orphan)).await;
 
 	tokio::time::timeout(DEADLINE, harness.sidecar.terminate())
