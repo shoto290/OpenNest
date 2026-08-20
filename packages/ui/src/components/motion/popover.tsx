@@ -42,12 +42,12 @@ export type TriggerMode = "click" | "hover"
 
 // This morph needs less bounce than layout motion: too much overshoot makes
 // the liquid neck balloon past the final panel edges.
-const GOO_OPEN_SPRING = {
+const PANEL_OPEN_SPRING = {
 	type: "spring",
 	visualDuration: 0.3,
 	bounce: 0.15,
 } as const
-const GOO_CLOSE_SPRING = {
+const PANEL_CLOSE_SPRING = {
 	type: "spring",
 	visualDuration: 0.21,
 	bounce: 0.15,
@@ -175,37 +175,6 @@ function clipForProgress(geo: Geo, progress: number, supportsShape: boolean) {
 		: insetFor(rect, geo.layerW, geo.layerH)
 }
 
-function roundedRectPath(rect: Rect) {
-	const radius = Math.max(0, Math.min(rect.r, rect.w / 2, rect.h / 2))
-	const n = (value: number) => value.toFixed(3)
-	const x1 = rect.x
-	const y1 = rect.y
-	const x2 = rect.x + rect.w
-	const y2 = rect.y + rect.h
-	const arc = `A${n(radius)} ${n(radius)} 0 0 1`
-
-	// A zero radius makes every arc degenerate to a line, so this also draws
-	// plain rectangles.
-	return (
-		`M${n(x1 + radius)} ${n(y1)}` +
-		`H${n(x2 - radius)}${arc} ${n(x2)} ${n(y1 + radius)}` +
-		`V${n(y2 - radius)}${arc} ${n(x2 - radius)} ${n(y2)}` +
-		`H${n(x1 + radius)}${arc} ${n(x1)} ${n(y2 - radius)}` +
-		`V${n(y1 + radius)}${arc} ${n(x1 + radius)} ${n(y1)}Z`
-	)
-}
-
-// The goo layer is portalled above the page, so its copy of the trigger pill
-// would cover the real trigger's label and focus ring. Punching the trigger
-// back out keeps the real one visible and clips the blur to the layer box.
-// This is a clip path rather than a CSS mask on purpose: WebKit silently
-// ignores `mask: url(#id)` pointing at an SVG <mask> element, which left the
-// label hidden behind the goo in Safari.
-function triggerCutout(geo: Geo) {
-	const layer = { x: 0, y: 0, w: geo.layerW, h: geo.layerH, r: 0 }
-	return `path(evenodd, "${roundedRectPath(layer)} ${roundedRectPath(geo.trigger)}")`
-}
-
 interface PopoverContextValue {
 	open: boolean
 	setOpen: (open: boolean) => void
@@ -217,9 +186,6 @@ interface PopoverContextValue {
 	align: Align
 	gap: number
 	panelRadius: number
-	gooStrength: number
-	reduce: boolean
-	gooId: string
 	contentId: string
 	progress: MotionValue<number>
 	triggerRef: React.MutableRefObject<HTMLElement | null>
@@ -247,12 +213,10 @@ export interface PopoverProps {
 	side?: Side
 	/** Alignment along the trigger's edge. Default "center". */
 	align?: Align
-	/** Gap between trigger and panel, in px — the length of the gooey neck. Default 14. */
+	/** Gap between trigger and panel, in px. Default 14. */
 	sideOffset?: number
 	/** Corner radius of the open panel, in px. Default 16. */
 	panelRadius?: number
-	/** Blur radius feeding the goo filter — higher melts more. Default 8. */
-	gooStrength?: number
 	className?: string
 }
 
@@ -266,11 +230,9 @@ export function Popover({
 	align = "center",
 	sideOffset = 14,
 	panelRadius = 16,
-	gooStrength = 8,
 	className,
 }: PopoverProps) {
 	const reduce = useReducedMotion() ?? false
-	const gooId = useId().replace(/:/g, "")
 	const contentId = useId()
 	const rootRef = useRef<HTMLDivElement>(null)
 	const triggerRef = useRef<HTMLElement | null>(null)
@@ -312,11 +274,16 @@ export function Popover({
 
 	useEffect(() => () => cancelClose(), [cancelClose])
 
+	// A closed popover that has never opened is already at rest, and a host can
+	// render one per row — springing 0 to 0 on every one of them would light the
+	// frame loop up for nothing.
 	useEffect(() => {
+		const target = open ? 1 : 0
+		if (progress.get() === target) return
 		const animation = animate(
 			progress,
-			open ? 1 : 0,
-			reduce ? { duration: 0 } : open ? GOO_OPEN_SPRING : GOO_CLOSE_SPRING,
+			target,
+			reduce ? { duration: 0 } : open ? PANEL_OPEN_SPRING : PANEL_CLOSE_SPRING,
 		)
 		return () => animation.stop()
 	}, [open, progress, reduce])
@@ -356,9 +323,6 @@ export function Popover({
 			align,
 			gap: sideOffset,
 			panelRadius,
-			gooStrength,
-			reduce,
-			gooId,
 			contentId,
 			progress,
 			triggerRef,
@@ -375,9 +339,6 @@ export function Popover({
 			align,
 			sideOffset,
 			panelRadius,
-			gooStrength,
-			reduce,
-			gooId,
 			contentId,
 			progress,
 		],
@@ -481,7 +442,7 @@ export function PopoverTrigger({ children }: PopoverTriggerProps) {
 		ref: mergeRefs(childRef, (node: HTMLElement | null) => {
 			ctx.triggerRef.current = node
 		}),
-		// Above the goo layer (z-[-1]) so the neck reads behind it.
+		// Above the panel body (z-[-1]) so the trigger reads in front of it.
 		className: cn("relative z-0", childProps.className as string | undefined),
 		"aria-haspopup": "dialog",
 		"aria-expanded": ctx.open,
@@ -515,9 +476,6 @@ export function PopoverContent({
 		align,
 		gap,
 		panelRadius,
-		gooStrength,
-		reduce,
-		gooId,
 		contentId,
 		progress,
 		triggerRef,
@@ -553,8 +511,8 @@ export function PopoverContent({
 		[layout, side, align, gap, panelRadius],
 	)
 
-	// Morph the same clip on the goo body and the content, so the whole popover
-	// oozes as one and the text reveals with it.
+	// Morph the same clip on the panel body and the content, so the whole
+	// popover opens as one and the text reveals with it.
 	const render = useCallback((g: Geo | null, p: number) => {
 		if (!g || g.layerW === 0) return
 		const clip = clipForProgress(g, p, supportsShapeRef.current)
@@ -591,32 +549,9 @@ export function PopoverContent({
 				transform: `translate3d(${layout?.trigger.left ?? 0}px, ${layout?.trigger.top ?? 0}px, 0)`,
 			}}
 		>
-			{/* Goo filter: blur, sharpen the alpha back into solid shapes, then lay
-          the crisp original on top so blobs merge with liquid edges. */}
-			<svg aria-hidden width="0" height="0" className="absolute">
-				<title>Popover visual effects</title>
-				<defs>
-					<filter id={gooId} x="-50%" y="-50%" width="200%" height="200%">
-						<feGaussianBlur
-							in="SourceGraphic"
-							stdDeviation={gooStrength}
-							result="blur"
-						/>
-						<feColorMatrix
-							in="blur"
-							mode="matrix"
-							values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10"
-							result="goo"
-						/>
-						<feComposite in="SourceGraphic" in2="goo" operator="atop" />
-					</filter>
-				</defs>
-			</svg>
-
-			{/* Goo body: static trigger pill + morphing blob. The elevation rides on
-          the wrapper as a drop-shadow, because the layer under it is clipped —
-          a box-shadow would be cut away with the clip, and one drawn inside the
-          goo filter would be hardened into a slab by its alpha matrix. */}
+			{/* The panel body, morphing out of the trigger under the content. The
+          elevation rides on the wrapper as a drop-shadow, because the layer
+          under it is clipped and a box-shadow would be cut away with it. */}
 			<div
 				aria-hidden
 				className={cn(
@@ -631,30 +566,12 @@ export function PopoverContent({
 				}}
 			>
 				<div
-					className="absolute inset-0"
+					ref={blobRef}
+					className="absolute inset-0 bg-popover"
 					style={{
-						filter: reduce ? undefined : `url(#${gooId})`,
-						clipPath: triggerCutout(geo),
+						clipPath: clipForProgress(geo, progress.get(), false),
 					}}
-				>
-					<div
-						className="absolute bg-popover"
-						style={{
-							left: geo.trigger.x,
-							top: geo.trigger.y,
-							width: geo.trigger.w,
-							height: geo.trigger.h,
-							borderRadius: geo.trigger.r,
-						}}
-					/>
-					<div
-						ref={blobRef}
-						className="absolute inset-0 bg-popover"
-						style={{
-							clipPath: clipForProgress(geo, progress.get(), false),
-						}}
-					/>
-				</div>
+				/>
 			</div>
 
 			{/* Content is clipped by the same morph. The portal wrapper stays

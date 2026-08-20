@@ -1,7 +1,7 @@
 "use client"
 // beui.dev/components/motion/context-menu
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
 import {
 	cloneElement,
 	createContext,
@@ -24,7 +24,7 @@ import {
 import { createPortal } from "react-dom"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { EASE_OUT, SPRING_PANEL } from "@workspace/ui/lib/ease"
+import { EASE_OUT } from "@workspace/ui/lib/ease"
 import {
 	holdSelection,
 	TOUCH_GESTURE_CONTENT_CLASS,
@@ -89,15 +89,16 @@ function clamp(value: number, min: number, max: number) {
 	return Math.min(Math.max(value, min), max)
 }
 
+// Collapses to a zero-area rect at the press point, so the closed menu leaves
+// nothing behind — the clip is the whole show/hide, there is no fade under it.
 function collapsedClip(
 	origin: MenuPoint,
 	size: { width: number; height: number },
 ) {
-	const half = 8
-	const top = clamp(origin.y - half, 0, size.height)
-	const right = clamp(size.width - origin.x - half, 0, size.width)
-	const bottom = clamp(size.height - origin.y - half, 0, size.height)
-	const left = clamp(origin.x - half, 0, size.width)
+	const top = clamp(origin.y, 0, size.height)
+	const right = clamp(size.width - origin.x, 0, size.width)
+	const bottom = clamp(size.height - origin.y, 0, size.height)
+	const left = clamp(origin.x, 0, size.width)
 	return `inset(${top}px ${right}px ${bottom}px ${left}px round 10px)`
 }
 
@@ -483,19 +484,34 @@ export function ContextMenuContent({
 
 	if (!mounted) return null
 
-	const visualOpen = context.open && morphReady
+	// A closed menu always targets the collapsed clip: reduced motion and the
+	// keyboard skip the morph on the way in, they do not keep the menu open.
+	const shown =
+		context.open &&
+		(context.reduce || context.modality === "keyboard" || morphReady)
 	const clipHidden = collapsedClip(origin, size)
 	const clipShown = "inset(0px 0px 0px 0px round 12px)"
 
 	return createPortal(
+		// The portal stays mounted so the menu can be measured before it opens, and
+		// the clip alone cannot hide it — an unmeasured collapsed clip is the whole
+		// box. A `visibility` transition holds `visible` for its whole duration, so
+		// the menu only leaves the page once it has finished shrinking back to the
+		// press point. Opening zeroes it to show the menu at once.
 		<div
 			data-context-menu-portal=""
 			aria-hidden={!context.open}
 			inert={!context.open}
-			style={{ left: position.x, top: position.y }}
+			style={{
+				left: position.x,
+				top: position.y,
+				transitionDuration: context.open ? "0s" : `${MORPH_DURATION}s`,
+			}}
 			className={cn(
-				"fixed z-[100] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.2))]",
-				context.open ? "pointer-events-auto" : "pointer-events-none",
+				"fixed z-[100] transition-[visibility] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.2))]",
+				context.open
+					? "pointer-events-auto visible"
+					: "pointer-events-none invisible",
 			)}
 		>
 			<motion.div
@@ -507,11 +523,7 @@ export function ContextMenuContent({
 				tabIndex={-1}
 				initial={false}
 				animate={{
-					opacity: visualOpen ? 1 : 0,
-					clipPath:
-						context.reduce || context.modality === "keyboard" || visualOpen
-							? clipShown
-							: clipHidden,
+					clipPath: shown ? clipShown : clipHidden,
 				}}
 				transition={
 					context.modality === "keyboard"
@@ -520,10 +532,6 @@ export function ContextMenuContent({
 							? { duration: 0.1, ease: EASE_OUT }
 							: {
 									clipPath: {
-										duration: MORPH_DURATION,
-										ease: EASE_OUT,
-									},
-									opacity: {
 										duration: MORPH_DURATION,
 										ease: EASE_OUT,
 									},
@@ -644,7 +652,6 @@ export function ContextMenuCheckboxItem({
 	children,
 	...props
 }: ContextMenuCheckboxItemProps) {
-	const context = useContextMenuContext("ContextMenuCheckboxItem")
 	return (
 		<ContextMenuItemBase
 			{...props}
@@ -653,23 +660,13 @@ export function ContextMenuCheckboxItem({
 			onSelect={() => onCheckedChange?.(!checked)}
 		>
 			<span className="flex h-4 w-4 shrink-0 items-center justify-center">
-				<AnimatePresence initial={false}>
-					{checked ? (
-						<motion.span
-							key="check"
-							initial={context.reduce ? false : { opacity: 0, scale: 0.75 }}
-							animate={{ opacity: 1, scale: 1 }}
-							exit={{ opacity: 0, scale: context.reduce ? 1 : 0.75 }}
-							transition={context.reduce ? { duration: 0.08 } : SPRING_PANEL}
-						>
-							<Icons.Check
-								aria-hidden="true"
-								className="h-3.5 w-3.5"
-								strokeWidth={2.4}
-							/>
-						</motion.span>
-					) : null}
-				</AnimatePresence>
+				{checked ? (
+					<Icons.Check
+						aria-hidden="true"
+						className="h-3.5 w-3.5"
+						strokeWidth={2.4}
+					/>
+				) : null}
 			</span>
 			{children}
 		</ContextMenuItemBase>
@@ -735,7 +732,7 @@ export function ContextMenuRadioItem({
 			<span className="flex h-4 w-4 shrink-0 items-center justify-center">
 				<span
 					className={cn(
-						"h-1.5 w-1.5 rounded-full bg-current transition-opacity",
+						"h-1.5 w-1.5 rounded-full bg-current",
 						checked ? "opacity-100" : "opacity-0",
 					)}
 				/>

@@ -19,13 +19,14 @@ import {
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
-import { ActionSwapIcon } from "@workspace/ui/components/motion/action-swap"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 /** Matches `leading-6` on the textarea and its measurement mirrors. */
 const LINE_HEIGHT = 24
-/** Matches `py-1.5` on the textarea. */
-const PADDING_Y = 12
+/** Matches `py-1` on the textarea, which makes one row exactly as tall as the send
+ * button beside it — any taller and the row centres the button, pushing it off the
+ * even inset the composer's padding gives it. */
+const PADDING_Y = 8
 /** Typography the mirrors share with the textarea, so both measure what it renders. */
 const MIRROR =
 	"pointer-events-none invisible absolute top-0 left-0 px-2 text-sm leading-6"
@@ -237,7 +238,7 @@ export function PromptInput({
 			onDragEnd={() => setIsDragOver(false)}
 			onDrop={handleDrop}
 			className={cn(
-				"flex w-full flex-wrap items-center gap-1 border border-border bg-background p-2 transition-[background-color,border-color,border-radius,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 motion-reduce:transition-none",
+				"flex w-full flex-wrap items-center gap-1 border border-border bg-background p-2 transition-[border-radius] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 motion-reduce:transition-none",
 				isExpanded ? "rounded-3xl" : "rounded-full",
 				isDropTarget && "border-primary bg-primary/10",
 				disabled && "opacity-50",
@@ -286,7 +287,7 @@ export function PromptInput({
 					onChange={(event) => setValue(event.target.value)}
 					onKeyDown={handleKeyDown}
 					onPaste={handlePaste}
-					className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+					className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
 				/>
 			</div>
 
@@ -307,13 +308,7 @@ export function PromptInput({
 							onClick={loading ? onStop : undefined}
 							className="rounded-full"
 						>
-							<ActionSwapIcon
-								value={loading ? "stop" : "send"}
-								animation="roll"
-								className="size-4"
-							>
-								{loading ? <Icons.Stop /> : <Icons.Send />}
-							</ActionSwapIcon>
+							{loading ? <Icons.Stop /> : <Icons.Send />}
 						</Button>
 					) : null}
 				</div>

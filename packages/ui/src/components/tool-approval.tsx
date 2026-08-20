@@ -1,7 +1,7 @@
 "use client"
 // Adapted from beui.dev/components/agents/tool-approval
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useId, useState } from "react"
 
 import {
@@ -206,26 +206,23 @@ export function ToolApproval({
 				</dl>
 			</AgentDisclosure>
 
-			<AnimatePresence initial={false}>
-				{status === "pending" ? (
-					<motion.div
-						initial={reduce ? { opacity: 0 } : { opacity: 0, y: 4 }}
-						animate={{ opacity: 1, y: 0 }}
-						exit={{ opacity: 0 }}
-						transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE_OUT }}
-						className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3"
-					>
-						<Button size="sm" onClick={onAllowOnce}>
-							<Icons.Success data-icon="inline-start" />
-							Allow once
-						</Button>
-						<Button variant="outline" size="sm" onClick={onDeny}>
-							<Icons.Close data-icon="inline-start" />
-							Deny
-						</Button>
-					</motion.div>
-				) : null}
-			</AnimatePresence>
+			{status === "pending" ? (
+				<motion.div
+					initial={reduce ? false : { y: 4 }}
+					animate={{ y: 0 }}
+					transition={{ duration: 0.22, ease: EASE_OUT }}
+					className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3"
+				>
+					<Button size="sm" onClick={onAllowOnce}>
+						<Icons.Success data-icon="inline-start" />
+						Allow once
+					</Button>
+					<Button variant="outline" size="sm" onClick={onDeny}>
+						<Icons.Close data-icon="inline-start" />
+						Deny
+					</Button>
+				</motion.div>
+			) : null}
 		</div>
 	)
 }

@@ -22,7 +22,6 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
-	useId,
 	useMemo,
 	useRef,
 	useState,
@@ -35,7 +34,6 @@ import {
 	EASE_DRAWER,
 	EASE_OUT,
 	SPRING_LAYOUT,
-	SPRING_PRESS,
 	TRANSITION_NONE,
 	TWEEN_REDUCED,
 } from "@workspace/ui/lib/ease"
@@ -65,20 +63,8 @@ const SIDEBAR_MORPH_TRANSITION = {
 	mass: 0.75,
 } as const
 
-const LABEL_ENTER_TRANSITION = {
-	duration: 0.2,
-	delay: 0.08,
-	ease: EASE_OUT,
-} as const
-
-const LABEL_EXIT_TRANSITION = {
-	duration: 0.12,
-	ease: EASE_OUT,
-} as const
-
 const SUBMENU_VARIANTS: Variants = {
 	closed: {
-		opacity: 0,
 		clipPath: "inset(0 0 100% 0 round 8px)",
 		transition: {
 			duration: 0.14,
@@ -88,7 +74,6 @@ const SUBMENU_VARIANTS: Variants = {
 		},
 	},
 	open: {
-		opacity: 1,
 		clipPath: "inset(0 0 0% 0 round 8px)",
 		transition: {
 			duration: 0.2,
@@ -101,11 +86,9 @@ const SUBMENU_VARIANTS: Variants = {
 
 const SUBMENU_ITEM_VARIANTS: Variants = {
 	closed: {
-		opacity: 0,
 		y: -6,
 	},
 	open: {
-		opacity: 1,
 		y: 0,
 		transition: { duration: 0.18, ease: EASE_OUT },
 	},
@@ -124,7 +107,6 @@ const useIsMobile = () => useMediaQuery(MOBILE_QUERY)
 
 interface AnimatedSidebarContextValue {
 	isMobile: boolean
-	layoutId: string
 	open: boolean
 	openMobile: boolean
 	reduce: boolean
@@ -211,7 +193,6 @@ export function AnimatedSidebarProvider({
 		useState(defaultOpenMobile)
 	const isMobile = useIsMobile()
 	const reduce = useReducedMotion() ?? false
-	const generatedId = useId()
 	const triggerRef = useRef<HTMLButtonElement>(null)
 	const desktopOpen = open ?? internalOpen
 	const mobileOpen = openMobile ?? internalOpenMobile
@@ -260,7 +241,6 @@ export function AnimatedSidebarProvider({
 	const contextValue = useMemo<AnimatedSidebarContextValue>(
 		() => ({
 			isMobile,
-			layoutId: `${generatedId}-active`,
 			open: desktopOpen,
 			openMobile: mobileOpen,
 			reduce,
@@ -272,7 +252,6 @@ export function AnimatedSidebarProvider({
 		}),
 		[
 			desktopOpen,
-			generatedId,
 			isMobile,
 			mobileOpen,
 			reduce,
@@ -408,8 +387,8 @@ function MobileSidebar({
 
 	return createPortal(
 		// A `visibility` transition holds `visible` for its whole duration, so the
-		// layer only leaves the accessibility tree once the drawer and the scrim
-		// have finished animating out. Opening zeroes it to show them at once.
+		// layer only leaves the accessibility tree once the drawer has finished
+		// animating out. Opening zeroes it to show it at once.
 		<div
 			data-slot="sidebar-mobile-layer"
 			style={{
@@ -422,13 +401,10 @@ function MobileSidebar({
 				context.openMobile ? "visible" : "invisible",
 			)}
 		>
-			<motion.button
+			<button
 				type="button"
 				aria-label="Close sidebar"
 				tabIndex={context.openMobile ? 0 : -1}
-				initial={false}
-				animate={{ opacity: context.openMobile ? 1 : 0 }}
-				transition={drawerTransition}
 				onClick={() => context.setOpenMobile(false)}
 				data-slot="sidebar-mobile-overlay"
 				className={cn(
@@ -452,7 +428,6 @@ function MobileSidebar({
 				data-side={side}
 				initial={false}
 				animate={{
-					opacity: context.reduce ? (context.openMobile ? 1 : 0) : 1,
 					x: drawerOffset({
 						open: context.openMobile,
 						reduce: context.reduce,
@@ -573,7 +548,6 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 				<motion.div
 					initial={false}
 					animate={{
-						opacity: offcanvas ? 0 : 1,
 						x: offcanvas ? (side === "left" ? "-100%" : "100%") : "0%",
 					}}
 					transition={context.reduce ? TRANSITION_NONE : PANEL_TRANSITION}
@@ -816,8 +790,8 @@ export const AnimatedSidebarGroupLabel = forwardRef<
 			aria-hidden={collapsed}
 			data-slot="sidebar-group-label"
 			className={cn(
-				"mb-1 h-7 overflow-hidden px-2 font-medium text-[10px] text-sidebar-foreground/70 uppercase tracking-[0.14em] transition-opacity",
-				collapsed ? "mb-0 h-0 w-0 px-0 opacity-0" : "opacity-100",
+				"mb-1 h-7 overflow-hidden px-2 font-medium text-[10px] text-sidebar-foreground/70 uppercase tracking-[0.14em]",
+				collapsed && "mb-0 h-0 w-0 px-0",
 				className,
 			)}
 		>
@@ -914,12 +888,9 @@ export const AnimatedSidebarMenuSub = forwardRef<
 					ref={forwardedRef}
 					key="sidebar-submenu"
 					variants={context.reduce ? undefined : SUBMENU_VARIANTS}
-					initial={context.reduce ? false : "closed"}
-					animate={context.reduce ? { opacity: 1 } : "open"}
-					exit={context.reduce ? { opacity: 0 } : "closed"}
-					// Reduced motion already enters instantly; the exit has to match, or
-					// the closing submenu lingers half-transparent and unreadable.
-					transition={context.reduce ? { duration: 0 } : undefined}
+					initial="closed"
+					animate="open"
+					exit="closed"
 					data-slot="sidebar-menu-sub"
 					className={cn(
 						"relative mt-1 ml-5 flex min-w-0 flex-col gap-0.5 border-sidebar-border border-l pl-3",
@@ -1014,7 +985,7 @@ export function AnimatedSidebarMenuSubButton({
 	)
 
 	return href ? (
-		<motion.a
+		<a
 			href={href}
 			target={target}
 			rel={rel ?? (target === "_blank" ? "noreferrer noopener" : undefined)}
@@ -1023,25 +994,21 @@ export function AnimatedSidebarMenuSubButton({
 			tabIndex={disabled ? -1 : undefined}
 			data-slot="sidebar-menu-sub-button"
 			onClick={select}
-			whileTap={context.reduce || disabled ? undefined : { scale: 0.98 }}
-			transition={SPRING_PRESS}
 			className={interactiveClassName}
 		>
 			{content}
-		</motion.a>
+		</a>
 	) : (
-		<motion.button
+		<button
 			type="button"
 			disabled={disabled}
 			aria-current={isActive ? "page" : undefined}
 			data-slot="sidebar-menu-sub-button"
 			onClick={select}
-			whileTap={context.reduce || disabled ? undefined : { scale: 0.98 }}
-			transition={SPRING_PRESS}
 			className={interactiveClassName}
 		>
 			{content}
-		</motion.button>
+		</button>
 	)
 }
 
@@ -1085,9 +1052,10 @@ export interface AnimatedSidebarMenuButtonProps extends MenuButtonElementProps {
 }
 
 /**
- * A top-level row. The active pill is a shared layout element, so moving the
- * active row glides the pill instead of cross-fading two backgrounds. String
- * children double as the accessible name once the panel collapses to icons.
+ * A top-level row. The active row carries its own background, so selecting
+ * another one swaps the highlight outright rather than gliding it across.
+ * String children double as the accessible name once the panel collapses to
+ * icons.
  */
 export function AnimatedSidebarMenuButton({
 	children,
@@ -1125,13 +1093,6 @@ export function AnimatedSidebarMenuButton({
 
 	const content = (
 		<>
-			{isActive ? (
-				<motion.span
-					layoutId={context.layoutId}
-					transition={context.reduce ? { duration: 0 } : SPRING_LAYOUT}
-					className="absolute inset-0 rounded-xl bg-sidebar-accent"
-				/>
-			) : null}
 			{icon ? (
 				<span
 					aria-hidden={isIconDecorative || undefined}
@@ -1140,19 +1101,7 @@ export function AnimatedSidebarMenuButton({
 					{icon}
 				</span>
 			) : null}
-			<motion.span
-				initial={false}
-				animate={{
-					opacity: panel.collapsed ? 0 : 1,
-					x: panel.collapsed ? -4 : 0,
-				}}
-				transition={
-					context.reduce
-						? TRANSITION_NONE
-						: panel.collapsed
-							? LABEL_EXIT_TRANSITION
-							: LABEL_ENTER_TRANSITION
-				}
+			<span
 				aria-hidden={panel.collapsed}
 				className={cn(
 					"relative z-10 min-w-0 flex-1 truncate",
@@ -1160,16 +1109,12 @@ export function AnimatedSidebarMenuButton({
 				)}
 			>
 				{children}
-			</motion.span>
+			</span>
 			{ariaExpanded !== undefined ? (
 				<motion.span
 					aria-hidden="true"
 					initial={false}
-					animate={{
-						opacity: panel.collapsed ? 0 : 1,
-						rotate: ariaExpanded ? 90 : 0,
-						x: panel.collapsed ? 4 : 0,
-					}}
+					animate={{ rotate: ariaExpanded ? 90 : 0 }}
 					transition={context.reduce ? { duration: 0 } : SPRING_LAYOUT}
 					className={cn(
 						"relative z-10 grid shrink-0 place-items-center text-sidebar-foreground/70",
@@ -1183,19 +1128,22 @@ export function AnimatedSidebarMenuButton({
 	)
 
 	const interactiveClassName = cn(
-		"relative flex min-h-9 w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-xl px-3 text-left font-medium text-sm outline-none",
+		"relative flex min-h-9 w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-xl text-left font-medium text-sm outline-none",
+		// `(row - glyph) / 2` on the leading edge, as `buttonVariants` explains.
+		"px-3",
+		icon && "pl-2",
 		"text-sidebar-foreground/70",
 		panel.collapsed && "justify-center gap-0 px-0",
 		!disabled &&
 			"hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
 		"focus-visible:bg-sidebar-accent/70 focus-visible:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-		isActive && "text-sidebar-accent-foreground",
+		isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 		disabled && "cursor-not-allowed opacity-40",
 		className,
 	)
 
 	return href ? (
-		<motion.a
+		<a
 			href={href}
 			ref={ref as Ref<HTMLAnchorElement>}
 			target={target}
@@ -1208,15 +1156,13 @@ export function AnimatedSidebarMenuButton({
 			tabIndex={disabled ? -1 : undefined}
 			data-slot="sidebar-menu-button"
 			onClick={select}
-			whileTap={context.reduce || disabled ? undefined : { scale: 0.98 }}
-			transition={SPRING_PRESS}
 			className={interactiveClassName}
 			{...elementProps}
 		>
 			{content}
-		</motion.a>
+		</a>
 	) : (
-		<motion.button
+		<button
 			type="button"
 			ref={ref as Ref<HTMLButtonElement>}
 			disabled={disabled}
@@ -1226,12 +1172,10 @@ export function AnimatedSidebarMenuButton({
 			title={panel.collapsed ? textLabel : undefined}
 			data-slot="sidebar-menu-button"
 			onClick={select}
-			whileTap={context.reduce || disabled ? undefined : { scale: 0.98 }}
-			transition={SPRING_PRESS}
 			className={interactiveClassName}
 			{...elementProps}
 		>
 			{content}
-		</motion.button>
+		</button>
 	)
 }

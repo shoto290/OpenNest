@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { EASE_OUT, SPRING_LAYOUT } from "@workspace/ui/lib/ease"
+import { SPRING_LAYOUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
 import type {
@@ -14,11 +14,17 @@ import type {
 	AgentSearchResult,
 } from "./types"
 
+/** The two row heights this panel draws, each with the inset its own glyph asks
+ * for: `(row - glyph) / 2` leading, and a wider trailing edge because what ends a
+ * row is text. Every row reads from here so they cannot disagree with each other. */
+const ROW_SM = "min-h-7 rounded-md py-1 pr-2.5 pl-1.5"
+const ROW_MD = "min-h-8 rounded-md py-0.5 pr-2.5 pl-2"
+
 function StepRow({ item }: { item: AgentActivityStep }) {
 	const state = item.status ?? "complete"
 
 	return (
-		<div className="flex min-h-7 items-start gap-2.5 rounded-md px-1.5 py-1">
+		<div className={cn("flex items-start gap-2.5", ROW_SM)}>
 			<span
 				aria-hidden="true"
 				className="mt-0.5 grid size-4 shrink-0 place-items-center text-muted-foreground"
@@ -27,11 +33,7 @@ function StepRow({ item }: { item: AgentActivityStep }) {
 					<Icons.Check className="size-4" strokeWidth={1.8} />
 				) : state === "active" ? (
 					<span className="relative grid size-3 place-items-center">
-						<motion.span
-							className="absolute inset-0 rounded-full bg-foreground/10"
-							animate={{ opacity: [0.35, 0.8, 0.35] }}
-							transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
-						/>
+						<span className="absolute inset-0 rounded-full bg-foreground/10" />
 						<span className="size-1.5 rounded-full bg-foreground/60" />
 					</span>
 				) : (
@@ -57,7 +59,7 @@ function StepRow({ item }: { item: AgentActivityStep }) {
 
 function TextRow({ item }: { item: AgentActivityText }) {
 	return (
-		<div className="rounded-md px-1.5 py-1 leading-5 text-muted-foreground">
+		<div className={cn(ROW_SM, "leading-5 text-muted-foreground")}>
 			{item.content}
 		</div>
 	)
@@ -68,7 +70,7 @@ function SearchResultRow({ result }: { result: AgentSearchResult }) {
 		<>
 			<span
 				aria-hidden="true"
-				className="grid size-5 shrink-0 place-items-center text-muted-foreground"
+				className="grid size-4 shrink-0 place-items-center text-muted-foreground"
 			>
 				{result.icon ?? <Icons.Web className="size-3" strokeWidth={2} />}
 			</span>
@@ -83,7 +85,8 @@ function SearchResultRow({ result }: { result: AgentSearchResult }) {
 		</>
 	)
 	const className = cn(
-		"flex min-h-7 items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none transition-colors",
+		ROW_SM,
+		"flex items-center gap-2 text-left outline-none",
 		result.url && "focus-visible:ring-2 focus-visible:ring-ring",
 	)
 
@@ -98,20 +101,21 @@ function SearchResultRow({ result }: { result: AgentSearchResult }) {
 
 function SearchRow({ item }: { item: AgentActivitySearch }) {
 	const reduce = useReducedMotion() ?? false
-	const enter = reduce ? { opacity: 1 } : { opacity: 0, y: 6 }
-	const visible = { opacity: 1, y: 0 }
-	const exit = reduce ? { opacity: 0 } : { opacity: 0, y: -3 }
+	const enter = reduce ? false : { y: 6 }
+	const visible = { y: 0 }
+	const exit = reduce ? undefined : { y: -3 }
 	const transition = reduce
 		? { duration: 0 }
-		: {
-				opacity: { duration: 0.18, ease: EASE_OUT },
-				y: SPRING_LAYOUT,
-				layout: SPRING_LAYOUT,
-			}
+		: { y: SPRING_LAYOUT, layout: SPRING_LAYOUT }
 
 	return (
 		<div className="space-y-0.5">
-			<div className="flex min-h-7 items-center gap-2.5 rounded-md px-1.5 py-1 text-muted-foreground">
+			<div
+				className={cn(
+					"flex items-center gap-2.5 text-muted-foreground",
+					ROW_SM,
+				)}
+			>
 				<Icons.Search
 					aria-hidden="true"
 					className="size-4 shrink-0"
@@ -168,7 +172,7 @@ function ToolRow({ item }: { item: AgentActivityTool }) {
 	const action = item.action.charAt(0).toUpperCase() + item.action.slice(1)
 
 	return (
-		<div className="flex min-h-8 min-w-0 items-center gap-2.5 rounded-md px-1.5 py-0.5 leading-5">
+		<div className={cn("flex min-w-0 items-center gap-2.5 leading-5", ROW_MD)}>
 			<span
 				aria-hidden="true"
 				className="grid size-4 shrink-0 place-items-center text-muted-foreground"
@@ -205,7 +209,12 @@ function TraceIcon({ kind }: { kind: AgentActivityTrace["kind"] }) {
 
 function TraceRow({ item }: { item: AgentActivityTrace }) {
 	return (
-		<div className="grid min-h-8 grid-cols-[1rem_auto_minmax(0,1fr)] items-center gap-2.5 rounded-md px-1.5 py-0.5">
+		<div
+			className={cn(
+				"grid grid-cols-[1rem_auto_minmax(0,1fr)] items-center gap-2.5",
+				ROW_MD,
+			)}
+		>
 			<span
 				aria-hidden="true"
 				className="grid size-4 place-items-center text-muted-foreground"

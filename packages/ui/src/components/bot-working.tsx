@@ -83,7 +83,7 @@ function BotWorking({
 			</SharedMark>
 			<span
 				className={cn(
-					"min-w-0 text-muted-foreground text-sm transition-opacity duration-200",
+					"min-w-0 text-muted-foreground text-sm",
 					pointed ? "opacity-100" : "opacity-0",
 				)}
 			>

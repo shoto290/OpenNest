@@ -53,7 +53,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					'A panel that oozes out of its own trigger: the surface behind both is blurred through an SVG goo filter, so the panel grows a liquid neck on its way out and swallows it on the way back. The panel is portalled to the body at fixed viewport coordinates, which is what lets it escape a sidebar\'s overflow, and it stays mounted-but-`inert` while closed. It anchors, it does not flip — `side` and `align` are honoured literally, so place it yourself rather than expecting collision detection. `role="dialog"` carries no name of its own: always pass `aria-label` to `PopoverContent`. Under reduced motion the goo filter is dropped and the panel simply appears.',
+					"A panel that grows out of its own trigger: one clip path drives both the surface and the content, so the panel unfolds from the trigger's box and folds back into it. The panel is portalled to the body at fixed viewport coordinates, which is what lets it escape a sidebar's overflow, and it stays mounted-but-`inert` while closed. It anchors, it does not flip — `side` and `align` are honoured literally, so place it yourself rather than expecting collision detection. `role=\"dialog\"` carries no name of its own: always pass `aria-label` to `PopoverContent`. Under reduced motion the panel simply appears.",
 			},
 		},
 	},
@@ -70,7 +70,6 @@ const meta = preview.meta({
 		trigger: { control: "inline-radio", options: TRIGGER_MODES },
 		sideOffset: { control: { type: "number", min: 0, step: 2 } },
 		panelRadius: { control: { type: "number", min: 0, step: 2 } },
-		gooStrength: { control: { type: "range", min: 0, max: 20, step: 1 } },
 	},
 })
 
@@ -80,7 +79,7 @@ export const Playground = meta.story({
 		docs: {
 			description: {
 				story:
-					"The knob story: turn `gooStrength` up to see how much of the neck survives between trigger and panel, and `sideOffset` to see how far it has to stretch. Check that the panel opens on the first click and closes on the second — the trigger toggles, it does not only open — and that `onOpenChange` fires once per gesture. Pick `Open` to review the resting shape without driving it.",
+					"The knob story: turn `sideOffset` up to see how far the panel has to travel from its trigger, and `panelRadius` to see how it rounds off when it lands. Check that the panel opens on the first click and closes on the second — the trigger toggles, it does not only open — and that `onOpenChange` fires once per gesture. Pick `Open` to review the resting shape without driving it.",
 			},
 		},
 	},

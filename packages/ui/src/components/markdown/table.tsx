@@ -80,7 +80,7 @@ const VIEWPORT_CLASS =
  * come through a wrapper span, and that span is what the button would then
  * position against instead of the frame. */
 const COPY_CLASS =
-	"absolute top-1.5 right-1.5 bg-foreground/10 text-foreground opacity-0 backdrop-blur-sm hover:bg-foreground/20 focus-visible:opacity-100 group-focus-within/markdown-table:opacity-100 group-hover/markdown-table:opacity-100 motion-reduce:transition-none"
+	"absolute top-1.5 right-1.5 bg-foreground/10 text-foreground opacity-0 hover:bg-foreground/20 focus-visible:opacity-100 group-focus-within/markdown-table:opacity-100 group-hover/markdown-table:opacity-100"
 
 /** A GFM table in a chat bubble: framed so cells read as a grid, scrollable on its
  * own axis, and copyable into a spreadsheet. */

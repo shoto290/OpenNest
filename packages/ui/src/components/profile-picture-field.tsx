@@ -19,6 +19,15 @@ const REMOVE_SIZE = 24
  * half off it. */
 const REMOVE_INSET = (PICTURE_SIZE / 2) * (1 - Math.SQRT1_2) - REMOVE_SIZE / 2
 
+/** Straddling the outline puts half of this badge on a picture the control knows
+ * nothing about, so it may never let that picture through: `secondary` is the one
+ * variant that stays opaque in both themes and under the cursor, where `outline`
+ * goes transparent in the dark theme and again on hover — a cross with a face
+ * showing through it is a cross a reader cannot find. The ring punches the badge
+ * out of the dialog the way the activity dot is punched out of the sidebar, so the
+ * picture's own edge never runs through it. */
+const REMOVE_CLASS = "absolute rounded-full ring-2 ring-popover"
+
 const PICTURE_INPUT_LABEL = "Profile picture file"
 
 /** The picture is the control: a reader drops or pastes onto it, or presses it to
@@ -86,11 +95,11 @@ const ProfilePictureField = ({
 			{image && onRemove ? (
 				<Button
 					aria-label="Remove picture"
-					className="absolute rounded-full text-muted-foreground"
+					className={REMOVE_CLASS}
 					onClick={onRemove}
 					size="icon-xs"
 					style={{ right: REMOVE_INSET, bottom: REMOVE_INSET }}
-					variant="outline"
+					variant="secondary"
 				>
 					<Icons.Close aria-hidden="true" />
 				</Button>

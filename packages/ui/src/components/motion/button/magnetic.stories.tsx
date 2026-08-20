@@ -23,7 +23,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"`MotionButton` wrapped in `Magnetic`, so the button leans toward the cursor on approach and springs back on leave. Every button prop passes straight through — variant, size, `ripple`, `disabled` — and only `strength` and `magneticClassName` are added, the latter for the wrapper rather than the button. The pull is decoration: it is dropped under `prefers-reduced-motion` and on pointers that cannot hover, and the button underneath keeps its own hit area and label either way. Reach for it on the single control a landing surface is built around; two of them on the same screen cancel each other out, and a toolbar of them is unusable. Its pull is gentler than bare `Magnetic` by default — 0.25 against 0.35 — because a control has to stay under the cursor to be clicked.",
+					"`MotionButton` wrapped in `Magnetic`, so the button leans toward the cursor on approach and springs back on leave. Every button prop passes straight through — variant, size, `disabled` — and only `strength` and `magneticClassName` are added, the latter for the wrapper rather than the button. The pull is decoration: it is dropped under `prefers-reduced-motion` and on pointers that cannot hover, and the button underneath keeps its own hit area and label either way. Reach for it on the single control a landing surface is built around; two of them on the same screen cancel each other out, and a toolbar of them is unusable. Its pull is gentler than bare `Magnetic` by default — 0.25 against 0.35 — because a control has to stay under the cursor to be clicked.",
 			},
 		},
 	},

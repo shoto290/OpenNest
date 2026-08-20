@@ -13,6 +13,7 @@ import {
 	SettingsRail,
 	SettingsRailItem,
 } from "@workspace/ui/components/settings-rail"
+import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import { AppearanceFields } from "@workspace/ui/components/user-settings-dialog/appearance-fields"
@@ -77,7 +78,7 @@ const UserSettingsDialog = ({
 					className,
 				)}
 			>
-				<header className="flex shrink-0 items-center gap-2.5 border-border border-b px-5 py-4 pr-14">
+				<header className={SETTINGS_HEADER_CLASS}>
 					<UserAvatar
 						image={value.image}
 						name={displayName}

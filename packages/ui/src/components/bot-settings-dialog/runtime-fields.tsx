@@ -43,7 +43,7 @@ const RuntimeFields = ({
 					<Select.Trigger
 						className={cn(
 							FIELD_CONTROL_CLASS,
-							"flex items-center justify-between gap-2 text-left hover:bg-muted",
+							"flex items-center justify-between gap-2 pr-2.5 text-left hover:bg-muted",
 						)}
 					>
 						<Select.Value
@@ -96,7 +96,7 @@ const RuntimeFields = ({
 					aria-labelledby={`${directoryId}-label ${directoryId}`}
 					className={cn(
 						FIELD_CONTROL_CLASS,
-						"flex items-center gap-2 text-left hover:bg-muted",
+						"flex items-center gap-2 pl-2.5 text-left hover:bg-muted",
 					)}
 					id={directoryId}
 					onClick={onBrowseWorkingDirectory}

@@ -18,13 +18,7 @@ import {
 
 type StoryProps = Pick<
 	ButtonProps,
-	| "variant"
-	| "size"
-	| "children"
-	| "disabled"
-	| "ripple"
-	| "pressScale"
-	| "onClick"
+	"variant" | "size" | "children" | "disabled" | "pressScale" | "onClick"
 >
 
 const BUTTON_VARIANTS = listExhaustively<ButtonVariant>({
@@ -61,7 +55,6 @@ const meta = preview.meta({
 		size: { control: "inline-radio", options: BUTTON_SIZES },
 		children: { control: "text" },
 		disabled: { control: "boolean" },
-		ripple: { control: "boolean" },
 		pressScale: { control: { type: "range", min: 0.8, max: 1, step: 0.01 } },
 	},
 })
@@ -159,18 +152,6 @@ export const States = meta.story({
 	),
 })
 
-export const WithRipple = meta.story({
-	args: { ripple: true, children: "Press anywhere" },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"`ripple` on: a circle spawns from the exact press point and fades outward over 1.6s. Reach for it on a wide target where the press point carries meaning and the scale alone is too subtle to read — a full-width call to action. It is off by default because it costs a clipped, relatively positioned box, and it is skipped under reduced motion. Press near a corner: the ripple must stay inside the pill's radius.",
-			},
-		},
-	},
-})
-
 export const PressScale = meta.story({
 	render: () => (
 		<Row>
@@ -204,7 +185,7 @@ export const AsLink = meta.story({
 		docs: {
 			description: {
 				story:
-					"`ButtonLink` renders the same skin on an anchor, for navigation rather than for an action. Reach for it whenever the control leads somewhere — it keeps the middle-click, the context menu and the status bar preview a `<button>` with an `onClick` would throw away. It takes no `ripple` and no `disabled`: an anchor that leads nowhere should not be rendered.",
+					"`ButtonLink` renders the same skin on an anchor, for navigation rather than for an action. Reach for it whenever the control leads somewhere — it keeps the middle-click, the context menu and the status bar preview a `<button>` with an `onClick` would throw away. It takes no `disabled`: an anchor that leads nowhere should not be rendered.",
 			},
 		},
 	},

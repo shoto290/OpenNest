@@ -4,8 +4,8 @@ import preview from "@workspace/storybook/preview"
 import { listExhaustively } from "@workspace/storybook/story-utils"
 import {
 	ToolResult,
-	ToolResultOutput,
 	type ToolResultKind,
+	ToolResultOutput,
 	type ToolResultProps,
 	type ToolResultStatus,
 } from "@workspace/ui/components/tool-result"

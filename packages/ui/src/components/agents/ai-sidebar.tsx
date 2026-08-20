@@ -15,10 +15,10 @@ import {
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
-	MorphPopover,
-	MorphPopoverContent,
-	MorphPopoverTrigger,
-} from "@workspace/ui/components/motion/popover-morph"
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@workspace/ui/components/motion/popover"
 import { SPRING_LAYOUT, TWEEN_REDUCED } from "@workspace/ui/lib/ease"
 import { useHoverCapable } from "@workspace/ui/lib/hooks/use-hover-capable"
 import { cn } from "@workspace/ui/lib/utils"
@@ -368,6 +368,7 @@ function ResourceRowBase({
 	const itemId = row.item.id
 	const acceptsChildren = canContain(row.item)
 	const hasMenu = !isReadOnly && !renaming && !row.item.disabled
+	const menuLabel = `Actions for ${row.item.label}`
 
 	if (menuOpen && !isMenuMounted) setIsMenuMounted(true)
 
@@ -468,7 +469,7 @@ function ResourceRowBase({
 			onMouseLeave={() => setHovered(false)}
 			{...(isReadOnly ? { draggable: false } : dragProps)}
 			className={cn(
-				"group/resource relative flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 rounded-xl pr-3 text-sm outline-none",
+				"group/resource relative flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 rounded-xl pr-1 text-sm outline-none",
 				"text-muted-foreground",
 				!row.item.disabled &&
 					"hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -483,7 +484,7 @@ function ResourceRowBase({
 					"bg-sidebar-accent text-sidebar-accent-foreground",
 				row.item.disabled && "cursor-not-allowed opacity-45",
 			)}
-			style={{ paddingLeft: `${12 + row.depth * 16}px` }}
+			style={{ paddingLeft: `${8 + row.depth * 16}px` }}
 		>
 			<span
 				aria-hidden="true"
@@ -526,34 +527,32 @@ function ResourceRowBase({
 			)}
 
 			{hasMenu ? (
-				<MorphPopover
+				<Popover
 					open={menuOpen}
 					onOpenChange={(open) => onMenuOpenChange(itemId, open)}
+					side="bottom"
+					align="end"
+					sideOffset={8}
+					panelRadius={12}
 				>
-					<MorphPopoverTrigger>
+					<PopoverTrigger>
 						<button
 							type="button"
 							draggable={false}
 							tabIndex={-1}
-							aria-label={`Actions for ${row.item.label}`}
+							aria-label={menuLabel}
 							onClick={(event) => event.stopPropagation()}
 							className="grid size-7 shrink-0 place-items-center rounded-lg opacity-0 outline-none hover:bg-foreground/5 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/resource:opacity-100 group-data-[menu-open=true]/resource:opacity-100"
 						>
 							<Icons.More aria-hidden="true" className="size-4" />
 						</button>
-					</MorphPopoverTrigger>
+					</PopoverTrigger>
 					{isMenuMounted ? (
-						<MorphPopoverContent
-							side="bottom"
-							align="end"
-							sideOffset={8}
-							radius={12}
-							className="w-40 p-1.5"
-						>
+						<PopoverContent aria-label={menuLabel} className="w-40 p-1.5">
 							<div ref={menuRef}>{menu}</div>
-						</MorphPopoverContent>
+						</PopoverContent>
 					) : null}
-				</MorphPopover>
+				</Popover>
 			) : null}
 		</motion.div>
 	)

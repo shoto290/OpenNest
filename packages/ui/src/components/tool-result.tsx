@@ -17,8 +17,7 @@ import {
 	type AgentCodeLanguage,
 } from "@workspace/ui/components/agents/agent-code"
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
-import { Icons, type IconProps } from "@workspace/ui/components/icons"
-import { ActionSwapRollText } from "@workspace/ui/components/motion/action-swap-roll"
+import { type IconProps, Icons } from "@workspace/ui/components/icons"
 import { SPRING_PRESS, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -78,12 +77,6 @@ const KIND_ICON: Record<ToolResultKind, ComponentType<IconProps>> = {
 	custom: Icons.Tool,
 }
 
-function getSwapKey(value: ReactNode, fallback: string) {
-	return typeof value === "string" || typeof value === "number"
-		? String(value)
-		: fallback
-}
-
 function KindIcon({ kind }: { kind: ToolResultKind }) {
 	const Icon = KIND_ICON[kind]
 	return <Icon aria-hidden="true" className="size-4" />
@@ -127,7 +120,7 @@ function ToolResultAction({
 			onClick={onClick}
 			whileTap={reduce ? undefined : { scale: 0.9 }}
 			transition={SPRING_PRESS}
-			className="grid size-7 place-items-center rounded-md text-foreground/70 outline-none transition-colors hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+			className="grid size-7 place-items-center rounded-md text-foreground/70 outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			{children}
 		</motion.button>
@@ -259,9 +252,7 @@ export function ToolResult({
 					</span>
 					{meta ? (
 						<span className="shrink-0 text-muted-foreground text-xs">
-							<ActionSwapRollText value={getSwapKey(meta, status)}>
-								{meta}
-							</ActionSwapRollText>
+							{meta}
 						</span>
 					) : null}
 					<span className="min-w-0 truncate font-mono text-muted-foreground text-xs">
@@ -275,7 +266,7 @@ export function ToolResult({
 					)}
 				>
 					<StatusIcon status={status} reduce={reduce} />
-					<ActionSwapRollText value={status}>{statusLabel}</ActionSwapRollText>
+					{statusLabel}
 				</span>
 				<motion.span
 					aria-hidden="true"

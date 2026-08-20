@@ -1,21 +1,9 @@
 "use client"
 
-import {
-	AnimatePresence,
-	type HTMLMotionProps,
-	motion,
-	useReducedMotion,
-} from "motion/react"
-import {
-	forwardRef,
-	type PointerEvent,
-	type ReactNode,
-	useCallback,
-	useRef,
-	useState,
-} from "react"
+import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react"
+import { forwardRef, type ReactNode } from "react"
 
-import { EASE_OUT, SPRING_PRESS } from "@workspace/ui/lib/ease"
+import { SPRING_PRESS } from "@workspace/ui/lib/ease"
 import { useHoverCapable } from "@workspace/ui/lib/hooks/use-hover-capable"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -27,8 +15,6 @@ export interface ButtonProps
 	variant?: ButtonVariant
 	size?: ButtonSize
 	pressScale?: number
-	/** Spawn a Material-style ripple from the press point. Off by default. */
-	ripple?: boolean
 	children?: ReactNode
 }
 
@@ -39,8 +25,6 @@ export interface ButtonLinkProps
 	pressScale?: number
 	children?: ReactNode
 }
-
-type Ripple = { id: number; x: number; y: number; size: number }
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
 	primary: "bg-primary text-primary-foreground hover:bg-primary/90",
@@ -63,39 +47,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 			variant = "primary",
 			size = "md",
 			pressScale = 0.93,
-			ripple = false,
 			className,
 			children,
-			onPointerDown,
 			...rest
 		},
 		ref,
 	) {
 		const reduce = useReducedMotion()
 		const canHover = useHoverCapable()
-		const [ripples, setRipples] = useState<Ripple[]>([])
-		const nextId = useRef(0)
-
-		const handlePointerDown = useCallback(
-			(event: PointerEvent<HTMLButtonElement>) => {
-				if (ripple && !reduce) {
-					const rect = event.currentTarget.getBoundingClientRect()
-					const size = Math.max(rect.width, rect.height) * 2
-					const id = nextId.current++
-					setRipples((prev) => [
-						...prev,
-						{
-							id,
-							x: event.clientX - rect.left,
-							y: event.clientY - rect.top,
-							size,
-						},
-					])
-				}
-				onPointerDown?.(event)
-			},
-			[ripple, reduce, onPointerDown],
-		)
 
 		return (
 			<motion.button
@@ -104,45 +63,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 				whileTap={reduce ? undefined : { scale: pressScale }}
 				whileHover={reduce || !canHover ? undefined : { scale: 1.02 }}
 				transition={SPRING_PRESS}
-				onPointerDown={handlePointerDown}
 				className={cn(
 					"inline-flex items-center justify-center font-medium select-none",
-					"transition-colors",
 					"disabled:pointer-events-none disabled:opacity-50",
-					ripple && "relative overflow-hidden",
 					VARIANT_CLASS[variant],
 					SIZE_CLASS[size],
 					className,
 				)}
 				{...rest}
 			>
-				{ripple && !reduce ? (
-					<span className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
-						<AnimatePresence>
-							{ripples.map((r) => (
-								<motion.span
-									key={r.id}
-									className="absolute rounded-full bg-current"
-									style={{
-										left: r.x,
-										top: r.y,
-										width: r.size,
-										height: r.size,
-										x: "-50%",
-										y: "-50%",
-									}}
-									initial={{ scale: 0.05, opacity: 0.3 }}
-									animate={{ scale: 1, opacity: 0 }}
-									exit={{ opacity: 0 }}
-									transition={{ duration: 1.6, ease: EASE_OUT }}
-									onAnimationComplete={() =>
-										setRipples((prev) => prev.filter((x) => x.id !== r.id))
-									}
-								/>
-							))}
-						</AnimatePresence>
-					</span>
-				) : null}
 				{children}
 			</motion.button>
 		)
@@ -172,7 +101,6 @@ export const ButtonLink = forwardRef<HTMLAnchorElement, ButtonLinkProps>(
 				transition={SPRING_PRESS}
 				className={cn(
 					"inline-flex items-center justify-center font-medium select-none",
-					"transition-colors",
 					VARIANT_CLASS[variant],
 					SIZE_CLASS[size],
 					className,

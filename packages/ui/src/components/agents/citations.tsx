@@ -66,7 +66,7 @@ export function Citation({
 			href={`#${citationTargetId(idPrefix, citationId)}`}
 			aria-label={`View citation ${index}`}
 			className={cn(
-				"mx-0.5 inline-flex min-w-4 -translate-y-0.5 items-center justify-center rounded-md bg-muted/60 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground no-underline outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+				"mx-0.5 inline-flex min-w-4 -translate-y-0.5 items-center justify-center rounded-md bg-muted/60 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 				className,
 			)}
 		>
@@ -132,7 +132,7 @@ function CitationRow({
 		<>
 			<CitationMark url={citation.url} />
 			<span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-				<span className="truncate text-sm font-medium text-foreground/80 transition-colors group-hover/citation:text-foreground">
+				<span className="truncate text-sm font-medium text-foreground/80 group-hover/citation:text-foreground">
 					{citation.title}
 				</span>
 				{citation.domain ? (
@@ -146,7 +146,7 @@ function CitationRow({
 					{index}
 				</span>
 				{citation.url ? (
-					<Icons.ExternalLink className="size-3.5 text-muted-foreground/40 transition-colors group-hover/citation:text-muted-foreground" />
+					<Icons.ExternalLink className="size-3.5 text-muted-foreground/40 group-hover/citation:text-muted-foreground" />
 				) : null}
 			</span>
 		</>
@@ -243,7 +243,7 @@ export function Citations({
 				aria-expanded={currentOpen}
 				aria-controls={contentId}
 				onClick={() => setOpen(!currentOpen)}
-				className="group -ml-1 flex min-h-8 items-center gap-2 rounded-lg px-1 text-left text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+				className="group -ml-1 flex min-h-8 items-center gap-2 rounded-lg px-1 text-left text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 			>
 				<Icons.Docs className="size-4" />
 				<span className="font-medium">{title}</span>

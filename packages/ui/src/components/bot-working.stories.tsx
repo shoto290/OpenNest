@@ -2,10 +2,7 @@ import { useState } from "react"
 import { expect, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import {
-	botIdentityAvatars,
-	slotsIn,
-} from "@workspace/storybook/story-utils"
+import { botIdentityAvatars, slotsIn } from "@workspace/storybook/story-utils"
 import type { AgentActivityItem } from "@workspace/ui/components/agent-activity"
 import { AgentActivity } from "@workspace/ui/components/agent-activity"
 import { BLOT_TINTS, BotAvatar } from "@workspace/ui/components/bot-avatar"

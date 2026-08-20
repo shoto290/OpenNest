@@ -1,7 +1,7 @@
 "use client"
 // Adapted from beui.dev/components/agents/streaming-response
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -57,7 +57,7 @@ function ResponseAction({
 			whileTap={reduce ? undefined : { scale: 0.9 }}
 			transition={SPRING_PRESS}
 			className={cn(
-				"grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+				"grid size-7 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 				active && "bg-muted text-foreground",
 			)}
 		>
@@ -133,53 +133,50 @@ export function StreamingResponse({
 				{children}
 			</div>
 
-			<AnimatePresence initial={false}>
-				{shouldShowActions ? (
-					<motion.div
-						initial={reduce ? { opacity: 0 } : { opacity: 0, y: 4 }}
-						animate={{ opacity: 1, y: 0 }}
-						exit={{ opacity: 0 }}
-						transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE_OUT }}
-						className={cn("mt-3 flex items-center gap-0.5", actionsClassName)}
-					>
-						{canCopy ? (
+			{shouldShowActions ? (
+				<motion.div
+					initial={reduce ? false : { y: 4 }}
+					animate={{ y: 0 }}
+					transition={{ duration: 0.22, ease: EASE_OUT }}
+					className={cn("mt-3 flex items-center gap-0.5", actionsClassName)}
+				>
+					{canCopy ? (
+						<ResponseAction
+							label={copied ? "Copied" : "Copy response"}
+							onClick={handleCopy}
+						>
+							{copied ? (
+								<Icons.Success className="size-3.5" />
+							) : (
+								<Icons.Copy className="size-3.5" />
+							)}
+						</ResponseAction>
+					) : null}
+					{onRetry ? (
+						<ResponseAction label="Retry response" onClick={onRetry}>
+							<Icons.Retry className="size-3.5" />
+						</ResponseAction>
+					) : null}
+					{complete ? (
+						<>
 							<ResponseAction
-								label={copied ? "Copied" : "Copy response"}
-								onClick={handleCopy}
+								label="Helpful"
+								active={currentFeedback === "up"}
+								onClick={() => setFeedback("up")}
 							>
-								{copied ? (
-									<Icons.Success className="size-3.5" />
-								) : (
-									<Icons.Copy className="size-3.5" />
-								)}
+								<Icons.ThumbsUp className="size-3.5" />
 							</ResponseAction>
-						) : null}
-						{onRetry ? (
-							<ResponseAction label="Retry response" onClick={onRetry}>
-								<Icons.Retry className="size-3.5" />
+							<ResponseAction
+								label="Not helpful"
+								active={currentFeedback === "down"}
+								onClick={() => setFeedback("down")}
+							>
+								<Icons.ThumbsDown className="size-3.5" />
 							</ResponseAction>
-						) : null}
-						{complete ? (
-							<>
-								<ResponseAction
-									label="Helpful"
-									active={currentFeedback === "up"}
-									onClick={() => setFeedback("up")}
-								>
-									<Icons.ThumbsUp className="size-3.5" />
-								</ResponseAction>
-								<ResponseAction
-									label="Not helpful"
-									active={currentFeedback === "down"}
-									onClick={() => setFeedback("down")}
-								>
-									<Icons.ThumbsDown className="size-3.5" />
-								</ResponseAction>
-							</>
-						) : null}
-					</motion.div>
-				) : null}
-			</AnimatePresence>
+						</>
+					) : null}
+				</motion.div>
+			) : null}
 		</div>
 	)
 }

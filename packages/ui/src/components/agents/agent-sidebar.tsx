@@ -34,7 +34,7 @@ const PANEL_LABEL = "Conversations"
 const CREATE_LABEL = "New bot"
 const EMPTY_LABEL = "No bots yet"
 const WINDOW_CONTROLS_INSET =
-	"h-12 flex-row items-center justify-end px-2 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
+	"h-12 flex-row items-center justify-end px-2.5 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
 
 /** Fixed slots: the avatar box and the timestamp box never resize, so a name,
  * a badge and a timestamp land on the same x on every row. The avatar keeps this
@@ -59,12 +59,6 @@ const PREVIEW_LINE = "h-4 truncate text-muted-foreground text-xs leading-4"
 /** The row is the only trigger the actions have, so it says it carries them
  * and lights up while they are open. */
 const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
-
-/** The mobile drawer opens by transitioning the `visibility` of the layer above
- * this button, and `transition-all` would make the button inherit that
- * transition and stay unfocusable for its whole duration — the drawer moves
- * focus to it the moment it opens, so it transitions colour only. */
-const CREATE_BUTTON = "transition-[color,background-color,box-shadow]"
 
 /** The pinned region under the list is one row: the reader's own chip, then
  * whatever the host pinned beside it. On the rail it drops its side padding and
@@ -165,7 +159,10 @@ const BotRosterRow = ({
 										{bot.title}
 									</span>
 								) : null}
-								<span className={TIMESTAMP_SLOT} data-slot="roster-row-timestamp">
+								<span
+									className={TIMESTAMP_SLOT}
+									data-slot="roster-row-timestamp"
+								>
 									{bot.timestamp}
 								</span>
 							</span>
@@ -239,7 +236,6 @@ const AgentSidebarBase = ({
 				<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET}>
 					<Button
 						aria-label={CREATE_LABEL}
-						className={CREATE_BUTTON}
 						onClick={onCreateBot}
 						size="icon-sm"
 						tooltip={CREATE_LABEL}
