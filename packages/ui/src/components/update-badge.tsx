@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -49,13 +50,6 @@ const BADGE_FRAME = "inline-flex items-center justify-center"
 
 const BADGE_BUTTON = "rounded-full"
 
-const UPDATE_BADGE_LABEL = {
-	available: "Download update",
-	downloading: "Downloading update",
-	ready: "Restart to update",
-	error: "Update failed, download again",
-} satisfies Record<Exclude<UpdateBadgeStatus, "idle">, string>
-
 interface UpdateActionProps {
 	status: Extract<UpdateBadgeStatus, "available" | "downloading" | "error">
 	progress: number
@@ -71,8 +65,9 @@ const UpdateAction = ({
 	onDownload,
 	className,
 }: UpdateActionProps) => {
+	const { t } = useTranslation("common")
 	const isDownloading = status === "downloading"
-	const label = UPDATE_BADGE_LABEL[status]
+	const label = t(`update.badge.${status}`)
 	const button = (
 		<Button
 			data-slot="update-badge"
@@ -107,33 +102,36 @@ const UpdateAction = ({
 	)
 }
 
-/** Names the control, and says in the same breath that following it leaves the
- * window — the glyph alone carries that only for those who can see it. */
-const RELEASE_NOTES_LABEL = "Read the full release notes in your browser"
-
 interface ReleaseNotesLinkProps {
 	href: string
 }
 
 /** The way out of the panel, held at the trailing edge so it never competes
- * with the restart: the summary above is three lines, the changelog is a page. */
-const ReleaseNotesLink = ({ href }: ReleaseNotesLinkProps) => (
-	<Tooltip content={RELEASE_NOTES_LABEL} side="right" wrapperClassName="ml-auto">
-		<a
-			data-slot="update-release-notes"
-			aria-label={RELEASE_NOTES_LABEL}
-			href={href}
-			target="_blank"
-			rel="noreferrer noopener"
-			className={cn(
-				buttonVariants({ variant: "ghost", size: "icon-sm" }),
-				"text-muted-foreground",
-			)}
-		>
-			<Icons.ExternalLink />
-		</a>
-	</Tooltip>
-)
+ * with the restart: the summary above is three lines, the changelog is a page.
+ * Its name says in the same breath that following it leaves the window — the
+ * glyph alone carries that only for those who can see it. */
+const ReleaseNotesLink = ({ href }: ReleaseNotesLinkProps) => {
+	const { t } = useTranslation("common")
+	const label = t("update.panel.releaseNotes")
+
+	return (
+		<Tooltip content={label} side="right" wrapperClassName="ml-auto">
+			<a
+				data-slot="update-release-notes"
+				aria-label={label}
+				href={href}
+				target="_blank"
+				rel="noreferrer noopener"
+				className={cn(
+					buttonVariants({ variant: "ghost", size: "icon-sm" }),
+					"text-muted-foreground",
+				)}
+			>
+				<Icons.ExternalLink />
+			</a>
+		</Tooltip>
+	)
+}
 
 interface UpdateReadyProps {
 	version?: string
@@ -144,9 +142,6 @@ interface UpdateReadyProps {
 	onPostpone?: () => void
 	className?: string
 }
-
-const botsBusyCopy = (count: number) =>
-	`${count} ${count === 1 ? "bot is" : "bots are"} still running. Stop them to restart.`
 
 /** The download landed: the glyph turns into a restart and the panel opens on
  * its own — once. Postponing closes it for good; only a deliberate click on the
@@ -160,8 +155,10 @@ const UpdateReady = ({
 	onPostpone,
 	className,
 }: UpdateReadyProps) => {
+	const { t } = useTranslation("common")
 	const [isOpen, setIsOpen] = useState(true)
 	const isBlocked = activeBotCount > 0
+	const title = t("update.panel.title")
 
 	const postpone = () => {
 		setIsOpen(false)
@@ -180,7 +177,7 @@ const UpdateReady = ({
 				<Button
 					data-slot="update-badge"
 					data-status="ready"
-					aria-label={UPDATE_BADGE_LABEL.ready}
+					aria-label={t("update.badge.ready")}
 					size="icon-sm"
 					variant="default"
 					className={BADGE_BUTTON}
@@ -188,12 +185,14 @@ const UpdateReady = ({
 					<Icons.Restart />
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent aria-label="Update ready">
+			<PopoverContent aria-label={title}>
 				<div data-slot="update-panel" className="flex flex-col gap-3">
 					<div className="flex flex-col gap-1">
-						<p className="font-medium text-sm">Update ready</p>
+						<p className="font-medium text-sm">{title}</p>
 						{version ? (
-							<p className="text-muted-foreground text-xs">Version {version}</p>
+							<p className="text-muted-foreground text-xs">
+								{t("update.panel.version", { version })}
+							</p>
 						) : null}
 					</div>
 					{releaseNotes.length > 0 ? (
@@ -205,17 +204,19 @@ const UpdateReady = ({
 					) : null}
 					{isBlocked ? (
 						<p className="text-amber-600 text-xs dark:text-amber-400">
-							{botsBusyCopy(activeBotCount)}
+							{t("update.panel.botsBusy", { count: activeBotCount })}
 						</p>
 					) : null}
 					<div className="flex items-center gap-2">
 						<Button size="sm" disabled={isBlocked} onClick={onRestart}>
-							Restart now
+							{t("update.panel.restart")}
 						</Button>
 						<Button size="sm" variant="ghost" onClick={postpone}>
-							Later
+							{t("update.panel.postpone")}
 						</Button>
-						{releaseNotesUrl ? <ReleaseNotesLink href={releaseNotesUrl} /> : null}
+						{releaseNotesUrl ? (
+							<ReleaseNotesLink href={releaseNotesUrl} />
+						) : null}
 					</div>
 				</div>
 			</PopoverContent>

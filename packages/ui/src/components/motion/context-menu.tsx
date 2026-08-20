@@ -22,6 +22,7 @@ import {
 	useState,
 } from "react"
 import { createPortal } from "react-dom"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT } from "@workspace/ui/lib/ease"
@@ -343,8 +344,9 @@ export interface ContextMenuContentProps {
 export function ContextMenuContent({
 	children,
 	className,
-	ariaLabel = "Context menu",
+	ariaLabel,
 }: ContextMenuContentProps) {
+	const { t } = useTranslation("common")
 	const context = useContextMenuContext("ContextMenuContent")
 	const [mounted, setMounted] = useState(false)
 	const [position, setPosition] = useState<MenuPoint>(context.point)
@@ -518,7 +520,7 @@ export function ContextMenuContent({
 				ref={context.contentRef}
 				id={context.menuId}
 				role="menu"
-				aria-label={ariaLabel}
+				aria-label={ariaLabel ?? t("contextMenu.label")}
 				data-morph-ready={morphReady ? "true" : "false"}
 				tabIndex={-1}
 				initial={false}
