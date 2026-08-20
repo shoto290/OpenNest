@@ -22,11 +22,18 @@ import {
 const SURFACE_CLASS =
 	"flex h-40 w-72 items-center justify-center rounded-xl border border-border border-dashed bg-card text-muted-foreground text-sm"
 
+/** The a11y pass reads colours straight after the play function, so the fade
+ * has to be over before it runs or it measures a half-transparent menu. */
+const settledMenu = async () => {
+	const menu = await screen.findByRole("menu")
+	await waitFor(() => expect(menu).toBeVisible())
+	await Promise.all(menu.getAnimations().map(({ finished }) => finished))
+	return menu
+}
+
 const openMenuOn = async (target: HTMLElement) => {
 	fireEvent.contextMenu(target, { clientX: 180, clientY: 140 })
-	const menu = await waitFor(() => screen.getByRole("menu"))
-	await waitFor(() => expect(menu).toHaveStyle({ opacity: "1" }))
-	return menu
+	return settledMenu()
 }
 
 const FileMenu = () => (
@@ -260,8 +267,7 @@ export const Keyboard = meta.story({
 		await expect(trigger).toHaveFocus()
 
 		await userEvent.keyboard("{Shift>}{F10}{/Shift}")
-		const menu = await waitFor(() => screen.getByRole("menu"))
-		await waitFor(() => expect(menu).toHaveStyle({ opacity: "1" }))
+		await settledMenu()
 
 		await waitFor(() =>
 			expect(
