@@ -10,6 +10,7 @@ import {
 	type AgentSidebarBot,
 	type AgentSidebarProps,
 	type BotAvatarBlot,
+	type UserChipIdentity,
 } from "@workspace/ui/components/agents/agent-sidebar"
 import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
 import { Button } from "@workspace/ui/components/button"
@@ -194,6 +195,32 @@ const FOOTER_CONTENT = (
 	</Button>
 )
 
+const READER_NAME = "Ada Martin"
+
+const READER: UserChipIdentity = {
+	name: READER_NAME,
+	image: UPLOADED_IMAGE,
+}
+
+/** What the update badge is nearly all the time: a node the host pinned that
+ * draws nothing at all. */
+const SilentSlot = () => null
+
+const SILENT_FOOTER_CONTENT = <SilentSlot />
+
+/** The width the pinned region has to give, once its own padding is taken off —
+ * what the chip covers when nothing else is drawn beside it. */
+const footerRowWidth = (footer: HTMLElement) => {
+	const style = getComputedStyle(footer)
+	return (
+		footer.clientWidth -
+		Number.parseFloat(style.paddingLeft) -
+		Number.parseFloat(style.paddingRight)
+	)
+}
+
+const verticalCentreOf = (box: DOMRect) => box.top + box.height / 2
+
 const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	...bot,
 	title: undefined,
@@ -355,6 +382,7 @@ const meta = preview.meta({
 		onCreateBot: fn(),
 		onEditBot: fn(),
 		onDeleteBot: fn(),
+		onOpenUserSettings: fn(),
 	},
 	argTypes: {
 		selectedBotId: { control: "text" },
@@ -1141,6 +1169,116 @@ export const FooterOnRail = meta.story({
 			.getBoundingClientRect()
 		await expect(buttonBox.left).toBeGreaterThanOrEqual(panelBox.left)
 		await expect(buttonBox.right).toBeLessThanOrEqual(panelBox.right)
+		await expectFooterAtColumnBottom(canvasElement)
+	},
+})
+
+export const WithUser = meta.story({
+	args: { user: READER },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reader themselves, pinned under the list — the only way into their own settings, so a host that has an account to show always hands one down. Check that the chip opens the region with the picture leading and the name beside it, that it covers the whole row since nothing else is drawn there, and that activating it fires the open event once. Pick `WithUserAndFooter` for the same chip sharing the row.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const footer = slotIn(canvasElement, "sidebar-footer")
+		const chip = within(footer).getByRole("button", { name: READER_NAME })
+
+		await expect(chip.getBoundingClientRect().width).toBeCloseTo(
+			footerRowWidth(footer),
+			0,
+		)
+		await expectFooterAtColumnBottom(canvasElement)
+
+		await userEvent.click(chip)
+		await expect(args.onOpenUserSettings).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const WithUserAndFooter = meta.story({
+	args: { user: READER, footer: FOOTER_CONTENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The chip beside what the host pinned next to it — the update badge, in the app. Check that the chip comes first and gives way to the control rather than pushing it off the row: the two share one line, the control keeps its size, and the name is what is clipped. Pick `WithUserAndIdleFooter` for the same pair while the control draws nothing.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const footer = slotIn(canvasElement, "sidebar-footer")
+		const chip = within(footer)
+			.getByRole("button", { name: READER_NAME })
+			.getBoundingClientRect()
+		const pinned = within(footer)
+			.getByRole("button", { name: FOOTER_LABEL })
+			.getBoundingClientRect()
+
+		await expect(chip.right).toBeLessThanOrEqual(pinned.left)
+		await expect(verticalCentreOf(chip)).toBeCloseTo(
+			verticalCentreOf(pinned),
+			0,
+		)
+		await expect(chip.width).toBeLessThan(footerRowWidth(footer))
+	},
+})
+
+export const WithUserAndIdleFooter = meta.story({
+	args: { user: READER, footer: SILENT_FOOTER_CONTENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The state the app is in nearly all the time: the host pinned a node beside the chip and that node draws nothing, since there is no update to install. Check that the row reads exactly as `WithUser` — the chip covers the whole width, with no gap held open beside it for something that is not there. Pick `WithUserAndFooter` for the moment the control does draw.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const footer = slotIn(canvasElement, "sidebar-footer")
+		const chip = within(footer).getByRole("button", { name: READER_NAME })
+
+		await expect(within(footer).getAllByRole("button")).toHaveLength(1)
+		await expect(chip.getBoundingClientRect().width).toBeCloseTo(
+			footerRowWidth(footer),
+			0,
+		)
+	},
+})
+
+export const WithUserOnRail = meta.story({
+	render: renderShell(false),
+	args: { user: READER, footer: FOOTER_CONTENT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The chip and the host's control once the panel collapses to its rail, where a row one avatar wide cannot hold both side by side. Check that they stack with the control above the chip — the chip is the row that is always there, so it stays against the bottom edge — that the picture is drawn alone with the name still naming the button, and that neither is clipped against an edge. `UserChip → OnRail` owns how the picture sits inside the chip; this one owns where the chip sits in the region. Pick `FooterOnRail` for the rail without a reader.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const panel = slotIn(canvasElement, "sidebar-panel")
+		const rail = railWidth()
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(rail, 0)
+		}, FRAME_POLL)
+
+		const footer = slotIn(canvasElement, "sidebar-footer")
+		const chipButton = within(footer).getByRole("button", { name: READER_NAME })
+		const pinned = within(footer)
+			.getByRole("button", { name: FOOTER_LABEL })
+			.getBoundingClientRect()
+		const avatar = slotIn(footer, "user-chip-avatar").getBoundingClientRect()
+
+		await expect(pinned.bottom).toBeLessThanOrEqual(avatar.top)
+		await expect(chipButton).toHaveAttribute("aria-label", READER_NAME)
+
+		const panelBox = panel.getBoundingClientRect()
+		await expect(avatar.left).toBeGreaterThanOrEqual(panelBox.left)
+		await expect(avatar.right).toBeLessThanOrEqual(panelBox.right)
 		await expectFooterAtColumnBottom(canvasElement)
 	},
 })
