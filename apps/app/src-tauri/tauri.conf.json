@@ -13,7 +13,7 @@
 		"security": {
 			"assetProtocol": {
 				"enable": true,
-				"scope": ["$APPDATA/avatars/*"]
+				"scope": ["$APPDATA/avatars/*", "$APPDATA/attachments/**"]
 			}
 		},
 		"windows": [

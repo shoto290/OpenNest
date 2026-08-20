@@ -25,6 +25,7 @@ import {
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 import { Markdown } from "@workspace/ui/components/markdown"
+import { MessageAttachments } from "@workspace/ui/components/message-attachments"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
@@ -44,6 +45,7 @@ import type { ChatController } from "@/lib/chat/chat-controller"
 import type { ChatError } from "@/lib/chat/chat-state"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
+import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import {
 	commandOptionsFor,
 	commandQueryIn,
@@ -69,6 +71,7 @@ import type {
 	Bot,
 } from "@/lib/conversations/store-contract"
 import { avatarSrc } from "@/lib/host"
+import { openAttachment } from "@/lib/links/open-attachment"
 
 /** The bot's face as the memoised rows below take it: four strings rather than a
  * node, so a streamed delta still shallow-compares equal. */
@@ -103,14 +106,20 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	 * wrote it and the store took it — so the retry lives on the screen alone. */
 	rejected?: boolean
 }) {
-	const content = <Markdown>{row.text}</Markdown>
+	const { text, attachments } = messageWithAttachments(row.text)
+	const content = (
+		<>
+			<MessageAttachments items={attachments} onOpen={openAttachment} />
+			{text ? <Markdown>{text}</Markdown> : null}
+		</>
+	)
 
 	if (row.role === "user") {
 		return (
 			<UserTurn
 				state={rejected ? "failed" : row.completion}
 				run={run}
-				copyText={row.text}
+				copyText={text}
 				onRetry={() => {
 					void controller.retry(row.messageId)
 				}}
@@ -124,8 +133,8 @@ const TranscriptTurn = memo(function TranscriptTurn({
 		<AssistantTurn
 			state={row.completion}
 			run={run}
-			copyText={row.text}
-			bare={isTableBlock(row.text)}
+			copyText={text}
+			bare={isTableBlock(text)}
 			avatar={
 				avatar ? (
 					<BotIdentityAvatar
