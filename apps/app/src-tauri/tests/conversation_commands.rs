@@ -1575,7 +1575,8 @@ fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_oth
 /// no session has ever answered for.
 #[test]
 fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the_next() {
-	let app = app("com.opennest.conversation-commands-27");
+	let home = Home::new();
+	let app = home.app();
 	let window = window(&app);
 	let id = a_bot(&window, "Nyx");
 	let silent = a_bot(&window, "Ada");
@@ -1624,6 +1625,4 @@ fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the
 		),
 		Err(json!({ "kind": "unknownBot", "id": "missing" }))
 	);
-
-	cleanup(&app);
 }
