@@ -14,17 +14,19 @@ export function isDesktopHost(): boolean {
 }
 
 /** The one way a path the host stored becomes something the webview may load: the
- * asset protocol, scoped by the host to the single directory avatars live in. A bot
- * with no picture has no source at all, which is what leaves it wearing its animal.
+ * asset protocol, scoped by the host to the directories it writes files in itself.
  *
  * Outside the host there is no protocol to convert to — `convertFileSrc` reaches for
  * internals only a Tauri window injects — so `bun dev:web` is handed the path the
  * fake store answered, unconverted. */
-export function avatarSrc(path: string | null): string | undefined {
-	if (!path) {
-		return undefined
-	}
+export function assetSrc(path: string): string {
 	return isDesktopHost() ? convertFileSrc(path) : path
+}
+
+/** A bot's picture, loadable. No path is no source at all, which is what leaves the
+ * bot wearing its animal. */
+export function avatarSrc(path: string | null): string | undefined {
+	return path ? assetSrc(path) : undefined
 }
 
 /** The window, on screen. It is declared hidden: the frame the platform draws

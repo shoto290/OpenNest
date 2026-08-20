@@ -5,6 +5,7 @@ import {
 	turnForOutcome,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
+import { storedAttachmentPath } from "./message-attachments"
 
 import type {
 	ChatMessage,
@@ -32,6 +33,7 @@ export type FakeChatDriverOptions = {
 const FAKE_COMMANDS = ["clear", "compact", "cost", "init", "review", "status"]
 
 const FAIL_DIRECTIVE = "/fail"
+
 const PERMISSION_DIRECTIVE = "/permission"
 
 /** Several paragraphs, so `bun dev:web` shows an answer landing in the flow one
@@ -327,14 +329,20 @@ export function createFakeChatDriver(
 		},
 
 		/** Nothing is written: an attachment reaches Claude as a path, so a plausible
-		 * one is the whole of what `bun dev:web` needs to compose the prompt. */
+		 * one is the whole of what `bun dev:web` needs to compose the prompt. Shaped
+		 * the way the host shapes a stored one, so the bubble reads it back as a file
+		 * rather than as a line of text. */
 		storeAttachments: (
 			conversationId: string,
 			attachments: SubmittedAttachment[],
 		) =>
 			Promise.resolve(
-				attachments.map(
-					(attachment) => `/tmp/opennest/${conversationId}/${attachment.name}`,
+				attachments.map((attachment) =>
+					storedAttachmentPath({
+						root: "/tmp/opennest",
+						conversationId,
+						submittedName: attachment.name,
+					}),
 				),
 			),
 
