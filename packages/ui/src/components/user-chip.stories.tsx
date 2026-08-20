@@ -42,7 +42,7 @@ const renderShell = (defaultOpen: boolean) => (args: UserChipProps) => (
 )
 
 const avatarIn = (canvasElement: HTMLElement) =>
-	slotsIn(canvasElement, "user-chip-avatar")[0]
+	slotsIn(canvasElement, "user-avatar")[0]
 
 const panelIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "sidebar-panel")[0]

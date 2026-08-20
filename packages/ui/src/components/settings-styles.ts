@@ -3,6 +3,13 @@ const FIELD_LABEL_CLASS = "font-medium text-foreground text-xs"
 const FIELD_CONTROL_CLASS =
 	"w-full rounded-xl border border-input bg-background px-3 py-2 text-foreground text-sm outline-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
 
+/** The chosen option is the filled tile, the way a selected row in the system's
+ * select is: one neutral surface and a name that stops being muted. No outline
+ * around it — a ring on a round swatch reads as a second, competing edge, and a
+ * tint would fight the colours the swatches are there to show. */
+const FIELD_OPTION_CLASS =
+	"flex cursor-pointer flex-col items-center gap-1 rounded-xl p-1.5 text-muted-foreground transition-colors hover:bg-muted has-[:checked]:bg-muted has-[:checked]:font-medium has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring motion-reduce:transition-none"
+
 /** The dimmed page behind every overlay — the settings dialog, the model list's
  * own popup and the delete confirmation standing over either. */
 const BACKDROP_CLASS =
@@ -23,6 +30,7 @@ export {
 	BACKDROP_CLASS,
 	FIELD_CONTROL_CLASS,
 	FIELD_LABEL_CLASS,
+	FIELD_OPTION_CLASS,
 	POPUP_CLASS,
 	POPUP_DROP_SHADOW_CLASS,
 }

@@ -1271,7 +1271,7 @@ export const WithUserOnRail = meta.story({
 		const pinned = within(footer)
 			.getByRole("button", { name: FOOTER_LABEL })
 			.getBoundingClientRect()
-		const avatar = slotIn(footer, "user-chip-avatar").getBoundingClientRect()
+		const avatar = slotIn(footer, "user-avatar").getBoundingClientRect()
 
 		await expect(pinned.bottom).toBeLessThanOrEqual(avatar.top)
 		await expect(chipButton).toHaveAttribute("aria-label", READER_NAME)

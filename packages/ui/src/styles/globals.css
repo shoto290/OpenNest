@@ -60,7 +60,8 @@
 }
 
 .dark,
-.dark[data-theme="amber"] {
+.dark[data-theme="amber"],
+.dark [data-theme="amber"] {
 	--background: oklch(0.141 0.005 285.823);
 	--foreground: oklch(0.985 0 0);
 	--bot-avatar-ink: oklch(0.995 0 0);
@@ -97,7 +98,11 @@
 }
 
 /* Palettes. Each block repaints the whole colour set; amber rides on the
- * default blocks above, so a document with no data-theme still paints. */
+ * default blocks above, so a document with no data-theme still paints.
+ *
+ * Each dark block is claimed twice: once on the element carrying the scheme, once
+ * on any element below it. A subtree naming its own palette — a swatch, a vignette
+ * — then paints in that palette's dark tokens rather than in its light ones. */
 [data-theme="slate"] {
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.141 0.021 258);
@@ -132,7 +137,8 @@
 	--sidebar-ring: oklch(0.705 0.04 258);
 }
 
-.dark[data-theme="slate"] {
+.dark[data-theme="slate"],
+.dark [data-theme="slate"] {
 	--background: oklch(0.141 0.021 258);
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.21 0.026 258);
@@ -200,7 +206,8 @@
 	--sidebar-ring: oklch(0.705 0.028 186);
 }
 
-.dark[data-theme="water"] {
+.dark[data-theme="water"],
+.dark [data-theme="water"] {
 	--background: oklch(0.141 0.015 186);
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.21 0.018 186);
@@ -268,7 +275,8 @@
 	--sidebar-ring: oklch(0.705 0.024 132);
 }
 
-.dark[data-theme="moss"] {
+.dark[data-theme="moss"],
+.dark [data-theme="moss"] {
 	--background: oklch(0.141 0.013 132);
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.21 0.016 132);
@@ -336,7 +344,8 @@
 	--sidebar-ring: oklch(0.705 0.024 42);
 }
 
-.dark[data-theme="coral"] {
+.dark[data-theme="coral"],
+.dark [data-theme="coral"] {
 	--background: oklch(0.141 0.013 42);
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.21 0.016 42);
@@ -404,7 +413,8 @@
 	--sidebar-ring: oklch(0.705 0.028 296);
 }
 
-.dark[data-theme="lavender"] {
+.dark[data-theme="lavender"],
+.dark [data-theme="lavender"] {
 	--background: oklch(0.141 0.015 296);
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.21 0.018 296);
