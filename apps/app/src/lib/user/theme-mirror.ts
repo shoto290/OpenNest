@@ -5,7 +5,7 @@ import {
 } from "@workspace/ui/lib/palettes"
 
 import type { ColorScheme, UserPreferences } from "./preferences-contract"
-import { userPreferencesStore } from "./preferences-transport"
+import { changePreferences, readPreferences } from "./preferences-queue"
 
 /** The two keys the first paint reads. The stored record is the source of truth,
  * but it only arrives over IPC: what `localStorage` holds is the copy the window
@@ -55,19 +55,20 @@ export const writeMirror = (theme: ThemePreferences) => {
  * leaves the window painting the mirror it opened with. */
 export const readStoredTheme = async (): Promise<ThemePreferences | null> => {
 	try {
-		return themeOf(await userPreferencesStore.read())
+		return themeOf(await readPreferences())
 	} catch {
 		return null
 	}
 }
 
 /** The record is written whole, so the rest of it is read back and echoed: a
- * scheme or a palette chosen here must not clear the name or the picture. A
- * refused call is dropped — the mirror already holds what is painted. */
+ * scheme or a palette chosen here must not clear the name or the picture. The read
+ * and the write are one turn of the queue every other writer shares, so the name
+ * this echoes is the one last written rather than one a keystroke has moved past.
+ * A refused call is dropped — the mirror already holds what is painted. */
 export const storeTheme = async (theme: ThemePreferences) => {
 	try {
-		const record = await userPreferencesStore.read()
-		await userPreferencesStore.write({ ...record, ...theme })
+		await changePreferences((record) => ({ ...record, ...theme }))
 	} catch {
 		return
 	}
