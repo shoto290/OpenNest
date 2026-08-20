@@ -1,10 +1,19 @@
 export type ConnectionState = "checking" | "ready" | "unavailable" | "crashed"
 
-export type TurnState = "idle" | "submitting" | "running" | "stopping" | "failed"
+export type TurnState =
+	| "idle"
+	| "submitting"
+	| "running"
+	| "stopping"
+	| "failed"
 
 export type MessageRole = "user" | "assistant"
 
-export type MessageCompletion = "streaming" | "complete" | "cancelled" | "failed"
+export type MessageCompletion =
+	| "streaming"
+	| "complete"
+	| "cancelled"
+	| "failed"
 
 export type ChatMessage = {
 	id: string
@@ -58,7 +67,7 @@ export type RuntimeScope = {
  * named, and a launch that has not opened one yet names none. */
 export type ScopedEvent = {
 	scope: RuntimeScope | null
-	event: ClaudeEvent
+	event: AgentEvent
 }
 
 export type TransportError =
@@ -93,7 +102,7 @@ export type SessionHandle = {
 	resumed: boolean
 }
 
-export type ClaudeEvent =
+export type AgentEvent =
 	| { type: "connectionChanged"; state: ConnectionState }
 	| { type: "turnChanged"; state: TurnState }
 	| { type: "sessionReady"; sessionId: string; resumed: boolean }

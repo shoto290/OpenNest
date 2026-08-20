@@ -9,7 +9,7 @@
 //! back exactly as they were written. A `#[serde(rename)]` on a stored enum would
 //! have made the same change a migration.
 //!
-//! Its sibling [`crate::claude::contract`] already spells a `MessageRole` with the
+//! Its sibling [`crate::agent::contract`] already spells a `MessageRole` with the
 //! same two words, and the two are kept apart for the same reason: the vocabulary of
 //! a live session and the vocabulary of a durable transcript answer to different
 //! boundaries, and sharing one enum would make a rename asked for by either a rename

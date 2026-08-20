@@ -1,5 +1,10 @@
-//! Claude Code stream-json wire frames. Internal only: nothing in this module
-//! is ever serialized towards the frontend.
+//! The agent sidecar's wire vocabulary. Internal only: nothing in this module is
+//! ever serialized towards the frontend.
+//!
+//! Every session's stream leaves the sidecar through one pipe, so each line is an
+//! [`Envelope`] naming the session it belongs to. What the envelope carries is a
+//! [`Frame`] — the SDK's own message types, plus the two the sidecar adds to say
+//! that a session opened and that one is over.
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -15,9 +20,49 @@ where
 	Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
+/// The sidecar's first line: what it is, and what this build of it can do. Read
+/// once, before any session exists.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ready {
+	pub provider: String,
+	pub version: String,
+	#[serde(default)]
+	pub sdk_version: Option<String>,
+	#[serde(default)]
+	pub capabilities: Vec<String>,
+}
+
+/// One frame and the session it came from.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Envelope {
+	pub session: String,
+	pub frame: Value,
+}
+
+/// What the host asks the sidecar to start a session as. Mirrors the SDK options
+/// it is turned into on the other side, and names no flag: the sidecar decides
+/// how its provider spells any of this.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenRequest {
+	pub cwd: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub resume: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub append_system_prompt: Option<String>,
+	pub partial_messages: bool,
+	#[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+	pub env: std::collections::BTreeMap<String, String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Frame {
+	/// The session is live and may be prompted.
+	Opened,
+	/// The session is over, whatever the host was expecting.
+	Closed(ClosedFrame),
 	System(SystemFrame),
 	StreamEvent(StreamEventFrame),
 	Assistant(MessageFrame),
@@ -27,6 +72,12 @@ pub enum Frame {
 	ControlResponse(ControlResponseFrame),
 	#[serde(other)]
 	Ignored,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClosedFrame {
+	#[serde(default)]
+	pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -166,49 +217,54 @@ pub struct ControlResponseBody {
 	pub error: Option<String>,
 }
 
-pub fn user_message(text: &str) -> Value {
-	serde_json::json!({
-		"type": "user",
-		"message": { "role": "user", "content": [{ "type": "text", "text": text }] }
-	})
+fn command(kind: &str, session: &str, body: Value) -> Value {
+	let mut frame = serde_json::json!({ "type": kind, "session": session });
+	if let (Some(frame), Some(body)) = (frame.as_object_mut(), body.as_object()) {
+		frame.extend(body.clone());
+	}
+	frame
 }
 
-pub fn initialize_request(request_id: &str) -> Value {
-	serde_json::json!({
-		"type": "control_request",
-		"request_id": request_id,
-		"request": { "subtype": "initialize", "hooks": {} }
-	})
+pub fn open_command(session: &str, request: &OpenRequest) -> Value {
+	command(
+		"open",
+		session,
+		serde_json::to_value(request).unwrap_or_else(|_| serde_json::json!({})),
+	)
 }
 
-pub fn interrupt_request(request_id: &str) -> Value {
-	serde_json::json!({
-		"type": "control_request",
-		"request_id": request_id,
-		"request": { "subtype": "interrupt" }
-	})
+pub fn prompt_command(session: &str, text: &str) -> Value {
+	command("prompt", session, serde_json::json!({ "text": text }))
 }
 
-pub fn allow_response(request_id: &str, input: &Value) -> Value {
-	serde_json::json!({
-		"type": "control_response",
-		"response": {
-			"subtype": "success",
-			"request_id": request_id,
-			"response": { "behavior": "allow", "updatedInput": input }
-		}
-	})
+pub fn interrupt_command(session: &str) -> Value {
+	command("interrupt", session, Value::Null)
 }
 
-pub fn deny_response(request_id: &str, message: &str) -> Value {
-	serde_json::json!({
-		"type": "control_response",
-		"response": {
-			"subtype": "success",
-			"request_id": request_id,
-			"response": { "behavior": "deny", "message": message }
-		}
-	})
+pub fn close_command(session: &str) -> Value {
+	command("close", session, Value::Null)
+}
+
+pub fn allow_command(session: &str, request_id: &str, input: &Value) -> Value {
+	command(
+		"permission",
+		session,
+		serde_json::json!({
+			"requestId": request_id,
+			"decision": { "behavior": "allow", "updatedInput": input }
+		}),
+	)
+}
+
+pub fn deny_command(session: &str, request_id: &str, message: &str) -> Value {
+	command(
+		"permission",
+		session,
+		serde_json::json!({
+			"requestId": request_id,
+			"decision": { "behavior": "deny", "message": message }
+		}),
+	)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

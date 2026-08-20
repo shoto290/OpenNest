@@ -17,13 +17,14 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::claude::commands::EVENT_CHANNEL;
-use opennest_app::claude::contract::{
-	CheckReport, ClaudeEvent, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
+use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
+use opennest_app::agent::commands::{terminate_session, EVENT_CHANNEL};
+use opennest_app::agent::contract::{
+	CheckReport, AgentEvent, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
 	ScopedEvent, TransportError, TurnOutcome,
 };
-use opennest_app::claude::ClaudeState;
+use opennest_app::agent::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -32,7 +33,8 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
-const SCENARIO_ENV: &str = "FAKE_CLAUDE_SCENARIO";
+const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
+const SCENARIO_ENV: &str = "FAKE_CLAUDE_SCENARIO_FILE";
 const IDENTIFIER: &str = "com.opennest.e2e";
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -102,6 +104,12 @@ impl Harness {
 		.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 	}
 
+	/// The host leaving, the way its event loop does on the way out.
+	fn quit(&self) {
+		let runtime = tokio::runtime::Runtime::new().expect("runtime");
+		runtime.block_on(terminate_session(&self.app.state::<ClaudeState>()));
+	}
+
 	fn scope(&self) -> Value {
 		serde_json::to_value(&*self.run.lock().expect("run")).expect("the scope serializes")
 	}
@@ -122,7 +130,7 @@ impl Harness {
 		self.call("claude_submit_prompt", json!({ "scope": self.scope(), "text": text }))
 	}
 
-	fn events(&self) -> Vec<ClaudeEvent> {
+	fn events(&self) -> Vec<AgentEvent> {
 		self.log.lock().expect("event log").iter().map(|scoped| scoped.event.clone()).collect()
 	}
 
@@ -140,7 +148,7 @@ impl Harness {
 	/// Events land by callback, so there is nothing to await. Everything this
 	/// test waits on is polled here, and a wait that never lands fails the test
 	/// naming what it wanted instead of hanging a developer's afternoon.
-	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[ClaudeEvent]) -> Option<T>) -> T {
+	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[AgentEvent]) -> Option<T>) -> T {
 		let deadline = Instant::now() + DEADLINE;
 		loop {
 			let seen = self.events();
@@ -156,61 +164,73 @@ impl Harness {
 	}
 }
 
+/// The sidecar's own environment is fixed when it is spawned, and one process
+/// serves every session — so a scenario that changes between two of them travels
+/// on a file the fake reads each time it opens one.
 fn scenario(name: &str) {
-	std::env::set_var(SCENARIO_ENV, name);
+	let path = std::env::temp_dir()
+		.join(format!("opennest-fake-scenario-{}.txt", std::process::id()));
+	std::fs::write(&path, name).expect("the scenario is written");
+	std::env::set_var(SCENARIO_ENV, path);
 }
 
-fn turn_outcome(seen: &[ClaudeEvent]) -> Option<TurnOutcome> {
+fn turn_outcome(seen: &[AgentEvent]) -> Option<TurnOutcome> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),
+		AgentEvent::TurnEnded { ended } => Some(ended.outcome),
 		_ => None,
 	})
 }
 
-fn session_ready(seen: &[ClaudeEvent]) -> Option<(String, bool)> {
+fn session_ready(seen: &[AgentEvent]) -> Option<(String, bool)> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::SessionReady { session_id, resumed } => Some((session_id.clone(), *resumed)),
+		AgentEvent::SessionReady { session_id, resumed } => Some((session_id.clone(), *resumed)),
 		_ => None,
 	})
 }
 
-fn permission_request(seen: &[ClaudeEvent]) -> Option<PermissionRequest> {
+fn permission_request(seen: &[AgentEvent]) -> Option<PermissionRequest> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::PermissionRequested { request } => Some(request.clone()),
+		AgentEvent::PermissionRequested { request } => Some(request.clone()),
 		_ => None,
 	})
 }
 
-fn message_started(seen: &[ClaudeEvent]) -> Option<()> {
+fn message_started(seen: &[AgentEvent]) -> Option<()> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::MessageStarted { .. } => Some(()),
+		AgentEvent::MessageStarted { .. } => Some(()),
 		_ => None,
 	})
 }
 
-fn resume_failure(seen: &[ClaudeEvent]) -> Option<()> {
+fn resume_failure(seen: &[AgentEvent]) -> Option<()> {
 	seen.iter().find_map(|event| match event {
-		ClaudeEvent::Failed { error: TransportError::ResumeFailed { .. } } => Some(()),
+		AgentEvent::Failed { error: TransportError::ResumeFailed { .. } } => Some(()),
 		_ => None,
 	})
 }
 
-fn permission_resolutions(seen: &[ClaudeEvent]) -> Vec<(String, PermissionDecision)> {
+fn permission_resolutions(seen: &[AgentEvent]) -> Vec<(String, PermissionDecision)> {
 	seen.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::PermissionResolved { id, decision } => Some((id.clone(), *decision)),
+			AgentEvent::PermissionResolved { id, decision } => Some((id.clone(), *decision)),
 			_ => None,
 		})
 		.collect()
 }
 
-fn deltas(seen: &[ClaudeEvent]) -> String {
+fn deltas(seen: &[AgentEvent]) -> String {
 	seen.iter()
 		.filter_map(|event| match event {
-			ClaudeEvent::MessageDelta { text, .. } => Some(text.clone()),
+			AgentEvent::MessageDelta { text, .. } => Some(text.clone()),
 			_ => None,
 		})
 		.collect()
+}
+
+/// The probe file is named after this test process: worktrees run their suites
+/// side by side and a shared path would have them racing.
+fn orphan_pid_file() -> std::path::PathBuf {
+	std::env::temp_dir().join(format!("opennest-e2e-orphan-{}.pid", std::process::id()))
 }
 
 #[cfg(unix)]
@@ -218,15 +238,15 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
-/// The fake spawns a grandchild only a process-group kill can reach. The probe
+/// The fake spawns a grandchild only a process-group kill can reach. Ending the
+/// session hands the sidecar a line; the group behind it belongs to the host, so
+/// what has to leave nothing behind is the quit. The probe
 /// file is named after this test process: worktrees run their suites side by
 /// side and a shared path would have them racing.
 #[cfg(unix)]
 fn shut_down_leaving_no_orphan(harness: &Harness) {
-	let pid_file =
-		std::env::temp_dir().join(format!("opennest-e2e-orphan-{}.pid", std::process::id()));
+	let pid_file = orphan_pid_file();
 	let _ = std::fs::remove_file(&pid_file);
-	std::env::set_var("FAKE_CLAUDE_PID_FILE", &pid_file);
 
 	scenario("orphan");
 	assert_eq!(harness.start(None), Ok(json!({ "resumed": false })));
@@ -245,6 +265,7 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 		harness.call("claude_shutdown", json!({ "scope": harness.scope() })),
 		Ok(Value::Null)
 	);
+	harness.quit();
 	harness.wait_for("the grandchild to be gone", |_| (!is_alive(orphan)).then_some(()));
 
 	std::env::remove_var("FAKE_CLAUDE_PID_FILE");
@@ -266,6 +287,9 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 #[test]
 fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
+	// Named before the sidecar is spawned: its own environment is fixed from then on.
+	std::env::set_var("FAKE_CLAUDE_PID_FILE", orphan_pid_file());
 	scenario("normal");
 
 	let first = launch();

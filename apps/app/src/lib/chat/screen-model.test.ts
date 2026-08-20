@@ -13,7 +13,7 @@ import {
 	workingStateFor,
 } from "./screen-model"
 
-import type { ActivityEvent } from "../claude/contract"
+import type { ActivityEvent } from "../agent/contract"
 import type {
 	TranscriptCompletion,
 	TranscriptMessage,

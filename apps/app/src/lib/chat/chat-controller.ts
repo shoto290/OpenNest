@@ -24,16 +24,16 @@ import {
 
 import { createQueue } from "../queue"
 import type {
+	AgentEvent,
 	ChatMessage,
 	CheckReport,
-	ClaudeEvent,
 	MessageCompletion,
 	PermissionDecision,
 	RuntimeScope,
 	SessionHandle,
 	TransportError,
 	TurnOutcome,
-} from "../claude/contract"
+} from "../agent/contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type { TerminalCompletion } from "../conversations/transcript-contract"
 import { createTranscriptController } from "../conversations/transcript-controller"
@@ -277,7 +277,7 @@ export function createChatController(
 	/** The controller speaking for the run a bot holds, in the vocabulary the host
 	 * speaks: what it says about that bot's own session is scoped with it and meets
 	 * the same gate as everything the session reports. */
-	const announce = (bot: BotChat, event: ClaudeEvent) =>
+	const announce = (bot: BotChat, event: AgentEvent) =>
 		dispatch(bot, { type: "driverEvent", scope: bot.state.runtime, event })
 
 	const report = (bot: BotChat, reason: unknown) =>
@@ -581,7 +581,7 @@ export function createChatController(
 	const persist = (
 		bot: BotChat,
 		scope: RuntimeScope | null,
-		event: ClaudeEvent,
+		event: AgentEvent,
 	) => {
 		const conversationId = scope?.conversationId
 		if (!conversationId) {
@@ -623,7 +623,7 @@ export function createChatController(
 	 * Walked rather than filtered: this runs on every word of every answer, and a
 	 * list built to be thrown away per token is the kind of work a stream multiplies.
 	 */
-	const route = (scope: RuntimeScope | null, event: ClaudeEvent) => {
+	const route = (scope: RuntimeScope | null, event: AgentEvent) => {
 		for (const bot of bots.values()) {
 			if (!isSameRuntimeScope(scope, bot.state.runtime)) {
 				continue
@@ -652,7 +652,7 @@ export function createChatController(
 	 * a refused resume leaves a fresh child in the same run, and a run that lost its
 	 * child has nothing at all. So the run stops claiming to have carried the chat,
 	 * and the next prompt is rebuilt in full rather than sent on its own. */
-	const noteFailure = (bot: BotChat, event: ClaudeEvent) => {
+	const noteFailure = (bot: BotChat, event: AgentEvent) => {
 		if (event.type !== "failed") {
 			return
 		}

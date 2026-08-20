@@ -7,8 +7,8 @@
 
 use std::path::PathBuf;
 
-use opennest_app::claude::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::claude::ClaudeState;
+use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
+use opennest_app::agent::ClaudeState;
 use opennest_app::commands::invoke_handler;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};

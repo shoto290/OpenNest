@@ -6,7 +6,7 @@ import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 import { type ChatState, isTurnBusy } from "./chat-state"
 import { toPublishedBlocks } from "./markdown-blocks"
 
-import type { ConnectionState, TransportError } from "../claude/contract"
+import type { ConnectionState, TransportError } from "../agent/contract"
 import type {
 	TranscriptCompletion,
 	TranscriptMessage,

@@ -183,7 +183,7 @@ impl Database {
 }
 
 pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
-	Database::open(&connection::file(app)?, crate::claude::store::file(app).as_deref())
+	Database::open(&connection::file(app)?, crate::agent::store::file(app).as_deref())
 }
 
 /// Every test that needs a file opens it the same way, on a directory of its own

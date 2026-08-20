@@ -8,7 +8,7 @@
 
 use tauri::Runtime;
 
-use crate::{attachments, claude, conversations, user};
+use crate::{agent, attachments, conversations, user};
 
 /// The commands are named by their module rather than imported: the attribute on
 /// each one leaves a macro beside it that `generate_handler!` reaches through the
@@ -17,15 +17,15 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 {
 	tauri::generate_handler![
 		attachments::commands::chat_store_attachments,
-		claude::commands::claude_check,
-		claude::commands::claude_models,
-		claude::commands::claude_start_or_resume_session,
-		claude::commands::claude_submit_prompt,
-		claude::commands::claude_cancel_turn,
-		claude::commands::claude_respond_to_permission,
-		claude::commands::claude_shutdown,
-		claude::commands::claude_load_session,
-		claude::commands::claude_save_session,
+		agent::commands::claude_check,
+		agent::commands::claude_models,
+		agent::commands::claude_start_or_resume_session,
+		agent::commands::claude_submit_prompt,
+		agent::commands::claude_cancel_turn,
+		agent::commands::claude_respond_to_permission,
+		agent::commands::claude_shutdown,
+		agent::commands::claude_load_session,
+		agent::commands::claude_save_session,
 		conversations::commands::conversation_bots,
 		conversations::commands::conversation_create_bot,
 		conversations::commands::conversation_update_bot,

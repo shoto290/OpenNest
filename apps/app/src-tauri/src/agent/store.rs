@@ -263,7 +263,7 @@ pub(crate) fn restrict_to_owner(_file: &fs::File) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::claude::contract::{
+	use crate::agent::contract::{
 		ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, MessageCompletion, MessageRole,
 	};
 

@@ -39,8 +39,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use uuid::Uuid;
 
-use crate::claude::contract::{self, ActivityEvent, ChatMessage, SessionSnapshot};
-use crate::claude::store::{self, Stored};
+use crate::agent::contract::{self, ActivityEvent, ChatMessage, SessionSnapshot};
+use crate::agent::store::{self, Stored};
 use crate::db::repositories::conversations::{ensure_chat_in, ConversationError, DEFAULT_BOT_ID};
 use crate::db::repositories::messages::{ActivityStatus, MessageRole, MessageState};
 
@@ -527,7 +527,7 @@ mod tests {
 	/// The two contract vocabularies that share no name with the stored ones above.
 	/// `MessageRole` and `ActivityStatus` stay qualified for the opposite reason: both
 	/// sides of those mappings are in scope here.
-	use crate::claude::contract::{ActivityKind, MessageCompletion};
+	use crate::agent::contract::{ActivityKind, MessageCompletion};
 	use crate::db::connection::{self, temp_dir, FILE_NAME};
 	use crate::db::migrations;
 

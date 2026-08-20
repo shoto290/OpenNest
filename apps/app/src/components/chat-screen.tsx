@@ -36,6 +36,8 @@ import {
 } from "@workspace/ui/components/tool-approval"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import type { PermissionRequest, TurnState } from "@/lib/agent/contract"
+import { describeTransportError } from "@/lib/agent/messages"
 import {
 	describeAttachmentError,
 	type StagedAttachment,
@@ -64,8 +66,6 @@ import {
 } from "@/lib/chat/screen-model"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import type { Chat } from "@/lib/chat/use-chat"
-import type { PermissionRequest, TurnState } from "@/lib/claude/contract"
-import { describeTransportError } from "@/lib/claude/messages"
 import type {
 	AvatarAnimal,
 	AvatarBlot,

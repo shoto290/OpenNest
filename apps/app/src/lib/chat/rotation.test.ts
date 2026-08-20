@@ -13,7 +13,7 @@ import {
 	STOPPED,
 } from "./rotation"
 
-import type { TransportError } from "../claude/contract"
+import type { TransportError } from "../agent/contract"
 
 const PROMPTS_PER_RUN = 3
 
