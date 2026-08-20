@@ -105,7 +105,8 @@ export function PromptCommandMenu({
 						<div
 							role="listbox"
 							aria-label="Commands"
-							className="max-h-64 overflow-y-auto"
+							tabIndex={0}
+							className="max-h-64 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 						>
 							{matches.map((command, index) => (
 								<button

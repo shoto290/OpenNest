@@ -51,15 +51,10 @@ const meta = preview.meta({
 	component: PromptCommandMenu,
 	parameters: {
 		layout: "centered",
-		a11y: {
-			config: {
-				rules: [{ id: "scrollable-region-focusable", enabled: false }],
-			},
-		},
 		docs: {
 			description: {
 				component:
-					"The slash command popup of the composer: it lists the commands the running session reports, filters them against the typed query and answers the keyboard while focus stays in the textarea. It draws only — the host owns `open`, `query` and what a selection does. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching nothing renders no menu at all.\n\nThe list is a scrollable region with no tab stop of its own, on purpose: the menu answers the arrows while the composer keeps focus, and a tab stop inside it could never be reached since Tab selects. `scrollable-region-focusable` is turned off here for that reason — the region is keyboard operable, just not by Tab.",
+					"The slash command popup of the composer: it lists the commands the running session reports, filters them against the typed query and answers the keyboard while focus stays in the textarea. It draws only — the host owns `open`, `query` and what a selection does. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching nothing renders no menu at all.\n\nThe list is a scrollable region and keeps a tab stop of its own, so it stays reachable to a keyboard on its own terms — the menu still answers the arrows while the composer holds focus, and Tab selects rather than moving into it.",
 			},
 		},
 	},
