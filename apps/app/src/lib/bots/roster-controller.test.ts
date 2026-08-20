@@ -110,6 +110,30 @@ describe("createRosterController", () => {
 		expect(controller.getState().selectedBotId).toBeNull()
 	})
 
+	// What the boot screen stands on, and the only thing that can hold it: a launch
+	// and a reader who owns no bot both hold no rows.
+	it("says nothing has been read until the rows land", async () => {
+		const controller = createRosterController(await anEmptyStore())
+
+		expect(controller.getState().hasLoaded).toBe(false)
+
+		await controller.load()
+
+		expect(controller.getState().hasLoaded).toBe(true)
+	})
+
+	// A record that cannot be read has still answered. Waiting on it forever would
+	// leave the reader looking at the launch screen with no way out of it.
+	it("counts a refused read as an answer", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
+		const controller = createRosterController(store)
+
+		await controller.load()
+
+		expect(controller.getState().hasLoaded).toBe(true)
+	})
+
 	it("creates a bot immediately, selects it and opens its settings on it", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

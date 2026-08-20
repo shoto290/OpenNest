@@ -495,6 +495,9 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
+	/* The document itself, not only the body: the first frame a webview paints is
+	 * the root element's, and a root left unpainted opens every window on white. */
+	html,
 	body {
 		@apply bg-background text-foreground;
 	}
