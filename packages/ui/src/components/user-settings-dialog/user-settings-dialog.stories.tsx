@@ -79,6 +79,7 @@ const meta = preview.meta({
 		onClose: fn(),
 		onValueChange: fn(),
 		onPictureUpload: fn(),
+		onPictureRemove: fn(),
 	},
 	render: (args) => <DialogHost {...args} />,
 })
@@ -88,7 +89,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the scheme and the palettes, `WithPicture` for the zone that takes a picture, `Empty` for the reader who never filled anything in.",
+					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the scheme and the palettes, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in.",
 			},
 		},
 	},
@@ -113,7 +114,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who has never filled anything in. Check that the breadcrumb reads `You` rather than a gap before the chevron, that the avatar falls back to that name's initial instead of a blank circle, and that the field itself stays empty with a placeholder — the fallback is what the app calls them, never a value written into the record. Pick `Default` for the named reader.",
+					"A reader who has never filled anything in. Check that the breadcrumb reads `You` rather than a gap before the chevron, that the avatar falls back to that name's initial instead of a blank circle, that the picture control heads the group as a dashed circle with a person glyph and offers nothing to remove, and that the field itself stays empty with a placeholder — the fallback is what the app calls them, never a value written into the record. Pick `Default` for the named reader.",
 			},
 		},
 	},
@@ -121,6 +122,12 @@ export const Empty = meta.story({
 		const dialog = await dialogIn()
 
 		await expect(dialog).toHaveAccessibleName("You Settings")
+		await expect(
+			within(dialog).getByRole("button", { name: "Add picture" }),
+		).toBeVisible()
+		await expect(
+			within(dialog).queryByRole("button", { name: "Remove picture" }),
+		).toBeNull()
 		await expect(within(dialog).getByLabelText("Display name")).toHaveValue("")
 	},
 })
@@ -131,7 +138,7 @@ export const WithPicture = meta.story({
 		docs: {
 			description: {
 				story:
-					"The zone that takes a picture, on a reader who already uploaded one. Check that a picked file is handed to the host as a file and that the dialog changes nothing it holds — the picture only moves once the host writes a URL back, which is why the breadcrumb still shows the old one here. The same zone takes a drop and a paste. Pick `Default` for the reader with no picture.",
+					"The round control that takes a picture, on a reader who already uploaded one. Check that it heads the Profile group above the display name and against the leading edge, that a picked file is handed to the host as a file and that the dialog changes nothing it holds — the picture only moves once the host writes a URL back. Remove is the same deal: it is emitted, never applied here. The same control takes a drop and a paste. Pick `Default` for the reader with no picture.",
 			},
 		},
 	},
@@ -143,6 +150,11 @@ export const WithPicture = meta.story({
 			PICKED_PICTURE_FILE,
 		)
 		await expect(args.onPictureUpload).toHaveBeenCalledWith(PICKED_PICTURE_FILE)
+
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: "Remove picture" }),
+		)
+		await expect(args.onPictureRemove).toHaveBeenCalledTimes(1)
 		await expect(args.onValueChange).not.toHaveBeenCalled()
 	},
 })

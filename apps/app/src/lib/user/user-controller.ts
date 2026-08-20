@@ -27,6 +27,7 @@ export type UserController = {
 	setSettingsOpen: (isSettingsOpen: boolean) => void
 	rename: (displayName: string) => void
 	uploadPicture: (file: File) => Promise<void>
+	removePicture: () => Promise<void>
 }
 
 /** What the window opens on before the host has answered: a reader with no name
@@ -127,5 +128,16 @@ export const createUserController = (): UserController => {
 			const bytes = new Uint8Array(await file.arrayBuffer())
 			return changeProfilePicture(bytes).then(apply).catch(restore)
 		},
+
+		/** The record with the picture taken off. `null` is what the contract reads as
+		 * no picture, so the host drops the file it was keeping and the chip falls back
+		 * to the initials. */
+		removePicture: () =>
+			changePreferences((record) => ({
+				...record,
+				profilePicturePath: null,
+			}))
+				.then(apply)
+				.catch(restore),
 	}
 }

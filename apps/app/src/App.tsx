@@ -233,6 +233,9 @@ export function App() {
 			them leaves the conversation and where it is scrolled alone. */}
 			<UserSettingsDialog
 				onClose={() => user.controller.setSettingsOpen(false)}
+				onPictureRemove={() => {
+					void user.controller.removePicture()
+				}}
 				onPictureUpload={(file) => {
 					void user.controller.uploadPicture(file)
 				}}

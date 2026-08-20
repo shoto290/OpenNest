@@ -98,6 +98,17 @@ describe("the reader's own record", () => {
 		expect(controller.getState().profile.profilePicturePath).toBe(WORN)
 	})
 
+	it("takes the picture off the record the host holds", async () => {
+		const host = aHost()
+		const controller = await loaded()
+		await controller.uploadPicture(aPicture())
+
+		await controller.removePicture()
+
+		expect(host().profilePicturePath).toBeNull()
+		expect(controller.getState().profile.profilePicturePath).toBeNull()
+	})
+
 	it("keeps showing what the host last answered with when a write is refused", async () => {
 		aHost({ ...DEFAULTS, displayName: "Nyx" })
 		const controller = await loaded()
