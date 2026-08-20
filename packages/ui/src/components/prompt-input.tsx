@@ -4,6 +4,7 @@
 import {
 	type FormEvent,
 	type KeyboardEvent,
+	type ReactNode,
 	type Ref,
 	type TextareaHTMLAttributes,
 	useCallback,
@@ -19,10 +20,16 @@ import { Icons } from "@workspace/ui/components/icons"
 import { ActionSwapIcon } from "@workspace/ui/components/motion/action-swap"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
-/** Matches `leading-6` on the textarea and its measurement mirror. */
+/** Matches `leading-6` on the textarea and its measurement mirrors. */
 const LINE_HEIGHT = 24
 /** Matches `py-1.5` on the textarea. */
 const PADDING_Y = 12
+/** Typography the mirrors share with the textarea, so both measure what it renders. */
+const MIRROR =
+	"pointer-events-none invisible absolute top-0 left-0 px-2 text-sm leading-6"
+
+const rowsIn = (element: HTMLElement) =>
+	Math.round(element.scrollHeight / LINE_HEIGHT)
 
 export interface PromptInputProps
 	extends Omit<
@@ -38,6 +45,11 @@ export interface PromptInputProps
 	loading?: boolean
 	/** Omit while loading to render the stop button inert — a stop already requested. */
 	onStop?: () => void
+	/** Controls held on the leading edge of the control area, beside the prompt while
+	 * it fits on one line and under it once it wraps. */
+	leading?: ReactNode
+	/** Controls held right before the send button, on the trailing edge. */
+	trailing?: ReactNode
 	minRows?: number
 	maxRows?: number
 	/** Exposes the textarea so a host can restore focus after its own interactions. */
@@ -51,7 +63,9 @@ export function PromptInput({
 	onSubmit,
 	loading = false,
 	onStop,
-	minRows = 2,
+	leading,
+	trailing,
+	minRows = 1,
 	maxRows = 8,
 	className,
 	disabled,
@@ -63,35 +77,53 @@ export function PromptInput({
 }: PromptInputProps) {
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 	const measurementRef = useRef<HTMLDivElement>(null)
+	const singleLineRef = useRef<HTMLDivElement>(null)
+	const promptRef = useRef<HTMLDivElement>(null)
+	const controlsRef = useRef<HTMLDivElement>(null)
 	const setTextareaRef = useMemo(
 		() => mergeRefs(textareaRef, externalTextareaRef),
 		[externalTextareaRef],
 	)
+	const latestResize = useRef(() => {})
 	const [internalValue, setInternalValue] = useState(defaultValue)
+	const [isExpanded, setIsExpanded] = useState(false)
 	const currentValue = value ?? internalValue
-	const canSubmit = Boolean(currentValue.trim()) && !disabled && !loading
+	const hasPrompt = Boolean(currentValue.trim())
+	const canSubmit = hasPrompt && !disabled && !loading
 
 	const resizeTextarea = useCallback(() => {
 		const textarea = textareaRef.current
 		const measurement = measurementRef.current
-		if (!textarea || !measurement || textarea.value !== currentValue) return
+		const singleLine = singleLineRef.current
+		const prompt = promptRef.current
+		const controls = controlsRef.current
+		if (!textarea || !measurement || !singleLine || !prompt || !controls) return
+		if (textarea.value !== currentValue) return
 
-		const rows = Math.min(
-			Math.max(Math.round(measurement.scrollHeight / LINE_HEIGHT), minRows),
-			maxRows,
-		)
+		prompt.style.flexBasis =
+			rowsIn(singleLine) > 1
+				? "100%"
+				: `${Math.ceil(singleLine.getBoundingClientRect().width)}px`
+		measurement.style.width = `${textarea.clientWidth}px`
+
+		const rows = Math.min(Math.max(rowsIn(measurement), minRows), maxRows)
 		textarea.style.height = `${rows * LINE_HEIGHT + PADDING_Y}px`
+
+		setIsExpanded(controls.offsetTop >= prompt.offsetTop + prompt.offsetHeight)
 	}, [currentValue, maxRows, minRows])
 
-	useLayoutEffect(resizeTextarea, [resizeTextarea])
+	useLayoutEffect(() => {
+		latestResize.current = resizeTextarea
+		resizeTextarea()
+	}, [resizeTextarea])
 
 	useEffect(() => {
-		const measurement = measurementRef.current
-		if (!measurement || typeof ResizeObserver === "undefined") return
-		const observer = new ResizeObserver(resizeTextarea)
-		observer.observe(measurement)
+		const prompt = promptRef.current
+		if (!prompt || typeof ResizeObserver === "undefined") return
+		const observer = new ResizeObserver(() => latestResize.current())
+		observer.observe(prompt)
 		return () => observer.disconnect()
-	}, [resizeTextarea])
+	}, [])
 
 	const setValue = (next: string) => {
 		if (value === undefined) setInternalValue(next)
@@ -126,49 +158,77 @@ export function PromptInput({
 		<form
 			onSubmit={submit}
 			aria-busy={loading}
+			data-slot="prompt-input"
+			data-expanded={isExpanded}
 			className={cn(
-				"relative w-full rounded-2xl border border-border bg-background p-2 transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
+				"flex w-full flex-wrap items-center gap-1 border border-border bg-background p-2 transition-[border-color,border-radius,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 motion-reduce:transition-none",
+				isExpanded ? "rounded-3xl" : "rounded-full",
 				disabled && "opacity-50",
 				className,
 			)}
 		>
 			<div
-				ref={measurementRef}
-				aria-hidden="true"
-				className="pointer-events-none invisible absolute inset-x-2 top-0 px-2 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:break-word]"
+				ref={promptRef}
+				className="relative min-w-0 grow-[999] overflow-hidden"
 			>
-				{`${currentValue}\u200b`}
-			</div>
-			<textarea
-				ref={setTextareaRef}
-				value={currentValue}
-				disabled={disabled}
-				placeholder={placeholder}
-				aria-label={ariaLabel}
-				rows={minRows}
-				{...textareaProps}
-				onChange={(event) => setValue(event.target.value)}
-				onKeyDown={handleKeyDown}
-				className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
-			/>
-
-			<div className="mt-1 flex min-h-8 items-center justify-end">
-				<Button
-					type={loading ? "button" : "submit"}
-					size="icon"
-					disabled={loading ? !onStop : !canSubmit}
-					aria-label={loading ? "Stop generating" : "Send prompt"}
-					onClick={loading ? onStop : undefined}
-					className="rounded-full"
+				<div
+					ref={singleLineRef}
+					aria-hidden="true"
+					className={cn(MIRROR, "w-max whitespace-pre")}
 				>
-					<ActionSwapIcon
-						value={loading ? "stop" : "send"}
-						animation="roll"
-						className="size-4"
-					>
-						{loading ? <Icons.Stop /> : <Icons.Send />}
-					</ActionSwapIcon>
-				</Button>
+					{`${currentValue}\u200b`}
+				</div>
+				<div
+					ref={measurementRef}
+					aria-hidden="true"
+					className={cn(
+						MIRROR,
+						"whitespace-pre-wrap [overflow-wrap:break-word]",
+					)}
+				>
+					{`${currentValue}\u200b`}
+				</div>
+				<textarea
+					ref={setTextareaRef}
+					value={currentValue}
+					disabled={disabled}
+					placeholder={placeholder}
+					aria-label={ariaLabel}
+					rows={minRows}
+					{...textareaProps}
+					onChange={(event) => setValue(event.target.value)}
+					onKeyDown={handleKeyDown}
+					className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+				/>
+			</div>
+
+			<div
+				ref={controlsRef}
+				inert={disabled}
+				className="flex grow items-center gap-1"
+			>
+				{leading}
+				<div className="ml-auto flex items-center gap-1">
+					{trailing}
+					{loading || hasPrompt ? (
+						<Button
+							type={loading ? "button" : "submit"}
+							size="icon"
+							disabled={loading ? !onStop : !canSubmit}
+							aria-label={loading ? "Stop generating" : "Send prompt"}
+							onClick={loading ? onStop : undefined}
+							className="rounded-full"
+						>
+							<ActionSwapIcon
+								value={loading ? "stop" : "send"}
+								animation="roll"
+								className="size-4"
+							>
+								{loading ? <Icons.Stop /> : <Icons.Send />}
+							</ActionSwapIcon>
+						</Button>
+					) : null}
+				</div>
 			</div>
 		</form>
 	)
