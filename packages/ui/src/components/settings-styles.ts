@@ -3,12 +3,16 @@ const FIELD_LABEL_CLASS = "font-medium text-foreground text-xs"
 const FIELD_CONTROL_CLASS =
 	"w-full rounded-xl border border-input bg-background px-3 py-2 text-foreground text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
 
-/** The chosen option is the filled tile, the way a selected row in the system's
- * select is: one neutral surface and a name that stops being muted. No outline
- * around it — a ring on a round swatch reads as a second, competing edge, and a
- * tint would fight the colours the swatches are there to show. */
-const FIELD_OPTION_CLASS =
-	"flex cursor-pointer flex-col items-center gap-1 rounded-xl p-1.5 text-muted-foreground hover:bg-muted has-[:checked]:bg-muted has-[:checked]:font-medium has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+/** The marks an option wears, whatever shape it is laid out in — a tile, a row.
+ * The chosen one is the filled surface, the way a selected row in the system's
+ * select is: one neutral fill and a name that stops being muted. No outline around
+ * it — a ring on a round swatch reads as a second, competing edge, and a tint would
+ * fight the colours the swatches are there to show. Layout is the caller's. */
+const FIELD_OPTION_MARKS_CLASS =
+	"cursor-pointer rounded-xl text-muted-foreground hover:bg-muted has-[:checked]:bg-muted has-[:checked]:font-medium has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+
+/** An option laid out as a tile: its icon or swatch above its name. */
+const FIELD_OPTION_CLASS = `${FIELD_OPTION_MARKS_CLASS} flex flex-col items-center gap-1 p-1.5`
 
 /** What a picture is dropped on, pasted into or pressed to browse from, whatever
  * shape it wears: the dashed zone a bot's picture takes and the round control the
@@ -51,6 +55,7 @@ export {
 	FIELD_CONTROL_CLASS,
 	FIELD_LABEL_CLASS,
 	FIELD_OPTION_CLASS,
+	FIELD_OPTION_MARKS_CLASS,
 	PICTURE_TARGET_CLASS,
 	POPUP_CLASS,
 	POPUP_DROP_SHADOW_CLASS,
