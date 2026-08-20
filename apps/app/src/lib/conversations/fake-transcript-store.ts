@@ -103,6 +103,9 @@ export const createFakeTranscriptStore = (
 	 * it seeded. Insertion order is what `bots` answers in. */
 	const bots = new Map<string, Bot>([[DEFAULT_BOT.id, DEFAULT_BOT]])
 	let minted = 0
+	/** What each bot's last session announced, the way the column holds it: written
+	 * whole, read back whole, and absent for a bot no session has spoken for. */
+	const commands = new Map<string, string[]>()
 	const rows = new Map<string, TranscriptMessage>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
@@ -227,11 +230,13 @@ export const createFakeTranscriptStore = (
 		/** A bot that is already gone is refused rather than silently accepted: a
 		 * caller told its delete landed would go on showing a list that is behind the
 		 * store. Everything said in its chat goes with it, the way the file cascades
-		 * the thread and the transcript under the bot that held them. */
+		 * the thread and the transcript under the bot that held them — and so does what
+		 * its sessions announced, which the file drops with the row it is a column of. */
 		deleteBot: (id: string) => {
 			if (!bots.delete(id)) {
 				return refuse({ kind: "unknownBot", id })
 			}
+			commands.delete(id)
 			const conversationId = chatIdOf(id)
 			for (const [rowId, row] of rows) {
 				if (row.conversationId === conversationId) {
@@ -277,6 +282,21 @@ export const createFakeTranscriptStore = (
 			bots.set(id, worn)
 			return Promise.resolve(worn)
 		},
+
+		/** Replaced whole, and refused for a bot that is not on the record — the two
+		 * rules the column is written under. */
+		recordBotCommands: (botId: string, listed: string[]) => {
+			if (!bots.has(botId)) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			commands.set(botId, [...listed])
+			return Promise.resolve()
+		},
+
+		/** No command is what a bot no session has announced anything for offers, and
+		 * a bot that is gone offers the same: neither has a list to answer with. */
+		botCommands: (botId: string) =>
+			Promise.resolve([...(commands.get(botId) ?? [])]),
 
 		mainChat: (botId: string) =>
 			Promise.resolve<Chat>({

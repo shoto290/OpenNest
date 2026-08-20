@@ -1567,3 +1567,63 @@ fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_oth
 	assert!(!Path::new(&dropped).exists(), "a deleted bot left its attachments behind");
 	assert!(Path::new(&kept).exists(), "deleting one bot took another conversation's attachments");
 }
+
+/// What a session announced, kept where the next launch finds it. The commands only
+/// ever reach this side on an init frame and a session is only started by a prompt,
+/// so what crosses here is what the composer offers a bot nobody has spoken to yet:
+/// the last list named, replaced whole by the next one, and nothing at all for a bot
+/// no session has ever answered for.
+#[test]
+fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the_next() {
+	let app = app("com.opennest.conversation-commands-27");
+	let window = window(&app);
+	let id = a_bot(&window, "Nyx");
+	let silent = a_bot(&window, "Ada");
+
+	assert_eq!(
+		call(&window, "conversation_bot_commands", json!({ "botId": &id })).expect("the commands"),
+		json!([]),
+		"a bot no session has announced anything for offers a command"
+	);
+
+	call(
+		&window,
+		"conversation_record_bot_commands",
+		json!({ "botId": &id, "commands": ["review", "compact"] }),
+	)
+	.expect("the first session's commands");
+
+	assert_eq!(
+		call(&window, "conversation_bot_commands", json!({ "botId": &id })).expect("the commands"),
+		json!(["review", "compact"])
+	);
+
+	call(
+		&window,
+		"conversation_record_bot_commands",
+		json!({ "botId": &id, "commands": ["status"] }),
+	)
+	.expect("the next session's commands");
+
+	assert_eq!(
+		call(&window, "conversation_bot_commands", json!({ "botId": &id })).expect("the commands"),
+		json!(["status"]),
+		"an announcement was added to the one before it instead of replacing it"
+	);
+	assert_eq!(
+		call(&window, "conversation_bot_commands", json!({ "botId": &silent }))
+			.expect("the commands"),
+		json!([]),
+		"one bot's session announced for another"
+	);
+	assert_eq!(
+		call(
+			&window,
+			"conversation_record_bot_commands",
+			json!({ "botId": "missing", "commands": ["review"] })
+		),
+		Err(json!({ "kind": "unknownBot", "id": "missing" }))
+	);
+
+	cleanup(&app);
+}

@@ -1088,7 +1088,10 @@ describe("createChatController", () => {
 					completion: "complete",
 				},
 			},
-			{ type: "turnEnded", ended: { sessionId: ANNOUNCED, outcome: "completed" } },
+			{
+				type: "turnEnded",
+				ended: { sessionId: ANNOUNCED, outcome: "completed" },
+			},
 		] satisfies ClaudeEvent[]) {
 			harness.driver.pushEvent(event, leaving)
 		}
@@ -1191,7 +1194,10 @@ describe("createChatController", () => {
 		await vi.runAllTimersAsync()
 
 		const first = await store.loadPage((await store.mainChat(BOT)).id, null)
-		const second = await store.loadPage((await store.mainChat(other.id)).id, null)
+		const second = await store.loadPage(
+			(await store.mainChat(other.id)).id,
+			null,
+		)
 		expect(spoken(first.messages)).toEqual([
 			["user", "hello", "complete"],
 			["assistant", REPLY, "complete"],
@@ -1889,7 +1895,9 @@ describe("a run replaced under a conversation that carries on", () => {
 		expectWholeChat(told(submitted), [])
 		expect(told(submitted)).toContain("The new message:\nand now?")
 		expect(occurrences(told(submitted), "and now?")).toBe(1)
-		expect(controller.getState().messages.slice(0, before.length)).toEqual(before)
+		expect(controller.getState().messages.slice(0, before.length)).toEqual(
+			before,
+		)
 		expect(spoken(controller.getState().messages).slice(-2)).toEqual([
 			["user", "and now?", "complete"],
 			["assistant", REPLY, "complete"],
@@ -2321,6 +2329,133 @@ describe("the provider session a run answered under", () => {
 				"its-own-process",
 			),
 		).resolves.toBeUndefined()
+	})
+})
+
+/** The slash commands a session announces, held where the next one can find them.
+ * A child names them on its init frame and nowhere else, and no child exists until
+ * a prompt has started one — so a bot just opened, and every bot after a restart,
+ * has nothing of its own to ask. */
+describe("the commands a bot last announced", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	/** A driver whose sessions come up saying nothing, the way a real one that has
+	 * not been prompted yet does: what the screen offers is then what was held for
+	 * the bot and nothing else. */
+	const silentDriver = (fake: FakeChatDriver): ChatDriver => ({
+		...fake,
+		startOrResumeSession: () => Promise.resolve({ resumed: false }),
+	})
+
+	it("holds what a session announced against the bot it answered for", async () => {
+		const store = createFakeTranscriptStore()
+		const { controller, detach } = await bootedHarness({ store })
+
+		const announced = controller.getState().commands
+
+		expect(announced.length).toBeGreaterThan(0)
+		expect(await store.botCommands(BOT)).toEqual(announced)
+		detach()
+	})
+
+	it("offers what was last held before a session of its own has started", async () => {
+		const store = createFakeTranscriptStore()
+		const first = await bootedHarness({ store })
+		const announced = first.controller.getState().commands
+		first.detach()
+
+		const next = await bootedHarness({ store, driver: silentDriver })
+
+		expect(next.controller.getState().commands).toEqual(announced)
+		next.detach()
+	})
+
+	it("replaces what it holds with what the next session named", async () => {
+		const store = createFakeTranscriptStore()
+		const { controller, driver, detach } = await bootedHarness({ store })
+
+		driver.pushEvent(
+			{ type: "commandsListed", commands: ["status"] },
+			runOf(controller),
+		)
+		await vi.runAllTimersAsync()
+
+		expect(controller.getState().commands).toEqual(["status"])
+		expect(await store.botCommands(BOT)).toEqual(["status"])
+		detach()
+	})
+
+	it("offers no command for a bot no session has announced anything for", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Ada" }))
+		const { controller, detach } = await bootedHarness({
+			store,
+			driver: silentDriver,
+			botId: other.id,
+		})
+
+		expect(controller.getState().commands).toEqual([])
+		expect(await store.botCommands(other.id)).toEqual([])
+		detach()
+	})
+
+	// The read is off the write queue, so nothing orders it against the session that
+	// may answer while it is out. The child that just named its own list is the
+	// authority on what it takes, whenever the older answer comes back.
+	it("keeps what the session named over a recall still in flight", async () => {
+		const base = createFakeTranscriptStore()
+		await base.recordBotCommands(BOT, ["from-the-record"])
+		const read = deferred()
+		const store: TranscriptStore = {
+			...base,
+			// Read before the session spoke, answered after it: the window the recall
+			// is the older of the two lists in.
+			botCommands: async (botId: string) => {
+				const held = await base.botCommands(botId)
+				await read.promise
+				return held
+			},
+		}
+		const { controller, detach } = await bootedHarness({ store })
+		const announced = controller.getState().commands
+
+		read.release()
+		await vi.runAllTimersAsync()
+
+		expect(announced).not.toEqual(["from-the-record"])
+		expect(controller.getState().commands).toEqual(announced)
+		detach()
+	})
+
+	it("writes nothing for a session announcing what the store already holds", async () => {
+		const base = createFakeTranscriptStore()
+		let written = 0
+		const store: TranscriptStore = {
+			...base,
+			recordBotCommands: (botId: string, commands: string[]) => {
+				written += 1
+				return base.recordBotCommands(botId, commands)
+			},
+		}
+		const { controller, driver, detach } = await bootedHarness({ store })
+		const announced = controller.getState().commands
+		expect(written).toBe(1)
+
+		driver.pushEvent(
+			{ type: "commandsListed", commands: announced },
+			runOf(controller),
+		)
+		await vi.runAllTimersAsync()
+
+		expect(written).toBe(1)
+		expect(await store.botCommands(BOT)).toEqual(announced)
+		detach()
 	})
 })
 

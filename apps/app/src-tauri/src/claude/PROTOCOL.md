@@ -23,7 +23,7 @@ separate pipe.
 
 | `type` | Carries | Mapped to |
 | --- | --- | --- |
-| `system` / `init` | `session_id`, `cwd`, tool list, `slash_commands` | `sessionReady` + `commandsListed` |
+| `system` / `init` | `session_id`, `cwd`, tool list, `slash_commands` | `sessionReady` + `commandsListed` (only when the frame names one) |
 | `system` / `hook_*`, `status`, `session_state_changed` | local hook noise | dropped |
 | `stream_event` / `message_start` | assistant message id | `messageStarted` |
 | `stream_event` / `content_block_delta` | `text_delta` | `messageDelta` |

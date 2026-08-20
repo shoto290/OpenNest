@@ -20,6 +20,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 2, statements: BOT_CONTEXT },
 	Migration { version: 3, statements: BOT_IDENTITY },
 	Migration { version: 4, statements: BOT_BLOT },
+	Migration { version: 5, statements: BOT_COMMANDS },
 ];
 
 /// Timestamps are unix millis, ids are UUID v4 text: both are what the host
@@ -247,6 +248,22 @@ ALTER TABLE bots ADD COLUMN avatar_blot TEXT
 		('coral', 'amber', 'moss', 'water', 'sky', 'lavender', 'rose', 'slate'));
 ";
 
+/// The slash commands the bot's last session announced, held against the bot
+/// rather than against the run that named them. A run only names them on its init
+/// frame, and a bot gets one of those once a process has been started for it — so a
+/// bot nobody has spoken to yet, on this launch or any other, has no run to ask.
+/// The column is what answers instead.
+///
+/// A JSON array of text: SQLite holds no list, the order is the child's own, and
+/// the whole point of the column is that it is replaced whole by the next
+/// announcement rather than added to. `NOT NULL DEFAULT '[]'` for the reason step
+/// 2's columns are empty-defaulted — it is what `ALTER TABLE` can answer for the
+/// rows already on disk, and no command is the honest value for a bot no session
+/// has ever spoken for.
+const BOT_COMMANDS: &str = "
+ALTER TABLE bots ADD COLUMN commands TEXT NOT NULL DEFAULT '[]';
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -423,6 +440,14 @@ mod tests {
 			identity_of(&connection, "b1"),
 			(String::new(), String::new(), "cat".to_owned(), "idle".to_owned(), None, None),
 			"a bot from the older build came out of the step without a face"
+		);
+		assert_eq!(
+			connection
+				.query_row("SELECT commands FROM bots WHERE id = 'b1'", [], |row| row
+					.get::<_, String>(0))
+				.expect("query"),
+			"[]",
+			"a bot from the older build came out of the step offering something"
 		);
 
 		drop(connection);

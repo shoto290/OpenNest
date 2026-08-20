@@ -39,6 +39,16 @@ export type TranscriptStore = TranscriptPort & {
 	 * Taking a picture off a bot is not here: it is `updateBot` with no
 	 * `avatarImagePath`, which is the same write that puts an animal back. */
 	setBotAvatarImage: (id: string, bytes: Uint8Array) => Promise<Bot>
+	/** The slash commands a session announced, held against the bot it answered for.
+	 * Replaced whole by every announcement: a command the newest session left out is
+	 * one it would refuse, so what is kept is the last list named rather than every
+	 * list ever named. A bot the store does not hold is refused — nothing may be kept
+	 * for a bot that is not there. */
+	recordBotCommands: (botId: string, commands: string[]) => Promise<void>
+	/** What was last held for the bot. Empty until a session of its own has
+	 * announced something, which is a bot that offers no command rather than one the
+	 * store owes an answer for. */
+	botCommands: (botId: string) => Promise<string[]>
 	mainChat: (botId: string) => Promise<Chat>
 	/** Opens the run a Claude process is about to be started for. The live run it
 	 * replaces is rotated by the same call, so a participant is never left with two

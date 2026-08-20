@@ -84,6 +84,19 @@ const WRITES: WriteCase[] = [
 		call: ["conversation_delete_bot", { id: "b-1" }],
 	},
 	{
+		member: "recordBotCommands",
+		write: () => conversationStore.recordBotCommands("b-1", ["review"]),
+		call: [
+			"conversation_record_bot_commands",
+			{ botId: "b-1", commands: ["review"] },
+		],
+	},
+	{
+		member: "botCommands",
+		write: () => conversationStore.botCommands("b-1"),
+		call: ["conversation_bot_commands", { botId: "b-1" }],
+	},
+	{
 		member: "mainChat",
 		write: () => conversationStore.mainChat("b-1"),
 		call: ["conversation_main_chat", { botId: "b-1" }],
