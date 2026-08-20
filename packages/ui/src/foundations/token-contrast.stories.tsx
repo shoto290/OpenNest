@@ -1,13 +1,13 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { contrastRatio, type Rgb } from "@workspace/ui/lib/contrast"
 import {
 	ACTION_TOKENS,
 	SIDEBAR_TOKENS,
 	SURFACE_TOKENS,
 } from "@workspace/ui/foundations/color-tokens"
 
-type Rgb = [number, number, number]
 type TokenPair = { background: string; foreground: string }
 type ThemeName = "light" | "dark"
 
@@ -50,19 +50,6 @@ const PAIRS_AWAITING_DESIGN_DECISION: Record<string, number> = {
 
 const requiredRatio = (label: string) =>
 	PAIRS_AWAITING_DESIGN_DECISION[label] ?? AA_TEXT_RATIO
-
-const toLinear = (channel: number) =>
-	channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-
-const relativeLuminance = ([red, green, blue]: Rgb) =>
-	0.2126 * toLinear(red / 255) +
-	0.7152 * toLinear(green / 255) +
-	0.0722 * toLinear(blue / 255)
-
-const contrastRatio = (a: Rgb, b: Rgb) => {
-	const luminances = [relativeLuminance(a), relativeLuminance(b)]
-	return (Math.max(...luminances) + 0.05) / (Math.min(...luminances) + 0.05)
-}
 
 const createPixel = () => {
 	const canvas = document.createElement("canvas")
