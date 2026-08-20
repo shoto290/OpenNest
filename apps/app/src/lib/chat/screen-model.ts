@@ -1,6 +1,7 @@
 import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 import type { ChatEmptyStateStatus } from "@workspace/ui/components/chat-empty-state"
 import type { ChatTurnState } from "@workspace/ui/components/chat-turn"
+import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { type ChatState, isTurnBusy } from "./chat-state"
 import { toPublishedBlocks } from "./markdown-blocks"
@@ -233,18 +234,18 @@ export function needsFreshSession(error: TransportError): boolean {
 	return SESSION_ENDING[error.kind]
 }
 
-export function noticeTitleFor(error: TransportError): string {
+export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
 	if (error.kind === "crashed") {
-		return "Claude Code stopped"
+		return t("screen.notice.crashed")
 	}
 	if (error.kind === "resumeFailed") {
-		return "Previous conversation could not be resumed"
+		return t("screen.notice.resumeFailed")
 	}
 	if (error.kind === "workingDirectoryRefused") {
-		return "The bot's folder was not found"
+		return t("screen.notice.workingDirectoryRefused")
 	}
 	if (needsFreshSession(error)) {
-		return "Claude Code is unavailable"
+		return t("screen.notice.unavailable")
 	}
-	return "That request did not go through"
+	return t("screen.notice.failed")
 }

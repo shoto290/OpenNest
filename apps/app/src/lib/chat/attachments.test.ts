@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import {
 	describeAttachmentError,
 	promptWithAttachments,
@@ -9,6 +11,8 @@ import {
 	toAttachmentStoreError,
 	withoutStaged,
 } from "./attachments"
+
+const t = i18n.getFixedT(null, "chat")
 
 const fileNamed = (name: string, type: string, bytes = [1, 2, 3]) =>
 	new File([new Uint8Array(bytes)], name, { type })
@@ -102,13 +106,13 @@ describe("the submitted prompt", () => {
 describe("a refused store", () => {
 	it("names the count limit the call was refused on", () => {
 		expect(
-			describeAttachmentError({ kind: "tooMany", count: 21, limit: 20 }),
+			describeAttachmentError(t, { kind: "tooMany", count: 21, limit: 20 }),
 		).toBe("A prompt carries 20 files at most, and 21 are staged.")
 	})
 
 	it("names the total size limit the call was refused on", () => {
 		expect(
-			describeAttachmentError({
+			describeAttachmentError(t, {
 				kind: "tooLargeTogether",
 				bytes: 210 * 1024 * 1024,
 				limit: 100 * 1024 * 1024,
@@ -120,7 +124,7 @@ describe("a refused store", () => {
 
 	it("names the file that was too big on its own", () => {
 		expect(
-			describeAttachmentError({
+			describeAttachmentError(t, {
 				kind: "tooLarge",
 				name: "huge.bin",
 				bytes: 21 * 1024 * 1024,
