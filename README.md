@@ -43,11 +43,12 @@ The Storybook half of `bun run test` runs in headless Chromium — install that 
 | Variable | Read by | What it does |
 | --- | --- | --- |
 | `OPENNEST_AGENT_SIDECAR` | the app, whenever it resolves the agent | Absolute path to an `opennest-agent` executable. It is tried **before** the copy bundled beside the app and the one left in the build tree, so it wins over the sidecar the app ships with. Leave it unset to run that one. |
+| `OPENNEST_CLAUDE_EXECUTABLE` | the sidecar, whenever it resolves the provider | Absolute path to a Claude Code executable. It is tried **before** the copy shipped beside the sidecar, which is what a bundle and a build tree both carry. Leave it unset to run that one; the sidecar test suites point it at the one in `node_modules`, having no bundle of their own. |
 | `APPLE_SIGNING_IDENTITY` | `bun run tauri:build` | Developer ID to sign the macOS bundle with. Unset, the build ad-hoc signs instead. Tauri reads it directly and enables the hardened runtime on its own. |
 
 `OPENNEST_AGENT_SIDECAR` is what the host test suites point at a fake sidecar. A leftover export silently sends the app at that fake too, so `unset OPENNEST_AGENT_SIDECAR` before running against the bundled sidecar.
 
-Neither variable belongs in the repository: one is a local path, the other a personal certificate name.
+None of them belongs in the repository: two are local paths, the third a personal certificate name.
 
 ## Monorepo
 

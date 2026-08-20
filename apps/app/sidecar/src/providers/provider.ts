@@ -45,7 +45,14 @@ export type AgentProvider = {
 	open: (request: SessionRequest, emit: EmitFrame) => Promise<AgentSession>
 }
 
+/** Where a build drops the files a provider ships beside the sidecar, under the
+ * name Tauri reads an external binary as. */
+export type StageTarget = {
+	directory: string
+	targetTriple: string
+}
+
 export type ProviderBuild = {
-	assetName: string
 	prepare: () => Promise<void>
+	stage: (target: StageTarget) => void
 }

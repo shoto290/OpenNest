@@ -43,7 +43,7 @@
 	"bundle": {
 		"active": true,
 		"createUpdaterArtifacts": true,
-		"externalBin": ["binaries/opennest-agent"],
+		"externalBin": ["binaries/opennest-agent", "binaries/opennest-claude"],
 		"targets": ["app", "dmg", "deb", "appimage", "nsis"],
 		"category": "DeveloperTool",
 		"copyright": "© 2026 OpenNest",

@@ -1,11 +1,21 @@
 import { describe, expect, it } from "bun:test"
 
+import { claudeSourceExecutable } from "./providers/claude/build"
+import { EXECUTABLE_OVERRIDE_ENV } from "./providers/claude/executable"
 import { DEFAULT_PROVIDER_ID } from "./providers/registry"
 
 const entrypoint = new URL("./index.ts", import.meta.url).pathname
 
+/** Run from source there is no bundle beside the sidecar, so the executable it
+ * spawns is named explicitly rather than resolved from a build tree. */
+const environment = {
+	...process.env,
+	[EXECUTABLE_OVERRIDE_ENV]: claudeSourceExecutable(),
+}
+
 const served = async (commands: string[]) => {
 	const child = Bun.spawn(["bun", entrypoint, "--serve"], {
+		env: environment,
 		stdin: "pipe",
 		stdout: "pipe",
 		stderr: "pipe",

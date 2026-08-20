@@ -1,23 +1,14 @@
-import type { ProviderBuild } from "./provider"
+import type { ProviderBuild, StageTarget } from "./provider"
 
 import { claudeBuild } from "./claude/build"
 
 const PROVIDER_BUILDS: ProviderBuild[] = [claudeBuild]
 
 export const prepareProviders = () =>
-	Promise.all(
-		PROVIDER_BUILDS.map(async (build) => {
-			await build.prepare()
-			return build.assetName
-		}),
-	)
+	Promise.all(PROVIDER_BUILDS.map((build) => build.prepare()))
 
-export const singleAssetName = (assetNames: string[]) => {
-	const [assetName, ...colliding] = new Set(assetNames)
-	if (colliding.length > 0) {
-		throw new Error(
-			`bun build accepts one asset naming pattern, providers requested ${assetName}, ${colliding.join(", ")}`,
-		)
+export const stageProviders = (target: StageTarget) => {
+	for (const build of PROVIDER_BUILDS) {
+		build.stage(target)
 	}
-	return assetName
 }

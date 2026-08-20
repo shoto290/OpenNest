@@ -10,7 +10,7 @@ type AuthStatus = {
 	loggedIn?: boolean
 }
 
-/** The local subscription, read from the credential store the embedded executable
+/** The local subscription, read from the credential store the shipped executable
  * already owns. Spawned rather than asked over the SDK: no session can be opened
  * before this answer, so there is nothing to ask it of.
  *
