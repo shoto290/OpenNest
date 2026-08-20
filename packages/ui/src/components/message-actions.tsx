@@ -25,13 +25,12 @@ interface MessageActionProps {
 	children: ReactNode
 }
 
-/** Faded rather than removed, so the button keeps its place in the tab order and
- * reaching it by keyboard lights the row it belongs to. The fade itself rides on
- * the transition `Button` already carries. It answers to this row's own group, so
- * a `MessageAction` reveals wherever the row is put rather than only inside a
+/** Hidden rather than removed, so the button keeps its place in the tab order
+ * and reaching it by keyboard lights the row it belongs to. It answers to this row's own group, so a
+ * `MessageAction` reveals wherever the row is put rather than only inside a
  * `MessageBubble`. */
 const HOVER_REVEAL =
-	"opacity-0 group-focus-within/message-actions:opacity-100 group-hover/message-actions:opacity-100 motion-reduce:transition-none"
+	"opacity-0 group-focus-within/message-actions:opacity-100 group-hover/message-actions:opacity-100"
 
 const ROW_SIDE_START = "group/message-actions flex max-w-full items-start gap-1"
 const ROW_SIDE_END = `${ROW_SIDE_START} flex-row-reverse`

@@ -38,9 +38,15 @@ const LIST_VARIANTS: Variants = {
 	show: { transition: { staggerChildren: 0.035, delayChildren: 0.05 } },
 }
 const ITEM_VARIANTS: Variants = {
-	hidden: { opacity: 0, y: -6, filter: "blur(3px)" },
-	show: { opacity: 1, y: 0, filter: "blur(0px)" },
+	hidden: { y: -6 },
+	show: { y: 0 },
 }
+
+/** The panel folds away after the options have gone, and its own `visibility`
+ * waits out both — read from here so the three cannot drift apart. */
+const CLOSE_DELAY = 0.14
+const CLOSE_DURATION = 0.26
+const CLOSE_TOTAL = CLOSE_DELAY + CLOSE_DURATION
 
 type Placement = "bottom" | "top"
 
@@ -213,7 +219,7 @@ export function SelectTrigger({ className, children }: SelectTriggerProps) {
 				borderBottomRightRadius: isTop ? INSTANT_TRANSITION : kfT,
 			}}
 			className={cn(
-				"relative z-10 flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors",
+				"relative z-10 flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-background py-2 pr-2.5 pl-3 text-sm text-foreground outline-none",
 				"hover:border-(--color-border-strong) focus-visible:ring-2 focus-visible:ring-foreground/20",
 				"disabled:pointer-events-none disabled:opacity-50",
 				className,
@@ -224,7 +230,7 @@ export function SelectTrigger({ className, children }: SelectTriggerProps) {
 				aria-hidden
 				animate={{ rotate: ctx.open ? 180 : 0 }}
 				transition={ctx.reduce ? { duration: 0 } : CHEVRON_TRANSITION}
-				className="text-muted-foreground"
+				className="shrink-0 text-muted-foreground"
 			>
 				<Icons.Expand className="h-4 w-4" />
 			</motion.span>
@@ -315,9 +321,8 @@ export function SelectContent({ className, children }: SelectContentProps) {
 			initial={false}
 			animate={
 				ctx.reduce
-					? { opacity: open ? 1 : 0, height: open ? height : 0 }
+					? { height: open ? height : 0 }
 					: {
-							opacity: open ? 1 : 0,
 							height: open ? height : 0,
 							// gap opens on the side facing the trigger
 							marginTop: isTop ? 0 : nearGap,
@@ -331,14 +336,15 @@ export function SelectContent({ className, children }: SelectContentProps) {
 			}
 			transition={
 				ctx.reduce
-					? { duration: 0.12 }
+					? { duration: CLOSE_DURATION }
 					: {
-							opacity: open
-								? { duration: 0.18 }
-								: { duration: 0.16, delay: 0.12 },
 							height: open
 								? { type: "spring", duration: 0.42, bounce: 0.14 }
-								: { duration: 0.26, ease: EASE_OUT, delay: 0.14 },
+								: {
+										duration: CLOSE_DURATION,
+										ease: EASE_OUT,
+										delay: CLOSE_DELAY,
+									},
 							marginTop: isTop ? INSTANT_TRANSITION : gapT,
 							marginBottom: isTop ? gapT : INSTANT_TRANSITION,
 							borderTopLeftRadius: isTop ? INSTANT_TRANSITION : radiusT,
@@ -351,11 +357,20 @@ export function SelectContent({ className, children }: SelectContentProps) {
 				transformOrigin: isTop ? "bottom" : "top",
 				overflow: "hidden",
 				pointerEvents: open ? "auto" : "none",
+				transitionDuration: open
+					? "0s"
+					: `${ctx.reduce ? CLOSE_DURATION : CLOSE_TOTAL}s`,
 			}}
 			// flush against the trigger, then separates into its own rounded pill;
 			// sits above or below depending on available space
+			// At zero height a bordered box still paints a hairline pill under the
+			// trigger, and the fade that used to cover it is gone. A `visibility`
+			// transition holds `visible` for its whole duration, so the panel keeps its
+			// border and its shadow all the way down and only leaves the page once it
+			// has finished folding away. Opening zeroes it to show the panel at once.
 			className={cn(
-				"absolute left-0 right-0 z-20 rounded-xl border border-border bg-background shadow-lg",
+				"absolute left-0 right-0 z-20 rounded-xl border border-border bg-background shadow-lg transition-[visibility]",
+				!open && "invisible",
 				isTop ? "bottom-full" : "top-full",
 				className,
 			)}
@@ -404,7 +419,7 @@ export function SelectItem({
 				disabled={disabled}
 				onClick={() => ctx.select(value)}
 				className={cn(
-					"flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none transition-colors",
+					"flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none",
 					selected
 						? "bg-muted text-foreground"
 						: "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:bg-muted",

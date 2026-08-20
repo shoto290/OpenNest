@@ -18,7 +18,7 @@ import {
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Icons } from "@workspace/ui/components/icons"
 import { MARKDOWN_PROSE_CLASS } from "@workspace/ui/components/markdown/prose"
-import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
+import { SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 /** What a bubble paints behind its content. Two of them paint nothing: `ghost`
@@ -89,12 +89,6 @@ export interface MessageBubbleCollapsibleProps
 	children?: ReactNode
 }
 
-const BUBBLE_CONTENT_REVEAL = {
-	duration: 0.12,
-	ease: EASE_OUT,
-	delay: 0.04,
-} as const
-
 // Sent bubbles should pop into place quickly with one restrained overshoot.
 const BUBBLE_POP = {
 	type: "spring",
@@ -124,8 +118,8 @@ export function MessageBubble({
 				data-align={resolvedAlign}
 				data-variant={variant}
 				initial={false}
-				exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3, scale: 0.99 }}
-				transition={reduce ? { duration: 0.12 } : SPRING_LAYOUT}
+				exit={reduce ? undefined : { y: -3, scale: 0.99 }}
+				transition={SPRING_LAYOUT}
 				className={cn(
 					"group/bubble flex w-full flex-col",
 					resolvedAlign === "end" ? "items-end" : "items-start",
@@ -153,7 +147,7 @@ function bubbleContentClass(
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
 		variant === "danger" && "text-destructive",
 		interactive &&
-			"cursor-pointer text-left outline-none transition-[background-color,color,transform] duration-150 hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
+			"cursor-pointer text-left outline-none transition-transform duration-150 hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
 	)
 }
 
@@ -200,38 +194,18 @@ export function MessageBubbleContent({
 					aria-hidden="true"
 					layout={reduce ? false : "size"}
 					layoutDependency={layoutVersion}
-					initial={
-						animateIn && !reduce
-							? {
-									opacity: 0,
-									scale: 0.92,
-								}
-							: false
-					}
-					animate={{ opacity: 1, scale: 1 }}
+					initial={animateIn && !reduce ? { scale: 0.92 } : false}
+					animate={{ scale: 1 }}
 					transition={
 						reduce
 							? { duration: 0 }
-							: {
-									opacity: { duration: 0.12, ease: EASE_OUT },
-									scale: BUBBLE_POP,
-									layout: SPRING_LAYOUT,
-								}
+							: { scale: BUBBLE_POP, layout: SPRING_LAYOUT }
 					}
 					className={bubbleSurfaceClass(variant, align)}
 				/>
 			) : null}
 			<MessageBubbleLayoutContext.Provider value={notifyLayout}>
-				<motion.div
-					initial={animateIn && !reduce ? { opacity: 0 } : false}
-					animate={{ opacity: 1 }}
-					transition={
-						reduce ? { duration: 0.12, ease: EASE_OUT } : BUBBLE_CONTENT_REVEAL
-					}
-					className="relative"
-				>
-					{children}
-				</motion.div>
+				<div className="relative">{children}</div>
 			</MessageBubbleLayoutContext.Provider>
 		</>
 	)
@@ -341,7 +315,7 @@ export function MessageBubbleCollapsible({
 				aria-controls={contentId}
 				onClick={() => setOpen(!currentOpen)}
 				className={cn(
-					"mt-2 inline-flex h-7 items-center gap-1 rounded-full px-2 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+					"mt-2 inline-flex h-7 items-center gap-1 rounded-full px-2 text-xs font-medium text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 					triggerClassName,
 				)}
 			>

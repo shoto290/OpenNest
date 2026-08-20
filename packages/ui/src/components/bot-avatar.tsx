@@ -364,11 +364,7 @@ function BotAvatar({
 							splitId={splitId}
 							weight={weight}
 						/>
-						<g
-							data-part={PARTS.blush}
-							opacity={0}
-							style={{ transition: "opacity 0.5s ease" }}
-						>
+						<g data-part={PARTS.blush} opacity={0}>
 							<ellipse rx={9} ry={4.5} {...ROLE_PROPS.accent} />
 							<ellipse rx={9} ry={4.5} {...ROLE_PROPS.accent} />
 						</g>

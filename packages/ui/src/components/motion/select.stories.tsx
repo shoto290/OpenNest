@@ -99,7 +99,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A select whose panel is attached to its trigger rather than dropped on top of it. On open, the edge of the trigger facing the panel snaps flat, the panel unfolds out of it at zero height, then the two pinch apart and both round off — one gesture, not a fade. The options stagger in behind it. The panel is positioned rather than portalled, so it needs a trigger that is not inside a clipping ancestor, and it flips above the trigger on its own when there is no room below. Composed as `Select` → `SelectTrigger` + `SelectValue` → `SelectContent` → `SelectItem`; items stay mounted while closed so the trigger can keep resolving the selected label. Closes on Escape and on an outside press. Reach for it over `ActionSwapButton` as soon as a reader needs to see the options before choosing. Known defect, not yet fixed: `SelectItem` renders an `<li>` with no list around it, so every story that leaves the panel open trips axe's `listitem` rule — those stories mark it `todo` so the violation stays visible in the a11y panel instead of being hidden.",
+					"A select whose panel is attached to its trigger rather than dropped on top of it. On open, the edge of the trigger facing the panel snaps flat, the panel unfolds out of it at zero height, then the two pinch apart and both round off — one gesture, not a fade. The options stagger in behind it. The panel is positioned rather than portalled, so it needs a trigger that is not inside a clipping ancestor, and it flips above the trigger on its own when there is no room below. Composed as `Select` → `SelectTrigger` + `SelectValue` → `SelectContent` → `SelectItem`; items stay mounted while closed so the trigger can keep resolving the selected label. Closes on Escape and on an outside press. Known defect, not yet fixed: `SelectItem` renders an `<li>` with no list around it, so every story that leaves the panel open trips axe's `listitem` rule — those stories mark it `todo` so the violation stays visible in the a11y panel instead of being hidden.",
 			},
 		},
 	},
@@ -209,7 +209,9 @@ export const WithDisabledItem = meta.story({
 	},
 	play: async ({ canvas, userEvent }) => {
 		await userEvent.click(canvas.getByRole("button", { name: /Paris/ }))
-		await expect(canvas.getByRole("option", { name: "Montreal" })).toBeDisabled()
+		await expect(
+			canvas.getByRole("option", { name: "Montreal" }),
+		).toBeDisabled()
 	},
 })
 

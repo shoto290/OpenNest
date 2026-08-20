@@ -21,7 +21,7 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
-import { EASE_OUT, SPRING_PANEL, TWEEN_REDUCED } from "@workspace/ui/lib/ease"
+import { EASE_OUT, SPRING_PANEL } from "@workspace/ui/lib/ease"
 import { useHoverCapable } from "@workspace/ui/lib/hooks/use-hover-capable"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -72,39 +72,23 @@ function buildVariants(side: Side): Variants {
 	const o = offsetFrom[side]
 	return {
 		initial: {
-			opacity: 0,
 			scale: 0.9,
-			filter: "blur(5px)",
 			x: o.x ?? 0,
 			y: o.y ?? 0,
 		},
 		animate: {
-			opacity: 1,
 			scale: 1,
-			filter: "blur(0px)",
 			x: 0,
 			y: 0,
-			transition: {
-				...SPRING_PANEL,
-				opacity: { duration: 0.14, ease: EASE_OUT },
-				filter: { duration: 0.18, ease: EASE_OUT },
-			},
+			transition: SPRING_PANEL,
 		},
 		exit: {
-			opacity: 0,
 			scale: 0.94,
-			filter: "blur(3px)",
 			x: (o.x ?? 0) * 0.6,
 			y: (o.y ?? 0) * 0.6,
 			transition: { duration: 0.12, ease: EASE_OUT },
 		},
 	}
-}
-
-const REDUCED_VARIANTS: Variants = {
-	initial: { opacity: 0 },
-	animate: { opacity: 1, transition: TWEEN_REDUCED },
-	exit: { opacity: 0, transition: TWEEN_REDUCED },
 }
 
 // Once any tooltip has just closed, neighbouring tooltips open without the
@@ -209,7 +193,7 @@ export function Tooltip({
 	)
 
 	const variants = useMemo(
-		() => (reduce ? REDUCED_VARIANTS : buildVariants(side)),
+		() => (reduce ? undefined : buildVariants(side)),
 		[reduce, side],
 	)
 

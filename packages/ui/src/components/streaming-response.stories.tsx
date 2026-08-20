@@ -221,7 +221,9 @@ export const WithActions = meta.story({
 		await expect(args.onCopy).toHaveBeenCalled()
 		await expect(canvas.getByRole("button", { name: "Copied" })).toBeVisible()
 
-		await userEvent.click(canvas.getByRole("button", { name: "Retry response" }))
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Retry response" }),
+		)
 		await expect(args.onRetry).toHaveBeenCalled()
 
 		const helpful = canvas.getByRole("button", { name: "Helpful" })

@@ -12,7 +12,7 @@ import { cn } from "@workspace/ui/lib/utils"
 const RAIL_LABELS_MIN_WIDTH = 672
 
 const RAIL_ITEM_CLASS =
-	"flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-muted-foreground text-sm outline-none transition-colors select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-active:bg-muted data-active:font-medium data-active:text-foreground motion-reduce:transition-none"
+	"flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-muted-foreground text-sm outline-none select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-active:bg-muted data-active:font-medium data-active:text-foreground"
 
 /** The panel leaving on a tab change is dropped out of the flow at once: Base UI
  * holds it one frame longer, and two panels sharing the row would be a flicker. */

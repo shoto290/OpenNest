@@ -9,8 +9,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const TRAVEL_STEPS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 }
 
-const PANEL_HIDDEN = { opacity: 0, y: 6, scale: 0.98 } as const
-const PANEL_VISIBLE = { opacity: 1, y: 0, scale: 1 } as const
+const PANEL_HIDDEN = { y: 6, scale: 0.98 } as const
+const PANEL_VISIBLE = { y: 0, scale: 1 } as const
 const PANEL_LEAVING = { ...PANEL_HIDDEN, pointerEvents: "none" } as const
 
 const scrollActiveIntoView = (row: HTMLButtonElement | null) => {

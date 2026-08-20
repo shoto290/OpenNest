@@ -31,7 +31,10 @@ type MotionOwnedProps =
 	| "onAnimationIteration"
 
 export interface MessageProps
-	extends Omit<ComponentPropsWithRef<"article">, "children" | MotionOwnedProps> {
+	extends Omit<
+		ComponentPropsWithRef<"article">,
+		"children" | MotionOwnedProps
+	> {
 	from: MessageFrom
 	/** Plays a trailing-edge pop-up once when this message row mounts. */
 	animateIn?: boolean
@@ -86,21 +89,15 @@ export function Message({
 					data-from={from}
 					aria-label={props["aria-label"] ?? `${from} message`}
 					initial={
-						entrance
-							? { opacity: 0, transform: "translateY(8px) scale(0.95)" }
-							: false
+						entrance ? { transform: "translateY(8px) scale(0.95)" } : false
 					}
 					animate={
-						entrance
-							? { opacity: 1, transform: "translateY(0px) scale(1)" }
-							: { opacity: 1 }
+						entrance ? { transform: "translateY(0px) scale(1)" } : undefined
 					}
 					exit={
-						reduce
-							? { opacity: 0 }
-							: { opacity: 0, transform: "translateY(-3px) scale(0.99)" }
+						reduce ? undefined : { transform: "translateY(-3px) scale(0.99)" }
 					}
-					transition={reduce ? { duration: 0.12 } : MESSAGE_POP_UP}
+					transition={MESSAGE_POP_UP}
 					style={{
 						transformOrigin: from === "user" ? "100% 100%" : "0% 100%",
 						...style,
@@ -244,11 +241,7 @@ export function MessageTyping({
 					key={index}
 					aria-hidden="true"
 					className="size-1 rounded-full bg-current"
-					animate={
-						reduce
-							? { opacity: 0.45 }
-							: { opacity: [0.28, 0.85, 0.28], y: [0, -2, 0] }
-					}
+					animate={reduce ? undefined : { y: [0, -2, 0] }}
 					transition={{
 						duration: 1.05,
 						ease: EASE_OUT,

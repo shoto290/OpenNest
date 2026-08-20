@@ -6,7 +6,7 @@ import { buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	BACKDROP_CLASS,
-	POPUP_CLASS,
+	DIALOG_POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -27,7 +27,7 @@ const Content = ({ children, className, ...props }: DialogContentProps) => (
 		/>
 		<DialogPrimitive.Popup
 			className={cn(
-				POPUP_CLASS,
+				DIALOG_POPUP_CLASS,
 				"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-3rem)] w-128 max-w-[calc(100vw-3rem)] flex-col gap-4 overflow-y-auto rounded-2xl p-6",
 				"[&>[data-slot=dialog-title]+[data-slot=dialog-description]]:-mt-3",
 				className,

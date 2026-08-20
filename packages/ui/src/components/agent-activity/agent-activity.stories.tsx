@@ -78,7 +78,8 @@ const FAILED_RUN: AgentActivityItem[] = [
 	{
 		id: "text-reason",
 		type: "text",
-		content: "Build stopped: nest-card.tsx imports a token that no longer exists.",
+		content:
+			"Build stopped: nest-card.tsx imports a token that no longer exists.",
 	},
 ]
 

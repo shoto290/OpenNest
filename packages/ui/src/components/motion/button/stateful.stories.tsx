@@ -39,7 +39,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One button that carries the whole outcome of the action it fires. `state` drives everything: the label cascades letter by letter into the next one, an icon slides in and animates its own width open so the pill grows instead of jumping, and the width springs to fit the new text. `loading` disables the button and sets `aria-busy`, and the label sits in an `aria-live=\"polite\"` region so the outcome is announced rather than only drawn. The state is the caller's to own — this component never transitions on its own, which is what keeps it honest about the request behind it. Under `prefers-reduced-motion` the cascade collapses to a fade and the width snaps. Reach for it on a submit whose result belongs in the button; where the outcome deserves a sentence, keep a plain button and put the sentence next to it.",
+					'One button that carries the whole outcome of the action it fires. `state` drives everything: the label cascades letter by letter into the next one, an icon slides in and animates its own width open so the pill grows instead of jumping, and the width springs to fit the new text. `loading` disables the button and sets `aria-busy`, and the label sits in an `aria-live="polite"` region so the outcome is announced rather than only drawn. The state is the caller\'s to own — this component never transitions on its own, which is what keeps it honest about the request behind it. Under `prefers-reduced-motion` the cascade collapses to a fade and the width snaps. Reach for it on a submit whose result belongs in the button; where the outcome deserves a sentence, keep a plain button and put the sentence next to it.',
 			},
 		},
 	},

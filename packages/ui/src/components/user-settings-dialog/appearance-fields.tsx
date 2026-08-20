@@ -24,7 +24,7 @@ const SCHEME_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "gap-1.5 px-2 py-3 text-xs")
 /** A tile drawn in the palette it offers. Its edge is that palette's own primary
  * once chosen, so the mark that says "this one" is itself a sample of the choice. */
 const VIGNETTE_CLASS =
-	"flex cursor-pointer flex-col gap-1.5 rounded-xl border border-border bg-background p-1.5 text-foreground transition-colors hover:border-primary/50 has-[:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring motion-reduce:transition-none"
+	"flex cursor-pointer flex-col gap-1.5 rounded-xl border border-border bg-background p-1.5 text-foreground hover:border-primary/50 has-[:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
 
 /** The app in miniature: the sidebar down the left, a heading and two lines of
  * text beside it. Every band is a token read live from the palette the tile names,

@@ -6,7 +6,7 @@ import { buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	BACKDROP_CLASS,
-	POPUP_CLASS,
+	DIALOG_POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -45,7 +45,7 @@ const DangerZone = ({
 				<AlertDialog.Backdrop className={BACKDROP_CLASS} />
 				<AlertDialog.Popup
 					className={cn(
-						POPUP_CLASS,
+						DIALOG_POPUP_CLASS,
 						"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex w-88 max-w-[calc(100vw-3rem)] flex-col gap-4 rounded-2xl p-5",
 					)}
 				>

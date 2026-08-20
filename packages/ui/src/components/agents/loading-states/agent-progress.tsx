@@ -53,11 +53,7 @@ function ProgressGrid() {
 				<motion.span
 					key={id}
 					className="rounded-[1px] bg-current"
-					animate={
-						reduce
-							? { opacity: [0.35, 0.8, 0.35] }
-							: { opacity: [0.28, 1, 0.28], scale: [0.72, 1, 0.72] }
-					}
+					animate={reduce ? undefined : { scale: [0.72, 1, 0.72] }}
 					transition={{
 						duration: 1.55,
 						ease: EASE_IN_OUT,

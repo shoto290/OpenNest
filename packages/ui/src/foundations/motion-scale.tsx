@@ -10,7 +10,6 @@ const EASINGS = [
 ]
 
 const ANIMATIONS = [
-	{ label: "fade-in", className: "animate-in fade-in" },
 	{ label: "zoom-in", className: "animate-in zoom-in" },
 	{ label: "spin-in", className: "animate-in spin-in" },
 	{ label: "slide-in-from-top", className: "animate-in slide-in-from-top-8" },
@@ -22,10 +21,6 @@ const ANIMATIONS = [
 	{
 		label: "slide-in-from-right",
 		className: "animate-in slide-in-from-right-8",
-	},
-	{
-		label: "fade-in + zoom-in",
-		className: "animate-in fade-in zoom-in",
 	},
 ]
 

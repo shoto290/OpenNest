@@ -31,9 +31,8 @@ export function AgentDisclosure({
 			initial={false}
 			animate={
 				reduce
-					? { opacity: open ? 1 : 0 }
+					? undefined
 					: {
-							opacity: open ? 1 : 0,
 							clipPath: open ? "inset(0 0 0% 0)" : "inset(0 0 100% 0)",
 							y: open ? 0 : -4,
 						}

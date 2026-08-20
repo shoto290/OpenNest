@@ -15,7 +15,7 @@ import {
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
 import { Icons } from "@workspace/ui/components/icons"
-import { EASE_OUT, SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
+import { SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
 import { ActivityRow } from "./activity-row"
@@ -231,7 +231,7 @@ export function AgentActivity({
 					aria-controls={contentId}
 					onClick={toggle}
 					className={cn(
-						"group flex h-7 min-w-0 items-center gap-1.5 rounded-md text-left font-medium outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+						"group flex h-7 min-w-0 items-center gap-1.5 rounded-md text-left font-medium outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 						failed ? "text-destructive" : "text-muted-foreground",
 					)}
 				>
@@ -292,17 +292,13 @@ export function AgentActivity({
 									layout="position"
 									key={item.id}
 									role="listitem"
-									initial={reduce ? { opacity: 1 } : { opacity: 0, y: 6 }}
-									animate={{ opacity: 1, y: 0 }}
-									exit={reduce ? { opacity: 0 } : { opacity: 0, y: -3 }}
+									initial={reduce ? false : { y: 6 }}
+									animate={{ y: 0 }}
+									exit={reduce ? undefined : { y: -3 }}
 									transition={
 										reduce
 											? { duration: 0 }
-											: {
-													opacity: { duration: 0.18, ease: EASE_OUT },
-													y: SPRING_LAYOUT,
-													layout: SPRING_LAYOUT,
-												}
+											: { y: SPRING_LAYOUT, layout: SPRING_LAYOUT }
 									}
 								>
 									<ActivityRow item={item} />

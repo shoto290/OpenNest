@@ -31,20 +31,20 @@ export interface StatefulButtonProps extends Omit<ButtonProps, "children"> {
 }
 
 const CASCADE_STAGGER = 0.025
-const ROLL_BLUR = "blur(6px)"
+
+/** The roll clears the box rather than fading across it, so the leaving label
+ * and the landing one never overlap half-way. */
+const ROLL_IN = "105%"
+const ROLL_OUT = "-105%"
 
 const CASCADE_LETTER_VARIANTS: Variants = {
-	initial: { opacity: 0, y: "105%", filter: ROLL_BLUR },
+	initial: { y: ROLL_IN },
 	animate: (delay: number = 0) => ({
-		opacity: 1,
 		y: "0%",
-		filter: "blur(0px)",
 		transition: { ...SPRING_SWAP, delay },
 	}),
 	exit: (delay: number = 0) => ({
-		opacity: 0,
-		y: "-105%",
-		filter: ROLL_BLUR,
+		y: ROLL_OUT,
 		transition: { duration: 0.16, ease: EASE_OUT, delay: delay * 0.5 },
 	}),
 }
@@ -52,19 +52,15 @@ const CASCADE_LETTER_VARIANTS: Variants = {
 const ICON_VARIANTS: Variants = {
 	// Width collapses too, so the icon adds/removes its own space smoothly
 	// instead of popping the row width in a single frame.
-	initial: { opacity: 0, width: 0, scale: 0.7, filter: ROLL_BLUR },
+	initial: { width: 0, scale: 0.7 },
 	animate: {
-		opacity: 1,
 		width: "1.5rem",
 		scale: 1,
-		filter: "blur(0px)",
 		transition: SPRING_SWAP,
 	},
 	exit: {
-		opacity: 0,
 		width: 0,
 		scale: 0.7,
-		filter: ROLL_BLUR,
 		transition: { duration: 0.16, ease: EASE_OUT },
 	},
 }
@@ -75,10 +71,9 @@ function IconSlot({ keyId, children }: { keyId: string; children: ReactNode }) {
 		<motion.span
 			key={keyId}
 			variants={ICON_VARIANTS}
-			initial={reduce ? { opacity: 0 } : "initial"}
-			animate={reduce ? { opacity: 1 } : "animate"}
-			exit={reduce ? { opacity: 0 } : "exit"}
-			transition={reduce ? { duration: 0.15 } : undefined}
+			initial={reduce ? false : "initial"}
+			animate="animate"
+			exit="exit"
 			className="inline-grid shrink-0 place-items-center overflow-hidden"
 		>
 			{children}
@@ -145,7 +140,7 @@ function TextSlot({ value, children }: { value: string; children: ReactNode }) {
 									key={index}
 									custom={index * CASCADE_STAGGER}
 									variants={CASCADE_LETTER_VARIANTS}
-									className="inline-block whitespace-pre will-change-[opacity,filter,transform]"
+									className="inline-block whitespace-pre"
 								>
 									{char}
 								</motion.span>
@@ -157,21 +152,11 @@ function TextSlot({ value, children }: { value: string; children: ReactNode }) {
 				<AnimatePresence initial={false}>
 					<motion.span
 						key={`text-${value}`}
-						initial={
-							reduce ? { opacity: 0 } : { opacity: 0, y: 14, filter: ROLL_BLUR }
-						}
-						animate={
-							reduce
-								? { opacity: 1 }
-								: { opacity: 1, y: 0, filter: "blur(0px)" }
-						}
-						exit={
-							reduce
-								? { opacity: 0 }
-								: { opacity: 0, y: -14, filter: ROLL_BLUR }
-						}
-						transition={reduce ? { duration: 0.15 } : SPRING_SWAP}
-						className="absolute left-0 top-0 inline-block will-change-[opacity,filter,transform]"
+						initial={reduce ? false : { y: ROLL_IN }}
+						animate={{ y: "0%" }}
+						exit={{ y: ROLL_OUT }}
+						transition={reduce ? { duration: 0 } : SPRING_SWAP}
+						className="absolute left-0 top-0 inline-block"
 					>
 						{children}
 					</motion.span>
