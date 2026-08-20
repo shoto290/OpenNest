@@ -88,6 +88,18 @@ describe("toUpdateBadgeProps", () => {
 		expect(props.releaseNotes).toEqual([])
 	})
 
+	it("points at the release the version was published as", () => {
+		const props = propsOf(stateOf({ available: release }))
+
+		expect(props.releaseNotesUrl).toBe(
+			"https://github.com/shoto290/OpenNest/releases/tag/v1.4.0",
+		)
+	})
+
+	it("has no release to point at while this build is the current one", () => {
+		expect(propsOf(stateOf()).releaseNotesUrl).toBeUndefined()
+	})
+
 	it("counts the bots a restart would interrupt", () => {
 		const props = propsOf(stateOf({ isRestartPending: true }), 2)
 

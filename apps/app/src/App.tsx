@@ -20,6 +20,7 @@ import { useSettingsShortcut } from "@/lib/bots/use-settings-shortcut"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
+import { useExternalLinks } from "@/lib/links/use-external-links"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
 
@@ -39,6 +40,10 @@ export function App() {
 	// Mounted at the top of the window: the release check belongs to the app being
 	// open, and the pastille under the roster is where what it found is read.
 	const updater = useUpdater()
+
+	// Mounted here for the same reason: a link is followed wherever the reader is,
+	// and the window is what has to stay on the view they were reading.
+	useExternalLinks()
 
 	const { bots, selectedBotId, isEditing, isConfirmingDelete } = roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
