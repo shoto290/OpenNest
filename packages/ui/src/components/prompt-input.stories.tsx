@@ -1,8 +1,15 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
+import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
+import {
+	DROPPED_PROMPT_FILE,
+	PASTED_PROMPT_FILE,
+	PROMPT_ATTACHMENTS,
+} from "@workspace/ui/components/prompt-attachments.fixtures"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 
 const DRAFT = "Summarise the release notes for v0.1"
@@ -22,8 +29,52 @@ const trailingControls = (
 	</Button>
 )
 
+const attachControl = <PromptAttachButton onAttach={fn()} />
+
+const stagedFiles = (
+	<PromptAttachments items={PROMPT_ATTACHMENTS} onRemove={fn()} />
+)
+
+const formOf = (element: HTMLElement) =>
+	element.closest("form") as HTMLFormElement
+
+/** A real `DataTransfer`, the only kind Chromium lets a drag or a paste carry. */
+const filesTransfer = (files: File[]) => {
+	const transfer = new DataTransfer()
+	for (const file of files) transfer.items.add(file)
+	return transfer
+}
+
+const textTransfer = (text: string) => {
+	const transfer = new DataTransfer()
+	transfer.setData("text/plain", text)
+	return transfer
+}
+
+/** Every event is cancelable, so the answer is whether the composer suppressed the
+ * browser's own handling — the whole point of a drop the page keeps for itself. */
+const drag = (
+	kind: "dragover" | "dragleave" | "dragend" | "drop",
+	target: HTMLElement,
+	init: DragEventInit = {},
+) =>
+	!target.dispatchEvent(
+		new DragEvent(kind, { bubbles: true, cancelable: true, ...init }),
+	)
+
+const pasteInto = (target: HTMLElement, clipboardData: DataTransfer) =>
+	!target.dispatchEvent(
+		new ClipboardEvent("paste", {
+			bubbles: true,
+			cancelable: true,
+			clipboardData,
+		}),
+	)
+
+const named = (file: File) => [expect.objectContaining({ name: file.name })]
+
 const isExpanded = (element: HTMLElement) =>
-	element.closest("form")?.dataset.expanded === "true"
+	formOf(element).dataset.expanded === "true"
 
 const box = (element: HTMLElement) => element.getBoundingClientRect()
 
@@ -54,6 +105,7 @@ const meta = preview.meta({
 		onSubmit: fn(),
 		onValueChange: fn(),
 		onStop: fn(),
+		onAttach: fn(),
 	},
 	argTypes: {
 		loading: { control: "boolean" },
@@ -221,6 +273,7 @@ export const States = meta.story({
 				defaultValue={DRAFT}
 				leading={leadingControls}
 				trailing={trailingControls}
+				attachments={stagedFiles}
 				aria-label="Disabled prompt"
 			/>
 			<PromptInput {...args} loading aria-label="Loading prompt" />
@@ -242,9 +295,15 @@ export const States = meta.story({
 		).toBeInTheDocument()
 
 		const addContext = canvas.getByRole("button", { name: "Add context" })
+		const remove = canvas.getByRole("button", {
+			name: `Remove ${PROMPT_ATTACHMENTS[0].name}`,
+		})
 
 		addContext.focus()
 		await expect(addContext).not.toHaveFocus()
+
+		remove.focus()
+		await expect(remove).not.toHaveFocus()
 	},
 })
 
@@ -309,5 +368,77 @@ export const Stopping = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "Stop generating" }),
 		).toBeDisabled()
+	},
+})
+
+export const WithAttachments = meta.story({
+	args: {
+		defaultValue: DRAFT,
+		leading: attachControl,
+		attachments: stagedFiles,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Files staged for the turn: the chips take the top of the composer, inside the same container as the text, and the composer holds its expanded shape whatever the prompt is worth. This is also the story for the two silent ways in — a drop on the composer and a paste into the textarea both report their files to `onAttach` and suppress the browser's own handling, while a drop carrying no file and a paste carrying text are handed straight back to it. Check that the row never overlaps the text, that dropping is suppressed rather than opening the file in a new tab, and that the composer folds back to the pill once the last chip is taken back — `PromptAttachments → InComposer` does the removing.",
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Prompt" })
+		const form = formOf(textarea)
+		const chip = canvas.getAllByRole("listitem")[0]
+
+		await expect(isExpanded(textarea)).toBe(true)
+		await expect(box(chip).bottom).toBeLessThanOrEqual(box(textarea).top)
+
+		const dropping = { dataTransfer: filesTransfer([DROPPED_PROMPT_FILE]) }
+
+		await expect(drag("drop", form, dropping)).toBe(true)
+		await expect(pasteInto(textarea, filesTransfer([PASTED_PROMPT_FILE]))).toBe(
+			true,
+		)
+		await expect(args.onAttach).toHaveBeenCalledWith(named(DROPPED_PROMPT_FILE))
+		await expect(args.onAttach).toHaveBeenCalledWith(named(PASTED_PROMPT_FILE))
+
+		await expect(drag("drop", form, { dataTransfer: new DataTransfer() })).toBe(
+			false,
+		)
+		await expect(pasteInto(textarea, textTransfer("plain words"))).toBe(false)
+		await expect(args.onAttach).toHaveBeenCalledTimes(2)
+	},
+})
+
+export const DragOver = meta.story({
+	args: { defaultValue: DRAFT, leading: attachControl },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A file is being dragged over the composer and has not been let go yet. Check that the whole composer takes the highlight — border and surface together, so the target reads as one place to drop — that the highlight survives the drag crossing the textarea and the buttons inside it, and that it clears the moment the pointer leaves the composer or the drag ends over it, whether or not the composer went disabled midway. Reach for it when tuning the drop tokens; `WithAttachments` covers what the drop itself does.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Prompt" })
+		const form = formOf(textarea)
+
+		const dragged = { dataTransfer: filesTransfer([DROPPED_PROMPT_FILE]) }
+
+		await expect(drag("dragover", form, dragged)).toBe(true)
+		await waitFor(() => expect(form.dataset.dropTarget).toBe("true"))
+
+		drag("dragleave", form, { relatedTarget: textarea })
+		await expect(form.dataset.dropTarget).toBe("true")
+
+		drag("dragleave", form, { relatedTarget: document.body })
+		await waitFor(() => expect(form.dataset.dropTarget).toBe("false"))
+
+		drag("dragover", form, dragged)
+		await waitFor(() => expect(form.dataset.dropTarget).toBe("true"))
+
+		drag("dragend", form)
+		await waitFor(() => expect(form.dataset.dropTarget).toBe("false"))
 	},
 })

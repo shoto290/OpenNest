@@ -2,6 +2,8 @@
 // Adapted from beui.dev/components/agents/prompt-input — write, send, stop.
 
 import {
+	type ClipboardEvent,
+	type DragEvent,
 	type FormEvent,
 	type KeyboardEvent,
 	type ReactNode,
@@ -28,8 +30,18 @@ const PADDING_Y = 12
 const MIRROR =
 	"pointer-events-none invisible absolute top-0 left-0 px-2 text-sm leading-6"
 
+const FILES = "Files"
+
 const rowsIn = (element: HTMLElement) =>
 	Math.round(element.scrollHeight / LINE_HEIGHT)
+
+const filesIn = (transfer: DataTransfer) => Array.from(transfer.files)
+
+/** The files of a payload made of files and nothing else. One that also carries
+ * text is the browser's business: it is a paste into the prompt, not an
+ * attachment. */
+const pastedFiles = (transfer: DataTransfer) =>
+	transfer.types.every((type) => type === FILES) ? filesIn(transfer) : []
 
 export interface PromptInputProps
 	extends Omit<
@@ -50,6 +62,13 @@ export interface PromptInputProps
 	leading?: ReactNode
 	/** Controls held right before the send button, on the trailing edge. */
 	trailing?: ReactNode
+	/** The files staged for this prompt, rendered above the textarea and inside the
+	 * composer. A slot holding nothing takes no room and leaves the pill untouched;
+	 * one holding a chip expands the composer. */
+	attachments?: ReactNode
+	/** Receives the files dropped on the composer or pasted into the textarea. Left
+	 * out, the composer lets the browser handle both. */
+	onAttach?: (files: File[]) => void
 	minRows?: number
 	maxRows?: number
 	/** Exposes the textarea so a host can restore focus after its own interactions. */
@@ -65,6 +84,8 @@ export function PromptInput({
 	onStop,
 	leading,
 	trailing,
+	attachments,
+	onAttach,
 	minRows = 1,
 	maxRows = 8,
 	className,
@@ -72,6 +93,7 @@ export function PromptInput({
 	placeholder = "Ask the agent to do something…",
 	"aria-label": ariaLabel = "Prompt",
 	onKeyDown,
+	onPaste,
 	textareaRef: externalTextareaRef,
 	...textareaProps
 }: PromptInputProps) {
@@ -79,6 +101,7 @@ export function PromptInput({
 	const measurementRef = useRef<HTMLDivElement>(null)
 	const singleLineRef = useRef<HTMLDivElement>(null)
 	const promptRef = useRef<HTMLDivElement>(null)
+	const attachmentsRef = useRef<HTMLDivElement>(null)
 	const controlsRef = useRef<HTMLDivElement>(null)
 	const setTextareaRef = useMemo(
 		() => mergeRefs(textareaRef, externalTextareaRef),
@@ -87,6 +110,7 @@ export function PromptInput({
 	const latestResize = useRef(() => {})
 	const [internalValue, setInternalValue] = useState(defaultValue)
 	const [isExpanded, setIsExpanded] = useState(false)
+	const [isDropTarget, setIsDropTarget] = useState(false)
 	const currentValue = value ?? internalValue
 	const hasPrompt = Boolean(currentValue.trim())
 	const canSubmit = hasPrompt && !disabled && !loading
@@ -100,8 +124,14 @@ export function PromptInput({
 		if (!textarea || !measurement || !singleLine || !prompt || !controls) return
 		if (textarea.value !== currentValue) return
 
+		// A slot given a node that renders nothing still leaves the row empty, so the
+		// answer comes from the DOM the last commit produced.
+		const hasAttachments =
+			Boolean(attachments) &&
+			(attachmentsRef.current?.childElementCount ?? 0) > 0
+
 		prompt.style.flexBasis =
-			rowsIn(singleLine) > 1
+			hasAttachments || rowsIn(singleLine) > 1
 				? "100%"
 				: `${Math.ceil(singleLine.getBoundingClientRect().width)}px`
 		measurement.style.width = `${textarea.clientWidth}px`
@@ -110,7 +140,7 @@ export function PromptInput({
 		textarea.style.height = `${rows * LINE_HEIGHT + PADDING_Y}px`
 
 		setIsExpanded(controls.offsetTop >= prompt.offsetTop + prompt.offsetHeight)
-	}, [currentValue, maxRows, minRows])
+	}, [attachments, currentValue, maxRows, minRows])
 
 	useLayoutEffect(() => {
 		latestResize.current = resizeTextarea
@@ -140,6 +170,38 @@ export function PromptInput({
 		textareaRef.current?.focus({ preventScroll: true })
 	}
 
+	const canAttach = Boolean(onAttach) && !disabled
+
+	const handleDragOver = (event: DragEvent<HTMLFormElement>) => {
+		if (!canAttach || !event.dataTransfer.types.includes(FILES)) return
+		event.preventDefault()
+		setIsDropTarget(true)
+	}
+
+	/** A drag entering a child leaves the form on its way in: only a target outside
+	 * the composer ends the highlight. */
+	const handleDragLeave = (event: DragEvent<HTMLFormElement>) => {
+		if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+		setIsDropTarget(false)
+	}
+
+	const handleDrop = (event: DragEvent<HTMLFormElement>) => {
+		setIsDropTarget(false)
+		const files = filesIn(event.dataTransfer)
+		if (!canAttach || files.length === 0) return
+		event.preventDefault()
+		onAttach?.(files)
+	}
+
+	const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+		onPaste?.(event)
+		if (!canAttach || event.defaultPrevented) return
+		const files = pastedFiles(event.clipboardData)
+		if (files.length === 0) return
+		event.preventDefault()
+		onAttach?.(files)
+	}
+
 	const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
 		onKeyDown?.(event)
 		if (
@@ -160,13 +222,29 @@ export function PromptInput({
 			aria-busy={loading}
 			data-slot="prompt-input"
 			data-expanded={isExpanded}
+			data-drop-target={isDropTarget}
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDragEnd={() => setIsDropTarget(false)}
+			onDrop={handleDrop}
 			className={cn(
-				"flex w-full flex-wrap items-center gap-1 border border-border bg-background p-2 transition-[border-color,border-radius,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 motion-reduce:transition-none",
+				"flex w-full flex-wrap items-center gap-1 border border-border bg-background p-2 transition-[background-color,border-color,border-radius,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 motion-reduce:transition-none",
 				isExpanded ? "rounded-3xl" : "rounded-full",
+				isDropTarget && "border-primary bg-primary/10",
 				disabled && "opacity-50",
 				className,
 			)}
 		>
+			{/* Always mounted so the slot can be measured: a chip in it turns the pill
+			into the expanded composer, and an empty row takes no room at all. */}
+			<div
+				ref={attachmentsRef}
+				inert={disabled}
+				className="w-full empty:hidden"
+			>
+				{attachments}
+			</div>
+
 			<div
 				ref={promptRef}
 				className="relative min-w-0 grow-[999] overflow-hidden"
@@ -198,6 +276,7 @@ export function PromptInput({
 					{...textareaProps}
 					onChange={(event) => setValue(event.target.value)}
 					onKeyDown={handleKeyDown}
+					onPaste={handlePaste}
 					className="block w-full resize-none overflow-y-auto bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
 				/>
 			</div>
