@@ -127,6 +127,7 @@ fn a_record(picture: Value) -> Value {
 		"profilePicturePath": picture,
 		"colorScheme": "dark",
 		"palette": "moss",
+		"language": "fr",
 	})
 }
 
@@ -187,6 +188,7 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"profilePicturePath": null,
 			"colorScheme": "system",
 			"palette": "amber",
+			"language": null,
 		})
 	);
 }
