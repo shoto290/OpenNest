@@ -51,7 +51,8 @@ export interface PromptInputProps
 	value?: string
 	defaultValue?: string
 	onValueChange?: (value: string) => void
-	/** Receives the trimmed prompt. Fired by Enter or by the send button. */
+	/** Receives the trimmed prompt, empty when the turn is carried by its
+	 * attachments alone. Fired by Enter or by the send button. */
 	onSubmit?: (value: string) => void
 	/** Swaps the send button for a stop button and blocks submission. */
 	loading?: boolean
@@ -69,6 +70,10 @@ export interface PromptInputProps
 	/** Receives the files dropped on the composer or pasted into the textarea. Left
 	 * out, the composer lets the browser handle both. */
 	onAttach?: (files: File[]) => void
+	/** Marks the composer as the target of a drag it never saw, for a host tracking
+	 * one over a wider surface. Its own drag events keep marking it on their own, and
+	 * a composer that cannot take a file stays unmarked whatever the host asks. */
+	dropTarget?: boolean
 	minRows?: number
 	maxRows?: number
 	/** Exposes the textarea so a host can restore focus after its own interactions. */
@@ -86,6 +91,7 @@ export function PromptInput({
 	trailing,
 	attachments,
 	onAttach,
+	dropTarget = false,
 	minRows = 1,
 	maxRows = 8,
 	className,
@@ -110,10 +116,14 @@ export function PromptInput({
 	const latestResize = useRef(() => {})
 	const [internalValue, setInternalValue] = useState(defaultValue)
 	const [isExpanded, setIsExpanded] = useState(false)
-	const [isDropTarget, setIsDropTarget] = useState(false)
+	const [isDragOver, setIsDragOver] = useState(false)
+	const [hasAttachments, setHasAttachments] = useState(false)
 	const currentValue = value ?? internalValue
 	const hasPrompt = Boolean(currentValue.trim())
-	const canSubmit = hasPrompt && !disabled && !loading
+	const hasPayload = hasPrompt || hasAttachments
+	const canAttach = Boolean(onAttach) && !disabled
+	const isDropTarget = canAttach && (dropTarget || isDragOver)
+	const canSubmit = hasPayload && !disabled && !loading
 
 	const resizeTextarea = useCallback(() => {
 		const textarea = textareaRef.current
@@ -126,12 +136,13 @@ export function PromptInput({
 
 		// A slot given a node that renders nothing still leaves the row empty, so the
 		// answer comes from the DOM the last commit produced.
-		const hasAttachments =
+		const isCarryingFiles =
 			Boolean(attachments) &&
 			(attachmentsRef.current?.childElementCount ?? 0) > 0
+		setHasAttachments(isCarryingFiles)
 
 		prompt.style.flexBasis =
-			hasAttachments || rowsIn(singleLine) > 1
+			isCarryingFiles || rowsIn(singleLine) > 1
 				? "100%"
 				: `${Math.ceil(singleLine.getBoundingClientRect().width)}px`
 		measurement.style.width = `${textarea.clientWidth}px`
@@ -162,31 +173,29 @@ export function PromptInput({
 
 	const submit = (event?: FormEvent) => {
 		event?.preventDefault()
-		const prompt = currentValue.trim()
-		if (!prompt || disabled || loading) return
+		if (!canSubmit) return
 
-		onSubmit?.(prompt)
+		onSubmit?.(currentValue.trim())
 		if (value === undefined) setInternalValue("")
 		textareaRef.current?.focus({ preventScroll: true })
 	}
 
-	const canAttach = Boolean(onAttach) && !disabled
-
 	const handleDragOver = (event: DragEvent<HTMLFormElement>) => {
 		if (!canAttach || !event.dataTransfer.types.includes(FILES)) return
 		event.preventDefault()
-		setIsDropTarget(true)
+		setIsDragOver(true)
 	}
 
 	/** A drag entering a child leaves the form on its way in: only a target outside
-	 * the composer ends the highlight. */
+	 * the composer ends what its own events started — a host still asking for the
+	 * mark keeps it. */
 	const handleDragLeave = (event: DragEvent<HTMLFormElement>) => {
 		if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
-		setIsDropTarget(false)
+		setIsDragOver(false)
 	}
 
 	const handleDrop = (event: DragEvent<HTMLFormElement>) => {
-		setIsDropTarget(false)
+		setIsDragOver(false)
 		const files = filesIn(event.dataTransfer)
 		if (!canAttach || files.length === 0) return
 		event.preventDefault()
@@ -225,7 +234,7 @@ export function PromptInput({
 			data-drop-target={isDropTarget}
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
-			onDragEnd={() => setIsDropTarget(false)}
+			onDragEnd={() => setIsDragOver(false)}
 			onDrop={handleDrop}
 			className={cn(
 				"flex w-full flex-wrap items-center gap-1 border border-border bg-background p-2 transition-[background-color,border-color,border-radius,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 motion-reduce:transition-none",
@@ -289,7 +298,7 @@ export function PromptInput({
 				{leading}
 				<div className="ml-auto flex items-center gap-1">
 					{trailing}
-					{loading || hasPrompt ? (
+					{loading || hasPayload ? (
 						<Button
 							type={loading ? "button" : "submit"}
 							size="icon"
