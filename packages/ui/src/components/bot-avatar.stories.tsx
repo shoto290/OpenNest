@@ -68,7 +68,7 @@ function LabeledCell({
 }
 
 type SweepRowProps = {
-	animal: BotAvatarAnimal
+	animal?: BotAvatarAnimal
 	axis: "yaw" | "pitch"
 	angles: number[]
 	debug: boolean
@@ -99,7 +99,7 @@ const meta = preview.meta({
 	component: BotAvatar,
 	parameters: { layout: "centered" },
 	args: {
-		animal: "cat",
+		animal: "rabbit",
 		state: "waiting",
 		size: 240,
 		animated: true,
@@ -144,7 +144,7 @@ export const Lab3D = meta.story({
 		docs: {
 			description: {
 				story:
-					"Opens on the locked reference pose — cat, waiting, orthographic. The bench for the whole rig: pick an animal, switch to any engine state, dial the `ink` weight, then drive the head with the yaw / pitch / roll sliders or by dragging the avatar itself — the sliders follow the drag. Each orientation prop overrides that axis of the state's own rest pose; leave it unset and the state decides, as it does everywhere else in the system. `perspective` blends from a flat orthographic projection (0) to a full weak-perspective one (1); `wireframe` overlays the head volume, its silhouette conic, the parallels culled to the near sheet and the resolved ear anchors. Check that eyes slide along the surface instead of sliding flat, and that each ear stays welded to the skull outline while the part of it that crosses behind the head plane is cut away by the head rather than the whole ear jumping layers.",
+					"Opens on the locked reference pose — rabbit, waiting, orthographic. The bench for the whole rig: pick an animal, switch to any engine state, dial the `ink` weight, then drive the head with the yaw / pitch / roll sliders or by dragging the avatar itself — the sliders follow the drag. Each orientation prop overrides that axis of the state's own rest pose; leave it unset and the state decides, as it does everywhere else in the system. `perspective` blends from a flat orthographic projection (0) to a full weak-perspective one (1); `wireframe` overlays the head volume, its silhouette conic, the parallels culled to the near sheet and the resolved ear anchors. Check that eyes slide along the surface instead of sliding flat, and that each ear stays welded to the skull outline while the part of it that crosses behind the head plane is cut away by the head rather than the whole ear jumping layers.",
 			},
 		},
 	},
@@ -211,7 +211,7 @@ export const EarWeld = meta.story({
 					{[false, true].map((debug) => (
 						<SweepRow
 							angles={axis === "yaw" ? YAW_SWEEP : PITCH_SWEEP}
-							animal={args.animal ?? "cat"}
+							animal={args.animal}
 							axis={axis}
 							debug={debug}
 							key={String(debug)}

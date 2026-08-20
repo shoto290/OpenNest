@@ -52,8 +52,8 @@ export const modelOptionsFor = (
  * seeds none — and it satisfies the store's vocabulary, so a face it would refuse
  * does not compile. */
 const FACES = [
-	"cat",
 	"rabbit",
+	"cat",
 	"bear",
 	"chick",
 	"dog",
