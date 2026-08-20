@@ -333,36 +333,29 @@ pub async fn agent_check<R: Runtime>(
 pub async fn check(state: &AgentState) -> CheckReport {
 	let sidecar = match state.sidecar().await {
 		Ok(sidecar) => sidecar,
-		Err(error) => {
-			return CheckReport {
-				connection: ConnectionState::Unavailable,
-				binary_version: None,
-				authenticated: false,
-				error: Some(error),
-			}
-		}
+		Err(error) => return reported(None, Err(error)),
 	};
-	let binary_version = Some(sidecar.version().to_owned());
+	let version = sidecar.version().to_owned();
+	reported(Some(version), sidecar.authenticated().await)
+}
 
-	match sidecar.authenticated().await {
-		Ok(true) => CheckReport {
-			connection: ConnectionState::Ready,
-			binary_version,
-			authenticated: true,
-			error: None,
+/// Ready is the one state with nothing to report, so the report is built from its
+/// failure alone: a signed-in install is the absence of one, and there is no way to
+/// spell a host that is both ready and refused.
+fn reported(binary_version: Option<String>, probe: Result<bool, TransportError>) -> CheckReport {
+	let error = match probe {
+		Ok(true) => None,
+		Ok(false) => Some(TransportError::NotAuthenticated),
+		Err(error) => Some(error),
+	};
+	CheckReport {
+		connection: match error {
+			None => ConnectionState::Ready,
+			Some(_) => ConnectionState::Unavailable,
 		},
-		Ok(false) => CheckReport {
-			connection: ConnectionState::Unavailable,
-			binary_version,
-			authenticated: false,
-			error: Some(TransportError::NotAuthenticated),
-		},
-		Err(error) => CheckReport {
-			connection: ConnectionState::Unavailable,
-			binary_version,
-			authenticated: false,
-			error: Some(error),
-		},
+		binary_version,
+		authenticated: error.is_none(),
+		error,
 	}
 }
 

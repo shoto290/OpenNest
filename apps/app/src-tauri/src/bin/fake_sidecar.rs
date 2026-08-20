@@ -467,17 +467,17 @@ fn serve() {
 fn answer_the_host(command: &Value) {
 	match command["type"].as_str() {
 		Some("check") => emit_raw(&checked().to_string()),
-		Some("models") => emit_raw(&json!({ "type": "catalogue", "models": models() }).to_string()),
+		Some("models") => emit_raw(&json!({ "type": "models", "models": models() }).to_string()),
 		_ => {}
 	}
 }
 
 fn checked() -> Value {
 	if let Ok(detail) = std::env::var("FAKE_AGENT_CHECK_FAILS") {
-		return json!({ "type": "checked", "authenticated": false, "detail": detail });
+		return json!({ "type": "check", "authenticated": false, "detail": detail });
 	}
 	json!({
-		"type": "checked",
+		"type": "check",
 		"authenticated": std::env::var("FAKE_AGENT_SIGNED_OUT").is_err()
 	})
 }

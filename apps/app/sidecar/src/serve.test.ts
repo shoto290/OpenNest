@@ -48,7 +48,7 @@ describe("serve", () => {
 		const { lines } = await served([JSON.stringify({ type: "check" })])
 		const checked = lines.at(-1)
 
-		expect(checked.type).toBe("checked")
+		expect(checked.type).toBe("check")
 		expect(typeof checked.authenticated).toBe("boolean")
 		// The probe reads an email, an organisation and a subscription type. None of
 		// them may reach the pipe: a verdict and, at most, why there is none.
@@ -63,7 +63,7 @@ describe("serve", () => {
 		const { lines } = await served([JSON.stringify({ type: "models" })])
 		const catalogue = lines.at(-1)
 
-		expect(catalogue.type).toBe("catalogue")
+		expect(catalogue.type).toBe("models")
 		expect(Array.isArray(catalogue.models)).toBe(true)
 	})
 

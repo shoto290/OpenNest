@@ -42,10 +42,13 @@ first, as `crashed`.
 Two commands name no session, because they are about the install rather than
 about a conversation. Each is asked once per launch and cached by the host.
 
+Each is answered under the type it was asked, so one name stands for the ask and
+its answer both.
+
 | `type` | Answered with | Becomes |
 | --- | --- | --- |
-| `check` | `{"type":"checked","authenticated":bool,"detail"?:string}` | the `CheckReport` |
-| `models` | `{"type":"catalogue","models":[…]}` | the model catalogue |
+| `check` | `{"type":"check","authenticated":bool,"detail"?:string}` | the `CheckReport` |
+| `models` | `{"type":"models","models":[…]}` | the model catalogue |
 
 `check` reads the provider's own credential store; `detail` says the question
 could not be answered at all, which reaches the frontend as `authCheckFailed`

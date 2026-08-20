@@ -267,22 +267,20 @@ pub fn deny_command(session: &str, request_id: &str, message: &str) -> Value {
 	)
 }
 
-/// The two asks that are about the install rather than about a conversation, so
-/// neither names a session and neither answer arrives inside an [`Envelope`].
-pub const CHECK_ANSWER: &str = "checked";
-pub const CATALOGUE_ANSWER: &str = "catalogue";
+/// The two asks that are about the install rather than about a conversation. Neither
+/// names a session, so neither answer arrives inside an [`Envelope`] — and each is
+/// answered under the type it was asked, which is what lets one name stand for the
+/// ask and its answer both.
+pub const CHECK: &str = "check";
+pub const MODELS: &str = "models";
 
-pub fn check_command() -> Value {
-	serde_json::json!({ "type": "check" })
+pub fn ask_command(kind: &str) -> Value {
+	serde_json::json!({ "type": kind })
 }
 
-pub fn catalogue_command() -> Value {
-	serde_json::json!({ "type": "models" })
-}
-
-/// The sign-in state of the provider's own credentials. `detail` says the question
-/// could not be answered at all, which a reader is owed apart from a plain refusal:
-/// a broken install is not an account that is signed out.
+/// The [`CHECK`] answer: the sign-in state of the provider's own credentials.
+/// `detail` says the question could not be answered at all, which a reader is owed
+/// apart from a plain refusal: a broken install is not an account that is signed out.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Checked {
@@ -292,8 +290,8 @@ pub struct Checked {
 	pub detail: Option<String>,
 }
 
-/// Every model label the provider offers, in the order it offers them. Empty is an
-/// answer, not a failure.
+/// The [`MODELS`] answer: every label the provider offers, in the order it offers
+/// them. Empty is an answer, not a failure.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Catalogue {

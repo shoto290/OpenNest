@@ -3,7 +3,6 @@ import { describeError } from "./describe-error"
 import { readLines } from "./read-lines"
 
 import type {
-	AgentProvider,
 	AgentSession,
 	PermissionDecision,
 	SessionFrame,
@@ -30,16 +29,6 @@ const write = (payload: unknown) => {
  * session it came from. Nothing else tells two runs apart on one process. */
 const emitter = (session: string) => (frame: SessionFrame) =>
 	write({ session, frame })
-
-/** An empty catalogue rather than a refusal: what to offer instead is the host's to
- * decide, and a provider that names no model is not a broken one. */
-const catalogue = async (provider: AgentProvider) => {
-	try {
-		return await provider.models()
-	} catch {
-		return []
-	}
-}
 
 export const serve = async (requestedId?: string) => {
 	const provider = requireProvider(requestedId)
@@ -84,15 +73,18 @@ export const serve = async (requestedId?: string) => {
 		opening.delete(session)
 	}
 
-	/** The two asks that belong to the install rather than to a conversation, so
-	 * neither names a session and neither is answered inside an envelope. Both are
-	 * asked once per launch and cached by the host. */
-	const answerHost = async (command: Command) => {
-		switch (command.type) {
+	/** The two asks that belong to the install rather than to a conversation: neither
+	 * names a session, and each is answered under the type it was asked. Both are asked
+	 * once per launch and cached by the host.
+	 *
+	 * A catalogue nobody could produce is empty rather than refused: what to offer
+	 * instead is the host's to decide, and a provider naming no model is not broken. */
+	const answerHost = async ({ type }: Command) => {
+		switch (type) {
 			case "check":
-				return write({ type: "checked", ...(await provider.authenticate()) })
+				return write({ type, ...(await provider.authenticate()) })
 			case "models":
-				return write({ type: "catalogue", models: await catalogue(provider) })
+				return write({ type, models: await provider.models().catch(() => []) })
 		}
 	}
 

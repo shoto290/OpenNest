@@ -263,8 +263,7 @@ impl Sidecar {
 	/// sidecar that could not answer at all reports why, so a broken install is not
 	/// read as an account that is signed out.
 	pub async fn authenticated(&self) -> Result<bool, TransportError> {
-		let answer =
-			self.ask(protocol::check_command(), protocol::CHECK_ANSWER, CHECK_TIMEOUT).await?;
+		let answer = self.ask(protocol::CHECK, CHECK_TIMEOUT).await?;
 		let checked: Checked = serde_json::from_value(answer)
 			.map_err(|error| TransportError::AuthCheckFailed { detail: error.to_string() })?;
 		match checked.detail {
@@ -276,9 +275,7 @@ impl Sidecar {
 	/// Every model label the provider offers, in the order it offers them. Empty is
 	/// an answer: what to offer instead is the frontend's to decide.
 	pub async fn catalogue(&self) -> Result<Vec<String>, TransportError> {
-		let answer = self
-			.ask(protocol::catalogue_command(), protocol::CATALOGUE_ANSWER, CATALOGUE_TIMEOUT)
-			.await?;
+		let answer = self.ask(protocol::MODELS, CATALOGUE_TIMEOUT).await?;
 		let catalogue: Catalogue = serde_json::from_value(answer)
 			.map_err(|error| TransportError::InvalidFrame { detail: error.to_string() })?;
 		Ok(catalogue.models)
@@ -290,15 +287,10 @@ impl Sidecar {
 	///
 	/// A sidecar that dies with the ask outstanding drops the sender, which is what
 	/// tells the caller the process is gone rather than slow.
-	async fn ask(
-		&self,
-		command: Value,
-		answer: &str,
-		timeout: Duration,
-	) -> Result<Value, TransportError> {
+	async fn ask(&self, kind: &str, timeout: Duration) -> Result<Value, TransportError> {
 		let (tx, rx) = oneshot::channel();
-		self.answers.lock().expect("answers").entry(answer.to_owned()).or_default().push(tx);
-		self.send(command)?;
+		self.answers.lock().expect("answers").entry(kind.to_owned()).or_default().push(tx);
+		self.send(protocol::ask_command(kind))?;
 
 		match tokio::time::timeout(timeout, rx).await {
 			Ok(Ok(value)) => Ok(value),
@@ -524,7 +516,7 @@ async fn read_loop(
 			}
 		}
 		let Ok(envelope) = serde_json::from_str::<super::protocol::Envelope>(&line) else {
-			answer_the_host(&answers, &line);
+			settle_answer(&answers, &line);
 			continue;
 		};
 		let lane = routes.lock().expect("routes").get(&envelope.session).cloned();
@@ -539,11 +531,11 @@ async fn read_loop(
 	reap(&child, pid).await;
 }
 
-/// A line naming no session is an answer to something the host asked about the
-/// install. Every waiter for that answer's type is served from the one line, and a
-/// line nobody is waiting for is dropped: an unsolicited answer is not a frame any
+/// A line naming no session answers something the host asked about the install, under
+/// the type it was asked. Every waiter for that type is served from the one line, and
+/// a line nobody is waiting for is dropped: an unsolicited answer is not a frame any
 /// session is owed.
-fn answer_the_host(answers: &Answers, line: &str) {
+fn settle_answer(answers: &Answers, line: &str) {
 	let Ok(value) = serde_json::from_str::<Value>(line) else {
 		return;
 	};
