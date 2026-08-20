@@ -1,8 +1,16 @@
 import { describe, expect, it } from "bun:test"
 
+import { claudeSourceExecutable } from "./providers/claude/build"
+import { EXECUTABLE_OVERRIDE_ENV } from "./providers/claude/executable"
 import { DEFAULT_PROVIDER_ID, PROVIDER_IDS } from "./providers/registry"
 
 const entrypoint = new URL("./index.ts", import.meta.url).pathname
+
+/** Run from source there is no bundle beside the sidecar to resolve. */
+const environment = {
+	...process.env,
+	[EXECUTABLE_OVERRIDE_ENV]: claudeSourceExecutable(),
+}
 
 type ProbeResult = {
 	exitCode: number
@@ -12,6 +20,7 @@ type ProbeResult = {
 
 const runProbe = async (extraArguments: string[]): Promise<ProbeResult> => {
 	const child = Bun.spawn(["bun", entrypoint, "--probe", ...extraArguments], {
+		env: environment,
 		stdout: "pipe",
 		stderr: "pipe",
 	})
@@ -31,7 +40,7 @@ describe("probe", () => {
 		expect(JSON.parse(stdout).provider).toBe(DEFAULT_PROVIDER_ID)
 	})
 
-	it("reports the embedded executable version and the sdk version apart", async () => {
+	it("reports the provider executable version and the sdk version apart", async () => {
 		const { stdout } = await runProbe([])
 		const { version, sdkVersion, capabilities } = JSON.parse(stdout)
 

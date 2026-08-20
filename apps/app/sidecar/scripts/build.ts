@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-import { prepareProviders, singleAssetName } from "../src/providers/build"
+import { prepareProviders, stageProviders } from "../src/providers/build"
 
 const BINARY_NAME = "opennest-agent"
 
@@ -22,12 +22,7 @@ const hostTargetTriple = () => {
 	return host[1].trim()
 }
 
-type CompileOptions = {
-	outfile: string
-	assetName: string
-}
-
-const compile = ({ outfile, assetName }: CompileOptions) => {
+const compile = (outfile: string) => {
 	mkdirSync(dirname(outfile), { recursive: true })
 	const build = Bun.spawnSync(
 		[
@@ -35,7 +30,6 @@ const compile = ({ outfile, assetName }: CompileOptions) => {
 			"build",
 			"--compile",
 			join(sidecarRoot, "src", "index.ts"),
-			`--asset-naming=${assetName}`,
 			"--outfile",
 			outfile,
 		],
@@ -47,9 +41,7 @@ const compile = ({ outfile, assetName }: CompileOptions) => {
 }
 
 const targetTriple = hostTargetTriple()
-const assetNames = await prepareProviders()
+await prepareProviders()
+stageProviders({ directory: binariesDirectory, targetTriple })
 
-compile({
-	outfile: join(binariesDirectory, `${BINARY_NAME}-${targetTriple}`),
-	assetName: singleAssetName(assetNames),
-})
+compile(join(binariesDirectory, `${BINARY_NAME}-${targetTriple}`))
