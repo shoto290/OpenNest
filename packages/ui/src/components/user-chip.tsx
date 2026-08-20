@@ -1,18 +1,8 @@
 "use client"
 
 import { AnimatedSidebarMenuButton } from "@workspace/ui/components/motion/animated-sidebar"
+import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import { cn } from "@workspace/ui/lib/utils"
-
-/** What the chip reads when the host has no name to give — a reader with no
- * display name still has to recognise the way into their own settings. */
-const FALLBACK_NAME = "You"
-
-/** Smaller than a roster row's avatar: the chip is a footer row, not a bot, and
- * it still lands well inside the rail once the panel collapses. */
-const AVATAR = "block size-7 shrink-0 overflow-hidden rounded-full"
-const AVATAR_IMAGE = "size-full object-cover"
-const AVATAR_INITIALS =
-	"grid size-full place-items-center bg-sidebar-accent font-medium text-[11px] text-sidebar-accent-foreground uppercase leading-none"
 
 /** The picture is inset from the leading edge by exactly what the row's height
  * leaves above and below it, so the chip reads as one square-set avatar with a
@@ -23,14 +13,6 @@ const AVATAR_INITIALS =
  * edges, and is the square target that leaves — never a band down the rail. */
 const CHIP =
 	"min-w-0 flex-1 px-1 group-data-[state=collapsed]/sidebar:size-9 group-data-[state=collapsed]/sidebar:flex-none"
-
-const displayNameOf = (name?: string) => name?.trim() || FALLBACK_NAME
-
-const initialsOf = (name: string) =>
-	name
-		.split(/\s+/, 2)
-		.map((word) => Array.from(word)[0])
-		.join("")
 
 type UserChipIdentity = {
 	/** The reader's own name, as the host spells it. Empty, and the chip reads
@@ -60,22 +42,7 @@ const UserChip = ({ name, image, onOpen, className }: UserChipProps) => {
 	return (
 		<AnimatedSidebarMenuButton
 			className={cn(CHIP, className)}
-			icon={
-				<span className={AVATAR} data-slot="user-chip-avatar">
-					{image ? (
-						<img
-							alt=""
-							aria-hidden="true"
-							className={AVATAR_IMAGE}
-							src={image}
-						/>
-					) : (
-						<span aria-hidden="true" className={AVATAR_INITIALS}>
-							{initialsOf(displayName)}
-						</span>
-					)}
-				</span>
-			}
+			icon={<UserAvatar image={image} name={displayName} />}
 			label={displayName}
 			onSelect={onOpen}
 		>

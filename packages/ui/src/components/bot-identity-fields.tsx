@@ -1,14 +1,6 @@
 "use client"
 
-import {
-	type ChangeEvent,
-	type ClipboardEvent,
-	type DragEvent,
-	type ReactNode,
-	useId,
-	useRef,
-	useState,
-} from "react"
+import { useId } from "react"
 
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import {
@@ -22,7 +14,9 @@ import {
 	type BotIdentity,
 	titleCase,
 } from "@workspace/ui/components/bot-settings"
-import { Icons } from "@workspace/ui/components/icons"
+import { PictureDropzone } from "@workspace/ui/components/picture-dropzone"
+import { SettingsGroup } from "@workspace/ui/components/settings-group"
+import { FIELD_OPTION_CLASS } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
 const PREVIEW_SIZE = 96
@@ -34,37 +28,7 @@ const BLOT_OPTIONS = [...BLOT_TINTS, undefined] as const
 
 const blotLabel = (blot?: BotAvatarBlot) => (blot ? titleCase(blot) : "No blot")
 
-/** The chosen option is the filled tile, the way a selected row in the system's
- * select is: one neutral surface and a name that stops being muted. No outline
- * around it — a ring on a round swatch reads as a second, competing edge, and a
- * tint would fight the eight tints the swatches are there to show. */
-const OPTION_CLASS =
-	"flex cursor-pointer flex-col items-center gap-1 rounded-xl p-1.5 text-muted-foreground transition-colors hover:bg-muted has-[:checked]:bg-muted has-[:checked]:font-medium has-[:checked]:text-foreground has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring motion-reduce:transition-none"
-
-const BLOT_OPTION_CLASS = cn(OPTION_CLASS, "p-1")
-
-/** The whole zone is the control: a reader who has a file already drops or pastes
- * it, and one who does not presses the same target to go looking for it. A button
- * rather than a div with a handler, so Enter and Space open the picker for free and
- * the target is a tab stop paste can land in. */
-const DROPZONE_CLASS =
-	"flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border border-border border-dashed p-6 text-center outline-none transition-colors hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
-
-type IdentityGroupProps = {
-	label: string
-	/** Grid shape of the options — the blots pack tighter than the animals. */
-	grid: string
-	children: ReactNode
-}
-
-const IdentityGroup = ({ label, grid, children }: IdentityGroupProps) => (
-	<fieldset className="min-w-0 border-0 p-0">
-		<legend className="mb-2 font-medium text-muted-foreground text-xs">
-			{label}
-		</legend>
-		<div className={cn("grid", grid)}>{children}</div>
-	</fieldset>
-)
+const BLOT_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "p-1")
 
 type BotIdentityFieldsProps = {
 	identity: BotIdentity
@@ -100,31 +64,10 @@ const BotIdentityFields = ({
 	className,
 }: BotIdentityFieldsProps) => {
 	const groupId = useId()
-	const fileRef = useRef<HTMLInputElement>(null)
-	const [dragging, setDragging] = useState(false)
 
 	const currentLabel = identity.image
 		? "Uploaded image"
 		: `${titleCase(identity.animal)}, ${blotLabel(identity.blot)}`
-
-	const emitFile = (file: File | undefined) => {
-		if (file) onAvatarUpload(file)
-	}
-
-	const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
-		event.preventDefault()
-		setDragging(false)
-		emitFile(event.dataTransfer.files[0])
-	}
-
-	const handlePaste = (event: ClipboardEvent<HTMLButtonElement>) =>
-		emitFile(event.clipboardData.files[0])
-
-	// Clearing the input lets the same file be picked twice in a row.
-	const handleBrowsed = (event: ChangeEvent<HTMLInputElement>) => {
-		emitFile(event.target.files?.[0])
-		event.target.value = ""
-	}
 
 	return (
 		<div
@@ -149,9 +92,9 @@ const BotIdentityFields = ({
 				</div>
 			</div>
 
-			<IdentityGroup grid="grid-cols-4 gap-1.5" label="Animal">
+			<SettingsGroup grid="grid-cols-4 gap-1.5" label="Animal">
 				{BOT_IDENTITY_ANIMALS.map((animal) => (
-					<label className={OPTION_CLASS} key={animal}>
+					<label className={FIELD_OPTION_CLASS} key={animal}>
 						<input
 							checked={identity.animal === animal}
 							className="sr-only"
@@ -175,9 +118,9 @@ const BotIdentityFields = ({
 						</span>
 					</label>
 				))}
-			</IdentityGroup>
+			</SettingsGroup>
 
-			<IdentityGroup grid="grid-cols-9 gap-1" label="Blot">
+			<SettingsGroup grid="grid-cols-9 gap-1" label="Blot">
 				{BLOT_OPTIONS.map((blot) => (
 					<label
 						className={BLOT_OPTION_CLASS}
@@ -207,46 +150,11 @@ const BotIdentityFields = ({
 						<span className="sr-only">{blotLabel(blot)}</span>
 					</label>
 				))}
-			</IdentityGroup>
+			</SettingsGroup>
 
-			<IdentityGroup grid="grid-cols-1" label="Picture">
-				<button
-					className={cn(
-						DROPZONE_CLASS,
-						dragging && "border-primary bg-primary/10",
-					)}
-					onClick={() => fileRef.current?.click()}
-					onDragLeave={() => setDragging(false)}
-					onDragOver={(event) => {
-						event.preventDefault()
-						setDragging(true)
-					}}
-					onDrop={handleDrop}
-					onPaste={handlePaste}
-					type="button"
-				>
-					<Icons.Image
-						aria-hidden="true"
-						className="size-5 text-muted-foreground"
-					/>
-					<span className="block text-foreground text-sm">
-						Drag, drop or paste an image
-					</span>
-					<span className="block text-muted-foreground text-xs">
-						or click to choose a file
-					</span>
-				</button>
-				{/* Outside the control it belongs to: a button may not hold an input, and
-				this one is only ever opened by that button. */}
-				<input
-					accept="image/*"
-					aria-label="Avatar image file"
-					className="hidden"
-					onChange={handleBrowsed}
-					ref={fileRef}
-					type="file"
-				/>
-			</IdentityGroup>
+			<SettingsGroup grid="grid-cols-1" label="Picture">
+				<PictureDropzone label="Avatar image file" onPick={onAvatarUpload} />
+			</SettingsGroup>
 		</div>
 	)
 }

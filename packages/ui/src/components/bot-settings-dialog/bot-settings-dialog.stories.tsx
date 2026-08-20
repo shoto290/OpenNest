@@ -85,7 +85,7 @@ const dialogIn = async () => {
 }
 
 const railIn = (dialog: HTMLElement) => {
-	const [rail] = slotsIn(dialog, "bot-settings-rail")
+	const [rail] = slotsIn(dialog, "settings-rail")
 	if (!rail) throw new Error("The dialog is missing its rail")
 	return rail
 }

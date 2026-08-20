@@ -16,9 +16,17 @@ import type {
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
-import { type Icon, Icons } from "@workspace/ui/components/icons"
-import { Tooltip } from "@workspace/ui/components/motion/tooltip"
+import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
+import {
+	RAIL_ITEM_CLASS,
+	RAIL_LABELS_MIN_WIDTH,
+	SETTINGS_PANEL_CLASS,
+	SETTINGS_SCROLLING_PANEL_CLASS,
+	SettingsRail,
+	SettingsRailItem,
+	SettingsRailSeparator,
+} from "@workspace/ui/components/settings-rail"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -31,62 +39,10 @@ const DANGER_TAB = "danger"
 
 const UNNAMED_BOT = "Untitled bot"
 
-/** Icons only below this width: a rail with its names takes 13rem, and a panel
- * holding a folder path or a grid of animals needs the rest of a 42rem row. */
-const RAIL_LABELS_MIN_WIDTH = 672
-
-const RAIL_ITEM_CLASS =
-	"flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-muted-foreground text-sm outline-none transition-colors select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-active:bg-muted data-active:font-medium data-active:text-foreground motion-reduce:transition-none"
-
 const DANGER_RAIL_ITEM_CLASS = cn(
 	RAIL_ITEM_CLASS,
 	"text-destructive hover:bg-destructive/10 hover:text-destructive data-active:bg-destructive/10 data-active:text-destructive",
 )
-
-/** The panel leaving on a tab change is dropped out of the flow at once: Base UI
- * holds it one frame longer, and two panels sharing the row would be a flicker. */
-const PANEL_CLASS =
-	"flex min-h-0 flex-1 flex-col gap-4 p-5 outline-none data-ending-style:hidden"
-
-const SCROLLING_PANEL_CLASS = cn(PANEL_CLASS, "overflow-y-auto")
-
-type RailItemProps = {
-	icon: Icon
-	label: string
-	value: string
-	/** Drops the name off the screen — never out of the accessible tree — and hands
-	 * it to a tooltip instead. */
-	iconsOnly: boolean
-	className?: string
-}
-
-/** One group in the rail. It carries a tooltip only while its name is off the
- * screen: a label a reader can already read does not need saying twice. */
-const RailItem = ({
-	icon: ItemIcon,
-	label,
-	value,
-	iconsOnly,
-	className,
-}: RailItemProps) => {
-	const tab = (
-		<Tabs.Tab
-			className={cn(RAIL_ITEM_CLASS, iconsOnly && "justify-center", className)}
-			value={value}
-		>
-			<ItemIcon aria-hidden="true" className="size-4 shrink-0" />
-			<span className={iconsOnly ? "sr-only" : undefined}>{label}</span>
-		</Tabs.Tab>
-	)
-
-	if (!iconsOnly) return tab
-
-	return (
-		<Tooltip content={label} side="right" wrapperClassName="w-full">
-			{tab}
-		</Tooltip>
-	)
-}
 
 type BotSettingsDialogProps = {
 	open: boolean
@@ -193,51 +149,45 @@ const BotSettingsDialog = ({
 					orientation="vertical"
 					ref={setTabs}
 				>
-					<Tabs.List
-						className={cn(
-							"flex shrink-0 flex-col gap-1 overflow-hidden border-border border-r p-2",
-							iconsOnly ? "w-14" : "w-52",
-						)}
-						data-slot="bot-settings-rail"
-					>
-						<RailItem
+					<SettingsRail iconsOnly={iconsOnly}>
+						<SettingsRailItem
 							icon={Icons.Settings}
 							iconsOnly={iconsOnly}
 							label="General"
 							value={FIRST_TAB}
 						/>
-						<RailItem
+						<SettingsRailItem
 							icon={Icons.Image}
 							iconsOnly={iconsOnly}
 							label="Appearance"
 							value="appearance"
 						/>
-						<RailItem
+						<SettingsRailItem
 							icon={Icons.Docs}
 							iconsOnly={iconsOnly}
 							label="Instructions"
 							value="instructions"
 						/>
-						<RailItem
+						<SettingsRailItem
 							icon={Icons.Terminal}
 							iconsOnly={iconsOnly}
 							label="Runtime"
 							value="runtime"
 						/>
-						<span
-							aria-hidden="true"
-							className="mx-1 my-1 h-px shrink-0 bg-border"
-						/>
-						<RailItem
+						<SettingsRailSeparator />
+						<SettingsRailItem
 							className={DANGER_RAIL_ITEM_CLASS}
 							icon={Icons.Alert}
 							iconsOnly={iconsOnly}
 							label="Danger zone"
 							value={DANGER_TAB}
 						/>
-					</Tabs.List>
+					</SettingsRail>
 
-					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value={FIRST_TAB}>
+					<Tabs.Panel
+						className={SETTINGS_SCROLLING_PANEL_CLASS}
+						value={FIRST_TAB}
+					>
 						<SettingsField
 							label="Name"
 							onValueChange={(name) => patch({ name })}
@@ -252,7 +202,10 @@ const BotSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
-					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value="appearance">
+					<Tabs.Panel
+						className={SETTINGS_SCROLLING_PANEL_CLASS}
+						value="appearance"
+					>
 						<BotIdentityFields
 							identity={value.identity}
 							onAvatarUpload={onAvatarUpload}
@@ -263,7 +216,7 @@ const BotSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
-					<Tabs.Panel className={PANEL_CLASS} value="instructions">
+					<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
 						<SettingsField
 							fill
 							label="Instructions"
@@ -273,7 +226,10 @@ const BotSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
-					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value="runtime">
+					<Tabs.Panel
+						className={SETTINGS_SCROLLING_PANEL_CLASS}
+						value="runtime"
+					>
 						<RuntimeFields
 							model={value.model}
 							models={models}
@@ -283,7 +239,10 @@ const BotSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
-					<Tabs.Panel className={SCROLLING_PANEL_CLASS} value={DANGER_TAB}>
+					<Tabs.Panel
+						className={SETTINGS_SCROLLING_PANEL_CLASS}
+						value={DANGER_TAB}
+					>
 						<DangerZone
 							botName={botName}
 							confirming={isConfirming}
