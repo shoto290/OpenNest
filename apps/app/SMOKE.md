@@ -28,9 +28,9 @@ APPLE_SIGNING_IDENTITY="Developer ID Application: Steve Puget (BBE5V2JL5H)" bun 
 ```
 
 The identity stays out of the committed config on purpose: a personal
-certificate name is not shared property. Tauri reads `APPLE_SIGNING_IDENTITY`
-and enables the hardened runtime on its own — no entitlements file and no
-`bundle.macOS` config are needed. Confirm both:
+certificate name is not shared property. Tauri reads `APPLE_SIGNING_IDENTITY`,
+enables the hardened runtime on its own, and signs every nested executable —
+`opennest-agent` first, then `opennest-app`, then the bundle. Confirm both:
 
 ```
 APP=apps/app/src-tauri/target/release/bundle/macos/OpenNest.app
@@ -41,6 +41,22 @@ codesign -d --verbose=4 "$APP" 2>&1 | grep -E "flags|Authority"
 → `valid on disk`, `flags=0x10000(runtime)`, and an `Authority` chain ending at
 `Apple Root CA`. Anything else and the bundle is not signed with the Developer
 ID, whatever the build log claimed.
+
+`--deep` covers the nested sidecar, but not what the hardened runtime does to
+it. Check it on its own:
+
+```
+AGENT="$APP/Contents/MacOS/opennest-agent"
+codesign -dv "$AGENT" 2>&1 | grep -E "Identifier|TeamIdentifier"
+"$AGENT" --probe
+```
+
+→ `Identifier=opennest-agent` with a `TeamIdentifier`, then one line of JSON.
+`Identifier=a.out` and no team means the binary kept the ad hoc signature bun
+gives it, which Apple will not notarize. A `SharedArrayBuffer is not defined`
+crash means `bundle.macOS.entitlements` lost `com.apple.security.cs.allow-jit`,
+which the hardened runtime needs to leave the JavaScriptCore JIT enabled — a
+failure that only ever shows up in a signed build, never in `bun run dev`.
 
 **Signing is not notarization.** A signed bundle is still refused by Gatekeeper:
 `spctl --assess --type execute "$APP"` answers
@@ -55,8 +71,8 @@ notarization credential belongs in the repo.
 
 2. Build signed (see **Signing** above), then
    `ls apps/app/src-tauri/target/release/bundle/macos/OpenNest.app/Contents/MacOS/`
-   → **only** `opennest-app`. `fake_claude` next to it means the feature gate
-   regressed.
+   → **exactly** `opennest-app` and `opennest-agent`. `fake_claude` next to them
+   means the feature gate regressed.
 
 3. Open the `.dmg` from
    `apps/app/src-tauri/target/release/bundle/dmg/`, drag to `/Applications`,
