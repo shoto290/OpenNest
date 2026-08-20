@@ -8,25 +8,27 @@ import {
 } from "node:fs"
 import { dirname, join } from "node:path"
 
-import { bundledExecutableName, externalBinaryName } from "./executable-name"
+import {
+	BUNDLED_EXECUTABLE_NAME,
+	EXECUTABLE_EXTENSION,
+	externalBinaryName,
+} from "./executable-name"
 
 import type { ProviderBuild, StageTarget } from "../provider"
 
 const SDK_PACKAGE = "@anthropic-ai/claude-agent-sdk"
+const SOURCE_EXECUTABLE_NAME = `claude${EXECUTABLE_EXTENSION}`
 const EXECUTABLE_MODE = 0o755
 
 const moduleRoot = import.meta.dir
 const generatedModule = join(moduleRoot, "generated", "manifest.ts")
-
-const sourceExecutableName = () =>
-	process.platform === "win32" ? "claude.exe" : "claude"
 
 const sdkDirectory = () => dirname(Bun.resolveSync(SDK_PACKAGE, moduleRoot))
 
 /** Where the installed SDK keeps the native executable this build ships. Read by
  * the staging step, and by any test that has no bundle to spawn from. */
 export const claudeSourceExecutable = () => {
-	const specifier = `${SDK_PACKAGE}-${process.platform}-${process.arch}/${sourceExecutableName()}`
+	const specifier = `${SDK_PACKAGE}-${process.platform}-${process.arch}/${SOURCE_EXECUTABLE_NAME}`
 	try {
 		return Bun.resolveSync(specifier, sdkDirectory())
 	} catch {
@@ -62,7 +64,7 @@ const writeGeneratedModule = ({
 const stageExecutable = ({ directory, targetTriple }: StageTarget) => {
 	mkdirSync(directory, { recursive: true })
 	const external = join(directory, externalBinaryName(targetTriple))
-	const bundled = join(directory, bundledExecutableName())
+	const bundled = join(directory, BUNDLED_EXECUTABLE_NAME)
 	rmSync(external, { force: true })
 	rmSync(bundled, { force: true })
 	copyFileSync(claudeSourceExecutable(), external)

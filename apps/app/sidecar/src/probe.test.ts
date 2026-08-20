@@ -6,8 +6,7 @@ import { DEFAULT_PROVIDER_ID, PROVIDER_IDS } from "./providers/registry"
 
 const entrypoint = new URL("./index.ts", import.meta.url).pathname
 
-/** Run from source there is no bundle beside the sidecar, so the executable it
- * spawns is named explicitly rather than resolved from a build tree. */
+/** Run from source there is no bundle beside the sidecar to resolve. */
 const environment = {
 	...process.env,
 	[EXECUTABLE_OVERRIDE_ENV]: claudeSourceExecutable(),

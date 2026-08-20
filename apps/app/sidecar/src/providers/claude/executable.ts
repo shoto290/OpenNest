@@ -1,7 +1,7 @@
 import { accessSync, constants, statSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-import { bundledExecutableName } from "./executable-name"
+import { BUNDLED_EXECUTABLE_NAME } from "./executable-name"
 
 /** The executable the sidecar spawns instead of the one shipped beside it.
  * Reserved for a run that has no bundle of its own — a test, or a developer
@@ -30,7 +30,7 @@ const isSpawnable = (path: string) => {
 /** Every place the executable can be, in the order it is looked for. Both are
  * answered with a stat: nothing here reads the file or fingerprints it. */
 const candidates = ({ directory, override }: Lookup) => {
-	const beside = join(directory, bundledExecutableName())
+	const beside = join(directory, BUNDLED_EXECUTABLE_NAME)
 	return override ? [override, beside] : [beside]
 }
 

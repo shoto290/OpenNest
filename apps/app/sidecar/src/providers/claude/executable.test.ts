@@ -10,7 +10,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { resolveExecutableIn } from "./executable"
-import { bundledExecutableName } from "./executable-name"
+import { BUNDLED_EXECUTABLE_NAME } from "./executable-name"
 
 const spawnable = (path: string) => {
 	writeFileSync(path, "#!/bin/sh\n")
@@ -30,27 +30,27 @@ describe("resolveExecutableIn", () => {
 	})
 
 	it("takes the executable shipped beside the sidecar", () => {
-		const beside = spawnable(join(directory, bundledExecutableName()))
+		const beside = spawnable(join(directory, BUNDLED_EXECUTABLE_NAME))
 
 		expect(resolveExecutableIn({ directory })).toBe(beside)
 	})
 
 	it("prefers an override over what ships beside the sidecar", () => {
-		spawnable(join(directory, bundledExecutableName()))
+		spawnable(join(directory, BUNDLED_EXECUTABLE_NAME))
 		const override = spawnable(join(directory, "elsewhere"))
 
 		expect(resolveExecutableIn({ directory, override })).toBe(override)
 	})
 
 	it("falls back to what ships beside the sidecar when the override is gone", () => {
-		const beside = spawnable(join(directory, bundledExecutableName()))
+		const beside = spawnable(join(directory, BUNDLED_EXECUTABLE_NAME))
 		const override = join(directory, "never-written")
 
 		expect(resolveExecutableIn({ directory, override })).toBe(beside)
 	})
 
 	it("refuses anything that is not a regular file", () => {
-		const beside = join(directory, bundledExecutableName())
+		const beside = join(directory, BUNDLED_EXECUTABLE_NAME)
 		mkdirSync(beside)
 
 		expect(() => resolveExecutableIn({ directory })).toThrow(beside)
@@ -60,7 +60,7 @@ describe("resolveExecutableIn", () => {
 		const override = join(directory, "never-written")
 
 		expect(() => resolveExecutableIn({ directory, override })).toThrow(
-			`No spawnable Claude Code executable at ${override}, ${join(directory, bundledExecutableName())}`,
+			`No spawnable Claude Code executable at ${override}, ${join(directory, BUNDLED_EXECUTABLE_NAME)}`,
 		)
 	})
 })
