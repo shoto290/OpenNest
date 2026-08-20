@@ -4,9 +4,11 @@ import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
+import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 import { ChatScreen } from "@/components/chat-screen"
+import { useTheme } from "@/components/theme-provider"
 import {
 	changesRuntime,
 	modelOptionsFor,
@@ -23,6 +25,8 @@ import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
+import { useUser } from "@/lib/user/use-user"
+import { toUserSettingsValue } from "@/lib/user/user-settings"
 
 /** The folder picker the working directory field opens. There is none on this
  * build: choosing a directory needs a host dialog this app does not carry yet, and
@@ -36,6 +40,8 @@ export function App() {
 	const chat = useChat(driver, store)
 	const roster = useRoster(store)
 	const catalogue = useModelCatalogue()
+	const user = useUser()
+	const theme = useTheme()
 
 	// Mounted at the top of the window: the release check belongs to the app being
 	// open, and the pastille under the roster is where what it found is read.
@@ -51,6 +57,10 @@ export function App() {
 	useEffect(() => {
 		void roster.controller.load()
 	}, [roster.controller])
+
+	useEffect(() => {
+		void user.controller.load()
+	}, [user.controller])
 
 	// The conversation follows the selection: opening a bot paints its transcript and
 	// puts a process of its own behind it. Coming back to one that is already
@@ -130,6 +140,19 @@ export function App() {
 		[roster.controller, isEditing],
 	)
 
+	// The name and the picture come from the record, the scheme and the palette from
+	// the provider painting the window: what the dialog edits is the two halves read
+	// as one. The chip is handed the same value — it draws the identity the dialog's
+	// breadcrumb draws, so there is nothing for a second reading to disagree with.
+	const userSettings = useMemo(
+		() =>
+			toUserSettingsValue(user.state.profile, {
+				colorScheme: theme.theme,
+				palette: theme.palette,
+			}),
+		[user.state.profile, theme.theme, theme.palette],
+	)
+
 	useSettingsShortcut({
 		isEnabled: Boolean(selected),
 		onToggle: toggleSettings,
@@ -148,8 +171,10 @@ export function App() {
 						}}
 						onDeleteBot={roster.controller.askToDelete}
 						onEditBot={roster.controller.edit}
+						onOpenUserSettings={() => user.controller.setSettingsOpen(true)}
 						onSelectBot={roster.controller.select}
 						selectedBotId={selectedBotId ?? undefined}
+						user={userSettings}
 					/>
 				}
 			>
@@ -203,6 +228,31 @@ export function App() {
 					workingKind={activity?.kind}
 				/>
 			) : null}
+			{/* Mounted whether or not a bot is selected, and over the window rather
+			than inside it: the reader's own settings belong to the app, so opening
+			them leaves the conversation and where it is scrolled alone. */}
+			<UserSettingsDialog
+				onClose={() => user.controller.setSettingsOpen(false)}
+				onPictureUpload={(file) => {
+					void user.controller.uploadPicture(file)
+				}}
+				// One field at a time, each to whichever half holds it: a scheme or a
+				// palette goes to the provider, which paints the window before it
+				// writes, and the name goes to the record.
+				onValueChange={(value) => {
+					if (value.name !== userSettings.name) {
+						user.controller.rename(value.name)
+					}
+					if (value.colorScheme !== userSettings.colorScheme) {
+						theme.setTheme(value.colorScheme)
+					}
+					if (value.palette !== userSettings.palette) {
+						theme.setPalette(value.palette)
+					}
+				}}
+				open={user.state.isSettingsOpen}
+				value={userSettings}
+			/>
 		</>
 	)
 }
