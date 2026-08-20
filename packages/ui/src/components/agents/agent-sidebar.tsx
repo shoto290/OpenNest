@@ -1,6 +1,8 @@
 "use client"
 
+import type { TFunction } from "i18next"
 import { memo, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
@@ -30,9 +32,6 @@ import {
 	type UserChipIdentity,
 } from "@workspace/ui/components/user-chip"
 
-const PANEL_LABEL = "Conversations"
-const CREATE_LABEL = "New bot"
-const EMPTY_LABEL = "No bots yet"
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2.5 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
 
@@ -104,9 +103,12 @@ const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
 
 const isBusy = (bot: AgentSidebarBot) => bot.status === "working"
 
-const announcementFor = (bot?: AgentSidebarBot) => {
-	if (!bot) return "No bot selected"
-	return `${bot.name} selected, ${isBusy(bot) ? poseOf(bot) : "idle"}`
+const announcementFor = (t: TFunction<"bots">, bot?: AgentSidebarBot) => {
+	if (!bot) return t("roster.announcement.none")
+	return t("roster.announcement.selected", {
+		name: bot.name,
+		state: isBusy(bot) ? t(`roster.pose.${poseOf(bot)}`) : t("roster.idle"),
+	})
 }
 
 interface BotRosterRowProps {
@@ -124,6 +126,7 @@ const BotRosterRow = ({
 	onEdit,
 	onDelete,
 }: BotRosterRowProps) => {
+	const { t } = useTranslation("bots")
 	const pose = poseOf(bot)
 	const working = isBusy(bot)
 
@@ -167,22 +170,24 @@ const BotRosterRow = ({
 								</span>
 							</span>
 							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
-								{working ? `${pose}…` : bot.lastMessage}
+								{working
+									? t("roster.working", { pose: t(`roster.pose.${pose}`) })
+									: bot.lastMessage}
 							</span>
 						</span>
 					</AnimatedSidebarMenuButton>
 				</ContextMenuTrigger>
-				<ContextMenuContent ariaLabel={`Actions for ${bot.name}`}>
+				<ContextMenuContent ariaLabel={t("roster.actions", { name: bot.name })}>
 					<ContextMenuItem onSelect={() => onEdit?.(bot.id)}>
 						<Icons.Settings aria-hidden="true" className="size-3.5" />
-						Settings
+						{t("roster.settings")}
 					</ContextMenuItem>
 					<ContextMenuItem
 						onSelect={() => onDelete?.(bot.id)}
 						tone="destructive"
 					>
 						<Icons.Delete aria-hidden="true" className="size-3.5" />
-						Delete
+						{t("roster.delete")}
 					</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>
@@ -224,21 +229,23 @@ const AgentSidebarBase = ({
 	user,
 	onOpenUserSettings,
 }: AgentSidebarProps) => {
+	const { t } = useTranslation("bots")
 	const selectedBot = roster.find((bot) => bot.id === selectedId)
+	const createLabel = t("roster.create")
 
 	return (
 		<>
 			<AnimatedSidebar
 				aria-busy={roster.some(isBusy)}
-				ariaLabel={PANEL_LABEL}
+				ariaLabel={t("roster.label")}
 				collapsible="icon"
 			>
 				<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET}>
 					<Button
-						aria-label={CREATE_LABEL}
+						aria-label={createLabel}
 						onClick={onCreateBot}
 						size="icon-sm"
-						tooltip={CREATE_LABEL}
+						tooltip={createLabel}
 						// The header is against the top of the window and the label is taller
 						// than the gap above it, so above is off the screen.
 						tooltipSide="bottom"
@@ -249,7 +256,7 @@ const AgentSidebarBase = ({
 				</AnimatedSidebarHeader>
 				<AnimatedSidebarContent className="pt-0 group-data-[state=collapsed]/sidebar:px-0">
 					{roster.length === 0 ? (
-						<p className={EMPTY_COPY}>{EMPTY_LABEL}</p>
+						<p className={EMPTY_COPY}>{t("roster.empty")}</p>
 					) : (
 						<AnimatedSidebarMenu>
 							{roster.map((bot) => (
@@ -279,7 +286,7 @@ const AgentSidebarBase = ({
 				) : null}
 			</AnimatedSidebar>
 			<span className="sr-only" role="status">
-				{announcementFor(selectedBot)}
+				{announcementFor(t, selectedBot)}
 			</span>
 		</>
 	)

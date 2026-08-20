@@ -1,6 +1,7 @@
 "use client"
 
 import { useId } from "react"
+import { useTranslation } from "react-i18next"
 
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import {
@@ -12,7 +13,6 @@ import {
 	BOT_IDENTITY_ANIMALS,
 	type BotAvatarBlot,
 	type BotIdentity,
-	titleCase,
 } from "@workspace/ui/components/bot-settings"
 import { PictureDropzone } from "@workspace/ui/components/picture-dropzone"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
@@ -25,8 +25,6 @@ const BLOT_SIZE = 24
 
 /** The eight tints and the option that takes the blot off, as one radio group. */
 const BLOT_OPTIONS = [...BLOT_TINTS, undefined] as const
-
-const blotLabel = (blot?: BotAvatarBlot) => (blot ? titleCase(blot) : "No blot")
 
 const BLOT_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "p-1")
 
@@ -63,11 +61,18 @@ const BotIdentityFields = ({
 	onAvatarUpload,
 	className,
 }: BotIdentityFieldsProps) => {
+	const { t } = useTranslation("bots")
 	const groupId = useId()
 
+	const blotLabel = (blot?: BotAvatarBlot) =>
+		blot ? t(`identity.blot.option.${blot}`) : t("identity.blot.none")
+
 	const currentLabel = identity.image
-		? "Uploaded image"
-		: `${titleCase(identity.animal)}, ${blotLabel(identity.blot)}`
+		? t("identity.uploadedImage")
+		: t("identity.current", {
+				animal: t(`identity.animal.option.${identity.animal}`),
+				blot: blotLabel(identity.blot),
+			})
 
 	return (
 		<div
@@ -85,14 +90,19 @@ const BotIdentityFields = ({
 					working={working}
 				/>
 				<div className="flex min-w-0 flex-col gap-1">
-					<span className="font-medium text-foreground text-sm">Avatar</span>
+					<span className="font-medium text-foreground text-sm">
+						{t("identity.avatar")}
+					</span>
 					<p className="truncate text-muted-foreground text-xs">
 						{currentLabel}
 					</p>
 				</div>
 			</div>
 
-			<SettingsGroup grid="grid-cols-4 gap-1.5" label="Animal">
+			<SettingsGroup
+				grid="grid-cols-4 gap-1.5"
+				label={t("identity.animal.label")}
+			>
 				{BOT_IDENTITY_ANIMALS.map((animal) => (
 					<label className={FIELD_OPTION_CLASS} key={animal}>
 						<input
@@ -114,13 +124,13 @@ const BotIdentityFields = ({
 							/>
 						</span>
 						<span className="w-full truncate text-center text-[11px]">
-							{titleCase(animal)}
+							{t(`identity.animal.option.${animal}`)}
 						</span>
 					</label>
 				))}
 			</SettingsGroup>
 
-			<SettingsGroup grid="grid-cols-9 gap-1" label="Blot">
+			<SettingsGroup grid="grid-cols-9 gap-1" label={t("identity.blot.label")}>
 				{BLOT_OPTIONS.map((blot) => (
 					<label
 						className={BLOT_OPTION_CLASS}
@@ -152,8 +162,11 @@ const BotIdentityFields = ({
 				))}
 			</SettingsGroup>
 
-			<SettingsGroup grid="grid-cols-1" label="Picture">
-				<PictureDropzone label="Avatar image file" onPick={onAvatarUpload} />
+			<SettingsGroup grid="grid-cols-1" label={t("identity.picture")}>
+				<PictureDropzone
+					label={t("identity.pictureFile")}
+					onPick={onAvatarUpload}
+				/>
 			</SettingsGroup>
 		</div>
 	)

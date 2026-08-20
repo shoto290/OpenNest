@@ -34,9 +34,6 @@ type BotSettingsValue = {
 	workingDirectory: string
 }
 
-const titleCase = (word: string) =>
-	`${word.charAt(0).toUpperCase()}${word.slice(1)}`
-
 export {
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
@@ -44,5 +41,4 @@ export {
 	type BotIdentity,
 	type BotModelOption,
 	type BotSettingsValue,
-	titleCase,
 }

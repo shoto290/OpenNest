@@ -2,6 +2,7 @@
 
 import { Select } from "@base-ui/react/select"
 import { useId } from "react"
+import { useTranslation } from "react-i18next"
 
 import type { BotModelOption } from "@workspace/ui/components/bot-settings"
 import { Icons } from "@workspace/ui/components/icons"
@@ -29,6 +30,7 @@ const RuntimeFields = ({
 	workingDirectory,
 	onBrowseWorkingDirectory,
 }: RuntimeFieldsProps) => {
+	const { t } = useTranslation("bots")
 	const directoryId = useId()
 
 	return (
@@ -39,7 +41,9 @@ const RuntimeFields = ({
 					onValueChange={(next: string | null) => onModelChange(next ?? "")}
 					value={model}
 				>
-					<Select.Label className={FIELD_LABEL_CLASS}>Model</Select.Label>
+					<Select.Label className={FIELD_LABEL_CLASS}>
+						{t("runtime.model.label")}
+					</Select.Label>
 					<Select.Trigger
 						className={cn(
 							FIELD_CONTROL_CLASS,
@@ -48,7 +52,7 @@ const RuntimeFields = ({
 					>
 						<Select.Value
 							className="min-w-0 truncate data-placeholder:text-muted-foreground"
-							placeholder="Choose a model"
+							placeholder={t("runtime.model.placeholder")}
 						/>
 						<Select.Icon className="shrink-0 text-muted-foreground">
 							<Icons.Expand className="size-4" />
@@ -90,7 +94,7 @@ const RuntimeFields = ({
 
 			<div className="flex flex-col gap-1.5">
 				<span className={FIELD_LABEL_CLASS} id={`${directoryId}-label`}>
-					Working directory
+					{t("runtime.directory.label")}
 				</span>
 				<button
 					aria-labelledby={`${directoryId}-label ${directoryId}`}
@@ -113,9 +117,11 @@ const RuntimeFields = ({
 							!workingDirectory && "text-muted-foreground",
 						)}
 					>
-						{workingDirectory || "Choose a folder"}
+						{workingDirectory || t("runtime.directory.placeholder")}
 					</span>
-					<span className="shrink-0 text-muted-foreground text-xs">Change</span>
+					<span className="shrink-0 text-muted-foreground text-xs">
+						{t("runtime.directory.browse")}
+					</span>
 				</button>
 			</div>
 		</>
