@@ -44,43 +44,6 @@ export type BotAvatarAnimalDefinition = {
 }
 
 export const ANIMALS = {
-	cat: {
-		faceY: 122,
-		scale: 0.52,
-		head: "M58,92 C64,64 88,48 120,48 C152,48 176,64 182,92 C192,108 194,126 186,140 C192,145 190,153 182,155 C172,176 150,188 120,188 C90,188 68,176 58,155 C50,153 48,145 54,140 C46,126 48,108 58,92 Z",
-		headDepth: 68,
-		ears: [
-			{
-				pivot: [72, 72],
-				side: -1,
-				depth: -14,
-				volume: { center: [67, 61], radii: [27, 35, 10] },
-				shapes: [
-					{
-						kind: "path",
-						role: "outline",
-						d: "M56,96 C44,72 40,44 46,26 C64,32 82,46 94,58 C78,64 64,78 56,96 Z",
-					},
-					{ kind: "path", role: "accent", d: "M60,74 L56,42 L82,58 Z" },
-				],
-			},
-			{
-				pivot: [168, 72],
-				side: 1,
-				depth: -14,
-				volume: { center: [173, 61], radii: [27, 35, 10] },
-				shapes: [
-					{
-						kind: "path",
-						role: "outline",
-						d: "M184,96 C196,72 200,44 194,26 C176,32 158,46 146,58 C162,64 176,78 184,96 Z",
-					},
-					{ kind: "path", role: "accent", d: "M180,74 L184,42 L158,58 Z" },
-				],
-			},
-		],
-		extras: [],
-	},
 	rabbit: {
 		faceY: 148,
 		scale: 0.42,
@@ -121,6 +84,43 @@ export const ANIMALS = {
 						role: "accent",
 						d: "M152,78 C157,62 158,44 154,34 C146,44 143,62 143,78 Z",
 					},
+				],
+			},
+		],
+		extras: [],
+	},
+	cat: {
+		faceY: 122,
+		scale: 0.52,
+		head: "M58,92 C64,64 88,48 120,48 C152,48 176,64 182,92 C192,108 194,126 186,140 C192,145 190,153 182,155 C172,176 150,188 120,188 C90,188 68,176 58,155 C50,153 48,145 54,140 C46,126 48,108 58,92 Z",
+		headDepth: 68,
+		ears: [
+			{
+				pivot: [72, 72],
+				side: -1,
+				depth: -14,
+				volume: { center: [67, 61], radii: [27, 35, 10] },
+				shapes: [
+					{
+						kind: "path",
+						role: "outline",
+						d: "M56,96 C44,72 40,44 46,26 C64,32 82,46 94,58 C78,64 64,78 56,96 Z",
+					},
+					{ kind: "path", role: "accent", d: "M60,74 L56,42 L82,58 Z" },
+				],
+			},
+			{
+				pivot: [168, 72],
+				side: 1,
+				depth: -14,
+				volume: { center: [173, 61], radii: [27, 35, 10] },
+				shapes: [
+					{
+						kind: "path",
+						role: "outline",
+						d: "M184,96 C196,72 200,44 194,26 C176,32 158,46 146,58 C162,64 176,78 184,96 Z",
+					},
+					{ kind: "path", role: "accent", d: "M180,74 L184,42 L158,58 Z" },
 				],
 			},
 		],

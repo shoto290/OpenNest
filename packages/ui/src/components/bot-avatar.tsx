@@ -185,7 +185,7 @@ type BotAvatarProps = {
 }
 
 function BotAvatar({
-	animal = "cat",
+	animal = "rabbit",
 	state = "waiting",
 	size = 240,
 	animated = true,
