@@ -102,7 +102,7 @@ pub enum TurnOutcome {
 }
 
 /// Every failure the frontend can act on. Never carries a credential, an
-/// environment value, or a raw Claude Code frame.
+/// environment value, or a raw provider frame.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TransportError {
@@ -189,14 +189,14 @@ impl TransportError {
 impl std::fmt::Display for TransportError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			TransportError::BinaryNotFound { .. } => write!(f, "claude binary not found"),
-			TransportError::NotAuthenticated => write!(f, "claude is not authenticated"),
+			TransportError::BinaryNotFound { .. } => write!(f, "the agent sidecar was not found"),
+			TransportError::NotAuthenticated => write!(f, "the agent is not signed in"),
 			TransportError::AuthCheckFailed { detail } => write!(f, "auth check failed: {detail}"),
 			TransportError::SpawnFailed { detail } => write!(f, "spawn failed: {detail}"),
 			TransportError::StartupTimeout { timeout_ms } => {
 				write!(f, "startup timed out after {timeout_ms}ms")
 			}
-			TransportError::Crashed { code, .. } => write!(f, "claude exited with {code:?}"),
+			TransportError::Crashed { code, .. } => write!(f, "the agent exited with {code:?}"),
 			TransportError::ResumeFailed { .. } => {
 				write!(f, "the stored session could not be resumed")
 			}
@@ -284,7 +284,7 @@ pub struct SessionSnapshot {
 	pub activities: Vec<ActivityEvent>,
 }
 
-/// The single stream React consumes. One tagged union, no raw Claude payloads.
+/// The single stream React consumes. One tagged union, no raw provider payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AgentEvent {

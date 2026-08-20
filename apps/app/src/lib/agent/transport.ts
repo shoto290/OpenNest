@@ -12,21 +12,21 @@ import type {
 import type { SubmittedAttachment } from "../chat/attachments-contract"
 import type { ChatDriver } from "../chat/driver"
 
-const EVENT_CHANNEL = "claude://event"
+const EVENT_CHANNEL = "agent://event"
 
-export const claudeTransport: ChatDriver = {
+export const agentTransport: ChatDriver = {
 	check: (scope: RuntimeScope | null) =>
-		invoke<CheckReport>("claude_check", { scope }),
+		invoke<CheckReport>("agent_check", { scope }),
 
 	startOrResumeSession: (scope: RuntimeScope, resume?: string, cwd?: string) =>
-		invoke<SessionHandle>("claude_start_or_resume_session", {
+		invoke<SessionHandle>("agent_start_or_resume_session", {
 			scope,
 			resume: resume ?? null,
 			cwd: cwd ?? null,
 		}),
 
 	submitPrompt: (scope: RuntimeScope, text: string) =>
-		invoke<void>("claude_submit_prompt", { scope, text }),
+		invoke<void>("agent_submit_prompt", { scope, text }),
 
 	storeAttachments: (
 		conversationId: string,
@@ -38,15 +38,15 @@ export const claudeTransport: ChatDriver = {
 		}),
 
 	cancelTurn: (scope: RuntimeScope) =>
-		invoke<void>("claude_cancel_turn", { scope }),
+		invoke<void>("agent_cancel_turn", { scope }),
 
 	respondToPermission: (
 		scope: RuntimeScope,
 		id: string,
 		decision: PermissionDecision,
-	) => invoke<void>("claude_respond_to_permission", { scope, id, decision }),
+	) => invoke<void>("agent_respond_to_permission", { scope, id, decision }),
 
-	shutdown: (scope: RuntimeScope) => invoke<void>("claude_shutdown", { scope }),
+	shutdown: (scope: RuntimeScope) => invoke<void>("agent_shutdown", { scope }),
 
 	subscribe: (onEvent: (event: ScopedEvent) => void) =>
 		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }) => onEvent(payload)),

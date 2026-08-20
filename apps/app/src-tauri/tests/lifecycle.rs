@@ -15,21 +15,19 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::{
-	claude_shutdown, claude_start_or_resume_session, claude_submit_prompt, shutdown_session,
+	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, shutdown_session,
 	terminate_session,
 };
 use opennest_app::agent::contract::{RuntimeScope, SessionHandle, TransportError};
 use opennest_app::agent::sidecar::live_groups;
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::AgentState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 use tauri::{App, Manager};
 
-const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -45,7 +43,7 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
 
 fn app() -> App<MockRuntime> {
 	mock_builder()
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		// A host that never opened a file: the bots these tests start are bots it can
 		// read nothing about, so every child comes up as one carrying nothing.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
@@ -85,9 +83,9 @@ async fn start_run(
 	app: &App<MockRuntime>,
 	scope: RuntimeScope,
 ) -> Result<SessionHandle, TransportError> {
-	claude_start_or_resume_session(
+	agent_start_or_resume_session(
 		app.handle().clone(),
-		app.state::<ClaudeState>(),
+		app.state::<AgentState>(),
 		app.state::<db::DatabaseState>(),
 		scope,
 		None,
@@ -101,7 +99,7 @@ async fn start(app: &App<MockRuntime>) -> Result<SessionHandle, TransportError> 
 }
 
 async fn shutdown(app: &App<MockRuntime>) -> Result<(), TransportError> {
-	claude_shutdown(app.handle().clone(), app.state::<ClaudeState>(), scope()).await
+	agent_shutdown(app.handle().clone(), app.state::<AgentState>(), scope()).await
 }
 
 fn is_refused<T>(outcome: &Result<T, TransportError>) -> bool {
@@ -138,7 +136,6 @@ fn probe_file() -> PathBuf {
 #[test]
 fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 	let _serial = serial();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 
 	let app = app();
@@ -155,12 +152,11 @@ fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 		);
 		assert_eq!(live_groups().len(), 1, "the refused start spawned a sidecar of its own");
 
-		shutdown_session(app.state::<ClaudeState>().inner(), &scope()).await;
-		terminate_session(app.state::<ClaudeState>().inner()).await;
+		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
+		terminate_session(app.state::<AgentState>().inner()).await;
 		assert!(live_groups().is_empty(), "the sidecar outlived the host it served");
 	});
 
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
 }
 
 /// A shutdown and a start on one participant are one seat, taken in turn: the
@@ -170,9 +166,8 @@ fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 #[test]
 fn a_start_racing_a_shutdown_never_interleaves() {
 	let _serial = serial();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
+	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
 
 	let app = app();
 	runtime().block_on(async {
@@ -185,13 +180,12 @@ fn a_start_racing_a_shutdown_never_interleaves() {
 		);
 		assert!(live_groups().len() <= 1, "the two transitions each spawned a sidecar");
 
-		shutdown_session(app.state::<ClaudeState>().inner(), &scope()).await;
-		terminate_session(app.state::<ClaudeState>().inner()).await;
+		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
+		terminate_session(app.state::<AgentState>().inner()).await;
 		assert!(live_groups().is_empty(), "a sidecar outlived both transitions");
 	});
 
-	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
 }
 
 /// The window a quit is most dangerous in: a start whose handshake has not
@@ -204,11 +198,10 @@ fn a_start_racing_a_shutdown_never_interleaves() {
 fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	let _serial = serial();
 	let pid_file = probe_file();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_CLAUDE_SCENARIO", "startup_timeout");
-	std::env::set_var("FAKE_CLAUDE_ORPHAN_AT_STARTUP", "1");
-	std::env::set_var("FAKE_CLAUDE_PID_FILE", &pid_file);
+	std::env::set_var("FAKE_AGENT_SCENARIO", "startup_timeout");
+	std::env::set_var("FAKE_AGENT_ORPHAN_AT_STARTUP", "1");
+	std::env::set_var("FAKE_AGENT_PID_FILE", &pid_file);
 
 	let app = app();
 	runtime().block_on(async {
@@ -218,7 +211,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 			let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");
 			assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
-			terminate_session(app.state::<ClaudeState>().inner()).await;
+			terminate_session(app.state::<AgentState>().inner()).await;
 			poll_until("the exit sweep to leave no orphan behind", || !is_alive(orphan)).await;
 		});
 
@@ -228,7 +221,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 		);
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		assert_eq!(
-			claude_submit_prompt(app.state::<ClaudeState>(), scope(), "salut".into()).await,
+			agent_submit_prompt(app.state::<AgentState>(), scope(), "salut".into()).await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
@@ -238,10 +231,9 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 		assert!(live_groups().is_empty(), "a start after the quit spawned a child");
 	});
 
-	std::env::remove_var("FAKE_CLAUDE_PID_FILE");
-	std::env::remove_var("FAKE_CLAUDE_ORPHAN_AT_STARTUP");
-	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_PID_FILE");
+	std::env::remove_var("FAKE_AGENT_ORPHAN_AT_STARTUP");
+	std::env::remove_var("FAKE_AGENT_SCENARIO");
 	let _ = std::fs::remove_file(&pid_file);
 }
 
@@ -252,10 +244,9 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 #[test]
 fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 	let _serial = serial();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
-	std::env::set_var("FAKE_CLAUDE_SCENARIO", "slow_open");
+	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
+	std::env::set_var("FAKE_AGENT_SCENARIO", "slow_open");
 
 	let app = app();
 	runtime().block_on(async {
@@ -263,7 +254,7 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 
 		let (restarted, ()) = tokio::join!(start(&app), async {
 			tokio::time::sleep(QUIT_INSIDE_THE_LADDER).await;
-			terminate_session(app.state::<ClaudeState>().inner()).await;
+			terminate_session(app.state::<AgentState>().inner()).await;
 		});
 
 		// Either verdict is the same guarantee: the gate refused the install, or the
@@ -275,15 +266,14 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 		);
 		assert!(live_groups().is_empty(), "the sidecar outlived the sweep");
 		assert_eq!(
-			claude_submit_prompt(app.state::<ClaudeState>(), scope(), "salut".into()).await,
+			agent_submit_prompt(app.state::<AgentState>(), scope(), "salut".into()).await,
 			Err(TransportError::NotStarted),
 			"a session reached the state after the quit"
 		);
 	});
 
-	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
-	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_SCENARIO");
+	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
 }
 
 /// The reader owns several bots and more than one of them is answering. A start for
@@ -296,9 +286,8 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 #[test]
 fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 	let _serial = serial();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_CLAUDE_IGNORE_EOF", "1");
+	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
 
 	let app = app();
 	runtime().block_on(async {
@@ -312,12 +301,12 @@ fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 			"the sidecar the host believes it holds is not running: {running:?}"
 		);
 		assert_eq!(
-			claude_submit_prompt(app.state::<ClaudeState>(), scope(), "salut".into()).await,
+			agent_submit_prompt(app.state::<AgentState>(), scope(), "salut".into()).await,
 			Ok(()),
 			"starting the second bot replaced the first one's session"
 		);
 
-		terminate_session(app.state::<ClaudeState>().inner()).await;
+		terminate_session(app.state::<AgentState>().inner()).await;
 
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		for pid in running {
@@ -325,6 +314,5 @@ fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 		}
 	});
 
-	std::env::remove_var("FAKE_CLAUDE_IGNORE_EOF");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
 }

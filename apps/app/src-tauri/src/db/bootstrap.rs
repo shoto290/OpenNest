@@ -403,7 +403,7 @@ fn unserializable(error: serde_json::Error) -> ConversationError {
 	ConversationError::from(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
 
-/// Copied, never renamed: `claude_load_session` still reads `session.json` and the
+/// Copied, never renamed: `agent_load_session` still reads `session.json` and the
 /// chat somebody is looking at must not change under them. The source is never
 /// moved, truncated or removed by any path through here.
 ///

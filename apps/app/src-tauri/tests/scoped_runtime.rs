@@ -15,11 +15,10 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::EVENT_CHANNEL;
 use opennest_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TurnOutcome};
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::AgentState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -27,7 +26,6 @@ use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_K
 use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, WebviewWindow, WebviewWindowBuilder};
 
-const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -60,7 +58,7 @@ struct Harness {
 
 fn launch() -> Harness {
 	let app = mock_builder()
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		// A host that never opened a file: what a bot was described as is another
 		// suite's subject, and here every child comes up carrying nothing.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
@@ -102,14 +100,14 @@ impl Harness {
 	/// Never `$HOME`: the child inherits this as its working directory.
 	fn start(&self, run: &Value) -> Result<Value, Value> {
 		self.call(
-			"claude_start_or_resume_session",
+			"agent_start_or_resume_session",
 			json!({ "scope": run, "resume": Value::Null, "cwd": std::env::temp_dir() }),
 		)
 	}
 
 	fn prompt_is_taken(&self, run: &Value) {
 		assert_eq!(
-			self.call("claude_submit_prompt", json!({ "scope": run, "text": "bonjour" })),
+			self.call("agent_submit_prompt", json!({ "scope": run, "text": "bonjour" })),
 			Ok(Value::Null),
 			"the live run refused a prompt"
 		);
@@ -189,9 +187,8 @@ fn stale(runtime_session_id: &str) -> Result<Value, Value> {
 #[test]
 fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() {
 	let _serial = serial();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_CLAUDE_SCENARIO", "normal");
+	std::env::set_var("FAKE_AGENT_SCENARIO", "normal");
 
 	let harness = launch();
 	let replaced = a_run(1);
@@ -200,25 +197,25 @@ fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() 
 	assert_eq!(harness.start(&live), Ok(json!({ "resumed": false })));
 
 	assert_eq!(
-		harness.call("claude_submit_prompt", json!({ "scope": replaced, "text": "salut" })),
+		harness.call("agent_submit_prompt", json!({ "scope": replaced, "text": "salut" })),
 		stale("r1"),
 		"a replaced run submitted a prompt to the session that took its place"
 	);
 	assert_eq!(
-		harness.call("claude_cancel_turn", json!({ "scope": replaced })),
+		harness.call("agent_cancel_turn", json!({ "scope": replaced })),
 		stale("r1"),
 		"a replaced run was answered about the live session's turn"
 	);
 	assert_eq!(
 		harness.call(
-			"claude_respond_to_permission",
+			"agent_respond_to_permission",
 			json!({ "scope": replaced, "id": "whatever", "decision": "allowOnce" })
 		),
 		stale("r1"),
 		"a replaced run answered a permission on the live session"
 	);
 	assert_eq!(
-		harness.call("claude_shutdown", json!({ "scope": replaced })),
+		harness.call("agent_shutdown", json!({ "scope": replaced })),
 		stale("r1"),
 		"a replaced run shut down the session that took its place"
 	);
@@ -230,10 +227,9 @@ fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() 
 		TurnOutcome::Completed,
 		"the live session stopped answering after the refusals"
 	);
-	assert_eq!(harness.call("claude_shutdown", json!({ "scope": live })), Ok(Value::Null));
+	assert_eq!(harness.call("agent_shutdown", json!({ "scope": live })), Ok(Value::Null));
 
-	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_SCENARIO");
 }
 
 /// A frontend has nothing but the envelope to tell one run's stream from another's,
@@ -243,9 +239,8 @@ fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() 
 #[test]
 fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	let _serial = serial();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_CLAUDE_SCENARIO", "normal");
+	std::env::set_var("FAKE_AGENT_SCENARIO", "normal");
 
 	let harness = launch();
 	let run = a_run(1);
@@ -253,7 +248,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	// than serializing each event's scope back to JSON to look at it.
 	let named: RuntimeScope = serde_json::from_value(run.clone()).expect("the scope parses");
 
-	harness.call("claude_check", json!({ "scope": Value::Null })).expect("the check reports");
+	harness.call("agent_check", json!({ "scope": Value::Null })).expect("the check reports");
 	assert!(
 		harness.events().iter().all(|scoped| scoped.scope.is_none()),
 		"a check made before any run invented one: {:#?}",
@@ -261,7 +256,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	);
 
 	harness.forget_events();
-	harness.call("claude_check", json!({ "scope": run })).expect("the check reports");
+	harness.call("agent_check", json!({ "scope": run })).expect("the check reports");
 	let echoed = harness.events();
 	assert!(
 		!echoed.is_empty() && echoed.iter().all(|scoped| scoped.scope.as_ref() == Some(&named)),
@@ -282,10 +277,9 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 		"the turn produced nothing to be scoped: {streamed:#?}"
 	);
 
-	assert_eq!(harness.call("claude_shutdown", json!({ "scope": run })), Ok(Value::Null));
+	assert_eq!(harness.call("agent_shutdown", json!({ "scope": run })), Ok(Value::Null));
 
-	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_SCENARIO");
 }
 
 /// The whole point of a runtime per participant: one reader, two bots, and both of
@@ -296,9 +290,8 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 #[test]
 fn two_bots_answer_at_once_and_each_stream_stays_under_its_own_run() {
 	let _serial = serial();
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_CLAUDE_SCENARIO", "normal");
+	std::env::set_var("FAKE_AGENT_SCENARIO", "normal");
 
 	let harness = launch();
 	let first = a_run(1);
@@ -328,7 +321,7 @@ fn two_bots_answer_at_once_and_each_stream_stays_under_its_own_run() {
 		"an event crossed under a run neither bot was started for: {streamed:#?}"
 	);
 
-	assert_eq!(harness.call("claude_shutdown", json!({ "scope": first })), Ok(Value::Null));
+	assert_eq!(harness.call("agent_shutdown", json!({ "scope": first })), Ok(Value::Null));
 	harness.forget_events();
 	harness.prompt_is_taken(&second);
 	assert_eq!(
@@ -338,8 +331,7 @@ fn two_bots_answer_at_once_and_each_stream_stays_under_its_own_run() {
 		TurnOutcome::Completed,
 		"ending one bot's session stopped the bot beside it"
 	);
-	assert_eq!(harness.call("claude_shutdown", json!({ "scope": second })), Ok(Value::Null));
+	assert_eq!(harness.call("agent_shutdown", json!({ "scope": second })), Ok(Value::Null));
 
-	std::env::remove_var("FAKE_CLAUDE_SCENARIO");
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
+	std::env::remove_var("FAKE_AGENT_SCENARIO");
 }

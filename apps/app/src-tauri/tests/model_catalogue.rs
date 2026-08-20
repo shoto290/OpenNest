@@ -1,50 +1,25 @@
 //! The model catalogue as the frontend asks for it, over IPC.
 //!
-//! A suite of its own because the answer is read once per process and kept: a second
-//! test pointing the host at a different executable would be answered with the first
-//! one's catalogue, which would make both tests lie. One process, one read, one
-//! executable — the way a launch has it.
+//! A suite of its own because the answer is asked once per host and kept: a second
+//! test pointing the host at a different sidecar would be answered with the first
+//! one's catalogue, which would make both tests lie. One process, one ask, one
+//! sidecar — the way a launch has it.
 
-use std::path::PathBuf;
-
-use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::commands::terminate_session;
+use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
+use opennest_app::agent::AgentState;
 use opennest_app::commands::invoke_handler;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{WebviewWindow, WebviewWindowBuilder};
+use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
 
-/// A tier name that exists nowhere in this repository but here and in the sibling
-/// unit tests. The scan has no list of tiers to check a file against, and this is
-/// what says so from the outside: the host offers a tier it was never told about.
-const INVENTED: &str = "quasar";
+const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 
-fn a_bundle_carrying(tier: &str) -> Vec<u8> {
-	format!(
-		r#"var noise=["claude-code-docs","claude-cli"];
-		var models=["claude-{tier}-5","claude-{tier}-4-1"];
-		var aliases=["{tier}","best","{tier}[1m]"];
-		var lone="claude-{tier}-preview";"#
-	)
-	.into_bytes()
-}
-
-/// A file the resolver will accept: on the search path it is not, but the override is
-/// the first candidate, and it has to be executable to be taken for one.
-fn an_executable_carrying(tier: &str) -> PathBuf {
-	let dir = std::env::temp_dir().join(format!("opennest-catalogue-ipc-{}", std::process::id()));
-	std::fs::create_dir_all(&dir).expect("a place for the fixture");
-	let path = dir.join("claude");
-	std::fs::write(&path, a_bundle_carrying(tier)).expect("the fixture is written");
-	#[cfg(unix)]
-	{
-		use std::os::unix::fs::PermissionsExt;
-		std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
-			.expect("the fixture is executable");
-	}
-	path
-}
+/// Labels no module of this repository could have made up. The host holds no list of
+/// models to check an answer against, and this is what says so from the outside: what
+/// the sidecar offers is what the frontend is offered, verbatim and in order.
+const OFFERED: &str = "quasar,quasar[1m],nimbus-preview";
 
 fn window(app: &tauri::App<MockRuntime>) -> WebviewWindow<MockRuntime> {
 	WebviewWindowBuilder::new(app.handle(), "main", tauri::WebviewUrl::default())
@@ -69,45 +44,32 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str) -> Result<Value, Value> 
 	.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 }
 
-/// The whole crossing: the command is registered, the host reads the executable the
-/// resolver leads it to, and what comes back is a list of strings the frontend can
-/// offer — including a tier this build has never heard of, which is the point.
+/// The whole crossing: the command is registered, the host asks the sidecar it serves
+/// its sessions from, and what comes back is the list the sidecar named — labels this
+/// build has never heard of included, which is the point.
 #[test]
-fn the_catalogue_crosses_as_the_executable_carries_it() {
-	let path = an_executable_carrying(INVENTED);
-	std::env::set_var(BINARY_OVERRIDE_ENV, &path);
+fn the_catalogue_crosses_as_the_sidecar_offers_it() {
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
+	std::env::set_var("FAKE_AGENT_MODELS", OFFERED);
 
 	let app = mock_builder()
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		.invoke_handler(invoke_handler())
 		.build(mock_context(noop_assets()))
 		.expect("app builds");
 	let window = window(&app);
 
-	let offered = call(&window, "claude_models").expect("the catalogue crosses");
+	let offered = call(&window, "agent_models").expect("the catalogue crosses");
 	let values: Vec<String> =
 		serde_json::from_value(offered.clone()).expect("a list of labels crossed");
 
-	for expected in [
-		INVENTED.to_owned(),
-		format!("{INVENTED}[1m]"),
-		"best".to_owned(),
-		format!("claude-{INVENTED}-5"),
-		format!("claude-{INVENTED}-4-1"),
-		format!("claude-{INVENTED}-preview"),
-	] {
-		assert!(values.contains(&expected), "{expected} was not offered: {values:?}");
-	}
-	assert!(
-		!values.iter().any(|value| value.contains("docs") || value.contains("cli")),
-		"a slug that is not a model was offered: {values:?}"
-	);
-	assert_eq!(values.first().map(String::as_str), Some(INVENTED), "the tier's alias comes first");
+	assert_eq!(values, OFFERED.split(',').collect::<Vec<_>>(), "the catalogue crossed changed");
 
-	// Read once and kept: the same answer, without the file being there any more.
-	std::fs::remove_file(&path).expect("the fixture is removed");
-	assert_eq!(call(&window, "claude_models"), Ok(offered), "a second ask read the file again");
+	// Asked once and kept: the same answer, with nothing left to ask.
+	std::env::set_var("FAKE_AGENT_MODELS", "something,else");
+	assert_eq!(call(&window, "agent_models"), Ok(offered), "a second ask reached the sidecar");
 
-	std::env::remove_var(BINARY_OVERRIDE_ENV);
-	std::fs::remove_dir_all(path.parent().expect("the fixture directory")).expect("cleanup");
+	tauri::async_runtime::block_on(terminate_session(app.state::<AgentState>().inner()));
+	std::env::remove_var("FAKE_AGENT_MODELS");
+	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 }

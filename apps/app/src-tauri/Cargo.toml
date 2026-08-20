@@ -15,18 +15,13 @@ path = "src/lib.rs"
 name = "opennest-app"
 path = "src/main.rs"
 
-# Every suite but real_claude.rs spawns these, so run them with
-# `cargo test --features fake-claude`. Cargo hands the tests their paths either
+# Every suite but real_claude.rs spawns this, so run them with
+# `cargo test --features fake-claude`. Cargo hands the tests its path either
 # way, so a plain `cargo test` still compiles and then fails at each spawn with
 # `SpawnFailed { detail: "No such file or directory" }`.
 #
-# `fake_claude` stands in for the executable the connection probe looks for;
-# `fake_sidecar` stands in for the one process every session is served from.
-[[bin]]
-name = "fake_claude"
-path = "src/bin/fake_claude.rs"
-required-features = ["fake-claude"]
-
+# `fake_sidecar` stands in for the one process every session is served from, and
+# for the install the connection probe and the model catalogue ask about.
 [[bin]]
 name = "fake_sidecar"
 path = "src/bin/fake_sidecar.rs"

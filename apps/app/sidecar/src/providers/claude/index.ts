@@ -1,4 +1,6 @@
+import { authenticateClaude } from "./auth"
 import { resolveExecutable } from "./executable"
+import { claudeModels } from "./models"
 import { openClaudeSession } from "./session"
 
 import type { AgentProvider } from "../provider"
@@ -17,5 +19,7 @@ export const claudeProvider: AgentProvider = {
 	assertReady: () => {
 		resolveExecutable()
 	},
+	authenticate: authenticateClaude,
+	models: claudeModels,
 	open: openClaudeSession,
 }

@@ -3,8 +3,12 @@
 //! Speaks the same envelope the real sidecar does — one process, many sessions,
 //! every frame naming the session it belongs to — so the transport can be
 //! exercised without the network, a subscription, or a wall clock. Each session
-//! picks its behaviour from `FAKE_CLAUDE_SCENARIO`, taken from the open command
+//! picks its behaviour from `FAKE_AGENT_SCENARIO`, taken from the open command
 //! when it carries one and from the ambient environment otherwise.
+//!
+//! It stands in for the install as well as for the sessions: the sign-in state and
+//! the model catalogue the host asks about are answered from here, so no test needs
+//! an executable on the machine.
 
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
@@ -67,7 +71,7 @@ fn close_stdout() {}
 /// empty.
 #[cfg(unix)]
 fn escape_group() {
-	if std::env::var("FAKE_CLAUDE_ESCAPE_GROUP").is_err() {
+	if std::env::var("FAKE_AGENT_ESCAPE_GROUP").is_err() {
 		return;
 	}
 	unsafe {
@@ -101,7 +105,7 @@ fn scenario_on_file(path: Option<&str>) -> Option<String> {
 
 /// A sidecar deaf to the EOF on its stdin, so only a signal can end it.
 fn ignores_eof() -> bool {
-	std::env::var("FAKE_CLAUDE_IGNORE_EOF").is_ok()
+	std::env::var("FAKE_AGENT_IGNORE_EOF").is_ok()
 }
 
 /// What one open command asked for, and the behaviour it picked.
@@ -133,13 +137,13 @@ impl Run {
 		let setting = |key: &str| read_setting(&settings, key);
 		let resume = command["resume"].as_str().map(str::to_owned);
 		let scenario = settings
-			.get("FAKE_CLAUDE_SCENARIO")
+			.get("FAKE_AGENT_SCENARIO")
 			.cloned()
-			.or_else(|| scenario_on_file(setting("FAKE_CLAUDE_SCENARIO_FILE").as_deref()))
-			.or_else(|| std::env::var("FAKE_CLAUDE_SCENARIO").ok())
+			.or_else(|| scenario_on_file(setting("FAKE_AGENT_SCENARIO_FILE").as_deref()))
+			.or_else(|| std::env::var("FAKE_AGENT_SCENARIO").ok())
 			.unwrap_or_else(|| "normal".into());
-		if setting("FAKE_CLAUDE_ORPHAN_AT_STARTUP").is_some() {
-			spawn_orphan(setting("FAKE_CLAUDE_PID_FILE").as_deref());
+		if setting("FAKE_AGENT_ORPHAN_AT_STARTUP").is_some() {
+			spawn_orphan(setting("FAKE_AGENT_PID_FILE").as_deref());
 		}
 		Self {
 			scenario,
@@ -361,7 +365,7 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 		}
 		"slow" | "orphan" => {
 			if run.scenario == "orphan" {
-				spawn_orphan(run.setting("FAKE_CLAUDE_PID_FILE").as_deref());
+				spawn_orphan(run.setting("FAKE_AGENT_PID_FILE").as_deref());
 			}
 			emit(
 				key,
@@ -434,7 +438,10 @@ fn serve() {
 	for line in stdin.lock().lines() {
 		let Ok(line) = line else { break };
 		let Ok(command) = serde_json::from_str::<Value>(&line) else { continue };
-		let Some(key) = command["session"].as_str().map(str::to_owned) else { continue };
+		let Some(key) = command["session"].as_str().map(str::to_owned) else {
+			answer_the_host(&command);
+			continue;
+		};
 
 		match command["type"].as_str() {
 			Some("open") => on_open(&key, &mut runs, &command),
@@ -454,10 +461,37 @@ fn serve() {
 	}
 }
 
-/// What this build announces it can do. Narrowed with `FAKE_CLAUDE_CAPABILITIES`
+/// The two asks that name no session. Signed in unless the test says otherwise, and
+/// a catalogue named as a comma-separated list so a suite can prove a label it made
+/// up reaches the frontend untouched.
+fn answer_the_host(command: &Value) {
+	match command["type"].as_str() {
+		Some("check") => emit_raw(&checked().to_string()),
+		Some("models") => emit_raw(&json!({ "type": "models", "models": models() }).to_string()),
+		_ => {}
+	}
+}
+
+fn checked() -> Value {
+	if let Ok(detail) = std::env::var("FAKE_AGENT_CHECK_FAILS") {
+		return json!({ "type": "check", "authenticated": false, "detail": detail });
+	}
+	json!({
+		"type": "check",
+		"authenticated": std::env::var("FAKE_AGENT_SIGNED_OUT").is_err()
+	})
+}
+
+fn models() -> Vec<String> {
+	std::env::var("FAKE_AGENT_MODELS")
+		.map(|named| named.split(',').filter(|name| !name.is_empty()).map(str::to_owned).collect())
+		.unwrap_or_default()
+}
+
+/// What this build announces it can do. Narrowed with `FAKE_AGENT_CAPABILITIES`
 /// so a test can prove the host stops asking for what a sidecar never offered.
 fn capabilities() -> Vec<String> {
-	std::env::var("FAKE_CLAUDE_CAPABILITIES")
+	std::env::var("FAKE_AGENT_CAPABILITIES")
 		.map(|named| {
 			named.split(',').filter(|name| !name.is_empty()).map(str::to_owned).collect()
 		})

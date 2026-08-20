@@ -1,6 +1,6 @@
 //! The session lifecycle driven end to end through the Tauri command layer.
 //!
-//! "End to end" stops at that layer: command handlers, `ClaudeState`, the real
+//! "End to end" stops at that layer: command handlers, `AgentState`, the real
 //! `Session` and its transport, the fake Claude child, and a relaunch through the
 //! on-disk store. Nothing above the IPC boundary runs — no React mount, no
 //! `chat-screen.tsx`, no `use-chat` subscription, no rendering — and `MockRuntime`
@@ -17,14 +17,13 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::agent::binary::BINARY_OVERRIDE_ENV;
 use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::{terminate_session, EVENT_CHANNEL};
 use opennest_app::agent::contract::{
 	CheckReport, AgentEvent, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
 	ScopedEvent, TransportError, TurnOutcome,
 };
-use opennest_app::agent::ClaudeState;
+use opennest_app::agent::AgentState;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -32,9 +31,8 @@ use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_K
 use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
-const FAKE: &str = env!("CARGO_BIN_EXE_fake_claude");
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const SCENARIO_ENV: &str = "FAKE_CLAUDE_SCENARIO_FILE";
+const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const IDENTIFIER: &str = "com.opennest.e2e";
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
@@ -65,7 +63,7 @@ fn launch() -> Harness {
 	context.config_mut().identifier = IDENTIFIER.into();
 
 	let app = mock_builder()
-		.manage(ClaudeState::default())
+		.manage(AgentState::default())
 		// A host that never opened a file: the session lifecycle is what this suite
 		// drives, and a bot it can read nothing about starts the way one always has.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
@@ -107,7 +105,7 @@ impl Harness {
 	/// The host leaving, the way its event loop does on the way out.
 	fn quit(&self) {
 		let runtime = tokio::runtime::Runtime::new().expect("runtime");
-		runtime.block_on(terminate_session(&self.app.state::<ClaudeState>()));
+		runtime.block_on(terminate_session(&self.app.state::<AgentState>()));
 	}
 
 	fn scope(&self) -> Value {
@@ -121,13 +119,13 @@ impl Harness {
 			*run = a_run(run.epoch + 1);
 		}
 		self.call(
-			"claude_start_or_resume_session",
+			"agent_start_or_resume_session",
 			json!({ "scope": self.scope(), "resume": resume, "cwd": std::env::temp_dir() }),
 		)
 	}
 
 	fn prompt(&self, text: &str) -> Result<Value, Value> {
-		self.call("claude_submit_prompt", json!({ "scope": self.scope(), "text": text }))
+		self.call("agent_submit_prompt", json!({ "scope": self.scope(), "text": text }))
 	}
 
 	fn events(&self) -> Vec<AgentEvent> {
@@ -262,20 +260,20 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 	assert!(is_alive(orphan), "the grandchild must be running before the shutdown");
 
 	assert_eq!(
-		harness.call("claude_shutdown", json!({ "scope": harness.scope() })),
+		harness.call("agent_shutdown", json!({ "scope": harness.scope() })),
 		Ok(Value::Null)
 	);
 	harness.quit();
 	harness.wait_for("the grandchild to be gone", |_| (!is_alive(orphan)).then_some(()));
 
-	std::env::remove_var("FAKE_CLAUDE_PID_FILE");
+	std::env::remove_var("FAKE_AGENT_PID_FILE");
 	let _ = std::fs::remove_file(&pid_file);
 }
 
 #[cfg(not(unix))]
 fn shut_down_leaving_no_orphan(harness: &Harness) {
 	assert_eq!(
-		harness.call("claude_shutdown", json!({ "scope": harness.scope() })),
+		harness.call("agent_shutdown", json!({ "scope": harness.scope() })),
 		Ok(Value::Null)
 	);
 }
@@ -286,10 +284,9 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 /// exit path, so this proves file-based restoration, not shutdown-on-quit.
 #[test]
 fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
-	std::env::set_var(BINARY_OVERRIDE_ENV, FAKE);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	// Named before the sidecar is spawned: its own environment is fixed from then on.
-	std::env::set_var("FAKE_CLAUDE_PID_FILE", orphan_pid_file());
+	std::env::set_var("FAKE_AGENT_PID_FILE", orphan_pid_file());
 	scenario("normal");
 
 	let first = launch();
@@ -297,7 +294,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	let _ = std::fs::remove_dir_all(&data_dir);
 
 	let report: CheckReport = serde_json::from_value(
-		first.call("claude_check", json!({ "scope": Value::Null })).expect("check reports"),
+		first.call("agent_check", json!({ "scope": Value::Null })).expect("check reports"),
 	)
 	.expect("a check report");
 	assert_eq!(report.connection, ConnectionState::Ready);
@@ -335,8 +332,8 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 		}],
 		"activities": []
 	});
-	assert_eq!(first.call("claude_save_session", json!({ "snapshot": snapshot })), Ok(Value::Null));
-	assert_eq!(first.call("claude_load_session", json!({})), Ok(snapshot.clone()));
+	assert_eq!(first.call("agent_save_session", json!({ "snapshot": snapshot })), Ok(Value::Null));
+	assert_eq!(first.call("agent_load_session", json!({})), Ok(snapshot.clone()));
 
 	scenario("permission");
 	assert_eq!(first.start(None), Ok(json!({ "resumed": false })));
@@ -346,7 +343,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	assert_eq!(request.tool_name, "Write");
 	assert_eq!(
 		first.call(
-			"claude_respond_to_permission",
+			"agent_respond_to_permission",
 			json!({ "scope": first.scope(), "id": request.id, "decision": "allowOnce" })
 		),
 		Ok(Value::Null)
@@ -363,7 +360,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	first.prompt("compte jusqu'a mille").expect("prompt accepted");
 	first.wait_for("the slow turn to start streaming", message_started);
 	assert_eq!(
-		first.call("claude_cancel_turn", json!({ "scope": first.scope() })),
+		first.call("agent_cancel_turn", json!({ "scope": first.scope() })),
 		Ok(Value::Null)
 	);
 	assert_eq!(first.wait_for("the cancelled turn to end", turn_outcome), TurnOutcome::Cancelled);
@@ -374,7 +371,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 
 	scenario("normal");
 	let second = launch();
-	let restored = second.call("claude_load_session", json!({})).expect("snapshot loads");
+	let restored = second.call("agent_load_session", json!({})).expect("snapshot loads");
 	assert_eq!(restored, snapshot);
 
 	let stored_id = restored["sessionId"].as_str().expect("a stored session id").to_owned();
@@ -389,10 +386,10 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	assert_eq!(second.start(Some(&stored_id)), Ok(json!({ "resumed": false })));
 	second.wait_for("the refused resume to be reported", resume_failure);
 
-	let dropped = second.call("claude_load_session", json!({})).expect("snapshot loads");
+	let dropped = second.call("agent_load_session", json!({})).expect("snapshot loads");
 	assert_eq!(dropped["sessionId"], Value::Null);
 	assert_eq!(dropped["messages"], snapshot["messages"]);
 
-	assert_eq!(second.call("claude_shutdown", json!({ "scope": second.scope() })), Ok(Value::Null));
+	assert_eq!(second.call("agent_shutdown", json!({ "scope": second.scope() })), Ok(Value::Null));
 	std::fs::remove_dir_all(&data_dir).expect("cleanup");
 }

@@ -73,9 +73,25 @@ export const serve = async (requestedId?: string) => {
 		opening.delete(session)
 	}
 
+	/** The two asks that belong to the install rather than to a conversation: neither
+	 * names a session, and each is answered under the type it was asked. Both are asked
+	 * once per launch and cached by the host.
+	 *
+	 * A catalogue nobody could produce is empty rather than refused: what to offer
+	 * instead is the host's to decide, and a provider naming no model is not broken. */
+	const answerHost = async ({ type }: Command) => {
+		switch (type) {
+			case "check":
+				return write({ type, ...(await provider.authenticate()) })
+			case "models":
+				return write({ type, models: await provider.models().catch(() => []) })
+		}
+	}
+
 	const dispatch = (command: Command) => {
 		const session = command.session
 		if (!session) {
+			void answerHost(command)
 			return
 		}
 		switch (command.type) {
