@@ -1,13 +1,13 @@
 # OpenNest
 
-OpenNest is a desktop app for Claude Code: a roster of bots you name, dress and brief — each with its own model, working directory and persistent conversation — all answered by the Claude Code CLI already installed on your machine.
+OpenNest is a desktop app for Claude Code: a roster of bots you name, dress and brief — each with its own model, working directory and persistent conversation — all answered by the Claude Code agent OpenNest ships with.
 
 Every bot runs its own `claude` process, so one can be working while you read another, and every conversation is stored locally and comes back on the next launch.
 
 ## Requirements
 
-- **[Claude Code](https://claude.com/claude-code), installed and signed in.** OpenNest drives that binary — it is the whole engine. Check yours with `claude --version`, and sign in with `claude` if you have not.
-- **No API key.** OpenNest never reads one, never asks for one and never talks to an API itself. Your existing Claude Code sign-in is the only credential involved.
+- **A [Claude](https://claude.com/claude-code) subscription, signed in.** OpenNest bundles the agent that answers — nothing to install — but it answers on your own sign-in.
+- **No API key.** OpenNest never reads one, never asks for one and never talks to an API itself. Your Claude sign-in is the only credential involved.
 - [Bun](https://bun.sh) — runtime and package manager.
 - [Rust toolchain](https://rustup.rs) — the Tauri host is Rust.
 - On Linux, the [Tauri system dependencies](https://tauri.app/start/prerequisites/#linux).

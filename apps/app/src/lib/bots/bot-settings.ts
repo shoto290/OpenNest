@@ -15,29 +15,29 @@ import type {
 } from "../conversations/store-contract"
 import type { LastWord } from "../conversations/transcript-state"
 
-/** What is offered when the catalogue is empty — a machine whose Claude Code could
- * not be found, or one whose executable carries no catalogue, or `bun dev:web`, which
- * has no executable at all. The four tier aliases and nothing else: they are the
- * labels Claude Code has resolved for as long as it has had tiers, and an alias
- * follows its tier rather than pinning a bot to one release of it.
+/** What is offered when the catalogue is empty — a launch whose sidecar could not be
+ * reached, or one whose sidecar names no model, or `bun dev:web`, which has no sidecar
+ * to ask. The four tier aliases and nothing else: they are the labels Claude Code has
+ * resolved for as long as it has had tiers, and an alias follows its tier rather than
+ * pinning a bot to one release of it.
  *
- * It is a floor, not a vocabulary. What a machine really knows is read from the
- * machine — see [`readModelCatalogue`] — and a value outside either list is still a
+ * It is a floor, not a vocabulary. What the agent really offers is read from the
+ * sidecar — see [`readModelCatalogue`] — and a value outside either list is still a
  * value the store keeps. */
 export const FALLBACK_MODELS = ["fable", "opus", "sonnet", "haiku"]
 
 /** What a new bot is created on. An alias, so it follows its tier. */
 const NEW_BOT_MODEL = "sonnet"
 
-/** The options for one bot: what this machine's executable carries, or the fallback
- * when it carries nothing, plus the label the bot already holds when that is in
- * neither. Offering a bot's own value back is what keeps the select from showing an
- * empty box over a value the file holds, and what keeps an edit to some other field
- * from quietly moving the bot to a model somebody else chose.
+/** The options for one bot: what the sidecar names, or the fallback when it names
+ * nothing, plus the label the bot already holds when that is in neither. Offering a
+ * bot's own value back is what keeps the select from showing an empty box over a value
+ * the file holds, and what keeps an edit to some other field from quietly moving the
+ * bot to a model somebody else chose.
  *
  * Every label is its value, verbatim. These are the words Claude Code accepts — a
  * tier alias, a long-context variant, a dated identifier — and dressing them up would
- * be inventing a vocabulary on top of the one the executable declares. */
+ * be inventing a vocabulary on top of the one the sidecar declares. */
 export const modelOptionsFor = (
 	model: string,
 	catalogue: string[],
