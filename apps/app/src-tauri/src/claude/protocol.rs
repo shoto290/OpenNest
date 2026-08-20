@@ -1,8 +1,19 @@
 //! Claude Code stream-json wire frames. Internal only: nothing in this module
 //! is ever serialized towards the frontend.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+
+/// `#[serde(default)]` answers a key left out, never one set to null. A frame is
+/// internally tagged, so a single null field costs the whole frame and everything
+/// it carries: null is read as the empty value an absent key leaves.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+	D: Deserializer<'de>,
+	T: Default + Deserialize<'de>,
+{
+	Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -65,7 +76,7 @@ pub struct StreamMessageHeader {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentDelta {
 	TextDelta {
-		#[serde(default)]
+		#[serde(default, deserialize_with = "null_as_default")]
 		text: String,
 	},
 	#[serde(other)]
@@ -82,7 +93,7 @@ pub struct MessageFrame {
 pub struct MessageBody {
 	#[serde(default)]
 	pub id: Option<String>,
-	#[serde(default)]
+	#[serde(default, deserialize_with = "null_as_default")]
 	pub content: Vec<ContentBlock>,
 }
 
@@ -90,7 +101,7 @@ pub struct MessageBody {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
 	Text {
-		#[serde(default)]
+		#[serde(default, deserialize_with = "null_as_default")]
 		text: String,
 	},
 	ToolUse {
@@ -101,7 +112,7 @@ pub enum ContentBlock {
 	},
 	ToolResult {
 		tool_use_id: String,
-		#[serde(default)]
+		#[serde(default, deserialize_with = "null_as_default")]
 		is_error: bool,
 	},
 	#[serde(other)]
@@ -114,7 +125,7 @@ pub struct ResultFrame {
 	pub subtype: Option<String>,
 	#[serde(default)]
 	pub session_id: Option<String>,
-	#[serde(default)]
+	#[serde(default, deserialize_with = "null_as_default")]
 	pub is_error: bool,
 }
 
