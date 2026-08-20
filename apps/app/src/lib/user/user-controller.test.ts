@@ -14,6 +14,7 @@ const DEFAULTS: UserPreferences = {
 	profilePicturePath: null,
 	colorScheme: "system",
 	palette: "amber",
+	language: null,
 }
 
 const WORN = "/data/avatars/worn.png"
@@ -82,6 +83,7 @@ describe("the reader's own record", () => {
 				profilePicturePath: null,
 				colorScheme: "dark",
 				palette: "moss",
+				language: null,
 			}),
 		)
 	})
@@ -137,6 +139,7 @@ describe("the reader's own record", () => {
 				profilePicturePath: null,
 				colorScheme: "light",
 				palette: "coral",
+				language: null,
 			}),
 		)
 	})

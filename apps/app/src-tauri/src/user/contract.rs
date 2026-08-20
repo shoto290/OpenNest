@@ -66,6 +66,11 @@ pub struct UserPreferences {
 	pub color_scheme: ColorScheme,
 	/// A name, not a vocabulary: see [`user::Preferences::palette`].
 	pub palette: String,
+	/// The language the app reads in, or `null` for nobody having chosen — which
+	/// this side answers as sent and the frontend reads as the machine's own. A name
+	/// no catalogue answers to is stored all the same: see
+	/// [`user::Preferences::language`].
+	pub language: Option<String>,
 }
 
 impl UserPreferences {
@@ -86,6 +91,7 @@ impl UserPreferences {
 			profile_picture_path,
 			color_scheme: preferences.color_scheme.into(),
 			palette: preferences.palette,
+			language: preferences.language,
 		}
 	}
 }
@@ -97,6 +103,7 @@ impl From<UserPreferences> for user::Preferences {
 			avatar_image_path: preferences.profile_picture_path,
 			color_scheme: preferences.color_scheme.into(),
 			palette: preferences.palette,
+			language: preferences.language,
 		}
 	}
 }

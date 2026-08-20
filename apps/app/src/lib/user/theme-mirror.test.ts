@@ -20,6 +20,7 @@ const RECORD: UserPreferences = {
 	profilePicturePath: "/data/avatars/one.png",
 	colorScheme: "dark",
 	palette: "moss",
+	language: "fr",
 }
 
 const createStorage = () => {
