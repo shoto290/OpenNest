@@ -1,4 +1,12 @@
-import { memo, type Ref, useCallback, useEffect, useRef, useState } from "react"
+import {
+	memo,
+	type RefObject,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react"
 
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
@@ -17,6 +25,7 @@ import {
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 import { Markdown } from "@workspace/ui/components/markdown"
+import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import {
 	ToolApproval,
@@ -26,6 +35,12 @@ import {
 import type { ChatController } from "@/lib/chat/chat-controller"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
+import {
+	commandOptionsFor,
+	commandQueryIn,
+	holdsDismissal,
+	promptForCommand,
+} from "@/lib/chat/prompt-commands"
 import {
 	emptyStateStatusFor,
 	needsFreshSession,
@@ -155,38 +170,83 @@ function PermissionPrompt({
 const Composer = memo(function Composer({
 	controller,
 	composerRef,
+	commands,
 	disabled,
+	isOverlayOpen,
 	turn,
 }: {
 	controller: ChatController
-	composerRef: Ref<HTMLTextAreaElement>
+	composerRef: RefObject<HTMLTextAreaElement | null>
+	/** What the live session answers to. Empty until it says so, and empty again
+	 * once it is gone. */
+	commands: string[]
 	disabled: boolean
+	/** Something is drawn over the conversation. */
+	isOverlayOpen: boolean
 	turn: TurnState
 }) {
+	const [wasDismissed, setWasDismissed] = useState(false)
+	const [prompt, setPrompt] = useState("")
+	const options = useMemo(() => commandOptionsFor(commands), [commands])
+	const canType = !disabled && !isOverlayOpen
+	const query = canType ? commandQueryIn(prompt, commands) : null
+
+	// A dismissal covers every draft that stays in the command shape, one edited
+	// back to the shape it was dismissed on included. It rearms when the draft
+	// leaves that shape, and while nothing can be typed at all — so an overlay
+	// closing offers the menu the draft under it asks for.
+	const isDismissed = holdsDismissal(wasDismissed, query)
+	if (wasDismissed !== isDismissed) {
+		setWasDismissed(isDismissed)
+	}
+
 	const stop = useCallback(() => {
 		void controller.stop()
 	}, [controller])
 
 	const submit = useCallback(
-		(prompt: string) => {
-			void controller.send(prompt)
+		(value: string) => {
+			setPrompt("")
+			void controller.send(value)
 		},
 		[controller],
 	)
 
+	// Held stable: the menu listens for the keyboard and for a press outside while
+	// it is open, and a fresh callback per keystroke would resubscribe both.
+	const select = useCallback(
+		(option: string) => {
+			setPrompt(promptForCommand(option))
+			composerRef.current?.focus({ preventScroll: true })
+		},
+		[composerRef],
+	)
+
+	const dismiss = useCallback(() => setWasDismissed(true), [])
+
 	return (
-		<PromptInput
-			textareaRef={composerRef}
-			disabled={disabled}
-			loading={isTurnBusy(turn)}
-			onStop={canStopTurn(turn) ? stop : undefined}
-			onSubmit={submit}
-			placeholder={
-				disabled
-					? "Waiting for Claude Code…"
-					: "Ask Claude Code to do something…"
-			}
-		/>
+		<PromptCommandMenu
+			commands={options}
+			open={query !== null && !isDismissed}
+			query={query ?? ""}
+			onSelect={select}
+			onDismiss={dismiss}
+		>
+			<PromptInput
+				textareaRef={composerRef}
+				disabled={disabled}
+				loading={isTurnBusy(turn)}
+				onStop={canStopTurn(turn) ? stop : undefined}
+				onSubmit={submit}
+				onValueChange={setPrompt}
+				value={prompt}
+				placeholder={
+					disabled
+						? "Waiting for Claude Code…"
+						: "Ask Claude Code to do something…"
+				}
+			/>
+		</PromptCommandMenu>
 	)
 })
 
@@ -202,6 +262,10 @@ type ChatScreenProps = {
 	/** Whether the settings dialog stands open over this one. The gear says so, and
 	 * pressing it is what closes the dialog again. */
 	isSettingsOpen: boolean
+	/** Whether anything at all is drawn over the conversation, this bot's settings
+	 * included. What the composer reads: a menu of its own may not answer the
+	 * keyboard from under a surface that has the reader's attention. */
+	isOverlayOpen: boolean
 	onToggleSettings: () => void
 }
 
@@ -209,6 +273,7 @@ export function ChatScreen({
 	bot,
 	chat,
 	isSettingsOpen,
+	isOverlayOpen,
 	onToggleSettings,
 }: ChatScreenProps) {
 	const { state, controller } = chat
@@ -305,7 +370,9 @@ export function ChatScreen({
 				<Composer
 					controller={controller}
 					composerRef={composerRef}
+					commands={state.commands}
 					disabled={disabled}
+					isOverlayOpen={isOverlayOpen}
 					turn={state.turn}
 				/>
 			}

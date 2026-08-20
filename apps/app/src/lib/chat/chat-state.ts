@@ -36,6 +36,10 @@ export type ChatState = {
 	 * Claude first reports its id — `sessionReady` only lands after a prompt. */
 	sessionOpen: boolean
 	sessionId: string | null
+	/** The slash commands the live session announced, as it named them: without a
+	 * leading slash, and only for as long as that session lasts. Another one may
+	 * know others, so nothing here survives a reset. */
+	commands: string[]
 	binaryVersion: string | null
 	/** The one visible chat, resolved from the store before anything is written. */
 	conversationId: string | null
@@ -88,6 +92,7 @@ export const initialChatState: ChatState = {
 	turn: "idle",
 	sessionOpen: false,
 	sessionId: null,
+	commands: [],
 	binaryVersion: null,
 	conversationId: null,
 	messages: [],
@@ -276,7 +281,7 @@ function applyEvent(state: ChatState, event: ClaudeEvent): ChatState {
 		case "sessionReady":
 			return { ...state, sessionId: event.sessionId }
 		case "commandsListed":
-			return state
+			return { ...state, commands: event.commands }
 		// What a message says and how it ended reach the screen through the
 		// transcript, never through here: the reader is shown what was stored.
 		case "messageStarted":
@@ -307,6 +312,7 @@ function applySessionReset(
 		turn: "idle",
 		sessionOpen: false,
 		sessionId,
+		commands: [],
 		permission: null,
 		// Nothing here outlives the process that reported it, and a cold launch
 		// starts with none: a step left pending would go on claiming work that no

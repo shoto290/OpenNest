@@ -26,6 +26,10 @@ export type FakeChatDriverOptions = {
 	replyFor?: (prompt: string) => string
 }
 
+/** What the real init frame announces, named the way Claude Code names it: no
+ * leading slash. Enough of them for `bun dev:web` to open the command menu. */
+const FAKE_COMMANDS = ["clear", "compact", "cost", "init", "review", "status"]
+
 const FAIL_DIRECTIVE = "/fail"
 const PERMISSION_DIRECTIVE = "/permission"
 
@@ -290,6 +294,7 @@ export function createFakeChatDriver(
 			runs.set(participantOf(scope), run)
 			latest = run
 			emitFor(run, { type: "connectionChanged", state: "ready" })
+			emitFor(run, { type: "commandsListed", commands: FAKE_COMMANDS })
 			return Promise.resolve({ resumed: Boolean(resume) })
 		},
 

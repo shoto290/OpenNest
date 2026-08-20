@@ -183,6 +183,7 @@ export function App() {
 						bot={selected}
 						chat={chat}
 						isSettingsOpen={isEditing}
+						isOverlayOpen={isEditing || user.state.isSettingsOpen}
 						onToggleSettings={toggleSettings}
 					/>
 				) : (
