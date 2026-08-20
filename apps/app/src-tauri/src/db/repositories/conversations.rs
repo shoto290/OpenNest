@@ -364,10 +364,11 @@ impl ConversationsRepository {
 			.await?
 	}
 
-	/// Every picture the record still points at. What the caller does with it is
-	/// delete everything else, so a path is answered exactly as it is stored: the
-	/// rule about where a path may point is not this module's, and narrowing the
-	/// list here would be narrowing what survives.
+	/// Every picture a bot still points at — one half of what a sweep keeps, the
+	/// other being the user's own record: see
+	/// [`crate::db::Database::referenced_avatar_paths`]. A path is answered exactly
+	/// as it is stored, because the rule about where a path may point is not this
+	/// module's and narrowing the list here would be narrowing what survives.
 	pub async fn avatar_image_paths(&self) -> Result<Vec<String>, DatabaseError> {
 		self.call(|connection| {
 			let mut statement = connection.prepare_cached(

@@ -28,7 +28,7 @@ use tauri::{AppHandle, Runtime};
 use bootstrap::LegacyImport;
 pub use connection::DatabaseError;
 use repositories::{
-	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository,
+	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository, UserRepository,
 };
 
 /// One connection, shared: SQLite serializes writers anyway, and a desktop host
@@ -96,6 +96,7 @@ pub struct Database {
 	conversations: ConversationsRepository,
 	messages: MessagesRepository,
 	runtime_context: RuntimeContextRepository,
+	user: UserRepository,
 	legacy_import: LegacyImport,
 }
 
@@ -121,6 +122,7 @@ impl Database {
 			conversations: ConversationsRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			runtime_context: RuntimeContextRepository::new(access.clone()),
+			user: UserRepository::new(access.clone()),
 			legacy_import,
 			access,
 		})
@@ -156,6 +158,20 @@ impl Database {
 
 	pub fn runtime_context(&self) -> &RuntimeContextRepository {
 		&self.runtime_context
+	}
+
+	pub fn user(&self) -> &UserRepository {
+		&self.user
+	}
+
+	/// Every avatar any row still points at, bots and the user's own record alike.
+	/// The sweep deletes whatever this list does not name, so it is written here
+	/// rather than in either repository: a picture left out of it is a file the next
+	/// write takes off the disk while the record is still pointing at it.
+	pub async fn referenced_avatar_paths(&self) -> Result<Vec<String>, DatabaseError> {
+		let mut referenced = self.conversations.avatar_image_paths().await?;
+		referenced.extend(self.user.avatar_image_path().await?);
+		Ok(referenced)
 	}
 
 	/// What the launch that opened this file did about the legacy `session.json`. Read
