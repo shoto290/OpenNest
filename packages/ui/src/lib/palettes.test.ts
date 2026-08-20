@@ -22,7 +22,7 @@ const STYLESHEET = readFileSync(
 
 const colorTokensOf = (selector: string) => {
 	const block = STYLESHEET.match(
-		new RegExp(`^${selector.replace(/[[\]".]/g, "\\$&")} \\{$([^}]*)^\\}$`, "m"),
+		new RegExp(`^${selector.replace(/[\\[\]".]/g, "\\$&")} \\{$([^}]*)^\\}$`, "m"),
 	)
 	if (!block) {
 		throw new Error(`Missing token block for ${selector}.`)
