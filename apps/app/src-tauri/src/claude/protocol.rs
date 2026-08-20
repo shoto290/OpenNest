@@ -24,6 +24,10 @@ pub struct SystemFrame {
 	pub subtype: Option<String>,
 	#[serde(default)]
 	pub session_id: Option<String>,
+	/// Named on the `init` frame only. A build exposing none leaves the key out or
+	/// sets it to null, and neither may cost the frame the id it also carries.
+	#[serde(default)]
+	pub slash_commands: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

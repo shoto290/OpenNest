@@ -294,6 +294,10 @@ pub enum ClaudeEvent {
 	TurnChanged { state: TurnState },
 	#[serde(rename_all = "camelCase")]
 	SessionReady { session_id: String, resumed: bool },
+	/// The slash commands the child announced when it started, in the order it
+	/// named them. A build exposing none announces an empty list.
+	#[serde(rename_all = "camelCase")]
+	CommandsListed { commands: Vec<String> },
 	#[serde(rename_all = "camelCase")]
 	MessageStarted { message: ChatMessage },
 	#[serde(rename_all = "camelCase")]

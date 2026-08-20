@@ -14,7 +14,9 @@ use super::contract::{
 	ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, ClaudeEvent, MessageCompletion,
 	MessageRole, PermissionRequest, TurnEnded, TurnOutcome,
 };
-use super::protocol::{ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent};
+use super::protocol::{
+	ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent, SystemFrame,
+};
 use super::redact;
 
 fn now_ms() -> i64 {
@@ -112,7 +114,7 @@ impl Translator {
 
 	pub fn ingest(&mut self, frame: Frame) -> Vec<ClaudeEvent> {
 		match frame {
-			Frame::System(system) => self.on_system(system.subtype.as_deref(), system.session_id),
+			Frame::System(system) => self.on_system(system),
 			Frame::StreamEvent(frame) => {
 				frame.event.map(|event| self.on_stream(event)).unwrap_or_default()
 			}
@@ -135,15 +137,21 @@ impl Translator {
 		}
 	}
 
-	fn on_system(&mut self, subtype: Option<&str>, session_id: Option<String>) -> Vec<ClaudeEvent> {
-		let Some(session_id) = session_id else {
-			return Vec::new();
-		};
-		if subtype != Some("init") || self.session_id.is_some() {
+	/// The id is announced once; the command list belongs to the child that just
+	/// spoke, so every init frame republishes it.
+	fn on_system(&mut self, frame: SystemFrame) -> Vec<ClaudeEvent> {
+		if frame.subtype.as_deref() != Some("init") {
 			return Vec::new();
 		}
-		self.session_id = Some(session_id.clone());
-		vec![ClaudeEvent::SessionReady { session_id, resumed: self.resumed }]
+		let mut events = Vec::new();
+		if let Some(session_id) = frame.session_id.filter(|_| self.session_id.is_none()) {
+			self.session_id = Some(session_id.clone());
+			events.push(ClaudeEvent::SessionReady { session_id, resumed: self.resumed });
+		}
+		events.push(ClaudeEvent::CommandsListed {
+			commands: frame.slash_commands.unwrap_or_default(),
+		});
+		events
 	}
 
 	fn on_stream(&mut self, event: StreamEvent) -> Vec<ClaudeEvent> {
@@ -427,6 +435,14 @@ mod tests {
 			.collect()
 	}
 
+	fn init(session_id: &str, slash_commands: Option<Value>) -> Value {
+		let mut frame = json!({ "type": "system", "subtype": "init", "session_id": session_id });
+		if let Some(commands) = slash_commands {
+			frame["slash_commands"] = commands;
+		}
+		frame
+	}
+
 	fn outcome(events: &[ClaudeEvent]) -> Option<TurnOutcome> {
 		events.iter().find_map(|event| match event {
 			ClaudeEvent::TurnEnded { ended } => Some(ended.outcome),
@@ -503,6 +519,50 @@ mod tests {
 					.map(|message| (message.text.as_str(), message.completion))
 					.collect::<Vec<_>>(),
 				vec![("", expected)]
+			);
+		}
+	}
+
+	/// The commands reach the reader in the order the child named them, next to the
+	/// announcement the init frame already carried — neither takes the other's place.
+	/// A resumed session is told the same thing a fresh one is: whichever child was
+	/// reached is the one that decides what can be run.
+	#[test]
+	fn an_init_frame_lists_the_commands_it_carries() {
+		for (resumed, session_id, commands) in [
+			(false, "s-1", vec!["review".to_owned(), "commit".to_owned(), "plan".to_owned()]),
+			(true, "carried-over", vec!["resume".to_owned()]),
+		] {
+			let mut translator = Translator::new(resumed);
+
+			let events = ingest(&mut translator, vec![init(session_id, Some(json!(commands)))]);
+
+			assert_eq!(
+				events,
+				vec![
+					ClaudeEvent::SessionReady { session_id: session_id.to_owned(), resumed },
+					ClaudeEvent::CommandsListed { commands },
+				]
+			);
+		}
+	}
+
+	/// A build exposing none says so, whether it leaves the key out or sets it to
+	/// null: the menu is empty rather than unknown, and either way the frame is still
+	/// read — a dropped init frame would take the session id down with it.
+	#[test]
+	fn an_init_frame_carrying_no_commands_lists_none() {
+		for slash_commands in [None, Some(Value::Null)] {
+			let mut translator = Translator::new(false);
+
+			let events = ingest(&mut translator, vec![init("s-1", slash_commands)]);
+
+			assert_eq!(
+				events,
+				vec![
+					ClaudeEvent::SessionReady { session_id: "s-1".into(), resumed: false },
+					ClaudeEvent::CommandsListed { commands: Vec::new() },
+				]
 			);
 		}
 	}
