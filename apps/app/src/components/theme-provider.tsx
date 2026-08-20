@@ -1,36 +1,39 @@
 import * as React from "react"
 
-type Theme = "dark" | "light" | "system"
-type ResolvedTheme = "dark" | "light"
+import type { Palette } from "@workspace/ui/lib/palettes"
+
+import type { ColorScheme } from "@/lib/user/preferences-contract"
+import {
+	isMirrorKey,
+	readMirror,
+	readStoredTheme,
+	sameTheme,
+	storeTheme,
+	type ThemePreferences,
+	writeMirror,
+} from "@/lib/user/theme-mirror"
+
+type ResolvedScheme = Exclude<ColorScheme, "system">
 
 type ThemeProviderProps = {
 	children: React.ReactNode
-	defaultTheme?: Theme
-	storageKey?: string
 	disableTransitionOnChange?: boolean
 }
 
 type ThemeProviderState = {
-	theme: Theme
-	setTheme: (theme: Theme) => void
+	theme: ColorScheme
+	setTheme: (theme: ColorScheme) => void
+	palette: Palette
+	setPalette: (palette: Palette) => void
 }
 
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
-const THEME_VALUES: Theme[] = ["dark", "light", "system"]
 
 const ThemeProviderContext = React.createContext<
 	ThemeProviderState | undefined
 >(undefined)
 
-function isTheme(value: string | null): value is Theme {
-	if (value === null) {
-		return false
-	}
-
-	return THEME_VALUES.includes(value as Theme)
-}
-
-function getSystemTheme(): ResolvedTheme {
+function getSystemTheme(): ResolvedScheme {
 	if (window.matchMedia(COLOR_SCHEME_QUERY).matches) {
 		return "dark"
 	}
@@ -57,7 +60,7 @@ function disableTransitionsTemporarily() {
 	}
 }
 
-function getNextTheme(theme: Theme): Theme {
+function getNextTheme(theme: ColorScheme): ColorScheme {
 	const resolvedTheme = theme === "system" ? getSystemTheme() : theme
 
 	return resolvedTheme === "dark" ? "light" : "dark"
@@ -84,38 +87,29 @@ function isEditableTarget(target: EventTarget | null) {
 
 export function ThemeProvider({
 	children,
-	defaultTheme = "system",
-	storageKey = "theme",
 	disableTransitionOnChange = true,
 }: ThemeProviderProps) {
-	const [theme, setThemeState] = React.useState<Theme>(() => {
-		const storedTheme = localStorage.getItem(storageKey)
-		if (isTheme(storedTheme)) {
-			return storedTheme
-		}
+	const [preferences, setPreferences] =
+		React.useState<ThemePreferences>(readMirror)
 
-		return defaultTheme
-	})
-
-	const setTheme = React.useCallback(
-		(nextTheme: Theme) => {
-			localStorage.setItem(storageKey, nextTheme)
-			setThemeState(nextTheme)
-		},
-		[storageKey],
-	)
+	const changeTheme = React.useCallback((next: ThemePreferences) => {
+		writeMirror(next)
+		setPreferences(next)
+		void storeTheme(next)
+	}, [])
 
 	const applyTheme = React.useCallback(
-		(nextTheme: Theme) => {
+		(next: ThemePreferences) => {
 			const root = document.documentElement
-			const resolvedTheme =
-				nextTheme === "system" ? getSystemTheme() : nextTheme
+			const resolvedScheme =
+				next.colorScheme === "system" ? getSystemTheme() : next.colorScheme
 			const restoreTransitions = disableTransitionOnChange
 				? disableTransitionsTemporarily()
 				: null
 
 			root.classList.remove("light", "dark")
-			root.classList.add(resolvedTheme)
+			root.classList.add(resolvedScheme)
+			root.dataset.theme = next.palette
 
 			if (restoreTransitions) {
 				restoreTransitions()
@@ -124,16 +118,18 @@ export function ThemeProvider({
 		[disableTransitionOnChange],
 	)
 
-	React.useEffect(() => {
-		applyTheme(theme)
+	// Before the browser paints, so the window opens on the scheme and the palette
+	// the mirror holds rather than on a frame of the defaults.
+	React.useLayoutEffect(() => {
+		applyTheme(preferences)
 
-		if (theme !== "system") {
+		if (preferences.colorScheme !== "system") {
 			return undefined
 		}
 
 		const mediaQuery = window.matchMedia(COLOR_SCHEME_QUERY)
 		const handleChange = () => {
-			applyTheme("system")
+			applyTheme(preferences)
 		}
 
 		mediaQuery.addEventListener("change", handleChange)
@@ -141,7 +137,22 @@ export function ThemeProvider({
 		return () => {
 			mediaQuery.removeEventListener("change", handleChange)
 		}
-	}, [theme, applyTheme])
+	}, [preferences, applyTheme])
+
+	// The record is the source of truth and arrives after the first paint: what it
+	// holds is painted and mirrored, and what it refuses leaves the mirror painting.
+	React.useEffect(() => {
+		void readStoredTheme().then((stored) => {
+			if (!stored) {
+				return
+			}
+
+			writeMirror(stored)
+			setPreferences((current) =>
+				sameTheme(current, stored) ? current : stored,
+			)
+		})
+	}, [])
 
 	React.useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
@@ -161,7 +172,10 @@ export function ThemeProvider({
 				return
 			}
 
-			setTheme(getNextTheme(theme))
+			changeTheme({
+				...preferences,
+				colorScheme: getNextTheme(preferences.colorScheme),
+			})
 		}
 
 		window.addEventListener("keydown", handleKeyDown)
@@ -169,7 +183,7 @@ export function ThemeProvider({
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown)
 		}
-	}, [theme, setTheme])
+	}, [preferences, changeTheme])
 
 	React.useEffect(() => {
 		const handleStorageChange = (event: StorageEvent) => {
@@ -177,16 +191,11 @@ export function ThemeProvider({
 				return
 			}
 
-			if (event.key !== storageKey) {
+			if (!isMirrorKey(event.key)) {
 				return
 			}
 
-			if (isTheme(event.newValue)) {
-				setThemeState(event.newValue)
-				return
-			}
-
-			setThemeState(defaultTheme)
+			setPreferences(readMirror())
 		}
 
 		window.addEventListener("storage", handleStorageChange)
@@ -194,14 +203,18 @@ export function ThemeProvider({
 		return () => {
 			window.removeEventListener("storage", handleStorageChange)
 		}
-	}, [defaultTheme, storageKey])
+	}, [])
 
 	const value = React.useMemo(
 		() => ({
-			theme,
-			setTheme,
+			theme: preferences.colorScheme,
+			setTheme: (colorScheme: ColorScheme) =>
+				changeTheme({ ...preferences, colorScheme }),
+			palette: preferences.palette,
+			setPalette: (palette: Palette) =>
+				changeTheme({ ...preferences, palette }),
 		}),
-		[theme, setTheme],
+		[preferences, changeTheme],
 	)
 
 	return (
