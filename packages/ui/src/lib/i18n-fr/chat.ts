@@ -5,12 +5,12 @@ const chat = {
 		ready: {
 			title: "Commencer avec Claude Code",
 			description:
-				"OpenNest dialogue avec l'agent livré avec l'app. Rien ne quitte votre appareil.",
+				"OpenNest dialogue avec son agent intégré. Rien ne quitte votre appareil.",
 		},
 		unavailable: {
 			title: "Claude Code n'est pas disponible",
 			description:
-				"OpenNest n'atteint pas l'agent livré avec l'app. Réessayez pour démarrer une conversation.",
+				"OpenNest n'atteint pas son agent intégré. Réessayez pour démarrer une conversation.",
 		},
 		settings: "Réglages du bot",
 		hint: "Saisissez votre première invite dans le champ ci-dessous",
@@ -179,7 +179,7 @@ const chat = {
 			failed: "Cette demande n'est pas passée",
 		},
 		transport: {
-			binaryNotFound: "L'agent OpenNest livré avec l'app est injoignable.",
+			binaryNotFound: "L'agent intégré d'OpenNest est injoignable.",
 			notAuthenticated:
 				"Votre abonnement Claude n'est pas connecté. Connectez-vous à Claude, puis reprenez la conversation.",
 			authCheckFailed: "La vérification de la connexion a échoué : {{detail}}",

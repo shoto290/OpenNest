@@ -141,7 +141,7 @@ export const Unavailable = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when OpenNest launched but the agent it ships with is unreachable: the composer is disabled, so the empty state has to carry the only action left. This screen is about the agent, not about the bot — check that the bot's face and name give way to the alert mark and the agent copy, that the retry button is the single focusable target, and that the copy blames the unreachable agent rather than the prompt. Pick `Default` when Claude Code answers and the composer is live.",
+					"Reach for this when OpenNest launched but its built-in agent is unreachable: the composer is disabled, so the empty state has to carry the only action left. This screen is about the agent, not about the bot — check that the bot's face and name give way to the alert mark and the agent copy, that the retry button is the single focusable target, and that the copy blames the unreachable agent rather than the prompt. Pick `Default` when Claude Code answers and the composer is live.",
 			},
 		},
 	},

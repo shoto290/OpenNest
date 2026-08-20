@@ -13,7 +13,7 @@ describe("describeTransportError", () => {
 				kind: "binaryNotFound",
 				searched: ["/usr/bin", "/opt/bin"],
 			}),
-		).toBe("The OpenNest agent shipped with the app is unreachable.")
+		).toBe("OpenNest's built-in agent is unreachable.")
 	})
 
 	it("keeps a signed-out subscription apart from an unreachable agent", () => {

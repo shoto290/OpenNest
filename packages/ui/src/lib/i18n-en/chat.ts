@@ -6,12 +6,12 @@ const chat = {
 		ready: {
 			title: "Start with Claude Code",
 			description:
-				"OpenNest talks to the agent it ships with. Nothing leaves your device.",
+				"OpenNest talks to its built-in agent. Nothing leaves your device.",
 		},
 		unavailable: {
 			title: "Claude Code is not available",
 			description:
-				"OpenNest cannot reach the agent it ships with. Try again to start a conversation.",
+				"OpenNest cannot reach its built-in agent. Try again to start a conversation.",
 		},
 		settings: "Bot settings",
 		hint: "Type your first prompt in the composer below",
@@ -176,7 +176,7 @@ const chat = {
 			failed: "That request did not go through",
 		},
 		transport: {
-			binaryNotFound: "The OpenNest agent shipped with the app is unreachable.",
+			binaryNotFound: "OpenNest's built-in agent is unreachable.",
 			notAuthenticated:
 				"Your Claude subscription is not signed in. Sign in to Claude, then start the conversation again.",
 			authCheckFailed: "The sign-in check failed: {{detail}}",
