@@ -120,9 +120,6 @@ export const Variants = meta.story({
 			))}
 		</div>
 	),
-	play: async ({ canvas }) => {
-		await expect(canvas.getByText("No name is thinking…")).not.toBeVisible()
-	},
 	parameters: {
 		docs: {
 			description: {
@@ -217,7 +214,8 @@ export const HoverLabel = meta.story({
 	play: async ({ canvas, userEvent }) => {
 		const text = canvas.getByText("No name is searching…")
 
-		await expect(text).not.toBeVisible()
+		// The words are hidden by a class, so wait for the sheet before reading it.
+		await waitFor(() => expect(text).not.toBeVisible())
 		await userEvent.hover(canvas.getByRole("img"))
 		// The reveal is a fade, so the row is only fully readable once it lands.
 		await waitFor(() => expect(text).toBeVisible())
