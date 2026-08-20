@@ -8,12 +8,22 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!**/src/generated/**"]
+		"includes": ["**", "!**/src/generated"]
 	},
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab"
 	},
+	"plugins": [
+		{
+			"path": "./biome-plugins/no-hardcoded-text.grit",
+			"includes": [
+				"**/src/**/*.tsx",
+				"!**/*.stories.tsx",
+				"!**/src/foundations/**"
+			]
+		}
+	],
 	"linter": {
 		"enabled": true,
 		"rules": {

@@ -429,7 +429,7 @@ function ResourceRowBase({
 					className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 				>
 					<Icons.Edit aria-hidden="true" className="size-3.5" />
-					Rename
+					{t("resources.menu.rename")}
 				</button>
 			))
 		: null
@@ -967,7 +967,7 @@ export function AISidebar({
 						data-active={dropTarget?.id === null || undefined}
 						className="absolute inset-x-1 bottom-0 flex h-8 items-center justify-center rounded-lg border border-sidebar-border border-dashed text-[10px] text-muted-foreground data-[active=true]:border-primary/50 data-[active=true]:bg-primary/10 data-[active=true]:text-foreground"
 					>
-						Move to top level
+						{t("resources.move.toTopLevel")}
 					</div>
 				) : null}
 			</div>

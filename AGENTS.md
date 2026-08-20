@@ -84,6 +84,7 @@ Only **technical composition** — it places things, it does not draw them:
 - **Named exports only** — No default exports (except Storybook stories).
 - **Files in kebab-case** — `chat-screen.tsx`, not `ChatScreen.tsx`.
 - **Check before creating** — Search `packages/ui/src/components` for an existing component before adding a new one.
+- **Copy lives in the catalogue** — Read every user-facing string with `useTranslation` from `packages/ui/src/lib/i18n-en`; lint fails on JSX text and on `alt`, `aria-label`, `placeholder` and `title` written into the markup. Stories and `src/foundations` are exempt.
 - **One concern per commit** — Conventional Commits.
 - **Avoid `useEffect`** — Use only when genuinely necessary.
 

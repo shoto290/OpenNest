@@ -1,0 +1,24 @@
+language js
+
+// Two letters in a row is what tells a word from a separator, so a bullet, a dash
+// and a decorative alt="" stay markup rather than copy someone forgot to key.
+or {
+	JsxText() as $text where {
+		$text <: r"(?s).*\p{L}{2}.*",
+		register_diagnostic(
+			span = $text,
+			message = "This text is not in the catalogue. Read it with useTranslation and add the key under packages/ui/src/lib/i18n-en.",
+			severity = "error"
+		)
+	},
+	JsxAttribute(name = $name, initializer = $initializer) where {
+		$name <: r"alt|aria-label|placeholder|title",
+		$initializer <: contains JsxString(),
+		$initializer <: r"(?s).*\p{L}{2}.*",
+		register_diagnostic(
+			span = $initializer,
+			message = "This attribute reaches a reader and is not in the catalogue. Read it with useTranslation and add the key under packages/ui/src/lib/i18n-en.",
+			severity = "error"
+		)
+	}
+}

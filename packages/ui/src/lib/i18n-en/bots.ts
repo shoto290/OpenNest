@@ -31,12 +31,16 @@ const bots = {
 		rename: "Rename {{name}}",
 		item: "item",
 		itemLead: "Item",
+		menu: {
+			rename: "Rename",
+		},
 		position: {
 			before: "before",
 			inside: "inside",
 			after: "after",
 		},
 		move: {
+			toTopLevel: "Move to top level",
 			busy: "Wait for the current move to finish.",
 			done: "Moved {{name}} {{position}} {{target}}.",
 			doneAtTopLevel: "Moved {{name}} to the top level.",

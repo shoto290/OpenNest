@@ -1,7 +1,18 @@
-/** Every string a reader sees on the chrome every surface shares — the sidebar,
- * the context menu, the stateful button and the update pastille. These belong to
- * no single surface, so they answer to none of their namespaces. */
+/** Every string a reader sees on the chrome every surface shares — the boot
+ * screen, the sidebar, the context menu, the dialog frame, the picture dropzone,
+ * the stateful button and the update pastille. These belong to no single surface,
+ * so they answer to none of their namespaces. */
 const common = {
+	boot: {
+		status: "Starting OpenNest",
+	},
+	dialog: {
+		close: "Close",
+	},
+	dropzone: {
+		drop: "Drag, drop or paste an image",
+		browse: "or click to choose a file",
+	},
 	sidebar: {
 		label: "Sidebar",
 		toggle: "Toggle sidebar",

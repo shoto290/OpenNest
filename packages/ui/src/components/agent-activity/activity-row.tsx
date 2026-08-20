@@ -1,4 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { SPRING_LAYOUT } from "@workspace/ui/lib/ease"
@@ -100,6 +101,7 @@ function SearchResultRow({ result }: { result: AgentSearchResult }) {
 }
 
 function SearchRow({ item }: { item: AgentActivitySearch }) {
+	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const enter = reduce ? false : { y: 6 }
 	const visible = { y: 0 }
@@ -151,7 +153,7 @@ function SearchRow({ item }: { item: AgentActivitySearch }) {
 						transition={transition}
 						className="px-1.5 py-1 pl-8 text-muted-foreground"
 					>
-						+{item.moreCount} more
+						{t("activity.moreResults", { count: item.moreCount })}
 					</motion.div>
 				) : null}
 			</AnimatePresence>
