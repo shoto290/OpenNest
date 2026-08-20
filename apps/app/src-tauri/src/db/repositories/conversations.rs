@@ -380,6 +380,19 @@ impl ConversationsRepository {
 		.await
 	}
 
+	/// Every conversation on the record. Two callers ask the same question of it —
+	/// whether an id a frontend named is one, and which attachment directories are
+	/// still referenced — so the whole list is answered rather than a row probed:
+	/// a bot holds one chat, and the set is the size of the roster.
+	pub async fn conversation_ids(&self) -> Result<Vec<String>, DatabaseError> {
+		self.call(|connection| {
+			let mut statement = connection.prepare_cached("SELECT id FROM conversations")?;
+			let rows = statement.query_map([], |row| row.get(0))?;
+			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+		})
+		.await
+	}
+
 	pub async fn participants(
 		&self,
 		conversation_id: String,

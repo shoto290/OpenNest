@@ -1,9 +1,11 @@
+pub mod attachments;
 pub mod avatars;
 pub mod claude;
 pub mod commands;
 pub mod conversations;
 pub mod db;
 pub mod user;
+mod private_files;
 
 use tauri::{Manager, RunEvent};
 
