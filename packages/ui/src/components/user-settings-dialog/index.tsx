@@ -2,6 +2,7 @@
 
 import { Tabs } from "@base-ui/react/tabs"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
@@ -63,6 +64,7 @@ const UserSettingsDialog = ({
 	onPictureRemove,
 	className,
 }: UserSettingsDialogProps) => {
+	const { t } = useTranslation("settings")
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const displayName = displayNameOf(value.name)
@@ -90,7 +92,9 @@ const UserSettingsDialog = ({
 							aria-hidden="true"
 							className="size-3.5 shrink-0 text-muted-foreground"
 						/>
-						<span className="shrink-0 text-muted-foreground">Settings</span>
+						<span className="shrink-0 text-muted-foreground">
+							{t("breadcrumb.title")}
+						</span>
 					</Title>
 				</header>
 
@@ -104,13 +108,13 @@ const UserSettingsDialog = ({
 						<SettingsRailItem
 							icon={Icons.User}
 							iconsOnly={iconsOnly}
-							label="Profile"
+							label={t("rail.profile")}
 							value={FIRST_TAB}
 						/>
 						<SettingsRailItem
 							icon={Icons.Image}
 							iconsOnly={iconsOnly}
-							label="Appearance"
+							label={t("rail.appearance")}
 							value="appearance"
 						/>
 					</SettingsRail>
@@ -125,9 +129,9 @@ const UserSettingsDialog = ({
 							onRemove={onPictureRemove}
 						/>
 						<SettingsField
-							label="Display name"
+							label={t("profile.name.label")}
 							onValueChange={(name) => patch({ name })}
-							placeholder="No name"
+							placeholder={t("profile.name.placeholder")}
 							value={value.name}
 						/>
 					</Tabs.Panel>
