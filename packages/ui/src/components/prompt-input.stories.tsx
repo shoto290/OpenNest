@@ -82,6 +82,12 @@ const isExpanded = (element: HTMLElement) =>
 
 const box = (element: HTMLElement) => element.getBoundingClientRect()
 
+const isBefore = (element: HTMLElement, next: HTMLElement) =>
+	box(element).right <= box(next).left
+
+const isBelow = (element: HTMLElement, previous: HTMLElement) =>
+	box(element).top >= box(previous).bottom
+
 const LONG_DRAFT = [
 	"Review the release branch and write the changelog for v0.1.",
 	"",
@@ -101,7 +107,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The composer for a single agent turn: write a prompt, send it, stop the run. At rest it is a one-line pill — the prompt, the `leading` and `trailing` slots and the send button all on the same row. The moment the prompt no longer fits beside them the bar expands: the prompt takes a row of its own and the controls drop below it, `leading` on the leading edge, `trailing` and send on the trailing one. Enter sends and Shift+Enter breaks a line in both layouts, and the trailing control is one button whose slot swaps between send and stop — `loading` decides which glyph, `onStop` decides whether it can be pressed.",
+					"The composer for a single agent turn: write a prompt, send it, stop the run. At rest it is a one-line pill — the `leading` slot, the prompt, then the `trailing` slot and the send button, all on the same row. The moment the prompt no longer fits beside them the bar expands: the prompt takes a row of its own and the controls drop below it, `leading` on the leading edge, `trailing` and send on the trailing one. Enter sends and Shift+Enter breaks a line in both layouts, and the trailing control is one button whose slot swaps between send and stop — `loading` decides which glyph, `onStop` decides whether it can be pressed.",
 			},
 		},
 	},
@@ -198,7 +204,7 @@ export const WithControls = meta.story({
 		docs: {
 			description: {
 				story:
-					"Both slots filled while the pill is still one line: `leading` opens the control area, `trailing` sits right before send. Reach for it when adding a control to the composer — it is the layout that runs out of room first. Check that the slots stay grouped against the trailing edge with the prompt taking the remaining width, and that filling them shortens the prompt's single line rather than wrapping the bar early. `LongContent` shows where the same controls land once the prompt wraps.",
+					"Both slots filled while the pill is still one line: `leading` opens the pill before the text, `trailing` sits right before send. Reach for it when adding a control to the composer — it is the layout that runs out of room first. Check that `leading` reads on the leading edge rather than beside the send button, that `trailing` and send stay grouped against the trailing edge with the prompt taking the remaining width, and that filling the slots shortens the prompt's single line rather than wrapping the bar early. `LongContent` shows where the same controls land once the prompt wraps.",
 			},
 		},
 	},
@@ -209,8 +215,9 @@ export const WithControls = meta.story({
 		const send = canvas.getByRole("button", { name: "Send prompt" })
 
 		await expect(isExpanded(textarea)).toBe(false)
-		await expect(box(addContext).left).toBeLessThan(box(search).left)
-		await expect(box(search).left).toBeLessThan(box(send).left)
+		await expect(isBefore(addContext, textarea)).toBe(true)
+		await expect(isBefore(textarea, search)).toBe(true)
+		await expect(isBefore(search, send)).toBe(true)
 	},
 })
 
@@ -224,7 +231,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A prompt long enough to stop fitting beside the controls, so the bar has expanded: the textarea owns the top row and the control row sits under it, `leading` on the leading edge, `trailing` and send on the trailing one. Check that the container softens from the pill to the rounded box without the controls jumping, that the prompt now uses the full width, and that deleting back to a short prompt folds it into `Default` again. `Overflow` pushes the same layout past `maxRows`.",
+					"A prompt long enough to stop fitting beside the controls, so the bar has expanded: the textarea owns the top row and the control row sits under it, `leading` on the leading edge, `trailing` and send on the trailing one. Check that the container softens from the pill to the rounded box without the controls jumping, that `leading` holds the same leading edge it had in the pill, that the prompt now uses the full width, and that deleting back to a short prompt folds it into `Default` again. `Overflow` pushes the same layout past `maxRows`.",
 			},
 		},
 	},
@@ -234,8 +241,10 @@ export const LongContent = meta.story({
 		const addContext = canvas.getByRole("button", { name: "Add context" })
 
 		await expect(isExpanded(textarea)).toBe(true)
-		await expect(box(send).top).toBeGreaterThanOrEqual(box(textarea).bottom)
-		await expect(box(addContext).left).toBeLessThan(box(send).left)
+		await expect(isBelow(addContext, textarea)).toBe(true)
+		await expect(isBelow(send, textarea)).toBe(true)
+		await expect(box(addContext).left).toBeLessThanOrEqual(box(textarea).left)
+		await expect(isBefore(addContext, send)).toBe(true)
 	},
 })
 

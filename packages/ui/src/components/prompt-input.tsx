@@ -59,8 +59,8 @@ export interface PromptInputProps
 	loading?: boolean
 	/** Omit while loading to render the stop button inert — a stop already requested. */
 	onStop?: () => void
-	/** Controls held on the leading edge of the control area, beside the prompt while
-	 * it fits on one line and under it once it wraps. */
+	/** Controls held on the leading edge of the composer: before the prompt while it
+	 * fits on one line, opening the control row once it wraps. */
 	leading?: ReactNode
 	/** Controls held right before the send button, on the trailing edge. */
 	trailing?: ReactNode
@@ -291,27 +291,36 @@ export function PromptInput({
 				/>
 			</div>
 
+			{/* Ordered before the prompt while they share a row, so the slot reads on the
+			leading edge of the pill instead of beside the send button. */}
+			<div
+				inert={disabled}
+				className={cn(
+					"flex items-center gap-1 empty:hidden",
+					!isExpanded && "order-first",
+				)}
+			>
+				{leading}
+			</div>
+
 			<div
 				ref={controlsRef}
 				inert={disabled}
-				className="flex grow items-center gap-1"
+				className="flex grow items-center justify-end gap-1"
 			>
-				{leading}
-				<div className="ml-auto flex items-center gap-1">
-					{trailing}
-					{loading || hasPayload ? (
-						<Button
-							type={loading ? "button" : "submit"}
-							size="icon"
-							disabled={loading ? !onStop : !canSubmit}
-							aria-label={loading ? "Stop generating" : "Send prompt"}
-							onClick={loading ? onStop : undefined}
-							className="rounded-full"
-						>
-							{loading ? <Icons.Stop /> : <Icons.Send />}
-						</Button>
-					) : null}
-				</div>
+				{trailing}
+				{loading || hasPayload ? (
+					<Button
+						type={loading ? "button" : "submit"}
+						size="icon"
+						disabled={loading ? !onStop : !canSubmit}
+						aria-label={loading ? "Stop generating" : "Send prompt"}
+						onClick={loading ? onStop : undefined}
+						className="rounded-full"
+					>
+						{loading ? <Icons.Stop /> : <Icons.Send />}
+					</Button>
+				) : null}
 			</div>
 		</form>
 	)
