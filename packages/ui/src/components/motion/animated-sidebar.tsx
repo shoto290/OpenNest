@@ -410,7 +410,7 @@ function MobileSidebar({
 				onClick={() => context.setOpenMobile(false)}
 				data-slot="sidebar-mobile-overlay"
 				className={cn(
-					"absolute inset-0 bg-foreground/40",
+					"absolute inset-0 bg-black/50",
 					context.openMobile ? "pointer-events-auto" : "pointer-events-none",
 				)}
 			/>

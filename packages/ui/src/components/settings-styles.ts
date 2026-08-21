@@ -28,9 +28,10 @@ const SETTINGS_HEADER_CLASS =
 	"flex shrink-0 items-center gap-2.5 border-border border-b py-4 pr-14 pl-4"
 
 /** The dimmed page behind every overlay — the settings dialog, the model list's
- * own popup and the delete confirmation standing over either. */
+ * own popup and the delete confirmation standing over either. Always a dark
+ * scrim: a light veil over a dark page washes it out instead of dimming it. */
 const BACKDROP_CLASS =
-	"fixed inset-0 z-50 bg-foreground/30 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
+	"fixed inset-0 z-50 bg-black/50 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
 
 /** The surface every popup shares — the settings dialog, the model list and the
  * delete confirmation. Size, radius and padding stay with each one. It draws
