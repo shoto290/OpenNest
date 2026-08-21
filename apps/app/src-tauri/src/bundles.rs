@@ -229,9 +229,8 @@ pub struct Generated {
 pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let text = fs::read_to_string(agent_file(root, bot_id)?).ok()?;
 	let model = front_value(&text, MODEL_KEY)
-		.map(str::trim)
-		.filter(|found| !found.is_empty())
-		.map(str::to_owned);
+		.map(|found| found.trim().to_owned())
+		.filter(|found| !found.is_empty());
 	Some(Generated { instructions: body(&text).to_owned(), model })
 }
 
@@ -430,17 +429,11 @@ fn briefed_with_skills(root: &Path, bot_id: &str, brief: &str) -> String {
 	format!("{brief}\n\n{CARRIED_OPEN}\n\n{carried}\n\n{CARRIED_CLOSE}")
 }
 
-/// A skill's body, under the name of the directory it came from.
-struct Preloaded {
-	name: String,
-	body: String,
-}
-
 /// Every skill of the bot's that asked to be carried, in the order the disk names
 /// them: two writes over the same directory produce the same file. A bundle with no
 /// `skills/` directory has none, which is every bot nobody dropped one into.
-fn preloaded(root: &Path, bot_id: &str) -> Vec<Preloaded> {
-	skill_dirs(root, bot_id).iter().filter_map(|path| marked_skill(path)).collect()
+fn preloaded(root: &Path, bot_id: &str) -> Vec<Skill> {
+	skills(root, bot_id).into_iter().filter(|skill| skill.is_preloaded).collect()
 }
 
 /// Every directory under the bot's `skills/`, by name. Sorted so two writes over the
@@ -454,18 +447,6 @@ fn skill_dirs(root: &Path, bot_id: &str) -> Vec<PathBuf> {
 		.collect();
 	directories.sort();
 	directories
-}
-
-/// The skill in a directory, when its frontmatter marks it for preloading. `None` is
-/// a directory holding no `SKILL.md`, or a skill that never asked — which stays on
-/// the disk and out of the agent file.
-fn marked_skill(path: &Path) -> Option<Preloaded> {
-	let text = fs::read_to_string(path.join(SKILL_NAME)).ok()?;
-	if front_value(&text, PRELOAD_KEY)? != "true" {
-		return None;
-	}
-	let name = path.file_name()?.to_string_lossy().into_owned();
-	Some(Preloaded { name, body: body(&text).to_owned() })
 }
 
 /// A skill of the bot's, whole. `id` is the directory it lives in, which is the one
@@ -569,12 +550,12 @@ fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
 fn read_skill(path: &Path) -> Option<Skill> {
 	let text = fs::read_to_string(path.join(SKILL_NAME)).ok()?;
 	let id = path.file_name()?.to_string_lossy().into_owned();
-	let name = front_value(&text, NAME_KEY).filter(|found| !found.is_empty()).unwrap_or(&id);
+	let named = front_value(&text, NAME_KEY).filter(|found| !found.is_empty());
 	Some(Skill {
-		name: name.to_owned(),
-		description: front_value(&text, DESCRIPTION_KEY).unwrap_or_default().to_owned(),
+		name: named.unwrap_or_else(|| id.clone()),
+		description: front_value(&text, DESCRIPTION_KEY).unwrap_or_default(),
 		body: body(&text).to_owned(),
-		is_preloaded: front_value(&text, PRELOAD_KEY) == Some(MARKED),
+		is_preloaded: front_value(&text, PRELOAD_KEY).as_deref() == Some(MARKED),
 		id,
 	})
 }
@@ -861,19 +842,28 @@ fn split_frontmatter(text: &str) -> Option<(&str, &str)> {
 
 /// The bot a file says it was generated for, or `None` for one that says nothing —
 /// which is every file this module did not write.
-fn marked_bot_id(text: &str) -> Option<&str> {
+fn marked_bot_id(text: &str) -> Option<String> {
 	front_value(text, OWNER_KEY)
 }
 
-/// A frontmatter key's scalar, unquoted, or `None` for a file that names none. Lines
-/// are read trimmed, so a key nested in a map answers under its own name — which is
-/// how [`OWNER_KEY`] is found inside `metadata`.
-fn front_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+/// A frontmatter key's scalar, as whoever wrote it meant it, or `None` for a file
+/// that names none. Lines are read trimmed, so a key nested in a map answers under
+/// its own name — which is how [`OWNER_KEY`] is found inside `metadata`.
+fn front_value(text: &str, key: &str) -> Option<String> {
 	let (front, _) = split_frontmatter(text)?;
 	front.lines().find_map(|line| {
 		let value = line.trim().strip_prefix(key)?.trim_start().strip_prefix(':')?;
-		Some(value.trim().trim_matches('"'))
+		Some(unquoted(value.trim()))
 	})
+}
+
+/// A scalar as it went in. Everything this module writes is a quoted JSON string —
+/// see [`quoted`] — so a name carrying a quotation mark, an apostrophe, a colon or a
+/// newline is read back as the reader typed it rather than as the file spells it. A
+/// bare scalar a hand wrote is its own text, which is the same answer for every value
+/// nothing had to escape.
+fn unquoted(value: &str) -> String {
+	serde_json::from_str::<String>(value).unwrap_or_else(|_| value.trim_matches('"').to_owned())
 }
 
 #[cfg(test)]
@@ -1170,13 +1160,12 @@ mod tests {
 	/// asks for it to be carried.
 	fn drop_a_skill(root: &Path, bot_id: &str, name: &str, preload: bool, body: &str) -> PathBuf {
 		let path = dir(root, bot_id).join(SKILLS_DIR).join(name).join(SKILL_NAME);
-		let front = if preload {
-			"---\nname: skill\nmetadata:\n  opennest:\n    preload: true\n---\n\n"
-		} else {
-			"---\nname: skill\n---\n\n"
-		};
-		private_files::replace(&path, format!("{front}{body}\n").as_bytes())
-			.expect("the skill is dropped in");
+		let mark = if preload { "metadata:\n  opennest:\n    preload: true\n" } else { "" };
+		private_files::replace(
+			&path,
+			format!("{FENCE}\nname: {name}\n{mark}{FENCE}\n\n{body}\n").as_bytes(),
+		)
+		.expect("the skill is dropped in");
 		path
 	}
 
@@ -1461,6 +1450,68 @@ mod tests {
 
 		remove_skill(&root, &bot, &created.id).expect("the skill is taken away");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some(brief));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The directory a skill lives in never moves, and the name a reader gives it does.
+	/// What the bot reads at the top of the carried region is the name the skill
+	/// declares — otherwise a rename in the panel would leave the bot reading the old
+	/// one in its own prompt — and a skill declaring none is still known by its
+	/// directory.
+	#[test]
+	fn a_carried_skill_is_titled_by_the_name_it_declares() {
+		let root = a_root("skill-titled");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let created = create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill is written");
+		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
+		private_files::replace(
+			&dir(&root, &bot.id).join(SKILLS_DIR).join("kneading").join(SKILL_NAME),
+			format!("{FENCE}\nmetadata:\n  opennest:\n    preload: true\n{FENCE}\n\nKnead.\n")
+				.as_bytes(),
+		)
+		.expect("the nameless skill is dropped in");
+
+		update_skill(&root, &bot, &created.id, &a_draft("Sourdough", "How to bake.", "Bake."))
+			.expect("the skill is renamed");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains("# Sourdough"), "got {written}");
+		assert!(!written.contains("# baking"), "got {written}");
+		assert!(written.contains("# kneading"), "got {written}");
+		assert_eq!(created.id, "baking", "a rename moved the directory");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Someone types an apostrophe on the first afternoon. Every value written here is
+	/// a quoted JSON string, so a quotation mark, a colon, a hash or a newline comes
+	/// back as it was typed rather than as the file had to spell it — and the file is
+	/// still frontmatter afterwards, which is what reading the rest of it back proves.
+	#[test]
+	fn a_value_written_into_a_skill_comes_back_as_it_went_in() {
+		let root = a_root("skill-quoted");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let name = "L'art du \"pain\": #1";
+		let description = "Bake: quickly, at 220\nthen rest.";
+
+		let created = create_skill(&root, &bot, &a_draft(name, description, "Bake."))
+			.expect("the skill is written");
+		let listed = skills(&root, &bot.id);
+
+		assert_eq!(created.name, name);
+		assert_eq!(created.description, description);
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].name, name);
+		assert_eq!(listed[0].description, description);
+		assert_eq!(listed[0].body, "Bake.");
+
+		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
+		assert!(skills(&root, &bot.id)[0].is_preloaded, "the mark was lost to the quoting");
+		assert!(written_agent(&root, &bot.id).contains(name), "got a name the file spelled");
 
 		let _ = fs::remove_dir_all(&root);
 	}
