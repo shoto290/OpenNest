@@ -5,6 +5,7 @@ import type {
 	BotMcpServer,
 	BotSkill,
 	BotSkillDraft,
+	BotSkillFront,
 	Chat,
 	ContextCheckpoint,
 	NewAssistantMessage,
@@ -100,6 +101,29 @@ const isWebp = (bytes: Uint8Array) => {
  * everything. Replays are idempotent on identity, an ending is final, and text
  * only ever appends to a message still open — the three rules the frontend leans
  * on, held here the way `messages.rs` holds them. */
+/** What a skill carries before anyone has written a key of its frontmatter: the
+ * same nothing the host reads back off a file that names none. */
+const NO_FRONT: BotSkillFront = {
+	whenToUse: null,
+	argumentHint: null,
+	arguments: null,
+	disableModelInvocation: null,
+	userInvocable: null,
+	allowedTools: null,
+	disallowedTools: null,
+	model: null,
+	effort: null,
+	context: null,
+	agent: null,
+	background: null,
+	hooks: null,
+	paths: null,
+	shell: null,
+	metadata: null,
+	license: null,
+	compatibility: null,
+}
+
 export const createFakeTranscriptStore = (
 	options: FakeTranscriptStoreOptions = {},
 ): TranscriptStore => {
@@ -365,6 +389,7 @@ export const createFakeTranscriptStore = (
 			}
 			const held = skills.get(botId) ?? []
 			const created: BotSkill = {
+				...NO_FRONT,
 				...draft,
 				id: freeSkillId(held, draft.name),
 				isPreloaded: false,

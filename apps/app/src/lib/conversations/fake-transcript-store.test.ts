@@ -254,11 +254,12 @@ describe("createFakeTranscriptStore", () => {
 		const created = await store.createBotSkill("default", draft)
 		const beside = await store.createBotSkill("default", draft)
 
-		expect(created).toEqual({
+		expect(created).toMatchObject({
 			id: "baking-bread",
 			...draft,
 			isPreloaded: false,
 		})
+		expect(created.allowedTools).toBeNull()
 		expect(beside.id).toBe("baking-bread-2")
 
 		const marked = await store.setBotSkillPreloaded("default", created.id, true)

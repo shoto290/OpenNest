@@ -72,6 +72,9 @@ const SKILL_DRAFT: BotSkillDraft = {
 	name: "Baking",
 	description: "How to bake.",
 	body: "Bake at 220 degrees.",
+	allowedTools: ["Read", "Write"],
+	userInvocable: true,
+	metadata: { author: "someone" },
 }
 
 const SERVER = { command: "atlas-mcp", args: ["--stdio"] }
