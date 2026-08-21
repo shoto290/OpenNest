@@ -147,3 +147,25 @@ export const Fill = meta.story({
 		)
 	},
 })
+
+export const WithHint = meta.story({
+	args: {
+		label: "Name",
+		value: "release-notes",
+		hint: "Lowercase letters, numbers and hyphens.",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this over `Default` whenever the field will not take everything a reader might type. The rule goes under the control rather than into the placeholder, because a placeholder is gone the moment they start typing — which is exactly when the rule is worth reading — and it is wired to the control through `aria-describedby`, so it is announced after the label instead of in place of it.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const control = canvas.getByLabelText("Name")
+		const hint = canvas.getByText("Lowercase letters, numbers and hyphens.")
+
+		await expect(control).toHaveAttribute("aria-describedby", hint.id)
+	},
+})

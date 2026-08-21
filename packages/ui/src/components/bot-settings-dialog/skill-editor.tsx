@@ -3,7 +3,10 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { BotSkillDraft } from "@workspace/ui/components/bot-settings"
+import {
+	type BotSkillDraft,
+	toSkillName,
+} from "@workspace/ui/components/bot-settings"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
@@ -90,8 +93,9 @@ const SkillEditor = ({
 			</div>
 
 			<SettingsField
+				hint={t("skills.name.hint")}
 				label={t("skills.name.label")}
-				onValueChange={(value) => patch({ name: value })}
+				onValueChange={(value) => patch({ name: toSkillName(value) })}
 				placeholder={t("skills.name.placeholder")}
 				value={draft.name}
 			/>

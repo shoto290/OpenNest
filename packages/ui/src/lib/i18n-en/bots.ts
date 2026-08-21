@@ -84,7 +84,8 @@ const bots = {
 		},
 		name: {
 			label: "Name",
-			placeholder: "What this skill is called",
+			placeholder: "release-notes",
+			hint: "Lowercase letters, numbers and hyphens. It is the skill's identity — the description below is what the bot reads.",
 		},
 		description: {
 			label: "Description",

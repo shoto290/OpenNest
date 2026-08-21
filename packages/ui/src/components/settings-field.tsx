@@ -11,6 +11,10 @@ type SettingsFieldProps = {
 	value: string
 	onValueChange: (value: string) => void
 	placeholder?: string
+	/** What the field will and will not take, said under the control rather than in
+	 * the placeholder — a placeholder is gone the moment a reader starts typing,
+	 * which is when a rule is worth reading. Announced after the label. */
+	hint?: string
 	/** Turns the control into a textarea of this many rows. */
 	rows?: number
 	/** Turns the control into a textarea that takes the height its container has
@@ -23,6 +27,7 @@ const SettingsField = ({
 	value,
 	onValueChange,
 	placeholder,
+	hint,
 	rows,
 	fill = false,
 }: SettingsFieldProps) => {
@@ -37,6 +42,7 @@ const SettingsField = ({
 			</label>
 			{rows || fill ? (
 				<textarea
+					aria-describedby={hint ? `${id}-hint` : undefined}
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						"resize-none leading-relaxed",
@@ -50,6 +56,7 @@ const SettingsField = ({
 				/>
 			) : (
 				<input
+					aria-describedby={hint ? `${id}-hint` : undefined}
 					className={FIELD_CONTROL_CLASS}
 					id={id}
 					onChange={emit}
@@ -58,6 +65,11 @@ const SettingsField = ({
 					value={value}
 				/>
 			)}
+			{hint ? (
+				<p className="text-muted-foreground text-xs" id={`${id}-hint`}>
+					{hint}
+				</p>
+			) : null}
 		</div>
 	)
 }

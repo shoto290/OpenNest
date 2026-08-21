@@ -81,7 +81,8 @@ const bots = {
 		},
 		name: {
 			label: "Nom",
-			placeholder: "Le nom de cette compétence",
+			placeholder: "notes-de-version",
+			hint: "Minuscules, chiffres et traits d'union. C'est l'identité de la compétence — c'est la description ci-dessous que le bot lit.",
 		},
 		description: {
 			label: "Description",

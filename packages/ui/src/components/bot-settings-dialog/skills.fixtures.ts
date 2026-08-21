@@ -5,21 +5,21 @@ import type { BotSkillItem } from "@workspace/ui/components/bot-settings"
 export const BOT_SKILLS: BotSkillItem[] = [
 	{
 		id: "release-notes",
-		name: "Release notes",
+		name: "release-notes",
 		description: "How this project words a changelog entry",
 		body: "# Release notes\n\nOne line per change, in the past tense, naming what a reader gains rather than what moved in the code.",
 		isPreloaded: true,
 	},
 	{
 		id: "commit-style",
-		name: "Commit style",
+		name: "commit-style",
 		description: "Conventional commits, one concern per commit",
 		body: "# Commit style\n\n`type(scope): subject` in the imperative. One concern per commit — a commit that needs an `and` is two commits.",
 		isPreloaded: false,
 	},
 	{
 		id: "review-checklist",
-		name: "Review checklist",
+		name: "review-checklist",
 		description: "",
 		body: "# Review checklist\n\nEvery changed line traces to the request. No refactor rides along.",
 		isPreloaded: false,
@@ -30,7 +30,7 @@ export const BOT_SKILLS: BotSkillItem[] = [
  * fill the body field several times over. */
 export const LONG_SKILL: BotSkillItem = {
 	id: "incident-response-runbook",
-	name: "Incident response runbook for the nightly ingestion pipeline",
+	name: "incident-response-runbook-for-the-nightly-ingestion-pipeline",
 	description:
 		"Everything to do, in order, when the nightly ingestion pipeline stops answering — who to tell, what to read first, and what may never be replayed twice",
 	body: `# Incident response runbook

@@ -88,11 +88,11 @@ export const Default = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.type(canvas.getByLabelText("Name"), "!")
+		await userEvent.type(canvas.getByLabelText("Name"), " Weekly")
 
-		await expect(args.onDraftChange).toHaveBeenCalledWith({
+		await expect(args.onDraftChange).toHaveBeenLastCalledWith({
 			...CARRIED,
-			name: `${CARRIED.name}!`,
+			name: `${CARRIED.name}-weekly`,
 		})
 	},
 })
@@ -125,9 +125,27 @@ export const Empty = meta.story({
 	},
 })
 
+export const WithTypedName = meta.story({
+	args: { draft: BLANK, onCreate: fn() },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill's name is an identifier, not a title: the format takes lowercase letters, numbers and hyphens and refuses the file outright for anything else. So the field writes what a reader types into the only shape it may take, rather than letting them find out from a skill that never loads — typing `Release Notes` leaves `release-notes`, and the hint under the field says why before it happens. What the bot reads to decide when to reach for a skill is the description, which takes any words at all.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const name = canvas.getByLabelText("Name")
+
+		await userEvent.type(name, "Release Notes!")
+		await expect(name).toHaveValue("release-notes-")
+	},
+})
+
 export const ZeroValue = meta.story({
 	args: {
-		draft: { name: "Review checklist", description: "", body: "" },
+		draft: { name: "review-checklist", description: "", body: "" },
 		isPreloaded: false,
 	},
 	parameters: {

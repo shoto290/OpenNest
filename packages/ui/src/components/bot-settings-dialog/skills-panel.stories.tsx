@@ -96,7 +96,7 @@ export const Default = meta.story({
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("button", { name: /Release notes/ }))
+		await userEvent.click(canvas.getByRole("button", { name: /release-notes/ }))
 
 		await expect(canvas.getByLabelText("Name")).toHaveValue(CARRIED.name)
 	},
@@ -146,12 +146,12 @@ export const WithNewSkill = meta.story({
 		await userEvent.click(canvas.getByRole("button", { name: "Add skill" }))
 
 		await expect(args.onCreate).toHaveBeenCalledWith({
-			name: "Release checklist",
+			name: "release-checklist",
 			description: "",
 			body: "",
 		})
 		await expect(
-			canvas.getByRole("button", { name: /Release checklist/ }),
+			canvas.getByRole("button", { name: /release-checklist/ }),
 		).toBeVisible()
 	},
 })
@@ -175,7 +175,7 @@ export const WithPreloadToggled = meta.story({
 
 		await userEvent.click(canvas.getByRole("button", { name: "All skills" }))
 		await expect(
-			canvas.getByRole("button", { name: /Commit style/ }),
+			canvas.getByRole("button", { name: /commit-style/ }),
 		).toHaveTextContent("Preloaded")
 	},
 })

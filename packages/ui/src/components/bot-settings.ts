@@ -32,6 +32,14 @@ type BotSkillDraft = {
 	body: string
 }
 
+/** A skill name reduced to what the skill format accepts: lowercase letters,
+ * numbers and hyphens. It is an identifier rather than a title — the file is refused
+ * outright for anything else — so the field writes what a reader types into the only
+ * shape it may take instead of letting them find out from a broken skill. What the
+ * bot reads to decide when to reach for a skill is its description, not this. */
+const toSkillName = (value: string) =>
+	value.toLowerCase().replace(/[^a-z0-9-]+/g, "-")
+
 /** A skill of the bot's, as the panel lists and edits it. `id` is its identity and
  * never moves: renaming a skill is free text changing, so every write is addressed
  * by the id and never by the name. */
@@ -61,4 +69,5 @@ export {
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
+	toSkillName,
 }
