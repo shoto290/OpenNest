@@ -56,6 +56,7 @@ const bots = {
 			appearance: "Appearance",
 			instructions: "Instructions",
 			skills: "Skills",
+			mcp: "MCP servers",
 			runtime: "Runtime",
 			danger: "Danger zone",
 		},
@@ -107,6 +108,48 @@ const bots = {
 				"Its description and its body go with it. This cannot be undone.",
 			confirm: {
 				title: "Delete {{name}}?",
+			},
+		},
+	},
+	mcp: {
+		untitled: "Untitled server",
+		add: "Add server",
+		create: "Add server",
+		save: "Save changes",
+		back: "All servers",
+		notice:
+			"A server is a program this bot starts on your machine, under your account, the next time it runs. Add one only from a source you trust.",
+		empty: {
+			title: "No MCP servers yet",
+			description:
+				"An MCP server gives this bot tools it does not have on its own. Adding one lets this bot start that program on your machine.",
+		},
+		name: {
+			label: "Name",
+			placeholder: "atlas",
+			hint: "Lowercase letters, numbers and hyphens. It is what the server is declared under and what the bot connects to it as.",
+		},
+		config: {
+			label: "Configuration",
+			placeholder:
+				'{\n  "command": "npx",\n  "args": ["-y", "@scope/server"]\n}',
+			hint: "JSON, copied from the server's own instructions. A local server names a command, its arguments and its environment; a remote one names a URL.",
+			invalid:
+				"This is not a JSON object, so there is nothing to save yet. Check the braces, the commas and the quotes.",
+		},
+		launch: {
+			label: "What this starts",
+			environment: "Environment",
+			unknown: "This configuration names nothing to start or connect to.",
+			reveal: "Show the value of {{name}}",
+			conceal: "Hide the value of {{name}}",
+		},
+		delete: {
+			action: "Remove server",
+			description:
+				"This bot stops starting it, and its configuration goes with it. This cannot be undone.",
+			confirm: {
+				title: "Remove {{name}}?",
 			},
 		},
 	},

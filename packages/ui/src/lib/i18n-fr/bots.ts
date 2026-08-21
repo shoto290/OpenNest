@@ -53,6 +53,7 @@ const bots = {
 			appearance: "Apparence",
 			instructions: "Instructions",
 			skills: "Compétences",
+			mcp: "Serveurs MCP",
 			runtime: "Exécution",
 			danger: "Zone sensible",
 		},
@@ -104,6 +105,48 @@ const bots = {
 				"Sa description et son contenu partent avec elle. C'est irréversible.",
 			confirm: {
 				title: "Supprimer {{name}} ?",
+			},
+		},
+	},
+	mcp: {
+		untitled: "Serveur sans titre",
+		add: "Ajouter un serveur",
+		create: "Ajouter le serveur",
+		save: "Enregistrer les modifications",
+		back: "Tous les serveurs",
+		notice:
+			"Un serveur est un programme que ce bot démarre sur votre machine, sous votre compte, à sa prochaine exécution. N'en ajoutez un que depuis une source de confiance.",
+		empty: {
+			title: "Aucun serveur MCP",
+			description:
+				"Un serveur MCP donne à ce bot des outils qu'il n'a pas seul. En ajouter un l'autorise à démarrer ce programme sur votre machine.",
+		},
+		name: {
+			label: "Nom",
+			placeholder: "atlas",
+			hint: "Minuscules, chiffres et traits d'union. C'est le nom sous lequel le serveur est déclaré et celui par lequel le bot s'y connecte.",
+		},
+		config: {
+			label: "Configuration",
+			placeholder:
+				'{\n  "command": "npx",\n  "args": ["-y", "@scope/server"]\n}',
+			hint: "Du JSON, repris des instructions du serveur. Un serveur local nomme une commande, ses arguments et son environnement ; un serveur distant nomme une URL.",
+			invalid:
+				"Ce n'est pas un objet JSON, il n'y a donc rien à enregistrer. Vérifiez les accolades, les virgules et les guillemets.",
+		},
+		launch: {
+			label: "Ce que cela démarre",
+			environment: "Environnement",
+			unknown: "Cette configuration ne nomme rien à démarrer ni à joindre.",
+			reveal: "Afficher la valeur de {{name}}",
+			conceal: "Masquer la valeur de {{name}}",
+		},
+		delete: {
+			action: "Retirer le serveur",
+			description:
+				"Ce bot cesse de le démarrer et sa configuration part avec lui. C'est irréversible.",
+			confirm: {
+				title: "Retirer {{name}} ?",
 			},
 		},
 	},

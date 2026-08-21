@@ -49,6 +49,53 @@ type BotSkillItem = BotSkillDraft & {
 	isPreloaded: boolean
 }
 
+/** An MCP server the bot's bundle declares, as the panel lists and edits it. The
+ * name is the identity — it is the key the server is written under — so renaming one
+ * moves it, unlike a skill, whose directory holds still. The configuration stays
+ * `Record<string, unknown>` all the way to the field: the shape belongs to the
+ * transport, and a local server naming a command has nothing in common with a remote
+ * one naming a URL. */
+type BotMcpServerItem = {
+	name: string
+	config: Record<string, unknown>
+}
+
+/** A server being written. Its configuration is text rather than an object because
+ * half-typed JSON is not one — the editor holds what the reader typed and parses it
+ * on every keystroke, so an unfinished brace is a message rather than a lost
+ * field. */
+type BotMcpServerDraft = {
+	name: string
+	config: string
+}
+
+/** A server name reduced to what a configuration key may hold: the bot connects to
+ * it under this, and a name carrying spaces or quotes is a key nobody can address.
+ * Lowercase letters, numbers and hyphens, like a skill's. */
+const toMcpServerName = (value: string) =>
+	value.toLowerCase().replace(/[^a-z0-9-]+/g, "-")
+
+const isConfigObject = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value)
+
+/** What the reader typed, read as a configuration, or `null` for anything the store
+ * would refuse: text that is not JSON at all, and JSON that is not an object. Both
+ * are one answer here because both mean the same thing to the panel — there is
+ * nothing to preview and nothing to write. */
+const parseMcpServerConfig = (text: string): Record<string, unknown> | null => {
+	try {
+		const parsed: unknown = JSON.parse(text)
+		return isConfigObject(parsed) ? parsed : null
+	} catch {
+		return null
+	}
+}
+
+/** A configuration laid out to be read and edited. Indented rather than compact:
+ * this is the field a reader checks a command in before it runs on their machine. */
+const toMcpServerConfigText = (config: Record<string, unknown>) =>
+	JSON.stringify(config, null, 2)
+
 type BotSettingsValue = {
 	identity: BotIdentity
 	name: string
@@ -65,9 +112,14 @@ export {
 	BOT_IDENTITY_ANIMALS,
 	type BotAvatarBlot,
 	type BotIdentity,
+	type BotMcpServerDraft,
+	type BotMcpServerItem,
 	type BotModelOption,
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
+	parseMcpServerConfig,
+	toMcpServerConfigText,
+	toMcpServerName,
 	toSkillName,
 }

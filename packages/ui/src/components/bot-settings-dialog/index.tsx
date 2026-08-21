@@ -11,12 +11,14 @@ import {
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
 import type {
 	BotIdentity,
+	BotMcpServerItem,
 	BotModelOption,
 	BotSettingsValue,
 	BotSkillDraft,
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
@@ -70,6 +72,19 @@ type BotSettingsDialogProps = {
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
+	/** Every MCP server the bot declares. Read and written on its own tab, like the
+	 * skills and for the same reason: a server lives in the bot's bundle rather than
+	 * in the row the rest of this panel edits. */
+	mcpServers: BotMcpServerItem[]
+	onMcpServerCreate: (name: string, config: Record<string, unknown>) => void
+	/** Addressed by the name the editor was opened on: the name is the key the
+	 * server is filed under, so a rename moves it. */
+	onMcpServerChange: (
+		openedName: string,
+		name: string,
+		config: Record<string, unknown>,
+	) => void
+	onMcpServerDelete: (name: string) => void
 	/** The edited bot's id. It is what its blot's shape is derived from, so the
 	 * breadcrumb shows the mark the roster row behind it is already showing. */
 	seed?: string
@@ -110,6 +125,10 @@ const BotSettingsDialog = ({
 	onSkillChange,
 	onSkillPreloadedChange,
 	onSkillDelete,
+	mcpServers,
+	onMcpServerCreate,
+	onMcpServerChange,
+	onMcpServerDelete,
 	seed,
 	onDelete,
 	showDanger,
@@ -187,6 +206,12 @@ const BotSettingsDialog = ({
 							value="skills"
 						/>
 						<SettingsRailItem
+							icon={Icons.Server}
+							iconsOnly={iconsOnly}
+							label={t("dialog.tab.mcp")}
+							value="mcp"
+						/>
+						<SettingsRailItem
 							icon={Icons.Terminal}
 							iconsOnly={iconsOnly}
 							label={t("dialog.tab.runtime")}
@@ -254,6 +279,18 @@ const BotSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
+					{/* The scrolling panel rather than the filling one the skills take:
+					an open server stacks a notice, two fields and a reading of what
+					will run, which is taller than the dialog on purpose. */}
+					<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="mcp">
+						<McpServersPanel
+							onChange={onMcpServerChange}
+							onCreate={onMcpServerCreate}
+							onDelete={onMcpServerDelete}
+							servers={mcpServers}
+						/>
+					</Tabs.Panel>
+
 					<Tabs.Panel
 						className={SETTINGS_SCROLLING_PANEL_CLASS}
 						value="runtime"
@@ -280,6 +317,7 @@ const BotSettingsDialog = ({
 }
 
 export {
+	type BotMcpServerItem,
 	type BotModelOption,
 	BotSettingsDialog,
 	type BotSettingsDialogProps,

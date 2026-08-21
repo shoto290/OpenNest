@@ -2,6 +2,7 @@ import { type ChangeEvent, useId } from "react"
 
 import {
 	FIELD_CONTROL_CLASS,
+	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
@@ -15,6 +16,10 @@ type SettingsFieldProps = {
 	 * the placeholder — a placeholder is gone the moment a reader starts typing,
 	 * which is when a rule is worth reading. Announced after the label. */
 	hint?: string
+	/** Why the value in the field cannot be used, said under the control in place of
+	 * nothing — the hint stays, since a rule is still worth reading while it is being
+	 * broken. It marks the control invalid and is announced with it. */
+	error?: string
 	/** Turns the control into a textarea of this many rows. */
 	rows?: number
 	/** Turns the control into a textarea that takes the height its container has
@@ -28,11 +33,14 @@ const SettingsField = ({
 	onValueChange,
 	placeholder,
 	hint,
+	error,
 	rows,
 	fill = false,
 }: SettingsFieldProps) => {
 	const id = useId()
 	const hintId = hint ? `${id}-hint` : undefined
+	const errorId = error ? `${id}-error` : undefined
+	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined
 	const emit = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
 		onValueChange(event.target.value)
 
@@ -43,9 +51,11 @@ const SettingsField = ({
 			</label>
 			{rows || fill ? (
 				<textarea
-					aria-describedby={hintId}
+					aria-describedby={describedBy}
+					aria-invalid={error ? true : undefined}
 					className={cn(
 						FIELD_CONTROL_CLASS,
+						error && FIELD_CONTROL_INVALID_CLASS,
 						"resize-none leading-relaxed",
 						fill && "min-h-0 flex-1",
 					)}
@@ -57,8 +67,12 @@ const SettingsField = ({
 				/>
 			) : (
 				<input
-					aria-describedby={hintId}
-					className={FIELD_CONTROL_CLASS}
+					aria-describedby={describedBy}
+					aria-invalid={error ? true : undefined}
+					className={cn(
+						FIELD_CONTROL_CLASS,
+						error && FIELD_CONTROL_INVALID_CLASS,
+					)}
 					id={id}
 					onChange={emit}
 					placeholder={placeholder}
@@ -69,6 +83,11 @@ const SettingsField = ({
 			{hint ? (
 				<p className="text-muted-foreground text-xs" id={hintId}>
 					{hint}
+				</p>
+			) : null}
+			{error ? (
+				<p className="text-destructive text-xs" id={errorId}>
+					{error}
 				</p>
 			) : null}
 		</div>
