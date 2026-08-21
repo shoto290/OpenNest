@@ -31,6 +31,10 @@
 		"test": {
 			"cache": false
 		},
+		"app#test": {
+			"dependsOn": ["sidecar#build"],
+			"cache": false
+		},
 		"lint": {},
 		"lint:fix": {
 			"cache": false
