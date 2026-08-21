@@ -13,7 +13,9 @@
 //! is told the transcript is not being written, and why, instead of being handed a
 //! silent success it would go on appending to.
 
-use tauri::{AppHandle, Runtime, State};
+use std::path::Path;
+
+use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
@@ -22,7 +24,9 @@ use super::contract::{
 };
 use crate::attachments;
 use crate::avatars;
+use crate::bundles;
 use crate::db;
+use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::db::repositories::runtime_context::ParticipantKey;
 
@@ -30,6 +34,87 @@ use crate::db::repositories::runtime_context::ParticipantKey;
 /// [`db::DatabaseState`] owns the outcome for the whole run.
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreError> {
 	state.as_ref().map_err(|failure| TranscriptStoreError::Unavailable { failure: failure.into() })
+}
+
+/// The bot's plugin bundle, laid down again from the row that was just written.
+///
+/// A disk that would not take it fails the save it belongs to, and the caller puts the
+/// row back: the bundle is what the process is really started on and what the brief is
+/// read back from, so a save reported as done over a bundle still holding the old body
+/// would leave the bot answering by it — silently, and for good.
+///
+/// The listing is not held to the same standard: a marketplace that could not be
+/// rewritten costs a reader one gesture, and the next write of any bot restores it.
+async fn write_bundle(
+	root: Option<&Path>,
+	database: &db::Database,
+	bot: &StoredBot,
+) -> Result<(), TranscriptStoreError> {
+	if let Some(root) = root {
+		bundles::write(root, bot).map_err(|error| TranscriptStoreError::UnwritableBundle {
+			detail: error.to_string(),
+		})?;
+	}
+	list_bundles(root, database).await;
+	Ok(())
+}
+
+/// The bundle of a bot that is gone, and the listing that stops naming it.
+async fn forget_bundle(root: Option<&Path>, database: &db::Database, bot_id: &str) {
+	if let Some(root) = root {
+		bundles::remove(root, bot_id);
+	}
+	list_bundles(root, database).await;
+}
+
+/// The marketplace every bundle is listed in, rebuilt from the roster after anything
+/// that changes it — one gesture for a reader who wants their bots somewhere else,
+/// instead of one install per directory.
+///
+/// Every bot on the roster is laid down before it is listed: a bundle a session has
+/// not written yet — a bot from before there were any — would otherwise be named by
+/// an entry pointing at a directory that is not there, which is a marketplace a
+/// reader cannot add.
+/// Every bundle this install holds, laid down and listed once the launch has a
+/// database. A reader who never opens the settings panel still has a marketplace to
+/// add, and a bundle a hand took away between two launches is back before the bot is
+/// spoken to.
+pub async fn list_bundles_at_launch<R: Runtime>(app: &AppHandle<R>) {
+	let state = app.state::<db::DatabaseState>();
+	let Ok(database) = state.inner().as_ref() else {
+		return;
+	};
+	list_bundles(bundles::root(app).as_deref(), database).await;
+}
+
+async fn list_bundles(root: Option<&Path>, database: &db::Database) {
+	let Some(root) = root else {
+		return;
+	};
+	if let Ok(roster) = database.conversations().bots().await {
+		for bot in &roster {
+			let _ = bundles::ensure(root, bot);
+		}
+		let _ = bundles::write_marketplace(root, &roster);
+	}
+}
+
+/// The brief this write lays down, resolved against the file the bot really runs on:
+/// a reader who changed it in the panel is writing a new one, and a reader who left
+/// it alone is not writing over a body somebody edited on the disk.
+///
+/// A bot the file no longer holds, or a host with nowhere to keep bundles, submits
+/// what it submitted: there is no disk to prefer.
+fn reconciled_identity(
+	root: Option<&Path>,
+	previous: Option<&StoredBot>,
+	identity: BotIdentity,
+) -> BotIdentity {
+	let (Some(root), Some(previous)) = (root, previous) else {
+		return identity;
+	};
+	let instructions = bundles::reconciled(root, previous, &identity.instructions);
+	BotIdentity { instructions, ..identity }
 }
 
 /// Every bot on the record, and nothing is seeded on the way: a launch reads the
@@ -45,8 +130,9 @@ pub async fn conversation_bots<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
+	let bundle_root = bundles::root(&app);
 	let stored = ready(&state)?.conversations().bots().await?;
-	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref())).collect())
+	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
 }
 
 /// A bot and the chat it will be spoken to in, written as one unit. The chat is
@@ -64,10 +150,19 @@ pub async fn conversation_create_bot<R: Runtime>(
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
+	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
 	let created = database.conversations().create_bot(identity.into()).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	Ok(Bot::of(created, dir.as_deref()))
+	if let Err(refusal) = write_bundle(bundle_root.as_deref(), database, &created).await {
+		// The bot exists for as long as this call is still failing. Taking it back is
+		// what makes the refusal true: a row nothing can be started from is not a bot
+		// the reader asked for, and it has said nothing yet for the deletion to cost.
+		let _ = database.conversations().delete_bot(created.id).await;
+		avatars::sweep_referenced(database, dir.as_deref()).await;
+		return Err(refusal);
+	}
+	Ok(Bot::of(created, dir.as_deref(), bundle_root.as_deref()))
 }
 
 /// Who the bot is, replaced whole: every field of [`BotIdentity`] is written, so
@@ -87,10 +182,23 @@ pub async fn conversation_update_bot<R: Runtime>(
 	identity: BotIdentity,
 ) -> Result<Bot, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
+	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
-	let updated = database.conversations().update_bot(id, identity.into()).await?;
+	let previous = database.conversations().bot(id.clone()).await?;
+	let reconciled = reconciled_identity(bundle_root.as_deref(), previous.as_ref(), identity);
+	let updated = database.conversations().update_bot(id.clone(), reconciled.into()).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	Ok(Bot::of(updated, dir.as_deref()))
+	if let Err(refusal) = write_bundle(bundle_root.as_deref(), database, &updated).await {
+		// The row moved and the bundle did not, which is the one state this whole
+		// module exists to make impossible. It is put back as it was, so what the
+		// reader is told and what the bot is are the same thing again.
+		if let Some(previous) = previous {
+			let _ = database.conversations().update_bot(id, previous.into()).await;
+			avatars::sweep_referenced(database, dir.as_deref()).await;
+		}
+		return Err(refusal);
+	}
+	Ok(Bot::of(updated, dir.as_deref(), bundle_root.as_deref()))
 }
 
 /// The picture a bot wears, from bytes the user picked.
@@ -133,7 +241,7 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 		return Err(rejection.into());
 	}
 	avatars::sweep_referenced(database, Some(&dir)).await;
-	Ok(Bot::of(updated, Some(&dir)))
+	Ok(Bot::of(updated, Some(&dir), bundles::root(&app).as_deref()))
 }
 
 /// The bot, its chat and the whole transcript under it. The last bot may be
@@ -141,7 +249,8 @@ pub async fn conversation_set_bot_avatar_image<R: Runtime>(
 /// conversations, which is the state a fresh install comes up in.
 /// The bot, its chat, the whole transcript under it — and the picture it was
 /// wearing and the files attached to its conversations, which the two sweeps take
-/// because the rows that referenced them are gone.
+/// because the rows that referenced them are gone. Its plugin bundle goes with it:
+/// nothing derives one any more, so nothing would ever write over it again.
 #[tauri::command]
 pub async fn conversation_delete_bot<R: Runtime>(
 	app: AppHandle<R>,
@@ -150,8 +259,10 @@ pub async fn conversation_delete_bot<R: Runtime>(
 ) -> Result<(), TranscriptStoreError> {
 	let dir = avatars::dir(&app);
 	let attachment_dir = attachments::dir(&app);
+	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
-	database.conversations().delete_bot(id).await?;
+	database.conversations().delete_bot(id.clone()).await?;
+	forget_bundle(bundle_root.as_deref(), database, &id).await;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	attachments::sweep_referenced(database, attachment_dir.as_deref()).await;
 	Ok(())

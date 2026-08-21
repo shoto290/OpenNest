@@ -1,6 +1,7 @@
 pub mod attachments;
 pub mod avatars;
 pub mod agent;
+pub mod bundles;
 pub mod commands;
 pub mod conversations;
 pub mod db;
@@ -45,6 +46,12 @@ pub fn run() {
 		// no database.
 		.setup(|app| {
 			app.manage(db::bootstrap(app.handle()));
+			// Off the launch path: a bot is spoken to long after the window is up, and
+			// the marketplace is for a reader who goes looking for one.
+			let handle = app.handle().clone();
+			tauri::async_runtime::spawn(async move {
+				conversations::commands::list_bundles_at_launch(&handle).await;
+			});
 			Ok(())
 		})
 		.invoke_handler(invoke_handler())

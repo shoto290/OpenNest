@@ -103,6 +103,28 @@ fn scenario_on_file(path: Option<&str>) -> Option<String> {
 	(!named.is_empty()).then_some(named)
 }
 
+/// What the bot was told, read where the real sidecar makes the agent read it: the
+/// body of `agents/<agent>.md` inside the bundle the open command names. A session
+/// opened with no bundle, or one whose agent file is not there, carries nothing —
+/// which is what a run with no plugin and no agent is.
+///
+/// The frontmatter is stripped here rather than through `bundles::body`, on purpose:
+/// a double that parsed the file with the code under test would agree with a
+/// mis-parse instead of catching it, and this is the only end-to-end reading of a
+/// brief reaching a child.
+fn instructions_in_the_bundle(command: &Value) -> String {
+	let read = || {
+		let path = command["pluginPath"].as_str()?;
+		// The host names the agent by its plugin, the way the real one resolves it.
+		let agent = command["agent"].as_str()?.rsplit(':').next()?;
+		let file = std::path::Path::new(path).join("agents").join(format!("{agent}.md"));
+		let text = std::fs::read_to_string(file).ok()?;
+		let body = text.split("---").last()?.trim().to_owned();
+		(!body.is_empty()).then_some(body)
+	};
+	read().unwrap_or_else(|| "none".to_owned())
+}
+
 /// A sidecar deaf to the EOF on its stdin, so only a signal can end it.
 fn ignores_eof() -> bool {
 	std::env::var("FAKE_AGENT_IGNORE_EOF").is_ok()
@@ -150,7 +172,7 @@ impl Run {
 			partial_messages: command["partialMessages"].as_bool().unwrap_or(false),
 			resumed: resume.is_some(),
 			session_id: resume.unwrap_or_else(|| DEFAULT_SESSION.into()),
-			instructions: command["appendSystemPrompt"].as_str().unwrap_or("none").to_owned(),
+			instructions: instructions_in_the_bundle(command),
 			cwd: as_a_child_would_see_it(command["cwd"].as_str().unwrap_or_default()),
 			announced: false,
 			pending_permission: None,

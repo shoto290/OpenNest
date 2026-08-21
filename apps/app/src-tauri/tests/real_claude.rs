@@ -11,9 +11,11 @@ use opennest_app::agent::commands::check;
 use opennest_app::agent::contract::{
 	ActivityKind, AgentEvent, ConnectionState, PermissionDecision, SessionSnapshot, TurnOutcome,
 };
-use opennest_app::agent::session::{EventSink, Session, SessionOptions};
+use opennest_app::agent::session::{Bundle, EventSink, Session, SessionOptions};
 use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions};
 use opennest_app::agent::store;
+use opennest_app::bundles;
+use opennest_app::db::repositories::conversations::{AvatarAnimal, Bot};
 use tokio::sync::mpsc;
 
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
@@ -29,7 +31,7 @@ async fn live(resume: Option<String>) -> Live {
 }
 
 /// One child, started the way the host starts one for a bot: resuming what it was
-/// given, carrying the instructions the bot was described with, in the directory the
+/// given, promoted to the agent in the bot's own plugin bundle, in the directory the
 /// bot names.
 async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBuf) -> Live {
 	let (tx, events) = mpsc::unbounded_channel();
@@ -40,10 +42,34 @@ async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBu
 	.await
 	.expect("the sidecar announces itself");
 	let options =
-		SessionOptions::new(cwd).resuming(resume).instructed(instructions.map(str::to_owned));
+		SessionOptions::new(cwd).resuming(resume).bundled(instructions.map(bundle_carrying));
 	let session =
 		Session::start(sidecar.clone(), options, sink).await.expect("session starts");
 	Live { session, sidecar, events }
+}
+
+/// The bot as a bundle on the disk, written the way the host writes one: what it
+/// was told is the body of the agent the main thread is promoted to.
+fn bundle_carrying(instructions: &str) -> Bundle {
+	let root = std::env::temp_dir().join("opennest-real-claude-bundles");
+	let bot = Bot {
+		id: "live-bot".to_owned(),
+		name: "Probe".to_owned(),
+		title: String::new(),
+		model: "sonnet".to_owned(),
+		avatar_animal: AvatarAnimal::Owl,
+		avatar_blot: None,
+		avatar_image_path: None,
+		working_dir: None,
+		instructions: instructions.to_owned(),
+		memory: String::new(),
+		created_at: 1,
+	};
+	bundles::write(&root, &bot).expect("the bundle is written");
+	Bundle {
+		path: bundles::dir(&root, &bot.id).display().to_string(),
+		agent: bundles::slug(&bot.name),
+	}
 }
 
 impl Live {

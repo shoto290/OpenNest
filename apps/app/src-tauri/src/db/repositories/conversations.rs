@@ -249,6 +249,24 @@ pub struct BotIdentity {
 	pub instructions: String,
 }
 
+/// Who the bot is, taken off the row it is on. What the row holds and nothing else:
+/// the id, the moment and the memory are not part of an identity, so a row written
+/// back through this is the same bot described the same way.
+impl From<Bot> for BotIdentity {
+	fn from(bot: Bot) -> Self {
+		Self {
+			name: bot.name,
+			title: bot.title,
+			model: bot.model,
+			avatar_animal: bot.avatar_animal,
+			avatar_blot: bot.avatar_blot,
+			avatar_image_path: bot.avatar_image_path,
+			working_dir: bot.working_dir,
+			instructions: bot.instructions,
+		}
+	}
+}
+
 pub struct ConversationsRepository {
 	access: Access,
 }
@@ -363,6 +381,31 @@ impl ConversationsRepository {
 	) -> Result<Bot, ConversationError> {
 		self.call_mut(move |connection| Ok(set_avatar_image_path(connection, &id, path.as_deref())))
 			.await?
+	}
+
+	/// What the bot's agent file says it was told, written down over what the row
+	/// held. The disk is the truth for a brief — it is what a process is really
+	/// started on — and this is the row catching up with it, so that a bundle which
+	/// later goes missing is rebuilt from the last thing that was true rather than
+	/// from a value nothing has obeyed for weeks.
+	///
+	/// Apart from the rest of the identity for the reason the picture is: this column
+	/// answers to a file, and no caller of it is describing a bot. One statement, so
+	/// no transaction — a `WHERE` that matched nothing wrote nothing, which is the
+	/// very thing the row count is read for.
+	pub async fn adopt_instructions(
+		&self,
+		id: String,
+		instructions: String,
+	) -> Result<(), ConversationError> {
+		self.call(move |connection| {
+			let written = connection.execute(
+				"UPDATE bots SET instructions = ?2 WHERE id = ?1",
+				params![&id, instructions],
+			)?;
+			Ok(refuse_if_untouched(written, &id))
+		})
+		.await?
 	}
 
 	/// The slash commands a session announced, written down against the bot it was
