@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
+	BotSkillDraft,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -67,6 +68,12 @@ type WriteCase = {
 
 const IDENTITY = botIdentity({ workingDir: "/work/opennest" })
 
+const SKILL_DRAFT: BotSkillDraft = {
+	name: "Baking",
+	description: "How to bake.",
+	body: "Bake at 220 degrees.",
+}
+
 const WRITES: WriteCase[] = [
 	{
 		member: "bots",
@@ -87,6 +94,43 @@ const WRITES: WriteCase[] = [
 		member: "deleteBot",
 		write: () => conversationStore.deleteBot("b-1"),
 		call: ["conversation_delete_bot", { id: "b-1" }],
+	},
+	{
+		member: "botSkills",
+		write: () => conversationStore.botSkills("b-1"),
+		call: ["conversation_bot_skills", { botId: "b-1" }],
+	},
+	{
+		member: "createBotSkill",
+		write: () => conversationStore.createBotSkill("b-1", SKILL_DRAFT),
+		call: [
+			"conversation_create_bot_skill",
+			{ botId: "b-1", draft: SKILL_DRAFT },
+		],
+	},
+	{
+		member: "updateBotSkill",
+		write: () => conversationStore.updateBotSkill("b-1", "baking", SKILL_DRAFT),
+		call: [
+			"conversation_update_bot_skill",
+			{ botId: "b-1", skillId: "baking", draft: SKILL_DRAFT },
+		],
+	},
+	{
+		member: "setBotSkillPreloaded",
+		write: () => conversationStore.setBotSkillPreloaded("b-1", "baking", true),
+		call: [
+			"conversation_set_bot_skill_preloaded",
+			{ botId: "b-1", skillId: "baking", isPreloaded: true },
+		],
+	},
+	{
+		member: "deleteBotSkill",
+		write: () => conversationStore.deleteBotSkill("b-1", "baking"),
+		call: [
+			"conversation_delete_bot_skill",
+			{ botId: "b-1", skillId: "baking" },
+		],
 	},
 	{
 		member: "recordBotCommands",

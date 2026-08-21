@@ -13,14 +13,14 @@
 //! is told the transcript is not being written, and why, instead of being handed a
 //! silent success it would go on appending to.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
 	Bot, BotIdentity, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage,
-	RuntimeSession, TerminalCompletion, TranscriptPage, TranscriptStoreError,
+	RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
@@ -267,6 +267,111 @@ pub async fn conversation_delete_bot<R: Runtime>(
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	attachments::sweep_referenced(database, attachment_dir.as_deref()).await;
 	Ok(())
+}
+
+/// Every skill in the bot's bundle, by the directory each lives in. A skill a hand
+/// dropped in is one of them: nothing here asks who wrote a file, and the disk is
+/// the whole record — no column holds a skill.
+///
+/// A host with nowhere to keep bundles has no skills to report, the same way it has
+/// no brief to read: an empty list rather than a refusal.
+#[tauri::command]
+pub async fn conversation_bot_skills<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+) -> Result<Vec<Skill>, TranscriptStoreError> {
+	let Some(root) = bundles::root(&app) else {
+		return Ok(Vec::new());
+	};
+	Ok(bundles::skills(&root, &bot_id).into_iter().map(Skill::from).collect())
+}
+
+/// A new skill for the bot, written at the directory its name slugs to. It is not
+/// carried into the bot's prompt until it is marked — see
+/// [`conversation_set_bot_skill_preloaded`].
+#[tauri::command]
+pub async fn conversation_create_bot_skill<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	draft: SkillDraft,
+) -> Result<Skill, TranscriptStoreError> {
+	let root = skills_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::create_skill(&root, &bot, &draft.into())).map(Skill::from)
+}
+
+/// What the skill says, replaced whole. Every frontmatter key this app does not own
+/// is left where it was: a `SKILL.md` a hand or another tool wrote is edited, never
+/// written again from a template.
+#[tauri::command]
+pub async fn conversation_update_bot_skill<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	skill_id: String,
+	draft: SkillDraft,
+) -> Result<Skill, TranscriptStoreError> {
+	let root = skills_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::update_skill(&root, &bot, &skill_id, &draft.into())).map(Skill::from)
+}
+
+/// Whether the skill's body is carried into the bot's agent file, which is the whole
+/// of how a skill reaches a promoted bot. Both marks move together — a carried skill
+/// left model-invocable is fetched again over text already in the prompt — and the
+/// agent file is rewritten, since this changes what the bot was told.
+#[tauri::command]
+pub async fn conversation_set_bot_skill_preloaded<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	skill_id: String,
+	is_preloaded: bool,
+) -> Result<Skill, TranscriptStoreError> {
+	let root = skills_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::set_skill_preloaded(&root, &bot, &skill_id, is_preloaded)).map(Skill::from)
+}
+
+/// The skill, taken away with its own directory and nothing outside it.
+#[tauri::command]
+pub async fn conversation_delete_bot_skill<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	skill_id: String,
+) -> Result<(), TranscriptStoreError> {
+	let root = skills_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::remove_skill(&root, &bot, &skill_id))
+}
+
+/// Where this install keeps bundles, for a write that has nowhere else to land. A
+/// host with no application data directory is refused rather than answered: a skill
+/// is a file in a bundle, and there is no bundle to put one in.
+fn skills_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, TranscriptStoreError> {
+	bundles::root(app).ok_or_else(|| TranscriptStoreError::UnwritableBundle {
+		detail: "there is no application data directory to keep skills in".to_owned(),
+	})
+}
+
+/// The bot a skill write is for, as the file holds it. Read for every write because
+/// changing a skill rewrites the bot's agent file, and that file is generated from
+/// the row: a bot the file no longer holds is refused before anything is written.
+async fn bot_row(database: &db::Database, bot_id: &str) -> Result<StoredBot, TranscriptStoreError> {
+	database
+		.conversations()
+		.bot(bot_id.to_owned())
+		.await?
+		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.to_owned() })
+}
+
+/// What the disk would not take, in the frontend's vocabulary. A skill id naming
+/// none of the bot's own skills lands here too: the file is not there to be written,
+/// which for a caller holding a list one gesture out of date is the same answer.
+fn bundled<T>(outcome: std::io::Result<T>) -> Result<T, TranscriptStoreError> {
+	outcome.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }
 
 /// The slash commands a session announced, kept against the bot it answered for.

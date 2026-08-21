@@ -64,6 +64,35 @@ export type BotIdentity = {
  * the host owns — the id it minted and the moment it wrote the row. */
 export type Bot = BotIdentity & { id: string; createdAt: number }
 
+/** A skill of a bot's, as the store answers it. It lives in the bot's plugin
+ * bundle and nowhere else: no row holds any of this, and a skill a hand dropped into
+ * the directory is answered beside the ones the app wrote.
+ *
+ * `id` is the directory the skill lives in — the one name two of a bot's skills
+ * cannot share, and what every write below addresses one by. `name` is free text and
+ * changing it moves nothing on the disk.
+ *
+ * `isPreloaded` is whether the body is carried into the bot's agent file, which is
+ * the whole of how a skill reaches a running bot: a skill that is not carried is
+ * text on the disk the bot may go and read, and one that is carried is already in
+ * its prompt. */
+export type BotSkill = {
+	id: string
+	name: string
+	description: string
+	body: string
+	isPreloaded: boolean
+}
+
+/** What a skill is written with, whole — both to create one and to change one. The
+ * mark is not here: it is set on its own, because it changes what the bot was told
+ * rather than what the skill says. */
+export type BotSkillDraft = {
+	name: string
+	description: string
+	body: string
+}
+
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
 /** A run just opened in a participant's lineage. `seq` is the number the lineage

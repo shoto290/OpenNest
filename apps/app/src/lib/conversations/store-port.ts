@@ -1,6 +1,8 @@
 import type {
 	Bot,
 	BotIdentity,
+	BotSkill,
+	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
 	NewAssistantMessage,
@@ -41,6 +43,32 @@ export type TranscriptStore = TranscriptPort & {
 	 * Taking a picture off a bot is not here: it is `updateBot` with no
 	 * `avatarImagePath`, which is the same write that puts an animal back. */
 	setBotAvatarImage: (id: string, bytes: Uint8Array) => Promise<Bot>
+	/** Every skill in the bot's bundle, by the directory each lives in. A skill
+	 * dropped in by hand is one of them: nothing asks who wrote a file, and a host
+	 * with nowhere to keep bundles answers none rather than refusing. */
+	botSkills: (botId: string) => Promise<BotSkill[]>
+	/** A new skill, written at a directory derived from its name — or beside it, when
+	 * something is already there, which is why the answer carries the `id` the store
+	 * chose. It is not carried into the bot's prompt until it is marked. */
+	createBotSkill: (botId: string, draft: BotSkillDraft) => Promise<BotSkill>
+	/** What the skill says, replaced whole. Every key of the file the app does not
+	 * own is left where it was: a skill a hand or another tool wrote is edited, never
+	 * written again from a template. */
+	updateBotSkill: (
+		botId: string,
+		skillId: string,
+		draft: BotSkillDraft,
+	) => Promise<BotSkill>
+	/** Whether the skill's body is carried into the bot's prompt. Its own write
+	 * rather than a field of the draft: this is what the bot was told changing, and
+	 * the bot's agent file is laid down again for it. */
+	setBotSkillPreloaded: (
+		botId: string,
+		skillId: string,
+		isPreloaded: boolean,
+	) => Promise<BotSkill>
+	/** The skill, taken away with its own directory and nothing beside it. */
+	deleteBotSkill: (botId: string, skillId: string) => Promise<void>
 	/** The slash commands a session announced, held against the bot it answered for.
 	 * Replaced whole by every announcement: a command the newest session left out is
 	 * one it would refuse, so what is kept is the last list named rather than every
