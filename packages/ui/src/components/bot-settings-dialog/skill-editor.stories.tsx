@@ -32,13 +32,10 @@ const EditorHost = (props: SkillEditorProps) => {
 				setDraft(next)
 				props.onDraftChange(next)
 			}}
-			onPreloadedChange={
-				props.onPreloadedChange &&
-				((next) => {
-					setPreloaded(next)
-					props.onPreloadedChange?.(next)
-				})
-			}
+			onPreloadedChange={(next) => {
+				setPreloaded(next)
+				props.onPreloadedChange(next)
+			}}
 		/>
 	)
 }
@@ -100,8 +97,7 @@ export const Default = meta.story({
 export const Empty = meta.story({
 	args: {
 		draft: BLANK,
-		isPreloaded: undefined,
-		onPreloadedChange: undefined,
+		isPreloaded: false,
 		onDelete: undefined,
 		onCreate: fn(),
 	},
@@ -109,7 +105,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A skill that does not exist yet. Reach for this over `Default` to review what a reader is asked for before anything is written: no preload card, because the mark is set on its own once the skill is there, and no delete, because there is nothing on the disk to take away. The button is the whole difference — a directory is made once — and it stays disabled until the skill is named.",
+					"A skill that does not exist yet. Reach for this over `Default` to review what a reader is asked for before anything is written: the same fields and the same preload card, because whether a skill travels is part of writing one rather than an afterthought, and no delete, because there is nothing on the disk to take away. The button is the whole difference — a directory is made once — and it stays disabled until the skill is named.",
 			},
 		},
 	},
@@ -126,7 +122,7 @@ export const Empty = meta.story({
 })
 
 export const WithTypedName = meta.story({
-	args: { draft: BLANK, onCreate: fn() },
+	args: { draft: BLANK, isPreloaded: false, onCreate: fn() },
 	parameters: {
 		docs: {
 			description: {

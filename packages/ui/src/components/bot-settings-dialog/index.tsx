@@ -65,7 +65,7 @@ type BotSettingsDialogProps = {
 	 * through `value`: a skill lives in the bot's bundle, not in the row the rest of
 	 * this panel edits. */
 	skills: BotSkillItem[]
-	onSkillCreate: (draft: BotSkillDraft) => void
+	onSkillCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	/** Addressed by id, never by name: renaming a skill moves nothing on the disk. */
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void

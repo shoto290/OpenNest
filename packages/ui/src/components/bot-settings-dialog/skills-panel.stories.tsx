@@ -30,9 +30,9 @@ const PanelHost = (props: SkillsPanelProps) => {
 				)
 				props.onChange(id, draft)
 			}}
-			onCreate={(draft) => {
-				setSkills([...skills, { ...draft, id: draft.name, isPreloaded: false }])
-				props.onCreate(draft)
+			onCreate={(draft, isPreloaded) => {
+				setSkills([...skills, { ...draft, id: draft.name, isPreloaded }])
+				props.onCreate(draft, isPreloaded)
 			}}
 			onDelete={(id) => {
 				setSkills(skills.filter((skill) => skill.id !== id))
@@ -137,22 +137,22 @@ export const WithNewSkill = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel mounted straight on the blank editor, which is where the add button lands. Writing a skill reports it once, with everything the reader gave, and returns to the list — the skill only appears there because the surface answered with it.",
+					"The panel mounted straight on the blank editor, which is where the add button lands. The preload card is here too: whether a skill travels in every prompt is part of writing one, not a second visit once it is on the disk. Writing it reports the draft and the mark together, once, and returns to the list — the skill only appears there because the surface answered with it, already wearing its tag.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await userEvent.type(canvas.getByLabelText("Name"), "Release checklist")
+		await userEvent.click(canvas.getByRole("switch"))
 		await userEvent.click(canvas.getByRole("button", { name: "Add skill" }))
 
-		await expect(args.onCreate).toHaveBeenCalledWith({
-			name: "release-checklist",
-			description: "",
-			body: "",
-		})
+		await expect(args.onCreate).toHaveBeenCalledWith(
+			{ name: "release-checklist", description: "", body: "" },
+			true,
+		)
 		await expect(
 			canvas.getByRole("button", { name: /release-checklist/ }),
-		).toBeVisible()
+		).toHaveTextContent("Preloaded")
 	},
 })
 

@@ -35,12 +35,23 @@ describe("skills controller", () => {
 		const store = createFakeTranscriptStore()
 		const controller = await opened(store)
 
-		controller.create(A_SKILL)
+		controller.create(A_SKILL, false)
 		await settled()
 
 		expect(await store.botSkills("default")).toMatchObject([
 			{ ...A_SKILL, isPreloaded: false },
 		])
+	})
+
+	it("creates a skill already carried, when that is what was asked for", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await opened(store)
+
+		controller.create(A_SKILL, true)
+		await settled()
+
+		expect(controller.getState().skills).toMatchObject([{ isPreloaded: true }])
+		expect((await store.botSkills("default"))[0].isPreloaded).toBe(true)
 	})
 
 	it("writes an edit to the skill it was opened on, by id", async () => {
@@ -95,7 +106,7 @@ describe("skills controller", () => {
 		const store = createFakeTranscriptStore()
 		const controller = createSkillsController(store)
 
-		controller.create(A_SKILL)
+		controller.create(A_SKILL, false)
 		await settled()
 
 		expect(await store.botSkills("default")).toEqual([])

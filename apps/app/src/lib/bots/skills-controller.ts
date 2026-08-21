@@ -18,8 +18,10 @@ export type SkillsController = {
 	 * a bundle a hand wrote into is a bundle this side never heard about. */
 	open: (botId: string) => Promise<void>
 	/** A skill, whole, at a directory the store picks. The answer carries the id it
-	 * chose, which is what every write below is addressed by. */
-	create: (draft: BotSkillDraft) => void
+	 * chose, which is what every write below is addressed by — including the mark,
+	 * which is a second write because there is no id to address it by until the
+	 * first one has answered. */
+	create: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	/** What the skill says, written as it is typed, one write at a time per skill:
 	 * the newest draft waits for the one in flight and every draft in between is
 	 * dropped, since each says the same skill less completely than the one after. */
@@ -128,10 +130,15 @@ export const createSkillsController = (
 			return enqueue(() => read(botId)).catch(() => undefined)
 		},
 
-		create: (draft: BotSkillDraft) =>
+		create: (draft: BotSkillDraft, isPreloaded: boolean) =>
 			onOpenBot(async (botId) => {
 				const created = await store.createBotSkill(botId, draft)
-				applyTo(botId, [...state.skills, created])
+				applyTo(botId, [
+					...state.skills,
+					isPreloaded
+						? await store.setBotSkillPreloaded(botId, created.id, true)
+						: created,
+				])
 			}),
 
 		describe: (skillId: string, draft: BotSkillDraft) => {

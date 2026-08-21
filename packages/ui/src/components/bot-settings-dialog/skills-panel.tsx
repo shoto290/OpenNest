@@ -15,9 +15,10 @@ const BLANK_SKILL: BotSkillDraft = { name: "", description: "", body: "" }
 
 type SkillsPanelProps = {
 	skills: BotSkillItem[]
-	/** Fired once, with everything the reader wrote. The skill only exists after the
-	 * surface answers with it, which is why nothing here is written as it is typed. */
-	onCreate: (draft: BotSkillDraft) => void
+	/** Fired once, with everything the reader wrote and whether it is to travel in
+	 * the prompt. The skill only exists after the surface answers with it, which is
+	 * why nothing here is written as it is typed. */
+	onCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	/** Fired on every keystroke, addressed by the id the editor was opened on — a
 	 * renamed skill is still the same directory. */
 	onChange: (id: string, draft: BotSkillDraft) => void
@@ -60,24 +61,32 @@ const SkillsPanel = ({
 	const [draft, setDraft] = useState<BotSkillDraft | null>(
 		defaultAdding ? BLANK_SKILL : null,
 	)
+	// The mark of the skill being written. A skill that already exists reads its own
+	// off the bundle — this is only ever the answer for one that does not yet.
+	const [isPreloaded, setPreloaded] = useState(false)
 
 	const close = () => {
 		setDraft(null)
 		setOpenId(null)
 	}
 
-	const add = () => setDraft(BLANK_SKILL)
+	const add = () => {
+		setDraft(BLANK_SKILL)
+		setPreloaded(false)
+	}
 
 	if (draft) {
 		return (
 			<SkillEditor
 				draft={draft}
+				isPreloaded={isPreloaded}
 				onBack={close}
 				onCreate={() => {
-					onCreate(draft)
+					onCreate(draft, isPreloaded)
 					close()
 				}}
 				onDraftChange={setDraft}
+				onPreloadedChange={setPreloaded}
 			/>
 		)
 	}

@@ -20,10 +20,11 @@ type SkillEditorProps = {
 	onDraftChange: (draft: BotSkillDraft) => void
 	/** Back to the list the editor was opened from. */
 	onBack: () => void
-	/** Whether the body travels in the bot's prompt. Left out for a skill that does
-	 * not exist yet: the mark is written on its own, after the skill is there. */
-	isPreloaded?: boolean
-	onPreloadedChange?: (isPreloaded: boolean) => void
+	/** Whether the body travels in the bot's prompt. Asked for on a skill that does
+	 * not exist yet as well: what it costs is worth knowing while it is being
+	 * written, not once it is already on the disk. */
+	isPreloaded: boolean
+	onPreloadedChange: (isPreloaded: boolean) => void
 	/** Fired only once the confirmation is accepted. Left out for a skill that does
 	 * not exist yet — there is nothing on the disk to take away. */
 	onDelete?: () => void
@@ -40,9 +41,11 @@ type SkillEditorProps = {
  *
  * The mark comes before the body and wears a card of its own, because it is the one
  * field here that costs something on every turn — the sentence beside it is what
- * says so, and the switch is described by it rather than only labelled. The body
- * takes whatever height is left, the way the instructions field does: a skill is
- * markdown somebody writes, and a four-line box is not where that happens.
+ * says so, and the switch is described by it rather than only labelled. It is asked
+ * for while a skill is being written as much as after: whether it travels is part of
+ * writing one. The body takes whatever height is left, the way the instructions
+ * field does: a skill is markdown somebody writes, and a four-line box is not where
+ * that happens.
  *
  * A skill that already exists is written as it is typed. One that does not yet
  * carries a button instead, because a directory is only made once.
@@ -106,27 +109,25 @@ const SkillEditor = ({
 				value={draft.description}
 			/>
 
-			{onPreloadedChange ? (
-				<div className="flex shrink-0 items-start justify-between gap-4 rounded-xl border border-border bg-muted/40 p-3">
-					<div className="flex min-w-0 flex-col gap-1">
-						<label className={FIELD_LABEL_CLASS} htmlFor={preloadId}>
-							{t("skills.preloaded.label")}
-						</label>
-						<p
-							className="text-muted-foreground text-xs leading-relaxed"
-							id={`${preloadId}-hint`}
-						>
-							{t("skills.preloaded.description")}
-						</p>
-					</div>
-					<Switch
-						aria-describedby={`${preloadId}-hint`}
-						checked={isPreloaded ?? false}
-						id={preloadId}
-						onCheckedChange={onPreloadedChange}
-					/>
+			<div className="flex shrink-0 items-start justify-between gap-4 rounded-xl border border-border bg-muted/40 p-3">
+				<div className="flex min-w-0 flex-col gap-1">
+					<label className={FIELD_LABEL_CLASS} htmlFor={preloadId}>
+						{t("skills.preloaded.label")}
+					</label>
+					<p
+						className="text-muted-foreground text-xs leading-relaxed"
+						id={`${preloadId}-hint`}
+					>
+						{t("skills.preloaded.description")}
+					</p>
 				</div>
-			) : null}
+				<Switch
+					aria-describedby={`${preloadId}-hint`}
+					checked={isPreloaded}
+					id={preloadId}
+					onCheckedChange={onPreloadedChange}
+				/>
+			</div>
 
 			<SettingsField
 				fill
