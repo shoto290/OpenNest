@@ -13,9 +13,12 @@ import type {
 	BotIdentity,
 	BotModelOption,
 	BotSettingsValue,
+	BotSkillDraft,
+	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
+import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
@@ -58,6 +61,15 @@ type BotSettingsDialogProps = {
 	onAvatarUpload: (file: File) => void
 	/** Opens the host's folder picker. */
 	onBrowseWorkingDirectory: () => void
+	/** Every skill the bot carries. Read and written on its own tab rather than
+	 * through `value`: a skill lives in the bot's bundle, not in the row the rest of
+	 * this panel edits. */
+	skills: BotSkillItem[]
+	onSkillCreate: (draft: BotSkillDraft) => void
+	/** Addressed by id, never by name: renaming a skill moves nothing on the disk. */
+	onSkillChange: (id: string, draft: BotSkillDraft) => void
+	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
+	onSkillDelete: (id: string) => void
 	/** The edited bot's id. It is what its blot's shape is derived from, so the
 	 * breadcrumb shows the mark the roster row behind it is already showing. */
 	seed?: string
@@ -93,6 +105,11 @@ const BotSettingsDialog = ({
 	models,
 	onAvatarUpload,
 	onBrowseWorkingDirectory,
+	skills,
+	onSkillCreate,
+	onSkillChange,
+	onSkillPreloadedChange,
+	onSkillDelete,
 	seed,
 	onDelete,
 	showDanger,
@@ -164,6 +181,12 @@ const BotSettingsDialog = ({
 							value="instructions"
 						/>
 						<SettingsRailItem
+							icon={Icons.Skill}
+							iconsOnly={iconsOnly}
+							label={t("dialog.tab.skills")}
+							value="skills"
+						/>
+						<SettingsRailItem
 							icon={Icons.Terminal}
 							iconsOnly={iconsOnly}
 							label={t("dialog.tab.runtime")}
@@ -221,6 +244,16 @@ const BotSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
+					<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
+						<SkillsPanel
+							onChange={onSkillChange}
+							onCreate={onSkillCreate}
+							onDelete={onSkillDelete}
+							onPreloadedChange={onSkillPreloadedChange}
+							skills={skills}
+						/>
+					</Tabs.Panel>
+
 					<Tabs.Panel
 						className={SETTINGS_SCROLLING_PANEL_CLASS}
 						value="runtime"
@@ -251,4 +284,6 @@ export {
 	BotSettingsDialog,
 	type BotSettingsDialogProps,
 	type BotSettingsValue,
+	type BotSkillDraft,
+	type BotSkillItem,
 }

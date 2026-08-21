@@ -16,6 +16,7 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
+import { useBotSkills } from "@/lib/bots/use-bot-skills"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
@@ -54,6 +55,7 @@ export function App() {
 		[chat.controller],
 	)
 	const roster = useRoster(store)
+	const skills = useBotSkills(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const theme = useTheme()
@@ -77,6 +79,15 @@ export function App() {
 	useEffect(() => {
 		void user.controller.load()
 	}, [user.controller])
+
+	// The skills follow the selection for the reason the conversation does: they live
+	// in the selected bot's own bundle, so the panel opens on what that bot carries
+	// rather than on what the bot before it did.
+	useEffect(() => {
+		if (selectedBotId) {
+			void skills.controller.open(selectedBotId)
+		}
+	}, [skills.controller, selectedBotId])
 
 	// The conversation follows the selection: opening a bot paints its transcript and
 	// puts a process of its own behind it. Coming back to one that is already
@@ -242,8 +253,13 @@ export function App() {
 							chat.controller.redescribe(selected.id)
 						}
 					}}
+					onSkillChange={skills.controller.describe}
+					onSkillCreate={skills.controller.create}
+					onSkillDelete={skills.controller.remove}
+					onSkillPreloadedChange={skills.controller.setPreloaded}
 					open={isEditing}
 					seed={selected.id}
+					skills={skills.state.skills}
 					showDanger={isShowingDanger}
 					value={toSettingsValue(selected)}
 					working={activity?.isWorking ?? false}
