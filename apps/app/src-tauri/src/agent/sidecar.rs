@@ -51,6 +51,11 @@ const CATALOGUE_TIMEOUT: Duration = Duration::from_secs(60);
 pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
 const TERMINATE_GRACE: Duration = Duration::from_millis(500);
 
+/// `CREATE_NO_WINDOW`. The host is a windows-subsystem binary with no console to
+/// hand down, so Windows would open a visible one for a console-subsystem child.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// What one sidecar process is started as. The ambient environment is inherited
 /// untouched so the agent can reach its own credential store.
 #[derive(Debug, Clone)]
@@ -448,6 +453,9 @@ fn spawn(options: &SidecarOptions) -> Result<Child, TransportError> {
 
 	#[cfg(unix)]
 	command.process_group(0);
+
+	#[cfg(windows)]
+	command.creation_flags(CREATE_NO_WINDOW);
 
 	command.spawn().map_err(|error| TransportError::SpawnFailed { detail: error.to_string() })
 }
