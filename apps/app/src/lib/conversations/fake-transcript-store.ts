@@ -394,7 +394,7 @@ export const createFakeTranscriptStore = (
 		 * map, and none at all for a bot nobody has written one for. */
 		botMcpServers: (botId: string): Promise<BotMcpServer[]> =>
 			Promise.resolve(
-				[...(servers.get(botId) ?? new Map())]
+				[...(servers.get(botId)?.entries() ?? [])]
 					.map(([name, config]) => ({ name, config }))
 					.sort((left, right) => left.name.localeCompare(right.name)),
 			),

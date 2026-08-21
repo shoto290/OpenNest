@@ -411,8 +411,12 @@ fn manifest(path: &Path, bundle: &Path, bot: &Bot) -> String {
 /// and nothing about a server is a reason to rewrite a brief.
 fn rewrite_manifest(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let bundle = dir(root, &bot.id);
-	let path = bundle.join(MANIFEST_DIR).join(MANIFEST_NAME);
+	let path = manifest_file(&bundle);
 	private_files::replace(&path, manifest(&path, &bundle, bot).as_bytes())
+}
+
+fn manifest_file(bundle: &Path) -> PathBuf {
+	bundle.join(MANIFEST_DIR).join(MANIFEST_NAME)
 }
 
 /// The manifest's pointer at the bundle's own server file, added while that file is
@@ -428,14 +432,19 @@ fn declare_servers(kept: &mut serde_json::Map<String, serde_json::Value>, bundle
 	}
 }
 
-/// This module's own pointer taken back out, for the write that took away the file it
-/// pointed at. A manifest left aimed at a file that is not there is a bundle that
-/// fails to load, and it is the one key this module removes at all.
+/// This module's own pointer taken back out once the file it pointed at has gone. A
+/// manifest left aimed at a file that is not there is a bundle that fails to load,
+/// and it is the one key this module removes at all.
 ///
-/// A value the reader wrote themselves is left exactly where it is — it may be aimed
-/// at something this module knows nothing about.
+/// Nothing happens while the file is still there, and a value the reader wrote
+/// themselves is left exactly where it is — it may be aimed at something this module
+/// knows nothing about.
 fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	let path = dir(root, &bot.id).join(MANIFEST_DIR).join(MANIFEST_NAME);
+	let bundle = dir(root, &bot.id);
+	if bundle.join(MCP_NAME).is_file() {
+		return Ok(());
+	}
+	let path = manifest_file(&bundle);
 	let mut kept = object_at(&path);
 	if kept.get(SERVERS_KEY).and_then(serde_json::Value::as_str) != Some(MCP_SOURCE) {
 		return Ok(());
@@ -611,6 +620,10 @@ pub fn mcp_servers(root: &Path, bot_id: &str) -> Vec<McpServer> {
 /// The refusal says what was wrong with the shape and never what was offered — a
 /// configuration is a command to run and an environment that often holds a token,
 /// and neither belongs in a message that travels.
+///
+/// The answer is the write rather than a read back off the disk, unlike
+/// [`written_skill`]: a skill goes into frontmatter this module has to spell and read
+/// again, and a configuration goes into the file as the JSON value it already is.
 pub fn set_mcp_server(
 	root: &Path,
 	bot: &Bot,
@@ -628,12 +641,7 @@ pub fn set_mcp_server(
 	servers.insert(name.to_owned(), config.clone());
 	write_servers(&path, servers)?;
 	rewrite_manifest(root, bot)?;
-	mcp_servers(root, &bot.id)
-		.into_iter()
-		.find(|server| server.name == name)
-		.ok_or_else(|| {
-			std::io::Error::new(std::io::ErrorKind::NotFound, "the server was not written")
-		})
+	Ok(McpServer { name: name.to_owned(), config: config.clone() })
 }
 
 /// The server taken out of the file, and the rest of it left as it was. A name the
@@ -647,9 +655,6 @@ pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<
 	}
 	write_servers(&path, servers)?;
 	rewrite_manifest(root, bot)?;
-	if path.is_file() {
-		return Ok(());
-	}
 	undeclare_servers(root, bot)
 }
 

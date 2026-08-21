@@ -297,7 +297,7 @@ pub async fn conversation_create_bot_skill<R: Runtime>(
 	bot_id: String,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::create_skill(&root, &bot, &draft.into())).map(Skill::from)
 }
@@ -313,7 +313,7 @@ pub async fn conversation_update_bot_skill<R: Runtime>(
 	skill_id: String,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::update_skill(&root, &bot, &skill_id, &draft.into())).map(Skill::from)
 }
@@ -330,7 +330,7 @@ pub async fn conversation_set_bot_skill_preloaded<R: Runtime>(
 	skill_id: String,
 	is_preloaded: bool,
 ) -> Result<Skill, TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::set_skill_preloaded(&root, &bot, &skill_id, is_preloaded)).map(Skill::from)
 }
@@ -343,7 +343,7 @@ pub async fn conversation_delete_bot_skill<R: Runtime>(
 	bot_id: String,
 	skill_id: String,
 ) -> Result<(), TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::remove_skill(&root, &bot, &skill_id))
 }
@@ -377,7 +377,7 @@ pub async fn conversation_set_bot_mcp_server<R: Runtime>(
 	name: String,
 	config: serde_json::Value,
 ) -> Result<McpServer, TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::set_mcp_server(&root, &bot, &name, &config)).map(McpServer::from)
 }
@@ -391,23 +391,23 @@ pub async fn conversation_delete_bot_mcp_server<R: Runtime>(
 	bot_id: String,
 	name: String,
 ) -> Result<(), TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::remove_mcp_server(&root, &bot, &name))
 }
 
 /// Where this install keeps bundles, for a write that has nowhere else to land. A
 /// host with no application data directory is refused rather than answered: a skill
-/// is a file in a bundle, and there is no bundle to put one in.
-fn skills_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, TranscriptStoreError> {
+/// and a server are both files in a bundle, and there is no bundle to put one in.
+fn writable_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, TranscriptStoreError> {
 	bundles::root(app).ok_or_else(|| TranscriptStoreError::UnwritableBundle {
-		detail: "there is no application data directory to keep skills in".to_owned(),
+		detail: "there is no application data directory to keep bundles in".to_owned(),
 	})
 }
 
-/// The bot a skill write is for, as the file holds it. Read for every write because
-/// changing a skill rewrites the bot's agent file, and that file is generated from
-/// the row: a bot the file no longer holds is refused before anything is written.
+/// The bot a bundle write is for, as the file holds it. Read for every write because
+/// the files it lays down are generated from the row: a bot the file no longer holds
+/// is refused before anything is written.
 async fn bot_row(database: &db::Database, bot_id: &str) -> Result<StoredBot, TranscriptStoreError> {
 	database
 		.conversations()
@@ -416,9 +416,11 @@ async fn bot_row(database: &db::Database, bot_id: &str) -> Result<StoredBot, Tra
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.to_owned() })
 }
 
-/// What the disk would not take, in the frontend's vocabulary. A skill id naming
-/// none of the bot's own skills lands here too: the file is not there to be written,
-/// which for a caller holding a list one gesture out of date is the same answer.
+/// What the disk would not take, in the frontend's vocabulary. A name none of the
+/// bot's own skills or servers answers to lands here too: the file is not there to be
+/// written, which for a caller holding a list one gesture out of date is the same
+/// answer. So does a server configuration the bundle refused, which is a caller's to
+/// fix by offering another shape.
 fn bundled<T>(outcome: std::io::Result<T>) -> Result<T, TranscriptStoreError> {
 	outcome.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }
