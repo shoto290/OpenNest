@@ -134,7 +134,7 @@ describe("createRosterController", () => {
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
 
-	it("creates a bot immediately, selects it and opens its settings on it", async () => {
+	it("creates a bot immediately, selects it and leaves the settings closed", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
 
@@ -143,10 +143,10 @@ describe("createRosterController", () => {
 		const state = controller.getState()
 		expect(state.bots).toHaveLength(2)
 		expect(state.selectedBotId).toBe(state.bots[1].id)
-		expect(state.isEditing).toBe(true)
+		expect(state.isEditing).toBe(false)
 		expect(BOT_NAMES).toContain(state.bots[1].name)
-		// It is on the record before the panel opens on it, which is what "the bot
-		// exists and then you name it" means.
+		// It is on the record and named before anybody describes it, which is what
+		// "the bot exists and then you name it" means.
 		expect((await reloaded(store)).bots).toHaveLength(2)
 	})
 

@@ -47,8 +47,9 @@ export type RosterController = {
 	 * no roster at all. */
 	load: () => Promise<void>
 	select: (id: string) => void
-	/** A bot, immediately, with its settings open on it. There is no dialog to fill
-	 * in first: the bot exists and is then described. */
+	/** A bot, immediately, with the conversation open on it. There is no dialog to
+	 * fill in first and none opens after: the bot exists and can be talked to, and the
+	 * gear is there for whoever wants to describe it. */
 	create: () => Promise<void>
 	edit: (id: string) => void
 	setEditing: (isEditing: boolean) => void
@@ -226,7 +227,6 @@ export const createRosterController = (
 				set({
 					bots: [...state.bots, created],
 					selectedBotId: created.id,
-					isEditing: true,
 					isShowingDanger: false,
 				})
 			}).catch(reload),
