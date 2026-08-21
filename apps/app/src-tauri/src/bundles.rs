@@ -1186,8 +1186,7 @@ mod tests {
 		bot.model = "  ".to_owned();
 		write(&root, &bot).expect("the bundle is written");
 
-		let written = fs::read_to_string(agent_file(&root, &bot.id).expect("the agent is there"))
-			.expect("the agent file reads");
+		let written = written_agent(&root, &bot.id);
 		for line in written.lines() {
 			assert!(!line.starts_with("model:"), "got {written}");
 		}
@@ -1208,8 +1207,7 @@ mod tests {
 		bot.changes_nothing = true;
 		write(&root, &bot).expect("the bundle is written");
 
-		let written = fs::read_to_string(agent_file(&root, &bot.id).expect("the agent is there"))
-			.expect("the agent file reads");
+		let written = written_agent(&root, &bot.id);
 		for tool in DENIED_TOOLS {
 			assert!(written.contains(&format!("\"{tool}\"")), "got {written}");
 		}
@@ -1229,8 +1227,7 @@ mod tests {
 
 		bot.changes_nothing = false;
 		write(&root, &bot).expect("the bundle is rewritten");
-		let written = fs::read_to_string(agent_file(&root, &bot.id).expect("the agent is there"))
-			.expect("the agent file reads");
+		let written = written_agent(&root, &bot.id);
 		for line in written.lines() {
 			assert!(!line.starts_with(DISALLOWED_KEY), "got {written}");
 		}

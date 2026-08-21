@@ -11,7 +11,7 @@ import {
 	FIELD_LABEL_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
-import { Switch } from "@workspace/ui/components/switch"
+import { SettingsSwitch } from "@workspace/ui/components/settings-switch"
 import { cn } from "@workspace/ui/lib/utils"
 
 type RuntimeFieldsProps = {
@@ -42,7 +42,6 @@ const RuntimeFields = ({
 }: RuntimeFieldsProps) => {
 	const { t } = useTranslation("bots")
 	const directoryId = useId()
-	const denialId = useId()
 
 	return (
 		<>
@@ -136,25 +135,12 @@ const RuntimeFields = ({
 				</button>
 			</div>
 
-			<div className="flex shrink-0 items-start justify-between gap-4 rounded-xl border border-border bg-muted/40 p-3">
-				<div className="flex min-w-0 flex-col gap-1">
-					<label className={FIELD_LABEL_CLASS} htmlFor={denialId}>
-						{t("runtime.changesNothing.label")}
-					</label>
-					<p
-						className="text-muted-foreground text-xs leading-relaxed"
-						id={`${denialId}-hint`}
-					>
-						{t("runtime.changesNothing.description")}
-					</p>
-				</div>
-				<Switch
-					aria-describedby={`${denialId}-hint`}
-					checked={changesNothing}
-					id={denialId}
-					onCheckedChange={onChangesNothingChange}
-				/>
-			</div>
+			<SettingsSwitch
+				checked={changesNothing}
+				description={t("runtime.changesNothing.description")}
+				label={t("runtime.changesNothing.label")}
+				onCheckedChange={onChangesNothingChange}
+			/>
 		</>
 	)
 }

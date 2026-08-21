@@ -1,6 +1,5 @@
 "use client"
 
-import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -11,8 +10,7 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
-import { FIELD_LABEL_CLASS } from "@workspace/ui/components/settings-styles"
-import { Switch } from "@workspace/ui/components/switch"
+import { SettingsSwitch } from "@workspace/ui/components/settings-switch"
 
 type SkillEditorProps = {
 	draft: BotSkillDraft
@@ -61,7 +59,6 @@ const SkillEditor = ({
 	defaultConfirming,
 }: SkillEditorProps) => {
 	const { t } = useTranslation("bots")
-	const preloadId = useId()
 	const name = draft.name.trim() || t("skills.untitled")
 
 	const patch = (fields: Partial<BotSkillDraft>) =>
@@ -109,25 +106,12 @@ const SkillEditor = ({
 				value={draft.description}
 			/>
 
-			<div className="flex shrink-0 items-start justify-between gap-4 rounded-xl border border-border bg-muted/40 p-3">
-				<div className="flex min-w-0 flex-col gap-1">
-					<label className={FIELD_LABEL_CLASS} htmlFor={preloadId}>
-						{t("skills.preloaded.label")}
-					</label>
-					<p
-						className="text-muted-foreground text-xs leading-relaxed"
-						id={`${preloadId}-hint`}
-					>
-						{t("skills.preloaded.description")}
-					</p>
-				</div>
-				<Switch
-					aria-describedby={`${preloadId}-hint`}
-					checked={isPreloaded}
-					id={preloadId}
-					onCheckedChange={onPreloadedChange}
-				/>
-			</div>
+			<SettingsSwitch
+				checked={isPreloaded}
+				description={t("skills.preloaded.description")}
+				label={t("skills.preloaded.label")}
+				onCheckedChange={onPreloadedChange}
+			/>
 
 			<SettingsField
 				fill
