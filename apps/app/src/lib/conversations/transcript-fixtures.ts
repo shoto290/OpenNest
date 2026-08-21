@@ -28,7 +28,7 @@ export const botIdentity = (
 	title: "Reviewer",
 	model: "opus",
 	avatarAnimal: "owl",
-	avatarBlot: "moss",
+	avatarBlot: "green",
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "Answer with the file you would touch.",

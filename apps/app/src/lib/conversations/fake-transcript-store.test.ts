@@ -154,14 +154,14 @@ describe("createFakeTranscriptStore", () => {
 
 		const updated = await store.updateBot(
 			created.id,
-			botIdentity({ name: "Ada", model: "haiku", avatarBlot: "slate" }),
+			botIdentity({ name: "Ada", model: "haiku", avatarBlot: "orange" }),
 		)
 
 		expect(updated.id).toBe(created.id)
 		expect(updated.createdAt).toBe(created.createdAt)
 		expect(updated.name).toBe("Ada")
 		expect(updated.model).toBe("haiku")
-		expect(updated.avatarBlot).toBe("slate")
+		expect(updated.avatarBlot).toBe("orange")
 	})
 
 	it("refuses a write on a bot it no longer holds", async () => {

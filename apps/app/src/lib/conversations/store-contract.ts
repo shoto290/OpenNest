@@ -19,18 +19,24 @@ export type AvatarAnimal =
 	| "owl"
 	| "koala"
 
-/** The eight tints a bot may be marked with. `null` is a bot marked with none,
- * which is what a bot is until someone marks it — the host holds the same eight and
- * the same absence, so "no mark" never has to be spelled as a ninth word. */
+/** The eight tints a bot may be marked with, named with the vocabulary an agent
+ * file's `color` key reads. One name for one thing: the tint a bot is stored under
+ * is the word written into its bundle and the word read back out of it, so no
+ * translation stands between them to lose one on the way. The ink is unchanged —
+ * `purple` is drawn as the lavender it always was.
+ *
+ * `null` is a bot marked with none, which is what a bot is until someone marks it —
+ * the host holds the same eight and the same absence, so "no mark" never has to be
+ * spelled as a ninth word. */
 export type AvatarBlot =
-	| "coral"
-	| "amber"
-	| "moss"
-	| "water"
-	| "sky"
-	| "lavender"
-	| "rose"
-	| "slate"
+	| "red"
+	| "yellow"
+	| "green"
+	| "cyan"
+	| "blue"
+	| "purple"
+	| "pink"
+	| "orange"
 
 /** Who a bot is, as the store is told it — whole, both to create one and to
  * change one. No `id` or `createdAt`: neither is a caller's to choose.

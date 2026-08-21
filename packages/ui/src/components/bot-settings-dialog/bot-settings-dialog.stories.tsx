@@ -34,7 +34,7 @@ const MODELS: BotModelOption[] = [
 ]
 
 const FILLED_BOT: BotSettingsValue = {
-	identity: { animal: "owl", blot: "sky" },
+	identity: { animal: "owl", blot: "blue" },
 	name: "Nest Keeper",
 	title: "Repository archivist",
 	instructions:

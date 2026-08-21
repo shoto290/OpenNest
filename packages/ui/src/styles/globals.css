@@ -10,14 +10,14 @@
 [data-theme="amber"] {
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.141 0.005 285.823);
-	--bot-blot-coral: #f4a98c;
-	--bot-blot-amber: #f2c879;
-	--bot-blot-moss: #afc99b;
-	--bot-blot-water: #92c9c2;
-	--bot-blot-sky: #a0bee8;
-	--bot-blot-lavender: #bcafe3;
-	--bot-blot-rose: #f0a9c0;
-	--bot-blot-slate: #c6cad0;
+	--bot-blot-red: #f4a98c;
+	--bot-blot-yellow: #f2c879;
+	--bot-blot-green: #afc99b;
+	--bot-blot-cyan: #92c9c2;
+	--bot-blot-blue: #a0bee8;
+	--bot-blot-purple: #bcafe3;
+	--bot-blot-pink: #f0a9c0;
+	--bot-blot-orange: #c6cad0;
 	--bot-blot-ink: oklch(0.08 0 0);
 	--bot-avatar-ink: var(--bot-blot-ink);
 	--diagram-scheme: light;

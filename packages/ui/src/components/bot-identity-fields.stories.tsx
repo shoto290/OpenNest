@@ -18,7 +18,7 @@ import type { BotIdentity } from "@workspace/ui/components/bot-settings"
  * its blot is derived from, and the only thing in here a reader cannot change. */
 const BOT_ID = "bot-7"
 
-const IDENTITY: BotIdentity = { animal: "owl", blot: "sky" }
+const IDENTITY: BotIdentity = { animal: "owl", blot: "blue" }
 
 /** The block keeps no draft, so a story has to hold the identity it edits. */
 const FieldsHost = (props: BotIdentityFieldsProps) => {
@@ -90,13 +90,13 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal case: a bot that already picked an owl and a sky blot. Reach for it to check that the preview, both grids and the picture zone stand at once with nothing to open first, that the two current choices are the checked ones, and that Tab walks the block in reading order.",
+					"The nominal case: a bot that already picked an owl and a blue blot. Reach for it to check that the preview, both grids and the picture zone stand at once with nothing to open first, that the two current choices are the checked ones, and that Tab walks the block in reading order.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("radio", { name: "Owl" })).toBeChecked()
-		await expect(canvas.getByRole("radio", { name: "Sky" })).toBeChecked()
+		await expect(canvas.getByRole("radio", { name: "Blue" })).toBeChecked()
 		await expect(canvas.getAllByRole("radio")).toHaveLength(17)
 		await expect(
 			canvas.getByRole("button", { name: /Drag, drop or paste an image/ }),
@@ -120,7 +120,7 @@ export const PicksAnAnimal = meta.story({
 
 		await expect(args.onIdentityChange).toHaveBeenCalledWith({
 			animal: "bear",
-			blot: "sky",
+			blot: "blue",
 		})
 		await expect(canvas.getByRole("radio", { name: "Bear" })).toBeChecked()
 	},
@@ -136,13 +136,13 @@ export const PicksABlot = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.click(canvas.getByRole("radio", { name: "Coral" }))
+		await userEvent.click(canvas.getByRole("radio", { name: "Red" }))
 
 		await expect(args.onIdentityChange).toHaveBeenCalledWith({
 			animal: "owl",
-			blot: "coral",
+			blot: "red",
 		})
-		await expect(canvas.getByRole("radio", { name: "Coral" })).toBeChecked()
+		await expect(canvas.getByRole("radio", { name: "Red" })).toBeChecked()
 	},
 })
 

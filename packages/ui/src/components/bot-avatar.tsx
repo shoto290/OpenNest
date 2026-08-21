@@ -64,17 +64,20 @@ const ROLE_PROPS = {
 
 const HEAD_MASK_BOUNDS = { x: -240, y: -240, width: 720, height: 720 } as const
 
-/** The eight tints a bot can be marked with. Light ones only: the ink line and the
- * ear accent are near-black, and they stop reading over anything darker. */
+/** The eight tints a bot can be marked with, named with the vocabulary an agent
+ * file's `color` key reads. The names are the agent format's; the ink is this
+ * system's own, and unchanged by them — `purple` is the lavender it always was, and
+ * `orange` the grey-blue. Light ones only: the ink line and the ear accent are
+ * near-black, and they stop reading over anything darker. */
 const BLOT_TINTS = [
-	"coral",
-	"amber",
-	"moss",
-	"water",
-	"sky",
-	"lavender",
-	"rose",
-	"slate",
+	"red",
+	"yellow",
+	"green",
+	"cyan",
+	"blue",
+	"purple",
+	"pink",
+	"orange",
 ] as const
 
 type BotAvatarBlot = (typeof BLOT_TINTS)[number]
