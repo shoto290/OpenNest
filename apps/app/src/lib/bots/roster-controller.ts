@@ -3,6 +3,7 @@ import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
 import { newBotIdentity, toIdentity } from "./bot-settings"
 
 import { createQueue } from "../queue"
+import { createWriteLoop } from "../write-loop"
 import type { Bot } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { type LastWord, lastWordIn } from "../conversations/transcript-state"
@@ -90,12 +91,6 @@ export const createRosterController = (
 	 * host happened to answer. */
 	const enqueue = createQueue()
 
-	/** The bots a write loop is running for, and the newest value waiting behind each
-	 * one. Typing is faster than a round trip: only the last value of a burst is
-	 * worth writing, and the ones before it describe the same bot on the way there. */
-	const writing = new Set<string>()
-	const pending = new Map<string, BotSettingsValue>()
-
 	const publish = () => {
 		for (const listener of listeners) {
 			listener()
@@ -175,26 +170,20 @@ export const createRosterController = (
 		set({ previews })
 	}
 
-	/** The value that is still waiting, and then whatever arrived while it was being
-	 * written. The store's answer is only applied once nothing is queued behind it:
-	 * an answer to a value the reader has already typed past would rewind the field
-	 * they are in. */
-	const flush = async (id: string): Promise<void> => {
-		const value = pending.get(id)
-		if (!value) {
-			return
-		}
-		pending.delete(id)
-		const bot = held(id)
-		if (!bot) {
-			return
-		}
-		const written = await store.updateBot(id, toIdentity(value, bot))
-		if (!pending.has(id)) {
-			apply(written)
-		}
-		return flush(id)
-	}
+	/** Every keystroke reaches the panel at once and the store once a burst is over.
+	 * A bot the record no longer holds is written nothing: what a reader typed into
+	 * a row that was deleted under them has nowhere to land. */
+	const writes = createWriteLoop<BotSettingsValue, Bot>({
+		enqueue,
+		write: (id, value) => {
+			const bot = held(id)
+			return bot
+				? store.updateBot(id, toIdentity(value, bot))
+				: Promise.resolve(null)
+		},
+		apply: (_id, written) => apply(written),
+		onRefused: reload,
+	})
 
 	return {
 		getState: () => state,
@@ -245,16 +234,7 @@ export const createRosterController = (
 
 		describe: (id: string, value: BotSettingsValue) => {
 			preview(id, value)
-			pending.set(id, value)
-			if (writing.has(id)) {
-				return
-			}
-			writing.add(id)
-			void enqueue(() => flush(id))
-				.catch(reload)
-				.finally(() => {
-					writing.delete(id)
-				})
+			writes.push(id, value)
 		},
 
 		uploadAvatar: (id: string, file: File) =>
@@ -269,7 +249,7 @@ export const createRosterController = (
 		remove: (id: string) =>
 			enqueue(async () => {
 				await store.deleteBot(id)
-				pending.delete(id)
+				writes.drop(id)
 				const bots = state.bots.filter((bot) => bot.id !== id)
 				const { [id]: _deleted, ...previews } = state.previews
 				set({

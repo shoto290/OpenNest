@@ -20,6 +20,7 @@ import {
 	type BotSettingsDialogProps,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-dialog"
+import { BOT_SKILLS } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 
 /** The id the store minted for the bot this dialog edits. It is what the shape of
  * its blot is derived from, and the only thing in here a reader cannot change. */
@@ -134,6 +135,11 @@ const meta = preview.meta({
 		onAvatarUpload: fn(),
 		onBrowseWorkingDirectory: fn(),
 		onDelete: fn(),
+		skills: BOT_SKILLS,
+		onSkillCreate: fn(),
+		onSkillChange: fn(),
+		onSkillPreloadedChange: fn(),
+		onSkillDelete: fn(),
 	},
 	argTypes: {
 		working: { control: "boolean" },
@@ -186,6 +192,7 @@ export const Rail = meta.story({
 			"General",
 			"Appearance",
 			"Instructions",
+			"Skills",
 			"Runtime",
 			"Danger zone",
 		])

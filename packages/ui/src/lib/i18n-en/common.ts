@@ -9,6 +9,9 @@ const common = {
 	dialog: {
 		close: "Close",
 	},
+	confirm: {
+		cancel: "Cancel",
+	},
 	dropzone: {
 		drop: "Drag, drop or paste an image",
 		browse: "or click to choose a file",

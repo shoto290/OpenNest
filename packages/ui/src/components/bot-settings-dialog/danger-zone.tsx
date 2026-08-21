@@ -1,15 +1,10 @@
 "use client"
 
-import { AlertDialog } from "@base-ui/react/alert-dialog"
 import { useTranslation } from "react-i18next"
 
 import { buttonVariants } from "@workspace/ui/components/button"
+import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
-import {
-	BACKDROP_CLASS,
-	DIALOG_POPUP_CLASS,
-} from "@workspace/ui/components/settings-styles"
-import { cn } from "@workspace/ui/lib/utils"
 
 type DangerZoneProps = {
 	/** Named in the question, so a reader who opened the wrong bot's settings sees
@@ -40,48 +35,23 @@ const DangerZone = ({
 					{t("danger.description")}
 				</p>
 			</div>
-			<AlertDialog.Root defaultOpen={defaultConfirming}>
-				<AlertDialog.Trigger
-					className={buttonVariants({ variant: "destructive", size: "sm" })}
-				>
-					<Icons.Delete aria-hidden="true" className="size-3.5" />
-					{t("danger.delete")}
-				</AlertDialog.Trigger>
-				<AlertDialog.Portal>
-					<AlertDialog.Backdrop className={BACKDROP_CLASS} />
-					<AlertDialog.Popup
-						className={cn(
-							DIALOG_POPUP_CLASS,
-							"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex w-88 max-w-[calc(100vw-3rem)] flex-col gap-4 rounded-2xl p-5",
-						)}
-					>
-						<div className="flex flex-col gap-1">
-							<AlertDialog.Title className="font-medium text-base">
-								{t("danger.confirm.title", { name: botName })}
-							</AlertDialog.Title>
-							<AlertDialog.Description className="text-muted-foreground text-sm">
-								{t("danger.description")}
-							</AlertDialog.Description>
-						</div>
-						<div className="flex justify-end gap-2">
-							<AlertDialog.Close
-								className={buttonVariants({ variant: "outline", size: "sm" })}
-							>
-								{t("danger.confirm.cancel")}
-							</AlertDialog.Close>
-							<AlertDialog.Close
-								className={buttonVariants({
-									variant: "destructive",
-									size: "sm",
-								})}
-								onClick={onDelete}
-							>
-								{t("danger.delete")}
-							</AlertDialog.Close>
-						</div>
-					</AlertDialog.Popup>
-				</AlertDialog.Portal>
-			</AlertDialog.Root>
+			<ConfirmDialog
+				confirmLabel={t("danger.delete")}
+				defaultOpen={defaultConfirming}
+				description={t("danger.description")}
+				onConfirm={onDelete}
+				title={t("danger.confirm.title", { name: botName })}
+				trigger={
+					<>
+						<Icons.Delete aria-hidden="true" className="size-3.5" />
+						{t("danger.delete")}
+					</>
+				}
+				triggerClassName={buttonVariants({
+					variant: "destructive",
+					size: "sm",
+				})}
+			/>
 		</div>
 	)
 }

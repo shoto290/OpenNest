@@ -8,6 +8,9 @@ const common = {
 	dialog: {
 		close: "Fermer",
 	},
+	confirm: {
+		cancel: "Annuler",
+	},
 	dropzone: {
 		drop: "Glissez, déposez ou collez une image",
 		browse: "ou cliquez pour choisir un fichier",

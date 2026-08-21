@@ -52,6 +52,7 @@ const bots = {
 			general: "Général",
 			appearance: "Apparence",
 			instructions: "Instructions",
+			skills: "Compétences",
 			runtime: "Exécution",
 			danger: "Zone sensible",
 		},
@@ -66,6 +67,44 @@ const bots = {
 		instructions: {
 			label: "Instructions",
 			placeholder: "L'invite système avec laquelle ce bot tourne toujours",
+		},
+	},
+	skills: {
+		untitled: "Compétence sans titre",
+		add: "Ajouter une compétence",
+		create: "Ajouter la compétence",
+		back: "Toutes les compétences",
+		empty: {
+			title: "Aucune compétence",
+			description:
+				"Une compétence est un savoir-faire que ce bot peut porter. Écrivez-en une et choisissez si elle voyage dans chaque invite.",
+		},
+		name: {
+			label: "Nom",
+			placeholder: "notes-de-version",
+			hint: "Minuscules, chiffres et traits d'union. C'est l'identité de la compétence — c'est la description ci-dessous que le bot lit.",
+		},
+		description: {
+			label: "Description",
+			placeholder: "Quand ce bot doit y recourir",
+		},
+		body: {
+			label: "Contenu",
+			placeholder: "Le markdown dans lequel cette compétence est écrite",
+		},
+		preloaded: {
+			label: "Précharger cette compétence",
+			tag: "Préchargée",
+			description:
+				"Une compétence préchargée est dans l'invite de ce bot à chaque tour. Sinon, elle reste sur le disque comme un texte que le bot peut aller lire.",
+		},
+		delete: {
+			action: "Supprimer la compétence",
+			description:
+				"Sa description et son contenu partent avec elle. C'est irréversible.",
+			confirm: {
+				title: "Supprimer {{name}} ?",
+			},
 		},
 	},
 	runtime: {
@@ -119,7 +158,6 @@ const bots = {
 			"Son avatar, ses instructions et son dossier de travail partent avec lui. C'est irréversible.",
 		confirm: {
 			title: "Supprimer {{name}} ?",
-			cancel: "Annuler",
 		},
 	},
 } as const

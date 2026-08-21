@@ -55,6 +55,7 @@ const bots = {
 			general: "General",
 			appearance: "Appearance",
 			instructions: "Instructions",
+			skills: "Skills",
 			runtime: "Runtime",
 			danger: "Danger zone",
 		},
@@ -69,6 +70,44 @@ const bots = {
 		instructions: {
 			label: "Instructions",
 			placeholder: "The system prompt this bot always runs with",
+		},
+	},
+	skills: {
+		untitled: "Untitled skill",
+		add: "Add skill",
+		create: "Add skill",
+		back: "All skills",
+		empty: {
+			title: "No skills yet",
+			description:
+				"A skill is a piece of know-how this bot can carry. Write one and choose whether it travels in every prompt.",
+		},
+		name: {
+			label: "Name",
+			placeholder: "release-notes",
+			hint: "Lowercase letters, numbers and hyphens. It is the skill's identity — the description below is what the bot reads.",
+		},
+		description: {
+			label: "Description",
+			placeholder: "When this bot should reach for it",
+		},
+		body: {
+			label: "Body",
+			placeholder: "The markdown this skill is written in",
+		},
+		preloaded: {
+			label: "Preload this skill",
+			tag: "Preloaded",
+			description:
+				"A preloaded skill is in this bot's prompt on every turn. Left off, it stays on the disk as text the bot may go and read.",
+		},
+		delete: {
+			action: "Delete skill",
+			description:
+				"Its description and its body go with it. This cannot be undone.",
+			confirm: {
+				title: "Delete {{name}}?",
+			},
 		},
 	},
 	runtime: {
@@ -126,7 +165,6 @@ const bots = {
 			"Its avatar, instructions and working directory go with it. This cannot be undone.",
 		confirm: {
 			title: "Delete {{name}}?",
-			cancel: "Cancel",
 		},
 	},
 } as const
