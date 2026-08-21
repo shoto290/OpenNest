@@ -1,29 +1,8 @@
-import { useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
-import {
-	DangerZone,
-	type DangerZoneProps,
-} from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-
-/** The group is controlled, so a story owns the answer to "is the question up?"
- * the way the settings dialog does. */
-const DangerZoneHost = (props: DangerZoneProps) => {
-	const [confirming, setConfirming] = useState(props.confirming)
-
-	return (
-		<DangerZone
-			{...props}
-			confirming={confirming}
-			onConfirmingChange={(next) => {
-				setConfirming(next)
-				props.onConfirmingChange(next)
-			}}
-		/>
-	)
-}
+import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 
 const confirmation = async () => {
 	const popup = await screen.findByRole("alertdialog")
@@ -40,7 +19,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The one action in a bot's settings that cannot be undone, kept behind a question. It states what leaves with the bot before the reader presses anything, then names the bot again in the confirmation — the reader who opened the wrong settings finds out there rather than after. The destructive tone is carried by a hairline border rather than a fill, so the group reads as serious without shouting over the panel above it. It is fully controlled: `confirming` is the screen's state and `onDelete` fires only on the second press. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"The one action in a bot's settings that cannot be undone, kept behind a question. It states what leaves with the bot before the reader presses anything, then names the bot again in the confirmation — the reader who opened the wrong settings finds out there rather than after. The destructive tone is carried by a hairline border rather than a fill, so the group reads as serious without shouting over the panel above it. The question is its own — the group opens and closes it, and `onDelete` fires only on the second press. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
 			},
 		},
 	},
@@ -53,14 +32,13 @@ const meta = preview.meta({
 	],
 	args: {
 		botName: "Nest Keeper",
-		confirming: false,
-		onConfirmingChange: fn(),
 		onDelete: fn(),
 	},
 	argTypes: {
-		confirming: { control: "boolean" },
+		// Read once, as the group mounts, so it is a story's arg rather than a knob:
+		// a control that only takes effect on a remount reads as a broken one.
+		defaultConfirming: { control: false },
 	},
-	render: (args) => <DangerZoneHost {...args} />,
 })
 
 export const Playground = meta.story({
@@ -68,7 +46,7 @@ export const Playground = meta.story({
 		docs: {
 			description: {
 				story:
-					"Knob story for the group. Change `botName` and check that it reaches the confirmation title, not only the panel — that is the whole reason the name is passed down. Flip `confirming` to raise the question without a press, which is how a screen restores it after a reload.",
+					"Knob story for the group. Change `botName` and check that it reaches the confirmation title, not only the panel — that is the whole reason the name is passed down. Pick `Confirming` for the group mounted with the question already up: `defaultConfirming` is read once, as the group mounts, so it is not a knob to flip here.",
 			},
 		},
 	},
@@ -92,7 +70,7 @@ export const Default = meta.story({
 })
 
 export const Confirming = meta.story({
-	args: { confirming: true },
+	args: { defaultConfirming: true },
 	parameters: {
 		docs: {
 			description: {
@@ -109,7 +87,6 @@ export const Confirming = meta.story({
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
 		await expect(args.onDelete).not.toHaveBeenCalled()
-		await expect(args.onConfirmingChange).toHaveBeenCalledWith(false)
 	},
 })
 
@@ -118,7 +95,7 @@ export const Cancelled = meta.story({
 		docs: {
 			description: {
 				story:
-					"The path most readers take: they open the question and back out of it. Cancel closes the confirmation, reports the state change and touches nothing else, so the group returns exactly as it was and the bot is still there. Check that the trigger is still reachable afterwards — a cancelled question must not leave the group inert.",
+					"The path most readers take: they open the question and back out of it. Cancel closes the confirmation and touches nothing else — nothing is reported, because a question nobody answered is not news — so the group returns exactly as it was and the bot is still there. Check that the trigger is still reachable afterwards — a cancelled question must not leave the group inert.",
 			},
 		},
 	},

@@ -15,16 +15,17 @@ type DangerZoneProps = {
 	/** Named in the question, so a reader who opened the wrong bot's settings sees
 	 * it before they answer. */
 	botName: string
-	confirming: boolean
-	onConfirmingChange: (confirming: boolean) => void
+	/** Whether the group mounts with the question already up. Read once, as the group
+	 * mounts: the group owns the question from there, and a question goes with the
+	 * panel it was asked in. */
+	defaultConfirming?: boolean
 	/** Fired only once the confirmation is accepted. */
 	onDelete: () => void
 }
 
 const DangerZone = ({
 	botName,
-	confirming,
-	onConfirmingChange,
+	defaultConfirming,
 	onDelete,
 }: DangerZoneProps) => {
 	const { t } = useTranslation("bots")
@@ -39,7 +40,7 @@ const DangerZone = ({
 					{t("danger.description")}
 				</p>
 			</div>
-			<AlertDialog.Root onOpenChange={onConfirmingChange} open={confirming}>
+			<AlertDialog.Root defaultOpen={defaultConfirming}>
 				<AlertDialog.Trigger
 					className={buttonVariants({ variant: "destructive", size: "sm" })}
 				>

@@ -32,9 +32,9 @@ import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** The tab a reader lands on, every time the dialog opens. Settings a bot has none
- * of yet are still the first thing to fill in — unless the host opened the dialog
- * to ask about a delete, which is a question only [`DANGER_TAB`] holds. */
+/** The tab a reader lands on whenever the dialog opens on its own account. Settings
+ * a bot has none of yet are still the first thing to fill in — unless the host opened
+ * it from a row's own delete, which lands on [`DANGER_TAB`] instead. */
 const FIRST_TAB = "general"
 
 const DANGER_TAB = "danger"
@@ -63,11 +63,11 @@ type BotSettingsDialogProps = {
 	seed?: string
 	/** Fired only once the confirmation is accepted. */
 	onDelete: () => void
-	/** Whether the delete confirmation stands. Controlled, so a host with another way
-	 * to ask — a row's context menu, a shortcut — lands on this one dialog instead of
-	 * building a second one. Leave it out and the Danger zone tab owns it. */
-	confirmingDelete?: boolean
-	onConfirmingDeleteChange?: (confirming: boolean) => void
+	/** Whether the dialog opens on the Danger zone rather than on the first group, for
+	 * a host opened from a row's own delete. It only picks the group — the question is
+	 * still the reader's to ask, on the tab's own button. Read once, as the dialog
+	 * mounts: a host that keeps it mounted across opens has to key it to be heard. */
+	showDanger?: boolean
 	/** The only thing that makes the breadcrumb avatar move. */
 	working?: boolean
 	/** What the bot is busy with while `working`. Its own animal performs it. */
@@ -95,26 +95,18 @@ const BotSettingsDialog = ({
 	onBrowseWorkingDirectory,
 	seed,
 	onDelete,
-	confirmingDelete,
-	onConfirmingDeleteChange,
+	showDanger,
 	working = false,
 	workingKind,
 	className,
 }: BotSettingsDialogProps) => {
 	const { t } = useTranslation("bots")
-	const [internalConfirming, setInternalConfirming] = useState(false)
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
-	const isConfirming = confirmingDelete ?? internalConfirming
 	const botName = value.name.trim() || t("dialog.untitled")
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
-
-	const setConfirming = (next: boolean) => {
-		if (confirmingDelete === undefined) setInternalConfirming(next)
-		onConfirmingDeleteChange?.(next)
-	}
 
 	return (
 		<Root onOpenChange={(next) => !next && onClose()} open={open}>
@@ -148,7 +140,7 @@ const BotSettingsDialog = ({
 
 				<Tabs.Root
 					className="flex min-h-0 flex-1"
-					defaultValue={confirmingDelete ? DANGER_TAB : FIRST_TAB}
+					defaultValue={showDanger ? DANGER_TAB : FIRST_TAB}
 					orientation="vertical"
 					ref={setTabs}
 				>
@@ -246,12 +238,7 @@ const BotSettingsDialog = ({
 						className={SETTINGS_SCROLLING_PANEL_CLASS}
 						value={DANGER_TAB}
 					>
-						<DangerZone
-							botName={botName}
-							confirming={isConfirming}
-							onConfirmingChange={setConfirming}
-							onDelete={onDelete}
-						/>
+						<DangerZone botName={botName} onDelete={onDelete} />
 					</Tabs.Panel>
 				</Tabs.Root>
 			</Content>
