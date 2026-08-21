@@ -20,6 +20,7 @@ import {
 	AnimatedSidebarMenu,
 	AnimatedSidebarMenuButton,
 	AnimatedSidebarMenuItem,
+	type AnimatedSidebarProps,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import {
 	ContextMenu,
@@ -195,7 +196,16 @@ const BotRosterRow = ({
 	)
 }
 
-interface AgentSidebarProps {
+/** What the panel does not name itself is the host's to set — the desktop shell
+ * marks the column as the surface its window is dragged by, and the rows, the
+ * buttons and the chip in it stay what they are: a press on one selects, it does
+ * not move the window. */
+type AgentSidebarPanelProps = Omit<
+	AnimatedSidebarProps,
+	"ariaLabel" | "children" | "collapsible"
+>
+
+interface AgentSidebarProps extends AgentSidebarPanelProps {
 	/** The roster, in the order it is read. Empty is a reader who owns no bot, and
 	 * the panel says so: there is no bot of its own to fall back on. */
 	bots: AgentSidebarBot[]
@@ -228,6 +238,7 @@ const AgentSidebarBase = ({
 	footer,
 	user,
 	onOpenUserSettings,
+	...panel
 }: AgentSidebarProps) => {
 	const { t } = useTranslation("bots")
 	const selectedBot = roster.find((bot) => bot.id === selectedId)
@@ -236,6 +247,7 @@ const AgentSidebarBase = ({
 	return (
 		<>
 			<AnimatedSidebar
+				{...panel}
 				aria-busy={roster.some(isBusy)}
 				ariaLabel={t("roster.label")}
 				collapsible="icon"

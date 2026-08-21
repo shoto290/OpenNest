@@ -1285,3 +1285,39 @@ export const WithUserOnRail = meta.story({
 		await expectFooterAtColumnBottom(canvasElement)
 	},
 })
+
+export const DragRegion = meta.story({
+	args: { user: READER },
+	render: (args: AgentSidebarProps) => (
+		<WorkspaceShell
+			defaultOpen
+			sidebar={<AgentSidebar {...args} data-tauri-drag-region="deep" />}
+		>
+			{null}
+		</WorkspaceShell>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel as a frameless desktop window mounts it: the column is what the window is carried by. Check that the attribute lands on the panel itself, so the space between the rows drags the window, and that nothing the reader presses carries it — a row, the create button and the chip are buttons, and a button with no drag region of its own is what stops the drag.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(slotIn(canvasElement, "sidebar")).toHaveAttribute(
+			"data-tauri-drag-region",
+			"deep",
+		)
+
+		const pressable = [
+			rowButton(rowsIn(canvasElement)[0]),
+			canvas.getByRole("button", { name: "New bot" }),
+			canvas.getByRole("button", { name: READER_NAME }),
+		]
+		for (const target of pressable) {
+			await expect(target.tagName).toBe("BUTTON")
+			await expect(target).not.toHaveAttribute("data-tauri-drag-region")
+		}
+	},
+})

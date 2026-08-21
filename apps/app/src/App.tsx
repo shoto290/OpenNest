@@ -186,6 +186,10 @@ export function App() {
 				defaultOpen
 				sidebar={
 					<AgentSidebar
+						// The column the window is carried by: a press on a row, a button
+						// or the chip is still theirs, and only the space between them
+						// moves the window.
+						data-tauri-drag-region="deep"
 						bots={rosterBots}
 						footer={updateBadge}
 						onCreateBot={() => {
