@@ -224,7 +224,8 @@ fn an_identity(instructions: Option<&str>, working_dir: Option<&Path>) -> Value 
 		"avatarBlot": Value::Null,
 		"avatarImagePath": Value::Null,
 		"workingDir": working_dir.map(|dir| dir.to_string_lossy().into_owned()),
-		"instructions": instructions.unwrap_or_default()
+		"instructions": instructions.unwrap_or_default(),
+		"changesNothing": false
 	})
 }
 

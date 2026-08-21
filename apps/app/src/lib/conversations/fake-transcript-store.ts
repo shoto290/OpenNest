@@ -40,6 +40,7 @@ const DEFAULT_BOT: Bot = {
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "",
+	changesNothing: false,
 	createdAt: 0,
 }
 

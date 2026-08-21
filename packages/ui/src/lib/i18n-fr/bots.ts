@@ -160,6 +160,11 @@ const bots = {
 			placeholder: "Choisissez un dossier",
 			browse: "Changer",
 		},
+		changesNothing: {
+			label: "Ne peut rien modifier lui-même",
+			description:
+				"Ce bot se voit refuser les outils qui modifient des fichiers et exécutent des commandes : il ne peut donc faire ni l'un ni l'autre lui-même. Il peut toujours lire, et tout ce qu'il embarque par ailleurs — un serveur MCP, un autre bot qu'il sollicite — n'est pas retenu par ce réglage.",
+		},
 	},
 	identity: {
 		avatar: "Avatar",

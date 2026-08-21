@@ -58,6 +58,11 @@ export type BotIdentity = {
 	 * run leaves behind for the next one is not here — the host keeps it and nothing
 	 * on this side reads or writes it. */
 	instructions: string
+	/** Whether the bot is denied the tools that edit files and run commands. Part of
+	 * the identity for the same reason `instructions` is — the settings panel sets it
+	 * beside the name — and the host lays it down in the agent file every run is
+	 * promoted onto, which is where it takes effect. */
+	changesNothing: boolean
 }
 
 /** A bot as the host answers it: everything it was described with, plus the two

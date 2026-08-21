@@ -163,6 +163,11 @@ const bots = {
 			placeholder: "Choose a folder",
 			browse: "Change",
 		},
+		changesNothing: {
+			label: "Cannot change anything itself",
+			description:
+				"This bot is refused the tools that edit files and run commands, so it cannot do either itself. It can still read, and anything else it carries — an MCP server, another bot it asks — is not held back by this.",
+		},
 	},
 	identity: {
 		avatar: "Avatar",

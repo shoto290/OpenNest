@@ -102,6 +102,8 @@ type BotSettingsValue = {
 	instructions: string
 	model: string
 	workingDirectory: string
+	/** Whether the bot is denied the tools that edit files and run commands. */
+	changesNothing: boolean
 }
 
 export {

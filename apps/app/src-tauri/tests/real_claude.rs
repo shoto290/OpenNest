@@ -76,6 +76,7 @@ fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
 		working_dir: None,
 		instructions: instructions.to_owned(),
 		memory: String::new(),
+		changes_nothing: false,
 		created_at: 1,
 	};
 	bundles::write(&root, &bot).expect("the bundle is written");

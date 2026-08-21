@@ -139,6 +139,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "",
+	changesNothing: false,
 })
 
 /** The stored bot as the settings panel edits it. */
@@ -153,6 +154,7 @@ export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 	instructions: bot.instructions,
 	model: bot.model,
 	workingDirectory: bot.workingDir ?? "",
+	changesNothing: bot.changesNothing,
 })
 
 /** The panel's value as the store is told it, resolved against the bot it stands
@@ -172,21 +174,24 @@ export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	avatarImagePath: value.identity.image ? bot.avatarImagePath : null,
 	workingDir: value.workingDirectory.trim() || null,
 	instructions: value.instructions,
+	changesNothing: value.changesNothing,
 })
 
 /** Whether this value would start a process differently from the one already
- * answering for the bot. Three fields do: the instructions a child is given as its
- * system prompt, the directory it is started in, and the model it answers under —
- * which is a key of the agent file the child is promoted to, so it is read once, when
- * that child starts. All three are settled at spawn, so a bot that changes any of
- * them is a bot whose live runtime has to be replaced — everything else about it is
- * read where it is shown, or travels with the next prompt. */
+ * answering for the bot. Four fields do: the instructions a child is given as its
+ * system prompt, the directory it is started in, the model it answers under, and
+ * whether it is denied the tools that change things — the last two are keys of the
+ * agent file the child is promoted to, so both are read once, when that child
+ * starts. All four are settled at spawn, so a bot that changes any of them is a bot
+ * whose live runtime has to be replaced — everything else about it is read where it
+ * is shown, or travels with the next prompt. */
 export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {
 	const next = toIdentity(value, bot)
 	return (
 		next.instructions !== bot.instructions ||
 		next.workingDir !== bot.workingDir ||
-		next.model !== bot.model
+		next.model !== bot.model ||
+		next.changesNothing !== bot.changesNothing
 	)
 }
 

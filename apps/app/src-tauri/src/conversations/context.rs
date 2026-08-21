@@ -331,6 +331,7 @@ mod tests {
 			working_dir: None,
 			instructions: instructions.to_owned(),
 			memory: memory.to_owned(),
+			changes_nothing: false,
 			created_at: 1,
 		}
 	}

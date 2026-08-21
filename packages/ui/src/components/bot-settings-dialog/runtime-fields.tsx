@@ -11,6 +11,7 @@ import {
 	FIELD_LABEL_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
+import { SettingsSwitch } from "@workspace/ui/components/settings-switch"
 import { cn } from "@workspace/ui/lib/utils"
 
 type RuntimeFieldsProps = {
@@ -19,16 +20,25 @@ type RuntimeFieldsProps = {
 	onModelChange: (model: string) => void
 	workingDirectory: string
 	onBrowseWorkingDirectory: () => void
+	/** Whether the bot is denied the tools that edit files and run commands. What it
+	 * stops is those four and nothing else, which is why the sentence beside it says
+	 * so — see the catalogue. */
+	changesNothing: boolean
+	onChangesNothingChange: (changesNothing: boolean) => void
 }
 
-/** What the bot runs on: the model behind it and the folder it works in. Both are
- * pickers rather than text — neither is something a reader can type correctly. */
+/** What the bot runs on: the model behind it, the folder it works in, and whether
+ * it may change anything there. The two first are pickers rather than text — neither
+ * is something a reader can type correctly — and the last is a switch, since it is
+ * on or off. */
 const RuntimeFields = ({
 	models,
 	model,
 	onModelChange,
 	workingDirectory,
 	onBrowseWorkingDirectory,
+	changesNothing,
+	onChangesNothingChange,
 }: RuntimeFieldsProps) => {
 	const { t } = useTranslation("bots")
 	const directoryId = useId()
@@ -124,6 +134,13 @@ const RuntimeFields = ({
 					</span>
 				</button>
 			</div>
+
+			<SettingsSwitch
+				checked={changesNothing}
+				description={t("runtime.changesNothing.description")}
+				label={t("runtime.changesNothing.label")}
+				onCheckedChange={onChangesNothingChange}
+			/>
 		</>
 	)
 }
