@@ -181,12 +181,13 @@ impl Bot {
 	/// host with no data directory — falls back to the columns, which is what the
 	/// bundle is rewritten from anyway.
 	pub fn of(bot: conversations::Bot, avatars: Option<&Path>, bundles: Option<&Path>) -> Self {
-		let instructions = bundles
-			.and_then(|root| crate::bundles::instructions(root, &bot.id))
-			.unwrap_or_else(|| bot.instructions.clone());
-		let model = bundles
-			.and_then(|root| crate::bundles::model(root, &bot.id))
+		let written = bundles.and_then(|root| crate::bundles::generated(root, &bot.id));
+		let model = written
+			.as_ref()
+			.and_then(|written| written.model.clone())
 			.unwrap_or_else(|| bot.model.clone());
+		let instructions =
+			written.map_or_else(|| bot.instructions.clone(), |written| written.instructions);
 		let avatar_image_path = bot
 			.avatar_image_path
 			.as_deref()
@@ -1136,23 +1137,31 @@ mod tests {
 		}
 	}
 
+	/// A row as the database hands it over, on the model it names.
+	fn a_stored_bot(model: &str) -> conversations::Bot {
+		conversations::Bot {
+			id: "b1".into(),
+			name: "Nyx".into(),
+			title: String::new(),
+			model: model.to_owned(),
+			avatar_animal: conversations::AvatarAnimal::Owl,
+			avatar_blot: None,
+			avatar_image_path: None,
+			working_dir: None,
+			instructions: String::new(),
+			memory: String::new(),
+			created_at: 1,
+		}
+	}
+
 	/// The projection every read of a bot goes through, on the two answers that are
 	/// not a picture: a path pointing out of the directory, and a run with no
 	/// directory at all. Both come back as no picture, which is the bot in its animal.
 	#[test]
 	fn a_bot_wearing_a_path_the_host_will_not_serve_crosses_without_one() {
 		let stored = |path: Option<&str>| conversations::Bot {
-			id: "b1".into(),
-			name: "Nyx".into(),
-			title: String::new(),
-			model: "sonnet".to_owned(),
-			avatar_animal: conversations::AvatarAnimal::Owl,
-			avatar_blot: None,
 			avatar_image_path: path.map(str::to_owned),
-			working_dir: None,
-			instructions: String::new(),
-			memory: String::new(),
-			created_at: 1,
+			..a_stored_bot("sonnet")
 		};
 		let dir = std::env::temp_dir();
 
@@ -1166,25 +1175,12 @@ mod tests {
 	/// bundle to read falls back to it.
 	#[test]
 	fn a_bot_is_reported_on_the_model_its_bundle_names() {
-		let stored = |model: &str| conversations::Bot {
-			id: "b1".into(),
-			name: "Nyx".into(),
-			title: String::new(),
-			model: model.to_owned(),
-			avatar_animal: conversations::AvatarAnimal::Owl,
-			avatar_blot: None,
-			avatar_image_path: None,
-			working_dir: None,
-			instructions: String::new(),
-			memory: String::new(),
-			created_at: 1,
-		};
 		let root = std::env::temp_dir().join("opennest-contract-model");
 		let _ = std::fs::remove_dir_all(&root);
-		crate::bundles::write(&root, &stored("haiku")).expect("the bundle is written");
+		crate::bundles::write(&root, &a_stored_bot("haiku")).expect("the bundle is written");
 
-		assert_eq!(Bot::of(stored("sonnet"), None, Some(&root)).model, "haiku");
-		assert_eq!(Bot::of(stored("sonnet"), None, None).model, "sonnet");
+		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).model, "haiku");
+		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, None).model, "sonnet");
 
 		let _ = std::fs::remove_dir_all(&root);
 	}

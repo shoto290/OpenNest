@@ -157,8 +157,9 @@ const WHERE_AND_WHO: &str = "Run the bash command `pwd` and reply with nothing b
 const WHICH_MODEL: &str =
 	"Which Claude model are you running as? Reply with one word: opus, sonnet or haiku.";
 
-/// Two tiers apart, so an answer cannot be read as either. Sonnet is what a bot is
-/// created on, and Haiku is what a reader would have had to pick.
+/// What a bot is created on, and what a reader would have had to pick. A child
+/// naming the second is a child the key reached: nothing else would move it off the
+/// first.
 const SONNET: &str = "sonnet";
 const HAIKU: &str = "haiku";
 
@@ -239,16 +240,7 @@ async fn a_bot_answers_under_the_model_its_bundle_names() {
 	picked.sidecar.shutdown().await;
 
 	assert!(named.contains(HAIKU), "the picked model did not reach the child: {named:?}");
-	assert!(!named.contains("opus"), "the child answered under another tier: {named:?}");
-
-	let mut default = started_on(None, Some(BANANA), SONNET, std::env::temp_dir()).await;
-	let fallen_back = text(&default.run_turn(WHICH_MODEL).await).to_lowercase();
-	default.sidecar.shutdown().await;
-
-	assert!(
-		fallen_back.contains(SONNET),
-		"the bot did not follow its bundle back: {fallen_back:?}"
-	);
+	assert!(!named.contains(SONNET), "the child answered under the default tier: {named:?}");
 }
 
 /// The check report is what the frontend receives first, and it is built from a

@@ -167,21 +167,31 @@ pub fn agent_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 	generated_agent(root, bot_id)
 }
 
-/// What the bot was told, as the file holds it — the brief a process would really be
-/// started on. `None` is a bundle this install has not written yet, or one a reader
-/// has taken the agent out of, and the caller answers with the stored value instead.
-pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
-	Some(body(&fs::read_to_string(agent_file(root, bot_id)?).ok()?).to_owned())
+/// What the agent file says the bot is: the brief a process would really be started
+/// on, and the model it would really answer under. Both in one read, since a caller
+/// that shows a bot shows both.
+pub struct Generated {
+	pub instructions: String,
+	/// `None` for a file whose frontmatter names no model — a bundle written for a
+	/// bot carrying no label, or an agent a reader wrote themselves.
+	pub model: Option<String>,
 }
 
-/// The model the file names — the one a process started on this bundle would really
-/// answer under, since the key is honoured and nothing passes an option over it.
-/// `None` is a bundle this install has not written yet, or a file whose frontmatter
-/// names no model, and the caller answers with the stored value instead.
-pub fn model(root: &Path, bot_id: &str) -> Option<String> {
+/// The bot as its own agent file holds it. `None` is a bundle this install has not
+/// written yet, or one a reader has taken the agent out of, and the caller answers
+/// with the stored values instead.
+pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let text = fs::read_to_string(agent_file(root, bot_id)?).ok()?;
-	let found = front_value(&text, MODEL_KEY)?.trim();
-	(!found.is_empty()).then(|| found.to_owned())
+	let model = front_value(&text, MODEL_KEY)
+		.map(str::trim)
+		.filter(|found| !found.is_empty())
+		.map(str::to_owned);
+	Some(Generated { instructions: body(&text).to_owned(), model })
+}
+
+/// What the bot was told, as the file holds it.
+pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
+	Some(generated(root, bot_id)?.instructions)
 }
 
 /// The bundle as the bot stands right now: the keys this module owns in the manifest,
@@ -345,10 +355,11 @@ fn agent(bot: &Bot, name: &str) -> String {
 
 /// The `model` key and its line ending, or nothing for a bot carrying no label.
 fn model_line(model: &str) -> String {
-	if model.trim().is_empty() {
+	let named = model.trim();
+	if named.is_empty() {
 		return String::new();
 	}
-	format!("{MODEL_KEY}: {}\n", quoted(model.trim()))
+	format!("{MODEL_KEY}: {}\n", quoted(named))
 }
 
 fn quoted(value: &str) -> String {
@@ -420,6 +431,10 @@ mod tests {
 			.expect("the hand edit lands");
 	}
 
+	fn named_model(root: &Path, bot_id: &str) -> Option<String> {
+		generated(root, bot_id)?.model
+	}
+
 	fn a_root(name: &str) -> PathBuf {
 		let root = std::env::temp_dir().join(format!("opennest-bundle-{name}"));
 		let _ = fs::remove_dir_all(&root);
@@ -466,11 +481,11 @@ mod tests {
 		bot.model = "haiku".to_owned();
 		write(&root, &bot).expect("the bundle is written");
 
-		assert_eq!(model(&root, &bot.id).as_deref(), Some("haiku"));
+		assert_eq!(named_model(&root, &bot.id).as_deref(), Some("haiku"));
 
 		bot.model = "claude-opus-4-1-20250805".to_owned();
 		write(&root, &bot).expect("the bundle is rewritten");
-		assert_eq!(model(&root, &bot.id).as_deref(), Some("claude-opus-4-1-20250805"));
+		assert_eq!(named_model(&root, &bot.id).as_deref(), Some("claude-opus-4-1-20250805"));
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -489,7 +504,7 @@ mod tests {
 		for line in written.lines() {
 			assert!(!line.starts_with("model:"), "got {written}");
 		}
-		assert_eq!(model(&root, &bot.id), None);
+		assert_eq!(named_model(&root, &bot.id), None);
 
 		let _ = fs::remove_dir_all(&root);
 	}
