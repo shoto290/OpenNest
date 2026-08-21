@@ -1723,13 +1723,31 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 		json!({
 			"botId": BOT,
 			"skillId": "baking-bread",
-			"draft": { "name": "Baking", "description": "Bread.", "body": "Bake at 240 degrees." },
+			"draft": {
+				"name": "Baking",
+				"description": "Bread.",
+				"body": "Bake at 240 degrees.",
+				"whenToUse": "When the loaf is flat.",
+				"allowedTools": ["Read", "Write"],
+				"userInvocable": true,
+				"metadata": { "author": "someone" },
+			},
 		}),
 	)
 	.expect("the skill is rewritten");
 	assert_eq!(updated["name"], json!("Baking"));
 	assert_eq!(updated["body"], json!("Bake at 240 degrees."));
 	assert_eq!(updated["isPreloaded"], json!(true), "an edit dropped the mark");
+	assert_eq!(updated["whenToUse"], json!("When the loaf is flat."));
+	assert_eq!(updated["allowedTools"], json!(["Read", "Write"]));
+	assert_eq!(updated["userInvocable"], json!(true));
+	assert_eq!(updated["metadata"]["author"], json!("someone"));
+	assert_eq!(updated["license"], json!(null), "a key the file never carried");
+	assert_eq!(
+		updated["metadata"]["opennest"]["preload"],
+		json!("true"),
+		"a caller writing the map took the mark with it"
+	);
 
 	call(
 		&window,

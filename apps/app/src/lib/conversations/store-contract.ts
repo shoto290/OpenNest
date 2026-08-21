@@ -81,7 +81,7 @@ export type Bot = BotIdentity & { id: string; createdAt: number }
  * the whole of how a skill reaches a running bot: a skill that is not carried is
  * text on the disk the bot may go and read, and one that is carried is already in
  * its prompt. */
-export type BotSkill = {
+export type BotSkill = BotSkillFront & {
 	id: string
 	name: string
 	description: string
@@ -89,10 +89,54 @@ export type BotSkill = {
 	isPreloaded: boolean
 }
 
+/** A frontmatter value this app carries without reading into it: `hooks`, `metadata`
+ * and `compatibility` are the agent's to define, and narrowing them here would be
+ * this app deciding what a file it does not own is allowed to say. */
+export type BotSkillValue =
+	| string
+	| number
+	| boolean
+	| null
+	| BotSkillValue[]
+	| { [key: string]: BotSkillValue }
+
+/** Every frontmatter key of a skill past its name and its description, flat beside
+ * the rest so a field of a panel is a key of the file.
+ *
+ * `null` is a key the file does not carry. The four lists are lists here whatever
+ * the file spells them as — a `SKILL.md` written by hand carries
+ * `allowed-tools: Read, Write` as often as it carries a sequence, and both mean the
+ * same two tools. */
+export type BotSkillFront = {
+	whenToUse: string | null
+	argumentHint: string | null
+	arguments: string[] | null
+	disableModelInvocation: boolean | null
+	userInvocable: boolean | null
+	allowedTools: string[] | null
+	disallowedTools: string[] | null
+	model: string | null
+	effort: string | null
+	context: string | null
+	agent: string | null
+	background: boolean | null
+	hooks: BotSkillValue
+	paths: string[] | null
+	shell: string | null
+	metadata: BotSkillValue
+	license: string | null
+	compatibility: BotSkillValue
+}
+
 /** What a skill is written with, whole — both to create one and to change one. The
  * mark is not here: it is set on its own, because it changes what the bot was told
- * rather than what the skill says. */
-export type BotSkillDraft = {
+ * rather than what the skill says.
+ *
+ * The name, the description and the body are what a skill is, and every save carries
+ * all three. Every other key is optional in the strong sense: a key left out is left
+ * exactly as the file has it, and a key sent empty is a key asked to go. That is how
+ * a panel showing three fields never takes away the seventeen it does not show. */
+export type BotSkillDraft = Partial<BotSkillFront> & {
 	name: string
 	description: string
 	body: string

@@ -269,7 +269,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 ///
 /// `isPreloaded` is whether the body is carried into the bot's agent file, which is
 /// the whole of how a skill reaches a promoted bot — see [`crate::bundles`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
 	pub id: String,
@@ -277,6 +277,8 @@ pub struct Skill {
 	pub description: String,
 	pub body: String,
 	pub is_preloaded: bool,
+	#[serde(flatten)]
+	pub front: bundles::SkillFront,
 }
 
 impl From<bundles::Skill> for Skill {
@@ -287,24 +289,36 @@ impl From<bundles::Skill> for Skill {
 			description: skill.description,
 			body: skill.body,
 			is_preloaded: skill.is_preloaded,
+			front: skill.front,
 		}
 	}
 }
 
-/// What a caller writes a skill with, whole: the three values a reader edits. The
-/// mark is not one of them — it is set by its own command, because it changes what
-/// the bot was told rather than what the skill says.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// What a caller writes a skill with, whole: the values a reader edits. The mark is
+/// not one of them — it is set by its own command, because it changes what the bot
+/// was told rather than what the skill says.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillDraft {
 	pub name: String,
 	pub description: String,
 	pub body: String,
+	/// The one type on this boundary that is not mirrored. Its fields are the
+	/// frontmatter's own keys, which the agent's file format spells and this app only
+	/// reads: there is no wording here for a mirror to hold apart from the writer's,
+	/// and a second copy of the list would be eighteen chances for the two to drift.
+	#[serde(flatten)]
+	pub front: bundles::SkillFront,
 }
 
 impl From<SkillDraft> for bundles::SkillDraft {
 	fn from(draft: SkillDraft) -> Self {
-		Self { name: draft.name, description: draft.description, body: draft.body }
+		Self {
+			name: draft.name,
+			description: draft.description,
+			body: draft.body,
+			front: draft.front,
+		}
 	}
 }
 

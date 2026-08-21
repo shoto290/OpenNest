@@ -54,6 +54,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::db::repositories::conversations::Bot;
@@ -142,6 +143,25 @@ const INVOCATION_KEY: &str = "disable-model-invocation";
 /// What a skill is titled and summarised by, and what a caller edits.
 const NAME_KEY: &str = "name";
 const DESCRIPTION_KEY: &str = "description";
+
+/// Every other frontmatter key a `SKILL.md` is read and written under. The list is
+/// the whole of what this module names: a key outside it is somebody else's, kept
+/// exactly where it was found on every write — see [`drafted`].
+const WHEN_TO_USE_KEY: &str = "when_to_use";
+const ARGUMENT_HINT_KEY: &str = "argument-hint";
+const ARGUMENTS_KEY: &str = "arguments";
+const USER_INVOCABLE_KEY: &str = "user-invocable";
+const ALLOWED_TOOLS_KEY: &str = "allowed-tools";
+const DISALLOWED_TOOLS_KEY: &str = "disallowed-tools";
+const EFFORT_KEY: &str = "effort";
+const CONTEXT_KEY: &str = "context";
+const AGENT_KEY: &str = "agent";
+const BACKGROUND_KEY: &str = "background";
+const HOOKS_KEY: &str = "hooks";
+const PATHS_KEY: &str = "paths";
+const SHELL_KEY: &str = "shell";
+const LICENSE_KEY: &str = "license";
+const COMPATIBILITY_KEY: &str = "compatibility";
 
 /// What both marks are worth when they are there. Read back through
 /// [`front_value`], which is why it is the word rather than a boolean.
@@ -551,6 +571,7 @@ pub struct Skill {
 	pub description: String,
 	pub body: String,
 	pub is_preloaded: bool,
+	pub front: SkillFront,
 }
 
 /// What a skill is written from. The mark is not here: it is set on its own, because
@@ -559,6 +580,50 @@ pub struct SkillDraft {
 	pub name: String,
 	pub description: String,
 	pub body: String,
+	pub front: SkillFront,
+}
+
+/// Every frontmatter key of a skill past its name and its description, read off the
+/// disk and written back under the spelling the agent reads them by.
+///
+/// `None` is a key the file does not carry, and — on the way in — a key the caller
+/// did not offer, which is left exactly as the file has it. An empty value is a key
+/// asked to go: a caller clears a field by sending it empty, not by leaving it out,
+/// so a panel showing three fields never takes away the seventeen it does not show.
+///
+/// The four lists are lists here whatever the file spells them as: a `SKILL.md`
+/// written by hand carries `allowed-tools: Read, Write` as often as it carries a
+/// sequence, and both mean the same two tools.
+///
+/// `hooks`, `metadata` and `compatibility` are whatever the file says. Their shape is
+/// the agent's to define and nothing here narrows it — `metadata` in particular is
+/// where this app keeps its own mark, which a write puts back under
+/// `metadata.opennest.preload` however the caller spelled the rest.
+///
+/// This is the type the frontend meets, camelCased and flattened into a skill by
+/// [`crate::conversations::contract`] rather than mirrored there: these are the
+/// frontmatter's own keys, so there is no second spelling for a mirror to protect.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SkillFront {
+	pub when_to_use: Option<String>,
+	pub argument_hint: Option<String>,
+	pub arguments: Option<Vec<String>>,
+	pub disable_model_invocation: Option<bool>,
+	pub user_invocable: Option<bool>,
+	pub allowed_tools: Option<Vec<String>>,
+	pub disallowed_tools: Option<Vec<String>>,
+	pub model: Option<String>,
+	pub effort: Option<String>,
+	pub context: Option<String>,
+	pub agent: Option<String>,
+	pub background: Option<bool>,
+	pub hooks: Option<serde_json::Value>,
+	pub paths: Option<Vec<String>>,
+	pub shell: Option<String>,
+	pub metadata: Option<serde_json::Value>,
+	pub license: Option<String>,
+	pub compatibility: Option<serde_json::Value>,
 }
 
 /// Every skill in the bot's bundle, by directory name. A skill dropped in by hand is
@@ -573,12 +638,15 @@ pub fn skills(root: &Path, bot_id: &str) -> Vec<Skill> {
 /// nothing in the bot's prompt until it is marked.
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
 	let path = free_skill_dir(root, &bot.id, &draft.name);
-	written_skill(root, bot, &path, drafted(None, draft))
+	written_skill(root, bot, &path, drafted(None, draft)?)
 }
 
 /// What the skill says, changed. The file is read and edited rather than written
 /// from a template: a `SKILL.md` a hand or another tool wrote carries keys this app
 /// knows nothing about, and they are put back exactly as they were found.
+///
+/// Frontmatter this module cannot read refuses the write and leaves the file exactly
+/// as it is — see [`checked_front`].
 pub fn update_skill(
 	root: &Path,
 	bot: &Bot,
@@ -587,7 +655,7 @@ pub fn update_skill(
 ) -> std::io::Result<Skill> {
 	let path = skill_dir(root, &bot.id, skill_id)?;
 	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
-	written_skill(root, bot, &path, drafted(Some(&text), draft))
+	written_skill(root, bot, &path, drafted(Some(&text), draft)?)
 }
 
 /// Whether the skill's body is carried into the bot's agent file. Both marks move
@@ -601,7 +669,7 @@ pub fn set_skill_preloaded(
 ) -> std::io::Result<Skill> {
 	let path = skill_dir(root, &bot.id, skill_id)?;
 	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
-	written_skill(root, bot, &path, marked(&text, is_preloaded))
+	written_skill(root, bot, &path, marked(&text, is_preloaded)?)
 }
 
 /// The skill, taken away whole: its own directory and nothing outside it. The path
@@ -758,8 +826,40 @@ fn read_skill(path: &Path) -> Option<Skill> {
 		description: front_value(&text, DESCRIPTION_KEY).unwrap_or_default(),
 		body: body(&text).to_owned(),
 		is_preloaded: front_value(&text, PRELOAD_KEY).as_deref() == Some(MARKED),
+		front: read_front(&text),
 		id,
 	})
+}
+
+/// Every key of [`SkillFront`] the file carries. Frontmatter this module cannot read
+/// answers as a skill carrying none rather than as no skill at all: a listing is not
+/// where a reader should first hear that a file is malformed, and a write over the
+/// same file refuses — see [`checked_front`].
+fn read_front(text: &str) -> SkillFront {
+	let map = mapped_lines(split_frontmatter(text).map_or("", |(front, _)| front));
+	let text_at = |key: &str| map.get(key).map(as_text);
+	let list_at = |key: &str| map.get(key).map(as_list);
+	let flag_at = |key: &str| map.get(key).and_then(as_flag);
+	SkillFront {
+		when_to_use: text_at(WHEN_TO_USE_KEY),
+		argument_hint: text_at(ARGUMENT_HINT_KEY),
+		arguments: list_at(ARGUMENTS_KEY),
+		disable_model_invocation: flag_at(INVOCATION_KEY),
+		user_invocable: flag_at(USER_INVOCABLE_KEY),
+		allowed_tools: list_at(ALLOWED_TOOLS_KEY),
+		disallowed_tools: list_at(DISALLOWED_TOOLS_KEY),
+		model: text_at(MODEL_KEY),
+		effort: text_at(EFFORT_KEY),
+		context: text_at(CONTEXT_KEY),
+		agent: text_at(AGENT_KEY),
+		background: flag_at(BACKGROUND_KEY),
+		hooks: map.get(HOOKS_KEY).cloned(),
+		paths: list_at(PATHS_KEY),
+		shell: text_at(SHELL_KEY),
+		metadata: map.get(METADATA_KEY).cloned(),
+		license: text_at(LICENSE_KEY),
+		compatibility: map.get(COMPATIBILITY_KEY).cloned(),
+	}
 }
 
 /// Where one of the bot's own skills lives. `NotFound` for an id that is not the name
@@ -787,27 +887,117 @@ fn free_skill_dir(root: &Path, bot_id: &str, name: &str) -> PathBuf {
 		.unwrap_or(preferred)
 }
 
-/// The file a draft leaves: the two keys a draft owns set, the body replaced, and
+/// The file a draft leaves: the keys the draft carries set, the body replaced, and
 /// every other key of a file that was already there left exactly where it was.
-fn drafted(existing: Option<&str>, draft: &SkillDraft) -> String {
-	let mut parts = parts(existing.unwrap_or_default());
+///
+/// The name and the description are written on every save, empty or not — the two
+/// keys the format asks a skill for are the file's shape rather than fields a reader
+/// may leave out. Every other key is written only when the draft offers it, taken
+/// away when the draft offers it empty, and never touched otherwise.
+fn drafted(existing: Option<&str>, draft: &SkillDraft) -> std::io::Result<String> {
+	let existing = existing.unwrap_or_default();
+	let mut parts = checked_front(existing)?;
 	parts.front = with_key(&parts.front, &[NAME_KEY], &quoted(&draft.name));
 	parts.front = with_key(&parts.front, &[DESCRIPTION_KEY], &quoted(&draft.description));
+	for (key, value) in offered(&draft.front, existing) {
+		parts.front = written_front(&parts.front, key, value.as_ref());
+	}
 	parts.body = format!("\n{}\n", draft.body.trim());
-	rendered(&parts)
+	Ok(rendered(&parts))
+}
+
+/// What a draft asks of the frontmatter, key by key: the value it offered, or nothing
+/// at all for a key it left out. `metadata` is the one value the caller does not have
+/// the last word on — the mark the file carries goes back into it, since whether a
+/// bot carries the skill is not a field of the skill.
+fn offered(front: &SkillFront, existing: &str) -> Vec<(&'static str, Option<serde_json::Value>)> {
+	let text = |value: &Option<String>| value.clone().map(serde_json::Value::from);
+	let list = |value: &Option<Vec<String>>| value.clone().map(serde_json::Value::from);
+	let flag = |value: &Option<bool>| (*value).map(serde_json::Value::from);
+	vec![
+		(WHEN_TO_USE_KEY, text(&front.when_to_use)),
+		(ARGUMENT_HINT_KEY, text(&front.argument_hint)),
+		(ARGUMENTS_KEY, list(&front.arguments)),
+		(INVOCATION_KEY, flag(&front.disable_model_invocation)),
+		(USER_INVOCABLE_KEY, flag(&front.user_invocable)),
+		(ALLOWED_TOOLS_KEY, list(&front.allowed_tools)),
+		(DISALLOWED_TOOLS_KEY, list(&front.disallowed_tools)),
+		(MODEL_KEY, text(&front.model)),
+		(EFFORT_KEY, text(&front.effort)),
+		(CONTEXT_KEY, text(&front.context)),
+		(AGENT_KEY, text(&front.agent)),
+		(BACKGROUND_KEY, flag(&front.background)),
+		(HOOKS_KEY, front.hooks.clone()),
+		(PATHS_KEY, list(&front.paths)),
+		(SHELL_KEY, text(&front.shell)),
+		(METADATA_KEY, front.metadata.clone().map(|held| remarked(held, existing))),
+		(LICENSE_KEY, text(&front.license)),
+		(COMPATIBILITY_KEY, front.compatibility.clone()),
+	]
+}
+
+/// The metadata a caller offered, with the mark the file already carries put back
+/// under `metadata.opennest.preload`. A caller rewriting the map has no way to know
+/// what the bot was told, and a mark lost this way is a body silently dropped out of
+/// a prompt on the next write.
+fn remarked(offered: serde_json::Value, existing: &str) -> serde_json::Value {
+	let Some(mark) = front_value(existing, PRELOAD_KEY) else {
+		return offered;
+	};
+	let mut map = match offered {
+		serde_json::Value::Object(map) => map,
+		_ => serde_json::Map::new(),
+	};
+	let mut nest = match map.remove(OPENNEST_KEY) {
+		Some(serde_json::Value::Object(nest)) => nest,
+		_ => serde_json::Map::new(),
+	};
+	nest.insert(PRELOAD_KEY.to_owned(), mark.into());
+	map.insert(OPENNEST_KEY.to_owned(), serde_json::Value::Object(nest));
+	serde_json::Value::Object(map)
 }
 
 /// The same file with both marks written, or with both taken away. The body is not
 /// touched — this is a key changing, not a skill being rewritten.
-fn marked(text: &str, is_preloaded: bool) -> String {
+fn marked(text: &str, is_preloaded: bool) -> std::io::Result<String> {
 	let path = [METADATA_KEY, OPENNEST_KEY, PRELOAD_KEY];
-	let mut parts = parts(text);
+	let mut parts = checked_front(text)?;
 	parts.front = if is_preloaded {
 		with_key(&with_key(&parts.front, &path, MARKED), &[INVOCATION_KEY], MARKED)
 	} else {
 		without_key(&without_key(&parts.front, &path), &[INVOCATION_KEY])
 	};
-	rendered(&parts)
+	Ok(rendered(&parts))
+}
+
+/// The file split, and refused when its frontmatter is not something this module can
+/// read: an opening fence nothing closes, or a line at the top of the map that names
+/// no key. Either would be rewritten into something else, so nothing is written at
+/// all and the caller is told — a `SKILL.md` a reader is in the middle of editing by
+/// hand is theirs, not this app's to flatten.
+fn checked_front(text: &str) -> std::io::Result<Parts> {
+	let unreadable = |detail: &str| {
+		std::io::Error::new(std::io::ErrorKind::InvalidData, format!("the frontmatter {detail}"))
+	};
+	if !text.trim().is_empty()
+		&& text.trim_start().starts_with(FENCE)
+		&& split_frontmatter(text).is_none()
+	{
+		return Err(unreadable("opens with a fence that nothing closes"));
+	}
+	let parts = parts(text);
+	match parts.front.lines().find(|line| !readable(line)) {
+		Some(line) => Err(unreadable(&format!("carries a line naming no key: {}", line.trim()))),
+		None => Ok(parts),
+	}
+}
+
+/// Whether a frontmatter line is one this module can put back where it found it: a
+/// blank, a comment, anything nested under a key, or a key of its own. A top-level
+/// line that is none of those is a file spelled some other way.
+fn readable(line: &str) -> bool {
+	let trimmed = line.trim();
+	trimmed.is_empty() || trimmed.starts_with('#') || indent_of(line) > 0 || keyed(trimmed)
 }
 
 /// A skill file as something to edit: its frontmatter, and everything under it
@@ -838,19 +1028,26 @@ fn rendered(parts: &Parts) -> String {
 /// the end of the deepest map on its path that does exist, and the rest of the path
 /// is written under it.
 fn with_key(front: &str, path: &[&str], value: &str) -> String {
+	let leaf = path.last().copied().unwrap_or_default();
+	with_block(front, path, vec![format!("{leaf}: {value}")])
+}
+
+/// The same, for a key worth more than one line: `written` is the key's whole block
+/// spelled at the left margin, and it lands wherever on the path the key belongs.
+fn with_block(front: &str, path: &[&str], written: Vec<String>) -> String {
 	let mut lines: Vec<String> = front.lines().map(str::to_owned).collect();
 	let mut from = 0;
 	let mut until = lines.len();
 	let mut indent = 0;
 	for (depth, key) in path.iter().enumerate() {
 		let Some(at) = key_line(&lines, from, until, indent, key) else {
-			let grown = branch(&path[depth..], indent, value);
+			let grown = branch(&path[depth..], indent, written);
 			lines.splice(until..until, grown);
 			return lines.join("\n");
 		};
 		if depth + 1 == path.len() {
 			let end = block_end(&lines, at);
-			lines.splice(at..end, [format!("{}{key}: {value}", " ".repeat(indent))]);
+			lines.splice(at..end, indented(written, indent));
 			return lines.join("\n");
 		}
 		from = at + 1;
@@ -858,6 +1055,86 @@ fn with_key(front: &str, path: &[&str], value: &str) -> String {
 		indent = child_indent(&lines, from, until).unwrap_or(indent + INDENT);
 	}
 	lines.join("\n")
+}
+
+/// Frontmatter with one top-level key written whole, or taken away when what it was
+/// offered is empty. A value the caller did not offer at all leaves the file alone,
+/// down to the spelling: a key nobody edited is a key nobody rewrote.
+///
+/// The value goes in as block YAML rather than as one flow line, because that is the
+/// shape the rest of this module reads a file back in — see [`front_value`], which
+/// finds the mark by the line it sits on.
+fn written_front(front: &str, key: &str, value: Option<&serde_json::Value>) -> String {
+	match value {
+		None => front.to_owned(),
+		Some(value) if is_blank(value) => without_key(front, &[key]),
+		Some(value) => with_block(front, &[key], yaml_lines(key, value, 0)),
+	}
+}
+
+/// Whether a value asks for its key to go: nothing, the empty word, the empty list
+/// and the empty map all mean a field a reader left empty.
+fn is_blank(value: &serde_json::Value) -> bool {
+	match value {
+		serde_json::Value::Null => true,
+		serde_json::Value::String(text) => text.is_empty(),
+		serde_json::Value::Array(items) => items.is_empty(),
+		serde_json::Value::Object(map) => map.is_empty(),
+		_ => false,
+	}
+}
+
+/// A value written out as YAML under its key. Scalars sit on the key's own line and
+/// everything else is nested under it, so a file this module writes reads the way a
+/// file a hand wrote does.
+fn yaml_lines(key: &str, value: &serde_json::Value, indent: usize) -> Vec<String> {
+	let pad = " ".repeat(indent);
+	match value {
+		serde_json::Value::Array(items) => {
+			let mut lines = vec![format!("{pad}{key}:")];
+			lines.extend(items.iter().flat_map(|item| item_lines(item, indent + INDENT)));
+			lines
+		}
+		serde_json::Value::Object(map) => {
+			let mut lines = vec![format!("{pad}{key}:")];
+			lines.extend(
+				map.iter().flat_map(|(nested, held)| yaml_lines(nested, held, indent + INDENT)),
+			);
+			lines
+		}
+		scalar => vec![format!("{pad}{key}: {}", written_scalar(scalar))],
+	}
+}
+
+/// One item of a sequence. A map under a dash keeps its first key on the dash's own
+/// line, which is how YAML spells it and how [`sequenced`] reads it back.
+fn item_lines(item: &serde_json::Value, indent: usize) -> Vec<String> {
+	let pad = " ".repeat(indent);
+	match item {
+		serde_json::Value::Object(map) if !map.is_empty() => {
+			let mut lines: Vec<String> =
+				map.iter().flat_map(|(key, held)| yaml_lines(key, held, indent + INDENT)).collect();
+			lines[0] = format!("{pad}- {}", lines[0].trim_start());
+			lines
+		}
+		serde_json::Value::Array(items) => {
+			let mut lines = vec![format!("{pad}-")];
+			lines.extend(items.iter().flat_map(|held| item_lines(held, indent + INDENT)));
+			lines
+		}
+		scalar => vec![format!("{pad}- {}", written_scalar(scalar))],
+	}
+}
+
+/// A scalar as the file spells it. Text is quoted whatever it says — a colon, a hash
+/// or a newline in a description would otherwise make the file mean something else —
+/// and a flag, a number and nothing keep the words YAML reads them by.
+fn written_scalar(value: &serde_json::Value) -> String {
+	match value {
+		serde_json::Value::String(text) => quoted(text),
+		serde_json::Value::Null => "null".to_owned(),
+		other => other.to_string(),
+	}
 }
 
 /// Frontmatter with one key taken away, and with every map its going leaves empty
@@ -892,19 +1169,22 @@ fn without_key(front: &str, path: &[&str]) -> String {
 	lines.join("\n")
 }
 
-/// A path written out as nested lines, the last one carrying the value.
-fn branch(path: &[&str], indent: usize, value: &str) -> Vec<String> {
-	path.iter()
+/// A path written out as nested lines, the deepest of them carrying the block.
+fn branch(path: &[&str], indent: usize, written: Vec<String>) -> Vec<String> {
+	let depth = path.len().saturating_sub(1);
+	let mut grown: Vec<String> = path[..depth]
+		.iter()
 		.enumerate()
-		.map(|(step, key)| {
-			let pad = " ".repeat(indent + step * INDENT);
-			if step + 1 == path.len() {
-				format!("{pad}{key}: {value}")
-			} else {
-				format!("{pad}{key}:")
-			}
-		})
-		.collect()
+		.map(|(step, key)| format!("{}{key}:", " ".repeat(indent + step * INDENT)))
+		.collect();
+	grown.extend(indented(written, indent + depth * INDENT));
+	grown
+}
+
+/// The same lines, moved in by one map's worth of depth.
+fn indented(lines: Vec<String>, indent: usize) -> Vec<String> {
+	let pad = " ".repeat(indent);
+	lines.into_iter().map(|line| format!("{pad}{line}")).collect()
 }
 
 /// Where a key sits at one depth of one map, or `None` for a map that does not carry
@@ -1085,6 +1365,188 @@ fn front_value(text: &str, key: &str) -> Option<String> {
 /// nothing had to escape.
 fn unquoted(value: &str) -> String {
 	serde_json::from_str::<String>(value).unwrap_or_else(|_| value.trim_matches('"').to_owned())
+}
+
+/// The whole of a frontmatter as values, by key. Every map this module writes it
+/// reads back, and a `SKILL.md` a hand wrote reads the same way: nested maps,
+/// sequences, flow lists and folded text all answer as what they say.
+fn mapped_lines(front: &str) -> serde_json::Map<String, serde_json::Value> {
+	let lines: Vec<String> = front.lines().map(str::to_owned).collect();
+	let end = lines.len();
+	mapped(&lines, 0, end)
+}
+
+/// One map, from its first line to the end of its block. Lines nested deeper belong
+/// to the key above them, and a line naming no key at this depth is skipped rather
+/// than guessed at — a write over that file is refused elsewhere, see
+/// [`checked_front`].
+fn mapped(
+	lines: &[String],
+	from: usize,
+	until: usize,
+) -> serde_json::Map<String, serde_json::Value> {
+	let until = until.min(lines.len());
+	let indent = child_indent(lines, from, until).unwrap_or(0);
+	let mut map = serde_json::Map::new();
+	let mut index = from;
+	while index < until {
+		let line = &lines[index];
+		let trimmed = line.trim();
+		if trimmed.is_empty() || indent_of(line) != indent || !keyed(trimmed) {
+			index += 1;
+			continue;
+		}
+		let end = block_end(lines, index);
+		let (key, inline) = trimmed.split_once(':').unwrap_or((trimmed, ""));
+		map.insert(key.trim().to_owned(), valued(inline.trim(), lines, index + 1, end));
+		index = end;
+	}
+	map
+}
+
+/// One sequence. An item carrying a key of its own is the map that starts on the
+/// dash's line — `- matcher: Bash` and everything indented under it — which is how a
+/// hooks block is spelled.
+fn sequenced(lines: &[String], from: usize, until: usize) -> Vec<serde_json::Value> {
+	let until = until.min(lines.len());
+	let indent = child_indent(lines, from, until).unwrap_or(0);
+	let mut items = Vec::new();
+	let mut index = from;
+	while index < until {
+		let line = &lines[index];
+		let trimmed = line.trim();
+		if trimmed.is_empty() || indent_of(line) != indent || !trimmed.starts_with('-') {
+			index += 1;
+			continue;
+		}
+		let inline = trimmed[1..].trim();
+		let end = block_end(lines, index);
+		if keyed(inline) {
+			let mut held: Vec<String> = lines[index..end].to_vec();
+			held[0] = held[0].replacen('-', " ", 1);
+			let length = held.len();
+			items.push(serde_json::Value::Object(mapped(&held, 0, length)));
+		} else {
+			items.push(valued(inline, lines, index + 1, end));
+		}
+		index = end;
+	}
+	items
+}
+
+/// What a key or a sequence item is worth: what sits on its own line, or the block
+/// nested under it. A key with neither is nothing at all.
+fn valued(inline: &str, lines: &[String], from: usize, until: usize) -> serde_json::Value {
+	if matches!(inline, "|" | "|-" | "|+" | ">" | ">-" | ">+") {
+		return serde_json::Value::String(folded(lines, from, until, inline.starts_with('>')));
+	}
+	if !inline.is_empty() && !inline.starts_with('#') {
+		return scalar(inline);
+	}
+	if from >= until.min(lines.len()) {
+		return serde_json::Value::Null;
+	}
+	if is_sequence(lines, from, until) {
+		serde_json::Value::Array(sequenced(lines, from, until))
+	} else {
+		serde_json::Value::Object(mapped(lines, from, until))
+	}
+}
+
+/// The text under a `|` or a `>`, dedented by however far its first line sits in. A
+/// folded block joins its lines with spaces and a literal one keeps the newlines,
+/// which is the difference the two marks name.
+///
+/// A line sitting shallower than the first keeps what indentation it has. Cutting it
+/// at the block's depth would be cutting a string at a byte a hand never chose — and
+/// a `pâte` two spaces in would take the whole listing down with it.
+fn folded(lines: &[String], from: usize, until: usize, is_folded: bool) -> String {
+	let until = until.min(lines.len());
+	let indent = child_indent(lines, from, until).unwrap_or(0);
+	let held: Vec<&str> = lines[from.min(until)..until]
+		.iter()
+		.map(|line| &line[indent_of(line).min(indent)..])
+		.collect();
+	held.join(if is_folded { " " } else { "\n" }).trim().to_owned()
+}
+
+/// Whether a block is a sequence rather than a map: its first line carries a dash and
+/// nothing else claims it.
+fn is_sequence(lines: &[String], from: usize, until: usize) -> bool {
+	lines[from.min(lines.len())..until.min(lines.len())]
+		.iter()
+		.find(|line| !line.trim().is_empty())
+		.is_some_and(|line| {
+			let trimmed = line.trim();
+			trimmed == "-" || trimmed.starts_with("- ")
+		})
+}
+
+/// Whether a line names a key. A colon ends the key or is followed by a space, so a
+/// URL and a quoted sentence carrying one are values rather than maps.
+fn keyed(text: &str) -> bool {
+	if text.starts_with('"') || text.starts_with('\'') || text.starts_with('-') {
+		return false;
+	}
+	text.ends_with(':') || text.split_once(": ").is_some()
+}
+
+/// One scalar as the file means it: a flag, a number, nothing, or text — quoted
+/// either way round, or bare, in which case it is its own words.
+fn scalar(text: &str) -> serde_json::Value {
+	if let Some(held) = text.strip_prefix('\'').and_then(|rest| rest.strip_suffix('\'')) {
+		return serde_json::Value::String(held.replace("''", "'"));
+	}
+	serde_json::from_str(text).unwrap_or_else(|_| serde_json::Value::String(unquoted(text)))
+}
+
+/// A value as text. Anything that is not text answers as the file spells it, so a
+/// `model: 4` reads back as `4` rather than as nothing.
+fn as_text(value: &serde_json::Value) -> String {
+	match value {
+		serde_json::Value::String(text) => text.clone(),
+		serde_json::Value::Null => String::new(),
+		other => other.to_string(),
+	}
+}
+
+/// A value as a list. A sequence is one already; a single word is a list of one; and
+/// a line a hand wrote as `Read, Write` or as `Read Write` is the two tools it names
+/// — commas first, since a tool may be spelled `Bash(git status:*)`.
+fn as_list(value: &serde_json::Value) -> Vec<String> {
+	match value {
+		serde_json::Value::Array(items) => items.iter().map(as_text).collect(),
+		serde_json::Value::Null => Vec::new(),
+		other => split_list(&as_text(other)),
+	}
+}
+
+fn split_list(text: &str) -> Vec<String> {
+	let held = text.trim().trim_start_matches('[').trim_end_matches(']');
+	let pieces: Vec<&str> = if held.contains(',') {
+		held.split(',').collect()
+	} else {
+		held.split_whitespace().collect()
+	};
+	pieces
+		.into_iter()
+		.map(|piece| unquoted(piece.trim()))
+		.filter(|piece| !piece.is_empty())
+		.collect()
+}
+
+/// A value as a flag. A file saying anything but yes or no says nothing this module
+/// can carry as one, and answers as a key the skill does not hold.
+fn as_flag(value: &serde_json::Value) -> Option<bool> {
+	match value {
+		serde_json::Value::Bool(flag) => Some(*flag),
+		serde_json::Value::String(text) => match text.as_str() {
+			"true" | "yes" => Some(true),
+			"false" | "no" => Some(false),
+			_ => None,
+		},
+		_ => None,
+	}
 }
 
 #[cfg(test)]
@@ -1556,11 +2018,14 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
+	/// A draft offering nothing past the three values a panel has always sent, which
+	/// is also what every key the draft leaves out is written from: nothing at all.
 	fn a_draft(name: &str, description: &str, body: &str) -> SkillDraft {
 		SkillDraft {
 			name: name.to_owned(),
 			description: description.to_owned(),
 			body: body.to_owned(),
+			front: SkillFront::default(),
 		}
 	}
 
@@ -1631,6 +2096,254 @@ mod tests {
 		assert!(written.contains("allowed-tools:\n  - Read"), "got {written}");
 		assert!(written.contains("  author: someone"), "got {written}");
 		assert!(!written.contains("Old body."), "got {written}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A `SKILL.md` a hand wrote spells the same key half a dozen ways: a list as a
+	/// sequence, as a comma-separated line or as words on one; a paragraph folded
+	/// under a bar; a map nested under a map. Every one of them is one value here,
+	/// and a panel binding a field to a key never has to know which way the file
+	/// happened to say it.
+	#[test]
+	fn every_frontmatter_key_a_skill_carries_is_read_back_whatever_the_file_spells() {
+		let root = a_root("skill-front-read");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		private_files::replace(
+			&path,
+			concat!(
+				"---\n",
+				"name: baking\n",
+				"description: How to bake.\n",
+				"when_to_use: |\n",
+				"  When the loaf is flat.\n",
+				"  And when it is not.\n",
+				"argument-hint: \"[loaf]\"\n",
+				"arguments:\n",
+				"  - flour\n",
+				"  - water\n",
+				"disable-model-invocation: true\n",
+				"user-invocable: false\n",
+				"allowed-tools: Read, Bash(git status:*)\n",
+				"disallowed-tools: WebFetch WebSearch\n",
+				"model: sonnet\n",
+				"effort: high\n",
+				"context: fresh\n",
+				"agent: baker\n",
+				"background: true\n",
+				"hooks:\n",
+				"  PreToolUse:\n",
+				"    - matcher: Bash\n",
+				"      command: echo\n",
+				"paths:\n",
+				"  - src\n",
+				"shell: /bin/zsh\n",
+				"metadata:\n",
+				"  author: someone\n",
+				"  opennest:\n",
+				"    preload: true\n",
+				"license: MIT\n",
+				"compatibility:\n",
+				"  claude-code: \">=2.0.0\"\n",
+				"---\n\n",
+				"Bake.\n",
+			)
+			.as_bytes(),
+		)
+		.expect("the skill is dropped in");
+
+		let read = read_skill(path.parent().expect("the skill directory")).expect("it reads");
+		let front = read.front;
+
+		assert_eq!(read.body, "Bake.");
+		assert!(read.is_preloaded);
+		assert_eq!(
+			front.when_to_use.as_deref(),
+			Some("When the loaf is flat.\nAnd when it is not.")
+		);
+		assert_eq!(front.argument_hint.as_deref(), Some("[loaf]"));
+		assert_eq!(front.arguments, Some(vec!["flour".to_owned(), "water".to_owned()]));
+		assert_eq!(front.disable_model_invocation, Some(true));
+		assert_eq!(front.user_invocable, Some(false));
+		assert_eq!(
+			front.allowed_tools,
+			Some(vec!["Read".to_owned(), "Bash(git status:*)".to_owned()])
+		);
+		assert_eq!(
+			front.disallowed_tools,
+			Some(vec!["WebFetch".to_owned(), "WebSearch".to_owned()])
+		);
+		assert_eq!(front.model.as_deref(), Some("sonnet"));
+		assert_eq!(front.effort.as_deref(), Some("high"));
+		assert_eq!(front.context.as_deref(), Some("fresh"));
+		assert_eq!(front.agent.as_deref(), Some("baker"));
+		assert_eq!(front.background, Some(true));
+		assert_eq!(
+			front.hooks,
+			Some(serde_json::json!({ "PreToolUse": [{ "matcher": "Bash", "command": "echo" }] }))
+		);
+		assert_eq!(front.paths, Some(vec!["src".to_owned()]));
+		assert_eq!(front.shell.as_deref(), Some("/bin/zsh"));
+		assert_eq!(
+			front.metadata,
+			Some(serde_json::json!({ "author": "someone", "opennest": { "preload": true } }))
+		);
+		assert_eq!(front.license.as_deref(), Some("MIT"));
+		assert_eq!(front.compatibility, Some(serde_json::json!({ "claude-code": ">=2.0.0" })));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A `SKILL.md` a hand wrote indents a folded block however it likes, and its text
+	/// is written in whatever language the reader thinks in. Dedenting every line to
+	/// the depth of the first would cut a shallower one at a byte in the middle of a
+	/// letter — which is not a wrong answer but a panic, taken by a caller who asked
+	/// for nothing more than the list of a bot's skills.
+	#[test]
+	fn a_folded_block_a_hand_indented_survives_a_letter_that_is_not_ascii() {
+		let root = a_root("skill-folded");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		private_files::replace(
+			&path,
+			concat!(
+				"---\n",
+				"name: baking\n",
+				"when_to_use: |\n",
+				"    Flat.\n",
+				"  p\u{e2}te\n",
+				"---\n\n",
+				"Bake.\n",
+			)
+			.as_bytes(),
+		)
+		.expect("the skill is dropped in");
+
+		let read = read_skill(path.parent().expect("the skill directory")).expect("it reads");
+
+		assert_eq!(read.front.when_to_use.as_deref(), Some("Flat.\np\u{e2}te"));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// What a draft asks for and what it does not. A key it offers is written, a key
+	/// it offers empty goes, a key it says nothing about is left exactly as the file
+	/// has it — and a key this app has never heard of is not its business either way.
+	#[test]
+	fn a_draft_writes_what_it_offers_and_leaves_alone_what_it_does_not() {
+		let root = a_root("skill-front-write");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		private_files::replace(
+			&path,
+			concat!(
+				"---\n",
+				"name: baking\n",
+				"description: old\n",
+				"license: MIT\n",
+				"effort: high\n",
+				"homegrown: kept\n",
+				"allowed-tools:\n",
+				"  - Read\n",
+				"---\n\n",
+				"Old body.\n",
+			)
+			.as_bytes(),
+		)
+		.expect("the skill is dropped in");
+
+		let draft = SkillDraft {
+			front: SkillFront {
+				allowed_tools: Some(vec!["Read".to_owned(), "Write".to_owned()]),
+				model: Some("opus".to_owned()),
+				user_invocable: Some(false),
+				license: Some(String::new()),
+				..SkillFront::default()
+			},
+			..a_draft("Baking", "New.", "New body.")
+		};
+		let updated = update_skill(&root, &bot, "baking", &draft).expect("the skill is rewritten");
+
+		assert_eq!(updated.front.allowed_tools, Some(vec!["Read".to_owned(), "Write".to_owned()]));
+		assert_eq!(updated.front.model.as_deref(), Some("opus"));
+		assert_eq!(updated.front.user_invocable, Some(false));
+		assert_eq!(updated.front.license, None);
+		assert_eq!(updated.front.effort.as_deref(), Some("high"), "a key nobody offered moved");
+
+		let written = written_skill_file(&root, &bot.id, "baking");
+		assert!(written.contains("allowed-tools:\n  - \"Read\"\n  - \"Write\""), "got {written}");
+		assert!(written.contains("model: \"opus\""), "got {written}");
+		assert!(written.contains("user-invocable: false"), "got {written}");
+		assert!(!written.contains("license"), "got {written}");
+		assert!(written.contains("homegrown: kept"), "got {written}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// `metadata` is a reader's map to write and this app keeps its own mark inside
+	/// it. A caller rewriting the map has no way to know what the bot was told, so the
+	/// mark goes back where it was — losing it would drop the body out of the prompt
+	/// on the next write, silently.
+	#[test]
+	fn metadata_a_caller_writes_keeps_the_mark_the_bot_carries() {
+		let root = a_root("skill-metadata");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let created = create_skill(&root, &bot, &a_draft("Baking", "How.", "Bake at 220 degrees."))
+			.expect("the skill is written");
+		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
+
+		let draft = SkillDraft {
+			front: SkillFront {
+				metadata: Some(serde_json::json!({ "author": "someone" })),
+				..SkillFront::default()
+			},
+			..a_draft("Baking", "How.", "Bake at 220 degrees.")
+		};
+		let updated =
+			update_skill(&root, &bot, &created.id, &draft).expect("the skill is rewritten");
+
+		assert!(updated.is_preloaded, "the mark went with the map that carried it");
+		assert_eq!(
+			updated.front.metadata,
+			Some(serde_json::json!({ "author": "someone", "opennest": { "preload": "true" } }))
+		);
+		let agent = written_agent(&root, &bot.id);
+		assert!(agent.contains("Bake at 220 degrees."), "got {agent}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A `SKILL.md` this module cannot read is not one it may rewrite: a fence nothing
+	/// closes and a line naming no key would both come back as something else. Nothing
+	/// is written, the caller is told, and the file is left for the hand that is in
+	/// the middle of it.
+	#[test]
+	fn frontmatter_this_app_cannot_read_refuses_the_write_and_leaves_the_file() {
+		let root = a_root("skill-unreadable");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let unclosed = "---\nname: baking\nstill typing\n";
+		let strange = "---\nname: kneading\njust some prose\n---\n\nKnead.\n";
+		for (id, text) in [("baking", unclosed), ("kneading", strange)] {
+			let path = dir(&root, &bot.id).join(SKILLS_DIR).join(id).join(SKILL_NAME);
+			private_files::replace(&path, text.as_bytes()).expect("the skill is dropped in");
+
+			let refused = update_skill(&root, &bot, id, &a_draft("Baking", "New.", "New body."));
+
+			assert!(refused.is_err(), "{id} was rewritten");
+			assert_eq!(written_skill_file(&root, &bot.id, id), text, "{id} was touched");
+			assert!(
+				set_skill_preloaded(&root, &bot, id, true).is_err(),
+				"{id} took a mark it could not carry"
+			);
+			assert_eq!(
+				written_skill_file(&root, &bot.id, id),
+				text,
+				"{id} was touched by the mark"
+			);
+		}
 
 		let _ = fs::remove_dir_all(&root);
 	}
