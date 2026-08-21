@@ -120,7 +120,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a bot is, in one overlay. A breadcrumb heads it with the bot's avatar, its name and the word Settings, so a reader who opened it from a roster of twelve knows which one they are editing on every tab. Down the left is a rail of groups — General, Appearance, Instructions, Runtime, then a separator and Danger zone in destructive tone, last because it is the one action that cannot be undone. It opens on General every time. It is fully controlled and saves as you type: every keystroke emits `onValueChange` with the whole value, and the dialog owns no draft, no debounce and no persistence — closing it is never a question, because there is nothing unsaved to lose. The breadcrumb and the rail hold still and only the open group scrolls, so the rail is where a reader left it after a long scroll through the animals. Below 42rem of content the rail drops to its icons, each one still named to a screen reader and named on hover and focus with a tooltip.",
+					"Everything a bot is, in one overlay. A breadcrumb heads it with the bot's avatar, its name and the word Settings, so a reader who opened it from a roster of twelve knows which one they are editing on every tab. Down the left is a rail of groups — General, Appearance, Instructions, Runtime, then a separator and Danger zone in destructive tone, last because it is the one action that cannot be undone. It opens on General, unless the host set `showDanger` to say a row's own delete is what opened it. It is fully controlled and saves as you type: every keystroke emits `onValueChange` with the whole value, and the dialog owns no draft, no debounce and no persistence — closing it is never a question, because there is nothing unsaved to lose. The breadcrumb and the rail hold still and only the open group scrolls, so the rail is where a reader left it after a long scroll through the animals. Below 42rem of content the rail drops to its icons, each one still named to a screen reader and named on hover and focus with a tooltip.",
 			},
 		},
 	},
@@ -137,6 +137,9 @@ const meta = preview.meta({
 	},
 	argTypes: {
 		working: { control: "boolean" },
+		// Read once, as the dialog mounts, so it is a story's arg rather than a knob:
+		// a control that only takes effect on a remount reads as a broken one.
+		showDanger: { control: false },
 	},
 	render: (args) => <DialogHost {...args} />,
 })
@@ -320,6 +323,29 @@ export const DangerZone = meta.story({
 			within(reopened).getByRole("button", { name: "Delete bot" }),
 		)
 		await expect(args.onDelete).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const OpenedOnDanger = meta.story({
+	args: { showDanger: true },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The dialog as a row's own delete opens it: `showDanger` lands it on Danger zone instead of General. Check that it only picks the group — no confirmation stands, so a reader who meant another bot can leave without answering anything. Pick `DangerZone` for the confirmation itself.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const danger = within(dialog).getByRole("tab", { name: "Danger zone" })
+		await expect(danger).toHaveAttribute("aria-selected", "true")
+		await expect(screen.queryByRole("alertdialog")).toBe(null)
+
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onClose).toHaveBeenCalled()
+		await expect(args.onDelete).not.toHaveBeenCalled()
 	},
 })
 

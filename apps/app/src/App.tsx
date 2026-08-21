@@ -66,7 +66,7 @@ export function App() {
 	// and the window is what has to stay on the view they were reading.
 	useExternalLinks()
 
-	const { bots, selectedBotId, isEditing, isConfirmingDelete, hasLoaded } =
+	const { bots, selectedBotId, isEditing, isShowingDanger, hasLoaded } =
 		roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
 
@@ -224,20 +224,12 @@ export function App() {
 			the width back without touching what is selected or where it is scrolled. */}
 			{selected ? (
 				<BotSettingsDialog
-					confirmingDelete={isConfirmingDelete}
 					models={modelOptionsFor(selected.model, catalogue)}
 					onAvatarUpload={(file) => {
 						void roster.controller.uploadAvatar(selected.id, file)
 					}}
 					onBrowseWorkingDirectory={browseWorkingDirectory}
 					onClose={() => roster.controller.setEditing(false)}
-					onConfirmingDeleteChange={(confirming) => {
-						if (confirming) {
-							roster.controller.askToDelete(selected.id)
-						} else {
-							roster.controller.cancelDelete()
-						}
-					}}
 					onDelete={() => {
 						void deleteBot(selected.id)
 					}}
@@ -252,6 +244,7 @@ export function App() {
 					}}
 					open={isEditing}
 					seed={selected.id}
+					showDanger={isShowingDanger}
 					value={toSettingsValue(selected)}
 					working={activity?.isWorking ?? false}
 					workingKind={activity?.kind}

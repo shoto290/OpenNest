@@ -243,29 +243,26 @@ describe("createRosterController", () => {
 		)
 	})
 
-	it("lands on the row that took the deleted one's place", async () => {
+	// The panel that asked closes with the bot, and the reader lands at the top of the
+	// roster rather than on the row the deleted one left behind — which is why the one
+	// deleted here is a middle row, where the two landings differ.
+	it("closes the panel and lands on the first row once a bot is deleted", async () => {
 		const controller = await loaded(await anEmptyStore())
 		await controller.create()
 		await controller.create()
-		const [first, second] = controller.getState().bots
-
-		controller.select(first.id)
-		await controller.remove(first.id)
-
-		expect(controller.getState().bots.map((bot) => bot.id)).toEqual([second.id])
-		expect(controller.getState().selectedBotId).toBe(second.id)
-	})
-
-	it("keeps the selection when another row's bot is deleted", async () => {
-		const controller = await loaded(await anEmptyStore())
 		await controller.create()
-		await controller.create()
-		const [first, second] = controller.getState().bots
+		const [first, second, third] = controller.getState().bots
 
-		controller.select(second.id)
-		await controller.remove(first.id)
+		controller.askToDelete(second.id)
+		await controller.remove(second.id)
 
-		expect(controller.getState().selectedBotId).toBe(second.id)
+		const state = controller.getState()
+		expect(state.bots.map((bot) => bot.id)).toEqual([first.id, third.id])
+		expect(state).toMatchObject({
+			selectedBotId: first.id,
+			isEditing: false,
+			isShowingDanger: false,
+		})
 	})
 
 	// Deleting the last bot is allowed, and what is left is the empty state rather
@@ -322,9 +319,9 @@ describe("createRosterController", () => {
 		)
 	})
 
-	// Asking from a roster row is the same confirmation the panel's own button opens,
-	// so asking selects the bot and stands the panel up over it. Nothing is deleted.
-	it("selects and opens the bot a delete is asked about, and deletes nothing yet", async () => {
+	// Asking from a roster row opens the panel where the delete lives, and nothing
+	// else: the confirmation is the panel's own, and the reader still has to ask.
+	it("selects the bot a delete is asked about and opens it on the danger group", async () => {
 		const store = createFakeTranscriptStore()
 		const deleted = vi.spyOn(store, "deleteBot")
 		const controller = await loaded(store)
@@ -334,12 +331,48 @@ describe("createRosterController", () => {
 		expect(controller.getState()).toMatchObject({
 			selectedBotId: "default",
 			isEditing: true,
-			isConfirmingDelete: true,
+			isShowingDanger: true,
 		})
 		expect(deleted).not.toHaveBeenCalled()
 
 		controller.setEditing(false)
-		expect(controller.getState().isConfirmingDelete).toBe(false)
+		expect(controller.getState().isShowingDanger).toBe(false)
+	})
+
+	// The group is about the bot it was asked for and no other. Anything that points
+	// the panel somewhere else lets go of it, or the reader would find a delete armed
+	// for a bot they never asked about.
+	it("lets go of the danger group when the panel is pointed at another bot", async () => {
+		const controller = await loaded(await anEmptyStore())
+		await controller.create()
+		await controller.create()
+		const [first, second] = controller.getState().bots
+
+		controller.askToDelete(second.id)
+		controller.select(first.id)
+
+		expect(controller.getState().isShowingDanger).toBe(false)
+
+		controller.askToDelete(second.id)
+		controller.edit(first.id)
+
+		expect(controller.getState().isShowingDanger).toBe(false)
+	})
+
+	// A record the panel's bot has left is a panel with nothing to edit: the read that
+	// finds it gone closes the panel rather than re-aiming it at whoever is left.
+	it("closes the panel when a read no longer holds the bot it was open on", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		controller.askToDelete("default")
+		await store.deleteBot("default")
+
+		await controller.load()
+
+		expect(controller.getState()).toMatchObject({
+			isEditing: false,
+			isShowingDanger: false,
+		})
 	})
 })
 
@@ -391,6 +424,26 @@ describe("createRosterController previews", () => {
 		const state = (await loaded(store)).getState()
 
 		expect(state.previews.default).toMatchObject({ text: "And?" })
+	})
+
+	// The preview goes with the row it previewed: what a deleted bot last said is not
+	// a conversation anybody can open any more.
+	it("drops the preview of the bot it deletes and keeps every other", async () => {
+		const store = createFakeTranscriptStore()
+		const seeded = await loaded(store)
+		await seeded.create()
+		const [first, second] = seeded.getState().bots
+		await saidTo(store, first.id, "Pulled the three papers.")
+		await saidTo(store, second.id, "Rebuilding the bundle.")
+		const controller = await loaded(store)
+
+		await controller.remove(second.id)
+
+		const { previews } = controller.getState()
+		expect(previews).not.toHaveProperty(second.id)
+		expect(previews[first.id]).toMatchObject({
+			text: "Pulled the three papers.",
+		})
 	})
 
 	// One conversation the store will not answer for is one blank row, not a roster

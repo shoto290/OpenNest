@@ -24,9 +24,11 @@ export type RosterState = {
 	 * closed, there is no panel beside the conversation at all, and the gear in the
 	 * conversation's own bar is what brings it back. */
 	isEditing: boolean
-	/** A delete waiting to be confirmed. Only ever about the selected bot, because
-	 * asking to delete one is what selects it. */
-	isConfirmingDelete: boolean
+	/** Whether the settings were opened to ask about a delete, which is what lands
+	 * them on the Danger zone rather than on the first group. Only ever about the
+	 * selected bot, because asking to delete one is what selects it. Nothing is
+	 * confirmed here — the confirmation belongs to the panel. */
+	isShowingDanger: boolean
 	/** Whether the record has answered the first read. It is what tells a launch
 	 * from a reader who owns no bot: both hold no rows, and only one of them is a
 	 * reader with nothing to show for it. A read the store refused still counts as
@@ -58,10 +60,11 @@ export type RosterController = {
 	/** The picture the reader picked, from the bytes of their file. The store owns
 	 * where it goes and answers with the bot wearing it. */
 	uploadAvatar: (id: string, file: File) => Promise<void>
-	/** Selects the bot and stands the confirmation up over it. Nothing is deleted
-	 * here — `remove` is what the confirmation calls. */
+	/** Selects the bot and opens its settings on the Danger zone. Nothing is asked
+	 * and nothing is deleted here — `remove` is what the panel's confirmation calls. */
 	askToDelete: (id: string) => void
-	cancelDelete: () => void
+	/** Deletes the bot, closes the panel that asked and lands the reader at the top of
+	 * the roster: the row a deleted bot left behind is nobody's conversation. */
 	remove: (id: string) => Promise<void>
 }
 
@@ -70,24 +73,8 @@ export const initialRosterState: RosterState = {
 	previews: {},
 	selectedBotId: null,
 	isEditing: false,
-	isConfirmingDelete: false,
+	isShowingDanger: false,
 	hasLoaded: false,
-}
-
-/** Where the selection lands when a bot is deleted: the row that takes its place,
- * the one above it if it was the last, and nothing at all if it was the only one.
- * A bot deleted from another row's menu leaves the selection where it was. */
-const selectionAfter = (
-	bots: Bot[],
-	deleted: string,
-	selected: string | null,
-): string | null => {
-	if (selected !== deleted) {
-		return selected
-	}
-	const index = bots.findIndex((bot) => bot.id === deleted)
-	const rest = bots.filter((bot) => bot.id !== deleted)
-	return rest[index]?.id ?? rest[index - 1]?.id ?? null
 }
 
 export const createRosterController = (
@@ -149,12 +136,15 @@ export const createRosterController = (
 
 	const read = async () => {
 		const bots = await store.bots()
+		const stillHeld = bots.find((bot) => bot.id === state.selectedBotId)?.id
 		set({
 			bots,
-			selectedBotId:
-				bots.find((bot) => bot.id === state.selectedBotId)?.id ??
-				bots[0]?.id ??
-				null,
+			selectedBotId: stillHeld ?? bots[0]?.id ?? null,
+			// The panel belongs to the bot it was opened on: a record that no longer
+			// holds that bot has nothing left for it to edit, and the group it was
+			// opened on is nobody's question.
+			isEditing: state.isEditing && stillHeld !== undefined,
+			isShowingDanger: state.isShowingDanger && stillHeld !== undefined,
 		})
 	}
 
@@ -226,7 +216,7 @@ export const createRosterController = (
 
 		select: (id: string) => {
 			if (id !== state.selectedBotId) {
-				set({ selectedBotId: id, isConfirmingDelete: false })
+				set({ selectedBotId: id, isShowingDanger: false })
 			}
 		},
 
@@ -237,20 +227,20 @@ export const createRosterController = (
 					bots: [...state.bots, created],
 					selectedBotId: created.id,
 					isEditing: true,
-					isConfirmingDelete: false,
+					isShowingDanger: false,
 				})
 			}).catch(reload),
 
 		edit: (id: string) =>
-			set({ selectedBotId: id, isEditing: true, isConfirmingDelete: false }),
+			set({ selectedBotId: id, isEditing: true, isShowingDanger: false }),
 
-		/** A confirmation goes with the panel that held it: the dialog lives inside the
-		 * column, so one still asked for after the reader closed it would pop the next
-		 * time they opened the settings for something else. */
+		/** The group goes with the panel that opened on it: settings reopened with the
+		 * gear are settings nobody asked a delete about, so they land on the first
+		 * group again. */
 		setEditing: (isEditing: boolean) =>
 			set({
 				isEditing,
-				isConfirmingDelete: isEditing && state.isConfirmingDelete,
+				isShowingDanger: isEditing && state.isShowingDanger,
 			}),
 
 		describe: (id: string, value: BotSettingsValue) => {
@@ -274,24 +264,20 @@ export const createRosterController = (
 			}).catch(reload),
 
 		askToDelete: (id: string) =>
-			set({ selectedBotId: id, isEditing: true, isConfirmingDelete: true }),
-
-		cancelDelete: () => set({ isConfirmingDelete: false }),
+			set({ selectedBotId: id, isEditing: true, isShowingDanger: true }),
 
 		remove: (id: string) =>
 			enqueue(async () => {
 				await store.deleteBot(id)
 				pending.delete(id)
-				const selectedBotId = selectionAfter(
-					state.bots,
-					id,
-					state.selectedBotId,
-				)
+				const bots = state.bots.filter((bot) => bot.id !== id)
+				const { [id]: _deleted, ...previews } = state.previews
 				set({
-					bots: state.bots.filter((bot) => bot.id !== id),
-					selectedBotId,
-					isEditing: state.isEditing && selectedBotId !== null,
-					isConfirmingDelete: false,
+					bots,
+					previews,
+					selectedBotId: bots[0]?.id ?? null,
+					isEditing: false,
+					isShowingDanger: false,
 				})
 			}).catch(reload),
 	}
