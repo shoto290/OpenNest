@@ -20,10 +20,9 @@ export type AvatarAnimal =
 	| "koala"
 
 /** The eight tints a bot may be marked with, named with the vocabulary an agent
- * file's `color` key reads. One name for one thing: the tint a bot is stored under
- * is the word written into its bundle and the word read back out of it, so no
- * translation stands between them to lose one on the way. The ink is unchanged —
- * `purple` is drawn as the lavender it always was.
+ * file's `color` key reads — the word the host stores is the word it writes into the
+ * bot's bundle, so nothing is translated on the way and no tint is lost translating.
+ * The names moved, the ink did not: `purple` is drawn as the lavender it always was.
  *
  * `null` is a bot marked with none, which is what a bot is until someone marks it —
  * the host holds the same eight and the same absence, so "no mark" never has to be

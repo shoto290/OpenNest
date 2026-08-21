@@ -89,10 +89,8 @@ impl From<AvatarAnimal> for conversations::AvatarAnimal {
 	}
 }
 
-/// The eight colours a bot may be marked with, named with the vocabulary an agent
-/// file's `color` key reads — see [`crate::db::repositories::conversations::AvatarBlot`].
-/// The names are the agent format's and the ink is the UI's own, so `purple` crosses
-/// as the lavender the frontend has always drawn.
+/// The eight colours a bot may be marked with, spelled the way
+/// [`conversations::AvatarBlot`] spells them and for the reason given there.
 ///
 /// `null` crosses for a bot marked with none, which is what a bot is until someone
 /// marks it: an `Option` rather than a ninth word, so "no mark" and a mark named
@@ -202,10 +200,8 @@ impl Bot {
 			.unwrap_or_else(|| bot.model.clone());
 		let changes_nothing =
 			written.as_ref().map_or(bot.changes_nothing, |written| written.changes_nothing);
-		let avatar_blot = written
-			.as_ref()
-			.map_or(bot.avatar_blot, |written| written.blot)
-			.map(Into::into);
+		let avatar_blot =
+			written.as_ref().map_or(bot.avatar_blot, |written| written.blot).map(Into::into);
 		let instructions = written
 			.map(|written| written.instructions)
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
@@ -1311,10 +1307,7 @@ mod tests {
 			..a_stored_bot("sonnet")
 		};
 
-		assert_eq!(
-			Bot::of(stored_pink(), None, Some(&root)).avatar_blot,
-			Some(AvatarBlot::Purple)
-		);
+		assert_eq!(Bot::of(stored_pink(), None, Some(&root)).avatar_blot, Some(AvatarBlot::Purple));
 		assert_eq!(Bot::of(stored_pink(), None, None).avatar_blot, Some(AvatarBlot::Pink));
 
 		crate::bundles::write(&root, &a_stored_bot("sonnet")).expect("the bundle is rewritten");

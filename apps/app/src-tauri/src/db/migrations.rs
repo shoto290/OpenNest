@@ -278,12 +278,9 @@ const BOT_DENIAL: &str = "
 ALTER TABLE bots ADD COLUMN changes_nothing INTEGER NOT NULL DEFAULT 0;
 ";
 
-/// The same mark, under the words an agent file's `color` key reads. The tint is
-/// now written into the bot's bundle and read back out of it — see
-/// [`crate::bundles`] — and one vocabulary on both ends is what makes that round
-/// trip exact, where a translation is where a tint gets lost on the way out and
-/// comes back as another on the way in. The ink is untouched: `purple` is drawn as
-/// the lavender it always was.
+/// The same mark, under the words an agent file's `color` key reads — the tint now
+/// travels to the bot's bundle and back, and why it is named there rather than here
+/// is `COLOR_KEY` in [`crate::bundles`].
 ///
 /// A column of its own rather than an `UPDATE` on the old one, for the reason step
 /// 3 left `description` and `avatar_pose` where they are: [`BOT_BLOT`] pinned its
@@ -740,14 +737,22 @@ mod tests {
 			("rose", "pink"),
 			("slate", "orange"),
 		];
-		for (was, _) in marked {
-			connection.execute_batch(&a_bot_marked_the_old_way(was, was)).expect("a marked bot");
-		}
+		let rows: String = marked
+			.iter()
+			.map(|(was, _)| {
+				format!(
+					"INSERT INTO bots (id, name, model, created_at, avatar_blot)
+						VALUES ('{was}', 'A bot', 'sonnet', 1, '{was}');"
+				)
+			})
+			.collect();
 		connection
-			.execute_batch(
-				"INSERT INTO bots (id, name, model, created_at) VALUES ('unmarked', 'A bot', 'sonnet', 1);",
-			)
-			.expect("a bot nobody marked");
+			.execute_batch(&format!(
+				"{rows}
+				INSERT INTO bots (id, name, model, created_at)
+					VALUES ('unmarked', 'A bot', 'sonnet', 1);"
+			))
+			.expect("the install this build upgrades from");
 
 		apply(&mut connection).expect("the file comes up to this build");
 
@@ -758,11 +763,7 @@ mod tests {
 				"the bot stored as {was} did not come up as {now}"
 			);
 		}
-		assert_eq!(
-			blot_of(&connection, "unmarked"),
-			None,
-			"the step marked a bot nobody marked"
-		);
+		assert_eq!(blot_of(&connection, "unmarked"), None, "the step marked a bot nobody marked");
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -793,15 +794,6 @@ mod tests {
 		format!(
 			"INSERT INTO bots (id, name, model, created_at, avatar_color)
 				VALUES ('{id}', 'A bot', 'sonnet', 1, {mark})"
-		)
-	}
-
-	/// A bot marked in the words step 4 held, written the way the build before the
-	/// rename wrote it: the old column, and none of the new one.
-	fn a_bot_marked_the_old_way(blot: &str, id: &str) -> String {
-		format!(
-			"INSERT INTO bots (id, name, model, created_at, avatar_blot)
-				VALUES ('{id}', 'A bot', 'sonnet', 1, '{blot}');"
 		)
 	}
 

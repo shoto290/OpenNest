@@ -273,7 +273,7 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let model = front_value(&text, MODEL_KEY)
 		.map(|found| found.trim().to_owned())
 		.filter(|found| !found.is_empty());
-	let blot = front_value(&text, COLOR_KEY).as_deref().map(str::trim).and_then(AvatarBlot::parse);
+	let blot = front_value(&text, COLOR_KEY).and_then(|found| AvatarBlot::parse(found.trim()));
 	let changes_nothing = denies_changes(&text);
 	Some(Generated { instructions: body(&text).to_owned(), model, blot, changes_nothing })
 }
