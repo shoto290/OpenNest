@@ -17,7 +17,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
 use super::contract::TransportError;
-use super::protocol::{self, Catalogue, Checked, Ready};
+use super::protocol::{self, Catalogue, Checked, Ready, ToolCatalogue};
 
 /// The executable the host spawns instead of the one it would find on `PATH`.
 /// Reserved for a run that ships no bundle of its own — a test, or a developer
@@ -40,9 +40,9 @@ pub const READY_TIMEOUT: Duration = Duration::from_secs(20);
 /// the launch waits on.
 const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// How long the sidecar is given to answer the catalogue. Longer than the check
+/// How long the sidecar is given to answer either catalogue. Longer than the check
 /// because the provider has to open a session to be asked at all, and nothing is
-/// waiting on it: the model list is asked for when a bot is being edited.
+/// waiting on it: both lists are asked for when a bot is being edited.
 const CATALOGUE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// How long a sidecar handed EOF is given to leave on its own before the ladder
@@ -284,6 +284,16 @@ impl Sidecar {
 		let catalogue: Catalogue = serde_json::from_value(answer)
 			.map_err(|error| TransportError::InvalidFrame { detail: error.to_string() })?;
 		Ok(catalogue.models)
+	}
+
+	/// Every built-in tool a session of this install can be given, in the order the
+	/// provider names them. Empty is an answer for the same reason the model
+	/// catalogue's is: what to offer instead is the frontend's to decide.
+	pub async fn tools(&self) -> Result<Vec<String>, TransportError> {
+		let answer = self.ask(protocol::TOOLS, CATALOGUE_TIMEOUT).await?;
+		let catalogue: ToolCatalogue = serde_json::from_value(answer)
+			.map_err(|error| TransportError::InvalidFrame { detail: error.to_string() })?;
+		Ok(catalogue.tools)
 	}
 
 	/// One ask about the install, and the one line that answers it. The waiter is

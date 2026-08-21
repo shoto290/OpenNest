@@ -15,9 +15,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::EVENT_CHANNEL;
 use opennest_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TransportError};
+use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::AgentState;
 use opennest_app::bundles;
 use opennest_app::commands::invoke_handler;
@@ -225,7 +225,7 @@ fn an_identity(instructions: Option<&str>, working_dir: Option<&Path>) -> Value 
 		"avatarImagePath": Value::Null,
 		"workingDir": working_dir.map(|dir| dir.to_string_lossy().into_owned()),
 		"instructions": instructions.unwrap_or_default(),
-		"changesNothing": false
+		"deniedTools": []
 	})
 }
 
@@ -295,8 +295,8 @@ fn as_the_child_sees_it(dir: &Path) -> String {
 /// serves every session — so a scenario that changes between two of them travels
 /// on a file the fake reads each time it opens one.
 fn scenario(name: &str) {
-	let path = std::env::temp_dir()
-		.join(format!("opennest-fake-scenario-{}.txt", std::process::id()));
+	let path =
+		std::env::temp_dir().join(format!("opennest-fake-scenario-{}.txt", std::process::id()));
 	std::fs::write(&path, name).expect("the scenario is written");
 	std::env::set_var(SCENARIO_ENV, path);
 }

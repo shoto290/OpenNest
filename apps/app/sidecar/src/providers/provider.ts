@@ -3,6 +3,7 @@ export type ProviderCapability =
 	| "resume"
 	| "interactivePermissions"
 	| "modelCatalogue"
+	| "toolCatalogue"
 
 export type SessionRequest = {
 	cwd: string
@@ -54,6 +55,10 @@ export type AgentProvider = {
 	assertReady: () => void
 	authenticate: () => Promise<ProviderAuth>
 	models: () => Promise<string[]>
+	/** The built-in tools a session of this provider can be given, without the ones
+	 * an MCP server provides: those belong to a server rather than to the install,
+	 * and nothing here offers to hold one back. */
+	tools: () => Promise<string[]>
 	open: (request: SessionRequest, emit: EmitFrame) => Promise<AgentSession>
 }
 

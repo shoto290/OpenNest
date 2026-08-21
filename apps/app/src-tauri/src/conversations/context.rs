@@ -331,7 +331,7 @@ mod tests {
 			working_dir: None,
 			instructions: instructions.to_owned(),
 			memory: memory.to_owned(),
-			changes_nothing: false,
+			denied_tools: Vec::new(),
 			created_at: 1,
 		}
 	}

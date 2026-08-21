@@ -523,13 +523,14 @@ fn serve() {
 	}
 }
 
-/// The two asks that name no session. Signed in unless the test says otherwise, and
-/// a catalogue named as a comma-separated list so a suite can prove a label it made
-/// up reaches the frontend untouched.
+/// The asks that name no session. Signed in unless the test says otherwise, and
+/// each catalogue named as a comma-separated list so a suite can prove a name it
+/// made up reaches the frontend untouched.
 fn answer_the_host(command: &Value) {
 	match command["type"].as_str() {
 		Some("check") => emit_raw(&checked().to_string()),
 		Some("models") => emit_raw(&json!({ "type": "models", "models": models() }).to_string()),
+		Some("tools") => emit_raw(&json!({ "type": "tools", "tools": tools() }).to_string()),
 		_ => {}
 	}
 }
@@ -545,7 +546,15 @@ fn checked() -> Value {
 }
 
 fn models() -> Vec<String> {
-	std::env::var("FAKE_AGENT_MODELS")
+	named_list("FAKE_AGENT_MODELS")
+}
+
+fn tools() -> Vec<String> {
+	named_list("FAKE_AGENT_TOOLS")
+}
+
+fn named_list(variable: &str) -> Vec<String> {
+	std::env::var(variable)
 		.map(|named| named.split(',').filter(|name| !name.is_empty()).map(str::to_owned).collect())
 		.unwrap_or_default()
 }
@@ -554,14 +563,18 @@ fn models() -> Vec<String> {
 /// so a test can prove the host stops asking for what a sidecar never offered.
 fn capabilities() -> Vec<String> {
 	std::env::var("FAKE_AGENT_CAPABILITIES")
-		.map(|named| {
-			named.split(',').filter(|name| !name.is_empty()).map(str::to_owned).collect()
-		})
+		.map(|named| named.split(',').filter(|name| !name.is_empty()).map(str::to_owned).collect())
 		.unwrap_or_else(|_| {
-			["partialMessages", "resume", "interactivePermissions", "modelCatalogue"]
-				.iter()
-				.map(|name| (*name).to_owned())
-				.collect()
+			[
+				"partialMessages",
+				"resume",
+				"interactivePermissions",
+				"modelCatalogue",
+				"toolCatalogue",
+			]
+			.iter()
+			.map(|name| (*name).to_owned())
+			.collect()
 		})
 }
 

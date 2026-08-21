@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 
 import {
 	BOT_NAMES,
+	CHANGING_TOOLS,
 	changesRuntime,
+	deniesChanges,
 	FALLBACK_MODELS,
 	modelOptionsFor,
 	newBotIdentity,
@@ -15,12 +17,12 @@ import { avatarSrc } from "../host"
 import type { Bot } from "../conversations/store-contract"
 import { botIdentity } from "../conversations/transcript-fixtures"
 
-const bot = (overrides: Partial<Bot> = {}): Bot => ({
-	...botIdentity(),
-	id: "b-1",
-	createdAt: 1,
-	...overrides,
-})
+/** The way the host answers a bot: `changesNothing` is read off the denials rather
+ * than set beside them, so no fixture here can describe a bot the store could not. */
+const bot = (overrides: Partial<Bot> = {}): Bot => {
+	const described = { ...botIdentity(), id: "b-1", createdAt: 1, ...overrides }
+	return { ...described, changesNothing: deniesChanges(described.deniedTools) }
+}
 
 describe("toSettingsValue", () => {
 	it("hands the panel every field a bot was described with", () => {
@@ -83,6 +85,11 @@ describe("changesRuntime", () => {
 		expect(changesRuntime(stored, { ...value, changesNothing: true })).toBe(
 			true,
 		)
+		expect(
+			changesRuntime(bot({ deniedTools: ["Bash"] }), {
+				...toSettingsValue(bot({ deniedTools: ["Bash"] })),
+			}),
+		).toBe(false)
 	})
 
 	// Everything else about a bot is read where it is shown, or travels with the
@@ -164,6 +171,44 @@ describe("toIdentity", () => {
 		for (const model of [...FALLBACK_MODELS, "claude-opus-4-1-20250805"]) {
 			expect(toIdentity({ ...value, model }, stored).model).toBe(model)
 		}
+	})
+})
+
+describe("toIdentity, on the tools a bot is denied", () => {
+	// The one path the denial is written through: a reader ticking the four tools
+	// one by one and a reader throwing the switch submit the same list, so no order
+	// of writes can make the agent file mean two things.
+	it("writes the same denials for the switch as for the four tools picked by hand", () => {
+		const picked = bot({ deniedTools: [...CHANGING_TOOLS].reverse() })
+		const thrown = bot({ deniedTools: [] })
+
+		expect(
+			toIdentity(
+				{ ...toSettingsValue(thrown), changesNothing: true },
+				thrown,
+			).deniedTools.toSorted(),
+		).toEqual(
+			toIdentity(toSettingsValue(picked), picked).deniedTools.toSorted(),
+		)
+	})
+
+	// Everything else the reader denied stays denied: the switch owns four names and
+	// no others.
+	it("leaves every other denial standing when the switch goes off", () => {
+		const held = bot({ deniedTools: [...CHANGING_TOOLS, "WebFetch"] })
+
+		expect(
+			toIdentity({ ...toSettingsValue(held), changesNothing: false }, held)
+				.deniedTools,
+		).toEqual(["WebFetch"])
+	})
+
+	it("carries the bot's own denials through a write that says nothing about them", () => {
+		const held = bot({ deniedTools: ["WebFetch"] })
+
+		expect(
+			toIdentity({ ...toSettingsValue(held), name: "Nyx" }, held).deniedTools,
+		).toEqual(["WebFetch"])
 	})
 })
 

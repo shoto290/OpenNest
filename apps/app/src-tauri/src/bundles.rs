@@ -129,15 +129,27 @@ const MODEL_KEY: &str = "model";
 const COLOR_KEY: &str = "color";
 
 /// The frontmatter key the agent format reads a denial from, honoured on the
-/// promoted path — see `agent/PLUGINS.md`, where a session named by all four dropped
-/// from 33 tools to 29 — and the tools a bot set to change nothing is denied.
+/// promoted path — see `agent/PLUGINS.md`, where a session named by four of them
+/// dropped from 33 tools to 29.
 ///
-/// The list is named here and nowhere else, so what the setting stops is one answer
-/// rather than one per surface. What it does not stop: a server the bundle declares
-/// writes wherever its own process may, and a bot may still ask somebody else to do
-/// the writing. This denies four built-in tools, not the ability to have an effect.
+/// One writer, and one only: every denial a bot carries is a name in the list this
+/// key is written from — see [`denial_line`] — so no second setting can reach the
+/// key and no two writes can disagree about it.
 const DISALLOWED_KEY: &str = "disallowedTools";
-const DENIED_TOOLS: [&str; 4] = ["Bash", "Edit", "Write", "NotebookEdit"];
+
+/// The built-in tools that write files and run commands. Named here and nowhere
+/// else on this side: a bot denying all four is what "changes nothing" reads as —
+/// see [`denies_changes`] — rather than a switch of its own.
+///
+/// What denying them does not stop: a server the bundle declares writes wherever
+/// its own process may, and a bot may still ask somebody else to do the writing.
+/// This denies four built-in tools, not the ability to have an effect.
+pub const CHANGING_TOOLS: [&str; 4] = ["Bash", "Edit", "Write", "NotebookEdit"];
+
+/// What a tool an MCP server provides is named. Never denied here: a server's tool
+/// is the bundle's own capability, declared in `.mcp.json`, and taking it away
+/// through this key would be one surface undoing another.
+const MCP_PREFIX: &str = "mcp__";
 
 /// The frontmatter key a skill asks to be carried under, read from wherever it sits
 /// in the map — `metadata.opennest.preload` — the same way [`OWNER_KEY`] is read.
@@ -280,9 +292,10 @@ pub struct Generated {
 	/// The tint the file marks the bot with. `None` for a file naming no colour, and
 	/// for one naming a word that is no tint of this build's — see [`COLOR_KEY`].
 	pub blot: Option<AvatarBlot>,
-	/// Whether the file denies the tools that change files and run commands, which
-	/// is the whole of how the setting reaches a run.
-	pub changes_nothing: bool,
+	/// The built-in tools the file denies, in the order it names them. The whole of
+	/// how a denial reaches a run, and the only thing "changes nothing" is read
+	/// from — see [`denies_changes`].
+	pub denied_tools: Vec<String>,
 }
 
 /// The bot as its own agent file holds it. `None` is a bundle this install has not
@@ -294,8 +307,8 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 		.map(|found| found.trim().to_owned())
 		.filter(|found| !found.is_empty());
 	let blot = front_value(&text, COLOR_KEY).and_then(|found| AvatarBlot::parse(found.trim()));
-	let changes_nothing = denies_changes(&text);
-	Some(Generated { instructions: body(&text).to_owned(), model, blot, changes_nothing })
+	let denied_tools = front_denials(&text);
+	Some(Generated { instructions: body(&text).to_owned(), model, blot, denied_tools })
 }
 
 /// What the bot was told, as the file holds it.
@@ -520,8 +533,8 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// writes no key, so the mark and its absence are the key and its absence.
 ///
 /// `disallowedTools` is the same shape and the whole of how a bot is held back from
-/// changing anything: the key is honoured on the promoted path, and a bot nobody
-/// held back writes none of it — see [`DENIED_TOOLS`].
+/// a built-in tool: the key is honoured on the promoted path, and a bot denying
+/// nothing writes none of it — see [`denial_line`].
 fn agent(root: &Path, bot: &Bot, name: &str, brief: &str) -> String {
 	format!(
 		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
@@ -529,7 +542,7 @@ fn agent(root: &Path, bot: &Bot, name: &str, brief: &str) -> String {
 		quoted(describe(bot)),
 		model_line(&bot.model),
 		color_line(bot.avatar_blot),
-		denial_line(bot.changes_nothing),
+		denial_line(&bot.denied_tools),
 		quoted(&bot.id),
 		briefed_with_skills(root, &bot.id, brief)
 	)
@@ -1307,23 +1320,61 @@ fn heading_level(line: &str) -> Option<usize> {
 	(level > 0 && line[level..].starts_with(' ')).then_some(level)
 }
 
-/// The `disallowedTools` key and its line ending, or nothing for a bot that may
-/// still change things. A flow sequence, which is both YAML and JSON, so the list
-/// reads the same to whatever opens the file.
-fn denial_line(changes_nothing: bool) -> String {
-	if !changes_nothing {
+/// The `disallowedTools` key and its line ending, or nothing for a bot that denies
+/// no tool. A flow sequence, which is both YAML and JSON, so the list reads the same
+/// to whatever opens the file.
+///
+/// The one writer of the key. Whatever a caller submits is laid down through
+/// [`denials`], so a list picked tool by tool and one standing for "changes
+/// nothing" produce the same line rather than two lines that have to be ordered.
+fn denial_line(denied: &[String]) -> String {
+	let named = denials(denied);
+	if named.is_empty() {
 		return String::new();
 	}
-	format!("{DISALLOWED_KEY}: {}\n", serde_json::json!(DENIED_TOOLS))
+	format!("{DISALLOWED_KEY}: {}\n", serde_json::json!(named))
 }
 
-/// Whether the file holds the denial this module writes: every tool of
-/// [`DENIED_TOOLS`] named on the key's own line. All four or none — a file denying
-/// some other set was written by somebody else, and answering "on" for it would
-/// offer a reader a switch that turns their own list into this one.
-fn denies_changes(text: &str) -> bool {
-	front_value(text, DISALLOWED_KEY)
-		.is_some_and(|denied| DENIED_TOOLS.iter().all(|tool| denied.contains(tool)))
+/// What is really written: each name once, in one order, and nothing an MCP server
+/// provides. Sorted so two callers asking for the same denials write the same file
+/// whatever order they named them in, and so a file rewritten from what it holds is
+/// the file it already was.
+fn denials(denied: &[String]) -> Vec<String> {
+	let mut named: Vec<String> = denied
+		.iter()
+		.map(|tool| tool.trim().to_owned())
+		.filter(|tool| !tool.is_empty() && !tool.starts_with(MCP_PREFIX))
+		.collect();
+	named.sort();
+	named.dedup();
+	named
+}
+
+/// Whether these denials cover the tools that write files and run commands, which
+/// is the whole of what "changes nothing" means. All four or it is off: a bot
+/// denying three of them is a bot that can still change something.
+pub fn denies_changes(denied: &[String]) -> bool {
+	CHANGING_TOOLS.iter().all(|tool| denied.iter().any(|named| named == tool))
+}
+
+/// The tools the file's own `disallowedTools` names, in the order it names them.
+/// The line is a flow sequence — that is what [`denial_line`] lays down — and a
+/// hand-written one is read the same way, quotes or none. A file naming the key on
+/// a shape this cannot read denies nothing here, and the next write replaces the
+/// line with the list the caller submitted.
+fn front_denials(text: &str) -> Vec<String> {
+	let Some(named) = front_value(text, DISALLOWED_KEY) else {
+		return Vec::new();
+	};
+	if let Ok(listed) = serde_json::from_str::<Vec<String>>(&named) {
+		return listed;
+	}
+	named
+		.trim_matches(|character| character == '[' || character == ']')
+		.split(',')
+		.map(|tool| unquoted(tool.trim()))
+		.filter(|tool| !tool.is_empty())
+		.collect()
 }
 
 /// The `model` key and its line ending, or nothing for a bot carrying no label.
@@ -1592,7 +1643,7 @@ mod tests {
 			working_dir: None,
 			instructions: instructions.to_owned(),
 			memory: String::new(),
-			changes_nothing: false,
+			denied_tools: Vec::new(),
 			created_at: 1,
 		}
 	}
@@ -1745,43 +1796,97 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bot set to change nothing denies, in the file its session is promoted onto,
-	/// every tool that writes a file or runs a command: the key is honoured on the
-	/// promoted path, so a session opened on this file is given none of the four.
-	/// Read back the way the panel reads it, so what the switch shows is what the run
-	/// is held to.
+	/// A bot denied a tool names it in the file its session is promoted onto, and
+	/// names nothing else: the key is honoured on the promoted path, so a session
+	/// opened on this file is given every other built-in. Read back the way the panel
+	/// reads it, so what a reader is shown is what the run is held to.
 	#[test]
-	fn a_bot_that_changes_nothing_denies_every_tool_that_would() {
-		let root = a_root("denied");
+	fn a_bot_denied_a_tool_names_that_tool_and_no_other() {
+		let root = a_root("denied-one");
 		let mut bot = a_bot("Bean", "Answer briefly.");
-		bot.changes_nothing = true;
+		bot.denied_tools = vec!["Bash".to_owned()];
 		write(&root, &bot).expect("the bundle is written");
 
-		let written = written_agent(&root, &bot.id);
-		for tool in DENIED_TOOLS {
-			assert!(written.contains(&format!("\"{tool}\"")), "got {written}");
-		}
-		assert!(generated(&root, &bot.id).expect("the file is read back").changes_nothing);
+		assert!(
+			written_agent(&root, &bot.id).contains(&format!("{DISALLOWED_KEY}: [\"Bash\"]")),
+			"got {}",
+			written_agent(&root, &bot.id)
+		);
+		let read_back = generated(&root, &bot.id).expect("the file is read back");
+		assert_eq!(read_back.denied_tools, vec!["Bash".to_owned()]);
+		assert!(!denies_changes(&read_back.denied_tools));
 
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The setting turned off leaves no denial behind: the key goes with it, so the
-	/// next session is given back everything the last one was refused.
+	/// The one path the key is written through, proved from both ends: denying the
+	/// four tools one by one lays down the file a bot set to change nothing lays
+	/// down, in the same order, and that file reads back as changing nothing. Two
+	/// settings writing this key would make the file depend on which wrote last.
 	#[test]
-	fn a_bot_nobody_held_back_writes_no_denial() {
-		let root = a_root("allowed");
+	fn denying_the_changing_tools_one_by_one_writes_the_change_nothing_file() {
+		let root = a_root("denied-each");
 		let mut bot = a_bot("Bean", "Answer briefly.");
-		bot.changes_nothing = true;
+		bot.denied_tools = vec!["Write".to_owned(), "Bash".to_owned()];
+		bot.denied_tools.push("NotebookEdit".to_owned());
+		bot.denied_tools.push("Edit".to_owned());
+		write(&root, &bot).expect("the bundle is written");
+		let picked = written_agent(&root, &bot.id);
+
+		bot.denied_tools = CHANGING_TOOLS.map(str::to_owned).to_vec();
+		write(&root, &bot).expect("the bundle is rewritten");
+
+		assert_eq!(picked, written_agent(&root, &bot.id));
+		let read_back = generated(&root, &bot.id).expect("the file is read back");
+		assert!(denies_changes(&read_back.denied_tools));
+		for tool in CHANGING_TOOLS {
+			assert!(picked.contains(&format!("\"{tool}\"")), "got {picked}");
+		}
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A tool an MCP server provides is the bundle's own capability, declared in
+	/// `.mcp.json`: it never reaches the key, whoever asks for it.
+	#[test]
+	fn a_server_s_tool_is_never_denied() {
+		let root = a_root("denied-server");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.denied_tools = vec!["mcp__helper__write".to_owned(), "Bash".to_owned()];
 		write(&root, &bot).expect("the bundle is written");
 
-		bot.changes_nothing = false;
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains(&format!("{DISALLOWED_KEY}: [\"Bash\"]")), "got {written}");
+		assert_eq!(
+			generated(&root, &bot.id).expect("the file is read back").denied_tools,
+			vec!["Bash".to_owned()]
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A tool allowed again is a tool the file stops naming: the key goes with the
+	/// last denial, so the next session is given back what the last one was refused.
+	#[test]
+	fn a_tool_allowed_again_is_left_unnamed() {
+		let root = a_root("allowed");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.denied_tools = CHANGING_TOOLS.map(str::to_owned).to_vec();
+		write(&root, &bot).expect("the bundle is written");
+
+		bot.denied_tools = vec!["Bash".to_owned()];
 		write(&root, &bot).expect("the bundle is rewritten");
+		let held_back = generated(&root, &bot.id).expect("the file is read back");
+		assert_eq!(held_back.denied_tools, vec!["Bash".to_owned()]);
+		assert!(!denies_changes(&held_back.denied_tools));
+
+		bot.denied_tools = Vec::new();
+		write(&root, &bot).expect("the bundle is rewritten again");
 		let written = written_agent(&root, &bot.id);
 		for line in written.lines() {
 			assert!(!line.starts_with(DISALLOWED_KEY), "got {written}");
 		}
-		assert!(!generated(&root, &bot.id).expect("the file is read back").changes_nothing);
+		assert!(generated(&root, &bot.id).expect("the file is read back").denied_tools.is_empty());
 
 		let _ = fs::remove_dir_all(&root);
 	}

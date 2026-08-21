@@ -63,16 +63,31 @@ export type BotIdentity = {
 	 * run leaves behind for the next one is not here — the host keeps it and nothing
 	 * on this side reads or writes it. */
 	instructions: string
-	/** Whether the bot is denied the tools that edit files and run commands. Part of
-	 * the identity for the same reason `instructions` is — the settings panel sets it
-	 * beside the name — and the host lays it down in the agent file every run is
-	 * promoted onto, which is where it takes effect. */
-	changesNothing: boolean
+	/** The built-in tools the bot is denied, by name. Part of the identity for the
+	 * same reason `instructions` is — the settings panel sets them beside the name —
+	 * and the host lays them down in the agent file every run is promoted onto, which
+	 * is where a denial takes effect.
+	 *
+	 * The one thing a caller submits about denials: the switch that holds a bot back
+	 * from changing anything is these four names, not a field of its own, so no two
+	 * settings write that key. A tool an MCP server provides is never here — a
+	 * server's tool is the bundle's own capability, and the host drops one that
+	 * arrives anyway. */
+	deniedTools: string[]
 }
 
-/** A bot as the host answers it: everything it was described with, plus the two
- * the host owns — the id it minted and the moment it wrote the row. */
-export type Bot = BotIdentity & { id: string; createdAt: number }
+/** A bot as the host answers it: everything it was described with, plus what the
+ * host owns — the id it minted, the moment it wrote the row, and the one reading it
+ * takes of the denials.
+ *
+ * `changesNothing` is that reading: true when `deniedTools` covers the tools that
+ * write files and run commands. Answered rather than submitted, so a panel shows a
+ * switch over the list instead of writing beside it. */
+export type Bot = BotIdentity & {
+	id: string
+	createdAt: number
+	changesNothing: boolean
+}
 
 /** A skill of a bot's, as the store answers it. It lives in the bot's plugin
  * bundle and nowhere else: no row holds any of this, and a skill a hand dropped into

@@ -271,7 +271,7 @@ fn a_bot_write_leaves_the_record_its_own_picture() {
 			"avatarImagePath": null,
 			"workingDir": null,
 			"instructions": "",
-			"changesNothing": false,
+			"deniedTools": [],
 		} }),
 	)
 	.expect("the bot is created");

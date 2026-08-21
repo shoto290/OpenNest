@@ -84,6 +84,7 @@ only part of it.
 | body | system prompt | system prompt |
 | `model` | honoured | honoured, and `--model` overrides it |
 | `tools` / `disallowedTools` | honoured | honoured — `tools` dropped a session to exactly `[Bash, Read]`, and `disallowedTools: [Bash, Edit, Write, NotebookEdit]` took it from 33 tools to 29 |
+
 | `description` | routes delegation | unused |
 | `skills` | **preloads full content** | **inert** |
 | `permissionMode` | honoured | **ignored** — session stayed `default` under `bypassPermissions` |
@@ -181,6 +182,25 @@ Default (no `settingSources`) inherits the user's whole configuration, including
 `SessionStart` hooks. `memory_paths.auto` keeps pointing at
 `~/.claude/projects/<cwd-slug>/memory/` either way, so two bots sharing a working
 directory share that memory.
+
+## The tool names come off the `init` frame — verified
+
+There is no control request that lists tools: `initializationResult()` carries
+commands, agents, models and the account, and no tool names. The `system` / `init`
+message carries `tools`, and nothing else does.
+
+The frame is emitted **when a turn begins**, never before it. A streaming session
+opened and left unprompted for 20s produced two `hook_started` / `hook_response`
+pairs and no `init`; the same session prompted with one character produced `init`
+3.9s later, ahead of any reply. Reading the catalogue therefore costs a turn that
+is started and closed on the frame, unlike `supportedModels()`, which costs a
+handshake.
+
+The list is the *effective* one: it holds every built-in the session was given plus
+every `mcp__<server>__<tool>` its configuration reached, and it leaves out whatever
+`disallowedTools` denied — which is why a bot's own session cannot be asked what it
+denies. The catalogue is taken from a session of the install's own, in a temporary
+directory, with the `mcp__` names filtered out.
 
 ## Deliberately not used
 
