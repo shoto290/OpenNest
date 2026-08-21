@@ -1,9 +1,9 @@
 "use client"
 
 import { Tabs } from "@base-ui/react/tabs"
-import type { ReactNode } from "react"
+import type { ReactElement, ReactNode } from "react"
 
-import type { Icon } from "@workspace/ui/components/icons"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { Tooltip } from "@workspace/ui/components/motion/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -24,6 +24,18 @@ const SETTINGS_SCROLLING_PANEL_CLASS = cn(
 	"overflow-y-auto",
 )
 
+/** A rail item whose name is off the screen says it in a tooltip instead. One a
+ * reader can already read is not worth saying twice, so above that width the item
+ * stands on its own. */
+const named = (item: ReactElement, label: string, iconsOnly: boolean) =>
+	iconsOnly ? (
+		<Tooltip content={label} side="right" wrapperClassName="w-full">
+			{item}
+		</Tooltip>
+	) : (
+		item
+	)
+
 type SettingsRailItemProps = {
 	icon: Icon
 	label: string
@@ -42,25 +54,47 @@ const SettingsRailItem = ({
 	value,
 	iconsOnly,
 	className,
-}: SettingsRailItemProps) => {
-	const tab = (
+}: SettingsRailItemProps) =>
+	named(
 		<Tabs.Tab
 			className={cn(RAIL_ITEM_CLASS, iconsOnly && "justify-center", className)}
 			value={value}
 		>
 			<ItemIcon aria-hidden="true" className="size-4 shrink-0" />
 			<span className={iconsOnly ? "sr-only" : undefined}>{label}</span>
-		</Tabs.Tab>
+		</Tabs.Tab>,
+		label,
+		iconsOnly,
 	)
 
-	if (!iconsOnly) return tab
-
-	return (
-		<Tooltip content={label} side="right" wrapperClassName="w-full">
-			{tab}
-		</Tooltip>
-	)
+type SettingsRailBackProps = {
+	label: string
+	onClick: () => void
+	/** Drops the name off the screen — never out of the accessible tree — and hands
+	 * it to a tooltip instead, the way a group does. */
+	iconsOnly: boolean
 }
+
+/** The way out of a rail, standing where the first group would. A button rather
+ * than a tab: it opens nothing, it leaves — so it sits above the list rather than
+ * inside it, where a screen reader would have counted it as a group. */
+const SettingsRailBack = ({
+	label,
+	onClick,
+	iconsOnly,
+}: SettingsRailBackProps) =>
+	named(
+		<button
+			className={cn(RAIL_ITEM_CLASS, iconsOnly && "justify-center")}
+			onClick={onClick}
+			type="button"
+		>
+			<Icons.Previous aria-hidden="true" className="size-4 shrink-0" />
+			<span className={iconsOnly ? "sr-only" : undefined}>{label}</span>
+		</button>,
+		label,
+		iconsOnly,
+	)
 
 /** The rule between a rail's groups and the one group that is not one of them. */
 const SettingsRailSeparator = () => (
@@ -71,6 +105,9 @@ type SettingsRailProps = {
 	/** Whether the names are off the screen. Measured by the surface that owns the
 	 * width, so the rail and the panel beside it answer the same question once. */
 	iconsOnly: boolean
+	/** What stands above the groups, in the same column and outside the list — a way
+	 * back out of the surface the rail belongs to. */
+	leading?: ReactNode
 	children: ReactNode
 	className?: string
 }
@@ -83,10 +120,11 @@ type SettingsRailProps = {
  */
 const SettingsRail = ({
 	iconsOnly,
+	leading,
 	children,
 	className,
 }: SettingsRailProps) => (
-	<Tabs.List
+	<div
 		className={cn(
 			"flex shrink-0 flex-col gap-1 overflow-hidden border-border border-r p-2",
 			iconsOnly ? "w-14" : "w-52",
@@ -94,8 +132,11 @@ const SettingsRail = ({
 		)}
 		data-slot="settings-rail"
 	>
-		{children}
-	</Tabs.List>
+		{leading}
+		<Tabs.List className="flex min-h-0 flex-col gap-1 overflow-y-auto">
+			{children}
+		</Tabs.List>
+	</div>
 )
 
 export {
@@ -104,6 +145,8 @@ export {
 	SETTINGS_PANEL_CLASS,
 	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
+	SettingsRailBack,
+	type SettingsRailBackProps,
 	SettingsRailItem,
 	type SettingsRailItemProps,
 	type SettingsRailProps,

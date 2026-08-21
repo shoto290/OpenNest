@@ -58,3 +58,43 @@ Anything that emits: a mail, an invoice, a webhook. Replaying those is a second 
 Write the incident down the same day. A runbook that grows after every incident is the only kind worth reading before one.`,
 	isPreloaded: true,
 }
+
+/** A skill that answers everything its format lets it answer, forked context
+ * included, so a section is never reviewed on empty fields. */
+export const DETAILED_SKILL: BotSkillItem = {
+	id: "changelog-release",
+	name: "changelog-release",
+	description:
+		"Writes the changelog entry for a release from the merged pull requests",
+	body: "# Changelog\n\nOne line per change, in the past tense, naming what a reader gains.",
+	whenToUse:
+		"A release is being cut and the merged pull requests since the last tag have to become one readable entry.",
+	argumentHint: "[version] [--draft]",
+	arguments: "version\ndraft",
+	isPreloaded: false,
+	isModelInvocationDisabled: false,
+	isUserInvocable: true,
+	paths: "CHANGELOG.md\ndocs/releases/**/*.md",
+	model: "claude-sonnet",
+	effort: "medium",
+	context: "fork",
+	shell: "/bin/zsh",
+	agent: "release-writer",
+	isBackground: true,
+	allowedTools: "Read\nGrep\nWrite",
+	disallowedTools: "Bash",
+	hooks: '{\n  "PreToolUse": []\n}',
+	license: "MIT",
+	compatibility: ">=1.4",
+	metadata: '{\n  "author": "Ada Martin"\n}',
+}
+
+/** A description and a `when_to_use` that together run past the 1536 characters the
+ * two share, so the budget under the field is over rather than near. */
+export const OVER_BUDGET_SKILL: BotSkillItem = {
+	...DETAILED_SKILL,
+	id: "over-budget",
+	description: "Writes the changelog entry for a release. ".repeat(20),
+	whenToUse:
+		"A release is being cut and nobody wants to read the diff. ".repeat(20),
+}

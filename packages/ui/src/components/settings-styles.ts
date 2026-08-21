@@ -27,6 +27,12 @@ const FIELD_OPTION_CLASS = `${FIELD_OPTION_MARKS_CLASS} flex flex-col items-cent
 const PICTURE_TARGET_CLASS =
 	"cursor-pointer border border-border outline-none hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 data-dragging:border-primary data-dragging:bg-primary/10"
 
+/** A short mark standing beside a name to say one thing about it — a skill carried
+ * in every prompt, an editor holding something unsaved. A pill on the neutral fill,
+ * whatever it says; the tone of its text stays with each caller. */
+const SETTINGS_TAG_CLASS =
+	"shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-xs"
+
 /** The bar every settings dialog opens with: the reader's or the bot's face, then
  * its name. Its leading inset is the face's own — `(header - face) / 2` — while the
  * trailing side leaves room for the close button pinned over it. */
@@ -72,4 +78,5 @@ export {
 	POPUP_CLASS,
 	POPUP_DROP_SHADOW_CLASS,
 	SETTINGS_HEADER_CLASS,
+	SETTINGS_TAG_CLASS,
 }

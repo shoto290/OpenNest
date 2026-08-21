@@ -12,11 +12,16 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 
 type ConfirmDialogProps = {
-	/** What is inside the button that opens the question — an icon, a word, both. */
-	trigger: ReactNode
+	/** What is inside the button that opens the question — an icon, a word, both.
+	 * Left out for a question a surface raises itself, which then owns `open`. */
+	trigger?: ReactNode
 	/** The trigger's own shape. Every caller so far dresses it with
 	 * `buttonVariants`. */
-	triggerClassName: string
+	triggerClassName?: string
+	/** Whether the question stands, for a surface that decides — a way out taken
+	 * while something is unsaved. Left out, the trigger owns it. */
+	open?: boolean
+	onOpenChange?: (open: boolean) => void
 	/** Names the thing being acted on, so a reader who opened the wrong one finds
 	 * out here rather than after. */
 	title: string
@@ -40,6 +45,8 @@ type ConfirmDialogProps = {
 const ConfirmDialog = ({
 	trigger,
 	triggerClassName,
+	open,
+	onOpenChange,
 	title,
 	description,
 	confirmLabel,
@@ -49,10 +56,16 @@ const ConfirmDialog = ({
 	const { t } = useTranslation("common")
 
 	return (
-		<AlertDialog.Root defaultOpen={defaultOpen}>
-			<AlertDialog.Trigger className={triggerClassName}>
-				{trigger}
-			</AlertDialog.Trigger>
+		<AlertDialog.Root
+			defaultOpen={defaultOpen}
+			onOpenChange={onOpenChange}
+			open={open}
+		>
+			{trigger ? (
+				<AlertDialog.Trigger className={triggerClassName}>
+					{trigger}
+				</AlertDialog.Trigger>
+			) : null}
 			<AlertDialog.Portal>
 				<AlertDialog.Backdrop className={BACKDROP_CLASS} />
 				<AlertDialog.Popup
