@@ -46,9 +46,13 @@ const POPUP_CLASS =
 const DIALOG_POPUP_CLASS = `${POPUP_CLASS} transition-[scale,opacity] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none`
 
 /** The same elevation as `POPUP_CLASS`, expressed as a filter. What a popup
- * whose shape is clipped has to use: a box-shadow is cut away with the clip. */
+ * whose shape is clipped has to use: a box-shadow is cut away with the clip —
+ * and so is the border, so the rim comes from the filter too. Two layers: a
+ * contact shadow that sets the panel down, then the cast one. On a dark page a
+ * black shadow lands on black and reads as nothing, so there the rim turns into
+ * a hairline of light — what `border-border` does for the popups that keep it. */
 const POPUP_DROP_SHADOW_CLASS =
-	"[filter:drop-shadow(0_10px_18px_rgba(0,0,0,0.14))]"
+	"[filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.10))_drop-shadow(0_10px_18px_rgba(0,0,0,0.16))] dark:[filter:drop-shadow(0_0_1px_rgba(255,255,255,0.16))_drop-shadow(0_12px_28px_rgba(0,0,0,0.7))]"
 
 export {
 	BACKDROP_CLASS,
