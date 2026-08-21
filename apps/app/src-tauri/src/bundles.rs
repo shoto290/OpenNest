@@ -301,11 +301,20 @@ pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// tool, or by an editor left open is adopted the next time anything reads or starts
 /// the bot, rather than being written over by a value it never saw.
 ///
-/// The two are compared as the file holds them, because the file holds the brief
-/// trimmed — see [`agent`]. A reader who has just typed a space is otherwise a hand
-/// edit against their own file, and the space goes back out from under them.
+/// See [`edited`] for what counts as a difference at all.
 pub fn adopted(root: &Path, bot: &Bot) -> Option<String> {
-	instructions(root, &bot.id).filter(|found| found != bot.instructions.trim())
+	instructions(root, &bot.id).filter(|found| edited(found, &bot.instructions))
+}
+
+/// Whether a body read off the disk is a brief somebody really wrote, rather than the
+/// stored one as the file holds it.
+///
+/// [`agent`] lays the body down trimmed, so a brief the reader is in the middle of
+/// typing differs from its own file by the space at the end of it. Preferring the
+/// file there takes that space back out from under them, one answer after they
+/// pressed it — which is a brief that can never be given a second word.
+pub fn edited(found: &str, stored: &str) -> bool {
+	found != stored.trim()
 }
 
 /// What a write submitting a whole identity should lay down. The panel wins when the
@@ -1128,7 +1137,11 @@ mod tests {
 		let bot = a_bot("Bean", "Parles ");
 		write(&root, &bot).expect("the bundle is written");
 
-		assert_eq!(adopted(&root, &bot), None, "the space the reader typed was reported as a hand edit");
+		assert_eq!(
+			adopted(&root, &bot),
+			None,
+			"the space the reader typed was reported as a hand edit"
+		);
 		assert_eq!(
 			reconciled(&root, &bot, "Parles "),
 			"Parles ",

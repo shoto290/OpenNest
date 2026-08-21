@@ -187,8 +187,10 @@ impl Bot {
 			.as_ref()
 			.and_then(|written| written.model.clone())
 			.unwrap_or_else(|| bot.model.clone());
-		let instructions =
-			written.map_or_else(|| bot.instructions.clone(), |written| written.instructions);
+		let instructions = written
+			.map(|written| written.instructions)
+			.filter(|found| crate::bundles::edited(found, &bot.instructions))
+			.unwrap_or_else(|| bot.instructions.clone());
 		let avatar_image_path = bot
 			.avatar_image_path
 			.as_deref()
@@ -1204,6 +1206,13 @@ mod tests {
 		}
 	}
 
+	/// A scratch bundle directory of this test's own, empty before it is written to.
+	fn a_bundle_root(name: &str) -> std::path::PathBuf {
+		let root = std::env::temp_dir().join(format!("opennest-contract-{name}"));
+		let _ = std::fs::remove_dir_all(&root);
+		root
+	}
+
 	/// The projection every read of a bot goes through, on the two answers that are
 	/// not a picture: a path pointing out of the directory, and a run with no
 	/// directory at all. Both come back as no picture, which is the bot in its animal.
@@ -1225,12 +1234,26 @@ mod tests {
 	/// bundle to read falls back to it.
 	#[test]
 	fn a_bot_is_reported_on_the_model_its_bundle_names() {
-		let root = std::env::temp_dir().join("opennest-contract-model");
-		let _ = std::fs::remove_dir_all(&root);
+		let root = a_bundle_root("model");
 		crate::bundles::write(&root, &a_stored_bot("haiku")).expect("the bundle is written");
 
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).model, "haiku");
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, None).model, "sonnet");
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	/// The brief a reader is still writing crosses as they typed it. The agent file
+	/// holds the body trimmed, so a projection that always preferred the file would
+	/// answer every write with the space taken back off the end — and a reader who
+	/// pressed space would watch it appear and leave again.
+	#[test]
+	fn a_brief_ending_in_a_space_crosses_as_the_reader_typed_it() {
+		let root = a_bundle_root("still-typing");
+		let typed = conversations::Bot { instructions: "Parles ".into(), ..a_stored_bot("sonnet") };
+		crate::bundles::write(&root, &typed).expect("the bundle is written");
+
+		assert_eq!(Bot::of(typed, None, Some(&root)).instructions, "Parles ");
 
 		let _ = std::fs::remove_dir_all(&root);
 	}
