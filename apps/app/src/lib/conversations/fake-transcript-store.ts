@@ -2,6 +2,8 @@ import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
 	Bot,
 	BotIdentity,
+	BotSkill,
+	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
 	NewAssistantMessage,
@@ -108,6 +110,9 @@ export const createFakeTranscriptStore = (
 	/** What each bot's last session announced, the way the column holds it: written
 	 * whole, read back whole, and absent for a bot no session has spoken for. */
 	const commands = new Map<string, AgentCommand[]>()
+	/** What each bot's bundle holds, the way the disk holds it: no row, one entry per
+	 * bot, and a skill named by the directory it would live in. */
+	const skills = new Map<string, BotSkill[]>()
 	const rows = new Map<string, TranscriptMessage>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
@@ -170,6 +175,53 @@ export const createFakeTranscriptStore = (
 		if (message.role === "user" && stored.content !== message.content)
 			return "content"
 		return null
+	}
+
+	/** What a name reduces to as a directory, the way the host reduces it: a run of
+	 * anything a directory name would not carry is one separator. */
+	const slugged = (name: string) =>
+		name
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "") || "bot"
+
+	/** Where a new skill goes: the directory its name reduces to, unless one of the
+	 * bot's own is already there. */
+	const freeSkillId = (held: BotSkill[], name: string) => {
+		const base = slugged(name)
+		const taken = (id: string) => held.some((skill) => skill.id === id)
+		if (!taken(base)) {
+			return base
+		}
+		let next = 2
+		while (taken(`${base}-${next}`)) {
+			next += 1
+		}
+		return `${base}-${next}`
+	}
+
+	/** One of a bot's skills, changed. A bot that is not there and a skill that is
+	 * not one of its own are the two refusals the host answers with — the second is
+	 * a file that is not on the disk to be written. */
+	const writeSkill = (
+		botId: string,
+		skillId: string,
+		change: (skill: BotSkill) => BotSkill,
+	): Promise<BotSkill> => {
+		if (!bots.has(botId)) {
+			return refuse({ kind: "unknownBot", id: botId })
+		}
+		const held = skills.get(botId) ?? []
+		const stored = held.find((skill) => skill.id === skillId)
+		if (!stored) {
+			return refuse({ kind: "unwritableBundle", detail: "no such skill" })
+		}
+		const written = change(stored)
+		skills.set(
+			botId,
+			held.map((skill) => (skill.id === skillId ? written : skill)),
+		)
+		return Promise.resolve(written)
 	}
 
 	const remember = (id: string, target: string | null) => {
@@ -239,6 +291,7 @@ export const createFakeTranscriptStore = (
 				return refuse({ kind: "unknownBot", id })
 			}
 			commands.delete(id)
+			skills.delete(id)
 			const conversationId = chatIdOf(id)
 			for (const [rowId, row] of rows) {
 				if (row.conversationId === conversationId) {
@@ -287,6 +340,46 @@ export const createFakeTranscriptStore = (
 
 		/** Replaced whole, and refused for a bot that is not on the record — the two
 		 * rules the column is written under. */
+		/** By directory name, the way the host reads them off the disk, and none at
+		 * all for a bot nobody has written one for. */
+		botSkills: (botId: string) =>
+			Promise.resolve(
+				[...(skills.get(botId) ?? [])].sort((left, right) =>
+					left.id.localeCompare(right.id),
+				),
+			),
+
+		createBotSkill: (botId: string, draft: BotSkillDraft) => {
+			if (!bots.has(botId)) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			const held = skills.get(botId) ?? []
+			const created: BotSkill = {
+				...draft,
+				id: freeSkillId(held, draft.name),
+				isPreloaded: false,
+			}
+			skills.set(botId, [...held, created])
+			return Promise.resolve(created)
+		},
+
+		updateBotSkill: (botId: string, skillId: string, draft: BotSkillDraft) =>
+			writeSkill(botId, skillId, (skill) => ({ ...skill, ...draft })),
+
+		setBotSkillPreloaded: (
+			botId: string,
+			skillId: string,
+			isPreloaded: boolean,
+		) => writeSkill(botId, skillId, (skill) => ({ ...skill, isPreloaded })),
+
+		deleteBotSkill: (botId: string, skillId: string) =>
+			writeSkill(botId, skillId, (skill) => skill).then(() => {
+				skills.set(
+					botId,
+					(skills.get(botId) ?? []).filter((skill) => skill.id !== skillId),
+				)
+			}),
+
 		recordBotCommands: (botId: string, listed: AgentCommand[]) => {
 			if (!bots.has(botId)) {
 				return refuse({ kind: "unknownBot", id: botId })

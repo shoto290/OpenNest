@@ -244,6 +244,43 @@ describe("createFakeTranscriptStore", () => {
 		})
 	})
 
+	/** The same shape the host answers: a skill named by the directory it would live
+	 * in, a second one of the same name written beside the first rather than over it,
+	 * a mark that is its own write, and a skill that is gone reported as one. */
+	it("writes, marks and takes away a bot's skills", async () => {
+		const store = createFakeTranscriptStore()
+		const draft = { name: "Baking Bread", description: "How.", body: "Bake." }
+
+		const created = await store.createBotSkill("default", draft)
+		const beside = await store.createBotSkill("default", draft)
+
+		expect(created).toEqual({
+			id: "baking-bread",
+			...draft,
+			isPreloaded: false,
+		})
+		expect(beside.id).toBe("baking-bread-2")
+
+		const marked = await store.setBotSkillPreloaded("default", created.id, true)
+		expect(marked.isPreloaded).toBe(true)
+
+		const renamed = await store.updateBotSkill("default", created.id, {
+			...draft,
+			name: "Baking",
+		})
+		expect(renamed).toEqual({ ...marked, name: "Baking" })
+
+		await store.deleteBotSkill("default", created.id)
+		expect(await store.botSkills("default")).toEqual([beside])
+		await expect(
+			store.deleteBotSkill("default", created.id),
+		).rejects.toMatchObject({ kind: "unwritableBundle" })
+		await expect(store.createBotSkill("missing", draft)).rejects.toMatchObject({
+			kind: "unknownBot",
+			id: "missing",
+		})
+	})
+
 	/** Taking a picture off is an identity write, the same one that puts an animal
 	 * back — there is no second call for it on either side of the boundary. */
 	it("takes the picture off a bot described again without a path", async () => {

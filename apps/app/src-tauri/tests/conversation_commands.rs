@@ -1633,3 +1633,89 @@ fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the
 		Err(json!({ "kind": "unknownBot", "id": "missing" }))
 	);
 }
+
+/// A bot's skills as the frontend meets them: written, listed, marked, unmarked and
+/// taken away over IPC, in the words a panel will spell. Nothing about a skill is in
+/// the database — the bundle on the disk is the whole record — so this is also the
+/// only place the surface can be seen answering at all.
+#[test]
+fn a_bots_skills_are_written_listed_marked_and_taken_away() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	a_bot_and_its_chat(&window);
+
+	let created = call(
+		&window,
+		"conversation_create_bot_skill",
+		json!({
+			"botId": BOT,
+			"draft": {
+				"name": "Baking Bread",
+				"description": "How to bake.",
+				"body": "Bake at 220 degrees.",
+			},
+		}),
+	)
+	.expect("the skill is written");
+	assert_eq!(created["id"], json!("baking-bread"));
+	assert_eq!(created["name"], json!("Baking Bread"));
+	assert_eq!(created["description"], json!("How to bake."));
+	assert_eq!(created["body"], json!("Bake at 220 degrees."));
+	assert_eq!(created["isPreloaded"], json!(false));
+
+	let listed =
+		call(&window, "conversation_bot_skills", json!({ "botId": BOT })).expect("the skills");
+	assert_eq!(listed, json!([created]));
+
+	let marked = call(
+		&window,
+		"conversation_set_bot_skill_preloaded",
+		json!({ "botId": BOT, "skillId": "baking-bread", "isPreloaded": true }),
+	)
+	.expect("the mark lands");
+	assert_eq!(marked["isPreloaded"], json!(true));
+
+	let updated = call(
+		&window,
+		"conversation_update_bot_skill",
+		json!({
+			"botId": BOT,
+			"skillId": "baking-bread",
+			"draft": { "name": "Baking", "description": "Bread.", "body": "Bake at 240 degrees." },
+		}),
+	)
+	.expect("the skill is rewritten");
+	assert_eq!(updated["name"], json!("Baking"));
+	assert_eq!(updated["body"], json!("Bake at 240 degrees."));
+	assert_eq!(updated["isPreloaded"], json!(true), "an edit dropped the mark");
+
+	call(
+		&window,
+		"conversation_set_bot_skill_preloaded",
+		json!({ "botId": BOT, "skillId": "baking-bread", "isPreloaded": false }),
+	)
+	.expect("the mark goes");
+	call(
+		&window,
+		"conversation_delete_bot_skill",
+		json!({ "botId": BOT, "skillId": "baking-bread" }),
+	)
+	.expect("the skill is taken away");
+
+	assert_eq!(
+		call(&window, "conversation_bot_skills", json!({ "botId": BOT })).expect("the skills"),
+		json!([])
+	);
+	assert_eq!(
+		call(
+			&window,
+			"conversation_create_bot_skill",
+			json!({
+				"botId": "missing",
+				"draft": { "name": "Baking", "description": "", "body": "" },
+			}),
+		),
+		Err(json!({ "kind": "unknownBot", "id": "missing" }))
+	);
+}

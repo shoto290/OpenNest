@@ -70,8 +70,8 @@ const MARKETPLACE_NAME: &str = "marketplace.json";
 const AGENTS_DIR: &str = "agents";
 const AGENT_EXTENSION: &str = "md";
 
-/// Where a bot's skills sit, one directory each. A reader drops them in by hand;
-/// nothing here creates one.
+/// Where a bot's skills sit, one directory each — written from here, or dropped in
+/// by hand: the disk holds both the same way.
 const SKILLS_DIR: &str = "skills";
 const SKILL_NAME: &str = "SKILL.md";
 
@@ -105,6 +105,26 @@ const MODEL_KEY: &str = "model";
 /// The frontmatter key a skill asks to be carried under, read from wherever it sits
 /// in the map — `metadata.opennest.preload` — the same way [`OWNER_KEY`] is read.
 const PRELOAD_KEY: &str = "preload";
+const METADATA_KEY: &str = "metadata";
+const OPENNEST_KEY: &str = "opennest";
+
+/// What a carried skill is also marked with. Its body is already in the prompt, and
+/// a skill left model-invocable is fetched again anyway — measured against the real
+/// install, see `agent/PLUGINS.md` — so the two marks are written and taken away
+/// together and never one without the other.
+const INVOCATION_KEY: &str = "disable-model-invocation";
+
+/// What a skill is titled and summarised by, and what a caller edits.
+const NAME_KEY: &str = "name";
+const DESCRIPTION_KEY: &str = "description";
+
+/// What both marks are worth when they are there. Read back through
+/// [`front_value`], which is why it is the word rather than a boolean.
+const MARKED: &str = "true";
+
+/// One level of a frontmatter map, in spaces. What this module writes when it adds
+/// one; a file already nesting another way keeps its own.
+const INDENT: usize = 2;
 
 /// What fences the carried bodies off from the brief. HTML comments, so the region
 /// says what it is to a reader opening the file and nothing to the model reading it
@@ -209,9 +229,8 @@ pub struct Generated {
 pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let text = fs::read_to_string(agent_file(root, bot_id)?).ok()?;
 	let model = front_value(&text, MODEL_KEY)
-		.map(str::trim)
-		.filter(|found| !found.is_empty())
-		.map(str::to_owned);
+		.map(|found| found.trim().to_owned())
+		.filter(|found| !found.is_empty());
 	Some(Generated { instructions: body(&text).to_owned(), model })
 }
 
@@ -229,13 +248,21 @@ pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
 /// agent however many times the bot is renamed. Anything else under `agents/` was put
 /// there by somebody else and keeps both its name and its content.
 pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	write_briefed(root, bot, &bot.instructions)
+}
+
+/// The same write, over a brief named rather than taken from the row. What a skill
+/// change lays down: the row it holds may be behind the file — the disk is the
+/// truth — and nothing about a skill is a reason to write a brief over the one the
+/// bot is really running on.
+fn write_briefed(root: &Path, bot: &Bot, brief: &str) -> std::io::Result<()> {
 	let manifest_path = dir(root, &bot.id).join(MANIFEST_DIR).join(MANIFEST_NAME);
 	let generated = generated_agent(root, &bot.id);
 	let agent_path = free_agent_path(root, bot, generated.as_deref());
 	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
 
 	private_files::replace(&manifest_path, manifest(&manifest_path, bot).as_bytes())?;
-	private_files::replace(&agent_path, agent(root, bot, &name).as_bytes())?;
+	private_files::replace(&agent_path, agent(root, bot, &name, brief).as_bytes())?;
 	if let Some(generated) = generated.filter(|path| path != &agent_path) {
 		let _ = fs::remove_file(generated);
 	}
@@ -368,14 +395,14 @@ fn manifest(path: &Path, bot: &Bot) -> String {
 /// it — so nothing passes one. A bot holding no label writes no key at all, which is
 /// the agent running on whatever the install defaults to rather than on the empty
 /// string.
-fn agent(root: &Path, bot: &Bot, name: &str) -> String {
+fn agent(root: &Path, bot: &Bot, name: &str, brief: &str) -> String {
 	format!(
 		"{FENCE}\nname: {}\ndescription: {}\n{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
 		quoted(name),
 		quoted(describe(bot)),
 		model_line(&bot.model),
 		quoted(&bot.id),
-		briefed_with_skills(root, bot)
+		briefed_with_skills(root, &bot.id, brief)
 	)
 }
 
@@ -386,10 +413,10 @@ fn agent(root: &Path, bot: &Bot, name: &str) -> String {
 ///
 /// A bot with nothing to carry writes no markers at all: the file is the brief, as it
 /// was before there were skills.
-fn briefed_with_skills(root: &Path, bot: &Bot) -> String {
-	let brief = without_carried(&bot.instructions);
+fn briefed_with_skills(root: &Path, bot_id: &str, brief: &str) -> String {
+	let brief = without_carried(brief);
 	let level = (deepest_heading(brief) + 1).min(MAX_HEADING);
-	let bodies: Vec<String> = preloaded(root, &bot.id)
+	let bodies: Vec<String> = preloaded(root, bot_id)
 		.into_iter()
 		.map(|skill| {
 			format!("{} {}\n\n{}", "#".repeat(level), skill.name, demoted(&skill.body, level))
@@ -402,16 +429,16 @@ fn briefed_with_skills(root: &Path, bot: &Bot) -> String {
 	format!("{brief}\n\n{CARRIED_OPEN}\n\n{carried}\n\n{CARRIED_CLOSE}")
 }
 
-/// A skill's body, under the name of the directory it came from.
-struct Preloaded {
-	name: String,
-	body: String,
-}
-
 /// Every skill of the bot's that asked to be carried, in the order the disk names
 /// them: two writes over the same directory produce the same file. A bundle with no
 /// `skills/` directory has none, which is every bot nobody dropped one into.
-fn preloaded(root: &Path, bot_id: &str) -> Vec<Preloaded> {
+fn preloaded(root: &Path, bot_id: &str) -> Vec<Skill> {
+	skills(root, bot_id).into_iter().filter(|skill| skill.is_preloaded).collect()
+}
+
+/// Every directory under the bot's `skills/`, by name. Sorted so two writes over the
+/// same disk produce the same file, and empty for a bundle nobody has put a skill in.
+fn skill_dirs(root: &Path, bot_id: &str) -> Vec<PathBuf> {
 	let mut directories: Vec<PathBuf> = fs::read_dir(dir(root, bot_id).join(SKILLS_DIR))
 		.into_iter()
 		.flatten()
@@ -419,19 +446,316 @@ fn preloaded(root: &Path, bot_id: &str) -> Vec<Preloaded> {
 		.map(|entry| entry.path())
 		.collect();
 	directories.sort();
-	directories.iter().filter_map(|path| marked_skill(path)).collect()
+	directories
 }
 
-/// The skill in a directory, when its frontmatter marks it for preloading. `None` is
-/// a directory holding no `SKILL.md`, or a skill that never asked — which stays on
-/// the disk and out of the agent file.
-fn marked_skill(path: &Path) -> Option<Preloaded> {
+/// A skill of the bot's, whole. `id` is the directory it lives in, which is the one
+/// name two of them cannot share and the only one that survives a rename: what the
+/// skill is called is free text in its frontmatter, and changing it moves nothing on
+/// the disk.
+///
+/// `is_preloaded` is whether its body is carried into the agent file — see
+/// [`set_skill_preloaded`].
+pub struct Skill {
+	pub id: String,
+	pub name: String,
+	pub description: String,
+	pub body: String,
+	pub is_preloaded: bool,
+}
+
+/// What a skill is written from. The mark is not here: it is set on its own, because
+/// it changes what the bot is rather than what the skill says.
+pub struct SkillDraft {
+	pub name: String,
+	pub description: String,
+	pub body: String,
+}
+
+/// Every skill in the bot's bundle, by directory name. A skill dropped in by hand is
+/// one of them: nothing here asks who wrote a file.
+pub fn skills(root: &Path, bot_id: &str) -> Vec<Skill> {
+	skill_dirs(root, bot_id).iter().filter_map(|path| read_skill(path)).collect()
+}
+
+/// A new skill, at the directory its name slugs to — or beside it, when something is
+/// already there. The name and the description are the frontmatter a skill is
+/// offered by; the mark is not written, so a new skill is text on the disk and
+/// nothing in the bot's prompt until it is marked.
+pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
+	let path = free_skill_dir(root, &bot.id, &draft.name);
+	written_skill(root, bot, &path, drafted(None, draft))
+}
+
+/// What the skill says, changed. The file is read and edited rather than written
+/// from a template: a `SKILL.md` a hand or another tool wrote carries keys this app
+/// knows nothing about, and they are put back exactly as they were found.
+pub fn update_skill(
+	root: &Path,
+	bot: &Bot,
+	skill_id: &str,
+	draft: &SkillDraft,
+) -> std::io::Result<Skill> {
+	let path = skill_dir(root, &bot.id, skill_id)?;
+	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
+	written_skill(root, bot, &path, drafted(Some(&text), draft))
+}
+
+/// Whether the skill's body is carried into the bot's agent file. Both marks move
+/// together — see [`INVOCATION_KEY`] — and the agent is rewritten, since this is the
+/// one skill change that changes what the bot was told.
+pub fn set_skill_preloaded(
+	root: &Path,
+	bot: &Bot,
+	skill_id: &str,
+	is_preloaded: bool,
+) -> std::io::Result<Skill> {
+	let path = skill_dir(root, &bot.id, skill_id)?;
+	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
+	written_skill(root, bot, &path, marked(&text, is_preloaded))
+}
+
+/// The skill, taken away whole: its own directory and nothing outside it. The path
+/// is resolved by scanning the bot's own skills rather than joined from the id, so
+/// an id naming anything else names no skill at all.
+pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<()> {
+	let path = skill_dir(root, &bot.id, skill_id)?;
+	fs::remove_dir_all(path)?;
+	rewrite_agent(root, bot)
+}
+
+/// The file written, the agent rewritten, and the skill read back off the disk —
+/// which is what a caller is answered with, so what it holds is what the file says
+/// rather than what the write meant.
+fn written_skill(root: &Path, bot: &Bot, path: &Path, text: String) -> std::io::Result<Skill> {
+	private_files::replace(&path.join(SKILL_NAME), text.as_bytes())?;
+	rewrite_agent(root, bot)?;
+	read_skill(path).ok_or_else(|| {
+		std::io::Error::new(std::io::ErrorKind::NotFound, "the skill was not written")
+	})
+}
+
+/// The bot's agent file, laid down again over the brief the disk holds. The brief is
+/// nobody's to change here: a skill was marked, not a prompt rewritten, so what comes
+/// through is what the file already said — the stored value only for a bundle there
+/// is nothing to read.
+fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	let brief = instructions(root, &bot.id).unwrap_or_else(|| bot.instructions.clone());
+	write_briefed(root, bot, &brief)
+}
+
+/// The skill in a directory, whatever it says about being carried. A name the
+/// frontmatter does not carry is the directory's own, so a file somebody wrote
+/// without one is still offered under something a reader recognises.
+fn read_skill(path: &Path) -> Option<Skill> {
 	let text = fs::read_to_string(path.join(SKILL_NAME)).ok()?;
-	if front_value(&text, PRELOAD_KEY)? != "true" {
-		return None;
+	let id = path.file_name()?.to_string_lossy().into_owned();
+	let named = front_value(&text, NAME_KEY).filter(|found| !found.is_empty());
+	Some(Skill {
+		name: named.unwrap_or_else(|| id.clone()),
+		description: front_value(&text, DESCRIPTION_KEY).unwrap_or_default(),
+		body: body(&text).to_owned(),
+		is_preloaded: front_value(&text, PRELOAD_KEY).as_deref() == Some(MARKED),
+		id,
+	})
+}
+
+/// Where one of the bot's own skills lives. `NotFound` for an id that is not the name
+/// of one of them, which is also what a caller reaching for a path of its own gets.
+fn skill_dir(root: &Path, bot_id: &str, skill_id: &str) -> std::io::Result<PathBuf> {
+	skill_dirs(root, bot_id)
+		.into_iter()
+		.find(|path| path.file_name().is_some_and(|name| name == skill_id))
+		.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no such skill"))
+}
+
+/// Where a new skill goes: the directory its name slugs to, unless something is
+/// already sitting there. Two skills a reader called the same thing are two
+/// directories, and a skill dropped in by hand is never written over.
+fn free_skill_dir(root: &Path, bot_id: &str, name: &str) -> PathBuf {
+	let skills = dir(root, bot_id).join(SKILLS_DIR);
+	let base = slug(name);
+	let preferred = skills.join(&base);
+	if !preferred.exists() {
+		return preferred;
 	}
-	let name = path.file_name()?.to_string_lossy().into_owned();
-	Some(Preloaded { name, body: body(&text).to_owned() })
+	(2u32..)
+		.map(|next| skills.join(format!("{base}-{next}")))
+		.find(|path| !path.exists())
+		.unwrap_or(preferred)
+}
+
+/// The file a draft leaves: the two keys a draft owns set, the body replaced, and
+/// every other key of a file that was already there left exactly where it was.
+fn drafted(existing: Option<&str>, draft: &SkillDraft) -> String {
+	let mut parts = parts(existing.unwrap_or_default());
+	parts.front = with_key(&parts.front, &[NAME_KEY], &quoted(&draft.name));
+	parts.front = with_key(&parts.front, &[DESCRIPTION_KEY], &quoted(&draft.description));
+	parts.body = format!("\n{}\n", draft.body.trim());
+	rendered(&parts)
+}
+
+/// The same file with both marks written, or with both taken away. The body is not
+/// touched — this is a key changing, not a skill being rewritten.
+fn marked(text: &str, is_preloaded: bool) -> String {
+	let path = [METADATA_KEY, OPENNEST_KEY, PRELOAD_KEY];
+	let mut parts = parts(text);
+	parts.front = if is_preloaded {
+		with_key(&with_key(&parts.front, &path, MARKED), &[INVOCATION_KEY], MARKED)
+	} else {
+		without_key(&without_key(&parts.front, &path), &[INVOCATION_KEY])
+	};
+	rendered(&parts)
+}
+
+/// A skill file as something to edit: its frontmatter, and everything under it
+/// verbatim. A file carrying none is all body, and one written back grows the
+/// frontmatter it never had.
+struct Parts {
+	front: String,
+	body: String,
+}
+
+fn parts(text: &str) -> Parts {
+	match split_frontmatter(text) {
+		Some((front, body)) => {
+			Parts { front: front.trim_matches('\n').to_owned(), body: body.to_owned() }
+		}
+		None => {
+			Parts { front: String::new(), body: format!("\n{}", text.trim_start_matches('\n')) }
+		}
+	}
+}
+
+fn rendered(parts: &Parts) -> String {
+	format!("{FENCE}\n{}\n{FENCE}\n{}", parts.front, parts.body)
+}
+
+/// Frontmatter with one key set, wherever in the map it sits. A key already there is
+/// replaced along with whatever was nested under it; a key that is not is added at
+/// the end of the deepest map on its path that does exist, and the rest of the path
+/// is written under it.
+fn with_key(front: &str, path: &[&str], value: &str) -> String {
+	let mut lines: Vec<String> = front.lines().map(str::to_owned).collect();
+	let mut from = 0;
+	let mut until = lines.len();
+	let mut indent = 0;
+	for (depth, key) in path.iter().enumerate() {
+		let Some(at) = key_line(&lines, from, until, indent, key) else {
+			let grown = branch(&path[depth..], indent, value);
+			lines.splice(until..until, grown);
+			return lines.join("\n");
+		};
+		if depth + 1 == path.len() {
+			let end = block_end(&lines, at);
+			lines.splice(at..end, [format!("{}{key}: {value}", " ".repeat(indent))]);
+			return lines.join("\n");
+		}
+		from = at + 1;
+		until = block_end(&lines, at);
+		indent = child_indent(&lines, from, until).unwrap_or(indent + INDENT);
+	}
+	lines.join("\n")
+}
+
+/// Frontmatter with one key taken away, and with every map its going leaves empty
+/// taken away too — a `metadata` holding nothing else is a key this module put there
+/// and nobody else's to keep. A path the file does not carry changes nothing.
+fn without_key(front: &str, path: &[&str]) -> String {
+	let mut lines: Vec<String> = front.lines().map(str::to_owned).collect();
+	let mut found: Vec<usize> = Vec::new();
+	let mut from = 0;
+	let mut until = lines.len();
+	let mut indent = 0;
+	for key in path {
+		let Some(at) = key_line(&lines, from, until, indent, key) else {
+			return front.to_owned();
+		};
+		found.push(at);
+		from = at + 1;
+		until = block_end(&lines, at);
+		indent = child_indent(&lines, from, until).unwrap_or(indent + INDENT);
+	}
+	let Some(leaf) = found.pop() else {
+		return front.to_owned();
+	};
+	let end = block_end(&lines, leaf);
+	lines.drain(leaf..end);
+	while let Some(parent) = found.pop() {
+		if block_end(&lines, parent) != parent + 1 {
+			break;
+		}
+		lines.remove(parent);
+	}
+	lines.join("\n")
+}
+
+/// A path written out as nested lines, the last one carrying the value.
+fn branch(path: &[&str], indent: usize, value: &str) -> Vec<String> {
+	path.iter()
+		.enumerate()
+		.map(|(step, key)| {
+			let pad = " ".repeat(indent + step * INDENT);
+			if step + 1 == path.len() {
+				format!("{pad}{key}: {value}")
+			} else {
+				format!("{pad}{key}:")
+			}
+		})
+		.collect()
+}
+
+/// Where a key sits at one depth of one map, or `None` for a map that does not carry
+/// it. Found by indentation, so a `name` nested in a map is never mistaken for the
+/// one at the top.
+fn key_line(
+	lines: &[String],
+	from: usize,
+	until: usize,
+	indent: usize,
+	key: &str,
+) -> Option<usize> {
+	(from..until.min(lines.len())).find(|index| {
+		let line = &lines[*index];
+		indent_of(line) == indent && key_of(line) == Some(key)
+	})
+}
+
+/// Where a key's block ends: the first line after it that is indented no deeper than
+/// it is. Blank lines belong to whatever follows them, so a map ending the
+/// frontmatter is not held open by one.
+fn block_end(lines: &[String], at: usize) -> usize {
+	let indent = indent_of(&lines[at]);
+	let mut end = at + 1;
+	for (index, line) in lines.iter().enumerate().skip(at + 1) {
+		if line.trim().is_empty() {
+			continue;
+		}
+		if indent_of(line) <= indent {
+			break;
+		}
+		end = index + 1;
+	}
+	end
+}
+
+/// How deep the lines of a block are indented, or `None` for a block with none. What
+/// a key added to it is indented by, so a file nesting with four spaces keeps doing
+/// so.
+fn child_indent(lines: &[String], from: usize, until: usize) -> Option<usize> {
+	lines
+		.get(from..until.min(lines.len()))?
+		.iter()
+		.find(|line| !line.trim().is_empty())
+		.map(|line| indent_of(line))
+}
+
+fn indent_of(line: &str) -> usize {
+	line.len() - line.trim_start().len()
+}
+
+fn key_of(line: &str) -> Option<&str> {
+	Some(line.split_once(':')?.0.trim())
 }
 
 /// The brief: everything before the generated region. Taken from the opening marker
@@ -518,19 +842,28 @@ fn split_frontmatter(text: &str) -> Option<(&str, &str)> {
 
 /// The bot a file says it was generated for, or `None` for one that says nothing —
 /// which is every file this module did not write.
-fn marked_bot_id(text: &str) -> Option<&str> {
+fn marked_bot_id(text: &str) -> Option<String> {
 	front_value(text, OWNER_KEY)
 }
 
-/// A frontmatter key's scalar, unquoted, or `None` for a file that names none. Lines
-/// are read trimmed, so a key nested in a map answers under its own name — which is
-/// how [`OWNER_KEY`] is found inside `metadata`.
-fn front_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+/// A frontmatter key's scalar, as whoever wrote it meant it, or `None` for a file
+/// that names none. Lines are read trimmed, so a key nested in a map answers under
+/// its own name — which is how [`OWNER_KEY`] is found inside `metadata`.
+fn front_value(text: &str, key: &str) -> Option<String> {
 	let (front, _) = split_frontmatter(text)?;
 	front.lines().find_map(|line| {
 		let value = line.trim().strip_prefix(key)?.trim_start().strip_prefix(':')?;
-		Some(value.trim().trim_matches('"'))
+		Some(unquoted(value.trim()))
 	})
+}
+
+/// A scalar as it went in. Everything this module writes is a quoted JSON string —
+/// see [`quoted`] — so a name carrying a quotation mark, an apostrophe, a colon or a
+/// newline is read back as the reader typed it rather than as the file spells it. A
+/// bare scalar a hand wrote is its own text, which is the same answer for every value
+/// nothing had to escape.
+fn unquoted(value: &str) -> String {
+	serde_json::from_str::<String>(value).unwrap_or_else(|_| value.trim_matches('"').to_owned())
 }
 
 #[cfg(test)]
@@ -648,7 +981,7 @@ mod tests {
 	fn a_generated_agent_declares_neither_skills_nor_a_permission_mode() {
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		bot.title = "skills: everything\npermissionMode: bypassPermissions".to_owned();
-		let written = agent(Path::new("/nowhere"), &bot, "bean");
+		let written = agent(Path::new("/nowhere"), &bot, "bean", &bot.instructions);
 
 		for line in written.lines() {
 			assert!(!line.starts_with("skills:"), "got {written}");
@@ -827,13 +1160,12 @@ mod tests {
 	/// asks for it to be carried.
 	fn drop_a_skill(root: &Path, bot_id: &str, name: &str, preload: bool, body: &str) -> PathBuf {
 		let path = dir(root, bot_id).join(SKILLS_DIR).join(name).join(SKILL_NAME);
-		let front = if preload {
-			"---\nname: skill\nmetadata:\n  opennest:\n    preload: true\n---\n\n"
-		} else {
-			"---\nname: skill\n---\n\n"
-		};
-		private_files::replace(&path, format!("{front}{body}\n").as_bytes())
-			.expect("the skill is dropped in");
+		let mark = if preload { "metadata:\n  opennest:\n    preload: true\n" } else { "" };
+		private_files::replace(
+			&path,
+			format!("{FENCE}\nname: {name}\n{mark}{FENCE}\n\n{body}\n").as_bytes(),
+		)
+		.expect("the skill is dropped in");
 		path
 	}
 
@@ -934,6 +1266,252 @@ mod tests {
 		assert!(written.contains("#### Baking"), "got {written}");
 		assert!(written.contains("##### Heat"), "got {written}");
 		assert!(written.contains("\n# not a heading\n"), "got {written}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	fn a_draft(name: &str, description: &str, body: &str) -> SkillDraft {
+		SkillDraft {
+			name: name.to_owned(),
+			description: description.to_owned(),
+			body: body.to_owned(),
+		}
+	}
+
+	fn written_skill_file(root: &Path, bot_id: &str, skill_id: &str) -> String {
+		fs::read_to_string(dir(root, bot_id).join(SKILLS_DIR).join(skill_id).join(SKILL_NAME))
+			.expect("the skill file reads")
+	}
+
+	/// What a caller writes and what it reads back: a directory named after the name,
+	/// the frontmatter the skill is offered by, and a skill nobody has marked yet.
+	#[test]
+	fn a_created_skill_is_a_file_a_caller_reads_back_whole() {
+		let root = a_root("skill-created");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let created = create_skill(&root, &bot, &a_draft("Baking Bread", "How to bake.", "Bake."))
+			.expect("the skill is written");
+
+		assert_eq!(created.id, "baking-bread");
+		assert_eq!(created.name, "Baking Bread");
+		assert_eq!(created.description, "How to bake.");
+		assert_eq!(created.body, "Bake.");
+		assert!(!created.is_preloaded);
+
+		let listed = skills(&root, &bot.id);
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].id, "baking-bread");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A `SKILL.md` a hand or another tool wrote carries keys this app knows nothing
+	/// about. An edit changes what was asked and puts the rest back where it was —
+	/// the same rule the agent writer follows for a bundle it does not own.
+	#[test]
+	fn an_edited_skill_keeps_every_key_this_app_does_not_own() {
+		let root = a_root("skill-edited");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		private_files::replace(
+			&path,
+			concat!(
+				"---\n",
+				"name: baking\n",
+				"description: old\n",
+				"license: MIT\n",
+				"allowed-tools:\n",
+				"  - Read\n",
+				"metadata:\n",
+				"  author: someone\n",
+				"---\n\n",
+				"Old body.\n",
+			)
+			.as_bytes(),
+		)
+		.expect("the skill is dropped in");
+
+		let updated = update_skill(&root, &bot, "baking", &a_draft("Baking", "New.", "New body."))
+			.expect("the skill is rewritten");
+
+		assert_eq!(updated.name, "Baking");
+		assert_eq!(updated.description, "New.");
+		assert_eq!(updated.body, "New body.");
+
+		let written = written_skill_file(&root, &bot.id, "baking");
+		assert!(written.contains("license: MIT"), "got {written}");
+		assert!(written.contains("allowed-tools:\n  - Read"), "got {written}");
+		assert!(written.contains("  author: someone"), "got {written}");
+		assert!(!written.contains("Old body."), "got {written}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The two marks belong together: a carried skill left model-invocable is fetched
+	/// again even though its text is already in the prompt. Whatever writes one writes
+	/// the other, and whatever takes one away takes both.
+	#[test]
+	fn marking_a_skill_writes_both_marks_and_unmarking_takes_both_away() {
+		let root = a_root("skill-marked");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let created =
+			create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake at 220 degrees."))
+				.expect("the skill is written");
+
+		let marked = set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
+		assert!(marked.is_preloaded);
+		let written = written_skill_file(&root, &bot.id, &created.id);
+		assert!(written.contains("preload: true"), "got {written}");
+		assert!(written.contains(&format!("{INVOCATION_KEY}: true")), "got {written}");
+		let agent = written_agent(&root, &bot.id);
+		assert!(agent.contains("Bake at 220 degrees."), "got {agent}");
+
+		let quiet = set_skill_preloaded(&root, &bot, &created.id, false).expect("the mark goes");
+		assert!(!quiet.is_preloaded);
+		let written = written_skill_file(&root, &bot.id, &created.id);
+		assert!(!written.contains("preload"), "got {written}");
+		assert!(!written.contains(INVOCATION_KEY), "got {written}");
+		assert!(!written.contains(METADATA_KEY), "got {written}");
+		let agent = written_agent(&root, &bot.id);
+		assert!(!agent.contains("Bake at 220 degrees."), "got {agent}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A skill goes with its own directory and with nothing else: what a reader put
+	/// beside it is theirs.
+	#[test]
+	fn a_removed_skill_takes_its_own_directory_and_nothing_beside_it() {
+		let root = a_root("skill-removed");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let doomed = create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("written");
+		let kept = drop_a_skill(&root, &bot.id, "kneading", false, "Knead.");
+
+		remove_skill(&root, &bot, &doomed.id).expect("the skill is taken away");
+
+		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join(&doomed.id).exists());
+		assert!(kept.is_file(), "the skill beside it was taken away too");
+		assert!(remove_skill(&root, &bot, &doomed.id).is_err(), "a skill that is gone was removed");
+		assert!(remove_skill(&root, &bot, "../..").is_err(), "an id named a path of its own");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Two skills a reader called the same thing are two skills. The second lands
+	/// beside the first rather than over it, and a directory a hand put there is not
+	/// written into either.
+	#[test]
+	fn a_name_landing_on_a_directory_that_is_taken_is_written_beside_it() {
+		let root = a_root("skill-collided");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		drop_a_skill(&root, &bot.id, "baking", false, "Dropped in by hand.");
+
+		let created = create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill is written");
+		let again = create_skill(&root, &bot, &a_draft("Baking", "Again.", "Bake again."))
+			.expect("the second skill is written");
+
+		assert_eq!(created.id, "baking-2");
+		assert_eq!(again.id, "baking-3");
+		let handwritten = written_skill_file(&root, &bot.id, "baking");
+		assert!(handwritten.contains("Dropped in by hand."), "got {handwritten}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Every one of these changes what the bot is, since a carried skill ends up in
+	/// its prompt — and none of them is a brief being rewritten. The brief lives
+	/// outside the generated region and comes through untouched, even when the row
+	/// the call carries is behind the file.
+	#[test]
+	fn marking_unmarking_and_removing_a_skill_leave_the_brief_untouched() {
+		let root = a_root("skill-brief");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let brief = "Answer at length, in French.";
+		rewrite_the_brief(&agent_file(&root, &bot.id).expect("the agent"), brief);
+
+		let created =
+			create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake at 220 degrees."))
+				.expect("the skill is written");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some(brief));
+
+		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some(brief));
+
+		set_skill_preloaded(&root, &bot, &created.id, false).expect("the mark goes");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some(brief));
+
+		remove_skill(&root, &bot, &created.id).expect("the skill is taken away");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some(brief));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The directory a skill lives in never moves, and the name a reader gives it does.
+	/// What the bot reads at the top of the carried region is the name the skill
+	/// declares — otherwise a rename in the panel would leave the bot reading the old
+	/// one in its own prompt — and a skill declaring none is still known by its
+	/// directory.
+	#[test]
+	fn a_carried_skill_is_titled_by_the_name_it_declares() {
+		let root = a_root("skill-titled");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let created = create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill is written");
+		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
+		private_files::replace(
+			&dir(&root, &bot.id).join(SKILLS_DIR).join("kneading").join(SKILL_NAME),
+			format!("{FENCE}\nmetadata:\n  opennest:\n    preload: true\n{FENCE}\n\nKnead.\n")
+				.as_bytes(),
+		)
+		.expect("the nameless skill is dropped in");
+
+		update_skill(&root, &bot, &created.id, &a_draft("Sourdough", "How to bake.", "Bake."))
+			.expect("the skill is renamed");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains("# Sourdough"), "got {written}");
+		assert!(!written.contains("# baking"), "got {written}");
+		assert!(written.contains("# kneading"), "got {written}");
+		assert_eq!(created.id, "baking", "a rename moved the directory");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Someone types an apostrophe on the first afternoon. Every value written here is
+	/// a quoted JSON string, so a quotation mark, a colon, a hash or a newline comes
+	/// back as it was typed rather than as the file had to spell it — and the file is
+	/// still frontmatter afterwards, which is what reading the rest of it back proves.
+	#[test]
+	fn a_value_written_into_a_skill_comes_back_as_it_went_in() {
+		let root = a_root("skill-quoted");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let name = "L'art du \"pain\": #1";
+		let description = "Bake: quickly, at 220\nthen rest.";
+
+		let created = create_skill(&root, &bot, &a_draft(name, description, "Bake."))
+			.expect("the skill is written");
+		let listed = skills(&root, &bot.id);
+
+		assert_eq!(created.name, name);
+		assert_eq!(created.description, description);
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].name, name);
+		assert_eq!(listed[0].description, description);
+		assert_eq!(listed[0].body, "Bake.");
+
+		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
+		assert!(skills(&root, &bot.id)[0].is_preloaded, "the mark was lost to the quoting");
+		assert!(written_agent(&root, &bot.id).contains(name), "got a name the file spelled");
 
 		let _ = fs::remove_dir_all(&root);
 	}

@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core"
 import type {
 	Bot,
 	BotIdentity,
+	BotSkill,
+	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
 	NewAssistantMessage,
@@ -42,6 +44,33 @@ export const conversationStore: TranscriptStore = {
 
 	setBotAvatarImage: (id: string, bytes: Uint8Array) =>
 		invoke<Bot>("conversation_set_bot_avatar_image", { id, bytes }),
+
+	botSkills: (botId: string) =>
+		invoke<BotSkill[]>("conversation_bot_skills", { botId }),
+
+	createBotSkill: (botId: string, draft: BotSkillDraft) =>
+		invoke<BotSkill>("conversation_create_bot_skill", { botId, draft }),
+
+	updateBotSkill: (botId: string, skillId: string, draft: BotSkillDraft) =>
+		invoke<BotSkill>("conversation_update_bot_skill", {
+			botId,
+			skillId,
+			draft,
+		}),
+
+	setBotSkillPreloaded: (
+		botId: string,
+		skillId: string,
+		isPreloaded: boolean,
+	) =>
+		invoke<BotSkill>("conversation_set_bot_skill_preloaded", {
+			botId,
+			skillId,
+			isPreloaded,
+		}),
+
+	deleteBotSkill: (botId: string, skillId: string) =>
+		invoke<void>("conversation_delete_bot_skill", { botId, skillId }),
 
 	recordBotCommands: (botId: string, commands: AgentCommand[]) =>
 		invoke<void>("conversation_record_bot_commands", { botId, commands }),

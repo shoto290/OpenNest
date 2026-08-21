@@ -38,6 +38,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::avatars;
+use crate::bundles;
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
@@ -242,6 +243,55 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			working_dir: identity.working_dir,
 			instructions: identity.instructions,
 		}
+	}
+}
+
+/// A skill of a bot's, as the frontend meets it. It lives in the bot's plugin
+/// bundle and nowhere else: no column holds any of this, and a skill a hand dropped
+/// into the directory is answered here beside the ones this app wrote.
+///
+/// `id` is the directory the skill lives in — the one name two of a bot's skills
+/// cannot share, and the name every write below addresses one by. What the skill is
+/// called is free text and changing it moves nothing on the disk.
+///
+/// `isPreloaded` is whether the body is carried into the bot's agent file, which is
+/// the whole of how a skill reaches a promoted bot — see [`crate::bundles`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Skill {
+	pub id: String,
+	pub name: String,
+	pub description: String,
+	pub body: String,
+	pub is_preloaded: bool,
+}
+
+impl From<bundles::Skill> for Skill {
+	fn from(skill: bundles::Skill) -> Self {
+		Self {
+			id: skill.id,
+			name: skill.name,
+			description: skill.description,
+			body: skill.body,
+			is_preloaded: skill.is_preloaded,
+		}
+	}
+}
+
+/// What a caller writes a skill with, whole: the three values a reader edits. The
+/// mark is not one of them — it is set by its own command, because it changes what
+/// the bot was told rather than what the skill says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDraft {
+	pub name: String,
+	pub description: String,
+	pub body: String,
+}
+
+impl From<SkillDraft> for bundles::SkillDraft {
+	fn from(draft: SkillDraft) -> Self {
+		Self { name: draft.name, description: draft.description, body: draft.body }
 	}
 }
 
