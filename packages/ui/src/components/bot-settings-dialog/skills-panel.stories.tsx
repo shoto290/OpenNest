@@ -3,6 +3,7 @@ import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import type { BotSkillItem } from "@workspace/ui/components/bot-settings"
 import {
 	BOT_SKILLS,
 	LONG_SKILL,
@@ -19,15 +20,18 @@ const [CARRIED] = BOT_SKILLS
 const PanelHost = (props: SkillsPanelProps) => {
 	const [skills, setSkills] = useState(props.skills)
 
+	const patch = (id: string, fields: Partial<BotSkillItem>) =>
+		setSkills(
+			skills.map((skill) =>
+				skill.id === id ? { ...skill, ...fields } : skill,
+			),
+		)
+
 	return (
 		<SkillsPanel
 			{...props}
 			onChange={(id, draft) => {
-				setSkills(
-					skills.map((skill) =>
-						skill.id === id ? { ...skill, ...draft } : skill,
-					),
-				)
+				patch(id, draft)
 				props.onChange(id, draft)
 			}}
 			onCreate={(draft, isPreloaded) => {
@@ -39,11 +43,7 @@ const PanelHost = (props: SkillsPanelProps) => {
 				props.onDelete(id)
 			}}
 			onPreloadedChange={(id, isPreloaded) => {
-				setSkills(
-					skills.map((skill) =>
-						skill.id === id ? { ...skill, isPreloaded } : skill,
-					),
-				)
+				patch(id, { isPreloaded })
 				props.onPreloadedChange(id, isPreloaded)
 			}}
 			skills={skills}

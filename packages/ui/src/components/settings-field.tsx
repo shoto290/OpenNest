@@ -32,6 +32,7 @@ const SettingsField = ({
 	fill = false,
 }: SettingsFieldProps) => {
 	const id = useId()
+	const hintId = hint ? `${id}-hint` : undefined
 	const emit = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
 		onValueChange(event.target.value)
 
@@ -42,7 +43,7 @@ const SettingsField = ({
 			</label>
 			{rows || fill ? (
 				<textarea
-					aria-describedby={hint ? `${id}-hint` : undefined}
+					aria-describedby={hintId}
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						"resize-none leading-relaxed",
@@ -56,7 +57,7 @@ const SettingsField = ({
 				/>
 			) : (
 				<input
-					aria-describedby={hint ? `${id}-hint` : undefined}
+					aria-describedby={hintId}
 					className={FIELD_CONTROL_CLASS}
 					id={id}
 					onChange={emit}
@@ -66,7 +67,7 @@ const SettingsField = ({
 				/>
 			)}
 			{hint ? (
-				<p className="text-muted-foreground text-xs" id={`${id}-hint`}>
+				<p className="text-muted-foreground text-xs" id={hintId}>
 					{hint}
 				</p>
 			) : null}

@@ -103,10 +103,10 @@ export const createSkillsController = (
 
 	/** A write against the bot on hand, or nothing at all: there is no skill to
 	 * address while no bot is open. */
-	const onOpenBot = (write: (botId: string) => Promise<void>) => {
+	const onOpenBot = (run: (botId: string) => Promise<void>) => {
 		const botId = state.botId
 		if (botId) {
-			void enqueue(() => write(botId)).catch(reload)
+			void enqueue(() => run(botId)).catch(reload)
 		}
 	}
 
@@ -133,12 +133,10 @@ export const createSkillsController = (
 		create: (draft: BotSkillDraft, isPreloaded: boolean) =>
 			onOpenBot(async (botId) => {
 				const created = await store.createBotSkill(botId, draft)
-				applyTo(botId, [
-					...state.skills,
-					isPreloaded
-						? await store.setBotSkillPreloaded(botId, created.id, true)
-						: created,
-				])
+				const skill = isPreloaded
+					? await store.setBotSkillPreloaded(botId, created.id, true)
+					: created
+				applyTo(botId, [...state.skills, skill])
 			}),
 
 		describe: (skillId: string, draft: BotSkillDraft) => {
