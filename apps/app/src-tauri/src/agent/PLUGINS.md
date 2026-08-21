@@ -143,6 +143,27 @@ gate it on `!isValid`"*. The classic form contradicts its own doctrine, with con
 and without ever consulting it. Cost: about 11k extra prompt tokens, 0.9 s, and prompt
 cache engaged from the second call.
 
+### A carried skill is still in the catalogue — verified
+
+A skill copied into the body does not leave the session: it is still a
+`skills/<name>/SKILL.md` in the bundle, so it is still listed for the `Skill` tool. Same
+bundle, same question, only the skill's frontmatter differing:
+
+| Skill frontmatter | `Skill` tool called | Answer |
+| --- | --- | --- |
+| carried in the body | **yes** | correct, after a round trip |
+| carried, plus `disable-model-invocation: true` | no | correct, straight from the body |
+
+The first row is the cost: the model fetched what it had already been given, paying a
+round trip for it and leaving the same text in context twice.
+
+- Consequence: **preloading and model invocation are contradictory settings.** A skill
+  whose body is in the system prompt has nothing left to be invoked for, and leaving it
+  invocable buys a duplicate.
+- Whatever writes `metadata.opennest.preload` should write `disable-model-invocation`
+  beside it. That is a decision about a file the reader owns, so it belongs to the
+  interface that marks a skill, not to the writer that carries one.
+
 ## Resume — flags are not sticky
 
 `--resume` **without** re-passing `--plugin-dir` and `--agent` replays the conversation
