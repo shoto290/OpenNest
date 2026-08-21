@@ -88,15 +88,25 @@ impl EventSink for GatedSink {
 	}
 }
 
+/// The plugin bundle a bot runs as, and the agent inside it the main thread is
+/// promoted to. The bundle carries what the bot was told, as the body of that
+/// agent — see [`crate::bundles`].
+///
+/// Both travel on every spawn, a resume included: neither is sticky, and a resume
+/// that re-passed neither would replay the conversation without ever loading the
+/// bot again. A session is given them once, when it is opened, which is why editing
+/// a bot rotates the runtime instead of reaching into the one that is running.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bundle {
+	pub path: String,
+	pub agent: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct SessionOptions {
 	pub cwd: PathBuf,
 	pub resume: Option<String>,
-	/// What the bot this session answers for was told to be, handed to the agent as
-	/// an addition to its own system prompt. A session is given it once, when it is
-	/// opened: there is no command that changes it afterwards, which is why editing
-	/// it rotates the runtime instead of reaching into the one that is running.
-	pub append_system_prompt: Option<String>,
+	pub bundle: Option<Bundle>,
 	pub startup_timeout: Duration,
 	/// Extra variables handed to the agent this session runs, and to it alone. The
 	/// sidecar's own environment is left untouched.
@@ -108,7 +118,7 @@ impl SessionOptions {
 		Self {
 			cwd,
 			resume: None,
-			append_system_prompt: None,
+			bundle: None,
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
 		}
@@ -119,11 +129,11 @@ impl SessionOptions {
 		self
 	}
 
-	/// A bot with nothing to say for itself is opened with no addition at all rather
-	/// than with an empty one: an empty append is a value the agent has to read past,
-	/// and a bot carrying only spaces has said nothing.
-	pub fn instructed(mut self, instructions: Option<String>) -> Self {
-		self.append_system_prompt = instructions.filter(|text| !text.trim().is_empty());
+	/// A bot whose bundle could not be written or read is opened as a session with no
+	/// plugin and no agent at all, which is how every process was started before a bot
+	/// could be described: the reader gets an agent rather than nothing.
+	pub fn bundled(mut self, bundle: Option<Bundle>) -> Self {
+		self.bundle = bundle;
 		self
 	}
 
@@ -136,7 +146,8 @@ impl SessionOptions {
 		OpenRequest {
 			cwd: self.cwd.to_string_lossy().into_owned(),
 			resume: self.resume.clone(),
-			append_system_prompt: self.append_system_prompt.clone(),
+			plugin_path: self.bundle.as_ref().map(|bundle| bundle.path.clone()),
+			agent: self.bundle.as_ref().map(|bundle| bundle.agent.clone()),
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
 		}
@@ -429,27 +440,39 @@ mod tests {
 		SessionOptions::new(PathBuf::from("/tmp"))
 	}
 
-	/// The bot's own instructions reach the agent as an addition to the provider's own
-	/// system prompt, never as a replacement for it.
+	/// The bot reaches the agent as a bundle to load and an agent to be promoted to,
+	/// and both are on the wire — a spawn that named one without the other would load
+	/// a plugin nothing uses, or name an agent nothing defines.
 	#[test]
-	fn a_bot_with_instructions_opens_with_them_appended() {
-		let told = options().instructed(Some("Answer briefly.".to_owned()));
-		let request = told.open_request(true);
-		assert_eq!(request.append_system_prompt.as_deref(), Some("Answer briefly."));
+	fn a_bot_opens_on_the_bundle_it_runs_as() {
+		let bundle = Bundle { path: "/bots/b1".to_owned(), agent: "bean".to_owned() };
+		let request = options().bundled(Some(bundle)).open_request(true);
+
+		assert_eq!(request.plugin_path.as_deref(), Some("/bots/b1"));
+		assert_eq!(request.agent.as_deref(), Some("bean"));
 	}
 
-	/// Nothing to say for itself is nothing on the wire either: a bot with no
-	/// instructions is opened exactly as every bot was opened before there were any.
+	/// Resuming re-passes both: neither survives a resume on its own, and a run that
+	/// dropped them would replay the transcript with no bot loaded behind it.
 	#[test]
-	fn a_bot_carrying_no_instructions_appends_nothing() {
-		for nothing in [None, Some(String::new()), Some("  \n ".to_owned())] {
-			let plain = options().instructed(nothing);
-			assert_eq!(
-				plain.open_request(true).append_system_prompt,
-				None,
-				"an empty addition reached the agent"
-			);
-		}
+	fn a_resumed_run_carries_the_bundle_again() {
+		let bundle = Bundle { path: "/bots/b1".to_owned(), agent: "bean".to_owned() };
+		let request =
+			options().bundled(Some(bundle)).resuming(Some("s1".to_owned())).open_request(true);
+
+		assert_eq!(request.resume.as_deref(), Some("s1"));
+		assert_eq!(request.plugin_path.as_deref(), Some("/bots/b1"));
+		assert_eq!(request.agent.as_deref(), Some("bean"));
+	}
+
+	/// A bot with no bundle to load is opened exactly as every bot was opened before
+	/// there were any: no plugin, no agent, and a process the reader can still talk to.
+	#[test]
+	fn a_bot_carrying_no_bundle_names_none() {
+		let plain = options().bundled(None).open_request(true);
+
+		assert_eq!(plain.plugin_path, None);
+		assert_eq!(plain.agent, None);
 	}
 
 	/// A sidecar that never announced deltas is never asked for them, so the reader

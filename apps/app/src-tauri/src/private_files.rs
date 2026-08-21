@@ -33,6 +33,41 @@ pub fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 	create_owned(path, bytes)
 }
 
+/// The bytes on the disk under a name the caller derives rather than mints, so a
+/// path already taken is the previous version of this very file and not a collision:
+/// it is truncated and written again. Owner-only when this call is the one to create
+/// it — a file that was already there keeps the mode it has, which is the honest
+/// answer for one a user may have put there themselves.
+///
+/// [`write`] is the other half of the pair and stays `create_new`: what a user picked
+/// off their disk is stored under a minted name, and overwriting one of those would
+/// mean two uploads had collided.
+pub fn replace(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+	if let Some(dir) = path.parent() {
+		create_dir(dir)?;
+	}
+	replace_owned(path, bytes)
+}
+
+#[cfg(unix)]
+fn replace_owned(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+	use std::io::Write;
+	use std::os::unix::fs::OpenOptionsExt;
+
+	let mut file = fs::OpenOptions::new()
+		.write(true)
+		.create(true)
+		.truncate(true)
+		.mode(FILE_MODE)
+		.open(path)?;
+	file.write_all(bytes)
+}
+
+#[cfg(not(unix))]
+fn replace_owned(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+	fs::write(path, bytes)
+}
+
 /// The directory and every missing parent of it, each created owner-only —
 /// `recursive` hands the same mode down, so a caller's own directory above the leaf
 /// is not left under the umask. Idempotent, which is what makes it safe to run

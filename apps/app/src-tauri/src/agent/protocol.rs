@@ -49,8 +49,13 @@ pub struct OpenRequest {
 	pub cwd: String,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub resume: Option<String>,
+	/// The bot's plugin bundle, loaded for this session and never installed, and the
+	/// agent inside it the main thread is promoted to. Both are re-sent on a resume:
+	/// neither is sticky — see `PLUGINS.md`.
 	#[serde(skip_serializing_if = "Option::is_none")]
-	pub append_system_prompt: Option<String>,
+	pub plugin_path: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub agent: Option<String>,
 	pub partial_messages: bool,
 	#[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
 	pub env: std::collections::BTreeMap<String, String>,

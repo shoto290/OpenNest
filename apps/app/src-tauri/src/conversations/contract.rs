@@ -138,8 +138,9 @@ impl From<AvatarBlot> for conversations::AvatarBlot {
 /// A bot as the frontend meets it. `instructions` is projected because the
 /// settings panel is where a bot is told how to answer: it is displayed, edited and
 /// submitted back, so a reload that could not read it would show an empty field over
-/// a stored prompt. `memory` is not — it is what a run leaves behind for the next
-/// one, and nothing over there displays or writes it.
+/// a stored prompt. It is read out of the bot's plugin bundle — see [`Bot::of`].
+/// `memory` is not — it is what a run leaves behind for the next one, and nothing
+/// over there displays or writes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bot {
@@ -170,7 +171,17 @@ impl Bot {
 	///
 	/// `None` for the directory is a run with nowhere to keep avatars. Same answer:
 	/// every bot wears its animal.
-	pub fn of(bot: conversations::Bot, avatars: Option<&Path>) -> Self {
+	///
+	/// `bundles` is where the same bot's plugin bundle lives, and `instructions` is
+	/// read from the agent file inside it rather than from the column: the file is
+	/// what the process is actually started with, so it is what the panel that edits
+	/// it has to show. A bundle this install has not written — a bot from before
+	/// there were any, a host with no data directory — falls back to the column,
+	/// which is what the bundle is rewritten from anyway.
+	pub fn of(bot: conversations::Bot, avatars: Option<&Path>, bundles: Option<&Path>) -> Self {
+		let instructions = bundles
+			.and_then(|root| crate::bundles::instructions(root, &bot.id))
+			.unwrap_or_else(|| bot.instructions.clone());
 		let avatar_image_path = bot
 			.avatar_image_path
 			.as_deref()
@@ -186,7 +197,7 @@ impl Bot {
 			avatar_blot: bot.avatar_blot.map(Into::into),
 			avatar_image_path,
 			working_dir: bot.working_dir,
-			instructions: bot.instructions,
+			instructions,
 			created_at: bot.created_at,
 		}
 	}
@@ -578,6 +589,13 @@ pub enum TranscriptStoreError {
 	/// them are the user's to fix by picking another file.
 	#[serde(rename_all = "camelCase")]
 	RejectedAvatarImage { reason: AvatarRejection },
+	/// The bot's plugin bundle could not be written, so the save was undone and the
+	/// bot is as it was. It is a refusal rather than a warning because the bundle is
+	/// what a process is really started on: a save reported as done while the disk
+	/// kept the old brief would leave the bot answering by it for good — see
+	/// [`crate::bundles`].
+	#[serde(rename_all = "camelCase")]
+	UnwritableBundle { detail: String },
 }
 
 /// Why an avatar was not stored, in the frontend's vocabulary. `tooLarge` carries
@@ -1133,9 +1151,9 @@ mod tests {
 		};
 		let dir = std::env::temp_dir();
 
-		assert_eq!(Bot::of(stored(Some("/etc/passwd")), Some(&dir)).avatar_image_path, None);
-		assert_eq!(Bot::of(stored(Some("/etc/passwd")), None).avatar_image_path, None);
-		assert_eq!(Bot::of(stored(None), Some(&dir)).avatar_image_path, None);
+		assert_eq!(Bot::of(stored(Some("/etc/passwd")), Some(&dir), None).avatar_image_path, None);
+		assert_eq!(Bot::of(stored(Some("/etc/passwd")), None, None).avatar_image_path, None);
+		assert_eq!(Bot::of(stored(None), Some(&dir), None).avatar_image_path, None);
 	}
 
 	/// The ending a caller reports is the one the file records: a mapping that

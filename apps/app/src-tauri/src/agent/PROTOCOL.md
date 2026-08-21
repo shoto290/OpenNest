@@ -60,7 +60,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `appendSystemPrompt?`, `partialMessages`, `env?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `agent?`, `partialMessages`, `env?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -71,8 +71,15 @@ Every other command names its session.
 - `resume` is the SDK's `resume`. The stored id is tried first; a refusal falls
   back to a fresh session and the id is given up on only when the refusal was a
   crash — see `commands.rs::start_with_fallback`.
-- `appendSystemPrompt` rides on the provider's own preset system prompt as an
-  addition to it, never as a replacement — see the provider module in the sidecar.
+- `pluginPath` is the bot's own plugin bundle, loaded for the session and never
+  installed, and `agent` is the agent inside it the main thread is promoted to,
+  namespaced as `<plugin>:<agent>` so it cannot resolve to one of the reader's own.
+  What the bot was told is that agent's body — see `PLUGINS.md` for what was
+  measured, and `bundles.rs` for what is written. Both are re-sent on every spawn,
+  a resume included: neither is carried across one.
+- the provider's own preset system prompt stays set on every spawn that names an
+  `agent`. Measured, not documented: without it the agent resolves and its body is
+  never applied.
 - `settingSources` is deliberately left out, which is what makes the SDK load the
   settings on disk and the instruction files they reach — the CLI defaults.
 - `env` is the SDK's `env`: variables for the agent this session runs, not for

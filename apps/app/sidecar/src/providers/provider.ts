@@ -7,7 +7,11 @@ export type ProviderCapability =
 export type SessionRequest = {
 	cwd: string
 	resume?: string
-	appendSystemPrompt?: string
+	/** The bot's plugin bundle, loaded for the session and never installed, and the
+	 * agent inside it the main thread is promoted to. Named apart from any provider's
+	 * spelling of them: the provider module turns the pair into its own options. */
+	pluginPath?: string
+	agent?: string
 	partialMessages: boolean
 }
 

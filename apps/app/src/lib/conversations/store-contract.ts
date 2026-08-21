@@ -139,3 +139,8 @@ export type TranscriptStoreError =
 	/** Nothing was written and nothing on the bot changed: it still wears whatever it
 	 * wore before the upload. */
 	| { kind: "rejectedAvatarImage"; reason: AvatarRejection }
+	/** The bot's plugin bundle could not be written, so the save was undone: the bot
+	 * is as it was, brief included. A refusal rather than a warning because the bundle
+	 * is what its process is started on — a save reported as done over a bundle that
+	 * kept the old brief would leave the bot answering by it for good. */
+	| { kind: "unwritableBundle"; detail: string }

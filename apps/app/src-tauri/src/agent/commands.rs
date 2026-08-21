@@ -10,10 +10,12 @@ use super::contract::{
 	SessionHandle, SessionSnapshot, TransportError,
 };
 use super::redact;
-use super::session::{EventSink, GatedSink, Session, SessionOptions};
+use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::store;
+use crate::bundles;
 use crate::db;
+use crate::db::repositories::conversations::Bot as StoredBot;
 
 pub const EVENT_CHANNEL: &str = "agent://event";
 
@@ -359,12 +361,12 @@ fn reported(binary_version: Option<String>, probe: Result<bool, TransportError>)
 	}
 }
 
-/// What the bot a run answers for is started as: its own instructions, and the
-/// directory it works in. Both are fixed for the life of a process, so both are
+/// What the bot a run answers for is started as: the plugin bundle it runs as, and
+/// the directory it works in. Both are fixed for the life of a process, so both are
 /// read at the moment one is spawned.
 #[derive(Default)]
 struct RuntimeIdentity {
-	instructions: Option<String>,
+	bundle: Option<Bundle>,
 	working_dir: Option<String>,
 }
 
@@ -375,14 +377,45 @@ struct RuntimeIdentity {
 /// A host with no database, or a bot the file no longer holds, is started as a bot
 /// carrying nothing — which is the runtime this app started every process in before
 /// a bot could be described at all.
-async fn runtime_identity(state: &db::DatabaseState, bot_id: &str) -> RuntimeIdentity {
+///
+/// The bundle is written here if the disk holds none: it is derived from the row in
+/// front of us, so a directory that was tidied away, restored from a backup or never
+/// written by an older build is one this spawn lays down again rather than a bot that
+/// starts without its brief.
+///
+/// A bundle that *is* there is the truth, and the row is what catches up: a brief
+/// edited on the disk since the last launch is what this process is started on, and
+/// the column is written from it so the rebuild above has the last true value to
+/// rebuild from.
+async fn runtime_identity<R: Runtime>(
+	app: &AppHandle<R>,
+	state: &db::DatabaseState,
+	bot_id: &str,
+) -> RuntimeIdentity {
 	let Ok(database) = state.as_ref() else {
 		return RuntimeIdentity::default();
 	};
 	let Ok(Some(bot)) = database.conversations().bot(bot_id.to_owned()).await else {
 		return RuntimeIdentity::default();
 	};
-	RuntimeIdentity { instructions: Some(bot.instructions), working_dir: bot.working_dir }
+	let root = bundles::root(app);
+	let bundle = root.as_deref().and_then(|root| laid_down_bundle(root, &bot));
+	if let Some(found) = root.as_deref().and_then(|root| bundles::adopted(root, &bot)) {
+		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
+	}
+	RuntimeIdentity { bundle, working_dir: bot.working_dir }
+}
+
+/// The bundle this session hands over, or `None` when the disk would not take it —
+/// which opens a session with no plugin and no agent. That is a bot answering as
+/// plain Claude: the honest outcome of a bundle that is not there, and one the reader
+/// can still talk to.
+fn laid_down_bundle(root: &Path, bot: &StoredBot) -> Option<Bundle> {
+	bundles::ensure(root, bot).ok()?;
+	Some(Bundle {
+		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
+		agent: bundles::agent_ref(root, bot),
+	})
 }
 
 /// Where the child is started, and the directory that was refused if one was. A
@@ -408,9 +441,9 @@ fn where_it_runs(stored: Option<String>, anywhere: PathBuf) -> (PathBuf, Option<
 /// crashes on its first breath is still a run somebody can name afterwards.
 ///
 /// The scope also says which bot the child is, and that is read off the record here
-/// rather than asked of the caller: the process is spawned with the bot's
-/// instructions as its system prompt and in the directory the bot works in, and
-/// neither can be changed in a child that is already running.
+/// rather than asked of the caller: the process is spawned on the bot's own plugin
+/// bundle and in the directory the bot works in, and neither can be changed in a
+/// child that is already running.
 ///
 /// `cwd` is what is left when the bot names no directory of its own, and what a
 /// refused one falls back to. The bot's own always wins — a caller cannot put a
@@ -444,7 +477,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	}
 
 	let sidecar = state.sidecar().await?;
-	let identity = runtime_identity(&database, &scope.bot_id).await;
+	let identity = runtime_identity(&app, &database, &scope.bot_id).await;
 	let anywhere = cwd
 		.map(PathBuf::from)
 		.or_else(|| app.path().home_dir().ok())
@@ -453,7 +486,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	let sink: Arc<dyn EventSink> =
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
-	let options = SessionOptions::new(working_dir).instructed(identity.instructions);
+	let options = SessionOptions::new(working_dir).bundled(identity.bundle);
 
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
 		Ok(started) => started,

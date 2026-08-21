@@ -14,7 +14,8 @@ type Command = {
 	session?: string
 	cwd?: string
 	resume?: string
-	appendSystemPrompt?: string
+	pluginPath?: string
+	agent?: string
 	partialMessages?: boolean
 	text?: string
 	requestId?: string
@@ -41,7 +42,8 @@ export const serve = async (requestedId?: string) => {
 				{
 					cwd: command.cwd ?? process.cwd(),
 					resume: command.resume,
-					appendSystemPrompt: command.appendSystemPrompt,
+					pluginPath: command.pluginPath,
+					agent: command.agent,
 					partialMessages: command.partialMessages ?? false,
 				},
 				emit,

@@ -19,6 +19,7 @@ use opennest_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use opennest_app::agent::commands::EVENT_CHANNEL;
 use opennest_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TransportError};
 use opennest_app::agent::AgentState;
+use opennest_app::bundles;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -33,8 +34,10 @@ const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
 
 const TURN: &str = "t1";
+const NAME: &str = "Camille";
 const FRENCH: &str = "Answer only in French.";
 const DUTCH: &str = "Answer only in Dutch.";
+const SPANISH: &str = "Answer only in Spanish.";
 
 struct Harness {
 	app: App<MockRuntime>,
@@ -214,7 +217,7 @@ fn refused_directory(seen: &[AgentEvent]) -> Option<String> {
 /// identity, with the two this suite is about spelled by the caller.
 fn an_identity(instructions: Option<&str>, working_dir: Option<&Path>) -> Value {
 	json!({
-		"name": "Camille",
+		"name": NAME,
 		"title": "",
 		"model": "sonnet",
 		"avatarAnimal": "cat",
@@ -223,6 +226,52 @@ fn an_identity(instructions: Option<&str>, working_dir: Option<&Path>) -> Value 
 		"workingDir": working_dir.map(|dir| dir.to_string_lossy().into_owned()),
 		"instructions": instructions.unwrap_or_default()
 	})
+}
+
+/// Where the host keeps this bot's plugin bundle, resolved the way the host
+/// resolves it rather than spelled again here.
+fn bundle_of(harness: &Harness, bot: &str) -> PathBuf {
+	let root = bundles::root(harness.app.handle()).expect("the bundle root");
+	bundles::dir(&root, bot)
+}
+
+/// The bot as the frontend reads it back, which is the only place a caller can see
+/// whether a refused write left anything behind.
+fn stored_bot(harness: &Harness, bot: &str) -> Value {
+	let listed = harness.call("conversation_bots", json!({})).expect("the roster");
+	listed
+		.as_array()
+		.and_then(|bots| bots.iter().find(|listed| listed["id"] == bot).cloned())
+		.expect("the bot is on the roster")
+}
+
+/// A brief rewritten the way a reader does it: the file's own frontmatter left where
+/// it is — the marker that says whose file it is included — and the body replaced.
+fn rewrite_the_brief(agent: &Path, brief: &str) {
+	let text = std::fs::read_to_string(agent).expect("the agent file is there");
+	let (front, _) = text.rsplit_once("---").expect("the closing fence");
+	std::fs::write(agent, format!("{front}---\n\n{brief}\n")).expect("the hand edit lands");
+}
+
+/// Every bundle the marketplace lists, by name and by the source it points at.
+fn listed_plugins(harness: &Harness) -> Vec<(String, String)> {
+	let root = bundles::root(harness.app.handle()).expect("the bundle root");
+	let text = std::fs::read_to_string(bundles::marketplace_file(&root)).unwrap_or_default();
+	let listed: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+	listed["plugins"]
+		.as_array()
+		.map(|plugins| {
+			plugins
+				.iter()
+				.map(|plugin| {
+					(
+						plugin["name"].as_str().unwrap_or_default().to_owned(),
+						plugin["source"].as_str().unwrap_or_default().to_owned(),
+					)
+				})
+				.collect()
+		})
+		.unwrap_or_default()
 }
 
 /// A directory of this suite's own, created fresh and named the way a reader would
@@ -320,6 +369,71 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	assert!(elsewhere.spoken.contains(&format!("system<{FRENCH}>")), "got {}", elsewhere.spoken);
 	let refused = harness.wait_for("the refused directory to be reported", refused_directory);
 	assert!(refused.ends_with("opennest-runtime-identity-gone"), "got {refused}");
+
+	// What the child was started on is a bundle on the disk, and describing the bot is
+	// what wrote it: the brief is the body of the agent the main thread is promoted to,
+	// not a prompt the host appends.
+	harness.describe(&bot, DUTCH, None);
+	let bundle = bundle_of(&harness, &bot);
+	let agent = bundle.join("agents").join(format!("{}.md", bundles::slug(NAME)));
+	let written = std::fs::read_to_string(&agent).expect("the agent file is there");
+	assert!(written.contains(DUTCH), "got {written}");
+	assert!(!written.contains("skills:"), "got {written}");
+	assert!(!written.contains("permissionMode"), "got {written}");
+
+	// One marketplace over every bundle, so a reader adds this directory once instead
+	// of installing one plugin per bot. Each entry names the bundle by the bot's id —
+	// the one name two bots cannot share — and sources it relative to the file listing
+	// it.
+	assert_eq!(listed_plugins(&harness), vec![(bot.clone(), format!("./plugins/{bot}"))]);
+
+	// A reader drops a skill into their bot's directory and rewrites the brief by
+	// hand. Describing the bot again is an unrelated write, and it is not allowed to
+	// cost them either: only generated files are written, and the body on the disk is
+	// what the bot is.
+	let skill = bundle.join("skills").join("baking").join("SKILL.md");
+	std::fs::create_dir_all(skill.parent().expect("the skill directory")).expect("made");
+	std::fs::write(&skill, "how to bake").expect("the skill is dropped in");
+	rewrite_the_brief(&agent, FRENCH);
+	harness.describe(&bot, DUTCH, None);
+	assert_eq!(std::fs::read_to_string(&skill).ok().as_deref(), Some("how to bake"));
+	let kept = std::fs::read_to_string(&agent).expect("the agent file is there");
+	assert!(kept.contains(FRENCH), "the hand edited brief was written over: {kept}");
+
+	// A brief edited between two launches, with no panel write to notice it: the run is
+	// started on what the file says, and the record catches up with it there too.
+	rewrite_the_brief(&agent, SPANISH);
+	let edited = harness.runtime_of(&conversation, &bot, 5);
+	assert!(edited.spoken.contains(&format!("system<{SPANISH}>")), "got {}", edited.spoken);
+
+	// Which is what makes the fallback honest. A bundle that is not there when a run
+	// starts is written again from the record, and what it writes is the hand edit
+	// rather than the last value the panel submitted.
+	std::fs::remove_dir_all(&bundle).expect("the bundle is taken away");
+	let rebuilt = harness.runtime_of(&conversation, &bot, 6);
+	assert!(rebuilt.spoken.contains(&format!("system<{SPANISH}>")), "got {}", rebuilt.spoken);
+	assert!(agent.is_file(), "the run that found no bundle did not write one");
+
+	// A bundle the disk will not take fails the save that triggered it. The row goes
+	// back to what it was, so what the panel reports and what the next process would be
+	// started on cannot come apart — which is the whole reason a brief lives in a file.
+	let manifest_dir = bundle.join(".claude-plugin");
+	std::fs::remove_dir_all(&manifest_dir).expect("the manifest directory is taken away");
+	std::fs::write(&manifest_dir, "not a directory").expect("a file stands in its place");
+	let mut renaming = an_identity(Some(SPANISH), None);
+	renaming["name"] = json!("Renamed");
+	let refused = harness
+		.call("conversation_update_bot", json!({ "id": bot, "identity": renaming }))
+		.expect_err("the save is refused");
+	assert_eq!(refused["kind"], "unwritableBundle", "got {refused}");
+	assert_eq!(stored_bot(&harness, &bot)["name"], NAME, "the refused save renamed the bot");
+	std::fs::remove_file(&manifest_dir).expect("the stand-in is taken away");
+
+	// Deleting the bot takes the directory it ran as with it, and the entry that
+	// listed it: nothing derives either for a bot the file no longer holds.
+	harness.call("conversation_delete_bot", json!({ "id": bot })).expect("the bot is deleted");
+	assert!(!bundle.exists(), "a deleted bot left its bundle behind");
+	assert_eq!(listed_plugins(&harness), Vec::new());
 
 	let _ = std::fs::remove_dir_all(&workshop);
 	let _ = std::fs::remove_dir_all(&studio);
