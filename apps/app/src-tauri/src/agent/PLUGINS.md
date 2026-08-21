@@ -83,7 +83,7 @@ only part of it.
 | --- | --- | --- |
 | body | system prompt | system prompt |
 | `model` | honoured | honoured, and `--model` overrides it |
-| `tools` / `disallowedTools` | honoured | honoured — a session dropped to exactly `[Bash, Read]` |
+| `tools` / `disallowedTools` | honoured | honoured — `tools` dropped a session to exactly `[Bash, Read]`, and `disallowedTools: [Bash, Edit, Write, NotebookEdit]` took it from 33 tools to 29 |
 | `description` | routes delegation | unused |
 | `skills` | **preloads full content** | **inert** |
 | `permissionMode` | honoured | **ignored** — session stayed `default` under `bypassPermissions` |

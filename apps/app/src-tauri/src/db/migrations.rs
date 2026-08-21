@@ -21,6 +21,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 3, statements: BOT_IDENTITY },
 	Migration { version: 4, statements: BOT_BLOT },
 	Migration { version: 5, statements: BOT_COMMANDS },
+	Migration { version: 6, statements: BOT_DENIAL },
 ];
 
 /// Timestamps are unix millis, ids are UUID v4 text: both are what the host
@@ -262,6 +263,18 @@ ALTER TABLE bots ADD COLUMN avatar_blot TEXT
 /// has ever spoken for.
 const BOT_COMMANDS: &str = "
 ALTER TABLE bots ADD COLUMN commands TEXT NOT NULL DEFAULT '[]';
+";
+
+/// Whether the bot is denied the tools that change files and run commands. It
+/// belongs to the bot rather than to a run: the agent file every spawn is promoted
+/// onto is rewritten from this column — see [`crate::bundles`] — so a bot set to
+/// change nothing is denied them again at the next launch.
+///
+/// `NOT NULL DEFAULT 0` for the reason step 2's columns are empty-defaulted: it is
+/// what `ALTER TABLE` can answer for the rows already on disk, and a bot nobody has
+/// held back is a bot that may still change things.
+const BOT_DENIAL: &str = "
+ALTER TABLE bots ADD COLUMN changes_nothing INTEGER NOT NULL DEFAULT 0;
 ";
 
 pub fn latest_version() -> u32 {

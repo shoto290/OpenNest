@@ -823,7 +823,8 @@ fn an_identity(name: &str, model: &str, animal: &str, blot: Value) -> Value {
 		"avatarBlot": blot,
 		"avatarImagePath": null,
 		"workingDir": "/work/opennest",
-		"instructions": "Answer with the file you would touch."
+		"instructions": "Answer with the file you would touch.",
+		"changesNothing": false
 	})
 }
 
@@ -973,6 +974,45 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 		)
 		.map(|bot| bot["model"].clone()),
 		Ok(json!("fable"))
+	);
+}
+
+/// A bot set to change nothing, over IPC and back: the setting is submitted with
+/// the rest of the identity, it is read back from the agent file the session is
+/// promoted onto, and turning it off leaves no denial behind. The file is the
+/// answer, not the row — a caller that saw "on" over a file naming no denial would
+/// be telling a reader the bot is held back while it is not.
+#[test]
+fn a_bot_set_to_change_nothing_is_denied_in_its_agent_file_and_read_back_from_it() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let mut held_back = an_identity("Nyx", "sonnet", "owl", json!("coral"));
+	held_back["changesNothing"] = json!(true);
+
+	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back }))
+		.expect("the bot is created");
+	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
+
+	assert_eq!(created["changesNothing"], json!(true));
+	assert_eq!(
+		call(&window, "conversation_bots", json!({})).map(|bots| bots[0]["changesNothing"].clone()),
+		Ok(json!(true)),
+		"the file the session is promoted onto denies nothing"
+	);
+
+	assert_eq!(
+		call(
+			&window,
+			"conversation_update_bot",
+			json!({
+				"id": id,
+				"identity": an_identity("Nyx", "sonnet", "owl", json!("coral"))
+			})
+		)
+		.map(|bot| bot["changesNothing"].clone()),
+		Ok(json!(false)),
+		"a denial outlived the setting that asked for it"
 	);
 }
 

@@ -32,6 +32,7 @@ export const botIdentity = (
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "Answer with the file you would touch.",
+	changesNothing: false,
 	...overrides,
 })
 

@@ -21,11 +21,17 @@ const LONG_PATH =
  * dialog holds the whole value. */
 const RuntimeFieldsHost = (props: RuntimeFieldsProps) => {
 	const [model, setModel] = useState(props.model)
+	const [changesNothing, setChangesNothing] = useState(props.changesNothing)
 
 	return (
 		<RuntimeFields
 			{...props}
+			changesNothing={changesNothing}
 			model={model}
+			onChangesNothingChange={(next) => {
+				setChangesNothing(next)
+				props.onChangesNothingChange(next)
+			}}
 			onModelChange={(next) => {
 				setModel(next)
 				props.onModelChange(next)
@@ -42,7 +48,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a bot runs on: the model behind it and the folder it works in. Both are pickers, never text, because neither is something a reader can type correctly — a mistyped model is a bot that never answers and a mistyped path is a bot working nowhere. The two rows share one control height and one label style, so the pair reads as a single group. Neither field owns anything: the model list comes from the host, and pressing the folder hands the ask back rather than opening a picker itself, which is what keeps the native dialog on the app's side of the line.",
+					"What a bot runs on: the model behind it, the folder it works in, and whether it may change anything there. The first two are pickers, never text, because neither is something a reader can type correctly — a mistyped model is a bot that never answers and a mistyped path is a bot working nowhere. The last is a switch with a sentence under it, because what it stops needs saying: four built-in tools, not everything the bot can reach. Neither field owns anything: the model list comes from the host, and pressing the folder hands the ask back rather than opening a picker itself, which is what keeps the native dialog on the app's side of the line.",
 			},
 		},
 	},
@@ -57,8 +63,10 @@ const meta = preview.meta({
 		models: MODELS,
 		model: "nest-sonnet-4-5",
 		workingDirectory: "/Users/wren/Projects/opennest",
+		changesNothing: false,
 		onModelChange: fn(),
 		onBrowseWorkingDirectory: fn(),
+		onChangesNothingChange: fn(),
 	},
 	render: (args) => <RuntimeFieldsHost {...args} />,
 })
@@ -159,5 +167,27 @@ export const LongPath = meta.story({
 
 		await userEvent.click(folder)
 		await expect(args.onBrowseWorkingDirectory).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const ChangesNothing = meta.story({
+	args: { changesNothing: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bot held back from editing files and running commands. The sentence under the label is the part to read: it names what is refused and what is not, so nobody leaves this row believing the bot has been made harmless. Check that the switch is the only thing that moves when it is pressed, and that the label is what a screen reader hears first, the sentence after it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const denial = canvas.getByRole("switch", {
+			name: /Cannot change anything itself/,
+		})
+
+		await expect(denial).toBeChecked()
+
+		await userEvent.click(denial)
+		await expect(args.onChangesNothingChange).toHaveBeenCalledWith(false)
 	},
 })

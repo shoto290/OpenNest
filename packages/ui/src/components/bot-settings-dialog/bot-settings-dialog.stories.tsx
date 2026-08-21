@@ -41,6 +41,7 @@ const FILLED_BOT: BotSettingsValue = {
 		"You are the Nest Keeper.\n\nEvery visual belongs to packages/ui. The app composes, it never draws.\n\nBefore proposing a component, search the package for one that already does the job. Answer with the file you would touch, then the change.",
 	model: "sonnet-4-5",
 	workingDirectory: "/Users/ada/Projects/opennest",
+	changesNothing: false,
 }
 
 const NEW_BOT: BotSettingsValue = {
@@ -50,6 +51,7 @@ const NEW_BOT: BotSettingsValue = {
 	instructions: "",
 	model: "",
 	workingDirectory: "",
+	changesNothing: false,
 }
 
 const UPLOADED_BOT: BotSettingsValue = {

@@ -11,6 +11,7 @@ import {
 	FIELD_LABEL_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
+import { Switch } from "@workspace/ui/components/switch"
 import { cn } from "@workspace/ui/lib/utils"
 
 type RuntimeFieldsProps = {
@@ -19,19 +20,29 @@ type RuntimeFieldsProps = {
 	onModelChange: (model: string) => void
 	workingDirectory: string
 	onBrowseWorkingDirectory: () => void
+	/** Whether the bot is denied the tools that edit files and run commands. What it
+	 * stops is those four and nothing else, which is why the sentence beside it says
+	 * so — see the catalogue. */
+	changesNothing: boolean
+	onChangesNothingChange: (changesNothing: boolean) => void
 }
 
-/** What the bot runs on: the model behind it and the folder it works in. Both are
- * pickers rather than text — neither is something a reader can type correctly. */
+/** What the bot runs on: the model behind it, the folder it works in, and whether
+ * it may change anything there. The two first are pickers rather than text — neither
+ * is something a reader can type correctly — and the last is a switch, since it is
+ * on or off. */
 const RuntimeFields = ({
 	models,
 	model,
 	onModelChange,
 	workingDirectory,
 	onBrowseWorkingDirectory,
+	changesNothing,
+	onChangesNothingChange,
 }: RuntimeFieldsProps) => {
 	const { t } = useTranslation("bots")
 	const directoryId = useId()
+	const denialId = useId()
 
 	return (
 		<>
@@ -123,6 +134,26 @@ const RuntimeFields = ({
 						{t("runtime.directory.browse")}
 					</span>
 				</button>
+			</div>
+
+			<div className="flex shrink-0 items-start justify-between gap-4 rounded-xl border border-border bg-muted/40 p-3">
+				<div className="flex min-w-0 flex-col gap-1">
+					<label className={FIELD_LABEL_CLASS} htmlFor={denialId}>
+						{t("runtime.changesNothing.label")}
+					</label>
+					<p
+						className="text-muted-foreground text-xs leading-relaxed"
+						id={`${denialId}-hint`}
+					>
+						{t("runtime.changesNothing.description")}
+					</p>
+				</div>
+				<Switch
+					aria-describedby={`${denialId}-hint`}
+					checked={changesNothing}
+					id={denialId}
+					onCheckedChange={onChangesNothingChange}
+				/>
 			</div>
 		</>
 	)

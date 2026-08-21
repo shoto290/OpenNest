@@ -43,6 +43,7 @@ describe("toSettingsValue", () => {
 			instructions: "Answer briefly.",
 			model: "haiku",
 			workingDirectory: "/work/opennest",
+			changesNothing: false,
 		})
 	})
 
@@ -68,10 +69,10 @@ describe("changesRuntime", () => {
 	})
 	const value = toSettingsValue(stored)
 
-	// The three a child is started with and can never be told afterwards. The model
-	// is one of them: it is a key of the agent file the child is promoted to, read
-	// once when that child starts.
-	it("says so for the instructions, the directory and the model", () => {
+	// The four a child is started with and can never be told afterwards. The model
+	// and the denial are two of them: both are keys of the agent file the child is
+	// promoted to, read once when that child starts.
+	it("says so for the instructions, the directory, the model and the denial", () => {
 		expect(
 			changesRuntime(stored, { ...value, instructions: "Answer at length." }),
 		).toBe(true)
@@ -79,6 +80,9 @@ describe("changesRuntime", () => {
 			changesRuntime(stored, { ...value, workingDirectory: "/work/other" }),
 		).toBe(true)
 		expect(changesRuntime(stored, { ...value, model: "haiku" })).toBe(true)
+		expect(changesRuntime(stored, { ...value, changesNothing: true })).toBe(
+			true,
+		)
 	})
 
 	// Everything else about a bot is read where it is shown, or travels with the

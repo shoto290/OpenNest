@@ -116,6 +116,17 @@ const OWNER_KEY: &str = "opennestBotId";
 /// runs on the model its reader picked.
 const MODEL_KEY: &str = "model";
 
+/// The frontmatter key the agent format reads a denial from, honoured on the
+/// promoted path — see `agent/PLUGINS.md`, where a session named by all four dropped
+/// from 33 tools to 29 — and the tools a bot set to change nothing is denied.
+///
+/// The list is named here and nowhere else, so what the setting stops is one answer
+/// rather than one per surface. What it does not stop: a server the bundle declares
+/// writes wherever its own process may, and a bot may still ask somebody else to do
+/// the writing. This denies four built-in tools, not the ability to have an effect.
+const DISALLOWED_KEY: &str = "disallowedTools";
+const DENIED_TOOLS: [&str; 4] = ["Bash", "Edit", "Write", "NotebookEdit"];
+
 /// The frontmatter key a skill asks to be carried under, read from wherever it sits
 /// in the map — `metadata.opennest.preload` — the same way [`OWNER_KEY`] is read.
 const PRELOAD_KEY: &str = "preload";
@@ -235,6 +246,9 @@ pub struct Generated {
 	/// `None` for a file whose frontmatter names no model — a bundle written for a
 	/// bot carrying no label, or an agent a reader wrote themselves.
 	pub model: Option<String>,
+	/// Whether the file denies the tools that change files and run commands, which
+	/// is the whole of how the setting reaches a run.
+	pub changes_nothing: bool,
 }
 
 /// The bot as its own agent file holds it. `None` is a bundle this install has not
@@ -245,7 +259,8 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let model = front_value(&text, MODEL_KEY)
 		.map(|found| found.trim().to_owned())
 		.filter(|found| !found.is_empty());
-	Some(Generated { instructions: body(&text).to_owned(), model })
+	let changes_nothing = denies_changes(&text);
+	Some(Generated { instructions: body(&text).to_owned(), model, changes_nothing })
 }
 
 /// What the bot was told, as the file holds it.
@@ -464,12 +479,17 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// it — so nothing passes one. A bot holding no label writes no key at all, which is
 /// the agent running on whatever the install defaults to rather than on the empty
 /// string.
+///
+/// `disallowedTools` is the same shape and the whole of how a bot is held back from
+/// changing anything: the key is honoured on the promoted path, and a bot nobody
+/// held back writes none of it — see [`DENIED_TOOLS`].
 fn agent(root: &Path, bot: &Bot, name: &str, brief: &str) -> String {
 	format!(
-		"{FENCE}\nname: {}\ndescription: {}\n{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
+		"{FENCE}\nname: {}\ndescription: {}\n{}{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
 		quoted(name),
 		quoted(describe(bot)),
 		model_line(&bot.model),
+		denial_line(bot.changes_nothing),
 		quoted(&bot.id),
 		briefed_with_skills(root, &bot.id, brief)
 	)
@@ -987,6 +1007,25 @@ fn heading_level(line: &str) -> Option<usize> {
 	(level > 0 && line[level..].starts_with(' ')).then_some(level)
 }
 
+/// The `disallowedTools` key and its line ending, or nothing for a bot that may
+/// still change things. A flow sequence, which is both YAML and JSON, so the list
+/// reads the same to whatever opens the file.
+fn denial_line(changes_nothing: bool) -> String {
+	if !changes_nothing {
+		return String::new();
+	}
+	format!("{DISALLOWED_KEY}: {}\n", serde_json::json!(DENIED_TOOLS))
+}
+
+/// Whether the file holds the denial this module writes: every tool of
+/// [`DENIED_TOOLS`] named on the key's own line. All four or none — a file denying
+/// some other set was written by somebody else, and answering "on" for it would
+/// offer a reader a switch that turns their own list into this one.
+fn denies_changes(text: &str) -> bool {
+	front_value(text, DISALLOWED_KEY)
+		.is_some_and(|denied| DENIED_TOOLS.iter().all(|tool| denied.contains(tool)))
+}
+
 /// The `model` key and its line ending, or nothing for a bot carrying no label.
 fn model_line(model: &str) -> String {
 	let named = model.trim();
@@ -1065,6 +1104,7 @@ mod tests {
 			working_dir: None,
 			instructions: instructions.to_owned(),
 			memory: String::new(),
+			changes_nothing: false,
 			created_at: 1,
 		}
 	}
@@ -1152,6 +1192,49 @@ mod tests {
 			assert!(!line.starts_with("model:"), "got {written}");
 		}
 		assert_eq!(named_model(&root, &bot.id), None);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A bot set to change nothing denies, in the file its session is promoted onto,
+	/// every tool that writes a file or runs a command: the key is honoured on the
+	/// promoted path, so a session opened on this file is given none of the four.
+	/// Read back the way the panel reads it, so what the switch shows is what the run
+	/// is held to.
+	#[test]
+	fn a_bot_that_changes_nothing_denies_every_tool_that_would() {
+		let root = a_root("denied");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.changes_nothing = true;
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = fs::read_to_string(agent_file(&root, &bot.id).expect("the agent is there"))
+			.expect("the agent file reads");
+		for tool in DENIED_TOOLS {
+			assert!(written.contains(&format!("\"{tool}\"")), "got {written}");
+		}
+		assert!(generated(&root, &bot.id).expect("the file is read back").changes_nothing);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The setting turned off leaves no denial behind: the key goes with it, so the
+	/// next session is given back everything the last one was refused.
+	#[test]
+	fn a_bot_nobody_held_back_writes_no_denial() {
+		let root = a_root("allowed");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.changes_nothing = true;
+		write(&root, &bot).expect("the bundle is written");
+
+		bot.changes_nothing = false;
+		write(&root, &bot).expect("the bundle is rewritten");
+		let written = fs::read_to_string(agent_file(&root, &bot.id).expect("the agent is there"))
+			.expect("the agent file reads");
+		for line in written.lines() {
+			assert!(!line.starts_with(DISALLOWED_KEY), "got {written}");
+		}
+		assert!(!generated(&root, &bot.id).expect("the file is read back").changes_nothing);
 
 		let _ = fs::remove_dir_all(&root);
 	}

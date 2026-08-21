@@ -160,6 +160,10 @@ pub struct Bot {
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
+	/// Whether the bot is denied the tools that change files and run commands, read
+	/// out of its plugin bundle the way `instructions` is — the agent file is what a
+	/// run is really promoted onto, so the file is what the panel has to show.
+	pub changes_nothing: bool,
 	pub created_at: i64,
 }
 
@@ -187,6 +191,8 @@ impl Bot {
 			.as_ref()
 			.and_then(|written| written.model.clone())
 			.unwrap_or_else(|| bot.model.clone());
+		let changes_nothing =
+			written.as_ref().map_or(bot.changes_nothing, |written| written.changes_nothing);
 		let instructions = written
 			.map(|written| written.instructions)
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
@@ -207,6 +213,7 @@ impl Bot {
 			avatar_image_path,
 			working_dir: bot.working_dir,
 			instructions,
+			changes_nothing,
 			created_at: bot.created_at,
 		}
 	}
@@ -231,6 +238,9 @@ pub struct BotIdentity {
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
+	/// See [`Bot::changes_nothing`]: submitted beside the name, since it is set from
+	/// the same panel, and laid down in the agent file by the write that follows.
+	pub changes_nothing: bool,
 }
 
 impl From<BotIdentity> for conversations::BotIdentity {
@@ -244,6 +254,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			avatar_image_path: identity.avatar_image_path,
 			working_dir: identity.working_dir,
 			instructions: identity.instructions,
+			changes_nothing: identity.changes_nothing,
 		}
 	}
 }
@@ -826,6 +837,7 @@ mod tests {
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				working_dir: Some("/work/opennest".into()),
 				instructions: "Answer briefly.".into(),
+				changes_nothing: true,
 				created_at: 1,
 			},
 			json!({
@@ -838,6 +850,7 @@ mod tests {
 				"avatarImagePath": "/pictures/owl.png",
 				"workingDir": "/work/opennest",
 				"instructions": "Answer briefly.",
+				"changesNothing": true,
 				"createdAt": 1
 			}),
 		);
@@ -862,6 +875,7 @@ mod tests {
 				avatar_image_path: None,
 				working_dir: None,
 				instructions: String::new(),
+				changes_nothing: false,
 			},
 			json!({
 				"name": "Claude",
@@ -871,7 +885,8 @@ mod tests {
 				"avatarBlot": null,
 				"avatarImagePath": null,
 				"workingDir": null,
-				"instructions": ""
+				"instructions": "",
+				"changesNothing": false
 			}),
 		);
 	}
@@ -935,7 +950,8 @@ mod tests {
 			"avatarPose": "idle",
 			"avatarImagePath": null,
 			"workingDir": null,
-			"instructions": ""
+			"instructions": "",
+			"changesNothing": false
 		});
 
 		let parsed = serde_json::from_value::<BotIdentity>(submitted).expect("the identity parses");
@@ -1223,6 +1239,7 @@ mod tests {
 			working_dir: None,
 			instructions: String::new(),
 			memory: String::new(),
+			changes_nothing: false,
 			created_at: 1,
 		}
 	}

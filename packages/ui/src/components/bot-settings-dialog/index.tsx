@@ -296,9 +296,13 @@ const BotSettingsDialog = ({
 						value="runtime"
 					>
 						<RuntimeFields
+							changesNothing={value.changesNothing}
 							model={value.model}
 							models={models}
 							onBrowseWorkingDirectory={onBrowseWorkingDirectory}
+							onChangesNothingChange={(changesNothing) =>
+								patch({ changesNothing })
+							}
 							onModelChange={(model) => patch({ model })}
 							workingDirectory={value.workingDirectory}
 						/>
