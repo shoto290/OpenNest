@@ -19,11 +19,10 @@ export type McpServersController = {
 	/** A server written under the name the reader gave. A name already taken is
 	 * replaced, which is what the store does too. */
 	create: (name: string, config: Record<string, unknown>) => void
-	/** The server filed under `openedName`, written as the reader left it. There is
-	 * no write loop here, unlike the skills': the name is the key on the disk and a
-	 * configuration is only ever valid whole, so the panel saves on a press rather
-	 * than as it is typed. A rename writes the new name and takes the old one away —
-	 * in that order, so a refused write leaves the server where it was. */
+	/** The server filed under `openedName`, written as the reader left it, and moved
+	 * if they changed its name. There is no write loop here, unlike the skills': the
+	 * name is the key on the disk and a configuration is only ever valid whole, so the
+	 * panel saves on a press rather than as it is typed. */
 	rename: (
 		openedName: string,
 		name: string,
@@ -93,6 +92,28 @@ export const createMcpServersController = (
 			? servers.map((held) => (held.name === server.name ? server : held))
 			: [...servers, server]
 
+	/** One write for both ways in: a server that does not exist yet names no
+	 * `openedName`, and one that does is written under its new name before the old one
+	 * is taken away — in that order, so a refused write leaves it where it was. */
+	const write = (
+		openedName: string | null,
+		name: string,
+		config: Record<string, unknown>,
+	) =>
+		onOpenBot(async (botId) => {
+			const server = await store.setBotMcpServer(botId, name, config)
+			if (openedName && openedName !== name) {
+				await store.deleteBotMcpServer(botId, openedName)
+			}
+			applyTo(
+				botId,
+				written(
+					state.servers.filter((held) => held.name !== openedName),
+					server,
+				),
+			)
+		})
+
 	return {
 		getState: () => state,
 
@@ -111,34 +132,9 @@ export const createMcpServersController = (
 		},
 
 		create: (name: string, config: Record<string, unknown>) =>
-			onOpenBot(async (botId) =>
-				applyTo(
-					botId,
-					written(
-						state.servers,
-						await store.setBotMcpServer(botId, name, config),
-					),
-				),
-			),
+			write(null, name, config),
 
-		rename: (
-			openedName: string,
-			name: string,
-			config: Record<string, unknown>,
-		) =>
-			onOpenBot(async (botId) => {
-				const server = await store.setBotMcpServer(botId, name, config)
-				if (name !== openedName) {
-					await store.deleteBotMcpServer(botId, openedName)
-				}
-				applyTo(
-					botId,
-					written(
-						state.servers.filter((held) => held.name !== openedName),
-						server,
-					),
-				)
-			}),
+		rename: write,
 
 		remove: (name: string) =>
 			onOpenBot(async (botId) => {

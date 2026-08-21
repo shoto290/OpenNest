@@ -32,12 +32,13 @@ type BotSkillDraft = {
 	body: string
 }
 
-/** A skill name reduced to what the skill format accepts: lowercase letters,
- * numbers and hyphens. It is an identifier rather than a title — the file is refused
- * outright for anything else — so the field writes what a reader types into the only
- * shape it may take instead of letting them find out from a broken skill. What the
- * bot reads to decide when to reach for a skill is its description, not this. */
-const toSkillName = (value: string) =>
+/** A name in a bot's bundle reduced to what the bundle accepts: lowercase letters,
+ * numbers and hyphens. It is an identifier rather than a title — a skill's directory
+ * is refused outright for anything else, and a server's name is the key it is
+ * declared and connected under — so the field writes what a reader types into the
+ * only shape it may take instead of letting them find out from a broken bundle. What
+ * the bot reads to decide when to reach for a skill is its description, not this. */
+const toBundleName = (value: string) =>
 	value.toLowerCase().replace(/[^a-z0-9-]+/g, "-")
 
 /** A skill of the bot's, as the panel lists and edits it. `id` is its identity and
@@ -69,12 +70,8 @@ type BotMcpServerDraft = {
 	config: string
 }
 
-/** A server name reduced to what a configuration key may hold: the bot connects to
- * it under this, and a name carrying spaces or quotes is a key nobody can address.
- * Lowercase letters, numbers and hyphens, like a skill's. */
-const toMcpServerName = (value: string) =>
-	value.toLowerCase().replace(/[^a-z0-9-]+/g, "-")
-
+/** What the store will take as a configuration, and what this side will read one
+ * out of: an object, and nothing an array or a bare value could be mistaken for. */
 const isConfigObject = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -118,8 +115,8 @@ export {
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
+	isConfigObject,
 	parseMcpServerConfig,
+	toBundleName,
 	toMcpServerConfigText,
-	toMcpServerName,
-	toSkillName,
 }

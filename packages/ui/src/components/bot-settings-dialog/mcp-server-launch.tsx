@@ -3,8 +3,9 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { isConfigObject } from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
-import { Icons } from "@workspace/ui/components/icons"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { FIELD_LABEL_CLASS } from "@workspace/ui/components/settings-styles"
 
 /** The mask an environment value wears until it is asked for. A fixed run of dots
@@ -25,16 +26,13 @@ const readText = (value: unknown) =>
 const readArguments = (value: unknown) =>
 	Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []
 
-const readEnvironment = (value: unknown) => {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		return []
-	}
-
-	return Object.entries(value).map(([name, entry]) => ({
-		name,
-		value: typeof entry === "string" ? entry : JSON.stringify(entry),
-	}))
-}
+const readEnvironment = (value: unknown) =>
+	isConfigObject(value)
+		? Object.entries(value).map(([name, entry]) => ({
+				name,
+				value: typeof entry === "string" ? entry : JSON.stringify(entry),
+			}))
+		: []
 
 /**
  * The keys a configuration is understood by, read off whatever else it holds. It
@@ -54,6 +52,23 @@ const readMcpServerLaunch = (
 		environment: readEnvironment(config.env),
 	}
 }
+
+type LaunchLineProps = {
+	icon: Icon
+	text: string
+}
+
+/** The one thing that will happen, said in the terms it will happen in. It wraps
+ * rather than truncates: a reader has to see all of what is about to run. */
+const LaunchLine = ({ icon: LineIcon, text }: LaunchLineProps) => (
+	<p className="flex items-start gap-2 text-foreground text-xs">
+		<LineIcon
+			aria-hidden="true"
+			className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+		/>
+		<span className="min-w-0 break-all font-mono">{text}</span>
+	</p>
+)
 
 type McpServerLaunchProps = {
 	config: Record<string, unknown>
@@ -89,31 +104,15 @@ const McpServerLaunch = ({ config }: McpServerLaunchProps) => {
 		<section className="flex shrink-0 flex-col gap-2 rounded-xl border border-border bg-muted/40 p-3">
 			<h3 className={FIELD_LABEL_CLASS}>{t("mcp.launch.label")}</h3>
 
-			{command ? (
-				<p className="flex items-start gap-2 text-foreground text-xs">
-					<Icons.Terminal
-						aria-hidden="true"
-						className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-					/>
-					<span className="min-w-0 break-all font-mono">{command}</span>
-				</p>
-			) : null}
+			{command ? <LaunchLine icon={Icons.Terminal} text={command} /> : null}
 
-			{url ? (
-				<p className="flex items-start gap-2 text-foreground text-xs">
-					<Icons.Web
-						aria-hidden="true"
-						className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-					/>
-					<span className="min-w-0 break-all font-mono">{url}</span>
-				</p>
-			) : null}
+			{url ? <LaunchLine icon={Icons.Web} text={url} /> : null}
 
-			{command || url ? null : (
+			{!command && !url ? (
 				<p className="text-muted-foreground text-xs leading-relaxed">
 					{t("mcp.launch.unknown")}
 				</p>
-			)}
+			) : null}
 
 			{environment.length > 0 ? (
 				<>

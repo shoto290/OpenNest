@@ -13,16 +13,24 @@ import { readMcpServerLaunch } from "@workspace/ui/components/bot-settings-dialo
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 
-/** What a blank editor opens on: the two keys a local server always has, so the
- * reader is answering a shape rather than facing an empty box. */
-const BLANK_SERVER: BotMcpServerDraft = {
-	name: "",
-	config: '{\n  "command": "",\n  "args": []\n}',
+/** What the editor holds open: the draft being written, and the name it is filed
+ * under on the disk — `null` for one that does not exist yet, which is what tells a
+ * save from a move. The two never move apart, so they are one state. */
+type Editing = {
+	openedName: string | null
+	draft: BotMcpServerDraft
 }
 
-const toDraft = (server: BotMcpServerItem): BotMcpServerDraft => ({
-	name: server.name,
-	config: toMcpServerConfigText(server.config),
+/** What a blank editor opens on: the two keys a local server always has, so the
+ * reader is answering a shape rather than facing an empty box. */
+const ADDING: Editing = {
+	openedName: null,
+	draft: { name: "", config: '{\n  "command": "",\n  "args": []\n}' },
+}
+
+const toEditing = (server: BotMcpServerItem): Editing => ({
+	openedName: server.name,
+	draft: { name: server.name, config: toMcpServerConfigText(server.config) },
 })
 
 type McpServersPanelProps = {
@@ -66,32 +74,15 @@ const McpServersPanel = ({
 }: McpServersPanelProps) => {
 	const { t } = useTranslation("bots")
 	const opened = servers.find((server) => server.name === defaultOpenServerName)
-	// The name the editor was opened on, kept beside the draft: the draft's own name
-	// is the reader's to change, and the write still has to reach the server they
-	// opened.
-	const [openedName, setOpenedName] = useState<string | null>(
-		opened?.name ?? null,
-	)
-	const [draft, setDraft] = useState<BotMcpServerDraft | null>(
-		defaultAdding ? BLANK_SERVER : (opened && toDraft(opened)) || null,
+	const [editing, setEditing] = useState<Editing | null>(
+		defaultAdding ? ADDING : opened ? toEditing(opened) : null,
 	)
 
-	const close = () => {
-		setDraft(null)
-		setOpenedName(null)
-	}
+	const close = () => setEditing(null)
 
-	const add = () => {
-		setDraft(BLANK_SERVER)
-		setOpenedName(null)
-	}
+	if (editing) {
+		const { openedName, draft } = editing
 
-	const open = (server: BotMcpServerItem) => {
-		setDraft(toDraft(server))
-		setOpenedName(server.name)
-	}
-
-	if (draft) {
 		return (
 			<McpServerEditor
 				draft={draft}
@@ -104,7 +95,7 @@ const McpServersPanel = ({
 							}
 						: undefined
 				}
-				onDraftChange={setDraft}
+				onDraftChange={(next) => setEditing({ openedName, draft: next })}
 				onSave={(config) => {
 					if (openedName) {
 						onChange(openedName, draft.name, config)
@@ -132,7 +123,7 @@ const McpServersPanel = ({
 						{t("mcp.empty.description")}
 					</p>
 				</div>
-				<Button onClick={add} size="sm">
+				<Button onClick={() => setEditing(ADDING)} size="sm">
 					<Icons.Add aria-hidden="true" className="size-3.5" />
 					{t("mcp.add")}
 				</Button>
@@ -143,7 +134,7 @@ const McpServersPanel = ({
 	return (
 		<>
 			<div className="flex shrink-0 justify-end">
-				<Button onClick={add} size="sm" variant="outline">
+				<Button onClick={() => setEditing(ADDING)} size="sm" variant="outline">
 					<Icons.Add aria-hidden="true" className="size-3.5" />
 					{t("mcp.add")}
 				</Button>
@@ -156,7 +147,7 @@ const McpServersPanel = ({
 						<li key={server.name}>
 							<button
 								className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-								onClick={() => open(server)}
+								onClick={() => setEditing(toEditing(server))}
 								type="button"
 							>
 								<span className="flex min-w-0 flex-1 flex-col gap-0.5">

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 import {
 	type BotMcpServerDraft,
 	parseMcpServerConfig,
-	toMcpServerName,
+	toBundleName,
 } from "@workspace/ui/components/bot-settings"
 import { McpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
@@ -61,6 +61,9 @@ const McpServerEditor = ({
 	const name = draft.name.trim() || t("mcp.untitled")
 	const config = parseMcpServerConfig(draft.config)
 	const isNamed = draft.name.trim().length > 0
+	// A server nobody has written has nothing to take away, so the delete is also
+	// what tells the two apart.
+	const isWritten = Boolean(onDelete)
 
 	const patch = (fields: Partial<BotMcpServerDraft>) =>
 		onDraftChange({ ...draft, ...fields })
@@ -104,7 +107,7 @@ const McpServerEditor = ({
 			<SettingsField
 				hint={t("mcp.name.hint")}
 				label={t("mcp.name.label")}
-				onValueChange={(value) => patch({ name: toMcpServerName(value) })}
+				onValueChange={(value) => patch({ name: toBundleName(value) })}
 				placeholder={t("mcp.name.placeholder")}
 				value={draft.name}
 			/>
@@ -127,12 +130,12 @@ const McpServerEditor = ({
 					onClick={() => config && onSave(config)}
 					size="sm"
 				>
-					{onDelete ? (
+					{isWritten ? (
 						<Icons.Check aria-hidden="true" className="size-3.5" />
 					) : (
 						<Icons.Add aria-hidden="true" className="size-3.5" />
 					)}
-					{t(onDelete ? "mcp.save" : "mcp.create")}
+					{t(isWritten ? "mcp.save" : "mcp.create")}
 				</Button>
 			</div>
 		</>
