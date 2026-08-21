@@ -37,6 +37,13 @@
 //! an agent is delegated, so a file carrying it would behave differently depending
 //! on who launched it; `permissionMode` is ignored on the promoted path and the host
 //! owns permissions either way.
+//!
+//! **A skill reaches a promoted bot only as text in the body.** A `skills/<name>/SKILL.md`
+//! whose frontmatter carries `metadata.opennest.preload` is copied into a generated
+//! region at the end of the agent file, between two markers. The brief is everything
+//! before the opening marker and never anything after it — a write that read the
+//! region back as brief would carry the last write's copy into the next one, and the
+//! file would grow on every save.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -62,6 +69,11 @@ const MANIFEST_NAME: &str = "plugin.json";
 const MARKETPLACE_NAME: &str = "marketplace.json";
 const AGENTS_DIR: &str = "agents";
 const AGENT_EXTENSION: &str = "md";
+
+/// Where a bot's skills sit, one directory each. A reader drops them in by hand;
+/// nothing here creates one.
+const SKILLS_DIR: &str = "skills";
+const SKILL_NAME: &str = "SKILL.md";
 
 /// What the marketplace calls itself, and what a reader would type after an `@`.
 const MARKETPLACE: &str = "opennest-bots";
@@ -89,6 +101,21 @@ const OWNER_KEY: &str = "opennestBotId";
 /// path — see `agent/PLUGINS.md` — which is why writing it is the whole of how a bot
 /// runs on the model its reader picked.
 const MODEL_KEY: &str = "model";
+
+/// The frontmatter key a skill asks to be carried under, read from wherever it sits
+/// in the map — `metadata.opennest.preload` — the same way [`OWNER_KEY`] is read.
+const PRELOAD_KEY: &str = "preload";
+const PRELOADED: &str = "true";
+
+/// What fences the carried bodies off from the brief. HTML comments, so the region
+/// says what it is to a reader opening the file and nothing to the model reading it
+/// as markdown.
+const CARRIED_OPEN: &str = "<!-- opennest: generated from this bot's skills, do not edit -->";
+const CARRIED_CLOSE: &str = "<!-- opennest: end of generated skills -->";
+
+/// The deepest heading markdown has. A skill carried under a brief that already goes
+/// that deep keeps its own levels rather than growing a seventh.
+const MAX_HEADING: usize = 6;
 
 const FENCE: &str = "---";
 const CLOSING_FENCE: &str = "\n---";
@@ -209,7 +236,7 @@ pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
 
 	private_files::replace(&manifest_path, manifest(&manifest_path, bot).as_bytes())?;
-	private_files::replace(&agent_path, agent(bot, &name).as_bytes())?;
+	private_files::replace(&agent_path, agent(root, bot, &name).as_bytes())?;
 	if let Some(generated) = generated.filter(|path| path != &agent_path) {
 		let _ = fs::remove_file(generated);
 	}
@@ -342,15 +369,121 @@ fn manifest(path: &Path, bot: &Bot) -> String {
 /// it — so nothing passes one. A bot holding no label writes no key at all, which is
 /// the agent running on whatever the install defaults to rather than on the empty
 /// string.
-fn agent(bot: &Bot, name: &str) -> String {
+fn agent(root: &Path, bot: &Bot, name: &str) -> String {
 	format!(
 		"{FENCE}\nname: {}\ndescription: {}\n{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
 		quoted(name),
 		quoted(describe(bot)),
 		model_line(&bot.model),
 		quoted(&bot.id),
-		bot.instructions.trim()
+		briefed_with_skills(root, bot)
 	)
+}
+
+/// The brief, and under it the body of every skill the bot marked for preloading.
+/// The brief is taken from outside the generated region even when it arrives already
+/// carrying one, so the region is rebuilt from the skills on the disk on every write
+/// rather than accumulated across writes.
+///
+/// A bot with nothing to carry writes no markers at all: the file is the brief, as it
+/// was before there were skills.
+fn briefed_with_skills(root: &Path, bot: &Bot) -> String {
+	let brief = without_carried(&bot.instructions);
+	let level = (deepest_heading(brief) + 1).min(MAX_HEADING);
+	let carried: Vec<String> = preloaded(root, &bot.id)
+		.iter()
+		.map(|skill| {
+			format!("{} {}\n\n{}", "#".repeat(level), skill.name, demoted(&skill.body, level))
+		})
+		.collect();
+	if carried.is_empty() {
+		return brief.to_owned();
+	}
+	format!("{brief}\n\n{CARRIED_OPEN}\n\n{}\n\n{CARRIED_CLOSE}", carried.join("\n\n"))
+}
+
+/// A skill's body, under the name of the directory it came from.
+struct Preloaded {
+	name: String,
+	body: String,
+}
+
+/// Every skill of the bot's that asked to be carried, in the order the disk names
+/// them: two writes over the same directory produce the same file. A bundle with no
+/// `skills/` directory has none, which is every bot nobody dropped one into.
+fn preloaded(root: &Path, bot_id: &str) -> Vec<Preloaded> {
+	let mut directories: Vec<PathBuf> = fs::read_dir(dir(root, bot_id).join(SKILLS_DIR))
+		.into_iter()
+		.flatten()
+		.flatten()
+		.map(|entry| entry.path())
+		.collect();
+	directories.sort();
+	directories.iter().filter_map(|path| carried(path)).collect()
+}
+
+/// The skill in a directory, when its frontmatter marks it for preloading. `None` is
+/// a directory holding no `SKILL.md`, or a skill that never asked — which stays on
+/// the disk and out of the agent file.
+fn carried(path: &Path) -> Option<Preloaded> {
+	let text = fs::read_to_string(path.join(SKILL_NAME)).ok()?;
+	if front_value(&text, PRELOAD_KEY)? != PRELOADED {
+		return None;
+	}
+	let name = path.file_name()?.to_string_lossy().into_owned();
+	Some(Preloaded { name, body: body(&text).to_owned() })
+}
+
+/// The brief: everything before the generated region. Taken from the opening marker
+/// rather than between the two, so a file whose closing marker was lost to a hand
+/// edit still reads as the brief it starts with.
+fn without_carried(text: &str) -> &str {
+	text.split_once(CARRIED_OPEN).map_or(text, |(brief, _)| brief).trim()
+}
+
+/// The deepest heading a text uses, or `0` for one using none. What the carried
+/// bodies are demoted below, so a skill's own `#` can never read as a section of the
+/// brief.
+fn deepest_heading(text: &str) -> usize {
+	prose(text).filter_map(heading_level).max().unwrap_or(0)
+}
+
+/// The same text with every heading pushed down by `shift` levels, and everything
+/// else left exactly as it was — a `# comment` inside a code fence is code, not a
+/// heading.
+fn demoted(text: &str, shift: usize) -> String {
+	let lines: Vec<String> = prose_and_code(text)
+		.map(|(line, is_prose)| match heading_level(line).filter(|_| is_prose) {
+			Some(level) => {
+				format!("{}{line}", "#".repeat(shift.min(MAX_HEADING.saturating_sub(level))))
+			}
+			None => line.to_owned(),
+		})
+		.collect();
+	lines.join("\n")
+}
+
+/// Every line, told apart from the code fences it may sit inside.
+fn prose_and_code(text: &str) -> impl Iterator<Item = (&str, bool)> {
+	let mut fenced = false;
+	text.lines().map(move |line| {
+		if line.trim_start().starts_with("```") {
+			fenced = !fenced;
+			return (line, false);
+		}
+		(line, !fenced)
+	})
+}
+
+/// The lines a heading could be on: everything outside a code fence.
+fn prose(text: &str) -> impl Iterator<Item = &str> {
+	prose_and_code(text).filter_map(|(line, is_prose)| is_prose.then_some(line))
+}
+
+/// How deep a heading goes, or `None` for a line that is not one.
+fn heading_level(line: &str) -> Option<usize> {
+	let level = line.len() - line.trim_start_matches('#').len();
+	(level > 0 && line[level..].starts_with(' ')).then_some(level)
 }
 
 /// The `model` key and its line ending, or nothing for a bot carrying no label.
@@ -373,8 +506,12 @@ fn quoted(value: &str) -> String {
 /// A fence is the three dashes and the end of their line, whatever the editor that
 /// wrote it ended lines with: a file saved with CRLF is one a reader edited on
 /// Windows, not a file with no frontmatter whose YAML is part of the brief.
+///
+/// The generated region is not body either. It is a copy of files that are already on
+/// the disk, so reading it back would hand a caller a brief holding the last write's
+/// copy — and the next write would carry that copy again.
 fn body(text: &str) -> &str {
-	split_frontmatter(text).map_or(text, |(_, body)| body).trim()
+	without_carried(split_frontmatter(text).map_or(text, |(_, body)| body))
 }
 
 /// The frontmatter and what follows it, or `None` for a file carrying none.
@@ -516,7 +653,7 @@ mod tests {
 	fn a_generated_agent_declares_neither_skills_nor_a_permission_mode() {
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		bot.title = "skills: everything\npermissionMode: bypassPermissions".to_owned();
-		let written = agent(&bot, "bean");
+		let written = agent(Path::new("/nowhere"), &bot, "bean");
 
 		for line in written.lines() {
 			assert!(!line.starts_with("skills:"), "got {written}");
@@ -687,6 +824,121 @@ mod tests {
 
 		remove(&root, &bot.id);
 		assert_eq!(instructions(&root, &bot.id), None);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A skill as a reader drops one in: a directory, a `SKILL.md`, and the mark that
+	/// asks for it to be carried.
+	fn drop_a_skill(root: &Path, bot_id: &str, name: &str, preload: bool, body: &str) -> PathBuf {
+		let path = dir(root, bot_id).join(SKILLS_DIR).join(name).join(SKILL_NAME);
+		let front = if preload {
+			"---\nname: skill\nmetadata:\n  opennest:\n    preload: true\n---\n\n"
+		} else {
+			"---\nname: skill\n---\n\n"
+		};
+		private_files::replace(&path, format!("{front}{body}\n").as_bytes())
+			.expect("the skill is dropped in");
+		path
+	}
+
+	fn written_agent(root: &Path, bot_id: &str) -> String {
+		fs::read_to_string(agent_file(root, bot_id).expect("the agent is there"))
+			.expect("the agent file reads")
+	}
+
+	/// The `skills` key is inert once an agent is promoted, so a skill only reaches a
+	/// bot at turn zero as text in the body. Carried under the name it came from,
+	/// between markers saying the region is generated — and a skill that never asked
+	/// stays on the disk and out of the file.
+	#[test]
+	fn a_skill_marked_for_preloading_is_carried_in_the_agent_body() {
+		let root = a_root("preloaded");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let quiet = drop_a_skill(&root, &bot.id, "kneading", false, "Knead for ten minutes.");
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains(CARRIED_OPEN), "got {written}");
+		assert!(written.contains(CARRIED_CLOSE), "got {written}");
+		assert!(written.contains("# baking"), "got {written}");
+		assert!(written.contains("Bake at 220 degrees."), "got {written}");
+		assert!(!written.contains("Knead for ten minutes."), "got {written}");
+		assert!(quiet.is_file(), "the unmarked skill was taken off the disk");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The one failure that is invisible until a bot's file is enormous: a write that
+	/// read the carried region back as the brief would lay it down again inside the
+	/// next one, and the file would grow on every save. The brief comes from outside
+	/// the region, so two writes over the same inputs produce the same file.
+	#[test]
+	fn a_brief_survives_two_consecutive_writes_with_a_skill_carried() {
+		let root = a_root("twice");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
+		write(&root, &bot).expect("the bundle is written");
+		let first = written_agent(&root, &bot.id);
+
+		bot.instructions = reconciled(&root, &bot, "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written again");
+		let second = written_agent(&root, &bot.id);
+
+		assert_eq!(first, second);
+		assert_eq!(second.matches(CARRIED_OPEN).count(), 1, "got {second}");
+		assert_eq!(second.matches("Bake at 220 degrees.").count(), 1, "got {second}");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
+		assert_eq!(adopted(&root, &bot), None, "the carried region was reported as a brief");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A skill that stops asking, and a skill that is gone: the region is rebuilt from
+	/// what the disk holds on every write, so neither is still in the file afterwards.
+	#[test]
+	fn a_skill_that_loses_its_mark_or_its_file_is_dropped_on_the_next_write() {
+		let root = a_root("dropped");
+		let bot = a_bot("Bean", "Answer briefly.");
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
+		let kneading = drop_a_skill(&root, &bot.id, "kneading", true, "Knead for ten minutes.");
+		write(&root, &bot).expect("the bundle is written");
+
+		drop_a_skill(&root, &bot.id, "baking", false, "Bake at 220 degrees.");
+		fs::remove_dir_all(kneading.parent().expect("the skill directory")).expect("taken away");
+		write(&root, &bot).expect("the bundle is written again");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(!written.contains("Bake at 220 degrees."), "got {written}");
+		assert!(!written.contains("Knead for ten minutes."), "got {written}");
+		assert!(!written.contains(CARRIED_OPEN), "got {written}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Carried headings go below the deepest one the brief uses, so a skill's own `#`
+	/// can never read as a section of the brief. What is inside a code fence is code:
+	/// a shell comment comes out as it went in.
+	#[test]
+	fn a_carried_skill_keeps_its_structure_under_the_brief() {
+		let root = a_root("demoted");
+		let bot = a_bot("Bean", "Answer briefly.\n\n# Rules\n\n## Tone\n\nWarm.");
+		drop_a_skill(
+			&root,
+			&bot.id,
+			"baking",
+			true,
+			"# Baking\n\n## Heat\n\n```sh\n# not a heading\n```",
+		);
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains("### baking"), "got {written}");
+		assert!(written.contains("#### Baking"), "got {written}");
+		assert!(written.contains("##### Heat"), "got {written}");
+		assert!(written.contains("\n# not a heading\n"), "got {written}");
 
 		let _ = fs::remove_dir_all(&root);
 	}
