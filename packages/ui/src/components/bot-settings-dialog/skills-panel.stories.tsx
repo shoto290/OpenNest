@@ -8,7 +8,6 @@ import {
 	LONG_SKILL,
 } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 import {
-	NEW_SKILL,
 	SkillsPanel,
 	type SkillsPanelProps,
 } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
@@ -81,8 +80,9 @@ const meta = preview.meta({
 		onDelete: fn(),
 	},
 	argTypes: {
-		// Read once, as the panel mounts, so it is a story's arg rather than a knob.
-		defaultOpenSkill: { control: false },
+		// Read once, as the panel mounts, so they are a story's args rather than knobs.
+		defaultOpenSkillId: { control: false },
+		defaultAdding: { control: false },
 	},
 })
 
@@ -132,7 +132,7 @@ export const LongContent = meta.story({
 })
 
 export const WithNewSkill = meta.story({
-	args: { defaultOpenSkill: NEW_SKILL },
+	args: { defaultAdding: true },
 	parameters: {
 		docs: {
 			description: {
@@ -157,7 +157,7 @@ export const WithNewSkill = meta.story({
 })
 
 export const WithPreloadToggled = meta.story({
-	args: { defaultOpenSkill: BOT_SKILLS[1].id },
+	args: { defaultOpenSkillId: BOT_SKILLS[1].id },
 	parameters: {
 		docs: {
 			description: {

@@ -11,9 +11,6 @@ import { SkillEditor } from "@workspace/ui/components/bot-settings-dialog/skill-
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 
-/** What `defaultOpenSkill` is given to mount on a skill that does not exist yet. */
-const NEW_SKILL = "new"
-
 const BLANK_SKILL: BotSkillDraft = { name: "", description: "", body: "" }
 
 type SkillsPanelProps = {
@@ -27,9 +24,11 @@ type SkillsPanelProps = {
 	onPreloadedChange: (id: string, isPreloaded: boolean) => void
 	/** Fired only once the confirmation is accepted. */
 	onDelete: (id: string) => void
-	/** Which skill the panel mounts opened on, or `NEW_SKILL` for a blank one. Read
-	 * once, as the panel mounts. */
-	defaultOpenSkill?: string
+	/** Which skill the panel mounts opened on. Read once, as the panel mounts. */
+	defaultOpenSkillId?: string
+	/** Whether it mounts on the blank editor instead. Read once, as the panel
+	 * mounts. */
+	defaultAdding?: boolean
 }
 
 /**
@@ -48,20 +47,28 @@ const SkillsPanel = ({
 	onChange,
 	onPreloadedChange,
 	onDelete,
-	defaultOpenSkill,
+	defaultOpenSkillId,
+	defaultAdding,
 }: SkillsPanelProps) => {
 	const { t } = useTranslation("bots")
-	const [openId, setOpenId] = useState(defaultOpenSkill ?? null)
-	const [draft, setDraft] = useState(BLANK_SKILL)
+	const [openId, setOpenId] = useState<string | null>(
+		defaultOpenSkillId ?? null,
+	)
+	// A draft on hand is the skill being written: there is none until the reader
+	// asks for one, which is what tells the blank editor from an open row without
+	// naming a skill no bundle holds.
+	const [draft, setDraft] = useState<BotSkillDraft | null>(
+		defaultAdding ? BLANK_SKILL : null,
+	)
 
-	const close = () => setOpenId(null)
-
-	const add = () => {
-		setDraft(BLANK_SKILL)
-		setOpenId(NEW_SKILL)
+	const close = () => {
+		setDraft(null)
+		setOpenId(null)
 	}
 
-	if (openId === NEW_SKILL) {
+	const add = () => setDraft(BLANK_SKILL)
+
+	if (draft) {
 		return (
 			<SkillEditor
 				draft={draft}
@@ -159,4 +166,4 @@ const SkillsPanel = ({
 	)
 }
 
-export { NEW_SKILL, SkillsPanel, type SkillsPanelProps }
+export { SkillsPanel, type SkillsPanelProps }

@@ -1,4 +1,5 @@
 import { createQueue } from "../queue"
+import { createWriteLoop } from "../write-loop"
 import type { BotSkill, BotSkillDraft } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -40,11 +41,6 @@ export const createSkillsController = (
 	/** Every call in the order it was asked for: a create that landed while the read
 	 * was in flight would otherwise be overwritten by an answer that predates it. */
 	const enqueue = createQueue()
-
-	/** The skills a write loop is running for, and the newest draft waiting behind
-	 * each one. Typing is faster than a round trip. */
-	const writing = new Set<string>()
-	const pending = new Map<string, BotSkillDraft>()
 
 	const publish = () => {
 		for (const listener of listeners) {
@@ -88,22 +84,20 @@ export const createSkillsController = (
 			),
 		})
 
-	/** The draft that is still waiting, and then whatever arrived while it was being
-	 * written. The answer is applied only once nothing is queued behind it: an answer
-	 * to a draft the reader has already typed past would rewind the field they are
+	/** Every keystroke reaches the panel at once and the bundle once a burst is over.
+	 * Nothing is written while no bot is open — there is no bundle to address a skill
 	 * in. */
-	const flush = async (botId: string, skillId: string): Promise<void> => {
-		const draft = pending.get(skillId)
-		if (!draft) {
-			return
-		}
-		pending.delete(skillId)
-		const written = await store.updateBotSkill(botId, skillId, draft)
-		if (!pending.has(skillId) && state.botId === botId) {
-			preview(skillId, written)
-		}
-		return flush(botId, skillId)
-	}
+	const writes = createWriteLoop<BotSkillDraft, BotSkill>({
+		enqueue,
+		write: (skillId, draft) => {
+			const botId = state.botId
+			return botId
+				? store.updateBotSkill(botId, skillId, draft)
+				: Promise.resolve(null)
+		},
+		apply: preview,
+		onRefused: reload,
+	})
 
 	/** A write against the bot on hand, or nothing at all: there is no skill to
 	 * address while no bot is open. */
@@ -125,10 +119,12 @@ export const createSkillsController = (
 		},
 
 		open: (botId: string) => {
-			// The list goes with the bot it belonged to: leaving one bot's skills up
-			// under another bot's name is the one wrong answer here.
+			// Both the list and anything still waiting to be written belong to the
+			// bundle they were read and typed in. Two bots may hold a skill in a
+			// directory of the same name, so leaving either up is how one bot's skill
+			// ends up written into the other's.
 			set({ botId, skills: [] })
-			pending.clear()
+			writes.clear()
 			return enqueue(() => read(botId)).catch(() => undefined)
 		},
 
@@ -139,41 +135,24 @@ export const createSkillsController = (
 			}),
 
 		describe: (skillId: string, draft: BotSkillDraft) => {
-			const botId = state.botId
-			if (!botId) {
-				return
-			}
 			preview(skillId, draft)
-			pending.set(skillId, draft)
-			if (writing.has(skillId)) {
-				return
-			}
-			writing.add(skillId)
-			void enqueue(() => flush(botId, skillId))
-				.catch(reload)
-				.finally(() => {
-					writing.delete(skillId)
-				})
+			writes.push(skillId, draft)
 		},
 
 		setPreloaded: (skillId: string, isPreloaded: boolean) => {
 			preview(skillId, { isPreloaded })
-			onOpenBot(async (botId) => {
-				const written = await store.setBotSkillPreloaded(
-					botId,
+			onOpenBot(async (botId) =>
+				preview(
 					skillId,
-					isPreloaded,
-				)
-				if (state.botId === botId) {
-					preview(skillId, written)
-				}
-			})
+					await store.setBotSkillPreloaded(botId, skillId, isPreloaded),
+				),
+			)
 		},
 
 		remove: (skillId: string) =>
 			onOpenBot(async (botId) => {
 				await store.deleteBotSkill(botId, skillId)
-				pending.delete(skillId)
+				writes.drop(skillId)
 				applyTo(
 					botId,
 					state.skills.filter((skill) => skill.id !== skillId),
