@@ -414,6 +414,40 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	assert!(rebuilt.spoken.contains(&format!("system<{SPANISH}>")), "got {}", rebuilt.spoken);
 	assert!(agent.is_file(), "the run that found no bundle did not write one");
 
+	// A server written through the commands is the one the next process is really
+	// given. It is the one surface that raises a bot's capability rather than reducing
+	// it — a declared server starts a process on the reader's machine — so what a
+	// child finds in the bundle is measured rather than assumed. The child names the
+	// servers and never their configuration: one is a command to run and an
+	// environment that often holds a token, and neither belongs in a transcript.
+	harness
+		.call(
+			"conversation_set_bot_mcp_server",
+			json!({
+				"botId": &bot,
+				"name": "atlas",
+				"config": { "command": "atlas-mcp", "args": ["--stdio"] },
+			}),
+		)
+		.expect("the server is written");
+	let manifest = bundle.join(".claude-plugin").join("plugin.json");
+	let declared: Value =
+		serde_json::from_str(&std::fs::read_to_string(&manifest).expect("the manifest"))
+			.expect("the manifest is json");
+	assert_eq!(declared["mcpServers"], json!("./.mcp.json"));
+	let served = harness.runtime_of(&conversation, &bot, 7);
+	assert!(served.spoken.contains("mcp<atlas>"), "got {}", served.spoken);
+	assert!(served.spoken.contains(&format!("system<{SPANISH}>")), "got {}", served.spoken);
+
+	// And taking it away is the same: the file goes with the last server, the manifest
+	// stops pointing at it, and the process after that is given none.
+	harness
+		.call("conversation_delete_bot_mcp_server", json!({ "botId": &bot, "name": "atlas" }))
+		.expect("the server is taken away");
+	assert!(!bundle.join(".mcp.json").exists(), "an empty server file was left behind");
+	let bare = harness.runtime_of(&conversation, &bot, 8);
+	assert!(bare.spoken.contains("mcp<none>"), "got {}", bare.spoken);
+
 	// A bundle the disk will not take fails the save that triggered it. The row goes
 	// back to what it was, so what the panel reports and what the next process would be
 	// started on cannot come apart — which is the whole reason a brief lives in a file.

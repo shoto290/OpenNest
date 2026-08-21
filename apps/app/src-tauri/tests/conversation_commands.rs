@@ -14,6 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use opennest_app::bundles;
 use opennest_app::commands::invoke_handler;
 use opennest_app::db;
 use serde_json::{json, Value};
@@ -1715,6 +1716,153 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 				"botId": "missing",
 				"draft": { "name": "Baking", "description": "", "body": "" },
 			}),
+		),
+		Err(json!({ "kind": "unknownBot", "id": "missing" }))
+	);
+}
+
+/// Where the bot's bundle sits, resolved the way the host resolves it rather than
+/// spelled again here.
+fn bundle_of(app: &App<MockRuntime>) -> PathBuf {
+	let root = bundles::root(app.handle()).expect("the bundle root");
+	bundles::dir(&root, BOT)
+}
+
+/// A JSON file off the disk, or `null` for one that is not there — which is how the
+/// absence of the server file is asserted beside its contents.
+fn json_at(path: &Path) -> Value {
+	std::fs::read_to_string(path)
+		.ok()
+		.and_then(|text| serde_json::from_str(&text).ok())
+		.unwrap_or(Value::Null)
+}
+
+/// A bot's MCP servers as the frontend meets them: written, listed, replaced and
+/// taken away over IPC. Nothing about a server is in the database — the bundle on
+/// the disk is the whole record — so the file itself is read alongside every call,
+/// since it is what the agent will really be started on.
+#[test]
+fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	a_bot_and_its_chat(&window);
+	let bundle = bundle_of(&app);
+	let servers = bundle.join(".mcp.json");
+	let manifest = bundle.join(".claude-plugin").join("plugin.json");
+
+	let atlas = json!({ "command": "atlas-mcp", "args": ["--stdio"] });
+	let ledger = json!({ "command": "ledger-mcp", "env": { "LEDGER_MODE": "read" } });
+
+	let written = call(
+		&window,
+		"conversation_set_bot_mcp_server",
+		json!({ "botId": BOT, "name": "atlas", "config": atlas }),
+	)
+	.expect("the server is written");
+	assert_eq!(written, json!({ "name": "atlas", "config": atlas }));
+
+	call(
+		&window,
+		"conversation_set_bot_mcp_server",
+		json!({ "botId": BOT, "name": "ledger", "config": ledger }),
+	)
+	.expect("the second server is written");
+
+	assert_eq!(
+		call(&window, "conversation_bot_mcp_servers", json!({ "botId": BOT }))
+			.expect("the servers"),
+		json!([
+			{ "name": "atlas", "config": atlas },
+			{ "name": "ledger", "config": ledger },
+		])
+	);
+	assert_eq!(json_at(&servers)["mcpServers"], json!({ "atlas": atlas, "ledger": ledger }));
+
+	// The manifest points at the file, which is what has the agent load it with the
+	// bundle at all.
+	assert_eq!(json_at(&manifest)["mcpServers"], json!("./.mcp.json"));
+
+	// A reader put a key of their own in the file. It is not this app's to carry away
+	// on the next write, and neither is the server it is not about.
+	let mut theirs = json_at(&servers);
+	theirs["opennestIsNotToTouchThis"] = json!(true);
+	std::fs::write(&servers, theirs.to_string()).expect("the hand edit lands");
+
+	let replaced = json!({ "command": "atlas-mcp", "args": ["--http"] });
+	call(
+		&window,
+		"conversation_set_bot_mcp_server",
+		json!({ "botId": BOT, "name": "atlas", "config": replaced }),
+	)
+	.expect("the server is replaced");
+	let after = json_at(&servers);
+	assert_eq!(after["mcpServers"], json!({ "atlas": replaced, "ledger": ledger }));
+	assert_eq!(after["opennestIsNotToTouchThis"], json!(true));
+
+	// A configuration that is not a map is refused before anything is written, and
+	// the refusal says what shape was wrong without carrying what was offered — a
+	// configuration is a command to run and an environment that often holds a token.
+	let refused = call(
+		&window,
+		"conversation_set_bot_mcp_server",
+		json!({ "botId": BOT, "name": "atlas", "config": "atlas-mcp --secret hunter2" }),
+	)
+	.expect_err("a scalar is not a server");
+	assert_eq!(refused["kind"], json!("unwritableBundle"));
+	assert!(
+		!refused["detail"].as_str().unwrap_or_default().contains("hunter2"),
+		"the refusal carried the configuration: {refused}"
+	);
+	assert_eq!(json_at(&servers)["mcpServers"]["atlas"], replaced, "the refusal wrote anyway");
+
+	call(
+		&window,
+		"conversation_delete_bot_mcp_server",
+		json!({ "botId": BOT, "name": "atlas" }),
+	)
+	.expect("the server is taken away");
+	assert_eq!(json_at(&servers)["mcpServers"], json!({ "ledger": ledger }));
+	assert_eq!(
+		call(
+			&window,
+			"conversation_delete_bot_mcp_server",
+			json!({ "botId": BOT, "name": "atlas" })
+		)
+		.expect_err("a name the bundle does not declare")["kind"],
+		json!("unwritableBundle")
+	);
+
+	// The last one going leaves the reader's own key behind and nothing of this
+	// module's — not an empty map, and not a manifest pointing at a map that is gone.
+	call(
+		&window,
+		"conversation_delete_bot_mcp_server",
+		json!({ "botId": BOT, "name": "ledger" }),
+	)
+	.expect("the last server is taken away");
+	let bare = json_at(&servers);
+	assert_eq!(bare["mcpServers"], Value::Null);
+	assert_eq!(bare["opennestIsNotToTouchThis"], json!(true));
+
+	// And with the reader's key taken out by hand too, the file itself goes rather
+	// than sitting there declaring nothing.
+	std::fs::write(&servers, json!({ "mcpServers": { "atlas": atlas } }).to_string())
+		.expect("a file with nothing but servers in it");
+	call(
+		&window,
+		"conversation_delete_bot_mcp_server",
+		json!({ "botId": BOT, "name": "atlas" }),
+	)
+	.expect("the server is taken away");
+	assert_eq!(json_at(&servers), Value::Null, "an empty server file was left behind");
+	assert_eq!(json_at(&manifest)["mcpServers"], Value::Null);
+
+	assert_eq!(
+		call(
+			&window,
+			"conversation_set_bot_mcp_server",
+			json!({ "botId": "missing", "name": "atlas", "config": atlas }),
 		),
 		Err(json!({ "kind": "unknownBot", "id": "missing" }))
 	);

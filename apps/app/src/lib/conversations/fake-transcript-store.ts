@@ -2,6 +2,7 @@ import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
 	Bot,
 	BotIdentity,
+	BotMcpServer,
 	BotSkill,
 	BotSkillDraft,
 	Chat,
@@ -113,6 +114,9 @@ export const createFakeTranscriptStore = (
 	/** What each bot's bundle holds, the way the disk holds it: no row, one entry per
 	 * bot, and a skill named by the directory it would live in. */
 	const skills = new Map<string, BotSkill[]>()
+	/** What each bot's server file declares, the way the disk holds it: one entry per
+	 * bot, and a server named by the key it is declared under. */
+	const servers = new Map<string, Map<string, Record<string, unknown>>>()
 	const rows = new Map<string, TranscriptMessage>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
@@ -199,6 +203,11 @@ export const createFakeTranscriptStore = (
 		}
 		return `${base}-${next}`
 	}
+
+	/** What the host will take as a server configuration: a JSON object, which an
+	 * array and a scalar are not. */
+	const isPlainObject = (value: unknown) =>
+		typeof value === "object" && value !== null && !Array.isArray(value)
 
 	/** One of a bot's skills, changed. A bot that is not there and a skill that is
 	 * not one of its own are the two refusals the host answers with — the second is
@@ -292,6 +301,7 @@ export const createFakeTranscriptStore = (
 			}
 			commands.delete(id)
 			skills.delete(id)
+			servers.delete(id)
 			const conversationId = chatIdOf(id)
 			for (const [rowId, row] of rows) {
 				if (row.conversationId === conversationId) {
@@ -379,6 +389,48 @@ export const createFakeTranscriptStore = (
 					(skills.get(botId) ?? []).filter((skill) => skill.id !== skillId),
 				)
 			}),
+
+		/** By the name each is declared under, the way the host reads them out of the
+		 * map, and none at all for a bot nobody has written one for. */
+		botMcpServers: (botId: string): Promise<BotMcpServer[]> =>
+			Promise.resolve(
+				[...(servers.get(botId) ?? new Map())]
+					.map(([name, config]) => ({ name, config }))
+					.sort((left, right) => left.name.localeCompare(right.name)),
+			),
+
+		/** The two refusals the host answers with: a bot that is not there, and a
+		 * configuration that is not an object — the second is a file that would fail at
+		 * launch, and the refusal never carries what was offered. */
+		setBotMcpServer: (
+			botId: string,
+			name: string,
+			config: Record<string, unknown>,
+		) => {
+			if (!bots.has(botId)) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			if (!isPlainObject(config)) {
+				return refuse({
+					kind: "unwritableBundle",
+					detail: "a server configuration must be a JSON object",
+				})
+			}
+			const declared = servers.get(botId) ?? new Map()
+			declared.set(name, config)
+			servers.set(botId, declared)
+			return Promise.resolve({ name, config })
+		},
+
+		deleteBotMcpServer: (botId: string, name: string) => {
+			if (!bots.has(botId)) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			if (!servers.get(botId)?.delete(name)) {
+				return refuse({ kind: "unwritableBundle", detail: "no such server" })
+			}
+			return Promise.resolve()
+		},
 
 		recordBotCommands: (botId: string, listed: AgentCommand[]) => {
 			if (!bots.has(botId)) {

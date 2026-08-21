@@ -297,6 +297,27 @@ impl From<SkillDraft> for bundles::SkillDraft {
 	}
 }
 
+/// An MCP server a bot's bundle declares, as the frontend meets it. Like a skill it
+/// lives in the bundle and nowhere else: no column holds any of it, and a `.mcp.json`
+/// a hand wrote is answered beside what this app wrote.
+///
+/// `name` is what it is declared under and what it connects as —
+/// `plugin:<bot id>:<name>`, see `agent/PLUGINS.md`. `config` travels verbatim: the
+/// shape a transport asks for is the agent's to define, not this app's, so nothing
+/// here narrows it past being an object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServer {
+	pub name: String,
+	pub config: serde_json::Value,
+}
+
+impl From<bundles::McpServer> for McpServer {
+	fn from(server: bundles::McpServer) -> Self {
+		Self { name: server.name, config: server.config }
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Chat {

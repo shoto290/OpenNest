@@ -19,8 +19,9 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
-	Bot, BotIdentity, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage,
-	RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage, TranscriptStoreError,
+	Bot, BotIdentity, Chat, ContextCheckpoint, McpServer, NewAssistantMessage, NewTurn,
+	NewUserMessage, RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage,
+	TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
@@ -345,6 +346,54 @@ pub async fn conversation_delete_bot_skill<R: Runtime>(
 	let root = skills_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::remove_skill(&root, &bot, &skill_id))
+}
+
+/// Every MCP server the bot's bundle declares, by the name each is declared under. A
+/// `.mcp.json` a hand wrote is read the same way, and a host with nowhere to keep
+/// bundles answers none rather than refusing — the same as the skills above.
+#[tauri::command]
+pub async fn conversation_bot_mcp_servers<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+) -> Result<Vec<McpServer>, TranscriptStoreError> {
+	let Some(root) = bundles::root(&app) else {
+		return Ok(Vec::new());
+	};
+	Ok(bundles::mcp_servers(&root, &bot_id).into_iter().map(McpServer::from).collect())
+}
+
+/// The server written under the name given, added or replaced. Every other server and
+/// every key of the file this app does not own stay where they were.
+///
+/// A configuration that is not a JSON object is refused, and the refusal carries the
+/// shape that was wrong rather than the value: a configuration is a command to run
+/// and an environment that often holds a token, and neither belongs in a message that
+/// leaves the host.
+#[tauri::command]
+pub async fn conversation_set_bot_mcp_server<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	name: String,
+	config: serde_json::Value,
+) -> Result<McpServer, TranscriptStoreError> {
+	let root = skills_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::set_mcp_server(&root, &bot, &name, &config)).map(McpServer::from)
+}
+
+/// The server taken out of the file, and the rest of it left as it was. The last one
+/// going takes the file with it, and the manifest stops pointing at it.
+#[tauri::command]
+pub async fn conversation_delete_bot_mcp_server<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	name: String,
+) -> Result<(), TranscriptStoreError> {
+	let root = skills_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::remove_mcp_server(&root, &bot, &name))
 }
 
 /// Where this install keeps bundles, for a write that has nowhere else to land. A
