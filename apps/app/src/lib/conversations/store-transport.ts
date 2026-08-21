@@ -18,6 +18,8 @@ import {
 	type TranscriptPage,
 } from "./transcript-contract"
 
+import type { AgentCommand } from "@/lib/agent/contract"
+
 /** The host owns the page and the failure: nothing here reshapes what came back
  * and nothing catches, so a `TranscriptStoreError` reaches the caller as sent. */
 export const conversationStore: TranscriptStore = {
@@ -41,11 +43,11 @@ export const conversationStore: TranscriptStore = {
 	setBotAvatarImage: (id: string, bytes: Uint8Array) =>
 		invoke<Bot>("conversation_set_bot_avatar_image", { id, bytes }),
 
-	recordBotCommands: (botId: string, commands: string[]) =>
+	recordBotCommands: (botId: string, commands: AgentCommand[]) =>
 		invoke<void>("conversation_record_bot_commands", { botId, commands }),
 
 	botCommands: (botId: string) =>
-		invoke<string[]>("conversation_bot_commands", { botId }),
+		invoke<AgentCommand[]>("conversation_bot_commands", { botId }),
 
 	mainChat: (botId: string) =>
 		invoke<Chat>("conversation_main_chat", { botId }),

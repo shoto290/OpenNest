@@ -13,7 +13,12 @@ import {
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptPage,
 } from "./transcript-contract"
-import { botIdentity, CONVERSATION, message } from "./transcript-fixtures"
+import {
+	botIdentity,
+	CONVERSATION,
+	message,
+	named,
+} from "./transcript-fixtures"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
@@ -85,10 +90,10 @@ const WRITES: WriteCase[] = [
 	},
 	{
 		member: "recordBotCommands",
-		write: () => conversationStore.recordBotCommands("b-1", ["review"]),
+		write: () => conversationStore.recordBotCommands("b-1", named("review")),
 		call: [
 			"conversation_record_bot_commands",
-			{ botId: "b-1", commands: ["review"] },
+			{ botId: "b-1", commands: named("review") },
 		],
 	},
 	{

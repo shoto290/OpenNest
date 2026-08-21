@@ -28,9 +28,19 @@ export type FakeChatDriverOptions = {
 	replyFor?: (prompt: string) => string
 }
 
-/** What the real init frame announces, named the way Claude Code names it: no
- * leading slash. Enough of them for `bun dev:web` to open the command menu. */
-const FAKE_COMMANDS = ["clear", "compact", "cost", "init", "review", "status"]
+/** What a real session announces, named the way Claude Code names it: no leading
+ * slash. Enough of them for `bun dev:web` to open the command menu. */
+const FAKE_COMMANDS = [
+	{ name: "clear", description: "Start a fresh conversation" },
+	{ name: "compact", description: "Summarise the thread and free the context" },
+	{ name: "cost", description: "Show what this session has spent so far" },
+	{ name: "init", description: "Write a CLAUDE.md for this repository" },
+	{ name: "review", description: "Review the pending changes on this branch" },
+	{
+		name: "status",
+		description: "Report the session's model, mode and account",
+	},
+]
 
 const FAIL_DIRECTIVE = "/fail"
 

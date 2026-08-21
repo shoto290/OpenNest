@@ -11,6 +11,8 @@ import type {
 import type { TerminalCompletion } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 
+import type { AgentCommand } from "@/lib/agent/contract"
+
 /** The write half of a conversation, on top of the reads so a fake and the real
  * store stay interchangeable. An append answers with the `seq` the store gave the
  * row: the caller never picks its own place in the transcript. */
@@ -44,11 +46,11 @@ export type TranscriptStore = TranscriptPort & {
 	 * one it would refuse, so what is kept is the last list named rather than every
 	 * list ever named. A bot the store does not hold is refused — nothing may be kept
 	 * for a bot that is not there. */
-	recordBotCommands: (botId: string, commands: string[]) => Promise<void>
+	recordBotCommands: (botId: string, commands: AgentCommand[]) => Promise<void>
 	/** What was last held for the bot. Empty until a session of its own has
 	 * announced something, which is a bot that offers no command rather than one the
 	 * store owes an answer for. */
-	botCommands: (botId: string) => Promise<string[]>
+	botCommands: (botId: string) => Promise<AgentCommand[]>
 	mainChat: (botId: string) => Promise<Chat>
 	/** Opens the run a Claude process is about to be started for. The live run it
 	 * replaces is rotated by the same call, so a participant is never left with two

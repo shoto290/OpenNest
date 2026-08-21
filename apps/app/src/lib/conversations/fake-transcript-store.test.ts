@@ -5,7 +5,7 @@ import {
 	FAKE_CHAT_ID,
 } from "./fake-transcript-store"
 import type { NewAssistantMessage, NewUserMessage } from "./store-contract"
-import { botIdentity, message } from "./transcript-fixtures"
+import { botIdentity, message, named } from "./transcript-fixtures"
 
 const TURN = { id: "t-1", conversationId: FAKE_CHAT_ID, startedAt: 1 }
 
@@ -192,7 +192,7 @@ describe("createFakeTranscriptStore", () => {
 	// A bot created at the id a deleted one held is a new bot, offering nothing.
 	it("forgets what a deleted bot's sessions announced", async () => {
 		const store = createFakeTranscriptStore()
-		await store.recordBotCommands("default", ["review"])
+		await store.recordBotCommands("default", named("review"))
 
 		await store.deleteBot("default")
 

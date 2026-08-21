@@ -36,7 +36,11 @@ import {
 } from "@workspace/ui/components/tool-approval"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import type { PermissionRequest, TurnState } from "@/lib/agent/contract"
+import type {
+	AgentCommand,
+	PermissionRequest,
+	TurnState,
+} from "@/lib/agent/contract"
 import { describeTransportError } from "@/lib/agent/messages"
 import {
 	describeAttachmentError,
@@ -215,7 +219,7 @@ const Composer = memo(function Composer({
 	/** What the bot last answered to: the live session's own list once it has
 	 * announced one, and until then the list the store kept from the session before
 	 * it. Empty only for a bot no session has ever announced anything for. */
-	commands: string[]
+	commands: AgentCommand[]
 	disabled: boolean
 	/** Something is drawn over the conversation. */
 	isOverlayOpen: boolean

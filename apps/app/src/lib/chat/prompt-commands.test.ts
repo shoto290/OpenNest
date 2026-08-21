@@ -7,7 +7,9 @@ import {
 	promptForCommand,
 } from "./prompt-commands"
 
-const COMMANDS = ["clear", "compact", "review"]
+import { named } from "../conversations/transcript-fixtures"
+
+const COMMANDS = named("clear", "compact", "review")
 
 describe("commandQueryIn", () => {
 	it("opens on a slash and hands back what follows it", () => {
@@ -39,9 +41,9 @@ describe("commandQueryIn", () => {
 describe("commandOptionsFor", () => {
 	it("lists the announced names the way the reader types them", () => {
 		expect(commandOptionsFor(COMMANDS)).toEqual([
-			"/clear",
-			"/compact",
-			"/review",
+			{ name: "/clear" },
+			{ name: "/compact" },
+			{ name: "/review" },
 		])
 	})
 })

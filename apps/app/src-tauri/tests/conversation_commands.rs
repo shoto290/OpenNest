@@ -1569,10 +1569,14 @@ fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_oth
 }
 
 /// What a session announced, kept where the next launch finds it. The commands only
-/// ever reach this side on an init frame and a session is only started by a prompt,
-/// so what crosses here is what the composer offers a bot nobody has spoken to yet:
-/// the last list named, replaced whole by the next one, and nothing at all for a bot
-/// no session has ever answered for.
+/// ever reach this side once a session is up and a session is only started by a
+/// prompt, so what crosses here is what the composer offers a bot nobody has spoken
+/// to yet: the last list named, replaced whole by the next one, and nothing at all
+/// for a bot no session has ever answered for.
+///
+/// The first list is written as bare names, which is what a list stored before
+/// descriptions were asked for holds: it still reads, as commands nothing is said
+/// about.
 #[test]
 fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the_next() {
 	let home = Home::new();
@@ -1596,19 +1600,22 @@ fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the
 
 	assert_eq!(
 		call(&window, "conversation_bot_commands", json!({ "botId": &id })).expect("the commands"),
-		json!(["review", "compact"])
+		json!([{ "name": "review" }, { "name": "compact" }])
 	);
 
 	call(
 		&window,
 		"conversation_record_bot_commands",
-		json!({ "botId": &id, "commands": ["status"] }),
+		json!({
+			"botId": &id,
+			"commands": [{ "name": "status", "description": "What this session is" }],
+		}),
 	)
 	.expect("the next session's commands");
 
 	assert_eq!(
 		call(&window, "conversation_bot_commands", json!({ "botId": &id })).expect("the commands"),
-		json!(["status"]),
+		json!([{ "name": "status", "description": "What this session is" }]),
 		"an announcement was added to the one before it instead of replacing it"
 	);
 	assert_eq!(

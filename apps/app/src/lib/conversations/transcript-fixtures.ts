@@ -1,6 +1,8 @@
 import type { BotIdentity } from "./store-contract"
 import type { TranscriptMessage } from "./transcript-contract"
 
+import type { AgentCommand } from "@/lib/agent/contract"
+
 export const CONVERSATION = "c-1"
 
 export const OTHER_CONVERSATION = "c-2"
@@ -32,3 +34,7 @@ export const botIdentity = (
 	instructions: "Answer with the file you would touch.",
 	...overrides,
 })
+
+/** Slash commands with nothing said about them. */
+export const named = (...names: string[]): AgentCommand[] =>
+	names.map((name) => ({ name }))

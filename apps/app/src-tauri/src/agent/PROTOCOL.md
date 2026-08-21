@@ -93,13 +93,14 @@ Every line is an envelope:
 {"session":"<key>","frame":{…}}
 ```
 
-The frame is an `SDKMessage` verbatim, plus the two the sidecar adds itself.
+The frame is an `SDKMessage` verbatim, plus the three the sidecar adds itself.
 
 | `frame.type` | Source | Mapped to |
 | --- | --- | --- |
 | `opened` | the sidecar, once `initializationResult()` returns | the start's readiness gate |
 | `closed` | the sidecar, when the query ends or throws | `crashed` |
-| `system` / `init` | `SDKSystemMessage` — `session_id`, `slash_commands` | `sessionReady` + `commandsListed` (only when the frame names one) |
+| `system` / `init` | `SDKSystemMessage` — `session_id` | `sessionReady` |
+| `commands` | the sidecar, from `initializationResult().commands` | `commandsListed` (only when the frame names one) |
 | `stream_event` | `SDKPartialAssistantMessage` — one Messages API streaming event | `messageStarted` / `messageDelta` / `activity` |
 | `assistant` | `SDKAssistantMessage` — `text` and/or `tool_use` blocks | `messageCompleted` / `activity` |
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |

@@ -13,6 +13,7 @@ import {
 } from "./rotation"
 
 import type {
+	AgentCommand,
 	AgentEvent,
 	ChatMessage,
 	RuntimeScope,
@@ -29,6 +30,7 @@ import type {
 } from "../conversations/transcript-contract"
 import {
 	botIdentity,
+	named,
 	message as storedMessage,
 } from "../conversations/transcript-fixtures"
 import {
@@ -2333,7 +2335,7 @@ describe("the provider session a run answered under", () => {
 })
 
 /** The slash commands a session announces, held where the next one can find them.
- * A child names them on its init frame and nowhere else, and no child exists until
+ * A child names them once as it comes up and nowhere else, and no child exists until
  * a prompt has started one — so a bot just opened, and every bot after a restart,
  * has nothing of its own to ask. */
 describe("the commands a bot last announced", () => {
@@ -2381,13 +2383,13 @@ describe("the commands a bot last announced", () => {
 		const { controller, driver, detach } = await bootedHarness({ store })
 
 		driver.pushEvent(
-			{ type: "commandsListed", commands: ["status"] },
+			{ type: "commandsListed", commands: named("status") },
 			runOf(controller),
 		)
 		await vi.runAllTimersAsync()
 
-		expect(controller.getState().commands).toEqual(["status"])
-		expect(await store.botCommands(BOT)).toEqual(["status"])
+		expect(controller.getState().commands).toEqual(named("status"))
+		expect(await store.botCommands(BOT)).toEqual(named("status"))
 		detach()
 	})
 
@@ -2410,7 +2412,7 @@ describe("the commands a bot last announced", () => {
 	// authority on what it takes, whenever the older answer comes back.
 	it("keeps what the session named over a recall still in flight", async () => {
 		const base = createFakeTranscriptStore()
-		await base.recordBotCommands(BOT, ["from-the-record"])
+		await base.recordBotCommands(BOT, named("from-the-record"))
 		const read = deferred()
 		const store: TranscriptStore = {
 			...base,
@@ -2428,7 +2430,7 @@ describe("the commands a bot last announced", () => {
 		read.release()
 		await vi.runAllTimersAsync()
 
-		expect(announced).not.toEqual(["from-the-record"])
+		expect(announced).not.toEqual(named("from-the-record"))
 		expect(controller.getState().commands).toEqual(announced)
 		detach()
 	})
@@ -2438,7 +2440,7 @@ describe("the commands a bot last announced", () => {
 		let written = 0
 		const store: TranscriptStore = {
 			...base,
-			recordBotCommands: (botId: string, commands: string[]) => {
+			recordBotCommands: (botId: string, commands: AgentCommand[]) => {
 				written += 1
 				return base.recordBotCommands(botId, commands)
 			},

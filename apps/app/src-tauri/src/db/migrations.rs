@@ -250,11 +250,11 @@ ALTER TABLE bots ADD COLUMN avatar_blot TEXT
 
 /// The slash commands the bot's last session announced, held against the bot
 /// rather than against the run that named them. A run only names them on its init
-/// frame, and a bot gets one of those once a process has been started for it — so a
+/// announcement, and a bot gets one of those once a process has been started for it — so a
 /// bot nobody has spoken to yet, on this launch or any other, has no run to ask.
 /// The column is what answers instead.
 ///
-/// A JSON array of text: SQLite holds no list, the order is the child's own, and
+/// A JSON array: SQLite holds no list, the order is the child's own, and
 /// the whole point of the column is that it is replaced whole by the next
 /// announcement rather than added to. `NOT NULL DEFAULT '[]'` for the reason step
 /// 2's columns are empty-defaulted — it is what `ALTER TABLE` can answer for the

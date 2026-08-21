@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -284,6 +284,47 @@ pub struct SessionSnapshot {
 	pub activities: Vec<ActivityEvent>,
 }
 
+/// A slash command as the menu lists it. The description is what the child said
+/// the command does, left out by one that says nothing.
+///
+/// A bare name reads as one too. That is the shape `bots.commands` was written in
+/// before descriptions were asked for, and those rows outlive the build that wrote
+/// them — see [`Self::deserialize`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommand {
+	pub name: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+}
+
+impl AgentCommand {
+	/// A command with nothing said about it.
+	pub(crate) fn named(name: impl Into<String>) -> Self {
+		Self { name: name.into(), description: None }
+	}
+}
+
+impl<'de> Deserialize<'de> for AgentCommand {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		#[derive(Deserialize)]
+		#[serde(untagged)]
+		enum Announced {
+			Named(String),
+			Described {
+				name: String,
+				#[serde(default)]
+				description: Option<String>,
+			},
+		}
+
+		Ok(match Announced::deserialize(deserializer)? {
+			Announced::Named(name) => Self::named(name),
+			Announced::Described { name, description } => Self { name, description },
+		})
+	}
+}
+
 /// The single stream React consumes. One tagged union, no raw provider payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -298,7 +339,7 @@ pub enum AgentEvent {
 	/// named them, and never empty: a child naming none announces nothing, which
 	/// leaves the list the bot was already holding standing.
 	#[serde(rename_all = "camelCase")]
-	CommandsListed { commands: Vec<String> },
+	CommandsListed { commands: Vec<AgentCommand> },
 	#[serde(rename_all = "camelCase")]
 	MessageStarted { message: ChatMessage },
 	#[serde(rename_all = "camelCase")]

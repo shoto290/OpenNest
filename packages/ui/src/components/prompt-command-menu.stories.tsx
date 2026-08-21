@@ -8,7 +8,9 @@ import {
 } from "@workspace/ui/components/prompt-command-menu"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 
-const COMMANDS = [
+const named = (names: string[]) => names.map((name) => ({ name }))
+
+const NAMES = [
 	"/clear",
 	"/compact",
 	"/config",
@@ -20,8 +22,24 @@ const COMMANDS = [
 	"/status",
 ]
 
-const LONG_COMMANDS = [
-	...COMMANDS,
+const DESCRIBED_COMMANDS = [
+	{ name: "/clear", description: "Start a fresh conversation" },
+	{
+		name: "/compact",
+		description: "Summarise the thread and free the context",
+	},
+	{
+		name: "/config",
+		description:
+			"Open the settings panel to change the model, the theme, the permission mode and everything else this session reads at launch",
+	},
+	{ name: "/cost", description: "Show what this session has spent so far" },
+	{ name: "/help" },
+	{ name: "/review", description: "Review the pending changes on this branch" },
+]
+
+const LONG_NAMES = [
+	...NAMES,
 	"/agents",
 	"/context",
 	"/doctor",
@@ -54,12 +72,12 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The slash command popup of the composer: it lists the commands the running session reports, filters them against the typed query and answers the keyboard while focus stays in the textarea. It draws only — the host owns `open`, `query` and what a selection does. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching nothing renders no menu at all.\n\nThe list is a scrollable region and keeps a tab stop of its own, so it stays reachable to a keyboard on its own terms — the menu still answers the arrows while the composer holds focus, and Tab selects rather than moving into it.",
+					"The slash command popup of the composer: it lists the commands the running session reports, each with the one line said about it, filters them against the typed query and answers the keyboard while focus stays in the textarea. It draws only — the host owns `open`, `query` and what a selection does. ArrowUp/ArrowDown travel and wrap, Enter and Tab select, Escape or a press outside dismisses, and a query matching nothing renders no menu at all.\n\nThe list is a scrollable region and keeps a tab stop of its own, so it stays reachable to a keyboard on its own terms — the menu still answers the arrows while the composer holds focus, and Tab selects rather than moving into it.",
 			},
 		},
 	},
 	args: {
-		commands: COMMANDS,
+		commands: named(NAMES),
 		open: true,
 		query: "",
 		onSelect: fn(),
@@ -91,7 +109,7 @@ export const Default = meta.story({
 	play: async ({ args, canvas, userEvent }) => {
 		const options = canvas.getAllByRole("option")
 
-		await expect(options).toHaveLength(COMMANDS.length)
+		await expect(options).toHaveLength(NAMES.length)
 		await expect(options[0]).toHaveAttribute("aria-selected", "true")
 		await expect(options[1]).toHaveAttribute("aria-selected", "false")
 
@@ -135,7 +153,7 @@ export const KeyboardTravel = meta.story({
 		const options = canvas.getAllByRole("option")
 
 		await userEvent.keyboard("{ArrowUp}")
-		await expect(options[COMMANDS.length - 1]).toHaveAttribute(
+		await expect(options[NAMES.length - 1]).toHaveAttribute(
 			"aria-selected",
 			"true",
 		)
@@ -154,8 +172,28 @@ export const KeyboardTravel = meta.story({
 	},
 })
 
+export const Described = meta.story({
+	args: { commands: DESCRIBED_COMMANDS },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Commands carrying a description: it sits under the name in muted extra-small text, on one line. Check that a description far too long for the row truncates rather than wrapping or widening the panel, that the panel stops at its own maximum width, and that a command naming none keeps a single-line row.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const options = canvas.getAllByRole("option")
+
+		await expect(options[0]).toHaveAccessibleName(
+			"/clear Start a fresh conversation",
+		)
+		await expect(options[4]).toHaveAccessibleName("/help")
+	},
+})
+
 export const LongContent = meta.story({
-	args: { commands: LONG_COMMANDS },
+	args: { commands: named(LONG_NAMES) },
 	parameters: {
 		docs: {
 			description: {

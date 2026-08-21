@@ -24,6 +24,7 @@ import {
 
 import { createQueue } from "../queue"
 import type {
+	AgentCommand,
 	AgentEvent,
 	ChatMessage,
 	CheckReport,
@@ -169,7 +170,7 @@ type BotChat = {
 	 * an announcement matching what is held is a write nothing has to make, and a
 	 * recall answering after a session has spoken is the older of the two lists —
 	 * the child that just named its own is the authority on what it takes. */
-	commands: { stored: string[]; announced: boolean }
+	commands: { stored: AgentCommand[]; announced: boolean }
 	pendingPreflight: Promise<SessionHandle | null> | null
 	/** The handover in flight for this bot, if there is one. A second caller joins it
 	 * instead of starting another: two would open two rows in one lineage and ask the
@@ -543,7 +544,7 @@ export function createChatController(
 	}
 
 	/** What the session says it can be asked for, kept against the bot rather than
-	 * the run: a run announces it once, on its init frame, and no run exists until a
+	 * the run: a run announces it once, as it comes up, and no run exists until a
 	 * prompt has started one. The bot is the one the event named, for the reason the
 	 * provider session is — a rotation in between would otherwise hand one bot the
 	 * list another announced.
@@ -555,7 +556,7 @@ export function createChatController(
 	const recordCommands = (
 		bot: BotChat,
 		scope: RuntimeScope | null,
-		commands: string[],
+		commands: AgentCommand[],
 	) => {
 		if (!scope) {
 			return

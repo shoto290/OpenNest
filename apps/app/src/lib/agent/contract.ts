@@ -102,11 +102,18 @@ export type SessionHandle = {
 	resumed: boolean
 }
 
+/** A slash command as the menu lists it. The description is what the child said
+ * the command does, absent from one that says nothing. */
+export type AgentCommand = {
+	name: string
+	description?: string
+}
+
 export type AgentEvent =
 	| { type: "connectionChanged"; state: ConnectionState }
 	| { type: "turnChanged"; state: TurnState }
 	| { type: "sessionReady"; sessionId: string; resumed: boolean }
-	| { type: "commandsListed"; commands: string[] }
+	| { type: "commandsListed"; commands: AgentCommand[] }
 	| { type: "messageStarted"; message: ChatMessage }
 	| { type: "messageDelta"; id: string; seq: number; text: string }
 	| { type: "messageCompleted"; message: ChatMessage }

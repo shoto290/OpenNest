@@ -3,11 +3,13 @@
 //!
 //! Every session's stream leaves the sidecar through one pipe, so each line is an
 //! [`Envelope`] naming the session it belongs to. What the envelope carries is a
-//! [`Frame`] — the SDK's own message types, plus the two the sidecar adds to say
-//! that a session opened and that one is over.
+//! [`Frame`] — the SDK's own message types, plus the three the sidecar adds to say
+//! that a session opened, what it can be asked to run, and that it is over.
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+
+use super::contract::AgentCommand;
 
 /// `#[serde(default)]` answers a key left out, never one set to null. A frame is
 /// internally tagged, so a single null field costs the whole frame and everything
@@ -73,6 +75,8 @@ pub enum Frame {
 	Assistant(MessageFrame),
 	User(MessageFrame),
 	Result(ResultFrame),
+	/// The commands the sidecar read off its provider, with what each one does.
+	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
 	ControlResponse(ControlResponseFrame),
 	#[serde(other)]
@@ -91,10 +95,17 @@ pub struct SystemFrame {
 	pub subtype: Option<String>,
 	#[serde(default)]
 	pub session_id: Option<String>,
-	/// Named on the `init` frame only. A build exposing none leaves the key out or
-	/// sets it to null, and neither may cost the frame the id it also carries.
-	#[serde(default)]
-	pub slash_commands: Option<Vec<String>>,
+}
+
+/// The sidecar's own frame, not the SDK's: the `init` message names the commands
+/// but not what they do, and the described list is answered by a control request
+/// that does not land in step with it. A frame naming none says nothing rather
+/// than saying "none" — the list is kept against the bot from one launch to the
+/// next, and erasing it here would erase it for good.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommandsFrame {
+	#[serde(default, deserialize_with = "null_as_default")]
+	pub commands: Vec<AgentCommand>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
