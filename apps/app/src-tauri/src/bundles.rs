@@ -1417,12 +1417,16 @@ fn valued(inline: &str, lines: &[String], from: usize, until: usize) -> serde_js
 /// The text under a `|` or a `>`, dedented by however far its first line sits in. A
 /// folded block joins its lines with spaces and a literal one keeps the newlines,
 /// which is the difference the two marks name.
+///
+/// A line sitting shallower than the first keeps what indentation it has. Cutting it
+/// at the block's depth would be cutting a string at a byte a hand never chose — and
+/// a `pâte` two spaces in would take the whole listing down with it.
 fn folded(lines: &[String], from: usize, until: usize, is_folded: bool) -> String {
 	let until = until.min(lines.len());
 	let indent = child_indent(lines, from, until).unwrap_or(0);
 	let held: Vec<&str> = lines[from.min(until)..until]
 		.iter()
-		.map(|line| if line.len() > indent { &line[indent..] } else { line.trim() })
+		.map(|line| &line[indent_of(line).min(indent)..])
 		.collect();
 	held.join(if is_folded { " " } else { "\n" }).trim().to_owned()
 }
@@ -2107,6 +2111,38 @@ mod tests {
 		);
 		assert_eq!(front.license.as_deref(), Some("MIT"));
 		assert_eq!(front.compatibility, Some(serde_json::json!({ "claude-code": ">=2.0.0" })));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A `SKILL.md` a hand wrote indents a folded block however it likes, and its text
+	/// is written in whatever language the reader thinks in. Dedenting every line to
+	/// the depth of the first would cut a shallower one at a byte in the middle of a
+	/// letter — which is not a wrong answer but a panic, taken by a caller who asked
+	/// for nothing more than the list of a bot's skills.
+	#[test]
+	fn a_folded_block_a_hand_indented_survives_a_letter_that_is_not_ascii() {
+		let root = a_root("skill-folded");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		private_files::replace(
+			&path,
+			concat!(
+				"---\n",
+				"name: baking\n",
+				"when_to_use: |\n",
+				"    Flat.\n",
+				"  p\u{e2}te\n",
+				"---\n\n",
+				"Bake.\n",
+			)
+			.as_bytes(),
+		)
+		.expect("the skill is dropped in");
+
+		let read = read_skill(path.parent().expect("the skill directory")).expect("it reads");
+
+		assert_eq!(read.front.when_to_use.as_deref(), Some("Flat.\np\u{e2}te"));
 
 		let _ = fs::remove_dir_all(&root);
 	}
