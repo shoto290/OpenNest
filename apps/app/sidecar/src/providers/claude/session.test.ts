@@ -41,6 +41,14 @@ describe("buildOptions", () => {
 		expect(options.agent).toBe("bean")
 	})
 
+	// The bot's model is a key of the agent file in its bundle, and an option here
+	// would override it: the picker would then change a stored value and nothing else.
+	it("names no model, so the bundle's own key is what the child answers under", () => {
+		for (const spawned of [request, { cwd: "/tmp", partialMessages: false }]) {
+			expect(buildOptions(spawned, undefined).model).toBeUndefined()
+		}
+	})
+
 	it("names neither for a session opened with no bundle", () => {
 		const options = buildOptions(
 			{ cwd: "/tmp", partialMessages: false },

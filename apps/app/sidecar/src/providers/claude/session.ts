@@ -42,7 +42,12 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
  * spawn, a resume included, since neither is carried across one.
  *
  * `settingSources` is left out so the CLI defaults stand — the settings on disk and
- * the CLAUDE.md files they reach. */
+ * the CLAUDE.md files they reach.
+ *
+ * No model is named on purpose. The bot's model is the `model` key of the agent it is
+ * promoted to, and an option passed here would override that key — the picker would
+ * move a stored value and the child would keep answering under whatever this side
+ * named. */
 export const buildOptions = (
 	request: SessionRequest,
 	canUseTool: Options["canUseTool"],

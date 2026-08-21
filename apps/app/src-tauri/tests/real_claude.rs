@@ -32,8 +32,20 @@ async fn live(resume: Option<String>) -> Live {
 
 /// One child, started the way the host starts one for a bot: resuming what it was
 /// given, promoted to the agent in the bot's own plugin bundle, in the directory the
-/// bot names.
+/// bot names. The bundle is written on the model every bot is created on.
 async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBuf) -> Live {
+	started_on(resume, instructions, SONNET, cwd).await
+}
+
+/// The same child, on a named model. The model reaches it as a key of the agent file
+/// it is promoted to and by no other route — no option is passed beside it, and one
+/// would override the key.
+async fn started_on(
+	resume: Option<String>,
+	instructions: Option<&str>,
+	model: &str,
+	cwd: PathBuf,
+) -> Live {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 	let sidecar = Sidecar::start(SidecarOptions::new(
@@ -41,8 +53,9 @@ async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBu
 	))
 	.await
 	.expect("the sidecar announces itself");
-	let options =
-		SessionOptions::new(cwd).resuming(resume).bundled(instructions.map(bundle_carrying));
+	let options = SessionOptions::new(cwd)
+		.resuming(resume)
+		.bundled(instructions.map(|told| bundle_carrying(told, model)));
 	let session =
 		Session::start(sidecar.clone(), options, sink).await.expect("session starts");
 	Live { session, sidecar, events }
@@ -50,13 +63,13 @@ async fn started(resume: Option<String>, instructions: Option<&str>, cwd: PathBu
 
 /// The bot as a bundle on the disk, written the way the host writes one: what it
 /// was told is the body of the agent the main thread is promoted to.
-fn bundle_carrying(instructions: &str) -> Bundle {
+fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
 	let root = std::env::temp_dir().join("opennest-real-claude-bundles");
 	let bot = Bot {
 		id: "live-bot".to_owned(),
 		name: "Probe".to_owned(),
 		title: String::new(),
-		model: "sonnet".to_owned(),
+		model: model.to_owned(),
 		avatar_animal: AvatarAnimal::Owl,
 		avatar_blot: None,
 		avatar_image_path: None,
@@ -138,6 +151,18 @@ const BANANA: &str = "Whatever you are asked, end every reply with the word BANA
 const ORANGE: &str = "Whatever you are asked, end every reply with the word ORANGE.";
 const WHERE_AND_WHO: &str = "Run the bash command `pwd` and reply with nothing but its output.";
 
+/// What model the child is answering under, asked of the child itself: the CLI names
+/// it in the system prompt of every session it starts, so the answer is what the
+/// process really runs on rather than what anything on this side believes.
+const WHICH_MODEL: &str =
+	"Which Claude model are you running as? Reply with one word: opus, sonnet or haiku.";
+
+/// What a bot is created on, and what a reader would have had to pick. A child
+/// naming the second is a child the key reached: nothing else would move it off the
+/// first.
+const SONNET: &str = "sonnet";
+const HAIKU: &str = "haiku";
+
 /// A directory of this suite's own. macOS hands the temporary one out through a
 /// symlink and resolves it on the way in, so it is resolved here too — the child
 /// reports where it really is.
@@ -201,6 +226,21 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 	second.sidecar.shutdown().await;
 	let _ = std::fs::remove_dir_all(&workshop);
 	let _ = std::fs::remove_dir_all(&studio);
+}
+
+/// The model a reader picks is the model the bot runs on. It travels as the `model`
+/// key of the agent file in the bot's bundle and by no other route — `buildOptions`
+/// passes none, and one passed there would override the key — so this is the only
+/// measurement that can tell whether the picker reaches the runtime at all.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_answers_under_the_model_its_bundle_names() {
+	let mut picked = started_on(None, Some(BANANA), HAIKU, std::env::temp_dir()).await;
+	let named = text(&picked.run_turn(WHICH_MODEL).await).to_lowercase();
+	picked.sidecar.shutdown().await;
+
+	assert!(named.contains(HAIKU), "the picked model did not reach the child: {named:?}");
+	assert!(!named.contains(SONNET), "the child answered under the default tier: {named:?}");
 }
 
 /// The check report is what the frontend receives first, and it is built from a

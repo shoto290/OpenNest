@@ -68,14 +68,17 @@ describe("changesRuntime", () => {
 	})
 	const value = toSettingsValue(stored)
 
-	// The two a child is started with and can never be told afterwards.
-	it("says so for the instructions and for the directory", () => {
+	// The three a child is started with and can never be told afterwards. The model
+	// is one of them: it is a key of the agent file the child is promoted to, read
+	// once when that child starts.
+	it("says so for the instructions, the directory and the model", () => {
 		expect(
 			changesRuntime(stored, { ...value, instructions: "Answer at length." }),
 		).toBe(true)
 		expect(
 			changesRuntime(stored, { ...value, workingDirectory: "/work/other" }),
 		).toBe(true)
+		expect(changesRuntime(stored, { ...value, model: "haiku" })).toBe(true)
 	})
 
 	// Everything else about a bot is read where it is shown, or travels with the
@@ -83,7 +86,6 @@ describe("changesRuntime", () => {
 	it("says nothing for a field the process was never started with", () => {
 		expect(changesRuntime(stored, value)).toBe(false)
 		expect(changesRuntime(stored, { ...value, name: "Nyx" })).toBe(false)
-		expect(changesRuntime(stored, { ...value, model: "haiku" })).toBe(false)
 		expect(
 			changesRuntime(stored, {
 				...value,

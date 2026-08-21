@@ -85,6 +85,11 @@ const UNNAMED: &str = "bot";
 /// belongs to this bot, and anything else under `agents/` belongs to whoever wrote it.
 const OWNER_KEY: &str = "opennestBotId";
 
+/// The frontmatter key the agent format reads a model from. Honoured on the promoted
+/// path — see `agent/PLUGINS.md` — which is why writing it is the whole of how a bot
+/// runs on the model its reader picked.
+const MODEL_KEY: &str = "model";
+
 const FENCE: &str = "---";
 const CLOSING_FENCE: &str = "\n---";
 
@@ -162,11 +167,31 @@ pub fn agent_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 	generated_agent(root, bot_id)
 }
 
-/// What the bot was told, as the file holds it — the brief a process would really be
-/// started on. `None` is a bundle this install has not written yet, or one a reader
-/// has taken the agent out of, and the caller answers with the stored value instead.
+/// What the agent file says the bot is: the brief a process would really be started
+/// on, and the model it would really answer under. Both in one read, since a caller
+/// that shows a bot shows both.
+pub struct Generated {
+	pub instructions: String,
+	/// `None` for a file whose frontmatter names no model — a bundle written for a
+	/// bot carrying no label, or an agent a reader wrote themselves.
+	pub model: Option<String>,
+}
+
+/// The bot as its own agent file holds it. `None` is a bundle this install has not
+/// written yet, or one a reader has taken the agent out of, and the caller answers
+/// with the stored values instead.
+pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
+	let text = fs::read_to_string(agent_file(root, bot_id)?).ok()?;
+	let model = front_value(&text, MODEL_KEY)
+		.map(str::trim)
+		.filter(|found| !found.is_empty())
+		.map(str::to_owned);
+	Some(Generated { instructions: body(&text).to_owned(), model })
+}
+
+/// What the bot was told, as the file holds it.
 pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
-	Some(body(&fs::read_to_string(agent_file(root, bot_id)?).ok()?).to_owned())
+	Some(generated(root, bot_id)?.instructions)
 }
 
 /// The bundle as the bot stands right now: the keys this module owns in the manifest,
@@ -311,14 +336,30 @@ fn manifest(path: &Path, bot: &Bot) -> String {
 /// newline in either would otherwise make the file mean something else.
 ///
 /// The `metadata` map is what marks the file as this bot's — see [`OWNER_KEY`].
+///
+/// `model` is the whole of how a reader's choice reaches the runtime: the key is
+/// honoured on the promoted path, and a model option passed alongside would override
+/// it — so nothing passes one. A bot holding no label writes no key at all, which is
+/// the agent running on whatever the install defaults to rather than on the empty
+/// string.
 fn agent(bot: &Bot, name: &str) -> String {
 	format!(
-		"{FENCE}\nname: {}\ndescription: {}\nmetadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
+		"{FENCE}\nname: {}\ndescription: {}\n{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
 		quoted(name),
 		quoted(describe(bot)),
+		model_line(&bot.model),
 		quoted(&bot.id),
 		bot.instructions.trim()
 	)
+}
+
+/// The `model` key and its line ending, or nothing for a bot carrying no label.
+fn model_line(model: &str) -> String {
+	let named = model.trim();
+	if named.is_empty() {
+		return String::new();
+	}
+	format!("{MODEL_KEY}: {}\n", quoted(named))
 }
 
 fn quoted(value: &str) -> String {
@@ -346,9 +387,16 @@ fn split_frontmatter(text: &str) -> Option<(&str, &str)> {
 /// The bot a file says it was generated for, or `None` for one that says nothing —
 /// which is every file this module did not write.
 fn marked_bot_id(text: &str) -> Option<&str> {
+	front_value(text, OWNER_KEY)
+}
+
+/// A frontmatter key's scalar, unquoted, or `None` for a file that names none. Lines
+/// are read trimmed, so a key nested in a map answers under its own name — which is
+/// how [`OWNER_KEY`] is found inside `metadata`.
+fn front_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 	let (front, _) = split_frontmatter(text)?;
 	front.lines().find_map(|line| {
-		let value = line.trim().strip_prefix(OWNER_KEY)?.trim_start().strip_prefix(':')?;
+		let value = line.trim().strip_prefix(key)?.trim_start().strip_prefix(':')?;
 		Some(value.trim().trim_matches('"'))
 	})
 }
@@ -383,6 +431,10 @@ mod tests {
 			.expect("the hand edit lands");
 	}
 
+	fn named_model(root: &Path, bot_id: &str) -> Option<String> {
+		generated(root, bot_id)?.model
+	}
+
 	fn a_root(name: &str) -> PathBuf {
 		let root = std::env::temp_dir().join(format!("opennest-bundle-{name}"));
 		let _ = fs::remove_dir_all(&root);
@@ -414,6 +466,45 @@ mod tests {
 		assert!(manifest.contains("\"displayName\":\"Bean\""), "got {manifest}");
 		assert_eq!(agent_ref(&root, &bot), "b1:bean");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The picked model is a key of the file the session is promoted to, and that key
+	/// is the whole of how it reaches the runtime — nothing passes an option beside
+	/// it. Read back the way the frontend reads it, so a bot runs on what the panel
+	/// showed.
+	#[test]
+	fn a_written_bundle_names_the_model_the_bot_answers_under() {
+		let root = a_root("modelled");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.model = "haiku".to_owned();
+		write(&root, &bot).expect("the bundle is written");
+
+		assert_eq!(named_model(&root, &bot.id).as_deref(), Some("haiku"));
+
+		bot.model = "claude-opus-4-1-20250805".to_owned();
+		write(&root, &bot).expect("the bundle is rewritten");
+		assert_eq!(named_model(&root, &bot.id).as_deref(), Some("claude-opus-4-1-20250805"));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A bot carrying no label writes no key: the agent then runs on whatever the
+	/// install defaults to, rather than on a model named by the empty string.
+	#[test]
+	fn a_bot_naming_no_model_writes_no_key() {
+		let root = a_root("modelless");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.model = "  ".to_owned();
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = fs::read_to_string(agent_file(&root, &bot.id).expect("the agent is there"))
+			.expect("the agent file reads");
+		for line in written.lines() {
+			assert!(!line.starts_with("model:"), "got {written}");
+		}
+		assert_eq!(named_model(&root, &bot.id), None);
 
 		let _ = fs::remove_dir_all(&root);
 	}

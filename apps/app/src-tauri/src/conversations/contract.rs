@@ -147,7 +147,8 @@ pub struct Bot {
 	pub id: String,
 	pub name: String,
 	pub title: String,
-	/// The model label the bot answers under. Free text at this boundary, unlike the
+	/// The model label the bot answers under, read out of its plugin bundle the way
+	/// `instructions` is — see [`Bot::of`]. Free text at this boundary, unlike the
 	/// two faces below: which aliases exist is Claude Code's to change and nothing
 	/// here can list them, so a label this build has never heard of crosses, is
 	/// stored, and comes back the way it went in. The frontend offers the aliases it
@@ -172,16 +173,21 @@ impl Bot {
 	/// `None` for the directory is a run with nowhere to keep avatars. Same answer:
 	/// every bot wears its animal.
 	///
-	/// `bundles` is where the same bot's plugin bundle lives, and `instructions` is
-	/// read from the agent file inside it rather than from the column: the file is
-	/// what the process is actually started with, so it is what the panel that edits
-	/// it has to show. A bundle this install has not written — a bot from before
-	/// there were any, a host with no data directory — falls back to the column,
-	/// which is what the bundle is rewritten from anyway.
+	/// `bundles` is where the same bot's plugin bundle lives, and `instructions` and
+	/// `model` are read from the agent file inside it rather than from the columns:
+	/// the file is what the process is actually started with — its `model` key is what
+	/// the child answers under — so it is what the panel that edits them has to show.
+	/// A bundle this install has not written — a bot from before there were any, a
+	/// host with no data directory — falls back to the columns, which is what the
+	/// bundle is rewritten from anyway.
 	pub fn of(bot: conversations::Bot, avatars: Option<&Path>, bundles: Option<&Path>) -> Self {
-		let instructions = bundles
-			.and_then(|root| crate::bundles::instructions(root, &bot.id))
-			.unwrap_or_else(|| bot.instructions.clone());
+		let written = bundles.and_then(|root| crate::bundles::generated(root, &bot.id));
+		let model = written
+			.as_ref()
+			.and_then(|written| written.model.clone())
+			.unwrap_or_else(|| bot.model.clone());
+		let instructions =
+			written.map_or_else(|| bot.instructions.clone(), |written| written.instructions);
 		let avatar_image_path = bot
 			.avatar_image_path
 			.as_deref()
@@ -192,7 +198,7 @@ impl Bot {
 			id: bot.id,
 			name: bot.name,
 			title: bot.title,
-			model: bot.model,
+			model,
 			avatar_animal: bot.avatar_animal.into(),
 			avatar_blot: bot.avatar_blot.map(Into::into),
 			avatar_image_path,
@@ -1131,29 +1137,52 @@ mod tests {
 		}
 	}
 
+	/// A row as the database hands it over, on the model it names.
+	fn a_stored_bot(model: &str) -> conversations::Bot {
+		conversations::Bot {
+			id: "b1".into(),
+			name: "Nyx".into(),
+			title: String::new(),
+			model: model.to_owned(),
+			avatar_animal: conversations::AvatarAnimal::Owl,
+			avatar_blot: None,
+			avatar_image_path: None,
+			working_dir: None,
+			instructions: String::new(),
+			memory: String::new(),
+			created_at: 1,
+		}
+	}
+
 	/// The projection every read of a bot goes through, on the two answers that are
 	/// not a picture: a path pointing out of the directory, and a run with no
 	/// directory at all. Both come back as no picture, which is the bot in its animal.
 	#[test]
 	fn a_bot_wearing_a_path_the_host_will_not_serve_crosses_without_one() {
 		let stored = |path: Option<&str>| conversations::Bot {
-			id: "b1".into(),
-			name: "Nyx".into(),
-			title: String::new(),
-			model: "sonnet".to_owned(),
-			avatar_animal: conversations::AvatarAnimal::Owl,
-			avatar_blot: None,
 			avatar_image_path: path.map(str::to_owned),
-			working_dir: None,
-			instructions: String::new(),
-			memory: String::new(),
-			created_at: 1,
+			..a_stored_bot("sonnet")
 		};
 		let dir = std::env::temp_dir();
 
 		assert_eq!(Bot::of(stored(Some("/etc/passwd")), Some(&dir), None).avatar_image_path, None);
 		assert_eq!(Bot::of(stored(Some("/etc/passwd")), None, None).avatar_image_path, None);
 		assert_eq!(Bot::of(stored(None), Some(&dir), None).avatar_image_path, None);
+	}
+
+	/// The disk is the truth for what a child is started on, and the model is one of
+	/// those: a bundle naming one is reported over the column, and a run with no
+	/// bundle to read falls back to it.
+	#[test]
+	fn a_bot_is_reported_on_the_model_its_bundle_names() {
+		let root = std::env::temp_dir().join("opennest-contract-model");
+		let _ = std::fs::remove_dir_all(&root);
+		crate::bundles::write(&root, &a_stored_bot("haiku")).expect("the bundle is written");
+
+		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).model, "haiku");
+		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, None).model, "sonnet");
+
+		let _ = std::fs::remove_dir_all(&root);
 	}
 
 	/// The ending a caller reports is the one the file records: a mapping that
