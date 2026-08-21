@@ -11,7 +11,11 @@ import {
 } from "./chat-state"
 
 import type { AgentEvent, ChatMessage, RuntimeScope } from "../agent/contract"
-import { CONVERSATION, message } from "../conversations/transcript-fixtures"
+import {
+	CONVERSATION,
+	message,
+	named,
+} from "../conversations/transcript-fixtures"
 
 /** One participant's lineage, a run at a time: the number and the row change
  * together, the way a restart takes the next one. */
@@ -117,10 +121,10 @@ describe("chatReducer", () => {
 
 	it("holds the commands a session announced past the session that named them", () => {
 		const listed = applyEvents(opened, [
-			{ type: "commandsListed", commands: ["review", "compact"] },
+			{ type: "commandsListed", commands: named("review", "compact") },
 		])
 
-		expect(listed.commands).toEqual(["review", "compact"])
+		expect(listed.commands).toEqual(named("review", "compact"))
 
 		const reset = chatReducer(listed, {
 			type: "sessionReset",
@@ -128,36 +132,36 @@ describe("chatReducer", () => {
 			sessionId: null,
 		})
 
-		expect(reset.commands).toEqual(["review", "compact"])
+		expect(reset.commands).toEqual(named("review", "compact"))
 	})
 
 	it("replaces what it holds with what the next session named", () => {
 		const recalled = chatReducer(opened, {
 			type: "commandsRecalled",
-			commands: ["review", "compact"],
+			commands: named("review", "compact"),
 		})
 
-		expect(recalled.commands).toEqual(["review", "compact"])
+		expect(recalled.commands).toEqual(named("review", "compact"))
 
 		const listed = applyEvents(recalled, [
-			{ type: "commandsListed", commands: ["status"] },
+			{ type: "commandsListed", commands: named("status") },
 		])
 
-		expect(listed.commands).toEqual(["status"])
+		expect(listed.commands).toEqual(named("status"))
 	})
 
 	it("stands still when what arrives is what it already holds", () => {
 		const recalled = chatReducer(opened, {
 			type: "commandsRecalled",
-			commands: ["review", "compact"],
+			commands: named("review", "compact"),
 		})
 
 		const again = chatReducer(recalled, {
 			type: "commandsRecalled",
-			commands: ["review", "compact"],
+			commands: named("review", "compact"),
 		})
 		const announced = applyEvents(recalled, [
-			{ type: "commandsListed", commands: ["review", "compact"] },
+			{ type: "commandsListed", commands: named("review", "compact") },
 		])
 
 		expect(again).toBe(recalled)

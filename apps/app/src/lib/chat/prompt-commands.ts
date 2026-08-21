@@ -1,18 +1,24 @@
+import type { PromptCommandOption } from "@workspace/ui/components/prompt-command-menu"
+
+import type { AgentCommand } from "@/lib/agent/contract"
+
 /** A prompt that is nothing but a slash and the start of a command name. The
  * moment a space lands the reader has moved on to writing the prompt itself. */
 const COMMAND_DRAFT = /^\/(\S*)$/
 
 /** The commands as the menu lists them: what the session named, wearing the slash
  * the reader types in front of it. */
-export function commandOptionsFor(commands: string[]): string[] {
-	return commands.map((command) => `/${command}`)
+export function commandOptionsFor(
+	commands: AgentCommand[],
+): PromptCommandOption[] {
+	return commands.map((command) => ({ ...command, name: `/${command.name}` }))
 }
 
 /** The query the menu opens on, or null while it stays shut — a prompt of any
  * other shape, and a session that announced nothing to offer. */
 export function commandQueryIn(
 	prompt: string,
-	commands: string[],
+	commands: AgentCommand[],
 ): string | null {
 	if (commands.length === 0) {
 		return null

@@ -20,6 +20,8 @@ import {
 	type TranscriptMessage,
 } from "./transcript-contract"
 
+import type { AgentCommand } from "@/lib/agent/contract"
+
 export type FakeTranscriptStoreOptions = {
 	messages?: TranscriptMessage[]
 	pageSize?: number
@@ -105,7 +107,7 @@ export const createFakeTranscriptStore = (
 	let minted = 0
 	/** What each bot's last session announced, the way the column holds it: written
 	 * whole, read back whole, and absent for a bot no session has spoken for. */
-	const commands = new Map<string, string[]>()
+	const commands = new Map<string, AgentCommand[]>()
 	const rows = new Map<string, TranscriptMessage>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
@@ -285,7 +287,7 @@ export const createFakeTranscriptStore = (
 
 		/** Replaced whole, and refused for a bot that is not on the record — the two
 		 * rules the column is written under. */
-		recordBotCommands: (botId: string, listed: string[]) => {
+		recordBotCommands: (botId: string, listed: AgentCommand[]) => {
 			if (!bots.has(botId)) {
 				return refuse({ kind: "unknownBot", id: botId })
 			}

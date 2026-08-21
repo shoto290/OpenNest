@@ -399,7 +399,7 @@ fn status_of(status: contract::ActivityStatus) -> ActivityStatus {
 /// An activity that will not serialize is a value that cannot become a column,
 /// which is the error rusqlite keeps for exactly that. It gets no outcome of its
 /// own: like every other refusal here it writes nothing and destroys nothing.
-fn unserializable(error: serde_json::Error) -> ConversationError {
+pub(in crate::db) fn unserializable(error: serde_json::Error) -> ConversationError {
 	ConversationError::from(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
 

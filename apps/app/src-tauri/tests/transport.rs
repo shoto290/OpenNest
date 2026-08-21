@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use opennest_app::agent::commands::start_with_fallback;
 use opennest_app::agent::contract::{
-	ActivityKind, ActivityStatus, AgentEvent, ConnectionState, MessageCompletion,
+	ActivityKind, ActivityStatus, AgentCommand, AgentEvent, ConnectionState, MessageCompletion,
 	PermissionDecision, PermissionRequest, TransportError, TurnOutcome, TurnState,
 };
 use opennest_app::agent::session::{EventSink, Session, SessionOptions, PARTIAL_MESSAGES};
@@ -444,6 +444,34 @@ async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
 	let seen = drain_after_settling(&mut events).await;
 
 	assert!(!reports_a_crash(&seen), "the killed child reported a crash of its own: {seen:#?}");
+}
+
+/// The commands a session announces cross as their own frame, with what each one
+/// does. The unit tests read the frame off a hand-built value; this one reads it
+/// off a real child, through the envelope and the tag that resolves it, and proves
+/// the list lands before the reader is told the session is open.
+#[tokio::test]
+async fn the_commands_a_session_announces_reach_the_reader() {
+	let mut harness = start(options("commands")).await.expect("the session opens");
+
+	let seen = drain_after_settling(&mut harness.events).await;
+
+	assert_eq!(
+		seen.iter()
+			.find_map(|event| match event {
+				AgentEvent::CommandsListed { commands } => Some(commands.clone()),
+				_ => None,
+			})
+			.expect("the announcement reached the reader"),
+		vec![
+			AgentCommand {
+				name: "review".to_owned(),
+				description: Some("Review the pending changes".to_owned()),
+			},
+			AgentCommand { name: "plan".to_owned(), description: None },
+		]
+	);
+	harness.session.shutdown().await;
 }
 
 /// A resume that works must lose nothing it emitted while it was still being

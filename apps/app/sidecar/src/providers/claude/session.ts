@@ -1,10 +1,15 @@
-import { type Options, query } from "@anthropic-ai/claude-agent-sdk"
+import {
+	type Options,
+	query,
+	type SlashCommand,
+} from "@anthropic-ai/claude-agent-sdk"
 
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
 
 import type {
+	AgentCommand,
 	AgentSession,
 	EmitFrame,
 	SessionFrame,
@@ -14,6 +19,15 @@ import { describeError } from "../../describe-error"
 
 const ABANDONED = "The session ended before this was answered."
 const ENDED = "the agent ended"
+
+/** The `init` message names the commands but not what they do; the described list
+ * comes back with the initialization response instead. An empty description is the
+ * SDK's way of saying nothing, so it is left out rather than passed on as blank. */
+const described = (commands: SlashCommand[]): AgentCommand[] =>
+	commands.map(({ name, description }) => ({
+		name,
+		...(description ? { description } : {}),
+	}))
 
 /** The preset is named on purpose, and it is what makes `agent` do anything at all:
  * measured against the real binary, an `agent` set without it resolves, is listed,
@@ -84,7 +98,12 @@ export const openClaudeSession = async (
 	})
 	collapsed.catch(() => {})
 
-	await Promise.race([run.initializationResult(), collapsed])
+	const initialized = await Promise.race([
+		run.initializationResult(),
+		collapsed,
+	])
+
+	emit({ type: "commands", commands: described(initialized.commands) })
 
 	return {
 		prompt: prompts.push,

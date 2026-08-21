@@ -30,10 +30,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
-use serde_json::Value;
 use uuid::Uuid;
 
 use super::messages::stored_as_text;
+use crate::agent::contract::AgentCommand;
+use crate::db::bootstrap::unserializable;
 use crate::db::{Access, DatabaseError};
 
 /// The bot the app ships with. Fixed rather than generated: seeding has to
@@ -410,7 +411,7 @@ impl ConversationsRepository {
 
 	/// The slash commands a session announced, written down against the bot it was
 	/// answering for. Replaced whole rather than merged: a list is what one child
-	/// named on its init frame, and a command the next one leaves out is one it will
+	/// named, and a command the next one leaves out is one it will
 	/// refuse. A bot the file does not hold is refused, which keeps a list from being
 	/// written for nobody.
 	///
@@ -419,10 +420,10 @@ impl ConversationsRepository {
 	pub async fn record_bot_commands(
 		&self,
 		id: String,
-		commands: Vec<String>,
+		commands: Vec<AgentCommand>,
 	) -> Result<(), ConversationError> {
+		let listed = serde_json::to_string(&commands).map_err(unserializable)?;
 		self.call(move |connection| {
-			let listed = Value::from(commands).to_string();
 			let written = connection
 				.execute("UPDATE bots SET commands = ?2 WHERE id = ?1", params![&id, listed])?;
 			Ok(refuse_if_untouched(written, &id))
@@ -434,8 +435,9 @@ impl ConversationsRepository {
 	/// cases a caller answers the same way — a bot no session ever announced anything
 	/// for, a bot the file does not hold, and text this build cannot read — because
 	/// none of them has a command to offer, and a menu built from broken JSON would
-	/// be worse than the empty one.
-	pub async fn bot_commands(&self, id: String) -> Result<Vec<String>, DatabaseError> {
+	/// be worse than the empty one. A row written before descriptions were asked for
+	/// holds bare names, and still reads: see [`AgentCommand`].
+	pub async fn bot_commands(&self, id: String) -> Result<Vec<AgentCommand>, DatabaseError> {
 		self.call(move |connection| {
 			let stored: Option<String> = connection
 				.query_row("SELECT commands FROM bots WHERE id = ?1", [id], |row| row.get(0))
@@ -1097,49 +1099,81 @@ mod tests {
 
 		assert_eq!(
 			repository.bot_commands(created.id.clone()).await.expect("the commands"),
-			Vec::<String>::new(),
+			Vec::<AgentCommand>::new(),
 			"a bot no session has announced anything for offers a command"
 		);
 
 		repository
 			.record_bot_commands(
 				created.id.clone(),
-				vec!["review".to_owned(), "compact".to_owned()],
+				vec![AgentCommand::named("review"), AgentCommand::named("compact")],
 			)
 			.await
 			.expect("the first session's commands");
 
 		assert_eq!(
 			repository.bot_commands(created.id.clone()).await.expect("the commands"),
-			vec!["review".to_owned(), "compact".to_owned()],
+			vec![AgentCommand::named("review"), AgentCommand::named("compact")],
 		);
 
 		repository
-			.record_bot_commands(created.id.clone(), vec!["status".to_owned()])
+			.record_bot_commands(created.id.clone(), vec![AgentCommand::named("status")])
 			.await
 			.expect("the next session's commands");
 
 		assert_eq!(
 			repository.bot_commands(created.id.clone()).await.expect("the commands"),
-			vec!["status".to_owned()],
+			vec![AgentCommand::named("status")],
 			"an announcement was added to the one before it instead of replacing it"
 		);
 		assert_eq!(
 			repository.bot_commands(silent.id).await.expect("the commands"),
-			Vec::<String>::new(),
+			Vec::<AgentCommand>::new(),
 			"one bot's session announced for another"
 		);
 		assert_eq!(
 			repository.bot_commands("missing".to_owned()).await.expect("the commands"),
-			Vec::<String>::new(),
+			Vec::<AgentCommand>::new(),
 			"a bot the file does not hold offered a command"
 		);
 
-		let refused =
-			repository.record_bot_commands("missing".to_owned(), vec!["review".to_owned()]).await;
+		let refused = repository
+			.record_bot_commands("missing".to_owned(), vec![AgentCommand::named("review")])
+			.await;
 		assert!(
 			format!("{refused:?}").contains("UnknownBot"),
 			"commands were written for a bot the file does not hold: {refused:?}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// The shape the column was written in before descriptions were asked for: a bare
+	/// list of names. Those rows outlive the build that wrote them, and a reader that
+	/// refused them would empty the menu of every bot an installed build ever spoke
+	/// for. They read as the commands they are, with nothing said about them.
+	#[tokio::test]
+	async fn commands_the_column_holds_as_bare_names_are_offered_as_commands() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let id = created.id.clone();
+		repository
+			.call(move |connection| {
+				connection.execute(
+					r#"UPDATE bots SET commands = '["review","compact"]' WHERE id = ?1"#,
+					[&id],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the shape an older build wrote");
+
+		assert_eq!(
+			repository.bot_commands(created.id).await.expect("the commands"),
+			vec![AgentCommand::named("review"), AgentCommand::named("compact")]
 		);
 
 		drop(database);
@@ -1170,7 +1204,7 @@ mod tests {
 
 		assert_eq!(
 			repository.bot_commands(created.id).await.expect("the commands"),
-			Vec::<String>::new()
+			Vec::<AgentCommand>::new()
 		);
 
 		drop(database);

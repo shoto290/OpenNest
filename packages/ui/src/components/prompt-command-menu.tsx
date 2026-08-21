@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { POPUP_CLASS } from "@workspace/ui/components/settings-styles"
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { useDismiss } from "@workspace/ui/lib/hooks/use-dismiss"
 import { cn } from "@workspace/ui/lib/utils"
@@ -18,9 +19,15 @@ const scrollActiveIntoView = (row: HTMLButtonElement | null) => {
 	row?.scrollIntoView({ block: "nearest" })
 }
 
+/** A row of the menu: the name the reader types, and the one line said about it. */
+export interface PromptCommandOption {
+	name: string
+	description?: string
+}
+
 export interface PromptCommandMenuProps {
-	/** Command names, rendered in the order given. */
-	commands: string[]
+	/** Commands, rendered in the order given. */
+	commands: PromptCommandOption[]
 	open: boolean
 	/** Filters the list, case-insensitively, on a contained match. */
 	query: string
@@ -50,7 +57,7 @@ export function PromptCommandMenu({
 	const matches = useMemo(() => {
 		const needle = query.toLocaleLowerCase()
 		return commands.filter((command) =>
-			command.toLocaleLowerCase().includes(needle),
+			command.name.toLocaleLowerCase().includes(needle),
 		)
 	}, [commands, query])
 
@@ -77,7 +84,7 @@ export function PromptCommandMenu({
 			event.preventDefault()
 			event.stopPropagation()
 
-			if (step === undefined) onSelect(matches[active])
+			if (step === undefined) onSelect(matches[active].name)
 			else setActiveIndex((active + step + matches.length) % matches.length)
 		}
 
@@ -102,7 +109,10 @@ export function PromptCommandMenu({
 						transition={reduce ? TRANSITION_NONE : SPRING_PANEL}
 						onPointerDown={(event) => event.preventDefault()}
 						style={{ transformOrigin: "bottom left" }}
-						className="absolute bottom-full left-0 z-50 mb-2 min-w-64 max-w-full overflow-hidden rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+						className={cn(
+							POPUP_CLASS,
+							"absolute bottom-full left-0 z-50 mb-2 min-w-64 max-w-[min(24rem,100%)] overflow-hidden rounded-xl p-1.5",
+						)}
 					>
 						<div
 							role="listbox"
@@ -112,7 +122,7 @@ export function PromptCommandMenu({
 						>
 							{matches.map((command, index) => (
 								<button
-									key={command}
+									key={command.name}
 									ref={index === active ? scrollActiveIntoView : undefined}
 									type="button"
 									role="option"
@@ -129,13 +139,18 @@ export function PromptCommandMenu({
 											setActiveIndex(index)
 										}
 									}}
-									onClick={() => onSelect(command)}
+									onClick={() => onSelect(command.name)}
 									className={cn(
-										"flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-foreground text-sm outline-none",
+										"flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-1.5 text-left text-foreground text-sm outline-none",
 										index === active && "bg-muted",
 									)}
 								>
-									<span className="truncate">{command}</span>
+									<span className="truncate">{command.name}</span>
+									{command.description ? (
+										<span className="truncate text-muted-foreground text-xs">
+											{command.description}
+										</span>
+									) : null}
 								</button>
 							))}
 						</div>

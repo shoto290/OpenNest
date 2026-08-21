@@ -11,11 +11,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 use super::contract::{
-	ActivityEvent, ActivityKind, ActivityStatus, ChatMessage, AgentEvent, MessageCompletion,
+	ActivityEvent, ActivityKind, ActivityStatus, AgentEvent, ChatMessage, MessageCompletion,
 	MessageRole, PermissionRequest, TurnEnded, TurnOutcome,
 };
 use super::protocol::{
-	ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent, SystemFrame,
+	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent, SystemFrame,
 };
 use super::redact;
 
@@ -130,6 +130,7 @@ impl Translator {
 				}
 				self.on_result(result.subtype.as_deref(), result.is_error)
 			}
+			Frame::Commands(frame) => Self::on_commands(frame),
 			Frame::ControlRequest(request) => {
 				self.on_control_request(request.request_id, request.request)
 			}
@@ -139,26 +140,25 @@ impl Translator {
 		}
 	}
 
-	/// The id is announced once; the command list belongs to the child that just
-	/// spoke, so every init frame republishes it.
-	///
-	/// A frame naming none says nothing rather than saying "none": the list is kept
-	/// against the bot from one launch to the next, and a child that leaves the key
-	/// out — or sets it to null — would otherwise erase what the bot answered to for
-	/// good. The frame is still read either way, since the session id rides on it.
+	/// The id is announced once, off the init frame it rides on.
 	fn on_system(&mut self, frame: SystemFrame) -> Vec<AgentEvent> {
 		if frame.subtype.as_deref() != Some("init") {
 			return Vec::new();
 		}
-		let mut events = Vec::new();
-		if let Some(session_id) = frame.session_id.filter(|_| self.session_id.is_none()) {
-			self.session_id = Some(session_id.clone());
-			events.push(AgentEvent::SessionReady { session_id, resumed: self.resumed });
+		let Some(session_id) = frame.session_id.filter(|_| self.session_id.is_none()) else {
+			return Vec::new();
+		};
+		self.session_id = Some(session_id.clone());
+		vec![AgentEvent::SessionReady { session_id, resumed: self.resumed }]
+	}
+
+	/// The command list belongs to the child that just spoke, so every frame naming
+	/// one republishes it. An empty list says nothing rather than saying "none".
+	fn on_commands(frame: CommandsFrame) -> Vec<AgentEvent> {
+		if frame.commands.is_empty() {
+			return Vec::new();
 		}
-		if let Some(commands) = frame.slash_commands.filter(|listed| !listed.is_empty()) {
-			events.push(AgentEvent::CommandsListed { commands });
-		}
-		events
+		vec![AgentEvent::CommandsListed { commands: frame.commands }]
 	}
 
 	fn on_stream(&mut self, event: StreamEvent) -> Vec<AgentEvent> {
@@ -337,6 +337,7 @@ fn new_id() -> String {
 mod tests {
 	use serde_json::json;
 
+	use super::super::contract::AgentCommand;
 	use super::*;
 
 	const ANSWER: &str = "Both files are in place.";
@@ -451,9 +452,12 @@ mod tests {
 		object
 	}
 
-	fn init(session_id: &str, slash_commands: Option<Value>) -> Value {
-		let frame = json!({ "type": "system", "subtype": "init", "session_id": session_id });
-		with_field(frame, "slash_commands", slash_commands)
+	fn init(session_id: &str) -> Value {
+		json!({ "type": "system", "subtype": "init", "session_id": session_id })
+	}
+
+	fn commands(listed: Option<Value>) -> Value {
+		with_field(json!({ "type": "commands" }), "commands", listed)
 	}
 
 	fn message(kind: &str, content: Option<Value>) -> Value {
@@ -541,46 +545,61 @@ mod tests {
 		}
 	}
 
-	/// The commands reach the reader in the order the child named them, next to the
-	/// announcement the init frame already carried — neither takes the other's place.
-	/// A resumed session is told the same thing a fresh one is: whichever child was
-	/// reached is the one that decides what can be run.
+	/// The id is announced once, whether the child is a fresh one or the one a
+	/// resume reached: whichever was reached is the one the reader is talking to.
 	#[test]
-	fn an_init_frame_lists_the_commands_it_carries() {
-		for (resumed, session_id, commands) in [
-			(false, "s-1", vec!["review".to_owned(), "commit".to_owned(), "plan".to_owned()]),
-			(true, "carried-over", vec!["resume".to_owned()]),
-		] {
+	fn an_init_frame_announces_the_session_it_carries() {
+		for (resumed, session_id) in [(false, "s-1"), (true, "carried-over")] {
 			let mut translator = Translator::new(resumed);
 
-			let events = ingest(&mut translator, vec![init(session_id, Some(json!(commands)))]);
+			let events = ingest(&mut translator, vec![init(session_id)]);
 
 			assert_eq!(
 				events,
-				vec![
-					AgentEvent::SessionReady { session_id: session_id.to_owned(), resumed },
-					AgentEvent::CommandsListed { commands },
-				]
+				vec![AgentEvent::SessionReady { session_id: session_id.to_owned(), resumed }]
 			);
 		}
 	}
 
-	/// A build naming none — key left out, set to null, or an empty list — lists
+	/// The commands reach the reader in the order the child named them, each with
+	/// what the child said it does — and a command the child says nothing about is
+	/// carried just as far as one it describes.
+	#[test]
+	fn a_commands_frame_lists_what_it_carries() {
+		let mut translator = Translator::new(false);
+
+		let events = ingest(
+			&mut translator,
+			vec![commands(Some(json!([
+				{ "name": "review", "description": "Review the pending changes" },
+				{ "name": "plan" },
+			])))],
+		);
+
+		assert_eq!(
+			events,
+			vec![AgentEvent::CommandsListed {
+				commands: vec![
+					AgentCommand {
+						name: "review".to_owned(),
+						description: Some("Review the pending changes".to_owned()),
+					},
+					AgentCommand::named("plan"),
+				],
+			}]
+		);
+	}
+
+	/// A child naming none — key left out, set to null, or an empty list — lists
 	/// nothing at all. What a bot answers to is held against it between launches, so
 	/// a frame that names none is a frame with nothing to say about it rather than
-	/// one taking the last list away. The frame is still read: a dropped init frame
-	/// would take the session id down with it.
+	/// one taking the last list away.
 	#[test]
-	fn an_init_frame_carrying_no_commands_lists_nothing() {
-		for slash_commands in [None, Some(Value::Null), Some(json!([]))] {
+	fn a_frame_carrying_no_commands_lists_nothing() {
+		for listed in [None, Some(Value::Null), Some(json!([]))] {
 			let mut translator = Translator::new(false);
 
-			let events = ingest(&mut translator, vec![init("s-1", slash_commands)]);
-
-			assert_eq!(
-				events,
-				vec![AgentEvent::SessionReady { session_id: "s-1".into(), resumed: false }]
-			);
+			assert!(ingest(&mut translator, vec![commands(listed)]).is_empty());
 		}
 	}
 

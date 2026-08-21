@@ -22,6 +22,7 @@ use super::contract::{
 	Bot, BotIdentity, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage,
 	RuntimeSession, TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
+use crate::agent::contract::AgentCommand;
 use crate::attachments;
 use crate::avatars;
 use crate::bundles;
@@ -269,7 +270,7 @@ pub async fn conversation_delete_bot<R: Runtime>(
 }
 
 /// The slash commands a session announced, kept against the bot it answered for.
-/// A child names them on its init frame and nowhere else, and it is only spawned by
+/// A child names them once its session is up and nowhere else, and it is only spawned by
 /// a prompt — so a bot the reader has just opened, and every bot after a restart,
 /// has no session of its own to ask. What the last one named is what the composer
 /// offers until a new one names its own.
@@ -277,7 +278,7 @@ pub async fn conversation_delete_bot<R: Runtime>(
 pub async fn conversation_record_bot_commands(
 	state: State<'_, db::DatabaseState>,
 	bot_id: String,
-	commands: Vec<String>,
+	commands: Vec<AgentCommand>,
 ) -> Result<(), TranscriptStoreError> {
 	Ok(ready(&state)?.conversations().record_bot_commands(bot_id, commands).await?)
 }
@@ -288,7 +289,7 @@ pub async fn conversation_record_bot_commands(
 pub async fn conversation_bot_commands(
 	state: State<'_, db::DatabaseState>,
 	bot_id: String,
-) -> Result<Vec<String>, TranscriptStoreError> {
+) -> Result<Vec<AgentCommand>, TranscriptStoreError> {
 	Ok(ready(&state)?.conversations().bot_commands(bot_id).await?)
 }
 

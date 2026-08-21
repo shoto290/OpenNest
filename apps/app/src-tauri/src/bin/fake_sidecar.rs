@@ -190,6 +190,22 @@ impl Run {
 	}
 }
 
+/// What the real sidecar reads off its provider once the session is up, in the
+/// frame it announces it on: two commands, one described and one not, so a host
+/// reading the frame is read against both shapes it may carry.
+fn emit_commands(key: &str) {
+	emit(
+		key,
+		json!({
+			"type": "commands",
+			"commands": [
+				{ "name": "review", "description": "Review the pending changes" },
+				{ "name": "plan" }
+			]
+		}),
+	);
+}
+
 fn emit_init(key: &str, run: &Run) {
 	emit(
 		key,
@@ -325,6 +341,7 @@ fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 			run.announced = true;
 			emit_init(key, &run);
 		}
+		"commands" => emit_commands(key),
 		_ => {}
 	}
 

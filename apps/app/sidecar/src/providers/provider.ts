@@ -21,6 +21,14 @@ export type PermissionDecision =
 
 export type SessionFrame = Record<string, unknown>
 
+/** A slash command as the host lists it: what the reader types, and the one line
+ * the provider said about it. Mirrors `AgentCommand` on the Rust side — a
+ * provider naming no description leaves the key out. */
+export type AgentCommand = {
+	name: string
+	description?: string
+}
+
 export type EmitFrame = (frame: SessionFrame) => void
 
 export type AgentSession = {

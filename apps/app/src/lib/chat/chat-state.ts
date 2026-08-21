@@ -1,6 +1,7 @@
 import type {
 	ActivityEvent,
 	ActivityStatus,
+	AgentCommand,
 	AgentEvent,
 	ConnectionState,
 	MessageCompletion,
@@ -37,11 +38,11 @@ export type ChatState = {
 	sessionOpen: boolean
 	sessionId: string | null
 	/** The slash commands last announced for this bot, as the session named them:
-	 * without a leading slash. A session only announces them on its init frame, and
-	 * it is only started by a prompt — so what a session named outlives it, both
+	 * without a leading slash. A session only announces them once it is up, and it
+	 * is only started by a prompt — so what a session named outlives it, both
 	 * across a reset and across a launch, and the next announcement replaces it
 	 * whole. Empty is a bot no session has ever announced anything for. */
-	commands: string[]
+	commands: AgentCommand[]
 	binaryVersion: string | null
 	/** The one visible chat, resolved from the store before anything is written. */
 	conversationId: string | null
@@ -71,14 +72,14 @@ export type ChatAction =
 	 * process's to begin with. `sessionId` is the id the new session resumes: the
 	 * child only re-announces it on the first prompt, so dropping it here would
 	 * write `null` over a session that is very much alive. The commands are kept for
-	 * the same reason: the next child re-announces them on its init frame, and until
+	 * the same reason: the next child re-announces its own, and until
 	 * then the last list named is the only one there is. */
 	| { type: "sessionReset"; runtime: RuntimeScope; sessionId: string | null }
 	| { type: "sessionOpened" }
 	/** The commands the store was holding for this bot, read when it was opened.
 	 * They stand until a session of its own announces its own, which is what the
 	 * composer offers before any process has been started. */
-	| { type: "commandsRecalled"; commands: string[] }
+	| { type: "commandsRecalled"; commands: AgentCommand[] }
 	| { type: "conversationOpened"; conversationId: string }
 	/** The durable transcript moved. The controller hands the whole selection
 	 * rather than a patch: the transcript reducer owns order and identity. */
@@ -169,10 +170,17 @@ export function isSameRuntimeScope(
  * child's own and the menu offers it as given, so a list rearranged is a different
  * list. Read by the reducer to publish nothing when what arrives is what is already
  * held, and by the controller to write nothing when it is what the store holds. */
-export function isSameCommandList(left: string[], right: string[]): boolean {
+export function isSameCommandList(
+	left: AgentCommand[],
+	right: AgentCommand[],
+): boolean {
 	return (
 		left.length === right.length &&
-		left.every((command, index) => command === right[index])
+		left.every(
+			(command, index) =>
+				command.name === right[index].name &&
+				command.description === right[index].description,
+		)
 	)
 }
 
@@ -323,7 +331,7 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 /** The same list again — a session re-announcing what was recalled, or a recall
  * answering what a session already named — is not a change: the state is handed
  * back as it stands, so nothing re-renders for a menu that reads the same. */
-function applyCommands(state: ChatState, commands: string[]): ChatState {
+function applyCommands(state: ChatState, commands: AgentCommand[]): ChatState {
 	return isSameCommandList(state.commands, commands)
 		? state
 		: { ...state, commands }
