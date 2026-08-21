@@ -300,8 +300,12 @@ pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// This is the whole of the direction of truth: a body edited by hand, by another
 /// tool, or by an editor left open is adopted the next time anything reads or starts
 /// the bot, rather than being written over by a value it never saw.
+///
+/// The two are compared as the file holds them, because the file holds the brief
+/// trimmed — see [`agent`]. A reader who has just typed a space is otherwise a hand
+/// edit against their own file, and the space goes back out from under them.
 pub fn adopted(root: &Path, bot: &Bot) -> Option<String> {
-	instructions(root, &bot.id).filter(|found| found != &bot.instructions)
+	instructions(root, &bot.id).filter(|found| found != bot.instructions.trim())
 }
 
 /// What a write submitting a whole identity should lay down. The panel wins when the
@@ -1110,6 +1114,26 @@ mod tests {
 		bot.name = "Fig".to_owned();
 		write(&root, &bot).expect("the rename is written");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer only in French."));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The space a reader has just typed is not a hand edit. The agent file holds the
+	/// brief trimmed, so a brief the reader is still in the middle of writing differs
+	/// from its own file by the space at the end of it — and adopting that difference
+	/// takes the space back out from under them, one keystroke after they typed it.
+	#[test]
+	fn a_brief_ending_in_a_space_is_not_taken_for_a_hand_edit() {
+		let root = a_root("still-typing");
+		let bot = a_bot("Bean", "Parles ");
+		write(&root, &bot).expect("the bundle is written");
+
+		assert_eq!(adopted(&root, &bot), None, "the space the reader typed was reported as a hand edit");
+		assert_eq!(
+			reconciled(&root, &bot, "Parles "),
+			"Parles ",
+			"the space the reader typed was taken back out"
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}
