@@ -16,6 +16,7 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
+import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
@@ -56,6 +57,7 @@ export function App() {
 	)
 	const roster = useRoster(store)
 	const skills = useBotSkills(store)
+	const mcpServers = useBotMcpServers(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const theme = useTheme()
@@ -80,14 +82,15 @@ export function App() {
 		void user.controller.load()
 	}, [user.controller])
 
-	// The skills follow the selection for the reason the conversation does: they live
-	// in the selected bot's own bundle, so the panel opens on what that bot carries
-	// rather than on what the bot before it did.
+	// The skills and the MCP servers follow the selection for the reason the
+	// conversation does: both live in the selected bot's own bundle, so the panels
+	// open on what that bot carries rather than on what the bot before it did.
 	useEffect(() => {
 		if (selectedBotId) {
 			void skills.controller.open(selectedBotId)
+			void mcpServers.controller.open(selectedBotId)
 		}
-	}, [skills.controller, selectedBotId])
+	}, [mcpServers.controller, skills.controller, selectedBotId])
 
 	// The conversation follows the selection: opening a bot paints its transcript and
 	// puts a process of its own behind it. Coming back to one that is already
@@ -239,6 +242,7 @@ export function App() {
 			the width back without touching what is selected or where it is scrolled. */}
 			{selected ? (
 				<BotSettingsDialog
+					mcpServers={mcpServers.state.servers}
 					models={modelOptionsFor(selected.model, catalogue)}
 					onAvatarUpload={(file) => {
 						void roster.controller.uploadAvatar(selected.id, file)
@@ -257,6 +261,9 @@ export function App() {
 							chat.controller.redescribe(selected.id)
 						}
 					}}
+					onMcpServerChange={mcpServers.controller.rename}
+					onMcpServerCreate={mcpServers.controller.create}
+					onMcpServerDelete={mcpServers.controller.remove}
 					onSkillChange={skills.controller.describe}
 					onSkillCreate={skills.controller.create}
 					onSkillDelete={skills.controller.remove}

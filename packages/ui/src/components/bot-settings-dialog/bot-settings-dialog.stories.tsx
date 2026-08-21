@@ -20,6 +20,7 @@ import {
 	type BotSettingsDialogProps,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-dialog"
+import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 
 /** The id the store minted for the bot this dialog edits. It is what the shape of
@@ -136,6 +137,10 @@ const meta = preview.meta({
 		onBrowseWorkingDirectory: fn(),
 		onDelete: fn(),
 		skills: BOT_SKILLS,
+		mcpServers: BOT_MCP_SERVERS,
+		onMcpServerCreate: fn(),
+		onMcpServerChange: fn(),
+		onMcpServerDelete: fn(),
 		onSkillCreate: fn(),
 		onSkillChange: fn(),
 		onSkillPreloadedChange: fn(),
@@ -178,7 +183,7 @@ export const Rail = meta.story({
 		docs: {
 			description: {
 				story:
-					"The five groups and the way between them. Check the order — General, Appearance, Instructions, Runtime, then a rule and Danger zone alone below it, the only item in destructive tone. One tab stop reaches the rail and the arrow keys walk it, so a keyboard reader crosses the whole dialog in two stops rather than five. Walking is not opening: focus moves with the arrows and the group opens on Enter, so nobody drags a grid of animals or a model list past on their way to the one they wanted. No item carries a tooltip at this width — its name is already on the screen. Pick `IconRail` for the width where the name leaves it. The breadcrumb is unchanged whichever group is open: it names the bot, not the group.",
+					"The six groups and the way between them. Check the order — General, Appearance, Instructions, Skills, MCP servers, Runtime, then a rule and Danger zone alone below it, the only item in destructive tone. One tab stop reaches the rail and the arrow keys walk it, so a keyboard reader crosses the whole dialog in two stops rather than five. Walking is not opening: focus moves with the arrows and the group opens on Enter, so nobody drags a grid of animals or a model list past on their way to the one they wanted. No item carries a tooltip at this width — its name is already on the screen. Pick `IconRail` for the width where the name leaves it. The breadcrumb is unchanged whichever group is open: it names the bot, not the group.",
 			},
 		},
 	},
@@ -193,6 +198,7 @@ export const Rail = meta.story({
 			"Appearance",
 			"Instructions",
 			"Skills",
+			"MCP servers",
 			"Runtime",
 			"Danger zone",
 		])

@@ -32,12 +32,13 @@ type BotSkillDraft = {
 	body: string
 }
 
-/** A skill name reduced to what the skill format accepts: lowercase letters,
- * numbers and hyphens. It is an identifier rather than a title — the file is refused
- * outright for anything else — so the field writes what a reader types into the only
- * shape it may take instead of letting them find out from a broken skill. What the
- * bot reads to decide when to reach for a skill is its description, not this. */
-const toSkillName = (value: string) =>
+/** A name in a bot's bundle reduced to what the bundle accepts: lowercase letters,
+ * numbers and hyphens. It is an identifier rather than a title — a skill's directory
+ * is refused outright for anything else, and a server's name is the key it is
+ * declared and connected under — so the field writes what a reader types into the
+ * only shape it may take instead of letting them find out from a broken bundle. What
+ * the bot reads to decide when to reach for a skill is its description, not this. */
+const toBundleName = (value: string) =>
 	value.toLowerCase().replace(/[^a-z0-9-]+/g, "-")
 
 /** A skill of the bot's, as the panel lists and edits it. `id` is its identity and
@@ -48,6 +49,49 @@ type BotSkillItem = BotSkillDraft & {
 	/** Whether the body is carried into the bot's prompt on every turn. */
 	isPreloaded: boolean
 }
+
+/** An MCP server the bot's bundle declares, as the panel lists and edits it. The
+ * name is the identity — it is the key the server is written under — so renaming one
+ * moves it, unlike a skill, whose directory holds still. The configuration stays
+ * `Record<string, unknown>` all the way to the field: the shape belongs to the
+ * transport, and a local server naming a command has nothing in common with a remote
+ * one naming a URL. */
+type BotMcpServerItem = {
+	name: string
+	config: Record<string, unknown>
+}
+
+/** A server being written. Its configuration is text rather than an object because
+ * half-typed JSON is not one — the editor holds what the reader typed and parses it
+ * on every keystroke, so an unfinished brace is a message rather than a lost
+ * field. */
+type BotMcpServerDraft = {
+	name: string
+	config: string
+}
+
+/** What the store will take as a configuration, and what this side will read one
+ * out of: an object, and nothing an array or a bare value could be mistaken for. */
+const isConfigObject = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value)
+
+/** What the reader typed, read as a configuration, or `null` for anything the store
+ * would refuse: text that is not JSON at all, and JSON that is not an object. Both
+ * are one answer here because both mean the same thing to the panel — there is
+ * nothing to preview and nothing to write. */
+const parseMcpServerConfig = (text: string): Record<string, unknown> | null => {
+	try {
+		const parsed: unknown = JSON.parse(text)
+		return isConfigObject(parsed) ? parsed : null
+	} catch {
+		return null
+	}
+}
+
+/** A configuration laid out to be read and edited. Indented rather than compact:
+ * this is the field a reader checks a command in before it runs on their machine. */
+const toMcpServerConfigText = (config: Record<string, unknown>) =>
+	JSON.stringify(config, null, 2)
 
 type BotSettingsValue = {
 	identity: BotIdentity
@@ -65,9 +109,14 @@ export {
 	BOT_IDENTITY_ANIMALS,
 	type BotAvatarBlot,
 	type BotIdentity,
+	type BotMcpServerDraft,
+	type BotMcpServerItem,
 	type BotModelOption,
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
-	toSkillName,
+	isConfigObject,
+	parseMcpServerConfig,
+	toBundleName,
+	toMcpServerConfigText,
 }

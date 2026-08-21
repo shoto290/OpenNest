@@ -3,6 +3,12 @@ const FIELD_LABEL_CLASS = "font-medium text-foreground text-xs"
 const FIELD_CONTROL_CLASS =
 	"w-full rounded-xl border border-input bg-background px-3 py-2 text-foreground text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
 
+/** A control holding something that cannot be used. The edge carries it rather than
+ * the text: what a reader typed stays legible, and the message under the field is
+ * what says why. */
+const FIELD_CONTROL_INVALID_CLASS =
+	"border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30"
+
 /** The marks an option wears, whatever shape it is laid out in — a tile, a row.
  * The chosen one is the filled surface, the way a selected row in the system's
  * select is: one neutral fill and a name that stops being muted. No outline around
@@ -58,6 +64,7 @@ export {
 	BACKDROP_CLASS,
 	DIALOG_POPUP_CLASS,
 	FIELD_CONTROL_CLASS,
+	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
 	FIELD_OPTION_CLASS,
 	FIELD_OPTION_MARKS_CLASS,
