@@ -19,8 +19,9 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
-	Bot, BotIdentity, Chat, ContextCheckpoint, NewAssistantMessage, NewTurn, NewUserMessage,
-	RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage, TranscriptStoreError,
+	Bot, BotIdentity, Chat, ContextCheckpoint, McpServer, NewAssistantMessage, NewTurn,
+	NewUserMessage, RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage,
+	TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
@@ -296,7 +297,7 @@ pub async fn conversation_create_bot_skill<R: Runtime>(
 	bot_id: String,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::create_skill(&root, &bot, &draft.into())).map(Skill::from)
 }
@@ -312,7 +313,7 @@ pub async fn conversation_update_bot_skill<R: Runtime>(
 	skill_id: String,
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::update_skill(&root, &bot, &skill_id, &draft.into())).map(Skill::from)
 }
@@ -329,7 +330,7 @@ pub async fn conversation_set_bot_skill_preloaded<R: Runtime>(
 	skill_id: String,
 	is_preloaded: bool,
 ) -> Result<Skill, TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::set_skill_preloaded(&root, &bot, &skill_id, is_preloaded)).map(Skill::from)
 }
@@ -342,23 +343,71 @@ pub async fn conversation_delete_bot_skill<R: Runtime>(
 	bot_id: String,
 	skill_id: String,
 ) -> Result<(), TranscriptStoreError> {
-	let root = skills_root(&app)?;
+	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::remove_skill(&root, &bot, &skill_id))
 }
 
+/// Every MCP server the bot's bundle declares, by the name each is declared under. A
+/// `.mcp.json` a hand wrote is read the same way, and a host with nowhere to keep
+/// bundles answers none rather than refusing — the same as the skills above.
+#[tauri::command]
+pub async fn conversation_bot_mcp_servers<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+) -> Result<Vec<McpServer>, TranscriptStoreError> {
+	let Some(root) = bundles::root(&app) else {
+		return Ok(Vec::new());
+	};
+	Ok(bundles::mcp_servers(&root, &bot_id).into_iter().map(McpServer::from).collect())
+}
+
+/// The server written under the name given, added or replaced. Every other server and
+/// every key of the file this app does not own stay where they were.
+///
+/// A configuration that is not a JSON object is refused, and the refusal carries the
+/// shape that was wrong rather than the value: a configuration is a command to run
+/// and an environment that often holds a token, and neither belongs in a message that
+/// leaves the host.
+#[tauri::command]
+pub async fn conversation_set_bot_mcp_server<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	name: String,
+	config: serde_json::Value,
+) -> Result<McpServer, TranscriptStoreError> {
+	let root = writable_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::set_mcp_server(&root, &bot, &name, &config)).map(McpServer::from)
+}
+
+/// The server taken out of the file, and the rest of it left as it was. The last one
+/// going takes the file with it, and the manifest stops pointing at it.
+#[tauri::command]
+pub async fn conversation_delete_bot_mcp_server<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	name: String,
+) -> Result<(), TranscriptStoreError> {
+	let root = writable_root(&app)?;
+	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	bundled(bundles::remove_mcp_server(&root, &bot, &name))
+}
+
 /// Where this install keeps bundles, for a write that has nowhere else to land. A
 /// host with no application data directory is refused rather than answered: a skill
-/// is a file in a bundle, and there is no bundle to put one in.
-fn skills_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, TranscriptStoreError> {
+/// and a server are both files in a bundle, and there is no bundle to put one in.
+fn writable_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, TranscriptStoreError> {
 	bundles::root(app).ok_or_else(|| TranscriptStoreError::UnwritableBundle {
-		detail: "there is no application data directory to keep skills in".to_owned(),
+		detail: "there is no application data directory to keep bundles in".to_owned(),
 	})
 }
 
-/// The bot a skill write is for, as the file holds it. Read for every write because
-/// changing a skill rewrites the bot's agent file, and that file is generated from
-/// the row: a bot the file no longer holds is refused before anything is written.
+/// The bot a bundle write is for, as the file holds it. Read for every write because
+/// the files it lays down are generated from the row: a bot the file no longer holds
+/// is refused before anything is written.
 async fn bot_row(database: &db::Database, bot_id: &str) -> Result<StoredBot, TranscriptStoreError> {
 	database
 		.conversations()
@@ -367,9 +416,11 @@ async fn bot_row(database: &db::Database, bot_id: &str) -> Result<StoredBot, Tra
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.to_owned() })
 }
 
-/// What the disk would not take, in the frontend's vocabulary. A skill id naming
-/// none of the bot's own skills lands here too: the file is not there to be written,
-/// which for a caller holding a list one gesture out of date is the same answer.
+/// What the disk would not take, in the frontend's vocabulary. A name none of the
+/// bot's own skills or servers answers to lands here too: the file is not there to be
+/// written, which for a caller holding a list one gesture out of date is the same
+/// answer. So does a server configuration the bundle refused, which is a caller's to
+/// fix by offering another shape.
 fn bundled<T>(outcome: std::io::Result<T>) -> Result<T, TranscriptStoreError> {
 	outcome.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }

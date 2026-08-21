@@ -74,6 +74,8 @@ const SKILL_DRAFT: BotSkillDraft = {
 	body: "Bake at 220 degrees.",
 }
 
+const SERVER = { command: "atlas-mcp", args: ["--stdio"] }
+
 const WRITES: WriteCase[] = [
 	{
 		member: "bots",
@@ -130,6 +132,27 @@ const WRITES: WriteCase[] = [
 		call: [
 			"conversation_delete_bot_skill",
 			{ botId: "b-1", skillId: "baking" },
+		],
+	},
+	{
+		member: "botMcpServers",
+		write: () => conversationStore.botMcpServers("b-1"),
+		call: ["conversation_bot_mcp_servers", { botId: "b-1" }],
+	},
+	{
+		member: "setBotMcpServer",
+		write: () => conversationStore.setBotMcpServer("b-1", "atlas", SERVER),
+		call: [
+			"conversation_set_bot_mcp_server",
+			{ botId: "b-1", name: "atlas", config: SERVER },
+		],
+	},
+	{
+		member: "deleteBotMcpServer",
+		write: () => conversationStore.deleteBotMcpServer("b-1", "atlas"),
+		call: [
+			"conversation_delete_bot_mcp_server",
+			{ botId: "b-1", name: "atlas" },
 		],
 	},
 	{

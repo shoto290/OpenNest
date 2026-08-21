@@ -93,6 +93,19 @@ export type BotSkillDraft = {
 	body: string
 }
 
+/** An MCP server a bot's bundle declares. Like a skill it lives in the bundle and
+ * nowhere else: no row holds any of it, and a server file a hand wrote is answered
+ * beside what the app wrote.
+ *
+ * `name` is what it is declared under and what it connects as, and `config` is what
+ * the file says, verbatim — a command to run, its arguments and its environment, or
+ * whatever else a transport asks for. The shape is the agent's to define, so nothing
+ * here narrows it past being an object; the host refuses anything that is not one. */
+export type BotMcpServer = {
+	name: string
+	config: Record<string, unknown>
+}
+
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
 /** A run just opened in a participant's lineage. `seq` is the number the lineage

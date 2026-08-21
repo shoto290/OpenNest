@@ -27,8 +27,8 @@
 //! missing, not the record the bundle is kept in step with.
 //!
 //! **Only generated files are written.** A bundle is a directory somebody else also
-//! writes into — a skill dropped in by hand, an `.mcp.json`, an executable the next
-//! wave puts there — so nothing here removes what it did not put down, and the
+//! writes into — a skill dropped in by hand, an executable the next wave puts there
+//! — so nothing here removes what it did not put down, and the
 //! manifest keeps every key it did not set. The one file it takes away is the agent it
 //! generated under a name the bot has stopped answering to, and it knows that file
 //! because the frontmatter it wrote still carries the bot's id.
@@ -44,6 +44,12 @@
 //! before the opening marker and never anything after it — a write that read the
 //! region back as brief would carry the last write's copy into the next one, and the
 //! file would grow on every save.
+//!
+//! **A server reaches a bot through `.mcp.json`.** The one surface that raises a
+//! bot's capability rather than reducing it: a declared server starts a process on
+//! the reader's machine at the next launch. This module owns the `mcpServers` map in
+//! that file and nothing else in it, and the manifest's pointer at the file is a
+//! projection of whether the file is there.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -74,6 +80,14 @@ const AGENT_EXTENSION: &str = "md";
 /// by hand: the disk holds both the same way.
 const SKILLS_DIR: &str = "skills";
 const SKILL_NAME: &str = "SKILL.md";
+
+/// Where a bot's MCP servers are declared, and what the manifest points at so they
+/// are loaded with the bundle — measured connecting as `plugin:<bot id>:<server>`,
+/// see `agent/PLUGINS.md`. This module owns the `mcpServers` map inside that file
+/// and nothing else in it.
+const MCP_NAME: &str = ".mcp.json";
+const SERVERS_KEY: &str = "mcpServers";
+const MCP_SOURCE: &str = "./.mcp.json";
 
 /// What the marketplace calls itself, and what a reader would type after an `@`.
 const MARKETPLACE: &str = "opennest-bots";
@@ -256,12 +270,11 @@ pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// truth — and nothing about a skill is a reason to write a brief over the one the
 /// bot is really running on.
 fn write_briefed(root: &Path, bot: &Bot, brief: &str) -> std::io::Result<()> {
-	let manifest_path = dir(root, &bot.id).join(MANIFEST_DIR).join(MANIFEST_NAME);
 	let generated = generated_agent(root, &bot.id);
 	let agent_path = free_agent_path(root, bot, generated.as_deref());
 	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
 
-	private_files::replace(&manifest_path, manifest(&manifest_path, bot).as_bytes())?;
+	rewrite_manifest(root, bot)?;
 	private_files::replace(&agent_path, agent(root, bot, &name, brief).as_bytes())?;
 	if let Some(generated) = generated.filter(|path| path != &agent_path) {
 		let _ = fs::remove_file(generated);
@@ -383,18 +396,61 @@ fn describe(bot: &Bot) -> &str {
 /// The plugin is named by the bot's id rather than by the bot — a name changes, and
 /// two bots can share one, so neither the marketplace nor the promoted agent could be
 /// told apart by it. What the reader calls the bot travels as `displayName`.
-fn manifest(path: &Path, bot: &Bot) -> String {
-	let mut kept = fs::read_to_string(path)
-		.ok()
-		.and_then(|text| {
-			serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&text).ok()
-		})
-		.unwrap_or_default();
+fn manifest(path: &Path, bundle: &Path, bot: &Bot) -> String {
+	let mut kept = object_at(path);
 	kept.insert("name".to_owned(), bot.id.clone().into());
 	kept.insert("version".to_owned(), VERSION.into());
 	kept.insert("displayName".to_owned(), bot.name.clone().into());
 	kept.insert("description".to_owned(), describe(bot).into());
+	declare_servers(&mut kept, bundle);
 	serde_json::Value::Object(kept).to_string()
+}
+
+/// The manifest laid down again over whatever it says now, without touching the
+/// agent file. What a server write needs: the declaration is derived from the disk,
+/// and nothing about a server is a reason to rewrite a brief.
+fn rewrite_manifest(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	let bundle = dir(root, &bot.id);
+	let path = manifest_file(&bundle);
+	private_files::replace(&path, manifest(&path, &bundle, bot).as_bytes())
+}
+
+fn manifest_file(bundle: &Path) -> PathBuf {
+	bundle.join(MANIFEST_DIR).join(MANIFEST_NAME)
+}
+
+/// The manifest's pointer at the bundle's own server file, added while that file is
+/// there and the manifest carries no pointer of its own.
+///
+/// Never taken away here. A value written by hand cannot be told from this module's
+/// by looking at it, and a brief being saved is no reason to decide: the one write
+/// that knows the file has gone is the one that took it — see
+/// [`undeclare_servers`].
+fn declare_servers(kept: &mut serde_json::Map<String, serde_json::Value>, bundle: &Path) {
+	if bundle.join(MCP_NAME).is_file() && !kept.contains_key(SERVERS_KEY) {
+		kept.insert(SERVERS_KEY.to_owned(), MCP_SOURCE.into());
+	}
+}
+
+/// This module's own pointer taken back out once the file it pointed at has gone. A
+/// manifest left aimed at a file that is not there is a bundle that fails to load,
+/// and it is the one key this module removes at all.
+///
+/// Nothing happens while the file is still there, and a value the reader wrote
+/// themselves is left exactly where it is — it may be aimed at something this module
+/// knows nothing about.
+fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	let bundle = dir(root, &bot.id);
+	if bundle.join(MCP_NAME).is_file() {
+		return Ok(());
+	}
+	let path = manifest_file(&bundle);
+	let mut kept = object_at(&path);
+	if kept.get(SERVERS_KEY).and_then(serde_json::Value::as_str) != Some(MCP_SOURCE) {
+		return Ok(());
+	}
+	kept.remove(SERVERS_KEY);
+	private_files::replace(&path, serde_json::Value::Object(kept).to_string().as_bytes())
 }
 
 /// Frontmatter and body. Every value is emitted as a quoted scalar rather than
@@ -535,6 +591,119 @@ pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<(
 	let path = skill_dir(root, &bot.id, skill_id)?;
 	fs::remove_dir_all(path)?;
 	rewrite_agent(root, bot)
+}
+
+/// An MCP server the bot's bundle declares. `name` is the key it is declared under,
+/// which is the one name two of a bundle's servers cannot share and what it connects
+/// as — `plugin:<bot id>:<name>`. `config` is what the file says, verbatim: a command
+/// to run, its arguments and its environment, or whatever else a transport asks for.
+pub struct McpServer {
+	pub name: String,
+	pub config: serde_json::Value,
+}
+
+/// Every server the bot's bundle declares, by name. A `.mcp.json` a hand or another
+/// tool wrote is read the same way, and a bundle carrying none — which is every
+/// bundle until something writes one — declares none.
+pub fn mcp_servers(root: &Path, bot_id: &str) -> Vec<McpServer> {
+	declared(&mcp_file(root, bot_id))
+		.into_iter()
+		.map(|(name, config)| McpServer { name, config })
+		.collect()
+}
+
+/// The server written under the name given, added or replaced. Every other server in
+/// the file stays exactly as it was, and so does every key of the file this module
+/// does not own: it is read and edited, never written from a template.
+///
+/// A configuration that is not a JSON object is refused before anything is written.
+/// The refusal says what was wrong with the shape and never what was offered — a
+/// configuration is a command to run and an environment that often holds a token,
+/// and neither belongs in a message that travels.
+///
+/// The answer is the write rather than a read back off the disk, unlike
+/// [`written_skill`]: a skill goes into frontmatter this module has to spell and read
+/// again, and a configuration goes into the file as the JSON value it already is.
+pub fn set_mcp_server(
+	root: &Path,
+	bot: &Bot,
+	name: &str,
+	config: &serde_json::Value,
+) -> std::io::Result<McpServer> {
+	if !config.is_object() {
+		return Err(std::io::Error::new(
+			std::io::ErrorKind::InvalidInput,
+			"a server configuration must be a JSON object",
+		));
+	}
+	let path = mcp_file(root, &bot.id);
+	let mut servers = declared(&path);
+	servers.insert(name.to_owned(), config.clone());
+	write_servers(&path, servers)?;
+	rewrite_manifest(root, bot)?;
+	Ok(McpServer { name: name.to_owned(), config: config.clone() })
+}
+
+/// The server taken out of the file, and the rest of it left as it was. A name the
+/// bundle does not declare is `NotFound`, which is also what a caller holding a list
+/// one gesture out of date gets.
+pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<()> {
+	let path = mcp_file(root, &bot.id);
+	let mut servers = declared(&path);
+	if servers.remove(name).is_none() {
+		return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no such server"));
+	}
+	write_servers(&path, servers)?;
+	rewrite_manifest(root, bot)?;
+	undeclare_servers(root, bot)
+}
+
+/// The file with its `mcpServers` map replaced and every other key put back where it
+/// was found. The last server going takes the file with it, so a bundle declaring
+/// nothing is a bundle with no server file rather than one holding an empty map —
+/// unless the file carries keys of somebody else's, which are not this module's to
+/// take away with its own.
+fn write_servers(
+	path: &Path,
+	servers: serde_json::Map<String, serde_json::Value>,
+) -> std::io::Result<()> {
+	let mut kept = object_at(path);
+	if servers.is_empty() {
+		kept.remove(SERVERS_KEY);
+		if kept.is_empty() {
+			return match fs::remove_file(path) {
+				Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+				_ => Ok(()),
+			};
+		}
+	} else {
+		kept.insert(SERVERS_KEY.to_owned(), serde_json::Value::Object(servers));
+	}
+	private_files::replace(path, serde_json::Value::Object(kept).to_string().as_bytes())
+}
+
+fn mcp_file(root: &Path, bot_id: &str) -> PathBuf {
+	dir(root, bot_id).join(MCP_NAME)
+}
+
+/// What a server file declares, as something to edit. Sorted by name, because the
+/// map is one: two reads over one disk answer in one order, and two writes leave one
+/// file.
+fn declared(path: &Path) -> serde_json::Map<String, serde_json::Value> {
+	match object_at(path).remove(SERVERS_KEY) {
+		Some(serde_json::Value::Object(servers)) => servers,
+		_ => serde_json::Map::new(),
+	}
+}
+
+/// A JSON object off the disk. A file that is not there, is not JSON, or is JSON that
+/// is not an object reads as an empty one — which is a file with nothing of anyone's
+/// to keep.
+fn object_at(path: &Path) -> serde_json::Map<String, serde_json::Value> {
+	fs::read_to_string(path)
+		.ok()
+		.and_then(|text| serde_json::from_str(&text).ok())
+		.unwrap_or_default()
 }
 
 /// The file written, the agent rewritten, and the skill read back off the disk —

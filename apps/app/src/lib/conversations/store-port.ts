@@ -1,6 +1,7 @@
 import type {
 	Bot,
 	BotIdentity,
+	BotMcpServer,
 	BotSkill,
 	BotSkillDraft,
 	Chat,
@@ -69,6 +70,21 @@ export type TranscriptStore = TranscriptPort & {
 	) => Promise<BotSkill>
 	/** The skill, taken away with its own directory and nothing beside it. */
 	deleteBotSkill: (botId: string, skillId: string) => Promise<void>
+	/** Every MCP server the bot's bundle declares, by the name each is declared
+	 * under. A server file a hand wrote is read the same way, and a host with nowhere
+	 * to keep bundles answers none rather than refusing. */
+	botMcpServers: (botId: string) => Promise<BotMcpServer[]>
+	/** The server written under the name given, added or replaced. Every other server
+	 * and every key of the file the app does not own stay where they were. A
+	 * configuration that is not an object is refused whole and nothing is written. */
+	setBotMcpServer: (
+		botId: string,
+		name: string,
+		config: Record<string, unknown>,
+	) => Promise<BotMcpServer>
+	/** The server taken out of the file, and the rest of it left as it was. The last
+	 * one going takes the file with it. */
+	deleteBotMcpServer: (botId: string, name: string) => Promise<void>
 	/** The slash commands a session announced, held against the bot it answered for.
 	 * Replaced whole by every announcement: a command the newest session left out is
 	 * one it would refuse, so what is kept is the last list named rather than every

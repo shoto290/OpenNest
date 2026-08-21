@@ -281,6 +281,49 @@ describe("createFakeTranscriptStore", () => {
 		})
 	})
 
+	/** The same shape the host answers: a server named by the key it is declared
+	 * under, a second write over that name replacing it rather than growing a second,
+	 * every other server left where it was, and a configuration that is not an object
+	 * refused whole. */
+	it("writes and takes away a bot's mcp servers", async () => {
+		const store = createFakeTranscriptStore()
+		const atlas = { command: "atlas-mcp", args: ["--stdio"] }
+		const ledger = { command: "ledger-mcp" }
+
+		await store.setBotMcpServer("default", "atlas", atlas)
+		await store.setBotMcpServer("default", "ledger", ledger)
+		expect(await store.botMcpServers("default")).toEqual([
+			{ name: "atlas", config: atlas },
+			{ name: "ledger", config: ledger },
+		])
+
+		const replaced = { command: "atlas-mcp", args: ["--http"] }
+		expect(await store.setBotMcpServer("default", "atlas", replaced)).toEqual({
+			name: "atlas",
+			config: replaced,
+		})
+		expect(await store.botMcpServers("default")).toEqual([
+			{ name: "atlas", config: replaced },
+			{ name: "ledger", config: ledger },
+		])
+
+		await store.deleteBotMcpServer("default", "atlas")
+		expect(await store.botMcpServers("default")).toEqual([
+			{ name: "ledger", config: ledger },
+		])
+		await expect(
+			store.deleteBotMcpServer("default", "atlas"),
+		).rejects.toMatchObject({ kind: "unwritableBundle" })
+		await expect(
+			store.setBotMcpServer("default", "atlas", [
+				"atlas-mcp",
+			] as unknown as Record<string, unknown>),
+		).rejects.toMatchObject({ kind: "unwritableBundle" })
+		await expect(
+			store.setBotMcpServer("missing", "atlas", atlas),
+		).rejects.toMatchObject({ kind: "unknownBot", id: "missing" })
+	})
+
 	/** Taking a picture off is an identity write, the same one that puts an animal
 	 * back — there is no second call for it on either side of the boundary. */
 	it("takes the picture off a bot described again without a path", async () => {

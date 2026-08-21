@@ -125,6 +125,27 @@ fn instructions_in_the_bundle(command: &Value) -> String {
 	read().unwrap_or_else(|| "none".to_owned())
 }
 
+/// Which MCP servers the bundle declares, read where the real agent reads them: the
+/// `mcpServers` map of the `.mcp.json` beside the manifest, in the bundle the open
+/// command names. A session opened with no bundle, or one declaring none, carries
+/// nothing.
+///
+/// Names only, never a configuration. What comes back here is spoken into a
+/// transcript, and a configuration is a command to run and an environment that often
+/// holds a token — the names are what says a server reached the child at all.
+fn servers_in_the_bundle(command: &Value) -> String {
+	let read = || {
+		let path = command["pluginPath"].as_str()?;
+		let file = std::path::Path::new(path).join(".mcp.json");
+		let declared: Value = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
+		let mut named: Vec<&str> =
+			declared["mcpServers"].as_object()?.keys().map(String::as_str).collect();
+		named.sort_unstable();
+		(!named.is_empty()).then(|| named.join(","))
+	};
+	read().unwrap_or_else(|| "none".to_owned())
+}
+
 /// A sidecar deaf to the EOF on its stdin, so only a signal can end it.
 fn ignores_eof() -> bool {
 	std::env::var("FAKE_AGENT_IGNORE_EOF").is_ok()
@@ -138,6 +159,7 @@ struct Run {
 	resumed: bool,
 	session_id: String,
 	instructions: String,
+	servers: String,
 	cwd: String,
 	announced: bool,
 	pending_permission: Option<String>,
@@ -173,6 +195,7 @@ impl Run {
 			resumed: resume.is_some(),
 			session_id: resume.unwrap_or_else(|| DEFAULT_SESSION.into()),
 			instructions: instructions_in_the_bundle(command),
+			servers: servers_in_the_bundle(command),
 			cwd: as_a_child_would_see_it(command["cwd"].as_str().unwrap_or_default()),
 			announced: false,
 			pending_permission: None,
@@ -186,7 +209,7 @@ impl Run {
 
 	/// What the host opened this session as, in the session's own words.
 	fn identity(&self) -> String {
-		format!("system<{}> cwd<{}>", self.instructions, self.cwd)
+		format!("system<{}> cwd<{}> mcp<{}>", self.instructions, self.cwd, self.servers)
 	}
 }
 
