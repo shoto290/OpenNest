@@ -105,7 +105,6 @@ const MODEL_KEY: &str = "model";
 /// The frontmatter key a skill asks to be carried under, read from wherever it sits
 /// in the map — `metadata.opennest.preload` — the same way [`OWNER_KEY`] is read.
 const PRELOAD_KEY: &str = "preload";
-const PRELOADED: &str = "true";
 
 /// What fences the carried bodies off from the brief. HTML comments, so the region
 /// says what it is to a reader opening the file and nothing to the model reading it
@@ -390,16 +389,17 @@ fn agent(root: &Path, bot: &Bot, name: &str) -> String {
 fn briefed_with_skills(root: &Path, bot: &Bot) -> String {
 	let brief = without_carried(&bot.instructions);
 	let level = (deepest_heading(brief) + 1).min(MAX_HEADING);
-	let carried: Vec<String> = preloaded(root, &bot.id)
-		.iter()
+	let bodies: Vec<String> = preloaded(root, &bot.id)
+		.into_iter()
 		.map(|skill| {
 			format!("{} {}\n\n{}", "#".repeat(level), skill.name, demoted(&skill.body, level))
 		})
 		.collect();
+	let carried = bodies.join("\n\n");
 	if carried.is_empty() {
 		return brief.to_owned();
 	}
-	format!("{brief}\n\n{CARRIED_OPEN}\n\n{}\n\n{CARRIED_CLOSE}", carried.join("\n\n"))
+	format!("{brief}\n\n{CARRIED_OPEN}\n\n{carried}\n\n{CARRIED_CLOSE}")
 }
 
 /// A skill's body, under the name of the directory it came from.
@@ -419,15 +419,15 @@ fn preloaded(root: &Path, bot_id: &str) -> Vec<Preloaded> {
 		.map(|entry| entry.path())
 		.collect();
 	directories.sort();
-	directories.iter().filter_map(|path| carried(path)).collect()
+	directories.iter().filter_map(|path| marked_skill(path)).collect()
 }
 
 /// The skill in a directory, when its frontmatter marks it for preloading. `None` is
 /// a directory holding no `SKILL.md`, or a skill that never asked — which stays on
 /// the disk and out of the agent file.
-fn carried(path: &Path) -> Option<Preloaded> {
+fn marked_skill(path: &Path) -> Option<Preloaded> {
 	let text = fs::read_to_string(path.join(SKILL_NAME)).ok()?;
-	if front_value(&text, PRELOAD_KEY)? != PRELOADED {
+	if front_value(&text, PRELOAD_KEY)? != "true" {
 		return None;
 	}
 	let name = path.file_name()?.to_string_lossy().into_owned();
@@ -445,15 +445,14 @@ fn without_carried(text: &str) -> &str {
 /// bodies are demoted below, so a skill's own `#` can never read as a section of the
 /// brief.
 fn deepest_heading(text: &str) -> usize {
-	prose(text).filter_map(heading_level).max().unwrap_or(0)
+	headed_lines(text).filter_map(|(_, level)| level).max().unwrap_or(0)
 }
 
 /// The same text with every heading pushed down by `shift` levels, and everything
-/// else left exactly as it was — a `# comment` inside a code fence is code, not a
-/// heading.
+/// else left exactly as it was.
 fn demoted(text: &str, shift: usize) -> String {
-	let lines: Vec<String> = prose_and_code(text)
-		.map(|(line, is_prose)| match heading_level(line).filter(|_| is_prose) {
+	let lines: Vec<String> = headed_lines(text)
+		.map(|(line, level)| match level {
 			Some(level) => {
 				format!("{}{line}", "#".repeat(shift.min(MAX_HEADING.saturating_sub(level))))
 			}
@@ -463,21 +462,17 @@ fn demoted(text: &str, shift: usize) -> String {
 	lines.join("\n")
 }
 
-/// Every line, told apart from the code fences it may sit inside.
-fn prose_and_code(text: &str) -> impl Iterator<Item = (&str, bool)> {
+/// Every line, with the heading level it carries. `None` is a line that is not a
+/// heading — and a `# comment` inside a code fence is code, not a heading.
+fn headed_lines(text: &str) -> impl Iterator<Item = (&str, Option<usize>)> {
 	let mut fenced = false;
 	text.lines().map(move |line| {
 		if line.trim_start().starts_with("```") {
 			fenced = !fenced;
-			return (line, false);
+			return (line, None);
 		}
-		(line, !fenced)
+		(line, if fenced { None } else { heading_level(line) })
 	})
-}
-
-/// The lines a heading could be on: everything outside a code fence.
-fn prose(text: &str) -> impl Iterator<Item = &str> {
-	prose_and_code(text).filter_map(|(line, is_prose)| is_prose.then_some(line))
 }
 
 /// How deep a heading goes, or `None` for a line that is not one.
