@@ -493,12 +493,17 @@ async fn runtime_identity<R: Runtime>(
 ///
 /// `system` is the app's own plugin, which travels with the bot's and never on its own:
 /// a launch that could not write it hands over a session on the bot's alone.
+///
+/// The identity is rendered from the row rather than read off the disk: the sentences
+/// are the app's own and no file holds them, so a rename reaches the next session
+/// without a bundle being rewritten for it.
 fn laid_down_bundle(root: &Path, bot: &StoredBot, system: Option<&Path>) -> Option<Bundle> {
 	bundles::ensure(root, bot).ok()?;
 	Some(Bundle {
 		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
 		system_path: system.map(|path| path.to_string_lossy().into_owned()),
 		agent: bundles::agent_ref(root, bot),
+		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),
 	})
 }

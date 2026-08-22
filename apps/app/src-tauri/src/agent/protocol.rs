@@ -62,6 +62,11 @@ pub struct OpenRequest {
 	pub system_plugin_path: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub agent: Option<String>,
+	/// Who the bot is, rendered by the host from the bot's own name and title. The
+	/// sidecar appends it to the prompt layer: the sentences are the app's, so no
+	/// bot's bundle carries a copy of them — see `PROTOCOL.md`.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub identity: Option<String>,
 	/// The style the answer is written in, by the name the provider knows it under.
 	/// Named, the sidecar passes it as an inline settings object; left out, it passes
 	/// no settings at all — see `PROTOCOL.md`.

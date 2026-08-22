@@ -68,7 +68,7 @@ fn bundles_root() -> PathBuf {
 	std::env::temp_dir().join("opennest-real-claude-bundles")
 }
 
-/// The name every probe bot answers under, carried into its bundle's identity zone.
+/// The name every probe bot answers under, carried on the identity the host renders.
 const PROBE_NAME: &str = "Probe";
 
 /// The bot every live test is served by, under an id of the caller's so one test's
@@ -117,6 +117,7 @@ fn handed_over(root: &Path, bot: &Bot) -> Bundle {
 		path: bundles::dir(root, &bot.id).display().to_string(),
 		system_path: Some(system_plugin().display().to_string()),
 		agent: bundles::slug(&bot.name),
+		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),
 	}
 }
@@ -242,6 +243,11 @@ const WHO_AND_WHAT: &str = "Who are you and what can you do?";
 /// third, its own name, is [`PROBE_NAME`].
 const OPENNEST: &str = "opennest";
 const LEARNING_WORDS: [&str; 3] = ["learn", "remember", "skill"];
+
+/// What the bot must never call itself. The identity says so and the layer says so
+/// again, and neither is worth a sentence if a child asked outright still answers with
+/// the provider's own product name.
+const CLAUDE_CODE: &str = "claude code";
 
 /// What the session was opened under, asked of the child itself: the Concise style is
 /// a system prompt of the provider's, so a child running under it can quote the line
@@ -562,10 +568,11 @@ async fn a_bot_answers_the_app_plugins_learn_rules_without_invoking_the_skill() 
 	assert!(used.is_empty(), "the bot went looking for rules it was already holding: {used:?}");
 }
 
-/// What a person gets when they ask the bot what it is. The three halves come from
-/// three places — the name from the bundle's identity zone, the app and the learning
-/// from the layer — so this is the only measurement that can tell whether the
-/// OpenNest situation reaches a run as something the bot will say out loud.
+/// What a person gets when they ask the bot what it is. Every half comes from the
+/// prompt layer now — the name and the stance on the open request, the app and the
+/// learning from the layer's own text — so this is the only measurement that can tell
+/// whether an identity that lives in no file at all still reaches a run as something
+/// the bot will say out loud, and whether it still refuses the provider's name.
 #[tokio::test]
 #[ignore = "needs a signed-in subscription and the network"]
 async fn a_bot_says_its_name_the_app_it_runs_in_and_that_it_learns() {
@@ -582,6 +589,7 @@ async fn a_bot_says_its_name_the_app_it_runs_in_and_that_it_learns() {
 		LEARNING_WORDS.iter().any(|word| answer.contains(word)),
 		"the bot said nothing about learning: {answer:?}"
 	);
+	assert!(!answer.contains(CLAUDE_CODE), "the bot presented itself as Claude Code: {answer:?}");
 }
 
 /// The style a bot is written under is the style its session is really opened in,

@@ -159,6 +159,7 @@ struct Run {
 	resumed: bool,
 	session_id: String,
 	instructions: String,
+	presented: String,
 	servers: String,
 	cwd: String,
 	announced: bool,
@@ -195,6 +196,7 @@ impl Run {
 			resumed: resume.is_some(),
 			session_id: resume.unwrap_or_else(|| DEFAULT_SESSION.into()),
 			instructions: instructions_in_the_bundle(command),
+			presented: command["identity"].as_str().unwrap_or("none").to_owned(),
 			servers: servers_in_the_bundle(command),
 			cwd: as_a_child_would_see_it(command["cwd"].as_str().unwrap_or_default()),
 			announced: false,
@@ -209,7 +211,10 @@ impl Run {
 
 	/// What the host opened this session as, in the session's own words.
 	fn identity(&self) -> String {
-		format!("system<{}> cwd<{}> mcp<{}>", self.instructions, self.cwd, self.servers)
+		format!(
+			"system<{}> told<{}> cwd<{}> mcp<{}>",
+			self.instructions, self.presented, self.cwd, self.servers
+		)
 	}
 }
 

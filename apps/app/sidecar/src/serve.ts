@@ -17,6 +17,7 @@ type Command = {
 	pluginPath?: string
 	systemPluginPath?: string
 	agent?: string
+	identity?: string
 	outputStyle?: string
 	partialMessages?: boolean
 	text?: string
@@ -47,6 +48,7 @@ export const serve = async (requestedId?: string) => {
 					pluginPath: command.pluginPath,
 					systemPluginPath: command.systemPluginPath,
 					agent: command.agent,
+					identity: command.identity,
 					outputStyle: command.outputStyle,
 					partialMessages: command.partialMessages ?? false,
 				},
