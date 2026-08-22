@@ -1,9 +1,11 @@
 import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
 import type {
+	BotCommitItem,
 	BotModelOption,
 	BotSettingsValue,
 } from "@workspace/ui/components/bot-settings"
 
+import type { BotCommit } from "./history-controller"
 import { rosterTimestamp } from "./roster-timestamp"
 
 import { avatarSrc } from "../host"
@@ -185,6 +187,18 @@ export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 	model: bot.model,
 	workingDirectory: bot.workingDir ?? "",
 	changesNothing: bot.changesNothing,
+})
+
+/** A write to the bundle as the History tab lists it. Seconds are what a commit
+ * holds and milliseconds are what the panel reads, which is the whole of the
+ * mapping past the diff travelling as it came. */
+export const toCommitItem = (commit: BotCommit): BotCommitItem => ({
+	id: commit.id,
+	at: commit.timestamp * 1000,
+	author: commit.author,
+	title: commit.title,
+	body: commit.body,
+	diff: commit.diff,
 })
 
 /** The panel's value as the store is told it, resolved against the bot it stands

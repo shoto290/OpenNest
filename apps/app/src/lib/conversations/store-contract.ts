@@ -175,6 +175,24 @@ export type BotMcpServer = {
 	config: Record<string, unknown>
 }
 
+/** Whose gesture a write to a bundle was: the reader's own, or the bot's on a run.
+ * Two answers rather than a name — it is the whole of what the history tells apart. */
+export type BotHistoryAuthor = "user" | "bot"
+
+/** One write to a bot's bundle, as the host reads it off the repository inside the
+ * bundle. No row holds any of it.
+ *
+ * `timestamp` is seconds since the epoch, which is what a commit itself holds — the
+ * panel reads milliseconds, so the conversion is this side's. `id` is what the diff
+ * and the undo address one by. */
+export type BotHistoryEntry = {
+	id: string
+	timestamp: number
+	author: BotHistoryAuthor
+	title: string
+	body: string
+}
+
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
 /** A run just opened in a participant's lineage. `seq` is the number the lineage

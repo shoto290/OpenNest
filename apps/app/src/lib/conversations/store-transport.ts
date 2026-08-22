@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 
 import type {
 	Bot,
+	BotHistoryEntry,
 	BotIdentity,
 	BotMcpServer,
 	BotSkill,
@@ -89,6 +90,15 @@ export const conversationStore: TranscriptStore = {
 
 	deleteBotMcpServer: (botId: string, name: string) =>
 		invoke<void>("conversation_delete_bot_mcp_server", { botId, name }),
+
+	botHistory: (botId: string) =>
+		invoke<BotHistoryEntry[]>("conversation_bot_history", { botId }),
+
+	botHistoryDiff: (botId: string, commitId: string) =>
+		invoke<string>("conversation_bot_history_diff", { botId, commitId }),
+
+	revertBot: (botId: string, commitId: string) =>
+		invoke<BotHistoryEntry[]>("conversation_bot_revert", { botId, commitId }),
 
 	recordBotCommands: (botId: string, commands: AgentCommand[]) =>
 		invoke<void>("conversation_record_bot_commands", { botId, commands }),
