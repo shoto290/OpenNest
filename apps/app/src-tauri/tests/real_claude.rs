@@ -46,6 +46,12 @@ async fn started_on(
 	model: &str,
 	cwd: PathBuf,
 ) -> Live {
+	started_with(resume, instructions.map(|told| bundle_carrying(told, model)), cwd).await
+}
+
+/// The same child again, on a bundle the caller built: the only way in for a bundle
+/// carrying more than a brief.
+async fn started_with(resume: Option<String>, bundle: Option<Bundle>, cwd: PathBuf) -> Live {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 	let sidecar = Sidecar::start(SidecarOptions::new(
@@ -53,19 +59,20 @@ async fn started_on(
 	))
 	.await
 	.expect("the sidecar announces itself");
-	let options = SessionOptions::new(cwd)
-		.resuming(resume)
-		.bundled(instructions.map(|told| bundle_carrying(told, model)));
+	let options = SessionOptions::new(cwd).resuming(resume).bundled(bundle);
 	let session = Session::start(sidecar.clone(), options, sink).await.expect("session starts");
 	Live { session, sidecar, events }
 }
 
-/// The bot as a bundle on the disk, written the way the host writes one: what it
-/// was told is the body of the agent the main thread is promoted to.
-fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
-	let root = std::env::temp_dir().join("opennest-real-claude-bundles");
-	let bot = Bot {
-		id: "live-bot".to_owned(),
+fn bundles_root() -> PathBuf {
+	std::env::temp_dir().join("opennest-real-claude-bundles")
+}
+
+/// The bot every live test is served by, under an id of the caller's so one test's
+/// bundle is never the one another wrote.
+fn probe_bot(id: &str, instructions: &str, model: &str) -> Bot {
+	Bot {
+		id: id.to_owned(),
 		name: "Probe".to_owned(),
 		title: String::new(),
 		model: model.to_owned(),
@@ -77,8 +84,18 @@ fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
 		memory: String::new(),
 		denied_tools: Vec::new(),
 		created_at: 1,
-	};
-	bundles::write(&root, &bot).expect("the bundle is written");
+	}
+}
+
+/// The bot as a bundle on the disk, written the way the host writes one: what it
+/// was told is the body of the agent the main thread is promoted to.
+fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
+	written(&probe_bot("live-bot", instructions, model))
+}
+
+fn written(bot: &Bot) -> Bundle {
+	let root = bundles_root();
+	bundles::write(&root, bot).expect("the bundle is written");
 	Bundle {
 		path: bundles::dir(&root, &bot.id).display().to_string(),
 		agent: bundles::slug(&bot.name),
@@ -251,13 +268,13 @@ fn memory_dir(cwd: &Path) -> PathBuf {
 /// and `strictMcpConfig` are passed on every spawn, so the `CLAUDE.md` sitting in the
 /// working directory is never read — the child cannot name a word it says out loud.
 ///
-/// The derived memory is the exception, measured here and not fixed: a word planted in
-/// `~/.claude/projects/<cwd-slug>/memory/` still reaches the child under
-/// `settingSources: []`, so two bots sharing a working directory share that memory.
-/// Asserted as it is so a change of behaviour in the CLI shows up as a failing test.
+/// The derived memory is closed by a second option: `settingSources: []` leaves
+/// `~/.claude/projects/<cwd-slug>/memory/` being read, and `CLAUDE_CODE_DISABLE_AUTO_MEMORY`
+/// in the child's environment is what stops it — otherwise two bots sharing a working
+/// directory would read each other's.
 #[tokio::test]
 #[ignore = "needs a signed-in subscription and the network"]
-async fn a_bot_reads_no_claude_md_of_its_own_directory_but_still_reads_its_memory() {
+async fn a_bot_reads_neither_the_claude_md_of_its_directory_nor_the_memory_derived_from_it() {
 	let sealed = a_directory("sealed");
 	std::fs::write(sealed.join("CLAUDE.md"), format!("The project code word is {CLAUDE_MD_WORD}."))
 		.expect("the working directory carries a CLAUDE.md");
@@ -281,9 +298,77 @@ async fn a_bot_reads_no_claude_md_of_its_own_directory_but_still_reads_its_memor
 		!answer.contains(CLAUDE_MD_WORD),
 		"the working directory's CLAUDE.md reached the child: {answer:?}"
 	);
+	assert!(!answer.contains(MEMORY_WORD), "the derived memory reached the child: {answer:?}");
+}
+
+/// A stdio server, spoken over newline-delimited JSON-RPC, small enough to live in the
+/// bundle it is declared from. It answers one tool, and that tool answers one word no
+/// model can guess: the word coming back is the whole measurement.
+const PROBE_SERVER: &str = r#"import json, sys
+
+TOOLS = [{
+    "name": "code_word",
+    "description": "Returns the probe code word.",
+    "inputSchema": {"type": "object", "properties": {}},
+}]
+
+for line in sys.stdin:
+    if not line.strip():
+        continue
+    message = json.loads(line)
+    if "id" not in message:
+        continue
+    method = message.get("method")
+    answer = {"jsonrpc": "2.0", "id": message["id"]}
+    if method == "initialize":
+        answer["result"] = {
+            "protocolVersion": message.get("params", {}).get("protocolVersion", "2025-06-18"),
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "probe", "version": "0.1.0"},
+        }
+    elif method == "tools/list":
+        answer["result"] = {"tools": TOOLS}
+    elif method == "tools/call":
+        answer["result"] = {"content": [{"type": "text", "text": "PORTCULLIS"}]}
+    elif method == "ping":
+        answer["result"] = {}
+    else:
+        answer["error"] = {"code": -32601, "message": "no such method"}
+    sys.stdout.write(json.dumps(answer) + "\n")
+    sys.stdout.flush()
+"#;
+
+const MCP_WORD: &str = "PORTCULLIS";
+const CALL_THE_SERVER: &str =
+	"Call the code_word tool of the probe MCP server and reply with exactly what it returns.";
+
+/// A bot keeps the servers its own bundle declares. `strictMcpConfig` drops every MCP
+/// configuration the session was not handed — the bundle's `.mcp.json` included — so
+/// the sidecar reads that file and hands the servers over under the names the bundle
+/// gives them. Measured by calling one: the word only exists inside the process the
+/// bundle asked for.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_reaches_the_mcp_servers_its_bundle_declares() {
+	let bot = probe_bot("live-bot-mcp", BANANA, SONNET);
+	let bundle = written(&bot);
+	let script = PathBuf::from(&bundle.path).join("probe_server.py");
+	std::fs::write(&script, PROBE_SERVER).expect("the server ships inside the bundle");
+	bundles::set_mcp_server(
+		&bundles_root(),
+		&bot,
+		"probe",
+		&serde_json::json!({ "command": "python3", "args": [script.display().to_string()] }),
+	)
+	.expect("the bundle declares its server");
+
+	let mut served = started_with(None, Some(bundle), std::env::temp_dir()).await;
+	let answer = text(&served.run_turn(CALL_THE_SERVER).await);
+	served.sidecar.shutdown().await;
+
 	assert!(
-		answer.contains(MEMORY_WORD),
-		"the derived memory no longer reaches the child — isolation grew, update PLUGINS.md: {answer:?}"
+		answer.contains(MCP_WORD),
+		"the server the bundle declares was out of reach: {answer:?}"
 	);
 }
 

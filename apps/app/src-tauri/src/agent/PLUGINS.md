@@ -186,20 +186,28 @@ with or without a bundle. That is what makes an exported bot the same bot anywhe
 configuration, including `SessionStart` hooks.
 
 `strictMcpConfig` ignores every MCP configuration that was not passed as an option —
-project `.mcp.json`, user settings, **and plugins**. A bundle declaring a server would
-therefore need it named in `mcpServers`; none does today.
+project `.mcp.json`, user settings, **and plugins**. **Plugin servers do not survive
+it**: measured, a bundle declaring a stdio server through its own `.mcp.json` reached a
+child that answered there was no such tool. **They are bridged instead** — the sidecar
+reads `<bundle>/.mcp.json` and passes its `mcpServers` map as an option, under the names
+the bundle gives them, so a bot's own servers are the only ones a session holds.
 
-Measured live (`tests/real_claude.rs`, `#[ignore]`), one turn, two words planted where
-a default session reads them:
+`settingSources: []` closes the settings and the `CLAUDE.md` files, and leaves one thing
+open: the memory the CLI derives from the working directory. `autoMemoryEnabled` sits in
+a settings file no longer read, so the child is given
+**`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`** in its environment instead — otherwise two bots
+sharing a working directory read each other's memory.
+
+Measured live (`tests/real_claude.rs`, `#[ignore]`), a word planted in each place a
+session reads from, and a word only the bundle's server can answer:
 
 | Planted in | Reaches the child |
 | --- | --- |
 | `CLAUDE.md` of the session's cwd | **no** — the child answers `NONE` |
-| `~/.claude/projects/<cwd-slug>/memory/MEMORY.md` | **yes** |
+| `~/.claude/projects/<cwd-slug>/memory/MEMORY.md` | **no**, with the variable set; **yes** without it |
+| the bundle's own `.mcp.json`, as a stdio server | **yes**, through `mcpServers`; **no** through the plugin |
 
-So `memory_paths.auto` keeps pointing at `~/.claude/projects/<cwd-slug>/memory/` under
-`settingSources: []`, and two bots sharing a working directory still share that memory.
-The bundle's own brief survives both options — the same turn obeyed it.
+The bundle's own brief survives all of it — the same turns obeyed it.
 
 ## The tool names come off the `init` frame — verified
 

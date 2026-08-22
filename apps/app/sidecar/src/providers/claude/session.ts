@@ -4,6 +4,7 @@ import {
 	type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
 
+import { bundleServers } from "./bundle-servers"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
@@ -19,6 +20,7 @@ import { describeError } from "../../describe-error"
 
 const ABANDONED = "The session ended before this was answered."
 const ENDED = "the agent ended"
+const DISABLE_AUTO_MEMORY = "CLAUDE_CODE_DISABLE_AUTO_MEMORY"
 
 /** The `init` message names the commands but not what they do; the described list
  * comes back with the initialization response instead. An empty description is the
@@ -44,8 +46,15 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
  * `settingSources: []` and `strictMcpConfig` are what make a bot the same bot
  * anywhere: no `settings.json` of the machine's, no `CLAUDE.md` of the working
  * directory's, no `.mcp.json` of the project's. They are passed with or without a
- * bundle, and `strictMcpConfig` drops the servers a plugin declares too, so a bundle
- * carrying one would need it named here. Measured, both of them, in the same file.
+ * bundle. `strictMcpConfig` drops what a plugin declares as well — measured — so the
+ * bundle's own servers are read off its `.mcp.json` and passed as options, which is
+ * what keeps the third option from taking a bot's servers with the machine's.
+ *
+ * The auto-memory directory is the one thing `settingSources: []` does not close:
+ * `~/.claude/projects/<cwd-slug>/memory/` is derived from the working directory, so
+ * two bots sharing one would read each other's. `autoMemoryEnabled` sits in a settings
+ * file no longer read, and the binary reads the variable below instead. `env` replaces
+ * the child's environment rather than adding to it, hence the spread.
  *
  * No model is named on purpose. The bot's model is the `model` key of the agent it is
  * promoted to, and an option passed here would override that key — the picker would
@@ -63,9 +72,11 @@ export const buildOptions = (
 		? {
 				plugins: [{ type: "local", path: request.pluginPath } as const],
 				agent: request.agent,
+				mcpServers: bundleServers(request.pluginPath),
 			}
 		: {}),
 	systemPrompt: { type: "preset", preset: "claude_code" },
+	env: { ...process.env, [DISABLE_AUTO_MEMORY]: "1" },
 	settingSources: [],
 	strictMcpConfig: true,
 	pathToClaudeCodeExecutable: resolveExecutable(),
