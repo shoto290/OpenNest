@@ -494,6 +494,7 @@ fn laid_down_bundle(root: &Path, bot: &StoredBot) -> Option<Bundle> {
 	Some(Bundle {
 		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
 		agent: bundles::agent_ref(root, bot),
+		output_style: bundles::output_style(root, &bot.id),
 	})
 }
 

@@ -47,14 +47,19 @@ fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreErro
 ///
 /// The listing is not held to the same standard: a marketplace that could not be
 /// rewritten costs a reader one gesture, and the next write of any bot restores it.
+///
+/// The answer style comes from the identity the caller submitted rather than from the
+/// row, because no column holds it: the agent file is where it lives, and this write
+/// is the only one that moves it — see [`bundles::write_styled`].
 async fn write_bundle(
 	root: Option<&Path>,
 	database: &db::Database,
 	bot: &StoredBot,
+	output_style: &str,
 ) -> Result<(), TranscriptStoreError> {
 	if let Some(root) = root {
-		bundles::write(root, bot).map_err(|error| TranscriptStoreError::UnwritableBundle {
-			detail: error.to_string(),
+		bundles::write_styled(root, bot, output_style).map_err(|error| {
+			TranscriptStoreError::UnwritableBundle { detail: error.to_string() }
 		})?;
 	}
 	list_bundles(root, database).await;
@@ -154,9 +159,12 @@ pub async fn conversation_create_bot<R: Runtime>(
 	let dir = avatars::dir(&app);
 	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
+	let output_style = identity.output_style.clone();
 	let created = database.conversations().create_bot(identity.into()).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	if let Err(refusal) = write_bundle(bundle_root.as_deref(), database, &created).await {
+	if let Err(refusal) =
+		write_bundle(bundle_root.as_deref(), database, &created, &output_style).await
+	{
 		// The bot exists for as long as this call is still failing. Taking it back is
 		// what makes the refusal true: a row nothing can be started from is not a bot
 		// the reader asked for, and it has said nothing yet for the deletion to cost.
@@ -188,9 +196,12 @@ pub async fn conversation_update_bot<R: Runtime>(
 	let database = ready(&state)?;
 	let previous = database.conversations().bot(id.clone()).await?;
 	let reconciled = reconciled_identity(bundle_root.as_deref(), previous.as_ref(), identity);
+	let output_style = reconciled.output_style.clone();
 	let updated = database.conversations().update_bot(id.clone(), reconciled.into()).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	if let Err(refusal) = write_bundle(bundle_root.as_deref(), database, &updated).await {
+	if let Err(refusal) =
+		write_bundle(bundle_root.as_deref(), database, &updated, &output_style).await
+	{
 		// The row moved and the bundle did not, which is the one state this whole
 		// module exists to make impossible. It is put back as it was, so what the
 		// reader is told and what the bot is are the same thing again.

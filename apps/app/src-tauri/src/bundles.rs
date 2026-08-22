@@ -214,6 +214,21 @@ const OWNER_KEY: &str = "opennestBotId";
 /// runs on the model its reader picked.
 const MODEL_KEY: &str = "model";
 
+/// The frontmatter key a generated agent carries its answer style under, inside the
+/// same `metadata` map the owner mark lives in — see [`OWNER_KEY`]. The agent format
+/// acts on none of it: the style is read back out here and handed to the session on
+/// the open request, which is the only route it has to a run.
+///
+/// It rides in the file rather than in a column for the same reason `model` does —
+/// the file is what a session is really started on, so the file is what a reader's
+/// pick has to reach.
+const OUTPUT_STYLE_KEY: &str = "outputStyle";
+
+/// The style a bot answers in until a reader picks another. A file naming no style is
+/// a bot on this one, so the key's absence and the key spelling it out say the same
+/// thing — which is what makes a bundle written before there was a key readable.
+pub const DEFAULT_OUTPUT_STYLE: &str = "Concise";
+
 /// The frontmatter key the agent format reads a colour from, and the whole reason
 /// the tints are named `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`
 /// and `cyan` rather than in a vocabulary of this app's own: the word the bundle
@@ -413,6 +428,10 @@ pub struct Generated {
 	/// how a denial reaches a run, and the only thing "changes nothing" is read
 	/// from — see [`denies_changes`].
 	pub denied_tools: Vec<String>,
+	/// How the file says the bot writes its answers, never empty: a file naming no
+	/// style answers with [`DEFAULT_OUTPUT_STYLE`], since that is what a session
+	/// started on it would be opened under anyway.
+	pub output_style: String,
 }
 
 /// The bot as its own agent file holds it. `None` is a bundle this install has not
@@ -425,7 +444,30 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 		.filter(|found| !found.is_empty());
 	let blot = front_value(&text, COLOR_KEY).and_then(|found| AvatarBlot::parse(found.trim()));
 	let denied_tools = front_denials(&text);
-	Some(Generated { instructions: body(&text).to_owned(), model, blot, denied_tools })
+	let output_style = front_output_style(&text);
+	Some(Generated {
+		instructions: body(&text).to_owned(),
+		model,
+		blot,
+		denied_tools,
+		output_style,
+	})
+}
+
+/// The style a bot's session is opened under, read off the one file a session is
+/// really started on. A bundle this install has not written answers with the default
+/// too: no file is no reason to open a run on a style nobody picked.
+pub fn output_style(root: &Path, bot_id: &str) -> String {
+	generated(root, bot_id)
+		.map_or_else(|| DEFAULT_OUTPUT_STYLE.to_owned(), |written| written.output_style)
+}
+
+/// The `metadata.opennest.outputStyle` of a file, or the default for one naming none
+/// — a bundle written before there was a key, or an agent a reader wrote themselves.
+/// Read through the same normaliser the write goes through, so a key a hand left
+/// blank reads as the style it would have been rewritten under.
+fn front_output_style(text: &str) -> String {
+	styled(&front_value(text, OUTPUT_STYLE_KEY).unwrap_or_default()).to_owned()
 }
 
 /// What the bot was told, as the file holds it.
@@ -442,7 +484,15 @@ pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
 /// agent however many times the bot is renamed. Anything else under `agents/` was put
 /// there by somebody else and keeps both its name and its content.
 pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	write_briefed(root, bot, &bot.instructions)?;
+	write_styled(root, bot, &output_style(root, &bot.id))
+}
+
+/// The same write, on a style the caller named rather than the one the file already
+/// carries. The one door a reader's pick comes through — every other write keeps what
+/// is on the disk, so a skill saved or an avatar changed never moves a bot off the
+/// style it answers in.
+pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
+	write_briefed(root, bot, &bot.instructions, output_style)?;
 	recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "saved from settings");
 	Ok(())
 }
@@ -465,14 +515,14 @@ fn recorded(root: &Path, bot_id: &str, subject: &str, name: &str, verb: &str) {
 /// change lays down: the row it holds may be behind the file — the disk is the
 /// truth — and nothing about a skill is a reason to write a brief over the one the
 /// bot is really running on.
-fn write_briefed(root: &Path, bot: &Bot, brief: &str) -> std::io::Result<()> {
+fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std::io::Result<()> {
 	equip(root, &bot.id)?;
 	let generated = generated_agent(root, &bot.id);
 	let agent_path = free_agent_path(root, bot, generated.as_deref());
 	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
 
 	rewrite_manifest(root, bot)?;
-	private_files::replace(&agent_path, agent(root, bot, &name, brief).as_bytes())?;
+	private_files::replace(&agent_path, agent(root, bot, &name, brief, output_style).as_bytes())?;
 	if let Some(generated) = generated.filter(|path| path != &agent_path) {
 		let _ = fs::remove_file(generated);
 	}
@@ -751,7 +801,10 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// written in raw, because a name or a title is free text: a colon, a hash or a
 /// newline in either would otherwise make the file mean something else.
 ///
-/// The `metadata` map is what marks the file as this bot's — see [`OWNER_KEY`].
+/// The `metadata` map is what marks the file as this bot's — see [`OWNER_KEY`] — and
+/// what carries the bot's answer style, on every write and never absent: the format
+/// reads none of the map, so the style travels to the host and reaches a run on the
+/// open request rather than through the file — see [`OUTPUT_STYLE_KEY`].
 ///
 /// `model` is the whole of how a reader's choice reaches the runtime: the key is
 /// honoured on the promoted path, and a model option passed alongside would override
@@ -766,18 +819,31 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// `disallowedTools` is the same shape and the whole of how a bot is held back from
 /// a built-in tool: the key is honoured on the promoted path, and a bot denying
 /// nothing writes none of it — see [`denial_line`].
-fn agent(root: &Path, bot: &Bot, name: &str, brief: &str) -> String {
+fn agent(root: &Path, bot: &Bot, name: &str, brief: &str, output_style: &str) -> String {
 	format!(
-		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n\n{}\n",
+		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n  {OPENNEST_KEY}:\n    {OUTPUT_STYLE_KEY}: {}\n{FENCE}\n\n{}\n\n{}\n",
 		quoted(name),
 		quoted(describe(bot)),
 		model_line(&bot.model),
 		color_line(bot.avatar_blot),
 		denial_line(&bot.denied_tools),
 		quoted(&bot.id),
+		quoted(styled(output_style)),
 		identity(bot),
 		briefed_with_skills(root, &bot.id, brief)
 	)
+}
+
+/// The style really written, so a caller submitting nothing at all is a bot on the
+/// default rather than a file carrying an empty key that would open a session under
+/// no style the provider knows.
+fn styled(output_style: &str) -> &str {
+	let named = output_style.trim();
+	if named.is_empty() {
+		DEFAULT_OUTPUT_STYLE
+	} else {
+		named
+	}
 }
 
 /// The generated zone at the head of the body: who the bot is, in its own name and
@@ -1134,8 +1200,10 @@ fn written_skill(root: &Path, bot: &Bot, path: &Path, text: String) -> std::io::
 /// through is what the file already said — the stored value only for a bundle there
 /// is nothing to read.
 fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	let brief = instructions(root, &bot.id).unwrap_or_else(|| bot.instructions.clone());
-	write_briefed(root, bot, &brief)
+	let held = generated(root, &bot.id);
+	let brief = held.as_ref().map_or(&bot.instructions, |held| &held.instructions);
+	let style = held.as_ref().map_or(DEFAULT_OUTPUT_STYLE, |held| held.output_style.as_str());
+	write_briefed(root, bot, brief, style)
 }
 
 /// The skill in a directory, whatever it says about being carried. A name the
@@ -2195,12 +2263,62 @@ mod tests {
 	fn a_generated_agent_declares_neither_skills_nor_a_permission_mode() {
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		bot.title = "skills: everything\npermissionMode: bypassPermissions".to_owned();
-		let written = agent(Path::new("/nowhere"), &bot, "bean", &bot.instructions);
+		let written =
+			agent(Path::new("/nowhere"), &bot, "bean", &bot.instructions, DEFAULT_OUTPUT_STYLE);
 
 		for line in written.lines() {
 			assert!(!line.starts_with("skills:"), "got {written}");
 			assert!(!line.starts_with("permissionMode:"), "got {written}");
 		}
+	}
+
+	/// The style a reader picked is the style the file carries and the style a session
+	/// would be opened under. Nothing else on this side holds it, so a value that did
+	/// not survive the round trip is a pick that never reached a run.
+	#[test]
+	fn the_style_a_reader_picks_is_the_style_the_file_carries() {
+		let root = a_root("styled");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write_styled(&root, &bot, "default").expect("the bundle is written");
+
+		assert_eq!(output_style(&root, &bot.id), "default");
+		assert_eq!(
+			generated(&root, &bot.id).expect("the file is read back").output_style,
+			"default"
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Every write that is not a reader picking a style keeps the one on the disk: a
+	/// skill saved, a name changed, a server declared. One writer of the key and one
+	/// only, or a bot would drift back to the default behind its reader.
+	#[test]
+	fn a_write_that_names_no_style_keeps_the_one_on_the_disk() {
+		let root = a_root("styled-kept");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		write_styled(&root, &bot, "default").expect("the bundle is written");
+
+		bot.name = "Fig".to_owned();
+		write(&root, &bot).expect("the bundle is written again");
+
+		assert_eq!(output_style(&root, &bot.id), "default");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Everything that names no style is a bot on the default one: a bundle written
+	/// before there was a key, an agent a reader wrote themselves, a pick submitted
+	/// blank, and a bot with no bundle at all. One normaliser answers for all four —
+	/// see [`styled`] — so none of them can open a session under a style the provider
+	/// cannot resolve.
+	#[test]
+	fn everything_that_names_no_style_reads_as_the_default_one() {
+		let styleless = format!("{FENCE}\nname: \"bean\"\n{FENCE}\n\nA brief.\n");
+
+		assert_eq!(front_output_style(&styleless), DEFAULT_OUTPUT_STYLE);
+		assert_eq!(styled("  "), DEFAULT_OUTPUT_STYLE);
+		assert_eq!(output_style(&a_root("styleless"), "b1"), DEFAULT_OUTPUT_STYLE);
 	}
 
 	/// A bundle is a directory somebody else writes into too. A skill dropped in by

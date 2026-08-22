@@ -172,6 +172,12 @@ pub struct Bot {
 	/// into the agent file, and a second switch over the same key would be a second
 	/// author of one line.
 	pub changes_nothing: bool,
+	/// How the bot writes its answers, read out of its plugin bundle the way `model`
+	/// is — `metadata.opennest.outputStyle` in the agent frontmatter, and nothing in
+	/// the database. Never empty: a bundle naming no style, and a bot whose bundle is
+	/// not there at all, answer with the default one, since that is what a session
+	/// opened for them would be opened under.
+	pub output_style: String,
 	pub created_at: i64,
 }
 
@@ -209,6 +215,9 @@ impl Bot {
 			.map_or_else(|| bot.denied_tools.clone(), |written| written.denied_tools.clone());
 		let avatar_blot =
 			written.as_ref().map_or(bot.avatar_blot, |written| written.blot).map(Into::into);
+		let output_style = written
+			.as_ref()
+			.map_or_else(default_output_style, |written| written.output_style.clone());
 		let instructions = written
 			.map(|written| written.instructions)
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
@@ -231,6 +240,7 @@ impl Bot {
 			instructions,
 			changes_nothing: crate::bundles::denies_changes(&denied_tools),
 			denied_tools,
+			output_style,
 			created_at: bot.created_at,
 		}
 	}
@@ -260,6 +270,17 @@ pub struct BotIdentity {
 	/// one thing a caller submits about denials — "changes nothing" is read back off
 	/// this list rather than sent alongside it.
 	pub denied_tools: Vec<String>,
+	/// See [`Bot::output_style`]: submitted beside the model, since a bot is moved
+	/// between styles from the same panel, and laid down in the agent file by the
+	/// write that follows rather than in a column. A caller leaving it out asks for
+	/// the default one — this is a whole identity, so a field nobody sent is a field
+	/// nobody meant to keep.
+	#[serde(default = "default_output_style")]
+	pub output_style: String,
+}
+
+fn default_output_style() -> String {
+	crate::bundles::DEFAULT_OUTPUT_STYLE.to_owned()
 }
 
 impl From<BotIdentity> for conversations::BotIdentity {
@@ -946,6 +967,7 @@ mod tests {
 					"Write".into(),
 				],
 				changes_nothing: true,
+				output_style: "Concise".into(),
 				created_at: 1,
 			},
 			json!({
@@ -960,6 +982,7 @@ mod tests {
 				"instructions": "Answer briefly.",
 				"deniedTools": ["Bash", "Edit", "NotebookEdit", "Write"],
 				"changesNothing": true,
+				"outputStyle": "Concise",
 				"createdAt": 1
 			}),
 		);
@@ -985,6 +1008,7 @@ mod tests {
 				working_dir: None,
 				instructions: String::new(),
 				denied_tools: Vec::new(),
+				output_style: "Concise".into(),
 			},
 			json!({
 				"name": "Claude",
@@ -995,7 +1019,8 @@ mod tests {
 				"avatarImagePath": null,
 				"workingDir": null,
 				"instructions": "",
-				"deniedTools": []
+				"deniedTools": [],
+				"outputStyle": "Concise"
 			}),
 		);
 	}
@@ -1392,6 +1417,24 @@ mod tests {
 
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).model, "haiku");
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, None).model, "sonnet");
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	/// The style has no column at all, so the bundle is the only truth: a bot whose
+	/// file names one is reported on it, and a bot with no bundle to read is reported
+	/// on the default rather than on nothing.
+	#[test]
+	fn a_bot_is_reported_on_the_style_its_bundle_names() {
+		let root = a_bundle_root("style");
+		crate::bundles::write_styled(&root, &a_stored_bot("sonnet"), "default")
+			.expect("the bundle is written");
+
+		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).output_style, "default");
+		assert_eq!(
+			Bot::of(a_stored_bot("sonnet"), None, None).output_style,
+			default_output_style()
+		);
 
 		let _ = std::fs::remove_dir_all(&root);
 	}

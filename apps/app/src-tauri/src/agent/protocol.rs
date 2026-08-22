@@ -58,6 +58,11 @@ pub struct OpenRequest {
 	pub plugin_path: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub agent: Option<String>,
+	/// The style the answer is written in, by the name the provider knows it under.
+	/// Named, the sidecar passes it as an inline settings object; left out, it passes
+	/// no settings at all — see `PROTOCOL.md`.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub output_style: Option<String>,
 	pub partial_messages: bool,
 	#[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
 	pub env: std::collections::BTreeMap<String, String>,
