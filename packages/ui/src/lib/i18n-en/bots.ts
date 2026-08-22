@@ -1,6 +1,7 @@
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type {
+	BotOutputStyle,
 	BotSkillContext,
 	BotSkillEffort,
 } from "@workspace/ui/components/bot-settings"
@@ -361,6 +362,25 @@ const bots = {
 		model: {
 			label: "Model",
 			placeholder: "Choose a model",
+		},
+		outputStyle: {
+			label: "Answer style",
+			/** One key per style, keyed by the value the host stores raw, so a style
+			 * the host gains and this catalogue has no name for fails the type check
+			 * rather than reaching a reader as it is written on disk. */
+			option: {
+				Concise: {
+					label: "Concise",
+					hint: "Short answers that lead with the result.",
+				},
+				default: {
+					label: "Standard",
+					hint: "Claude's standard answers.",
+				},
+			} as const satisfies Record<
+				BotOutputStyle,
+				{ label: string; hint: string }
+			>,
 		},
 		directory: {
 			label: "Working directory",

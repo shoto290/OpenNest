@@ -354,6 +354,19 @@ const bots = {
 			label: "Modèle",
 			placeholder: "Choisissez un modèle",
 		},
+		outputStyle: {
+			label: "Style de réponse",
+			option: {
+				Concise: {
+					label: "Concis",
+					hint: "Des réponses courtes qui commencent par le résultat.",
+				},
+				default: {
+					label: "Standard",
+					hint: "Les réponses standard de Claude.",
+				},
+			},
+		},
 		directory: {
 			label: "Dossier de travail",
 			placeholder: "Choisissez un dossier",

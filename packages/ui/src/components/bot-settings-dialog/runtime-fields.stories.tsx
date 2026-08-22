@@ -2,7 +2,10 @@ import { useState } from "react"
 import { expect, fn, screen } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import type { BotModelOption } from "@workspace/ui/components/bot-settings"
+import {
+	type BotModelOption,
+	DEFAULT_BOT_OUTPUT_STYLE,
+} from "@workspace/ui/components/bot-settings"
 import {
 	RuntimeFields,
 	type RuntimeFieldsProps,
@@ -21,6 +24,7 @@ const LONG_PATH =
  * dialog holds the whole value. */
 const RuntimeFieldsHost = (props: RuntimeFieldsProps) => {
 	const [model, setModel] = useState(props.model)
+	const [outputStyle, setOutputStyle] = useState(props.outputStyle)
 	const [changesNothing, setChangesNothing] = useState(props.changesNothing)
 
 	return (
@@ -36,6 +40,11 @@ const RuntimeFieldsHost = (props: RuntimeFieldsProps) => {
 				setModel(next)
 				props.onModelChange(next)
 			}}
+			onOutputStyleChange={(next) => {
+				setOutputStyle(next)
+				props.onOutputStyleChange?.(next)
+			}}
+			outputStyle={outputStyle}
 		/>
 	)
 }
@@ -62,9 +71,11 @@ const meta = preview.meta({
 	args: {
 		models: MODELS,
 		model: "nest-sonnet-4-5",
+		outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 		workingDirectory: "/Users/wren/Projects/opennest",
 		changesNothing: false,
 		onModelChange: fn(),
+		onOutputStyleChange: fn(),
 		onBrowseWorkingDirectory: fn(),
 		onChangesNothingChange: fn(),
 	},
@@ -95,6 +106,50 @@ export const Filled = meta.story({
 					"A configured bot: a model out of the host's list and a folder already chosen. The folder row keeps its `Change` affordance on the right even when full, so the row never becomes a label a reader mistakes for read-only text.",
 			},
 		},
+	},
+})
+
+export const Concise = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The style a bot is given by default: short answers that lead with the result. The hint under the trigger is the picked style's own, so the reader reads what they chose rather than a sentence about the field.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByRole("combobox", { name: /Answer style/ }),
+		).toHaveTextContent("Concise")
+		await expect(
+			canvas.getByText("Short answers that lead with the result."),
+		).toBeVisible()
+	},
+})
+
+export const StandardAnswers = meta.story({
+	args: { outputStyle: "default" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Claude's standard answers. The value the host stores raw is `default`, and the reader never sees it — the trigger reads `Standard` and the hint changes with it. Check that picking reports the raw value rather than the label.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const style = canvas.getByRole("combobox", { name: /Answer style/ })
+
+		await expect(style).toHaveTextContent("Standard")
+
+		await userEvent.click(style)
+		await userEvent.click(
+			await screen.findByRole("option", { name: "Concise" }),
+		)
+
+		await expect(args.onOutputStyleChange).toHaveBeenCalledWith("Concise")
+		await expect(style).toHaveTextContent("Concise")
 	},
 })
 

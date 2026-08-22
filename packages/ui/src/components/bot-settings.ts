@@ -23,6 +23,21 @@ type BotModelOption = {
 	value: string
 }
 
+/** How the bot writes its answers, as the host stores it raw: the concise style it
+ * is given by default, and Claude's own. Two answers rather than free text — the
+ * value is written into the host's settings as it stands here. */
+type BotOutputStyle = (typeof BOT_OUTPUT_STYLES)[number]
+
+const BOT_OUTPUT_STYLES = ["Concise", "default"] as const
+
+/** The style a bot writes in until somebody says otherwise. */
+const DEFAULT_BOT_OUTPUT_STYLE: BotOutputStyle = "Concise"
+
+/** What the host holds, read as a style the panel can show. Anything it does not
+ * know is read as the default one. */
+const readBotOutputStyle = (value: string): BotOutputStyle =>
+	BOT_OUTPUT_STYLES.find((style) => style === value) ?? DEFAULT_BOT_OUTPUT_STYLE
+
 /** How hard the model is asked to think on a skill's turn. */
 type BotSkillEffort = (typeof SKILL_EFFORTS)[number]
 
@@ -535,6 +550,7 @@ export {
 	BLANK_SKILL_DRAFT,
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
+	BOT_OUTPUT_STYLES,
 	type BotAvatarBlot,
 	type BotCommitAuthor,
 	type BotCommitItem,
@@ -544,11 +560,13 @@ export {
 	type BotMcpServerItem,
 	type BotMcpTransport,
 	type BotModelOption,
+	type BotOutputStyle,
 	type BotSettingsValue,
 	type BotSkillContext,
 	type BotSkillDraft,
 	type BotSkillEffort,
 	type BotSkillItem,
+	DEFAULT_BOT_OUTPUT_STYLE,
 	isConfigObject,
 	isMcpServerDraftUnsaved,
 	isSameFieldAnswer,
@@ -556,6 +574,7 @@ export {
 	MCP_ENDPOINT_KINDS,
 	MCP_TRANSPORTS,
 	parseMcpServerConfig,
+	readBotOutputStyle,
 	readConfigList,
 	readConfigPairs,
 	readConfigText,
