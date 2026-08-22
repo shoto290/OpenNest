@@ -13,6 +13,10 @@ export type SessionRequest = {
 	 * spelling of them: the provider module turns the pair into its own options. */
 	pluginPath?: string
 	agent?: string
+	/** The app's own plugin bundle, loaded beside the bot's for the same session and
+	 * carrying the capabilities the host owns rather than the bot. Only ever loaded
+	 * with a bot's bundle, and never promoted: nothing in it is an agent. */
+	systemPluginPath?: string
 	/** The output style the host names for this session, by the name the provider
 	 * knows it under. Left out, the provider's own default stands. */
 	outputStyle?: string
