@@ -161,7 +161,7 @@ export const EveryBlot = meta.story({
 		docs: {
 			description: {
 				story:
-					"The eight tints a bot can be marked with, and the bot marked with none. The names are the ones an agent file's `color` key reads; the ink is unchanged by them — `purple` is the lavender it always was, and `orange` the grey-blue. All eight are light on purpose: the ink line is near-black and the ear accent is coral, and both stop reading over anything darker — check that the outline, the eyes and the ears hold on every tint, and that the tint is the only thing that changes from one to the next. Switch the Storybook theme to dark: the tints do not flip, because a bot's mark is the same colour wherever it is shown. The first avatar draws no blot at all and must be identical to what the component rendered before blots existed.",
+					"The eight tints a bot can be marked with, and the bot marked with none. The names are the ones an agent file's `color` key reads. Seven inks came through the renaming untouched — `purple` is the lavender it always was; `orange` is the one that was drawn again, because the grey it inherited did not answer to the word. All eight are light on purpose: the ink line is near-black and the ear accent is coral, and both stop reading over anything darker — check that the outline, the eyes and the ears hold on every tint, and that the tint is the only thing that changes from one to the next. Switch the Storybook theme to dark: the tints do not flip, because a bot's mark is the same colour wherever it is shown. The first avatar draws no blot at all and must be identical to what the component rendered before blots existed.",
 			},
 		},
 	},
