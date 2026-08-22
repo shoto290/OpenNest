@@ -12,9 +12,12 @@
 //!   plugins/<bot id>/
 //!     .claude-plugin/plugin.json      name: <bot id>, displayName: <bot name>
 //!     agents/<slug>.md                metadata carries the bot id
-//!     hooks/hooks.json                one SessionStart hook, and the script it runs
-//!     skills/learn/SKILL.md           the rules the bot edits itself under
+//!     skills/<name>/SKILL.md          what the bot remembered, one directory each
 //! ```
+//!
+//! What the host owns is not in there: the `learn` rules every bot writes its memory
+//! under are one plugin of the app's own, loaded beside the bot's for the same
+//! session — see [`system`].
 //!
 //! **A name is not an identity.** It changes, and two bots can share one, so the id
 //! names the plugin, marks the generated agent as this bot's, and qualifies the agent
@@ -47,13 +50,11 @@
 //! region back as brief would carry the last write's copy into the next one, and the
 //! file would grow on every save.
 //!
-//! **A bot is handed its own directory, and told what it may do with it.** Every bundle
-//! carries a `SessionStart` hook printing the `CLAUDE_PLUGIN_ROOT` the agent resolved
-//! for it — the one route that path has, since the variable is empty in the bot's own
-//! `Bash` — and a `learn` skill, carried into the brief, saying that its
-//! `skills/<name>/SKILL.md` files are its only memory and that nothing else in the
-//! directory is its to edit. The hook is generated and rewritten like the manifest; the
-//! skill is written once and never again, because it is a file the bot itself edits.
+//! **A bot is told where its own directory is through the prompt layer.** Every bundle
+//! carried a `SessionStart` hook printing `CLAUDE_PLUGIN_ROOT` for as long as that was
+//! the only route the path had; a session names it in the appended layer now — see
+//! `agent/PROTOCOL.md` — so the hook and the per-bundle copy of `learn` are taken back
+//! out of a bundle that still has them.
 //!
 //! **A server reaches a bot through `.mcp.json`.** The one surface that raises a
 //! bot's capability rather than reducing it: a declared server starts a process on
@@ -71,6 +72,7 @@ use crate::db::repositories::conversations::{AvatarBlot, Bot};
 use crate::private_files;
 
 mod git;
+pub mod system;
 
 pub use git::{commit, diff, history, revert, Author, HistoryEntry};
 
@@ -96,28 +98,17 @@ const AGENT_EXTENSION: &str = "md";
 const SKILLS_DIR: &str = "skills";
 const SKILL_NAME: &str = "SKILL.md";
 
-/// Where the bundle's own hooks are declared, under the names the agent discovers
-/// them by. The one hook written here hands the bot the one thing its own shell
-/// cannot tell it: `CLAUDE_PLUGIN_ROOT` is set for a hook and empty in the bot's
-/// `Bash`, so the path of its directory reaches it as text at turn zero or not at
-/// all — see `agent/PLUGINS.md`.
+/// The hook this module used to write into every bundle, and the only reason either
+/// name is still spelled here: they are what [`unequip`] takes back out of a bundle
+/// written before the prompt layer named the bot's directory — see `agent/PLUGINS.md`.
 const HOOKS_DIR: &str = "hooks";
 const HOOKS_NAME: &str = "hooks.json";
 const SESSION_START_NAME: &str = "session-start.sh";
-const SESSION_START_EVENT: &str = "SessionStart";
-
-/// The script the hook runs, which prints the one line the session starts with. A
-/// hook is a command rather than a value, so the path is read from the environment
-/// the agent sets rather than written into the file: one script says the same thing
-/// in every bundle, whatever the reader's disk calls their bots' directories.
-const SESSION_START: &str = r#"#!/bin/sh
-printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"PLUGIN_ROOT=%s"}}' "$CLAUDE_PLUGIN_ROOT"
-"#;
 
 /// What the bot leaves behind for the write that records its turn: a title line, a
-/// blank line, then what it changed and why, as [`LEARN_BODY`] asks it to. Read once
-/// the turn is over and deleted with the commit that carries it, so the next turn
-/// speaks for itself.
+/// blank line, then what it changed and why, as the `learn` skill asks it to — see
+/// [`system`]. Read once the turn is over and deleted with the commit that carries it,
+/// so the next turn speaks for itself.
 const LEARNED_NAME: &str = ".learned.md";
 
 /// The title a turn is recorded under when the bot wrote files and left no sentence
@@ -125,53 +116,11 @@ const LEARNED_NAME: &str = ".learned.md";
 /// which is all this app can honestly say about a write nobody described.
 const EVOLVED_TITLE: &str = "The bot changed its files";
 
-/// The skill a bot evolves through, and the only one this module writes a body for.
-/// Written once and never again: it is a file in the reader's own bundle from the
-/// moment it lands, so a hand that rewrites it has rewritten it for good.
-///
-/// Carried into the brief and taken out of the catalogue, both — see
-/// [`INVOCATION_KEY`]: a bot that has to fetch its own rules for remembering is a bot
-/// that decides, turn by turn, whether it has any.
+/// The directory the host's `learn` skill lives in, in the app's own plugin — see
+/// [`system`], which is where its text is. Named here because it is also what
+/// [`unequip`] takes back out of a bundle carrying the copy this module used to write
+/// into every one of them.
 const LEARN_ID: &str = "learn";
-const LEARN_DESCRIPTION: &str =
-	"How you remember. Applies when the user corrects you, tells you a preference or a fact you would have needed earlier, or asks you to remember something.";
-
-/// What the skill says. Addressed to the bot, because this is the one text in the
-/// bundle nobody wrote for a reader: it is the rules a bot edits itself under.
-const LEARN_BODY: &str = r#"Your own directory is the PLUGIN_ROOT you were given at the start of this session.
-
-## What is yours
-
-The `skills/<name>/SKILL.md` files under that directory are your only memory. Nothing
-else there is yours: never edit `agents/`, `.claude-plugin/`, `.mcp.json` or `hooks/`.
-What you were told and who you are belong to the person you are talking to.
-
-## When to write
-
-- They corrected you.
-- They told you a preference or a fact that would have saved a round-trip had you known it.
-- They asked you to remember something. That one you always keep.
-
-Write nothing else. Anything only this conversation needs is not memory.
-
-## How to write
-
-Read the skills you already have first. Then update the one that covers the subject
-rather than writing beside it, merge two that overlap into one, and create a skill
-only when none of them covers it. Keep each skill's `description` naming when it
-applies, so the next session knows when to reach for it.
-
-## What to say afterwards
-
-After any write, overwrite `<PLUGIN_ROOT>/.learned.md` with a title line under 72
-characters, a blank line, then one to three lines saying what changed and why. Write it
-in the language of the conversation, for someone who does not read code.
-
-## When it takes effect
-
-A skill you write is loaded at your next message, not in the turn you wrote it. Answer
-the turn from what you already know, and do not read the file back as if it were in
-force."#;
 
 /// Where a bot's MCP servers are declared, and what the manifest points at so they
 /// are loaded with the bundle — measured connecting as `plugin:<bot id>:<server>`,
@@ -524,7 +473,7 @@ fn recorded(root: &Path, bot_id: &str, subject: &str, name: &str, verb: &str) {
 /// truth — and nothing about a skill is a reason to write a brief over the one the
 /// bot is really running on.
 fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std::io::Result<()> {
-	equip(root, &bot.id)?;
+	unequip(root, &bot.id);
 	let generated = generated_agent(root, &bot.id);
 	let agent_path = free_agent_path(root, bot, generated.as_deref());
 	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
@@ -537,50 +486,40 @@ fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std
 	Ok(())
 }
 
-/// What every bundle carries beyond what a reader wrote: the hook that tells the bot
-/// where its own directory is, and the skill that says what it may do with it.
+/// What this module used to put in every bundle and now takes back out: the hook pair
+/// that printed the bot's own directory, and the copy of the host's `learn` text. The
+/// prompt layer names the directory, and the app's own plugin carries the text — see
+/// [`system`] — so both are the host's writes still sitting in the reader's bundle.
 ///
-/// The two are laid down differently on purpose. The hook is generated, rewritten on
-/// every write like the manifest, and its content is the same in every bundle. The
-/// skill is a text a bot edits — its whole point — so it is written once, when there
-/// is nothing at that path, and never over what is there.
-fn equip(root: &Path, bot_id: &str) -> std::io::Result<()> {
-	let hooks = dir(root, bot_id).join(HOOKS_DIR);
-	private_files::replace(&hooks.join(HOOKS_NAME), declared_hooks().as_bytes())?;
-	private_files::replace_runnable(&hooks.join(SESSION_START_NAME), SESSION_START.as_bytes())?;
-	write_learn(root, bot_id)
-}
-
-/// One hook on one event, pointing at the script beside this very file. The path is
-/// spelled through `CLAUDE_PLUGIN_ROOT` because that is the one thing the agent
-/// resolves for a bundle it never installed: nothing here knows where the reader's
-/// app data directory will be when this runs.
-fn declared_hooks() -> String {
-	let run = serde_json::json!({
-		"type": "command",
-		"command": format!("${{CLAUDE_PLUGIN_ROOT}}/{HOOKS_DIR}/{SESSION_START_NAME}"),
-	});
-	serde_json::json!({ "hooks": { SESSION_START_EVENT: [{ "hooks": [run] }] } }).to_string()
-}
-
-/// The skill written the way any other one is — through [`drafted`] and [`marked`] —
-/// so what lands on the disk is a file this module reads back like every skill a
-/// reader created, mark included.
-fn write_learn(root: &Path, bot_id: &str) -> std::io::Result<()> {
-	let path = dir(root, bot_id).join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME);
-	if path.exists() {
-		return Ok(());
+/// Only what this module generated goes. The two hook files while the declaration is
+/// still the one it wrote — a `hooks.json` a reader filled with hooks of their own is
+/// theirs, and so is everything else in a `hooks/`, which is why the directory itself
+/// only goes when it is empty afterwards; and `skills/learn` only while it carries the
+/// mark that says the host wrote it — see [`SYSTEM_KEY`]. A `learn` skill a reader made
+/// their own, by dropping the key or by writing the directory themselves, is theirs.
+///
+/// Nothing here fails a write. A file that is not there is the ordinary case — every
+/// bundle written from now on — and a file that will not go is a bundle that is still
+/// perfectly good to start a session on.
+fn unequip(root: &Path, bot_id: &str) {
+	let bundle = dir(root, bot_id);
+	let hooks = bundle.join(HOOKS_DIR);
+	let declared = hooks.join(HOOKS_NAME);
+	if generated_hooks(&declared) {
+		let _ = fs::remove_file(declared);
+		let _ = fs::remove_file(hooks.join(SESSION_START_NAME));
+		let _ = fs::remove_dir(hooks);
 	}
-	let draft = SkillDraft {
-		name: LEARN_ID.to_owned(),
-		description: LEARN_DESCRIPTION.to_owned(),
-		body: LEARN_BODY.to_owned(),
-		front: SkillFront {
-			metadata: Some(serde_json::json!({ OPENNEST_KEY: { SYSTEM_KEY: true } })),
-			..SkillFront::default()
-		},
-	};
-	private_files::replace(&path, marked(&drafted(None, &draft)?, true)?.as_bytes())
+	if is_system_skill(root, bot_id, LEARN_ID) {
+		let _ = fs::remove_dir_all(bundle.join(SKILLS_DIR).join(LEARN_ID));
+	}
+}
+
+/// Whether a declaration is the one this module used to write, which is the only one it
+/// takes away: the file names the script it laid down beside it, and a `hooks.json`
+/// naming anything else is a reader's own.
+fn generated_hooks(path: &Path) -> bool {
+	fs::read_to_string(path).is_ok_and(|text| text.contains(SESSION_START_NAME))
 }
 
 /// Where this bot's agent goes: the name it answers to, unless a file nobody
@@ -601,9 +540,9 @@ fn free_agent_path(root: &Path, bot: &Bot, generated: Option<&Path>) -> PathBuf 
 /// start a bot without one.
 ///
 /// A bundle that is already there is completed rather than written over: the brief
-/// comes off the disk, so a hand edit survives, and what a bot older than a feature
-/// never had — its hook, its `learn` skill — is put down beside it. The brief is
-/// laid down again from that same disk on the way through, which is what carries a
+/// comes off the disk, so a hand edit survives, and what this module used to write into
+/// every bundle and no longer does is taken back out of it — see [`unequip`]. The brief
+/// is laid down again from that same disk on the way through, which is what carries a
 /// skill that has just appeared into the body the session is really started on.
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	if agent_file(root, &bot.id).is_some() {
@@ -2597,79 +2536,49 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The one thing a bot cannot find out for itself: `CLAUDE_PLUGIN_ROOT` is set for
-	/// a hook and empty in the bot's own `Bash`, so where its directory is reaches it
-	/// as text at the start of a session or not at all.
+	/// What a bundle no longer carries: the hook that printed its own directory, and a
+	/// copy of the host's `learn` text. The prompt layer names the directory and the
+	/// app's own plugin holds the text, so a bundle written today is the bot and nothing
+	/// of the host's beside it.
 	#[test]
-	fn a_written_bundle_carries_the_hook_that_hands_the_bot_its_own_directory() {
-		let root = a_root("hooked");
+	fn a_written_bundle_carries_neither_a_hook_nor_a_learn_skill() {
+		let root = a_root("unhooked");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 
-		let hooks = dir(&root, &bot.id).join(HOOKS_DIR);
-		let text = fs::read_to_string(hooks.join(HOOKS_NAME)).expect("the hooks file reads");
-		let declared: serde_json::Value = serde_json::from_str(&text).expect("the hooks are JSON");
-		let hook = &declared["hooks"][SESSION_START_EVENT][0]["hooks"][0];
-
-		assert_eq!(hook["type"], "command", "got {text}");
-		assert_eq!(hook["command"], "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh", "got {text}");
-		assert!(hooks.join(SESSION_START_NAME).is_file(), "the hook points at nothing");
-
-		let _ = fs::remove_dir_all(&root);
-	}
-
-	/// The script as the agent runs it: runnable by its owner, and printing the one
-	/// line the session opens with — the root it was handed, and nothing else.
-	#[cfg(unix)]
-	#[test]
-	fn the_session_start_hook_prints_the_root_it_was_run_with() {
-		use std::os::unix::fs::PermissionsExt;
-
-		let root = a_root("hook-run");
-		let bot = a_bot("Bean", "Answer briefly.");
-		write(&root, &bot).expect("the bundle is written");
-
-		let script = dir(&root, &bot.id).join(HOOKS_DIR).join(SESSION_START_NAME);
-		let mode = fs::metadata(&script).expect("metadata").permissions().mode();
-		assert_eq!(mode & 0o777, private_files::RUN_MODE, "the hook is not the owner's to run");
-
-		let printed = std::process::Command::new(&script)
-			.env("CLAUDE_PLUGIN_ROOT", "/somewhere/b1")
-			.output()
-			.expect("the hook runs");
-
-		assert_eq!(
-			String::from_utf8_lossy(&printed.stdout),
-			"{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"PLUGIN_ROOT=/somewhere/b1\"}}"
+		let bundle = dir(&root, &bot.id);
+		assert!(!bundle.join(HOOKS_DIR).exists(), "the bundle carries a hook");
+		assert!(
+			!bundle.join(SKILLS_DIR).join(LEARN_ID).exists(),
+			"the bundle carries a learn copy"
 		);
+		assert!(skills(&root, &bot.id).is_empty(), "a bot nobody taught has a skill");
+		assert!(!written_agent(&root, &bot.id).contains(CARRIED_OPEN), "something was carried");
 
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The mark that makes the skill the host's: written where the file is laid down,
-	/// carried by a file the bot rewrote as long as the key stays, and gone the moment
-	/// the key is. A skill a reader created carries none of it.
+	/// The mark that says the host wrote a skill, read off the file every time: a
+	/// bundle from before the app had a plugin of its own still holds one, and the
+	/// settings answer for it — see `conversations::commands::refuse_system_skill`.
+	/// A skill a reader created carries none of it.
 	#[test]
-	fn the_learn_skill_is_marked_as_the_hosts_and_stays_so_while_the_key_stays() {
+	fn a_skill_reads_as_the_hosts_while_it_carries_the_mark() {
 		let root = a_root("system-mark");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 
-		let written = written_skill_file(&root, &bot.id, LEARN_ID);
-		assert!(written.contains("system: true"), "got {written}");
-		assert!(is_system_skill(&root, &bot.id, LEARN_ID), "the generated skill is not the host's");
-
-		let path = dir(&root, &bot.id).join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME);
+		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("remembering").join(SKILL_NAME);
 		let kept = format!(
-			"{FENCE}\nname: learn\nmetadata:\n  opennest:\n    system: true\n{FENCE}\n\nRewritten.\n"
+			"{FENCE}\nname: remembering\nmetadata:\n  opennest:\n    system: true\n{FENCE}\n\nRewritten.\n"
 		);
-		private_files::replace(&path, kept.as_bytes()).expect("the bot's rewrite lands");
-		assert!(is_system_skill(&root, &bot.id, LEARN_ID), "the mark did not survive a rewrite");
+		private_files::replace(&path, kept.as_bytes()).expect("the older file lands");
+		assert!(is_system_skill(&root, &bot.id, "remembering"), "the mark was not read back");
 
-		let bare = format!("{FENCE}\nname: learn\n{FENCE}\n\nMine now.\n");
+		let bare = format!("{FENCE}\nname: remembering\n{FENCE}\n\nMine now.\n");
 		private_files::replace(&path, bare.as_bytes()).expect("the rewrite lands");
 		assert!(
-			!is_system_skill(&root, &bot.id, LEARN_ID),
+			!is_system_skill(&root, &bot.id, "remembering"),
 			"a file that dropped the key still reads as the host's"
 		);
 
@@ -2690,46 +2599,13 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The skill a bot evolves through: carried into the brief, out of the catalogue
-	/// so nothing fetches what it was already given, and written exactly once — a
-	/// hand that rewrites it has rewritten it for good.
+	/// A bot nobody has told anything still carries what it remembered — and still
+	/// reads back as told nothing, since the carried region is not a brief.
 	#[test]
-	fn a_bundle_carries_a_learn_skill_and_writes_it_only_once() {
-		let root = a_root("learn");
-		let bot = a_bot("Bean", "Answer briefly.");
-		write(&root, &bot).expect("the bundle is written");
-
-		let learned = skills(&root, &bot.id)
-			.into_iter()
-			.find(|skill| skill.id == LEARN_ID)
-			.expect("the bundle carries a learn skill");
-		assert!(learned.is_preloaded, "the skill was not marked for the brief");
-		assert_eq!(learned.front.disable_model_invocation, Some(true));
-
-		let written = written_agent(&root, &bot.id);
-		assert!(written.contains(CARRIED_OPEN), "got {written}");
-		assert!(written.contains("`skills/<name>/SKILL.md`"), "got {written}");
-		assert!(written.contains(".learned.md"), "got {written}");
-
-		let mine = format!("{FENCE}\nname: learn\n{FENCE}\n\nMine now.\n");
-		private_files::replace(
-			&dir(&root, &bot.id).join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME),
-			mine.as_bytes(),
-		)
-		.expect("the hand edit lands");
-		write(&root, &bot).expect("the bundle is written again");
-
-		assert_eq!(written_skill_file(&root, &bot.id, LEARN_ID), mine);
-
-		let _ = fs::remove_dir_all(&root);
-	}
-
-	/// A bot nobody has told anything still carries the skill it remembers through —
-	/// and still reads back as told nothing, since the carried region is not a brief.
-	#[test]
-	fn a_bot_told_nothing_carries_the_skill_and_still_reads_as_told_nothing() {
+	fn a_bot_told_nothing_carries_its_skills_and_still_reads_as_told_nothing() {
 		let root = a_root("untold");
 		let bot = a_bot("Bean", "");
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
 		write(&root, &bot).expect("the bundle is written");
 
 		assert!(written_agent(&root, &bot.id).contains(CARRIED_OPEN));
@@ -2739,29 +2615,77 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bundle written before there was a hook or a skill to remember through is
-	/// completed on the next launch rather than left half a bot — and the brief the
-	/// disk holds is still what the bot is afterwards.
+	/// A bundle written when the host still put a hook and a copy of `learn` in every
+	/// one of them: both are taken back the next time anything ensures it, the reader's
+	/// own skills are left where they are, and the brief the disk holds is still what
+	/// the bot is afterwards.
 	#[test]
-	fn a_bundle_older_than_the_hook_and_the_skill_is_completed_when_it_is_ensured() {
-		let root = a_root("completed");
+	fn a_bundle_from_before_the_system_plugin_has_the_hosts_files_taken_back() {
+		let root = a_root("unequipped");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 		let bundle = dir(&root, &bot.id);
-		fs::remove_dir_all(bundle.join(HOOKS_DIR)).expect("the hooks are taken away");
-		fs::remove_dir_all(bundle.join(SKILLS_DIR).join(LEARN_ID)).expect("the skill goes");
+		let hooks = bundle.join(HOOKS_DIR);
+		let declared = format!(
+			r#"{{"hooks":{{"SessionStart":[{{"hooks":[{{"type":"command","command":"${{CLAUDE_PLUGIN_ROOT}}/{HOOKS_DIR}/{SESSION_START_NAME}"}}]}}]}}}}"#
+		);
+		private_files::replace(&hooks.join(HOOKS_NAME), declared.as_bytes())
+			.expect("the older hook lands");
+		private_files::replace(&hooks.join(SESSION_START_NAME), b"#!/bin/sh\n")
+			.expect("the older script lands");
+		private_files::replace(
+			&bundle.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME),
+			format!("{FENCE}\nname: learn\nmetadata:\n  opennest:\n    system: true\n{FENCE}\n\nOld rules.\n")
+				.as_bytes(),
+		)
+		.expect("the older copy lands");
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
 		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
 		rewrite_the_brief(&agent, "Answer at length.");
 
 		ensure(&root, &bot).expect("the bundle is completed");
 
-		assert!(bundle.join(HOOKS_DIR).join(HOOKS_NAME).is_file(), "the hook was not put back");
-		assert!(
-			bundle.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME).is_file(),
-			"the skill was not put back"
-		);
+		assert!(!hooks.exists(), "the hook is still there");
+		assert!(!bundle.join(SKILLS_DIR).join(LEARN_ID).exists(), "the learn copy is still there");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer at length."));
-		assert!(written_agent(&root, &bot.id).contains(CARRIED_OPEN));
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains("Bake at 220 degrees."), "got {written}");
+		assert!(!written.contains("Old rules."), "got {written}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The `learn` a bot's reader made their own: the mark is gone, so the directory is
+	/// theirs and nothing here takes it away. Same for a `hooks/` somebody else filled —
+	/// only the two files this module wrote go, and the directory goes with them only if
+	/// it is empty afterwards.
+	#[test]
+	fn a_learn_a_reader_owns_and_a_hook_somebody_else_wrote_both_stay() {
+		let root = a_root("kept");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let bundle = dir(&root, &bot.id);
+		let mine = format!("{FENCE}\nname: learn\n{FENCE}\n\nMine now.\n");
+		private_files::replace(
+			&bundle.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME),
+			mine.as_bytes(),
+		)
+		.expect("the reader's file lands");
+		private_files::replace(&bundle.join(HOOKS_DIR).join("theirs.sh"), b"#!/bin/sh\n")
+			.expect("their script lands");
+		let theirs = r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"${CLAUDE_PLUGIN_ROOT}/hooks/theirs.sh"}]}]}}"#;
+		private_files::replace(&bundle.join(HOOKS_DIR).join(HOOKS_NAME), theirs.as_bytes())
+			.expect("their declaration lands");
+
+		ensure(&root, &bot).expect("the bundle is completed");
+
+		assert_eq!(written_skill_file(&root, &bot.id, LEARN_ID), mine);
+		assert!(bundle.join(HOOKS_DIR).join("theirs.sh").is_file(), "their script went");
+		assert_eq!(
+			fs::read_to_string(bundle.join(HOOKS_DIR).join(HOOKS_NAME)).expect("it reads"),
+			theirs,
+			"their declaration went"
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -2966,12 +2890,6 @@ mod tests {
 		}
 	}
 
-	/// Every skill in a bundle but the one this module puts in each of them. A test
-	/// about what a reader wrote is not a test about `learn`.
-	fn readers_skills(root: &Path, bot_id: &str) -> Vec<Skill> {
-		skills(root, bot_id).into_iter().filter(|skill| skill.id != LEARN_ID).collect()
-	}
-
 	fn written_skill_file(root: &Path, bot_id: &str, skill_id: &str) -> String {
 		fs::read_to_string(dir(root, bot_id).join(SKILLS_DIR).join(skill_id).join(SKILL_NAME))
 			.expect("the skill file reads")
@@ -2994,7 +2912,7 @@ mod tests {
 		assert_eq!(created.body, "Bake.");
 		assert!(!created.is_preloaded);
 
-		let listed = readers_skills(&root, &bot.id);
+		let listed = skills(&root, &bot.id);
 		assert_eq!(listed.len(), 1);
 		assert_eq!(listed[0].id, "baking-bread");
 
@@ -3442,7 +3360,7 @@ mod tests {
 
 		let created = create_skill(&root, &bot, &a_draft(name, description, "Bake."))
 			.expect("the skill is written");
-		let listed = readers_skills(&root, &bot.id);
+		let listed = skills(&root, &bot.id);
 
 		assert_eq!(created.name, name);
 		assert_eq!(created.description, description);
@@ -3452,7 +3370,7 @@ mod tests {
 		assert_eq!(listed[0].body, "Bake.");
 
 		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
-		assert!(readers_skills(&root, &bot.id)[0].is_preloaded, "the mark was lost to the quoting");
+		assert!(skills(&root, &bot.id)[0].is_preloaded, "the mark was lost to the quoting");
 		assert!(written_agent(&root, &bot.id).contains(name), "got a name the file spelled");
 
 		let _ = fs::remove_dir_all(&root);
@@ -3621,7 +3539,7 @@ mod tests {
 		let titles = titles(&root, &bot.id);
 		assert_eq!(titles[0], "Change undone: Skill \"Kneading\" created from settings");
 		assert_eq!(titles.len(), 3);
-		assert!(readers_skills(&root, &bot.id).is_empty(), "the skill is back on the disk");
+		assert!(skills(&root, &bot.id).is_empty(), "the skill is back on the disk");
 		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join(&skill.id).exists());
 
 		let _ = fs::remove_dir_all(&root);
@@ -3745,8 +3663,7 @@ mod tests {
 		write_marketplace(&root, std::slice::from_ref(&bot)).expect("the marketplace is written");
 
 		assert!(dir(&root, &bot.id).join(".git").is_dir());
-		let listed: Vec<String> =
-			readers_skills(&root, &bot.id).into_iter().map(|it| it.id).collect();
+		let listed: Vec<String> = skills(&root, &bot.id).into_iter().map(|it| it.id).collect();
 		assert_eq!(listed, vec!["kneading"]);
 		assert!(written_agent(&root, &bot.id).contains("Answer briefly."));
 		let marketplace =

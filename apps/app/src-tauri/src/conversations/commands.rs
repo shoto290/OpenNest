@@ -86,7 +86,14 @@ async fn forget_bundle(root: Option<&Path>, database: &db::Database, bot_id: &st
 /// database. A reader who never opens the settings panel still has a marketplace to
 /// add, and a bundle a hand took away between two launches is back before the bot is
 /// spoken to.
+///
+/// The app's own plugin is written first, and without a database: it is the host's own
+/// text rather than a projection of anything stored, every session loads it beside the
+/// bot's, and this is the one write it has — see [`bundles::system`].
 pub async fn list_bundles_at_launch<R: Runtime>(app: &AppHandle<R>) {
+	if let Some(path) = bundles::system::path(app) {
+		let _ = bundles::system::write(&path);
+	}
 	let state = app.state::<db::DatabaseState>();
 	let Ok(database) = state.inner().as_ref() else {
 		return;
@@ -718,18 +725,30 @@ mod tests {
 		}
 	}
 
-	/// What the settings may not do to the skill the host generated, and what it may
+	/// What the settings may not do to a skill marked as the host's, and what it may
 	/// still do to every other one. The refusal names the skill, and it happens before
 	/// any of the three commands reaches a write.
+	///
+	/// The mark is written here rather than generated: the host puts its own text in its
+	/// own plugin now — see `bundles::system` — and this is a bundle that still carries
+	/// one of the copies it used to write.
 	#[test]
-	fn a_write_from_the_settings_stops_at_a_skill_the_host_generated() {
+	fn a_write_from_the_settings_stops_at_a_skill_marked_as_the_hosts() {
 		let root = std::env::temp_dir().join("opennest-commands-system-skill");
 		let _ = fs::remove_dir_all(&root);
 		let bot = a_bot();
 		bundles::write(&root, &bot).expect("the bundle is written");
+		let older = bundles::dir(&root, &bot.id).join("skills").join("remembering");
+		fs::create_dir_all(&older).expect("the older directory is made");
+		fs::write(
+			older.join("SKILL.md"),
+			"---\nname: remembering\nmetadata:\n  opennest:\n    system: true\n---\n\nOld rules.\n",
+		)
+		.expect("the older file lands");
 
 		let skills = bundles::skills(&root, &bot.id);
-		let system = skills.iter().find(|skill| skill.is_system).expect("the bundle generated one");
+		let system =
+			skills.iter().find(|skill| skill.is_system).expect("the marked file reads back");
 
 		assert_eq!(
 			refuse_system_skill(&root, &bot.id, &system.id),

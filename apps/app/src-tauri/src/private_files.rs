@@ -19,10 +19,6 @@ use std::path::Path;
 const DIR_MODE: u32 = 0o700;
 const FILE_MODE: u32 = 0o600;
 
-/// What a file this host writes to be *run* ends up as. The same owner and nobody
-/// else, plus the one bit that makes a script a command.
-pub const RUN_MODE: u32 = 0o700;
-
 /// The bytes on the disk, owner-only from the moment the file exists, in a
 /// directory made if this is the first file to go in it.
 ///
@@ -51,30 +47,6 @@ pub fn replace(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 		create_dir(dir)?;
 	}
 	replace_owned(path, bytes)
-}
-
-/// The same write, for a file that is run rather than read. The one place this module
-/// widens a mode after creating something, and it is allowed to: the file goes from
-/// owner-read-write to owner-read-write-execute and never past its own owner, so
-/// there is no moment in between when anybody else could open it.
-///
-/// The bit is set on every write rather than only on the first, so a file that
-/// arrived without one — restored from a backup, copied across a disk that carries
-/// none — is a command again afterwards.
-pub fn replace_runnable(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-	replace(path, bytes)?;
-	run_owned(path)
-}
-
-#[cfg(unix)]
-fn run_owned(path: &Path) -> std::io::Result<()> {
-	use std::os::unix::fs::PermissionsExt;
-	fs::set_permissions(path, fs::Permissions::from_mode(RUN_MODE))
-}
-
-#[cfg(not(unix))]
-fn run_owned(_path: &Path) -> std::io::Result<()> {
-	Ok(())
 }
 
 #[cfg(unix)]

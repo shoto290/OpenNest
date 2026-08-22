@@ -56,6 +56,10 @@ pub struct OpenRequest {
 	/// neither is sticky — see `PLUGINS.md`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub plugin_path: Option<String>,
+	/// The app's own bundle, loaded beside the bot's and never promoted — nothing in it
+	/// is an agent. Only ever named beside a `plugin_path`, see `PROTOCOL.md`.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub system_plugin_path: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub agent: Option<String>,
 	/// The style the answer is written in, by the name the provider knows it under.

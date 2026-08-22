@@ -478,7 +478,8 @@ async fn runtime_identity<R: Runtime>(
 		return RuntimeIdentity::default();
 	};
 	let root = bundles::root(app);
-	let bundle = root.as_deref().and_then(|root| laid_down_bundle(root, &bot));
+	let system = bundles::system::laid_down(app);
+	let bundle = root.as_deref().and_then(|root| laid_down_bundle(root, &bot, system.as_deref()));
 	if let Some(found) = root.as_deref().and_then(|root| bundles::adopted(root, &bot)) {
 		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
 	}
@@ -489,10 +490,14 @@ async fn runtime_identity<R: Runtime>(
 /// which opens a session with no plugin and no agent. That is a bot answering as
 /// plain Claude: the honest outcome of a bundle that is not there, and one the reader
 /// can still talk to.
-fn laid_down_bundle(root: &Path, bot: &StoredBot) -> Option<Bundle> {
+///
+/// `system` is the app's own plugin, which travels with the bot's and never on its own:
+/// a launch that could not write it hands over a session on the bot's alone.
+fn laid_down_bundle(root: &Path, bot: &StoredBot, system: Option<&Path>) -> Option<Bundle> {
 	bundles::ensure(root, bot).ok()?;
 	Some(Bundle {
 		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
+		system_path: system.map(|path| path.to_string_lossy().into_owned()),
 		agent: bundles::agent_ref(root, bot),
 		output_style: bundles::output_style(root, &bot.id),
 	})
