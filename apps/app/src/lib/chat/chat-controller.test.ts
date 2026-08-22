@@ -6,6 +6,7 @@ import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
 import {
 	ASKED_FOR,
+	EVOLVED,
 	NEARING_THE_BOUND,
 	REDESCRIBED,
 	REFUSED,
@@ -138,6 +139,14 @@ const spokenAnswer = (text: string): AgentEvent[] => [
 		},
 	},
 ]
+
+/** The host reporting that a bot rewrote itself: a commit in its bundle, which
+ * the process that wrote it was not spawned on. */
+const EVOLUTION: AgentEvent = {
+	type: "botEvolved",
+	commitId: "c-1",
+	title: "learned to count",
+}
 
 const ended = (outcome: "completed" | "cancelled" | "failed"): AgentEvent => ({
 	type: "turnEnded",
@@ -1935,6 +1944,59 @@ describe("a run replaced under a conversation that carries on", () => {
 
 		expect(reasons(opened, BOT)).toEqual([null, REDESCRIBED])
 		expect(reasons(opened, other.id)).toEqual([null])
+		detach()
+	})
+
+	// The bot rewrote its own instructions in the middle of a run. The child that
+	// wrote them is the one that cannot read them — it was spawned on what the
+	// bundle said before — so the run is spent from there and the next prompt is
+	// carried by a process started on what the bot says now. The reader sees
+	// nothing of it, neither a notice nor a spawn.
+	it("replaces the run of a bot that evolved, on the next prompt", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver, detach } = await bootedHarness({ store })
+		const submitted = vi.spyOn(driver, "submitPrompt")
+		const started = vi.spyOn(driver, "startOrResumeSession")
+		const evolved = runOf(controller)
+		const before = controller.getState().messages
+
+		driver.pushEvent(EVOLUTION, evolved)
+		await vi.runAllTimersAsync()
+
+		expect(started).not.toHaveBeenCalled()
+		expect(reasons(opened, BOT)).toEqual([null])
+		expect(controller.getState().messages).toEqual(before)
+
+		await controller.send("and now?")
+		await vi.runAllTimersAsync()
+
+		expect(reasons(opened, BOT)).toEqual([null, EVOLVED])
+		expect(runOf(controller).epoch).toBe(evolved.epoch + 1)
+		expectWholeChat(told(submitted), [])
+		expect(told(submitted)).toContain("The new message:\nand now?")
+		expect(spoken(controller.getState().messages).slice(-2)).toEqual([
+			["user", "and now?", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		detach()
+	})
+
+	// The same frame under no run at all. It names no process this launch holds, so
+	// there is nothing to retire and the run it would spend is never opened.
+	it("ignores an evolution reported under a run it does not hold", async () => {
+		const store = withHistory()
+		const opened = vi.spyOn(store, "openRuntimeSession")
+		const { controller, driver, detach } = await bootedHarness({ store })
+		const started = vi.spyOn(driver, "startOrResumeSession")
+
+		driver.pushEvent(EVOLUTION, null)
+		await vi.runAllTimersAsync()
+		await controller.send("and now?")
+		await vi.runAllTimersAsync()
+
+		expect(started).not.toHaveBeenCalled()
+		expect(reasons(opened, BOT)).toEqual([null])
 		detach()
 	})
 

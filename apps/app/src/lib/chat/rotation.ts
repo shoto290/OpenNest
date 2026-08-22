@@ -15,6 +15,10 @@ export const NEARING_THE_BOUND = "the context was nearing its bound"
  * moment — its instructions are the system prompt it was given, its directory is
  * where it was put — and neither can be said to a child that is already running. */
 export const REDESCRIBED = "the bot was described again"
+/** The bot rewrote its own instructions mid-run. What a child was spawned with is
+ * what it goes on reading, so the process that learned something is the one that
+ * cannot act on it — only its replacement is started as the bot now reads. */
+export const EVOLVED = "the bot learned something"
 
 /** Why a run was left behind. Every rotation records one: a replaced row with no
  * reason is a handover nobody can account for afterwards, and the only row that
@@ -26,6 +30,7 @@ export type RotationReason =
 	| typeof NEVER_STARTED
 	| typeof NEARING_THE_BOUND
 	| typeof REDESCRIBED
+	| typeof EVOLVED
 
 /** How many prompts one provider session carries before it is replaced on
  * purpose. The threshold is preventive: a session is rotated while it still
