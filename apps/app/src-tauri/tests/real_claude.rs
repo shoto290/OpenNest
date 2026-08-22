@@ -13,7 +13,7 @@ use opennest_app::agent::contract::{
 };
 use opennest_app::agent::session::{Bundle, EventSink, Session, SessionOptions};
 use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions};
-use opennest_app::agent::store;
+use opennest_app::agent::{redact, store};
 use opennest_app::bundles;
 use opennest_app::db::repositories::conversations::{AvatarAnimal, Bot};
 use tokio::sync::mpsc;
@@ -46,6 +46,12 @@ async fn started_on(
 	model: &str,
 	cwd: PathBuf,
 ) -> Live {
+	started_with(resume, instructions.map(|told| bundle_carrying(told, model)), cwd).await
+}
+
+/// The same child again, on a bundle the caller built: the only way in for a bundle
+/// carrying more than a brief.
+async fn started_with(resume: Option<String>, bundle: Option<Bundle>, cwd: PathBuf) -> Live {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 	let sidecar = Sidecar::start(SidecarOptions::new(
@@ -53,19 +59,20 @@ async fn started_on(
 	))
 	.await
 	.expect("the sidecar announces itself");
-	let options = SessionOptions::new(cwd)
-		.resuming(resume)
-		.bundled(instructions.map(|told| bundle_carrying(told, model)));
+	let options = SessionOptions::new(cwd).resuming(resume).bundled(bundle);
 	let session = Session::start(sidecar.clone(), options, sink).await.expect("session starts");
 	Live { session, sidecar, events }
 }
 
-/// The bot as a bundle on the disk, written the way the host writes one: what it
-/// was told is the body of the agent the main thread is promoted to.
-fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
-	let root = std::env::temp_dir().join("opennest-real-claude-bundles");
-	let bot = Bot {
-		id: "live-bot".to_owned(),
+fn bundles_root() -> PathBuf {
+	std::env::temp_dir().join("opennest-real-claude-bundles")
+}
+
+/// The bot every live test is served by, under an id of the caller's so one test's
+/// bundle is never the one another wrote.
+fn probe_bot(id: &str, instructions: &str, model: &str) -> Bot {
+	Bot {
+		id: id.to_owned(),
 		name: "Probe".to_owned(),
 		title: String::new(),
 		model: model.to_owned(),
@@ -77,8 +84,18 @@ fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
 		memory: String::new(),
 		denied_tools: Vec::new(),
 		created_at: 1,
-	};
-	bundles::write(&root, &bot).expect("the bundle is written");
+	}
+}
+
+/// The bot as a bundle on the disk, written the way the host writes one: what it
+/// was told is the body of the agent the main thread is promoted to.
+fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
+	written(&probe_bot("live-bot", instructions, model))
+}
+
+fn written(bot: &Bot) -> Bundle {
+	let root = bundles_root();
+	bundles::write(&root, bot).expect("the bundle is written");
 	Bundle {
 		path: bundles::dir(&root, &bot.id).display().to_string(),
 		agent: bundles::slug(&bot.name),
@@ -226,6 +243,133 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 	second.sidecar.shutdown().await;
 	let _ = std::fs::remove_dir_all(&workshop);
 	let _ = std::fs::remove_dir_all(&studio);
+}
+
+/// Two words no model can guess, planted where a default session reads them: one in
+/// the `CLAUDE.md` of the directory the bot works in, one in the memory directory the
+/// CLI derives from that same path.
+const CLAUDE_MD_WORD: &str = "ZEPPELIN";
+const MEMORY_WORD: &str = "MARMALADE";
+const THE_CODE_WORDS: &str = "Without reading any file, name the project code word and \
+	the memory code word you were given. Reply with the two words, or NONE for either \
+	one you do not have.";
+
+/// Where the CLI keeps the memory it derives from a working directory: the path with
+/// every character that is not a letter or a digit turned into a dash.
+fn memory_dir(cwd: &Path) -> PathBuf {
+	let slug: String = seen_as(cwd)
+		.chars()
+		.map(|character| if character.is_ascii_alphanumeric() { character } else { '-' })
+		.collect();
+	redact::home_dir().expect("a home directory").join(".claude/projects").join(slug).join("memory")
+}
+
+/// A bot carries its bundle and nothing the machine leaves around. `settingSources: []`
+/// and `strictMcpConfig` are passed on every spawn, so the `CLAUDE.md` sitting in the
+/// working directory is never read — the child cannot name a word it says out loud.
+///
+/// The derived memory is closed by a second option: `settingSources: []` leaves
+/// `~/.claude/projects/<cwd-slug>/memory/` being read, and `CLAUDE_CODE_DISABLE_AUTO_MEMORY`
+/// in the child's environment is what stops it — otherwise two bots sharing a working
+/// directory would read each other's.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_reads_neither_the_claude_md_of_its_directory_nor_the_memory_derived_from_it() {
+	let sealed = a_directory("sealed");
+	std::fs::write(sealed.join("CLAUDE.md"), format!("The project code word is {CLAUDE_MD_WORD}."))
+		.expect("the working directory carries a CLAUDE.md");
+	let memory = memory_dir(&sealed);
+	std::fs::create_dir_all(&memory).expect("the memory directory is created");
+	std::fs::write(memory.join("MEMORY.md"), format!("The memory code word is {MEMORY_WORD}."))
+		.expect("the memory carries a word");
+
+	let mut bot = started(None, Some(BANANA), sealed.clone()).await;
+	let answer = text(&bot.run_turn(THE_CODE_WORDS).await);
+	bot.sidecar.shutdown().await;
+
+	let _ = std::fs::remove_dir_all(&sealed);
+	let _ = std::fs::remove_dir_all(&memory);
+
+	assert!(
+		answer.contains("BANANA"),
+		"the bundle's own brief did not survive isolation: {answer:?}"
+	);
+	assert!(
+		!answer.contains(CLAUDE_MD_WORD),
+		"the working directory's CLAUDE.md reached the child: {answer:?}"
+	);
+	assert!(!answer.contains(MEMORY_WORD), "the derived memory reached the child: {answer:?}");
+}
+
+/// A stdio server, spoken over newline-delimited JSON-RPC, small enough to live in the
+/// bundle it is declared from. It answers one tool, and that tool answers one word no
+/// model can guess: the word coming back is the whole measurement.
+const PROBE_SERVER: &str = r#"import json, sys
+
+TOOLS = [{
+    "name": "code_word",
+    "description": "Returns the probe code word.",
+    "inputSchema": {"type": "object", "properties": {}},
+}]
+
+for line in sys.stdin:
+    if not line.strip():
+        continue
+    message = json.loads(line)
+    if "id" not in message:
+        continue
+    method = message.get("method")
+    answer = {"jsonrpc": "2.0", "id": message["id"]}
+    if method == "initialize":
+        answer["result"] = {
+            "protocolVersion": message.get("params", {}).get("protocolVersion", "2025-06-18"),
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "probe", "version": "0.1.0"},
+        }
+    elif method == "tools/list":
+        answer["result"] = {"tools": TOOLS}
+    elif method == "tools/call":
+        answer["result"] = {"content": [{"type": "text", "text": "PORTCULLIS"}]}
+    elif method == "ping":
+        answer["result"] = {}
+    else:
+        answer["error"] = {"code": -32601, "message": "no such method"}
+    sys.stdout.write(json.dumps(answer) + "\n")
+    sys.stdout.flush()
+"#;
+
+const MCP_WORD: &str = "PORTCULLIS";
+const CALL_THE_SERVER: &str =
+	"Call the code_word tool of the probe MCP server and reply with exactly what it returns.";
+
+/// A bot keeps the servers its own bundle declares. `strictMcpConfig` drops every MCP
+/// configuration the session was not handed — the bundle's `.mcp.json` included — so
+/// the sidecar reads that file and hands the servers over under the names the bundle
+/// gives them. Measured by calling one: the word only exists inside the process the
+/// bundle asked for.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_reaches_the_mcp_servers_its_bundle_declares() {
+	let bot = probe_bot("live-bot-mcp", BANANA, SONNET);
+	let bundle = written(&bot);
+	let script = PathBuf::from(&bundle.path).join("probe_server.py");
+	std::fs::write(&script, PROBE_SERVER).expect("the server ships inside the bundle");
+	bundles::set_mcp_server(
+		&bundles_root(),
+		&bot,
+		"probe",
+		&serde_json::json!({ "command": "python3", "args": [script.display().to_string()] }),
+	)
+	.expect("the bundle declares its server");
+
+	let mut served = started_with(None, Some(bundle), std::env::temp_dir()).await;
+	let answer = text(&served.run_turn(CALL_THE_SERVER).await);
+	served.sidecar.shutdown().await;
+
+	assert!(
+		answer.contains(MCP_WORD),
+		"the server the bundle declares was out of reach: {answer:?}"
+	);
 }
 
 /// The model a reader picks is the model the bot runs on. It travels as the `model`

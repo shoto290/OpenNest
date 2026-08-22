@@ -49,6 +49,21 @@ describe("buildOptions", () => {
 		}
 	})
 
+	it("reads no settings on disk and no MCP configuration it was not given", () => {
+		for (const spawned of [request, { cwd: "/tmp", partialMessages: false }]) {
+			const options = buildOptions(spawned, undefined)
+
+			expect(options.settingSources).toEqual([])
+			expect(options.strictMcpConfig).toBe(true)
+		}
+	})
+
+	// `strictMcpConfig` drops what a plugin declares, so the bundle's own file is
+	// read and passed as an option: measured, that is the only route left.
+	it("hands over the servers the bundle declares", () => {
+		expect(buildOptions(request, undefined).mcpServers).toEqual({})
+	})
+
 	it("names neither for a session opened with no bundle", () => {
 		const options = buildOptions(
 			{ cwd: "/tmp", partialMessages: false },
@@ -57,5 +72,6 @@ describe("buildOptions", () => {
 
 		expect(options.plugins).toBeUndefined()
 		expect(options.agent).toBeUndefined()
+		expect(options.mcpServers).toBeUndefined()
 	})
 })
