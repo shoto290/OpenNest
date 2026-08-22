@@ -29,6 +29,36 @@ export const FALLBACK_MODELS = ["fable", "opus", "sonnet", "haiku"]
 /** What a new bot is created on. An alias, so it follows its tier. */
 const NEW_BOT_MODEL = "sonnet"
 
+/** The built-in tools that write files and run commands, named the way the host
+ * names them — `src-tauri/src/bundles.rs` holds the same four and reads them back
+ * as "changes nothing". The switch in the panel is these four names in the bot's
+ * denials and nothing else, which is what keeps one list the only author of the
+ * denial the agent file carries. */
+export const CHANGING_TOOLS = ["Bash", "Edit", "NotebookEdit", "Write"]
+
+/** The denials a bot carries once the switch has been moved. A switch standing
+ * where the bot's own denials put it moves nothing: the list is what the reader
+ * edits tool by tool, and a save that read the switch back over it would take away
+ * a tool they denied by hand. Thrown on it adds the four to whatever is already
+ * denied; thrown off it takes those four out and leaves every other denial
+ * standing. */
+const withChangesNothing = (bot: Bot, changesNothing: boolean): string[] => {
+	if (changesNothing === bot.changesNothing) {
+		return bot.deniedTools
+	}
+	return changesNothing
+		? [
+				...bot.deniedTools,
+				...CHANGING_TOOLS.filter((tool) => !bot.deniedTools.includes(tool)),
+			]
+		: bot.deniedTools.filter((tool) => !CHANGING_TOOLS.includes(tool))
+}
+
+/** The same reading the host answers `changesNothing` with, made here for a value
+ * the store has not been told about yet. */
+export const deniesChanges = (denied: string[]): boolean =>
+	CHANGING_TOOLS.every((tool) => denied.includes(tool))
+
 /** The options for one bot: what the sidecar names, or the fallback when it names
  * nothing, plus the label the bot already holds when that is in neither. Offering a
  * bot's own value back is what keeps the select from showing an empty box over a value
@@ -139,7 +169,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "",
-	changesNothing: false,
+	deniedTools: [],
 })
 
 /** The stored bot as the settings panel edits it. */
@@ -174,24 +204,30 @@ export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	avatarImagePath: value.identity.image ? bot.avatarImagePath : null,
 	workingDir: value.workingDirectory.trim() || null,
 	instructions: value.instructions,
-	changesNothing: value.changesNothing,
+	deniedTools: withChangesNothing(bot, value.changesNothing),
 })
+
+/** The denials as one word, so two lists holding the same names in another order
+ * are the same denial. What the file carries is a set — the host sorts it before it
+ * writes the key — and a reader who ticked the same tools twice has changed
+ * nothing. */
+const denialOf = (denied: string[]): string => [...denied].sort().join(",")
 
 /** Whether this value would start a process differently from the one already
  * answering for the bot. Four fields do: the instructions a child is given as its
  * system prompt, the directory it is started in, the model it answers under, and
- * whether it is denied the tools that change things — the last two are keys of the
- * agent file the child is promoted to, so both are read once, when that child
- * starts. All four are settled at spawn, so a bot that changes any of them is a bot
- * whose live runtime has to be replaced — everything else about it is read where it
- * is shown, or travels with the next prompt. */
+ * the tools it is denied — the last two are keys of the agent file the child is
+ * promoted to, so both are read once, when that child starts. All four are settled
+ * at spawn, so a bot that changes any of them is a bot whose live runtime has to be
+ * replaced — everything else about it is read where it is shown, or travels with
+ * the next prompt. */
 export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {
 	const next = toIdentity(value, bot)
 	return (
 		next.instructions !== bot.instructions ||
 		next.workingDir !== bot.workingDir ||
 		next.model !== bot.model ||
-		next.changesNothing !== bot.changesNothing
+		denialOf(next.deniedTools) !== denialOf(bot.deniedTools)
 	)
 }
 

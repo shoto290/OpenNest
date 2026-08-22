@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
 use super::contract::{
-	CheckReport, AgentEvent, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
+	AgentEvent, CheckReport, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
 	SessionHandle, SessionSnapshot, TransportError,
 };
 use super::redact;
@@ -217,6 +217,9 @@ pub struct AgentState {
 	/// of the host: the install cannot change under a running one, so the second ask
 	/// costs a lock and no round trip.
 	models: Mutex<Option<Vec<String>>>,
+	/// The same, for the built-in tools a session can be given. Kept apart from the
+	/// models so one ask that could not be answered does not spend the other's cache.
+	tools: Mutex<Option<Vec<String>>>,
 }
 
 impl AgentState {
@@ -272,6 +275,24 @@ impl AgentState {
 		*cached = Some(offered.clone());
 		offered
 	}
+
+	/// Asked once and kept, the way [`AgentState::models`] is, and for the same
+	/// reason: the ask opens a session on the provider, and two callers arriving
+	/// together must share one.
+	async fn tools(&self) -> Vec<String> {
+		let mut cached = self.tools.lock().await;
+		if let Some(found) = cached.as_ref() {
+			return found.clone();
+		}
+		let Ok(sidecar) = self.sidecar().await else {
+			return Vec::new();
+		};
+		let Ok(offered) = sidecar.tools().await else {
+			return Vec::new();
+		};
+		*cached = Some(offered.clone());
+		offered
+	}
 }
 
 /// Frees the participant's seat once the transition it stands for has ended.
@@ -301,6 +322,19 @@ fn stale(scope: &RuntimeScope) -> TransportError {
 #[tauri::command]
 pub async fn agent_models<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
 	app.state::<AgentState>().models().await
+}
+
+/// Every built-in tool a session of this install can be given, in the order the
+/// sidecar names them and without the ones an MCP server provides: a server's tool
+/// belongs to the bundle that declared it, and nothing here offers to hold one back.
+///
+/// Asked and kept the way the models are, and empty for the same reasons — a host
+/// with no sidecar to ask, or a session that named nothing. It is what a bot's
+/// denials are chosen from; a name a bot denies that this list does not hold is
+/// still written and still honoured.
+#[tauri::command]
+pub async fn agent_tools<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
+	app.state::<AgentState>().tools().await
 }
 
 /// The scope is the caller's own and is echoed rather than checked: a check asks
@@ -507,9 +541,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	if let Some(refusal) = &started.resume_refusal {
 		let forgot_session_id =
 			forget_the_id_a_refusal_blames(store::file(&app).as_deref(), refusal);
-		sink.emit(AgentEvent::Failed {
-			error: TransportError::ResumeFailed { forgot_session_id },
-		});
+		sink.emit(AgentEvent::Failed { error: TransportError::ResumeFailed { forgot_session_id } });
 	}
 
 	let session = Arc::new(started.session);
@@ -690,11 +722,7 @@ pub async fn agent_shutdown<R: Runtime>(
 		return Err(stale(&scope));
 	}
 	shutdown_session(&state, &scope).await;
-	announce(
-		&app,
-		Some(scope),
-		AgentEvent::ConnectionChanged { state: ConnectionState::Checking },
-	);
+	announce(&app, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
 }
 

@@ -25,6 +25,7 @@ import {
 } from "./transcript-contract"
 
 import type { AgentCommand } from "@/lib/agent/contract"
+import { deniesChanges } from "../bots/bot-settings"
 
 export type FakeTranscriptStoreOptions = {
 	messages?: TranscriptMessage[]
@@ -41,6 +42,7 @@ const DEFAULT_BOT: Bot = {
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "",
+	deniedTools: [],
 	changesNothing: false,
 	createdAt: 0,
 }
@@ -298,6 +300,7 @@ export const createFakeTranscriptStore = (
 				...identity,
 				id: `bot-${minted}`,
 				createdAt: minted,
+				changesNothing: deniesChanges(identity.deniedTools),
 			}
 			bots.set(created.id, created)
 			return Promise.resolve(created)
@@ -310,7 +313,11 @@ export const createFakeTranscriptStore = (
 			if (!stored) {
 				return refuse({ kind: "unknownBot", id })
 			}
-			const updated: Bot = { ...stored, ...identity }
+			const updated: Bot = {
+				...stored,
+				...identity,
+				changesNothing: deniesChanges(identity.deniedTools),
+			}
 			bots.set(id, updated)
 			return Promise.resolve(updated)
 		},

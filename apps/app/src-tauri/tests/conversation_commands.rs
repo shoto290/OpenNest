@@ -824,7 +824,7 @@ fn an_identity(name: &str, model: &str, animal: &str, blot: Value) -> Value {
 		"avatarImagePath": null,
 		"workingDir": "/work/opennest",
 		"instructions": "Answer with the file you would touch.",
-		"changesNothing": false
+		"deniedTools": []
 	})
 }
 
@@ -977,23 +977,28 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 	);
 }
 
-/// A bot set to change nothing, over IPC and back: the setting is submitted with
-/// the rest of the identity, it is read back from the agent file the session is
-/// promoted onto, and turning it off leaves no denial behind. The file is the
-/// answer, not the row — a caller that saw "on" over a file naming no denial would
-/// be telling a reader the bot is held back while it is not.
+/// The tools a bot is denied, over IPC and back: the list is submitted with the
+/// rest of the identity, it is read back from the agent file the session is
+/// promoted onto, and a tool allowed again leaves no denial behind. The file is the
+/// answer, not the row — a caller that saw a tool denied over a file naming none
+/// would be telling a reader the bot is held back while it is not.
+///
+/// The bot that denies the four tools that write files and run commands is answered
+/// as changing nothing, without ever having been asked a second question: one list
+/// crosses, and the switch is a reading of it.
 #[test]
-fn a_bot_set_to_change_nothing_is_denied_in_its_agent_file_and_read_back_from_it() {
+fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() {
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
 	let mut held_back = an_identity("Nyx", "sonnet", "owl", json!("red"));
-	held_back["changesNothing"] = json!(true);
+	held_back["deniedTools"] = json!(["Bash", "Edit", "NotebookEdit", "Write"]);
 
 	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back }))
 		.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 
+	assert_eq!(created["deniedTools"], json!(["Bash", "Edit", "NotebookEdit", "Write"]));
 	assert_eq!(created["changesNothing"], json!(true));
 	assert_eq!(
 		call(&window, "conversation_bots", json!({})).map(|bots| bots[0]["changesNothing"].clone()),
@@ -1001,19 +1006,14 @@ fn a_bot_set_to_change_nothing_is_denied_in_its_agent_file_and_read_back_from_it
 		"the file the session is promoted onto denies nothing"
 	);
 
-	assert_eq!(
-		call(
-			&window,
-			"conversation_update_bot",
-			json!({
-				"id": id,
-				"identity": an_identity("Nyx", "sonnet", "owl", json!("red"))
-			})
-		)
-		.map(|bot| bot["changesNothing"].clone()),
-		Ok(json!(false)),
-		"a denial outlived the setting that asked for it"
-	);
+	let mut one_tool = an_identity("Nyx", "sonnet", "owl", json!("red"));
+	one_tool["deniedTools"] = json!(["WebFetch"]);
+	let updated =
+		call(&window, "conversation_update_bot", json!({ "id": id, "identity": one_tool }))
+			.expect("the bot is updated");
+
+	assert_eq!(updated["deniedTools"], json!(["WebFetch"]), "a denial outlived the list");
+	assert_eq!(updated["changesNothing"], json!(false));
 }
 
 /// The one refusal a caller can act on: the list it is holding is behind the
@@ -1874,12 +1874,8 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	);
 	assert_eq!(json_at(&servers)["mcpServers"]["atlas"], replaced, "the refusal wrote anyway");
 
-	call(
-		&window,
-		"conversation_delete_bot_mcp_server",
-		json!({ "botId": BOT, "name": "atlas" }),
-	)
-	.expect("the server is taken away");
+	call(&window, "conversation_delete_bot_mcp_server", json!({ "botId": BOT, "name": "atlas" }))
+		.expect("the server is taken away");
 	assert_eq!(json_at(&servers)["mcpServers"], json!({ "ledger": ledger }));
 	assert_eq!(
 		call(
@@ -1893,12 +1889,8 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 
 	// The last one going leaves the reader's own key behind and nothing of this
 	// module's — not an empty map, and not a manifest pointing at a map that is gone.
-	call(
-		&window,
-		"conversation_delete_bot_mcp_server",
-		json!({ "botId": BOT, "name": "ledger" }),
-	)
-	.expect("the last server is taken away");
+	call(&window, "conversation_delete_bot_mcp_server", json!({ "botId": BOT, "name": "ledger" }))
+		.expect("the last server is taken away");
 	let bare = json_at(&servers);
 	assert_eq!(bare["mcpServers"], Value::Null);
 	assert_eq!(bare["opennestIsNotToTouchThis"], json!(true));
@@ -1907,12 +1899,8 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	// than sitting there declaring nothing.
 	std::fs::write(&servers, json!({ "mcpServers": { "atlas": atlas } }).to_string())
 		.expect("a file with nothing but servers in it");
-	call(
-		&window,
-		"conversation_delete_bot_mcp_server",
-		json!({ "botId": BOT, "name": "atlas" }),
-	)
-	.expect("the server is taken away");
+	call(&window, "conversation_delete_bot_mcp_server", json!({ "botId": BOT, "name": "atlas" }))
+		.expect("the server is taken away");
 	assert_eq!(json_at(&servers), Value::Null, "an empty server file was left behind");
 	assert_eq!(json_at(&manifest)["mcpServers"], Value::Null);
 

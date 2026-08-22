@@ -283,12 +283,13 @@ pub fn deny_command(session: &str, request_id: &str, message: &str) -> Value {
 	)
 }
 
-/// The two asks that are about the install rather than about a conversation. Neither
-/// names a session, so neither answer arrives inside an [`Envelope`] — and each is
+/// The asks that are about the install rather than about a conversation. None of
+/// them names a session, so no answer arrives inside an [`Envelope`] — and each is
 /// answered under the type it was asked, which is what lets one name stand for the
 /// ask and its answer both.
 pub const CHECK: &str = "check";
 pub const MODELS: &str = "models";
+pub const TOOLS: &str = "tools";
 
 pub fn ask_command(kind: &str) -> Value {
 	serde_json::json!({ "type": kind })
@@ -313,4 +314,14 @@ pub struct Checked {
 pub struct Catalogue {
 	#[serde(default, deserialize_with = "null_as_default")]
 	pub models: Vec<String>,
+}
+
+/// The [`TOOLS`] answer: every built-in a session of this install can be given, in
+/// the order the provider named them and without the ones an MCP server provides.
+/// Empty is an answer, not a failure.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCatalogue {
+	#[serde(default, deserialize_with = "null_as_default")]
+	pub tools: Vec<String>,
 }

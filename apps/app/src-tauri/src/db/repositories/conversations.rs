@@ -237,10 +237,10 @@ pub struct Bot {
 	pub working_dir: Option<String>,
 	pub instructions: String,
 	pub memory: String,
-	/// Whether the bot is denied the tools that change files and run commands. Part
-	/// of [`BotIdentity`] — it is set from the same panel as the name — and written
-	/// into the bot's agent file, which is where it reaches a run.
-	pub changes_nothing: bool,
+	/// The built-in tools the bot is denied, by name. Part of [`BotIdentity`] — they
+	/// are set from the same panel as the name — and written into the bot's agent
+	/// file, which is where a denial reaches a run.
+	pub denied_tools: Vec<String>,
 	pub created_at: i64,
 }
 
@@ -267,8 +267,8 @@ pub struct BotIdentity {
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
-	/// See [`Bot::changes_nothing`].
-	pub changes_nothing: bool,
+	/// See [`Bot::denied_tools`].
+	pub denied_tools: Vec<String>,
 }
 
 /// Who the bot is, taken off the row it is on. What the row holds and nothing else:
@@ -285,7 +285,7 @@ impl From<Bot> for BotIdentity {
 			avatar_image_path: bot.avatar_image_path,
 			working_dir: bot.working_dir,
 			instructions: bot.instructions,
-			changes_nothing: bot.changes_nothing,
+			denied_tools: bot.denied_tools,
 		}
 	}
 }
@@ -520,11 +520,11 @@ impl ConversationsRepository {
 /// the same columns — the order they list them in is theirs to choose, and a
 /// column dropped from both is a line deleted rather than a projection renumbered.
 const SELECT_BOT: &str = "SELECT id, name, title, model, avatar_animal, avatar_color,
-		avatar_image_path, working_dir, instructions, memory, changes_nothing, created_at
+		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
 	FROM bots WHERE id = ?1";
 
 const SELECT_BOTS: &str = "SELECT id, name, title, model, avatar_animal, avatar_color,
-		avatar_image_path, working_dir, instructions, memory, changes_nothing, created_at
+		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
 	FROM bots ORDER BY created_at ASC, id ASC";
 
 /// A bot holds one chat, and the participant link is what says which. The order
@@ -637,7 +637,7 @@ fn created_bot(
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
 		"INSERT INTO bots (id, name, title, model, avatar_animal, avatar_color,
-				avatar_image_path, working_dir, instructions, changes_nothing, created_at)
+				avatar_image_path, working_dir, instructions, denied_tools, created_at)
 			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
 		params![
 			id,
@@ -649,7 +649,7 @@ fn created_bot(
 			identity.avatar_image_path,
 			identity.working_dir,
 			identity.instructions,
-			identity.changes_nothing,
+			denied(identity)?,
 			now(),
 		],
 	)?;
@@ -670,7 +670,7 @@ fn updated_bot(
 	let written = transaction.execute(
 		"UPDATE bots SET name = ?2, title = ?3, model = ?4,
 				avatar_animal = ?5, avatar_color = ?6, avatar_image_path = ?7, working_dir = ?8,
-				instructions = ?9, changes_nothing = ?10
+				instructions = ?9, denied_tools = ?10
 			WHERE id = ?1",
 		params![
 			id,
@@ -682,7 +682,7 @@ fn updated_bot(
 			identity.avatar_image_path,
 			identity.working_dir,
 			identity.instructions,
-			identity.changes_nothing,
+			denied(identity)?,
 		],
 	)?;
 	refuse_if_untouched(written, id)?;
@@ -775,9 +775,23 @@ fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 		working_dir: row.get("working_dir")?,
 		instructions: row.get("instructions")?,
 		memory: row.get("memory")?,
-		changes_nothing: row.get("changes_nothing")?,
+		denied_tools: listed(row.get("denied_tools")?),
 		created_at: row.get("created_at")?,
 	})
+}
+
+/// The denials as the column holds them: one JSON array, replaced whole by the
+/// next write. A caller that submitted a name no JSON can hold is refused rather
+/// than written half-way, which is the same answer a command list gets.
+fn denied(identity: &BotIdentity) -> Result<String, ConversationError> {
+	serde_json::to_string(&identity.denied_tools).map_err(unserializable)
+}
+
+/// What the column says, or nothing at all: text this build cannot read is a bot
+/// denying no tool, the same answer a command list gives, because a denial nobody
+/// can name is one nothing can be written from.
+fn listed(stored: String) -> Vec<String> {
+	serde_json::from_str(&stored).unwrap_or_default()
 }
 
 /// Unix millis, the unit the schema stores. A clock behind the epoch answers zero
@@ -807,7 +821,7 @@ mod tests {
 			avatar_image_path: None,
 			working_dir: None,
 			instructions: String::new(),
-			changes_nothing: false,
+			denied_tools: Vec::new(),
 		}
 	}
 
@@ -1010,7 +1024,7 @@ mod tests {
 			name: "Nyx".to_owned(),
 			title: "Reviewer".to_owned(),
 			model: "haiku".to_owned(),
-			changes_nothing: true,
+			denied_tools: vec!["Bash".to_owned(), "Write".to_owned()],
 			avatar_animal: AvatarAnimal::Owl,
 			avatar_blot: Some(AvatarBlot::Red),
 			avatar_image_path: Some("/pictures/owl.png".to_owned()),
@@ -1031,6 +1045,7 @@ mod tests {
 		assert_eq!(listed[0].avatar_image_path.as_deref(), Some("/pictures/owl.png"));
 		assert_eq!(listed[0].working_dir.as_deref(), Some("/work/opennest"));
 		assert_eq!(listed[0].instructions, described.instructions);
+		assert_eq!(listed[0].denied_tools, described.denied_tools);
 		assert_eq!(listed[0].id, created.id);
 
 		drop(database);
@@ -1072,7 +1087,7 @@ mod tests {
 					name: "Ada".to_owned(),
 					title: "Reviewer".to_owned(),
 					model: "opus".to_owned(),
-					changes_nothing: true,
+					denied_tools: vec!["Bash".to_owned()],
 					avatar_animal: AvatarAnimal::Koala,
 					avatar_blot: Some(AvatarBlot::Orange),
 					avatar_image_path: Some("/pictures/koala.png".to_owned()),

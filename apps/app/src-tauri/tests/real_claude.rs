@@ -56,8 +56,7 @@ async fn started_on(
 	let options = SessionOptions::new(cwd)
 		.resuming(resume)
 		.bundled(instructions.map(|told| bundle_carrying(told, model)));
-	let session =
-		Session::start(sidecar.clone(), options, sink).await.expect("session starts");
+	let session = Session::start(sidecar.clone(), options, sink).await.expect("session starts");
 	Live { session, sidecar, events }
 }
 
@@ -76,7 +75,7 @@ fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
 		working_dir: None,
 		instructions: instructions.to_owned(),
 		memory: String::new(),
-		changes_nothing: false,
+		denied_tools: Vec::new(),
 		created_at: 1,
 	};
 	bundles::write(&root, &bot).expect("the bundle is written");

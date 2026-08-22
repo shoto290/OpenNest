@@ -23,6 +23,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 5, statements: BOT_COMMANDS },
 	Migration { version: 6, statements: BOT_DENIAL },
 	Migration { version: 7, statements: BOT_COLOUR },
+	Migration { version: 8, statements: BOT_DENIED_TOOLS },
 ];
 
 /// Timestamps are unix millis, ids are UUID v4 text: both are what the host
@@ -308,6 +309,29 @@ UPDATE bots SET avatar_color = CASE avatar_blot
 	WHEN 'rose' THEN 'pink'
 	WHEN 'slate' THEN 'orange'
 END;
+";
+
+/// The built-in tools the bot is denied, by name. Numbered 8 rather than 7: the
+/// step that renames the tints holds 7, and a number two steps share is a step that
+/// never runs against a file the other already brought up — the version says the
+/// file is current, and one of the two columns is never written.
+///
+/// Step 6's boolean said "all four or none"; this column says which, and the
+/// boolean becomes a reading of it — a bot denying the four that write files and
+/// run commands is a bot that changes nothing. Carried over rather than asked for
+/// again: a bot held back by an older build keeps its denial, spelled out.
+///
+/// The column that stood for it is dropped in the same step, because two columns
+/// standing for one setting is two writers of one line in the agent file — see
+/// [`crate::bundles`], which owns that line.
+///
+/// A JSON array, for the reason `commands` is one: SQLite holds no list, and the
+/// value is replaced whole by the next write rather than added to.
+const BOT_DENIED_TOOLS: &str = "
+ALTER TABLE bots ADD COLUMN denied_tools TEXT NOT NULL DEFAULT '[]';
+UPDATE bots SET denied_tools = '[\"Bash\",\"Edit\",\"NotebookEdit\",\"Write\"]'
+	WHERE changes_nothing = 1;
+ALTER TABLE bots DROP COLUMN changes_nothing;
 ";
 
 pub fn latest_version() -> u32 {
@@ -675,6 +699,49 @@ mod tests {
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	/// What the step that spells the denials out owes a file already in use: the bot
+	/// a reader had set to change nothing is still held back, now by the names of the
+	/// four tools, and the bot nobody held back is denied none. The switch is gone
+	/// from the file, so nothing can write that denial twice.
+	#[test]
+	fn the_step_that_names_the_denied_tools_carries_the_switch_it_replaces() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..6]).expect("the shipped schema installs");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, name, model, created_at, changes_nothing)
+					VALUES ('held', 'Held', 'sonnet', 1, 1),
+					       ('free', 'Free', 'sonnet', 2, 0);",
+			)
+			.expect("the install this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			denied_tools_of(&connection, "held"),
+			r#"["Bash","Edit","NotebookEdit","Write"]"#,
+			"a bot set to change nothing came up denying nothing"
+		);
+		assert_eq!(denied_tools_of(&connection, "free"), "[]");
+		assert!(
+			connection
+				.query_row("SELECT changes_nothing FROM bots", [], |row| row.get::<_, i64>(0))
+				.is_err(),
+			"the switch the list replaced is still a column"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn denied_tools_of(connection: &Connection, id: &str) -> String {
+		connection
+			.query_row("SELECT denied_tools FROM bots WHERE id = ?1", [id], |row| row.get(0))
+			.expect("the denials")
 	}
 
 	/// What the step that adds the mark owes a file already in use: the bots it

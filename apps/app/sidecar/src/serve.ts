@@ -75,8 +75,8 @@ export const serve = async (requestedId?: string) => {
 		opening.delete(session)
 	}
 
-	/** The two asks that belong to the install rather than to a conversation: neither
-	 * names a session, and each is answered under the type it was asked. Both are asked
+	/** The asks that belong to the install rather than to a conversation: none of them
+	 * names a session, and each is answered under the type it was asked. Each is asked
 	 * once per launch and cached by the host.
 	 *
 	 * A catalogue nobody could produce is empty rather than refused: what to offer
@@ -87,6 +87,8 @@ export const serve = async (requestedId?: string) => {
 				return write({ type, ...(await provider.authenticate()) })
 			case "models":
 				return write({ type, models: await provider.models().catch(() => []) })
+			case "tools":
+				return write({ type, tools: await provider.tools().catch(() => []) })
 		}
 	}
 

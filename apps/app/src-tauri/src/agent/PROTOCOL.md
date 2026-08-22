@@ -26,7 +26,8 @@ The sidecar's first stdout line, before any session exists:
 
 ```json
 {"type":"ready","provider":"<id>","version":"2.1.237","sdkVersion":"0.3.237",
- "capabilities":["partialMessages","resume","interactivePermissions","modelCatalogue"]}
+ "capabilities":["partialMessages","resume","interactivePermissions","modelCatalogue",
+ "toolCatalogue"]}
 ```
 
 Same payload `--probe` prints. `capabilities` is a contract, not a description:
@@ -39,7 +40,7 @@ first, as `crashed`.
 
 ## Host → sidecar
 
-Two commands name no session, because they are about the install rather than
+Three commands name no session, because they are about the install rather than
 about a conversation. Each is asked once per launch and cached by the host.
 
 Each is answered under the type it was asked, so one name stands for the ask and
@@ -49,12 +50,20 @@ its answer both.
 | --- | --- | --- |
 | `check` | `{"type":"check","authenticated":bool,"detail"?:string}` | the `CheckReport` |
 | `models` | `{"type":"models","models":[…]}` | the model catalogue |
+| `tools` | `{"type":"tools","tools":[…]}` | the tool catalogue |
 
 `check` reads the provider's own credential store; `detail` says the question
 could not be answered at all, which reaches the frontend as `authCheckFailed`
 rather than as `notAuthenticated`. `models` is `Query.supportedModels()`, asked of
 a session opened for nothing else and closed again — there is no file to read and
 no endpoint to ask.
+
+`tools` is the `tools` of the `init` frame, taken off a session opened for nothing
+else and closed the moment the frame lands. No control request answers it, and the
+frame is only emitted once a turn has begun — so unlike `models` the ask costs a
+turn that is started and never finished. What an MCP server provides is filtered
+out before the answer is written: those tools belong to a server rather than to
+the install.
 
 Every other command names its session.
 

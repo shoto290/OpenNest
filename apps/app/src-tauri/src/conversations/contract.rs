@@ -162,9 +162,15 @@ pub struct Bot {
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
-	/// Whether the bot is denied the tools that change files and run commands, read
-	/// out of its plugin bundle the way `instructions` is — the agent file is what a
-	/// run is really promoted onto, so the file is what the panel has to show.
+	/// The built-in tools the bot is denied, by name, read out of its plugin bundle
+	/// the way `instructions` is — the agent file is what a run is really promoted
+	/// onto, so the file is what the panel has to show. What an MCP server provides
+	/// is never among them: a server's tool is the bundle's own capability.
+	pub denied_tools: Vec<String>,
+	/// Whether those denials cover the tools that write files and run commands. A
+	/// reading of `denied_tools` and never a setting of its own — one list is written
+	/// into the agent file, and a second switch over the same key would be a second
+	/// author of one line.
 	pub changes_nothing: bool,
 	pub created_at: i64,
 }
@@ -198,8 +204,9 @@ impl Bot {
 			.as_ref()
 			.and_then(|written| written.model.clone())
 			.unwrap_or_else(|| bot.model.clone());
-		let changes_nothing =
-			written.as_ref().map_or(bot.changes_nothing, |written| written.changes_nothing);
+		let denied_tools = written
+			.as_ref()
+			.map_or_else(|| bot.denied_tools.clone(), |written| written.denied_tools.clone());
 		let avatar_blot =
 			written.as_ref().map_or(bot.avatar_blot, |written| written.blot).map(Into::into);
 		let instructions = written
@@ -222,7 +229,8 @@ impl Bot {
 			avatar_image_path,
 			working_dir: bot.working_dir,
 			instructions,
-			changes_nothing,
+			changes_nothing: crate::bundles::denies_changes(&denied_tools),
+			denied_tools,
 			created_at: bot.created_at,
 		}
 	}
@@ -247,9 +255,11 @@ pub struct BotIdentity {
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
-	/// See [`Bot::changes_nothing`]: submitted beside the name, since it is set from
-	/// the same panel, and laid down in the agent file by the write that follows.
-	pub changes_nothing: bool,
+	/// See [`Bot::denied_tools`]: submitted beside the name, since they are set from
+	/// the same panel, and laid down in the agent file by the write that follows. The
+	/// one thing a caller submits about denials — "changes nothing" is read back off
+	/// this list rather than sent alongside it.
+	pub denied_tools: Vec<String>,
 }
 
 impl From<BotIdentity> for conversations::BotIdentity {
@@ -263,7 +273,7 @@ impl From<BotIdentity> for conversations::BotIdentity {
 			avatar_image_path: identity.avatar_image_path,
 			working_dir: identity.working_dir,
 			instructions: identity.instructions,
-			changes_nothing: identity.changes_nothing,
+			denied_tools: identity.denied_tools,
 		}
 	}
 }
@@ -860,6 +870,12 @@ mod tests {
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				working_dir: Some("/work/opennest".into()),
 				instructions: "Answer briefly.".into(),
+				denied_tools: vec![
+					"Bash".into(),
+					"Edit".into(),
+					"NotebookEdit".into(),
+					"Write".into(),
+				],
 				changes_nothing: true,
 				created_at: 1,
 			},
@@ -873,6 +889,7 @@ mod tests {
 				"avatarImagePath": "/pictures/owl.png",
 				"workingDir": "/work/opennest",
 				"instructions": "Answer briefly.",
+				"deniedTools": ["Bash", "Edit", "NotebookEdit", "Write"],
 				"changesNothing": true,
 				"createdAt": 1
 			}),
@@ -898,7 +915,7 @@ mod tests {
 				avatar_image_path: None,
 				working_dir: None,
 				instructions: String::new(),
-				changes_nothing: false,
+				denied_tools: Vec::new(),
 			},
 			json!({
 				"name": "Claude",
@@ -909,7 +926,7 @@ mod tests {
 				"avatarImagePath": null,
 				"workingDir": null,
 				"instructions": "",
-				"changesNothing": false
+				"deniedTools": []
 			}),
 		);
 	}
@@ -956,12 +973,12 @@ mod tests {
 		);
 	}
 
-	/// The boundary no longer has a word for the pose or for the description, and a
-	/// caller that still spells either is answered the way this vocabulary answers
-	/// anything it has no field for: the word carries nothing, and the mark it did
-	/// not name is no mark. That is what a caller written against the older shape
-	/// gets — an unmarked bot, not a refusal, and not a pose smuggled in under
-	/// another name.
+	/// The boundary no longer has a word for the pose, for the description, or for
+	/// the switch that stood for four denials, and a caller that still spells one is
+	/// answered the way this vocabulary answers anything it has no field for: the
+	/// word carries nothing, and the mark it did not name is no mark. That is what a
+	/// caller written against the older shape gets — an unmarked bot, not a refusal,
+	/// and neither a pose nor a denial smuggled in under another name.
 	#[test]
 	fn an_identity_still_spelling_the_abandoned_words_crosses_as_a_bot_with_no_mark() {
 		let submitted = json!({
@@ -974,12 +991,14 @@ mod tests {
 			"avatarImagePath": null,
 			"workingDir": null,
 			"instructions": "",
-			"changesNothing": false
+			"changesNothing": true,
+			"deniedTools": []
 		});
 
 		let parsed = serde_json::from_value::<BotIdentity>(submitted).expect("the identity parses");
 
 		assert_eq!(parsed.avatar_blot, None, "a pose reached the mark it is not");
+		assert!(parsed.denied_tools.is_empty(), "a switch reached the list it is not");
 	}
 
 	/// What the frontend builds a runtime scope out of. A rename here is a launch
@@ -1262,7 +1281,7 @@ mod tests {
 			working_dir: None,
 			instructions: String::new(),
 			memory: String::new(),
-			changes_nothing: false,
+			denied_tools: Vec::new(),
 			created_at: 1,
 		}
 	}
