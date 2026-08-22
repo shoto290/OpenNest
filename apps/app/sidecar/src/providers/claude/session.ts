@@ -8,6 +8,7 @@ import { bundleServers } from "./bundle-servers"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
+import { OPENNEST_LAYER } from "./system-layer"
 
 import type {
 	AgentCommand,
@@ -36,6 +37,15 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
  * honours its model — and never applies its body. Dropping it looks like a
  * simplification and silently strips every bot of its brief. See
  * `src-tauri/src/agent/PLUGINS.md`.
+ *
+ * Its `append` is the OpenNest layer, which the preset carries without losing the
+ * agent: measured, the two compose, where a custom string prompt would replace the
+ * preset and take the bot's brief with it.
+ *
+ * The output style the host names travels through `settings` rather than through the
+ * prompt: `settingSources: []` closes every settings file on the machine, so an
+ * inline object is the only route a style has left. Absent, no key is passed at all —
+ * an empty `settings` would still be a settings layer of the highest priority.
  *
  * The bundle is a `local` plugin: a directory loaded for this session and never
  * installed, with the bot's agent inside it. The two options stand or fall together —
@@ -75,7 +85,14 @@ export const buildOptions = (
 				mcpServers: bundleServers(request.pluginPath),
 			}
 		: {}),
-	systemPrompt: { type: "preset", preset: "claude_code" },
+	systemPrompt: {
+		type: "preset",
+		preset: "claude_code",
+		append: OPENNEST_LAYER,
+	},
+	...(request.outputStyle
+		? { settings: { outputStyle: request.outputStyle } }
+		: {}),
 	env: { ...process.env, [DISABLE_AUTO_MEMORY]: "1" },
 	settingSources: [],
 	strictMcpConfig: true,

@@ -185,6 +185,16 @@ const WHICH_ROOT: &str =
 const SONNET: &str = "sonnet";
 const HAIKU: &str = "haiku";
 
+/// The layer this app appends to every session, asked of the child itself. Quoting is
+/// the one route: the layer holds no marker of its own, and asking about it is exactly
+/// the case it allows a bot to speak about its own instructions.
+const QUOTE_THE_LAYER: &str =
+	"Quote, word for word, the sentence in your instructions that begins with \"Leave out\".";
+
+/// A fragment of that sentence, mirroring `sidecar/src/providers/claude/system-layer.ts`.
+/// A child that can produce it was handed the layer.
+const LAYER_WORDS: &str = "closing recaps";
+
 /// A directory of this suite's own. macOS hands the temporary one out through a
 /// symlink and resolves it on the way in, so it is resolved here too — the child
 /// reports where it really is.
@@ -414,6 +424,22 @@ async fn a_bot_answers_under_the_model_its_bundle_names() {
 
 	assert!(named.contains(HAIKU), "the picked model did not reach the child: {named:?}");
 	assert!(!named.contains(SONNET), "the child answered under the default tier: {named:?}");
+}
+
+/// Both prompts a session is composed of, proved in one turn: the bundle's own brief
+/// and the layer this app appends to the preset. The bot ends on its nonsense word
+/// because its bundle says so, and it can quote the layer because the `append`
+/// reached the child — measured, a system prompt of ours would have replaced the
+/// preset and taken the agent with it.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_session_carries_the_bundle_brief_and_the_opennest_layer_at_once() {
+	let mut live = started(None, Some(BANANA), std::env::temp_dir()).await;
+	let answer = text(&live.run_turn(QUOTE_THE_LAYER).await);
+	live.sidecar.shutdown().await;
+
+	assert!(answer.contains("BANANA"), "the bundle's brief did not reach the child: {answer:?}");
+	assert!(answer.contains(LAYER_WORDS), "the appended layer did not reach the child: {answer:?}");
 }
 
 /// The check report is what the frontend receives first, and it is built from a
