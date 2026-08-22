@@ -18,7 +18,7 @@ const FieldHost = (props: SettingsFieldProps) => {
 			{...props}
 			onValueChange={(next) => {
 				setValue(next)
-				props.onValueChange(next)
+				props.onValueChange?.(next)
 			}}
 			value={value}
 		/>
@@ -167,5 +167,32 @@ export const WithHint = meta.story({
 		const hint = canvas.getByText("Lowercase letters, numbers and hyphens.")
 
 		await expect(control).toHaveAttribute("aria-describedby", hint.id)
+	},
+})
+
+export const ReadOnly = meta.story({
+	args: {
+		label: "Body",
+		readOnly: true,
+		rows: 4,
+		value:
+			"# Environment\n\nPlatform: darwin 24.5.0\nShell: /bin/zsh\n\nRead from the machine each time this bot starts.",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A field holding something a reader may read but not write — a skill the host keeps up to date. Check that the neutral fill says so before a keystroke does, that Tab still reaches the control with a visible ring so the text can be read and copied by keyboard, and that typing into it changes nothing and reports nothing.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const field = canvas.getByLabelText("Body")
+
+		await userEvent.tab()
+		await expect(field).toHaveFocus()
+
+		await userEvent.type(field, "!")
+		await expect(args.onValueChange).not.toHaveBeenCalled()
 	},
 })

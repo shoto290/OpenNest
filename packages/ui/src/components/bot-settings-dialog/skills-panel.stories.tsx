@@ -4,6 +4,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	BOT_SKILLS,
 	LONG_SKILL,
+	SYSTEM_SKILL,
 } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
 
@@ -65,6 +66,24 @@ export const Empty = meta.story({
 		await userEvent.click(canvas.getByRole("button", { name: "Add skill" }))
 
 		await expect(args.onAdd).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const WithSystemSkill = meta.story({
+	args: { skills: [SYSTEM_SKILL, ...BOT_SKILLS] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bundle the host wrote a skill into. Check that the system skill is listed like any other and tagged as its own, that a skill carried in every prompt wears both marks side by side without moving the chevron, and that taking its row reports it the same way — it opens, it is simply read rather than written. Pick `SkillEditor`'s `System` story for what opening it gives.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expect(canvas.getByText("System")).toBeVisible()
+
+		await userEvent.click(canvas.getByRole("button", { name: /environment/ }))
+		await expect(args.onOpen).toHaveBeenCalledWith(SYSTEM_SKILL)
 	},
 })
 

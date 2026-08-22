@@ -163,6 +163,10 @@ const toBundleName = (value: string) =>
 type BotSkillItem = BotSkillDraft & {
 	id: string
 	isPreloaded: boolean
+	/** Whether the host wrote this skill rather than the reader. A system skill is
+	 * listed and opened like any other, and read there rather than edited: its body
+	 * is regenerated, so anything typed into it would be written over. */
+	isSystem: boolean
 }
 
 /** Who wrote a commit into the bundle: the reader themself, or the bot on a run.
