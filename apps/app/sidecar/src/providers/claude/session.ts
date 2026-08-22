@@ -77,6 +77,7 @@ export const buildOptions = (
 	cwd: request.cwd,
 	resume: request.resume,
 	includePartialMessages: request.partialMessages,
+	permissionMode: "auto",
 	canUseTool,
 	...(request.pluginPath && request.agent
 		? {

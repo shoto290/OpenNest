@@ -119,6 +119,25 @@ A bundle can therefore *reduce* capability but never *raise* it: a bot declaring
 `bypassPermissions` cannot escape the host's permission gate. The one surface that
 does add capability is the bundle's `.mcp.json`, which starts processes.
 
+Since the key is ignored on the promoted path, the mode is the host's to set, and it
+sets `permissionMode: "auto"` on every session — `buildOptions`, bundle or not.
+Measured on 2.1.239 in `-p` mode, on the same prompt asking for one file write inside
+the working directory:
+
+| Mode | Result |
+| --- | --- |
+| default | refused — *permission to write … was not granted* |
+| `--permission-mode auto` | the write lands, nothing to answer |
+
+- Consequence: a bot acts on its own by default. What `auto` still escalates keeps
+  arriving at `canUseTool` and at the reader's dialog, so the gate is unchanged.
+- Consequence: "this bot cannot change anything" stays the brake — a bundle naming
+  `Write` and `Edit` in `disallowedTools` still refuses them under `auto`.
+- Measured beside it: `disallowedTools` binds the promoted thread and not the one
+  `Task` starts. A bot denied every changing tool and left free to delegate had a
+  subagent write the file — under the default mode that write reached the reader's
+  dialog, under `auto` it lands with nothing to answer. Denying `Task` would close it.
+
 ## A bundle's own hook, and what a bot writes mid-session — verified
 
 Measured on the real binary, 2.1.239. Three findings, and the whole reason a bot is

@@ -227,6 +227,28 @@ const CONCISE_WORDS: &str = "concise";
 const CONCISE_STYLE: &str = "Concise";
 const NO_STYLE: &str = "default";
 
+/// One file inside the bot's own working directory, and the word it must hold. The
+/// disk is what is read back: a bot refused the tool still reports it wrote one.
+const WRITE_A_FILE: &str = "Write the single word OPENNEST into a file named probe.txt in your working directory. Reply with nothing but DONE.";
+const PROBE_FILE: &str = "probe.txt";
+const PROBE_WORD: &str = "OPENNEST";
+
+/// Appended to close delegation: `disallowedTools` binds the bot's own thread only, so
+/// a denied bot asked without this hands the write to a subagent.
+const ALONE: &str = " Do it yourself, never delegate it to a subagent.";
+
+/// Whether anything reached the reader at all. Every request is auto-approved on the
+/// way through, so this is what tells `auto` from the default mode.
+fn asked_permission(events: &[AgentEvent]) -> bool {
+	events.iter().any(|event| matches!(event, AgentEvent::PermissionRequested { .. }))
+}
+
+fn a_clean_file(dir: &Path) -> PathBuf {
+	let file = dir.join(PROBE_FILE);
+	let _ = std::fs::remove_file(&file);
+	file
+}
+
 /// A directory of this suite's own. macOS hands the temporary one out through a
 /// symlink and resolves it on the way in, so it is resolved here too — the child
 /// reports where it really is.
@@ -506,6 +528,49 @@ async fn a_bot_answers_in_the_style_its_bundle_carries() {
 		!under_default.contains(CONCISE_WORDS),
 		"a bot under no style was still handed the concise one: {under_default:?}"
 	);
+}
+
+/// The mode every session is opened under. Measured in `-p` mode, the same write is
+/// refused under the default mode and lands under `auto`, and the frontmatter key is
+/// ignored on the promoted path — so `buildOptions` is the only place that can set it
+/// and this is the only measurement that can tell whether it reaches a run.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_writes_inside_its_own_directory_without_asking_the_reader() {
+	let workshop = a_directory("auto-write");
+	let file = a_clean_file(&workshop);
+
+	let mut live = started(None, Some(BANANA), workshop).await;
+	let events = live.run_turn(WRITE_A_FILE).await;
+	live.sidecar.shutdown().await;
+
+	assert!(!asked_permission(&events), "the write still reached the reader's dialog");
+	let written = std::fs::read_to_string(&file).expect("the bot wrote the file it was asked for");
+	assert!(written.contains(PROBE_WORD), "the file holds {written:?}");
+}
+
+/// The brake `auto` must not lift. A bot denying the changing tools names them in its
+/// bundle's `disallowedTools`, which is honoured on the promoted path: the mode moves
+/// what is asked of the reader, never what a bot is allowed to hold.
+///
+/// The turn forbids delegation on purpose. Measured here: `disallowedTools` binds the
+/// bot's own thread and not the one `Task` starts, so a denied bot left free to
+/// delegate had a subagent write the file — under the default mode that write reached
+/// the reader's dialog, under `auto` it lands silently. Denying `Task` is a product
+/// decision of its own and is not taken here.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_denied_the_changing_tools_still_changes_nothing_under_auto() {
+	let workshop = a_directory("auto-denied");
+	let file = a_clean_file(&workshop);
+
+	let mut held_back = probe_bot("live-bot-denied", BANANA, SONNET);
+	held_back.denied_tools = bundles::CHANGING_TOOLS.map(str::to_owned).to_vec();
+	let mut live = started_with(None, Some(written(&held_back)), workshop).await;
+	live.run_turn(&format!("{WRITE_A_FILE}{ALONE}")).await;
+	live.sidecar.shutdown().await;
+
+	assert!(!file.exists(), "a bot denied every changing tool still wrote {}", seen_as(&file));
 }
 
 /// The check report is what the frontend receives first, and it is built from a
