@@ -173,8 +173,53 @@ impl<R: Runtime> EventSink for RunSink<R> {
 		if !self.live.holds(&self.scope) {
 			return;
 		}
+		let ended = matches!(event, AgentEvent::TurnEnded { .. });
 		announce(&self.app, Some(self.scope.clone()), event);
+		if ended {
+			self.record_writes();
+		}
 	}
+}
+
+impl<R: Runtime> RunSink<R> {
+	/// What the bot wrote in its own bundle this turn, committed once the turn is
+	/// over. Off the reader's thread and after the end of the turn has already been
+	/// announced: the commit is a disk's worth of work, and nothing about the answer
+	/// the reader is looking at waits on it.
+	///
+	/// The run is checked again on the way out, so a bot the reader has already
+	/// replaced does not announce a write under a run nobody is holding — the same
+	/// cut every other event on this sink is made by.
+	fn record_writes(&self) {
+		let app = self.app.clone();
+		let scope = self.scope.clone();
+		let live = self.live.clone();
+		tauri::async_runtime::spawn(async move {
+			let Some(evolution) = evolution(&app, &scope.bot_id).await else {
+				return;
+			};
+			if !live.holds(&scope) {
+				return;
+			}
+			announce(
+				&app,
+				Some(scope),
+				AgentEvent::BotEvolved { commit_id: evolution.commit_id, title: evolution.title },
+			);
+		});
+	}
+}
+
+/// The turn's write, recorded against the bot as the record has it right now. A host
+/// with no database, a bot no longer on the record, or a disk with no bundle root is
+/// a turn nothing can be recorded for — which is silence rather than a failure: the
+/// files the bot wrote are still where it left them.
+async fn evolution<R: Runtime>(app: &AppHandle<R>, bot_id: &str) -> Option<bundles::Evolution> {
+	let root = bundles::root(app)?;
+	let state = app.try_state::<db::DatabaseState>()?;
+	let database = state.inner().as_ref().ok()?;
+	let bot = database.conversations().bot(bot_id.to_owned()).await.ok()??;
+	bundles::evolve(&root, &bot)
 }
 
 /// Which participants a lifecycle transition owns right now, and whether the host

@@ -354,6 +354,12 @@ pub enum AgentEvent {
 	PermissionResolved { id: String, decision: PermissionDecision },
 	#[serde(rename_all = "camelCase")]
 	TurnEnded { ended: TurnEnded },
+	/// The bot wrote in its own bundle during the turn that just ended, and the
+	/// write was recorded. Always after the [`AgentEvent::TurnEnded`] it belongs to,
+	/// and only for a turn that changed something: the reader is told their bot has
+	/// a new self, and what it is called.
+	#[serde(rename_all = "camelCase")]
+	BotEvolved { commit_id: String, title: String },
 	#[serde(rename_all = "camelCase")]
 	Failed { error: TransportError },
 }

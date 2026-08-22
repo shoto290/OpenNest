@@ -121,4 +121,5 @@ export type AgentEvent =
 	| { type: "permissionRequested"; request: PermissionRequest }
 	| { type: "permissionResolved"; id: string; decision: PermissionDecision }
 	| { type: "turnEnded"; ended: TurnEnded }
+	| { type: "botEvolved"; commitId: string; title: string }
 	| { type: "failed"; error: TransportError }
