@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest"
 
 import {
 	type BotSkillDraft,
+	isMcpServerDraftUnsaved,
 	isSkillDraftUnsaved,
+	readMcpServerFields,
+	readMcpServerTransport,
+	toMcpServerConfigFor,
+	toMcpServerConfigWith,
+	toMcpServerWrittenConfig,
 	toSkillDescriptionLength,
 } from "@workspace/ui/components/bot-settings"
 
@@ -61,5 +67,193 @@ describe("toSkillDescriptionLength", () => {
 
 	it("counts a skill that says only what it is for", () => {
 		expect(toSkillDescriptionLength(SKILL)).toBe(SKILL.description.length)
+	})
+})
+
+const SERVER = {
+	command: "npx",
+	args: ["-y", "@atlas/mcp"],
+	env: { ATLAS_TOKEN: "sk-atlas" },
+	type: "stdio",
+}
+
+describe("readMcpServerFields", () => {
+	it("reads a list and an environment as the lines a reader types", () => {
+		const fields = readMcpServerFields(SERVER)
+
+		expect(fields.args).toBe("-y\n@atlas/mcp")
+		expect(fields.environment).toBe("ATLAS_TOKEN=sk-atlas")
+	})
+
+	it("reads a key the configuration leaves out as an unanswered field", () => {
+		expect(readMcpServerFields({}).url).toBe("")
+	})
+})
+
+describe("toMcpServerConfigWith", () => {
+	it("keeps every key no field names", () => {
+		expect(toMcpServerConfigWith(SERVER, "command", "bunx")).toEqual({
+			...SERVER,
+			command: "bunx",
+		})
+	})
+
+	it("takes a key out rather than writing it empty", () => {
+		expect(toMcpServerConfigWith(SERVER, "environment", "")).toEqual({
+			command: "npx",
+			args: ["-y", "@atlas/mcp"],
+			type: "stdio",
+		})
+	})
+
+	it("reads a header written either way a server's instructions spell it", () => {
+		expect(
+			toMcpServerConfigWith(
+				{},
+				"headers",
+				"Authorization: Bearer sk\nX-Room=4",
+			),
+		).toEqual({ headers: { Authorization: "Bearer sk", "X-Room": "4" } })
+	})
+})
+
+describe("toMcpServerConfigFor", () => {
+	it("drops what only the transport being left names", () => {
+		expect(toMcpServerConfigFor(SERVER, "remote")).toEqual({
+			env: { ATLAS_TOKEN: "sk-atlas" },
+			type: "http",
+		})
+	})
+
+	it("names the kind of endpoint a remote server cannot be reached without", () => {
+		expect(
+			toMcpServerConfigFor({ url: "https://atlas.dev" }, "remote"),
+		).toEqual({
+			url: "https://atlas.dev",
+			type: "http",
+		})
+	})
+
+	it("leaves the kind of endpoint a configuration already names", () => {
+		expect(
+			toMcpServerConfigFor({ url: "https://atlas.dev", type: "sse" }, "remote"),
+		).toEqual({ url: "https://atlas.dev", type: "sse" })
+	})
+
+	it("keeps the other spelling of an HTTP endpoint rather than writing over it", () => {
+		expect(
+			toMcpServerConfigFor(
+				{ url: "https://atlas.dev", type: "streamable-http" },
+				"remote",
+			),
+		).toEqual({ url: "https://atlas.dev", type: "streamable-http" })
+	})
+
+	it("takes the endpoint out with the address once the server is started here", () => {
+		expect(
+			toMcpServerConfigFor(
+				{
+					url: "https://atlas.dev",
+					type: "http",
+					headers: { A: "b" },
+					env: {},
+				},
+				"local",
+			),
+		).toEqual({ env: {} })
+	})
+})
+
+describe("readMcpServerTransport", () => {
+	it("reads an address as a server reached rather than started", () => {
+		expect(readMcpServerTransport({ url: "https://atlas.dev" })).toBe("remote")
+	})
+
+	it("leaves a configuration naming neither on the transport it is already on", () => {
+		expect(readMcpServerTransport({ type: "stdio" }, "remote")).toBe("remote")
+	})
+
+	it("reads a kind of endpoint as a server reached, whichever spelling it takes", () => {
+		expect(readMcpServerTransport({ type: "streamable-http" })).toBe("remote")
+		expect(readMcpServerTransport({ type: "ws" })).toBe("remote")
+	})
+
+	it("reads a configuration naming stdio off the keys it carries", () => {
+		expect(readMcpServerTransport({ type: "stdio", command: "npx" })).toBe(
+			"local",
+		)
+	})
+})
+
+describe("toMcpServerWrittenConfig", () => {
+	it("writes the endpoint beside the address of a server that names none", () => {
+		expect(
+			toMcpServerWrittenConfig(
+				{ url: "https://ledger.internal/mcp" },
+				"remote",
+			),
+		).toEqual({ url: "https://ledger.internal/mcp", type: "http" })
+	})
+
+	it("reads a server missing that endpoint as something to save", () => {
+		const draft = {
+			name: "ledger",
+			transport: "remote" as const,
+			config: '{"url":"https://ledger.internal/mcp"}',
+		}
+
+		expect(isMcpServerDraftUnsaved(draft, draft)).toBe(true)
+	})
+})
+
+describe("isMcpServerDraftUnsaved", () => {
+	it("reads a configuration laid out again as nothing to save", () => {
+		expect(
+			isMcpServerDraftUnsaved(
+				{ name: "atlas", transport: "local", config: '{ "command": "npx" }' },
+				{ name: "atlas", transport: "local", config: '{"command":"npx"}' },
+			),
+		).toBe(false)
+	})
+
+	it("reads a key answered again in another order as nothing to save", () => {
+		expect(
+			isMcpServerDraftUnsaved(
+				{
+					name: "atlas",
+					transport: "local",
+					config: '{"args":["-y"],"command":"npx","env":{"B":"2","A":"1"}}',
+				},
+				{
+					name: "atlas",
+					transport: "local",
+					config: '{"command":"npx","env":{"A":"1","B":"2"},"args":["-y"]}',
+				},
+			),
+		).toBe(false)
+	})
+
+	it("reads a list put in another order as something to save", () => {
+		expect(
+			isMcpServerDraftUnsaved(
+				{ name: "atlas", transport: "local", config: '{"args":["b","a"]}' },
+				{ name: "atlas", transport: "local", config: '{"args":["a","b"]}' },
+			),
+		).toBe(true)
+	})
+
+	it("reads a rename as something to save", () => {
+		expect(
+			isMcpServerDraftUnsaved(
+				{ name: "books", transport: "local", config: "{}" },
+				{ name: "atlas", transport: "local", config: "{}" },
+			),
+		).toBe(true)
+	})
+
+	it("reads a server nobody has written yet as something to save", () => {
+		expect(
+			isMcpServerDraftUnsaved({ name: "", transport: "local", config: "{}" }),
+		).toBe(true)
 	})
 })

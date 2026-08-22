@@ -237,7 +237,13 @@ const bots = {
 		add: "Add server",
 		create: "Add server",
 		save: "Save changes",
+		unsaved: "Unsaved changes",
 		back: "All servers",
+		section: {
+			connection: "Connection",
+			environment: "Environment",
+			advanced: "Advanced",
+		},
 		notice:
 			"A server is a program this bot starts on your machine, under your account, the next time it runs. Add one only from a source you trust.",
 		empty: {
@@ -257,6 +263,58 @@ const bots = {
 			hint: "JSON, copied from the server's own instructions. A local server names a command, its arguments and its environment; a remote one names a URL.",
 			invalid:
 				"This is not a JSON object, so there is nothing to save yet. Check the braces, the commas and the quotes.",
+		},
+		transport: {
+			label: "Transport",
+			hint: "It decides what the rest of the configuration says: a local server names a command to run, a remote one an address to reach.",
+			/** One key per transport, keyed by what the draft carries, so a transport
+			 * the format gains and this catalogue has no name for fails the type check. */
+			option: {
+				local: "Started on this machine",
+				remote: "Reached over the network",
+			},
+		},
+		command: {
+			label: "Command",
+			placeholder: "npx",
+			hint: "The program this bot starts. It runs under your account, with what you can reach.",
+		},
+		args: {
+			label: "Arguments",
+			placeholder: "-y\n@scope/server",
+			hint: "One argument a line, in the order the command takes them.",
+		},
+		url: {
+			label: "URL",
+			placeholder: "https://example.com/mcp",
+			hint: "The address this bot connects to. Nothing is started on your machine.",
+		},
+		endpoint: {
+			label: "Endpoint",
+			hint: "The kind of endpoint the address is reached on. A remote server written without one is skipped, so it is always saved beside the URL. Streamable HTTP is the same endpoint as HTTP, and a file already spelling it that way is left alone.",
+			/** One key per kind, keyed by what the configuration carries, so a kind the
+			 * format gains and this catalogue has no name for fails the type check. */
+			option: {
+				http: "HTTP",
+				sse: "Server-sent events",
+				ws: "WebSocket",
+			},
+		},
+		headers: {
+			label: "Headers",
+			placeholder: "Authorization: Bearer token",
+			hint: "One header a line, as name and value. This is where a server asks for a key.",
+		},
+		environment: {
+			label: "Environment",
+			placeholder: "ATLAS_TOKEN=sk-...",
+			hint: "One name and value a line. The server starts with these, and nothing else this bot holds.",
+		},
+		leave: {
+			title: "Leave without saving?",
+			description:
+				"Everything typed since this server was opened goes with it. The server on the disk is left as it was.",
+			action: "Leave",
 		},
 		launch: {
 			label: "What this starts",

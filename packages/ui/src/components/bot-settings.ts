@@ -176,13 +176,65 @@ type BotMcpServerItem = {
 	config: Record<string, unknown>
 }
 
+/** Where the server runs: one started on the reader's own machine, or one already
+ * running somewhere and reached over the network. It is the question the rest of the
+ * configuration answers — a local server names a command, a remote one names an
+ * address — so it is asked first and it decides which fields stand under it. */
+type BotMcpTransport = (typeof MCP_TRANSPORTS)[number]
+
+const MCP_TRANSPORTS = ["local", "remote"] as const
+
+/** The keys each transport is the only one to name, and which leave the
+ * configuration the moment the other one is picked: a remote server has no command to
+ * run and a local one has no headers to send, nor a kind of endpoint to reach. Every
+ * key neither of them names is none of their business and stays exactly where it
+ * was. */
+const MCP_TRANSPORT_KEYS = {
+	local: ["command", "args"],
+	remote: ["url", "type", "headers"],
+} as const satisfies Record<BotMcpTransport, readonly string[]>
+
+/** The kinds of endpoint a remote server is reached on, as a reader picks one. */
+type BotMcpEndpointKind = (typeof MCP_ENDPOINT_KINDS)[number]
+
+const MCP_ENDPOINT_KINDS = ["http", "sse", "ws"] as const
+
+/** Every `type` a remote server is reached by, the other spelling of an HTTP endpoint
+ * included: a file already carrying `streamable-http` keeps it, since the two mean one
+ * thing to the runtime and rewriting somebody's configuration over a spelling is not
+ * this editor's business. `stdio` is not one of them — it is what a configuration
+ * naming no type at all is read as. */
+const MCP_ENDPOINT_TYPES = [...MCP_ENDPOINT_KINDS, "streamable-http"]
+
+const isMcpEndpointType = (value: unknown) =>
+	MCP_ENDPOINT_TYPES.some((type) => type === readConfigText(value))
+
+/** The kind of endpoint a configuration names, as the field asks for it. It stands on
+ * HTTP for a configuration naming none and for the alias, which is the same endpoint
+ * under its other name. */
+const readMcpEndpointKind = (value: unknown): BotMcpEndpointKind =>
+	MCP_ENDPOINT_KINDS.find((kind) => kind === readConfigText(value)) ?? "http"
+
 /** A server being written. Its configuration is text rather than an object because
  * half-typed JSON is not one — the editor holds what the reader typed and parses it
- * on every keystroke, so an unfinished brace is a message rather than a lost
- * field. */
+ * on every keystroke, so an unfinished brace is a message rather than a lost field.
+ *
+ * The transport rides beside it rather than being read out of it: a remote server
+ * whose address is still empty names nothing, and a transport derived from the keys
+ * would flip back under the reader the moment they picked it. */
 type BotMcpServerDraft = {
 	name: string
+	transport: BotMcpTransport
 	config: string
+}
+
+/** A server nobody has written yet: the resting state of the editor. The
+ * configuration opens empty, because the fields under Connection now name the shape
+ * a reader used to have to know. */
+const BLANK_MCP_SERVER_DRAFT: BotMcpServerDraft = {
+	name: "",
+	transport: "local",
+	config: "{}",
 }
 
 /** What the store will take as a configuration, and what this side will read one
@@ -208,6 +260,240 @@ const parseMcpServerConfig = (text: string): Record<string, unknown> | null => {
 const toMcpServerConfigText = (config: Record<string, unknown>) =>
 	JSON.stringify(config, null, 2)
 
+/** A key the configuration names as text, or nothing for a key it leaves out: a
+ * missing key and an empty field are one state to a reader. */
+const readConfigText = (value: unknown) =>
+	typeof value === "string" ? value : ""
+
+/** A key the configuration names as a list, kept to the entries that are text. */
+const readConfigList = (value: unknown) =>
+	Array.isArray(value)
+		? value.filter((entry): entry is string => typeof entry === "string")
+		: []
+
+/** A key the configuration names as an object of names and values — an environment,
+ * a set of headers. Anything that is not text is shown as the JSON it is, so a value
+ * this side does not expect is still readable rather than gone. */
+const readConfigPairs = (value: unknown) =>
+	isConfigObject(value)
+		? Object.entries(value).map(([name, entry]) => ({
+				name,
+				value: typeof entry === "string" ? entry : JSON.stringify(entry),
+			}))
+		: []
+
+/** Where a name stops and its value starts on a line a reader typed. Either notation
+ * is taken — an environment is written `NAME=value` and a header `Name: value` — so a
+ * line pasted from a server's own instructions is read as it was copied. */
+const PAIR_SEPARATOR = /[:=]/
+
+const fromLines = (text: string) =>
+	text
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean)
+
+const toPairLines = (value: unknown, separator: string) =>
+	readConfigPairs(value)
+		.map((pair) => `${pair.name}${separator}${pair.value}`)
+		.join("\n")
+
+const fromPairLines = (text: string) =>
+	Object.fromEntries(
+		fromLines(text).map((line) => {
+			const at = line.search(PAIR_SEPARATOR)
+
+			return at === -1
+				? [line, ""]
+				: [line.slice(0, at).trim(), line.slice(at + 1).trim()]
+		}),
+	)
+
+/** The handful of keys the editor names with a field of its own, as text: a field is
+ * something a reader types into, whatever shape the configuration keeps the answer
+ * in. Everything else a configuration holds is only ever read as JSON. */
+type BotMcpServerFields = {
+	command: string
+	args: string
+	url: string
+	type: string
+	headers: string
+	environment: string
+}
+
+/** Which key of the configuration each field answers. The environment is the one
+ * whose field and key are named differently: `env` is what the format writes, and
+ * nothing else in the app is called that. */
+const MCP_FIELD_KEYS = {
+	command: "command",
+	args: "args",
+	url: "url",
+	type: "type",
+	headers: "headers",
+	environment: "env",
+} as const satisfies Record<keyof BotMcpServerFields, string>
+
+const readMcpServerFields = (
+	config: Record<string, unknown>,
+): BotMcpServerFields => ({
+	command: readConfigText(config.command),
+	args: readConfigList(config.args).join("\n"),
+	url: readConfigText(config.url),
+	type: readConfigText(config.type),
+	headers: toPairLines(config.headers, ": "),
+	environment: toPairLines(config.env, "="),
+})
+
+const toFieldValue = (
+	field: keyof BotMcpServerFields,
+	value: string,
+): unknown => {
+	if (field === "args") return fromLines(value)
+	if (field === "headers" || field === "environment")
+		return fromPairLines(value)
+
+	return value
+}
+
+/** Whether two spellings of a field say the same thing to the configuration: a
+ * header line still being typed and the same line laid out again are one answer, and
+ * an editor can leave the typing alone while they are. */
+const isSameFieldAnswer = (
+	field: keyof BotMcpServerFields,
+	a: string,
+	b: string,
+) =>
+	JSON.stringify(toFieldValue(field, a)) ===
+	JSON.stringify(toFieldValue(field, b))
+
+/** Whether an answer says nothing at all, whichever shape it takes. A key that would
+ * say nothing is taken out rather than written empty: a configuration is copied
+ * around and read by a program, and `"command": ""` is a command. */
+const isEmptyAnswer = (value: unknown) =>
+	value === "" ||
+	(Array.isArray(value) && value.length === 0) ||
+	(isConfigObject(value) && Object.keys(value).length === 0)
+
+const withoutKeys = (
+	config: Record<string, unknown>,
+	keys: readonly string[],
+): Record<string, unknown> =>
+	Object.fromEntries(
+		Object.entries(config).filter(([key]) => !keys.includes(key)),
+	)
+
+/** One field's answer carried back into the configuration it was read out of. Every
+ * key no field names is left exactly where it was, because the shape belongs to the
+ * transport and this side only ever names a handful of it. */
+const toMcpServerConfigWith = (
+	config: Record<string, unknown>,
+	field: keyof BotMcpServerFields,
+	value: string,
+): Record<string, unknown> => {
+	const key = MCP_FIELD_KEYS[field]
+	const answer = toFieldValue(field, value)
+
+	return isEmptyAnswer(answer)
+		? withoutKeys(config, [key])
+		: { ...config, [key]: answer }
+}
+
+/** A remote configuration always names the kind of endpoint it reaches: an address
+ * with no `type` beside it is refused outright — the server is skipped and the reader
+ * is told to add one — so a remote server that names none is written as the HTTP one
+ * it most often is. A kind already named is left exactly as it is written. */
+const withMcpEndpointType = (config: Record<string, unknown>) =>
+	isMcpEndpointType(config.type) ? config : { ...config, type: "http" }
+
+/** The configuration a transport leaves behind once the other one is picked: what
+ * only the transport being left names goes, everything else stays, and a remote one
+ * gains the kind of endpoint it cannot be reached without. */
+const toMcpServerConfigFor = (
+	config: Record<string, unknown>,
+	transport: BotMcpTransport,
+) => {
+	const kept = withoutKeys(
+		config,
+		transport === "remote"
+			? MCP_TRANSPORT_KEYS.local
+			: MCP_TRANSPORT_KEYS.remote,
+	)
+
+	return transport === "remote" ? withMcpEndpointType(kept) : kept
+}
+
+/** Which transport a configuration was written for. The kind of endpoint answers it
+ * outright where it is named; past that it is read off the keys — an address is only
+ * a remote server's and a command only a local one's. A configuration naming neither
+ * says nothing about which of the two a reader picked, so it is left on the one they
+ * are already on. */
+const readMcpServerTransport = (
+	config: Record<string, unknown>,
+	current: BotMcpTransport = "local",
+): BotMcpTransport => {
+	if (isMcpEndpointType(config.type)) return "remote"
+	if (readConfigText(config.url)) return "remote"
+	if (readConfigText(config.command) || readConfigList(config.args).length > 0)
+		return "local"
+
+	return current
+}
+
+/** A server as it is kept, opened for writing. */
+const toMcpServerDraft = (server: BotMcpServerItem): BotMcpServerDraft => ({
+	name: server.name,
+	transport: readMcpServerTransport(server.config),
+	config: toMcpServerConfigText(server.config),
+})
+
+/** The configuration that would be written, which is not always the one on screen: a
+ * remote server is written with the kind of endpoint it is reached by, whether or not
+ * the text names one yet. */
+const toMcpServerWrittenConfig = (
+	config: Record<string, unknown>,
+	transport: BotMcpTransport,
+) => (transport === "remote" ? withMcpEndpointType(config) : config)
+
+/** A configuration as one word, with its keys in a fixed order at every depth: a
+ * field answered again writes its key back at the end of the object, so two
+ * configurations saying the same thing in another order are the same configuration. */
+const toOrderedValue = (value: unknown): unknown => {
+	if (Array.isArray(value)) return value.map(toOrderedValue)
+	if (!isConfigObject(value)) return value
+
+	return Object.fromEntries(
+		Object.keys(value)
+			.sort()
+			.map((key) => [key, toOrderedValue(value[key])]),
+	)
+}
+
+const toComparableConfig = (config: Record<string, unknown>) =>
+	JSON.stringify(toOrderedValue(config))
+
+/** Whether a draft has anything to save, weighed against the server it was opened
+ * on: what would be written against what is kept. A server nobody has written yet
+ * always has — there is nothing kept to be the same as — and so has a remote one
+ * whose file is missing the type it cannot be reached without. The text itself is
+ * never compared, only what it says: it is laid out again every time a field is
+ * answered, and a re-indent is not something to save. */
+const isMcpServerDraftUnsaved = (
+	draft: BotMcpServerDraft,
+	saved?: BotMcpServerDraft,
+) => {
+	if (!saved || draft.name !== saved.name) return true
+
+	const config = parseMcpServerConfig(draft.config)
+	const kept = parseMcpServerConfig(saved.config)
+
+	if (!config || !kept) return true
+
+	return (
+		toComparableConfig(toMcpServerWrittenConfig(config, draft.transport)) !==
+		toComparableConfig(kept)
+	)
+}
+
 type BotSettingsValue = {
 	identity: BotIdentity
 	name: string
@@ -222,13 +508,16 @@ type BotSettingsValue = {
 }
 
 export {
+	BLANK_MCP_SERVER_DRAFT,
 	BLANK_SKILL_DRAFT,
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
 	type BotAvatarBlot,
 	type BotIdentity,
 	type BotMcpServerDraft,
+	type BotMcpServerFields,
 	type BotMcpServerItem,
+	type BotMcpTransport,
 	type BotModelOption,
 	type BotSettingsValue,
 	type BotSkillContext,
@@ -236,13 +525,27 @@ export {
 	type BotSkillEffort,
 	type BotSkillItem,
 	isConfigObject,
+	isMcpServerDraftUnsaved,
+	isSameFieldAnswer,
 	isSkillDraftUnsaved,
+	MCP_ENDPOINT_KINDS,
+	MCP_TRANSPORTS,
 	parseMcpServerConfig,
+	readConfigList,
+	readConfigPairs,
+	readConfigText,
+	readMcpEndpointKind,
+	readMcpServerFields,
+	readMcpServerTransport,
 	SKILL_CONTEXTS,
 	SKILL_DESCRIPTION_LIMIT,
 	SKILL_EFFORTS,
 	SKILL_FLAG_DEFAULTS,
 	toBundleName,
+	toMcpServerConfigFor,
 	toMcpServerConfigText,
+	toMcpServerConfigWith,
+	toMcpServerDraft,
+	toMcpServerWrittenConfig,
 	toSkillDescriptionLength,
 }

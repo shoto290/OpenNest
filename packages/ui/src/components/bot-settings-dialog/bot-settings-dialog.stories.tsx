@@ -537,6 +537,34 @@ export const WithSkillOpen = meta.story({
 	},
 })
 
+export const WithServerOpen = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A server taken out of the list. The dialog gives up its own rail the same way it does for a skill: the server takes the whole surface, and the rail becomes that server's summary — a way back to the list, then Connection, Environment and Advanced. Nothing in it is written as it is typed, so the save is a press and the way back asks before it drops anything. Pick `WithSkillOpen` for the other surface that does this.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(
+			within(dialog).getByRole("tab", { name: "MCP servers" }),
+		)
+		await userEvent.click(within(dialog).getByRole("button", { name: /atlas/ }))
+
+		const sections = within(railIn(dialog))
+			.getAllByRole("tab")
+			.map((tab) => tab.textContent)
+		await expect(sections).toEqual(["Connection", "Environment", "Advanced"])
+		await expect(
+			within(dialog).getByRole("button", { name: "All servers" }),
+		).toBeVisible()
+	},
+})
+
 export const Closing = meta.story({
 	parameters: {
 		docs: {

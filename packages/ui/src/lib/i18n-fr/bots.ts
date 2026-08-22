@@ -227,7 +227,13 @@ const bots = {
 		add: "Ajouter un serveur",
 		create: "Ajouter le serveur",
 		save: "Enregistrer les modifications",
+		unsaved: "Modifications non enregistrées",
 		back: "Tous les serveurs",
+		section: {
+			connection: "Connexion",
+			environment: "Environnement",
+			advanced: "Avancé",
+		},
 		notice:
 			"Un serveur est un programme que ce bot démarre sur votre machine, sous votre compte, à sa prochaine exécution. N'en ajoutez un que depuis une source de confiance.",
 		empty: {
@@ -247,6 +253,60 @@ const bots = {
 			hint: "Du JSON, repris des instructions du serveur. Un serveur local nomme une commande, ses arguments et son environnement ; un serveur distant nomme une URL.",
 			invalid:
 				"Ce n'est pas un objet JSON, il n'y a donc rien à enregistrer. Vérifiez les accolades, les virgules et les guillemets.",
+		},
+		transport: {
+			label: "Transport",
+			hint: "C'est lui qui décide de ce que dit le reste de la configuration : un serveur local nomme une commande à lancer, un serveur distant une adresse à joindre.",
+			/** Une clé par transport, indexée sur ce que porte le brouillon : un
+			 * transport que le format gagnerait et que ce catalogue ne nommerait pas
+			 * échoue à la vérification de types. */
+			option: {
+				local: "Démarré sur cette machine",
+				remote: "Joint par le réseau",
+			},
+		},
+		command: {
+			label: "Commande",
+			placeholder: "npx",
+			hint: "Le programme que ce bot démarre. Il tourne sous votre compte, avec ce que vous pouvez atteindre.",
+		},
+		args: {
+			label: "Arguments",
+			placeholder: "-y\n@scope/server",
+			hint: "Un argument par ligne, dans l'ordre où la commande les prend.",
+		},
+		url: {
+			label: "URL",
+			placeholder: "https://exemple.com/mcp",
+			hint: "L'adresse à laquelle ce bot se connecte. Rien n'est démarré sur votre machine.",
+		},
+		endpoint: {
+			label: "Point d'accès",
+			hint: "Le type de point d'accès sur lequel l'adresse est jointe. Un serveur distant écrit sans lui est ignoré, il est donc toujours enregistré à côté de l'URL. Streamable HTTP est le même point d'accès que HTTP, et un fichier qui l'écrit déjà ainsi est laissé tel quel.",
+			/** Une clé par type, indexée sur ce que porte la configuration : un type que
+			 * le format gagnerait et que ce catalogue ne nommerait pas échoue à la
+			 * vérification de types. */
+			option: {
+				http: "HTTP",
+				sse: "Événements envoyés par le serveur",
+				ws: "WebSocket",
+			},
+		},
+		headers: {
+			label: "En-têtes",
+			placeholder: "Authorization: Bearer jeton",
+			hint: "Un en-tête par ligne, nom et valeur. C'est ici qu'un serveur demande une clé.",
+		},
+		environment: {
+			label: "Environnement",
+			placeholder: "ATLAS_TOKEN=sk-...",
+			hint: "Un nom et une valeur par ligne. Le serveur démarre avec ceux-ci, et rien d'autre de ce que ce bot détient.",
+		},
+		leave: {
+			title: "Partir sans enregistrer ?",
+			description:
+				"Tout ce qui a été tapé depuis l'ouverture de ce serveur part avec. Le serveur sur le disque reste tel qu'il était.",
+			action: "Partir",
 		},
 		launch: {
 			label: "Ce que cela démarre",

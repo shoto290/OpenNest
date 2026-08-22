@@ -10,16 +10,21 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
 import {
+	BLANK_MCP_SERVER_DRAFT,
 	BLANK_SKILL_DRAFT,
 	type BotIdentity,
+	type BotMcpServerDraft,
 	type BotMcpServerItem,
 	type BotModelOption,
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
+	isMcpServerDraftUnsaved,
 	isSkillDraftUnsaved,
+	toMcpServerDraft,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { SkillEditor } from "@workspace/ui/components/bot-settings-dialog/skill-editor"
@@ -55,6 +60,14 @@ const DANGER_TAB = "danger"
 type SkillSession = {
 	draft: BotSkillDraft
 	opened?: BotSkillItem
+}
+
+/** A server held open on the whole dialog: the draft as it is being written, and the
+ * server it was opened on to weigh it against — which is also where it is filed, so a
+ * rename is reported against that name. No server for a creation. */
+type McpSession = {
+	draft: BotMcpServerDraft
+	saved?: BotMcpServerDraft
 }
 
 const DANGER_RAIL_ITEM_CLASS = cn(
@@ -155,6 +168,7 @@ const BotSettingsDialog = ({
 	const { t } = useTranslation("bots")
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
 	const [skill, setSkill] = useState<SkillSession | null>(null)
+	const [server, setServer] = useState<McpSession | null>(null)
 	const [isLeaving, setLeaving] = useState(false)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const botName = value.name.trim() || t("dialog.untitled")
@@ -169,12 +183,33 @@ const BotSettingsDialog = ({
 		skill && isSkillDraftUnsaved(skill.draft, skill.opened),
 	)
 
+	// The open server weighed the same way, so a dialog closed over one asks before it
+	// drops the draft its own editor would have asked about.
+	const isServerUnsaved = Boolean(
+		server && isMcpServerDraftUnsaved(server.draft, server.saved),
+	)
+
 	const leave = () => {
 		setSkill(null)
+		setServer(null)
 		onClose()
 	}
 
-	const close = () => (isSkillUnsaved ? setLeaving(true) : leave())
+	const close = () =>
+		isSkillUnsaved || isServerUnsaved ? setLeaving(true) : leave()
+
+	// The question names what is about to be dropped, so it is the open editor's own.
+	const leaveCopy = server
+		? {
+				title: t("mcp.leave.title"),
+				description: t("mcp.leave.description"),
+				action: t("mcp.leave.action"),
+			}
+		: {
+				title: t("skills.leave.title"),
+				description: t("skills.leave.description"),
+				action: t("skills.leave.action"),
+			}
 
 	// The chord that opened the dialog closes it, and closes it the way Escape and
 	// the backdrop do: a host that flipped `open` itself would take an unsaved skill
@@ -204,6 +239,35 @@ const BotSettingsDialog = ({
 		setSkill(null)
 	}
 
+	const saveServer = (
+		{ draft, saved }: McpSession,
+		config: Record<string, unknown>,
+	) => {
+		if (saved) {
+			onMcpServerChange(saved.name, draft.name, config)
+		} else {
+			onMcpServerCreate(draft.name, config)
+		}
+
+		setServer(null)
+	}
+
+	const deleteServer = (saved: BotMcpServerDraft) => {
+		onMcpServerDelete(saved.name)
+		setServer(null)
+	}
+
+	const openServerEditor = ({ draft, saved }: McpSession) => (
+		<McpServerEditor
+			draft={draft}
+			onBack={() => setServer(null)}
+			onDelete={saved ? () => deleteServer(saved) : undefined}
+			onDraftChange={(next) => setServer({ draft: next, saved })}
+			onSave={(config) => saveServer({ draft, saved }, config)}
+			saved={saved}
+		/>
+	)
+
 	const openSkillEditor = ({ draft, opened }: SkillSession) => (
 		<SkillEditor
 			draft={draft}
@@ -214,6 +278,15 @@ const BotSettingsDialog = ({
 			saved={opened}
 		/>
 	)
+
+	// One editor at a time, and either of them takes the whole dialog: a skill and a
+	// server both replace the rail with one of their own.
+	const openEditor = () => {
+		if (skill) return openSkillEditor(skill)
+		if (server) return openServerEditor(server)
+
+		return null
+	}
 
 	return (
 		<Root onOpenChange={(next) => !next && close()} open={open}>
@@ -245,9 +318,7 @@ const BotSettingsDialog = ({
 					</Title>
 				</header>
 
-				{skill ? (
-					openSkillEditor(skill)
-				) : (
+				{openEditor() ?? (
 					<Tabs.Root
 						className="flex min-h-0 flex-1"
 						defaultValue={showDanger ? DANGER_TAB : FIRST_TAB}
@@ -353,14 +424,15 @@ const BotSettingsDialog = ({
 							/>
 						</Tabs.Panel>
 
-						{/* The scrolling panel rather than the filling one the skills take:
-					an open server stacks a notice, two fields and a reading of what
-					will run, which is taller than the dialog on purpose. */}
-						<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="mcp">
+						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">
 							<McpServersPanel
-								onChange={onMcpServerChange}
-								onCreate={onMcpServerCreate}
-								onDelete={onMcpServerDelete}
+								onAdd={() => setServer({ draft: BLANK_MCP_SERVER_DRAFT })}
+								onOpen={(opened) =>
+									setServer({
+										draft: toMcpServerDraft(opened),
+										saved: toMcpServerDraft(opened),
+									})
+								}
 								servers={mcpServers}
 							/>
 						</Tabs.Panel>
@@ -392,12 +464,12 @@ const BotSettingsDialog = ({
 				)}
 
 				<ConfirmDialog
-					confirmLabel={t("skills.leave.action")}
-					description={t("skills.leave.description")}
+					confirmLabel={leaveCopy.action}
+					description={leaveCopy.description}
 					onConfirm={leave}
 					onOpenChange={setLeaving}
 					open={isLeaving}
-					title={t("skills.leave.title")}
+					title={leaveCopy.title}
 				/>
 			</Content>
 		</Root>
