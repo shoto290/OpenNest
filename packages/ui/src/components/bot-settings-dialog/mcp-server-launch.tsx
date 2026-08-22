@@ -3,7 +3,11 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { isConfigObject } from "@workspace/ui/components/bot-settings"
+import {
+	readConfigList,
+	readConfigPairs,
+	readConfigText,
+} from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { FIELD_LABEL_CLASS } from "@workspace/ui/components/settings-styles"
@@ -20,19 +24,9 @@ type McpServerLaunchReading = {
 	environment: { name: string; value: string }[]
 }
 
-const readText = (value: unknown) =>
-	typeof value === "string" && value.length > 0 ? value : null
-
-const readArguments = (value: unknown) =>
-	Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []
-
-const readEnvironment = (value: unknown) =>
-	isConfigObject(value)
-		? Object.entries(value).map(([name, entry]) => ({
-				name,
-				value: typeof entry === "string" ? entry : JSON.stringify(entry),
-			}))
-		: []
+/** A key the configuration leaves out and one it names as nothing are one answer
+ * here: there is no line to draw for either. */
+const readLine = (value: unknown) => readConfigText(value) || null
 
 /**
  * The keys a configuration is understood by, read off whatever else it holds. It
@@ -42,14 +36,14 @@ const readEnvironment = (value: unknown) =>
 const readMcpServerLaunch = (
 	config: Record<string, unknown>,
 ): McpServerLaunchReading => {
-	const command = readText(config.command)
+	const command = readLine(config.command)
 
 	return {
 		command: command
-			? [command, ...readArguments(config.args)].join(" ")
+			? [command, ...readConfigList(config.args)].join(" ")
 			: null,
-		url: readText(config.url),
-		environment: readEnvironment(config.env),
+		url: readLine(config.url),
+		environment: readConfigPairs(config.env),
 	}
 }
 
