@@ -281,6 +281,29 @@ round trip for it and leaving the same text in context twice.
   beside it. That is a decision about a file the reader owns, so it belongs to the
   interface that marks a skill, not to the writer that carries one.
 
+### The app's own skills ride the layer, not a body
+
+The compiled body is a bot's mechanism. The app's plugin has no agent to compile into,
+and copying its text into every bundle would put the app's words in files a bot owns —
+so the app's preloaded skills reach the model through the same `append` the layer rides.
+
+`preloadedSkills` in `sidecar/src/providers/claude/system-skills.ts` reads
+`<systemPluginPath>/skills/*/SKILL.md`, keeps the ones whose frontmatter carries
+`metadata.opennest.preload: true`, and `layerFor` in `system-layer.ts` appends each body
+under a `# <name>` heading, below the sentence naming the bot's own directory.
+
+- The `append` composes with `agent` and `skills:` preloads nothing on the promoted path
+  — both measured above — so the layer is the only route the app's text has.
+- The plugin is rewritten at every launch, so an edit to `learn` is in force at the next
+  session of every bot: no bundle is rewritten, and no exported bot carries app text.
+- A session with no `systemPluginPath`, or one whose plugin marks nothing, appends
+  nothing for it.
+- The bot's own preloaded skills stay compiled in its body. The two mechanisms carry
+  different texts and never the same one.
+- Open: `learn` is marked for preloading and left invocable, which the row above prices
+  as a duplicate. `disable-model-invocation` beside the mark is the fix, and it belongs
+  to whatever writes the plugin — `bundles/system.rs`.
+
 ## Resume — flags are not sticky
 
 `--resume` **without** re-passing `--plugin-dir` and `--agent` replays the conversation

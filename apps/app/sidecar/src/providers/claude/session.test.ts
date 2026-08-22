@@ -1,4 +1,7 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
@@ -40,7 +43,7 @@ describe("buildOptions", () => {
 			expect(buildOptions(spawned, undefined).systemPrompt).toEqual({
 				type: "preset",
 				preset: "claude_code",
-				append: layerFor(spawned.pluginPath),
+				append: layerFor(spawned.pluginPath, spawned.systemPluginPath),
 			})
 		}
 	})
@@ -173,5 +176,50 @@ describe("buildOptions", () => {
 		expect(options.plugins).toBeUndefined()
 		expect(options.agent).toBeUndefined()
 		expect(options.mcpServers).toBeUndefined()
+	})
+})
+
+describe("layerFor", () => {
+	let system: string
+
+	beforeEach(() => {
+		system = mkdtempSync(join(tmpdir(), "opennest-layer-"))
+	})
+
+	afterEach(() => {
+		rmSync(system, { recursive: true, force: true })
+	})
+
+	const dropSkill = (id: string, contents: string) => {
+		const dir = join(system, "skills", id)
+		mkdirSync(dir, { recursive: true })
+		writeFileSync(join(dir, "SKILL.md"), contents)
+	}
+
+	// The app's text reaches a bot through the layer rather than through its bundle:
+	// a change to the app's plugin is in force at the next session of every bot.
+	it("carries the app plugin's preloaded skills under the bot's own directory", () => {
+		dropSkill(
+			"learn",
+			'---\nname: "learn"\nmetadata:\n  opennest:\n    preload: true\n---\n\n## When to write\n\nRules.\n',
+		)
+
+		// The skill is named in a heading of its own, above a body whose sections nest
+		// under it rather than beside it.
+		expect(layerFor("/bots/b1", system)).toBe(
+			[
+				OPENNEST_LAYER,
+				bundleLine("/bots/b1"),
+				"# learn\n\n## When to write\n\nRules.",
+			].join("\n\n"),
+		)
+	})
+
+	it("appends nothing for an app plugin with no preloaded skill", () => {
+		dropSkill("quiet", '---\nname: "quiet"\n---\n\nRules.\n')
+
+		expect(layerFor("/bots/b1", system)).toBe(
+			`${OPENNEST_LAYER}\n\n${bundleLine("/bots/b1")}`,
+		)
 	})
 })

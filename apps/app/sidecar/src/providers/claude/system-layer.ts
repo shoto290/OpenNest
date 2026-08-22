@@ -1,3 +1,5 @@
+import { type PreloadedSkill, preloadedSkills } from "./system-skills"
+
 /** What every session is told on top of the provider's preset, under the bot's own
  * brief. It carries the situation and nothing else — where the bot runs, how its
  * learning reaches the person, and the chat it is read in: no capability, no tool
@@ -28,5 +30,29 @@ You are not Claude Code and never present yourself as it. Say nothing about the 
 export const bundleLine = (pluginPath: string): string =>
 	`Your own skills live in ${pluginPath}, and that is the directory to write a new one into.`
 
-export const layerFor = (pluginPath?: string): string =>
-	pluginPath ? `${OPENNEST_LAYER}\n\n${bundleLine(pluginPath)}` : OPENNEST_LAYER
+/** One skill of the app's plugin as the model reads it: a heading naming it, and its
+ * body under it. The layer carries no heading of its own, so a skill's own `##`
+ * sections nest under this one rather than beside it. */
+const skillSection = ({ name, body }: PreloadedSkill): string =>
+	`# ${name}\n\n${body}`
+
+/** The layer, the bot's own directory, and the body of every skill the app's plugin
+ * marked for preloading.
+ *
+ * The app's skills are carried here rather than compiled into a bot's agent file: the
+ * text belongs to the app, so a change to it reaches every bot at its next session
+ * without rewriting a single bundle. A bot's own preloaded skills stay in its brief,
+ * which is what keeps an exported bundle whole. `skills:` in an agent's frontmatter is
+ * measured to preload nothing on the promoted path, and the `append` is measured to
+ * reach the model beside `agent` — see `src-tauri/src/agent/PLUGINS.md`. */
+export const layerFor = (
+	pluginPath?: string,
+	systemPluginPath?: string,
+): string =>
+	[
+		OPENNEST_LAYER,
+		...(pluginPath ? [bundleLine(pluginPath)] : []),
+		...(systemPluginPath
+			? preloadedSkills(systemPluginPath).map(skillSection)
+			: []),
+	].join("\n\n")
