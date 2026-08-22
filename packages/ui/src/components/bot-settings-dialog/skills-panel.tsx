@@ -5,7 +5,10 @@ import { useTranslation } from "react-i18next"
 import type { BotSkillItem } from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
-import { SETTINGS_TAG_CLASS } from "@workspace/ui/components/settings-styles"
+import {
+	SETTINGS_EMPTY_CLASS,
+	SETTINGS_TAG_CLASS,
+} from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SkillsPanelProps = {
@@ -31,7 +34,7 @@ const SkillsPanel = ({ skills, onOpen, onAdd }: SkillsPanelProps) => {
 
 	if (skills.length === 0) {
 		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+			<div className={SETTINGS_EMPTY_CLASS}>
 				<Icons.Skill
 					aria-hidden="true"
 					className="size-8 text-muted-foreground"

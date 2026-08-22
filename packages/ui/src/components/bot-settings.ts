@@ -165,6 +165,25 @@ type BotSkillItem = BotSkillDraft & {
 	isPreloaded: boolean
 }
 
+/** Who wrote a commit into the bundle: the reader themself, or the bot on a run.
+ * Two answers rather than a free name — the panel has one name to put on each,
+ * and the bot's is the bot's own. */
+type BotCommitAuthor = "user" | "bot"
+
+/** One commit of the bot's bundle, as the history lists it. The title is the line a
+ * non-developer reads first and the body is what it meant; `diff` is the unified
+ * diff, absent until the host answers the panel's request for it, so an expanded
+ * commit with none yet is a commit still loading rather than an empty one. */
+type BotCommitItem = {
+	id: string
+	/** When it landed, in milliseconds. Read as a distance from now. */
+	at: number
+	author: BotCommitAuthor
+	title: string
+	body: string
+	diff?: string
+}
+
 /** An MCP server the bot's bundle declares, as the panel lists and edits it. The
  * name is the identity — it is the key the server is written under — so renaming one
  * moves it, unlike a skill, whose directory holds still. The configuration stays
@@ -513,6 +532,8 @@ export {
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
 	type BotAvatarBlot,
+	type BotCommitAuthor,
+	type BotCommitItem,
 	type BotIdentity,
 	type BotMcpServerDraft,
 	type BotMcpServerFields,

@@ -20,6 +20,7 @@ import {
 	type BotSettingsDialogProps,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-dialog"
+import { BOT_COMMITS } from "@workspace/ui/components/bot-settings-dialog/history.fixtures"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 
@@ -147,6 +148,11 @@ const meta = preview.meta({
 		onSkillChange: fn(),
 		onSkillPreloadedChange: fn(),
 		onSkillDelete: fn(),
+		history: {
+			commits: BOT_COMMITS,
+			onLoadDiff: fn(),
+			onRevert: fn(),
+		},
 	},
 	argTypes: {
 		working: { control: "boolean" },
@@ -201,6 +207,7 @@ export const Rail = meta.story({
 			"Instructions",
 			"Skills",
 			"MCP servers",
+			"History",
 			"Runtime",
 			"Danger zone",
 		])
@@ -476,6 +483,53 @@ export const Empty = meta.story({
 		await expect(
 			within(panel).getByRole("button", { name: /Working directory/ }),
 		).toHaveTextContent("Choose a folder")
+	},
+})
+
+export const History = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Everything that has ever changed in this bot's bundle, on the tab between MCP servers and Runtime. Reach for this to check that the group reads as a list of changes rather than a log: the title leads each row, who and when sit under it, and the diff is folded away until somebody asks for it. The tab exists only for a host that passed the `history` group — a host with no bundle to read gets no tab rather than an empty one. Pick `AI/HistoryPanel` for the states the list itself takes.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const panel = await openTab(dialog, "History", userEvent)
+
+		const [newest] = within(panel).getAllByRole("listitem")
+		await expect(newest).toHaveTextContent(
+			"Switched the model to Claude Sonnet 4.5",
+		)
+
+		const [changes] = within(panel).getAllByRole("button", {
+			name: "Show changes",
+		})
+		if (!changes) throw new Error("The history is missing its disclosures")
+
+		await userEvent.click(changes)
+		await expect(args.history?.onLoadDiff).toHaveBeenCalledWith("commit-4")
+	},
+})
+
+export const WithoutHistory = meta.story({
+	args: { history: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same dialog on a host that has not wired the bundle's history. Check that the rail simply has one item fewer — no tab, no empty group behind one — and that every other group is where it was.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+
+		await expect(
+			within(railIn(dialog)).queryByRole("tab", { name: "History" }),
+		).toBe(null)
 	},
 })
 
