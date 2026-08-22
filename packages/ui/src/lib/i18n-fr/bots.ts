@@ -54,6 +54,7 @@ const bots = {
 			instructions: "Instructions",
 			skills: "Compétences",
 			mcp: "Serveurs MCP",
+			history: "Historique",
 			runtime: "Exécution",
 			danger: "Zone sensible",
 		},
@@ -68,6 +69,25 @@ const bots = {
 		instructions: {
 			label: "Instructions",
 			placeholder: "L'invite système avec laquelle ce bot tourne toujours",
+		},
+	},
+	history: {
+		empty: "Rien n'a encore été modifié dans ce bot.",
+		author: {
+			user: "Vous",
+		},
+		diff: {
+			show: "Afficher les modifications",
+			hide: "Masquer les modifications",
+			loading: "Chargement des modifications…",
+			filename: "Modifications",
+		},
+		undo: {
+			action: "Annuler",
+			title: "Annuler « {{title}} » ?",
+			description:
+				"Le bot revient à son état d'avant cette modification. C'est écrit comme une nouvelle modification : l'historique garde les deux.",
+			confirm: "Annuler cette modification",
 		},
 	},
 	skills: {

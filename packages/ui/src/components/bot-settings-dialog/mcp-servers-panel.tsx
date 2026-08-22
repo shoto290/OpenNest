@@ -6,6 +6,7 @@ import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
 import { readMcpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { SETTINGS_EMPTY_CLASS } from "@workspace/ui/components/settings-styles"
 
 type McpServersPanelProps = {
 	servers: BotMcpServerItem[]
@@ -31,7 +32,7 @@ const McpServersPanel = ({ servers, onOpen, onAdd }: McpServersPanelProps) => {
 
 	if (servers.length === 0) {
 		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+			<div className={SETTINGS_EMPTY_CLASS}>
 				<Icons.Server
 					aria-hidden="true"
 					className="size-8 text-muted-foreground"

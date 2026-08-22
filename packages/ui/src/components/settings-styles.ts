@@ -66,6 +66,12 @@ const DIALOG_POPUP_CLASS = `${POPUP_CLASS} transition-[scale,opacity] duration-1
 const POPUP_DROP_SHADOW_CLASS =
 	"[filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.10))_drop-shadow(0_10px_18px_rgba(0,0,0,0.16))] dark:[filter:drop-shadow(0_0_1px_rgba(255,255,255,0.16))_drop-shadow(0_12px_28px_rgba(0,0,0,0.7))]"
 
+/** A group with nothing in it yet, on the space the list would have taken: its
+ * icon, what there is none of, and the way to make the first one, stacked in the
+ * middle. Its contents stay with each panel — only the standing is shared. */
+const SETTINGS_EMPTY_CLASS =
+	"flex flex-1 flex-col items-center justify-center gap-3 text-center"
+
 export {
 	BACKDROP_CLASS,
 	DIALOG_POPUP_CLASS,
@@ -77,6 +83,7 @@ export {
 	PICTURE_TARGET_CLASS,
 	POPUP_CLASS,
 	POPUP_DROP_SHADOW_CLASS,
+	SETTINGS_EMPTY_CLASS,
 	SETTINGS_HEADER_CLASS,
 	SETTINGS_TAG_CLASS,
 }

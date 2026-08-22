@@ -61,6 +61,7 @@ const bots = {
 			instructions: "Instructions",
 			skills: "Skills",
 			mcp: "MCP servers",
+			history: "History",
 			runtime: "Runtime",
 			danger: "Danger zone",
 		},
@@ -75,6 +76,25 @@ const bots = {
 		instructions: {
 			label: "Instructions",
 			placeholder: "The system prompt this bot always runs with",
+		},
+	},
+	history: {
+		empty: "Nothing has been changed in this bot yet.",
+		author: {
+			user: "You",
+		},
+		diff: {
+			show: "Show changes",
+			hide: "Hide changes",
+			loading: "Loading the changes…",
+			filename: "Changes",
+		},
+		undo: {
+			action: "Undo",
+			title: "Undo “{{title}}”?",
+			description:
+				"The bot goes back to how it was before this change. It is written as a new change, so the history keeps both.",
+			confirm: "Undo this change",
 		},
 	},
 	skills: {

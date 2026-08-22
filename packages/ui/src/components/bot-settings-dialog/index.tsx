@@ -12,6 +12,7 @@ import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
 import {
 	BLANK_MCP_SERVER_DRAFT,
 	BLANK_SKILL_DRAFT,
+	type BotCommitItem,
 	type BotIdentity,
 	type BotMcpServerDraft,
 	type BotMcpServerItem,
@@ -24,6 +25,7 @@ import {
 	toMcpServerDraft,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import { HistoryPanel } from "@workspace/ui/components/bot-settings-dialog/history-panel"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
@@ -70,6 +72,21 @@ type McpSession = {
 	saved?: BotMcpServerDraft
 }
 
+/** Everything the History tab needs, travelling together: a host that has no
+ * bundle to read cannot half-wire it, and one that leaves it out gets no tab rather
+ * than an empty one. */
+type BotHistory = {
+	/** Every commit of the bundle. Order is this side's — it lists them newest
+	 * first whatever order they arrive in. */
+	commits: BotCommitItem[]
+	/** Fired the moment a commit is opened. The diff comes back on the commit's own
+	 * `diff`, so an opened commit without one is still loading. */
+	onLoadDiff: (commitId: string) => void
+	/** Fired only once the question on the row is accepted. The host answers with a
+	 * new commit; nothing here is removed. */
+	onRevert: (commitId: string) => void
+}
+
 const DANGER_RAIL_ITEM_CLASS = cn(
 	RAIL_ITEM_CLASS,
 	"text-destructive hover:bg-destructive/10 hover:text-destructive data-active:bg-destructive/10 data-active:text-destructive",
@@ -112,6 +129,9 @@ type BotSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
+	/** Everything that has ever changed in the bot's bundle, and the two ways to act
+	 * on it. Left out, the dialog carries no History tab at all. */
+	history?: BotHistory
 	/** The edited bot's id. It is what its blot's shape is derived from, so the
 	 * breadcrumb shows the mark the roster row behind it is already showing. */
 	seed?: string
@@ -158,6 +178,7 @@ const BotSettingsDialog = ({
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
+	history,
 	seed,
 	onDelete,
 	showDanger,
@@ -356,6 +377,14 @@ const BotSettingsDialog = ({
 								label={t("dialog.tab.mcp")}
 								value="mcp"
 							/>
+							{history ? (
+								<SettingsRailItem
+									icon={Icons.History}
+									iconsOnly={iconsOnly}
+									label={t("dialog.tab.history")}
+									value="history"
+								/>
+							) : null}
 							<SettingsRailItem
 								icon={Icons.Terminal}
 								iconsOnly={iconsOnly}
@@ -437,6 +466,20 @@ const BotSettingsDialog = ({
 							/>
 						</Tabs.Panel>
 
+						{history ? (
+							<Tabs.Panel
+								className={SETTINGS_SCROLLING_PANEL_CLASS}
+								value="history"
+							>
+								<HistoryPanel
+									botName={botName}
+									commits={history.commits}
+									onLoadDiff={history.onLoadDiff}
+									onRevert={history.onRevert}
+								/>
+							</Tabs.Panel>
+						) : null}
+
 						<Tabs.Panel
 							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="runtime"
@@ -477,6 +520,8 @@ const BotSettingsDialog = ({
 }
 
 export {
+	type BotCommitItem,
+	type BotHistory,
 	type BotMcpServerItem,
 	type BotModelOption,
 	BotSettingsDialog,
