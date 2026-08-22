@@ -211,6 +211,29 @@ describe("createRosterController", () => {
 		expect(written.mock.calls.length).toBeLessThan(3)
 	})
 
+	// The style is edited beside the panel's value rather than in it, so the write it
+	// authors is built from the bot on the record — what was typed a keystroke ago
+	// included.
+	it("writes the style the reader picked without losing what was typed", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const id = "default"
+
+		controller.describe(
+			id,
+			edited(toSettingsValue(held(controller, id)), { name: "Nyx" }),
+		)
+		controller.restyle(id, "default")
+		expect(held(controller, id).outputStyle).toBe("default")
+
+		await vi.waitFor(async () =>
+			expect((await reloaded(store)).bots[0]).toMatchObject({
+				name: "Nyx",
+				outputStyle: "default",
+			}),
+		)
+	})
+
 	it("takes the picture off when an animal is picked and keeps it when it is not", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

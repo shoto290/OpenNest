@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { AppHeader } from "@workspace/ui/components/app-header"
+import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
@@ -267,6 +268,7 @@ export function App() {
 					}}
 					mcpServers={mcpServers.state.servers}
 					models={modelOptionsFor(selected.model, catalogue)}
+					outputStyle={readBotOutputStyle(selected.outputStyle)}
 					onAvatarUpload={(file) => {
 						void roster.controller.uploadAvatar(selected.id, file)
 					}}
@@ -274,6 +276,17 @@ export function App() {
 					onClose={() => roster.controller.setEditing(false)}
 					onDelete={() => {
 						void deleteBot(selected.id)
+					}}
+					// The style is the model's twin: a bot writing in another one is a bot
+					// whose live process was started under the one before it, so the record
+					// takes the style and the runtime is retired with it. A pick landing on
+					// the style the bot already answers under changes neither.
+					onOutputStyleChange={(outputStyle) => {
+						if (outputStyle === selected.outputStyle) {
+							return
+						}
+						roster.controller.restyle(selected.id, outputStyle)
+						chat.controller.redescribe(selected.id)
 					}}
 					// The record first, then the runtime: a bot that changed what a
 					// process is started as retires the one answering for it, and the

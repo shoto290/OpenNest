@@ -1,8 +1,9 @@
 import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
-import type {
-	BotCommitItem,
-	BotModelOption,
-	BotSettingsValue,
+import {
+	type BotCommitItem,
+	type BotModelOption,
+	type BotSettingsValue,
+	DEFAULT_BOT_OUTPUT_STYLE,
 } from "@workspace/ui/components/bot-settings"
 
 import type { BotCommit } from "./history-controller"
@@ -172,6 +173,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 	workingDir: null,
 	instructions: "",
 	deniedTools: [],
+	outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 })
 
 /** The stored bot as the settings panel edits it. */
@@ -208,7 +210,11 @@ export const toCommitItem = (commit: BotCommit): BotCommitItem => ({
  * was handed to render, and the store holds the path that URL was built from. So a
  * value that still carries an image keeps the path the bot already wears, and one
  * that carries none takes the picture off — which is what choosing an animal in the
- * picker does, since it emits an identity with no image at all. */
+ * picker does, since it emits an identity with no image at all.
+ *
+ * The style is carried over for a plainer reason: the panel edits it beside its
+ * value rather than in it, so no write the panel's value authors moves the bot off
+ * the style it already answers under. */
 export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	name: value.name,
 	title: value.title,
@@ -219,6 +225,7 @@ export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	workingDir: value.workingDirectory.trim() || null,
 	instructions: value.instructions,
 	deniedTools: withChangesNothing(bot, value.changesNothing),
+	outputStyle: bot.outputStyle,
 })
 
 /** The denials as one word, so two lists holding the same names in another order
@@ -234,7 +241,9 @@ const denialOf = (denied: string[]): string => [...denied].sort().join(",")
  * promoted to, so both are read once, when that child starts. All four are settled
  * at spawn, so a bot that changes any of them is a bot whose live runtime has to be
  * replaced — everything else about it is read where it is shown, or travels with
- * the next prompt. */
+ * the next prompt. The style a bot writes in settles at spawn too, but it is not
+ * asked about here: the panel edits it beside its value rather than in it, so the
+ * pick is what retires the runtime. */
 export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {
 	const next = toIdentity(value, bot)
 	return (
