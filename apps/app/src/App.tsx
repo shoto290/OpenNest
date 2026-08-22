@@ -14,10 +14,12 @@ import { useTheme } from "@/components/theme-provider"
 import {
 	changesRuntime,
 	modelOptionsFor,
+	toCommitItem,
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
 import { toSkillDraft, toSkillItem } from "@/lib/bots/skill-draft"
+import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
@@ -59,6 +61,7 @@ export function App() {
 	const roster = useRoster(store)
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
+	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const theme = useTheme()
@@ -83,15 +86,21 @@ export function App() {
 		void user.controller.load()
 	}, [user.controller])
 
-	// The skills and the MCP servers follow the selection for the reason the
-	// conversation does: both live in the selected bot's own bundle, so the panels
-	// open on what that bot carries rather than on what the bot before it did.
+	// The skills, the MCP servers and the history follow the selection for the reason
+	// the conversation does: all three live in the selected bot's own bundle, so the
+	// panels open on what that bot carries rather than on what the bot before it did.
 	useEffect(() => {
 		if (selectedBotId) {
 			void skills.controller.open(selectedBotId)
 			void mcpServers.controller.open(selectedBotId)
+			void history.controller.open(selectedBotId)
 		}
-	}, [mcpServers.controller, skills.controller, selectedBotId])
+	}, [
+		history.controller,
+		mcpServers.controller,
+		skills.controller,
+		selectedBotId,
+	])
 
 	// The conversation follows the selection: opening a bot paints its transcript and
 	// puts a process of its own behind it. Coming back to one that is already
@@ -245,6 +254,17 @@ export function App() {
 			the width back without touching what is selected or where it is scrolled. */}
 			{selected ? (
 				<BotSettingsDialog
+					// An undo is the bundle changing under the bot the same way a
+					// redescription is: the process answering for it was started on files
+					// that no longer read as they did, so it is spent from here.
+					history={{
+						commits: history.state.commits.map(toCommitItem),
+						onLoadDiff: history.controller.loadDiff,
+						onRevert: (commitId) => {
+							history.controller.revert(commitId)
+							chat.controller.redescribe(selected.id)
+						},
+					}}
 					mcpServers={mcpServers.state.servers}
 					models={modelOptionsFor(selected.model, catalogue)}
 					onAvatarUpload={(file) => {

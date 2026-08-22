@@ -1,5 +1,6 @@
 import type {
 	Bot,
+	BotHistoryEntry,
 	BotIdentity,
 	BotMcpServer,
 	BotSkill,
@@ -85,6 +86,19 @@ export type TranscriptStore = TranscriptPort & {
 	/** The server taken out of the file, and the rest of it left as it was. The last
 	 * one going takes the file with it. */
 	deleteBotMcpServer: (botId: string, name: string) => Promise<void>
+	/** Every write to the bot's bundle, newest first, as the repository inside it
+	 * holds them. A host with nowhere to keep bundles answers none rather than
+	 * refusing, the way it does for the skills; a bundle whose repository will not
+	 * open is a refusal, because the writes did land. */
+	botHistory: (botId: string) => Promise<BotHistoryEntry[]>
+	/** What one write changed, as a unified diff against what came before it. The
+	 * first write of a bundle reads as every file being added. */
+	botHistoryDiff: (botId: string, commitId: string) => Promise<string>
+	/** The write undone, as a new write on top rather than a past rewritten. The
+	 * answer is the history as it now reads, so the caller has the undo without a
+	 * second read. The bundle on the disk is laid down again from the result, which
+	 * makes a running process of that bot's stale. */
+	revertBot: (botId: string, commitId: string) => Promise<BotHistoryEntry[]>
 	/** The slash commands a session announced, held against the bot it answered for.
 	 * Replaced whole by every announcement: a command the newest session left out is
 	 * one it would refuse, so what is kept is the last list named rather than every

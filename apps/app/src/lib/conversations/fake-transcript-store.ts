@@ -1,6 +1,7 @@
 import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
 	Bot,
+	BotHistoryEntry,
 	BotIdentity,
 	BotMcpServer,
 	BotSkill,
@@ -141,6 +142,11 @@ export const createFakeTranscriptStore = (
 	/** What each bot's bundle holds, the way the disk holds it: no row, one entry per
 	 * bot, and a skill named by the directory it would live in. */
 	const skills = new Map<string, BotSkill[]>()
+	/** Every write to each bot's bundle, newest first, the way the repository inside
+	 * it reads: one entry per bot, and nothing at all for a bundle nobody has written
+	 * to. */
+	const history = new Map<string, BotHistoryEntry[]>()
+	let committed = 0
 	/** What each bot's server file declares, the way the disk holds it: one entry per
 	 * bot, and a server named by the key it is declared under. */
 	const servers = new Map<string, Map<string, Record<string, unknown>>>()
@@ -236,6 +242,28 @@ export const createFakeTranscriptStore = (
 	const isPlainObject = (value: unknown) =>
 		typeof value === "object" && value !== null && !Array.isArray(value)
 
+	/** The write that just landed, recorded the way the host records it: a title a
+	 * reader can place without seeing a diff, and an id the diff and the undo address
+	 * it by. */
+	const recorded = (botId: string, title: string) => {
+		committed += 1
+		const entry: BotHistoryEntry = {
+			id: `commit-${committed}`,
+			timestamp: Math.floor(Date.now() / 1000),
+			author: "user",
+			title,
+			body: "",
+		}
+		history.set(botId, [entry, ...(history.get(botId) ?? [])])
+	}
+
+	/** The bot's writes, newest first and copied out, so a caller holding one list
+	 * does not see the next write land in it. */
+	const historyOf = (botId: string) => [...(history.get(botId) ?? [])]
+
+	const historyEntry = (botId: string, commitId: string) =>
+		history.get(botId)?.find((entry) => entry.id === commitId)
+
 	/** One of a bot's skills, changed. A bot that is not there and a skill that is
 	 * not one of its own are the two refusals the host answers with — the second is
 	 * a file that is not on the disk to be written. */
@@ -243,6 +271,7 @@ export const createFakeTranscriptStore = (
 		botId: string,
 		skillId: string,
 		change: (skill: BotSkill) => BotSkill,
+		verb = "saved from settings",
 	): Promise<BotSkill> => {
 		if (!bots.has(botId)) {
 			return refuse({ kind: "unknownBot", id: botId })
@@ -257,6 +286,7 @@ export const createFakeTranscriptStore = (
 			botId,
 			held.map((skill) => (skill.id === skillId ? written : skill)),
 		)
+		recorded(botId, `Skill "${written.name}" ${verb}`)
 		return Promise.resolve(written)
 	}
 
@@ -403,6 +433,7 @@ export const createFakeTranscriptStore = (
 				isPreloaded: false,
 			}
 			skills.set(botId, [...held, created])
+			recorded(botId, `Skill "${created.name}" saved from settings`)
 			return Promise.resolve(created)
 		},
 
@@ -416,7 +447,7 @@ export const createFakeTranscriptStore = (
 		) => writeSkill(botId, skillId, (skill) => ({ ...skill, isPreloaded })),
 
 		deleteBotSkill: (botId: string, skillId: string) =>
-			writeSkill(botId, skillId, (skill) => skill).then(() => {
+			writeSkill(botId, skillId, (skill) => skill, "taken away").then(() => {
 				skills.set(
 					botId,
 					(skills.get(botId) ?? []).filter((skill) => skill.id !== skillId),
@@ -452,6 +483,7 @@ export const createFakeTranscriptStore = (
 			const declared = servers.get(botId) ?? new Map()
 			declared.set(name, config)
 			servers.set(botId, declared)
+			recorded(botId, `Server "${name}" saved from settings`)
 			return Promise.resolve({ name, config })
 		},
 
@@ -462,7 +494,32 @@ export const createFakeTranscriptStore = (
 			if (!servers.get(botId)?.delete(name)) {
 				return refuse({ kind: "unwritableBundle", detail: "no such server" })
 			}
+			recorded(botId, `Server "${name}" taken away`)
 			return Promise.resolve()
+		},
+
+		/** Newest first, the way the host reads the repository, and none at all for a
+		 * bundle nobody has written to. */
+		botHistory: (botId: string) => Promise.resolve(historyOf(botId)),
+
+		/** No file is kept here to diff, so what comes back only stands for one: a
+		 * commit that is not the bot's own is the refusal the host answers with. */
+		botHistoryDiff: (botId: string, commitId: string) => {
+			const entry = historyEntry(botId, commitId)
+			return entry
+				? Promise.resolve(`@@ ${entry.title} @@`)
+				: refuse({ kind: "unwritableBundle", detail: "no such commit" })
+		},
+
+		/** A new write on top rather than a past rewritten, and the history as it now
+		 * reads — the same two rules the host undoes under. */
+		revertBot: (botId: string, commitId: string) => {
+			const entry = historyEntry(botId, commitId)
+			if (!entry) {
+				return refuse({ kind: "unwritableBundle", detail: "no such commit" })
+			}
+			recorded(botId, `Undone: ${entry.title}`)
+			return Promise.resolve(historyOf(botId))
 		},
 
 		recordBotCommands: (botId: string, listed: AgentCommand[]) => {
