@@ -19,9 +19,11 @@ use std::fs;
 use std::path::Path;
 
 use git2::build::CheckoutBuilder;
-use git2::{Commit, Diff, DiffFormat, IndexAddOption, Oid, Repository, Signature, Sort, Tree};
+use git2::{
+	Commit, Diff, DiffFormat, IndexAddOption, Oid, Repository, Signature, Sort, StatusOptions, Tree,
+};
 
-use super::dir;
+use super::{dir, LEARNED_NAME};
 use crate::private_files;
 
 /// What a bot writes down for itself between turns, which is memory rather than
@@ -29,7 +31,7 @@ use crate::private_files;
 /// their bot's writes is not looking for it. Excluded in the repository's own
 /// `info/exclude` rather than in a `.gitignore`, because a `.gitignore` is a file in
 /// the bundle and this is not a rule anybody outside this app agreed to.
-const EXCLUDED: &str = ".learned.md";
+const EXCLUDED: &str = LEARNED_NAME;
 
 const INFO_DIR: &str = "info";
 const EXCLUDE_NAME: &str = "exclude";
@@ -103,6 +105,28 @@ pub fn commit(
 		&parents,
 	)?;
 	Ok(Some(id.to_string()))
+}
+
+/// What the bundle holds that its history does not, as paths a reader could place.
+/// Untracked files count — a bot writing a new skill has written nothing git knows
+/// yet — and what [`EXCLUDED`] names never does.
+///
+/// A bundle that is not a repository yet answers as nothing changed rather than as
+/// its whole contents: a directory nobody has recorded is not a turn's doing, and
+/// the first commit that takes it in is a reader's write, not a bot's.
+pub fn changes(root: &Path, bot_id: &str) -> Vec<String> {
+	let Ok(repository) = Repository::open(dir(root, bot_id)) else {
+		return Vec::new();
+	};
+	let mut options = StatusOptions::new();
+	options.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
+	let Ok(statuses) = repository.statuses(Some(&mut options)) else {
+		return Vec::new();
+	};
+	let mut paths: Vec<String> =
+		statuses.iter().filter_map(|status| status.path().map(str::to_owned).ok()).collect();
+	paths.sort();
+	paths
 }
 
 /// Every write to the bundle, newest first. Ordered by what came after what rather

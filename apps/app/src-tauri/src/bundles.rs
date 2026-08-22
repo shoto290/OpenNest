@@ -114,6 +114,17 @@ const SESSION_START: &str = r#"#!/bin/sh
 printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"PLUGIN_ROOT=%s"}}' "$CLAUDE_PLUGIN_ROOT"
 "#;
 
+/// What the bot leaves behind for the write that records its turn: a title line, a
+/// blank line, then what it changed and why, as [`LEARN_BODY`] asks it to. Read once
+/// the turn is over and deleted with the commit that carries it, so the next turn
+/// speaks for itself.
+const LEARNED_NAME: &str = ".learned.md";
+
+/// The title a turn is recorded under when the bot wrote files and left no sentence
+/// about them. Deliberately plain: it says who wrote and that something changed,
+/// which is all this app can honestly say about a write nobody described.
+const EVOLVED_TITLE: &str = "The bot changed its files";
+
 /// The skill a bot evolves through, and the only one this module writes a body for.
 /// Written once and never again: it is a file in the reader's own bundle from the
 /// moment it lands, so a hand that rewrites it has rewritten it for good.
@@ -520,6 +531,50 @@ pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 		return Ok(());
 	}
 	write(root, bot)
+}
+
+/// One write of the bot's own, as the reader is told about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Evolution {
+	pub commit_id: String,
+	pub title: String,
+}
+
+/// What the bot wrote in its own bundle during the turn that just ended, recorded.
+/// `None` for a bundle it left exactly as it found it, which is most turns.
+///
+/// The agent file is laid down again before the commit, so a skill written mid-turn
+/// is carried into the body the next session is started on and the history holds the
+/// bundle as the bot will really run it — the write and its effect in one commit
+/// rather than one now and one at the next launch.
+///
+/// A commit that will not be made leaves everything on the disk, [`LEARNED_NAME`]
+/// included: the next turn to end reads the same sentence and records the same
+/// write, rather than a turn's work being lost to a repository that would not open.
+pub fn evolve(root: &Path, bot: &Bot) -> Option<Evolution> {
+	let changed = git::changes(root, &bot.id);
+	if changed.is_empty() {
+		return None;
+	}
+	let _ = rewrite_agent(root, bot);
+	let (title, body) =
+		learned(root, &bot.id).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
+	let commit_id = git::commit(root, &bot.id, Author::Bot, &title, &body).ok().flatten()?;
+	let _ = fs::remove_file(dir(root, &bot.id).join(LEARNED_NAME));
+	Some(Evolution { commit_id, title })
+}
+
+/// What the bot said about its own write: the first line as the title, everything
+/// under it as the body. A file that is not there, or one whose first line is blank,
+/// is a bot that said nothing — the caller speaks for it then.
+fn learned(root: &Path, bot_id: &str) -> Option<(String, String)> {
+	let text = fs::read_to_string(dir(root, bot_id).join(LEARNED_NAME)).ok()?;
+	let (title, body) = text.split_once('\n').unwrap_or((&text, ""));
+	let title = title.trim();
+	if title.is_empty() {
+		return None;
+	}
+	Some((title.to_owned(), body.trim().to_owned()))
 }
 
 /// What the disk says the bot was told, when that is not what is stored. `None`
@@ -3180,6 +3235,112 @@ mod tests {
 		assert_eq!(titles.len(), 3);
 		assert!(readers_skills(&root, &bot.id).is_empty(), "the skill is back on the disk");
 		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join(&skill.id).exists());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A skill the bot wrote by hand, as it lands on the disk mid-turn: nothing has
+	/// been through this module, so the bundle holds a file its history and its agent
+	/// file have never heard of.
+	fn a_bot_writes(root: &Path, bot_id: &str, name: &str, body: &str) {
+		let path = dir(root, bot_id).join(SKILLS_DIR).join(name).join(SKILL_NAME);
+		let text = format!(
+			"{FENCE}\n{NAME_KEY}: {name}\n{DESCRIPTION_KEY}: What {name} is for.\n{PRELOAD_KEY}: {MARKED}\n{FENCE}\n\n{body}\n"
+		);
+		private_files::replace(&path, text.as_bytes()).expect("the bot's write lands");
+	}
+
+	/// A turn the bot answered without touching its own directory is not a write, so
+	/// there is nothing to record and nothing to tell the reader about.
+	#[test]
+	fn a_turn_that_left_the_bundle_alone_records_nothing() {
+		let root = a_root("evolve-clean");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		assert_eq!(evolve(&root, &bot), None);
+		assert_eq!(titles(&root, &bot.id).len(), 1);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// What the bot left in its note is what the reader reads back: the first line as
+	/// the title, the rest as the body, under the bot's own name. The note itself is
+	/// taken away with the commit that carries it.
+	#[test]
+	fn what_the_bot_wrote_is_recorded_under_what_it_said_about_it() {
+		let root = a_root("evolve-learned");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		private_files::replace(
+			&dir(&root, &bot.id).join(LEARNED_NAME),
+			b"Bean learned about figs\n\nThey said figs, not dates.\n",
+		)
+		.expect("the note lands");
+
+		let evolution = evolve(&root, &bot).expect("the turn is recorded");
+
+		assert_eq!(evolution.title, "Bean learned about figs");
+		let entry = &history(&root, &bot.id).expect("the history reads")[0];
+		assert_eq!(entry.id, evolution.commit_id);
+		assert_eq!(entry.author, Author::Bot);
+		assert_eq!(entry.body, "They said figs, not dates.");
+		assert!(!dir(&root, &bot.id).join(LEARNED_NAME).exists(), "the note is still there");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The write is recorded with the agent file rebuilt around it, so the commit
+	/// holds the bundle as the next session will really be started on it rather than
+	/// a skill sitting beside a body that has never heard of it.
+	#[test]
+	fn a_recorded_turn_carries_the_agent_file_the_next_session_starts_on() {
+		let root = a_root("evolve-agent");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+
+		evolve(&root, &bot).expect("the turn is recorded");
+
+		assert!(written_agent(&root, &bot.id).contains("Bean likes figs."));
+		assert!(git::changes(&root, &bot.id).is_empty(), "the bundle is left uncommitted");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A bot that wrote and said nothing about it is still a write the reader can
+	/// see: a plain title, and the paths it touched under it.
+	#[test]
+	fn a_turn_the_bot_said_nothing_about_is_recorded_under_the_paths_it_changed() {
+		let root = a_root("evolve-silent");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+
+		let evolution = evolve(&root, &bot).expect("the turn is recorded");
+
+		assert_eq!(evolution.title, EVOLVED_TITLE);
+		let entry = &history(&root, &bot.id).expect("the history reads")[0];
+		assert!(entry.body.contains("skills/figs/SKILL.md"), "got {}", entry.body);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A note is the bot's only say in what its write is called, so a note it left
+	/// blank is no say at all rather than a commit with no title.
+	#[test]
+	fn a_note_with_no_title_leaves_the_write_named_by_this_app() {
+		let root = a_root("evolve-blank");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		private_files::replace(&dir(&root, &bot.id).join(LEARNED_NAME), b"   \n\nFigs.\n")
+			.expect("the note lands");
+
+		let evolution = evolve(&root, &bot).expect("the turn is recorded");
+
+		assert_eq!(evolution.title, EVOLVED_TITLE);
 
 		let _ = fs::remove_dir_all(&root);
 	}

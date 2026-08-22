@@ -323,6 +323,11 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 			return applyPermissionResolved(state, event.id, event.decision)
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
+		// A bot that has just rewritten itself changes nothing on the screen the
+		// reader is looking at: the write is in the bundle's history, and what the
+		// next session is started on is settled elsewhere.
+		case "botEvolved":
+			return state
 		case "failed":
 			return applyFailure(state, event.error)
 	}
