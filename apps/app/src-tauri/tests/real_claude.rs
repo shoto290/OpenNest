@@ -13,7 +13,7 @@ use opennest_app::agent::contract::{
 };
 use opennest_app::agent::session::{Bundle, EventSink, Session, SessionOptions};
 use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions};
-use opennest_app::agent::store;
+use opennest_app::agent::{redact, store};
 use opennest_app::bundles;
 use opennest_app::db::repositories::conversations::{AvatarAnimal, Bot};
 use tokio::sync::mpsc;
@@ -226,6 +226,65 @@ async fn a_rotation_starts_a_second_process_under_the_identity_the_bot_holds_now
 	second.sidecar.shutdown().await;
 	let _ = std::fs::remove_dir_all(&workshop);
 	let _ = std::fs::remove_dir_all(&studio);
+}
+
+/// Two words no model can guess, planted where a default session reads them: one in
+/// the `CLAUDE.md` of the directory the bot works in, one in the memory directory the
+/// CLI derives from that same path.
+const CLAUDE_MD_WORD: &str = "ZEPPELIN";
+const MEMORY_WORD: &str = "MARMALADE";
+const THE_CODE_WORDS: &str = "Without reading any file, name the project code word and \
+	the memory code word you were given. Reply with the two words, or NONE for either \
+	one you do not have.";
+
+/// Where the CLI keeps the memory it derives from a working directory: the path with
+/// every character that is not a letter or a digit turned into a dash.
+fn memory_dir(cwd: &Path) -> PathBuf {
+	let slug: String = seen_as(cwd)
+		.chars()
+		.map(|character| if character.is_ascii_alphanumeric() { character } else { '-' })
+		.collect();
+	redact::home_dir().expect("a home directory").join(".claude/projects").join(slug).join("memory")
+}
+
+/// A bot carries its bundle and nothing the machine leaves around. `settingSources: []`
+/// and `strictMcpConfig` are passed on every spawn, so the `CLAUDE.md` sitting in the
+/// working directory is never read — the child cannot name a word it says out loud.
+///
+/// The derived memory is the exception, measured here and not fixed: a word planted in
+/// `~/.claude/projects/<cwd-slug>/memory/` still reaches the child under
+/// `settingSources: []`, so two bots sharing a working directory share that memory.
+/// Asserted as it is so a change of behaviour in the CLI shows up as a failing test.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_reads_no_claude_md_of_its_own_directory_but_still_reads_its_memory() {
+	let sealed = a_directory("sealed");
+	std::fs::write(sealed.join("CLAUDE.md"), format!("The project code word is {CLAUDE_MD_WORD}."))
+		.expect("the working directory carries a CLAUDE.md");
+	let memory = memory_dir(&sealed);
+	std::fs::create_dir_all(&memory).expect("the memory directory is created");
+	std::fs::write(memory.join("MEMORY.md"), format!("The memory code word is {MEMORY_WORD}."))
+		.expect("the memory carries a word");
+
+	let mut bot = started(None, Some(BANANA), sealed.clone()).await;
+	let answer = text(&bot.run_turn(THE_CODE_WORDS).await);
+	bot.sidecar.shutdown().await;
+
+	let _ = std::fs::remove_dir_all(&sealed);
+	let _ = std::fs::remove_dir_all(&memory);
+
+	assert!(
+		answer.contains("BANANA"),
+		"the bundle's own brief did not survive isolation: {answer:?}"
+	);
+	assert!(
+		!answer.contains(CLAUDE_MD_WORD),
+		"the working directory's CLAUDE.md reached the child: {answer:?}"
+	);
+	assert!(
+		answer.contains(MEMORY_WORD),
+		"the derived memory no longer reaches the child — isolation grew, update PLUGINS.md: {answer:?}"
+	);
 }
 
 /// The model a reader picks is the model the bot runs on. It travels as the `model`

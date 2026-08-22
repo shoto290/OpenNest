@@ -49,6 +49,15 @@ describe("buildOptions", () => {
 		}
 	})
 
+	it("reads no settings on disk and no MCP configuration it was not given", () => {
+		for (const spawned of [request, { cwd: "/tmp", partialMessages: false }]) {
+			const options = buildOptions(spawned, undefined)
+
+			expect(options.settingSources).toEqual([])
+			expect(options.strictMcpConfig).toBe(true)
+		}
+	})
+
 	it("names neither for a session opened with no bundle", () => {
 		const options = buildOptions(
 			{ cwd: "/tmp", partialMessages: false },

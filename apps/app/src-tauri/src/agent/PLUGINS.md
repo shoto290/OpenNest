@@ -176,12 +176,30 @@ loss is invisible. Re-passing both restores everything, brief included.
 
 ## Isolation
 
+Every session is built with **`settingSources: []`** and **`strictMcpConfig: true`**,
+with or without a bundle. That is what makes an exported bot the same bot anywhere.
+
 `--setting-sources project --strict-mcp-config` cut a session from 203 tools to 33,
 100 skills to 17, 24 agents to 6 and 14 MCP servers to 0, leaving only the bundle.
-Default (no `settingSources`) inherits the user's whole configuration, including
-`SessionStart` hooks. `memory_paths.auto` keeps pointing at
-`~/.claude/projects/<cwd-slug>/memory/` either way, so two bots sharing a working
-directory share that memory.
+`[]` goes one step further than `project`: it drops the `CLAUDE.md` files too, which
+`project` still reads. Default (no `settingSources`) inherits the user's whole
+configuration, including `SessionStart` hooks.
+
+`strictMcpConfig` ignores every MCP configuration that was not passed as an option —
+project `.mcp.json`, user settings, **and plugins**. A bundle declaring a server would
+therefore need it named in `mcpServers`; none does today.
+
+Measured live (`tests/real_claude.rs`, `#[ignore]`), one turn, two words planted where
+a default session reads them:
+
+| Planted in | Reaches the child |
+| --- | --- |
+| `CLAUDE.md` of the session's cwd | **no** — the child answers `NONE` |
+| `~/.claude/projects/<cwd-slug>/memory/MEMORY.md` | **yes** |
+
+So `memory_paths.auto` keeps pointing at `~/.claude/projects/<cwd-slug>/memory/` under
+`settingSources: []`, and two bots sharing a working directory still share that memory.
+The bundle's own brief survives both options — the same turn obeyed it.
 
 ## The tool names come off the `init` frame — verified
 

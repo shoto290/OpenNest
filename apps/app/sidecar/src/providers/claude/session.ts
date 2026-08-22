@@ -41,8 +41,11 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
  * agent with no path names one nothing defines — and both are rebuilt here on every
  * spawn, a resume included, since neither is carried across one.
  *
- * `settingSources` is left out so the CLI defaults stand — the settings on disk and
- * the CLAUDE.md files they reach.
+ * `settingSources: []` and `strictMcpConfig` are what make a bot the same bot
+ * anywhere: no `settings.json` of the machine's, no `CLAUDE.md` of the working
+ * directory's, no `.mcp.json` of the project's. They are passed with or without a
+ * bundle, and `strictMcpConfig` drops the servers a plugin declares too, so a bundle
+ * carrying one would need it named here. Measured, both of them, in the same file.
  *
  * No model is named on purpose. The bot's model is the `model` key of the agent it is
  * promoted to, and an option passed here would override that key — the picker would
@@ -63,6 +66,8 @@ export const buildOptions = (
 			}
 		: {}),
 	systemPrompt: { type: "preset", preset: "claude_code" },
+	settingSources: [],
+	strictMcpConfig: true,
 	pathToClaudeCodeExecutable: resolveExecutable(),
 	stderr: () => {},
 })
