@@ -56,6 +56,27 @@ the plugin's `.mcp.json` servers connect as `plugin:<name>:<server>`.
 `--agent` resolves an agent from that directory under both its bare name (`probe`)
 and its namespaced name (`spike:probe`).
 
+## Two plugins in one session — verified
+
+Measured on 2.1.239: two `--plugin-dir` directories load in the same session. The init
+frame reports both, each skill is listed under its own plugin's namespace
+(`<plugin>:<skill>`), and a skill belonging to the second plugin invokes as readily as
+one belonging to the first — neither shadows the other.
+
+That is what a session is built from: the bot's bundle, whose agent the main thread is
+promoted to, and the app's own plugin, which carries what the host owns rather than
+the bot (`learn` today, shared MCP servers later). The bot's comes first, the app's
+second; the app's is never promoted, since nothing in it is an agent. A session opened
+without a bot's bundle loads neither.
+
+Both are bridged for servers the same way — `strictMcpConfig` drops what either
+declares, so both `.mcp.json` files are read and merged into one `mcpServers` option,
+the bot's names applied last so a bot keeps its own on a clash.
+
+The bot is told which directory is its own through the prompt layer, not a hook: with
+two plugins loaded, one appended sentence naming `pluginPath` is the only thing that
+says where its skills live.
+
 ## `agent` without `systemPrompt` is silently ignored — verified
 
 Under the SDK, omitting `systemPrompt` starts a minimal prompt and **the agent's body

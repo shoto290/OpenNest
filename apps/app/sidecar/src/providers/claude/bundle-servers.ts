@@ -32,3 +32,15 @@ export const bundleServers = (pluginPath: string): Servers => {
 		return {}
 	}
 }
+
+/** Both bundles of a session bridged into one map: the app's own plugin declares
+ * servers the same way a bot's does, and the same `strictMcpConfig` drops both. The
+ * bot's names are applied last, so a bot that declares a server the app also names
+ * keeps its own. */
+export const sessionServers = (
+	pluginPath: string,
+	systemPluginPath?: string,
+): Servers => ({
+	...(systemPluginPath ? bundleServers(systemPluginPath) : {}),
+	...bundleServers(pluginPath),
+})

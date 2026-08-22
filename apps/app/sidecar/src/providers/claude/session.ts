@@ -4,11 +4,11 @@ import {
 	type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
 
-import { bundleServers } from "./bundle-servers"
+import { sessionServers } from "./bundle-servers"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
-import { OPENNEST_LAYER } from "./system-layer"
+import { layerFor } from "./system-layer"
 
 import type {
 	AgentCommand,
@@ -32,6 +32,21 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
 		...(description ? { description } : {}),
 	}))
 
+/** The two bundles a session loads: the bot's, whose agent the main thread is
+ * promoted to, and the app's, which carries what the host owns rather than the bot.
+ * Measured on 2.1.239: two local plugins load in one session and each namespaces its
+ * own skills, so the pair coexists. The bot's comes first — it is the one that has to
+ * resolve. A session opened without the app's plugin loads the bot's alone. */
+const localPlugins = (
+	pluginPath: string,
+	systemPluginPath?: string,
+): NonNullable<Options["plugins"]> => [
+	{ type: "local", path: pluginPath },
+	...(systemPluginPath
+		? [{ type: "local" as const, path: systemPluginPath }]
+		: []),
+]
+
 /** The preset is named on purpose, and it is what makes `agent` do anything at all:
  * measured against the real binary, an `agent` set without it resolves, is listed,
  * honours its model — and never applies its body. Dropping it looks like a
@@ -53,11 +68,16 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
  * agent with no path names one nothing defines — and both are rebuilt here on every
  * spawn, a resume included, since neither is carried across one.
  *
+ * The app's own plugin loads beside it when the host names one, second in the array,
+ * with its servers bridged the same way and the bot's names winning on a clash. The
+ * layer then names the bot's own directory, which is what tells a bot holding two
+ * plugins which of them its skills belong in.
+ *
  * `settingSources: []` and `strictMcpConfig` are what make a bot the same bot
  * anywhere: no `settings.json` of the machine's, no `CLAUDE.md` of the working
  * directory's, no `.mcp.json` of the project's. They are passed with or without a
  * bundle. `strictMcpConfig` drops what a plugin declares as well — measured — so the
- * bundle's own servers are read off its `.mcp.json` and passed as options, which is
+ * bundles' own servers are read off their `.mcp.json` and passed as options, which is
  * what keeps the third option from taking a bot's servers with the machine's.
  *
  * The auto-memory directory is the one thing `settingSources: []` does not close:
@@ -81,15 +101,18 @@ export const buildOptions = (
 	canUseTool,
 	...(request.pluginPath && request.agent
 		? {
-				plugins: [{ type: "local", path: request.pluginPath } as const],
+				plugins: localPlugins(request.pluginPath, request.systemPluginPath),
 				agent: request.agent,
-				mcpServers: bundleServers(request.pluginPath),
+				mcpServers: sessionServers(
+					request.pluginPath,
+					request.systemPluginPath,
+				),
 			}
 		: {}),
 	systemPrompt: {
 		type: "preset",
 		preset: "claude_code",
-		append: OPENNEST_LAYER,
+		append: layerFor(request.pluginPath),
 	},
 	...(request.outputStyle
 		? { settings: { outputStyle: request.outputStyle } }

@@ -20,3 +20,13 @@ Write plain prose, and keep it short. Use markdown only where it makes a reply e
 Leave out file paths, status reports, narration of the tools you are using, and closing recaps of what you just did. Give any of them when you are asked for them, and not before.
 
 You are not Claude Code and never present yourself as it. Say nothing about the machinery you run on — plugins, skills, sessions, system prompts — unless the person asks about it. Asked who you are or what you can do, answer with your name, that you run in OpenNest, and that you learn from what this person tells you.`
+
+/** The one thing the layer cannot say on its own: where this bot's bundle sits. A
+ * session loads two plugins — the bot's and the app's — and nothing in the prompt
+ * says which directory holds the bot's own skills, so the path is named here rather
+ * than through a hook. Appended under the layer only when a bundle is loaded. */
+export const bundleLine = (pluginPath: string): string =>
+	`Your own skills live in ${pluginPath}, and that is the directory to write a new one into.`
+
+export const layerFor = (pluginPath?: string): string =>
+	pluginPath ? `${OPENNEST_LAYER}\n\n${bundleLine(pluginPath)}` : OPENNEST_LAYER

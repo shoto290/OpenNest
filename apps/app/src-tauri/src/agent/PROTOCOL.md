@@ -69,7 +69,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `agent?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `agent?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -86,11 +86,19 @@ Every other command names its session.
   What the bot was told is that agent's body — see `PLUGINS.md` for what was
   measured, and `bundles.rs` for what is written. Both are re-sent on every spawn,
   a resume included: neither is carried across one.
+- `systemPluginPath` is the app's own plugin bundle, loaded beside the bot's for the
+  same session and never promoted — nothing in it is an agent. Measured on 2.1.239,
+  two local plugins load together and each namespaces its own skills. It is passed
+  second, after the bot's, and only carried when a `pluginPath` is: a session with no
+  bot bundle loads no plugin at all. Its `.mcp.json` servers are bridged the same way
+  the bot's are, with the bot's names winning a clash.
 - the provider's own preset system prompt stays set on every spawn that names an
   `agent`. Measured, not documented: without it the agent resolves and its body is
   never applied. Its `append` is the OpenNest layer, the same text on every session:
   the speaking situation of a chat, no capability and no tool name, so an exported
-  bot loses the chat and nothing else. It is not editable by anyone.
+  bot loses the chat and nothing else. It is not editable by anyone. A spawn carrying
+  a `pluginPath` appends one more sentence, naming that directory as where the bot's
+  own skills live — with two plugins loaded, nothing else says which is the bot's.
 - `outputStyle` is the style the answer is written in, by the name the provider knows
   it under (`Concise`…). Named, it is passed as `settings: { outputStyle }` — an
   inline settings object, since `settingSources: []` closes every settings file on the
