@@ -88,7 +88,7 @@ export const openClaudeSession = async (
 	emit: EmitFrame,
 ): Promise<AgentSession> => {
 	const prompts = createPromptStream()
-	const permissions = createPermissionGate(emit)
+	const permissions = createPermissionGate(emit, request.pluginPath)
 	const run = query({
 		prompt: prompts.stream,
 		options: buildOptions(request, permissions.canUseTool),
