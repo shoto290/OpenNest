@@ -105,6 +105,12 @@ pub struct Bundle {
 	/// `None` is a host that has none on the disk to name.
 	pub system_path: Option<String>,
 	pub agent: String,
+	/// Who the bot is, rendered by the host from the bot's own name and title — see
+	/// [`crate::bundles::identity`]. The sentences are the app's text, so they travel
+	/// on the open request and reach the prompt layer rather than sitting in the bot's
+	/// bundle. It rides with the bundle because a session opened without one is a
+	/// session with no bot to name.
+	pub identity: String,
 	/// How the bot writes its answers, as the bundle's own agent file carries it —
 	/// see [`crate::bundles::output_style`]. It travels on the open request rather
 	/// than in the file, because the agent format acts on none of it.
@@ -158,6 +164,7 @@ impl SessionOptions {
 			plugin_path: self.bundle.as_ref().map(|bundle| bundle.path.clone()),
 			system_plugin_path: self.bundle.as_ref().and_then(|bundle| bundle.system_path.clone()),
 			agent: self.bundle.as_ref().map(|bundle| bundle.agent.clone()),
+			identity: self.bundle.as_ref().map(|bundle| bundle.identity.clone()),
 			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
@@ -460,12 +467,14 @@ mod tests {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
 			agent: "bean".to_owned(),
+			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
 		};
 		let request = options().bundled(Some(bundle)).open_request(true);
 
 		assert_eq!(request.plugin_path.as_deref(), Some("/bots/b1"));
 		assert_eq!(request.agent.as_deref(), Some("bean"));
+		assert_eq!(request.identity.as_deref(), Some("You are Bean, the baker."));
 	}
 
 	/// Resuming re-passes both: neither survives a resume on its own, and a run that
@@ -476,6 +485,7 @@ mod tests {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
 			agent: "bean".to_owned(),
+			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
 		};
 		let request =
@@ -495,6 +505,7 @@ mod tests {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
 			agent: "bean".to_owned(),
+			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "default".to_owned(),
 		};
 		let request = options().bundled(Some(bundle)).open_request(true);
@@ -510,6 +521,7 @@ mod tests {
 
 		assert_eq!(plain.plugin_path, None);
 		assert_eq!(plain.agent, None);
+		assert_eq!(plain.identity, None);
 		assert_eq!(plain.output_style, None);
 	}
 

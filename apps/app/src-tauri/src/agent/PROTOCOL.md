@@ -69,7 +69,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `agent?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -99,6 +99,12 @@ Every other command names its session.
   bot loses the chat and nothing else. It is not editable by anyone. A spawn carrying
   a `pluginPath` appends one more sentence, naming that directory as where the bot's
   own skills live — with two plugins loaded, nothing else says which is the bot's.
+- `identity` is who the bot is: the host's own sentences over the bot's own name and
+  title, rendered on the host side — see `bundles.rs::identity`. It is appended to the
+  layer above the OpenNest sentences, and it travels on the request rather than in the
+  bundle because the sentences are the app's: no bot's file carries a copy, and a
+  rename reaches the next session with nothing rewritten. Left out for a session
+  opened with no bot to name, which is a session that carries no plugin either.
 - `outputStyle` is the style the answer is written in, by the name the provider knows
   it under (`Concise`…). Named, it is passed as `settings: { outputStyle }` — an
   inline settings object, since `settingSources: []` closes every settings file on the

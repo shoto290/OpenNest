@@ -1,5 +1,14 @@
 import { type PreloadedSkill, preloadedSkills } from "./system-skills"
 
+import type { SessionRequest } from "../provider"
+
+/** What the layer is built from: who the bot is, and the two bundles the session
+ * loads. Everything else about a request is the provider's business. */
+export type LayerContext = Pick<
+	SessionRequest,
+	"identity" | "pluginPath" | "systemPluginPath"
+>
+
 /** What every session is told on top of the provider's preset, under the bot's own
  * brief. It carries the situation and nothing else — where the bot runs, how its
  * learning reaches the person, and the chat it is read in: no capability, no tool
@@ -36,8 +45,13 @@ export const bundleLine = (pluginPath: string): string =>
 const skillSection = ({ name, body }: PreloadedSkill): string =>
 	`# ${name}\n\n${body}`
 
-/** The layer, the bot's own directory, and the body of every skill the app's plugin
- * marked for preloading.
+/** Who the bot is, the layer, the bot's own directory, and the body of every skill
+ * the app's plugin marked for preloading.
+ *
+ * The identity comes first, above the OpenNest sentences: it is the host's text over
+ * the bot's own name and title, so it travels on the open request rather than sitting
+ * in a bundle — see `src-tauri/src/agent/PROTOCOL.md`. A session opened with no bot to
+ * name carries none.
  *
  * The app's skills are carried here rather than compiled into a bot's agent file: the
  * text belongs to the app, so a change to it reaches every bot at its next session
@@ -45,11 +59,13 @@ const skillSection = ({ name, body }: PreloadedSkill): string =>
  * which is what keeps an exported bundle whole. `skills:` in an agent's frontmatter is
  * measured to preload nothing on the promoted path, and the `append` is measured to
  * reach the model beside `agent` — see `src-tauri/src/agent/PLUGINS.md`. */
-export const layerFor = (
-	pluginPath?: string,
-	systemPluginPath?: string,
-): string =>
+export const layerFor = ({
+	identity,
+	pluginPath,
+	systemPluginPath,
+}: LayerContext): string =>
 	[
+		...(identity ? [identity] : []),
 		OPENNEST_LAYER,
 		...(pluginPath ? [bundleLine(pluginPath)] : []),
 		...(systemPluginPath

@@ -17,6 +17,11 @@ export type SessionRequest = {
 	 * carrying the capabilities the host owns rather than the bot. Only ever loaded
 	 * with a bot's bundle, and never promoted: nothing in it is an agent. */
 	systemPluginPath?: string
+	/** Who the bot is, as the host renders it from the bot's own name and title. The
+	 * sentences are the app's, so they arrive on the request rather than in the bot's
+	 * bundle: the provider appends them to the prompt layer. Left out for a session
+	 * opened with no bot to name. */
+	identity?: string
 	/** The output style the host names for this session, by the name the provider
 	 * knows it under. Left out, the provider's own default stands. */
 	outputStyle?: string

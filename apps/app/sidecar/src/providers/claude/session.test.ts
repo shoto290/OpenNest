@@ -13,11 +13,14 @@ import type { SessionRequest } from "../provider"
 /** Run from source there is no bundle beside the sidecar to resolve. */
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 
+const identity = "You are Bean, the baker."
+
 const request = {
 	cwd: "/tmp",
 	partialMessages: true,
 	pluginPath: "/bots/b1",
 	agent: "bean",
+	identity,
 }
 
 const spawns: SessionRequest[] = [
@@ -43,7 +46,7 @@ describe("buildOptions", () => {
 			expect(buildOptions(spawned, undefined).systemPrompt).toEqual({
 				type: "preset",
 				preset: "claude_code",
-				append: layerFor(spawned.pluginPath, spawned.systemPluginPath),
+				append: layerFor(spawned),
 			})
 		}
 	})
@@ -51,11 +54,11 @@ describe("buildOptions", () => {
 	// A session holds two plugins and the prompt is the only thing that says which
 	// directory is the bot's own.
 	it("names the bot's own directory under the layer, and only with a bundle", () => {
-		expect(layerFor("/bots/b1")).toBe(
+		expect(layerFor({ pluginPath: "/bots/b1" })).toBe(
 			`${OPENNEST_LAYER}\n\n${bundleLine("/bots/b1")}`,
 		)
 		expect(bundleLine("/bots/b1")).toContain("/bots/b1")
-		expect(layerFor()).toBe(OPENNEST_LAYER)
+		expect(layerFor({})).toBe(OPENNEST_LAYER)
 	})
 
 	// Measured on 2.1.239 in `-p` mode: under the default mode a file write inside
@@ -206,7 +209,7 @@ describe("layerFor", () => {
 
 		// The skill is named in a heading of its own, above a body whose sections nest
 		// under it rather than beside it.
-		expect(layerFor("/bots/b1", system)).toBe(
+		expect(layerFor({ pluginPath: "/bots/b1", systemPluginPath: system })).toBe(
 			[
 				OPENNEST_LAYER,
 				bundleLine("/bots/b1"),
@@ -218,8 +221,17 @@ describe("layerFor", () => {
 	it("appends nothing for an app plugin with no preloaded skill", () => {
 		dropSkill("quiet", '---\nname: "quiet"\n---\n\nRules.\n')
 
-		expect(layerFor("/bots/b1", system)).toBe(
+		expect(layerFor({ pluginPath: "/bots/b1", systemPluginPath: system })).toBe(
 			`${OPENNEST_LAYER}\n\n${bundleLine("/bots/b1")}`,
 		)
+	})
+
+	// The host owns the sentences and the bot owns only its name: the identity is
+	// rendered on the other side and appended here, above the app's own text.
+	it("opens on the identity the host rendered, above the OpenNest sentences", () => {
+		expect(layerFor({ identity, pluginPath: "/bots/b1" })).toBe(
+			[identity, OPENNEST_LAYER, bundleLine("/bots/b1")].join("\n\n"),
+		)
+		expect(layerFor({ pluginPath: "/bots/b1" })).not.toContain(identity)
 	})
 })

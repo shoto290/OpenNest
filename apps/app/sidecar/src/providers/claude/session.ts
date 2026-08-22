@@ -114,7 +114,7 @@ export const buildOptions = (
 	systemPrompt: {
 		type: "preset",
 		preset: "claude_code",
-		append: layerFor(request.pluginPath, request.systemPluginPath),
+		append: layerFor(request),
 	},
 	...(request.outputStyle
 		? { settings: { outputStyle: request.outputStyle } }

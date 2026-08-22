@@ -276,14 +276,14 @@ const INDENT: usize = 2;
 const CARRIED_OPEN: &str = "<!-- opennest: generated from this bot's skills, do not edit -->";
 const CARRIED_CLOSE: &str = "<!-- opennest: end of generated skills -->";
 
-/// What fences the bot's own identity off from the brief, at the head of the body.
-/// Same shape as the skills markers and for the same reason: a reader opening the
-/// file is told the region is the host's, and the model reads it as markdown.
-const IDENTITY_OPEN: &str = "<!-- opennest: generated from this bot's identity, do not edit -->";
+/// What closed the identity zone this module used to write at the head of every
+/// body. The sentences are the host's text, so they travel on the open request now
+/// and no bundle carries a copy of them: the marker is only what a brief is cut off
+/// at, so a rewrite takes an old zone back out — see [`without_generated`].
 const IDENTITY_CLOSE: &str = "<!-- opennest: end of generated identity -->";
 
-/// What the identity zone says, over the bot's own name and title. The brief that
-/// follows is the reader's; these lines are what the bot is before anybody wrote one.
+/// What the host says the bot is, over the bot's own name and title. The brief is the
+/// reader's; these lines are what the bot is before anybody wrote one.
 const IDENTITY_STANCE: &str = "You are a bot with your own personality, and you accompany the person you talk to.
 You are not Claude Code, and you never present yourself as such.
 You do not narrate your own machinery — plugin, skills, files, sessions — unprompted, but when you are asked what you are or what you can do, you say so plainly.
@@ -768,7 +768,7 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// nothing writes none of it — see [`denial_line`].
 fn agent(root: &Path, bot: &Bot, name: &str, brief: &str, output_style: &str) -> String {
 	format!(
-		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n  {OPENNEST_KEY}:\n    {OUTPUT_STYLE_KEY}: {}\n{FENCE}\n\n{}\n\n{}\n",
+		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n  {OPENNEST_KEY}:\n    {OUTPUT_STYLE_KEY}: {}\n{FENCE}\n\n{}\n",
 		quoted(name),
 		quoted(describe(bot)),
 		model_line(&bot.model),
@@ -776,7 +776,6 @@ fn agent(root: &Path, bot: &Bot, name: &str, brief: &str, output_style: &str) ->
 		denial_line(&bot.denied_tools),
 		quoted(&bot.id),
 		quoted(styled(output_style)),
-		identity(bot),
 		briefed_with_skills(root, &bot.id, brief)
 	)
 }
@@ -793,13 +792,15 @@ fn styled(output_style: &str) -> &str {
 	}
 }
 
-/// The generated zone at the head of the body: who the bot is, in its own name and
-/// its own title. Rebuilt on every write like the skills zone, so a rename or a new
-/// title reaches the file the bot is really started on, and a hand edit inside it
-/// does not survive — the brief is read back from outside both zones.
+/// Who the bot is: the host's own sentences over the bot's own name and title.
+///
+/// It travels on the open request and is appended to the prompt layer rather than
+/// written into the bundle — see `agent/PROTOCOL.md`. The sentences are the app's
+/// text, so no bot's file carries a copy of them, and a rename or a new title reaches
+/// the next session from the row it was read from.
 ///
 /// A bot nobody gave a title is named alone rather than named with an empty one.
-fn identity(bot: &Bot) -> String {
+pub fn identity(bot: &Bot) -> String {
 	let name = one_line(&bot.name);
 	let title = one_line(&bot.title);
 	let named = if title.is_empty() {
@@ -807,12 +808,12 @@ fn identity(bot: &Bot) -> String {
 	} else {
 		format!("You are {name}, {title}.")
 	};
-	format!("{IDENTITY_OPEN}\n\n{named}\n{IDENTITY_STANCE}\n\n{IDENTITY_CLOSE}")
+	format!("{named}\n{IDENTITY_STANCE}")
 }
 
 /// A name or a title as one line of prose. Both are single-line fields to a reader,
 /// so a value carrying a break is flattened rather than allowed to open a line of its
-/// own inside the generated zone.
+/// own inside the identity.
 fn one_line(text: &str) -> String {
 	text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -1580,12 +1581,15 @@ fn key_of(line: &str) -> Option<&str> {
 	Some(line.split_once(':')?.0.trim())
 }
 
-/// The brief: what is left once both generated regions are taken off — the identity
-/// zone above it and the carried skills below it.
+/// The brief: what is left once the carried skills below it are taken off, and once
+/// the identity zone an older build wrote above it is taken off too.
 ///
 /// The skills zone is cut at its opening marker and the identity zone at its closing
 /// one, so in both cases a file whose other marker was lost to a hand edit still
 /// reads as the brief that is really there.
+///
+/// Cutting the old zone is the whole of how it goes: the brief is read back from
+/// outside it, and the next write lays that brief down with no zone above it.
 fn without_generated(text: &str) -> &str {
 	let below = text.split_once(IDENTITY_CLOSE).map_or(text, |(_, brief)| brief);
 	below.split_once(CARRIED_OPEN).map_or(below, |(brief, _)| brief).trim()
@@ -1726,10 +1730,10 @@ fn quoted(value: &str) -> String {
 /// wrote it ended lines with: a file saved with CRLF is one a reader edited on
 /// Windows, not a file with no frontmatter whose YAML is part of the brief.
 ///
-/// Neither generated region is body. Both are written from what is already on the
-/// disk — the row's own name and title, the bodies of its skills — so reading one
-/// back would hand a caller a brief holding the last write's copy, and the next write
-/// would carry that copy again.
+/// Neither generated region is body: the carried skills below the brief, and the
+/// identity zone an older build wrote above it. Both are written from what was
+/// already on the disk, so reading one back would hand a caller a brief holding the
+/// last write's copy, and the next write would carry that copy again.
 fn body(text: &str) -> &str {
 	without_generated(split_frontmatter(text).map_or(text, |(_, body)| body))
 }
@@ -2732,78 +2736,63 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Who the bot is travels in the bundle rather than in the host, so an exported
-	/// bot keeps it. The zone is generated: it names the bot, carries its title, and
-	/// sits above the brief the reader wrote.
+	/// The identity is the host's text, so no bundle carries a copy of it: the body
+	/// opens on the brief the reader wrote and on nothing else.
 	#[test]
-	fn an_agent_body_opens_on_the_generated_identity_zone() {
+	fn an_agent_body_opens_on_the_brief_and_carries_no_identity() {
 		let root = a_root("identity");
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		bot.title = "the baker".to_owned();
 		write(&root, &bot).expect("the bundle is written");
 
 		let written = written_agent(&root, &bot.id);
-		let zone = written.split_once(IDENTITY_OPEN).expect("the zone is there").1;
-		let (zone, below) = zone.split_once(IDENTITY_CLOSE).expect("the zone closes");
-		assert!(zone.contains("You are Bean, the baker."), "got {zone}");
-		assert!(zone.contains("You are not Claude Code"), "got {zone}");
-		assert!(zone.contains("plugin, skills, files, sessions"), "got {zone}");
-		assert!(zone.contains("you say so plainly"), "got {zone}");
-		assert!(below.trim_start().starts_with("Answer briefly."), "got {below}");
+		assert!(written.ends_with("Answer briefly.\n"), "got {written}");
+		assert!(!written.contains("You are Bean"), "got {written}");
+		assert!(!written.contains("You are not Claude Code"), "got {written}");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The zone is the row's, not the file's: renaming or retitling the bot rewrites
-	/// it, and nothing a hand typed inside it is carried into the next write.
+	/// A bundle an older build wrote carries a zone this one does not: writing or
+	/// ensuring the bot takes it back out, and the brief it was already running on
+	/// comes through untouched.
 	#[test]
-	fn the_identity_zone_is_rebuilt_on_every_write() {
-		let root = a_root("retitled");
-		let mut bot = a_bot("Bean", "Answer briefly.");
-		bot.title = "the baker".to_owned();
-		write(&root, &bot).expect("the bundle is written");
-		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
-		rewrite_the_brief(
-			&agent,
-			&format!(
-				"{IDENTITY_OPEN}\n\nYou are somebody else.\n\n{IDENTITY_CLOSE}\n\nAnswer briefly."
-			),
-		);
-
-		bot.name = "Bramble".to_owned();
-		bot.title = "the miller".to_owned();
-		write(&root, &bot).expect("the bundle is written again");
-
-		let written = written_agent(&root, &bot.id);
-		assert_eq!(written.matches(IDENTITY_OPEN).count(), 1, "got {written}");
-		assert!(written.contains("You are Bramble, the miller."), "got {written}");
-		assert!(!written.contains("You are somebody else."), "got {written}");
-		assert!(!written.contains("the baker"), "got {written}");
-		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
-
-		let _ = fs::remove_dir_all(&root);
-	}
-
-	/// A bundle written before there was a zone has none. Starting the bot completes
-	/// it, and the brief it was already running on is untouched.
-	#[test]
-	fn a_bundle_with_no_identity_zone_is_given_one_when_it_is_ensured() {
+	fn an_identity_zone_an_older_build_wrote_is_taken_back_out() {
 		let root = a_root("unidentified");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
-		rewrite_the_brief(&agent, "Answer at length.");
-		assert!(!written_agent(&root, &bot.id).contains(IDENTITY_OPEN));
+		rewrite_the_brief(
+			&agent,
+			&format!("You are somebody else.\n\n{IDENTITY_CLOSE}\n\nAnswer at length."),
+		);
 
 		ensure(&root, &bot).expect("the bundle is completed");
 
 		let written = written_agent(&root, &bot.id);
-		assert!(written.contains("You are Bean."), "got {written}");
+		assert!(!written.contains(IDENTITY_CLOSE), "got {written}");
+		assert!(!written.contains("You are somebody else."), "got {written}");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer at length."));
 		assert_eq!(adopted(&root, &bot).as_deref(), Some("Answer at length."));
 
 		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// What the host tells a session the bot is: the bot's own name and title, and the
+	/// stance the app owns rather than the reader. A bot nobody gave a title is named
+	/// alone rather than named with an empty one.
+	#[test]
+	fn the_identity_names_the_bot_over_the_stance_the_host_owns() {
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		assert!(identity(&bot).starts_with("You are Bean.\n"), "got {}", identity(&bot));
+
+		bot.title = "the baker".to_owned();
+		let told = identity(&bot);
+		assert!(told.starts_with("You are Bean, the baker.\n"), "got {told}");
+		assert!(told.contains("You are not Claude Code"), "got {told}");
+		assert!(told.contains("plugin, skills, files, sessions"), "got {told}");
+		assert!(told.contains("you say so plainly"), "got {told}");
 	}
 
 	/// The one failure that is invisible until a bot's file is enormous: a write that
