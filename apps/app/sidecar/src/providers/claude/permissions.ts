@@ -1,14 +1,21 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk"
 
+import { isBundleWrite } from "./bundle-writes"
+
 import type { EmitFrame, PermissionDecision } from "../provider"
 
 type Waiting = (decision: PermissionDecision) => void
 
-export const createPermissionGate = (emit: EmitFrame) => {
+/** The reader answers every tool call, with one exception: a write inside the bot's
+ * own bundle is the bot's to make, so it is allowed here and never reaches them. */
+export const createPermissionGate = (emit: EmitFrame, pluginPath?: string) => {
 	const waiting = new Map<string, Waiting>()
 
-	const canUseTool: CanUseTool = (toolName, input, options) =>
-		new Promise<PermissionDecision>((resolve) => {
+	const canUseTool: CanUseTool = (toolName, input, options) => {
+		if (isBundleWrite(pluginPath, toolName, input)) {
+			return Promise.resolve({ behavior: "allow", updatedInput: input })
+		}
+		return new Promise<PermissionDecision>((resolve) => {
 			waiting.set(options.requestId, resolve)
 			emit({
 				type: "control_request",
@@ -22,6 +29,7 @@ export const createPermissionGate = (emit: EmitFrame) => {
 				},
 			})
 		})
+	}
 
 	return {
 		canUseTool,
