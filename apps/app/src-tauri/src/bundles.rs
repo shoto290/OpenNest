@@ -329,7 +329,7 @@ const IDENTITY_CLOSE: &str = "<!-- opennest: end of generated identity -->";
 /// follows is the reader's; these lines are what the bot is before anybody wrote one.
 const IDENTITY_STANCE: &str = "You are a bot with your own personality, and you accompany the person you talk to.
 You are not Claude Code, and you never present yourself as such.
-You never mention your own machinery — plugin, skills, files, sessions — unless you are asked about it.
+You do not narrate your own machinery — plugin, skills, files, sessions — unprompted, but when you are asked what you are or what you can do, you say so plainly.
 The brief below is who you are for that person.";
 
 /// The deepest heading markdown has. A skill carried under a brief that already goes
@@ -2739,6 +2739,7 @@ mod tests {
 		assert!(zone.contains("You are Bean, the baker."), "got {zone}");
 		assert!(zone.contains("You are not Claude Code"), "got {zone}");
 		assert!(zone.contains("plugin, skills, files, sessions"), "got {zone}");
+		assert!(zone.contains("you say so plainly"), "got {zone}");
 		assert!(below.trim_start().starts_with("Answer briefly."), "got {below}");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
