@@ -7,6 +7,7 @@ import { Icons } from "@workspace/ui/components/icons"
 import {
 	SETTINGS_PANEL_CLASS,
 	SettingsRail,
+	SettingsRailBack,
 	SettingsRailItem,
 	type SettingsRailProps,
 	SettingsRailSeparator,
@@ -71,6 +72,36 @@ const meta = preview.meta({
 		},
 	},
 	args: { iconsOnly: false, children: null },
+})
+
+export const WithBack = meta.story({
+	args: {
+		leading: (
+			<>
+				<SettingsRailBack
+					iconsOnly={false}
+					label="All skills"
+					onClick={() => {}}
+				/>
+				<SettingsRailSeparator />
+			</>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The rail of a surface a reader came into from somewhere else — a skill opened out of the list of them. Reach for this whenever the rail replaces another one: the way out stands where the first group would, above the list rather than inside it, so a screen reader counts the groups and never a button among them. Check that one Tab still reaches the groups, and that the way back is its own stop before them.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const back = canvas.getByRole("button", { name: "All skills" })
+
+		back.focus()
+		await userEvent.tab()
+		await expect(canvas.getByRole("tab", { name: "Profile" })).toHaveFocus()
+	},
 })
 
 export const Default = meta.story({

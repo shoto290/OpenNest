@@ -462,6 +462,40 @@ export const Working = meta.story({
 	},
 })
 
+export const WithSkillOpen = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A skill taken out of the list. Reach for this to check the one place the dialog gives up its own rail: the skill takes the whole surface, and the rail becomes that skill's summary — a way back to the list, then Instructions, Triggering, Execution, Tools and Advanced. Nothing in it is written as it is typed, so the save is a press and the way back asks before it drops anything. Pick `Rail` for the bot's own groups.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Skills" }))
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: /release-notes/ }),
+		)
+
+		const sections = within(railIn(dialog))
+			.getAllByRole("tab")
+			.map((tab) => tab.textContent)
+		await expect(sections).toEqual([
+			"Instructions",
+			"Triggering",
+			"Execution",
+			"Tools",
+			"Advanced",
+		])
+		await expect(
+			within(dialog).getByRole("button", { name: "All skills" }),
+		).toBeVisible()
+	},
+})
+
 export const Closing = meta.story({
 	parameters: {
 		docs: {

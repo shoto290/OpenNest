@@ -16,6 +16,7 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
+import { toSkillDraft, toSkillItem } from "@/lib/bots/skill-draft"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
@@ -264,13 +265,17 @@ export function App() {
 					onMcpServerChange={mcpServers.controller.rename}
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}
-					onSkillChange={skills.controller.describe}
-					onSkillCreate={skills.controller.create}
+					onSkillChange={(id, draft) =>
+						skills.controller.describe(id, toSkillDraft(draft))
+					}
+					onSkillCreate={(draft, isPreloaded) =>
+						skills.controller.create(toSkillDraft(draft), isPreloaded)
+					}
 					onSkillDelete={skills.controller.remove}
 					onSkillPreloadedChange={skills.controller.setPreloaded}
 					open={isEditing}
 					seed={selected.id}
-					skills={skills.state.skills}
+					skills={skills.state.skills.map(toSkillItem)}
 					showDanger={isShowingDanger}
 					value={toSettingsValue(selected)}
 					working={activity?.isWorking ?? false}

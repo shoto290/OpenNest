@@ -1,5 +1,9 @@
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
+import type {
+	BotSkillContext,
+	BotSkillEffort,
+} from "@workspace/ui/components/bot-settings"
 
 /** Every string a reader sees on the bots surface — the roster, the resource tree,
  * the settings dialog and the delete it guards. */
@@ -77,7 +81,16 @@ const bots = {
 		untitled: "Untitled skill",
 		add: "Add skill",
 		create: "Add skill",
+		save: "Save skill",
+		unsaved: "Unsaved changes",
 		back: "All skills",
+		section: {
+			instructions: "Instructions",
+			triggering: "Triggering",
+			execution: "Execution",
+			tools: "Tools",
+			advanced: "Advanced",
+		},
 		empty: {
 			title: "No skills yet",
 			description:
@@ -92,15 +105,123 @@ const bots = {
 			label: "Description",
 			placeholder: "When this bot should reach for it",
 		},
+		whenToUse: {
+			label: "When to use",
+			placeholder: "The turns this skill is the right answer to",
+		},
+		budget: {
+			label: "{{used}} of {{max}} characters",
+			hint: "The description and when to use are read as one paragraph, and they are budgeted as one.",
+			over: "Over the budget by {{over}} characters. Shorten either field before saving.",
+		},
 		body: {
 			label: "Body",
 			placeholder: "The markdown this skill is written in",
+		},
+		argumentHint: {
+			label: "Argument hint",
+			placeholder: "[version] [--draft]",
+			hint: "What a reader invoking this skill by hand is prompted for.",
+		},
+		arguments: {
+			label: "Arguments",
+			placeholder: "One argument a line",
+		},
+		paths: {
+			label: "Paths",
+			placeholder: "docs/**/*.md",
+			hint: "One glob a line. The files whose presence makes this skill worth reaching for.",
+		},
+		modelInvocation: {
+			label: "Keep the bot from reaching for it",
+			description:
+				"Left off, the bot decides on its own from the description. Turned on, only a reader may invoke it.",
+		},
+		userInvocable: {
+			label: "Let a reader invoke it",
+			description:
+				"It appears in the command menu, invoked by name with the arguments above.",
 		},
 		preloaded: {
 			label: "Preload this skill",
 			tag: "Preloaded",
 			description:
 				"A preloaded skill is in this bot's prompt on every turn. Left off, it stays on the disk as text the bot may go and read.",
+		},
+		model: {
+			label: "Model",
+			placeholder: "The bot's own",
+			hint: "Left empty, this skill's turn runs on the model the bot runs on.",
+		},
+		effort: {
+			label: "Effort",
+			default: "The bot's own",
+			/** One key per effort, keyed by what the draft carries, so an effort the
+			 * format gains and this catalogue has no name for fails the type check. */
+			option: {
+				low: "Low",
+				medium: "Medium",
+				high: "High",
+			} as const satisfies Record<BotSkillEffort, string>,
+		},
+		context: {
+			label: "Context",
+			default: "The conversation it was reached from",
+			hint: "A fork runs the skill in a copy of the conversation, with a runner of its own — which is the only place an agent and a background run mean anything.",
+			/** One key per context, on the same terms as the efforts above. */
+			option: {
+				shared: "Shared",
+				fork: "Fork",
+			} as const satisfies Record<BotSkillContext, string>,
+		},
+		shell: {
+			label: "Shell",
+			placeholder: "/bin/zsh",
+			hint: "What this skill's commands run in. Left empty, the machine's own.",
+		},
+		agent: {
+			label: "Agent",
+			placeholder: "The bot itself",
+			hint: "Who the forked run is handed to.",
+		},
+		background: {
+			label: "Run in the background",
+			description:
+				"The fork is left to finish on its own, and the conversation carries on without waiting for it.",
+		},
+		allowedTools: {
+			label: "Allowed tools",
+			placeholder: "Read\nGrep",
+			hint: "One tool a name a line. Left empty, this skill's turn may use everything the bot may.",
+		},
+		disallowedTools: {
+			label: "Disallowed tools",
+			placeholder: "Bash",
+		},
+		hooks: {
+			label: "Hooks",
+			placeholder: '{\n  "PreToolUse": []\n}',
+			hint: "What runs around this skill's turn, as the bundle spells it.",
+		},
+		license: {
+			label: "License",
+			placeholder: "MIT",
+		},
+		compatibility: {
+			label: "Compatibility",
+			placeholder: ">=1.4",
+			hint: "What this skill needs of the runtime around it.",
+		},
+		metadata: {
+			label: "Metadata",
+			placeholder: '{\n  "author": "Ada Martin"\n}',
+			hint: "Anything the bundle carries that nothing here reads. It is kept as it is.",
+		},
+		leave: {
+			title: "Leave without saving?",
+			description:
+				"Everything typed since this skill was opened goes with it. The skill on the disk is left as it was.",
+			action: "Leave",
 		},
 		delete: {
 			action: "Delete skill",

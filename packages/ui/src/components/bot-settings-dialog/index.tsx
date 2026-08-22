@@ -9,17 +9,19 @@ import {
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
-import type {
-	BotIdentity,
-	BotMcpServerItem,
-	BotModelOption,
-	BotSettingsValue,
-	BotSkillDraft,
-	BotSkillItem,
+import {
+	BLANK_SKILL_DRAFT,
+	type BotIdentity,
+	type BotMcpServerItem,
+	type BotModelOption,
+	type BotSettingsValue,
+	type BotSkillDraft,
+	type BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
+import { SkillEditor } from "@workspace/ui/components/bot-settings-dialog/skill-editor"
 import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
@@ -43,6 +45,14 @@ import { cn } from "@workspace/ui/lib/utils"
 const FIRST_TAB = "general"
 
 const DANGER_TAB = "danger"
+
+/** A skill held open on the whole dialog: the draft as it is being written, and the
+ * skill it was opened on to weigh it against. No skill for a creation — there is
+ * nothing kept to compare a first draft to. */
+type SkillSession = {
+	draft: BotSkillDraft
+	opened?: BotSkillItem
+}
 
 const DANGER_RAIL_ITEM_CLASS = cn(
 	RAIL_ITEM_CLASS,
@@ -138,11 +148,46 @@ const BotSettingsDialog = ({
 }: BotSettingsDialogProps) => {
 	const { t } = useTranslation("bots")
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
+	const [skill, setSkill] = useState<SkillSession | null>(null)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const botName = value.name.trim() || t("dialog.untitled")
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
+
+	// The mark is written with the rest of the skill rather than the moment it is
+	// pressed: the editor saves on a press, so what the bot was told and what the
+	// skill says leave together, and only when either actually moved.
+	const saveSkill = ({ draft, opened }: SkillSession) => {
+		const isPreloaded = draft.isPreloaded ?? false
+
+		if (!opened) {
+			onSkillCreate(draft, isPreloaded)
+		} else {
+			onSkillChange(opened.id, draft)
+			if (isPreloaded !== opened.isPreloaded) {
+				onSkillPreloadedChange(opened.id, isPreloaded)
+			}
+		}
+
+		setSkill(null)
+	}
+
+	const deleteSkill = (opened: BotSkillItem) => {
+		onSkillDelete(opened.id)
+		setSkill(null)
+	}
+
+	const openSkillEditor = ({ draft, opened }: SkillSession) => (
+		<SkillEditor
+			draft={draft}
+			onBack={() => setSkill(null)}
+			onDelete={opened ? () => deleteSkill(opened) : undefined}
+			onDraftChange={(next) => setSkill({ draft: next, opened })}
+			onSave={() => saveSkill({ draft, opened })}
+			saved={opened}
+		/>
+	)
 
 	return (
 		<Root onOpenChange={(next) => !next && onClose()} open={open}>
@@ -174,147 +219,151 @@ const BotSettingsDialog = ({
 					</Title>
 				</header>
 
-				<Tabs.Root
-					className="flex min-h-0 flex-1"
-					defaultValue={showDanger ? DANGER_TAB : FIRST_TAB}
-					orientation="vertical"
-					ref={setTabs}
-				>
-					<SettingsRail iconsOnly={iconsOnly}>
-						<SettingsRailItem
-							icon={Icons.Settings}
-							iconsOnly={iconsOnly}
-							label={t("dialog.tab.general")}
+				{skill ? (
+					openSkillEditor(skill)
+				) : (
+					<Tabs.Root
+						className="flex min-h-0 flex-1"
+						defaultValue={showDanger ? DANGER_TAB : FIRST_TAB}
+						orientation="vertical"
+						ref={setTabs}
+					>
+						<SettingsRail iconsOnly={iconsOnly}>
+							<SettingsRailItem
+								icon={Icons.Settings}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.general")}
+								value={FIRST_TAB}
+							/>
+							<SettingsRailItem
+								icon={Icons.Image}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.appearance")}
+								value="appearance"
+							/>
+							<SettingsRailItem
+								icon={Icons.Docs}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.instructions")}
+								value="instructions"
+							/>
+							<SettingsRailItem
+								icon={Icons.Skill}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.skills")}
+								value="skills"
+							/>
+							<SettingsRailItem
+								icon={Icons.Server}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.mcp")}
+								value="mcp"
+							/>
+							<SettingsRailItem
+								icon={Icons.Terminal}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.runtime")}
+								value="runtime"
+							/>
+							<SettingsRailSeparator />
+							<SettingsRailItem
+								className={DANGER_RAIL_ITEM_CLASS}
+								icon={Icons.Alert}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.danger")}
+								value={DANGER_TAB}
+							/>
+						</SettingsRail>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value={FIRST_TAB}
-						/>
-						<SettingsRailItem
-							icon={Icons.Image}
-							iconsOnly={iconsOnly}
-							label={t("dialog.tab.appearance")}
+						>
+							<SettingsField
+								label={t("dialog.name.label")}
+								onValueChange={(name) => patch({ name })}
+								placeholder={t("dialog.name.placeholder")}
+								value={value.name}
+							/>
+							<SettingsField
+								label={t("dialog.title.label")}
+								onValueChange={(title) => patch({ title })}
+								placeholder={t("dialog.title.placeholder")}
+								value={value.title}
+							/>
+						</Tabs.Panel>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="appearance"
-						/>
-						<SettingsRailItem
-							icon={Icons.Docs}
-							iconsOnly={iconsOnly}
-							label={t("dialog.tab.instructions")}
-							value="instructions"
-						/>
-						<SettingsRailItem
-							icon={Icons.Skill}
-							iconsOnly={iconsOnly}
-							label={t("dialog.tab.skills")}
-							value="skills"
-						/>
-						<SettingsRailItem
-							icon={Icons.Server}
-							iconsOnly={iconsOnly}
-							label={t("dialog.tab.mcp")}
-							value="mcp"
-						/>
-						<SettingsRailItem
-							icon={Icons.Terminal}
-							iconsOnly={iconsOnly}
-							label={t("dialog.tab.runtime")}
-							value="runtime"
-						/>
-						<SettingsRailSeparator />
-						<SettingsRailItem
-							className={DANGER_RAIL_ITEM_CLASS}
-							icon={Icons.Alert}
-							iconsOnly={iconsOnly}
-							label={t("dialog.tab.danger")}
-							value={DANGER_TAB}
-						/>
-					</SettingsRail>
+						>
+							<BotIdentityFields
+								identity={value.identity}
+								onAvatarUpload={onAvatarUpload}
+								onIdentityChange={(identity: BotIdentity) =>
+									patch({ identity })
+								}
+								seed={seed}
+								working={working}
+								workingKind={workingKind}
+							/>
+						</Tabs.Panel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value={FIRST_TAB}
-					>
-						<SettingsField
-							label={t("dialog.name.label")}
-							onValueChange={(name) => patch({ name })}
-							placeholder={t("dialog.name.placeholder")}
-							value={value.name}
-						/>
-						<SettingsField
-							label={t("dialog.title.label")}
-							onValueChange={(title) => patch({ title })}
-							placeholder={t("dialog.title.placeholder")}
-							value={value.title}
-						/>
-					</Tabs.Panel>
+						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
+							<SettingsField
+								fill
+								label={t("dialog.instructions.label")}
+								onValueChange={(instructions) => patch({ instructions })}
+								placeholder={t("dialog.instructions.placeholder")}
+								value={value.instructions}
+							/>
+						</Tabs.Panel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value="appearance"
-					>
-						<BotIdentityFields
-							identity={value.identity}
-							onAvatarUpload={onAvatarUpload}
-							onIdentityChange={(identity: BotIdentity) => patch({ identity })}
-							seed={seed}
-							working={working}
-							workingKind={workingKind}
-						/>
-					</Tabs.Panel>
+						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
+							<SkillsPanel
+								onAdd={() => setSkill({ draft: BLANK_SKILL_DRAFT })}
+								onOpen={(opened) => setSkill({ draft: opened, opened })}
+								skills={skills}
+							/>
+						</Tabs.Panel>
 
-					<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
-						<SettingsField
-							fill
-							label={t("dialog.instructions.label")}
-							onValueChange={(instructions) => patch({ instructions })}
-							placeholder={t("dialog.instructions.placeholder")}
-							value={value.instructions}
-						/>
-					</Tabs.Panel>
-
-					<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
-						<SkillsPanel
-							onChange={onSkillChange}
-							onCreate={onSkillCreate}
-							onDelete={onSkillDelete}
-							onPreloadedChange={onSkillPreloadedChange}
-							skills={skills}
-						/>
-					</Tabs.Panel>
-
-					{/* The scrolling panel rather than the filling one the skills take:
+						{/* The scrolling panel rather than the filling one the skills take:
 					an open server stacks a notice, two fields and a reading of what
 					will run, which is taller than the dialog on purpose. */}
-					<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="mcp">
-						<McpServersPanel
-							onChange={onMcpServerChange}
-							onCreate={onMcpServerCreate}
-							onDelete={onMcpServerDelete}
-							servers={mcpServers}
-						/>
-					</Tabs.Panel>
+						<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="mcp">
+							<McpServersPanel
+								onChange={onMcpServerChange}
+								onCreate={onMcpServerCreate}
+								onDelete={onMcpServerDelete}
+								servers={mcpServers}
+							/>
+						</Tabs.Panel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value="runtime"
-					>
-						<RuntimeFields
-							changesNothing={value.changesNothing}
-							model={value.model}
-							models={models}
-							onBrowseWorkingDirectory={onBrowseWorkingDirectory}
-							onChangesNothingChange={(changesNothing) =>
-								patch({ changesNothing })
-							}
-							onModelChange={(model) => patch({ model })}
-							workingDirectory={value.workingDirectory}
-						/>
-					</Tabs.Panel>
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
+							value="runtime"
+						>
+							<RuntimeFields
+								changesNothing={value.changesNothing}
+								model={value.model}
+								models={models}
+								onBrowseWorkingDirectory={onBrowseWorkingDirectory}
+								onChangesNothingChange={(changesNothing) =>
+									patch({ changesNothing })
+								}
+								onModelChange={(model) => patch({ model })}
+								workingDirectory={value.workingDirectory}
+							/>
+						</Tabs.Panel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value={DANGER_TAB}
-					>
-						<DangerZone botName={botName} onDelete={onDelete} />
-					</Tabs.Panel>
-				</Tabs.Root>
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
+							value={DANGER_TAB}
+						>
+							<DangerZone botName={botName} onDelete={onDelete} />
+						</Tabs.Panel>
+					</Tabs.Root>
+				)}
 			</Content>
 		</Root>
 	)

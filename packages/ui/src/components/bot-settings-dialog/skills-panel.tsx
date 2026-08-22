@@ -1,113 +1,33 @@
 "use client"
 
-import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import type {
-	BotSkillDraft,
-	BotSkillItem,
-} from "@workspace/ui/components/bot-settings"
-import { SkillEditor } from "@workspace/ui/components/bot-settings-dialog/skill-editor"
+import type { BotSkillItem } from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
-
-const BLANK_SKILL: BotSkillDraft = { name: "", description: "", body: "" }
+import { SETTINGS_TAG_CLASS } from "@workspace/ui/components/settings-styles"
+import { cn } from "@workspace/ui/lib/utils"
 
 type SkillsPanelProps = {
 	skills: BotSkillItem[]
-	/** Fired once, with everything the reader wrote and whether it is to travel in
-	 * the prompt. The skill only exists after the surface answers with it, which is
-	 * why nothing here is written as it is typed. */
-	onCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
-	/** Fired on every keystroke, addressed by the id the editor was opened on — a
-	 * renamed skill is still the same directory. */
-	onChange: (id: string, draft: BotSkillDraft) => void
-	onPreloadedChange: (id: string, isPreloaded: boolean) => void
-	/** Fired only once the confirmation is accepted. */
-	onDelete: (id: string) => void
-	/** Which skill the panel mounts opened on. Read once, as the panel mounts. */
-	defaultOpenSkillId?: string
-	/** Whether it mounts on the blank editor instead. Read once, as the panel
-	 * mounts. */
-	defaultAdding?: boolean
+	/** Opens a skill that exists. The editor takes the whole dialog, rail included,
+	 * so it is the surface above that answers rather than this panel. */
+	onOpen: (skill: BotSkillItem) => void
+	/** Opens the editor on a skill nobody has written yet. */
+	onAdd: () => void
 }
 
 /**
- * Every skill a bot carries, and the one being written. The list is the resting
- * state — a name, when the bot should reach for it, and whether it travels in the
- * prompt — and opening a row hands the whole panel to that skill, because a skill is
- * markdown somebody writes and it needs the height.
+ * Every skill a bot carries: a name, when the bot should reach for it, and whether
+ * it travels in the prompt. The resting state of the skills group, and nothing
+ * more — opening a row hands the whole dialog to that skill, because a skill is a
+ * file somebody writes and it needs both the height and a summary of its own.
  *
- * The panel keeps no skill of its own: it holds which one is open, and the draft of
- * the one that does not exist yet. Everything else is reported to the surface, which
- * owns the writing.
+ * The panel keeps nothing: it lists what it is given and reports which row was
+ * taken.
  */
-const SkillsPanel = ({
-	skills,
-	onCreate,
-	onChange,
-	onPreloadedChange,
-	onDelete,
-	defaultOpenSkillId,
-	defaultAdding,
-}: SkillsPanelProps) => {
+const SkillsPanel = ({ skills, onOpen, onAdd }: SkillsPanelProps) => {
 	const { t } = useTranslation("bots")
-	const [openId, setOpenId] = useState<string | null>(
-		defaultOpenSkillId ?? null,
-	)
-	// A draft on hand is the skill being written: there is none until the reader
-	// asks for one, which is what tells the blank editor from an open row without
-	// naming a skill no bundle holds.
-	const [draft, setDraft] = useState<BotSkillDraft | null>(
-		defaultAdding ? BLANK_SKILL : null,
-	)
-	// The mark of the skill being written. A skill that already exists reads its own
-	// off the bundle — this is only ever the answer for one that does not yet.
-	const [isPreloaded, setPreloaded] = useState(false)
-
-	const close = () => {
-		setDraft(null)
-		setOpenId(null)
-	}
-
-	const add = () => {
-		setDraft(BLANK_SKILL)
-		setPreloaded(false)
-	}
-
-	if (draft) {
-		return (
-			<SkillEditor
-				draft={draft}
-				isPreloaded={isPreloaded}
-				onBack={close}
-				onCreate={() => {
-					onCreate(draft, isPreloaded)
-					close()
-				}}
-				onDraftChange={setDraft}
-				onPreloadedChange={setPreloaded}
-			/>
-		)
-	}
-
-	const open = skills.find((skill) => skill.id === openId)
-
-	if (open) {
-		return (
-			<SkillEditor
-				draft={open}
-				isPreloaded={open.isPreloaded}
-				onBack={close}
-				onDelete={() => {
-					onDelete(open.id)
-					close()
-				}}
-				onDraftChange={(next) => onChange(open.id, next)}
-				onPreloadedChange={(next) => onPreloadedChange(open.id, next)}
-			/>
-		)
-	}
 
 	if (skills.length === 0) {
 		return (
@@ -124,7 +44,7 @@ const SkillsPanel = ({
 						{t("skills.empty.description")}
 					</p>
 				</div>
-				<Button onClick={add} size="sm">
+				<Button onClick={onAdd} size="sm">
 					<Icons.Add aria-hidden="true" className="size-3.5" />
 					{t("skills.add")}
 				</Button>
@@ -135,7 +55,7 @@ const SkillsPanel = ({
 	return (
 		<>
 			<div className="flex shrink-0 justify-end">
-				<Button onClick={add} size="sm" variant="outline">
+				<Button onClick={onAdd} size="sm" variant="outline">
 					<Icons.Add aria-hidden="true" className="size-3.5" />
 					{t("skills.add")}
 				</Button>
@@ -145,7 +65,7 @@ const SkillsPanel = ({
 					<li key={skill.id}>
 						<button
 							className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-							onClick={() => setOpenId(skill.id)}
+							onClick={() => onOpen(skill)}
 							type="button"
 						>
 							<span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -159,7 +79,7 @@ const SkillsPanel = ({
 								) : null}
 							</span>
 							{skill.isPreloaded ? (
-								<span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-foreground text-xs">
+								<span className={cn(SETTINGS_TAG_CLASS, "text-foreground")}>
 									{t("skills.preloaded.tag")}
 								</span>
 							) : null}

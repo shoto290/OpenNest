@@ -3,38 +3,33 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
-import type { BotSkillDraft } from "@workspace/ui/components/bot-settings"
+import { BLANK_SKILL_DRAFT } from "@workspace/ui/components/bot-settings"
 import {
 	SkillEditor,
 	type SkillEditorProps,
 } from "@workspace/ui/components/bot-settings-dialog/skill-editor"
 import {
 	BOT_SKILLS,
+	DETAILED_SKILL,
 	LONG_SKILL,
+	OVER_BUDGET_SKILL,
 } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 
 const [CARRIED] = BOT_SKILLS
 
-const BLANK: BotSkillDraft = { name: "", description: "", body: "" }
-
-/** The editor keeps no draft and no mark of its own, so a story that lets a reader
- * type or press holds both. */
+/** The editor keeps no draft of its own, so a story that lets a reader type holds
+ * it — and holds it beside the skill it was opened on, which is what tells the
+ * editor there is something to save. */
 const EditorHost = (props: SkillEditorProps) => {
 	const [draft, setDraft] = useState(props.draft)
-	const [isPreloaded, setPreloaded] = useState(props.isPreloaded)
 
 	return (
 		<SkillEditor
 			{...props}
 			draft={draft}
-			isPreloaded={isPreloaded}
 			onDraftChange={(next) => {
 				setDraft(next)
 				props.onDraftChange(next)
-			}}
-			onPreloadedChange={(next) => {
-				setPreloaded(next)
-				props.onPreloadedChange(next)
 			}}
 		/>
 	)
@@ -49,29 +44,32 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One skill of a bot's, whole: what it is called, when the bot should reach for it, whether it travels in the prompt, and the markdown it is written in. The preload mark comes before the body and wears a card of its own — it is the one field here that costs something on every turn, and the sentence beside it says so, read after the label rather than in place of it. The body takes whatever height is left, the way the instructions field does, because a skill is markdown somebody writes and a four-line box is not where that happens. The card stands whether or not the skill exists yet: whether it travels is part of writing one, not a second visit once it is on the disk. A skill that already exists is written as it is typed and carries a delete behind a question; one that does not exist yet carries a button instead, because a directory is only made once. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"One skill of a bot's, whole, on the whole dialog: a rail of sections down the left and one section at a time on the right. The rail replaces the bot's own while a skill is open and is the summary — Instructions, Triggering, Execution, Tools, Advanced — so a reader sees at once everything a skill can carry rather than three fields and a format they have to know about. Nothing is written as it is typed: every keystroke reports the draft, the editor says when it differs from the skill it was opened on, the save is a press and the way out asks before it drops anything. The description and when to use are budgeted as one paragraph against 1536 characters, because that is how the bot reads them. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
 			},
 		},
 	},
 	decorators: [
 		(Story) => (
-			<div className="flex h-[28rem] w-[36rem] flex-col gap-4 p-5">
+			<div className="flex h-[34rem] w-[52rem] overflow-hidden rounded-2xl border border-border">
 				<Story />
 			</div>
 		),
 	],
 	render: (args) => <EditorHost {...args} />,
 	args: {
-		draft: CARRIED,
-		isPreloaded: CARRIED.isPreloaded,
+		draft: DETAILED_SKILL,
+		saved: DETAILED_SKILL,
 		onDraftChange: fn(),
 		onBack: fn(),
-		onPreloadedChange: fn(),
+		onSave: fn(),
 		onDelete: fn(),
 	},
 	argTypes: {
-		// Read once, as the editor mounts, so it is a story's arg rather than a knob.
+		// All three are read once, as the editor mounts, so they are a story's args
+		// rather than knobs.
+		defaultSection: { control: false },
 		defaultConfirming: { control: false },
+		defaultLeaving: { control: false },
 	},
 })
 
@@ -80,32 +78,146 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A skill that already exists, carried in every prompt. Nothing here waits on a save — every keystroke reports the whole draft, addressed by the id the editor was opened on, which is why renaming it is safe. Check that the body field grows into the height the card and the fields above it leave, and that the preload card keeps its own height while it does.",
+					"A skill that already exists, opened on what it tells the bot to do. Check that the body takes the height the two fields under it leave, that the save is disabled while nothing has been typed, and that typing turns it on and raises the unsaved mark beside the name. Reach for a section story below to review one group of fields on its own.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.type(canvas.getByLabelText("Name"), " Weekly")
+		const save = canvas.getByRole("button", { name: "Save skill" })
 
-		await expect(args.onDraftChange).toHaveBeenLastCalledWith({
-			...CARRIED,
-			name: `${CARRIED.name}-weekly`,
-		})
+		await expect(save).toBeDisabled()
+		await userEvent.type(canvas.getByLabelText("Body"), " Nothing else.")
+
+		await expect(args.onDraftChange).toHaveBeenCalled()
+		await expect(save).toBeEnabled()
+		await expect(canvas.getByText("Unsaved changes")).toBeVisible()
+
+		await userEvent.click(save)
+		await expect(args.onSave).toHaveBeenCalledTimes(1)
 	},
 })
 
-export const Empty = meta.story({
+export const Triggering = meta.story({
+	args: { defaultSection: "triggering" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Everything that decides whether the bot reaches for the skill at all: its name, the description, when to use it, who may invoke it, the paths that make it worth reading and whether it travels in every prompt. Check that the description and when to use are counted together under the second field — the bot reads them as one paragraph, so they share one budget. Pick `OverBudget` for the state where that budget is spent.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const name = canvas.getByLabelText("Name")
+
+		await userEvent.clear(name)
+		await userEvent.type(name, "Release Notes!")
+		await expect(name).toHaveValue("release-notes-")
+		await expect(canvas.getByText(/of 1536 characters/)).toBeVisible()
+	},
+})
+
+export const OverBudget = meta.story({
 	args: {
-		draft: BLANK,
-		isPreloaded: false,
-		onDelete: undefined,
-		onCreate: fn(),
+		defaultSection: "triggering",
+		draft: OVER_BUDGET_SKILL,
+		saved: OVER_BUDGET_SKILL,
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A skill that does not exist yet. Reach for this over `Default` to review what a reader is asked for before anything is written: the same fields and the same preload card, because whether a skill travels is part of writing one rather than an afterthought, and no delete, because there is nothing on the disk to take away. The button is the whole difference — a directory is made once — and it stays disabled until the skill is named.",
+					"A description and a when to use that together run past the 1536 characters they share. Check that the field is marked invalid and says by how much rather than truncating anything, and that the save stays out of reach until one of the two is shortened — the file would be refused as it stands. Pick `Triggering` for the same section inside its budget.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText(/Over the budget by/)).toBeVisible()
+		await expect(
+			canvas.getByRole("button", { name: "Save skill" }),
+		).toBeDisabled()
+	},
+})
+
+export const Execution = meta.story({
+	args: {
+		defaultSection: "execution",
+		draft: { ...DETAILED_SKILL, context: undefined },
+		saved: { ...DETAILED_SKILL, context: undefined },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"What the skill's turn runs on, in the conversation it was reached from: a model, an effort, a context and a shell. Check that no agent and no background switch stand here — a run sharing the conversation has no runner of its own to hand anything to. Pick `ForkedExecution` for the context where both appear.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByLabelText("Agent")).toBe(null)
+		await expect(canvas.queryByText("Run in the background")).toBe(null)
+	},
+})
+
+export const ForkedExecution = meta.story({
+	args: { defaultSection: "execution" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same section once the context is a fork. Check that the agent and the background switch appear under the context that gives them a meaning, and that they leave again the moment it goes back to the shared conversation — with their answers, not just their fields: a value saved from behind a section that no longer shows it is worse than no value at all.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expect(canvas.getByLabelText("Agent")).toBeVisible()
+		await expect(canvas.getByText("Run in the background")).toBeVisible()
+
+		await userEvent.click(canvas.getByRole("combobox", { name: "Context" }))
+		await userEvent.click(await screen.findByRole("option", { name: "Shared" }))
+
+		await expect(canvas.queryByLabelText("Agent")).toBe(null)
+		await expect(args.onDraftChange).toHaveBeenLastCalledWith(
+			expect.objectContaining({ agent: undefined, isBackground: undefined }),
+		)
+	},
+})
+
+export const Tools = meta.story({
+	args: { defaultSection: "tools" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"What the skill's turn may reach for, and what runs around it. Check that the two tool lists read as lists — one name a line — and that the hooks field is tall enough to hold a real object without scrolling on the first line.",
+			},
+		},
+	},
+})
+
+export const Advanced = meta.story({
+	args: { defaultSection: "advanced" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"What the bundle carries around the skill rather than in it: a license, what it needs of the runtime, and the metadata nothing here reads. Reach for this to check that metadata is presented as kept-as-is rather than as something the editor understands.",
+			},
+		},
+	},
+})
+
+export const Empty = meta.story({
+	args: {
+		draft: BLANK_SKILL_DRAFT,
+		saved: undefined,
+		onDelete: undefined,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill nobody has written yet. Reach for this over `Default` to review what a reader is asked for before anything exists: the same rail and the same sections, a save named as a creation, and no delete — there is nothing kept to take away. The action stays out of reach until the skill is named, and leaving reports nothing.",
 			},
 		},
 	},
@@ -113,56 +225,85 @@ export const Empty = meta.story({
 		const create = canvas.getByRole("button", { name: "Add skill" })
 
 		await expect(create).toBeDisabled()
-		await userEvent.type(canvas.getByLabelText("Name"), "Release notes")
+		await expect(canvas.queryByRole("button", { name: "Delete skill" })).toBe(
+			null,
+		)
+
+		await userEvent.click(canvas.getByRole("tab", { name: "Triggering" }))
+		await userEvent.type(canvas.getByLabelText("Name"), "release-notes")
 		await expect(create).toBeEnabled()
 
 		await userEvent.click(create)
-		await expect(args.onCreate).toHaveBeenCalledTimes(1)
-	},
-})
-
-export const WithTypedName = meta.story({
-	args: { draft: BLANK, isPreloaded: false, onCreate: fn() },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A skill's name is an identifier, not a title: the format takes lowercase letters, numbers and hyphens and refuses the file outright for anything else. So the field writes what a reader types into the only shape it may take, rather than letting them find out from a skill that never loads — typing `Release Notes` leaves `release-notes`, and the hint under the field says why before it happens. What the bot reads to decide when to reach for a skill is the description, which takes any words at all.",
-			},
-		},
-	},
-	play: async ({ canvas, userEvent }) => {
-		const name = canvas.getByLabelText("Name")
-
-		await userEvent.type(name, "Release Notes!")
-		await expect(name).toHaveValue("release-notes-")
+		await expect(args.onSave).toHaveBeenCalledTimes(1)
 	},
 })
 
 export const ZeroValue = meta.story({
-	args: {
-		draft: { name: "review-checklist", description: "", body: "" },
-		isPreloaded: false,
-	},
+	args: { draft: CARRIED, saved: CARRIED },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A real skill with an empty description and an empty body — not the same as `Empty`, which is a skill that was never written. Check that both fields fall back to their placeholder rather than collapsing, and that the preload card reads as genuinely off rather than as unset.",
+					"A skill that exists and answers only the three fields a skill must answer — every frontmatter field left unset. Not the same as `Empty`, which is a skill that was never written. Check that each section still reads as a set of questions with placeholders rather than as a broken form, and that the save stays disabled: nothing has moved.",
 			},
 		},
 	},
 })
 
 export const LongContent = meta.story({
-	args: { draft: LONG_SKILL, isPreloaded: LONG_SKILL.isPreloaded },
+	args: { draft: LONG_SKILL, saved: LONG_SKILL },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A runbook long enough to overflow its field several times over, with a name and a description that both wrap. Check that only the body scrolls — the name, the description and the preload card must stay put, because the sentence about the cost is the one thing a reader must not have to scroll to.",
+					"A runbook long enough to overflow its field several times over, under a name that wraps. Check that only the body scrolls, that the rail and the header hold still, and that the name in the header truncates rather than pushing the save off the row.",
 			},
 		},
+	},
+})
+
+export const IconRail = meta.story({
+	decorators: [
+		(Story) => (
+			<div className="flex h-[34rem] w-[30rem] overflow-hidden rounded-2xl border border-border">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The editor on a surface too narrow for the rail's names — below 42rem, the same threshold the bot's own rail takes. Check that every section stays reachable and named to a screen reader, and that the way out keeps its name as a tooltip rather than losing it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.hover(canvas.getByRole("button", { name: "All skills" }))
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+			"All skills",
+		)
+	},
+})
+
+export const WithLeaving = meta.story({
+	args: { defaultLeaving: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The way out taken while something is unsaved, mounted with its question already up. It says what goes and what is left as it was before anything is dropped. Check that cancelling leaves the draft exactly as it was and reports nothing, and that accepting fires `onBack` once. A draft with nothing in it goes straight back without asking.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await screen.findByRole("alertdialog")
+		await waitFor(() => expect(popup).toBeVisible())
+
+		await userEvent.click(within(popup).getByRole("button", { name: "Leave" }))
+
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
+		await expect(args.onBack).toHaveBeenCalledTimes(1)
 	},
 })
 
@@ -172,7 +313,7 @@ export const WithConfirmation = meta.story({
 		docs: {
 			description: {
 				story:
-					"The delete, mounted with its question already up. It names the skill and states what goes with it before anything is reported. Check that cancelling leaves the editor exactly as it was and reports nothing, and that accepting fires `onDelete` once.",
+					"The delete, mounted with its question already up. It names the skill and states what goes with it before anything is reported. Check that cancelling leaves the editor exactly as it was, and that accepting fires `onDelete` once.",
 			},
 		},
 	},
@@ -180,7 +321,7 @@ export const WithConfirmation = meta.story({
 		const popup = await screen.findByRole("alertdialog")
 		await waitFor(() => expect(popup).toBeVisible())
 
-		await expect(popup).toHaveTextContent(`Delete ${CARRIED.name}?`)
+		await expect(popup).toHaveTextContent(`Delete ${DETAILED_SKILL.name}?`)
 		await userEvent.click(
 			within(popup).getByRole("button", { name: "Delete skill" }),
 		)

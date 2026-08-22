@@ -23,14 +23,104 @@ type BotModelOption = {
 	value: string
 }
 
-/** What a skill is written with, whole — both to create one and to change one. The
- * preload mark is not here: it is set on its own, because it changes what the bot
- * was told rather than what the skill says. */
+/** How hard the model is asked to think on a skill's turn. */
+type BotSkillEffort = (typeof SKILL_EFFORTS)[number]
+
+const SKILL_EFFORTS = ["low", "medium", "high"] as const
+
+/** Whether the skill runs in the conversation it was reached from or in a copy of
+ * it. A fork is the only context that has a runner of its own, which is why an agent
+ * and a background run are only asked for there. */
+type BotSkillContext = (typeof SKILL_CONTEXTS)[number]
+
+const SKILL_CONTEXTS = ["shared", "fork"] as const
+
+/** What a skill is written with, whole — both to create one and to change one.
+ *
+ * Everything past the name, the description and the body is frontmatter a skill may
+ * leave out, so every one of them is optional: a skill of three fields is a complete
+ * skill, and the rest are answers a reader gives once they need them. The preload
+ * mark rides along rather than being set on its own — the editor saves on a press
+ * now, so what the bot was told and what the skill says are written in one go. */
 type BotSkillDraft = {
 	name: string
 	description: string
 	body: string
+	/** The sentence the bot reads beside the description to decide whether this is
+	 * the skill for the turn. It shares the description's budget. */
+	whenToUse?: string
+	/** What a reader who invokes the skill by hand is prompted with. */
+	argumentHint?: string
+	/** The arguments the skill takes, as its own format spells them. */
+	arguments?: string
+	/** Whether the body is carried into the bot's prompt on every turn. */
+	isPreloaded?: boolean
+	/** Whether the bot is kept from reaching for it on its own. */
+	isModelInvocationDisabled?: boolean
+	/** Whether a reader may invoke it by hand. */
+	isUserInvocable?: boolean
+	/** The files whose presence makes the skill worth reaching for, one glob a
+	 * line. */
+	paths?: string
+	/** The model this skill's turn runs on. Left empty, it runs on the bot's. */
+	model?: string
+	effort?: BotSkillEffort
+	context?: BotSkillContext
+	/** The shell its commands run in. */
+	shell?: string
+	/** The agent a forked run is handed to. */
+	agent?: string
+	/** Whether a forked run is left to finish on its own. */
+	isBackground?: boolean
+	/** The tools the skill's turn may use, one a line. */
+	allowedTools?: string
+	disallowedTools?: string
+	/** What runs around the skill's turn, as its own format spells it. */
+	hooks?: string
+	license?: string
+	/** What this skill needs of the runtime around it. */
+	compatibility?: string
+	/** Anything the bundle carries that nothing here reads. */
+	metadata?: string
 }
+
+/** A skill nobody has written yet: the resting state of the editor, and what a
+ * creation is compared against to know whether anything was typed. */
+const BLANK_SKILL_DRAFT: BotSkillDraft = { name: "", description: "", body: "" }
+
+/** How much of a skill's frontmatter the description and the sentence beside it may
+ * take together, in characters. The two are read as one paragraph when the bot
+ * decides whether to reach for the skill, so they are budgeted as one. */
+const SKILL_DESCRIPTION_LIMIT = 1536
+
+/** What the description and `when_to_use` take of that budget, together. */
+const toSkillDescriptionLength = (draft: BotSkillDraft) =>
+	draft.description.length + (draft.whenToUse?.length ?? 0)
+
+/** A field nobody answered, whichever shape its answer takes. An empty string, an
+ * unticked switch and a missing key are one state: the skill does not say. */
+const isSkillFieldAnswered = (value: unknown) =>
+	value !== undefined && value !== "" && value !== false
+
+/** Whether two drafts say the same thing, so an editor can tell an untouched skill
+ * from one with something to save. Compared field by field over what either of them
+ * answers — a field typed and cleared again is back to unanswered rather than
+ * different. */
+const isSameSkillDraft = (a: BotSkillDraft, b: BotSkillDraft) => {
+	const left = toAnsweredFields(a)
+	const right = toAnsweredFields(b)
+	const fields = Object.keys(left)
+
+	return (
+		fields.length === Object.keys(right).length &&
+		fields.every((field) => left[field] === right[field])
+	)
+}
+
+const toAnsweredFields = (draft: BotSkillDraft): Record<string, unknown> =>
+	Object.fromEntries(
+		Object.entries(draft).filter(([, value]) => isSkillFieldAnswered(value)),
+	)
 
 /** A name in a bot's bundle reduced to what the bundle accepts: lowercase letters,
  * numbers and hyphens. It is an identifier rather than a title — a skill's directory
@@ -46,7 +136,6 @@ const toBundleName = (value: string) =>
  * by the id and never by the name. */
 type BotSkillItem = BotSkillDraft & {
 	id: string
-	/** Whether the body is carried into the bot's prompt on every turn. */
 	isPreloaded: boolean
 }
 
@@ -107,6 +196,7 @@ type BotSettingsValue = {
 }
 
 export {
+	BLANK_SKILL_DRAFT,
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
 	type BotAvatarBlot,
@@ -115,10 +205,17 @@ export {
 	type BotMcpServerItem,
 	type BotModelOption,
 	type BotSettingsValue,
+	type BotSkillContext,
 	type BotSkillDraft,
+	type BotSkillEffort,
 	type BotSkillItem,
 	isConfigObject,
+	isSameSkillDraft,
 	parseMcpServerConfig,
+	SKILL_CONTEXTS,
+	SKILL_DESCRIPTION_LIMIT,
+	SKILL_EFFORTS,
 	toBundleName,
 	toMcpServerConfigText,
+	toSkillDescriptionLength,
 }
