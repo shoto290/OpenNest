@@ -15,6 +15,12 @@ const request = {
 	agent: "bean",
 }
 
+const spawns = [
+	request,
+	{ ...request, resume: "s1" },
+	{ cwd: "/tmp", partialMessages: false },
+]
+
 describe("buildOptions", () => {
 	it("loads the bot's bundle as a local plugin and promotes its agent", () => {
 		const options = buildOptions(request, undefined)
@@ -28,18 +34,22 @@ describe("buildOptions", () => {
 	// preset's `append`, which is measured to compose with the agent rather than
 	// replace it.
 	it("appends the layer to the preset on every spawn, bundled or not", () => {
-		const spawns = [
-			request,
-			{ ...request, resume: "s1" },
-			{ cwd: "/tmp", partialMessages: false },
-		]
-
 		for (const spawned of spawns) {
 			expect(buildOptions(spawned, undefined).systemPrompt).toEqual({
 				type: "preset",
 				preset: "claude_code",
 				append: OPENNEST_LAYER,
 			})
+		}
+	})
+
+	// Measured on 2.1.239 in `-p` mode: under the default mode a file write inside
+	// the working directory is refused, and under `auto` the same write lands with
+	// nothing to answer. What `auto` still escalates keeps reaching `canUseTool`, and
+	// a bundle's `disallowedTools` keeps refusing what it names.
+	it("opens every session in auto mode, bundled or not", () => {
+		for (const spawned of spawns) {
+			expect(buildOptions(spawned, undefined).permissionMode).toBe("auto")
 		}
 	})
 
