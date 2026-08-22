@@ -2746,8 +2746,7 @@ mod tests {
 		write(&root, &bot).expect("the bundle is written");
 
 		let written = written_agent(&root, &bot.id);
-		let below = written.split_once(&format!("{FENCE}\n\n")).expect("the body is there").1;
-		assert!(below.starts_with("Answer briefly."), "got {below}");
+		assert!(written.ends_with("Answer briefly.\n"), "got {written}");
 		assert!(!written.contains("You are Bean"), "got {written}");
 		assert!(!written.contains("You are not Claude Code"), "got {written}");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));

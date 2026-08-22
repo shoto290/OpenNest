@@ -301,8 +301,8 @@ fn briefed(brief: &str) -> String {
 /// Who the child was told it is, as the fake reports the open request. Spelled here
 /// rather than imported: what a child is really handed is the contract, so the test
 /// says the words instead of asking the module for them.
-fn told(name: &str) -> String {
-	format!("told<You are {name}.")
+fn told() -> String {
+	format!("told<You are {NAME}.")
 }
 
 /// The sidecar's own environment is fixed when it is spawned, and one process
@@ -343,7 +343,7 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	// And who it is travels beside the brief rather than inside it: the host renders
 	// the sentences over the bot's own name and sends them on the open request.
 	assert!(
-		first.spoken.contains(&told(NAME)),
+		first.spoken.contains(&told()),
 		"the open request does not name the bot: {}",
 		first.spoken
 	);
@@ -372,7 +372,7 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	harness.describe(&bot, "", None);
 	let plain = harness.runtime_of(&conversation, &bot, 3);
 	assert!(!plain.spoken.contains(DUTCH), "got {}", plain.spoken);
-	assert!(plain.spoken.contains(&told(NAME)), "got {}", plain.spoken);
+	assert!(plain.spoken.contains(&told()), "got {}", plain.spoken);
 	assert!(
 		plain.spoken.contains(&format!("cwd<{}>", as_the_child_sees_it(&std::env::temp_dir()))),
 		"got {}",

@@ -13,12 +13,14 @@ import type { SessionRequest } from "../provider"
 /** Run from source there is no bundle beside the sidecar to resolve. */
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 
+const identity = "You are Bean, the baker."
+
 const request = {
 	cwd: "/tmp",
 	partialMessages: true,
 	pluginPath: "/bots/b1",
 	agent: "bean",
-	identity: "You are Bean, the baker.",
+	identity,
 }
 
 const spawns: SessionRequest[] = [
@@ -227,8 +229,6 @@ describe("layerFor", () => {
 	// The host owns the sentences and the bot owns only its name: the identity is
 	// rendered on the other side and appended here, above the app's own text.
 	it("opens on the identity the host rendered, above the OpenNest sentences", () => {
-		const identity = "You are Bean, the baker."
-
 		expect(layerFor({ identity, pluginPath: "/bots/b1" })).toBe(
 			[identity, OPENNEST_LAYER, bundleLine("/bots/b1")].join("\n\n"),
 		)
