@@ -93,6 +93,26 @@ A bundle can therefore *reduce* capability but never *raise* it: a bot declaring
 `bypassPermissions` cannot escape the host's permission gate. The one surface that
 does add capability is the bundle's `.mcp.json`, which starts processes.
 
+## A bundle's own hook, and what a bot writes mid-session — verified
+
+Measured on the real binary, 2.1.239. Three findings, and the whole reason a bot is
+handed its directory rather than left to look for it.
+
+| Measured | Result |
+| --- | --- |
+| `hooks/hooks.json` in a loaded bundle | fires at `SessionStart` with `CLAUDE_PLUGIN_ROOT` set, and its `additionalContext` is in context at turn zero |
+| `echo $CLAUDE_PLUGIN_ROOT` in the bot's own `Bash` | **empty** |
+| a `SKILL.md` written mid-session | `Unknown skill` until the next session; visible on resume |
+
+- Consequence: the path of a bundle reaches the bot **through the hook or not at all**.
+  Its own shell cannot tell it, and nothing else in a session names the directory.
+- Consequence: a skill a bot writes is memory for the *next* session. Nothing recompiles
+  mid-turn, so a bot that reads its own write back is reading a file the session has not
+  loaded — which is why the rule it writes under says the write lands at the next
+  message.
+- The hook is a command, not a value: the script prints `PLUGIN_ROOT=$CLAUDE_PLUGIN_ROOT`,
+  so one script says the right thing in every bundle whatever the reader's disk calls it.
+
 ## `skills:` does not preload on the promoted path — verified
 
 The documentation states the field injects "the full skill content, not only the

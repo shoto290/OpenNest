@@ -291,6 +291,10 @@ fn as_the_child_sees_it(dir: &Path) -> String {
 	dir.canonicalize().unwrap_or_else(|_| dir.to_owned()).display().to_string()
 }
 
+/// A word from the `learn` skill every bundle carries, which is in the body of every
+/// bot now — including one that was told nothing at all.
+const LEARNED: &str = "PLUGIN_ROOT";
+
 /// The sidecar's own environment is fixed when it is spawned, and one process
 /// serves every session — so a scenario that changes between two of them travels
 /// on a file the fake reads each time it opens one.
@@ -325,7 +329,7 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	// directory is where the child runs.
 	harness.describe(&bot, FRENCH, Some(&workshop));
 	let first = harness.runtime_of(&conversation, &bot, 1);
-	assert!(first.spoken.contains(&format!("system<{FRENCH}>")), "got {}", first.spoken);
+	assert!(first.spoken.contains(&format!("system<{FRENCH}")), "got {}", first.spoken);
 	assert!(
 		first.spoken.contains(&format!("cwd<{}>", as_the_child_sees_it(&workshop))),
 		"got {}",
@@ -336,7 +340,7 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	// different one, and what it was told is what the file says now.
 	harness.describe(&bot, DUTCH, Some(&studio));
 	let rotated = harness.runtime_of(&conversation, &bot, 2);
-	assert!(rotated.spoken.contains(&format!("system<{DUTCH}>")), "got {}", rotated.spoken);
+	assert!(rotated.spoken.contains(&format!("system<{DUTCH}")), "got {}", rotated.spoken);
 	assert!(
 		rotated.spoken.contains(&format!("cwd<{}>", as_the_child_sees_it(&studio))),
 		"got {}",
@@ -344,11 +348,13 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	);
 	assert_ne!(rotated.from, first.from, "the new identity landed in the same process");
 
-	// Nothing to say for itself and nowhere of its own: no system prompt at all, and
-	// the directory a run has always started in.
+	// Nothing to say for itself and nowhere of its own: what is left in the system
+	// prompt is the `learn` skill every bundle carries, and the run starts in the
+	// directory a run has always started in.
 	harness.describe(&bot, "", None);
 	let plain = harness.runtime_of(&conversation, &bot, 3);
-	assert!(plain.spoken.contains("system<none>"), "got {}", plain.spoken);
+	assert!(!plain.spoken.contains(DUTCH), "got {}", plain.spoken);
+	assert!(plain.spoken.contains(LEARNED), "got {}", plain.spoken);
 	assert!(
 		plain.spoken.contains(&format!("cwd<{}>", as_the_child_sees_it(&std::env::temp_dir()))),
 		"got {}",
@@ -367,7 +373,7 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 		"got {}",
 		elsewhere.spoken
 	);
-	assert!(elsewhere.spoken.contains(&format!("system<{FRENCH}>")), "got {}", elsewhere.spoken);
+	assert!(elsewhere.spoken.contains(&format!("system<{FRENCH}")), "got {}", elsewhere.spoken);
 	let refused = harness.wait_for("the refused directory to be reported", refused_directory);
 	assert!(refused.ends_with("opennest-runtime-identity-gone"), "got {refused}");
 
@@ -405,14 +411,14 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	// started on what the file says, and the record catches up with it there too.
 	rewrite_the_brief(&agent, SPANISH);
 	let edited = harness.runtime_of(&conversation, &bot, 5);
-	assert!(edited.spoken.contains(&format!("system<{SPANISH}>")), "got {}", edited.spoken);
+	assert!(edited.spoken.contains(&format!("system<{SPANISH}")), "got {}", edited.spoken);
 
 	// Which is what makes the fallback honest. A bundle that is not there when a run
 	// starts is written again from the record, and what it writes is the hand edit
 	// rather than the last value the panel submitted.
 	std::fs::remove_dir_all(&bundle).expect("the bundle is taken away");
 	let rebuilt = harness.runtime_of(&conversation, &bot, 6);
-	assert!(rebuilt.spoken.contains(&format!("system<{SPANISH}>")), "got {}", rebuilt.spoken);
+	assert!(rebuilt.spoken.contains(&format!("system<{SPANISH}")), "got {}", rebuilt.spoken);
 	assert!(agent.is_file(), "the run that found no bundle did not write one");
 
 	// A server written through the commands is the one the next process is really
@@ -438,7 +444,7 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	assert_eq!(declared["mcpServers"], json!("./.mcp.json"));
 	let served = harness.runtime_of(&conversation, &bot, 7);
 	assert!(served.spoken.contains("mcp<atlas>"), "got {}", served.spoken);
-	assert!(served.spoken.contains(&format!("system<{SPANISH}>")), "got {}", served.spoken);
+	assert!(served.spoken.contains(&format!("system<{SPANISH}")), "got {}", served.spoken);
 
 	// And taking it away is the same: the file goes with the last server, the manifest
 	// stops pointing at it, and the process after that is given none.

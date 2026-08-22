@@ -1705,9 +1705,7 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	assert_eq!(created["body"], json!("Bake at 220 degrees."));
 	assert_eq!(created["isPreloaded"], json!(false));
 
-	let listed =
-		call(&window, "conversation_bot_skills", json!({ "botId": BOT })).expect("the skills");
-	assert_eq!(listed, json!([created]));
+	assert_eq!(readers_skills(&window), json!([created]));
 
 	let marked = call(
 		&window,
@@ -1762,10 +1760,7 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	)
 	.expect("the skill is taken away");
 
-	assert_eq!(
-		call(&window, "conversation_bot_skills", json!({ "botId": BOT })).expect("the skills"),
-		json!([])
-	);
+	assert_eq!(readers_skills(&window), json!([]));
 	assert_eq!(
 		call(
 			&window,
@@ -1777,6 +1772,21 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 		),
 		Err(json!({ "kind": "unknownBot", "id": "missing" }))
 	);
+}
+
+/// The bot's skills as a panel lists them, minus the `learn` skill every bundle
+/// carries: what a reader writes is what this test is about.
+fn readers_skills(window: &WebviewWindow<MockRuntime>) -> Value {
+	let listed =
+		call(window, "conversation_bot_skills", json!({ "botId": BOT })).expect("the skills");
+	let readers = listed
+		.as_array()
+		.expect("a list of skills")
+		.iter()
+		.filter(|skill| skill["id"] != json!("learn"))
+		.cloned()
+		.collect();
+	Value::Array(readers)
 }
 
 /// Where the bot's bundle sits, resolved the way the host resolves it rather than
