@@ -53,12 +53,21 @@ describe("buildOptions", () => {
 		}
 	})
 
-	// The layer carries the speaking situation only: a bot exported out of this app
-	// keeps everything it can do.
+	// The layer carries the situation only: a bot exported out of this app keeps
+	// everything it can do.
 	it("names no tool in the layer, so it grants no capability", () => {
 		for (const tool of ["Bash", "Edit", "Grep", "Glob", "Task", "WebFetch"]) {
 			expect(OPENNEST_LAYER).not.toContain(tool)
 		}
+	})
+
+	// What is true only inside this app rides here rather than in a bundle: where the
+	// bot runs, and where the person reads back and undoes what it kept.
+	it("places the bot in OpenNest and points its learning at the History", () => {
+		expect(OPENNEST_LAYER).toContain("OpenNest, a desktop app")
+		expect(OPENNEST_LAYER).toContain("one of them")
+		expect(OPENNEST_LAYER).toContain("one of your skills")
+		expect(OPENNEST_LAYER).toContain("your History")
 	})
 
 	// `settingSources: []` closes every settings file, so an inline object is the

@@ -68,12 +68,15 @@ fn bundles_root() -> PathBuf {
 	std::env::temp_dir().join("opennest-real-claude-bundles")
 }
 
+/// The name every probe bot answers under, carried into its bundle's identity zone.
+const PROBE_NAME: &str = "Probe";
+
 /// The bot every live test is served by, under an id of the caller's so one test's
 /// bundle is never the one another wrote.
 fn probe_bot(id: &str, instructions: &str, model: &str) -> Bot {
 	Bot {
 		id: id.to_owned(),
-		name: "Probe".to_owned(),
+		name: PROBE_NAME.to_owned(),
 		title: String::new(),
 		model: model.to_owned(),
 		avatar_animal: AvatarAnimal::Owl,
@@ -209,6 +212,16 @@ const QUOTE_THE_LAYER: &str =
 /// A fragment of that sentence, mirroring `sidecar/src/providers/claude/system-layer.ts`.
 /// A child that can produce it was handed the layer.
 const LAYER_WORDS: &str = "closing recaps";
+
+/// What the bot is, asked the way a person would ask it. The layer places the bot in
+/// this app and names its learning, so a child handed it can answer all three at once
+/// — its own name from its bundle, the app from the layer, and that it learns.
+const WHO_AND_WHAT: &str = "Who are you and what can you do?";
+
+/// The app the layer puts the bot in, and any word for the learning it names. The
+/// third, its own name, is [`PROBE_NAME`].
+const OPENNEST: &str = "opennest";
+const LEARNING_WORDS: [&str; 3] = ["learn", "remember", "skill"];
 
 /// What the session was opened under, asked of the child itself: the Concise style is
 /// a system prompt of the provider's, so a child running under it can quote the line
@@ -494,6 +507,28 @@ async fn a_session_carries_the_bundle_brief_and_the_opennest_layer_at_once() {
 
 	assert!(answer.contains("BANANA"), "the bundle's brief did not reach the child: {answer:?}");
 	assert!(answer.contains(LAYER_WORDS), "the appended layer did not reach the child: {answer:?}");
+}
+
+/// What a person gets when they ask the bot what it is. The three halves come from
+/// three places — the name from the bundle's identity zone, the app and the learning
+/// from the layer — so this is the only measurement that can tell whether the
+/// OpenNest situation reaches a run as something the bot will say out loud.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_says_its_name_the_app_it_runs_in_and_that_it_learns() {
+	let mut live = started(None, Some(BANANA), std::env::temp_dir()).await;
+	let answer = text(&live.run_turn(WHO_AND_WHAT).await).to_lowercase();
+	live.sidecar.shutdown().await;
+
+	assert!(
+		answer.contains(&PROBE_NAME.to_lowercase()),
+		"the bot did not give its own name: {answer:?}"
+	);
+	assert!(answer.contains(OPENNEST), "the bot did not place itself in the app: {answer:?}");
+	assert!(
+		LEARNING_WORDS.iter().any(|word| answer.contains(word)),
+		"the bot said nothing about learning: {answer:?}"
+	);
 }
 
 /// The style a bot is written under is the style its session is really opened in,
