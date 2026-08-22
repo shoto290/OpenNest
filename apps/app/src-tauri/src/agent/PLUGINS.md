@@ -300,9 +300,10 @@ under a `# <name>` heading, below the sentence naming the bot's own directory.
   nothing for it.
 - The bot's own preloaded skills stay compiled in its body. The two mechanisms carry
   different texts and never the same one.
-- Open: `learn` is marked for preloading and left invocable, which the row above prices
-  as a duplicate. `disable-model-invocation` beside the mark is the fix, and it belongs
-  to whatever writes the plugin — `bundles/system.rs`.
+- `learn` is written with `disable-model-invocation: true` beside its preload mark, so
+  the body the layer already carries is never fetched a second time — the duplicate the
+  row above prices. The two marks are written together by whatever writes the plugin,
+  `bundles/system.rs`.
 
 ## Resume — flags are not sticky
 

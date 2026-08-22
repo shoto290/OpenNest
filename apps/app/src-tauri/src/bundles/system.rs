@@ -128,11 +128,11 @@ fn manifest() -> String {
 /// The skill written the way a bot's own is — through [`drafted`] — so the file on the
 /// disk is one the same reader reads back.
 ///
-/// It asks to be carried, and it stays invocable: the two marks a bot's skill wears
-/// together are written one without the other here on purpose. Nothing carries this
-/// plugin's bodies into a brief yet, so the agent's own listing is the one route the
-/// text has, and a `disable-model-invocation` beside a mark nothing reads would leave
-/// the rules on the disk and out of every session — see [`super::INVOCATION_KEY`].
+/// It wears the two marks together, as a bot's skill does: the sidecar carries this
+/// plugin's preloaded bodies in the prompt layer, so the text is in context at turn
+/// zero and there is nothing left to invoke it for. Left invocable, the model fetches
+/// what it already holds and pays a round trip to hold it twice — see
+/// [`super::INVOCATION_KEY`].
 fn learn() -> std::io::Result<String> {
 	let draft = SkillDraft {
 		name: LEARN_ID.to_owned(),
@@ -140,6 +140,7 @@ fn learn() -> std::io::Result<String> {
 		body: LEARN_BODY.to_owned(),
 		front: SkillFront {
 			metadata: Some(serde_json::json!({ OPENNEST_KEY: { PRELOAD_KEY: true } })),
+			disable_model_invocation: Some(true),
 			..SkillFront::default()
 		},
 	};
@@ -148,6 +149,7 @@ fn learn() -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
+	use super::super::INVOCATION_KEY;
 	use super::*;
 	use std::fs;
 
@@ -158,8 +160,8 @@ mod tests {
 	}
 
 	/// The two files the agent loads a plugin from: a manifest naming the plugin, and
-	/// the one skill it carries — marked to be carried, and left invocable because the
-	/// agent's own listing is the only route its text has today.
+	/// the one skill it carries — marked to be carried, and closed to invocation, since
+	/// the layer already puts its body in context.
 	#[test]
 	fn the_written_plugin_is_the_manifest_and_the_learn_skill() {
 		let path = a_path("written");
@@ -175,7 +177,7 @@ mod tests {
 		let skill = path.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME);
 		let text = fs::read_to_string(&skill).expect("the skill reads");
 		assert!(text.contains(&format!("{PRELOAD_KEY}: true")), "got {text}");
-		assert!(!text.contains(super::super::INVOCATION_KEY), "got {text}");
+		assert!(text.contains(&format!("{INVOCATION_KEY}: true")), "got {text}");
 		assert!(text.contains("`skills/<name>/SKILL.md`"), "got {text}");
 		assert!(!text.contains("PLUGIN_ROOT"), "got {text}");
 
