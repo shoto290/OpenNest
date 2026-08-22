@@ -254,9 +254,17 @@ const DISALLOWED_KEY: &str = "disallowedTools";
 /// see [`denies_changes`] — rather than a switch of its own.
 ///
 /// What denying them does not stop: a server the bundle declares writes wherever
-/// its own process may, and a bot may still ask somebody else to do the writing.
-/// This denies four built-in tools, not the ability to have an effect.
+/// its own process may. This denies built-in tools, not the ability to have an effect.
 pub const CHANGING_TOOLS: [&str; 4] = ["Bash", "Edit", "Write", "NotebookEdit"];
+
+/// What the binary lists delegation by, measured off the `init` frame's tool list —
+/// see `agent/PLUGINS.md`. Denied with the four rather than beside them: the key
+/// binds the promoted thread and not the one delegation starts, so a bot held back
+/// from writing and left free to delegate had a subagent write the file.
+///
+/// Never a name a caller submits. [`denials`] lays it down with the lock and takes
+/// it away with it, so "changes nothing" stays one switch over one list.
+const DELEGATION_TOOL: &str = "Task";
 
 /// What a tool an MCP server provides is named. Never denied here: a server's tool
 /// is the bundle's own capability, declared in `.mcp.json`, and taking it away
@@ -1703,12 +1711,20 @@ fn denial_line(denied: &[String]) -> String {
 /// provides. Sorted so two callers asking for the same denials write the same file
 /// whatever order they named them in, and so a file rewritten from what it holds is
 /// the file it already was.
+///
+/// [`DELEGATION_TOOL`] is derived here and only here: dropped from whatever was
+/// submitted, then written back for a list that denies every changing tool. A bot
+/// that changes nothing starts nothing that changes anything either, and the same
+/// derivation takes the name away the moment the lock is lifted.
 fn denials(denied: &[String]) -> Vec<String> {
 	let mut named: Vec<String> = denied
 		.iter()
 		.map(|tool| tool.trim().to_owned())
-		.filter(|tool| !tool.is_empty() && !tool.starts_with(MCP_PREFIX))
+		.filter(|tool| !tool.is_empty() && !tool.starts_with(MCP_PREFIX) && tool != DELEGATION_TOOL)
 		.collect();
+	if denies_changes(&named) {
+		named.push(DELEGATION_TOOL.to_owned());
+	}
 	named.sort();
 	named.dedup();
 	named
@@ -1717,6 +1733,9 @@ fn denials(denied: &[String]) -> Vec<String> {
 /// Whether these denials cover the tools that write files and run commands, which
 /// is the whole of what "changes nothing" means. All four or it is off: a bot
 /// denying three of them is a bot that can still change something.
+///
+/// The four and nothing else: a bundle written before there was a delegation to deny
+/// still reads as locked, and is given the name back the next time it is written.
 pub fn denies_changes(denied: &[String]) -> bool {
 	CHANGING_TOOLS.iter().all(|tool| denied.iter().any(|named| named == tool))
 }
@@ -2207,6 +2226,72 @@ mod tests {
 		for tool in CHANGING_TOOLS {
 			assert!(picked.contains(&format!("\"{tool}\"")), "got {picked}");
 		}
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A bot that changes nothing starts nothing that changes anything either. The
+	/// key binds the promoted thread only, so the delegation tool is named beside the
+	/// four: a subagent is how a held-back bot had the file written for it.
+	#[test]
+	fn a_bot_that_changes_nothing_is_denied_delegation_too() {
+		let root = a_root("denied-delegation");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.denied_tools = CHANGING_TOOLS.map(str::to_owned).to_vec();
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(
+			written.contains(&format!(
+				"{DISALLOWED_KEY}: [\"Bash\",\"Edit\",\"NotebookEdit\",\"Task\",\"Write\"]"
+			)),
+			"got {written}"
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The lock lifted gives delegation back, and a caller naming the tool on its own
+	/// never takes it away: the name is derived from the four and from nothing else,
+	/// so one switch writes it and the same switch removes it.
+	#[test]
+	fn delegation_is_left_alone_wherever_the_changing_tools_are_allowed() {
+		let root = a_root("allowed-delegation");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.denied_tools = CHANGING_TOOLS.map(str::to_owned).to_vec();
+		write(&root, &bot).expect("the bundle is written");
+
+		bot.denied_tools = vec![DELEGATION_TOOL.to_owned(), "WebFetch".to_owned()];
+		write(&root, &bot).expect("the bundle is rewritten");
+
+		let freed = generated(&root, &bot.id).expect("the file is read back");
+		assert_eq!(freed.denied_tools, vec!["WebFetch".to_owned()]);
+		assert!(!denies_changes(&freed.denied_tools));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A bundle written before there was a delegation to deny is read as changing
+	/// nothing all the same — the reading is the four — and is given the name on the
+	/// next launch, which is what ensuring one is for.
+	#[test]
+	fn a_locked_bundle_written_without_the_delegation_tool_is_given_it_when_ensured() {
+		let root = a_root("older-delegation");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.denied_tools = CHANGING_TOOLS.map(str::to_owned).to_vec();
+		write(&root, &bot).expect("the bundle is written");
+
+		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
+		let older = written_agent(&root, &bot.id).replace(",\"Task\"", "");
+		fs::write(&agent, older).expect("the older file is dropped in");
+		let held = generated(&root, &bot.id).expect("the older file reads");
+		assert!(!held.denied_tools.iter().any(|tool| tool == DELEGATION_TOOL));
+		assert!(denies_changes(&held.denied_tools));
+
+		ensure(&root, &bot).expect("the bundle is completed");
+
+		let given = written_agent(&root, &bot.id);
+		assert!(given.contains(&format!("\"{DELEGATION_TOOL}\"")), "got {given}");
 
 		let _ = fs::remove_dir_all(&root);
 	}

@@ -157,7 +157,10 @@ the working directory:
 - Measured beside it: `disallowedTools` binds the promoted thread and not the one
   `Task` starts. A bot denied every changing tool and left free to delegate had a
   subagent write the file — under the default mode that write reached the reader's
-  dialog, under `auto` it lands with nothing to answer. Denying `Task` would close it.
+  dialog, under `auto` it lands with nothing to answer.
+- Consequence: `Task` — the name the `init` frame lists delegation by — is denied
+  with the four. A bot that changes nothing starts nothing that changes anything
+  either, so the lock writes five names into the key and lifts all five at once.
 
 ## A bundle's own hook, and what a bot writes mid-session — verified
 

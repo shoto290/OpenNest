@@ -246,10 +246,6 @@ const WRITE_A_FILE: &str = "Write the single word OPENNEST into a file named pro
 const PROBE_FILE: &str = "probe.txt";
 const PROBE_WORD: &str = "OPENNEST";
 
-/// Appended to close delegation: `disallowedTools` binds the bot's own thread only, so
-/// a denied bot asked without this hands the write to a subagent.
-const ALONE: &str = " Do it yourself, never delegate it to a subagent.";
-
 /// Whether anything reached the reader at all. Every request is auto-approved on the
 /// way through, so this is what tells `auto` from the default mode.
 fn asked_permission(events: &[AgentEvent]) -> bool {
@@ -588,11 +584,11 @@ async fn a_bot_writes_inside_its_own_directory_without_asking_the_reader() {
 /// bundle's `disallowedTools`, which is honoured on the promoted path: the mode moves
 /// what is asked of the reader, never what a bot is allowed to hold.
 ///
-/// The turn forbids delegation on purpose. Measured here: `disallowedTools` binds the
-/// bot's own thread and not the one `Task` starts, so a denied bot left free to
-/// delegate had a subagent write the file — under the default mode that write reached
-/// the reader's dialog, under `auto` it lands silently. Denying `Task` is a product
-/// decision of its own and is not taken here.
+/// The turn is asked plainly, delegation and all. `disallowedTools` binds the bot's
+/// own thread and not the one `Task` starts, so a denied bot left free to delegate had
+/// a subagent write the file — under `auto` that write lands with nothing to answer.
+/// The lock names `Task` beside the four, which is what this measures: nothing written
+/// and nothing escalated.
 #[tokio::test]
 #[ignore = "needs a signed-in subscription and the network"]
 async fn a_bot_denied_the_changing_tools_still_changes_nothing_under_auto() {
@@ -602,10 +598,11 @@ async fn a_bot_denied_the_changing_tools_still_changes_nothing_under_auto() {
 	let mut held_back = probe_bot("live-bot-denied", BANANA, SONNET);
 	held_back.denied_tools = bundles::CHANGING_TOOLS.map(str::to_owned).to_vec();
 	let mut live = started_with(None, Some(written(&held_back)), workshop).await;
-	live.run_turn(&format!("{WRITE_A_FILE}{ALONE}")).await;
+	let events = live.run_turn(WRITE_A_FILE).await;
 	live.sidecar.shutdown().await;
 
 	assert!(!file.exists(), "a bot denied every changing tool still wrote {}", seen_as(&file));
+	assert!(!asked_permission(&events), "a held-back bot reached the reader's dialog");
 }
 
 /// The check report is what the frontend receives first, and it is built from a

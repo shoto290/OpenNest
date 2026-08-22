@@ -985,7 +985,8 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 ///
 /// The bot that denies the four tools that write files and run commands is answered
 /// as changing nothing, without ever having been asked a second question: one list
-/// crosses, and the switch is a reading of it.
+/// crosses, and the switch is a reading of it. The delegation tool comes back with
+/// them: a bot that changes nothing starts nothing that changes anything either.
 #[test]
 fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() {
 	let home = Home::new();
@@ -998,7 +999,7 @@ fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() 
 		.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 
-	assert_eq!(created["deniedTools"], json!(["Bash", "Edit", "NotebookEdit", "Write"]));
+	assert_eq!(created["deniedTools"], json!(["Bash", "Edit", "NotebookEdit", "Task", "Write"]));
 	assert_eq!(created["changesNothing"], json!(true));
 	assert_eq!(
 		call(&window, "conversation_bots", json!({})).map(|bots| bots[0]["changesNothing"].clone()),
