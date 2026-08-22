@@ -17,6 +17,7 @@ import {
 	type BotMcpServerDraft,
 	type BotMcpServerItem,
 	type BotModelOption,
+	type BotOutputStyle,
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
@@ -102,6 +103,12 @@ type BotSettingsDialogProps = {
 	/** Fired on every edit — the dialog keeps no draft and owns no persistence. */
 	onValueChange: (value: BotSettingsValue) => void
 	models: BotModelOption[]
+	/** How the bot writes its answers, as the host stores it raw. Read and written
+	 * beside `value` rather than in it: the style lives in the host's own settings,
+	 * not in the row the rest of this panel edits. Left out, the concise style the
+	 * bot is given by default, reported to nobody. */
+	outputStyle?: BotOutputStyle
+	onOutputStyleChange?: (outputStyle: BotOutputStyle) => void
 	/** Receives the picked, dropped or pasted file. The host turns it into a URL
 	 * and writes it back as `value.identity.image`. */
 	onAvatarUpload: (file: File) => void
@@ -167,6 +174,8 @@ const BotSettingsDialog = ({
 	value,
 	onValueChange,
 	models,
+	outputStyle,
+	onOutputStyleChange,
 	onAvatarUpload,
 	onBrowseWorkingDirectory,
 	skills,
@@ -494,6 +503,8 @@ const BotSettingsDialog = ({
 									patch({ changesNothing })
 								}
 								onModelChange={(model) => patch({ model })}
+								onOutputStyleChange={onOutputStyleChange}
+								outputStyle={outputStyle}
 								workingDirectory={value.workingDirectory}
 							/>
 						</Tabs.Panel>
@@ -525,6 +536,7 @@ export {
 	type BotHistory,
 	type BotMcpServerItem,
 	type BotModelOption,
+	type BotOutputStyle,
 	BotSettingsDialog,
 	type BotSettingsDialogProps,
 	type BotSettingsValue,

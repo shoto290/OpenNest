@@ -14,6 +14,7 @@ import {
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
+import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
 import {
 	type BotModelOption,
 	BotSettingsDialog,
@@ -64,6 +65,7 @@ const UPLOADED_BOT: BotSettingsValue = {
  * both — the value it edits and whether it stands. */
 const DialogHost = (props: BotSettingsDialogProps) => {
 	const [value, setValue] = useState(props.value)
+	const [outputStyle, setOutputStyle] = useState(props.outputStyle)
 	const [open, setOpen] = useState(props.open)
 
 	return (
@@ -73,6 +75,11 @@ const DialogHost = (props: BotSettingsDialogProps) => {
 				setOpen(false)
 				props.onClose()
 			}}
+			onOutputStyleChange={(next) => {
+				setOutputStyle(next)
+				props.onOutputStyleChange?.(next)
+			}}
+			outputStyle={outputStyle}
 			onValueChange={(next) => {
 				setValue(next)
 				props.onValueChange(next)
@@ -133,8 +140,10 @@ const meta = preview.meta({
 		open: true,
 		value: FILLED_BOT,
 		models: MODELS,
+		outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 		seed: BOT_ID,
 		onClose: fn(),
+		onOutputStyleChange: fn(),
 		onValueChange: fn(),
 		onAvatarUpload: fn(),
 		onBrowseWorkingDirectory: fn(),
