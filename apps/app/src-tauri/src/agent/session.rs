@@ -100,6 +100,10 @@ impl EventSink for GatedSink {
 pub struct Bundle {
 	pub path: String,
 	pub agent: String,
+	/// How the bot writes its answers, as the bundle's own agent file carries it —
+	/// see [`crate::bundles::output_style`]. It travels on the open request rather
+	/// than in the file, because the agent format acts on none of it.
+	pub output_style: String,
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +152,7 @@ impl SessionOptions {
 			resume: self.resume.clone(),
 			plugin_path: self.bundle.as_ref().map(|bundle| bundle.path.clone()),
 			agent: self.bundle.as_ref().map(|bundle| bundle.agent.clone()),
+			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
 		}
@@ -445,7 +450,11 @@ mod tests {
 	/// a plugin nothing uses, or name an agent nothing defines.
 	#[test]
 	fn a_bot_opens_on_the_bundle_it_runs_as() {
-		let bundle = Bundle { path: "/bots/b1".to_owned(), agent: "bean".to_owned() };
+		let bundle = Bundle {
+			path: "/bots/b1".to_owned(),
+			agent: "bean".to_owned(),
+			output_style: "Concise".to_owned(),
+		};
 		let request = options().bundled(Some(bundle)).open_request(true);
 
 		assert_eq!(request.plugin_path.as_deref(), Some("/bots/b1"));
@@ -456,13 +465,32 @@ mod tests {
 	/// dropped them would replay the transcript with no bot loaded behind it.
 	#[test]
 	fn a_resumed_run_carries_the_bundle_again() {
-		let bundle = Bundle { path: "/bots/b1".to_owned(), agent: "bean".to_owned() };
+		let bundle = Bundle {
+			path: "/bots/b1".to_owned(),
+			agent: "bean".to_owned(),
+			output_style: "Concise".to_owned(),
+		};
 		let request =
 			options().bundled(Some(bundle)).resuming(Some("s1".to_owned())).open_request(true);
 
 		assert_eq!(request.resume.as_deref(), Some("s1"));
 		assert_eq!(request.plugin_path.as_deref(), Some("/bots/b1"));
 		assert_eq!(request.agent.as_deref(), Some("bean"));
+	}
+
+	/// The style the bundle carries is on the wire, because the agent format acts on
+	/// none of it: a request that dropped the key would open every session on whatever
+	/// the provider defaults to, whatever the reader picked.
+	#[test]
+	fn a_bot_opens_on_the_style_its_bundle_carries() {
+		let bundle = Bundle {
+			path: "/bots/b1".to_owned(),
+			agent: "bean".to_owned(),
+			output_style: "default".to_owned(),
+		};
+		let request = options().bundled(Some(bundle)).open_request(true);
+
+		assert_eq!(request.output_style.as_deref(), Some("default"));
 	}
 
 	/// A bot with no bundle to load is opened exactly as every bot was opened before
@@ -473,6 +501,7 @@ mod tests {
 
 		assert_eq!(plain.plugin_path, None);
 		assert_eq!(plain.agent, None);
+		assert_eq!(plain.output_style, None);
 	}
 
 	/// A sidecar that never announced deltas is never asked for them, so the reader

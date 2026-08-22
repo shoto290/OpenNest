@@ -93,12 +93,27 @@ fn bundle_carrying(instructions: &str, model: &str) -> Bundle {
 	written(&probe_bot("live-bot", instructions, model))
 }
 
+/// The same bundle, written under a style the caller named. The one door a reader's
+/// pick comes through — see `bundles::write_styled`.
+fn styled_bundle(bot: &Bot, output_style: &str) -> Bundle {
+	let root = bundles_root();
+	bundles::write_styled(&root, bot, output_style).expect("the bundle is written");
+	handed_over(&root, bot)
+}
+
 fn written(bot: &Bot) -> Bundle {
 	let root = bundles_root();
 	bundles::write(&root, bot).expect("the bundle is written");
+	handed_over(&root, bot)
+}
+
+/// The bundle on the disk as the host hands it to a session, read back rather than
+/// assumed: what a run is opened on is what the files say, whichever door wrote them.
+fn handed_over(root: &Path, bot: &Bot) -> Bundle {
 	Bundle {
-		path: bundles::dir(&root, &bot.id).display().to_string(),
+		path: bundles::dir(root, &bot.id).display().to_string(),
 		agent: bundles::slug(&bot.name),
+		output_style: bundles::output_style(root, &bot.id),
 	}
 }
 
@@ -194,6 +209,23 @@ const QUOTE_THE_LAYER: &str =
 /// A fragment of that sentence, mirroring `sidecar/src/providers/claude/system-layer.ts`.
 /// A child that can produce it was handed the layer.
 const LAYER_WORDS: &str = "closing recaps";
+
+/// What the session was opened under, asked of the child itself: the Concise style is
+/// a system prompt of the provider's, so a child running under it can quote the line
+/// it was given and a child running under none has nothing to quote.
+const QUOTE_THE_STYLE: &str =
+	"Are you running under an output style? If you are, quote the sentence of it that tells you how long an answer should be. If you are not, reply with nothing but the word NONE.";
+
+/// A word of that instruction. Measured against `Concise` and against `default` in the
+/// same suite, since the value is free text on the wire and only a run can say whether
+/// the provider resolved it.
+const CONCISE_WORDS: &str = "concise";
+
+/// The two styles a bot may be moved between, spelled the way the provider knows them
+/// — the value is written into the agent file as it stands and passed to the session
+/// as it stands.
+const CONCISE_STYLE: &str = "Concise";
+const NO_STYLE: &str = "default";
 
 /// A directory of this suite's own. macOS hands the temporary one out through a
 /// symlink and resolves it on the way in, so it is resolved here too — the child
@@ -440,6 +472,40 @@ async fn a_session_carries_the_bundle_brief_and_the_opennest_layer_at_once() {
 
 	assert!(answer.contains("BANANA"), "the bundle's brief did not reach the child: {answer:?}");
 	assert!(answer.contains(LAYER_WORDS), "the appended layer did not reach the child: {answer:?}");
+}
+
+/// The style a bot is written under is the style its session is really opened in,
+/// and it reaches the child on the open request rather than through the agent file:
+/// the format acts on none of `metadata`, so this is the only measurement that can
+/// tell whether a reader's pick reaches a run at all.
+///
+/// Both halves in one test on purpose. `Concise` alone would pass on a machine whose
+/// provider defaults to it anyway, so the bot written under `default` is the control:
+/// the same question, the same bundle, and no Concise instruction to quote.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_answers_in_the_style_its_bundle_carries() {
+	let concise = probe_bot("live-bot-concise", BANANA, SONNET);
+	let mut styled =
+		started_with(None, Some(styled_bundle(&concise, CONCISE_STYLE)), std::env::temp_dir())
+			.await;
+	let under_concise = text(&styled.run_turn(QUOTE_THE_STYLE).await).to_lowercase();
+	styled.sidecar.shutdown().await;
+
+	let plain = probe_bot("live-bot-plain", BANANA, SONNET);
+	let mut unstyled =
+		started_with(None, Some(styled_bundle(&plain, NO_STYLE)), std::env::temp_dir()).await;
+	let under_default = text(&unstyled.run_turn(QUOTE_THE_STYLE).await).to_lowercase();
+	unstyled.sidecar.shutdown().await;
+
+	assert!(
+		under_concise.contains(CONCISE_WORDS),
+		"the picked style did not reach the child: {under_concise:?}"
+	);
+	assert!(
+		!under_default.contains(CONCISE_WORDS),
+		"a bot under no style was still handed the concise one: {under_default:?}"
+	);
 }
 
 /// The check report is what the frontend receives first, and it is built from a
