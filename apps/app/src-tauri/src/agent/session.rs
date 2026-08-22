@@ -99,6 +99,11 @@ impl EventSink for GatedSink {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bundle {
 	pub path: String,
+	/// The app's own plugin, loaded beside the bot's for the same session and never
+	/// promoted — see `PLUGINS.md`. It rides with the bot's bundle because it only
+	/// travels with one: a session opened without a bot loads no plugin at all.
+	/// `None` is a host that has none on the disk to name.
+	pub system_path: Option<String>,
 	pub agent: String,
 	/// How the bot writes its answers, as the bundle's own agent file carries it —
 	/// see [`crate::bundles::output_style`]. It travels on the open request rather
@@ -151,6 +156,7 @@ impl SessionOptions {
 			cwd: self.cwd.to_string_lossy().into_owned(),
 			resume: self.resume.clone(),
 			plugin_path: self.bundle.as_ref().map(|bundle| bundle.path.clone()),
+			system_plugin_path: self.bundle.as_ref().and_then(|bundle| bundle.system_path.clone()),
 			agent: self.bundle.as_ref().map(|bundle| bundle.agent.clone()),
 			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
 			partial_messages,
@@ -452,6 +458,7 @@ mod tests {
 	fn a_bot_opens_on_the_bundle_it_runs_as() {
 		let bundle = Bundle {
 			path: "/bots/b1".to_owned(),
+			system_path: Some("/system/opennest".to_owned()),
 			agent: "bean".to_owned(),
 			output_style: "Concise".to_owned(),
 		};
@@ -467,6 +474,7 @@ mod tests {
 	fn a_resumed_run_carries_the_bundle_again() {
 		let bundle = Bundle {
 			path: "/bots/b1".to_owned(),
+			system_path: Some("/system/opennest".to_owned()),
 			agent: "bean".to_owned(),
 			output_style: "Concise".to_owned(),
 		};
@@ -485,6 +493,7 @@ mod tests {
 	fn a_bot_opens_on_the_style_its_bundle_carries() {
 		let bundle = Bundle {
 			path: "/bots/b1".to_owned(),
+			system_path: Some("/system/opennest".to_owned()),
 			agent: "bean".to_owned(),
 			output_style: "default".to_owned(),
 		};

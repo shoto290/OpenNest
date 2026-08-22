@@ -69,6 +69,29 @@ the bot (`learn` today, shared MCP servers later). The bot's comes first, the ap
 second; the app's is never promoted, since nothing in it is an agent. A session opened
 without a bot's bundle loads neither.
 
+The two are written differently, and that is the whole shape:
+
+```text
+<app data>/bots/plugins/<bot id>/     the bot's — the disk is the truth
+  .claude-plugin/plugin.json          name: <bot id>
+  agents/<slug>.md                    the brief a session is promoted to
+  skills/<name>/SKILL.md              what the bot remembered, its own to write
+
+<app data>/system/opennest/           the app's — the host is the truth
+  .claude-plugin/plugin.json          name: opennest
+  skills/learn/SKILL.md               the rules every bot remembers under
+```
+
+The bot's bundle is completed rather than written over: a body edited by hand is
+adopted, and a skill the bot wrote is its memory. The app's plugin is rewritten whole
+at every launch from the text in `bundles/system.rs`, and nothing reads it back — one
+text for every bot instead of a copy in each bundle that a bot could edit into
+something else. It sits outside `bots/`, so it is in no marketplace and in no bot's
+skill listing.
+
+It reaches the sidecar as `systemPluginPath` on the open request, beside the bot's
+`pluginPath` and only ever with one — see `PROTOCOL.md`.
+
 Both are bridged for servers the same way — `strictMcpConfig` drops what either
 declares, so both `.mcp.json` files are read and merged into one `mcpServers` option,
 the bot's names applied last so a bot keeps its own on a clash.
@@ -165,7 +188,9 @@ the working directory:
 ## A bundle's own hook, and what a bot writes mid-session — verified
 
 Measured on the real binary, 2.1.239. Three findings, and the whole reason a bot is
-handed its directory rather than left to look for it.
+handed its directory rather than left to look for it. No bundle carries a hook any
+more — the appended prompt layer names the directory, which is one file fewer in every
+bot's bundle — and this is what was measured before that.
 
 | Measured | Result |
 | --- | --- |
@@ -173,14 +198,16 @@ handed its directory rather than left to look for it.
 | `echo $CLAUDE_PLUGIN_ROOT` in the bot's own `Bash` | **empty** |
 | a `SKILL.md` written mid-session | `Unknown skill` until the next session; visible on resume |
 
-- Consequence: the path of a bundle reaches the bot **through the hook or not at all**.
-  Its own shell cannot tell it, and nothing else in a session names the directory.
+- Consequence: the path of a bundle reaches the bot through the prompt layer or not at
+  all. Its own shell cannot tell it, and a hook — the only other route — is one
+  generated file in every reader's bundle for one sentence the layer says for free.
 - Consequence: a skill a bot writes is memory for the *next* session. Nothing recompiles
   mid-turn, so a bot that reads its own write back is reading a file the session has not
   loaded — which is why the rule it writes under says the write lands at the next
   message.
-- The hook is a command, not a value: the script prints `PLUGIN_ROOT=$CLAUDE_PLUGIN_ROOT`,
-  so one script says the right thing in every bundle whatever the reader's disk calls it.
+- A hook is a command, not a value: a script printing `PLUGIN_ROOT=$CLAUDE_PLUGIN_ROOT`
+  said the right thing in every bundle whatever the reader's disk called it — which is
+  what the layer does now without writing anything.
 
 ## `skills:` does not preload on the promoted path — verified
 

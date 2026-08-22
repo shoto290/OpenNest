@@ -115,9 +115,18 @@ fn written(bot: &Bot) -> Bundle {
 fn handed_over(root: &Path, bot: &Bot) -> Bundle {
 	Bundle {
 		path: bundles::dir(root, &bot.id).display().to_string(),
+		system_path: Some(system_plugin().display().to_string()),
 		agent: bundles::slug(&bot.name),
 		output_style: bundles::output_style(root, &bot.id),
 	}
+}
+
+/// The app's own plugin, written where a live run can load it: every session here
+/// carries both plugins, as a session in the app does — see `bundles::system`.
+fn system_plugin() -> PathBuf {
+	let path = std::env::temp_dir().join("opennest-real-claude-system");
+	bundles::system::write(&path).expect("the app's plugin is written");
+	path
 }
 
 impl Live {
@@ -192,10 +201,11 @@ const WHERE_AND_WHO: &str = "Run the bash command `pwd` and reply with nothing b
 const WHICH_MODEL: &str =
 	"Which Claude model are you running as? Reply with one word: opus, sonnet or haiku.";
 
-/// What the session started with, asked of the bot itself: the hook prints it into
-/// the context at turn zero, so a child that can answer is a child the hook reached.
+/// Where its own directory is, asked of the bot itself: the appended layer names it —
+/// see `sidecar/src/providers/claude/system-layer.ts` — so a child that can answer is a
+/// child the layer reached with a path.
 const WHICH_ROOT: &str =
-	"What is the PLUGIN_ROOT you were given at the start of this session? Reply with nothing but that path.";
+	"What is the full path of the directory your own skills live in? Reply with nothing but that path.";
 
 /// What a bot is created on, and what a reader would have had to pick. A child
 /// naming the second is a child the key reached: nothing else would move it off the
@@ -450,10 +460,10 @@ async fn a_bot_reaches_the_mcp_servers_its_bundle_declares() {
 	);
 }
 
-/// The bot is told where its own directory is before it says anything, by the
-/// `SessionStart` hook in its own bundle. `CLAUDE_PLUGIN_ROOT` is set for a hook and
-/// empty in the bot's own `Bash`, so this is the only route the path has — and the
-/// only measurement that can tell whether it arrives at all.
+/// The bot is told where its own directory is before it says anything, by the sentence
+/// the prompt layer appends when a bundle is loaded. With two plugins in the session
+/// nothing else says which directory is the bot's, so this is the only route the path
+/// has — and the only measurement that can tell whether it arrives at all.
 ///
 /// The path is compared both as it was written and as the machine resolves it: macOS
 /// hands the temporary directory out through a symlink, and the child reports where
@@ -469,7 +479,7 @@ async fn a_bot_is_handed_its_own_directory_before_its_first_turn() {
 	let resolved = bundle.canonicalize().unwrap_or_else(|_| bundle.clone());
 	assert!(
 		told.contains(&seen_as(&bundle)) || told.contains(&seen_as(&resolved)),
-		"the hook did not reach the child: {told:?} for {}",
+		"the layer did not reach the child with a path: {told:?} for {}",
 		seen_as(&resolved)
 	);
 }

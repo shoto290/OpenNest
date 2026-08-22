@@ -291,10 +291,6 @@ fn as_the_child_sees_it(dir: &Path) -> String {
 	dir.canonicalize().unwrap_or_else(|_| dir.to_owned()).display().to_string()
 }
 
-/// A word from the `learn` skill every bundle carries, which is in the body of every
-/// bot now — including one that was told nothing at all.
-const LEARNED: &str = "PLUGIN_ROOT";
-
 /// What closes the generated identity zone the host writes at the head of every body.
 /// Spelled here rather than imported: what a child is really handed is the contract,
 /// so the test says the words instead of asking the module for them.
@@ -369,12 +365,12 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	assert_ne!(rotated.from, first.from, "the new identity landed in the same process");
 
 	// Nothing to say for itself and nowhere of its own: what is left in the system
-	// prompt is the `learn` skill every bundle carries, and the run starts in the
-	// directory a run has always started in.
+	// prompt is the identity zone the host writes, and the run starts in the directory
+	// a run has always started in.
 	harness.describe(&bot, "", None);
 	let plain = harness.runtime_of(&conversation, &bot, 3);
 	assert!(!plain.spoken.contains(DUTCH), "got {}", plain.spoken);
-	assert!(plain.spoken.contains(LEARNED), "got {}", plain.spoken);
+	assert!(plain.spoken.contains(&format!("You are {NAME}.")), "got {}", plain.spoken);
 	assert!(
 		plain.spoken.contains(&format!("cwd<{}>", as_the_child_sees_it(&std::env::temp_dir()))),
 		"got {}",
