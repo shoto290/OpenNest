@@ -74,6 +74,15 @@ export type BotIdentity = {
 	 * server's tool is the bundle's own capability, and the host drops one that
 	 * arrives anyway. */
 	deniedTools: string[]
+	/** How the bot writes its answers, as the host stores it raw. Part of the
+	 * identity for the same reason `model` is — a bot is moved between styles from
+	 * the same panel — and the host lays it down in the agent file every run is
+	 * promoted onto, which is where a style takes effect. Free text at this boundary
+	 * the way `model` is: the styles the settings offer are a list the frontend
+	 * holds, and a value outside it is stored and read back as it stands. A whole
+	 * identity, so a write that left it out would put the bot back on the default
+	 * one. */
+	outputStyle: string
 }
 
 /** A bot as the host answers it: everything it was described with, plus what the

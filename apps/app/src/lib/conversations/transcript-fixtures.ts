@@ -1,3 +1,5 @@
+import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
+
 import type { BotIdentity } from "./store-contract"
 import type { TranscriptMessage } from "./transcript-contract"
 
@@ -33,6 +35,7 @@ export const botIdentity = (
 	workingDir: null,
 	instructions: "Answer with the file you would touch.",
 	deniedTools: [],
+	outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 	...overrides,
 })
 

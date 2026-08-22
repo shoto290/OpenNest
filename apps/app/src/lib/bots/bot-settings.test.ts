@@ -162,6 +162,18 @@ describe("toIdentity", () => {
 		).toBeNull()
 	})
 
+	// The panel edits the style beside its value, so every write the value authors
+	// has to leave the bot on the style it already answers under — otherwise saving a
+	// name puts it back on the default one.
+	it("carries the style the bot already answers under", () => {
+		const styled = bot({ outputStyle: "default" })
+
+		expect(
+			toIdentity({ ...toSettingsValue(styled), name: "Nyx" }, styled)
+				.outputStyle,
+		).toBe("default")
+	})
+
 	// A model label is not a vocabulary this side polices: there is no listing to
 	// check one against, so what the panel emitted is what the store is told —
 	// alias, versioned name or something this build has never seen.
@@ -278,6 +290,10 @@ describe("newBotIdentity", () => {
 			avatarImagePath: null,
 			workingDir: null,
 		})
+	})
+
+	it("creates a bot on the concise style", () => {
+		expect(newBotIdentity([]).outputStyle).toBe("Concise")
 	})
 
 	it("offers at least thirty names to draw from", () => {

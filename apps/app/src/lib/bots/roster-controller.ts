@@ -1,6 +1,9 @@
-import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
+import type {
+	BotOutputStyle,
+	BotSettingsValue,
+} from "@workspace/ui/components/bot-settings"
 
-import { newBotIdentity, toIdentity } from "./bot-settings"
+import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 
 import { createQueue } from "../queue"
 import { createWriteLoop } from "../write-loop"
@@ -59,6 +62,11 @@ export type RosterController = {
 	 * every value in between is dropped, since each of them describes the same bot
 	 * less completely than the one after it. */
 	describe: (id: string, value: BotSettingsValue) => void
+	/** How the bot writes its answers. Written on its own rather than through
+	 * `describe` because the panel edits it beside its value rather than in it: the
+	 * bot on the record is the whole of what the write is built from, so the style
+	 * lands on top of whatever was last typed instead of over it. */
+	restyle: (id: string, outputStyle: BotOutputStyle) => void
 	/** The picture the reader picked, from the bytes of their file. The store owns
 	 * where it goes and answers with the bot wearing it. */
 	uploadAvatar: (id: string, file: File) => Promise<void>
@@ -235,6 +243,16 @@ export const createRosterController = (
 		describe: (id: string, value: BotSettingsValue) => {
 			preview(id, value)
 			writes.push(id, value)
+		},
+
+		restyle: (id: string, outputStyle: BotOutputStyle) => {
+			const bot = held(id)
+			if (!bot) {
+				return
+			}
+			const styled = { ...bot, outputStyle }
+			apply(styled)
+			writes.push(id, toSettingsValue(styled))
 		},
 
 		uploadAvatar: (id: string, file: File) =>
