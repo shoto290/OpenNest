@@ -10,6 +10,7 @@ const A_SKILL: BotSkill = {
 	description: "How this project words a changelog entry",
 	body: "One line per change.",
 	isPreloaded: true,
+	isSystem: false,
 	whenToUse: "A release is being cut",
 	argumentHint: "[version]",
 	arguments: ["version", "draft"],

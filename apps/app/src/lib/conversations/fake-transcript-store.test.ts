@@ -244,12 +244,15 @@ describe("createFakeTranscriptStore", () => {
 		})
 	})
 
-	/** The same shape the host answers: a skill named by the directory it would live
-	 * in, a second one of the same name written beside the first rather than over it,
-	 * a mark that is its own write, and a skill that is gone reported as one. */
+	/** The same shape the host answers: the bundle's own `learn` skill already there,
+	 * a skill named by the directory it would live in, a second one of the same name
+	 * written beside the first rather than over it, a mark that is its own write, a
+	 * skill that is gone reported as one, and a write over the host's own refused. */
 	it("writes, marks and takes away a bot's skills", async () => {
 		const store = createFakeTranscriptStore()
 		const draft = { name: "Baking Bread", description: "How.", body: "Bake." }
+		const [learn] = await store.botSkills("default")
+		expect(learn).toMatchObject({ id: "learn", isSystem: true })
 
 		const created = await store.createBotSkill("default", draft)
 		const beside = await store.createBotSkill("default", draft)
@@ -272,10 +275,13 @@ describe("createFakeTranscriptStore", () => {
 		expect(renamed).toEqual({ ...marked, name: "Baking" })
 
 		await store.deleteBotSkill("default", created.id)
-		expect(await store.botSkills("default")).toEqual([beside])
+		expect(await store.botSkills("default")).toEqual([beside, learn])
 		await expect(
 			store.deleteBotSkill("default", created.id),
 		).rejects.toMatchObject({ kind: "unwritableBundle" })
+		await expect(
+			store.updateBotSkill("default", "learn", draft),
+		).rejects.toMatchObject({ kind: "systemSkill", id: "learn" })
 		await expect(store.createBotSkill("missing", draft)).rejects.toMatchObject({
 			kind: "unknownBot",
 			id: "missing",

@@ -100,13 +100,18 @@ export type Bot = BotIdentity & {
  * `isPreloaded` is whether the body is carried into the bot's agent file, which is
  * the whole of how a skill reaches a running bot: a skill that is not carried is
  * text on the disk the bot may go and read, and one that is carried is already in
- * its prompt. */
+ * its prompt.
+ *
+ * `isSystem` is whether the host generated it. The settings show such a skill and
+ * change nothing about it — the bot rewrites it through its own tools, and a write
+ * from this side is refused with `systemSkill`. */
 export type BotSkill = BotSkillFront & {
 	id: string
 	name: string
 	description: string
 	body: string
 	isPreloaded: boolean
+	isSystem: boolean
 }
 
 /** A frontmatter value this app carries without reading into it: `hooks`, `metadata`
@@ -273,3 +278,12 @@ export type TranscriptStoreError =
 	 * is what its process is started on — a save reported as done over a bundle that
 	 * kept the old brief would leave the bot answering by it for good. */
 	| { kind: "unwritableBundle"; detail: string }
+	/** A write from the settings named a skill the host generates and owns. Nothing
+	 * changed and the bot still has the skill: what is refused is the settings
+	 * writing it, not the skill changing — the bot rewrites it through its own
+	 * tools. */
+	| { kind: "systemSkill"; id: string }
+	/** The bundle's own history could not be read. Nothing on the disk is wrong and
+	 * the bot runs exactly as it did: the repository inside the bundle is what would
+	 * not open, so the writes are all there and the account of them is not. */
+	| { kind: "unreadableHistory"; detail: string }

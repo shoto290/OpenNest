@@ -128,6 +128,20 @@ const NO_FRONT: BotSkillFront = {
 	compatibility: null,
 }
 
+/** The skill the host writes into every bundle it lays down: the bot's own rules for
+ * remembering, carried into its brief and never the settings' to write. Here so a
+ * caller meets a bundle shaped like the one production hands out — a roster with a
+ * skill nothing on this side may change. */
+const learnSkill = (): BotSkill => ({
+	...NO_FRONT,
+	id: "learn",
+	name: "learn",
+	description: "How you remember.",
+	body: "Your own directory is the plugin root you were given.",
+	isPreloaded: true,
+	isSystem: true,
+})
+
 export const createFakeTranscriptStore = (
 	options: FakeTranscriptStoreOptions = {},
 ): TranscriptStore => {
@@ -141,7 +155,7 @@ export const createFakeTranscriptStore = (
 	const commands = new Map<string, AgentCommand[]>()
 	/** What each bot's bundle holds, the way the disk holds it: no row, one entry per
 	 * bot, and a skill named by the directory it would live in. */
-	const skills = new Map<string, BotSkill[]>()
+	const skills = new Map<string, BotSkill[]>([[DEFAULT_BOT.id, [learnSkill()]]])
 	/** Every write to each bot's bundle, newest first, the way the repository inside
 	 * it reads: one entry per bot, and nothing at all for a bundle nobody has written
 	 * to. */
@@ -264,9 +278,10 @@ export const createFakeTranscriptStore = (
 	const historyEntry = (botId: string, commitId: string) =>
 		history.get(botId)?.find((entry) => entry.id === commitId)
 
-	/** One of a bot's skills, changed. A bot that is not there and a skill that is
-	 * not one of its own are the two refusals the host answers with — the second is
-	 * a file that is not on the disk to be written. */
+	/** One of a bot's skills, changed. A bot that is not there, a skill that is not
+	 * one of its own and a skill the host owns are the three refusals the host answers
+	 * with — the second is a file that is not on the disk to be written, and the third
+	 * a file only the bot rewrites. */
 	const writeSkill = (
 		botId: string,
 		skillId: string,
@@ -280,6 +295,9 @@ export const createFakeTranscriptStore = (
 		const stored = held.find((skill) => skill.id === skillId)
 		if (!stored) {
 			return refuse({ kind: "unwritableBundle", detail: "no such skill" })
+		}
+		if (stored.isSystem) {
+			return refuse({ kind: "systemSkill", id: skillId })
 		}
 		const written = change(stored)
 		skills.set(
@@ -333,6 +351,7 @@ export const createFakeTranscriptStore = (
 				changesNothing: deniesChanges(identity.deniedTools),
 			}
 			bots.set(created.id, created)
+			skills.set(created.id, [learnSkill()])
 			return Promise.resolve(created)
 		},
 
@@ -431,6 +450,7 @@ export const createFakeTranscriptStore = (
 				...draft,
 				id: freeSkillId(held, draft.name),
 				isPreloaded: false,
+				isSystem: false,
 			}
 			skills.set(botId, [...held, created])
 			recorded(botId, `Skill "${created.name}" saved from settings`)

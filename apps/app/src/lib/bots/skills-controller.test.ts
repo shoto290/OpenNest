@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { createSkillsController } from "./skills-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
-import type { BotSkillDraft } from "../conversations/store-contract"
+import type { BotSkill, BotSkillDraft } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
 const A_SKILL = {
@@ -22,6 +22,14 @@ const opened = async (store: TranscriptStore, botId = "default") => {
  * store holds only after the loop it was handed to has run out. */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+/** What a reader wrote, without the skill the bundle came with: every bot's bundle
+ * carries the host's own, and none of these tests are about it. */
+const readers = (skills: BotSkill[]) =>
+	skills.filter((skill) => !skill.isSystem)
+
+const readerSkills = async (store: TranscriptStore) =>
+	readers(await store.botSkills("default"))
+
 describe("skills controller", () => {
 	it("opens on the skills the bundle already holds", async () => {
 		const store = createFakeTranscriptStore()
@@ -29,7 +37,7 @@ describe("skills controller", () => {
 
 		const controller = await opened(store)
 
-		expect(controller.getState().skills).toMatchObject([A_SKILL])
+		expect(readers(controller.getState().skills)).toMatchObject([A_SKILL])
 	})
 
 	it("creates a skill with everything the reader gave", async () => {
@@ -39,7 +47,7 @@ describe("skills controller", () => {
 		controller.create(A_SKILL, false)
 		await settled()
 
-		expect(await store.botSkills("default")).toMatchObject([
+		expect(await readerSkills(store)).toMatchObject([
 			{ ...A_SKILL, isPreloaded: false },
 		])
 	})
@@ -51,8 +59,10 @@ describe("skills controller", () => {
 		controller.create(A_SKILL, true)
 		await settled()
 
-		expect(controller.getState().skills).toMatchObject([{ isPreloaded: true }])
-		expect((await store.botSkills("default"))[0].isPreloaded).toBe(true)
+		expect(readers(controller.getState().skills)).toMatchObject([
+			{ isPreloaded: true },
+		])
+		expect((await readerSkills(store))[0].isPreloaded).toBe(true)
 	})
 
 	it("writes a save to the skill it was opened on, by id", async () => {
@@ -63,7 +73,7 @@ describe("skills controller", () => {
 		controller.save(written.id, { ...A_SKILL, name: "Changelog" })
 		await settled()
 
-		const [held] = await store.botSkills("default")
+		const [held] = await readerSkills(store)
 		expect(held).toMatchObject({ id: written.id, name: "Changelog" })
 	})
 
@@ -96,7 +106,7 @@ describe("skills controller", () => {
 				whenToUse: "Whenever a release is cut",
 			},
 		])
-		expect(controller.getState().skills[0]).toMatchObject({
+		expect(readers(controller.getState().skills)[0]).toMatchObject({
 			allowedTools: ["Read"],
 			whenToUse: "Whenever a release is cut",
 		})
@@ -114,7 +124,19 @@ describe("skills controller", () => {
 		controller.save(written.id, { ...A_SKILL, name: "Changelog" })
 		await settled()
 
-		expect(controller.getState().skills).toMatchObject([A_SKILL])
+		expect(readers(controller.getState().skills)).toMatchObject([A_SKILL])
+	})
+
+	it("leaves the host's own skill as the bundle holds it when a save is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await opened(store)
+
+		controller.save("learn", A_SKILL)
+		await settled()
+
+		expect(controller.getState().skills).toMatchObject([
+			{ id: "learn", name: "learn", isSystem: true },
+		])
 	})
 
 	it("sets the preload mark on its own", async () => {
@@ -125,7 +147,7 @@ describe("skills controller", () => {
 		controller.setPreloaded(written.id, true)
 		await settled()
 
-		expect((await store.botSkills("default"))[0].isPreloaded).toBe(true)
+		expect((await readerSkills(store))[0].isPreloaded).toBe(true)
 	})
 
 	it("takes a skill away", async () => {
@@ -136,8 +158,8 @@ describe("skills controller", () => {
 		controller.remove(written.id)
 		await settled()
 
-		expect(controller.getState().skills).toEqual([])
-		expect(await store.botSkills("default")).toEqual([])
+		expect(readers(controller.getState().skills)).toEqual([])
+		expect(await readerSkills(store)).toEqual([])
 	})
 
 	it("writes nothing while no bot is open", async () => {
@@ -147,6 +169,6 @@ describe("skills controller", () => {
 		controller.create(A_SKILL, false)
 		await settled()
 
-		expect(await store.botSkills("default")).toEqual([])
+		expect(await readerSkills(store)).toEqual([])
 	})
 })
