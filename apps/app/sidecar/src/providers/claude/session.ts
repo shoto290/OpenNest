@@ -71,7 +71,9 @@ const localPlugins = (
  * The app's own plugin loads beside it when the host names one, second in the array,
  * with its servers bridged the same way and the bot's names winning on a clash. The
  * layer then names the bot's own directory, which is what tells a bot holding two
- * plugins which of them its skills belong in.
+ * plugins which of them its skills belong in, and carries the body of every skill that
+ * plugin marked for preloading — the app's text reaches a bot through the layer rather
+ * than through its bundle.
  *
  * `settingSources: []` and `strictMcpConfig` are what make a bot the same bot
  * anywhere: no `settings.json` of the machine's, no `CLAUDE.md` of the working
@@ -112,7 +114,7 @@ export const buildOptions = (
 	systemPrompt: {
 		type: "preset",
 		preset: "claude_code",
-		append: layerFor(request.pluginPath),
+		append: layerFor(request.pluginPath, request.systemPluginPath),
 	},
 	...(request.outputStyle
 		? { settings: { outputStyle: request.outputStyle } }

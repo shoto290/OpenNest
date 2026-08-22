@@ -223,6 +223,16 @@ const QUOTE_THE_LAYER: &str =
 /// A child that can produce it was handed the layer.
 const LAYER_WORDS: &str = "closing recaps";
 
+/// A rule of the app plugin's `learn` skill, asked of the child itself. The skill is
+/// marked for preloading and its body is appended to the layer — see
+/// `sidecar/src/providers/claude/system-skills.ts` — so a child that answers this was
+/// handed the rules before it could reach for the skill.
+const AFTER_A_WRITE: &str = "After you write one of your own skills, which file do you overwrite afterwards, and how many characters may its title line be? Reply with the file name and the number.";
+
+/// The two the `learn` body names, mirroring `src-tauri/src/bundles/system.rs`.
+const LEARNED_FILE: &str = ".learned.md";
+const TITLE_LIMIT: &str = "72";
+
 /// What the bot is, asked the way a person would ask it. The layer places the bot in
 /// this app and names its learning, so a child handed it can answer all three at once
 /// — its own name from its bundle, the app from the layer, and that it learns.
@@ -260,6 +270,20 @@ const PROBE_WORD: &str = "OPENNEST";
 /// way through, so this is what tells `auto` from the default mode.
 fn asked_permission(events: &[AgentEvent]) -> bool {
 	events.iter().any(|event| matches!(event, AgentEvent::PermissionRequested { .. }))
+}
+
+/// Every tool the child reached for in a turn, by title. A skill it invokes surfaces
+/// here the way any other tool call does.
+fn tools_used(events: &[AgentEvent]) -> Vec<String> {
+	events
+		.iter()
+		.filter_map(|event| match event {
+			AgentEvent::Activity { activity } if activity.kind == ActivityKind::Tool => {
+				Some(activity.title.clone())
+			}
+			_ => None,
+		})
+		.collect()
 }
 
 fn a_clean_file(dir: &Path) -> PathBuf {
@@ -513,6 +537,29 @@ async fn a_session_carries_the_bundle_brief_and_the_opennest_layer_at_once() {
 
 	assert!(answer.contains("BANANA"), "the bundle's brief did not reach the child: {answer:?}");
 	assert!(answer.contains(LAYER_WORDS), "the appended layer did not reach the child: {answer:?}");
+}
+
+/// The app's own skills reach a bot through the layer rather than through its bundle.
+/// The `learn` skill lives in the app's plugin, marked for preloading, and the sidecar
+/// appends its body to the `append` of every session that loads that plugin: the bot
+/// answers a rule of it in the turn it is asked, with no skill invoked and no file
+/// read. That is the whole point of the route — the text is the app's, so a change to
+/// it is in force at the next session of every bot, and no bundle is rewritten.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_answers_the_app_plugins_learn_rules_without_invoking_the_skill() {
+	let mut live = started(None, Some(BANANA), std::env::temp_dir()).await;
+	let turn = live.run_turn(AFTER_A_WRITE).await;
+	live.sidecar.shutdown().await;
+
+	let answer = text(&turn);
+	assert!(
+		answer.contains(LEARNED_FILE),
+		"the preloaded rules did not reach the child: {answer:?}"
+	);
+	assert!(answer.contains(TITLE_LIMIT), "the preloaded rules were not held whole: {answer:?}");
+	let used = tools_used(&turn);
+	assert!(used.is_empty(), "the bot went looking for rules it was already holding: {used:?}");
 }
 
 /// What a person gets when they ask the bot what it is. The three halves come from
