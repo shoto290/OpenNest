@@ -102,46 +102,61 @@ impl AvatarAnimal {
 	}
 }
 
-/// The eight colours a bot may be marked with. A bot wears one or none, and none
-/// is the default: it is `Option::None` here and `NULL` on the disk, never a ninth
-/// word — a bot nobody marked and a bot marked "unmarked" would otherwise be the
-/// same row.
+/// The eight colours a bot may be marked with, named with the vocabulary an agent
+/// file's `color` key reads. One word for one tint on both ends: it is what the
+/// column holds, what the bundle is written with and what is read back out of it —
+/// see [`crate::bundles`] — so nothing has to be translated between them and no tint
+/// can be lost in the translating. The ink each one is drawn with is the UI's own
+/// and unchanged by the words: `purple` is the lavender it always was.
+///
+/// A bot wears one or none, and none is the default: it is `Option::None` here and
+/// `NULL` on the disk, never a ninth word — a bot nobody marked and a bot marked
+/// "unmarked" would otherwise be the same row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AvatarBlot {
-	Coral,
-	Amber,
-	Moss,
-	Water,
-	Sky,
-	Lavender,
-	Rose,
-	Slate,
+	Red,
+	Yellow,
+	Green,
+	Cyan,
+	Blue,
+	Purple,
+	Pink,
+	Orange,
 }
 
 impl AvatarBlot {
 	fn as_sql(self) -> &'static str {
+		self.named()
+	}
+
+	/// The one word the tint answers to, wherever it is written down — the column,
+	/// and the `color` key of the bot's agent file.
+	pub fn named(self) -> &'static str {
 		match self {
-			AvatarBlot::Coral => "coral",
-			AvatarBlot::Amber => "amber",
-			AvatarBlot::Moss => "moss",
-			AvatarBlot::Water => "water",
-			AvatarBlot::Sky => "sky",
-			AvatarBlot::Lavender => "lavender",
-			AvatarBlot::Rose => "rose",
-			AvatarBlot::Slate => "slate",
+			AvatarBlot::Red => "red",
+			AvatarBlot::Yellow => "yellow",
+			AvatarBlot::Green => "green",
+			AvatarBlot::Cyan => "cyan",
+			AvatarBlot::Blue => "blue",
+			AvatarBlot::Purple => "purple",
+			AvatarBlot::Pink => "pink",
+			AvatarBlot::Orange => "orange",
 		}
 	}
 
-	fn parse(text: &str) -> Option<Self> {
+	/// The tint that word names, and nothing for any other word: a `color` an agent
+	/// file was given by hand and this build has no tint for is a bot marked with
+	/// none, not a read that fails.
+	pub fn parse(text: &str) -> Option<Self> {
 		match text {
-			"coral" => Some(AvatarBlot::Coral),
-			"amber" => Some(AvatarBlot::Amber),
-			"moss" => Some(AvatarBlot::Moss),
-			"water" => Some(AvatarBlot::Water),
-			"sky" => Some(AvatarBlot::Sky),
-			"lavender" => Some(AvatarBlot::Lavender),
-			"rose" => Some(AvatarBlot::Rose),
-			"slate" => Some(AvatarBlot::Slate),
+			"red" => Some(AvatarBlot::Red),
+			"yellow" => Some(AvatarBlot::Yellow),
+			"green" => Some(AvatarBlot::Green),
+			"cyan" => Some(AvatarBlot::Cyan),
+			"blue" => Some(AvatarBlot::Blue),
+			"purple" => Some(AvatarBlot::Purple),
+			"pink" => Some(AvatarBlot::Pink),
+			"orange" => Some(AvatarBlot::Orange),
 			_ => None,
 		}
 	}
@@ -504,11 +519,11 @@ impl ConversationsRepository {
 /// [`bot`] reads the row by column name, so the two statements only have to name
 /// the same columns — the order they list them in is theirs to choose, and a
 /// column dropped from both is a line deleted rather than a projection renumbered.
-const SELECT_BOT: &str = "SELECT id, name, title, model, avatar_animal, avatar_blot,
+const SELECT_BOT: &str = "SELECT id, name, title, model, avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, changes_nothing, created_at
 	FROM bots WHERE id = ?1";
 
-const SELECT_BOTS: &str = "SELECT id, name, title, model, avatar_animal, avatar_blot,
+const SELECT_BOTS: &str = "SELECT id, name, title, model, avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, changes_nothing, created_at
 	FROM bots ORDER BY created_at ASC, id ASC";
 
@@ -621,7 +636,7 @@ fn created_bot(
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
-		"INSERT INTO bots (id, name, title, model, avatar_animal, avatar_blot,
+		"INSERT INTO bots (id, name, title, model, avatar_animal, avatar_color,
 				avatar_image_path, working_dir, instructions, changes_nothing, created_at)
 			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
 		params![
@@ -654,7 +669,7 @@ fn updated_bot(
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
 		"UPDATE bots SET name = ?2, title = ?3, model = ?4,
-				avatar_animal = ?5, avatar_blot = ?6, avatar_image_path = ?7, working_dir = ?8,
+				avatar_animal = ?5, avatar_color = ?6, avatar_image_path = ?7, working_dir = ?8,
 				instructions = ?9, changes_nothing = ?10
 			WHERE id = ?1",
 		params![
@@ -755,7 +770,7 @@ fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 		title: row.get("title")?,
 		model: row.get("model")?,
 		avatar_animal: row.get("avatar_animal")?,
-		avatar_blot: row.get("avatar_blot")?,
+		avatar_blot: row.get("avatar_color")?,
 		avatar_image_path: row.get("avatar_image_path")?,
 		working_dir: row.get("working_dir")?,
 		instructions: row.get("instructions")?,
@@ -997,7 +1012,7 @@ mod tests {
 			model: "haiku".to_owned(),
 			changes_nothing: true,
 			avatar_animal: AvatarAnimal::Owl,
-			avatar_blot: Some(AvatarBlot::Coral),
+			avatar_blot: Some(AvatarBlot::Red),
 			avatar_image_path: Some("/pictures/owl.png".to_owned()),
 			working_dir: Some("/work/opennest".to_owned()),
 			instructions: "Answer briefly.".to_owned(),
@@ -1012,7 +1027,7 @@ mod tests {
 		assert_eq!(listed[0].title, described.title);
 		assert_eq!(listed[0].model, "haiku");
 		assert_eq!(listed[0].avatar_animal, AvatarAnimal::Owl);
-		assert_eq!(listed[0].avatar_blot, Some(AvatarBlot::Coral));
+		assert_eq!(listed[0].avatar_blot, Some(AvatarBlot::Red));
 		assert_eq!(listed[0].avatar_image_path.as_deref(), Some("/pictures/owl.png"));
 		assert_eq!(listed[0].working_dir.as_deref(), Some("/work/opennest"));
 		assert_eq!(listed[0].instructions, described.instructions);
@@ -1059,7 +1074,7 @@ mod tests {
 					model: "opus".to_owned(),
 					changes_nothing: true,
 					avatar_animal: AvatarAnimal::Koala,
-					avatar_blot: Some(AvatarBlot::Slate),
+					avatar_blot: Some(AvatarBlot::Orange),
 					avatar_image_path: Some("/pictures/koala.png".to_owned()),
 					working_dir: Some("/work/opennest".to_owned()),
 					instructions: "answer at length".to_owned(),
@@ -1071,7 +1086,7 @@ mod tests {
 		assert_eq!(updated.name, "Ada");
 		assert_eq!(updated.title, "Reviewer");
 		assert_eq!(updated.avatar_animal, AvatarAnimal::Koala);
-		assert_eq!(updated.avatar_blot, Some(AvatarBlot::Slate));
+		assert_eq!(updated.avatar_blot, Some(AvatarBlot::Orange));
 		assert_eq!(updated.working_dir.as_deref(), Some("/work/opennest"));
 		assert_eq!(updated.model, "opus", "an update left the bot on its old model");
 		assert_eq!(

@@ -359,7 +359,7 @@ export const Blots = meta.story({
 		docs: {
 			description: {
 				story:
-					"The eight tints a bot can be marked with, drawn once behind the whole animal, plus the avatar with no blot at all. The blot sits outside the sketch filter, so it never boils with the line and never animates — the ink is what moves, the mark is what stays. All eight are light on purpose: the line is near-black and the ear accent is coral, and neither reads over anything darker. Reach for this when adding a tint, and check on both themes — the tints do not flip under `.dark`, so a bot's mark is the same colour wherever it is shown. The first cell is the markup the avatar renders without a blot and must be untouched by any of this. Pick `BlotShapes` for the shapes one tint is laid down in.",
+					"The eight tints a bot can be marked with, drawn once behind the whole animal, plus the avatar with no blot at all. The names are the ones an agent file's `color` key reads, so a tint survives the round trip to a bot's bundle unchanged. Seven of the eight inks came through the renaming untouched — `purple` is the lavender it always was. `orange` is the one that was drawn again: it inherited a grey, and a reader picking Orange is owed an orange, here and in the agent display that reads the same word. It sits between `red` and `yellow` now. The blot sits outside the sketch filter, so it never boils with the line and never animates — the ink is what moves, the mark is what stays. All eight are light on purpose: the line is near-black and the ear accent is coral, and neither reads over anything darker. Reach for this when adding a tint, and check on both themes — the tints do not flip under `.dark`, so a bot's mark is the same colour wherever it is shown. The first cell is the markup the avatar renders without a blot and must be untouched by any of this. Pick `BlotShapes` for the shapes one tint is laid down in.",
 			},
 		},
 	},
@@ -393,7 +393,7 @@ export const BlotShapes = meta.story({
 					<BotAvatar
 						{...args}
 						animated={false}
-						blot="sky"
+						blot="blue"
 						seed={seed}
 						size={120}
 					/>

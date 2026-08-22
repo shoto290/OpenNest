@@ -57,7 +57,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
-use crate::db::repositories::conversations::Bot;
+use crate::db::repositories::conversations::{AvatarBlot, Bot};
 use crate::private_files;
 
 /// Beside `conversations.sqlite3` and the avatars.
@@ -116,6 +116,17 @@ const OWNER_KEY: &str = "opennestBotId";
 /// path — see `agent/PLUGINS.md` — which is why writing it is the whole of how a bot
 /// runs on the model its reader picked.
 const MODEL_KEY: &str = "model";
+
+/// The frontmatter key the agent format reads a colour from, and the whole reason
+/// the tints are named `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`
+/// and `cyan` rather than in a vocabulary of this app's own: the word the bundle
+/// carries is the word the bot is stored under, so a tint written out here is the
+/// same tint read back in — see [`AvatarBlot`].
+///
+/// A colour the format does not know costs the file nothing: the agent resolves and
+/// applies its brief either way. So a hand that writes one is answered by reporting
+/// the bot as marked with none and leaving the word exactly where it stands.
+const COLOR_KEY: &str = "color";
 
 /// The frontmatter key the agent format reads a denial from, honoured on the
 /// promoted path — see `agent/PLUGINS.md`, where a session named by all four dropped
@@ -266,6 +277,9 @@ pub struct Generated {
 	/// `None` for a file whose frontmatter names no model — a bundle written for a
 	/// bot carrying no label, or an agent a reader wrote themselves.
 	pub model: Option<String>,
+	/// The tint the file marks the bot with. `None` for a file naming no colour, and
+	/// for one naming a word that is no tint of this build's — see [`COLOR_KEY`].
+	pub blot: Option<AvatarBlot>,
 	/// Whether the file denies the tools that change files and run commands, which
 	/// is the whole of how the setting reaches a run.
 	pub changes_nothing: bool,
@@ -279,8 +293,9 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let model = front_value(&text, MODEL_KEY)
 		.map(|found| found.trim().to_owned())
 		.filter(|found| !found.is_empty());
+	let blot = front_value(&text, COLOR_KEY).and_then(|found| AvatarBlot::parse(found.trim()));
 	let changes_nothing = denies_changes(&text);
-	Some(Generated { instructions: body(&text).to_owned(), model, changes_nothing })
+	Some(Generated { instructions: body(&text).to_owned(), model, blot, changes_nothing })
 }
 
 /// What the bot was told, as the file holds it.
@@ -500,15 +515,20 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 /// the agent running on whatever the install defaults to rather than on the empty
 /// string.
 ///
+/// `color` carries the bot's tint out to the file the same way, under the words the
+/// agent format already reads colours by — see [`COLOR_KEY`]. A bot marked with none
+/// writes no key, so the mark and its absence are the key and its absence.
+///
 /// `disallowedTools` is the same shape and the whole of how a bot is held back from
 /// changing anything: the key is honoured on the promoted path, and a bot nobody
 /// held back writes none of it — see [`DENIED_TOOLS`].
 fn agent(root: &Path, bot: &Bot, name: &str, brief: &str) -> String {
 	format!(
-		"{FENCE}\nname: {}\ndescription: {}\n{}{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
+		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n{FENCE}\n\n{}\n",
 		quoted(name),
 		quoted(describe(bot)),
 		model_line(&bot.model),
+		color_line(bot.avatar_blot),
 		denial_line(bot.changes_nothing),
 		quoted(&bot.id),
 		briefed_with_skills(root, &bot.id, brief)
@@ -1315,6 +1335,12 @@ fn model_line(model: &str) -> String {
 	format!("{MODEL_KEY}: {}\n", quoted(named))
 }
 
+/// The `color` key and its line ending, or nothing at all for a bot marked with no
+/// tint: no mark is the absence of the key, never a word standing for "none".
+fn color_line(blot: Option<AvatarBlot>) -> String {
+	blot.map_or_else(String::new, |blot| format!("{COLOR_KEY}: {}\n", quoted(blot.named())))
+}
+
 fn quoted(value: &str) -> String {
 	serde_json::Value::String(value.to_owned()).to_string()
 }
@@ -1584,6 +1610,10 @@ mod tests {
 		generated(root, bot_id)?.model
 	}
 
+	fn named_blot(root: &Path, bot_id: &str) -> Option<AvatarBlot> {
+		generated(root, bot_id)?.blot
+	}
+
 	fn a_root(name: &str) -> PathBuf {
 		let root = std::env::temp_dir().join(format!("opennest-bundle-{name}"));
 		let _ = fs::remove_dir_all(&root);
@@ -1653,6 +1683,64 @@ mod tests {
 			assert!(!line.starts_with("model:"), "got {written}");
 		}
 		assert_eq!(named_model(&root, &bot.id), None);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The tint is a key of the file too, under the word the agent format reads a
+	/// colour by. It goes out and comes back as the same tint, which is the whole
+	/// point of naming it in the format's own vocabulary rather than in one of ours.
+	#[test]
+	fn a_written_bundle_names_the_tint_the_bot_is_marked_with() {
+		let root = a_root("tinted");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.avatar_blot = Some(AvatarBlot::Purple);
+		write(&root, &bot).expect("the bundle is written");
+
+		assert!(written_agent(&root, &bot.id).contains("color: \"purple\""));
+		assert_eq!(named_blot(&root, &bot.id), Some(AvatarBlot::Purple));
+
+		bot.avatar_blot = Some(AvatarBlot::Orange);
+		write(&root, &bot).expect("the bundle is rewritten");
+		assert_eq!(named_blot(&root, &bot.id), Some(AvatarBlot::Orange));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A bot nobody marked writes no key at all: no mark is the absence of the
+	/// colour, never a word standing for "none".
+	#[test]
+	fn a_bot_marked_with_no_tint_writes_no_key() {
+		let root = a_root("untinted");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = written_agent(&root, &bot.id);
+		for line in written.lines() {
+			assert!(!line.starts_with("color:"), "got {written}");
+		}
+		assert_eq!(named_blot(&root, &bot.id), None);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A colour a reader wrote by hand that names no tint of this build's is a bot
+	/// marked with none — and the word stays exactly where they put it. The agent
+	/// resolves and applies its brief either way, so there is nothing to correct.
+	#[test]
+	fn a_colour_this_build_has_no_tint_for_is_left_alone_and_reported_as_no_tint() {
+		let root = a_root("teal");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.avatar_blot = Some(AvatarBlot::Blue);
+		write(&root, &bot).expect("the bundle is written");
+		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
+		let text = fs::read_to_string(&agent)
+			.expect("the agent file reads")
+			.replace("color: \"blue\"", "color: teal");
+		private_files::replace(&agent, text.as_bytes()).expect("the hand edit lands");
+
+		assert_eq!(named_blot(&root, &bot.id), None);
+		assert!(fs::read_to_string(&agent).expect("still there").contains("color: teal"));
 
 		let _ = fs::remove_dir_all(&root);
 	}

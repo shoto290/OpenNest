@@ -13,7 +13,7 @@ const UPLOADED_IMAGE =
 const BOT = {
 	name: "Nest Keeper",
 	animal: "rabbit",
-	blot: "sky",
+	blot: "blue",
 	seed: "bot_4f8c21",
 } as const
 

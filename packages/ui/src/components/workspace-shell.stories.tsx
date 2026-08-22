@@ -46,7 +46,7 @@ const ROSTER: AgentSidebarBot[] = [
 		name: "Atlas",
 		title: "Research",
 		animal: "owl",
-		blot: "sky",
+		blot: "blue",
 		lastMessage: ANSWER,
 	},
 ]

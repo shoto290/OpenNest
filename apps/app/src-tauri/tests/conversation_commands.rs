@@ -841,7 +841,7 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	let created = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "sonnet", "owl", json!("coral")) }),
+		json!({ "identity": an_identity("Nyx", "sonnet", "owl", json!("red")) }),
 	)
 	.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
@@ -850,7 +850,7 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	assert_eq!(created["title"], json!("Reviewer"));
 	assert_eq!(created["model"], json!("sonnet"));
 	assert_eq!(created["avatarAnimal"], json!("owl"));
-	assert_eq!(created["avatarBlot"], json!("coral"));
+	assert_eq!(created["avatarBlot"], json!("red"));
 	assert_eq!(created["avatarImagePath"], json!(null));
 	assert_eq!(created["workingDir"], json!("/work/opennest"));
 	assert_eq!(created["instructions"], json!("Answer with the file you would touch."));
@@ -921,7 +921,7 @@ fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
 	let animal = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "sonnet", "dragon", json!("coral")) }),
+		json!({ "identity": an_identity("Nyx", "sonnet", "dragon", json!("red")) }),
 	);
 	let blot = call(
 		&window,
@@ -953,7 +953,7 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 	let created = call(
 		&window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity("Nyx", "claude-opus-4-1-20250805", "owl", json!("coral")) }),
+		json!({ "identity": an_identity("Nyx", "claude-opus-4-1-20250805", "owl", json!("red")) }),
 	)
 	.expect("a bot on a label the host does not know");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
@@ -970,7 +970,7 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 		call(
 			&window,
 			"conversation_update_bot",
-			json!({ "id": id, "identity": an_identity("Nyx", "fable", "owl", json!("coral")) })
+			json!({ "id": id, "identity": an_identity("Nyx", "fable", "owl", json!("red")) })
 		)
 		.map(|bot| bot["model"].clone()),
 		Ok(json!("fable"))
@@ -987,7 +987,7 @@ fn a_bot_set_to_change_nothing_is_denied_in_its_agent_file_and_read_back_from_it
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
-	let mut held_back = an_identity("Nyx", "sonnet", "owl", json!("coral"));
+	let mut held_back = an_identity("Nyx", "sonnet", "owl", json!("red"));
 	held_back["changesNothing"] = json!(true);
 
 	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back }))
@@ -1007,7 +1007,7 @@ fn a_bot_set_to_change_nothing_is_denied_in_its_agent_file_and_read_back_from_it
 			"conversation_update_bot",
 			json!({
 				"id": id,
-				"identity": an_identity("Nyx", "sonnet", "owl", json!("coral"))
+				"identity": an_identity("Nyx", "sonnet", "owl", json!("red"))
 			})
 		)
 		.map(|bot| bot["changesNothing"].clone()),
@@ -1096,7 +1096,7 @@ fn a_bot(window: &WebviewWindow<MockRuntime>, name: &str) -> String {
 	call(
 		window,
 		"conversation_create_bot",
-		json!({ "identity": an_identity(name, "sonnet", "owl", json!("coral")) }),
+		json!({ "identity": an_identity(name, "sonnet", "owl", json!("red")) }),
 	)
 	.expect("the bot is created")["id"]
 		.as_str()
@@ -1306,7 +1306,7 @@ fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with
 		.expect("a path")
 		.to_owned();
 
-	let mut echoed = an_identity("Nyx", "sonnet", "owl", json!("coral"));
+	let mut echoed = an_identity("Nyx", "sonnet", "owl", json!("red"));
 	echoed["avatarImagePath"] = json!(worn);
 	let unchanged =
 		call(&window, "conversation_update_bot", json!({ "id": id, "identity": echoed }))
@@ -1318,7 +1318,7 @@ fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with
 	let bare = call(
 		&window,
 		"conversation_update_bot",
-		json!({ "id": id, "identity": an_identity("Nyx", "sonnet", "owl", json!("coral")) }),
+		json!({ "id": id, "identity": an_identity("Nyx", "sonnet", "owl", json!("red")) }),
 	)
 	.expect("the bot is updated");
 
@@ -1344,7 +1344,7 @@ fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
 		avatar_dir(&app).join("..").join("elsewhere.png").to_string_lossy().into_owned(),
 		"/etc/passwd".to_owned(),
 	] {
-		let mut identity = an_identity("Nyx", "sonnet", "owl", json!("coral"));
+		let mut identity = an_identity("Nyx", "sonnet", "owl", json!("red"));
 		identity["avatarImagePath"] = json!(escaping);
 		let updated =
 			call(&window, "conversation_update_bot", json!({ "id": id, "identity": identity }))

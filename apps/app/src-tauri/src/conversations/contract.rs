@@ -89,34 +89,36 @@ impl From<AvatarAnimal> for conversations::AvatarAnimal {
 	}
 }
 
-/// The eight colours a bot may be marked with. `null` crosses for a bot marked
-/// with none, which is what a bot is until someone marks it: an `Option` rather
-/// than a ninth word, so "no mark" and a mark named "none" cannot be confused on
-/// either side.
+/// The eight colours a bot may be marked with, spelled the way
+/// [`conversations::AvatarBlot`] spells them and for the reason given there.
+///
+/// `null` crosses for a bot marked with none, which is what a bot is until someone
+/// marks it: an `Option` rather than a ninth word, so "no mark" and a mark named
+/// "none" cannot be confused on either side.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AvatarBlot {
-	Coral,
-	Amber,
-	Moss,
-	Water,
-	Sky,
-	Lavender,
-	Rose,
-	Slate,
+	Red,
+	Yellow,
+	Green,
+	Cyan,
+	Blue,
+	Purple,
+	Pink,
+	Orange,
 }
 
 impl From<conversations::AvatarBlot> for AvatarBlot {
 	fn from(blot: conversations::AvatarBlot) -> Self {
 		match blot {
-			conversations::AvatarBlot::Coral => AvatarBlot::Coral,
-			conversations::AvatarBlot::Amber => AvatarBlot::Amber,
-			conversations::AvatarBlot::Moss => AvatarBlot::Moss,
-			conversations::AvatarBlot::Water => AvatarBlot::Water,
-			conversations::AvatarBlot::Sky => AvatarBlot::Sky,
-			conversations::AvatarBlot::Lavender => AvatarBlot::Lavender,
-			conversations::AvatarBlot::Rose => AvatarBlot::Rose,
-			conversations::AvatarBlot::Slate => AvatarBlot::Slate,
+			conversations::AvatarBlot::Red => AvatarBlot::Red,
+			conversations::AvatarBlot::Yellow => AvatarBlot::Yellow,
+			conversations::AvatarBlot::Green => AvatarBlot::Green,
+			conversations::AvatarBlot::Cyan => AvatarBlot::Cyan,
+			conversations::AvatarBlot::Blue => AvatarBlot::Blue,
+			conversations::AvatarBlot::Purple => AvatarBlot::Purple,
+			conversations::AvatarBlot::Pink => AvatarBlot::Pink,
+			conversations::AvatarBlot::Orange => AvatarBlot::Orange,
 		}
 	}
 }
@@ -124,14 +126,14 @@ impl From<conversations::AvatarBlot> for AvatarBlot {
 impl From<AvatarBlot> for conversations::AvatarBlot {
 	fn from(blot: AvatarBlot) -> Self {
 		match blot {
-			AvatarBlot::Coral => conversations::AvatarBlot::Coral,
-			AvatarBlot::Amber => conversations::AvatarBlot::Amber,
-			AvatarBlot::Moss => conversations::AvatarBlot::Moss,
-			AvatarBlot::Water => conversations::AvatarBlot::Water,
-			AvatarBlot::Sky => conversations::AvatarBlot::Sky,
-			AvatarBlot::Lavender => conversations::AvatarBlot::Lavender,
-			AvatarBlot::Rose => conversations::AvatarBlot::Rose,
-			AvatarBlot::Slate => conversations::AvatarBlot::Slate,
+			AvatarBlot::Red => conversations::AvatarBlot::Red,
+			AvatarBlot::Yellow => conversations::AvatarBlot::Yellow,
+			AvatarBlot::Green => conversations::AvatarBlot::Green,
+			AvatarBlot::Cyan => conversations::AvatarBlot::Cyan,
+			AvatarBlot::Blue => conversations::AvatarBlot::Blue,
+			AvatarBlot::Purple => conversations::AvatarBlot::Purple,
+			AvatarBlot::Pink => conversations::AvatarBlot::Pink,
+			AvatarBlot::Orange => conversations::AvatarBlot::Orange,
 		}
 	}
 }
@@ -178,13 +180,18 @@ impl Bot {
 	/// `None` for the directory is a run with nowhere to keep avatars. Same answer:
 	/// every bot wears its animal.
 	///
-	/// `bundles` is where the same bot's plugin bundle lives, and `instructions` and
-	/// `model` are read from the agent file inside it rather than from the columns:
-	/// the file is what the process is actually started with — its `model` key is what
-	/// the child answers under — so it is what the panel that edits them has to show.
-	/// A bundle this install has not written — a bot from before there were any, a
-	/// host with no data directory — falls back to the columns, which is what the
-	/// bundle is rewritten from anyway.
+	/// `bundles` is where the same bot's plugin bundle lives, and `instructions`,
+	/// `model` and `avatarBlot` are read from the agent file inside it rather than
+	/// from the columns: the file is what the process is actually started with — its
+	/// `model` key is what the child answers under — so it is what the panel that
+	/// edits them has to show. A bundle this install has not written — a bot from
+	/// before there were any, a host with no data directory — falls back to the
+	/// columns, which is what the bundle is rewritten from anyway.
+	///
+	/// A bundle that is there answers for the tint whichever way it answers: its
+	/// `color` key is the mark, and a file naming no colour — or naming a word that is
+	/// no tint here — is a bot marked with none rather than a reason to go back to the
+	/// column. The file is what a reader edits, so the file is what a reader is shown.
 	pub fn of(bot: conversations::Bot, avatars: Option<&Path>, bundles: Option<&Path>) -> Self {
 		let written = bundles.and_then(|root| crate::bundles::generated(root, &bot.id));
 		let model = written
@@ -193,6 +200,8 @@ impl Bot {
 			.unwrap_or_else(|| bot.model.clone());
 		let changes_nothing =
 			written.as_ref().map_or(bot.changes_nothing, |written| written.changes_nothing);
+		let avatar_blot =
+			written.as_ref().map_or(bot.avatar_blot, |written| written.blot).map(Into::into);
 		let instructions = written
 			.map(|written| written.instructions)
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
@@ -209,7 +218,7 @@ impl Bot {
 			title: bot.title,
 			model,
 			avatar_animal: bot.avatar_animal.into(),
-			avatar_blot: bot.avatar_blot.map(Into::into),
+			avatar_blot,
 			avatar_image_path,
 			working_dir: bot.working_dir,
 			instructions,
@@ -847,7 +856,7 @@ mod tests {
 				title: "Reviewer".into(),
 				model: "opus".into(),
 				avatar_animal: AvatarAnimal::Owl,
-				avatar_blot: Some(AvatarBlot::Coral),
+				avatar_blot: Some(AvatarBlot::Red),
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				working_dir: Some("/work/opennest".into()),
 				instructions: "Answer briefly.".into(),
@@ -860,7 +869,7 @@ mod tests {
 				"title": "Reviewer",
 				"model": "opus",
 				"avatarAnimal": "owl",
-				"avatarBlot": "coral",
+				"avatarBlot": "red",
 				"avatarImagePath": "/pictures/owl.png",
 				"workingDir": "/work/opennest",
 				"instructions": "Answer briefly.",
@@ -925,14 +934,14 @@ mod tests {
 			assert_crosses_as(animal, json!(wire));
 		}
 		for (blot, wire) in [
-			(AvatarBlot::Coral, "coral"),
-			(AvatarBlot::Amber, "amber"),
-			(AvatarBlot::Moss, "moss"),
-			(AvatarBlot::Water, "water"),
-			(AvatarBlot::Sky, "sky"),
-			(AvatarBlot::Lavender, "lavender"),
-			(AvatarBlot::Rose, "rose"),
-			(AvatarBlot::Slate, "slate"),
+			(AvatarBlot::Red, "red"),
+			(AvatarBlot::Yellow, "yellow"),
+			(AvatarBlot::Green, "green"),
+			(AvatarBlot::Cyan, "cyan"),
+			(AvatarBlot::Blue, "blue"),
+			(AvatarBlot::Purple, "purple"),
+			(AvatarBlot::Pink, "pink"),
+			(AvatarBlot::Orange, "orange"),
 		] {
 			assert_crosses_as(blot, json!(wire));
 		}
@@ -1291,6 +1300,32 @@ mod tests {
 
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).model, "haiku");
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, None).model, "sonnet");
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	/// The tint takes the same road as the model: the bundle is the truth once there
+	/// is one, and the column answers only for a bot that has none. A bundle that
+	/// names no colour is a bot marked with none — the reader took the key out, and
+	/// taking it out is how a mark is removed.
+	#[test]
+	fn a_bot_is_reported_on_the_tint_its_bundle_names() {
+		let root = a_bundle_root("tint");
+		let marked = conversations::Bot {
+			avatar_blot: Some(conversations::AvatarBlot::Purple),
+			..a_stored_bot("sonnet")
+		};
+		crate::bundles::write(&root, &marked).expect("the bundle is written");
+		let stored_pink = || conversations::Bot {
+			avatar_blot: Some(conversations::AvatarBlot::Pink),
+			..a_stored_bot("sonnet")
+		};
+
+		assert_eq!(Bot::of(stored_pink(), None, Some(&root)).avatar_blot, Some(AvatarBlot::Purple));
+		assert_eq!(Bot::of(stored_pink(), None, None).avatar_blot, Some(AvatarBlot::Pink));
+
+		crate::bundles::write(&root, &a_stored_bot("sonnet")).expect("the bundle is rewritten");
+		assert_eq!(Bot::of(stored_pink(), None, Some(&root)).avatar_blot, None);
 
 		let _ = std::fs::remove_dir_all(&root);
 	}

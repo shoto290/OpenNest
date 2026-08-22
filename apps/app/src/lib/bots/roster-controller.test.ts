@@ -174,7 +174,7 @@ describe("createRosterController", () => {
 				title: "Reviewer",
 				instructions: "Answer briefly.",
 				model: "haiku",
-				identity: { animal: "owl", blot: "sky" },
+				identity: { animal: "owl", blot: "blue" },
 			}),
 		)
 		// Shown before the store has answered: the panel is controlled by this state,
@@ -189,7 +189,7 @@ describe("createRosterController", () => {
 			instructions: "Answer briefly.",
 			model: "haiku",
 			avatarAnimal: "owl",
-			avatarBlot: "sky",
+			avatarBlot: "blue",
 		})
 	})
 
@@ -236,7 +236,7 @@ describe("createRosterController", () => {
 		const value = toSettingsValue(held(controller, "default"))
 		controller.describe("default", {
 			...value,
-			identity: { animal: "bear", blot: "amber" },
+			identity: { animal: "bear", blot: "yellow" },
 		})
 		await vi.waitFor(async () =>
 			expect((await reloaded(store)).bots[0].avatarImagePath).toBeNull(),

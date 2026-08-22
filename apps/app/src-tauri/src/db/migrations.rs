@@ -22,6 +22,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 4, statements: BOT_BLOT },
 	Migration { version: 5, statements: BOT_COMMANDS },
 	Migration { version: 6, statements: BOT_DENIAL },
+	Migration { version: 7, statements: BOT_COLOUR },
 ];
 
 /// Timestamps are unix millis, ids are UUID v4 text: both are what the host
@@ -275,6 +276,38 @@ ALTER TABLE bots ADD COLUMN commands TEXT NOT NULL DEFAULT '[]';
 /// held back is a bot that may still change things.
 const BOT_DENIAL: &str = "
 ALTER TABLE bots ADD COLUMN changes_nothing INTEGER NOT NULL DEFAULT 0;
+";
+
+/// The same mark, under the words an agent file's `color` key reads — the tint now
+/// travels to the bot's bundle and back, and why it is named there rather than here
+/// is `COLOR_KEY` in [`crate::bundles`].
+///
+/// A column of its own rather than an `UPDATE` on the old one, for the reason step
+/// 3 left `description` and `avatar_pose` where they are: [`BOT_BLOT`] pinned its
+/// column to the eight old words with a `CHECK`, SQLite will not edit a `CHECK` in
+/// place, and rebuilding an installed `bots` table around one is a far larger step
+/// than stopping the projection of a column. `avatar_blot` stays exactly where it
+/// is, values included, and nothing above reads it any more.
+///
+/// The `CASE` carries every marked row over by name, which is what keeps a bot from
+/// coming up unmarked on the first launch after this. A row that is `NULL` — or that
+/// somehow holds a word this list does not name — falls out of the `CASE` as `NULL`,
+/// which is a bot marked with none.
+const BOT_COLOUR: &str = "
+ALTER TABLE bots ADD COLUMN avatar_color TEXT
+	CHECK (avatar_color IN
+		('red', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'orange'));
+
+UPDATE bots SET avatar_color = CASE avatar_blot
+	WHEN 'coral' THEN 'red'
+	WHEN 'amber' THEN 'yellow'
+	WHEN 'moss' THEN 'green'
+	WHEN 'water' THEN 'cyan'
+	WHEN 'sky' THEN 'blue'
+	WHEN 'lavender' THEN 'purple'
+	WHEN 'rose' THEN 'pink'
+	WHEN 'slate' THEN 'orange'
+END;
 ";
 
 pub fn latest_version() -> u32 {
@@ -624,7 +657,7 @@ mod tests {
 		let dir = temp_dir();
 		let connection = migrated(&dir);
 
-		for blot in ["coral", "amber", "moss", "water", "sky", "lavender", "rose", "slate"] {
+		for blot in ["red", "yellow", "green", "cyan", "blue", "purple", "pink", "orange"] {
 			assert!(
 				write(&connection, &a_bot_marked(Some(blot), blot)).is_ok(),
 				"the palette holds {blot} and the file refused it"
@@ -685,6 +718,57 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	/// What the step that renames the marks owes a file already in use: every bot
+	/// comes up under the new word for the colour it was stored with, and the one
+	/// nobody marked comes up marked with nothing. A bot losing its colour on the
+	/// first launch after the rename is the whole of what this step exists to prevent.
+	#[test]
+	fn the_step_that_renames_the_marks_carries_every_bot_to_its_new_name() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..6]).expect("the build before the rename");
+		let marked = [
+			("coral", "red"),
+			("amber", "yellow"),
+			("moss", "green"),
+			("water", "cyan"),
+			("sky", "blue"),
+			("lavender", "purple"),
+			("rose", "pink"),
+			("slate", "orange"),
+		];
+		let rows: String = marked
+			.iter()
+			.map(|(was, _)| {
+				format!(
+					"INSERT INTO bots (id, name, model, created_at, avatar_blot)
+						VALUES ('{was}', 'A bot', 'sonnet', 1, '{was}');"
+				)
+			})
+			.collect();
+		connection
+			.execute_batch(&format!(
+				"{rows}
+				INSERT INTO bots (id, name, model, created_at)
+					VALUES ('unmarked', 'A bot', 'sonnet', 1);"
+			))
+			.expect("the install this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		for (was, now) in marked {
+			assert_eq!(
+				blot_of(&connection, was).as_deref(),
+				Some(now),
+				"the bot stored as {was} did not come up as {now}"
+			);
+		}
+		assert_eq!(blot_of(&connection, "unmarked"), None, "the step marked a bot nobody marked");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
 	/// The install every step below upgrades from: a bot, the one chat it holds and
 	/// the two things said in it. Only the bot row differs between the steps — it is
 	/// written with the columns its version knows — so it is the one part a caller
@@ -708,14 +792,14 @@ mod tests {
 	fn a_bot_marked(blot: Option<&str>, id: &str) -> String {
 		let mark = blot.map_or("NULL".to_owned(), |blot| format!("'{blot}'"));
 		format!(
-			"INSERT INTO bots (id, name, model, created_at, avatar_blot)
+			"INSERT INTO bots (id, name, model, created_at, avatar_color)
 				VALUES ('{id}', 'A bot', 'sonnet', 1, {mark})"
 		)
 	}
 
 	fn blot_of(connection: &Connection, id: &str) -> Option<String> {
 		connection
-			.query_row("SELECT avatar_blot FROM bots WHERE id = ?1", [id], |row| row.get(0))
+			.query_row("SELECT avatar_color FROM bots WHERE id = ?1", [id], |row| row.get(0))
 			.expect("query")
 	}
 

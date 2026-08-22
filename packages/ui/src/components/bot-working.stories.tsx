@@ -20,7 +20,7 @@ import {
 
 /** The bot this row is about: its animal, its tint and the id its blot shape is
  * derived from — the three things it wears at rest and must keep while it works. */
-const BUSY_BOT = { animal: "owl", blot: "sky", seed: "bot-7" } as const
+const BUSY_BOT = { animal: "owl", blot: "blue", seed: "bot-7" } as const
 
 const BOT_WORKING_KINDS: BotWorkingKind[] = [
 	"thinking",
@@ -131,7 +131,7 @@ export const Variants = meta.story({
 })
 
 export const Blot = meta.story({
-	args: { animal: "rabbit", blot: "sky" },
+	args: { animal: "rabbit", blot: "blue" },
 	render: (args) => (
 		<div className="flex flex-col gap-4">
 			<BotWorking {...args} blot={undefined} />
@@ -157,7 +157,7 @@ export const Blot = meta.story({
 				avatar
 					.querySelector('[data-slot="bot-avatar-blot"]')
 					?.getAttribute("fill"),
-			).toBe("var(--bot-blot-sky)")
+			).toBe("var(--bot-blot-blue)")
 		}
 	},
 })

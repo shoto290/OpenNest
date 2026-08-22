@@ -34,7 +34,7 @@ const UPLOADED_IMAGE =
 const ROSTER: AgentSidebarBot[] = [
 	{
 		id: "atlas",
-		blot: "sky",
+		blot: "blue",
 		name: "Atlas",
 		title: "Research",
 		animal: "owl",
@@ -43,7 +43,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "beacon",
-		blot: "amber",
+		blot: "yellow",
 		name: "Beacon",
 		animal: "cat",
 		lastMessage: LAST_MESSAGE,
@@ -51,7 +51,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "cinder",
-		blot: "coral",
+		blot: "red",
 		name: "Cinder",
 		title: "Build",
 		animal: "dog",
@@ -62,7 +62,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "dune",
-		blot: "moss",
+		blot: "green",
 		name: "Dune",
 		animal: "bear",
 		lastMessage: "Nothing since the migration landed.",
@@ -70,7 +70,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "ember",
-		blot: "lavender",
+		blot: "purple",
 		name: "Ember",
 		title: "Review",
 		animal: "rabbit",
@@ -79,7 +79,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "flint",
-		blot: "rose",
+		blot: "pink",
 		name: "Flint",
 		animal: "mouse",
 		lastMessage: "Ran the suite twice, both green.",
@@ -87,7 +87,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "grove",
-		blot: "water",
+		blot: "cyan",
 		name: "Grove",
 		title: "Docs",
 		animal: "koala",
@@ -96,7 +96,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "harbor",
-		blot: "slate",
+		blot: "orange",
 		name: "Harbor",
 		animal: "chick",
 		lastMessage: "Waiting on the credentials you promised.",
@@ -104,7 +104,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "iris",
-		blot: "amber",
+		blot: "yellow",
 		name: "Iris",
 		title: "Design",
 		animal: "cat",
@@ -113,7 +113,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "juno",
-		blot: "sky",
+		blot: "blue",
 		name: "Juno",
 		animal: "owl",
 		lastMessage: "Summarised yesterday's session into six bullets.",
@@ -121,7 +121,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "kite",
-		blot: "coral",
+		blot: "red",
 		name: "Kite",
 		title: "Ops",
 		animal: "dog",
@@ -130,7 +130,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 	{
 		id: "lumen",
-		blot: "slate",
+		blot: "orange",
 		name: "Lumen",
 		animal: "bear",
 		lastMessage: "Nothing yet.",
@@ -141,14 +141,14 @@ const ROSTER: AgentSidebarBot[] = [
 /** Every blot a bot can be given in its settings, one bot each and none of them
  * running, so the rows and the assertions read off the same list. */
 const IDENTITY_BLOTS: BotAvatarBlot[] = [
-	"coral",
-	"amber",
-	"moss",
-	"water",
-	"sky",
-	"lavender",
-	"rose",
-	"slate",
+	"red",
+	"yellow",
+	"green",
+	"cyan",
+	"blue",
+	"purple",
+	"pink",
+	"orange",
 ]
 
 const IDENTITY_ROSTER: AgentSidebarBot[] = IDENTITY_BLOTS.map(
@@ -169,7 +169,7 @@ const blotFillsIn = (canvasElement: HTMLElement) =>
  * them apart is the shape each bot's id lands on. */
 const SHARED_TINT_ROSTER: AgentSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
 	...bot,
-	blot: "sky",
+	blot: "blue",
 }))
 
 /** Three passes over the roster, ids kept apart, so the list is taller than any
@@ -763,7 +763,7 @@ export const Working = meta.story({
 		await expect(
 			within(resting).getByRole("img", { name: /idle$/ }),
 		).toBeVisible()
-		await expect(blotFillsIn(resting)).toEqual(["var(--bot-blot-lavender)"])
+		await expect(blotFillsIn(resting)).toEqual(["var(--bot-blot-purple)"])
 
 		await expect(
 			within(rowFor(canvasElement, "Atlas")).getByRole("img", {

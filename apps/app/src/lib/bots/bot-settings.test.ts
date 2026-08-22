@@ -32,12 +32,12 @@ describe("toSettingsValue", () => {
 					instructions: "Answer briefly.",
 					model: "haiku",
 					avatarAnimal: "owl",
-					avatarBlot: "moss",
+					avatarBlot: "green",
 					workingDir: "/work/opennest",
 				}),
 			),
 		).toEqual({
-			identity: { animal: "owl", blot: "moss", image: undefined },
+			identity: { animal: "owl", blot: "green", image: undefined },
 			name: "Nyx",
 			title: "Reviewer",
 			instructions: "Answer briefly.",
@@ -93,7 +93,7 @@ describe("changesRuntime", () => {
 		expect(
 			changesRuntime(stored, {
 				...value,
-				identity: { animal: "owl", blot: "sky" },
+				identity: { animal: "owl", blot: "blue" },
 			}),
 		).toBe(false)
 	})
@@ -127,12 +127,12 @@ describe("toIdentity", () => {
 
 		expect(
 			toIdentity(
-				{ ...value, identity: { animal: "bear", blot: "amber" } },
+				{ ...value, identity: { animal: "bear", blot: "yellow" } },
 				stored,
 			),
 		).toMatchObject({
 			avatarAnimal: "bear",
-			avatarBlot: "amber",
+			avatarBlot: "yellow",
 			avatarImagePath: null,
 		})
 	})
@@ -282,7 +282,7 @@ describe("toRosterBots", () => {
 			name: "Atlas",
 			title: "Research",
 			animal: "owl",
-			blot: "moss",
+			blot: "green",
 		})
 		// A bot nobody gave a role draws no badge, which is a title left out rather
 		// than an empty one passed through.
