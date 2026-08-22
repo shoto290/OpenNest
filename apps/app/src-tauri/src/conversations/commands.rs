@@ -19,8 +19,8 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
-	Bot, BotIdentity, Chat, ContextCheckpoint, McpServer, NewAssistantMessage, NewTurn,
-	NewUserMessage, RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage,
+	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, NewAssistantMessage,
+	NewTurn, NewUserMessage, RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage,
 	TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
@@ -394,6 +394,66 @@ pub async fn conversation_delete_bot_mcp_server<R: Runtime>(
 	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::remove_mcp_server(&root, &bot, &name))
+}
+
+/// Every write to the bot's bundle, newest first. It is read off the repository
+/// inside the bundle, which is the whole record: no column holds a commit.
+///
+/// A host with nowhere to keep bundles has no history to report, the same way it
+/// has no skills — an empty list rather than a refusal. A bundle whose repository
+/// will not open is a refusal, because the writes did land and this is the one
+/// place a reader can be told their account of them is missing.
+#[tauri::command]
+pub async fn conversation_bot_history<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+	let Some(root) = bundles::root(&app) else {
+		return Ok(Vec::new());
+	};
+	read_history(&root, &bot_id)
+}
+
+/// What one write changed, as a unified diff against what came before it. The very
+/// first write has nothing before it and reads as every file being added.
+#[tauri::command]
+pub async fn conversation_bot_history_diff<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+	commit_id: String,
+) -> Result<String, TranscriptStoreError> {
+	let root = writable_root(&app)?;
+	recounted(bundles::diff(&root, &bot_id, &commit_id))
+}
+
+/// The write undone, as a new write on top rather than a past rewritten. The bundle
+/// on the disk is laid down again from the result — it is what a session is really
+/// started on — and the answer is the history as it now reads, so the caller has
+/// the new write without a second round trip.
+#[tauri::command]
+pub async fn conversation_bot_revert<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+	commit_id: String,
+) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+	let root = writable_root(&app)?;
+	bundles::revert(&root, &bot_id, &commit_id)
+		.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })?;
+	read_history(&root, &bot_id)
+}
+
+/// The bundle's history in the frontend's vocabulary, for the two commands that
+/// answer with it.
+fn read_history(root: &Path, bot_id: &str) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+	recounted(bundles::history(root, bot_id))
+		.map(|entries| entries.into_iter().map(BotHistoryEntry::from).collect())
+}
+
+/// What the bundle's repository would not tell us, in the frontend's vocabulary.
+/// Nothing on the disk is wrong when this lands: the writes are all there and the
+/// account of them is not — the read counterpart of [`bundled`].
+fn recounted<T>(outcome: Result<T, git2::Error>) -> Result<T, TranscriptStoreError> {
+	outcome.map_err(|error| TranscriptStoreError::UnreadableHistory { detail: error.to_string() })
 }
 
 /// Where this install keeps bundles, for a write that has nowhere else to land. A

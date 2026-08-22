@@ -341,6 +341,57 @@ impl From<SkillDraft> for bundles::SkillDraft {
 	}
 }
 
+/// One write to a bot's bundle, as the frontend meets it. It comes off the
+/// repository inside the bundle and nowhere else: no column holds any of it.
+///
+/// `title` is a sentence somebody who has never seen a diff can read — the write
+/// and what it was about, no path — and `body` is whatever was said under it, empty
+/// for the writes that needed no second sentence. `id` is what
+/// [`super::commands::conversation_bot_history_diff`] and
+/// [`super::commands::conversation_bot_revert`] address one by.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BotHistoryEntry {
+	pub id: String,
+	/// Seconds since the epoch, which is what the commit itself holds. The frontend
+	/// renders it in the reader's own zone; nothing here guesses at one.
+	pub timestamp: i64,
+	pub author: HistoryAuthor,
+	pub title: String,
+	pub body: String,
+}
+
+/// Whose gesture a write was. Two words rather than a name, because that is the
+/// whole of what the frontend distinguishes: what the reader did, and what the bot
+/// did to itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HistoryAuthor {
+	User,
+	Bot,
+}
+
+impl From<bundles::Author> for HistoryAuthor {
+	fn from(author: bundles::Author) -> Self {
+		match author {
+			bundles::Author::User => HistoryAuthor::User,
+			bundles::Author::Bot => HistoryAuthor::Bot,
+		}
+	}
+}
+
+impl From<bundles::HistoryEntry> for BotHistoryEntry {
+	fn from(entry: bundles::HistoryEntry) -> Self {
+		Self {
+			id: entry.id,
+			timestamp: entry.timestamp,
+			author: entry.author.into(),
+			title: entry.title,
+			body: entry.body,
+		}
+	}
+}
+
 /// An MCP server a bot's bundle declares, as the frontend meets it. Like a skill it
 /// lives in the bundle and nowhere else: no column holds any of it, and a `.mcp.json`
 /// a hand wrote is answered beside what this app wrote.
@@ -719,6 +770,12 @@ pub enum TranscriptStoreError {
 	/// [`crate::bundles`].
 	#[serde(rename_all = "camelCase")]
 	UnwritableBundle { detail: String },
+	/// The bundle's own history could not be read. Nothing on the disk is wrong and
+	/// the bot runs exactly as it did: the repository inside the bundle is what
+	/// would not open, so the writes are all there and the account of them is not —
+	/// see [`crate::bundles`].
+	#[serde(rename_all = "camelCase")]
+	UnreadableHistory { detail: String },
 }
 
 /// Why an avatar was not stored, in the frontend's vocabulary. `tooLarge` carries

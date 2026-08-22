@@ -60,6 +60,10 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::db::repositories::conversations::{AvatarBlot, Bot};
 use crate::private_files;
 
+mod git;
+
+pub use git::{commit, diff, history, revert, Author, HistoryEntry};
+
 /// Beside `conversations.sqlite3` and the avatars.
 const DIR_NAME: &str = "bots";
 
@@ -102,6 +106,12 @@ const VERSION: &str = "0.1.0";
 /// What a bot whose name survives no slug is called. A name is free text and may be
 /// emoji alone; the file still has to have one.
 const UNNAMED: &str = "bot";
+
+/// What a commit title calls the thing a write was about, in the words the settings
+/// dialog uses for it — see [`recorded`].
+const BOT_SUBJECT: &str = "Bot";
+const SKILL_SUBJECT: &str = "Skill";
+const SERVER_SUBJECT: &str = "MCP server";
 
 /// The frontmatter key a generated agent carries its bot's id under, inside the
 /// `metadata` map the agent format keeps free for exactly this: Claude Code accepts
@@ -325,7 +335,23 @@ pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
 /// agent however many times the bot is renamed. Anything else under `agents/` was put
 /// there by somebody else and keeps both its name and its content.
 pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	write_briefed(root, bot, &bot.instructions)
+	write_briefed(root, bot, &bot.instructions)?;
+	recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "saved from settings");
+	Ok(())
+}
+
+/// The write that just landed, recorded in the bundle's own repository — see
+/// [`git`]. A repository that would not open or write is swallowed here on purpose:
+/// the files are already on the disk and are what a session is really started on, so
+/// refusing the save now would undo a bundle that is perfectly good over a history
+/// nobody has asked to see yet. The failure surfaces from the history commands.
+///
+/// The title is spelled here and nowhere else, so every write in a reader's history
+/// reads the same way: what was written, what it was called, and what happened to
+/// it. No path, and nothing a reader would have to be a developer to place.
+fn recorded(root: &Path, bot_id: &str, subject: &str, name: &str, verb: &str) {
+	let title = format!("{subject} \"{}\" {verb}", name.trim());
+	let _ = git::commit(root, bot_id, Author::User, &title, "");
 }
 
 /// The same write, over a brief named rather than taken from the row. What a skill
@@ -364,6 +390,7 @@ fn free_agent_path(root: &Path, bot: &Bot, generated: Option<&Path>) -> PathBuf 
 /// edits included.
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	if agent_file(root, &bot.id).is_some() {
+		recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "added to the history");
 		return Ok(());
 	}
 	write(root, bot)
@@ -671,7 +698,9 @@ pub fn skills(root: &Path, bot_id: &str) -> Vec<Skill> {
 /// nothing in the bot's prompt until it is marked.
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
 	let path = free_skill_dir(root, &bot.id, &draft.name);
-	written_skill(root, bot, &path, drafted(None, draft)?)
+	let skill = written_skill(root, bot, &path, drafted(None, draft)?)?;
+	recorded(root, &bot.id, SKILL_SUBJECT, &skill.name, "created from settings");
+	Ok(skill)
 }
 
 /// What the skill says, changed. The file is read and edited rather than written
@@ -688,7 +717,9 @@ pub fn update_skill(
 ) -> std::io::Result<Skill> {
 	let path = skill_dir(root, &bot.id, skill_id)?;
 	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
-	written_skill(root, bot, &path, drafted(Some(&text), draft)?)
+	let skill = written_skill(root, bot, &path, drafted(Some(&text), draft)?)?;
+	recorded(root, &bot.id, SKILL_SUBJECT, &skill.name, "updated from settings");
+	Ok(skill)
 }
 
 /// Whether the skill's body is carried into the bot's agent file. Both marks move
@@ -702,7 +733,19 @@ pub fn set_skill_preloaded(
 ) -> std::io::Result<Skill> {
 	let path = skill_dir(root, &bot.id, skill_id)?;
 	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
-	written_skill(root, bot, &path, marked(&text, is_preloaded)?)
+	let skill = written_skill(root, bot, &path, marked(&text, is_preloaded)?)?;
+	recorded(root, &bot.id, SKILL_SUBJECT, &skill.name, marking(is_preloaded));
+	Ok(skill)
+}
+
+/// What a mark reads as to somebody who never sees a frontmatter key: a skill is
+/// carried in what the bot was told, or it is not.
+fn marking(is_preloaded: bool) -> &'static str {
+	if is_preloaded {
+		"added to the brief from settings"
+	} else {
+		"taken out of the brief from settings"
+	}
 }
 
 /// The skill, taken away whole: its own directory and nothing outside it. The path
@@ -710,8 +753,11 @@ pub fn set_skill_preloaded(
 /// an id naming anything else names no skill at all.
 pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<()> {
 	let path = skill_dir(root, &bot.id, skill_id)?;
+	let name = read_skill(&path).map(|skill| skill.name).unwrap_or_else(|| skill_id.to_owned());
 	fs::remove_dir_all(path)?;
-	rewrite_agent(root, bot)
+	rewrite_agent(root, bot)?;
+	recorded(root, &bot.id, SKILL_SUBJECT, &name, "removed from settings");
+	Ok(())
 }
 
 /// An MCP server the bot's bundle declares. `name` is the key it is declared under,
@@ -762,6 +808,7 @@ pub fn set_mcp_server(
 	servers.insert(name.to_owned(), config.clone());
 	write_servers(&path, servers)?;
 	rewrite_manifest(root, bot)?;
+	recorded(root, &bot.id, SERVER_SUBJECT, name, "saved from settings");
 	Ok(McpServer { name: name.to_owned(), config: config.clone() })
 }
 
@@ -776,7 +823,9 @@ pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<
 	}
 	write_servers(&path, servers)?;
 	rewrite_manifest(root, bot)?;
-	undeclare_servers(root, bot)
+	undeclare_servers(root, bot)?;
+	recorded(root, &bot.id, SERVER_SUBJECT, name, "removed from settings");
+	Ok(())
 }
 
 /// The file with its `mcpServers` map replaced and every other key put back where it
@@ -2730,6 +2779,185 @@ mod tests {
 		assert_eq!(listed["plugins"][0]["source"], "./plugins/b1");
 		assert_eq!(listed["plugins"][1]["name"], "b2");
 		assert_eq!(listed["plugins"][1]["source"], "./plugins/b2");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	fn titles(root: &Path, bot_id: &str) -> Vec<String> {
+		history(root, bot_id)
+			.expect("the history reads")
+			.into_iter()
+			.map(|entry| entry.title)
+			.collect()
+	}
+
+	/// The first write makes the repository and puts everything already in the
+	/// directory into one commit, under a title naming the bot rather than a path.
+	#[test]
+	fn the_first_write_records_the_whole_bundle_under_one_title() {
+		let root = a_root("git-first");
+		let bot = a_bot("Bean", "Answer briefly.");
+		drop_a_skill(&root, &bot.id, "baking", false, "Bake at 220 degrees.");
+		write(&root, &bot).expect("the bundle is written");
+
+		assert_eq!(titles(&root, &bot.id), vec!["Bot \"Bean\" saved from settings"]);
+		let entry = &history(&root, &bot.id).expect("the history reads")[0];
+		assert_eq!(entry.author, Author::User);
+		assert!(entry.timestamp > 0, "got {}", entry.timestamp);
+		assert!(entry.body.is_empty(), "got {}", entry.body);
+
+		let shown = diff(&root, &bot.id, &entry.id).expect("the diff reads");
+		assert!(shown.contains("Bake at 220 degrees."), "got {shown}");
+		assert!(shown.contains("plugin.json"), "got {shown}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Every gesture a reader makes in the settings dialog is one sentence in the
+	/// history, newest first, naming what was written and what it was about.
+	#[test]
+	fn every_write_is_one_sentence_naming_what_it_changed() {
+		let root = a_root("git-every");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let skill =
+			create_skill(&root, &bot, &a_draft("Kneading", "How to knead.", "Ten minutes."))
+				.expect("the skill is created");
+		update_skill(&root, &bot, &skill.id, &a_draft("Kneading", "How to knead.", "Twelve."))
+			.expect("the skill is updated");
+		set_skill_preloaded(&root, &bot, &skill.id, true).expect("the skill is marked");
+		set_skill_preloaded(&root, &bot, &skill.id, false).expect("the skill is unmarked");
+		set_mcp_server(&root, &bot, "clock", &serde_json::json!({ "command": "clock" }))
+			.expect("the server is written");
+		remove_mcp_server(&root, &bot, "clock").expect("the server is removed");
+		remove_skill(&root, &bot, &skill.id).expect("the skill is removed");
+
+		assert_eq!(
+			titles(&root, &bot.id),
+			vec![
+				"Skill \"Kneading\" removed from settings",
+				"MCP server \"clock\" removed from settings",
+				"MCP server \"clock\" saved from settings",
+				"Skill \"Kneading\" taken out of the brief from settings",
+				"Skill \"Kneading\" added to the brief from settings",
+				"Skill \"Kneading\" updated from settings",
+				"Skill \"Kneading\" created from settings",
+				"Bot \"Bean\" saved from settings",
+			]
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A save of values nobody changed is not a write, so it is not a line in a
+	/// reader's history either.
+	#[test]
+	fn a_write_that_changes_nothing_records_nothing() {
+		let root = a_root("git-unchanged");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		write(&root, &bot).expect("the bundle is written again");
+		ensure(&root, &bot).expect("the bundle is ensured");
+
+		assert_eq!(titles(&root, &bot.id).len(), 1);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A bundle written before this app kept any history joins it whole on the next
+	/// launch rather than starting empty.
+	#[test]
+	fn a_bundle_with_no_repository_is_taken_into_one_when_it_is_ensured() {
+		let root = a_root("git-ensured");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		fs::remove_dir_all(dir(&root, &bot.id).join(".git")).expect("the repository is dropped");
+
+		ensure(&root, &bot).expect("the bundle is ensured");
+
+		assert_eq!(titles(&root, &bot.id), vec!["Bot \"Bean\" added to the history"]);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// What the bot writes for itself is memory, not history: it is excluded, and it
+	/// never lands in a commit however many writes go past it.
+	#[test]
+	fn what_the_bot_writes_for_itself_is_left_out_of_the_history() {
+		let root = a_root("git-learned");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		private_files::replace(&dir(&root, &bot.id).join(".learned.md"), b"Bean likes figs.")
+			.expect("the memory lands");
+		create_skill(&root, &bot, &a_draft("Kneading", "How to knead.", "Ten minutes."))
+			.expect("the skill is created");
+
+		let excluded = fs::read_to_string(dir(&root, &bot.id).join(".git/info/exclude"))
+			.expect("the exclude file is there");
+		assert!(excluded.lines().any(|line| line == ".learned.md"), "got {excluded}");
+		for entry in history(&root, &bot.id).expect("the history reads") {
+			let shown = diff(&root, &bot.id, &entry.id).expect("the diff reads");
+			assert!(!shown.contains("Bean likes figs."), "got {shown}");
+		}
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// Undoing puts the bundle back the way it was and says so, on top of the
+	/// history rather than instead of it.
+	#[test]
+	fn an_undone_write_lands_on_the_disk_and_on_top_of_the_history() {
+		let root = a_root("git-revert");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let skill =
+			create_skill(&root, &bot, &a_draft("Kneading", "How to knead.", "Ten minutes."))
+				.expect("the skill is created");
+		let created = history(&root, &bot.id).expect("the history reads")[0].id.clone();
+
+		revert(&root, &bot.id, &created).expect("the write is undone");
+
+		let titles = titles(&root, &bot.id);
+		assert_eq!(titles[0], "Change undone: Skill \"Kneading\" created from settings");
+		assert_eq!(titles.len(), 3);
+		assert!(skills(&root, &bot.id).is_empty(), "the skill is back on the disk");
+		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join(&skill.id).exists());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The repository is at the bundle root and nothing that reads the bundle looks
+	/// there: not the agent, not the skills, not the marketplace.
+	#[test]
+	fn the_repository_is_never_taken_for_part_of_the_bundle() {
+		let root = a_root("git-invisible");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Kneading", "How to knead.", "Ten minutes."))
+			.expect("the skill is created");
+		write_marketplace(&root, std::slice::from_ref(&bot)).expect("the marketplace is written");
+
+		assert!(dir(&root, &bot.id).join(".git").is_dir());
+		let listed: Vec<String> = skills(&root, &bot.id).into_iter().map(|it| it.id).collect();
+		assert_eq!(listed, vec!["kneading"]);
+		assert!(written_agent(&root, &bot.id).contains("Answer briefly."));
+		let marketplace =
+			fs::read_to_string(marketplace_file(&root)).expect("the marketplace is there");
+		assert!(!marketplace.contains(".git"), "got {marketplace}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// A history nobody can open is the one place a caller is told so — the bundle
+	/// itself is on the disk and the bot runs exactly as it did.
+	#[test]
+	fn a_bundle_with_no_repository_reads_as_a_refusal_and_writes_anyway() {
+		let root = a_root("git-missing");
+		let bot = a_bot("Bean", "Answer briefly.");
+
+		assert!(history(&root, &bot.id).is_err());
+		assert!(diff(&root, &bot.id, "0000000000000000000000000000000000000000").is_err());
+		assert!(revert(&root, &bot.id, "0000000000000000000000000000000000000000").is_err());
 
 		let _ = fs::remove_dir_all(&root);
 	}
