@@ -12,6 +12,7 @@ import {
 import type { ChatDriver } from "./driver"
 import {
 	ASKED_FOR,
+	EVOLVED,
 	type LiveRun,
 	openedRun,
 	PROMPTS_PER_RUN,
@@ -631,6 +632,7 @@ export function createChatController(
 			}
 			dispatch(bot, { type: "driverEvent", scope, event })
 			noteFailure(bot, event)
+			noteEvolution(bot, event)
 			persist(bot, scope, event)
 		}
 	}
@@ -663,6 +665,28 @@ export function createChatController(
 		}
 		bot.run.spent ??= reason
 		bot.run.carried = false
+	}
+
+	/** A run that is no longer what its process was started as is marked, not
+	 * replaced on the spot — for the reason a failed run is, see `noteFailure`. The
+	 * first reason recorded is the one that stands, and a bot with no process has no
+	 * run to spend. What the child holds is left alone: it goes on carrying the
+	 * conversation until the prompt that replaces it. */
+	const spend = (bot: BotChat, reason: RotationReason) => {
+		if (!bot.state.sessionOpen) {
+			return
+		}
+		bot.run.spent ??= reason
+	}
+
+	/** The bot rewrote its own instructions while a process was answering for it.
+	 * What a child was spawned with cannot be said to it again, so the run is spent
+	 * and the next prompt is carried by a process started as the bot now reads. */
+	const noteEvolution = (bot: BotChat, event: AgentEvent) => {
+		if (event.type !== "botEvolved") {
+			return
+		}
+		spend(bot, EVOLVED)
 	}
 
 	const attach = () => {
@@ -824,16 +848,14 @@ export function createChatController(
 		}
 	}
 
-	/** The bot is no longer what its process was started as. Marked rather than
-	 * replaced, for the reason a failed run is — see `noteFailure`. What it holds is
-	 * left alone: the child that is running still carries the conversation, and it
-	 * goes on carrying it until the prompt that replaces it. */
+	/** The bot is no longer what its process was started as: it was described again,
+	 * and a child is given its instructions and its directory at spawn. */
 	const redescribe = (botId: string) => {
 		const bot = bots.get(botId)
-		if (!bot || !bot.state.sessionOpen) {
+		if (!bot) {
 			return
 		}
-		bot.run.spent ??= REDESCRIBED
+		spend(bot, REDESCRIBED)
 	}
 
 	/** Whether the bot has a process of its own to go on answering in. A run whose
