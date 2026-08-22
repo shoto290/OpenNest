@@ -7,6 +7,7 @@ import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
+import { useSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
 
 import { ChatScreen } from "@/components/chat-screen"
 import { useTheme } from "@/components/theme-provider"
@@ -22,7 +23,6 @@ import { useBotSkills } from "@/lib/bots/use-bot-skills"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
-import { useSettingsShortcut } from "@/lib/bots/use-settings-shortcut"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
@@ -190,8 +190,10 @@ export function App() {
 	// where it is read from and this only holds what the settings mark as chosen.
 	const [language, setLanguage] = useState(chosenLanguage)
 
+	// Only the way in: the dialog listens for the same chord while it is open, so a
+	// way out asks whatever Escape asks instead of taking the draft with it.
 	useSettingsShortcut({
-		isEnabled: Boolean(selected),
+		isEnabled: Boolean(selected) && !isEditing,
 		onToggle: toggleSettings,
 	})
 

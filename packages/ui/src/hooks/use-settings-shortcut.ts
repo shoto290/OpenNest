@@ -13,7 +13,12 @@ type SettingsShortcut = {
 
 /** The window-wide way in and out of a bot's settings. It listens on the capture
  * phase and takes the event: the dialog holds text fields, and a chord typed into
- * one of them must close the dialog rather than write a comma into the name. */
+ * one of them must close the dialog rather than write a comma into the name.
+ *
+ * The way in and the way out are two readers of it, never both at once: the surface
+ * that opens the dialog listens while it is closed, and the dialog listens while it
+ * is open, so the chord leaves by the same door as Escape and the backdrop and asks
+ * whatever they ask. */
 export const useSettingsShortcut = ({
 	isEnabled,
 	onToggle,

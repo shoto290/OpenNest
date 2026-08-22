@@ -370,7 +370,7 @@ export const ClosingOverAnUnsavedSkill = meta.story({
 		docs: {
 			description: {
 				story:
-					"The way out taken over a skill with something typed into it. A skill is written on a press, so the dialog asks the question its editor asks rather than dropping the draft on an Escape. Check that Escape raises the question and reports nothing, and that accepting it closes the dialog once.",
+					"Every way out taken over a skill with something typed into it. A skill is written on a press, so the dialog asks the question its editor asks rather than dropping the draft — on the settings chord as much as on Escape, since a chord that closed the dialog behind the question would be the one way out that loses the draft. Check that the chord raises the question, that refusing it leaves the skill open with what was typed still there, and that accepting the next one closes the dialog once.",
 			},
 		},
 	},
@@ -381,14 +381,23 @@ export const ClosingOverAnUnsavedSkill = meta.story({
 		await userEvent.click(
 			within(dialog).getByRole("button", { name: /release-notes/ }),
 		)
-		await userEvent.type(within(dialog).getByLabelText("Body"), "!")
+		const body = within(dialog).getByLabelText("Body")
+		await userEvent.type(body, "!")
+
+		await userEvent.keyboard("{Meta>},{/Meta}")
+
+		const asked = await screen.findByRole("alertdialog")
+		await waitFor(() => expect(asked).toBeVisible())
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		await userEvent.click(within(asked).getByRole("button", { name: "Cancel" }))
+
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
+		await expect(body).toHaveValue(`${BOT_SKILLS[0]?.body}!`)
 
 		await userEvent.keyboard("{Escape}")
 
 		const popup = await screen.findByRole("alertdialog")
-		await waitFor(() => expect(popup).toBeVisible())
-		await expect(args.onClose).not.toHaveBeenCalled()
-
 		await userEvent.click(within(popup).getByRole("button", { name: "Leave" }))
 
 		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))

@@ -215,7 +215,6 @@ export {
 	type BotSkillEffort,
 	type BotSkillItem,
 	isConfigObject,
-	isSameSkillDraft,
 	isSkillDraftUnsaved,
 	parseMcpServerConfig,
 	SKILL_CONTEXTS,

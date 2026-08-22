@@ -39,6 +39,7 @@ import {
 } from "@workspace/ui/components/settings-rail"
 import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
+import { useSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
 import { cn } from "@workspace/ui/lib/utils"
 
 /** The tab a reader lands on whenever the dialog opens on its own account. Settings
@@ -174,6 +175,11 @@ const BotSettingsDialog = ({
 	}
 
 	const close = () => (isSkillUnsaved ? setLeaving(true) : leave())
+
+	// The chord that opened the dialog closes it, and closes it the way Escape and
+	// the backdrop do: a host that flipped `open` itself would take an unsaved skill
+	// with it without ever asking.
+	useSettingsShortcut({ isEnabled: open, onToggle: close })
 
 	// The mark is written with the rest of the skill rather than the moment it is
 	// pressed: the editor saves on a press, so what the bot was told and what the

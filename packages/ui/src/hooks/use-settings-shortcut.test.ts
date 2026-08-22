@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { isSettingsShortcut } from "./use-settings-shortcut"
+import { isSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
 
 const chord = (event: Partial<KeyboardEvent>) =>
 	isSettingsShortcut(event as KeyboardEvent)
