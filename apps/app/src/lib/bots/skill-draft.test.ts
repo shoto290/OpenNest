@@ -50,6 +50,19 @@ describe("toSkillItem", () => {
 		expect(item.isModelInvocationDisabled).toBe(false)
 	})
 
+	it("stands a mark the file says nothing about on what it means unsaid", () => {
+		const item = toSkillItem({
+			...A_SKILL,
+			disableModelInvocation: null,
+			userInvocable: null,
+			background: null,
+		})
+
+		expect(item.isUserInvocable).toBe(true)
+		expect(item.isBackground).toBe(true)
+		expect(item.isModelInvocationDisabled).toBe(false)
+	})
+
 	it("keeps an effort or a context the editor has no name for out of it", () => {
 		const item = toSkillItem({ ...A_SKILL, effort: "extreme", context: null })
 
@@ -67,7 +80,7 @@ describe("toSkillItem", () => {
 
 describe("toSkillDraft", () => {
 	it("comes back to what it was read from", () => {
-		const draft = toSkillDraft(toSkillItem(A_SKILL))
+		const draft = toSkillDraft(toSkillItem(A_SKILL), A_SKILL)
 
 		expect(draft).toMatchObject({
 			whenToUse: A_SKILL.whenToUse,
@@ -83,11 +96,10 @@ describe("toSkillDraft", () => {
 	})
 
 	it("asks for a key to go once its box is left empty", () => {
-		const draft = toSkillDraft({
-			...toSkillItem(A_SKILL),
-			whenToUse: "",
-			paths: "",
-		})
+		const draft = toSkillDraft(
+			{ ...toSkillItem(A_SKILL), whenToUse: "", paths: "" },
+			A_SKILL,
+		)
 
 		expect(draft.whenToUse).toBeNull()
 		expect(draft.paths).toBeNull()
@@ -100,5 +112,57 @@ describe("toSkillDraft", () => {
 		})
 
 		expect(draft.allowedTools).toEqual(["Read", "Grep"])
+	})
+
+	it("leaves a mark out of a file that never carried it", () => {
+		const unmarked: BotSkill = {
+			...A_SKILL,
+			disableModelInvocation: null,
+			userInvocable: null,
+			background: null,
+		}
+
+		const draft = toSkillDraft(toSkillItem(unmarked), unmarked)
+
+		expect(draft.userInvocable).toBeNull()
+		expect(draft.background).toBeNull()
+		expect(draft.disableModelInvocation).toBeNull()
+	})
+
+	it("writes a mark the file carries, whatever it says", () => {
+		const marked: BotSkill = { ...A_SKILL, userInvocable: false }
+
+		const draft = toSkillDraft(toSkillItem(marked), marked)
+
+		expect(draft.userInvocable).toBe(false)
+	})
+
+	it("writes a mark a reader moved off what it means unsaid", () => {
+		const unmarked: BotSkill = {
+			...A_SKILL,
+			userInvocable: null,
+			background: null,
+		}
+
+		const draft = toSkillDraft(
+			{ ...toSkillItem(unmarked), isUserInvocable: false },
+			unmarked,
+		)
+
+		expect(draft.userInvocable).toBe(false)
+		expect(draft.background).toBeNull()
+	})
+
+	it("writes nothing but what a creation was marked with", () => {
+		const draft = toSkillDraft({
+			name: "release-notes",
+			description: "How this project words a changelog entry",
+			body: "One line per change.",
+			isModelInvocationDisabled: true,
+		})
+
+		expect(draft.disableModelInvocation).toBe(true)
+		expect(draft.userInvocable).toBeNull()
+		expect(draft.background).toBeNull()
 	})
 })

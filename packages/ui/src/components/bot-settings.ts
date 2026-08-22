@@ -84,9 +84,28 @@ type BotSkillDraft = {
 	metadata?: string
 }
 
+/** What a skill's marks mean when its frontmatter says nothing about them. A skill
+ * is invocable by hand and a forked run is left to finish on its own unless the file
+ * says otherwise, so a switch showing anything else would be telling a reader their
+ * skill does something it does not.
+ *
+ * They are the resting state of a switch, not a value to write: a mark standing
+ * where a file that never carried the key put it stays out of the file. */
+const SKILL_FLAG_DEFAULTS = {
+	isModelInvocationDisabled: false,
+	isUserInvocable: true,
+	isBackground: true,
+} as const
+
 /** A skill nobody has written yet: the resting state of the editor, and what a
  * creation is compared against to know whether anything was typed. */
-const BLANK_SKILL_DRAFT: BotSkillDraft = { name: "", description: "", body: "" }
+const BLANK_SKILL_DRAFT: BotSkillDraft = {
+	name: "",
+	description: "",
+	body: "",
+	isPreloaded: false,
+	...SKILL_FLAG_DEFAULTS,
+}
 
 /** How much of a skill's frontmatter the description and the sentence beside it may
  * take together, in characters. The two are read as one paragraph when the bot
@@ -97,10 +116,12 @@ const SKILL_DESCRIPTION_LIMIT = 1536
 const toSkillDescriptionLength = (draft: BotSkillDraft) =>
 	draft.description.length + (draft.whenToUse?.length ?? 0)
 
-/** A field nobody answered, whichever shape its answer takes. An empty string, an
- * unticked switch and a missing key are one state: the skill does not say. */
+/** A field nobody answered, whichever shape its answer takes. An empty string and a
+ * missing key are one state: the skill does not say. A switch always says something
+ * — off is an answer a reader gave, and a draft that differs only by a mark taken
+ * down is a draft with something to save. */
 const isSkillFieldAnswered = (value: unknown) =>
-	value !== undefined && value !== "" && value !== false
+	value !== undefined && value !== ""
 
 /** Whether two drafts say the same thing, so an editor can tell an untouched skill
  * from one with something to save. Compared field by field over what either of them
@@ -220,6 +241,7 @@ export {
 	SKILL_CONTEXTS,
 	SKILL_DESCRIPTION_LIMIT,
 	SKILL_EFFORTS,
+	SKILL_FLAG_DEFAULTS,
 	toBundleName,
 	toMcpServerConfigText,
 	toSkillDescriptionLength,

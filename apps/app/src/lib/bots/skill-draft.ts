@@ -5,6 +5,7 @@ import {
 	type BotSkillDraft as EditedSkill,
 	SKILL_CONTEXTS,
 	SKILL_EFFORTS,
+	SKILL_FLAG_DEFAULTS,
 } from "@workspace/ui/components/bot-settings"
 
 import type {
@@ -58,6 +59,24 @@ const toValue = (text: string | undefined): BotSkillValue => {
 	}
 }
 
+/** A mark read back as the file holds it. A default is a resting state rather than
+ * an answer, so a switch left where a file that never carried the key put it keeps
+ * the key out of the file — a `user-invocable: false` nobody asked for would take
+ * the skill out of the command menu. A file that already carries the key is written
+ * every time, and so is a switch a reader moved: from that save on the key is the
+ * file's, and every save after carries it. */
+const toFlag = (
+	moved: boolean | undefined,
+	kept: boolean | null | undefined,
+	fallback: boolean,
+) => {
+	if (kept === null || kept === undefined) {
+		return moved === undefined || moved === fallback ? null : moved
+	}
+
+	return moved ?? kept
+}
+
 const toOption = <Option extends string>(
 	options: readonly Option[],
 	value: string | null | undefined,
@@ -73,15 +92,17 @@ export const toSkillItem = (skill: BotSkill): BotSkillItem => ({
 	whenToUse: skill.whenToUse ?? "",
 	argumentHint: skill.argumentHint ?? "",
 	arguments: toLines(skill.arguments),
-	isModelInvocationDisabled: skill.disableModelInvocation ?? false,
-	isUserInvocable: skill.userInvocable ?? false,
+	isModelInvocationDisabled:
+		skill.disableModelInvocation ??
+		SKILL_FLAG_DEFAULTS.isModelInvocationDisabled,
+	isUserInvocable: skill.userInvocable ?? SKILL_FLAG_DEFAULTS.isUserInvocable,
 	paths: toLines(skill.paths),
 	model: skill.model ?? "",
 	effort: toOption<BotSkillEffort>(SKILL_EFFORTS, skill.effort),
 	context: toOption<BotSkillContext>(SKILL_CONTEXTS, skill.context),
 	shell: skill.shell ?? "",
 	agent: skill.agent ?? "",
-	isBackground: skill.background ?? false,
+	isBackground: skill.background ?? SKILL_FLAG_DEFAULTS.isBackground,
 	allowedTools: toLines(skill.allowedTools),
 	disallowedTools: toLines(skill.disallowedTools),
 	hooks: toText(skill.hooks),
@@ -90,25 +111,42 @@ export const toSkillItem = (skill: BotSkill): BotSkillItem => ({
 	metadata: toText(skill.metadata),
 })
 
-/** What the editor wrote, as the store takes it. Every key is answered, because the
- * editor showed every key: a box the reader left empty is a key asked to go, not a
- * key left alone. */
-export const toSkillDraft = (edited: EditedSkill): BotSkillDraft => ({
+/** What the editor wrote, as the store takes it. Every box is answered, because the
+ * editor showed every one of them: a box the reader left empty is a key asked to go,
+ * not a key left alone. The marks are the exception, and `kept` — the skill as the
+ * bundle holds it, absent for a creation — is what tells a default apart from an
+ * answer. */
+export const toSkillDraft = (
+	edited: EditedSkill,
+	kept?: BotSkill,
+): BotSkillDraft => ({
 	name: edited.name,
 	description: edited.description,
 	body: edited.body,
 	whenToUse: edited.whenToUse || null,
 	argumentHint: edited.argumentHint || null,
 	arguments: toList(edited.arguments),
-	disableModelInvocation: edited.isModelInvocationDisabled ?? false,
-	userInvocable: edited.isUserInvocable ?? false,
+	disableModelInvocation: toFlag(
+		edited.isModelInvocationDisabled,
+		kept?.disableModelInvocation,
+		SKILL_FLAG_DEFAULTS.isModelInvocationDisabled,
+	),
+	userInvocable: toFlag(
+		edited.isUserInvocable,
+		kept?.userInvocable,
+		SKILL_FLAG_DEFAULTS.isUserInvocable,
+	),
 	paths: toList(edited.paths),
 	model: edited.model || null,
 	effort: edited.effort ?? null,
 	context: edited.context ?? null,
 	shell: edited.shell || null,
 	agent: edited.agent || null,
-	background: edited.isBackground ?? false,
+	background: toFlag(
+		edited.isBackground,
+		kept?.background,
+		SKILL_FLAG_DEFAULTS.isBackground,
+	),
 	allowedTools: toList(edited.allowedTools),
 	disallowedTools: toList(edited.disallowedTools),
 	hooks: toValue(edited.hooks),

@@ -29,10 +29,19 @@ describe("isSkillDraftUnsaved", () => {
 		)
 	})
 
+	it("reads a mark taken down as something to save", () => {
+		expect(
+			isSkillDraftUnsaved(
+				{ ...SKILL, isUserInvocable: false },
+				{ ...SKILL, isUserInvocable: true },
+			),
+		).toBe(true)
+	})
+
 	it("reads a field cleared back to nothing as unanswered rather than changed", () => {
 		expect(
 			isSkillDraftUnsaved(
-				{ ...SKILL, whenToUse: "", isPreloaded: false, effort: undefined },
+				{ ...SKILL, whenToUse: "", effort: undefined },
 				SKILL,
 			),
 		).toBe(false)

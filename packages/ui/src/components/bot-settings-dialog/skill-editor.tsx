@@ -10,6 +10,7 @@ import {
 	SKILL_CONTEXTS,
 	SKILL_DESCRIPTION_LIMIT,
 	SKILL_EFFORTS,
+	SKILL_FLAG_DEFAULTS,
 	toBundleName,
 	toSkillDescriptionLength,
 } from "@workspace/ui/components/bot-settings"
@@ -292,7 +293,10 @@ const SkillEditor = ({
 						value={draft.whenToUse ?? ""}
 					/>
 					<SettingsSwitch
-						checked={draft.isModelInvocationDisabled ?? false}
+						checked={
+							draft.isModelInvocationDisabled ??
+							SKILL_FLAG_DEFAULTS.isModelInvocationDisabled
+						}
 						description={t("skills.modelInvocation.description")}
 						label={t("skills.modelInvocation.label")}
 						onCheckedChange={(next) =>
@@ -300,7 +304,9 @@ const SkillEditor = ({
 						}
 					/>
 					<SettingsSwitch
-						checked={draft.isUserInvocable ?? false}
+						checked={
+							draft.isUserInvocable ?? SKILL_FLAG_DEFAULTS.isUserInvocable
+						}
 						description={t("skills.userInvocable.description")}
 						label={t("skills.userInvocable.label")}
 						onCheckedChange={(next) => patch({ isUserInvocable: next })}
@@ -364,7 +370,7 @@ const SkillEditor = ({
 								value={draft.agent ?? ""}
 							/>
 							<SettingsSwitch
-								checked={draft.isBackground ?? false}
+								checked={draft.isBackground ?? SKILL_FLAG_DEFAULTS.isBackground}
 								description={t("skills.background.description")}
 								label={t("skills.background.label")}
 								onCheckedChange={(next) => patch({ isBackground: next })}

@@ -217,7 +217,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A skill nobody has written yet. Reach for this over `Default` to review what a reader is asked for before anything exists: the same rail and the same sections, a save named as a creation, and no delete — there is nothing kept to take away. The action stays out of reach until the skill is named, and leaving reports nothing.",
+					"A skill nobody has written yet. Reach for this over `Default` to review what a reader is asked for before anything exists: the same rail and the same sections, a save named as a creation, and no delete — there is nothing kept to take away. The marks stand where a file that says nothing about them stands, so a skill is invocable by hand from the moment it is created. The action stays out of reach until the skill is named, and leaving reports nothing.",
 			},
 		},
 	},
@@ -230,6 +230,15 @@ export const Empty = meta.story({
 		)
 
 		await userEvent.click(canvas.getByRole("tab", { name: "Triggering" }))
+		await expect(
+			canvas.getByRole("switch", { name: "Let a reader invoke it" }),
+		).toBeChecked()
+		await expect(
+			canvas.getByRole("switch", {
+				name: "Keep the bot from reaching for it",
+			}),
+		).not.toBeChecked()
+
 		await userEvent.type(canvas.getByLabelText("Name"), "release-notes")
 		await expect(create).toBeEnabled()
 

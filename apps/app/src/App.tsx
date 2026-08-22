@@ -267,8 +267,17 @@ export function App() {
 					onMcpServerChange={mcpServers.controller.rename}
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}
+					// The skill as the bundle holds it goes with the draft: it is what
+					// tells a mark the file carries from one standing on its default,
+					// which is the difference between writing the key and leaving it out.
 					onSkillChange={(id, draft) =>
-						skills.controller.save(id, toSkillDraft(draft))
+						skills.controller.save(
+							id,
+							toSkillDraft(
+								draft,
+								skills.state.skills.find((skill) => skill.id === id),
+							),
+						)
 					}
 					onSkillCreate={(draft, isPreloaded) =>
 						skills.controller.create(toSkillDraft(draft), isPreloaded)
