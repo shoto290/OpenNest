@@ -5,12 +5,12 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
-	BLANK_SKILL_DRAFT,
 	type BotSkillDraft,
-	isSameSkillDraft,
+	isSkillDraftUnsaved,
 	SKILL_CONTEXTS,
 	SKILL_DESCRIPTION_LIMIT,
 	SKILL_EFFORTS,
+	SKILL_FLAG_DEFAULTS,
 	toBundleName,
 	toSkillDescriptionLength,
 } from "@workspace/ui/components/bot-settings"
@@ -111,7 +111,7 @@ const SkillEditor = ({
 
 	const name = draft.name.trim() || t("skills.untitled")
 	const isWritten = Boolean(saved)
-	const isUnsaved = !isSameSkillDraft(draft, saved ?? BLANK_SKILL_DRAFT)
+	const isUnsaved = isSkillDraftUnsaved(draft, saved)
 	const used = toSkillDescriptionLength(draft)
 	const isOverBudget = used > SKILL_DESCRIPTION_LIMIT
 	const isSavable = isUnsaved && !isOverBudget && draft.name.trim().length > 0
@@ -293,7 +293,10 @@ const SkillEditor = ({
 						value={draft.whenToUse ?? ""}
 					/>
 					<SettingsSwitch
-						checked={draft.isModelInvocationDisabled ?? false}
+						checked={
+							draft.isModelInvocationDisabled ??
+							SKILL_FLAG_DEFAULTS.isModelInvocationDisabled
+						}
 						description={t("skills.modelInvocation.description")}
 						label={t("skills.modelInvocation.label")}
 						onCheckedChange={(next) =>
@@ -301,7 +304,9 @@ const SkillEditor = ({
 						}
 					/>
 					<SettingsSwitch
-						checked={draft.isUserInvocable ?? false}
+						checked={
+							draft.isUserInvocable ?? SKILL_FLAG_DEFAULTS.isUserInvocable
+						}
 						description={t("skills.userInvocable.description")}
 						label={t("skills.userInvocable.label")}
 						onCheckedChange={(next) => patch({ isUserInvocable: next })}
@@ -365,7 +370,7 @@ const SkillEditor = ({
 								value={draft.agent ?? ""}
 							/>
 							<SettingsSwitch
-								checked={draft.isBackground ?? false}
+								checked={draft.isBackground ?? SKILL_FLAG_DEFAULTS.isBackground}
 								description={t("skills.background.description")}
 								label={t("skills.background.label")}
 								onCheckedChange={(next) => patch({ isBackground: next })}

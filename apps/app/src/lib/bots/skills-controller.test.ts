@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { createSkillsController } from "./skills-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import type { BotSkillDraft } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
 const A_SKILL = {
@@ -54,29 +55,66 @@ describe("skills controller", () => {
 		expect((await store.botSkills("default"))[0].isPreloaded).toBe(true)
 	})
 
-	it("writes an edit to the skill it was opened on, by id", async () => {
+	it("writes a save to the skill it was opened on, by id", async () => {
 		const store = createFakeTranscriptStore()
 		const written = await store.createBotSkill("default", A_SKILL)
 		const controller = await opened(store)
 
-		controller.describe(written.id, { ...A_SKILL, name: "Changelog" })
+		controller.save(written.id, { ...A_SKILL, name: "Changelog" })
 		await settled()
 
 		const [held] = await store.botSkills("default")
 		expect(held).toMatchObject({ id: written.id, name: "Changelog" })
 	})
 
-	it("shows the newest keystroke before the write lands", async () => {
+	it("writes every field the save carried, once", async () => {
 		const store = createFakeTranscriptStore()
 		const written = await store.createBotSkill("default", A_SKILL)
-		const controller = await opened(store)
+		const drafts: BotSkillDraft[] = []
+		const counted: TranscriptStore = {
+			...store,
+			updateBotSkill: (botId, skillId, draft) => {
+				drafts.push(draft)
+				return store.updateBotSkill(botId, skillId, draft)
+			},
+		}
+		const controller = await opened(counted)
 
-		controller.describe(written.id, { ...A_SKILL, body: "A" })
-		controller.describe(written.id, { ...A_SKILL, body: "AB" })
-
-		expect(controller.getState().skills[0].body).toBe("AB")
+		controller.save(written.id, {
+			...A_SKILL,
+			allowedTools: ["Read"],
+			model: "",
+			whenToUse: "Whenever a release is cut",
+		})
 		await settled()
-		expect((await store.botSkills("default"))[0].body).toBe("AB")
+
+		expect(drafts).toEqual([
+			{
+				...A_SKILL,
+				allowedTools: ["Read"],
+				model: "",
+				whenToUse: "Whenever a release is cut",
+			},
+		])
+		expect(controller.getState().skills[0]).toMatchObject({
+			allowedTools: ["Read"],
+			whenToUse: "Whenever a release is cut",
+		})
+	})
+
+	it("puts the reader back on what the bundle holds when a save is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const written = await store.createBotSkill("default", A_SKILL)
+		const refusing: TranscriptStore = {
+			...store,
+			updateBotSkill: () => Promise.reject({ kind: "unwritableBundle" }),
+		}
+		const controller = await opened(refusing)
+
+		controller.save(written.id, { ...A_SKILL, name: "Changelog" })
+		await settled()
+
+		expect(controller.getState().skills).toMatchObject([A_SKILL])
 	})
 
 	it("sets the preload mark on its own", async () => {

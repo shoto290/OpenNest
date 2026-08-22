@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
-	BLANK_SKILL_DRAFT,
 	type BotSkillDraft,
-	isSameSkillDraft,
+	isSkillDraftUnsaved,
 	toSkillDescriptionLength,
 } from "@workspace/ui/components/bot-settings"
 
@@ -13,34 +12,43 @@ const SKILL: BotSkillDraft = {
 	body: "One line per change.",
 }
 
-describe("isSameSkillDraft", () => {
+describe("isSkillDraftUnsaved", () => {
 	it("reads a draft as untouched while every answer holds", () => {
-		expect(isSameSkillDraft(SKILL, { ...SKILL })).toBe(true)
+		expect(isSkillDraftUnsaved({ ...SKILL }, SKILL)).toBe(false)
 	})
 
 	it("reads a changed answer as something to save", () => {
-		expect(isSameSkillDraft(SKILL, { ...SKILL, body: "Two lines." })).toBe(
-			false,
+		expect(isSkillDraftUnsaved({ ...SKILL, body: "Two lines." }, SKILL)).toBe(
+			true,
 		)
 	})
 
 	it("reads a field answered for the first time as something to save", () => {
-		expect(isSameSkillDraft(SKILL, { ...SKILL, isPreloaded: true })).toBe(false)
+		expect(isSkillDraftUnsaved({ ...SKILL, isPreloaded: true }, SKILL)).toBe(
+			true,
+		)
+	})
+
+	it("reads a mark taken down as something to save", () => {
+		expect(
+			isSkillDraftUnsaved(
+				{ ...SKILL, isUserInvocable: false },
+				{ ...SKILL, isUserInvocable: true },
+			),
+		).toBe(true)
 	})
 
 	it("reads a field cleared back to nothing as unanswered rather than changed", () => {
 		expect(
-			isSameSkillDraft(SKILL, {
-				...SKILL,
-				whenToUse: "",
-				isPreloaded: false,
-				effort: undefined,
-			}),
-		).toBe(true)
+			isSkillDraftUnsaved(
+				{ ...SKILL, whenToUse: "", effort: undefined },
+				SKILL,
+			),
+		).toBe(false)
 	})
 
-	it("tells a written skill from one nobody has written", () => {
-		expect(isSameSkillDraft(SKILL, BLANK_SKILL_DRAFT)).toBe(false)
+	it("reads a skill nobody has written yet as something to save", () => {
+		expect(isSkillDraftUnsaved(SKILL)).toBe(true)
 	})
 })
 

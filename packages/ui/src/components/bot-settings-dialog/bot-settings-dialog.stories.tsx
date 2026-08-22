@@ -124,7 +124,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a bot is, in one overlay. A breadcrumb heads it with the bot's avatar, its name and the word Settings, so a reader who opened it from a roster of twelve knows which one they are editing on every tab. Down the left is a rail of groups — General, Appearance, Instructions, Runtime, then a separator and Danger zone in destructive tone, last because it is the one action that cannot be undone. It opens on General, unless the host set `showDanger` to say a row's own delete is what opened it. It is fully controlled and saves as you type: every keystroke emits `onValueChange` with the whole value, and the dialog owns no draft, no debounce and no persistence — closing it is never a question, because there is nothing unsaved to lose. The breadcrumb and the rail hold still and only the open group scrolls, so the rail is where a reader left it after a long scroll through the animals. Below 42rem of content the rail drops to its icons, each one still named to a screen reader and named on hover and focus with a tooltip.",
+					"Everything a bot is, in one overlay. A breadcrumb heads it with the bot's avatar, its name and the word Settings, so a reader who opened it from a roster of twelve knows which one they are editing on every tab. Down the left is a rail of groups — General, Appearance, Instructions, Runtime, then a separator and Danger zone in destructive tone, last because it is the one action that cannot be undone. It opens on General, unless the host set `showDanger` to say a row's own delete is what opened it. It is fully controlled and saves as you type: every keystroke emits `onValueChange` with the whole value, and the dialog owns no draft, no debounce and no persistence. A skill is the exception: it is written on a press, so closing over one with something unsaved asks first. The breadcrumb and the rail hold still and only the open group scrolls, so the rail is where a reader left it after a long scroll through the animals. Below 42rem of content the rail drops to its icons, each one still named to a screen reader and named on hover and focus with a tooltip.",
 			},
 		},
 	},
@@ -364,6 +364,47 @@ export const OpenedOnDanger = meta.story({
 	},
 })
 
+export const ClosingOverAnUnsavedSkill = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Every way out taken over a skill with something typed into it. A skill is written on a press, so the dialog asks the question its editor asks rather than dropping the draft — on the settings chord as much as on Escape, since a chord that closed the dialog behind the question would be the one way out that loses the draft. Check that the chord raises the question, that refusing it leaves the skill open with what was typed still there, and that accepting the next one closes the dialog once.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Skills" }))
+		await userEvent.click(
+			within(dialog).getByRole("button", { name: /release-notes/ }),
+		)
+		const body = within(dialog).getByLabelText("Body")
+		await userEvent.type(body, "!")
+
+		await userEvent.keyboard("{Meta>},{/Meta}")
+
+		const asked = await screen.findByRole("alertdialog")
+		await waitFor(() => expect(asked).toBeVisible())
+		await expect(args.onClose).not.toHaveBeenCalled()
+
+		await userEvent.click(within(asked).getByRole("button", { name: "Cancel" }))
+
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
+		await expect(body).toHaveValue(`${BOT_SKILLS[0]?.body}!`)
+
+		await userEvent.keyboard("{Escape}")
+
+		const popup = await screen.findByRole("alertdialog")
+		await userEvent.click(within(popup).getByRole("button", { name: "Leave" }))
+
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBe(null))
+		await expect(args.onClose).toHaveBeenCalledTimes(1)
+	},
+})
+
 export const IconRail = meta.story({
 	args: { className: "w-[26rem]" },
 	parameters: {
@@ -501,7 +542,7 @@ export const Closing = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three ways out — Escape, the backdrop and the corner affordance — and none of them asks a question. Every keystroke was already reported, so there is nothing unsaved to warn about. Check that Escape closes the dialog and reports it once, and that nothing is confirmed on the way.",
+					"The three ways out — Escape, the backdrop and the corner affordance — and none of them asks a question while no skill is open. Every keystroke of the bot's own fields was already reported, so there is nothing unsaved to warn about. Check that Escape closes the dialog and reports it once, and that nothing is confirmed on the way. Pick `ClosingOverAnUnsavedSkill` for the one way out that does ask.",
 			},
 		},
 	},

@@ -1,5 +1,4 @@
 import { createQueue } from "../queue"
-import { createWriteLoop } from "../write-loop"
 import type { BotSkill, BotSkillDraft } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -22,10 +21,11 @@ export type SkillsController = {
 	 * which is a second write because there is no id to address it by until the
 	 * first one has answered. */
 	create: (draft: BotSkillDraft, isPreloaded: boolean) => void
-	/** What the skill says, written as it is typed, one write at a time per skill:
-	 * the newest draft waits for the one in flight and every draft in between is
-	 * dropped, since each says the same skill less completely than the one after. */
-	describe: (skillId: string, draft: BotSkillDraft) => void
+	/** What the skill says, written when the editor reports a save and never as it
+	 * is typed: one write, carrying every frontmatter key the draft holds. A skill is
+	 * a file with a frontmatter, and half a written key is not a state worth
+	 * keeping. */
+	save: (skillId: string, draft: BotSkillDraft) => void
 	/** Whether the body is carried into the bot's prompt. Its own write: this is what
 	 * the bot was told changing, not what the skill says. */
 	setPreloaded: (skillId: string, isPreloaded: boolean) => void
@@ -76,30 +76,13 @@ export const createSkillsController = (
 		}
 	}
 
-	/** What the reader sees while a write is on its way. The panel is controlled by
-	 * this state, so the value has to move on the keystroke rather than on the
-	 * answer — a body that waited for the disk would drop characters. */
-	const preview = (skillId: string, fields: Partial<BotSkill>) =>
+	/** The store's own answer for one skill, applied to the roster on hand. */
+	const applySkill = (skillId: string, fields: Partial<BotSkill>) =>
 		set({
 			skills: state.skills.map((skill) =>
 				skill.id === skillId ? { ...skill, ...fields } : skill,
 			),
 		})
-
-	/** Every keystroke reaches the panel at once and the bundle once a burst is over.
-	 * Nothing is written while no bot is open — there is no bundle to address a skill
-	 * in. */
-	const writes = createWriteLoop<BotSkillDraft, BotSkill>({
-		enqueue,
-		write: (skillId, draft) => {
-			const botId = state.botId
-			return botId
-				? store.updateBotSkill(botId, skillId, draft)
-				: Promise.resolve(null)
-		},
-		apply: preview,
-		onRefused: reload,
-	})
 
 	/** A write against the bot on hand, or nothing at all: there is no skill to
 	 * address while no bot is open. */
@@ -121,12 +104,10 @@ export const createSkillsController = (
 		},
 
 		open: (botId: string) => {
-			// Both the list and anything still waiting to be written belong to the
-			// bundle they were read and typed in. Two bots may hold a skill in a
-			// directory of the same name, so leaving either up is how one bot's skill
-			// ends up written into the other's.
+			// The list belongs to the bundle it was read in. Two bots may hold a skill
+			// in a directory of the same name, so leaving it up is how one bot's skill
+			// ends up read as the other's.
 			set({ botId, skills: [] })
-			writes.clear()
 			return enqueue(() => read(botId)).catch(() => undefined)
 		},
 
@@ -139,15 +120,15 @@ export const createSkillsController = (
 				applyTo(botId, [...state.skills, skill])
 			}),
 
-		describe: (skillId: string, draft: BotSkillDraft) => {
-			preview(skillId, draft)
-			writes.push(skillId, draft)
-		},
+		save: (skillId: string, draft: BotSkillDraft) =>
+			onOpenBot(async (botId) =>
+				applySkill(skillId, await store.updateBotSkill(botId, skillId, draft)),
+			),
 
 		setPreloaded: (skillId: string, isPreloaded: boolean) => {
-			preview(skillId, { isPreloaded })
+			applySkill(skillId, { isPreloaded })
 			onOpenBot(async (botId) =>
-				preview(
+				applySkill(
 					skillId,
 					await store.setBotSkillPreloaded(botId, skillId, isPreloaded),
 				),
@@ -157,7 +138,6 @@ export const createSkillsController = (
 		remove: (skillId: string) =>
 			onOpenBot(async (botId) => {
 				await store.deleteBotSkill(botId, skillId)
-				writes.drop(skillId)
 				applyTo(
 					botId,
 					state.skills.filter((skill) => skill.id !== skillId),
