@@ -243,6 +243,13 @@ const PRELOAD_KEY: &str = "preload";
 const METADATA_KEY: &str = "metadata";
 const OPENNEST_KEY: &str = "opennest";
 
+/// The frontmatter key that says the host generated the skill and owns it —
+/// `metadata.opennest.system`, read the same way. It is what makes the settings
+/// refuse to change or take away a skill, and the bot's own tools go on writing the
+/// file: the mark travels with the text, so a rewrite that keeps the key keeps the
+/// skill the host's.
+const SYSTEM_KEY: &str = "system";
+
 /// What a carried skill is also marked with. Its body is already in the prompt, and
 /// a skill left model-invocable is fetched again anyway — measured against the real
 /// install, see `agent/PLUGINS.md` — so the two marks are written and taken away
@@ -486,7 +493,10 @@ fn write_learn(root: &Path, bot_id: &str) -> std::io::Result<()> {
 		name: LEARN_ID.to_owned(),
 		description: LEARN_DESCRIPTION.to_owned(),
 		body: LEARN_BODY.to_owned(),
-		front: SkillFront::default(),
+		front: SkillFront {
+			metadata: Some(serde_json::json!({ OPENNEST_KEY: { SYSTEM_KEY: true } })),
+			..SkillFront::default()
+		},
 	};
 	private_files::replace(&path, marked(&drafted(None, &draft)?, true)?.as_bytes())
 }
@@ -750,13 +760,16 @@ fn skill_dirs(root: &Path, bot_id: &str) -> Vec<PathBuf> {
 /// the disk.
 ///
 /// `is_preloaded` is whether its body is carried into the agent file — see
-/// [`set_skill_preloaded`].
+/// [`set_skill_preloaded`]. `is_system` is whether this module generated it: the
+/// settings show such a skill and change nothing about it, while the bot rewrites it
+/// through its own tools — see [`SYSTEM_KEY`].
 pub struct Skill {
 	pub id: String,
 	pub name: String,
 	pub description: String,
 	pub body: String,
 	pub is_preloaded: bool,
+	pub is_system: bool,
 	pub front: SkillFront,
 }
 
@@ -816,6 +829,16 @@ pub struct SkillFront {
 /// one of them: nothing here asks who wrote a file.
 pub fn skills(root: &Path, bot_id: &str) -> Vec<Skill> {
 	skill_dirs(root, bot_id).iter().filter_map(|path| read_skill(path)).collect()
+}
+
+/// Whether the skill at that id is one this module generated. Read off the file
+/// every time rather than held: the bot rewrites its own skills between two calls,
+/// and an id naming no skill of this bot's is not a system skill.
+pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
+	skill_dir(root, bot_id, skill_id)
+		.ok()
+		.and_then(|path| read_skill(&path))
+		.is_some_and(|skill| skill.is_system)
 }
 
 /// A new skill, at the directory its name slugs to — or beside it, when something is
@@ -1034,6 +1057,7 @@ fn read_skill(path: &Path) -> Option<Skill> {
 		description: front_value(&text, DESCRIPTION_KEY).unwrap_or_default(),
 		body: body(&text).to_owned(),
 		is_preloaded: front_value(&text, PRELOAD_KEY).as_deref() == Some(MARKED),
+		is_system: front_value(&text, SYSTEM_KEY).as_deref() == Some(MARKED),
 		front: read_front(&text),
 		id,
 	})
@@ -2317,6 +2341,50 @@ mod tests {
 			String::from_utf8_lossy(&printed.stdout),
 			"{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"PLUGIN_ROOT=/somewhere/b1\"}}"
 		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	/// The mark that makes the skill the host's: written where the file is laid down,
+	/// carried by a file the bot rewrote as long as the key stays, and gone the moment
+	/// the key is. A skill a reader created carries none of it.
+	#[test]
+	fn the_learn_skill_is_marked_as_the_hosts_and_stays_so_while_the_key_stays() {
+		let root = a_root("system-mark");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = written_skill_file(&root, &bot.id, LEARN_ID);
+		assert!(written.contains("system: true"), "got {written}");
+		assert!(is_system_skill(&root, &bot.id, LEARN_ID), "the generated skill is not the host's");
+
+		let path = dir(&root, &bot.id).join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME);
+		let kept = format!(
+			"{FENCE}\nname: learn\nmetadata:\n  opennest:\n    system: true\n{FENCE}\n\nRewritten.\n"
+		);
+		private_files::replace(&path, kept.as_bytes()).expect("the bot's rewrite lands");
+		assert!(is_system_skill(&root, &bot.id, LEARN_ID), "the mark did not survive a rewrite");
+
+		let bare = format!("{FENCE}\nname: learn\n{FENCE}\n\nMine now.\n");
+		private_files::replace(&path, bare.as_bytes()).expect("the rewrite lands");
+		assert!(
+			!is_system_skill(&root, &bot.id, LEARN_ID),
+			"a file that dropped the key still reads as the host's"
+		);
+
+		let ours = create_skill(
+			&root,
+			&bot,
+			&SkillDraft {
+				name: "Tone".into(),
+				description: "How to answer.".into(),
+				body: "Briefly.".into(),
+				front: SkillFront::default(),
+			},
+		)
+		.expect("the skill is created");
+		assert!(!ours.is_system, "a skill a reader created reads as the host's");
+		assert!(!is_system_skill(&root, &bot.id, "nothing-of-the-sort"));
 
 		let _ = fs::remove_dir_all(&root);
 	}

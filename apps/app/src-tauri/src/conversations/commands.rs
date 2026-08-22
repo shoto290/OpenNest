@@ -305,6 +305,8 @@ pub async fn conversation_create_bot_skill<R: Runtime>(
 /// What the skill says, replaced whole. Every frontmatter key this app does not own
 /// is left where it was: a `SKILL.md` a hand or another tool wrote is edited, never
 /// written again from a template.
+///
+/// A skill the host generated is refused — see [`refuse_system_skill`].
 #[tauri::command]
 pub async fn conversation_update_bot_skill<R: Runtime>(
 	app: AppHandle<R>,
@@ -314,6 +316,7 @@ pub async fn conversation_update_bot_skill<R: Runtime>(
 	draft: SkillDraft,
 ) -> Result<Skill, TranscriptStoreError> {
 	let root = writable_root(&app)?;
+	refuse_system_skill(&root, &bot_id, &skill_id)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::update_skill(&root, &bot, &skill_id, &draft.into())).map(Skill::from)
 }
@@ -331,11 +334,13 @@ pub async fn conversation_set_bot_skill_preloaded<R: Runtime>(
 	is_preloaded: bool,
 ) -> Result<Skill, TranscriptStoreError> {
 	let root = writable_root(&app)?;
+	refuse_system_skill(&root, &bot_id, &skill_id)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::set_skill_preloaded(&root, &bot, &skill_id, is_preloaded)).map(Skill::from)
 }
 
-/// The skill, taken away with its own directory and nothing outside it.
+/// The skill, taken away with its own directory and nothing outside it. A skill the
+/// host generated stays — see [`refuse_system_skill`].
 #[tauri::command]
 pub async fn conversation_delete_bot_skill<R: Runtime>(
 	app: AppHandle<R>,
@@ -344,8 +349,24 @@ pub async fn conversation_delete_bot_skill<R: Runtime>(
 	skill_id: String,
 ) -> Result<(), TranscriptStoreError> {
 	let root = writable_root(&app)?;
+	refuse_system_skill(&root, &bot_id, &skill_id)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
 	bundled(bundles::remove_skill(&root, &bot, &skill_id))
+}
+
+/// The three writes above, stopped before anything is written when they name a skill
+/// this host generated: it is the bot's own memory rules, read-only from the settings
+/// and rewritten by the bot through its own tools. The mark is read off the disk on
+/// every call, so a file the bot has since rewritten answers for itself.
+fn refuse_system_skill(
+	root: &Path,
+	bot_id: &str,
+	skill_id: &str,
+) -> Result<(), TranscriptStoreError> {
+	if bundles::is_system_skill(root, bot_id, skill_id) {
+		return Err(TranscriptStoreError::SystemSkill { id: skill_id.to_owned() });
+	}
+	Ok(())
 }
 
 /// Every MCP server the bot's bundle declares, by the name each is declared under. A
@@ -660,4 +681,51 @@ pub async fn conversation_finalize_message(
 	completion: TerminalCompletion,
 ) -> Result<(), TranscriptStoreError> {
 	Ok(ready(&state)?.messages().finalize_message(id, completion.into()).await?)
+}
+
+#[cfg(test)]
+mod tests {
+	use std::fs;
+
+	use super::*;
+	use crate::db::repositories::conversations::AvatarAnimal;
+
+	fn a_bot() -> StoredBot {
+		StoredBot {
+			id: "b1".to_owned(),
+			name: "Bean".to_owned(),
+			title: String::new(),
+			model: "sonnet".to_owned(),
+			avatar_animal: AvatarAnimal::Owl,
+			avatar_blot: None,
+			avatar_image_path: None,
+			working_dir: None,
+			instructions: "Answer briefly.".to_owned(),
+			memory: String::new(),
+			denied_tools: Vec::new(),
+			created_at: 1,
+		}
+	}
+
+	/// What the settings may not do to the skill the host generated, and what it may
+	/// still do to every other one. The refusal names the skill, and it happens before
+	/// any of the three commands reaches a write.
+	#[test]
+	fn a_write_from_the_settings_stops_at_a_skill_the_host_generated() {
+		let root = std::env::temp_dir().join("opennest-commands-system-skill");
+		let _ = fs::remove_dir_all(&root);
+		let bot = a_bot();
+		bundles::write(&root, &bot).expect("the bundle is written");
+
+		let skills = bundles::skills(&root, &bot.id);
+		let system = skills.iter().find(|skill| skill.is_system).expect("the bundle generated one");
+
+		assert_eq!(
+			refuse_system_skill(&root, &bot.id, &system.id),
+			Err(TranscriptStoreError::SystemSkill { id: system.id.clone() })
+		);
+		assert_eq!(refuse_system_skill(&root, &bot.id, "written-by-a-reader"), Ok(()));
+
+		let _ = fs::remove_dir_all(&root);
+	}
 }
