@@ -74,6 +74,32 @@ looks like a simplification and silently strips every bot of its brief.
 
 `append` composes with `agent`: a bot answered `"ORCHID OPENNEST-GLOBAL"` with both set.
 
+## The prompt layer and the output style — verified
+
+Measured on 2.1.239, three findings that between them fix how a session is composed.
+
+| Measured | Result |
+| --- | --- |
+| `systemPrompt: { preset: "claude_code", append }` with an `agent` | **both answer** — the bot's brief and the appended layer are obeyed in one reply |
+| `systemPrompt: "<a string of ours>"` with an `agent` | the preset is **replaced** and the agent is lost with it — the bot answers as plain Claude |
+| the built-in `Concise` style, under an `agent` and an `append` | **survives**, in its condensed form (`"Be concise: lead with the result…"`) |
+
+- Consequence: what this app has to say on every turn goes in the `append` and nowhere
+  else. A prompt of our own is the one shape that silently costs a bot its brief, and it
+  is the shape a "just set the system prompt" change reaches for first.
+- Consequence: an output style is a third voice that composes with the other two rather
+  than overriding either. It is asked for by name, and the names are the provider's.
+- `settingSources: []` means no `settings.json` on the machine is read, so a style has
+  only one route left: the SDK's `settings` option, passed inline as
+  `{ outputStyle: "<name>" }`. `buildOptions` passes the key only when the host names a
+  style — an empty object would still be a settings layer, and the highest-priority one.
+
+The layer itself carries the **speaking situation only** — one reader, that reader's
+language, short prose, no path or status report or tool narration unless asked, and
+never Claude Code's name or a word about its own machinery. It grants no capability and
+names no tool, which is what makes it safe to compile into every session: a bot exported
+out of this app loses the chat window it was speaking in, never anything it can do.
+
 ## Frontmatter — what survives promotion
 
 An agent file is written to be *delegated*. Promoting it to the main thread honours

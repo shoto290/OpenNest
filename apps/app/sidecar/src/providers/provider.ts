@@ -13,6 +13,9 @@ export type SessionRequest = {
 	 * spelling of them: the provider module turns the pair into its own options. */
 	pluginPath?: string
 	agent?: string
+	/** The output style the host names for this session, by the name the provider
+	 * knows it under. Left out, the provider's own default stands. */
+	outputStyle?: string
 	partialMessages: boolean
 }
 

@@ -16,6 +16,7 @@ type Command = {
 	resume?: string
 	pluginPath?: string
 	agent?: string
+	outputStyle?: string
 	partialMessages?: boolean
 	text?: string
 	requestId?: string
@@ -44,6 +45,7 @@ export const serve = async (requestedId?: string) => {
 					resume: command.resume,
 					pluginPath: command.pluginPath,
 					agent: command.agent,
+					outputStyle: command.outputStyle,
 					partialMessages: command.partialMessages ?? false,
 				},
 				emit,

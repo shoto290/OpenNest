@@ -69,7 +69,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `agent?`, `partialMessages`, `env?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `agent?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -88,9 +88,13 @@ Every other command names its session.
   a resume included: neither is carried across one.
 - the provider's own preset system prompt stays set on every spawn that names an
   `agent`. Measured, not documented: without it the agent resolves and its body is
-  never applied.
-- `settingSources` is deliberately left out, which is what makes the SDK load the
-  settings on disk and the instruction files they reach — the CLI defaults.
+  never applied. Its `append` is the OpenNest layer, the same text on every session:
+  the speaking situation of a chat, no capability and no tool name, so an exported
+  bot loses the chat and nothing else. It is not editable by anyone.
+- `outputStyle` is the style the answer is written in, by the name the provider knows
+  it under (`Concise`…). Named, it is passed as `settings: { outputStyle }` — an
+  inline settings object, since `settingSources: []` closes every settings file on the
+  machine. Left out, no `settings` key is passed at all.
 - `env` is the SDK's `env`: variables for the agent this session runs, not for
   the sidecar.
 

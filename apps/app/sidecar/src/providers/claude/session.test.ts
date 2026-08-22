@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test"
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { buildOptions } from "./session"
+import { OPENNEST_LAYER } from "./system-layer"
 
 /** Run from source there is no bundle beside the sidecar to resolve. */
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
@@ -23,14 +24,40 @@ describe("buildOptions", () => {
 	})
 
 	// Measured, not documented: an `agent` set without the preset resolves, is
-	// listed, honours its model — and never applies its body.
-	it("keeps the preset system prompt on every spawn that names an agent", () => {
-		for (const spawned of [request, { ...request, resume: "s1" }]) {
+	// listed, honours its model — and never applies its body. The layer rides as the
+	// preset's `append`, which is measured to compose with the agent rather than
+	// replace it.
+	it("appends the layer to the preset on every spawn, bundled or not", () => {
+		const spawns = [
+			request,
+			{ ...request, resume: "s1" },
+			{ cwd: "/tmp", partialMessages: false },
+		]
+
+		for (const spawned of spawns) {
 			expect(buildOptions(spawned, undefined).systemPrompt).toEqual({
 				type: "preset",
 				preset: "claude_code",
+				append: OPENNEST_LAYER,
 			})
 		}
+	})
+
+	// The layer carries the speaking situation only: a bot exported out of this app
+	// keeps everything it can do.
+	it("names no tool in the layer, so it grants no capability", () => {
+		for (const tool of ["Bash", "Edit", "Grep", "Glob", "Task", "WebFetch"]) {
+			expect(OPENNEST_LAYER).not.toContain(tool)
+		}
+	})
+
+	// `settingSources: []` closes every settings file, so an inline object is the
+	// only route the host's style has left.
+	it("passes the output style the host names, and no settings without one", () => {
+		expect(
+			buildOptions({ ...request, outputStyle: "Concise" }, undefined).settings,
+		).toEqual({ outputStyle: "Concise" })
+		expect(buildOptions(request, undefined).settings).toBeUndefined()
 	})
 
 	it("carries the bundle again on a resume, since neither option is sticky", () => {
