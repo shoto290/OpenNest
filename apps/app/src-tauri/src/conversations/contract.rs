@@ -288,6 +288,10 @@ impl From<BotIdentity> for conversations::BotIdentity {
 ///
 /// `isPreloaded` is whether the body is carried into the bot's agent file, which is
 /// the whole of how a skill reaches a promoted bot — see [`crate::bundles`].
+///
+/// `isSystem` is whether the host generated it. Such a skill is shown like any other
+/// and none of the writes below will touch it: it is the bot's to rewrite through its
+/// own tools, and nobody's to change from the settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
@@ -296,6 +300,7 @@ pub struct Skill {
 	pub description: String,
 	pub body: String,
 	pub is_preloaded: bool,
+	pub is_system: bool,
 	#[serde(flatten)]
 	pub front: bundles::SkillFront,
 }
@@ -308,6 +313,7 @@ impl From<bundles::Skill> for Skill {
 			description: skill.description,
 			body: skill.body,
 			is_preloaded: skill.is_preloaded,
+			is_system: skill.is_system,
 			front: skill.front,
 		}
 	}
@@ -770,6 +776,12 @@ pub enum TranscriptStoreError {
 	/// [`crate::bundles`].
 	#[serde(rename_all = "camelCase")]
 	UnwritableBundle { detail: String },
+	/// A write from the settings named a skill the host generates and owns. The file
+	/// is exactly as it was and the bot still has the skill: it is carried, and the
+	/// bot rewrites it through its own tools — this refuses the settings, not the
+	/// skill changing.
+	#[serde(rename_all = "camelCase")]
+	SystemSkill { id: String },
 	/// The bundle's own history could not be read. Nothing on the disk is wrong and
 	/// the bot runs exactly as it did: the repository inside the bundle is what
 	/// would not open, so the writes are all there and the account of them is not —
@@ -1259,6 +1271,10 @@ mod tests {
 			(
 				TranscriptStoreError::UnknownBot { id: "b1".into() },
 				json!({ "kind": "unknownBot", "id": "b1" }),
+			),
+			(
+				TranscriptStoreError::SystemSkill { id: "learn".into() },
+				json!({ "kind": "systemSkill", "id": "learn" }),
 			),
 			(
 				TranscriptStoreError::RejectedAvatarImage {
