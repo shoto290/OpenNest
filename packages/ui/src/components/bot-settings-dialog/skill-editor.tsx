@@ -5,9 +5,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
-	BLANK_SKILL_DRAFT,
 	type BotSkillDraft,
-	isSameSkillDraft,
+	isSkillDraftUnsaved,
 	SKILL_CONTEXTS,
 	SKILL_DESCRIPTION_LIMIT,
 	SKILL_EFFORTS,
@@ -111,7 +110,7 @@ const SkillEditor = ({
 
 	const name = draft.name.trim() || t("skills.untitled")
 	const isWritten = Boolean(saved)
-	const isUnsaved = !isSameSkillDraft(draft, saved ?? BLANK_SKILL_DRAFT)
+	const isUnsaved = isSkillDraftUnsaved(draft, saved)
 	const used = toSkillDescriptionLength(draft)
 	const isOverBudget = used > SKILL_DESCRIPTION_LIMIT
 	const isSavable = isUnsaved && !isOverBudget && draft.name.trim().length > 0

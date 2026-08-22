@@ -17,12 +17,14 @@ import {
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
+	isSkillDraftUnsaved,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { SkillEditor } from "@workspace/ui/components/bot-settings-dialog/skill-editor"
 import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
+import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
@@ -61,8 +63,9 @@ const DANGER_RAIL_ITEM_CLASS = cn(
 
 type BotSettingsDialogProps = {
 	open: boolean
-	/** Fired for every way out — Escape, the backdrop, the corner affordance. The
-	 * dialog never asks to confirm: nothing in it is unsaved. */
+	/** Fired for every way out — Escape, the backdrop, the corner affordance. Asked
+	 * through a question while a skill is open with something unsaved: the editor
+	 * saves on a press, so closing over it would drop what was typed. */
 	onClose: () => void
 	value: BotSettingsValue
 	/** Fired on every edit — the dialog keeps no draft and owns no persistence. */
@@ -116,7 +119,9 @@ type BotSettingsDialogProps = {
  * Everything a bot is, in one overlay: a breadcrumb naming the bot it belongs to,
  * a rail of groups down the left and one group at a time on the right. It is fully
  * controlled and saves as you type — every keystroke emits `onValueChange` with the
- * whole value, and the dialog owns no draft, no debounce and no persistence.
+ * whole value, and the dialog owns no draft, no debounce and no persistence. A skill
+ * is the exception: its editor saves on a press, so a way out taken over one with
+ * something unsaved asks before it drops the draft.
  *
  * The breadcrumb and the rail hold still; only the open group scrolls. Below 42rem
  * of content the rail drops to its icons, and only then do its items carry a
@@ -149,11 +154,26 @@ const BotSettingsDialog = ({
 	const { t } = useTranslation("bots")
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
 	const [skill, setSkill] = useState<SkillSession | null>(null)
+	const [isLeaving, setLeaving] = useState(false)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const botName = value.name.trim() || t("dialog.untitled")
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
+
+	// The open skill weighed against what is kept, exactly as its editor weighs it:
+	// the same draft is unsaved on both sides, so the way out of the dialog asks the
+	// same question the way back to the list does.
+	const isSkillUnsaved = Boolean(
+		skill && isSkillDraftUnsaved(skill.draft, skill.opened),
+	)
+
+	const leave = () => {
+		setSkill(null)
+		onClose()
+	}
+
+	const close = () => (isSkillUnsaved ? setLeaving(true) : leave())
 
 	// The mark is written with the rest of the skill rather than the moment it is
 	// pressed: the editor saves on a press, so what the bot was told and what the
@@ -190,7 +210,7 @@ const BotSettingsDialog = ({
 	)
 
 	return (
-		<Root onOpenChange={(next) => !next && onClose()} open={open}>
+		<Root onOpenChange={(next) => !next && close()} open={open}>
 			<Content
 				className={cn(
 					"h-[34rem] w-[52rem] gap-0 overflow-hidden p-0",
@@ -364,6 +384,15 @@ const BotSettingsDialog = ({
 						</Tabs.Panel>
 					</Tabs.Root>
 				)}
+
+				<ConfirmDialog
+					confirmLabel={t("skills.leave.action")}
+					description={t("skills.leave.description")}
+					onConfirm={leave}
+					onOpenChange={setLeaving}
+					open={isLeaving}
+					title={t("skills.leave.title")}
+				/>
 			</Content>
 		</Root>
 	)

@@ -117,6 +117,11 @@ const isSameSkillDraft = (a: BotSkillDraft, b: BotSkillDraft) => {
 	)
 }
 
+/** Whether a draft has anything to save: what is being written weighed against what
+ * is kept, and against a skill nobody has written yet for a creation. */
+const isSkillDraftUnsaved = (draft: BotSkillDraft, saved?: BotSkillDraft) =>
+	!isSameSkillDraft(draft, saved ?? BLANK_SKILL_DRAFT)
+
 const toAnsweredFields = (draft: BotSkillDraft): Record<string, unknown> =>
 	Object.fromEntries(
 		Object.entries(draft).filter(([, value]) => isSkillFieldAnswered(value)),
@@ -211,6 +216,7 @@ export {
 	type BotSkillItem,
 	isConfigObject,
 	isSameSkillDraft,
+	isSkillDraftUnsaved,
 	parseMcpServerConfig,
 	SKILL_CONTEXTS,
 	SKILL_DESCRIPTION_LIMIT,

@@ -266,7 +266,7 @@ export function App() {
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}
 					onSkillChange={(id, draft) =>
-						skills.controller.describe(id, toSkillDraft(draft))
+						skills.controller.save(id, toSkillDraft(draft))
 					}
 					onSkillCreate={(draft, isPreloaded) =>
 						skills.controller.create(toSkillDraft(draft), isPreloaded)
