@@ -174,6 +174,11 @@ const WHERE_AND_WHO: &str = "Run the bash command `pwd` and reply with nothing b
 const WHICH_MODEL: &str =
 	"Which Claude model are you running as? Reply with one word: opus, sonnet or haiku.";
 
+/// What the session started with, asked of the bot itself: the hook prints it into
+/// the context at turn zero, so a child that can answer is a child the hook reached.
+const WHICH_ROOT: &str =
+	"What is the PLUGIN_ROOT you were given at the start of this session? Reply with nothing but that path.";
+
 /// What a bot is created on, and what a reader would have had to pick. A child
 /// naming the second is a child the key reached: nothing else would move it off the
 /// first.
@@ -369,6 +374,30 @@ async fn a_bot_reaches_the_mcp_servers_its_bundle_declares() {
 	assert!(
 		answer.contains(MCP_WORD),
 		"the server the bundle declares was out of reach: {answer:?}"
+	);
+}
+
+/// The bot is told where its own directory is before it says anything, by the
+/// `SessionStart` hook in its own bundle. `CLAUDE_PLUGIN_ROOT` is set for a hook and
+/// empty in the bot's own `Bash`, so this is the only route the path has — and the
+/// only measurement that can tell whether it arrives at all.
+///
+/// The path is compared both as it was written and as the machine resolves it: macOS
+/// hands the temporary directory out through a symlink, and the child reports where
+/// it really is.
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_is_handed_its_own_directory_before_its_first_turn() {
+	let mut live = started(None, Some(BANANA), std::env::temp_dir()).await;
+	let told = text(&live.run_turn(WHICH_ROOT).await);
+	live.sidecar.shutdown().await;
+
+	let bundle = bundles::dir(&bundles_root(), "live-bot");
+	let resolved = bundle.canonicalize().unwrap_or_else(|_| bundle.clone());
+	assert!(
+		told.contains(&seen_as(&bundle)) || told.contains(&seen_as(&resolved)),
+		"the hook did not reach the child: {told:?} for {}",
+		seen_as(&resolved)
 	);
 }
 
