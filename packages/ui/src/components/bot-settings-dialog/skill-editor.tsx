@@ -67,6 +67,10 @@ type SkillEditorProps = {
 	/** Fired only once the confirmation is accepted. Left out for a skill that does
 	 * not exist yet — there is nothing kept to take away. */
 	onDelete?: () => void
+	/** Whether the host wrote this skill. It is then read rather than edited: what it
+	 * says, what it is for and what it tells the bot, and nothing to save, delete or
+	 * carry into the prompt — every one of those is decided where it is generated. */
+	isSystem?: boolean
 	/** Which section the editor mounts on. Read once, as it mounts. */
 	defaultSection?: string
 	/** Whether the delete mounts with its question already up. Read once. */
@@ -91,6 +95,11 @@ type SkillEditorProps = {
  * whether to reach for the skill, so they are budgeted as one and counted against
  * that budget under the field. An agent and a background run only stand under a
  * forked context — they mean nothing in the conversation the skill was reached from.
+ *
+ * A skill the host wrote drops all of that: what it says, what it is for and what it
+ * tells the bot, read-only on one surface, with a sentence saying who keeps it. There
+ * is nothing to save, nothing to delete and no prompt to carry it into, so none of
+ * those controls stand.
  */
 const SkillEditor = ({
 	draft,
@@ -99,6 +108,7 @@ const SkillEditor = ({
 	onBack,
 	onSave,
 	onDelete,
+	isSystem = false,
 	defaultSection,
 	defaultConfirming,
 	defaultLeaving,
@@ -110,6 +120,48 @@ const SkillEditor = ({
 	const iconsOnly = useIsNarrowerThan(root, RAIL_LABELS_MIN_WIDTH)
 
 	const name = draft.name.trim() || t("skills.untitled")
+
+	if (isSystem)
+		return (
+			<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+				<div className="flex shrink-0 items-center gap-2 border-border border-b py-2 pr-5 pl-2">
+					<Button onClick={onBack} size="sm" variant="ghost">
+						<Icons.Previous aria-hidden="true" className="size-3.5" />
+						{t("skills.back")}
+					</Button>
+					<span className="min-w-0 flex-1 truncate font-medium text-foreground text-sm">
+						{name}
+					</span>
+					<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
+						{t("skills.system.tag")}
+					</span>
+				</div>
+
+				<div className={SETTINGS_PANEL_CLASS}>
+					<p className="text-muted-foreground text-xs">
+						{t("skills.system.notice")}
+					</p>
+					<SettingsField
+						label={t("skills.name.label")}
+						readOnly
+						value={draft.name}
+					/>
+					<SettingsField
+						label={t("skills.description.label")}
+						readOnly
+						rows={2}
+						value={draft.description}
+					/>
+					<SettingsField
+						fill
+						label={t("skills.body.label")}
+						readOnly
+						value={draft.body}
+					/>
+				</div>
+			</div>
+		)
+
 	const isWritten = Boolean(saved)
 	const isUnsaved = isSkillDraftUnsaved(draft, saved)
 	const used = toSkillDescriptionLength(draft)

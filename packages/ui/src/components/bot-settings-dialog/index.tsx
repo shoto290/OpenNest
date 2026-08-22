@@ -292,6 +292,7 @@ const BotSettingsDialog = ({
 	const openSkillEditor = ({ draft, opened }: SkillSession) => (
 		<SkillEditor
 			draft={draft}
+			isSystem={opened?.isSystem}
 			onBack={() => setSkill(null)}
 			onDelete={opened ? () => deleteSkill(opened) : undefined}
 			onDraftChange={(next) => setSkill({ draft: next, opened })}

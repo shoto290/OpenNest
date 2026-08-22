@@ -89,6 +89,7 @@ export const toSkillItem = (skill: BotSkill): BotSkillItem => ({
 	description: skill.description,
 	body: skill.body,
 	isPreloaded: skill.isPreloaded,
+	isSystem: false,
 	whenToUse: skill.whenToUse ?? "",
 	argumentHint: skill.argumentHint ?? "",
 	arguments: toLines(skill.arguments),

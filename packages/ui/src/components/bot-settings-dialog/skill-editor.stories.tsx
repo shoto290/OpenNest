@@ -13,6 +13,7 @@ import {
 	DETAILED_SKILL,
 	LONG_SKILL,
 	OVER_BUDGET_SKILL,
+	SYSTEM_SKILL,
 } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 
 const [CARRIED] = BOT_SKILLS
@@ -204,6 +205,36 @@ export const Advanced = meta.story({
 					"What the bundle carries around the skill rather than in it: a license, what it needs of the runtime, and the metadata nothing here reads. Reach for this to check that metadata is presented as kept-as-is rather than as something the editor understands.",
 			},
 		},
+	},
+})
+
+export const System = meta.story({
+	args: { draft: SYSTEM_SKILL, isSystem: true, saved: SYSTEM_SKILL },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill the host wrote, opened. Check that the rail of sections is gone — there is no frontmatter for a reader to answer — that the name, the description and the body are readable and selectable but refuse a keystroke, and that no save, no delete and no preload switch stand anywhere on the surface. The sentence above the fields is the whole explanation: what it says is decided where it is generated. The way back is the only control left.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const body = canvas.getByLabelText("Body")
+
+		await expect(body).toHaveAttribute("readonly")
+		await userEvent.type(body, "!")
+		await expect(args.onDraftChange).not.toHaveBeenCalled()
+
+		await expect(
+			canvas.queryByRole("button", { name: "Save skill" }),
+		).toBeNull()
+		await expect(
+			canvas.queryByRole("button", { name: "Delete skill" }),
+		).toBeNull()
+		await expect(canvas.queryByText("Preload this skill")).toBeNull()
+
+		await userEvent.click(canvas.getByRole("button", { name: "All skills" }))
+		await expect(args.onBack).toHaveBeenCalledTimes(1)
 	},
 })
 

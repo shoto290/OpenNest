@@ -161,6 +161,11 @@ const bots = {
 			description:
 				"Une compétence préchargée est dans l'invite de ce bot à chaque tour. Sinon, elle reste sur le disque comme un texte que le bot peut aller lire.",
 		},
+		system: {
+			tag: "Système",
+			notice:
+				"L'hôte écrit cette compétence et la tient à jour. Elle est ici pour être lue : ce qu'elle dit se décide là où elle est générée, pas dans cette fenêtre.",
+		},
 		model: {
 			label: "Modèle",
 			placeholder: "Celui du bot",

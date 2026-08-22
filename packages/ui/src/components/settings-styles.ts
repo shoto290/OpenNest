@@ -9,6 +9,12 @@ const FIELD_CONTROL_CLASS =
 const FIELD_CONTROL_INVALID_CLASS =
 	"border-destructive focus-visible:border-destructive focus-visible:ring-destructive/30"
 
+/** A control holding something a reader may read but not write — a field of a
+ * skill the host keeps up to date. The neutral fill says so at a glance and the
+ * caret still lands in it, so the text stays selectable and reachable by keyboard.
+ */
+const FIELD_CONTROL_READONLY_CLASS = "cursor-default bg-muted"
+
 /** The marks an option wears, whatever shape it is laid out in — a tile, a row.
  * The chosen one is the filled surface, the way a selected row in the system's
  * select is: one neutral fill and a name that stops being muted. No outline around
@@ -77,6 +83,7 @@ export {
 	DIALOG_POPUP_CLASS,
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
+	FIELD_CONTROL_READONLY_CLASS,
 	FIELD_LABEL_CLASS,
 	FIELD_OPTION_CLASS,
 	FIELD_OPTION_MARKS_CLASS,

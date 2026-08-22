@@ -3,6 +3,7 @@ import { type ChangeEvent, useId } from "react"
 import {
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
+	FIELD_CONTROL_READONLY_CLASS,
 	FIELD_LABEL_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
@@ -10,7 +11,8 @@ import { cn } from "@workspace/ui/lib/utils"
 type SettingsFieldProps = {
 	label: string
 	value: string
-	onValueChange: (value: string) => void
+	/** Left out only for a field that is read rather than written. */
+	onValueChange?: (value: string) => void
 	placeholder?: string
 	/** What the field will and will not take, said under the control rather than in
 	 * the placeholder — a placeholder is gone the moment a reader starts typing,
@@ -25,6 +27,10 @@ type SettingsFieldProps = {
 	/** Turns the control into a textarea that takes the height its container has
 	 * left, for a field that is the whole of what a surface shows. */
 	fill?: boolean
+	/** Whether the value is there to be read rather than written. The control keeps
+	 * its place in the tab order and its text stays selectable — it only refuses the
+	 * keystroke. */
+	readOnly?: boolean
 }
 
 const SettingsField = ({
@@ -36,13 +42,14 @@ const SettingsField = ({
 	error,
 	rows,
 	fill = false,
+	readOnly = false,
 }: SettingsFieldProps) => {
 	const id = useId()
 	const hintId = hint ? `${id}-hint` : undefined
 	const errorId = error ? `${id}-error` : undefined
 	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined
 	const emit = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-		onValueChange(event.target.value)
+		onValueChange?.(event.target.value)
 
 	return (
 		<div className={cn("flex flex-col gap-1.5", fill && "min-h-0 flex-1")}>
@@ -56,12 +63,14 @@ const SettingsField = ({
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						error && FIELD_CONTROL_INVALID_CLASS,
+						readOnly && FIELD_CONTROL_READONLY_CLASS,
 						"resize-none leading-relaxed",
 						fill && "min-h-0 flex-1",
 					)}
 					id={id}
 					onChange={emit}
 					placeholder={placeholder}
+					readOnly={readOnly}
 					rows={rows}
 					value={value}
 				/>
@@ -72,10 +81,12 @@ const SettingsField = ({
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						error && FIELD_CONTROL_INVALID_CLASS,
+						readOnly && FIELD_CONTROL_READONLY_CLASS,
 					)}
 					id={id}
 					onChange={emit}
 					placeholder={placeholder}
+					readOnly={readOnly}
 					type="text"
 					value={value}
 				/>

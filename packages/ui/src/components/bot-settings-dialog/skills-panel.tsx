@@ -81,6 +81,13 @@ const SkillsPanel = ({ skills, onOpen, onAdd }: SkillsPanelProps) => {
 									</span>
 								) : null}
 							</span>
+							{skill.isSystem ? (
+								<span
+									className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}
+								>
+									{t("skills.system.tag")}
+								</span>
+							) : null}
 							{skill.isPreloaded ? (
 								<span className={cn(SETTINGS_TAG_CLASS, "text-foreground")}>
 									{t("skills.preloaded.tag")}

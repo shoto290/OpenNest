@@ -168,6 +168,11 @@ const bots = {
 			description:
 				"A preloaded skill is in this bot's prompt on every turn. Left off, it stays on the disk as text the bot may go and read.",
 		},
+		system: {
+			tag: "System",
+			notice:
+				"The host writes this skill and keeps it up to date. It is here to be read: what it says is decided where it is generated, not in this dialog.",
+		},
 		model: {
 			label: "Model",
 			placeholder: "The bot's own",

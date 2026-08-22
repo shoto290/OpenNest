@@ -9,6 +9,7 @@ export const BOT_SKILLS: BotSkillItem[] = [
 		description: "How this project words a changelog entry",
 		body: "# Release notes\n\nOne line per change, in the past tense, naming what a reader gains rather than what moved in the code.",
 		isPreloaded: true,
+		isSystem: false,
 	},
 	{
 		id: "commit-style",
@@ -16,6 +17,7 @@ export const BOT_SKILLS: BotSkillItem[] = [
 		description: "Conventional commits, one concern per commit",
 		body: "# Commit style\n\n`type(scope): subject` in the imperative. One concern per commit — a commit that needs an `and` is two commits.",
 		isPreloaded: false,
+		isSystem: false,
 	},
 	{
 		id: "review-checklist",
@@ -23,6 +25,7 @@ export const BOT_SKILLS: BotSkillItem[] = [
 		description: "",
 		body: "# Review checklist\n\nEvery changed line traces to the request. No refactor rides along.",
 		isPreloaded: false,
+		isSystem: false,
 	},
 ]
 
@@ -57,6 +60,7 @@ Anything that emits: a mail, an invoice, a webhook. Replaying those is a second 
 
 Write the incident down the same day. A runbook that grows after every incident is the only kind worth reading before one.`,
 	isPreloaded: true,
+	isSystem: false,
 }
 
 /** A skill that answers everything its format lets it answer, forked context
@@ -72,6 +76,7 @@ export const DETAILED_SKILL: BotSkillItem = {
 	argumentHint: "[version] [--draft]",
 	arguments: "version\ndraft",
 	isPreloaded: false,
+	isSystem: false,
 	isModelInvocationDisabled: false,
 	isUserInvocable: true,
 	paths: "CHANGELOG.md\ndocs/releases/**/*.md",
@@ -97,4 +102,15 @@ export const OVER_BUDGET_SKILL: BotSkillItem = {
 	description: "Writes the changelog entry for a release. ".repeat(20),
 	whenToUse:
 		"A release is being cut and nobody wants to read the diff. ".repeat(20),
+}
+
+/** A skill the host wrote: listed and opened like the others, tagged as its own, and
+ * read rather than edited — its body is regenerated from what the machine answers. */
+export const SYSTEM_SKILL: BotSkillItem = {
+	id: "environment",
+	name: "environment",
+	description: "What this machine is, as the host reads it",
+	body: "# Environment\n\nPlatform: darwin 24.5.0\nShell: /bin/zsh\nGit: 2.45.2\nNode: 22.11.0\n\nThe working tree is a Turborepo monorepo. Every path below is read from the machine each time this bot starts, so nothing here is worth writing by hand.",
+	isPreloaded: true,
+	isSystem: true,
 }
