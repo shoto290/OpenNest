@@ -29,6 +29,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		agent::commands::agent_save_session,
 		conversations::commands::conversation_bots,
 		conversations::commands::conversation_create_bot,
+		conversations::commands::conversation_duplicate_bot,
 		conversations::commands::conversation_update_bot,
 		conversations::commands::conversation_delete_bot,
 		conversations::commands::conversation_set_bot_avatar_image,

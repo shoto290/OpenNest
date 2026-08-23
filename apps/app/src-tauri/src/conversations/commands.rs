@@ -32,6 +32,10 @@ use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::db::repositories::runtime_context::ParticipantKey;
 
+/// What a duplicate is called: the source's name and this, so the two are told apart
+/// in a roster that orders by nothing a reader picked.
+const DUPLICATE_SUFFIX: &str = " copy";
+
 /// The database, or why the launch never got one. Borrowed rather than cloned:
 /// [`db::DatabaseState`] owns the outcome for the whole run.
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreError> {
@@ -180,6 +184,85 @@ pub async fn conversation_create_bot<R: Runtime>(
 		return Err(refusal);
 	}
 	Ok(Bot::of(created, dir.as_deref(), bundle_root.as_deref()))
+}
+
+/// A second bot of the first one, with nothing it has said. Everything the reader can
+/// see of a bot comes over — what it was told, the model it answers under, the face it
+/// wears, where it works, what it is denied and how it writes — and its bundle comes
+/// with it: the skills it carries, the servers it declares, the hooks it was given.
+/// The transcript does not, and neither does what the source came to remember: the
+/// duplicate is a bot to start with rather than a conversation to continue.
+///
+/// The identity is read through [`Bot::of`], which is the same projection the panel
+/// showing the source is looking at — the agent file rather than the columns — so what
+/// the reader duplicates is the bot they were shown.
+#[tauri::command]
+pub async fn conversation_duplicate_bot<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+) -> Result<Bot, TranscriptStoreError> {
+	let dir = avatars::dir(&app);
+	let bundle_root = bundles::root(&app);
+	let database = ready(&state)?;
+	let source = database
+		.conversations()
+		.bot(bot_id.clone())
+		.await?
+		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.clone() })?;
+	let identity = duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()));
+	let output_style = identity.output_style.clone();
+	let created = database.conversations().create_bot(identity.into()).await?;
+	avatars::sweep_referenced(database, dir.as_deref()).await;
+	if let Err(refusal) =
+		duplicated_bundle(bundle_root.as_deref(), database, &bot_id, &created, &output_style).await
+	{
+		// Same reading as the creation above, and one file more: the copy is taken back
+		// with the row, so a duplicate nothing can be started from leaves neither a bot
+		// on the roster nor a directory nobody derives any more.
+		let _ = database.conversations().delete_bot(created.id.clone()).await;
+		forget_bundle(bundle_root.as_deref(), database, &created.id).await;
+		avatars::sweep_referenced(database, dir.as_deref()).await;
+		return Err(refusal);
+	}
+	Ok(Bot::of(created, dir.as_deref(), bundle_root.as_deref()))
+}
+
+/// The source's own bundle, copied under the duplicate before the manifest and the
+/// agent are generated for it: a skill is carried into the body the session is really
+/// started on, and a server has to be declared for the manifest to point at it, so
+/// both have to be on the disk by the time that write runs.
+async fn duplicated_bundle(
+	root: Option<&Path>,
+	database: &db::Database,
+	source_id: &str,
+	bot: &StoredBot,
+	output_style: &str,
+) -> Result<(), TranscriptStoreError> {
+	if let Some(root) = root {
+		bundles::inherit(root, source_id, &bot.id).map_err(|error| {
+			TranscriptStoreError::UnwritableBundle { detail: error.to_string() }
+		})?;
+	}
+	write_bundle(root, database, bot, output_style).await
+}
+
+/// Who the duplicate is: the source, under a name that says where it came from. The
+/// name is the one thing that cannot be shared — two bots wearing the same one is a
+/// roster a reader cannot read — and it is the only thing changed.
+fn duplicated_identity(source: Bot) -> BotIdentity {
+	BotIdentity {
+		name: format!("{}{DUPLICATE_SUFFIX}", source.name),
+		title: source.title,
+		model: source.model,
+		avatar_animal: source.avatar_animal,
+		avatar_blot: source.avatar_blot,
+		avatar_image_path: source.avatar_image_path,
+		working_dir: source.working_dir,
+		instructions: source.instructions,
+		denied_tools: source.denied_tools,
+		output_style: source.output_style,
+	}
 }
 
 /// Who the bot is, replaced whole: every field of [`BotIdentity`] is written, so
