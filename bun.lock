@@ -5,7 +5,7 @@
     "": {
       "name": "opennest",
       "devDependencies": {
-        "@biomejs/biome": "^2.4.12",
+        "@biomejs/biome": "2.5.8",
         "@types/bun": "^1.3.14",
         "husky": "^9.1.7",
         "lint-staged": "^16.2.7",

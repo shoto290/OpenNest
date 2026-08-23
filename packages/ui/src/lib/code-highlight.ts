@@ -118,10 +118,7 @@ function remember(key: string, lines: CodeTokenLines) {
 }
 
 /** Synchronous by design: no grammar fetch, no WASM, identical output on every run. */
-export function highlightCode(
-	code: string,
-	language?: string,
-): CodeTokenLines {
+export function highlightCode(code: string, language?: string): CodeTokenLines {
 	const resolved = resolveCodeLanguage(language)
 	const key = `${resolved}:${code}`
 	const cached = tokenCache.get(key)

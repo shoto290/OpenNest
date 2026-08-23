@@ -1092,7 +1092,9 @@ export const MathDisplay = meta.story({
 	play: async ({ canvasElement }) => {
 		await waitFor(
 			() =>
-				expect(canvasElement.querySelector(".katex-display")).toBeInTheDocument(),
+				expect(
+					canvasElement.querySelector(".katex-display"),
+				).toBeInTheDocument(),
 			RENDERER_ARRIVES,
 		)
 		await expect(typesetIn(canvasElement)).toHaveLength(2)
@@ -1363,7 +1365,9 @@ export const DestinationsFetchNothing = meta.story({
 		]).toEqual([MARK_BOX])
 
 		await expect(
-			canvas.getAllByRole("link", { name: "a directory (xn--e1afmkfd.xn--p1ai)" }),
+			canvas.getAllByRole("link", {
+				name: "a directory (xn--e1afmkfd.xn--p1ai)",
+			}),
 		).toHaveLength(2)
 		await expect(requestsSinceRender()).toEqual([])
 	},

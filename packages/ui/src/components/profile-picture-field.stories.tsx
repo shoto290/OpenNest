@@ -43,7 +43,9 @@ export const Default = meta.story({
 		await expect(args.onPick).toHaveBeenCalledWith(PICKED_PICTURE_FILE)
 		await expect(input).toHaveValue("")
 
-		await userEvent.click(canvas.getByRole("button", { name: "Remove picture" }))
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Remove picture" }),
+		)
 		await expect(args.onRemove).toHaveBeenCalledTimes(1)
 	},
 })

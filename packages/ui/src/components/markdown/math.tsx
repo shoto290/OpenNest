@@ -31,7 +31,10 @@ const contentOf = (html: string, source: string): MathContent =>
  * thrown — and for one that would cost more than an expression may. A source that
  * changes, or a block that goes away, is never typeset at all: the work is dropped
  * where it waits rather than after it is paid for. */
-export const MarkdownMath = ({ display = false, source }: MarkdownMathProps) => {
+export const MarkdownMath = ({
+	display = false,
+	source,
+}: MarkdownMathProps) => {
 	const [html, setHtml] = useState("")
 
 	useEffect(() => {
