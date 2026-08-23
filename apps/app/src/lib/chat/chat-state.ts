@@ -20,6 +20,17 @@ export type ChatError = {
 	error: TransportError
 }
 
+/** A prompt the reader sent before the session could take it. The text is the one
+ * that will be submitted, paths and all — the composer names its stored files in
+ * it before it is sent, and nothing here rewrites what was typed. The id is the
+ * entry's own: the transcript row is only written when it is submitted, so until
+ * then this is the only name it has. */
+export type OutboxEntry = {
+	id: string
+	text: string
+	repliedToMessageId: string | null
+}
+
 /** What the screen needs that a restart may not survive, plus a mirror of the
  * durable transcript. Everything here but `messages`, `hasOlder` and
  * `conversationId` belongs to the running process: a connection, a turn, a
@@ -54,6 +65,10 @@ export type ChatState = {
 	 * store took it before the submission was attempted — so the failure lives
 	 * here rather than on the durable row, which no submission can change. */
 	rejectedPromptId: string | null
+	/** The prompts sent while nothing could take them, in the order they were sent.
+	 * Kept across a reset: the session going away is why they are waiting. A stop
+	 * empties it onto the record — nothing here is held back, only waiting. */
+	outbox: OutboxEntry[]
 	activities: ActivityEvent[]
 	permission: PermissionRequest | null
 	errors: ChatError[]
@@ -90,6 +105,16 @@ export type ChatAction =
 	  }
 	| { type: "olderLoading"; loading: boolean }
 	| { type: "promptSubmitted" }
+	/** A prompt nothing could take yet, put at the back of the bot's outbox. */
+	| { type: "promptHeld"; entry: OutboxEntry }
+	/** An entry taken for submission that was never written down. It goes back where
+	 * it was taken from: nothing on the record says the reader ever asked it. */
+	| { type: "promptReturned"; entry: OutboxEntry }
+	/** An entry leaving the outbox, whether it is being submitted or dropped. */
+	| { type: "outboxEntryRemoved"; id: string }
+	/** Everything the outbox held, taken out at once — a stop puts it on the record
+	 * instead, and there is nothing left waiting to be sent. */
+	| { type: "outboxCleared" }
 	| { type: "promptRejected"; id: string | null; error: TransportError }
 	| { type: "promptRetried"; id: string }
 	| { type: "stopRejected"; error: TransportError }
@@ -108,6 +133,7 @@ export const initialChatState: ChatState = {
 	hasOlder: false,
 	loadingOlder: false,
 	rejectedPromptId: null,
+	outbox: [],
 	activities: [],
 	permission: null,
 	errors: [],
@@ -397,6 +423,12 @@ function applyPromptRetried(state: ChatState, id: string): ChatState {
 	return setTurn({ ...state, rejectedPromptId: null }, "submitting")
 }
 
+/** An entry leaves and the rest keep their order. */
+function applyOutboxEntryRemoved(state: ChatState, id: string): ChatState {
+	const outbox = state.outbox.filter((entry) => entry.id !== id)
+	return outbox.length === state.outbox.length ? state : { ...state, outbox }
+}
+
 function applyStopRejected(state: ChatState, error: TransportError): ChatState {
 	const next = pushError(state, error)
 	return next.turn === "stopping" ? { ...next, turn: "failed" } : next
@@ -426,6 +458,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 				: { ...state, loadingOlder: action.loading }
 		case "promptSubmitted":
 			return setTurn({ ...state, rejectedPromptId: null }, "submitting")
+		case "promptHeld":
+			return { ...state, outbox: [...state.outbox, action.entry] }
+		case "promptReturned":
+			return { ...state, outbox: [action.entry, ...state.outbox] }
+		case "outboxEntryRemoved":
+			return applyOutboxEntryRemoved(state, action.id)
+		case "outboxCleared":
+			return state.outbox.length === 0 ? state : { ...state, outbox: [] }
 		case "promptRejected":
 			return applyPromptRejected(state, action.id, action.error)
 		case "promptRetried":

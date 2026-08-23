@@ -603,3 +603,65 @@ describe("session reset", () => {
 		expect(reset.sessionId).toBe("s-1")
 	})
 })
+
+describe("the outbox a prompt waits in", () => {
+	const held = (state: ChatState, id: string, text: string): ChatState =>
+		chatReducer(state, {
+			type: "promptHeld",
+			entry: { id, text, repliedToMessageId: null },
+		})
+
+	const queued = (state: ChatState) => state.outbox.map((entry) => entry.text)
+
+	const three = held(held(held(opened, "a", "one"), "b", "two"), "c", "three")
+
+	it("holds what was sent in the order it was sent", () => {
+		expect(queued(three)).toEqual(["one", "two", "three"])
+		expect(three.outbox[0]).toMatchObject({ id: "a", text: "one" })
+	})
+
+	it("drops the entry named and keeps the order of the rest", () => {
+		const without = chatReducer(three, {
+			type: "outboxEntryRemoved",
+			id: "b",
+		})
+
+		expect(queued(without)).toEqual(["one", "three"])
+		expect(chatReducer(without, { type: "outboxEntryRemoved", id: "b" })).toBe(
+			without,
+		)
+	})
+
+	// A prompt taken for submission that was never written down is still one nobody
+	// has seen. It goes back to the front, ahead of what was sent after it.
+	it("returns an entry nothing was written for to the front", () => {
+		const taken = chatReducer(three, { type: "outboxEntryRemoved", id: "a" })
+		const returned = chatReducer(taken, {
+			type: "promptReturned",
+			entry: { id: "a", text: "one", repliedToMessageId: null },
+		})
+
+		expect(queued(returned)).toEqual(["one", "two", "three"])
+	})
+
+	// A stop puts every held prompt on the record. None of them is waiting to be
+	// sent afterwards, so the line the reader was in is empty rather than paused.
+	it("empties whole when a stop takes what it was holding", () => {
+		const cleared = chatReducer(three, { type: "outboxCleared" })
+
+		expect(cleared.outbox).toEqual([])
+		expect(chatReducer(cleared, { type: "outboxCleared" })).toBe(cleared)
+	})
+
+	// The session going away is exactly why a prompt is waiting. Losing the line on
+	// the restart that was going to send it would be the one moment it must not.
+	it("survives the session it was waiting for being reset", () => {
+		const reset = chatReducer(three, {
+			type: "sessionReset",
+			runtime: run(1),
+			sessionId: null,
+		})
+
+		expect(queued(reset)).toEqual(["one", "two", "three"])
+	})
+})
