@@ -24,6 +24,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		agent::commands::agent_submit_prompt,
 		agent::commands::agent_cancel_turn,
 		agent::commands::agent_respond_to_permission,
+		agent::commands::agent_answer_question,
 		agent::commands::agent_shutdown,
 		agent::commands::agent_load_session,
 		agent::commands::agent_save_session,

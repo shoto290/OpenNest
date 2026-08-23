@@ -712,6 +712,20 @@ pub async fn agent_respond_to_permission(
 	state.live.session_for(&scope)?.respond_to_permission(&id, decision).await
 }
 
+/// The reader's answers, keyed by the question they answer. A denial goes back
+/// through [`agent_respond_to_permission`]: refusing to answer is refusing the
+/// tool, and the child is told so the same way.
+#[tauri::command]
+pub async fn agent_answer_question(
+	state: State<'_, AgentState>,
+	scope: RuntimeScope,
+	id: String,
+	answers: HashMap<String, String>,
+	annotations: Option<serde_json::Value>,
+) -> Result<(), TransportError> {
+	state.live.session_for(&scope)?.answer_question(&id, answers, annotations).await
+}
+
 /// The unguarded primitive, for one participant. The lifecycle gate belongs to the
 /// command layer, so reaching this directly is reserved for a caller that already
 /// holds the claim — or a test standing in for one.

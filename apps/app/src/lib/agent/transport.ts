@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event"
 import type {
 	CheckReport,
 	PermissionDecision,
+	QuestionAnswers,
 	RuntimeScope,
 	ScopedEvent,
 	SessionHandle,
@@ -45,6 +46,19 @@ export const agentTransport: ChatDriver = {
 		id: string,
 		decision: PermissionDecision,
 	) => invoke<void>("agent_respond_to_permission", { scope, id, decision }),
+
+	answerQuestion: (
+		scope: RuntimeScope,
+		id: string,
+		answers: QuestionAnswers,
+		annotations?: Record<string, unknown>,
+	) =>
+		invoke<void>("agent_answer_question", {
+			scope,
+			id,
+			answers,
+			annotations: annotations ?? null,
+		}),
 
 	shutdown: (scope: RuntimeScope) => invoke<void>("agent_shutdown", { scope }),
 

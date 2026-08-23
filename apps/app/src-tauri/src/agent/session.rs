@@ -5,6 +5,7 @@
 //! back. What ends a session is the lane closing — which happens when the sidecar
 //! drops it, and when the sidecar itself dies.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -290,18 +291,22 @@ impl Session {
 		self.write(protocol::interrupt_command(&self.key))
 	}
 
+	/// The tool input the ask was made on, taken once: whichever answer arrives
+	/// first owns it, and a second one finds nothing pending under that id.
+	async fn take_pending_input(&self, id: &str) -> Result<Value, TransportError> {
+		let mut shared = self.shared.lock().await;
+		shared
+			.translator
+			.take_permission_input(id)
+			.ok_or_else(|| TransportError::UnknownPermission { id: id.to_owned() })
+	}
+
 	pub async fn respond_to_permission(
 		&self,
 		id: &str,
 		decision: PermissionDecision,
 	) -> Result<(), TransportError> {
-		let input = {
-			let mut shared = self.shared.lock().await;
-			shared
-				.translator
-				.take_permission_input(id)
-				.ok_or_else(|| TransportError::UnknownPermission { id: id.to_owned() })?
-		};
+		let input = self.take_pending_input(id).await?;
 
 		let command = match decision {
 			PermissionDecision::AllowOnce => protocol::allow_command(&self.key, id, &input),
@@ -311,6 +316,27 @@ impl Session {
 		};
 		self.write(command)?;
 		self.sink.emit(AgentEvent::PermissionResolved { id: id.to_owned(), decision });
+		Ok(())
+	}
+
+	/// The answer travels as the tool input the child would have run with, with the
+	/// reader's replies written into it: the tool is allowed, and what it reads is
+	/// what they said. Every string is carried as it was given — one label, several
+	/// joined, or words typed instead.
+	pub async fn answer_question(
+		&self,
+		id: &str,
+		answers: HashMap<String, String>,
+		annotations: Option<Value>,
+	) -> Result<(), TransportError> {
+		let input = self.take_pending_input(id).await?;
+
+		let answered = answered_input(input, answers, annotations);
+		self.write(protocol::allow_command(&self.key, id, &answered))?;
+		self.sink.emit(AgentEvent::PermissionResolved {
+			id: id.to_owned(),
+			decision: PermissionDecision::AllowOnce,
+		});
 		Ok(())
 	}
 
@@ -333,6 +359,22 @@ impl Session {
 		let _ = self.write(protocol::close_command(&self.key));
 		self.sidecar.detach(&self.key);
 	}
+}
+
+fn answered_input(
+	input: Value,
+	answers: HashMap<String, String>,
+	annotations: Option<Value>,
+) -> Value {
+	let mut fields = match input {
+		Value::Object(fields) => fields,
+		_ => serde_json::Map::new(),
+	};
+	fields.insert("answers".to_owned(), serde_json::json!(answers));
+	if let Some(annotations) = annotations {
+		fields.insert("annotations".to_owned(), annotations);
+	}
+	Value::Object(fields)
 }
 
 impl From<TurnOutcome> for TurnState {

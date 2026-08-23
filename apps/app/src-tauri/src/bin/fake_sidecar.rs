@@ -430,6 +430,49 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 				}),
 			);
 		}
+		"question" => {
+			let request_id = format!("ask_fake_{key}");
+			run.pending_permission = Some(request_id.clone());
+			emit(
+				key,
+				json!({
+					"type": "control_request",
+					"request_id": request_id,
+					"request": {
+						"subtype": "can_use_tool",
+						"tool_name": "AskUserQuestion",
+						"display_name": "AskUserQuestion",
+						"description": null,
+						"input": {
+							"questions": [
+								{
+									"header": "Library",
+									"question": "Which library should we use?",
+									"multiSelect": false,
+									"options": [
+										{
+											"label": "date-fns",
+											"description": "Small and tree-shakeable.",
+											"preview": "import { format } from \"date-fns\""
+										},
+										{ "label": "Luxon", "description": "Time zones built in." }
+									]
+								},
+								{
+									"header": "Extras",
+									"question": "Which extras do you want?",
+									"multiSelect": true,
+									"options": [
+										{ "label": "Tests", "description": "Ship a spec with it." },
+										{ "label": "Docs", "description": "Write the readme too." }
+									]
+								}
+							]
+						}
+					}
+				}),
+			);
+		}
 		"slow" | "orphan" => {
 			if run.scenario == "orphan" {
 				spawn_orphan(run.setting("FAKE_AGENT_PID_FILE").as_deref());
@@ -462,6 +505,18 @@ fn on_interrupt(key: &str, runs: &HashMap<String, Run>) {
 	emit_result(key, run, "error_during_execution", false);
 }
 
+/// What the child would read off an answered question, said back so a test can
+/// see the strings arrived whole.
+fn answers_read(input: &Value) -> Option<String> {
+	let answers = input["answers"].as_object()?;
+	let mut read: Vec<String> = answers
+		.iter()
+		.map(|(question, answer)| format!("{question}={}", answer.as_str().unwrap_or_default()))
+		.collect();
+	read.sort();
+	Some(read.join(" | "))
+}
+
 fn on_permission(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 	let Some(run) = runs.get_mut(key) else { return };
 	let request_id = command["requestId"].as_str().unwrap_or_default();
@@ -485,6 +540,11 @@ fn on_permission(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 			}
 		}),
 	);
+	// An answered question is said back word for word, since a tool result never
+	// reaches the reader and the strings are what the ask was for.
+	if let Some(read) = answers_read(&command["decision"]["updatedInput"]) {
+		emit_text_turn(key, run, &read);
+	}
 	emit_result(key, run, "success", false);
 }
 

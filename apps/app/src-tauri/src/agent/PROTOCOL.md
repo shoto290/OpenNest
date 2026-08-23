@@ -133,6 +133,7 @@ The frame is an `SDKMessage` verbatim, plus the three the sidecar adds itself.
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
 | `result` | `SDKResultMessage` — `subtype`, `session_id`, `is_error` | `turnEnded` |
 | `control_request` / `can_use_tool` | the sidecar, from `canUseTool` | `permissionRequested` |
+| `control_request` / `can_use_tool`, tool `AskUserQuestion` | the sidecar, from `canUseTool` | `questionRequested` |
 
 Every other `SDKMessage` type is dropped: `translate.rs` reads what the contract
 needs and nothing else, so a new SDK message is inert until it is asked for.
@@ -146,6 +147,15 @@ of band: it emits the request under the SDK's own `requestId`, and the host's
 ```json
 {"type":"permission","session":"…","requestId":"…",
  "decision":{"behavior":"allow","updatedInput":{…}}}
+```
+
+`AskUserQuestion` is the same ask read differently: it travels as
+`questionRequested` and is answered by allowing the tool with the reader's
+replies written into its input, keyed by the question they answer.
+
+```json
+{"type":"permission","session":"…","requestId":"…",
+ "decision":{"behavior":"allow","updatedInput":{"questions":[…],"answers":{"Which library?":"date-fns"}}}}
 ```
 
 `{"behavior":"deny","message":"…"}` produces a `tool_result` with `is_error:
