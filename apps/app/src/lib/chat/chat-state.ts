@@ -319,6 +319,11 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 			return applyActivity(state, event.activity)
 		case "permissionRequested":
 			return applyPermissionRequested(state, event.request)
+		// The card that collects the answers is not on the screen yet: the pending
+		// activity row already stands for the wait, and the question reaches the
+		// reader once there is somewhere to show it.
+		case "questionRequested":
+			return state
 		case "permissionResolved":
 			return applyPermissionResolved(state, event.id, event.decision)
 		case "turnEnded":

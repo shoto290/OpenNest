@@ -1,5 +1,6 @@
 //! Transport tests driven by the deterministic fake sidecar.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -7,7 +8,7 @@ use std::time::{Duration, Instant};
 use opennest_app::agent::commands::start_with_fallback;
 use opennest_app::agent::contract::{
 	ActivityKind, ActivityStatus, AgentCommand, AgentEvent, ConnectionState, MessageCompletion,
-	PermissionDecision, PermissionRequest, TransportError, TurnOutcome, TurnState,
+	PermissionDecision, PermissionRequest, QuestionRequest, TransportError, TurnOutcome, TurnState,
 };
 use opennest_app::agent::session::{EventSink, Session, SessionOptions, PARTIAL_MESSAGES};
 use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions, SHUTDOWN_GRACE};
@@ -120,6 +121,12 @@ impl Harness {
 		seen
 	}
 
+	async fn wait_for_question(&mut self) -> QuestionRequest {
+		let seen =
+			self.wait_for("a question request", |events| question_request(events).is_some()).await;
+		question_request(&seen).expect("the wait only returns once it is there")
+	}
+
 	async fn wait_for_permission(&mut self) -> PermissionRequest {
 		let seen = self
 			.wait_for("a permission request", |events| permission_request(events).is_some())
@@ -154,6 +161,13 @@ fn reports_a_crash(events: &[AgentEvent]) -> bool {
 fn permission_request(events: &[AgentEvent]) -> Option<PermissionRequest> {
 	events.iter().find_map(|event| match event {
 		AgentEvent::PermissionRequested { request } => Some(request.clone()),
+		_ => None,
+	})
+}
+
+fn question_request(events: &[AgentEvent]) -> Option<QuestionRequest> {
+	events.iter().find_map(|event| match event {
+		AgentEvent::QuestionRequested { request } => Some(request.clone()),
 		_ => None,
 	})
 }
@@ -650,6 +664,85 @@ async fn a_permission_request_can_be_denied() {
 		event,
 		AgentEvent::Activity { activity } if activity.status == ActivityStatus::Failed
 	)));
+	harness.session.shutdown().await;
+}
+
+/// The ask travels as questions rather than as a permission, and the answers go
+/// back as the tool input the child reads: one label, several joined, and words
+/// typed instead all arrive as they were written.
+#[tokio::test]
+async fn a_question_is_answered_with_what_the_reader_said() {
+	let mut harness = start(options("question")).await.expect("session starts");
+	harness.submit("choisis").await.expect("prompt accepted");
+	let request = harness.wait_for_question().await;
+
+	let headers: Vec<&str> = request.questions.iter().map(|asked| asked.header.as_str()).collect();
+	assert_eq!(headers, ["Library", "Extras"]);
+	assert_eq!(
+		request.questions[0].options[0].preview.as_deref(),
+		Some("import { format } from \"date-fns\"")
+	);
+	assert!(!request.questions[0].multi_select);
+	assert!(request.questions[1].multi_select);
+
+	let answers = HashMap::from([
+		("Which library should we use?".to_owned(), "date-fns".to_owned()),
+		("Which extras do you want?".to_owned(), "Tests, Docs".to_owned()),
+	]);
+	harness
+		.session
+		.answer_question(&request.id, answers, None)
+		.await
+		.expect("the answers are accepted");
+
+	let events = harness.drain_turn().await;
+	assert!(events.iter().any(|event| matches!(
+		event,
+		AgentEvent::PermissionResolved { id, decision }
+			if id == &request.id && *decision == PermissionDecision::AllowOnce
+	)));
+	assert!(events.iter().any(|event| matches!(
+		event,
+		AgentEvent::Activity { activity } if activity.status == ActivityStatus::Succeeded
+	)));
+	assert_eq!(
+		assistant_text(&events),
+		"Which extras do you want?=Tests, Docs | Which library should we use?=date-fns"
+	);
+	harness.session.shutdown().await;
+}
+
+/// Refusing to answer is refusing the tool: the question goes back through the
+/// permission path and the child is denied.
+#[tokio::test]
+async fn a_question_can_be_denied() {
+	let mut harness = start(options("question")).await.expect("session starts");
+	harness.submit("choisis").await.expect("prompt accepted");
+	let request = harness.wait_for_question().await;
+
+	harness
+		.session
+		.respond_to_permission(&request.id, PermissionDecision::Deny)
+		.await
+		.expect("decision accepted");
+
+	let events = harness.drain_turn().await;
+	assert!(events.iter().any(|event| matches!(
+		event,
+		AgentEvent::Activity { activity } if activity.status == ActivityStatus::Failed
+	)));
+	harness.session.shutdown().await;
+}
+
+#[tokio::test]
+async fn answering_a_question_nobody_asked_is_rejected() {
+	let harness = start(options("normal")).await.expect("session starts");
+	let error = harness
+		.session
+		.answer_question("nope", HashMap::new(), None)
+		.await
+		.expect_err("unknown id rejected");
+	assert!(matches!(error, TransportError::UnknownPermission { .. }));
 	harness.session.shutdown().await;
 }
 

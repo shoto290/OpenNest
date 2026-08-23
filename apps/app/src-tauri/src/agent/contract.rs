@@ -79,6 +79,35 @@ pub struct PermissionRequest {
 	pub detail: Option<String>,
 }
 
+/// One choice the child offered for a question. `preview` is the longer content
+/// it wrote for the option, absent from one that carries none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionOption {
+	pub label: String,
+	pub description: Option<String>,
+	pub preview: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AskedQuestion {
+	pub header: String,
+	pub question: String,
+	pub options: Vec<QuestionOption>,
+	pub multi_select: bool,
+}
+
+/// The child asking the reader rather than asking for a permission. Answered
+/// under the same request id, which is why an unanswered one is dropped with the
+/// pending permissions when the turn ends.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionRequest {
+	pub id: String,
+	pub questions: Vec<AskedQuestion>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PermissionDecision {
@@ -350,6 +379,8 @@ pub enum AgentEvent {
 	Activity { activity: ActivityEvent },
 	#[serde(rename_all = "camelCase")]
 	PermissionRequested { request: PermissionRequest },
+	#[serde(rename_all = "camelCase")]
+	QuestionRequested { request: QuestionRequest },
 	#[serde(rename_all = "camelCase")]
 	PermissionResolved { id: String, decision: PermissionDecision },
 	#[serde(rename_all = "camelCase")]

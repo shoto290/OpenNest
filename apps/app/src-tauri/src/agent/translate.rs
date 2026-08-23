@@ -11,8 +11,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 use super::contract::{
-	ActivityEvent, ActivityKind, ActivityStatus, AgentEvent, ChatMessage, MessageCompletion,
-	MessageRole, PermissionRequest, TurnEnded, TurnOutcome,
+	ActivityEvent, ActivityKind, ActivityStatus, AgentEvent, AskedQuestion, ChatMessage,
+	MessageCompletion, MessageRole, PermissionRequest, QuestionOption, QuestionRequest, TurnEnded,
+	TurnOutcome,
 };
 use super::protocol::{
 	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent, SystemFrame,
@@ -59,6 +60,37 @@ fn permission_detail(name: &str, input: &Value) -> Option<String> {
 		_ => string_field(input, "file_path").or_else(|| string_field(input, "path"))?,
 	};
 	Some(redact::text(&raw))
+}
+
+/// The one tool the reader answers with words rather than with a verdict.
+pub const ASK_USER_QUESTION: &str = "AskUserQuestion";
+
+fn read_list<T>(value: &Value, key: &str, read: impl Fn(&Value) -> Option<T>) -> Vec<T> {
+	value
+		.get(key)
+		.and_then(Value::as_array)
+		.map_or_else(Vec::new, |items| items.iter().filter_map(read).collect())
+}
+
+/// What the child asked, read off the tool input it would have run with. A
+/// question missing its text or its header is dropped rather than shown blank,
+/// and so is an option with no label: nothing here is worth putting in front of
+/// the reader without something to answer.
+fn asked_question(value: &Value) -> Option<AskedQuestion> {
+	Some(AskedQuestion {
+		header: string_field(value, "header")?,
+		question: string_field(value, "question")?,
+		options: read_list(value, "options", question_option),
+		multi_select: value.get("multiSelect").and_then(Value::as_bool).unwrap_or_default(),
+	})
+}
+
+fn question_option(value: &Value) -> Option<QuestionOption> {
+	Some(QuestionOption {
+		label: string_field(value, "label")?,
+		description: string_field(value, "description"),
+		preview: string_field(value, "preview"),
+	})
 }
 
 /// The assistant message the stream is in the middle of, and whether it has said
@@ -311,21 +343,32 @@ impl Translator {
 			_ => label,
 		};
 		let detail = permission_detail(&tool_name, &input);
+		let questions = (tool_name == ASK_USER_QUESTION)
+			.then(|| read_list(&input, "questions", asked_question));
 		self.pending_permissions.insert(request_id.clone(), input);
 
-		vec![
-			AgentEvent::Activity {
-				activity: ActivityEvent {
-					id: request_id.clone(),
-					title: title.clone(),
-					kind: ActivityKind::Permission,
-					status: ActivityStatus::Pending,
-				},
+		let pending = AgentEvent::Activity {
+			activity: ActivityEvent {
+				id: request_id.clone(),
+				title: title.clone(),
+				kind: ActivityKind::Permission,
+				status: ActivityStatus::Pending,
 			},
-			AgentEvent::PermissionRequested {
+		};
+
+		// A question is the same ask underneath — the child is blocked on the same
+		// promise, under the same id — so it waits on the same pending row. What
+		// changes is what the reader is shown: choices to answer, not a verdict.
+		let asked = match questions {
+			Some(questions) => AgentEvent::QuestionRequested {
+				request: QuestionRequest { id: request_id, questions },
+			},
+			None => AgentEvent::PermissionRequested {
 				request: PermissionRequest { id: request_id, tool_name, title, detail },
 			},
-		]
+		};
+
+		vec![pending, asked]
 	}
 }
 
@@ -683,5 +726,138 @@ mod tests {
 			);
 			assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
 		}
+	}
+
+	fn control_request(tool_name: &str, input: Value) -> Value {
+		json!({
+			"type": "control_request",
+			"request_id": "req-1",
+			"request": {
+				"subtype": "can_use_tool",
+				"tool_name": tool_name,
+				"display_name": tool_name,
+				"description": null,
+				"input": input
+			}
+		})
+	}
+
+	fn asked(events: &[AgentEvent]) -> Option<&QuestionRequest> {
+		events.iter().find_map(|event| match event {
+			AgentEvent::QuestionRequested { request } => Some(request),
+			_ => None,
+		})
+	}
+
+	/// The ask reaches the reader whole: both questions, the options under each,
+	/// the preview only one of them carries, and which one takes several answers.
+	#[test]
+	fn a_question_is_carried_instead_of_a_permission() {
+		let mut translator = Translator::new(false);
+		let input = json!({
+			"questions": [
+				{
+					"header": "Library",
+					"question": "Which library?",
+					"multiSelect": false,
+					"options": [
+						{ "label": "date-fns", "description": "Small.", "preview": "format()" },
+						{ "label": "Luxon", "description": "Zones." }
+					]
+				},
+				{
+					"header": "Extras",
+					"question": "Which extras?",
+					"multiSelect": true,
+					"options": [{ "label": "Tests", "description": "A spec." }]
+				}
+			]
+		});
+
+		let events = ingest(&mut translator, vec![control_request(ASK_USER_QUESTION, input)]);
+
+		assert_eq!(statuses(&events), [ActivityStatus::Pending]);
+		assert!(!events
+			.iter()
+			.any(|event| matches!(event, AgentEvent::PermissionRequested { .. })));
+		let request = asked(&events).expect("a question request");
+		assert_eq!(request.id, "req-1");
+		assert_eq!(
+			request.questions,
+			vec![
+				AskedQuestion {
+					header: "Library".to_owned(),
+					question: "Which library?".to_owned(),
+					multi_select: false,
+					options: vec![
+						QuestionOption {
+							label: "date-fns".to_owned(),
+							description: Some("Small.".to_owned()),
+							preview: Some("format()".to_owned()),
+						},
+						QuestionOption {
+							label: "Luxon".to_owned(),
+							description: Some("Zones.".to_owned()),
+							preview: None,
+						},
+					],
+				},
+				AskedQuestion {
+					header: "Extras".to_owned(),
+					question: "Which extras?".to_owned(),
+					multi_select: true,
+					options: vec![QuestionOption {
+						label: "Tests".to_owned(),
+						description: Some("A spec.".to_owned()),
+						preview: None,
+					}],
+				},
+			]
+		);
+		assert!(translator.take_permission_input("req-1").is_some());
+	}
+
+	/// Nothing to answer is still an ask the child is blocked on: the row is
+	/// pending and the reader is shown a question list that says none.
+	#[test]
+	fn a_question_frame_carrying_nothing_readable_asks_nothing() {
+		for input in [json!({}), json!({ "questions": [{ "header": "Only" }] })] {
+			let mut translator = Translator::new(false);
+
+			let events = ingest(&mut translator, vec![control_request(ASK_USER_QUESTION, input)]);
+
+			assert_eq!(asked(&events).expect("a question request").questions, Vec::new());
+		}
+	}
+
+	/// Any other tool is the permission it has always been.
+	#[test]
+	fn another_tool_still_asks_for_a_permission() {
+		let mut translator = Translator::new(false);
+		let input = json!({ "file_path": "/tmp/notes.txt" });
+
+		let events = ingest(&mut translator, vec![control_request("Write", input)]);
+
+		assert!(asked(&events).is_none());
+		assert!(events.iter().any(|event| matches!(
+			event,
+			AgentEvent::PermissionRequested { request } if request.tool_name == "Write"
+		)));
+	}
+
+	/// A turn ending on an unanswered question leaves nothing behind, the way it
+	/// leaves nothing of an unanswered permission.
+	#[test]
+	fn a_question_left_unanswered_is_dropped_when_the_turn_ends() {
+		let mut translator = Translator::new(false);
+		let input = json!({ "questions": [] });
+
+		ingest(&mut translator, vec![control_request(ASK_USER_QUESTION, input)]);
+		ingest(
+			&mut translator,
+			vec![json!({ "type": "result", "subtype": "success", "session_id": "s-1" })],
+		);
+
+		assert!(translator.take_permission_input("req-1").is_none());
 	}
 }

@@ -3,6 +3,7 @@ import type { SubmittedAttachment } from "./attachments-contract"
 import type {
 	CheckReport,
 	PermissionDecision,
+	QuestionAnswers,
 	RuntimeScope,
 	ScopedEvent,
 	SessionHandle,
@@ -41,6 +42,14 @@ export type ChatDriver = {
 		scope: RuntimeScope,
 		id: string,
 		decision: PermissionDecision,
+	) => Promise<void>
+	/** Answers a pending question. Refusing to answer is refusing the tool, so a
+	 * denial goes back through `respondToPermission` like any other. */
+	answerQuestion: (
+		scope: RuntimeScope,
+		id: string,
+		answers: QuestionAnswers,
+		annotations?: Record<string, unknown>,
 	) => Promise<void>
 	shutdown: (scope: RuntimeScope) => Promise<void>
 	subscribe: (

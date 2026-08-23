@@ -275,6 +275,30 @@ export function createFakeChatDriver(
 		return steps
 	}
 
+	const resolvePermission = (
+		scope: RuntimeScope,
+		id: string,
+		decision: PermissionDecision,
+	) => {
+		if (isForeign(scope)) {
+			return refuseStale(scope)
+		}
+		const run = heldFor(scope)
+		if (run?.pendingPermissionId !== id) {
+			return Promise.reject({ kind: "unknownPermission", id })
+		}
+		run.pendingPermissionId = null
+		emitFor(run, { type: "permissionResolved", id, decision })
+		if (decision === "deny") {
+			clearQueue(run)
+			finishTurn(run, "cancelled")
+			return Promise.resolve()
+		}
+		run.waiting = false
+		pump(run)
+		return Promise.resolve()
+	}
+
 	return {
 		check: () =>
 			Promise.resolve({
@@ -370,29 +394,12 @@ export function createFakeChatDriver(
 			return Promise.resolve()
 		},
 
-		respondToPermission: (
-			scope: RuntimeScope,
-			id: string,
-			decision: PermissionDecision,
-		) => {
-			if (isForeign(scope)) {
-				return refuseStale(scope)
-			}
-			const run = heldFor(scope)
-			if (run?.pendingPermissionId !== id) {
-				return Promise.reject({ kind: "unknownPermission", id })
-			}
-			run.pendingPermissionId = null
-			emitFor(run, { type: "permissionResolved", id, decision })
-			if (decision === "deny") {
-				clearQueue(run)
-				finishTurn(run, "cancelled")
-				return Promise.resolve()
-			}
-			run.waiting = false
-			pump(run)
-			return Promise.resolve()
-		},
+		respondToPermission: resolvePermission,
+
+		/** An answered question is an allowed tool, so it settles the same wait the
+		 * same way. What the reader said is the real transport's business. */
+		answerQuestion: (scope: RuntimeScope, id: string) =>
+			resolvePermission(scope, id, "allowOnce"),
 
 		/** Refused for a run the bot no longer holds, and a no-op when it holds
 		 * none: shutting down twice is as safe as shutting down once. */

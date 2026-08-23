@@ -41,6 +41,32 @@ export type PermissionRequest = {
 	detail: string | null
 }
 
+/** One choice the child offered. `preview` is the longer content it wrote for the
+ * option, `null` on one that carries none. */
+export type QuestionOption = {
+	label: string
+	description: string | null
+	preview: string | null
+}
+
+export type AskedQuestion = {
+	header: string
+	question: string
+	options: QuestionOption[]
+	multiSelect: boolean
+}
+
+/** The child asking the reader instead of asking for a permission. Answered under
+ * the same id, and dropped with the pending permissions when the turn ends. */
+export type QuestionRequest = {
+	id: string
+	questions: AskedQuestion[]
+}
+
+/** One answer per question, keyed by the question text. Several picked options
+ * join with ", ", and words typed instead travel in the same string. */
+export type QuestionAnswers = Record<string, string>
+
 export type PermissionDecision = "allowOnce" | "deny"
 
 export type TurnOutcome = "completed" | "cancelled" | "failed"
@@ -119,6 +145,7 @@ export type AgentEvent =
 	| { type: "messageCompleted"; message: ChatMessage }
 	| { type: "activity"; activity: ActivityEvent }
 	| { type: "permissionRequested"; request: PermissionRequest }
+	| { type: "questionRequested"; request: QuestionRequest }
 	| { type: "permissionResolved"; id: string; decision: PermissionDecision }
 	| { type: "turnEnded"; ended: TurnEnded }
 	| { type: "botEvolved"; commitId: string; title: string }
