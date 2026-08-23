@@ -128,6 +128,9 @@ fn a_record(picture: Value) -> Value {
 		"colorScheme": "dark",
 		"palette": "moss",
 		"language": "fr",
+		"notifyOnQuestion": false,
+		"notifyOnPermission": true,
+		"notifyOnFinishedTurn": false,
 	})
 }
 
@@ -189,6 +192,9 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"colorScheme": "system",
 			"palette": "amber",
 			"language": null,
+			"notifyOnQuestion": true,
+			"notifyOnPermission": true,
+			"notifyOnFinishedTurn": true,
 		})
 	);
 }

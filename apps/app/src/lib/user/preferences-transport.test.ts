@@ -17,6 +17,9 @@ const RECORD: UserPreferences = {
 	colorScheme: "dark",
 	palette: "moss",
 	language: "fr",
+	notifyOnQuestion: true,
+	notifyOnPermission: true,
+	notifyOnFinishedTurn: true,
 }
 
 /** What the host answers before anything has been stored. Spelled out here rather
@@ -28,6 +31,9 @@ const DEFAULTS: UserPreferences = {
 	colorScheme: "system",
 	palette: "amber",
 	language: null,
+	notifyOnQuestion: true,
+	notifyOnPermission: true,
+	notifyOnFinishedTurn: true,
 }
 
 const FAILURES: UserPreferencesError[] = [

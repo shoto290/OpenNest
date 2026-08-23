@@ -71,6 +71,12 @@ pub struct UserPreferences {
 	/// no catalogue answers to is stored all the same: see
 	/// [`user::Preferences::language`].
 	pub language: Option<String>,
+	/// The three events worth telling the reader about, each switched on its own and
+	/// each shipped on: see [`user::Preferences::notify_on_question`]. A turn that
+	/// failed is deliberately not one of them.
+	pub notify_on_question: bool,
+	pub notify_on_permission: bool,
+	pub notify_on_finished_turn: bool,
 }
 
 impl UserPreferences {
@@ -92,6 +98,9 @@ impl UserPreferences {
 			color_scheme: preferences.color_scheme.into(),
 			palette: preferences.palette,
 			language: preferences.language,
+			notify_on_question: preferences.notify_on_question,
+			notify_on_permission: preferences.notify_on_permission,
+			notify_on_finished_turn: preferences.notify_on_finished_turn,
 		}
 	}
 }
@@ -104,6 +113,9 @@ impl From<UserPreferences> for user::Preferences {
 			color_scheme: preferences.color_scheme.into(),
 			palette: preferences.palette,
 			language: preferences.language,
+			notify_on_question: preferences.notify_on_question,
+			notify_on_permission: preferences.notify_on_permission,
+			notify_on_finished_turn: preferences.notify_on_finished_turn,
 		}
 	}
 }

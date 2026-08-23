@@ -15,6 +15,9 @@ const DEFAULTS: UserPreferences = {
 	colorScheme: "system",
 	palette: "amber",
 	language: null,
+	notifyOnQuestion: true,
+	notifyOnPermission: true,
+	notifyOnFinishedTurn: true,
 }
 
 const WORN = "/data/avatars/worn.png"
@@ -79,11 +82,10 @@ describe("the reader's own record", () => {
 		expect(controller.getState().profile.displayName).toBe("Nyx")
 		await vi.waitFor(() =>
 			expect(host()).toEqual({
+				...DEFAULTS,
 				displayName: "Nyx",
-				profilePicturePath: null,
 				colorScheme: "dark",
 				palette: "moss",
-				language: null,
 			}),
 		)
 	})
@@ -135,11 +137,10 @@ describe("the reader's own record", () => {
 
 		await vi.waitFor(() =>
 			expect(host()).toEqual({
+				...DEFAULTS,
 				displayName: "Nyxie",
-				profilePicturePath: null,
 				colorScheme: "light",
 				palette: "coral",
-				language: null,
 			}),
 		)
 	})
