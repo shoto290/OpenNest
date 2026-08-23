@@ -45,7 +45,6 @@ import type {
 	AskedQuestion,
 	PermissionRequest,
 	QuestionRequest,
-	TurnState,
 } from "@/lib/agent/contract"
 import { describeTransportError } from "@/lib/agent/messages"
 import {
@@ -55,9 +54,10 @@ import {
 import type { AttachmentStoreError } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { ChatController } from "@/lib/chat/chat-controller"
-import type { ChatError } from "@/lib/chat/chat-state"
+import type { ChatError, OutboxEntry } from "@/lib/chat/chat-state"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
+import type { MessageContent } from "@/lib/chat/message-attachments"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import {
 	commandOptionsFor,
@@ -94,6 +94,15 @@ type BotFace = {
 	image?: string
 }
 
+/** What a turn reads as under its bubble: the files the prompt named, then the
+ * words themselves. The same on a stored row and on one still waiting to go. */
+const TurnBody = ({ attachments, text }: MessageContent) => (
+	<>
+		<MessageAttachments items={attachments} onOpen={openAttachment} />
+		{text ? <Markdown>{text}</Markdown> : null}
+	</>
+)
+
 /** Memoised: a streamed delta rewrites one message, and the view model hands
  * back the same rows for the rest. `run` arrives from the enclosing group and
  * `avatar` stays a boolean, so the shallow compare holds through a stream — which
@@ -118,12 +127,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	rejected?: boolean
 }) {
 	const { text, attachments } = messageWithAttachments(row.text)
-	const content = (
-		<>
-			<MessageAttachments items={attachments} onOpen={openAttachment} />
-			{text ? <Markdown>{text}</Markdown> : null}
-		</>
-	)
+	const content = <TurnBody attachments={attachments} text={text} />
 
 	if (row.role === "user") {
 		return (
@@ -160,6 +164,34 @@ const TranscriptTurn = memo(function TranscriptTurn({
 		>
 			{content}
 		</AssistantTurn>
+	)
+})
+
+/** A prompt the reader has sent and nothing has taken yet. It reads like the
+ * transcript row it is about to become — the same words, the same files named in
+ * them — and carries the only way back out of the wait. */
+const QueuedTurn = memo(function QueuedTurn({
+	entry,
+	controller,
+	run,
+}: {
+	entry: OutboxEntry
+	controller: ChatController
+	run?: ChatTurnRun
+}) {
+	const { text, attachments } = messageWithAttachments(entry.text)
+
+	return (
+		<UserTurn
+			state="queued"
+			run={run}
+			copyText={text}
+			onCancel={() => {
+				controller.discard(entry.id)
+			}}
+		>
+			<TurnBody attachments={attachments} text={text} />
+		</UserTurn>
 	)
 })
 
@@ -239,22 +271,21 @@ function QuestionPrompt({
 	)
 }
 
-/** Memoised: the draft mirror and the send/stop icon swap must not re-render per token. */
+/** Memoised: the draft mirror must not re-render per token. Nothing here reads the
+ * turn or the connection — the composer takes a prompt whatever either is doing,
+ * and the outbox is where one that cannot land yet waits. */
 const Composer = memo(function Composer({
-	controller,
 	composerRef,
 	botName,
 	commands,
-	disabled,
+	canAttach,
 	isOverlayOpen,
-	turn,
 	attachments,
 	isDropTarget,
 	onAttach,
 	onRemoveAttachment,
 	onSubmitPrompt,
 }: {
-	controller: ChatController
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	/** The bot the prompt is addressed to, which the placeholder names. */
 	botName: string
@@ -262,10 +293,11 @@ const Composer = memo(function Composer({
 	 * announced one, and until then the list the store kept from the session before
 	 * it. Empty only for a bot no session has ever announced anything for. */
 	commands: AgentCommand[]
-	disabled: boolean
+	/** Whether files may be staged at all: they are written to disk against an open
+	 * session, which a held prompt does not have. */
+	canAttach: boolean
 	/** Something is drawn over the conversation. */
 	isOverlayOpen: boolean
-	turn: TurnState
 	/** The files staged for this prompt, drawn as chips inside the composer. */
 	attachments: StagedAttachment[]
 	/** Files are being dragged over the conversation, which the composer wears even
@@ -281,21 +313,16 @@ const Composer = memo(function Composer({
 	const [wasDismissed, setWasDismissed] = useState(false)
 	const [prompt, setPrompt] = useState("")
 	const options = useMemo(() => commandOptionsFor(commands), [commands])
-	const canType = !disabled && !isOverlayOpen
-	const query = canType ? commandQueryIn(prompt, commands) : null
+	const query = isOverlayOpen ? null : commandQueryIn(prompt, commands)
 
 	// A dismissal covers every draft that stays in the command shape, one edited
 	// back to the shape it was dismissed on included. It rearms when the draft
-	// leaves that shape, and while nothing can be typed at all — so an overlay
-	// closing offers the menu the draft under it asks for.
+	// leaves that shape, and while an overlay covers the conversation — so an
+	// overlay closing offers the menu the draft under it asks for.
 	const isDismissed = holdsDismissal(wasDismissed, query)
 	if (wasDismissed !== isDismissed) {
 		setWasDismissed(isDismissed)
 	}
-
-	const stop = useCallback(() => {
-		void controller.stop()
-	}, [controller])
 
 	// The draft only goes if it is still the one that was sent: storing the files
 	// takes a round trip, and whatever the reader typed meanwhile is theirs.
@@ -337,20 +364,15 @@ const Composer = memo(function Composer({
 						onRemove={onRemoveAttachment}
 					/>
 				}
-				leading={<PromptAttachButton disabled={disabled} onAttach={onAttach} />}
-				disabled={disabled}
+				leading={
+					<PromptAttachButton disabled={!canAttach} onAttach={onAttach} />
+				}
 				dropTarget={isDropTarget}
-				loading={isTurnBusy(turn)}
-				onAttach={onAttach}
-				onStop={canStopTurn(turn) ? stop : undefined}
+				onAttach={canAttach ? onAttach : undefined}
 				onSubmit={submit}
 				onValueChange={setPrompt}
 				value={prompt}
-				placeholder={
-					disabled
-						? t("screen.waiting")
-						: t("screen.placeholder", { name: botName })
-				}
+				placeholder={t("screen.placeholder", { name: botName })}
 			/>
 		</PromptCommandMenu>
 	)
@@ -445,9 +467,8 @@ export function ChatScreen({
 	// The picture the bot wears, as something a webview may load. Resolved once per
 	// render and handed down: every avatar on this screen is the same bot's.
 	const face = avatarSrc(bot.avatarImagePath)
-	const disabled = !isSessionReady(state)
-	const staged = useAttachments(attachments, bot.id, !disabled, conversationRef)
-	const acceptsInput = !disabled && !isTurnBusy(state.turn)
+	const canAttach = isSessionReady(state)
+	const staged = useAttachments(attachments, bot.id, canAttach, conversationRef)
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
 	const latestError = state.errors.at(-1)
 	const notice = latestError?.id === dismissedErrorId ? undefined : latestError
@@ -462,11 +483,16 @@ export function ChatScreen({
 		void controller.loadOlder()
 	}, [controller])
 
+	const stop = useCallback(() => {
+		void controller.stop()
+	}, [controller])
+
+	// The caret waits for nothing: a prompt written before the session is up is
+	// held rather than refused, so the composer takes it the moment the screen is
+	// there.
 	useEffect(() => {
-		if (acceptsInput) {
-			composerRef.current?.focus({ preventScroll: true })
-		}
-	}, [acceptsInput])
+		composerRef.current?.focus({ preventScroll: true })
+	}, [])
 
 	return (
 		<ChatLayout
@@ -523,13 +549,11 @@ export function ChatScreen({
 			}
 			composer={
 				<Composer
-					controller={controller}
 					composerRef={composerRef}
 					botName={bot.name}
 					commands={state.commands}
-					disabled={disabled}
+					canAttach={canAttach}
 					isOverlayOpen={isOverlayOpen}
-					turn={state.turn}
 					attachments={staged.items}
 					isDropTarget={staged.isDropTarget}
 					onAttach={staged.stage}
@@ -587,6 +611,7 @@ export function ChatScreen({
 					kind={working.kind}
 					label={working.label}
 					seed={bot.id}
+					onStop={canStopTurn(state.turn) ? stop : undefined}
 				/>
 			) : null}
 
@@ -596,6 +621,16 @@ export function ChatScreen({
 
 			{state.permission ? (
 				<PermissionPrompt controller={controller} request={state.permission} />
+			) : null}
+
+			{/* Under everything the bot is doing: these are the words said after it,
+			 * and the last of them is the newest thing on the screen. */}
+			{state.outbox.length > 0 ? (
+				<ChatTurnGroup>
+					{state.outbox.map((entry) => (
+						<QueuedTurn key={entry.id} entry={entry} controller={controller} />
+					))}
+				</ChatTurnGroup>
 			) : null}
 		</ChatLayout>
 	)

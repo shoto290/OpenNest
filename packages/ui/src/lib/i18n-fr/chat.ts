@@ -172,7 +172,6 @@ const chat = {
 		label: "Conversation Claude Code",
 		settings: "Réglages du bot",
 		placeholder: "Demandez à {{name}} de faire quelque chose…",
-		waiting: "En attente de Claude Code…",
 		permission: {
 			description: "Claude Code attend votre accord avant de lancer cet outil.",
 			path: "Chemin",
