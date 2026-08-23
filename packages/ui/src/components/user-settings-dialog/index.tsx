@@ -19,6 +19,7 @@ import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import { AppearanceFields } from "@workspace/ui/components/user-settings-dialog/appearance-fields"
 import { LanguageFields } from "@workspace/ui/components/user-settings-dialog/language-fields"
+import { NotificationFields } from "@workspace/ui/components/user-settings-dialog/notification-fields"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import type { Language } from "@workspace/ui/lib/i18n"
 import { cn } from "@workspace/ui/lib/utils"
@@ -57,10 +58,10 @@ type UserSettingsDialogProps = {
 
 /**
  * Everything a reader is to the app, in one overlay: a breadcrumb wearing their own
- * face, a rail of three groups down the left and one group at a time on the right.
+ * face, a rail of four groups down the left and one group at a time on the right.
  * Profile is who they are — the name the app calls them and the picture it shows;
- * Appearance is how the app is painted for them; Language is the one it speaks to
- * them in.
+ * Appearance is how the app is painted for them; Notifications is what it tells them
+ * about; Language is the one it speaks to them in.
  *
  * It is the same contract as a bot's settings and for the same reason: fully
  * controlled, saving as you type. Every edit emits the whole value through
@@ -134,6 +135,12 @@ const UserSettingsDialog = ({
 							value="appearance"
 						/>
 						<SettingsRailItem
+							icon={Icons.Bell}
+							iconsOnly={iconsOnly}
+							label={t("rail.notifications")}
+							value="notifications"
+						/>
+						<SettingsRailItem
 							icon={Icons.Language}
 							iconsOnly={iconsOnly}
 							label={t("rail.language")}
@@ -168,6 +175,18 @@ const UserSettingsDialog = ({
 							onColorSchemeChange={(colorScheme) => patch({ colorScheme })}
 							onPaletteChange={(palette) => patch({ palette })}
 							palette={value.palette}
+						/>
+					</Tabs.Panel>
+
+					<Tabs.Panel
+						className={SETTINGS_SCROLLING_PANEL_CLASS}
+						value="notifications"
+					>
+						<NotificationFields
+							notifications={value.notifications}
+							onNotificationsChange={(notifications) =>
+								patch({ notifications })
+							}
 						/>
 					</Tabs.Panel>
 
