@@ -172,7 +172,9 @@ export const WithReleaseNotes = meta.story({
 		await expect(link).toHaveAttribute("href", RELEASE_NOTES_URL)
 		await expect(link).toHaveAttribute("target", "_blank")
 		await expect(link).toHaveAttribute("rel", "noreferrer noopener")
-		await expect(body.getByRole("button", { name: "Restart now" })).toBeEnabled()
+		await expect(
+			body.getByRole("button", { name: "Restart now" }),
+		).toBeEnabled()
 	},
 })
 

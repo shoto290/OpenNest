@@ -29,7 +29,8 @@ const loadRenderer = async () => {
 	finish.length = 0
 	initialize.mockClear()
 	render.mockClear()
-	renderMermaid = (await import("@workspace/ui/lib/render-mermaid")).renderMermaid
+	renderMermaid = (await import("@workspace/ui/lib/render-mermaid"))
+		.renderMermaid
 }
 
 const finishAll = () => {
