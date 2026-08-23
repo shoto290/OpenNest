@@ -2596,7 +2596,7 @@ dependencies = [
 
 [[package]]
 name = "opennest-app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "git2",
  "image",
