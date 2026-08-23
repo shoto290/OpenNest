@@ -91,6 +91,11 @@ const WRITES: WriteCase[] = [
 		call: ["conversation_create_bot", { identity: IDENTITY }],
 	},
 	{
+		member: "duplicateBot",
+		write: () => conversationStore.duplicateBot("b-1"),
+		call: ["conversation_duplicate_bot", { botId: "b-1" }],
+	},
+	{
 		member: "updateBot",
 		write: () => conversationStore.updateBot("b-1", IDENTITY),
 		call: ["conversation_update_bot", { id: "b-1", identity: IDENTITY }],

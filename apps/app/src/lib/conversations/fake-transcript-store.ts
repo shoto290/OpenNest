@@ -317,6 +317,16 @@ export const createFakeTranscriptStore = (
 		}
 	}
 
+	/** Every bot the store mints, however it was asked for: the next id and moment
+	 * in the order it holds them, and the learn skill a new bundle opens with. */
+	const mint = (fields: Omit<Bot, "id" | "createdAt">) => {
+		minted += 1
+		const bot: Bot = { ...fields, id: `bot-${minted}`, createdAt: minted }
+		bots.set(bot.id, bot)
+		skills.set(bot.id, [learnSkill()])
+		return Promise.resolve(bot)
+	}
+
 	const append = (message: TranscriptDraft): Promise<number> => {
 		const stored = rows.get(message.id)
 		if (stored) {
@@ -345,17 +355,20 @@ export const createFakeTranscriptStore = (
 		 * too. The chat is not written alongside because it does not have to be: a
 		 * bot's thread is named after it, so the one it was created with is the one
 		 * `mainChat` answers. */
-		createBot: (identity: BotIdentity) => {
-			minted += 1
-			const created: Bot = {
+		createBot: (identity: BotIdentity) =>
+			mint({
 				...identity,
-				id: `bot-${minted}`,
-				createdAt: minted,
 				changesNothing: deniesChanges(identity.deniedTools),
+			}),
+
+		/** A copy minted like any other bot, so its thread is named after it and opens
+		 * empty. What the source has said stays with the source. */
+		duplicateBot: (botId: string) => {
+			const source = bots.get(botId)
+			if (!source) {
+				return refuse({ kind: "unknownBot", id: botId })
 			}
-			bots.set(created.id, created)
-			skills.set(created.id, [learnSkill()])
-			return Promise.resolve(created)
+			return mint({ ...source, name: `${source.name} copy` })
 		},
 
 		/** Who the bot is, replaced whole. Its id and the moment it was written are

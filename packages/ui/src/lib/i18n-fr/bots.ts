@@ -7,6 +7,7 @@ const bots = {
 		empty: "Aucun bot pour l'instant",
 		actions: "Actions pour {{name}}",
 		settings: "Réglages",
+		duplicate: "Dupliquer",
 		delete: "Supprimer",
 		working: "{{pose}}…",
 		pose: {

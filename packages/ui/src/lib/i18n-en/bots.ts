@@ -15,6 +15,7 @@ const bots = {
 		empty: "No bots yet",
 		actions: "Actions for {{name}}",
 		settings: "Settings",
+		duplicate: "Duplicate",
 		delete: "Delete",
 		working: "{{pose}}…",
 		pose: {

@@ -39,6 +39,9 @@ export const conversationStore: TranscriptStore = {
 	createBot: (identity: BotIdentity) =>
 		invoke<Bot>("conversation_create_bot", { identity }),
 
+	duplicateBot: (botId: string) =>
+		invoke<Bot>("conversation_duplicate_bot", { botId }),
+
 	updateBot: (id: string, identity: BotIdentity) =>
 		invoke<Bot>("conversation_update_bot", { id, identity }),
 

@@ -29,6 +29,11 @@ export type TranscriptStore = TranscriptPort & {
 	/** A bot and the chat it will be spoken to in, written as one unit: what comes
 	 * back is a thread the caller can open straight away. */
 	createBot: (identity: BotIdentity) => Promise<Bot>
+	/** A copy of an existing bot and a chat of its own, written as one unit the same
+	 * way a create is. The copy carries the source's name suffixed with " copy" and
+	 * opens on an empty transcript: what the source was told travels, what it has
+	 * said does not. */
+	duplicateBot: (botId: string) => Promise<Bot>
 	/** Who the bot is, replaced whole — a field left out of `identity` is a bot only
 	 * half described, not one the store leaves alone. What the bot was told and what
 	 * it has said are untouched. */

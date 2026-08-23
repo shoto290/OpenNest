@@ -150,6 +150,31 @@ describe("createRosterController", () => {
 		expect((await reloaded(store)).bots).toHaveLength(2)
 	})
 
+	it("appends the copy the store answers with and selects it", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+
+		await controller.duplicate("default")
+
+		const state = controller.getState()
+		expect(state.bots).toHaveLength(2)
+		expect(state.bots[1].name).toBe("Claude copy")
+		expect(state.selectedBotId).toBe(state.bots[1].id)
+		expect((await reloaded(store)).bots).toHaveLength(2)
+	})
+
+	it("leaves the roster as it was when the copy is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		vi.spyOn(store, "duplicateBot").mockRejectedValue(new Error("no room"))
+
+		await controller.duplicate("default")
+
+		const state = controller.getState()
+		expect(state.bots.map((bot) => bot.id)).toEqual(["default"])
+		expect(state.selectedBotId).toBe("default")
+	})
+
 	it("gives every bot it creates a face no other bot is wearing", async () => {
 		const controller = await loaded(await anEmptyStore())
 
