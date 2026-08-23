@@ -62,6 +62,12 @@ function BotWorking({
 	const text = label
 		? t("working.labelled", { name: named, label })
 		: t("working.state", { name: named, verb: t(`working.verb.${kind}`) })
+	/** The hidden words answer the pointer too: reaching for them is reaching for
+	 * the avatar, so both halves of the row listen. */
+	const pointing = {
+		onPointerEnter: () => setPointed(true),
+		onPointerLeave: () => setPointed(false),
+	}
 
 	return (
 		<div
@@ -69,12 +75,7 @@ function BotWorking({
 			data-kind={kind}
 			className={cn("flex min-w-0 items-center gap-2", className)}
 		>
-			<SharedMark
-				markId={markId}
-				className="shrink-0"
-				onPointerEnter={() => setPointed(true)}
-				onPointerLeave={() => setPointed(false)}
-			>
+			<SharedMark markId={markId} className="shrink-0" {...pointing}>
 				<BotIdentityAvatar
 					animal={animal}
 					blot={blot}
@@ -90,6 +91,7 @@ function BotWorking({
 					"min-w-0 text-muted-foreground text-sm",
 					pointed ? "opacity-100" : "opacity-0",
 				)}
+				{...pointing}
 			>
 				{isTimed(kind) ? (
 					// The clock only ticks while it is being read.
