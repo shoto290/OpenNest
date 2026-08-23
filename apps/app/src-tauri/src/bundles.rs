@@ -454,6 +454,50 @@ pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Resu
 	Ok(())
 }
 
+/// Everything a duplicate inherits from the bundle it was copied from: the skills it
+/// carries, the servers it declares and the hooks a reader gave it. What names the
+/// source is not among them — the manifest and the agent file are generated for the
+/// new bot by the write that follows this one, and the repository under the source is
+/// its own history, so the duplicate starts one of its own.
+///
+/// `.learned.md` stays behind too: it is what the source came to remember over the
+/// turns it was spoken to, and a duplicate has been spoken to none.
+pub fn inherit(root: &Path, source_id: &str, bot_id: &str) -> std::io::Result<()> {
+	let source = dir(root, source_id);
+	let target = dir(root, bot_id);
+	copied_tree(&source.join(SKILLS_DIR), &target.join(SKILLS_DIR))?;
+	copied_tree(&source.join(HOOKS_DIR), &target.join(HOOKS_DIR))?;
+	copied_file(&source.join(MCP_NAME), &target.join(MCP_NAME))
+}
+
+/// One directory copied whole, owner-only the way everything else in a bundle is
+/// written. A directory that is not there is copied as nothing: a bundle with no
+/// skills and no hooks is the ordinary one.
+fn copied_tree(source: &Path, target: &Path) -> std::io::Result<()> {
+	if !source.is_dir() {
+		return Ok(());
+	}
+	private_files::create_dir(target)?;
+	for entry in fs::read_dir(source)? {
+		let entry = entry?;
+		let path = entry.path();
+		let into = target.join(entry.file_name());
+		if path.is_dir() {
+			copied_tree(&path, &into)?;
+		} else {
+			copied_file(&path, &into)?;
+		}
+	}
+	Ok(())
+}
+
+fn copied_file(source: &Path, target: &Path) -> std::io::Result<()> {
+	if !source.is_file() {
+		return Ok(());
+	}
+	private_files::replace(target, &fs::read(source)?)
+}
+
 /// The write that just landed, recorded in the bundle's own repository — see
 /// [`git`]. A repository that would not open or write is swallowed here on purpose:
 /// the files are already on the disk and are what a session is really started on, so

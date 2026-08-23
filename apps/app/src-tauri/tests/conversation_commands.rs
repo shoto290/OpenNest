@@ -1706,7 +1706,7 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	assert_eq!(created["body"], json!("Bake at 220 degrees."));
 	assert_eq!(created["isPreloaded"], json!(false));
 
-	assert_eq!(readers_skills(&window), json!([created]));
+	assert_eq!(readers_skills(&window, BOT), json!([created]));
 
 	let marked = call(
 		&window,
@@ -1761,7 +1761,7 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	)
 	.expect("the skill is taken away");
 
-	assert_eq!(readers_skills(&window), json!([]));
+	assert_eq!(readers_skills(&window, BOT), json!([]));
 	assert_eq!(
 		call(
 			&window,
@@ -1777,9 +1777,9 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 
 /// The bot's skills as a panel lists them, minus the `learn` skill every bundle
 /// carries: what a reader writes is what this test is about.
-fn readers_skills(window: &WebviewWindow<MockRuntime>) -> Value {
+fn readers_skills(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Value {
 	let listed =
-		call(window, "conversation_bot_skills", json!({ "botId": BOT })).expect("the skills");
+		call(window, "conversation_bot_skills", json!({ "botId": bot_id })).expect("the skills");
 	let readers = listed
 		.as_array()
 		.expect("a list of skills")
@@ -1792,9 +1792,9 @@ fn readers_skills(window: &WebviewWindow<MockRuntime>) -> Value {
 
 /// Where the bot's bundle sits, resolved the way the host resolves it rather than
 /// spelled again here.
-fn bundle_of(app: &App<MockRuntime>) -> PathBuf {
+fn bundle_of(app: &App<MockRuntime>, bot_id: &str) -> PathBuf {
 	let root = bundles::root(app.handle()).expect("the bundle root");
-	bundles::dir(&root, BOT)
+	bundles::dir(&root, bot_id)
 }
 
 /// A JSON file off the disk, or `null` for one that is not there — which is how the
@@ -1816,7 +1816,7 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	let app = home.app();
 	let window = window(&app);
 	a_bot_and_its_chat(&window);
-	let bundle = bundle_of(&app);
+	let bundle = bundle_of(&app, BOT);
 	let servers = bundle.join(".mcp.json");
 	let manifest = bundle.join(".claude-plugin").join("plugin.json");
 
@@ -1923,4 +1923,172 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 		),
 		Err(json!({ "kind": "unknownBot", "id": "missing" }))
 	);
+}
+
+/// A bot duplicated over IPC: everything the panel showed of the first one, the
+/// bundle it is really started on, and none of what it said. The bundle is read off
+/// the disk rather than through the listing commands where it can be, because the
+/// duplicate has to be a directory an agent could be launched on and not a row that
+/// answers like one.
+#[test]
+fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let source = call(
+		&window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity("Nyx", "sonnet", "owl", json!("red")) }),
+	)
+	.expect("the bot is created");
+	let source_id = source["id"].as_str().expect("the bot holds an id").to_owned();
+
+	call(
+		&window,
+		"conversation_create_bot_skill",
+		json!({
+			"botId": source_id,
+			"draft": {
+				"name": "Baking Bread",
+				"description": "How to bake.",
+				"body": "Bake at 220 degrees.",
+			},
+		}),
+	)
+	.expect("the skill is written");
+	let atlas = json!({ "command": "atlas-mcp", "args": ["--stdio"] });
+	call(
+		&window,
+		"conversation_set_bot_mcp_server",
+		json!({ "botId": source_id, "name": "atlas", "config": atlas }),
+	)
+	.expect("the server is written");
+
+	// A hook of the reader's own and the source's own memory, neither of which any
+	// command writes: one is a bundle the reader filled in by hand, the other is what
+	// the bot came to remember over the turns it was spoken to.
+	let source_bundle = bundle_of(&app, &source_id);
+	let theirs =
+		r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo theirs"}]}]}}"#;
+	std::fs::create_dir_all(source_bundle.join("hooks")).expect("the hooks directory");
+	std::fs::write(source_bundle.join("hooks").join("hooks.json"), theirs).expect("the hook lands");
+	std::fs::write(source_bundle.join(".learned.md"), "What the source remembered\n")
+		.expect("the memory lands");
+
+	let chat = call(&window, "conversation_main_chat", json!({ "botId": source_id }))
+		.expect("the chat the source was created with");
+	let conversation = chat["id"].as_str().expect("the chat holds an id").to_owned();
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn is started");
+	call(
+		&window,
+		"conversation_append_user_message",
+		a_user_message("m1", &conversation, "hello", 2),
+	)
+	.expect("the message is appended");
+
+	let duplicate = call(&window, "conversation_duplicate_bot", json!({ "botId": source_id }))
+		.expect("the bot is duplicated");
+	let duplicate_id = duplicate["id"].as_str().expect("the duplicate holds an id").to_owned();
+
+	assert_ne!(duplicate_id, source_id, "a duplicate answered under the source's id");
+	assert_eq!(duplicate["name"], json!("Nyx copy"));
+	assert_eq!(duplicate["title"], source["title"]);
+	assert_eq!(duplicate["model"], source["model"]);
+	assert_eq!(duplicate["avatarAnimal"], source["avatarAnimal"]);
+	assert_eq!(duplicate["avatarBlot"], source["avatarBlot"]);
+	assert_eq!(duplicate["avatarImagePath"], source["avatarImagePath"]);
+	assert_eq!(duplicate["workingDir"], source["workingDir"]);
+	assert_eq!(duplicate["instructions"], source["instructions"]);
+	assert_eq!(duplicate["deniedTools"], source["deniedTools"]);
+	assert_eq!(duplicate["outputStyle"], source["outputStyle"]);
+
+	// A thread of its own, with nothing in it: the duplicate is a bot to start with
+	// rather than a conversation to continue.
+	let duplicate_chat = call(&window, "conversation_main_chat", json!({ "botId": duplicate_id }))
+		.expect("the chat the duplicate was created with");
+	let duplicate_conversation =
+		duplicate_chat["id"].as_str().expect("the chat holds an id").to_owned();
+	assert_ne!(duplicate_conversation, conversation, "a duplicate was seated in the source's chat");
+	assert_eq!(
+		call(
+			&window,
+			"conversation_message_page",
+			json!({ "conversationId": duplicate_conversation, "beforeSeq": null, "limit": 20 })
+		),
+		Ok(json!({
+			"conversationId": duplicate_conversation,
+			"messages": [],
+			"hasMore": false
+		})),
+		"a duplicate opened on what the source had said"
+	);
+
+	assert_eq!(
+		readers_skills(&window, &duplicate_id),
+		readers_skills(&window, &source_id),
+		"the skills the source carries did not come over"
+	);
+
+	let bundle = bundle_of(&app, &duplicate_id);
+	assert_eq!(json_at(&bundle.join(".mcp.json"))["mcpServers"], json!({ "atlas": atlas }));
+	assert_eq!(
+		std::fs::read_to_string(bundle.join("hooks").join("hooks.json")).ok(),
+		Some(theirs.to_owned()),
+		"a hook the reader gave the source did not come over"
+	);
+	assert!(
+		!bundle.join(".learned.md").exists(),
+		"what the source remembered was copied into a bot that has been told nothing"
+	);
+
+	// Generated for the duplicate rather than copied: the manifest names its id, the
+	// agent file carries it, and the history under it starts here.
+	let root = bundles::root(app.handle()).expect("the bundle root");
+	let manifest = json_at(&bundle.join(".claude-plugin").join("plugin.json"));
+	assert_eq!(manifest["name"], json!(duplicate_id));
+	assert_eq!(manifest["mcpServers"], json!("./.mcp.json"));
+	assert!(
+		bundles::agent_file(&root, &duplicate_id).is_some(),
+		"the duplicate has no agent file of its own"
+	);
+	let history = call(&window, "conversation_bot_history", json!({ "botId": duplicate_id }))
+		.expect("the duplicate's history");
+	assert!(
+		!history.as_array().expect("a list of writes").is_empty(),
+		"the duplicate has no history of its own"
+	);
+
+	// And the source is exactly as it was: duplicating a bot moves nothing on it.
+	assert!(source_bundle.join(".learned.md").exists(), "the source lost what it remembered");
+	assert_eq!(
+		json_at(&source_bundle.join(".mcp.json"))["mcpServers"],
+		json!({ "atlas": atlas }),
+		"the source lost the server it declares"
+	);
+	assert_eq!(
+		call(&window, "conversation_bots", json!({}))
+			.expect("the bots")
+			.as_array()
+			.expect("a list")
+			.iter()
+			.map(|bot| bot["name"].clone())
+			.collect::<Vec<_>>(),
+		vec![json!("Nyx"), json!("Nyx copy")]
+	);
+}
+
+/// The one refusal a caller can act on, on this command too: the list it is holding
+/// names a bot the file no longer does, and nothing is written for the id it sent.
+#[test]
+fn a_duplicate_of_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	assert_eq!(
+		call(&window, "conversation_duplicate_bot", json!({ "botId": "missing" })),
+		Err(json!({ "kind": "unknownBot", "id": "missing" }))
+	);
+	assert_eq!(call(&window, "conversation_bots", json!({})), Ok(json!([])));
 }
