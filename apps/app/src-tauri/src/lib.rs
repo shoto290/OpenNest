@@ -39,6 +39,8 @@ pub fn run() {
 		// A link followed in the conversation goes to the system browser: the
 		// webview has nowhere to open it but over the app itself.
 		.plugin(tauri_plugin_opener::init())
+		// What tells a reader a bot has answered while they were looking elsewhere.
+		.plugin(tauri_plugin_notification::init())
 		.manage(AgentState::default())
 		// The database is opened once, here, because `app_data_dir()` needs the
 		// resolved identifier only the built app carries. A failure is managed like
