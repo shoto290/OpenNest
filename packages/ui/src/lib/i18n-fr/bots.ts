@@ -394,6 +394,7 @@ const bots = {
 				mouse: "Souris",
 				owl: "Hibou",
 				koala: "Koala",
+				skippy: "Skippy",
 			},
 		},
 		blot: {

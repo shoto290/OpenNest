@@ -412,6 +412,7 @@ const bots = {
 				mouse: "Mouse",
 				owl: "Owl",
 				koala: "Koala",
+				skippy: "Skippy",
 			} as const satisfies Record<BotAvatarAnimal, string>,
 		},
 		blot: {

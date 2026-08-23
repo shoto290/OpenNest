@@ -7,10 +7,18 @@ import {
 	type BotAvatarAnimal,
 } from "@workspace/ui/components/bot-avatar-animals"
 
-const BOT_IDENTITY_ANIMALS = Object.keys(ANIMALS) as BotAvatarAnimal[]
+/** The one animal the picker never offers: a bot is given it rather than
+ * choosing it. */
+const UNPICKABLE_ANIMAL = "skippy"
+
+type BotIdentityAnimal = Exclude<BotAvatarAnimal, typeof UNPICKABLE_ANIMAL>
+
+const BOT_IDENTITY_ANIMALS = (Object.keys(ANIMALS) as BotAvatarAnimal[]).filter(
+	(animal): animal is BotIdentityAnimal => animal !== UNPICKABLE_ANIMAL,
+)
 
 type BotIdentity = {
-	animal: BotAvatarAnimal
+	animal: BotIdentityAnimal
 	/** The tint drawn behind the animal. Left out, the bot wears no blot. */
 	blot?: BotAvatarBlot
 	/** An uploaded picture. It wins over the animal and hides its blot, so the
