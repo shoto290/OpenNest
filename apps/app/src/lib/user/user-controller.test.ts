@@ -22,6 +22,12 @@ const DEFAULTS: UserPreferences = {
 
 const WORN = "/data/avatars/worn.png"
 
+const ALL_NOTIFIED = {
+	notifyOnQuestion: true,
+	notifyOnPermission: true,
+	notifyOnFinishedTurn: true,
+}
+
 /** The host's own record, answered and replaced the way the three commands do: a
  * write lands whole, and a picture leaves the rest of the record alone. What the
  * controller reads back is what a launch would find. */
@@ -67,6 +73,7 @@ describe("the reader's own record", () => {
 		const controller = await loaded()
 
 		expect(controller.getState().profile).toEqual({
+			...ALL_NOTIFIED,
 			displayName: "Nyx",
 			profilePicturePath: WORN,
 		})
@@ -126,6 +133,41 @@ describe("the reader's own record", () => {
 		await vi.waitFor(() =>
 			expect(controller.getState().profile.displayName).toBe("Nyx"),
 		)
+	})
+
+	it("shows the switch on the press and writes the record whole", async () => {
+		const host = aHost({ ...DEFAULTS, displayName: "Nyx", palette: "moss" })
+		const controller = await loaded()
+
+		const written = controller.setNotification({
+			field: "notifyOnPermission",
+			isEnabled: false,
+		})
+
+		expect(controller.getState().profile.notifyOnPermission).toBe(false)
+		await written
+		expect(host()).toEqual({
+			...DEFAULTS,
+			displayName: "Nyx",
+			palette: "moss",
+			notifyOnPermission: false,
+		})
+	})
+
+	it("puts a switch back on what the host last answered when its write is refused", async () => {
+		aHost()
+		const controller = await loaded()
+		hostInvoke.mockRejectedValue({
+			kind: "storage",
+			failure: { kind: "sqlite", detail: "disk I/O error" },
+		})
+
+		await controller.setNotification({
+			field: "notifyOnQuestion",
+			isEnabled: false,
+		})
+
+		expect(controller.getState().profile.notifyOnQuestion).toBe(true)
 	})
 
 	it("holds a theme chosen between a keystroke's read and its write", async () => {
