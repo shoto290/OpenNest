@@ -2629,6 +2629,7 @@ dependencies = [
  "git2",
  "image",
  "libc",
+ "mac-notification-sys",
  "rusqlite",
  "serde",
  "serde_json",

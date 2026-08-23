@@ -3,12 +3,11 @@ export type NotificationRequest = {
 	/** Which bot the notification is about, so a click can land back in that
 	 * conversation rather than wherever the app was left.
 	 *
-	 * Awaiting a route that can carry it: `tauri-plugin-notification` keeps nothing
-	 * about a notification it has shown, so a macOS click is to be delivered
-	 * through `mac-notification-sys` — already in the tree under `notify-rust` —
-	 * whose `send_notification` answers with a `NotificationResponse`. The event
-	 * that route emits carries this id, and `onActivate` in
-	 * `notification-transport.ts` is what receives it. */
+	 * Only macOS can carry it back: `tauri-plugin-notification` keeps nothing about
+	 * a notification it has shown, so a click there is delivered through
+	 * `mac-notification-sys` — already in the tree under `notify-rust` — whose
+	 * `send_notification` answers with a `NotificationResponse`. The event that
+	 * route emits carries this id, and `onActivate` is what receives it. */
 	botId: string
 	title: string
 	body: string

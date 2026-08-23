@@ -11,7 +11,6 @@
 		"process:allow-restart",
 		"opener:allow-open-url",
 		"opener:allow-default-urls",
-		"notification:allow-notify",
 		{
 			"identifier": "opener:allow-open-path",
 			"allow": [{ "path": "$APPDATA/attachments/**" }]

@@ -1,31 +1,37 @@
-import { sendNotification } from "@tauri-apps/plugin-notification"
+import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 
 import type { NotificationPort } from "./notification-port"
 
+/** Where the host reports a click, carrying the bot the notification was sent
+ * with. Spelled the same in `src-tauri/src/notifications/commands.rs`. */
+const ACTIVATED_EVENT = "notification://activated"
+
 export const notificationTransport: NotificationPort = {
-	/** Nothing is asked before sending. The platform grants in hard code — the
-	 * plugin's desktop `permission_state` and `request_permission` both answer
-	 * `Granted` without ever consulting the OS — so a notification the reader has
-	 * refused in system settings is dropped silently and the app cannot know.
+	/** Nothing is asked before sending, and nothing is reported back: whether a
+	 * notification is shown at all is the platform's, and a reader who refused
+	 * them in system settings is indistinguishable from one who was told.
 	 *
-	 * The bot is not passed on: the desktop plugin shows the notification and keeps
-	 * nothing, so there is no payload for a click to come back with. */
-	send: async ({ title, body }) => {
+	 * The bot goes with it. The host decides where it can land — on macOS the
+	 * notification is kept until the reader answers it, everywhere else it is
+	 * shown and forgotten — and returns as soon as it is on screen, so nothing
+	 * here waits on the reader. */
+	send: async ({ botId, title, body }) => {
 		try {
-			sendNotification({ title, body })
+			await invoke("notification_show", { botId, title, body })
 		} catch {
 			// A platform that will not take a notification is a platform that shows
 			// none. There was nothing else this call was going to do.
 		}
 	},
 
-	/** The listener is dropped: nothing on the desktop host can fire it.
-	 * `tauri-plugin-notification` shows through `notify-rust` and discards the
-	 * handle without awaiting a response, and `onAction` rejects here — no
-	 * `register_listener` command is registered outside mobile.
+	/** Every click on every notification this app showed, told to this listener.
+	 * Only clicks arrive — a notification closed or timed out emits nothing —
+	 * and only on macOS, the one host that keeps a notification long enough to
+	 * hear back from it.
 	 *
-	 * Routing a click to its bot belongs here when that becomes possible. Bringing
-	 * the window back does not: `src-tauri/src/lib.rs` already unminimizes, shows
-	 * and focuses it for the single-instance handler, which is the layer that can. */
-	onActivate: async () => () => undefined,
+	 * Routing the click is the caller's: bringing the window back is not needed
+	 * here, `src-tauri/src/lib.rs` already unminimizes, shows and focuses it. */
+	onActivate: (listener) =>
+		listen<string>(ACTIVATED_EVENT, (event) => listener(event.payload)),
 }
