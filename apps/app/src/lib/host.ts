@@ -29,6 +29,11 @@ export function avatarSrc(path: string | null): string | undefined {
 	return path ? assetSrc(path) : undefined
 }
 
+/** Whether the window is also put in front of the reader, and not only on screen. */
+export type WindowReveal = {
+	withFocus?: boolean
+}
+
 /** The window, on screen. It is declared hidden: the frame the platform draws
  * around a webview is drawn before the webview has anything in it, and no stylesheet
  * reaches that frame — the only way not to flash it is not to be on screen for it.
@@ -40,12 +45,20 @@ export function avatarSrc(path: string | null): string | undefined {
  * palette is on the window before this is reached.
  *
  * A host that refuses leaves the window hidden, and nothing can be done about that
- * from inside it. */
-export function revealWindow(): void {
+ * from inside it.
+ *
+ * `withFocus` also brings it in front of whatever the reader was doing instead,
+ * which is what an answered notification asks for: the reader may have closed the
+ * window rather than only looked away, and focusing a window that is not on screen
+ * brings nothing back. A launch asks for none of it — the window the platform opens
+ * is already the one in front. */
+export function revealWindow({ withFocus }: WindowReveal = {}): void {
 	if (!isDesktopHost()) {
 		return
 	}
-	getCurrentWindow()
-		.show()
-		.catch(() => undefined)
+	const current = getCurrentWindow()
+	current.show().catch(() => undefined)
+	if (withFocus) {
+		current.setFocus().catch(() => undefined)
+	}
 }

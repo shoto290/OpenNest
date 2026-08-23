@@ -31,6 +31,7 @@ import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { useExternalLinks } from "@/lib/links/use-external-links"
+import { useNotifications } from "@/lib/notifications/use-notifications"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
 import { chosenLanguage, storeLanguage } from "@/lib/user/language-mirror"
@@ -77,6 +78,15 @@ export function App() {
 	// Mounted here for the same reason: a link is followed wherever the reader is,
 	// and the window is what has to stay on the view they were reading.
 	useExternalLinks()
+
+	// Above every bot rather than inside the conversation: what a reader looking
+	// elsewhere is told about is the bot they are not reading, and the click that
+	// answers it is what selects that bot.
+	useNotifications({
+		chat: chat.controller,
+		roster: roster.controller,
+		user: user.controller,
+	})
 
 	const { bots, selectedBotId, isEditing, isShowingDanger, hasLoaded } =
 		roster.state

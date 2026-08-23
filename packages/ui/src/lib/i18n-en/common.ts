@@ -29,6 +29,14 @@ const common = {
 		success: "Done",
 		error: "Try again",
 	},
+	/** What a reader looking elsewhere is told. The bot's name is the title, so the
+	 * body only has to say what happened: macOS keeps a notification in its centre
+	 * until the reader clears it, and nothing of a conversation belongs there. */
+	notification: {
+		question: "Asked you a question",
+		permission: "Wants your permission",
+		finishedTurn: "Finished its turn",
+	},
 	update: {
 		badge: {
 			available: "Download update",
