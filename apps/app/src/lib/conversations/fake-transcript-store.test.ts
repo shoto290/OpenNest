@@ -148,6 +148,29 @@ describe("createFakeTranscriptStore", () => {
 		expect(created.avatarAnimal).toBe("owl")
 	})
 
+	it("copies a bot under a fresh id, a name of its own and an empty transcript", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+
+		const copy = await store.duplicateBot("default")
+
+		expect(copy.id).not.toBe("default")
+		expect(copy.name).toBe("Claude copy")
+		expect(copy.model).toBe("sonnet")
+		const chat = await store.mainChat(copy.id)
+		expect((await store.loadPage(chat.id, null)).messages).toEqual([])
+	})
+
+	it("refuses a copy of a bot it does not hold", async () => {
+		const store = createFakeTranscriptStore()
+
+		await expect(store.duplicateBot("missing")).rejects.toEqual({
+			kind: "unknownBot",
+			id: "missing",
+		})
+	})
+
 	it("replaces who a bot is and leaves its id and its moment alone", async () => {
 		const store = createFakeTranscriptStore()
 		const created = await store.createBot(botIdentity())

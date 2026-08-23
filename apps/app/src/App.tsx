@@ -223,6 +223,9 @@ export function App() {
 							void roster.controller.create()
 						}}
 						onDeleteBot={roster.controller.askToDelete}
+						onDuplicateBot={(id) => {
+							void roster.controller.duplicate(id)
+						}}
 						onEditBot={roster.controller.edit}
 						onOpenUserSettings={() => user.controller.setSettingsOpen(true)}
 						onSelectBot={roster.controller.select}

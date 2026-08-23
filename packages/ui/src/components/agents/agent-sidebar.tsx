@@ -117,6 +117,7 @@ interface BotRosterRowProps {
 	isSelected: boolean
 	onSelect?: (id: string) => void
 	onEdit?: (id: string) => void
+	onDuplicate?: (id: string) => void
 	onDelete?: (id: string) => void
 }
 
@@ -125,6 +126,7 @@ const BotRosterRow = ({
 	isSelected,
 	onSelect,
 	onEdit,
+	onDuplicate,
 	onDelete,
 }: BotRosterRowProps) => {
 	const { t } = useTranslation("bots")
@@ -183,6 +185,10 @@ const BotRosterRow = ({
 						<Icons.Settings aria-hidden="true" className="size-3.5" />
 						{t("roster.settings")}
 					</ContextMenuItem>
+					<ContextMenuItem onSelect={() => onDuplicate?.(bot.id)}>
+						<Icons.Copy aria-hidden="true" className="size-3.5" />
+						{t("roster.duplicate")}
+					</ContextMenuItem>
 					<ContextMenuItem
 						onSelect={() => onDelete?.(bot.id)}
 						tone="destructive"
@@ -214,6 +220,9 @@ interface AgentSidebarProps extends AgentSidebarPanelProps {
 	onSelectBot?: (id: string) => void
 	onCreateBot?: () => void
 	onEditBot?: (id: string) => void
+	/** A copy of the bot, made by the host and appended to `bots`. The panel only
+	 * says which row was asked about. */
+	onDuplicateBot?: (id: string) => void
 	onDeleteBot?: (id: string) => void
 	/** Pinned under the list, against the bottom of the column. The panel knows
 	 * nothing of what goes in it and reserves nothing for it: leave it out and the
@@ -234,6 +243,7 @@ const AgentSidebarBase = ({
 	onSelectBot,
 	onCreateBot,
 	onEditBot,
+	onDuplicateBot,
 	onDeleteBot,
 	footer,
 	user,
@@ -277,6 +287,7 @@ const AgentSidebarBase = ({
 									isSelected={bot.id === selectedId}
 									key={bot.id}
 									onDelete={onDeleteBot}
+									onDuplicate={onDuplicateBot}
 									onEdit={onEditBot}
 									onSelect={onSelectBot}
 								/>

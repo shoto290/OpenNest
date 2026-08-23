@@ -55,6 +55,9 @@ export type RosterController = {
 	 * fill in first and none opens after: the bot exists and can be talked to, and the
 	 * gear is there for whoever wants to describe it. */
 	create: () => Promise<void>
+	/** A copy of the bot, appended to the roster and selected the way a create is.
+	 * The store owns what travels: a refusal leaves the roster as it was. */
+	duplicate: (id: string) => Promise<void>
 	edit: (id: string) => void
 	setEditing: (isEditing: boolean) => void
 	/** Who the bot is now, from the panel's whole value. Written as it is typed,
@@ -111,6 +114,16 @@ export const createRosterController = (
 	}
 
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)
+
+	/** A bot the store has just written, at the end of the roster and opened on: a
+	 * create and a duplicate both land the reader in the conversation they asked for. */
+	const admit = (written: Bot) => {
+		set({
+			bots: [...state.bots, written],
+			selectedBotId: written.id,
+			isShowingDanger: false,
+		})
+	}
 
 	/** The store's own answer over the row it is about. Applied whole: what a caller
 	 * displays is what the store holds, including a picture it refused to keep. */
@@ -220,12 +233,12 @@ export const createRosterController = (
 
 		create: () =>
 			enqueue(async () => {
-				const created = await store.createBot(newBotIdentity(state.bots))
-				set({
-					bots: [...state.bots, created],
-					selectedBotId: created.id,
-					isShowingDanger: false,
-				})
+				admit(await store.createBot(newBotIdentity(state.bots)))
+			}).catch(reload),
+
+		duplicate: (id: string) =>
+			enqueue(async () => {
+				admit(await store.duplicateBot(id))
 			}).catch(reload),
 
 		edit: (id: string) =>
