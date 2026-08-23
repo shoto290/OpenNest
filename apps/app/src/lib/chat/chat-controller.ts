@@ -7,6 +7,7 @@ import {
 	initialChatState,
 	isSameCommandList,
 	isSameRuntimeScope,
+	isSessionReady,
 	isTurnBusy,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
@@ -108,7 +109,12 @@ export type ChatController = {
 		botId: string,
 		attachments: SubmittedAttachment[],
 	) => Promise<string[]>
+	/** Asks the run to stop. What the reader said while it was answering is put on
+	 * the record rather than sent: stopping stops the bot, and nothing else. */
 	stop: () => Promise<void>
+	/** Drops one held prompt. The rest keep their order, and a prompt already
+	 * submitted is not one of these — it is a transcript row by then. */
+	discard: (id: string) => void
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	retry: (id: string) => Promise<void>
 	shutdown: () => Promise<void>
@@ -136,6 +142,11 @@ const ENDING_FOR: Record<MessageCompletion, TerminalCompletion | null> = {
 	cancelled: "cancelled",
 	failed: "failed",
 }
+
+/** What became of a prompt handed to a run. `unwritten` is the one a caller may
+ * still act on as words nobody has seen: nothing was stored, so a held prompt goes
+ * back to waiting. `refused` is on the record and the reader may send it again. */
+type PromptOutcome = "submitted" | "unwritten" | "refused"
 
 /** How a turn ending settles the reply it was streaming. */
 const ENDING_FOR_OUTCOME: Record<TurnOutcome, TerminalCompletion> = {
@@ -183,6 +194,9 @@ type BotChat = {
 	 * second caller checks only becomes busy once the prompt has been written down,
 	 * and the whole handover happens before that. */
 	sending: boolean
+	/** The pass over this bot's outbox in flight, if there is one. One at a time:
+	 * two would read the same head before either had taken it. */
+	draining: Promise<void> | null
 }
 
 function toTransportError(reason: unknown): TransportError {
@@ -262,6 +276,7 @@ export function createChatController(
 			pendingPreflight: null,
 			pendingRotation: null,
 			sending: false,
+			draining: null,
 		}
 		bots.set(id, bot)
 		return bot
@@ -634,6 +649,9 @@ export function createChatController(
 			noteFailure(bot, event)
 			noteEvolution(bot, event)
 			persist(bot, scope, event)
+			// A turn that ended, a connection that came back: whatever the frame said,
+			// it may be what the held prompts were waiting for.
+			pump(bot)
 		}
 	}
 
@@ -776,6 +794,7 @@ export function createChatController(
 			}
 			const handle = await driver.startOrResumeSession(runtime, resume)
 			dispatch(bot, { type: "sessionOpened" })
+			pump(bot)
 			return handle
 		} catch (reason) {
 			// The row is open and nothing came up behind it. The run is spent from
@@ -877,7 +896,11 @@ export function createChatController(
 		selected = bot
 		publish()
 		await openConversation(bot)
-		return openedFor(bot)
+		const handle = await openedFor(bot)
+		// The conversation a held prompt was missing may be the one just opened, and a
+		// bot already answering opens no session to pump behind it.
+		pump(bot)
+		return handle
 	}
 
 	/** The bot is going away, so its process goes with it and this launch forgets
@@ -1011,7 +1034,8 @@ export function createChatController(
 	 * The two refusals are kept apart because they are different failures: the store
 	 * would not give up the conversation, or Claude would not take the prompt. Both
 	 * leave the prompt where it is — written, shown, and the one the reader may send
-	 * again. */
+	 * again. Answers whether Claude took it, which is what tells a pass over the
+	 * outbox to stop rather than send the next one into the same refusal. */
 	const submit = async (bot: BotChat, id: string, text: string) => {
 		const runtime = bot.state.runtime
 		if (!runtime || !isAnswerable(bot)) {
@@ -1020,7 +1044,7 @@ export function createChatController(
 				id,
 				error: { kind: "notStarted" },
 			})
-			return
+			return false
 		}
 		let carried: string
 		try {
@@ -1031,23 +1055,27 @@ export function createChatController(
 				id,
 				error: toStoreError(refusal),
 			})
-			return
+			return false
 		}
 		try {
 			await driver.submitPrompt(runtime, carried)
 			bot.run.carried = true
 			bot.run.prompts += 1
+			return true
 		} catch (reason) {
 			dispatch(bot, {
 				type: "promptRejected",
 				id,
 				error: toTransportError(reason),
 			})
+			return false
 		}
 	}
 
-	/** One prompt at a time per bot, claimed before the first await. The turn a
-	 * caller is refused on only becomes busy once the prompt has been written down,
+	/** One resubmission at a time per bot, claimed before the first await. A prompt
+	 * the reader sends waits its place instead of being refused; a retry is refused,
+	 * because it names a row a turn may already have taken. The turn a caller is
+	 * refused on only becomes busy once the prompt has been written down,
 	 * and everything a handover does happens before that — so the busy check alone
 	 * lets a second caller in through the window the first one is still opening, and
 	 * both replace the run. */
@@ -1056,13 +1084,63 @@ export function createChatController(
 			report(bot, { kind: "turnAlreadyRunning" })
 			return
 		}
+		await claim(bot, submission)
+	}
+
+	/** The claim itself: the bot is sending for as long as the submission runs. */
+	const claim = async <T>(bot: BotChat, submission: () => Promise<T>) => {
 		bot.sending = true
 		try {
-			await submission()
+			return await submission()
 		} finally {
 			bot.sending = false
 		}
 	}
+
+	/** A user prompt as the record holds it: the turn it opens and the row itself.
+	 * The same pair whether it is about to be submitted or was only ever said. */
+	const promptRow = (
+		conversationId: string,
+		content: string,
+		repliedToMessageId?: string,
+	) => ({
+		id: newId(),
+		turnId: newId(),
+		conversationId,
+		content,
+		createdAt: now(),
+		repliedToMessageId: repliedToMessageId ?? null,
+	})
+
+	type PromptRow = ReturnType<typeof promptRow>
+
+	const storePrompt = async (said: PromptRow) => {
+		await store.startTurn({
+			id: said.turnId,
+			conversationId: said.conversationId,
+			startedAt: said.createdAt,
+		})
+		await store.appendUserMessage({
+			id: said.id,
+			conversationId: said.conversationId,
+			turnId: said.turnId,
+			authorBotId: null,
+			repliedToMessageId: said.repliedToMessageId,
+			content: said.content,
+			createdAt: said.createdAt,
+		})
+	}
+
+	const showPrompt = (said: PromptRow) =>
+		transcript.append({
+			id: said.id,
+			conversationId: said.conversationId,
+			turnId: said.turnId,
+			role: "user",
+			content: said.content,
+			completion: "complete",
+			createdAt: said.createdAt,
+		})
 
 	/** The prompt reaches the transcript before it reaches Claude. A prompt that
 	 * could not be written down is not submitted at all: the answer would arrive
@@ -1076,55 +1154,30 @@ export function createChatController(
 		bot: BotChat,
 		trimmed: string,
 		repliedToMessageId?: string,
-	) => {
+	): Promise<PromptOutcome> => {
 		const conversationId = bot.state.conversationId
 		if (!conversationId) {
 			reportStore(bot, { kind: "unavailable" })
-			return
+			return "unwritten"
 		}
 		await rotateIfDue(bot)
 		dispatch(bot, { type: "promptSubmitted" })
 
-		const turnId = newId()
-		const promptId = newId()
-		const createdAt = now()
+		const said = promptRow(conversationId, trimmed, repliedToMessageId)
 		try {
-			await enqueue(async () => {
-				await store.startTurn({
-					id: turnId,
-					conversationId,
-					startedAt: createdAt,
-				})
-				await store.appendUserMessage({
-					id: promptId,
-					conversationId,
-					turnId,
-					authorBotId: null,
-					repliedToMessageId: repliedToMessageId ?? null,
-					content: trimmed,
-					createdAt,
-				})
-			})
+			await enqueue(() => storePrompt(said))
 		} catch (reason) {
 			dispatch(bot, {
 				type: "promptRejected",
 				id: null,
 				error: toStoreError(reason),
 			})
-			return
+			return "unwritten"
 		}
 
-		transcript.append({
-			id: promptId,
-			conversationId,
-			turnId,
-			role: "user",
-			content: trimmed,
-			completion: "complete",
-			createdAt,
-		})
-		bot.activeTurn = { id: turnId, promptId }
-		await submit(bot, promptId, trimmed)
+		showPrompt(said)
+		bot.activeTurn = { id: said.turnId, promptId: said.id }
+		return (await submit(bot, said.id, trimmed)) ? "submitted" : "refused"
 	}
 
 	/** The files a prompt is about to name, written down before the prompt is sent.
@@ -1146,12 +1199,101 @@ export function createChatController(
 		return driver.storeAttachments(conversationId, attachments)
 	}
 
-	const send = (bot: BotChat, text: string, repliedToMessageId?: string) => {
+	/** A bot with nothing in the way of the next prompt: a conversation to write it
+	 * in, a session to take it, and no prompt of its own already on its way out. */
+	const canSend = (bot: BotChat) => canDeliver(bot) && isSessionReady(bot.state)
+
+	/** A bot a held prompt still has a way out of: the session is not in it, because
+	 * one that is down is opened by the pass itself. */
+	const canDeliver = (bot: BotChat) =>
+		!bot.sending &&
+		bot.state.conversationId !== null &&
+		!isTurnBusy(bot.state.turn)
+
+	/** The session the next held prompt needs. A bot whose process never came up, or
+	 * went away, is given one here: a prompt waiting for a session nobody is going to
+	 * open is a prompt that never leaves. */
+	const sessionForOutbox = async (bot: BotChat) => {
+		if (isSessionReady(bot.state)) {
+			return true
+		}
+		await openedFor(bot)
+		return canSend(bot)
+	}
+
+	/** The outbox, oldest first, one prompt at a time. Each entry leaves the outbox
+	 * before it is submitted, so nothing can read it twice — and the pass stops on
+	 * the first refusal rather than sending what is left after it into whatever
+	 * refused the one before. A session that dies mid-pass refuses the prompt after
+	 * it, which ends the pass, and the pump that the next frame asks for opens one. */
+	const drainOutbox = async (bot: BotChat) => {
+		if (!(await sessionForOutbox(bot))) {
+			return
+		}
+		while (canSend(bot)) {
+			const entry = bot.state.outbox[0]
+			if (!entry) {
+				return
+			}
+			dispatch(bot, { type: "outboxEntryRemoved", id: entry.id })
+			const outcome = await claim(bot, () =>
+				sendPrompt(bot, entry.text, entry.repliedToMessageId ?? undefined),
+			)
+			// Nothing was written down, so the reader is still owed these words: they go
+			// back to the front, where they were before this pass took them.
+			if (outcome === "unwritten") {
+				dispatch(bot, { type: "promptReturned", entry })
+			}
+			if (outcome !== "submitted") {
+				return
+			}
+		}
+	}
+
+	/** Asked at every moment a bot may have become able to take a prompt, and one
+	 * pass at a time whoever asks. Cheap when there is nothing to send, because that
+	 * is nearly every time it is asked: this runs on every frame of every answer. */
+	const pump = (bot: BotChat) => {
+		if (bot.draining || bot.state.outbox.length === 0 || !canDeliver(bot)) {
+			return
+		}
+		bot.draining = drainOutbox(bot)
+			// Nothing on this path throws today, and a pass that ever did would end
+			// without a word: the entries would sit there and the reader would be
+			// looking at a line that stopped moving for no reason they can see.
+			.catch((reason) => report(bot, reason))
+			.finally(() => {
+				bot.draining = null
+			})
+	}
+
+	/** A prompt is never refused for arriving early or over a turn: what cannot go
+	 * out now waits its place in the bot's outbox, and the next moment the session
+	 * can take one sends it.
+	 *
+	 * A bot that could not take it and a store that would not write it down come to
+	 * the same thing from where the reader sits — the words reached nothing and no
+	 * record shows them — so both wait rather than being lost with the draft the
+	 * composer has already cleared. */
+	const send = async (bot: BotChat, text: string, repliedTo?: string) => {
 		const trimmed = text.trim()
 		if (trimmed.length === 0) {
-			return Promise.resolve()
+			return
 		}
-		return admit(bot, () => sendPrompt(bot, trimmed, repliedToMessageId))
+		const outcome = canSend(bot)
+			? await claim(bot, () => sendPrompt(bot, trimmed, repliedTo))
+			: "unwritten"
+		if (outcome === "unwritten") {
+			dispatch(bot, {
+				type: "promptHeld",
+				entry: {
+					id: newId(),
+					text: trimmed,
+					repliedToMessageId: repliedTo ?? null,
+				},
+			})
+		}
+		pump(bot)
 	}
 
 	/** Resubmits a prompt the store already holds. Only the one Claude refused: it
@@ -1178,12 +1320,45 @@ export function createChatController(
 		await submit(bot, id, target.content)
 	}
 
+	/** What the reader said while the bot was answering, written where they said it:
+	 * one ordinary user row each, in the order they were sent, and none of them
+	 * submitted. Nothing is waiting afterwards — the outbox is empty, and the prompt
+	 * that starts the bot again is the reader's next one.
+	 *
+	 * The run is left uncarried, so that prompt hands the process the whole rebuilt
+	 * conversation: what these rows say was never told to the child, and the answer it
+	 * was cut off mid-sentence is not what it thinks it said either. */
+	const recordHeld = (bot: BotChat) => {
+		const conversationId = bot.state.conversationId
+		if (!conversationId) {
+			return
+		}
+		bot.run.carried = false
+		const held = bot.state.outbox
+		dispatch(bot, { type: "outboxCleared" })
+		for (const entry of held) {
+			const said = promptRow(
+				conversationId,
+				entry.text,
+				entry.repliedToMessageId ?? undefined,
+			)
+			write(
+				bot,
+				() => storePrompt(said),
+				() => showPrompt(said),
+			)
+		}
+	}
+
+	/** Stopping stops the bot's work and nothing else: what the reader had already
+	 * said is neither thrown away nor sent on its own, it goes on the record. */
 	const stop = async (bot: BotChat) => {
 		const runtime = bot.state.runtime
 		if (!runtime || !canStopTurn(bot.state.turn)) {
 			return
 		}
 		announce(bot, { type: "turnChanged", state: "stopping" })
+		recordHeld(bot)
 		try {
 			await driver.cancelTurn(runtime)
 		} catch (reason) {
@@ -1224,6 +1399,13 @@ export function createChatController(
 		nothing: T,
 	): Promise<T> => (selected ? ask(selected) : Promise.resolve(nothing))
 
+	/** The same, for what answers nothing at all. */
+	const forSelected = (act: (bot: BotChat) => void) => {
+		if (selected) {
+			act(selected)
+		}
+	}
+
 	return {
 		getState: () => selected?.state ?? initialChatState,
 		stateFor: (botId) => bots.get(botId)?.state ?? initialChatState,
@@ -1257,6 +1439,8 @@ export function createChatController(
 		},
 		storeAttachments,
 		stop: () => onSelected(stop, undefined),
+		discard: (id) =>
+			forSelected((bot) => dispatch(bot, { type: "outboxEntryRemoved", id })),
 		respond: (id, decision) =>
 			onSelected((bot) => respond(bot, id, decision), undefined),
 		retry: (id) =>

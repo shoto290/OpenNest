@@ -457,17 +457,28 @@ describe("createChatController", () => {
 		neverAheadOfStorage(state.messages, stored)
 	})
 
-	it("refuses a second prompt while a turn is running", async () => {
+	it("holds a second prompt over a running turn and sends it after", async () => {
 		const { controller } = await bootedHarness()
 		await controller.send("first")
 		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
 		await controller.send("second")
 
-		const state = controller.getState()
+		const held = controller.getState()
 		expect(
-			state.messages.filter((message) => message.role === "user"),
+			held.messages.filter((message) => message.role === "user"),
 		).toHaveLength(1)
-		expect(state.errors.at(-1)?.error.kind).toBe("turnAlreadyRunning")
+		expect(held.outbox.map((entry) => entry.text)).toEqual(["second"])
+		expect(held.errors).toEqual([])
+
+		await vi.runAllTimersAsync()
+		const state = controller.getState()
+		expect(state.outbox).toEqual([])
+		expect(spoken(state.messages)).toEqual([
+			["user", "first", "complete"],
+			["assistant", REPLY, "complete"],
+			["user", "second", "complete"],
+			["assistant", REPLY, "complete"],
+		])
 	})
 
 	it("stores a stopped turn as cancelled, with the words it had", async () => {
@@ -2733,9 +2744,10 @@ describe("a handover nothing may run twice", () => {
 
 	// Two prompts arriving at the threshold. Both pass a busy check that is only ever
 	// true once a turn has started, and the turn starts after the handover — so
-	// without an admission taken before the first await, each opens a run of its own
-	// and asks the host for a process the host will refuse one of.
-	it("lets one of two prompts at the threshold hand over, and refuses the other", async () => {
+	// without a claim taken before the first await, each opens a run of its own and
+	// asks the host for a process the host will refuse one of. The second waits in
+	// the outbox instead, and takes a handover of its own when its place comes.
+	it("holds the second of two prompts at the threshold for its own handover", async () => {
 		const base = createFakeTranscriptStore()
 		const released = deferred()
 		const { store, hold } = foldingStore(base, released.promise)
@@ -2760,21 +2772,22 @@ describe("a handover nothing may run twice", () => {
 		await vi.runAllTimersAsync()
 
 		const state = harness.controller.getState()
-		expect(opened).toHaveBeenCalledTimes(2)
-		expect(watched.starts).toHaveLength(2)
-		expect(runOf(harness.controller).epoch).toBe(carried.epoch + 1)
-		expect(watched.submits).toHaveLength(2)
-		expect(watched.submits.at(-1)?.[1]).toContain("second")
-		expect(watched.submits.some(([, text]) => text.includes("third"))).toBe(
-			false,
-		)
+		expect(opened).toHaveBeenCalledTimes(3)
+		expect(watched.starts).toHaveLength(3)
+		expect(runOf(harness.controller).epoch).toBe(carried.epoch + 2)
+		expect(watched.submits).toHaveLength(3)
+		expect(watched.submits.at(-2)?.[1]).toContain("second")
+		expect(watched.submits.at(-1)?.[1]).toContain("third")
 		expect(spoken(state.messages)).toEqual([
 			["user", "first", "complete"],
 			["assistant", REPLY, "complete"],
 			["user", "second", "complete"],
 			["assistant", REPLY, "complete"],
+			["user", "third", "complete"],
+			["assistant", REPLY, "complete"],
 		])
-		expect(state.errors.at(-1)?.error).toEqual({ kind: "turnAlreadyRunning" })
+		expect(state.outbox).toEqual([])
+		expect(state.errors).toEqual([])
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 		harness.detach()
 	})
@@ -2857,6 +2870,317 @@ describe("a handover nothing may run twice", () => {
 				(message) => message.role === "assistant" && message.content === "",
 			),
 		).toEqual([])
+		harness.detach()
+	})
+})
+
+/** A prompt is never refused for arriving early or over a turn: what nothing can
+ * take yet waits its place in the bot's outbox, and the outbox sends itself. */
+describe("prompts the session cannot take yet", () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	const outboxOf = (controller: ChatController) =>
+		controller.getState().outbox.map((entry) => entry.text)
+
+	const promptsIn = (messages: TranscriptMessage[]) =>
+		spoken(messages).filter(([role]) => role === "user")
+
+	/** The driver as the controller reaches it, with every prompt it was really
+	 * asked written down as it was asked — and a submission that can be made to
+	 * refuse the way one aimed at a session that is gone refuses. */
+	const submitting =
+		(submits: string[], refusing: () => boolean = () => false) =>
+		(fake: FakeChatDriver): ChatDriver => ({
+			...fake,
+			submitPrompt: (scope, text) => {
+				submits.push(text)
+				return refusing()
+					? Promise.reject({ kind: "notStarted" })
+					: fake.submitPrompt(scope, text)
+			},
+		})
+
+	// A prompt sent into a bot whose conversation is still being read has nowhere to
+	// be written and nothing to answer it. It waits, and the store answering is what
+	// sends it — the transcript row is written then, and not a moment before.
+	it("holds a prompt sent before the conversation is open", async () => {
+		const base = createFakeTranscriptStore()
+		const reading = deferred()
+		const store: TranscriptStore = {
+			...base,
+			mainChat: (botId) => reading.promise.then(() => base.mainChat(botId)),
+		}
+		const harness = createHarness({ store })
+		const opening = harness.controller.open(BOT)
+		await vi.advanceTimersByTimeAsync(0)
+
+		await harness.controller.send("early")
+
+		expect(outboxOf(harness.controller)).toEqual(["early"])
+		expect(harness.controller.getState().messages).toEqual([])
+		expect(harness.controller.getState().errors).toEqual([])
+
+		reading.release()
+		await opening
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(state.outbox).toEqual([])
+		expect(spoken(state.messages)).toEqual([
+			["user", "early", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		harness.detach()
+	})
+
+	// Three prompts, one turn at a time: the outbox is a line, not a batch, and the
+	// transcript reads as the alternation the reader would have typed by hand.
+	it("sends what it holds in the order it was sent, one turn at a time", async () => {
+		const harness = await bootedHarness()
+
+		await harness.controller.send("first")
+		await harness.controller.send("second")
+		await harness.controller.send("third")
+
+		expect(outboxOf(harness.controller)).toEqual(["second", "third"])
+
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(state.outbox).toEqual([])
+		expect(spoken(state.messages)).toEqual([
+			["user", "first", "complete"],
+			["assistant", REPLY, "complete"],
+			["user", "second", "complete"],
+			["assistant", REPLY, "complete"],
+			["user", "third", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		expect(state.errors).toEqual([])
+		expect(spoken(await reload(harness.store))).toEqual(spoken(state.messages))
+		harness.detach()
+	})
+
+	// A reader who cut an answer short did not ask for the questions behind it to go
+	// out on their own. They are not thrown away either: they are on the record, in
+	// the order they were said, and nothing is left waiting to be sent.
+	it("records what it was holding when the turn is stopped, and sends none of it", async () => {
+		const submits: string[] = []
+		const harness = await bootedHarness({ driver: submitting(submits) })
+		await harness.controller.send("first")
+		await harness.controller.send("second")
+		await harness.controller.send("third")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
+
+		await harness.controller.stop()
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(state.outbox).toEqual([])
+		expect(promptsIn(state.messages)).toEqual([
+			["user", "first", "complete"],
+			["user", "second", "complete"],
+			["user", "third", "complete"],
+		])
+		expect(submits).toHaveLength(1)
+		expect(submits.at(-1)).toContain("first")
+		expect(state.turn).toBe("idle")
+		expect(spoken(await reload(harness.store))).toEqual(spoken(state.messages))
+		harness.detach()
+	})
+
+	// The bot was never told what the reader said while it was answering, and the
+	// answer it was cut off mid-sentence is not what it thinks it said either. So the
+	// prompt that starts it again hands it the conversation as the record now reads.
+	it("carries the rebuilt conversation on the prompt after a stop", async () => {
+		const submits: string[] = []
+		const harness = await bootedHarness({ driver: submitting(submits) })
+		await harness.controller.send("first")
+		await harness.controller.send("held")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
+		await harness.controller.stop()
+		await vi.runAllTimersAsync()
+
+		await harness.controller.send("again")
+		await vi.runAllTimersAsync()
+
+		const carried = submits.at(-1) ?? ""
+		expect(carried).toContain("held")
+		expect(carried).toContain("again")
+		expect(harness.controller.getState().outbox).toEqual([])
+		harness.detach()
+	})
+
+	// The reader changed their mind about one of the questions in the line. Only that
+	// one goes, and the rest are still in the order they were sent.
+	it("drops one held prompt and keeps the order of the rest", async () => {
+		const harness = await bootedHarness()
+		await harness.controller.send("first")
+		await harness.controller.send("second")
+		await harness.controller.send("third")
+
+		const held = harness.controller.getState().outbox
+		harness.controller.discard(held[0]?.id ?? "")
+
+		expect(outboxOf(harness.controller)).toEqual(["third"])
+
+		await vi.runAllTimersAsync()
+
+		expect(spoken(harness.controller.getState().messages)).toEqual([
+			["user", "first", "complete"],
+			["assistant", REPLY, "complete"],
+			["user", "third", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		harness.detach()
+	})
+
+	// The line stops at the first refusal: whatever would not take one prompt is not
+	// going to take the two behind it, and the reader keeps them either way.
+	it("leaves the rest in the outbox when a submission is refused", async () => {
+		let refusing = false
+		const harness = await bootedHarness({
+			driver: submitting([], () => refusing),
+		})
+		await harness.controller.send("first")
+		await harness.controller.send("second")
+		await harness.controller.send("third")
+		refusing = true
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(outboxOf(harness.controller)).toEqual(["third"])
+		expect(state.rejectedPromptId).toBe(state.messages.at(-1)?.id)
+		expect(spoken(state.messages).at(-1)).toEqual([
+			"user",
+			"second",
+			"complete",
+		])
+		harness.detach()
+	})
+
+	// The composer clears on send, so a prompt the store refused on its way out is
+	// gone from everywhere unless it waits: nothing was written, nothing was shown,
+	// and the reader would have to remember what they typed.
+	it("holds the words when the store refuses a prompt that could have gone out", async () => {
+		const base = createFakeTranscriptStore()
+		let refusing = true
+		const store: TranscriptStore = {
+			...base,
+			startTurn: (turn) =>
+				refusing ? Promise.reject({ kind: "storage" }) : base.startTurn(turn),
+		}
+		const harness = await bootedHarness({ store })
+
+		await harness.controller.send("only")
+		await vi.runAllTimersAsync()
+
+		expect(outboxOf(harness.controller)).toEqual(["only"])
+		expect(harness.controller.getState().messages).toEqual([])
+		expect(harness.controller.getState().errors.at(-1)?.error.kind).toBe(
+			"writeFailed",
+		)
+
+		refusing = false
+		await harness.controller.open(BOT)
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(state.outbox).toEqual([])
+		expect(spoken(state.messages)).toEqual([
+			["user", "only", "complete"],
+			["assistant", REPLY, "complete"],
+		])
+		harness.detach()
+	})
+
+	// A prompt the store would not write down is one nobody has seen: it never
+	// reached Claude and it is on no record, so it goes back to the front of the line
+	// rather than being lost between the two.
+	it("returns a held prompt the store refused to the front of the outbox", async () => {
+		const base = createFakeTranscriptStore()
+		let refusing = false
+		const store: TranscriptStore = {
+			...base,
+			appendUserMessage: (message) =>
+				refusing
+					? Promise.reject({ kind: "storage" })
+					: base.appendUserMessage(message),
+		}
+		const harness = await bootedHarness({ store })
+		await harness.controller.send("first")
+		await harness.controller.send("second")
+		await harness.controller.send("third")
+		refusing = true
+		await vi.runAllTimersAsync()
+
+		const state = harness.controller.getState()
+		expect(outboxOf(harness.controller)).toEqual(["second", "third"])
+		expect(promptsIn(state.messages)).toEqual([["user", "first", "complete"]])
+		expect(state.errors.at(-1)?.error.kind).toBe("writeFailed")
+		harness.detach()
+	})
+
+	// One line per bot. What one is holding is not another's to send, and neither of
+	// them waits on the other's turn.
+	it("keeps each bot's held prompts to itself", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		await harness.controller.send("mine")
+		await harness.controller.send("mine again")
+
+		await harness.controller.open(other.id)
+		await harness.controller.send("theirs")
+		await harness.controller.send("theirs again")
+
+		expect(
+			harness.controller.stateFor(BOT).outbox.map((held) => held.text),
+		).toEqual(["mine again"])
+		expect(
+			harness.controller.stateFor(other.id).outbox.map((held) => held.text),
+		).toEqual(["theirs again"])
+
+		await vi.runAllTimersAsync()
+
+		const mine = await store.loadPage((await store.mainChat(BOT)).id, null)
+		const theirs = await store.loadPage(
+			(await store.mainChat(other.id)).id,
+			null,
+		)
+		expect(promptsIn(mine.messages)).toEqual([
+			["user", "mine", "complete"],
+			["user", "mine again", "complete"],
+		])
+		expect(promptsIn(theirs.messages)).toEqual([
+			["user", "theirs", "complete"],
+			["user", "theirs again", "complete"],
+		])
+		harness.detach()
+	})
+
+	// The composer names the files it stored in the prompt itself, so a prompt that
+	// waited names them exactly as it would have if it had gone out at once.
+	it("submits a held prompt naming the files it was staged with", async () => {
+		const submits: string[] = []
+		const harness = await bootedHarness({ driver: submitting(submits) })
+
+		await harness.controller.send("first")
+		await harness.controller.send("read this\n/tmp/shot.png")
+		await vi.runAllTimersAsync()
+
+		expect(submits.at(-1)).toContain("/tmp/shot.png")
+		expect(spoken(harness.controller.getState().messages).at(-2)).toEqual([
+			"user",
+			"read this\n/tmp/shot.png",
+			"complete",
+		])
 		harness.detach()
 	})
 })
