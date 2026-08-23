@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, waitFor } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { botIdentityAvatars, slotsIn } from "@workspace/storybook/story-utils"
@@ -87,7 +87,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What the transcript shows while the bot is busy: its avatar, alone, in the pose that matches the work. The words only appear while the reader points at the avatar — timed kinds add a clock to them, untimed ones only shimmer. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is understood to be the same mark the `AssistantTurn` gutter shows once the turn lands, so it travels there rather than being replaced — see `Mark`.",
+					"What the transcript shows while the bot is busy: its avatar, alone, in the pose that matches the work. The avatar is also the stop control — given `onStop`, pointing at it or reaching it by keyboard covers the animal with a stop glyph, so the composer below stays free for the next prompt. The words only appear while the reader points at the avatar — timed kinds add a clock to them, untimed ones only shimmer. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is understood to be the same mark the `AssistantTurn` gutter shows once the turn lands, so it travels there rather than being replaced — see `Mark`.",
 			},
 		},
 	},
@@ -251,5 +251,57 @@ export const Marked = meta.story({
 				thinking.getAttribute("transform"),
 			)
 		}
+	},
+})
+
+export const Stop = meta.story({
+	args: {
+		...BUSY_BOT,
+		kind: "working",
+		name: "Atlas",
+		label: "Bash · npm test",
+		onStop: fn(),
+	},
+	render: (args) => (
+		<div className="flex flex-col gap-4">
+			<BotWorking {...args} />
+			<BotWorking {...args} onStop={undefined} />
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Interrupting the run, from the row that is running it: the first avatar takes `onStop` and becomes the control, the second takes none and stays a drawing. Check that the glyph only appears once the avatar itself is pointed at — pointing at the words beside it reveals them and nothing else — that Tab reaches the control and lights the same glyph, and that the second row exposes no button at all.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const stop = canvas.getByRole("button", { name: "Stop Atlas" })
+		const [glyph] = slotsIn(canvasElement, "bot-working-stop-glyph")
+		const label = canvas.getAllByText("Atlas · Bash · npm test")[0]
+
+		await expect(canvas.getAllByRole("button")).toHaveLength(1)
+
+		// Stories share one page and one real pointer, and this one is handed the mouse
+		// wherever the story before it left it — over the control, for all it knows,
+		// with the glyph already armed. Nothing here can read that state away: the
+		// first move fires no leave on an element the runner never saw the pointer
+		// enter. So take the control first. From there every move is one this story
+		// made, and what it reads back is what it set.
+		stop.blur()
+		await userEvent.hover(stop)
+		await waitFor(() => expect(glyph).toBeVisible())
+
+		await userEvent.hover(label)
+		await waitFor(() => expect(label).toBeVisible())
+		await waitFor(() => expect(glyph).not.toBeVisible())
+
+		await userEvent.tab()
+		await expect(stop).toHaveFocus()
+		await waitFor(() => expect(glyph).toBeVisible())
+
+		await userEvent.click(stop)
+		await expect(args.onStop).toHaveBeenCalledTimes(1)
 	},
 })

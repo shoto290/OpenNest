@@ -37,9 +37,11 @@ const chat = {
 		copy: "Copier",
 		copied: "Copié",
 		retry: "Réessayer",
+		cancel: "Annuler cette invite",
 		footer: {
 			cancelled: "Arrêté",
 			failed: "Cette réponse a échoué",
+			queued: "En attente d'envoi",
 		},
 	},
 	working: {
@@ -53,6 +55,7 @@ const chat = {
 		},
 		state: "{{name}} {{verb}}…",
 		labelled: "{{name}} · {{label}}",
+		stop: "Arrêter {{name}}",
 	},
 	notice: {
 		retry: "Réessayer",
@@ -69,7 +72,6 @@ const chat = {
 		label: "Invite",
 		placeholder: "Demandez à l'agent de faire quelque chose…",
 		send: "Envoyer l'invite",
-		stop: "Arrêter la génération",
 		commands: "Commandes",
 	},
 	toolApproval: {
@@ -170,7 +172,6 @@ const chat = {
 		label: "Conversation Claude Code",
 		settings: "Réglages du bot",
 		placeholder: "Demandez à {{name}} de faire quelque chose…",
-		waiting: "En attente de Claude Code…",
 		permission: {
 			description: "Claude Code attend votre accord avant de lancer cet outil.",
 			path: "Chemin",

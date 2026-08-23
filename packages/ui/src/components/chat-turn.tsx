@@ -38,6 +38,11 @@ const CHAT_AVATAR_SIZE = 40
 /** How the turn ended, mirroring the transport's message completion. */
 type ChatTurnState = "streaming" | "complete" | "cancelled" | "failed"
 
+/** Every state the reader's own row can be in: what a turn ended as, plus the
+ * one a prompt waits in before it is sent. The composer stays writable whatever
+ * is running, so `queued` is where a prompt that cannot land yet reads. */
+type UserTurnState = ChatTurnState | "queued"
+
 /** Where the row sits in a run of messages from the same speaker. */
 type ChatTurnRun = "single" | "first" | "middle" | "last"
 
@@ -54,7 +59,7 @@ interface ChatTurnGroupProps {
 
 interface UserTurnProps {
 	children: ReactNode
-	state?: ChatTurnState
+	state?: UserTurnState
 	/** Set by the surrounding `ChatTurnGroup`; only override it to render a row
 	 * out of its group. */
 	run?: ChatTurnRun
@@ -63,6 +68,9 @@ interface UserTurnProps {
 	copyText?: string
 	/** Offered only on a `failed` turn, whose prompt never reached Claude. */
 	onRetry?: () => void
+	/** Drops a prompt that has not been sent. Offered on `queued`, where the way
+	 * out of the wait has to be on the row that is waiting. */
+	onCancel?: () => void
 	className?: string
 }
 
@@ -95,10 +103,11 @@ interface AssistantTurnProps {
 }
 
 const TURN_FOOTER_KEY: Partial<
-	Record<ChatTurnState, "turn.footer.cancelled" | "turn.footer.failed">
+	Record<UserTurnState, `turn.footer.${"cancelled" | "failed" | "queued"}`>
 > = {
 	cancelled: "turn.footer.cancelled",
 	failed: "turn.footer.failed",
+	queued: "turn.footer.queued",
 }
 
 /** Corners facing a neighbour in the same run tighten, so a run reads as one
@@ -167,6 +176,19 @@ function ChatTurnGroup({
 	)
 }
 
+/** The spinner a queued prompt carries beside it: the only thing on the row
+ * that moves, since the words are already written and nothing is answering
+ * them yet. The footer under the bubble is what names the wait. */
+function PendingSpinner() {
+	return (
+		<Icons.Loading
+			aria-hidden="true"
+			data-slot="turn-pending-spinner"
+			className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"
+		/>
+	)
+}
+
 /** The reader's own side. It carries no avatar: only the bots are named here. */
 function UserTurn({
 	children,
@@ -174,18 +196,35 @@ function UserTurn({
 	run = "single",
 	copyText,
 	onRetry,
+	onCancel,
 	className,
 }: UserTurnProps) {
 	const { t } = useTranslation("chat")
+	const queued = state === "queued"
+	const footerKey = queued ? TURN_FOOTER_KEY.queued : undefined
 
 	return (
 		<Message from="user" animateIn className={className}>
 			<MessageContent>
-				<MessageBubble variant="solid">
+				{/* A prompt on its way keeps a trace of the reader's own fill rather
+				 * than all of it: it is speech that has not been said yet. */}
+				<MessageBubble variant={queued ? "tint" : "solid"}>
 					<MessageActions
 						actions={
 							<>
+								{queued ? <PendingSpinner /> : null}
 								{copyText ? <CopyAction text={copyText} /> : null}
+								{queued && onCancel ? (
+									// Pinned like the retry: a wait nobody can see the end of is
+									// not a wait, it is a loss.
+									<MessageAction
+										alwaysVisible
+										label={t("turn.cancel")}
+										onClick={onCancel}
+									>
+										<Icons.Close />
+									</MessageAction>
+								) : null}
 								{state === "failed" && onRetry ? (
 									// Pinned: a prompt that never landed has to show its way out
 									// without waiting to be pointed at.
@@ -207,6 +246,7 @@ function UserTurn({
 						</MessageBubbleContent>
 					</MessageActions>
 				</MessageBubble>
+				{footerKey ? <MessageFooter>{t(footerKey)}</MessageFooter> : null}
 			</MessageContent>
 		</Message>
 	)
@@ -287,4 +327,5 @@ export {
 	type ChatTurnState,
 	UserTurn,
 	type UserTurnProps,
+	type UserTurnState,
 }

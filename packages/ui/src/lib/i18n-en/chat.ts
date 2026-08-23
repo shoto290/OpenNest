@@ -38,9 +38,11 @@ const chat = {
 		copy: "Copy",
 		copied: "Copied",
 		retry: "Retry",
+		cancel: "Cancel this prompt",
 		footer: {
 			cancelled: "Stopped",
 			failed: "This response failed",
+			queued: "Waiting to be sent",
 		},
 	},
 	working: {
@@ -54,6 +56,7 @@ const chat = {
 		},
 		state: "{{name}} is {{verb}}…",
 		labelled: "{{name}} · {{label}}",
+		stop: "Stop {{name}}",
 	},
 	notice: {
 		retry: "Retry",
@@ -70,7 +73,6 @@ const chat = {
 		label: "Prompt",
 		placeholder: "Ask the agent to do something…",
 		send: "Send prompt",
-		stop: "Stop generating",
 		commands: "Commands",
 	},
 	toolApproval: {
@@ -167,7 +169,6 @@ const chat = {
 		label: "Claude Code conversation",
 		settings: "Bot settings",
 		placeholder: "Ask {{name}} to do something…",
-		waiting: "Waiting for Claude Code…",
 		permission: {
 			description: "Claude Code is waiting on you before it runs this tool.",
 			path: "Path",
