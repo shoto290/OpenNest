@@ -282,16 +282,19 @@ export const Stop = meta.story({
 		const label = canvas.getAllByText("Atlas · Bash · npm test")[0]
 
 		await expect(canvas.getAllByRole("button")).toHaveLength(1)
-		await expect(glyph).not.toBeVisible()
 
-		await userEvent.hover(label)
-		await waitFor(() => expect(label).toBeVisible())
-		await expect(glyph).not.toBeVisible()
-
+		// Stories share one page and one real pointer, and this one is handed the mouse
+		// wherever the story before it left it — over the control, for all it knows,
+		// with the glyph already armed. Nothing here can read that state away: the
+		// first move fires no leave on an element the runner never saw the pointer
+		// enter. So take the control first. From there every move is one this story
+		// made, and what it reads back is what it set.
+		stop.blur()
 		await userEvent.hover(stop)
 		await waitFor(() => expect(glyph).toBeVisible())
 
 		await userEvent.hover(label)
+		await waitFor(() => expect(label).toBeVisible())
 		await waitFor(() => expect(glyph).not.toBeVisible())
 
 		await userEvent.tab()
