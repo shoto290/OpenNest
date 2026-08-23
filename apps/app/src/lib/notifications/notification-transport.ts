@@ -19,9 +19,10 @@ export const notificationTransport: NotificationPort = {
 	send: async ({ botId, title, body }) => {
 		try {
 			await invoke("notification_show", { botId, title, body })
-		} catch {
-			// A platform that will not take a notification is a platform that shows
-			// none. There was nothing else this call was going to do.
+		} catch (reason) {
+			// Still resolves: a platform that will not take a notification is a
+			// platform that shows none, and the caller has nothing to do about it.
+			console.error("notification transport: notification_show failed", reason)
 		}
 	},
 
