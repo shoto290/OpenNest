@@ -1,5 +1,5 @@
 "use client"
-// Adapted from beui.dev/components/agents/prompt-input — write, send, stop.
+// Adapted from beui.dev/components/agents/prompt-input — write and send.
 
 import {
 	type ClipboardEvent,
@@ -54,12 +54,10 @@ export interface PromptInputProps
 	defaultValue?: string
 	onValueChange?: (value: string) => void
 	/** Receives the trimmed prompt, empty when the turn is carried by its
-	 * attachments alone. Fired by Enter or by the send button. */
+	 * attachments alone. Fired by Enter or by the send button. A prompt written
+	 * while a turn is running is sent like any other: the transcript is where a
+	 * prompt that cannot land yet waits, not the composer. */
 	onSubmit?: (value: string) => void
-	/** Swaps the send button for a stop button and blocks submission. */
-	loading?: boolean
-	/** Omit while loading to render the stop button inert — a stop already requested. */
-	onStop?: () => void
 	/** Controls held on the leading edge of the composer: before the prompt while it
 	 * fits on one line, opening the control row once it wraps. */
 	leading?: ReactNode
@@ -87,8 +85,6 @@ export function PromptInput({
 	defaultValue = "",
 	onValueChange,
 	onSubmit,
-	loading = false,
-	onStop,
 	leading,
 	trailing,
 	attachments,
@@ -126,7 +122,7 @@ export function PromptInput({
 	const hasPayload = hasPrompt || hasAttachments
 	const canAttach = Boolean(onAttach) && !disabled
 	const isDropTarget = canAttach && (dropTarget || isDragOver)
-	const canSubmit = hasPayload && !disabled && !loading
+	const canSubmit = hasPayload && !disabled
 
 	const resizeTextarea = useCallback(() => {
 		const textarea = textareaRef.current
@@ -231,7 +227,6 @@ export function PromptInput({
 	return (
 		<form
 			onSubmit={submit}
-			aria-busy={loading}
 			data-slot="prompt-input"
 			data-expanded={isExpanded}
 			data-drop-target={isDropTarget}
@@ -311,16 +306,15 @@ export function PromptInput({
 				className="flex grow items-center justify-end gap-1"
 			>
 				{trailing}
-				{loading || hasPayload ? (
+				{hasPayload ? (
 					<Button
-						type={loading ? "button" : "submit"}
+						type="submit"
 						size="icon"
-						disabled={loading ? !onStop : !canSubmit}
-						aria-label={loading ? t("composer.stop") : t("composer.send")}
-						onClick={loading ? onStop : undefined}
+						disabled={!canSubmit}
+						aria-label={t("composer.send")}
 						className="rounded-full"
 					>
-						{loading ? <Icons.Stop /> : <Icons.Send />}
+						<Icons.Send />
 					</Button>
 				) : null}
 			</div>

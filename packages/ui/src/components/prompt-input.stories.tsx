@@ -107,18 +107,16 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The composer for a single agent turn: write a prompt, send it, stop the run. At rest it is a one-line pill — the `leading` slot, the prompt, then the `trailing` slot and the send button, all on the same row. The moment the prompt no longer fits beside them the bar expands: the prompt takes a row of its own and the controls drop below it, `leading` on the leading edge, `trailing` and send on the trailing one. Enter sends and Shift+Enter breaks a line in both layouts, and the trailing control is one button whose slot swaps between send and stop — `loading` decides which glyph, `onStop` decides whether it can be pressed.",
+					"The composer for a prompt: write it and send it, whatever the session is doing. At rest it is a one-line pill — the `leading` slot, the prompt, then the `trailing` slot and the send button, all on the same row. The moment the prompt no longer fits beside them the bar expands: the prompt takes a row of its own and the controls drop below it, `leading` on the leading edge, `trailing` and send on the trailing one. Enter sends and Shift+Enter breaks a line in both layouts. It knows nothing about a running turn: a prompt written mid-run is sent like any other and waits in the transcript as a pending `UserTurn`, and stopping the run belongs to the working bot's avatar in `Feedback/BotWorking`.",
 			},
 		},
 	},
 	args: {
 		onSubmit: fn(),
 		onValueChange: fn(),
-		onStop: fn(),
 		onAttach: fn(),
 	},
 	argTypes: {
-		loading: { control: "boolean" },
 		disabled: { control: "boolean" },
 		placeholder: { control: "text" },
 		minRows: { control: { type: "number", min: 1, max: 8 } },
@@ -138,7 +136,7 @@ export const Playground = meta.story({
 		docs: {
 			description: {
 				story:
-					"The knob story, and the keyboard contract in one pass: typing, Shift+Enter for a second line, Enter to send. Check that Shift+Enter never fires `onSubmit`, that Enter sends the trimmed value, that the bar expands on the second line and folds back into a pill once the field is cleared, and that an uncontrolled input clears itself afterwards. Flip `loading` here to watch the send glyph roll into the stop glyph in place.",
+					"The knob story, and the keyboard contract in one pass: typing, Shift+Enter for a second line, Enter to send. Check that Shift+Enter never fires `onSubmit`, that Enter sends the trimmed value, that the bar expands on the second line and folds back into a pill once the field is cleared, and that an uncontrolled input clears itself afterwards.",
 			},
 		},
 	},
@@ -272,7 +270,7 @@ export const States = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every state of the composer stacked, idle to loading. Reach for it when changing the border, ring or opacity tokens: the second instance is focused by the play function, so the focus ring can be compared against the resting border without touching the canvas. Check that disabled dims the whole composer, blocks the textarea and takes its `leading` and `trailing` controls out of reach of both pointer and Tab, that loading keeps the field editable while the trailing control shows stop, and that the idle instance carries no send button at all while the loading one keeps its stop button on an empty prompt.",
+					"Every state of the composer stacked, idle to disabled. Reach for it when changing the border, ring or opacity tokens: the second instance is focused by the play function, so the focus ring can be compared against the resting border without touching the canvas. Check that disabled dims the whole composer, blocks the textarea and takes its `leading` and `trailing` controls out of reach of both pointer and Tab, and that the idle instance carries no send button at all until something is worth sending.",
 			},
 		},
 	},
@@ -289,7 +287,6 @@ export const States = meta.story({
 				attachments={stagedFiles}
 				aria-label="Disabled prompt"
 			/>
-			<PromptInput {...args} loading aria-label="Loading prompt" />
 		</div>
 	),
 	play: async ({ canvas, userEvent }) => {
@@ -303,9 +300,6 @@ export const States = meta.story({
 		await expect(
 			canvas.getAllByRole("button", { name: "Send prompt" }),
 		).toHaveLength(2)
-		await expect(
-			canvas.getByRole("button", { name: "Stop generating" }),
-		).toBeInTheDocument()
 
 		const addContext = canvas.getByRole("button", { name: "Add context" })
 		const remove = canvas.getByRole("button", {
@@ -335,52 +329,6 @@ export const Overflow = meta.story({
 
 		await expect(isExpanded(textarea)).toBe(true)
 		await expect(textarea.scrollHeight).toBeGreaterThan(textarea.clientHeight)
-	},
-})
-
-export const Loading = meta.story({
-	args: { loading: true, defaultValue: DRAFT },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A turn is running: the same button now carries the stop glyph, and Enter is inert so a second turn cannot be queued. Check that only one control sits in the trailing slot through the swap, and that the field stays editable so the next prompt can be drafted mid-run. `Stopping` covers the moment after stop is pressed.",
-			},
-		},
-	},
-	play: async ({ args, canvas, userEvent }) => {
-		const textarea = canvas.getByRole("textbox", { name: "Prompt" })
-
-		await expect(
-			canvas.queryByRole("button", { name: "Send prompt" }),
-		).not.toBeInTheDocument()
-
-		await userEvent.click(textarea)
-		await userEvent.keyboard("{Enter}")
-		await expect(args.onSubmit).not.toHaveBeenCalled()
-
-		await userEvent.click(
-			canvas.getByRole("button", { name: "Stop generating" }),
-		)
-		await expect(args.onStop).toHaveBeenCalled()
-	},
-})
-
-export const Stopping = meta.story({
-	args: { loading: true, defaultValue: DRAFT },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Stop has been requested and the run is winding down: the host keeps `loading` on but drops `onStop`, so the control stays in place and goes inert instead of accepting a second stop. Check that the button never flips back to send before the turn actually ends. `Loading` covers the stoppable half of the same run.",
-			},
-		},
-	},
-	render: (args) => <PromptInput {...args} onStop={undefined} />,
-	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByRole("button", { name: "Stop generating" }),
-		).toBeDisabled()
 	},
 })
 

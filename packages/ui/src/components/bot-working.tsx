@@ -13,6 +13,7 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { CHAT_AVATAR_SIZE } from "@workspace/ui/components/chat-turn"
+import { Icons } from "@workspace/ui/components/icons"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -34,9 +35,19 @@ interface BotWorkingProps {
 	/** The working bot's id, which is what its blot's shape is derived from. A bot
 	 * must not change shape the moment it starts working. */
 	seed?: string
+	/** Interrupts this bot's turn. Given, the avatar becomes the stop control:
+	 * pointing at it or reaching it by keyboard covers the animal with a stop
+	 * glyph. Left out, the avatar stays a drawing nobody can press — a stop
+	 * already asked for, or a run this reader does not command. */
+	onStop?: () => void
 	size?: number
 	className?: string
 }
+
+/** The glyph sits on the avatar rather than beside it: the row is one mark
+ * wide, and the stop belongs to the bot that is working, not to the transcript. */
+const STOP_OVERLAY =
+	"pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-background/75 text-foreground transition-opacity duration-150 motion-reduce:transition-none"
 
 /** Work that runs long enough for the reader to want a clock on it. */
 const isTimed = (kind: BotWorkingKind) =>
@@ -52,12 +63,16 @@ function BotWorking({
 	blot,
 	image,
 	seed,
+	onStop,
 	size = CHAT_AVATAR_SIZE,
 	className,
 }: BotWorkingProps) {
 	const { t } = useTranslation("chat")
 	const markId = useChatMarkId()
 	const [pointed, setPointed] = useState(false)
+	/** The glyph answers the avatar alone: the words beside it listen to the same
+	 * pointer, and arming a stop from over there would be a trap. */
+	const [armed, setArmed] = useState(false)
 	const named = name ?? t("working.name")
 	const text = label
 		? t("working.labelled", { name: named, label })
@@ -68,6 +83,24 @@ function BotWorking({
 		onPointerEnter: () => setPointed(true),
 		onPointerLeave: () => setPointed(false),
 	}
+	/** The stop answers pointer and keyboard alike, so both reach it the same way. */
+	const arming = {
+		onPointerEnter: () => setArmed(true),
+		onPointerLeave: () => setArmed(false),
+		onFocus: () => setArmed(true),
+		onBlur: () => setArmed(false),
+	}
+	const avatar = (
+		<BotIdentityAvatar
+			animal={animal}
+			blot={blot}
+			image={image}
+			kind={kind}
+			seed={seed}
+			size={size}
+			working
+		/>
+	)
 
 	return (
 		<div
@@ -76,15 +109,27 @@ function BotWorking({
 			className={cn("flex min-w-0 items-center gap-2", className)}
 		>
 			<SharedMark markId={markId} className="shrink-0" {...pointing}>
-				<BotIdentityAvatar
-					animal={animal}
-					blot={blot}
-					image={image}
-					kind={kind}
-					seed={seed}
-					size={size}
-					working
-				/>
+				{onStop ? (
+					<button
+						type="button"
+						data-slot="bot-working-stop"
+						aria-label={t("working.stop", { name: named })}
+						onClick={onStop}
+						{...arming}
+						className="relative block w-fit rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						{avatar}
+						<span
+							aria-hidden="true"
+							data-slot="bot-working-stop-glyph"
+							className={cn(STOP_OVERLAY, armed ? "opacity-100" : "opacity-0")}
+						>
+							<Icons.Stop className="size-1/2" />
+						</span>
+					</button>
+				) : (
+					avatar
+				)}
 			</SharedMark>
 			<span
 				className={cn(

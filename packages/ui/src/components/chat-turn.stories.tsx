@@ -2,6 +2,7 @@ import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { slotsIn } from "@workspace/storybook/story-utils"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { BotWorking } from "@workspace/ui/components/bot-working"
 import { Button } from "@workspace/ui/components/button"
@@ -23,6 +24,10 @@ const RUN = [
 	"`@workspace/ui` holds the design system: primitives, tokens and the stories that document them.",
 	"`app` holds the Tauri shell and consumes that system. Nothing goes back the other way.",
 ]
+
+const QUEUED = "And then run the test suite once that lands."
+
+const cancelQueued = fn()
 
 const PASTED = `Walk me through every package.\n\nStart with the design system, then the Tauri shell, and call out anything that crosses between them.`
 
@@ -127,7 +132,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `ChatTurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `ChatTurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -384,5 +389,39 @@ export const LongContent = meta.story({
 					"Reach for this to check the two multi-line paths: a pasted prompt keeps its blank lines in one bubble, and a bot row that was handed more than one paragraph still renders them verbatim. Check that both bubbles stop widening at their cap. Pick `Run` for the split the screen normally performs before it gets here.",
 			},
 		},
+	},
+})
+
+export const Pending = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<UserTurn copyText={ANSWER}>{ANSWER}</UserTurn>
+			<UserTurn state="queued" copyText={QUEUED} onCancel={cancelQueued}>
+				{QUEUED}
+			</UserTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The composer stays writable while a turn runs, so a prompt that cannot be sent yet waits here instead. A sent prompt tops the stack, then the `queued` one below it: one step back from the reader's own fill, a spinner beside it and its footer naming the wait. Check that the queued row offers no retry, that its cancel is pinned rather than waiting for a hover, and that only the spinner moves. Pick `Error` for a prompt that was sent and never landed.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		cancelQueued.mockClear()
+
+		const cancel = canvas.getByRole("button", { name: "Cancel this prompt" })
+
+		await expect(slotsIn(canvasElement, "turn-pending-spinner")).toHaveLength(1)
+		await expect(cancel).toBeVisible()
+		await expect(
+			canvas.queryByRole("button", { name: "Retry" }),
+		).not.toBeInTheDocument()
+		await expect(canvas.getByText("Waiting to be sent")).toBeVisible()
+
+		await userEvent.click(cancel)
+		await expect(cancelQueued).toHaveBeenCalledTimes(1)
 	},
 })
