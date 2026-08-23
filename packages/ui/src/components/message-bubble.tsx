@@ -98,6 +98,12 @@ const BUBBLE_POP = {
 	mass: 0.52,
 } as const
 
+/** Whether a bubble paints a surface of its own, and so is held short of the
+ * transcript's full width. */
+function isCapped(variant: MessageBubbleVariant) {
+	return variant !== "ghost" && variant !== "bare"
+}
+
 export function MessageBubble({
 	variant = "soft",
 	align,
@@ -123,6 +129,11 @@ export function MessageBubble({
 				transition={SPRING_LAYOUT}
 				className={cn(
 					"group/bubble flex w-full flex-col",
+					// A bubble that spans the transcript reads as a page rather than as
+					// speech: the eye loses the line it was on, and the two sides stop
+					// looking like a conversation. Content that draws its own surface —
+					// a table, a card — keeps every pixel it was given.
+					isCapped(variant) && "max-w-[75%]",
 					resolvedAlign === "end" ? "items-end" : "items-start",
 					className,
 				)}
