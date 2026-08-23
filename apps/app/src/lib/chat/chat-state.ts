@@ -7,6 +7,7 @@ import type {
 	MessageCompletion,
 	PermissionDecision,
 	PermissionRequest,
+	QuestionRequest,
 	RuntimeScope,
 	TransportError,
 	TurnEnded,
@@ -71,6 +72,10 @@ export type ChatState = {
 	outbox: OutboxEntry[]
 	activities: ActivityEvent[]
 	permission: PermissionRequest | null
+	/** The question the child is blocked on, waiting for the reader. It sits beside
+	 * the permission rather than in it: the same wait, but answered with choices
+	 * instead of a verdict, and shown by a card of its own. */
+	question: QuestionRequest | null
 	errors: ChatError[]
 	errorCount: number
 }
@@ -136,6 +141,7 @@ export const initialChatState: ChatState = {
 	outbox: [],
 	activities: [],
 	permission: null,
+	question: null,
 	errors: [],
 	errorCount: 0,
 }
@@ -258,17 +264,45 @@ function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
 	return { ...state, activities: state.activities.with(index, activity) }
 }
 
+/** Only a turn still going asks anything, and a second ask under another id while
+ * one is still waiting is dropped: the child is blocked on the first, and swapping
+ * the card would take away what the reader is answering. */
+function takesRequest(
+	state: ChatState,
+	held: { id: string } | null,
+	id: string,
+): boolean {
+	return canStopTurn(state.turn) && (held === null || held.id === id)
+}
+
 function applyPermissionRequested(
 	state: ChatState,
 	request: PermissionRequest,
 ): ChatState {
-	if (state.turn !== "submitting" && state.turn !== "running") {
-		return state
+	return takesRequest(state, state.permission, request.id)
+		? { ...state, permission: request }
+		: state
+}
+
+function applyQuestionRequested(
+	state: ChatState,
+	request: QuestionRequest,
+): ChatState {
+	return takesRequest(state, state.question, request.id)
+		? { ...state, question: request }
+		: state
+}
+
+/** An answered question comes back as a resolved permission under the same id, so
+ * whichever card was holding that id is the one that is done. */
+function clearRequest(state: ChatState, id: string): ChatState {
+	if (state.permission?.id === id) {
+		return { ...state, permission: null }
 	}
-	if (state.permission && state.permission.id !== request.id) {
-		return state
+	if (state.question?.id === id) {
+		return { ...state, question: null }
 	}
-	return { ...state, permission: request }
+	return state
 }
 
 /** The answer settles the request's own activity row on the spot. Nothing else
@@ -279,8 +313,7 @@ function applyPermissionResolved(
 	id: string,
 	decision: PermissionDecision,
 ): ChatState {
-	const cleared =
-		state.permission?.id === id ? { ...state, permission: null } : state
+	const cleared = clearRequest(state, id)
 	const index = cleared.activities.findIndex((activity) => activity.id === id)
 	if (index === -1) {
 		return cleared
@@ -309,6 +342,7 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 		...next,
 		sessionId: ended.sessionId ?? state.sessionId,
 		permission: null,
+		question: null,
 	}
 }
 
@@ -345,11 +379,8 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 			return applyActivity(state, event.activity)
 		case "permissionRequested":
 			return applyPermissionRequested(state, event.request)
-		// The card that collects the answers is not on the screen yet: the pending
-		// activity row already stands for the wait, and the question reaches the
-		// reader once there is somewhere to show it.
 		case "questionRequested":
-			return state
+			return applyQuestionRequested(state, event.request)
 		case "permissionResolved":
 			return applyPermissionResolved(state, event.id, event.decision)
 		case "turnEnded":
@@ -385,6 +416,7 @@ function applySessionReset(
 		sessionOpen: false,
 		sessionId,
 		permission: null,
+		question: null,
 		// Nothing here outlives the process that reported it, and a cold launch
 		// starts with none: a step left pending would go on claiming work that no
 		// longer has anything doing it.

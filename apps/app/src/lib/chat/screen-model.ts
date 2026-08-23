@@ -189,6 +189,9 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 	if (!isTurnBusy(state.turn)) {
 		return null
 	}
+	if (state.question) {
+		return { kind: "waiting", label: state.question.questions[0]?.header }
+	}
 	if (state.permission) {
 		return { kind: "waiting", label: state.permission.title }
 	}
@@ -207,7 +210,8 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 }
 
 /** Whether the sidebar shows the bot as busy, and with what. A pending
- * permission counts as busy: the turn is waiting on the reader, not over. */
+ * permission or an unanswered question counts as busy: the turn is waiting on the
+ * reader, not over. */
 export type SidebarActivity = {
 	isWorking: boolean
 	kind?: BotWorkingKind

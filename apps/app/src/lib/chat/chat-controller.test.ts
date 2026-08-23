@@ -834,6 +834,47 @@ describe("createChatController", () => {
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 	})
 
+	it("answers a question and leaves what was asked in the transcript", async () => {
+		const { controller, store, driver } = await bootedHarness()
+		const answerQuestion = vi.spyOn(driver, "answerQuestion")
+		await controller.send("pick one /question")
+		await vi.runAllTimersAsync()
+
+		const asked = controller.getState().question
+		expect(asked?.questions[0].header).toBe("Framework")
+
+		await controller.answer(asked?.id ?? "", {
+			"Which framework should it use?": "React",
+		})
+		await vi.runAllTimersAsync()
+
+		expect(answerQuestion).toHaveBeenCalledWith(expect.anything(), asked?.id, {
+			"Which framework should it use?": "React",
+		})
+		const state = controller.getState()
+		expect(state.question).toBeNull()
+		const recorded = state.messages.find((entry) =>
+			entry.content.includes("Which framework should it use?"),
+		)
+		expect(recorded?.role).toBe("user")
+		expect(recorded?.content).toContain("React")
+		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
+	})
+
+	it("denies a question the reader answered with a prompt instead", async () => {
+		const { controller } = await bootedHarness()
+		await controller.send("pick one /question")
+		await vi.runAllTimersAsync()
+		expect(controller.getState().question).not.toBeNull()
+
+		await controller.send("never mind, do it your way")
+		await vi.runAllTimersAsync()
+
+		const state = controller.getState()
+		expect(state.question).toBeNull()
+		expect(state.messages.at(-1)?.completion).toBe("complete")
+	})
+
 	it("leaves no permission activity pending after either decision", async () => {
 		for (const decision of ["allowOnce", "deny"] as const) {
 			const { controller } = await bootedHarness()

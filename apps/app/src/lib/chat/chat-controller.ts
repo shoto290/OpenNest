@@ -32,6 +32,8 @@ import type {
 	CheckReport,
 	MessageCompletion,
 	PermissionDecision,
+	QuestionAnswers,
+	QuestionRequest,
 	RuntimeScope,
 	SessionHandle,
 	TransportError,
@@ -116,6 +118,9 @@ export type ChatController = {
 	 * submitted is not one of these — it is a transcript row by then. */
 	discard: (id: string) => void
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
+	/** Answers a pending question, keyed by the question text. Refusing to answer
+	 * is refusing the tool, so a denial goes back through `respond`. */
+	answer: (id: string, answers: QuestionAnswers) => Promise<void>
 	retry: (id: string) => Promise<void>
 	shutdown: () => Promise<void>
 }
@@ -1280,6 +1285,7 @@ export function createChatController(
 		if (trimmed.length === 0) {
 			return
 		}
+		await denyPendingQuestion(bot)
 		const outcome = canSend(bot)
 			? await claim(bot, () => sendPrompt(bot, trimmed, repliedTo))
 			: "unwritten"
@@ -1380,6 +1386,72 @@ export function createChatController(
 			.catch((reason) => report(bot, reason))
 	}
 
+	/** What was asked and what was said, kept as the one row a reload can bring
+	 * back. The answers themselves travelled to the child inside the tool's input,
+	 * where nothing on the screen can read them. */
+	const recordAnswers = (
+		bot: BotChat,
+		request: QuestionRequest,
+		answers: QuestionAnswers,
+	) => {
+		const conversationId = bot.state.conversationId
+		const turn = bot.activeTurn
+		const content = request.questions
+			.filter(({ question }) => answers[question])
+			.map(({ question }) => `${question}\n\n${answers[question]}`)
+			.join("\n\n")
+		if (!conversationId || !turn || content.length === 0) {
+			return
+		}
+		const id = newId()
+		const createdAt = now()
+		write(
+			bot,
+			() =>
+				store.appendUserMessage({
+					id,
+					conversationId,
+					turnId: turn.id,
+					authorBotId: null,
+					repliedToMessageId: null,
+					content,
+					createdAt,
+				}),
+			() =>
+				transcript.append({
+					id,
+					conversationId,
+					turnId: turn.id,
+					role: "user",
+					content,
+					completion: "complete",
+					createdAt,
+				}),
+		)
+	}
+
+	/** The answered tool is an allowed tool, so the host settles the same wait it
+	 * settles for a permission and the card goes away on that. Anything but the
+	 * question this bot is holding is not an answer to it. */
+	const answer = (bot: BotChat, id: string, answers: QuestionAnswers) => {
+		const runtime = bot.state.runtime
+		const request = bot.state.question
+		if (!runtime || request?.id !== id) {
+			return Promise.resolve()
+		}
+		return driver
+			.answerQuestion(runtime, id, answers)
+			.then(() => recordAnswers(bot, request, answers))
+			.catch((reason) => report(bot, reason))
+	}
+
+	/** A prompt written instead of an answer refuses the tool: the child is blocked
+	 * on the question, and nothing sent to it lands until that question is settled. */
+	const denyPendingQuestion = (bot: BotChat) => {
+		const request = bot.state.question
+		return request ? respond(bot, request.id, "deny") : Promise.resolve()
+	}
+
 	/** Names the run this bot holds, and asks for nothing when it holds none.
 	 * A second shutdown is as safe as the first: by then the host holds no session
 	 * either, and a caller it has no other run to protect from is not refused. */
@@ -1443,6 +1515,8 @@ export function createChatController(
 			forSelected((bot) => dispatch(bot, { type: "outboxEntryRemoved", id })),
 		respond: (id, decision) =>
 			onSelected((bot) => respond(bot, id, decision), undefined),
+		answer: (id, answers) =>
+			onSelected((bot) => answer(bot, id, answers), undefined),
 		retry: (id) =>
 			onSelected((bot) => admit(bot, () => retryPrompt(bot, id)), undefined),
 		shutdown: () => onSelected(shutdown, undefined),

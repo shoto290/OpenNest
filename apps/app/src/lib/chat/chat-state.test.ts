@@ -278,6 +278,58 @@ describe("chatReducer", () => {
 		expect(active.permission?.id).toBe("perm-1")
 	})
 
+	it("stores a question beside the permission, and keeps the first one asked", () => {
+		const asked = (id: string): AgentEvent => ({
+			type: "questionRequested",
+			request: {
+				id,
+				questions: [
+					{
+						header: "Framework",
+						question: "Which one?",
+						multiSelect: false,
+						options: [{ label: "React", description: null, preview: null }],
+					},
+				],
+			},
+		})
+		expect(applyEvents(initialChatState, [asked("ask-1")]).question).toBeNull()
+
+		const state = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "submitting" },
+			asked("ask-1"),
+			asked("ask-2"),
+		])
+		expect(state.question?.id).toBe("ask-1")
+		expect(state.permission).toBeNull()
+	})
+
+	it("clears a stored question when the turn ends", () => {
+		const state = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "submitting" },
+			{
+				type: "questionRequested",
+				request: { id: "ask-1", questions: [] },
+			},
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+		])
+
+		expect(state.question).toBeNull()
+	})
+
+	it("clears a stored question once its request is resolved", () => {
+		const state = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "submitting" },
+			{
+				type: "questionRequested",
+				request: { id: "ask-1", questions: [] },
+			},
+			{ type: "permissionResolved", id: "ask-1", decision: "allowOnce" },
+		])
+
+		expect(state.question).toBeNull()
+	})
+
 	it("clears a pending permission when the turn ends", () => {
 		const state = applyEvents(initialChatState, [
 			{ type: "turnChanged", state: "submitting" },
