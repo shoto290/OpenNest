@@ -85,6 +85,13 @@ const chat = {
 		allowOnce: "Allow once",
 		deny: "Deny",
 	},
+	toolQuestion: {
+		freeText: "Other answer",
+		freeTextPlaceholder: "Write your own answer…",
+		preview: "Preview",
+		submit: "Send answers",
+		dismiss: "Dismiss",
+	},
 	toolResult: {
 		status: {
 			running: "Running",
