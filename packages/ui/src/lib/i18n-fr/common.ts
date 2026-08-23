@@ -28,6 +28,11 @@ const common = {
 		success: "Terminé",
 		error: "Réessayer",
 	},
+	notification: {
+		question: "Vous a posé une question",
+		permission: "Demande votre permission",
+		finishedTurn: "A terminé son tour",
+	},
 	update: {
 		badge: {
 			available: "Télécharger la mise à jour",
