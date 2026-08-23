@@ -34,11 +34,17 @@ import {
 	ToolApproval,
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
+import {
+	ToolQuestion,
+	type ToolQuestionItem,
+} from "@workspace/ui/components/tool-question"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type {
 	AgentCommand,
+	AskedQuestion,
 	PermissionRequest,
+	QuestionRequest,
 	TurnState,
 } from "@/lib/agent/contract"
 import { describeTransportError } from "@/lib/agent/messages"
@@ -194,6 +200,42 @@ function PermissionPrompt({
 				<ToolApprovalCode code={request.detail} />
 			) : null}
 		</ToolApproval>
+	)
+}
+
+/** A question the child asked, read as the card takes it: an option that describes
+ * itself in no words describes itself in none, and one that previews nothing
+ * previews nothing. */
+const toQuestionItem = (asked: AskedQuestion): ToolQuestionItem => ({
+	question: asked.question,
+	header: asked.header,
+	multiSelect: asked.multiSelect,
+	options: asked.options.map((option) => ({
+		label: option.label,
+		description: option.description ?? "",
+		preview: option.preview ?? undefined,
+	})),
+})
+
+/** Refusing to answer refuses the tool, which is the same denial any permission
+ * gets and travels the same way. */
+function QuestionPrompt({
+	controller,
+	request,
+}: {
+	controller: ChatController
+	request: QuestionRequest
+}) {
+	return (
+		<ToolQuestion
+			questions={request.questions.map(toQuestionItem)}
+			onAnswer={(answers) => {
+				void controller.answer(request.id, answers)
+			}}
+			onDeny={() => {
+				void controller.respond(request.id, "deny")
+			}}
+		/>
 	)
 }
 
@@ -546,6 +588,10 @@ export function ChatScreen({
 					label={working.label}
 					seed={bot.id}
 				/>
+			) : null}
+
+			{state.question ? (
+				<QuestionPrompt controller={controller} request={state.question} />
 			) : null}
 
 			{state.permission ? (

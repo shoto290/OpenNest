@@ -46,6 +46,8 @@ const FAIL_DIRECTIVE = "/fail"
 
 const PERMISSION_DIRECTIVE = "/permission"
 
+const QUESTION_DIRECTIVE = "/question"
+
 /** Several paragraphs, so `bun dev:web` shows an answer landing in the flow one
  * message at a time rather than as a single block. */
 function defaultReply(prompt: string): string {
@@ -172,29 +174,54 @@ export function createFakeChatDriver(
 		emitFor(run, { type: "turnChanged", state: turnForOutcome(outcome) })
 	}
 
-	const requestPermission = (run: FakeRun) => {
+	/** The transport announces the wait as an activity row before it asks, so the
+	 * pending step is visible in the log and not only in the card. A question waits
+	 * the same way under the same id: what changes is what the reader is shown. */
+	const beginAsk = (run: FakeRun, title: string) => {
 		permissionSeq += 1
 		const id = `fake-perm-${permissionSeq}`
 		run.pendingPermissionId = id
 		run.waiting = true
-		// The transport announces the wait as an activity row before it asks, so the
-		// pending step is visible in the log and not only in the approval card.
 		emitFor(run, {
 			type: "activity",
-			activity: {
-				id,
-				title: "Run a command",
-				kind: "permission",
-				status: "pending",
-			},
+			activity: { id, title, kind: "permission", status: "pending" },
 		})
+		return id
+	}
+
+	const requestPermission = (run: FakeRun) => {
+		const title = "Run a command"
 		emitFor(run, {
 			type: "permissionRequested",
 			request: {
-				id,
+				id: beginAsk(run, title),
 				toolName: "Bash",
-				title: "Run a command",
+				title,
 				detail: "echo hello",
+			},
+		})
+	}
+
+	const requestQuestion = (run: FakeRun) => {
+		emitFor(run, {
+			type: "questionRequested",
+			request: {
+				id: beginAsk(run, "Ask the reader"),
+				questions: [
+					{
+						header: "Framework",
+						question: "Which framework should it use?",
+						multiSelect: false,
+						options: [
+							{
+								label: "React",
+								description: "The one the app already runs on",
+								preview: null,
+							},
+							{ label: "Solid", description: null, preview: "createSignal()" },
+						],
+					},
+				],
 			},
 		})
 	}
@@ -242,6 +269,9 @@ export function createFakeChatDriver(
 		]
 		if (prompt.includes(PERMISSION_DIRECTIVE)) {
 			steps.push(() => requestPermission(run))
+		}
+		if (prompt.includes(QUESTION_DIRECTIVE)) {
+			steps.push(() => requestQuestion(run))
 		}
 		for (const chunk of streamed) {
 			steps.push(() => appendDelta(run, message.id, chunk))
