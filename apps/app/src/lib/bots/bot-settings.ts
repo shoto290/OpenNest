@@ -1,5 +1,6 @@
 import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
 import {
+	BLOT_TINTS,
 	type BotCommitItem,
 	type BotModelOption,
 	type BotSettingsValue,
@@ -13,6 +14,7 @@ import { avatarSrc } from "../host"
 import type { SidebarActivity } from "../chat/screen-model"
 import type {
 	AvatarAnimal,
+	AvatarBlot,
 	Bot,
 	BotIdentity,
 } from "../conversations/store-contract"
@@ -148,6 +150,22 @@ const nextFace = (bots: Bot[]): AvatarAnimal => {
 	)
 }
 
+/** A tint no bot in the roster is marked with, so a reader who creates three bots
+ * gets three of them and tells the rows apart before reading a name. Once all eight
+ * are taken the list starts over, the same answer [`nextFace`] gives a roster larger
+ * than the faces there are.
+ *
+ * A new bot is always marked: the picker keeps its "no mark" for a reader who wants
+ * the animal on its own, and the absence is what a bot from before this was drawn
+ * still carries. */
+const nextBlot = (bots: Bot[]): AvatarBlot => {
+	const marked = new Set(bots.map((bot) => bot.avatarBlot))
+	return (
+		BLOT_TINTS.find((tint) => !marked.has(tint)) ??
+		BLOT_TINTS[bots.length % BLOT_TINTS.length]
+	)
+}
+
 /** A name no bot in the roster carries, drawn rather than taken in order, so a
  * roster reads as a litter rather than as the list in the order it is written. Once
  * every name is carried the whole list is in play again, which is the honest answer
@@ -168,7 +186,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 	title: "",
 	model: NEW_BOT_MODEL,
 	avatarAnimal: nextFace(bots),
-	avatarBlot: null,
+	avatarBlot: nextBlot(bots),
 	avatarImagePath: null,
 	workingDir: null,
 	instructions: "",

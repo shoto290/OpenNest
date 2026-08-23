@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
+
 import {
 	BOT_NAMES,
 	CHANGING_TOOLS,
@@ -279,17 +281,39 @@ describe("newBotIdentity", () => {
 		names.map((name, index) => bot({ id: `b-${index}`, name }))
 
 	it("names a bot before it is named and gives it a face nobody wears", () => {
-		const created = newBotIdentity([bot({ avatarAnimal: "cat" })])
+		const created = newBotIdentity([
+			bot({ avatarAnimal: "cat", avatarBlot: "red" }),
+		])
 
 		expect(BOT_NAMES).toContain(created.name)
 		expect(created).toMatchObject({
 			title: "",
 			instructions: "",
 			avatarAnimal: "rabbit",
-			avatarBlot: null,
 			avatarImagePath: null,
 			workingDir: null,
 		})
+	})
+
+	it("marks a bot with a tint nobody in the roster is marked with", () => {
+		const [spared, ...marked] = BLOT_TINTS
+
+		expect(newBotIdentity([]).avatarBlot).toBe(spared)
+		expect(
+			newBotIdentity(
+				marked.map((blot, index) =>
+					bot({ id: `b-${index}`, avatarBlot: blot }),
+				),
+			).avatarBlot,
+		).toBe(spared)
+	})
+
+	it("marks from the whole list once every tint is taken", () => {
+		const roster = BLOT_TINTS.map((blot, index) =>
+			bot({ id: `b-${index}`, avatarBlot: blot }),
+		)
+
+		expect(BLOT_TINTS).toContain(newBotIdentity(roster).avatarBlot)
 	})
 
 	it("creates a bot on the concise style", () => {
