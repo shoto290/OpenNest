@@ -9,6 +9,10 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
 
 const hostInvoke = vi.mocked(invoke)
 const hostListen = vi.mocked(listen)
+const reportedError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+const sendOne = () =>
+	notificationTransport.send({ botId: "bot-one", title: "a", body: "b" })
 
 const clickWith = (botId: string) =>
 	({ event: "notification://activated", id: 1, payload: botId }) as never
@@ -18,6 +22,7 @@ beforeEach(() => {
 	hostInvoke.mockResolvedValue(undefined)
 	hostListen.mockReset()
 	hostListen.mockResolvedValue(() => undefined)
+	reportedError.mockClear()
 })
 
 describe("notificationTransport", () => {
@@ -38,9 +43,25 @@ describe("notificationTransport", () => {
 	it("resolves when the host refuses the notification", async () => {
 		hostInvoke.mockRejectedValue(new Error("no notification centre"))
 
-		await expect(
-			notificationTransport.send({ botId: "bot-one", title: "a", body: "b" }),
-		).resolves.toBeUndefined()
+		await expect(sendOne()).resolves.toBeUndefined()
+	})
+
+	it("reports why the host refused the notification", async () => {
+		const refusal = new Error("no notification centre")
+		hostInvoke.mockRejectedValue(refusal)
+
+		await sendOne()
+
+		expect(reportedError).toHaveBeenCalledWith(
+			expect.stringContaining("notification transport"),
+			refusal,
+		)
+	})
+
+	it("stays quiet when the host takes the notification", async () => {
+		await sendOne()
+
+		expect(reportedError).not.toHaveBeenCalled()
 	})
 
 	it("tells the listener which bot was clicked", async () => {
