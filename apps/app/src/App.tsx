@@ -35,7 +35,10 @@ import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
 import { chosenLanguage, storeLanguage } from "@/lib/user/language-mirror"
 import { useUser } from "@/lib/user/use-user"
-import { toUserSettingsValue } from "@/lib/user/user-settings"
+import {
+	toNotificationChange,
+	toUserSettingsValue,
+} from "@/lib/user/user-settings"
 
 /** The folder picker the working directory field opens. There is none on this
  * build: choosing a directory needs a host dialog this app does not carry yet, and
@@ -182,10 +185,11 @@ export function App() {
 		[roster.controller, isEditing],
 	)
 
-	// The name and the picture come from the record, the scheme and the palette from
-	// the provider painting the window: what the dialog edits is the two halves read
-	// as one. The chip is handed the same value — it draws the identity the dialog's
-	// breadcrumb draws, so there is nothing for a second reading to disagree with.
+	// The name, the picture and the three switches come from the record, the scheme
+	// and the palette from the provider painting the window: what the dialog edits is
+	// the two halves read as one. The chip is handed the same value — it draws the
+	// identity the dialog's breadcrumb draws, so there is nothing for a second
+	// reading to disagree with.
 	const userSettings = useMemo(
 		() =>
 			toUserSettingsValue(user.state.profile, {
@@ -347,7 +351,7 @@ export function App() {
 				}}
 				// One field at a time, each to whichever half holds it: a scheme or a
 				// palette goes to the provider, which paints the window before it
-				// writes, and the name goes to the record.
+				// writes, and the name and the switches go to the record.
 				onValueChange={(value) => {
 					if (value.name !== userSettings.name) {
 						user.controller.rename(value.name)
@@ -357,6 +361,10 @@ export function App() {
 					}
 					if (value.palette !== userSettings.palette) {
 						theme.setPalette(value.palette)
+					}
+					const notification = toNotificationChange(value, userSettings)
+					if (notification) {
+						void user.controller.setNotification(notification)
 					}
 				}}
 				open={user.state.isSettingsOpen}

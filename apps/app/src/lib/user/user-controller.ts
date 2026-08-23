@@ -5,12 +5,28 @@ import {
 	readPreferences,
 } from "./preferences-queue"
 
-/** The half of the record the reader is: their name and the picture the host
- * stored for them. The other half is the theme, which the provider holds. */
+/** The half of the record the reader is: their name, the picture the host stored
+ * for them and the events they are told about. The other half is the theme, which
+ * the provider holds. */
 export type UserProfile = Pick<
 	UserPreferences,
-	"displayName" | "profilePicturePath"
+	| "displayName"
+	| "profilePicturePath"
+	| "notifyOnQuestion"
+	| "notifyOnPermission"
+	| "notifyOnFinishedTurn"
 >
+
+/** Which of the three switches a write flips. They are the record's own names, so
+ * the record is what the controller writes and the dialog's shape is the settings'
+ * to translate. */
+type NotificationField = Extract<keyof UserProfile, `notifyOn${string}`>
+
+/** One switch, as the record names it, and where the reader just put it. */
+export type NotificationChange = {
+	field: NotificationField
+	isEnabled: boolean
+}
 
 export type UserState = {
 	/** Who the reader is, as the chip and the settings draw them. */
@@ -26,14 +42,23 @@ export type UserController = {
 	load: () => Promise<void>
 	setSettingsOpen: (isSettingsOpen: boolean) => void
 	rename: (displayName: string) => void
+	setNotification: (change: NotificationChange) => Promise<void>
 	uploadPicture: (file: File) => Promise<void>
 	removePicture: () => Promise<void>
 }
 
 /** What the window opens on before the host has answered: a reader with no name
- * reads as `You`, and one with no picture wears their initials. */
+ * reads as `You`, one with no picture wears their initials, and all three switches
+ * stand on — the host answers them on until they are written, and a question
+ * nobody heard is what that default is against. */
 export const initialUserState: UserState = {
-	profile: { displayName: "", profilePicturePath: null },
+	profile: {
+		displayName: "",
+		profilePicturePath: null,
+		notifyOnQuestion: true,
+		notifyOnPermission: true,
+		notifyOnFinishedTurn: true,
+	},
 	isSettingsOpen: false,
 }
 
@@ -66,6 +91,9 @@ export const createUserController = (): UserController => {
 		answered = {
 			displayName: record.displayName,
 			profilePicturePath: record.profilePicturePath,
+			notifyOnQuestion: record.notifyOnQuestion,
+			notifyOnPermission: record.notifyOnPermission,
+			notifyOnFinishedTurn: record.notifyOnFinishedTurn,
 		}
 		set({ profile: answered })
 	}
@@ -122,6 +150,16 @@ export const createUserController = (): UserController => {
 				.finally(() => {
 					isWriting = false
 				})
+		},
+
+		/** The switch moves under the finger and the record is written whole behind it.
+		 * A refused write puts the switch back on what the host last answered, so what
+		 * the reader reads is never a choice that did not land. */
+		setNotification: ({ field, isEnabled }: NotificationChange) => {
+			set({ profile: { ...state.profile, [field]: isEnabled } })
+			return changePreferences((record) => ({ ...record, [field]: isEnabled }))
+				.then(apply)
+				.catch(restore)
 		},
 
 		uploadPicture: async (file: File) => {
