@@ -27,13 +27,21 @@ export type Language = string | null
  * path inside the one directory the host keeps pictures in, and only while the file
  * is still there; a picture that is gone reads as `null`. Echo it to keep the
  * picture, send `null` to take it off, and use `setProfilePicture` to put a new one
- * on. */
+ * on.
+ *
+ * The three `notifyOn` switches are the events worth telling the reader about: the
+ * bot asked a question, it asked for a permission, it finished a turn. Each is
+ * switched on its own and the host answers all three on until they are written; a
+ * turn that failed is deliberately not one of them. */
 export type UserPreferences = {
 	displayName: string
 	profilePicturePath: string | null
 	colorScheme: ColorScheme
 	palette: Palette
 	language: Language
+	notifyOnQuestion: boolean
+	notifyOnPermission: boolean
+	notifyOnFinishedTurn: boolean
 }
 
 /** Why a preferences call refused. `unavailable` says nothing is being stored this

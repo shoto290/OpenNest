@@ -21,6 +21,9 @@ const RECORD: UserPreferences = {
 	colorScheme: "dark",
 	palette: "moss",
 	language: null,
+	notifyOnQuestion: true,
+	notifyOnPermission: true,
+	notifyOnFinishedTurn: true,
 }
 
 const createStorage = () => {
