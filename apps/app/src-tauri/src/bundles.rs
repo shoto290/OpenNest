@@ -3555,6 +3555,48 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
+	/// What a duplicate is given of the bundle it came from: the skills it carries,
+	/// the hooks a reader gave it and the servers it declares, nested files and all.
+	/// What the source came to remember stays behind, and so does the repository
+	/// under it — a duplicate has been spoken to none of those turns.
+	#[test]
+	fn a_duplicate_inherits_the_bundle_without_the_memory_or_the_history() {
+		let root = a_root("inherit");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let source = dir(&root, &bot.id);
+		drop_a_skill(&root, &bot.id, "kneading", true, "How to knead.");
+		private_files::replace(&source.join(HOOKS_DIR).join("pre.sh"), b"echo figs")
+			.expect("the hook lands");
+		private_files::replace(&source.join(MCP_NAME), b"{\"mcpServers\":{}}")
+			.expect("the servers land");
+		private_files::replace(&source.join(LEARNED_NAME), b"Bean likes figs.")
+			.expect("the memory lands");
+
+		inherit(&root, &bot.id, "bot-copy").expect("the bundle is inherited");
+
+		let copy = dir(&root, "bot-copy");
+		assert!(
+			skills(&root, "bot-copy")
+				.iter()
+				.any(|skill| skill.id == "kneading" && skill.body.contains("How to knead.")),
+			"the skill came over"
+		);
+		assert_eq!(
+			fs::read_to_string(copy.join(HOOKS_DIR).join("pre.sh")).expect("the hook came over"),
+			"echo figs"
+		);
+		assert_eq!(
+			fs::read_to_string(copy.join(MCP_NAME)).expect("the servers came over"),
+			"{\"mcpServers\":{}}"
+		);
+		assert!(!copy.join(LEARNED_NAME).exists(), "the memory came over");
+		assert!(!copy.join(".git").exists(), "the history came over");
+		assert!(source.join(LEARNED_NAME).exists(), "the source lost its memory");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
 	/// Undoing puts the bundle back the way it was and says so, on top of the
 	/// history rather than instead of it.
 	#[test]

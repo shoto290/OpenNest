@@ -210,7 +210,10 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 		.bot(bot_id.clone())
 		.await?
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.clone() })?;
-	let identity = duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()));
+	let taken: Vec<String> =
+		database.conversations().bots().await?.into_iter().map(|bot| bot.name).collect();
+	let identity =
+		duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()), &taken);
 	let output_style = identity.output_style.clone();
 	let created = database.conversations().create_bot(identity.into()).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
@@ -249,10 +252,11 @@ async fn duplicated_bundle(
 
 /// Who the duplicate is: the source, under a name that says where it came from. The
 /// name is the one thing that cannot be shared — two bots wearing the same one is a
-/// roster a reader cannot read — and it is the only thing changed.
-fn duplicated_identity(source: Bot) -> BotIdentity {
+/// roster a reader cannot read — and it is the only thing changed. `taken` is every
+/// name the roster already carries, the source's among them.
+fn duplicated_identity(source: Bot, taken: &[String]) -> BotIdentity {
 	BotIdentity {
-		name: format!("{}{DUPLICATE_SUFFIX}", source.name),
+		name: unshared_name(format!("{}{DUPLICATE_SUFFIX}", source.name), taken),
 		title: source.title,
 		model: source.model,
 		avatar_animal: source.avatar_animal,
@@ -262,6 +266,25 @@ fn duplicated_identity(source: Bot) -> BotIdentity {
 		instructions: source.instructions,
 		denied_tools: source.denied_tools,
 		output_style: source.output_style,
+	}
+}
+
+/// `wanted` if no bot carries it, and otherwise `wanted` counted off from 2 until a
+/// number nobody carries: a reader duplicating the same bot twice gets "Bean copy"
+/// and then "Bean copy 2" rather than two rows they cannot tell apart. Nothing that
+/// already exists is renamed to make room — the new row is the one that moves.
+fn unshared_name(wanted: String, taken: &[String]) -> String {
+	let carried = |name: &str| taken.iter().any(|held| held == name);
+	if !carried(&wanted) {
+		return wanted;
+	}
+	let mut number = 2;
+	loop {
+		let candidate = format!("{wanted} {number}");
+		if !carried(&candidate) {
+			return candidate;
+		}
+		number += 1;
 	}
 }
 
@@ -806,6 +829,65 @@ mod tests {
 			denied_tools: Vec::new(),
 			created_at: 1,
 		}
+	}
+
+	/// Who a duplicate is: the source in every field a reader can see of it — what it
+	/// was told, the model it answers under, the face it wears, where it works, what it
+	/// is denied and how it writes — under a name that says where it came from. The
+	/// name is the only thing that changes.
+	#[test]
+	fn a_duplicate_is_the_source_under_a_name_that_says_where_it_came_from() {
+		use crate::conversations::contract::{AvatarAnimal, AvatarBlot};
+
+		let source = Bot {
+			id: "b1".to_owned(),
+			name: "Bean".to_owned(),
+			title: "Bakes".to_owned(),
+			model: "opus".to_owned(),
+			avatar_animal: AvatarAnimal::Owl,
+			avatar_blot: Some(AvatarBlot::Cyan),
+			avatar_image_path: Some("/pictures/bean.png".to_owned()),
+			working_dir: Some("/loaves".to_owned()),
+			instructions: "Answer briefly.".to_owned(),
+			denied_tools: vec!["Bash".to_owned()],
+			changes_nothing: true,
+			output_style: "terse".to_owned(),
+			created_at: 1,
+		};
+
+		assert_eq!(
+			duplicated_identity(source.clone(), &["Bean".to_owned()]),
+			BotIdentity {
+				name: "Bean copy".to_owned(),
+				title: source.title,
+				model: source.model,
+				avatar_animal: source.avatar_animal,
+				avatar_blot: source.avatar_blot,
+				avatar_image_path: source.avatar_image_path,
+				working_dir: source.working_dir,
+				instructions: source.instructions,
+				denied_tools: source.denied_tools,
+				output_style: source.output_style,
+			}
+		);
+	}
+
+	/// What a duplicate is called when the name it would take is already worn: the
+	/// suffix on its own while nobody carries it, and then counted off from 2, skipping
+	/// every number the roster already holds. A gap is filled rather than stepped over
+	/// — the lowest free number is the one taken.
+	#[test]
+	fn a_duplicate_takes_the_lowest_name_no_bot_carries() {
+		let named = |names: &[&str]| {
+			let taken: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
+			unshared_name("Bean copy".to_owned(), &taken)
+		};
+
+		assert_eq!(named(&["Bean"]), "Bean copy");
+		assert_eq!(named(&["Bean", "Bean copy"]), "Bean copy 2");
+		assert_eq!(named(&["Bean", "Bean copy", "Bean copy 2"]), "Bean copy 3");
+		assert_eq!(named(&["Bean", "Bean copy", "Bean copy 3"]), "Bean copy 2");
+		assert_eq!(named(&[]), "Bean copy");
 	}
 
 	/// What the settings may not do to a skill marked as the host's, and what it may
