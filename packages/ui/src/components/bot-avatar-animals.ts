@@ -332,6 +332,58 @@ export const ANIMALS = {
 		],
 		extras: [],
 	},
+	skippy: {
+		faceY: 142,
+		scale: 0.32,
+		head: "M120,56 C143,60 159,84 160,116 C161,142 161,166 160,186 C159,200 143,208 120,208 C97,208 81,200 80,186 C79,166 79,142 80,116 C81,84 97,60 120,56 Z",
+		headDepth: 38,
+		ears: [
+			{
+				pivot: [82, 124],
+				side: -1,
+				depth: -8,
+				volume: { center: [72, 153], radii: [17, 31, 8] },
+				shapes: [
+					{
+						kind: "path",
+						role: "outline",
+						d: "M84,122 C68,130 56,146 55,162 C54,175 66,184 84,184 C89,184 89,175 84,173 C71,172 65,166 66,158 C67,147 76,138 88,133 C92,130 89,122 84,122 Z",
+					},
+				],
+			},
+			{
+				pivot: [158, 124],
+				side: 1,
+				depth: -8,
+				volume: { center: [168, 153], radii: [17, 31, 8] },
+				shapes: [
+					{
+						kind: "path",
+						role: "outline",
+						d: "M156,122 C172,130 184,146 185,162 C186,175 174,184 156,184 C151,184 151,175 156,173 C169,172 175,166 174,158 C173,147 164,138 152,133 C148,130 151,122 156,122 Z",
+					},
+				],
+			},
+		],
+		extras: [
+			{ kind: "circle", role: "outline", cx: 103, cy: 96, r: 14 },
+			{ kind: "circle", role: "outline", cx: 137, cy: 96, r: 14 },
+			{ kind: "circle", role: "accent", cx: 103, cy: 96, r: 9 },
+			{ kind: "circle", role: "accent", cx: 137, cy: 96, r: 9 },
+			{
+				kind: "path",
+				role: "line",
+				strokeWidth: 3,
+				d: "M117,94 C119,91 121,91 123,94",
+			},
+			{
+				kind: "path",
+				role: "line",
+				strokeWidth: 4,
+				d: "M82,192 C100,197 140,197 158,192",
+			},
+		],
+	},
 } as const satisfies Record<string, BotAvatarAnimalDefinition>
 
 export type BotAvatarAnimal = keyof typeof ANIMALS
