@@ -8,7 +8,7 @@
 
 use tauri::Runtime;
 
-use crate::{agent, attachments, conversations, user};
+use crate::{agent, attachments, conversations, notifications, user};
 
 /// The commands are named by their module rather than imported: the attribute on
 /// each one leaves a macro beside it that `generate_handler!` reaches through the
@@ -59,6 +59,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		conversations::commands::conversation_open_assistant_message,
 		conversations::commands::conversation_append_text,
 		conversations::commands::conversation_finalize_message,
+		notifications::commands::notification_show,
 		user::commands::user_preferences,
 		user::commands::user_set_preferences,
 		user::commands::user_set_profile_picture,

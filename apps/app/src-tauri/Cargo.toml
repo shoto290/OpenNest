@@ -54,6 +54,12 @@ git2 = { version = "0.21", default-features = false, features = ["vendored-libgi
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# The one route on macOS that answers what became of a notification it showed:
+# `send_notification` reports the click back, which `tauri-plugin-notification`
+# cannot. Already in the tree under `notify-rust`, which the plugin shows through.
+[target.'cfg(target_os = "macos")'.dependencies]
+mac-notification-sys = "0.6"
+
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }
 # Already a dependency; named again so an integration test can build the pictures it
