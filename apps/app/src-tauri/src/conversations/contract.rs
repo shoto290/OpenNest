@@ -428,10 +428,11 @@ pub struct TranscriptMessage {
 	pub created_at: i64,
 	pub replied_to_message_id: Option<String>,
 	pub runtime_session_id: Option<String>,
+	pub pinned_at: Option<i64>,
 }
 
 impl TranscriptMessage {
-	fn of(conversation_id: &str, stored: messages::StoredMessage) -> Self {
+	pub fn of(conversation_id: &str, stored: messages::StoredMessage) -> Self {
 		Self {
 			id: stored.id,
 			conversation_id: conversation_id.to_owned(),
@@ -443,6 +444,7 @@ impl TranscriptMessage {
 			created_at: stored.created_at,
 			replied_to_message_id: stored.replied_to_message_id,
 			runtime_session_id: stored.runtime_session_id,
+			pinned_at: stored.pinned_at,
 		}
 	}
 }
@@ -625,6 +627,8 @@ pub enum TranscriptStoreError {
 	#[serde(rename_all = "camelCase")]
 	UnknownBot { id: String },
 	#[serde(rename_all = "camelCase")]
+	UnknownMessage { id: String },
+	#[serde(rename_all = "camelCase")]
 	RejectedAvatarImage { reason: AvatarRejection },
 	#[serde(rename_all = "camelCase")]
 	UnwritableBundle { detail: String },
@@ -677,6 +681,9 @@ impl From<messages::TranscriptError> for TranscriptStoreError {
 					from: from.to_owned(),
 					to: to.to_owned(),
 				}
+			}
+			messages::TranscriptError::UnknownMessage { id } => {
+				TranscriptStoreError::UnknownMessage { id }
 			}
 			messages::TranscriptError::Database(failure) => {
 				TranscriptStoreError::Storage { failure: (&failure).into() }
@@ -739,6 +746,7 @@ mod tests {
 			created_at: 2,
 			replied_to_message_id: Some("m0".into()),
 			runtime_session_id: Some("run-1".into()),
+			pinned_at: Some(5),
 		}
 	}
 
@@ -753,7 +761,8 @@ mod tests {
 			"completion": "complete",
 			"createdAt": 2,
 			"repliedToMessageId": "m0",
-			"runtimeSessionId": "run-1"
+			"runtimeSessionId": "run-1",
+			"pinnedAt": 5
 		})
 	}
 

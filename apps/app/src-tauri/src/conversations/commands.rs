@@ -7,7 +7,7 @@ use super::context;
 use super::contract::{
 	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, MessageReference,
 	NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession, Skill, SkillDraft,
-	TerminalCompletion, TranscriptPage, TranscriptStoreError,
+	TerminalCompletion, TranscriptMessage, TranscriptPage, TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
@@ -572,6 +572,37 @@ pub async fn conversation_message_reference(
 	};
 	let run = context::run_behind(database, &stored).await?;
 	Ok(Some(MessageReference::of(conversation_id, stored, run)))
+}
+
+#[tauri::command]
+pub async fn conversation_pin_message(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	message_id: String,
+	pinned_at: i64,
+) -> Result<(), TranscriptStoreError> {
+	Ok(ready(&state)?.messages().pin_message(conversation_id, message_id, pinned_at).await?)
+}
+
+#[tauri::command]
+pub async fn conversation_unpin_message(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	message_id: String,
+) -> Result<(), TranscriptStoreError> {
+	Ok(ready(&state)?.messages().unpin_message(conversation_id, message_id).await?)
+}
+
+#[tauri::command]
+pub async fn conversation_pinned_messages(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+) -> Result<Vec<TranscriptMessage>, TranscriptStoreError> {
+	let stored = ready(&state)?.messages().pinned_messages(conversation_id.clone()).await?;
+	Ok(stored
+		.into_iter()
+		.map(|message| TranscriptMessage::of(&conversation_id, message))
+		.collect())
 }
 
 #[tauri::command]
