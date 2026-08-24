@@ -151,18 +151,29 @@ export function MessageScroller({
 		[onFollowChange],
 	)
 
+	const syncFollowing = useCallback(() => {
+		const viewport = viewportRef.current
+		if (!viewport) return
+		setFollowing(distanceFromEnd(viewport) <= followThreshold)
+	}, [followThreshold, setFollowing])
+
 	const releaseProgrammaticScroll = useCallback(() => {
 		programmaticScrollRef.current = false
 		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
 	}, [])
 
+	const abandonProgrammaticScroll = useCallback(() => {
+		releaseProgrammaticScroll()
+		syncFollowing()
+	}, [releaseProgrammaticScroll, syncFollowing])
+
 	const deferSettle = useCallback(() => {
 		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
 		scrollTimerRef.current = window.setTimeout(
-			releaseProgrammaticScroll,
+			abandonProgrammaticScroll,
 			SETTLE_TIMEOUT,
 		)
-	}, [releaseProgrammaticScroll])
+	}, [abandonProgrammaticScroll])
 
 	const holdProgrammaticScroll = useCallback(
 		(targetTop: number) => {
@@ -231,14 +242,8 @@ export function MessageScroller({
 
 		if (pinRef.current) pinTopVisibleRow()
 
-		setFollowing(distanceFromEnd(viewport) <= followThreshold)
-	}, [
-		deferSettle,
-		followThreshold,
-		pinTopVisibleRow,
-		releaseProgrammaticScroll,
-		setFollowing,
-	])
+		syncFollowing()
+	}, [deferSettle, pinTopVisibleRow, releaseProgrammaticScroll, syncFollowing])
 
 	const requestOlder = () => {
 		if (!older || older.isLoading) return
