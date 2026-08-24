@@ -308,6 +308,9 @@ async fn runtime_identity<R: Runtime>(
 	if let Some(found) = root.as_deref().and_then(|root| bundles::adopted(root, &bot)) {
 		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
 	}
+	if let Some(learned) = root.as_deref().and_then(|root| bundles::adopted_memory(root, &bot)) {
+		let _ = database.conversations().adopt_memory(bot.id.clone(), learned).await;
+	}
 	RuntimeIdentity { bundle, working_dir: bot.working_dir }
 }
 

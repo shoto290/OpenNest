@@ -1,5 +1,4 @@
 
-use crate::db::repositories::conversations::Bot;
 use crate::db::repositories::messages::{
 	MessageRole, MessageWindowQuery, StoredMessage, TranscriptError,
 };
@@ -20,7 +19,6 @@ const CHARS_PER_TOKEN: i64 = 4;
 
 const ELIDED: &str = "…";
 
-const MEMORY_LABEL: &str = "What you remember:";
 const SUMMARY_LABEL: &str = "The conversation so far:";
 const REPLY_LABEL: &str = "The message this one replies to:";
 const RECENT_LABEL: &str = "The most recent messages:";
@@ -38,7 +36,6 @@ pub async fn bounded_context(
 		.await?
 		.ok_or_else(no_such_message)?;
 	let checkpoint = database.runtime_context().latest_checkpoint(participant.clone()).await?;
-	let bot = database.conversations().bot(participant.bot_id.clone()).await?;
 	let recent = database
 		.messages()
 		.window_messages(MessageWindowQuery {
@@ -51,7 +48,6 @@ pub async fn bounded_context(
 	let replied_to = replied_to_target(database, &conversation_id, &prompt, &recent).await?;
 
 	Ok(compose(Parts {
-		bot: bot.as_ref(),
 		summary: checkpoint.as_ref().map(|checkpoint| checkpoint.summary.as_str()),
 		replied_to: replied_to.as_ref(),
 		recent: &recent,
@@ -125,7 +121,6 @@ fn no_such_message() -> TranscriptError {
 }
 
 struct Parts<'a> {
-	bot: Option<&'a Bot>,
 	summary: Option<&'a str>,
 	replied_to: Option<&'a StoredMessage>,
 	recent: &'a [StoredMessage],
@@ -134,9 +129,6 @@ struct Parts<'a> {
 
 fn compose(parts: Parts<'_>) -> String {
 	let mut sections: Vec<String> = Vec::new();
-	if let Some(bot) = parts.bot {
-		push_section(&mut sections, MEMORY_LABEL, &bot.memory);
-	}
 	if let Some(summary) = parts.summary {
 		push_section(&mut sections, SUMMARY_LABEL, summary);
 	}
@@ -220,7 +212,6 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::open;
-	use crate::db::repositories::conversations::AvatarAnimal;
 	use crate::db::repositories::messages::{
 		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState,
 	};
@@ -239,36 +230,17 @@ mod tests {
 		}
 	}
 
-	fn a_bot(instructions: &str, memory: &str) -> Bot {
-		Bot {
-			id: "b1".to_owned(),
-			name: "Claude".to_owned(),
-			title: String::new(),
-			model: "sonnet".to_owned(),
-			avatar_animal: AvatarAnimal::Cat,
-			avatar_blot: None,
-			avatar_image_path: None,
-			working_dir: None,
-			instructions: instructions.to_owned(),
-			memory: memory.to_owned(),
-			denied_tools: Vec::new(),
-			created_at: 1,
-		}
-	}
-
 	fn only(prompt: &str) -> Parts<'_> {
-		Parts { bot: None, summary: None, replied_to: None, recent: &[], prompt }
+		Parts { summary: None, replied_to: None, recent: &[], prompt }
 	}
 
 	#[test]
 	fn a_context_with_nothing_behind_it_is_the_prompt_itself() {
 		assert_eq!(compose(only("hello")), "hello");
-		assert_eq!(compose(Parts { bot: Some(&a_bot("", "")), ..only("hello") }), "hello");
 	}
 
 	#[test]
 	fn every_part_is_printed_once_and_the_prompt_comes_last() {
-		let bot = a_bot("Answer briefly.", "The reader prefers French.");
 		let target = a_message(2, MessageRole::User, "what about the roof?");
 		let recent = [
 			a_message(40, MessageRole::User, "and the walls?"),
@@ -276,7 +248,6 @@ mod tests {
 		];
 
 		let context = compose(Parts {
-			bot: Some(&bot),
 			summary: Some("user: we are building a house"),
 			replied_to: Some(&target),
 			recent: &recent,
@@ -285,26 +256,22 @@ mod tests {
 
 		assert_eq!(
 			context,
-			"What you remember:\nThe reader prefers French.\n\n\
-			The conversation so far:\nuser: we are building a house\n\n\
+			"The conversation so far:\nuser: we are building a house\n\n\
 			The message this one replies to:\nuser: what about the roof?\n\n\
 			The most recent messages:\nuser: and the walls?\nassistant: they are up\n\n\
 			The new message:\nand now?"
 		);
 		assert_eq!(context.matches("and now?").count(), 1, "the prompt was printed twice");
-		assert!(!context.contains("Answer briefly."), "the system prompt was said twice");
 	}
 
 	#[test]
 	fn a_part_with_no_words_in_it_is_left_out_with_its_heading() {
 		let context = compose(Parts {
-			bot: Some(&a_bot("", "   ")),
 			summary: Some(""),
 			recent: &[a_message(1, MessageRole::User, "hello")],
 			..only("and now?")
 		});
 
-		assert!(!context.contains(MEMORY_LABEL), "an empty memory was announced");
 		assert!(!context.contains(SUMMARY_LABEL), "an empty summary was announced");
 		assert!(context.contains(RECENT_LABEL), "the tail that was there went missing");
 	}

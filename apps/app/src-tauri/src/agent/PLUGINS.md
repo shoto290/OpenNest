@@ -74,8 +74,9 @@ The two are written differently, and that is the whole shape:
 ```text
 <app data>/bots/plugins/<bot id>/     the bot's — the disk is the truth
   .claude-plugin/plugin.json          name: <bot id>
-  agents/<slug>.md                    the brief a session is promoted to
-  skills/<name>/SKILL.md              what the bot remembered, its own to write
+  agents/<slug>.md                    the brief a session is promoted to,
+                                      with the block the bot keeps what it learned in
+  skills/<name>/SKILL.md              a procedure a task triggers, the bot's to write
 
 <app data>/system/opennest/           the app's — the host is the truth
   .claude-plugin/plugin.json          name: opennest
@@ -83,8 +84,9 @@ The two are written differently, and that is the whole shape:
 ```
 
 The bot's bundle is completed rather than written over: a body edited by hand is
-adopted, and a skill the bot wrote is its memory. The app's plugin is rewritten whole
-at every launch from the text in `bundles/system.rs`, and nothing reads it back — one
+adopted, and the memory block and the skills the bot wrote are carried over. The app's
+plugin is rewritten whole at every launch from the text in `bundles/system.rs`, and
+nothing reads it back — one
 text for every bot instead of a copy in each bundle that a bot could edit into
 something else. It sits outside `bots/`, so it is in no marketplace and in no bot's
 skill listing.
