@@ -113,6 +113,9 @@ fn a_record(picture: Value) -> Value {
 		"notifyOnPermission": true,
 		"notifyOnFinishedTurn": false,
 		"notifyWithSound": false,
+		"sidebarWidth": 320,
+		"windowBounds": { "x": -40, "y": 12, "width": 1280, "height": 800 },
+		"lastBotId": "bot-one",
 	})
 }
 
@@ -172,6 +175,9 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"notifyOnPermission": true,
 			"notifyOnFinishedTurn": true,
 			"notifyWithSound": true,
+			"sidebarWidth": null,
+			"windowBounds": null,
+			"lastBotId": null,
 		})
 	);
 }

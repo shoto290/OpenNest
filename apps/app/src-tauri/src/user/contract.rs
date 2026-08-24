@@ -35,6 +35,27 @@ impl From<ColorScheme> for user::ColorScheme {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowBounds {
+	pub x: i32,
+	pub y: i32,
+	pub width: u32,
+	pub height: u32,
+}
+
+impl From<user::WindowBounds> for WindowBounds {
+	fn from(bounds: user::WindowBounds) -> Self {
+		Self { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
+	}
+}
+
+impl From<WindowBounds> for user::WindowBounds {
+	fn from(bounds: WindowBounds) -> Self {
+		Self { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserPreferences {
@@ -47,6 +68,9 @@ pub struct UserPreferences {
 	pub notify_on_permission: bool,
 	pub notify_on_finished_turn: bool,
 	pub notify_with_sound: bool,
+	pub sidebar_width: Option<u32>,
+	pub window_bounds: Option<WindowBounds>,
+	pub last_bot_id: Option<String>,
 }
 
 impl UserPreferences {
@@ -67,6 +91,9 @@ impl UserPreferences {
 			notify_on_permission: preferences.notify_on_permission,
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
 			notify_with_sound: preferences.notify_with_sound,
+			sidebar_width: preferences.sidebar_width,
+			window_bounds: preferences.window_bounds.map(WindowBounds::from),
+			last_bot_id: preferences.last_bot_id,
 		}
 	}
 }
@@ -83,6 +110,9 @@ impl From<UserPreferences> for user::Preferences {
 			notify_on_permission: preferences.notify_on_permission,
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
 			notify_with_sound: preferences.notify_with_sound,
+			sidebar_width: preferences.sidebar_width,
+			window_bounds: preferences.window_bounds.map(user::WindowBounds::from),
+			last_bot_id: preferences.last_bot_id,
 		}
 	}
 }
