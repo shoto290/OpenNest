@@ -13,6 +13,7 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
+	widthInRems,
 } from "@workspace/storybook/story-utils"
 import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
 import {
@@ -24,9 +25,14 @@ import {
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
-import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
+import {
+	BOT_SKILLS,
+	LONG_SKILL,
+} from "@workspace/ui/components/plugin-settings/skills.fixtures"
 
 const BOT_ID = "bot-7"
+
+const DIALOG_WIDTH_REMS = 52
 
 const MODELS: BotModelOption[] = [
 	{ label: "Claude Sonnet 4.5", value: "sonnet-4-5" },
@@ -584,6 +590,31 @@ export const Working = meta.story({
 		await expect(
 			avatar.querySelector('[data-slot="bot-activity-dot"]'),
 		).not.toBeNull()
+	},
+})
+
+export const WithALongSkill = meta.story({
+	args: { skills: [...BOT_SKILLS, LONG_SKILL] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill whose name and description are both wider than the panel that lists them. Check that the dialog stays the width it declares rather than growing to the longest row, and that the row clips its two lines instead of pushing its tag and chevron out of reach. Pick `WithSkillOpen` for that skill taken out of the list.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+		const panel = await openTab(dialog, "Skills", userEvent)
+
+		await expect(widthInRems(dialog)).toBeCloseTo(DIALOG_WIDTH_REMS, 1)
+
+		const row = within(panel).getByRole("button", {
+			name: new RegExp(LONG_SKILL.name),
+		})
+		await expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(
+			dialog.getBoundingClientRect().right,
+		)
 	},
 })
 

@@ -46,6 +46,10 @@ export const Row = ({ children }: { children: React.ReactNode }) => (
 export const slotsIn = (root: Element, slot: string) =>
 	Array.from(root.querySelectorAll<HTMLElement>(`[data-slot="${slot}"]`))
 
+export const widthInRems = (element: HTMLElement) =>
+	element.getBoundingClientRect().width /
+	Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+
 export const botIdentityAvatars = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "bot-identity-avatar")
 
