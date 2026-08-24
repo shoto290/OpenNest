@@ -8,6 +8,7 @@ import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import {
+	avatarShape,
 	BotIdentityAvatar,
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
@@ -31,7 +32,7 @@ interface BotWorkingProps {
 }
 
 const STOP_OVERLAY =
-	"pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-background/75 text-foreground transition-opacity duration-150 motion-reduce:transition-none"
+	"pointer-events-none absolute inset-0 flex items-center justify-center bg-background/75 text-foreground"
 
 const isTimed = (kind: BotWorkingKind) =>
 	kind === "searching" || kind === "working"
@@ -99,7 +100,11 @@ function BotWorking({
 						<span
 							aria-hidden="true"
 							data-slot="bot-working-stop-glyph"
-							className={cn(STOP_OVERLAY, armed ? "opacity-100" : "opacity-0")}
+							className={cn(
+								STOP_OVERLAY,
+								avatarShape(image),
+								armed ? "opacity-100" : "opacity-0",
+							)}
 						>
 							<Icons.Stop className="size-1/2" />
 						</span>

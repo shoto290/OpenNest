@@ -2,7 +2,11 @@ import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { botIdentityAvatars, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	botIdentityAvatars,
+	slotsIn,
+	UPLOADED_AVATAR_IMAGE,
+} from "@workspace/storybook/story-utils"
 import type { AgentActivityItem } from "@workspace/ui/components/agent-activity"
 import { AgentActivity } from "@workspace/ui/components/agent-activity"
 import { BLOT_TINTS, BotAvatar } from "@workspace/ui/components/bot-avatar"
@@ -259,6 +263,7 @@ export const Stop = meta.story({
 	render: (args) => (
 		<div className="flex flex-col gap-4">
 			<BotWorking {...args} />
+			<BotWorking {...args} image={UPLOADED_AVATAR_IMAGE} />
 			<BotWorking {...args} onStop={undefined} />
 		</div>
 	),
@@ -266,16 +271,27 @@ export const Stop = meta.story({
 		docs: {
 			description: {
 				story:
-					"Interrupting the run, from the row that is running it: the first avatar takes `onStop` and becomes the control, the second takes none and stays a drawing. Check that the glyph only appears once the avatar itself is pointed at — pointing at the words beside it reveals them and nothing else — that Tab reaches the control and lights the same glyph, and that the second row exposes no button at all.",
+					"Interrupting the run, from the row that is running it: the first two avatars take `onStop` and become controls, the last takes none and stays a drawing. Check that the veil covers the drawn avatar corner to corner and holds to the circle of the uploaded picture, that it appears the instant the avatar is pointed at with no fade — pointing at the words beside it reveals them and nothing else — that Tab reaches each control and lights the same glyph, and that the last row exposes no button at all.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
-		const stop = canvas.getByRole("button", { name: "Stop Atlas" })
-		const [glyph] = slotsIn(canvasElement, "bot-working-stop-glyph")
+		const [stop, uploaded] = canvas.getAllByRole("button", {
+			name: "Stop Atlas",
+		})
+		const [glyph, uploadedGlyph] = slotsIn(
+			canvasElement,
+			"bot-working-stop-glyph",
+		)
 		const label = canvas.getAllByText("Atlas · Bash · npm test")[0]
 
-		await expect(canvas.getAllByRole("button")).toHaveLength(1)
+		await expect(canvas.getAllByRole("button")).toHaveLength(2)
+		await expect(glyph).not.toHaveClass("rounded-full")
+		await expect(uploadedGlyph).toHaveClass("rounded-full")
+
+		await userEvent.hover(uploaded)
+		await waitFor(() => expect(uploadedGlyph).toBeVisible())
+		await userEvent.unhover(uploaded)
 
 		stop.blur()
 		await userEvent.hover(stop)
