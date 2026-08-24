@@ -62,3 +62,30 @@ export function revealWindow({ withFocus }: WindowReveal = {}): void {
 		current.setFocus().catch(() => undefined)
 	}
 }
+
+/** The focus the operating system gives a window, watched for as long as the caller
+ * holds the returned unsubscribe.
+ *
+ * Not `document.hasFocus()`: that answers about the caret inside the webview, and it
+ * turns false the moment the reader clicks off an input on a window that is still
+ * the frontmost one. The platform decides what to do with a notification on the
+ * window, so the window is what has to be asked.
+ *
+ * The state now is reported first, before any change is: a window that has been in
+ * front since launch never fires an event, and a source waiting for one would decide
+ * on nothing. A host that refuses to answer it reports focused — a notification the
+ * platform swallows is a quieter failure than one raised over a reader who is right
+ * there.
+ *
+ * Outside the host there is no window to ask and nothing is ever reported, which
+ * leaves the caller on whatever it decides with in the meantime. */
+export function watchWindowFocus(
+	report: (isFocused: boolean) => void,
+): Promise<() => void> {
+	if (!isDesktopHost()) {
+		return Promise.resolve(() => undefined)
+	}
+	const current = getCurrentWindow()
+	current.isFocused().then(report, () => report(true))
+	return current.onFocusChanged(({ payload }) => report(payload))
+}

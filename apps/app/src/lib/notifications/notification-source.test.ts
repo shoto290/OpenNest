@@ -73,10 +73,28 @@ const createFakeRoster = (bots: { id: string; name: string }[]) => {
 	}
 }
 
+/** The window telling the source what the operating system gave it, and whether the
+ * source is still listening for it. */
+const createFakeWindowFocus = () => {
+	let report: ((isFocused: boolean) => void) | undefined
+
+	return {
+		watch: (listener: (isFocused: boolean) => void) => {
+			report = listener
+			return Promise.resolve(() => {
+				report = undefined
+			})
+		},
+		isWatched: () => report !== undefined,
+		tell: (isFocused: boolean) => report?.(isFocused),
+	}
+}
+
 type Harness = {
 	chat: ReturnType<typeof createFakeChat>
 	roster: ReturnType<typeof createFakeRoster>
 	notifications: FakeNotificationPort
+	windowFocus: ReturnType<typeof createFakeWindowFocus>
 	stop: () => void
 }
 
@@ -87,6 +105,7 @@ const start = async (
 	const chat = createFakeChat()
 	const roster = createFakeRoster(bots)
 	const notifications = createFakeNotificationPort()
+	const windowFocus = createFakeWindowFocus()
 
 	const stop = startNotificationSource({
 		chat,
@@ -94,12 +113,13 @@ const start = async (
 		notifications,
 		switches: () => ALL_ON,
 		hasFocus: () => false,
+		watchFocus: windowFocus.watch,
 		raiseWindow: () => undefined,
 		...options,
 	})
 	await Promise.resolve()
 
-	return { chat, roster, notifications, stop }
+	return { chat, roster, notifications, windowFocus, stop }
 }
 
 /** The publish that gives a bot the state its next change is read against. Nothing
@@ -157,6 +177,42 @@ describe("startNotificationSource", () => {
 	})
 
 	it("sends nothing while the window holds the focus", async () => {
+		const harness = await start()
+		harness.windowFocus.tell(true)
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", { question: question("q-1") })
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("sends on the window's focus rather than the document's", async () => {
+		const harness = await start({ hasFocus: () => true })
+		harness.windowFocus.tell(false)
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", { question: question("q-1") })
+
+		expect(harness.notifications.sent).toEqual([
+			{ botId: "bot-one", title: "Nyx", body: "Asked you a question" },
+		])
+	})
+
+	it("decides on the focus the window reported last", async () => {
+		const harness = await start()
+		harness.windowFocus.tell(true)
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", { question: question("q-1") })
+		harness.windowFocus.tell(false)
+		harness.chat.publish("bot-one", { question: question("q-2") })
+
+		expect(harness.notifications.sent).toEqual([
+			{ botId: "bot-one", title: "Nyx", body: "Asked you a question" },
+		])
+	})
+
+	it("decides on the document until the window has reported", async () => {
 		const harness = await start({ hasFocus: () => true })
 		seed(harness, "bot-one")
 
@@ -212,7 +268,7 @@ describe("startNotificationSource", () => {
 		expect(harness.notifications.sent).toEqual([])
 	})
 
-	it("stops listening to the controller and to the click once disposed", async () => {
+	it("stops listening to the controller, the window and the click once disposed", async () => {
 		const harness = await start()
 		seed(harness, "bot-one")
 
@@ -222,6 +278,7 @@ describe("startNotificationSource", () => {
 		harness.notifications.activate("bot-one")
 
 		expect(harness.chat.listenerCount()).toBe(0)
+		expect(harness.windowFocus.isWatched()).toBe(false)
 		expect(harness.notifications.sent).toEqual([])
 		expect(harness.roster.select).not.toHaveBeenCalled()
 	})

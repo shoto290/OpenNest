@@ -25,14 +25,19 @@ type RosterSource = {
 }
 
 /** Everything the source reads from outside itself, handed in rather than reached
- * for: the switches as the record holds them now, the focus as the window has it
- * now, and the window coming back to the front. */
+ * for: the switches as the record holds them now, the focus the operating system
+ * gives the window, and the window coming back to the front.
+ *
+ * `watchFocus` is what decides, and `hasFocus` is only what is decided on until it
+ * reports: outside the Tauri host there is no window to watch, and the document is
+ * the closest thing to a reader looking at the app. */
 export type NotificationSourceOptions = {
 	chat: ChatSource
 	roster: RosterSource
 	notifications: NotificationPort
 	switches: () => NotificationSwitches
 	hasFocus: () => boolean
+	watchFocus: (report: (isFocused: boolean) => void) => Promise<() => void>
 	raiseWindow: () => void
 }
 
@@ -52,9 +57,15 @@ export const startNotificationSource = ({
 	notifications,
 	switches,
 	hasFocus,
+	watchFocus,
 	raiseWindow,
 }: NotificationSourceOptions): (() => void) => {
 	const seen = new Map<string, ChatState>()
+
+	/** What the window last reported, kept between publishes rather than asked for at
+	 * each one: the host answers over IPC and a publish decides now. Nothing reported
+	 * yet leaves the document to answer for it. */
+	let windowFocus: boolean | undefined
 
 	/** The bots the roster let go of, dropped from what is compared. Only reached
 	 * when the roster is shorter than what is held: this runs on every word of every
@@ -72,7 +83,7 @@ export const startNotificationSource = ({
 		// Read once for the whole publish rather than per bot: every bot is being told
 		// about the same moment, with the same switches and the same window.
 		const currentSwitches = switches()
-		const isFocused = hasFocus()
+		const isFocused = windowFocus ?? hasFocus()
 
 		for (const bot of bots) {
 			const after = chat.stateFor(bot.id)
@@ -115,13 +126,17 @@ export const startNotificationSource = ({
 	}
 
 	const stopChat = chat.subscribe(compare)
-	// The promise is what is held rather than what it answers with: the host
-	// registers the listener over IPC, so a dispose that lands first still has
-	// something to unsubscribe once the registration settles.
+	// Both registrations go through the host, so what is held is the promise rather
+	// than what it answers with: a dispose that lands first still has something to
+	// release once the registration settles.
+	const focus = watchFocus((isFocused) => {
+		windowFocus = isFocused
+	}).catch(() => undefined)
 	const activation = notifications.onActivate(activate).catch(() => undefined)
 
 	return () => {
 		stopChat()
+		void focus.then((stop) => stop?.())
 		void activation.then((stop) => stop?.())
 	}
 }
