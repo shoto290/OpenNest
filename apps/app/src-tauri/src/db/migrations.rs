@@ -19,6 +19,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 8, statements: BOT_DENIED_TOOLS },
 	Migration { version: 9, statements: MESSAGE_RUNTIME_SESSION },
 	Migration { version: 10, statements: MESSAGE_PIN },
+	Migration { version: 11, statements: BUBBLE_PIN },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -205,6 +206,24 @@ ALTER TABLE messages ADD COLUMN runtime_session_id TEXT REFERENCES runtime_sessi
 const MESSAGE_PIN: &str = "
 ALTER TABLE messages ADD COLUMN pinned_at INTEGER;
 CREATE INDEX messages_pinned ON messages (conversation_id, seq) WHERE pinned_at IS NOT NULL;
+";
+
+const BUBBLE_PIN: &str = "
+CREATE TABLE message_pins (
+	conversation_id TEXT NOT NULL,
+	message_id TEXT NOT NULL,
+	block_index INTEGER NOT NULL,
+	pinned_at INTEGER NOT NULL,
+	PRIMARY KEY (conversation_id, message_id, block_index),
+	FOREIGN KEY (message_id, conversation_id)
+		REFERENCES messages (id, conversation_id) ON DELETE CASCADE
+);
+
+INSERT INTO message_pins (conversation_id, message_id, block_index, pinned_at)
+	SELECT conversation_id, id, 0, pinned_at FROM messages WHERE pinned_at IS NOT NULL;
+
+DROP INDEX messages_pinned;
+ALTER TABLE messages DROP COLUMN pinned_at;
 ";
 
 pub fn latest_version() -> u32 {
@@ -598,16 +617,19 @@ mod tests {
 	}
 
 	#[test]
-	fn the_step_that_adds_the_pin_leaves_every_message_unpinned_and_its_transcript_whole() {
+	fn the_step_that_moves_the_pin_to_a_bubble_carries_it_over_and_leaves_the_transcript_whole() {
 		let dir = temp_dir();
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
-		apply_each(&mut connection, &MIGRATIONS[..9]).expect("the shipped schema installs");
+		apply_each(&mut connection, &MIGRATIONS[..10]).expect("the shipped schema installs");
 		connection
 			.execute_batch(&a_chat_held_by(
 				"INSERT INTO bots (id, name, model, created_at, denied_tools)
 					VALUES ('default', 'Claude', 'sonnet', 1, '[]');",
 			))
 			.expect("the install this build upgrades from");
+		connection
+			.execute("UPDATE messages SET pinned_at = 42 WHERE id = 'm2'", [])
+			.expect("the pin this build carries over");
 
 		apply(&mut connection).expect("the file comes up to this build");
 
@@ -615,31 +637,37 @@ mod tests {
 		assert_eq!(
 			transcript_of(&connection, "c1"),
 			vec!["hello".to_owned(), "hi there".to_owned()],
-			"the step the messages gained a pin in cost the chat its transcript"
+			"the step the pin moved to a bubble in cost the chat its transcript"
 		);
 		assert_eq!(
 			pins_held_in(&connection, "c1"),
-			vec![None, None],
-			"the step pinned a message nobody pinned"
+			vec![("m2".to_owned(), 0, 42)],
+			"the step lost the pin the reader had set or moved it off the first bubble"
 		);
 		assert!(
-			has_index(&connection, "messages_pinned"),
-			"the step left the pinned reads without their index"
+			!has_index(&connection, "messages_pinned"),
+			"the step left the index the pin column carried behind"
+		);
+		assert!(
+			connection
+				.query_row("SELECT pinned_at FROM messages", [], |row| row.get::<_, i64>(0))
+				.is_err(),
+			"the column the pin table replaced is still on the messages"
 		);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	fn pins_held_in(connection: &Connection, conversation_id: &str) -> Vec<Option<i64>> {
+	fn pins_held_in(connection: &Connection, conversation_id: &str) -> Vec<(String, i64, i64)> {
 		let mut statement = connection
 			.prepare(
-				"SELECT pinned_at FROM messages
-					WHERE conversation_id = ?1 ORDER BY seq ASC",
+				"SELECT message_id, block_index, pinned_at FROM message_pins
+					WHERE conversation_id = ?1 ORDER BY message_id ASC, block_index ASC",
 			)
 			.expect("prepare");
 		statement
-			.query_map([conversation_id], |row| row.get::<_, Option<i64>>(0))
+			.query_map([conversation_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
 			.expect("query")
 			.collect::<rusqlite::Result<Vec<_>>>()
 			.expect("rows")

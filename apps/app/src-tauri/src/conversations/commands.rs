@@ -6,8 +6,8 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use super::context;
 use super::contract::{
 	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, MessageReference,
-	NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession, Skill, SkillDraft,
-	TerminalCompletion, TranscriptMessage, TranscriptPage, TranscriptStoreError,
+	NewAssistantMessage, NewTurn, NewUserMessage, PinnedBubble, RuntimeSession, Skill, SkillDraft,
+	TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
@@ -579,9 +579,13 @@ pub async fn conversation_pin_message(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 	message_id: String,
+	block_index: i64,
 	pinned_at: i64,
 ) -> Result<(), TranscriptStoreError> {
-	Ok(ready(&state)?.messages().pin_message(conversation_id, message_id, pinned_at).await?)
+	Ok(ready(&state)?
+		.messages()
+		.pin_message(conversation_id, message_id, block_index, pinned_at)
+		.await?)
 }
 
 #[tauri::command]
@@ -589,20 +593,18 @@ pub async fn conversation_unpin_message(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 	message_id: String,
+	block_index: i64,
 ) -> Result<(), TranscriptStoreError> {
-	Ok(ready(&state)?.messages().unpin_message(conversation_id, message_id).await?)
+	Ok(ready(&state)?.messages().unpin_message(conversation_id, message_id, block_index).await?)
 }
 
 #[tauri::command]
 pub async fn conversation_pinned_messages(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
-) -> Result<Vec<TranscriptMessage>, TranscriptStoreError> {
+) -> Result<Vec<PinnedBubble>, TranscriptStoreError> {
 	let stored = ready(&state)?.messages().pinned_messages(conversation_id.clone()).await?;
-	Ok(stored
-		.into_iter()
-		.map(|message| TranscriptMessage::of(&conversation_id, message))
-		.collect())
+	Ok(stored.into_iter().map(|pin| PinnedBubble::of(&conversation_id, pin)).collect())
 }
 
 #[tauri::command]
