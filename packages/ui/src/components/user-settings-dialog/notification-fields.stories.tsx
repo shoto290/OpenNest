@@ -16,6 +16,7 @@ const NOTHING_NOTIFIED: Notifications = {
 	question: false,
 	permission: false,
 	turn: false,
+	sound: false,
 }
 
 const NotificationHost = (props: NotificationFieldsProps) => {
@@ -46,7 +47,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a reader is told about, one switch to a moment: a bot asking them a question, a bot asking leave, a bot going quiet. All three start on — a bot that asked something nobody heard waits forever, so silence is only ever something a reader chose. Each row says under its name what turning it off costs, because a switch whose consequence needs a sentence is one nobody should have to guess at. It holds nothing: a flip hands the whole set back to the host, the flipped one among them.",
+					"What a reader is told about, one switch to a moment: a bot asking them a question, a bot asking leave, a bot going quiet. Under them, in a group of its own, the sound the app plays itself alongside a notification — how the interruption arrives rather than when. All four start on — a bot that asked something nobody heard waits forever, so silence is only ever something a reader chose. Each row says under its name what turning it off costs, because a switch whose consequence needs a sentence is one nobody should have to guess at. It holds nothing: a flip hands the whole set back to the host, the flipped one among them.",
 			},
 		},
 	},
@@ -61,13 +62,13 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three switches as a reader who has changed nothing finds them: all on. Check that each switch is pressed by its own words as well as its handle, that its sentence is announced with it, and that flipping one hands back all three with that one turned off. Pick `AllOff` for the reader who turned the lot off, `InFrench` for the group once the reader has switched language.",
+					"The four switches as a reader who has changed nothing finds them: all on. Check that each switch is pressed by its own words as well as its handle, that its sentence is announced with it, and that flipping one hands back all four with that one turned off. Pick `AllOff` for the reader who turned the lot off, `InFrench` for the groups once the reader has switched language.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		const switches = canvas.getAllByRole("switch")
-		await expect(switches).toHaveLength(3)
+		await expect(switches).toHaveLength(4)
 		for (const control of switches) {
 			await expect(control).toBeChecked()
 		}
@@ -77,6 +78,7 @@ export const Default = meta.story({
 			question: false,
 			permission: true,
 			turn: true,
+			sound: true,
 		})
 		await expect(
 			canvas.getByRole("switch", { name: "A bot asks a question" }),
@@ -90,7 +92,7 @@ export const AllOff = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader who turned all three off, which is the state the sentences under the names are there to warn about: nothing reaches them and a bot waiting on an answer waits in silence. Check that every switch reads as off rather than merely unstyled, and that turning one back on leaves the other two off. Pick `Default` for the state a reader starts in.",
+					"The reader who turned the lot off, which is the state the sentences under the names are there to warn about: nothing reaches them and a bot waiting on an answer waits in silence. Check that every switch reads as off rather than merely unstyled, and that turning one back on leaves the others off. Pick `Default` for the state a reader starts in.",
 			},
 		},
 	},
@@ -120,7 +122,7 @@ export const InFrench = meta.story({
 		docs: {
 			description: {
 				story:
-					"The group read in French, where the rows are longest: every name and every sentence under it turns, and the permission row is the one that has to wrap without pushing its switch off the edge. Check that the legend turned too and that each switch stays beside the words it belongs to. Pick `Default` for the English group.",
+					"The groups read in French, where the rows are longest: every name and every sentence under it turns, and the permission row is the one that has to wrap without pushing its switch off the edge. Check that both legends turned too and that each switch stays beside the words it belongs to. Pick `Default` for the English groups.",
 			},
 		},
 	},
@@ -130,6 +132,9 @@ export const InFrench = meta.story({
 		).toBeVisible()
 		await expect(
 			canvas.getByRole("switch", { name: "Un bot demande une permission" }),
+		).toBeVisible()
+		await expect(
+			await canvas.findByRole("group", { name: "Son" }),
 		).toBeVisible()
 	},
 })

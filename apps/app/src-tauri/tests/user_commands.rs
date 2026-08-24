@@ -112,6 +112,7 @@ fn a_record(picture: Value) -> Value {
 		"notifyOnQuestion": false,
 		"notifyOnPermission": true,
 		"notifyOnFinishedTurn": false,
+		"notifyWithSound": false,
 	})
 }
 
@@ -170,6 +171,7 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"notifyOnQuestion": true,
 			"notifyOnPermission": true,
 			"notifyOnFinishedTurn": true,
+			"notifyWithSound": true,
 		})
 	);
 }

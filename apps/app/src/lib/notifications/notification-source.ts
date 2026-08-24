@@ -6,6 +6,7 @@ import type { NotificationPort } from "./notification-port"
 import { notificationWordsFor } from "./notification-words"
 
 import type { ChatState } from "../chat/chat-state"
+import type { UserPreferences } from "../user/preferences-contract"
 
 type NotifiedBot = {
 	id: string
@@ -22,14 +23,18 @@ type RosterSource = {
 	select: (botId: string) => void
 }
 
+export type NotificationSourceSwitches = NotificationSwitches &
+	Pick<UserPreferences, "notifyWithSound">
+
 export type NotificationSourceOptions = {
 	chat: ChatSource
 	roster: RosterSource
 	notifications: NotificationPort
-	switches: () => NotificationSwitches
+	switches: () => NotificationSourceSwitches
 	hasFocus: () => boolean
 	watchFocus: (report: (isFocused: boolean) => void) => Promise<() => void>
 	raiseWindow: () => void
+	playChime: () => void
 }
 
 export const startNotificationSource = ({
@@ -40,6 +45,7 @@ export const startNotificationSource = ({
 	hasFocus,
 	watchFocus,
 	raiseWindow,
+	playChime,
 }: NotificationSourceOptions): (() => void) => {
 	const seen = new Map<string, ChatState>()
 
@@ -57,6 +63,7 @@ export const startNotificationSource = ({
 		const { bots } = roster.getState()
 		const currentSwitches = switches()
 		const isFocused = windowFocus ?? hasFocus()
+		let hasNotified = false
 
 		for (const bot of bots) {
 			const after = chat.stateFor(bot.id)
@@ -76,11 +83,16 @@ export const startNotificationSource = ({
 			})
 
 			for (const change of changes) {
+				hasNotified = true
 				void notifications.send({
 					botId: bot.id,
 					...notificationWordsFor({ botName: bot.name, event: change.event }),
 				})
 			}
+		}
+
+		if (hasNotified && currentSwitches.notifyWithSound) {
+			playChime()
 		}
 
 		if (seen.size > bots.length) {

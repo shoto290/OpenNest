@@ -1,4 +1,3 @@
-
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -47,6 +46,7 @@ pub struct UserPreferences {
 	pub notify_on_question: bool,
 	pub notify_on_permission: bool,
 	pub notify_on_finished_turn: bool,
+	pub notify_with_sound: bool,
 }
 
 impl UserPreferences {
@@ -66,6 +66,7 @@ impl UserPreferences {
 			notify_on_question: preferences.notify_on_question,
 			notify_on_permission: preferences.notify_on_permission,
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
+			notify_with_sound: preferences.notify_with_sound,
 		}
 	}
 }
@@ -81,6 +82,7 @@ impl From<UserPreferences> for user::Preferences {
 			notify_on_question: preferences.notify_on_question,
 			notify_on_permission: preferences.notify_on_permission,
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
+			notify_with_sound: preferences.notify_with_sound,
 		}
 	}
 }

@@ -38,6 +38,12 @@ const settings = {
 				description: "Il a dit tout ce qu'il avait à dire et s'est tu.",
 			},
 		},
+		sound: {
+			label: "Son",
+			switch: "Jouer un son",
+			description:
+				"Un bref carillon à chaque notification, joué par l'application elle-même — pour l'entendre là où le système afficherait la notification en silence.",
+		},
 	},
 	language: {
 		label: "Langue",

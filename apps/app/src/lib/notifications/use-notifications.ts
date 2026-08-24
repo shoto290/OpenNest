@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 
 import { createNotifications } from "./create-notifications"
+import { createChime } from "./notification-chime"
 import { startNotificationSource } from "./notification-source"
 
 import { revealWindow, watchWindowFocus } from "../host"
@@ -29,6 +30,7 @@ export const useNotifications = ({
 				hasFocus: () => document.hasFocus(),
 				watchFocus: watchWindowFocus,
 				raiseWindow: () => revealWindow({ withFocus: true }),
+				playChime: createChime(),
 			}),
 		[chat, roster, user],
 	)

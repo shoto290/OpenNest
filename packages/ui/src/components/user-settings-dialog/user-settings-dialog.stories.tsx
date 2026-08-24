@@ -202,7 +202,7 @@ export const Notifications = meta.story({
 		docs: {
 			description: {
 				story:
-					"The third group, on a record that holds no choice: all three switches on, which is what a reader who has never opened this tab is owed — a bot that asked something nobody heard waits forever. Check that flipping one writes the whole value back through `onValueChange` with that one event turned off and the name, the scheme and the palette exactly as they were. Pick `LanguageTab` for the group next door.",
+					"The third group, on a record that holds no choice: the three moments on and the sound with them, which is what a reader who has never opened this tab is owed — a bot that asked something nobody heard waits forever. Check that flipping one writes the whole value back through `onValueChange` with that one event turned off and the name, the scheme and the palette exactly as they were. Pick `LanguageTab` for the group next door.",
 			},
 		},
 	},
@@ -220,7 +220,12 @@ export const Notifications = meta.story({
 		)
 		await expect(args.onValueChange).toHaveBeenCalledWith({
 			...FILLED_USER,
-			notifications: { question: true, permission: false, turn: true },
+			notifications: {
+				question: true,
+				permission: false,
+				turn: true,
+				sound: true,
+			},
 		})
 	},
 })

@@ -4,19 +4,20 @@ import {
 	createFakeNotificationPort,
 	type FakeNotificationPort,
 } from "./fake-notification-port"
-import type { NotificationSwitches } from "./notification-policy"
 import {
 	type NotificationSourceOptions,
+	type NotificationSourceSwitches,
 	startNotificationSource,
 } from "./notification-source"
 
 import type { PermissionRequest, QuestionRequest } from "../agent/contract"
 import { type ChatState, initialChatState } from "../chat/chat-state"
 
-const ALL_ON: NotificationSwitches = {
+const ALL_ON: NotificationSourceSwitches = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
 	notifyOnFinishedTurn: true,
+	notifyWithSound: true,
 }
 
 const question = (id: string): QuestionRequest => ({
@@ -92,6 +93,7 @@ type Harness = {
 	roster: ReturnType<typeof createFakeRoster>
 	notifications: FakeNotificationPort
 	windowFocus: ReturnType<typeof createFakeWindowFocus>
+	playChime: ReturnType<typeof vi.fn>
 	stop: () => void
 }
 
@@ -103,6 +105,7 @@ const start = async (
 	const roster = createFakeRoster(bots)
 	const notifications = createFakeNotificationPort()
 	const windowFocus = createFakeWindowFocus()
+	const playChime = vi.fn()
 
 	const stop = startNotificationSource({
 		chat,
@@ -112,11 +115,12 @@ const start = async (
 		hasFocus: () => false,
 		watchFocus: windowFocus.watch,
 		raiseWindow: () => undefined,
+		playChime,
 		...options,
 	})
 	await Promise.resolve()
 
-	return { chat, roster, notifications, windowFocus, stop }
+	return { chat, roster, notifications, windowFocus, playChime, stop }
 }
 
 const seed = (harness: Harness, botId: string) => {
@@ -227,6 +231,41 @@ describe("startNotificationSource", () => {
 		expect(harness.notifications.sent).toEqual([
 			{ botId: "bot-one", title: "Nyx", body: "Asked you a question" },
 		])
+	})
+
+	it("plays the chime once for a publish that told the reader anything", async () => {
+		const harness = await start()
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", {
+			question: question("q-1"),
+			permission: permission("p-1"),
+		})
+
+		expect(harness.notifications.sent).toHaveLength(2)
+		expect(harness.playChime).toHaveBeenCalledTimes(1)
+	})
+
+	it("plays nothing for a publish that told the reader nothing", async () => {
+		const harness = await start()
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one")
+
+		expect(harness.playChime).not.toHaveBeenCalled()
+	})
+
+	it("notifies without the chime while the sound switch is off, and reads it at each publish", async () => {
+		const switches = { ...ALL_ON, notifyWithSound: false }
+		const harness = await start({ switches: () => switches })
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", { question: question("q-1") })
+		switches.notifyWithSound = true
+		harness.chat.publish("bot-one", { question: question("q-2") })
+
+		expect(harness.notifications.sent).toHaveLength(2)
+		expect(harness.playChime).toHaveBeenCalledTimes(1)
 	})
 
 	it("shows the window and opens the bot the click carries", async () => {

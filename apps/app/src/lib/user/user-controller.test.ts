@@ -18,6 +18,7 @@ const DEFAULTS: UserPreferences = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
 	notifyOnFinishedTurn: true,
+	notifyWithSound: true,
 }
 
 const WORN = "/data/avatars/worn.png"
@@ -26,6 +27,7 @@ const ALL_NOTIFIED = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
 	notifyOnFinishedTurn: true,
+	notifyWithSound: true,
 }
 
 const aHost = (record: UserPreferences = DEFAULTS) => {
