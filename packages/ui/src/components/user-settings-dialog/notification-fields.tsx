@@ -9,6 +9,7 @@ import {
 	NOTIFIED_EVENTS,
 	type Notifications,
 } from "@workspace/ui/components/user-settings"
+import { cn } from "@workspace/ui/lib/utils"
 
 type NotificationFieldsProps = {
 	notifications?: Notifications
@@ -24,7 +25,10 @@ const NotificationFields = ({
 	const { t } = useTranslation("settings")
 
 	return (
-		<div className={className} data-slot="notification-fields">
+		<div
+			className={cn("flex flex-col gap-5", className)}
+			data-slot="notification-fields"
+		>
 			<SettingsGroup grid="gap-2" label={t("notifications.label")}>
 				{NOTIFIED_EVENTS.map((event) => (
 					<SettingsSwitch
@@ -37,6 +41,16 @@ const NotificationFields = ({
 						}
 					/>
 				))}
+			</SettingsGroup>
+			<SettingsGroup grid="gap-2" label={t("notifications.sound.label")}>
+				<SettingsSwitch
+					checked={notifications.sound}
+					description={t("notifications.sound.description")}
+					label={t("notifications.sound.switch")}
+					onCheckedChange={(plays) =>
+						onNotificationsChange({ ...notifications, sound: plays })
+					}
+				/>
 			</SettingsGroup>
 		</div>
 	)

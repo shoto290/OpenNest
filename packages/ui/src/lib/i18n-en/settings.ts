@@ -38,6 +38,12 @@ const settings = {
 				description: "It has said everything it had to say and gone quiet.",
 			},
 		},
+		sound: {
+			label: "Sound",
+			switch: "Play a sound",
+			description:
+				"A short chime with every notification, played by the app itself — so it is heard where the system would show a notification silently.",
+		},
 	},
 	language: {
 		label: "Language",

@@ -1,8 +1,8 @@
 import {
 	DEFAULT_NOTIFICATIONS,
-	NOTIFIED_EVENTS,
+	NOTIFICATION_SWITCHES,
+	type NotificationSwitch,
 	type Notifications,
-	type NotifiedEvent,
 	type UserSettingsValue,
 } from "@workspace/ui/components/user-settings"
 
@@ -11,17 +11,21 @@ import type { NotificationChange, UserProfile } from "./user-controller"
 
 import { avatarSrc } from "../host"
 
-const NOTIFICATION_FIELDS: Record<NotifiedEvent, NotificationChange["field"]> =
-	{
-		question: "notifyOnQuestion",
-		permission: "notifyOnPermission",
-		turn: "notifyOnFinishedTurn",
-	}
+const NOTIFICATION_FIELDS: Record<
+	NotificationSwitch,
+	NotificationChange["field"]
+> = {
+	question: "notifyOnQuestion",
+	permission: "notifyOnPermission",
+	turn: "notifyOnFinishedTurn",
+	sound: "notifyWithSound",
+}
 
 const toNotifications = (profile: UserProfile): Notifications => ({
 	question: profile.notifyOnQuestion,
 	permission: profile.notifyOnPermission,
 	turn: profile.notifyOnFinishedTurn,
+	sound: profile.notifyWithSound,
 })
 
 export const toUserSettingsValue = (
@@ -41,8 +45,8 @@ export const toNotificationChange = (
 ): NotificationChange | null => {
 	const notifications = next.notifications ?? DEFAULT_NOTIFICATIONS
 	const shown = previous.notifications ?? DEFAULT_NOTIFICATIONS
-	const flipped = NOTIFIED_EVENTS.find(
-		(event) => notifications[event] !== shown[event],
+	const flipped = NOTIFICATION_SWITCHES.find(
+		(name) => notifications[name] !== shown[name],
 	)
 	if (flipped === undefined) {
 		return null

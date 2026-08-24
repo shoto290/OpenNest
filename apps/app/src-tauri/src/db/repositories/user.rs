@@ -1,4 +1,3 @@
-
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
 use crate::db::{Access, DatabaseError};
@@ -11,6 +10,7 @@ const LANGUAGE_KEY: &str = "user.language";
 const NOTIFY_ON_QUESTION_KEY: &str = "user.notify_on_question";
 const NOTIFY_ON_PERMISSION_KEY: &str = "user.notify_on_permission";
 const NOTIFY_ON_FINISHED_TURN_KEY: &str = "user.notify_on_finished_turn";
+const NOTIFY_WITH_SOUND_KEY: &str = "user.notify_with_sound";
 
 const SWITCH_ON: &str = "on";
 const SWITCH_OFF: &str = "off";
@@ -66,6 +66,7 @@ pub struct Preferences {
 	pub notify_on_question: bool,
 	pub notify_on_permission: bool,
 	pub notify_on_finished_turn: bool,
+	pub notify_with_sound: bool,
 }
 
 impl Default for Preferences {
@@ -79,6 +80,7 @@ impl Default for Preferences {
 			notify_on_question: true,
 			notify_on_permission: true,
 			notify_on_finished_turn: true,
+			notify_with_sound: true,
 		}
 	}
 }
@@ -154,6 +156,7 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		notify_on_question: switch_in(connection, NOTIFY_ON_QUESTION_KEY)?,
 		notify_on_permission: switch_in(connection, NOTIFY_ON_PERMISSION_KEY)?,
 		notify_on_finished_turn: switch_in(connection, NOTIFY_ON_FINISHED_TURN_KEY)?,
+		notify_with_sound: switch_in(connection, NOTIFY_WITH_SOUND_KEY)?,
 	})
 }
 
@@ -174,6 +177,7 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	write_switch_in(transaction, NOTIFY_ON_QUESTION_KEY, preferences.notify_on_question)?;
 	write_switch_in(transaction, NOTIFY_ON_PERMISSION_KEY, preferences.notify_on_permission)?;
 	write_switch_in(transaction, NOTIFY_ON_FINISHED_TURN_KEY, preferences.notify_on_finished_turn)?;
+	write_switch_in(transaction, NOTIFY_WITH_SOUND_KEY, preferences.notify_with_sound)?;
 	write_picture_in(transaction, preferences.avatar_image_path.as_deref())
 }
 
@@ -225,6 +229,7 @@ mod tests {
 			notify_on_question: false,
 			notify_on_permission: true,
 			notify_on_finished_turn: false,
+			notify_with_sound: false,
 		}
 	}
 
@@ -250,6 +255,7 @@ mod tests {
 				notify_on_question: true,
 				notify_on_permission: true,
 				notify_on_finished_turn: true,
+				notify_with_sound: true,
 			}
 		);
 	}
@@ -362,6 +368,7 @@ mod tests {
 		assert_eq!(read.display_name, "Nyx");
 		assert_eq!(read.palette, "moss");
 		assert!(read.notify_on_question, "a switch the older build never wrote must read as on");
+		assert!(read.notify_with_sound, "a switch the older build never wrote must read as on");
 	}
 
 	#[tokio::test]
@@ -393,6 +400,7 @@ mod tests {
 		assert_eq!(setting(&database, NOTIFY_ON_QUESTION_KEY).await, Some("off".to_owned()));
 		assert_eq!(setting(&database, NOTIFY_ON_PERMISSION_KEY).await, Some("on".to_owned()));
 		assert_eq!(setting(&database, NOTIFY_ON_FINISHED_TURN_KEY).await, Some("off".to_owned()));
+		assert_eq!(setting(&database, NOTIFY_WITH_SOUND_KEY).await, Some("off".to_owned()));
 	}
 
 	#[tokio::test]

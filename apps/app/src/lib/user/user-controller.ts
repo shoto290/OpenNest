@@ -12,9 +12,10 @@ export type UserProfile = Pick<
 	| "notifyOnQuestion"
 	| "notifyOnPermission"
 	| "notifyOnFinishedTurn"
+	| "notifyWithSound"
 >
 
-type NotificationField = Extract<keyof UserProfile, `notifyOn${string}`>
+type NotificationField = Extract<keyof UserProfile, `notify${string}`>
 
 export type NotificationChange = {
 	field: NotificationField
@@ -44,6 +45,7 @@ export const initialUserState: UserState = {
 		notifyOnQuestion: true,
 		notifyOnPermission: true,
 		notifyOnFinishedTurn: true,
+		notifyWithSound: true,
 	},
 	isSettingsOpen: false,
 }
@@ -75,6 +77,7 @@ export const createUserController = (): UserController => {
 			notifyOnQuestion: record.notifyOnQuestion,
 			notifyOnPermission: record.notifyOnPermission,
 			notifyOnFinishedTurn: record.notifyOnFinishedTurn,
+			notifyWithSound: record.notifyWithSound,
 		}
 		set({ profile: answered })
 	}

@@ -24,6 +24,7 @@ const RECORD: UserPreferences = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
 	notifyOnFinishedTurn: true,
+	notifyWithSound: true,
 }
 
 const createStorage = () => {

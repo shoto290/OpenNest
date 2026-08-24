@@ -18,6 +18,7 @@ export type UserPreferences = {
 	notifyOnQuestion: boolean
 	notifyOnPermission: boolean
 	notifyOnFinishedTurn: boolean
+	notifyWithSound: boolean
 }
 
 export type UserPreferencesError =

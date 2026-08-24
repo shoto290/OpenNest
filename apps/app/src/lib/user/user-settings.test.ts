@@ -9,6 +9,7 @@ const PROFILE: UserProfile = {
 	notifyOnQuestion: true,
 	notifyOnPermission: false,
 	notifyOnFinishedTurn: true,
+	notifyWithSound: true,
 }
 
 const THEME = { colorScheme: "dark", palette: "moss" } as const
@@ -22,6 +23,16 @@ describe("the switches the dialog draws", () => {
 			question: true,
 			permission: false,
 			turn: true,
+			sound: true,
+		})
+	})
+
+	it("reads the sound the dialog flipped as the field the record names", () => {
+		const silenced = shown({ ...PROFILE, notifyWithSound: false })
+
+		expect(toNotificationChange(silenced, shown())).toEqual({
+			field: "notifyWithSound",
+			isEnabled: false,
 		})
 	})
 
