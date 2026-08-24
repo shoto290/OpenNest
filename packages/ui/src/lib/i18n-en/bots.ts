@@ -77,6 +77,19 @@ const bots = {
 			label: "Instructions",
 			placeholder: "The system prompt this bot always runs with",
 		},
+		memory: {
+			label: "Memory",
+			hint: "What the bot has written down for itself across conversations. Correct it or wipe it — it keeps writing either way.",
+			empty: "This bot has not written anything down yet.",
+			save: "Save memory",
+			clear: {
+				action: "Clear",
+				title: "Clear this bot's memory?",
+				description:
+					"Everything the bot has written down for itself is removed. It starts learning again from the next conversation.",
+				confirm: "Clear the memory",
+			},
+		},
 	},
 	history: {
 		empty: "Nothing has been changed in this bot yet.",

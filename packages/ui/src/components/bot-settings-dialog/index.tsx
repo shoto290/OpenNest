@@ -29,6 +29,7 @@ import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-
 import { HistoryPanel } from "@workspace/ui/components/bot-settings-dialog/history-panel"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
+import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { SkillEditor } from "@workspace/ui/components/bot-settings-dialog/skill-editor"
 import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
@@ -83,6 +84,8 @@ type BotSettingsDialogProps = {
 	models: BotModelOption[]
 	outputStyle?: BotOutputStyle
 	onOutputStyleChange?: (outputStyle: BotOutputStyle) => void
+	memory?: string
+	onMemoryChange?: (memory: string) => void
 	onAvatarUpload: (file: File) => void
 	onBrowseWorkingDirectory: () => void
 	skills: BotSkillItem[]
@@ -115,6 +118,8 @@ const BotSettingsDialog = ({
 	models,
 	outputStyle,
 	onOutputStyleChange,
+	memory,
+	onMemoryChange,
 	onAvatarUpload,
 	onBrowseWorkingDirectory,
 	skills,
@@ -380,6 +385,12 @@ const BotSettingsDialog = ({
 								placeholder={t("dialog.instructions.placeholder")}
 								value={value.instructions}
 							/>
+							{memory !== undefined ? (
+								<MemoryPanel
+									memory={memory}
+									onSave={(next) => onMemoryChange?.(next)}
+								/>
+							) : null}
 						</Tabs.Panel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
