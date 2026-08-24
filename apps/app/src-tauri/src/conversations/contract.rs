@@ -106,6 +106,7 @@ pub struct Bot {
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
+	pub memory: String,
 	pub denied_tools: Vec<String>,
 	pub changes_nothing: bool,
 	pub output_style: String,
@@ -127,6 +128,7 @@ impl Bot {
 		let output_style = written
 			.as_ref()
 			.map_or_else(default_output_style, |written| written.output_style.clone());
+		let memory = crate::bundles::held_memory(written.as_ref(), &bot.memory);
 		let instructions = written
 			.map(|written| written.instructions)
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
@@ -147,6 +149,7 @@ impl Bot {
 			avatar_image_path,
 			working_dir: bot.working_dir,
 			instructions,
+			memory,
 			changes_nothing: crate::bundles::denies_changes(&denied_tools),
 			denied_tools,
 			output_style,
@@ -710,6 +713,7 @@ mod tests {
 				avatar_image_path: Some("/pictures/owl.png".into()),
 				working_dir: Some("/work/opennest".into()),
 				instructions: "Answer briefly.".into(),
+				memory: "They bake on Sundays.".into(),
 				denied_tools: vec![
 					"Bash".into(),
 					"Edit".into(),
@@ -730,6 +734,7 @@ mod tests {
 				"avatarImagePath": "/pictures/owl.png",
 				"workingDir": "/work/opennest",
 				"instructions": "Answer briefly.",
+				"memory": "They bake on Sundays.",
 				"deniedTools": ["Bash", "Edit", "NotebookEdit", "Write"],
 				"changesNothing": true,
 				"outputStyle": "Concise",
@@ -1169,6 +1174,22 @@ mod tests {
 
 		crate::bundles::write(&root, &a_stored_bot("sonnet")).expect("the bundle is rewritten");
 		assert_eq!(Bot::of(stored_pink(), None, Some(&root)).avatar_blot, None);
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bot_carries_the_memory_its_block_holds_and_the_one_stored_when_the_block_is_empty() {
+		let root = a_bundle_root("memory");
+		let learned =
+			|| conversations::Bot { memory: "They use bun.".into(), ..a_stored_bot("sonnet") };
+		crate::bundles::write(&root, &learned()).expect("the bundle is written");
+
+		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).memory, "They use bun.");
+		assert_eq!(Bot::of(learned(), None, None).memory, "They use bun.");
+
+		crate::bundles::write_remembered(&root, &learned(), "").expect("the memory is cleared");
+		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).memory, "");
 
 		let _ = std::fs::remove_dir_all(&root);
 	}

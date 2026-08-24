@@ -264,6 +264,10 @@ impl ConversationsRepository {
 			.await?
 	}
 
+	pub async fn set_memory(&self, id: String, memory: String) -> Result<Bot, ConversationError> {
+		self.call_mut(move |connection| Ok(set_memory(connection, &id, &memory))).await?
+	}
+
 	pub async fn adopt_instructions(
 		&self,
 		id: String,
@@ -511,6 +515,20 @@ fn set_avatar_image_path(
 	let transaction = write_transaction(connection)?;
 	let written = transaction
 		.execute("UPDATE bots SET avatar_image_path = ?2 WHERE id = ?1", params![id, path])?;
+	refuse_if_untouched(written, id)?;
+	let stored = transaction.query_row(SELECT_BOT, [id], bot)?;
+	transaction.commit()?;
+	Ok(stored)
+}
+
+fn set_memory(
+	connection: &mut Connection,
+	id: &str,
+	memory: &str,
+) -> Result<Bot, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let written =
+		transaction.execute("UPDATE bots SET memory = ?2 WHERE id = ?1", params![id, memory])?;
 	refuse_if_untouched(written, id)?;
 	let stored = transaction.query_row(SELECT_BOT, [id], bot)?;
 	transaction.commit()?;
@@ -788,6 +806,33 @@ mod tests {
 		assert_eq!(listed[0].instructions, described.instructions);
 		assert_eq!(listed[0].denied_tools, described.denied_tools);
 		assert_eq!(listed[0].id, created.id);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn saving_a_memory_replaces_what_the_bot_kept_and_clearing_it_leaves_nothing() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+
+		let saved = repository
+			.set_memory(created.id.clone(), "they use bun".to_owned())
+			.await
+			.expect("the memory is saved");
+		assert_eq!(saved.memory, "they use bun");
+		assert_eq!(saved.name, created.name);
+
+		let cleared = repository
+			.set_memory(created.id.clone(), String::new())
+			.await
+			.expect("the memory is cleared");
+		assert_eq!(cleared.memory, "");
+
+		let refused = repository.set_memory("nobody".to_owned(), "anything".to_owned()).await;
+		assert!(matches!(refused, Err(ConversationError::UnknownBot { .. })));
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
