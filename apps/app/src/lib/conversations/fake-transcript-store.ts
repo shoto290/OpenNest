@@ -327,6 +327,22 @@ export const createFakeTranscriptStore = (
 		return Promise.resolve(bot)
 	}
 
+	const writePin = (
+		conversationId: string,
+		messageId: string,
+		pinnedAt: number | null,
+	) => {
+		const stored = rows.get(messageId)
+		if (!stored || stored.conversationId !== conversationId) {
+			return refuse({
+				kind: "storage",
+				failure: { kind: "sqlite", detail: "no such message" },
+			})
+		}
+		rows.set(messageId, { ...stored, pinnedAt })
+		return Promise.resolve()
+	}
+
 	const append = (message: TranscriptDraft): Promise<number> => {
 		const stored = rows.get(message.id)
 		if (stored) {
@@ -695,12 +711,26 @@ export const createFakeTranscriptStore = (
 			})
 		},
 
+		pinMessage: (conversationId: string, messageId: string, pinnedAt: number) =>
+			writePin(conversationId, messageId, pinnedAt),
+
+		unpinMessage: (conversationId: string, messageId: string) =>
+			writePin(conversationId, messageId, null),
+
+		pinnedMessages: (conversationId: string) =>
+			Promise.resolve(
+				ordered(conversationId)
+					.filter((row) => row.pinnedAt !== null)
+					.reverse(),
+			),
+
 		appendUserMessage: (message: NewUserMessage) => {
 			remember(message.id, message.repliedToMessageId)
 			return append({
 				...message,
 				role: "user",
 				completion: "complete",
+				pinnedAt: null,
 				runtimeSessionId: liveSessionOf(
 					message.conversationId,
 					message.authorBotId,
@@ -715,6 +745,7 @@ export const createFakeTranscriptStore = (
 				role: "assistant",
 				content: "",
 				completion: "pending",
+				pinnedAt: null,
 				runtimeSessionId: liveSessionOf(
 					message.conversationId,
 					message.authorBotId,

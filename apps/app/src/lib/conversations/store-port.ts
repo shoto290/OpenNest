@@ -13,7 +13,10 @@ import type {
 	NewUserMessage,
 	RuntimeSession,
 } from "./store-contract"
-import type { TerminalCompletion } from "./transcript-contract"
+import type {
+	TerminalCompletion,
+	TranscriptMessage,
+} from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 
 import type { AgentCommand } from "@/lib/agent/contract"
@@ -93,6 +96,13 @@ export type TranscriptStore = TranscriptPort & {
 		conversationId: string,
 		messageId: string,
 	) => Promise<MessageReference | null>
+	pinMessage: (
+		conversationId: string,
+		messageId: string,
+		pinnedAt: number,
+	) => Promise<void>
+	unpinMessage: (conversationId: string, messageId: string) => Promise<void>
+	pinnedMessages: (conversationId: string) => Promise<TranscriptMessage[]>
 	startTurn: (turn: NewTurn) => Promise<number>
 	completeTurn: (id: string, completedAt: number) => Promise<void>
 	appendUserMessage: (message: NewUserMessage) => Promise<number>

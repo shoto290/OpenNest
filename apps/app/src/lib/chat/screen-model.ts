@@ -213,22 +213,25 @@ export function quotedTargetsIn(
 export type MessageAnchors = {
 	group?: string
 	rows: ReadonlySet<string>
+	closing: ReadonlySet<string>
 }
 
 const NO_ANCHORED_ROWS: ReadonlySet<string> = new Set()
 
 export function messageAnchorsIn(run: TranscriptRow[]): MessageAnchors {
-	const [first] = run
-	if (run.every((row) => row.messageId === first.messageId)) {
-		return { group: first.messageId, rows: NO_ANCHORED_ROWS }
-	}
 	const rows = new Set<string>()
+	const closing = new Set<string>()
 	run.forEach((row, index) => {
 		if (run[index - 1]?.messageId !== row.messageId) {
 			rows.add(row.id)
 		}
+		if (run[index + 1]?.messageId !== row.messageId) {
+			closing.add(row.id)
+		}
 	})
-	return { rows }
+	return rows.size === 1
+		? { group: run[0].messageId, rows: NO_ANCHORED_ROWS, closing }
+		: { rows, closing }
 }
 
 function kindForTool(title: string): BotWorkingKind {

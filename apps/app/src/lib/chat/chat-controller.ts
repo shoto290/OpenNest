@@ -41,7 +41,10 @@ import type {
 } from "../agent/contract"
 import type { MessageReference } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import type { TerminalCompletion } from "../conversations/transcript-contract"
+import type {
+	TerminalCompletion,
+	TranscriptMessage,
+} from "../conversations/transcript-contract"
 import { createTranscriptController } from "../conversations/transcript-controller"
 import {
 	selectHasMore,
@@ -69,6 +72,9 @@ export type ChatController = {
 		repliedToMessageId?: string,
 	) => Promise<void>
 	reference: (messageId: string) => Promise<MessageReference | null>
+	pin: (messageId: string) => Promise<void>
+	unpin: (messageId: string) => Promise<void>
+	pins: () => Promise<TranscriptMessage[]>
 	storeAttachments: (
 		botId: string,
 		attachments: SubmittedAttachment[],
@@ -88,6 +94,8 @@ export type ChatControllerOptions = {
 }
 
 const INTERRUPTED: TerminalCompletion = "interrupted"
+
+const NO_PINS: TranscriptMessage[] = []
 
 const ENDING_FOR: Record<MessageCompletion, TerminalCompletion | null> = {
 	streaming: null,
@@ -302,6 +310,7 @@ export function createChatController(
 					createdAt: message.timestamp,
 					repliedToMessageId: turn.promptId,
 					runtimeSessionId: null,
+					pinnedAt: null,
 				}),
 		)
 		streamReply(bot, message.id, 1, message.text, conversationId)
@@ -729,6 +738,27 @@ export function createChatController(
 			: Promise.resolve(null)
 	}
 
+	const pinFor = (bot: BotChat, messageId: string) => {
+		const conversationId = bot.state.conversationId
+		return conversationId
+			? enqueue(() => store.pinMessage(conversationId, messageId, now()))
+			: Promise.resolve()
+	}
+
+	const unpinFor = (bot: BotChat, messageId: string) => {
+		const conversationId = bot.state.conversationId
+		return conversationId
+			? enqueue(() => store.unpinMessage(conversationId, messageId))
+			: Promise.resolve()
+	}
+
+	const pinsOf = (bot: BotChat) => {
+		const conversationId = bot.state.conversationId
+		return conversationId
+			? enqueue(() => store.pinnedMessages(conversationId))
+			: Promise.resolve(NO_PINS)
+	}
+
 	const contextFor = async (bot: BotChat, promptId: string, text: string) => {
 		const conversationId = bot.state.conversationId
 		if (bot.run.carried || !conversationId) {
@@ -834,6 +864,7 @@ export function createChatController(
 			createdAt: said.createdAt,
 			repliedToMessageId: said.repliedToMessageId,
 			runtimeSessionId: null,
+			pinnedAt: null,
 		})
 
 	const sendPrompt = async (
@@ -1053,6 +1084,7 @@ export function createChatController(
 					createdAt,
 					repliedToMessageId: null,
 					runtimeSessionId: null,
+					pinnedAt: null,
 				}),
 		)
 	}
@@ -1126,6 +1158,10 @@ export function createChatController(
 		},
 		reference: (messageId) =>
 			onSelected((bot) => referenceFor(bot, messageId), null),
+		pin: (messageId) => onSelected((bot) => pinFor(bot, messageId), undefined),
+		unpin: (messageId) =>
+			onSelected((bot) => unpinFor(bot, messageId), undefined),
+		pins: () => onSelected(pinsOf, NO_PINS),
 		storeAttachments,
 		stop: () => onSelected(stop, undefined),
 		discard: (id) =>

@@ -20,6 +20,7 @@ import {
 	type TerminalCompletion,
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptCursor,
+	type TranscriptMessage,
 	type TranscriptPage,
 } from "./transcript-contract"
 
@@ -193,6 +194,21 @@ export const conversationStore: TranscriptStore = {
 		invoke<MessageReference | null>("conversation_message_reference", {
 			conversationId,
 			messageId,
+		}),
+
+	pinMessage: (conversationId: string, messageId: string, pinnedAt: number) =>
+		invoke<void>("conversation_pin_message", {
+			conversationId,
+			messageId,
+			pinnedAt,
+		}),
+
+	unpinMessage: (conversationId: string, messageId: string) =>
+		invoke<void>("conversation_unpin_message", { conversationId, messageId }),
+
+	pinnedMessages: (conversationId: string) =>
+		invoke<TranscriptMessage[]>("conversation_pinned_messages", {
+			conversationId,
 		}),
 
 	startTurn: (turn: NewTurn) =>

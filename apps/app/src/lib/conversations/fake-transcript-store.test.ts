@@ -396,6 +396,45 @@ describe("createFakeTranscriptStore", () => {
 		expect(excerpt.endsWith("…")).toBe(true)
 	})
 
+	it("hands back the messages a reader pinned, newest first", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+		await store.openAssistantMessage(REPLY)
+
+		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 10)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 20)
+
+		const pinned = await store.pinnedMessages(FAKE_CHAT_ID)
+
+		expect(pinned.map((entry) => entry.id)).toEqual([REPLY.id, PROMPT.id])
+		expect(pinned.map((entry) => entry.pinnedAt)).toEqual([20, 10])
+	})
+
+	it("drops a message from the pins once the reader unpins it", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 10)
+
+		await store.unpinMessage(FAKE_CHAT_ID, PROMPT.id)
+
+		expect(await store.pinnedMessages(FAKE_CHAT_ID)).toEqual([])
+		expect((await contentOf(store, PROMPT.id))?.pinnedAt).toBeNull()
+	})
+
+	it("refuses to pin a message another conversation holds", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+
+		await expect(store.pinMessage("elsewhere", PROMPT.id, 10)).rejects.toEqual({
+			kind: "storage",
+			failure: { kind: "sqlite", detail: "no such message" },
+		})
+		expect(await store.pinnedMessages(FAKE_CHAT_ID)).toEqual([])
+	})
+
 	it("takes the picture off a bot described again without a path", async () => {
 		const store = createFakeTranscriptStore()
 		await store.setBotAvatarImage("default", aPng())

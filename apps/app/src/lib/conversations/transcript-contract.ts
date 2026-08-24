@@ -19,6 +19,7 @@ export type TranscriptMessage = {
 	createdAt: number
 	repliedToMessageId: string | null
 	runtimeSessionId: string | null
+	pinnedAt: number | null
 }
 
 export type TranscriptDraft = Omit<TranscriptMessage, "seq">
