@@ -84,7 +84,7 @@ const bots = {
 		},
 	},
 	history: {
-		empty: "Rien n'a encore été modifié dans ce bot.",
+		empty: "Rien n'a encore été modifié ici.",
 		author: {
 			user: "Vous",
 		},
@@ -98,7 +98,7 @@ const bots = {
 			action: "Annuler",
 			title: "Annuler « {{title}} » ?",
 			description:
-				"Le bot revient à son état d'avant cette modification. C'est écrit comme une nouvelle modification : l'historique garde les deux.",
+				"Tout revient à l'état d'avant cette modification. C'est écrit comme une nouvelle modification : l'historique garde les deux.",
 			confirm: "Annuler cette modification",
 		},
 	},
@@ -119,7 +119,7 @@ const bots = {
 		empty: {
 			title: "Aucune compétence",
 			description:
-				"Une compétence est un savoir-faire que ce bot peut porter. Écrivez-en une et choisissez si elle voyage dans chaque invite.",
+				"Une compétence est un savoir-faire à porter. Écrivez-en une et choisissez si elle voyage dans chaque invite.",
 		},
 		name: {
 			label: "Nom",

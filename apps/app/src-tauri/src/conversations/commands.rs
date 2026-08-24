@@ -448,7 +448,7 @@ fn read_history(root: &Path, bot_id: &str) -> Result<Vec<BotHistoryEntry>, Trans
 		.map(|entries| entries.into_iter().map(BotHistoryEntry::from).collect())
 }
 
-fn recounted<T>(outcome: Result<T, git2::Error>) -> Result<T, TranscriptStoreError> {
+pub(crate) fn recounted<T>(outcome: Result<T, git2::Error>) -> Result<T, TranscriptStoreError> {
 	outcome.map_err(|error| TranscriptStoreError::UnreadableHistory { detail: error.to_string() })
 }
 
@@ -466,7 +466,7 @@ async fn bot_row(database: &db::Database, bot_id: &str) -> Result<StoredBot, Tra
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.to_owned() })
 }
 
-fn bundled<T>(outcome: std::io::Result<T>) -> Result<T, TranscriptStoreError> {
+pub(crate) fn bundled<T>(outcome: std::io::Result<T>) -> Result<T, TranscriptStoreError> {
 	outcome.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }
 

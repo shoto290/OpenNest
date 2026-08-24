@@ -105,6 +105,31 @@ export const conversationStore: TranscriptStore = {
 	revertBot: (botId: string, commitId: string) =>
 		invoke<BotHistoryEntry[]>("conversation_bot_revert", { botId, commitId }),
 
+	userPluginSkills: () => invoke<BotSkill[]>("user_plugin_skills"),
+
+	createUserPluginSkill: (draft: BotSkillDraft) =>
+		invoke<BotSkill>("user_plugin_create_skill", { draft }),
+
+	updateUserPluginSkill: (skillId: string, draft: BotSkillDraft) =>
+		invoke<BotSkill>("user_plugin_update_skill", { skillId, draft }),
+
+	setUserPluginSkillPreloaded: (skillId: string, isPreloaded: boolean) =>
+		invoke<BotSkill>("user_plugin_set_skill_preloaded", {
+			skillId,
+			isPreloaded,
+		}),
+
+	deleteUserPluginSkill: (skillId: string) =>
+		invoke<void>("user_plugin_delete_skill", { skillId }),
+
+	userPluginHistory: () => invoke<BotHistoryEntry[]>("user_plugin_history"),
+
+	userPluginHistoryDiff: (commitId: string) =>
+		invoke<string>("user_plugin_history_diff", { commitId }),
+
+	revertUserPlugin: (commitId: string) =>
+		invoke<BotHistoryEntry[]>("user_plugin_revert", { commitId }),
+
 	recordBotCommands: (botId: string, commands: AgentCommand[]) =>
 		invoke<void>("conversation_record_bot_commands", { botId, commands }),
 

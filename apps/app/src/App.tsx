@@ -36,6 +36,7 @@ import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
 import { chosenLanguage, storeLanguage } from "@/lib/user/language-mirror"
 import { useUser } from "@/lib/user/use-user"
+import { useUserPlugin } from "@/lib/user/use-user-plugin"
 import {
 	toNotificationChange,
 	toUserSettingsValue,
@@ -62,6 +63,7 @@ export function App() {
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
+	const userPlugin = useUserPlugin(store)
 	const theme = useTheme()
 
 	const updater = useUpdater()
@@ -186,7 +188,10 @@ export function App() {
 							void roster.controller.duplicate(id)
 						}}
 						onEditBot={roster.controller.edit}
-						onOpenUserSettings={() => user.controller.setSettingsOpen(true)}
+						onOpenUserSettings={() => {
+							user.controller.setSettingsOpen(true)
+							void userPlugin.controller.open()
+						}}
 						onSelectBot={roster.controller.select}
 						selectedBotId={selectedBotId ?? undefined}
 						user={userSettings}
@@ -273,6 +278,11 @@ export function App() {
 				/>
 			) : null}
 			<UserSettingsDialog
+				history={{
+					commits: userPlugin.state.commits.map(toCommitItem),
+					onLoadDiff: userPlugin.controller.loadDiff,
+					onRevert: userPlugin.controller.revert,
+				}}
 				onClose={() => user.controller.setSettingsOpen(false)}
 				language={language}
 				onLanguageChange={(next) => {
@@ -300,7 +310,22 @@ export function App() {
 						void user.controller.setNotification(notification)
 					}
 				}}
+				onSkillChange={(id, draft) =>
+					userPlugin.controller.saveSkill(
+						id,
+						toSkillDraft(
+							draft,
+							userPlugin.state.skills.find((skill) => skill.id === id),
+						),
+					)
+				}
+				onSkillCreate={(draft, isPreloaded) =>
+					userPlugin.controller.createSkill(toSkillDraft(draft), isPreloaded)
+				}
+				onSkillDelete={userPlugin.controller.removeSkill}
+				onSkillPreloadedChange={userPlugin.controller.setSkillPreloaded}
 				open={user.state.isSettingsOpen}
+				skills={userPlugin.state.skills.map(toSkillItem)}
 				value={userSettings}
 			/>
 		</>

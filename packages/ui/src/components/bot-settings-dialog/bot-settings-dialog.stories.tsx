@@ -21,10 +21,10 @@ import {
 	type BotSettingsDialogProps,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-dialog"
-import { BOT_COMMITS } from "@workspace/ui/components/bot-settings-dialog/history.fixtures"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
-import { BOT_SKILLS } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
+import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
+import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
 
 const BOT_ID = "bot-7"
 

@@ -55,5 +55,13 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		user::commands::user_preferences,
 		user::commands::user_set_preferences,
 		user::commands::user_set_profile_picture,
+		user::commands::user_plugin_skills,
+		user::commands::user_plugin_create_skill,
+		user::commands::user_plugin_update_skill,
+		user::commands::user_plugin_set_skill_preloaded,
+		user::commands::user_plugin_delete_skill,
+		user::commands::user_plugin_history,
+		user::commands::user_plugin_history_diff,
+		user::commands::user_plugin_revert,
 	]
 }

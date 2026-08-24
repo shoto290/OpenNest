@@ -12,11 +12,14 @@ import { SETTINGS_EMPTY_CLASS } from "@workspace/ui/components/settings-styles"
 import { toRelativeTime } from "@workspace/ui/lib/relative-time"
 import { cn } from "@workspace/ui/lib/utils"
 
-type HistoryPanelProps = {
+type PluginHistory = {
 	commits: BotCommitItem[]
-	botName: string
 	onLoadDiff: (commitId: string) => void
 	onRevert: (commitId: string) => void
+}
+
+type HistoryPanelProps = PluginHistory & {
+	authorName: string
 }
 
 const ROW_CLASS =
@@ -26,7 +29,7 @@ const SEPARATOR_CLASS = "before:mr-1.5 before:content-['·']"
 
 const HistoryPanel = ({
 	commits,
-	botName,
+	authorName,
 	onLoadDiff,
 	onRevert,
 }: HistoryPanelProps) => {
@@ -85,7 +88,7 @@ const HistoryPanel = ({
 										<span className="truncate">
 											{commit.author === "user"
 												? t("history.author.user")
-												: botName}
+												: authorName}
 										</span>
 										<span className={SEPARATOR_CLASS}>
 											{toRelativeTime(commit.at, i18n.language, now)}
@@ -156,4 +159,4 @@ const HistoryPanel = ({
 	)
 }
 
-export { HistoryPanel, type HistoryPanelProps }
+export { HistoryPanel, type HistoryPanelProps, type PluginHistory }

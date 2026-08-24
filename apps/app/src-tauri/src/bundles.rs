@@ -216,13 +216,13 @@ pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
 
 pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
 	write_briefed(root, bot, &bot.instructions, &kept_memory(root, bot), output_style)?;
-	recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "saved from settings");
+	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "saved from settings");
 	Ok(())
 }
 
 pub fn write_remembered(root: &Path, bot: &Bot, memory: &str) -> std::io::Result<()> {
 	rewrite_agent_holding(root, bot, memory)?;
-	recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "memory saved from settings");
+	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "memory saved from settings");
 	Ok(())
 }
 
@@ -259,9 +259,9 @@ fn copied_file(source: &Path, target: &Path) -> std::io::Result<()> {
 	private_files::replace(target, &fs::read(source)?)
 }
 
-fn recorded(root: &Path, bot_id: &str, subject: &str, name: &str, verb: &str) {
+fn recorded(bundle: &Path, subject: &str, name: &str, verb: &str) {
 	let title = format!("{subject} \"{}\" {verb}", name.trim());
-	let _ = git::commit(&dir(root, bot_id), Author::User, &title, "");
+	let _ = git::commit(bundle, Author::User, &title, "");
 }
 
 fn write_briefed(
@@ -317,7 +317,7 @@ fn free_agent_path(root: &Path, bot: &Bot, generated: Option<&Path>) -> PathBuf 
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	if agent_file(root, &bot.id).is_some() {
 		rewrite_agent(root, bot)?;
-		recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "added to the history");
+		recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "added to the history");
 		return Ok(());
 	}
 	write(root, bot)
@@ -373,15 +373,27 @@ pub fn reconciled(root: &Path, bot: &Bot, submitted: &str) -> String {
 }
 
 pub fn history(root: &Path, bot_id: &str) -> Result<Vec<HistoryEntry>, git2::Error> {
-	git::history(&dir(root, bot_id))
+	history_at(&dir(root, bot_id))
+}
+
+pub fn history_at(bundle: &Path) -> Result<Vec<HistoryEntry>, git2::Error> {
+	git::history(bundle)
 }
 
 pub fn diff(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2::Error> {
-	git::diff(&dir(root, bot_id), commit_id)
+	diff_at(&dir(root, bot_id), commit_id)
+}
+
+pub fn diff_at(bundle: &Path, commit_id: &str) -> Result<String, git2::Error> {
+	git::diff(bundle, commit_id)
 }
 
 pub fn revert(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2::Error> {
-	git::revert(&dir(root, bot_id), commit_id)
+	revert_at(&dir(root, bot_id), commit_id)
+}
+
+pub fn revert_at(bundle: &Path, commit_id: &str) -> Result<String, git2::Error> {
+	git::revert(bundle, commit_id)
 }
 
 pub fn remove(root: &Path, bot_id: &str) {
@@ -543,8 +555,8 @@ fn preloaded(root: &Path, bot_id: &str) -> Vec<Skill> {
 	skills(root, bot_id).into_iter().filter(|skill| skill.is_preloaded).collect()
 }
 
-fn skill_dirs(root: &Path, bot_id: &str) -> Vec<PathBuf> {
-	let mut directories: Vec<PathBuf> = fs::read_dir(dir(root, bot_id).join(SKILLS_DIR))
+fn skill_dirs(bundle: &Path) -> Vec<PathBuf> {
+	let mut directories: Vec<PathBuf> = fs::read_dir(bundle.join(SKILLS_DIR))
 		.into_iter()
 		.flatten()
 		.flatten()
@@ -595,20 +607,31 @@ pub struct SkillFront {
 }
 
 pub fn skills(root: &Path, bot_id: &str) -> Vec<Skill> {
-	skill_dirs(root, bot_id).iter().filter_map(|path| read_skill(path)).collect()
+	skills_at(&dir(root, bot_id))
+}
+
+pub fn skills_at(bundle: &Path) -> Vec<Skill> {
+	skill_dirs(bundle).iter().filter_map(|path| read_skill(path)).collect()
 }
 
 pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
-	skill_dir(root, bot_id, skill_id)
+	skill_dir(&dir(root, bot_id), skill_id)
 		.ok()
 		.and_then(|path| read_skill(&path))
 		.is_some_and(|skill| skill.is_system)
 }
 
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
-	let path = free_skill_dir(root, &bot.id, &draft.name);
+	let bundle = dir(root, &bot.id);
+	let path = free_skill_dir(&bundle, &draft.name);
 	let skill = written_skill(root, bot, &path, drafted(None, draft)?)?;
-	recorded(root, &bot.id, SKILL_SUBJECT, &skill.name, "created from settings");
+	recorded(&bundle, SKILL_SUBJECT, &skill.name, "created from settings");
+	Ok(skill)
+}
+
+pub fn create_skill_at(bundle: &Path, draft: &SkillDraft) -> std::io::Result<Skill> {
+	let skill = kept_skill(&free_skill_dir(bundle, &draft.name), drafted(None, draft)?)?;
+	recorded(bundle, SKILL_SUBJECT, &skill.name, "created from settings");
 	Ok(skill)
 }
 
@@ -618,10 +641,21 @@ pub fn update_skill(
 	skill_id: &str,
 	draft: &SkillDraft,
 ) -> std::io::Result<Skill> {
-	let path = skill_dir(root, &bot.id, skill_id)?;
-	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
-	let skill = written_skill(root, bot, &path, drafted(Some(&text), draft)?)?;
-	recorded(root, &bot.id, SKILL_SUBJECT, &skill.name, "updated from settings");
+	let bundle = dir(root, &bot.id);
+	let path = skill_dir(&bundle, skill_id)?;
+	let skill = written_skill(root, bot, &path, drafted(Some(&held_skill(&path)), draft)?)?;
+	recorded(&bundle, SKILL_SUBJECT, &skill.name, "updated from settings");
+	Ok(skill)
+}
+
+pub fn update_skill_at(
+	bundle: &Path,
+	skill_id: &str,
+	draft: &SkillDraft,
+) -> std::io::Result<Skill> {
+	let path = skill_dir(bundle, skill_id)?;
+	let skill = kept_skill(&path, drafted(Some(&held_skill(&path)), draft)?)?;
+	recorded(bundle, SKILL_SUBJECT, &skill.name, "updated from settings");
 	Ok(skill)
 }
 
@@ -631,11 +665,26 @@ pub fn set_skill_preloaded(
 	skill_id: &str,
 	is_preloaded: bool,
 ) -> std::io::Result<Skill> {
-	let path = skill_dir(root, &bot.id, skill_id)?;
-	let text = fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default();
-	let skill = written_skill(root, bot, &path, marked(&text, is_preloaded)?)?;
-	recorded(root, &bot.id, SKILL_SUBJECT, &skill.name, marking(is_preloaded));
+	let bundle = dir(root, &bot.id);
+	let path = skill_dir(&bundle, skill_id)?;
+	let skill = written_skill(root, bot, &path, marked(&held_skill(&path), is_preloaded)?)?;
+	recorded(&bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded));
 	Ok(skill)
+}
+
+pub fn set_skill_preloaded_at(
+	bundle: &Path,
+	skill_id: &str,
+	is_preloaded: bool,
+) -> std::io::Result<Skill> {
+	let path = skill_dir(bundle, skill_id)?;
+	let skill = kept_skill(&path, marked(&held_skill(&path), is_preloaded)?)?;
+	recorded(bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded));
+	Ok(skill)
+}
+
+fn held_skill(path: &Path) -> String {
+	fs::read_to_string(path.join(SKILL_NAME)).unwrap_or_default()
 }
 
 fn marking(is_preloaded: bool) -> &'static str {
@@ -647,12 +696,24 @@ fn marking(is_preloaded: bool) -> &'static str {
 }
 
 pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<()> {
-	let path = skill_dir(root, &bot.id, skill_id)?;
+	let bundle = dir(root, &bot.id);
+	let name = deleted_skill(&bundle, skill_id)?;
+	rewrite_agent(root, bot)?;
+	recorded(&bundle, SKILL_SUBJECT, &name, "removed from settings");
+	Ok(())
+}
+
+pub fn remove_skill_at(bundle: &Path, skill_id: &str) -> std::io::Result<()> {
+	let name = deleted_skill(bundle, skill_id)?;
+	recorded(bundle, SKILL_SUBJECT, &name, "removed from settings");
+	Ok(())
+}
+
+fn deleted_skill(bundle: &Path, skill_id: &str) -> std::io::Result<String> {
+	let path = skill_dir(bundle, skill_id)?;
 	let name = read_skill(&path).map(|skill| skill.name).unwrap_or_else(|| skill_id.to_owned());
 	fs::remove_dir_all(path)?;
-	rewrite_agent(root, bot)?;
-	recorded(root, &bot.id, SKILL_SUBJECT, &name, "removed from settings");
-	Ok(())
+	Ok(name)
 }
 
 pub struct McpServer {
@@ -684,7 +745,7 @@ pub fn set_mcp_server(
 	servers.insert(name.to_owned(), config.clone());
 	write_servers(&path, servers)?;
 	rewrite_manifest(root, bot)?;
-	recorded(root, &bot.id, SERVER_SUBJECT, name, "saved from settings");
+	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings");
 	Ok(McpServer { name: name.to_owned(), config: config.clone() })
 }
 
@@ -697,7 +758,7 @@ pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<
 	write_servers(&path, servers)?;
 	rewrite_manifest(root, bot)?;
 	undeclare_servers(root, bot)?;
-	recorded(root, &bot.id, SERVER_SUBJECT, name, "removed from settings");
+	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "removed from settings");
 	Ok(())
 }
 
@@ -739,8 +800,13 @@ fn object_at(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 }
 
 fn written_skill(root: &Path, bot: &Bot, path: &Path, text: String) -> std::io::Result<Skill> {
-	private_files::replace(&path.join(SKILL_NAME), text.as_bytes())?;
+	let skill = kept_skill(path, text)?;
 	rewrite_agent(root, bot)?;
+	Ok(skill)
+}
+
+fn kept_skill(path: &Path, text: String) -> std::io::Result<Skill> {
+	private_files::replace(&path.join(SKILL_NAME), text.as_bytes())?;
 	read_skill(path).ok_or_else(|| {
 		std::io::Error::new(std::io::ErrorKind::NotFound, "the skill was not written")
 	})
@@ -799,15 +865,15 @@ fn read_front(text: &str) -> SkillFront {
 	}
 }
 
-fn skill_dir(root: &Path, bot_id: &str, skill_id: &str) -> std::io::Result<PathBuf> {
-	skill_dirs(root, bot_id)
+fn skill_dir(bundle: &Path, skill_id: &str) -> std::io::Result<PathBuf> {
+	skill_dirs(bundle)
 		.into_iter()
 		.find(|path| path.file_name().is_some_and(|name| name == skill_id))
 		.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no such skill"))
 }
 
-fn free_skill_dir(root: &Path, bot_id: &str, name: &str) -> PathBuf {
-	let skills = dir(root, bot_id).join(SKILLS_DIR);
+fn free_skill_dir(bundle: &Path, name: &str) -> PathBuf {
+	let skills = bundle.join(SKILLS_DIR);
 	let base = slug(name);
 	let preferred = skills.join(&base);
 	if !preferred.exists() {

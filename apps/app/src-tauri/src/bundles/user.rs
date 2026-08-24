@@ -5,8 +5,8 @@ use std::sync::{Mutex, PoisonError};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::{
-	drafted, git, learned, Author, SkillDraft, SkillFront, LEARNED_NAME, MANIFEST_DIR,
-	MANIFEST_NAME, OPENNEST_KEY, PRELOAD_KEY, SKILLS_DIR, SKILL_NAME, VERSION,
+	drafted, git, learned, Author, HistoryEntry, Skill, SkillDraft, SkillFront, LEARNED_NAME,
+	MANIFEST_DIR, MANIFEST_NAME, OPENNEST_KEY, PRELOAD_KEY, SKILLS_DIR, SKILL_NAME, VERSION,
 };
 use crate::private_files;
 
@@ -54,6 +54,47 @@ pub fn evolve(path: &Path) {
 		return;
 	}
 	let _ = fs::remove_file(path.join(LEARNED_NAME));
+}
+
+pub fn skills(path: &Path) -> Vec<Skill> {
+	super::skills_at(path)
+}
+
+pub fn create_skill(path: &Path, draft: &SkillDraft) -> std::io::Result<Skill> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::create_skill_at(path, draft)
+}
+
+pub fn update_skill(path: &Path, skill_id: &str, draft: &SkillDraft) -> std::io::Result<Skill> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::update_skill_at(path, skill_id, draft)
+}
+
+pub fn set_skill_preloaded(
+	path: &Path,
+	skill_id: &str,
+	is_preloaded: bool,
+) -> std::io::Result<Skill> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::set_skill_preloaded_at(path, skill_id, is_preloaded)
+}
+
+pub fn remove_skill(path: &Path, skill_id: &str) -> std::io::Result<()> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::remove_skill_at(path, skill_id)
+}
+
+pub fn history(path: &Path) -> Result<Vec<HistoryEntry>, git2::Error> {
+	super::history_at(path)
+}
+
+pub fn diff(path: &Path, commit_id: &str) -> Result<String, git2::Error> {
+	super::diff_at(path, commit_id)
+}
+
+pub fn revert(path: &Path, commit_id: &str) -> Result<String, git2::Error> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::revert_at(path, commit_id)
 }
 
 fn kept(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -169,6 +210,59 @@ mod tests {
 		assert_eq!(history[0].author, Author::Bot);
 		assert!(!path.join(LEARNED_NAME).exists(), "the note is cleared");
 		assert!(git::changes(&path).is_empty(), "the plugin is left committed");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	fn a_draft(name: &str, body: &str) -> SkillDraft {
+		SkillDraft {
+			name: name.to_owned(),
+			description: "How the person likes to be answered".to_owned(),
+			body: body.to_owned(),
+			front: SkillFront::default(),
+		}
+	}
+
+	#[test]
+	fn a_skill_the_person_writes_is_kept_and_reaches_the_history() {
+		let path = a_path("skilled");
+		lay_down(&path).expect("the plugin is laid down");
+
+		let created =
+			create_skill(&path, &a_draft("how-i-work", "Short answers.")).expect("the skill lands");
+
+		assert_eq!(created.id, "how-i-work");
+		assert!(skills(&path).iter().any(|skill| skill.id == created.id));
+		assert!(git::changes(&path).is_empty(), "the skill reached the history");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn undoing_a_change_puts_the_skill_back_as_it_was() {
+		let path = a_path("undone");
+		lay_down(&path).expect("the plugin is laid down");
+		update_skill(&path, ABOUT_ID, &a_draft(ABOUT_ID, "They like figs.")).expect("the edit lands");
+		let latest = history(&path).expect("the history reads")[0].id.clone();
+
+		revert(&path, &latest).expect("the change is undone");
+
+		let text = fs::read_to_string(about_file(&path)).expect("the skill reads");
+		assert!(!text.contains("figs"), "got {text}");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn a_skill_the_person_removes_leaves_the_plugin() {
+		let path = a_path("pruned");
+		lay_down(&path).expect("the plugin is laid down");
+		create_skill(&path, &a_draft("passing", "Gone soon.")).expect("the skill lands");
+
+		remove_skill(&path, "passing").expect("the skill is removed");
+
+		assert!(!skills(&path).iter().any(|skill| skill.id == "passing"));
+		assert!(git::changes(&path).is_empty(), "the removal reached the history");
 
 		let _ = fs::remove_dir_all(&path);
 	}

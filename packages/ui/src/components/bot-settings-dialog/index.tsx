@@ -11,7 +11,6 @@ import {
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
 import {
 	BLANK_MCP_SERVER_DRAFT,
-	BLANK_SKILL_DRAFT,
 	type BotCommitItem,
 	type BotIdentity,
 	type BotMcpServerDraft,
@@ -22,20 +21,21 @@ import {
 	type BotSkillDraft,
 	type BotSkillItem,
 	isMcpServerDraftUnsaved,
-	isSkillDraftUnsaved,
 	toMcpServerDraft,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-import { HistoryPanel } from "@workspace/ui/components/bot-settings-dialog/history-panel"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
-import { SkillEditor } from "@workspace/ui/components/bot-settings-dialog/skill-editor"
-import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	HistoryPanel,
+	type PluginHistory,
+} from "@workspace/ui/components/plugin-settings/history-panel"
+import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_ITEM_CLASS,
@@ -55,20 +55,9 @@ const FIRST_TAB = "general"
 
 const DANGER_TAB = "danger"
 
-type SkillSession = {
-	draft: BotSkillDraft
-	opened?: BotSkillItem
-}
-
 type McpSession = {
 	draft: BotMcpServerDraft
 	saved?: BotMcpServerDraft
-}
-
-type BotHistory = {
-	commits: BotCommitItem[]
-	onLoadDiff: (commitId: string) => void
-	onRevert: (commitId: string) => void
 }
 
 const DANGER_RAIL_ITEM_CLASS = cn(
@@ -101,7 +90,7 @@ type BotSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
-	history?: BotHistory
+	history?: PluginHistory
 	seed?: string
 	onDelete: () => void
 	showDanger?: boolean
@@ -141,31 +130,33 @@ const BotSettingsDialog = ({
 }: BotSettingsDialogProps) => {
 	const { t } = useTranslation("bots")
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
-	const [skill, setSkill] = useState<SkillSession | null>(null)
 	const [server, setServer] = useState<McpSession | null>(null)
 	const [isLeaving, setLeaving] = useState(false)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const botName = value.name.trim() || t("dialog.untitled")
+	const skillSession = useSkillSession({
+		skills,
+		onSkillChange,
+		onSkillCreate,
+		onSkillDelete,
+		onSkillPreloadedChange,
+	})
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
-
-	const isSkillUnsaved = Boolean(
-		skill && isSkillDraftUnsaved(skill.draft, skill.opened),
-	)
 
 	const isServerUnsaved = Boolean(
 		server && isMcpServerDraftUnsaved(server.draft, server.saved),
 	)
 
 	const leave = () => {
-		setSkill(null)
+		skillSession.discard()
 		setServer(null)
 		onClose()
 	}
 
 	const close = () =>
-		isSkillUnsaved || isServerUnsaved ? setLeaving(true) : leave()
+		skillSession.isUnsaved || isServerUnsaved ? setLeaving(true) : leave()
 
 	const leaveCopy = server
 		? {
@@ -180,26 +171,6 @@ const BotSettingsDialog = ({
 			}
 
 	useSettingsShortcut({ isEnabled: open, onToggle: close })
-
-	const saveSkill = ({ draft, opened }: SkillSession) => {
-		const isPreloaded = draft.isPreloaded ?? false
-
-		if (!opened) {
-			onSkillCreate(draft, isPreloaded)
-		} else {
-			onSkillChange(opened.id, draft)
-			if (isPreloaded !== opened.isPreloaded) {
-				onSkillPreloadedChange(opened.id, isPreloaded)
-			}
-		}
-
-		setSkill(null)
-	}
-
-	const deleteSkill = (opened: BotSkillItem) => {
-		onSkillDelete(opened.id)
-		setSkill(null)
-	}
 
 	const saveServer = (
 		{ draft, saved }: McpSession,
@@ -230,20 +201,8 @@ const BotSettingsDialog = ({
 		/>
 	)
 
-	const openSkillEditor = ({ draft, opened }: SkillSession) => (
-		<SkillEditor
-			draft={draft}
-			isSystem={opened?.isSystem}
-			onBack={() => setSkill(null)}
-			onDelete={opened ? () => deleteSkill(opened) : undefined}
-			onDraftChange={(next) => setSkill({ draft: next, opened })}
-			onSave={() => saveSkill({ draft, opened })}
-			saved={opened}
-		/>
-	)
-
 	const openEditor = () => {
-		if (skill) return openSkillEditor(skill)
+		if (skillSession.editor) return skillSession.editor
 		if (server) return openServerEditor(server)
 
 		return null
@@ -394,11 +353,7 @@ const BotSettingsDialog = ({
 						</Tabs.Panel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
-							<SkillsPanel
-								onAdd={() => setSkill({ draft: BLANK_SKILL_DRAFT })}
-								onOpen={(opened) => setSkill({ draft: opened, opened })}
-								skills={skills}
-							/>
+							{skillSession.panel}
 						</Tabs.Panel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">
@@ -420,7 +375,7 @@ const BotSettingsDialog = ({
 								value="history"
 							>
 								<HistoryPanel
-									botName={botName}
+									authorName={botName}
 									commits={history.commits}
 									onLoadDiff={history.onLoadDiff}
 									onRevert={history.onRevert}
@@ -471,7 +426,6 @@ const BotSettingsDialog = ({
 
 export {
 	type BotCommitItem,
-	type BotHistory,
 	type BotMcpServerItem,
 	type BotModelOption,
 	type BotOutputStyle,
@@ -480,4 +434,5 @@ export {
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
+	type PluginHistory,
 }

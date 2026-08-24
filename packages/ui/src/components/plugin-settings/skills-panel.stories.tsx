@@ -5,8 +5,8 @@ import {
 	BOT_SKILLS,
 	LONG_SKILL,
 	SYSTEM_SKILL,
-} from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
-import { SkillsPanel } from "@workspace/ui/components/bot-settings-dialog/skills-panel"
+} from "@workspace/ui/components/plugin-settings/skills.fixtures"
+import { SkillsPanel } from "@workspace/ui/components/plugin-settings/skills-panel"
 
 const [CARRIED] = BOT_SKILLS
 
