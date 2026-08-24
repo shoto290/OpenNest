@@ -318,6 +318,30 @@ describe("createRosterController", () => {
 		expect(page.messages).toEqual([])
 	})
 
+	it("holds the memory the command hands back and clears it through the same call", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+
+		await controller.remember("default", "They bake on Sundays.")
+		expect(held(controller, "default").memory).toBe("They bake on Sundays.")
+
+		await controller.remember("default", "")
+		expect(held(controller, "default").memory).toBe("")
+	})
+
+	it("keeps the memory a bot already had when the command refuses", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setBotMemory("default", "They bake on Sundays.")
+		const controller = await loaded({
+			...store,
+			setBotMemory: () => Promise.reject({ kind: "storage" }),
+		})
+
+		await controller.remember("default", "They ski.")
+
+		expect(held(controller, "default").memory).toBe("They bake on Sundays.")
+	})
+
 	it("puts the reader back on what the store holds when a write is refused", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded({

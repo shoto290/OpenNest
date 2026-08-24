@@ -37,6 +37,7 @@ export type Bot = BotIdentity & {
 	id: string
 	createdAt: number
 	changesNothing: boolean
+	memory: string
 }
 
 export type BotSkill = BotSkillFront & {

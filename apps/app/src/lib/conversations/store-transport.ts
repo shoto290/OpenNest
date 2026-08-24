@@ -48,6 +48,9 @@ export const conversationStore: TranscriptStore = {
 	setBotAvatarImage: (id: string, bytes: Uint8Array) =>
 		invoke<Bot>("conversation_set_bot_avatar_image", { id, bytes }),
 
+	setBotMemory: (id: string, memory: string) =>
+		invoke<Bot>("conversation_set_bot_memory", { id, memory }),
+
 	botSkills: (botId: string) =>
 		invoke<BotSkill[]>("conversation_bot_skills", { botId }),
 

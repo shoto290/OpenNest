@@ -221,6 +221,10 @@ export function App() {
 					mcpServers={mcpServers.state.servers}
 					models={modelOptionsFor(selected.model, catalogue)}
 					outputStyle={readBotOutputStyle(selected.outputStyle)}
+					memory={selected.memory}
+					onMemoryChange={(memory) => {
+						void roster.controller.remember(selected.id, memory)
+					}}
 					onAvatarUpload={(file) => {
 						void roster.controller.uploadAvatar(selected.id, file)
 					}}
