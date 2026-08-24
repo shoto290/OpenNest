@@ -323,6 +323,7 @@ describe("toRosterBots", () => {
 
 	const NOW = new Date(2025, 2, 12, 21, 30).getTime()
 	const TODAY = new Date(2025, 2, 12, 9, 24).getTime()
+	const YESTERDAY = new Date(2025, 2, 11).getTime()
 
 	it("reads the name, the title and the face off the record", () => {
 		const [atlas, beacon] = toRosterBots(
@@ -404,7 +405,7 @@ describe("toRosterBots", () => {
 				working: {},
 				previews: {
 					"b-1": { text: "Today", at: TODAY },
-					"b-2": { text: "A day back", at: new Date(2025, 2, 11).getTime() },
+					"b-2": { text: "A day back", at: YESTERDAY },
 				},
 			},
 			NOW,
@@ -433,6 +434,46 @@ describe("toRosterBots", () => {
 		)
 
 		expect(bare.blot).toBeUndefined()
+	})
+
+	it("puts the bot that spoke last above the one that spoke earlier", () => {
+		const ordered = toRosterBots(
+			roster,
+			{
+				working: {},
+				previews: {
+					"b-1": { text: "A day back", at: YESTERDAY },
+					"b-2": { text: "Today", at: TODAY },
+				},
+			},
+			NOW,
+		)
+
+		expect(ordered.map((bot) => bot.id)).toEqual(["b-2", "b-1"])
+	})
+
+	it("sorts a bot that never spoke on the day it was created", () => {
+		const ordered = toRosterBots(
+			[
+				bot({ id: "b-1", createdAt: new Date(2025, 2, 10).getTime() }),
+				bot({ id: "b-2", createdAt: TODAY }),
+			],
+			{
+				working: {},
+				previews: {
+					"b-1": { text: "Yesterday", at: YESTERDAY },
+				},
+			},
+			NOW,
+		)
+
+		expect(ordered.map((bot) => bot.id)).toEqual(["b-2", "b-1"])
+	})
+
+	it("holds two bots carrying the same time in the order it read them", () => {
+		const ordered = toRosterBots(roster, { working: {}, previews: {} }, NOW)
+
+		expect(ordered.map((bot) => bot.id)).toEqual(["b-1", "b-2"])
 	})
 
 	it("passes an uploaded picture through and leaves a bot without one to its animal", () => {
