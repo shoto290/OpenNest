@@ -3,7 +3,7 @@ import { useEffect } from "react"
 import { createNotifications } from "./create-notifications"
 import { startNotificationSource } from "./notification-source"
 
-import { revealWindow } from "../host"
+import { revealWindow, watchWindowFocus } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
 import type { UserController } from "../user/user-controller"
@@ -20,7 +20,9 @@ export type NotificationsMount = {
  *
  * The switches and the focus are read at each publish rather than closed over: the
  * reader flipping a switch in the settings must not restart the source, and a window
- * that just lost the focus is a window whose reader is already elsewhere. */
+ * that just lost the focus is a window whose reader is already elsewhere. The focus
+ * that decides is the one the operating system gives the window; the document's is
+ * only what answers where there is no window to watch. */
 export const useNotifications = ({
 	chat,
 	roster,
@@ -34,6 +36,7 @@ export const useNotifications = ({
 				notifications: createNotifications(),
 				switches: () => user.getState().profile,
 				hasFocus: () => document.hasFocus(),
+				watchFocus: watchWindowFocus,
 				raiseWindow: () => revealWindow({ withFocus: true }),
 			}),
 		[chat, roster, user],
