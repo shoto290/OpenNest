@@ -19,7 +19,11 @@ type BotWorkingKind = Extract<
 const busyStateFor = (kind: BotWorkingKind): BotAvatarState =>
 	kind === "waiting" ? "listening" : kind
 
-const IMAGE_CLASS = "size-full rounded-full border border-border object-cover"
+const UPLOADED_IMAGE_SHAPE = "rounded-full"
+
+const avatarShape = (image?: string) => (image ? UPLOADED_IMAGE_SHAPE : "")
+
+const IMAGE_CLASS = `size-full border border-border object-cover ${UPLOADED_IMAGE_SHAPE}`
 
 const DOT_CLASS =
 	"absolute right-[6%] bottom-[6%] block rounded-full bg-sidebar-primary ring-2 ring-sidebar motion-safe:animate-pulse"
@@ -86,4 +90,9 @@ function BotIdentityAvatar({
 	)
 }
 
-export { BotIdentityAvatar, type BotIdentityAvatarProps, type BotWorkingKind }
+export {
+	avatarShape,
+	BotIdentityAvatar,
+	type BotIdentityAvatarProps,
+	type BotWorkingKind,
+}
