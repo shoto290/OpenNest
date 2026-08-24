@@ -17,6 +17,8 @@ export type TranscriptMessage = {
 	content: string
 	completion: TranscriptCompletion
 	createdAt: number
+	repliedToMessageId: string | null
+	runtimeSessionId: string | null
 }
 
 export type TranscriptDraft = Omit<TranscriptMessage, "seq">

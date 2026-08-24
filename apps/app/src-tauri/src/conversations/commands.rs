@@ -5,9 +5,9 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
-	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, NewAssistantMessage,
-	NewTurn, NewUserMessage, RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage,
-	TranscriptStoreError,
+	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, MessageReference,
+	MessageRun, NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession, Skill, SkillDraft,
+	TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
@@ -15,7 +15,7 @@ use crate::avatars;
 use crate::bundles;
 use crate::db;
 use crate::db::repositories::conversations::Bot as StoredBot;
-use crate::db::repositories::messages::MessagePageQuery;
+use crate::db::repositories::messages::{MessagePageQuery, StoredMessage};
 use crate::db::repositories::runtime_context::ParticipantKey;
 
 const DUPLICATE_SUFFIX: &str = " copy";
@@ -557,6 +557,40 @@ pub async fn conversation_message_page(
 	let query = MessagePageQuery { conversation_id: conversation_id.clone(), before_seq, limit };
 	let page = ready(&state)?.messages().page_messages(query).await?;
 	Ok(TranscriptPage::of(conversation_id, page))
+}
+
+#[tauri::command]
+pub async fn conversation_message_reference(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	message_id: String,
+) -> Result<Option<MessageReference>, TranscriptStoreError> {
+	let database = ready(&state)?;
+	let Some(stored) = database.messages().message(conversation_id.clone(), message_id).await?
+	else {
+		return Ok(None);
+	};
+	let run = run_behind(database, &stored).await?;
+	Ok(Some(MessageReference::of(conversation_id, stored, run)))
+}
+
+async fn run_behind(
+	database: &db::Database,
+	stored: &StoredMessage,
+) -> Result<MessageRun, TranscriptStoreError> {
+	let runtime_session_id = match &stored.runtime_session_id {
+		Some(session_id) => Some(session_id.clone()),
+		None => database.messages().run_of_turn(stored.turn_id.clone()).await?,
+	};
+	let provider_session_id = match &runtime_session_id {
+		Some(session_id) => database
+			.runtime_context()
+			.session(session_id.clone())
+			.await?
+			.and_then(|session| session.provider_session_id),
+		None => None,
+	};
+	Ok(MessageRun { runtime_session_id, provider_session_id })
 }
 
 #[tauri::command]

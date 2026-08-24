@@ -426,6 +426,8 @@ pub struct TranscriptMessage {
 	pub content: String,
 	pub completion: TranscriptCompletion,
 	pub created_at: i64,
+	pub replied_to_message_id: Option<String>,
+	pub runtime_session_id: Option<String>,
 }
 
 impl TranscriptMessage {
@@ -439,6 +441,57 @@ impl TranscriptMessage {
 			content: stored.content,
 			completion: stored.state.into(),
 			created_at: stored.created_at,
+			replied_to_message_id: stored.replied_to_message_id,
+			runtime_session_id: stored.runtime_session_id,
+		}
+	}
+}
+
+const EXCERPT_LIMIT: usize = 280;
+
+fn message_uri(conversation_id: &str, message_id: &str) -> String {
+	format!("opennest://c/{conversation_id}/m/{message_id}")
+}
+
+fn excerpt_of(content: &str) -> String {
+	if content.chars().count() <= EXCERPT_LIMIT {
+		return content.to_owned();
+	}
+	let kept: String = content.chars().take(EXCERPT_LIMIT - 1).collect();
+	format!("{kept}\u{2026}")
+}
+
+pub struct MessageRun {
+	pub runtime_session_id: Option<String>,
+	pub provider_session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageReference {
+	pub uri: String,
+	pub conversation_id: String,
+	pub message_id: String,
+	pub role: TranscriptRole,
+	pub seq: i64,
+	pub created_at: i64,
+	pub excerpt: String,
+	pub runtime_session_id: Option<String>,
+	pub provider_session_id: Option<String>,
+}
+
+impl MessageReference {
+	pub fn of(conversation_id: String, stored: messages::StoredMessage, run: MessageRun) -> Self {
+		Self {
+			uri: message_uri(&conversation_id, &stored.id),
+			conversation_id,
+			message_id: stored.id,
+			role: stored.role.into(),
+			seq: stored.seq,
+			created_at: stored.created_at,
+			excerpt: excerpt_of(&stored.content),
+			runtime_session_id: run.runtime_session_id,
+			provider_session_id: run.provider_session_id,
 		}
 	}
 }
@@ -684,6 +737,8 @@ mod tests {
 			content: "hi there".into(),
 			completion: TranscriptCompletion::Complete,
 			created_at: 2,
+			replied_to_message_id: Some("m0".into()),
+			runtime_session_id: Some("run-1".into()),
 		}
 	}
 
@@ -696,7 +751,9 @@ mod tests {
 			"role": "assistant",
 			"content": "hi there",
 			"completion": "complete",
-			"createdAt": 2
+			"createdAt": 2,
+			"repliedToMessageId": "m0",
+			"runtimeSessionId": "run-1"
 		})
 	}
 

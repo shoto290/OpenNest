@@ -11,6 +11,7 @@ import type {
 	BotSkillFront,
 	Chat,
 	ContextCheckpoint,
+	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -29,6 +30,7 @@ import {
 
 import type { AgentCommand } from "@/lib/agent/contract"
 import { deniesChanges } from "../bots/bot-settings"
+import { messageUri } from "../links/message-uri"
 
 export type FakeTranscriptStoreOptions = {
 	messages?: TranscriptMessage[]
@@ -58,6 +60,15 @@ export const FAKE_CHAT_ID = chatIdOf(DEFAULT_BOT.id)
 const OPEN: TranscriptCompletion[] = ["pending", "streaming"]
 
 const RECENT_TAIL = 20
+
+const EXCERPT_LIMIT = 280
+
+const excerptOf = (content: string) => {
+	const letters = [...content]
+	return letters.length <= EXCERPT_LIMIT
+		? content
+		: `${letters.slice(0, EXCERPT_LIMIT - 1).join("")}\u2026`
+}
 
 const SUMMARY_LABEL = "The conversation so far:"
 const REPLY_LABEL = "The message this one replies to:"
@@ -150,6 +161,19 @@ export const createFakeTranscriptStore = (
 
 	const participantKey = (conversationId: string, botId: string) =>
 		`${conversationId}/${botId}`
+
+	const liveSessionOf = (conversationId: string, botId: string | null) => {
+		if (!botId) {
+			return null
+		}
+		const participant = participantKey(conversationId, botId)
+		for (const [id, row] of runRows) {
+			if (row.participant === participant && row.live) {
+				return id
+			}
+		}
+		return null
+	}
 
 	const ordered = (conversationId: string) =>
 		[...rows.values()]
@@ -603,9 +627,38 @@ export const createFakeTranscriptStore = (
 
 		completeTurn: () => Promise.resolve(),
 
+		messageReference: (conversationId: string, messageId: string) => {
+			const stored = rows.get(messageId)
+			if (!stored || stored.conversationId !== conversationId) {
+				return Promise.resolve(null)
+			}
+			const providerSessionId = stored.runtimeSessionId
+				? (runRows.get(stored.runtimeSessionId)?.providerSessionId ?? null)
+				: null
+			return Promise.resolve<MessageReference>({
+				uri: messageUri(conversationId, messageId),
+				conversationId,
+				messageId,
+				role: stored.role,
+				seq: stored.seq,
+				createdAt: stored.createdAt,
+				excerpt: excerptOf(stored.content),
+				runtimeSessionId: stored.runtimeSessionId,
+				providerSessionId,
+			})
+		},
+
 		appendUserMessage: (message: NewUserMessage) => {
 			remember(message.id, message.repliedToMessageId)
-			return append({ ...message, role: "user", completion: "complete" })
+			return append({
+				...message,
+				role: "user",
+				completion: "complete",
+				runtimeSessionId: liveSessionOf(
+					message.conversationId,
+					message.authorBotId,
+				),
+			})
 		},
 
 		openAssistantMessage: (message: NewAssistantMessage) => {
@@ -615,6 +668,10 @@ export const createFakeTranscriptStore = (
 				role: "assistant",
 				content: "",
 				completion: "pending",
+				runtimeSessionId: liveSessionOf(
+					message.conversationId,
+					message.authorBotId,
+				),
 			})
 		},
 

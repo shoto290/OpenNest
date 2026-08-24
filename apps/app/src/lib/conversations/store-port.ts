@@ -7,6 +7,7 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -73,6 +74,10 @@ export type TranscriptStore = TranscriptPort & {
 		runtimeSessionId: string | null,
 		createdAt: number,
 	) => Promise<ContextCheckpoint | null>
+	messageReference: (
+		conversationId: string,
+		messageId: string,
+	) => Promise<MessageReference | null>
 	startTurn: (turn: NewTurn) => Promise<number>
 	completeTurn: (id: string, completedAt: number) => Promise<void>
 	appendUserMessage: (message: NewUserMessage) => Promise<number>

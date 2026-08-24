@@ -20,6 +20,8 @@ export const message = (
 	content: "",
 	completion: "complete",
 	createdAt: 0,
+	repliedToMessageId: null,
+	runtimeSessionId: null,
 	...overrides,
 })
 

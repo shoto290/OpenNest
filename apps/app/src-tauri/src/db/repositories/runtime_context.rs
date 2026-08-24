@@ -271,6 +271,14 @@ impl RuntimeContextRepository {
 			.await
 	}
 
+	pub async fn session(&self, id: String) -> Result<Option<RuntimeSession>, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				Ok(connection.query_row(SESSION_BY_ID, params![id], session_from).optional()?)
+			})
+			.await
+	}
+
 	pub async fn active_session(
 		&self,
 		participant: ParticipantKey,
