@@ -1,30 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { ChatController } from "./chat-controller"
-import { bubbleIdOf, bubbleOf, type TranscriptRow } from "./screen-model"
+import { type PinnedBubble, pinnedBubblesOf } from "./pinned-bubbles"
+import { bubbleIdOf } from "./screen-model"
 
 import type { MessagePin } from "../conversations/store-contract"
 
 const NO_PINS: MessagePin[] = []
 
-export type PinnedBubble = {
-	id: string
-	bubble: TranscriptRow
-	pin: MessagePin
-}
-
 export type PinnedBubbles = {
 	bubbles: PinnedBubble[]
 	ids: ReadonlySet<string>
+	anchorOf: (bubbleId: string) => string
 	toggle: (messageId: string, blockIndex: number) => void
 	unpin: (bubbleId: string) => void
-}
-
-const shownAs = (pin: MessagePin): PinnedBubble[] => {
-	const bubble = bubbleOf(pin.message, pin.blockIndex)
-	return bubble
-		? [{ id: bubbleIdOf(bubble.messageId, bubble.blockIndex), bubble, pin }]
-		: []
 }
 
 export function usePinnedMessages(
@@ -43,10 +32,15 @@ export function usePinnedMessages(
 
 	useEffect(recall, [recall])
 
-	const bubbles = useMemo(() => pins.flatMap(shownAs), [pins])
+	const bubbles = useMemo(() => pinnedBubblesOf(pins), [pins])
 	const held = useMemo(
-		() => new Map(bubbles.map((shown) => [shown.id, shown.pin])),
+		() => new Map(bubbles.map((shown) => [shown.id, shown])),
 		[bubbles],
+	)
+
+	const anchorOf = useCallback(
+		(bubbleId: string) => held.get(bubbleId)?.anchor ?? bubbleId,
+		[held],
 	)
 
 	const toggle = useCallback(
@@ -61,19 +55,19 @@ export function usePinnedMessages(
 
 	const unpin = useCallback(
 		(bubbleId: string) => {
-			const pin = held.get(bubbleId)
-			if (!pin) {
+			const shown = held.get(bubbleId)
+			if (!shown) {
 				return
 			}
 			void controller
-				.unpin(pin.message.id, pin.blockIndex)
+				.unpin(shown.pin.message.id, shown.pin.blockIndex)
 				.then(recall, () => undefined)
 		},
 		[controller, held, recall],
 	)
 
 	return useMemo(
-		() => ({ bubbles, ids: new Set(held.keys()), toggle, unpin }),
-		[bubbles, held, toggle, unpin],
+		() => ({ bubbles, ids: new Set(held.keys()), anchorOf, toggle, unpin }),
+		[bubbles, held, anchorOf, toggle, unpin],
 	)
 }

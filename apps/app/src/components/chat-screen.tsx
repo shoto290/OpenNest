@@ -68,6 +68,7 @@ import { isTableBlock } from "@/lib/chat/markdown-blocks"
 import type { MessageContent } from "@/lib/chat/message-attachments"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import { pinTimestamp } from "@/lib/chat/pin-timestamp"
+import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
 import {
 	commandOptionsFor,
 	commandQueryIn,
@@ -88,10 +89,7 @@ import {
 } from "@/lib/chat/screen-model"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import type { Chat } from "@/lib/chat/use-chat"
-import {
-	type PinnedBubble,
-	usePinnedMessages,
-} from "@/lib/chat/use-pinned-messages"
+import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
 import { useQuotedMessages } from "@/lib/chat/use-quoted-messages"
 import type {
 	AvatarAnimal,
@@ -630,6 +628,13 @@ export function ChatScreen({
 		[reachMessage],
 	)
 
+	const jumpToPin = useCallback(
+		(bubbleId: string) => {
+			jumpToMessage(pins.anchorOf(bubbleId))
+		},
+		[jumpToMessage, pins.anchorOf],
+	)
+
 	useEffect(() => () => clearTimeout(heldHighlight.current), [])
 
 	useEffect(() => {
@@ -691,7 +696,7 @@ export function ChatScreen({
 							/>
 							<PinnedMessages
 								messages={pinnedRows}
-								onJump={jumpToMessage}
+								onJump={jumpToPin}
 								onUnpin={pins.unpin}
 							/>
 							<Button
