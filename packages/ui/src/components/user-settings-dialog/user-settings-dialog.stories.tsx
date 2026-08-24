@@ -5,10 +5,14 @@ import preview from "@workspace/storybook/preview"
 import {
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
+	widthInRems,
 } from "@workspace/storybook/story-utils"
 import { PICKED_PICTURE_FILE } from "@workspace/ui/components/picture-dropzone.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
-import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
+import {
+	BOT_SKILLS,
+	LONG_SKILL,
+} from "@workspace/ui/components/plugin-settings/skills.fixtures"
 import {
 	UserSettingsDialog,
 	type UserSettingsDialogProps,
@@ -33,6 +37,8 @@ const PICTURED_USER: UserSettingsValue = {
 	colorScheme: "dark",
 	palette: "lavender",
 }
+
+const DIALOG_WIDTH_REMS = 52
 
 const DialogHost = (props: UserSettingsDialogProps) => {
 	const [value, setValue] = useState(props.value)
@@ -358,6 +364,35 @@ export const NoSkills = meta.story({
 		await expect(
 			within(panel).getByRole("button", { name: "Add skill" }),
 		).toBeVisible()
+	},
+})
+
+export const WithALongSkill = meta.story({
+	args: { skills: [...BOT_SKILLS, LONG_SKILL] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill whose name and description are both wider than the panel that lists them. Check that the dialog stays the width it declares rather than growing to the longest row, and that the row clips its two lines instead of pushing the chevron and the tag out of reach. Pick `Skills` for the list at its usual widths.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Skills" }))
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Skills",
+		})
+
+		await expect(widthInRems(dialog)).toBeCloseTo(DIALOG_WIDTH_REMS, 1)
+
+		const row = within(panel).getByRole("button", {
+			name: new RegExp(LONG_SKILL.name),
+		})
+		await expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(
+			dialog.getBoundingClientRect().right,
+		)
 	},
 })
 
