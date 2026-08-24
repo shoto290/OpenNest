@@ -4,31 +4,11 @@ const carriesFiles = (event: DragEvent) =>
 	Boolean(event.dataTransfer?.types.includes(FILES))
 
 export type ConversationDragsPort = {
-	/** The region the conversation occupies, as the layout hands it back. A drag
-	 * over the roster beside it is not one this composer answers. */
 	conversation: { current: HTMLElement | null }
-	/** Whether the composer should wear the drop mark. */
 	onHover: (isOver: boolean) => void
 	onDrop: (files: File[]) => void
 }
 
-/**
- * The window drags a conversation answers, watched until the returned call ends
- * it — which also puts the mark out, so a watcher rebuilt under a drag hands the
- * next one a composer that is not still lit.
- *
- * Every file drop over the window is taken from the browser — an unhandled one
- * navigates the webview away from the app — and only the ones over the
- * conversation are handed on.
- *
- * The mark rides a depth count rather than the last event seen: crossing from one
- * element to another enters the next before it leaves the previous, so a lone
- * `dragleave` says nothing about having left. The count follows every element the
- * drag is over, inside the conversation or beside it, because a leave reported on
- * a node a stream has replaced — or on no element at all — still has to bring it
- * down: an OS drag raises `dragend` on nothing, so a count left standing would
- * never come down again.
- */
 export const watchConversationDrags = ({
 	conversation,
 	onHover,
@@ -80,8 +60,6 @@ export const watchConversationDrags = ({
 			if (!carriesFiles(event)) {
 				return
 			}
-			// The composer takes what is dropped on itself, and says so by preventing
-			// the default before this listener sees the event.
 			const taken = event.defaultPrevented
 			event.preventDefault()
 			settle()

@@ -17,9 +17,6 @@ import type {
 } from "../agent/contract"
 
 export type FakeChatDriver = ChatDriver & {
-	/** Emits under the run the fake started last, or under any run a caller names —
-	 * which is how a test reproduces the one thing a driver cannot do to itself:
-	 * speak for a session that has already been replaced. */
 	pushEvent: (event: AgentEvent, scope?: RuntimeScope | null) => void
 }
 
@@ -28,8 +25,6 @@ export type FakeChatDriverOptions = {
 	replyFor?: (prompt: string) => string
 }
 
-/** What a real session announces, named the way Claude Code names it: no leading
- * slash. Enough of them for `bun dev:web` to open the command menu. */
 const FAKE_COMMANDS = [
 	{ name: "clear", description: "Start a fresh conversation" },
 	{ name: "compact", description: "Summarise the thread and free the context" },
@@ -48,8 +43,6 @@ const PERMISSION_DIRECTIVE = "/permission"
 
 const QUESTION_DIRECTIVE = "/question"
 
-/** Several paragraphs, so `bun dev:web` shows an answer landing in the flow one
- * message at a time rather than as a single block. */
 function defaultReply(prompt: string): string {
 	return `Simulated reply to "${prompt}".\n\nThe fake driver streams this text piece by piece to reproduce a whole Claude Code turn.\n\nEach paragraph lands in the thread as soon as it is finished.`
 }
@@ -64,9 +57,6 @@ function toChunks(reply: string): string[] {
 	return chunks
 }
 
-/** One fake child: everything a session holds while it answers. There is one per
- * participant, the way the host runs one process per bot, so two bots streaming at
- * once neither share a turn nor cut each other off. */
 type FakeRun = {
 	scope: RuntimeScope
 	sessionId: string | null
@@ -80,8 +70,6 @@ type FakeRun = {
 	timer: ReturnType<typeof setTimeout> | null
 }
 
-/** The conversation and the bot a run answers for, which is what the host keys its
- * live runtimes by too. */
 const participantOf = (scope: RuntimeScope) =>
 	`${scope.conversationId} ${scope.botId}`
 
@@ -93,17 +81,11 @@ export function createFakeChatDriver(
 	const listeners = new Set<(event: ScopedEvent) => void>()
 
 	const runs = new Map<string, FakeRun>()
-	/** The run a caller that names none is speaking about: the last one started.
-	 * A test driving a single bot never has to name it. */
 	let latest: FakeRun | null = null
-	/** Minted across every run, because two bots writing into one store may not mint
-	 * the same message id. */
 	let sessionSeq = 0
 	let messageSeq = 0
 	let permissionSeq = 0
 
-	/** Everything crosses under the run it came from, the way the host stamps its
-	 * channel. */
 	const emit = (
 		event: AgentEvent,
 		scope: RuntimeScope | null = latest?.scope ?? null,
@@ -118,10 +100,6 @@ export function createFakeChatDriver(
 	const heldFor = (scope: RuntimeScope) =>
 		runs.get(participantOf(scope)) ?? null
 
-	/** The host refuses a command that names a run it is not holding for that bot,
-	 * and so does this: a fake that answered anyway would let a test pass on a
-	 * boundary production does not have. A bot holding no run refuses nobody — there
-	 * is no other session of its own for a late caller to reach past. */
 	const isForeign = (scope: RuntimeScope) => {
 		const held = heldFor(scope)
 		return held !== null && !isSameRuntimeScope(scope, held.scope)
@@ -174,9 +152,6 @@ export function createFakeChatDriver(
 		emitFor(run, { type: "turnChanged", state: turnForOutcome(outcome) })
 	}
 
-	/** The transport announces the wait as an activity row before it asks, so the
-	 * pending step is visible in the log and not only in the card. A question waits
-	 * the same way under the same id: what changes is what the reader is shown. */
 	const beginAsk = (run: FakeRun, title: string) => {
 		permissionSeq += 1
 		const id = `fake-perm-${permissionSeq}`
@@ -338,8 +313,6 @@ export function createFakeChatDriver(
 				error: null,
 			}),
 
-		/** A start replaces the run of the bot it names and of no other: every other
-		 * bot keeps the child it is answering in. */
 		startOrResumeSession: (scope: RuntimeScope, resume?: string) => {
 			const replaced = heldFor(scope)
 			if (replaced) {
@@ -377,8 +350,6 @@ export function createFakeChatDriver(
 				return Promise.reject({ kind: "turnAlreadyRunning" })
 			}
 			run.turnActive = true
-			// The CLI only emits `system/init` once it starts answering, so the
-			// session id lands on the first prompt and never before it.
 			if (!run.announced) {
 				run.announced = true
 				emitFor(run, {
@@ -392,10 +363,6 @@ export function createFakeChatDriver(
 			return Promise.resolve()
 		},
 
-		/** Nothing is written: an attachment reaches Claude as a path, so a plausible
-		 * one is the whole of what `bun dev:web` needs to compose the prompt. Shaped
-		 * the way the host shapes a stored one, so the bubble reads it back as a file
-		 * rather than as a line of text. */
 		storeAttachments: (
 			conversationId: string,
 			attachments: SubmittedAttachment[],
@@ -426,13 +393,9 @@ export function createFakeChatDriver(
 
 		respondToPermission: resolvePermission,
 
-		/** An answered question is an allowed tool, so it settles the same wait the
-		 * same way. What the reader said is the real transport's business. */
 		answerQuestion: (scope: RuntimeScope, id: string) =>
 			resolvePermission(scope, id, "allowOnce"),
 
-		/** Refused for a run the bot no longer holds, and a no-op when it holds
-		 * none: shutting down twice is as safe as shutting down once. */
 		shutdown: (scope: RuntimeScope) => {
 			if (isForeign(scope)) {
 				return refuseStale(scope)

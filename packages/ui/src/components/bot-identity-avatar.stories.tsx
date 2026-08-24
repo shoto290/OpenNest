@@ -16,15 +16,11 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
 
-/** The three sizes the product draws this at: a roster row and a reply are the
- * same 40, the settings preview is 96. */
 const SIZES = [40, 96, 24]
 
 const blotShapeOf = (avatar: HTMLElement) =>
 	slotsIn(avatar, "bot-avatar-blot")[0]?.getAttribute("transform")
 
-/** Every place at once, on one identity: what the roster row, the settings column
- * and the reply each draw, side by side. */
 const EveryPlace = (props: BotIdentityAvatarProps) => (
 	<Row>
 		{SIZES.map((size) => (
@@ -33,8 +29,6 @@ const EveryPlace = (props: BotIdentityAvatarProps) => (
 	</Row>
 )
 
-/** One bot, with a control that renames it to Skippy and back. Nothing else moves:
- * the animal it stores is the same rabbit throughout. */
 const Renamed = (props: BotIdentityAvatarProps) => {
 	const [named, setNamed] = useState(false)
 
@@ -48,8 +42,6 @@ const Renamed = (props: BotIdentityAvatarProps) => {
 	)
 }
 
-/** One bot, with a control that changes everything a reader is allowed to change
- * about it. Its id is the one thing that stays. */
 const Rebranded = (props: BotIdentityAvatarProps) => {
 	const [rebranded, setRebranded] = useState(false)
 
@@ -72,7 +64,6 @@ const Rebranded = (props: BotIdentityAvatarProps) => {
 	)
 }
 
-/** The same three, with a control that changes the bot. */
 const Changing = (props: BotIdentityAvatarProps) => {
 	const [wearing, setWearing] = useState(false)
 

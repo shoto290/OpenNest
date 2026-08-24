@@ -1,19 +1,9 @@
-//! The agent sidecar's wire vocabulary. Internal only: nothing in this module is
-//! ever serialized towards the frontend.
-//!
-//! Every session's stream leaves the sidecar through one pipe, so each line is an
-//! [`Envelope`] naming the session it belongs to. What the envelope carries is a
-//! [`Frame`] — the SDK's own message types, plus the three the sidecar adds to say
-//! that a session opened, what it can be asked to run, and that it is over.
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use super::contract::AgentCommand;
 
-/// `#[serde(default)]` answers a key left out, never one set to null. A frame is
-/// internally tagged, so a single null field costs the whole frame and everything
-/// it carries: null is read as the empty value an absent key leaves.
 fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
 	D: Deserializer<'de>,
@@ -22,8 +12,6 @@ where
 	Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
-/// The sidecar's first line: what it is, and what this build of it can do. Read
-/// once, before any session exists.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Ready {
@@ -35,41 +23,26 @@ pub struct Ready {
 	pub capabilities: Vec<String>,
 }
 
-/// One frame and the session it came from.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Envelope {
 	pub session: String,
 	pub frame: Value,
 }
 
-/// What the host asks the sidecar to start a session as. Mirrors the SDK options
-/// it is turned into on the other side, and names no flag: the sidecar decides
-/// how its provider spells any of this.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenRequest {
 	pub cwd: String,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub resume: Option<String>,
-	/// The bot's plugin bundle, loaded for this session and never installed, and the
-	/// agent inside it the main thread is promoted to. Both are re-sent on a resume:
-	/// neither is sticky — see `PLUGINS.md`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub plugin_path: Option<String>,
-	/// The app's own bundle, loaded beside the bot's and never promoted — nothing in it
-	/// is an agent. Only ever named beside a `plugin_path`, see `PROTOCOL.md`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub system_plugin_path: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub agent: Option<String>,
-	/// Who the bot is, rendered by the host from the bot's own name and title. The
-	/// sidecar appends it to the prompt layer: the sentences are the app's, so no
-	/// bot's bundle carries a copy of them — see `PROTOCOL.md`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub identity: Option<String>,
-	/// The style the answer is written in, by the name the provider knows it under.
-	/// Named, the sidecar passes it as an inline settings object; left out, it passes
-	/// no settings at all — see `PROTOCOL.md`.
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub output_style: Option<String>,
 	pub partial_messages: bool,
@@ -80,16 +53,13 @@ pub struct OpenRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Frame {
-	/// The session is live and may be prompted.
 	Opened,
-	/// The session is over, whatever the host was expecting.
 	Closed(ClosedFrame),
 	System(SystemFrame),
 	StreamEvent(StreamEventFrame),
 	Assistant(MessageFrame),
 	User(MessageFrame),
 	Result(ResultFrame),
-	/// The commands the sidecar read off its provider, with what each one does.
 	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
 	ControlResponse(ControlResponseFrame),
@@ -111,11 +81,6 @@ pub struct SystemFrame {
 	pub session_id: Option<String>,
 }
 
-/// The sidecar's own frame, not the SDK's: the `init` message names the commands
-/// but not what they do, and the described list is answered by a control request
-/// that does not land in step with it. A frame naming none says nothing rather
-/// than saying "none" — the list is kept against the bot from one launch to the
-/// next, and erasing it here would erase it for good.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CommandsFrame {
 	#[serde(default, deserialize_with = "null_as_default")]
@@ -297,10 +262,6 @@ pub fn deny_command(session: &str, request_id: &str, message: &str) -> Value {
 	)
 }
 
-/// The asks that are about the install rather than about a conversation. None of
-/// them names a session, so no answer arrives inside an [`Envelope`] — and each is
-/// answered under the type it was asked, which is what lets one name stand for the
-/// ask and its answer both.
 pub const CHECK: &str = "check";
 pub const MODELS: &str = "models";
 pub const TOOLS: &str = "tools";
@@ -309,9 +270,6 @@ pub fn ask_command(kind: &str) -> Value {
 	serde_json::json!({ "type": kind })
 }
 
-/// The [`CHECK`] answer: the sign-in state of the provider's own credentials.
-/// `detail` says the question could not be answered at all, which a reader is owed
-/// apart from a plain refusal: a broken install is not an account that is signed out.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Checked {
@@ -321,8 +279,6 @@ pub struct Checked {
 	pub detail: Option<String>,
 }
 
-/// The [`MODELS`] answer: every label the provider offers, in the order it offers
-/// them. Empty is an answer, not a failure.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Catalogue {
@@ -330,9 +286,6 @@ pub struct Catalogue {
 	pub models: Vec<String>,
 }
 
-/// The [`TOOLS`] answer: every built-in a session of this install can be given, in
-/// the order the provider named them and without the ones an MCP server provides.
-/// Empty is an answer, not a failure.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCatalogue {

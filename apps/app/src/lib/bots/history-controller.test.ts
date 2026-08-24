@@ -11,8 +11,6 @@ const A_SKILL = {
 	body: "One line per change.",
 }
 
-/** A bundle with one write in it, which is the smallest history a reader can act
- * on: every commit here comes from a write the fake accepted. */
 const written = async (store: TranscriptStore) => {
 	await store.createBotSkill("default", A_SKILL)
 	const controller = createHistoryController(store)
@@ -20,8 +18,6 @@ const written = async (store: TranscriptStore) => {
 	return controller
 }
 
-/** The queue behind every call answers on its own turn, so a test reads the state
- * only after the loop it was handed to has run out. */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe("history controller", () => {

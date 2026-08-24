@@ -18,8 +18,6 @@ import {
 	CHAT_AVATAR_SIZE,
 } from "@workspace/ui/components/chat-turn"
 
-/** The bot this row is about: its animal, its tint and the id its blot shape is
- * derived from — the three things it wears at rest and must keep while it works. */
 const BUSY_BOT = { animal: "owl", blot: "blue", seed: "bot-7" } as const
 
 const BOT_WORKING_KINDS: BotWorkingKind[] = [
@@ -39,8 +37,6 @@ const ACTIVITY: AgentActivityItem[] = [
 	{ id: "sum", type: "trace", kind: "thinking", label: "Two workspaces" },
 ]
 
-/** The other origin: the mark is working inside an activity header rather than
- * standing alone, and the row it lands in was already on screen. */
 const MarkHandoff = () => {
 	const [delivered, setDelivered] = useState(false)
 
@@ -214,10 +210,8 @@ export const HoverLabel = meta.story({
 	play: async ({ canvas, userEvent }) => {
 		const text = canvas.getByText("No name is searching…")
 
-		// The words are hidden by a class, so wait for the sheet before reading it.
 		await waitFor(() => expect(text).not.toBeVisible())
 		await userEvent.hover(canvas.getByRole("img"))
-		// The reveal is a fade, so the row is only fully readable once it lands.
 		await waitFor(() => expect(text).toBeVisible())
 	},
 })
@@ -283,12 +277,6 @@ export const Stop = meta.story({
 
 		await expect(canvas.getAllByRole("button")).toHaveLength(1)
 
-		// Stories share one page and one real pointer, and this one is handed the mouse
-		// wherever the story before it left it — over the control, for all it knows,
-		// with the glyph already armed. Nothing here can read that state away: the
-		// first move fires no leave on an element the runner never saw the pointer
-		// enter. So take the control first. From there every move is one this story
-		// made, and what it reads back is what it set.
 		stop.blur()
 		await userEvent.hover(stop)
 		await waitFor(() => expect(glyph).toBeVisible())

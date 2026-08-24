@@ -17,9 +17,6 @@ export const PROVIDER_IDS = Object.keys(PROVIDERS)
 export const findProvider = (id: string): AgentProvider | undefined =>
 	PROVIDERS[id]
 
-/** The one readiness gate both entrypoints pass through: a provider nobody knows
- * and a provider that cannot run are both a host with nothing to talk to, and
- * neither is worth a frame. */
 export const requireProvider = (requestedId?: string): AgentProvider => {
 	const id = requestedId ?? DEFAULT_PROVIDER_ID
 	const provider = findProvider(id)

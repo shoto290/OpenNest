@@ -19,7 +19,6 @@ const GROUPS = [
 	{ icon: Icons.Terminal, label: "Runtime", value: "runtime" },
 ]
 
-/** The group that never sits with the others — a rule stands between it and them. */
 const DANGER = { icon: Icons.Alert, label: "Danger zone", value: "danger" }
 
 const renderRail = (args: SettingsRailProps) => (

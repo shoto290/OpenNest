@@ -6,7 +6,6 @@ export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs))
 }
 
-/** Fans one node out to every ref given, callback or object. */
 export function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
 	return (node: T | null) => {
 		for (const ref of refs) {

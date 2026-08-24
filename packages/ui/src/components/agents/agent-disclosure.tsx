@@ -12,7 +12,6 @@ export interface AgentDisclosureProps
 	openHeight?: CSSProperties["height"]
 }
 
-/** Shared transform-only reveal for collapsible agent content. */
 export function AgentDisclosure({
 	open,
 	openHeight = "auto",

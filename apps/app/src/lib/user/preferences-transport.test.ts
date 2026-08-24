@@ -22,9 +22,6 @@ const RECORD: UserPreferences = {
 	notifyOnFinishedTurn: true,
 }
 
-/** What the host answers before anything has been stored. Spelled out here rather
- * than exported from the contract: the defaults are the host's, and a copy this
- * side shipped would be a second answer for a screen to read. */
 const DEFAULTS: UserPreferences = {
 	displayName: "",
 	profilePicturePath: null,

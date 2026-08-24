@@ -29,7 +29,6 @@ export type MarkdownPreProps = ComponentPropsWithoutRef<"pre"> & ExtraProps
 
 interface MarkdownFenceProps {
 	code: string
-	/** Free-form: the fence label the author typed, unknown values render as plain text. */
 	language?: string
 }
 
@@ -39,7 +38,6 @@ type FenceElement = Extract<FenceChild, { tagName: string }>
 
 const LANGUAGE_PREFIX = "language-"
 
-/** Past this a fence takes long enough to tokenise that the first frame would wait on it. */
 const HIGHLIGHT_BUDGET_LINES = 200
 
 const isCodeElement = (child: FenceChild): child is FenceElement =>
@@ -47,8 +45,6 @@ const isCodeElement = (child: FenceChild): child is FenceElement =>
 
 const codeChildOf = (node?: FenceNode) => node?.children.find(isCodeElement)
 
-/** What sits between the fence delimiters, byte for byte: the one newline the parser
- * appends when it builds the element is not part of what the author wrote. */
 const sourceOf = (node: FenceElement) =>
 	node.children
 		.map((child) => (child.type === "text" ? child.value : ""))
@@ -68,8 +64,6 @@ const languageOf = (node: FenceElement) => {
 const fitsInOneFrame = (code: string) =>
 	code.split("\n", HIGHLIGHT_BUDGET_LINES + 1).length <= HIGHLIGHT_BUDGET_LINES
 
-/** Inline code: the parser output is already the markup this renderer wants, except for
- * the one label `remark-math` writes — an expression is typeset, not quoted. */
 export const MarkdownCode = ({
 	node,
 	children,
@@ -82,11 +76,6 @@ export const MarkdownCode = ({
 	return <code {...props}>{children}</code>
 }
 
-/** The surface, radius and scroll come from the prose class the renderer owns, so a
- * fence keeps reading like markdown on every bubble variant; the tokens and the copy
- * control are what this adds. The viewport stops short of that control rather than
- * running under it, so no line hides behind the button at any scroll position, and a
- * fence past the budget paints its source first and takes its colours a frame later. */
 const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(code)
@@ -139,10 +128,6 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 	)
 }
 
-/** A fence arrives as `pre > code`, so the source text and its label are read from the
- * node rather than from rendered children — a token tree cannot be copied back to text.
- * Two labels are not code at all: `math` is what a `$$` block becomes, and `mermaid` is
- * a drawing an author asked for; both take their own renderer and neither is painted. */
 export const MarkdownPre = ({ node, children, ...props }: MarkdownPreProps) => {
 	const code = codeChildOf(node)
 	if (!code) return <pre {...props}>{children}</pre>

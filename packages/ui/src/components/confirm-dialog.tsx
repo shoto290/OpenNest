@@ -12,36 +12,17 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 
 type ConfirmDialogProps = {
-	/** What is inside the button that opens the question — an icon, a word, both.
-	 * Left out for a question a surface raises itself, which then owns `open`. */
 	trigger?: ReactNode
-	/** The trigger's own shape. Every caller so far dresses it with
-	 * `buttonVariants`. */
 	triggerClassName?: string
-	/** Whether the question stands, for a surface that decides — a way out taken
-	 * while something is unsaved. Left out, the trigger owns it. */
 	open?: boolean
 	onOpenChange?: (open: boolean) => void
-	/** Names the thing being acted on, so a reader who opened the wrong one finds
-	 * out here rather than after. */
 	title: string
-	/** What the action takes away, in full. Never shortened to "Are you sure?" —
-	 * the consequence is the question. */
 	description: string
 	confirmLabel: string
-	/** Fired only once the question is accepted. */
 	onConfirm: () => void
-	/** Whether it mounts with the question already up. Read once, as it mounts. */
 	defaultOpen?: boolean
 }
 
-/**
- * A question standing between a reader and something they cannot undo. It dims the
- * whole page and traps focus — this is a question, not a notification — and puts
- * Cancel first, so the safe way out is the one the hand reaches. Escape and the
- * backdrop both cancel, and a cancelled question reports nothing: `onConfirm` fires
- * on the second press and only then.
- */
 const ConfirmDialog = ({
 	trigger,
 	triggerClassName,

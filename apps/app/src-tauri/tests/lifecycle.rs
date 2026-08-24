@@ -1,15 +1,3 @@
-//! The lifecycle transitions of one session, raced against each other.
-//!
-//! Unix only: what a refused transition must not leave behind is a process
-//! group, and a group kill is a no-op everywhere else.
-//!
-//! The tests here share more than a process. `live_groups()` and the sweep are
-//! process-wide by nature, and `cargo test` runs the tests of one binary in
-//! parallel — so a neighbour running alongside would have its child counted, and
-//! swept, by whichever test got there first. They take `SERIAL` in turn instead,
-//! and recover from a poisoned lock rather than propagate it: the test that
-//! panicked already fails the run, and cascading that into the others would only
-//! hide which one broke.
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
@@ -31,8 +19,6 @@ use tauri::{App, Manager};
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
-/// Comfortably inside the grace a child deaf to EOF is given, so the quit lands
-/// while the restart is still tearing the previous session down.
 const QUIT_INSIDE_THE_LADDER: Duration = Duration::from_millis(200);
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -44,8 +30,6 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
 fn app() -> App<MockRuntime> {
 	mock_builder()
 		.manage(AgentState::default())
-		// A host that never opened a file: the bots these tests start are bots it can
-		// read nothing about, so every child comes up as one carrying nothing.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(mock_context(noop_assets()))
@@ -56,8 +40,6 @@ fn runtime() -> tokio::runtime::Runtime {
 	tokio::runtime::Runtime::new().expect("runtime")
 }
 
-/// One conversation restarting its own runtime, so what is under test stays the
-/// transition and never the scope: every call below names the same run.
 fn scope() -> RuntimeScope {
 	RuntimeScope {
 		conversation_id: "c1".to_owned(),
@@ -67,8 +49,6 @@ fn scope() -> RuntimeScope {
 	}
 }
 
-/// A second bot, in a chat of its own: the other participant a child may be live
-/// for while the first one is answering.
 fn another_bots_scope() -> RuntimeScope {
 	RuntimeScope {
 		conversation_id: "c2".to_owned(),
@@ -78,7 +58,6 @@ fn another_bots_scope() -> RuntimeScope {
 	}
 }
 
-/// Never `$HOME`: the child inherits this as its working directory.
 async fn start_run(
 	app: &App<MockRuntime>,
 	scope: RuntimeScope,
@@ -122,17 +101,12 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
-/// The probe file is named after this test process: worktrees run their suites
-/// side by side and a shared path would have them racing.
 fn probe_file() -> PathBuf {
 	let path = std::env::temp_dir().join(format!("opennest-lifecycle-{}.pid", std::process::id()));
 	let _ = std::fs::remove_file(&path);
 	path
 }
 
-/// Two starts landing together must not both take the seat. The loser's session
-/// would be reachable through nothing but the sidecar's routing table, and
-/// nothing left running would ever close it.
 #[test]
 fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 	let _serial = serial();
@@ -159,10 +133,6 @@ fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 
 }
 
-/// A shutdown and a start on one participant are one seat, taken in turn: the
-/// loser is refused rather than queued, and neither ever ends up holding a
-/// session the other is tearing down. Whichever order they land in, the host is
-/// left with one sidecar and a state that agrees with it.
 #[test]
 fn a_start_racing_a_shutdown_never_interleaves() {
 	let _serial = serial();
@@ -188,12 +158,6 @@ fn a_start_racing_a_shutdown_never_interleaves() {
 	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
 }
 
-/// The window a quit is most dangerous in: a start whose handshake has not
-/// returned owns a process group nothing else can see, and the slot it would
-/// install into is still empty. The sweep ends the group, the child's stdout
-/// closes with it, and the start comes back on the crash rather than on its
-/// startup timeout — to a gate that stays shut behind it, because the next start
-/// would launch a child for a host that no longer exists.
 #[test]
 fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	let _serial = serial();
@@ -237,10 +201,6 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	let _ = std::fs::remove_file(&pid_file);
 }
 
-/// The one window the sweep cannot cover, because the session it would have to
-/// reach does not exist yet: a restart is still waiting on the sidecar to open
-/// one when the quit lands. Only the check before the slot keeps that session
-/// from being installed into a host on its way out, and left open behind it.
 #[test]
 fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 	let _serial = serial();
@@ -257,9 +217,6 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 			terminate_session(app.state::<AgentState>().inner()).await;
 		});
 
-		// Either verdict is the same guarantee: the gate refused the install, or the
-		// sweep reached the sidecar first and the open died with it. What must never
-		// come back is a handle.
 		assert!(
 			restarted.is_err(),
 			"the restart installed a session into a quitting host: {restarted:?}"
@@ -276,13 +233,6 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
 }
 
-/// The reader owns several bots and more than one of them is answering. A start for
-/// one of them is not a handover of the other: two sessions on the one sidecar, and
-/// a transition on one that never keeps the other from coming up.
-///
-/// Then the one event that has to reach both — the host's exit. The sidecar here is
-/// deaf to the EOF its stdin is handed, so a polite close alone would leave it
-/// running; what ends it is the escalation behind it.
 #[test]
 fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 	let _serial = serial();

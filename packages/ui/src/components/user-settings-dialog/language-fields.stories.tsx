@@ -13,9 +13,6 @@ import {
 	type Language,
 } from "@workspace/ui/lib/i18n"
 
-/** The group holds no choice of its own, so a story that lets a reader pick holds
- * what the picking produces — and reads the interface in it, the way the host does
- * once it has written the choice down. */
 const LanguageHost = (props: LanguageFieldsProps) => {
 	const [language, setLanguage] = useState(props.language)
 

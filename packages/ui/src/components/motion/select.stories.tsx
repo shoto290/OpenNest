@@ -11,9 +11,6 @@ import {
 	SelectValue,
 } from "@workspace/ui/components/motion/select"
 
-/** `SelectItem` renders an `<li>` under a plain `div`, so axe's `listitem` rule
- * fires on any story that leaves the panel open. Reported, not hidden: `todo`
- * keeps the violation in the a11y panel while the markup is fixed upstream. */
 const A11Y_LISTBOX_MARKUP_DEBT = { test: "todo" } as const
 
 type Field = {

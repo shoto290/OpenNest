@@ -3,8 +3,6 @@ import { check, type DownloadEvent } from "@tauri-apps/plugin-updater"
 
 import type { UpdateProgress, UpdaterPort } from "./updater-port"
 
-/** The plugin reports a length once and then a chunk at a time, so the running
- * total is kept here rather than recomputed by every reader of it. */
 const accumulate = (onProgress: (progress: UpdateProgress) => void) => {
 	let downloaded = 0
 	let total: number | null = null

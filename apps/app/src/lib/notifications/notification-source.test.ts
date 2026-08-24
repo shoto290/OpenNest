@@ -51,7 +51,6 @@ const createFakeChat = () => {
 			}
 		},
 		listenerCount: () => listeners.size,
-		/** One bot's state changing, published the way the controller publishes it. */
 		publish: (botId: string, state: Partial<ChatState> = {}) => {
 			states.set(botId, { ...initialChatState, ...state })
 			for (const listener of [...listeners]) {
@@ -73,8 +72,6 @@ const createFakeRoster = (bots: { id: string; name: string }[]) => {
 	}
 }
 
-/** The window telling the source what the operating system gave it, and whether the
- * source is still listening for it. */
 const createFakeWindowFocus = () => {
 	let report: ((isFocused: boolean) => void) | undefined
 
@@ -122,9 +119,6 @@ const start = async (
 	return { chat, roster, notifications, windowFocus, stop }
 }
 
-/** The publish that gives a bot the state its next change is read against. Nothing
- * is compared on the first sight of a bot, so every test that expects a notification
- * starts from one. */
 const seed = (harness: Harness, botId: string) => {
 	harness.chat.publish(botId)
 	harness.notifications.sent.length = 0

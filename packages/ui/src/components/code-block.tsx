@@ -1,5 +1,4 @@
 "use client"
-// Adapted from beui.dev/components/agents/code-block
 
 import {
 	type CSSProperties,
@@ -27,7 +26,6 @@ type CopyOutcome = "idle" | "copied" | "failed"
 
 export interface CodeBlockProps {
 	code: string
-	/** Free-form so a model can stream any fence label; unknown values render as plain text. */
 	language?: string
 	filename?: string
 	status?: CodeBlockStatus

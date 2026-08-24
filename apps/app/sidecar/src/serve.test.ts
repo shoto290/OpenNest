@@ -6,7 +6,6 @@ import { DEFAULT_PROVIDER_ID } from "./providers/registry"
 
 const entrypoint = new URL("./index.ts", import.meta.url).pathname
 
-/** Run from source there is no bundle beside the sidecar to resolve. */
 const providerExecutable = claudeSourceExecutable()
 
 const environment = {
@@ -14,19 +13,10 @@ const environment = {
 	[EXECUTABLE_OVERRIDE_ENV]: providerExecutable,
 }
 
-/** Starting the sidecar and reading its answer back: 150ms on an idle machine,
- * 1.7s beside every other suite of the repository. */
 const SIDECAR_TIMEOUT = 10_000
 
-/** The same, plus one run of the provider executable: 0.4s on an idle machine,
- * 6.1s under the same load. Three quarters of a run go to the executable, none
- * of it to the sidecar. */
 const PROVIDER_TIMEOUT = 20_000
 
-/** The provider executable is 302 MB, and the first run of it on a machine pays
- * for validating that whole signature: 4.3s measured against 0.4s for every run
- * after it. Paid once here rather than inside whichever test reached the
- * executable first, where it read as that test being slow. */
 const WARM_UP_TIMEOUT = 60_000
 
 const warmUpProvider = async () => {
@@ -96,8 +86,6 @@ describe("serve", () => {
 
 			expect(checked.type).toBe("check")
 			expect(typeof checked.authenticated).toBe("boolean")
-			// The probe reads an email, an organisation and a subscription type. None of
-			// them may reach the pipe: a verdict and, at most, why there is none.
 			expect(
 				Object.keys(checked).filter(
 					(key) => !["type", "authenticated", "detail"].includes(key),

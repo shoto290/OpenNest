@@ -48,18 +48,14 @@ const TURN_STATES: ChatTurnState[] = [
 
 const Avatar = () => <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />
 
-/** The padding of the bubble a node sits in, which is what a bare row gives up. */
 const bubblePaddingOf = (node: Element) => {
 	const bubble = node.closest<HTMLElement>(
 		'[data-slot="message-bubble-content"]',
 	)
-	// `Error` names a story in this file, and that shadows the constructor.
 	if (!bubble) throw new globalThis.Error("This node sits in no bubble")
 	return getComputedStyle(bubble).paddingLeft
 }
 
-/** The handoff the app performs: a run withholds its closing paragraph until
- * the turn lands, so that row mounts in the very commit that hands it the mark. */
 const MarkHandoff = () => {
 	const [delivered, setDelivered] = useState(false)
 
@@ -90,8 +86,6 @@ const MarkHandoff = () => {
 const TESTS =
 	"Beside what they test: Vitest drives the stories in `@workspace/ui`, and `cargo test` covers the Tauri host."
 
-/** A transcript that already holds an answered run, so a second avatar is on
- * screen while the mark moves. */
 const MarkedHistory = () => {
 	const [working, setWorking] = useState(false)
 
@@ -219,13 +213,10 @@ export const Mark = meta.story({
 		await expect(marks()).toHaveLength(1)
 
 		await userEvent.click(canvas.getByRole("button", { name: "Land the turn" }))
-		// The answer arrives on a fade, so nothing may be read off it until the
-		// reveal has landed.
 		await waitFor(() =>
 			expect(getComputedStyle(canvas.getByText(ANSWER)).opacity).toBe("1"),
 		)
 
-		// One identity throughout: the mark is never absent and never doubled.
 		await expect(marks()).toHaveLength(1)
 
 		const gutter = canvasElement.querySelector<HTMLElement>(
@@ -234,8 +225,6 @@ export const Mark = meta.story({
 		const landed = gutter?.firstElementChild
 
 		await expect(landed).toBeInTheDocument()
-		// The gutter measures the mark and nothing else, so the spring lands the
-		// avatar on the bubble rather than a descender above it.
 		await expect(gutter?.getBoundingClientRect().height).toBe(
 			landed?.getBoundingClientRect().height,
 		)
@@ -267,8 +256,6 @@ export const MarkAcrossRuns = meta.story({
 		)
 		await waitFor(() => expect(gutterAvatars()).toHaveLength(1))
 
-		// The mark left for the working row; the run above it never held it, so it
-		// stays exactly where it was drawn.
 		await expect(marked()).toHaveLength(1)
 		await expect(gutterAvatars()[0].getBoundingClientRect().top).toBe(
 			settled.top,

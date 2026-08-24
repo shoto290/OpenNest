@@ -19,8 +19,6 @@ import { avatarSrc } from "../host"
 import type { Bot } from "../conversations/store-contract"
 import { botIdentity } from "../conversations/transcript-fixtures"
 
-/** The way the host answers a bot: `changesNothing` is read off the denials rather
- * than set beside them, so no fixture here can describe a bot the store could not. */
 const bot = (overrides: Partial<Bot> = {}): Bot => {
 	const described = { ...botIdentity(), id: "b-1", createdAt: 1, ...overrides }
 	return { ...described, changesNothing: deniesChanges(described.deniedTools) }
@@ -51,14 +49,10 @@ describe("toSettingsValue", () => {
 		})
 	})
 
-	// The two the store keeps as absences: a bot with nowhere to work is not a bot
-	// working at the empty path, and the field shows its own placeholder instead.
 	it("reads a directory the bot does not have as no text at all", () => {
 		expect(toSettingsValue(bot({ workingDir: null })).workingDirectory).toBe("")
 	})
 
-	// A bot nobody marked is a bare animal, not an animal on a default tint: the
-	// picker opens on "No blot" and the avatar draws nothing behind it.
 	it("reads a bot nobody marked as wearing no blot", () => {
 		expect(
 			toSettingsValue(bot({ avatarBlot: null })).identity.blot,
@@ -73,9 +67,6 @@ describe("changesRuntime", () => {
 	})
 	const value = toSettingsValue(stored)
 
-	// The four a child is started with and can never be told afterwards. The model
-	// and the denial are two of them: both are keys of the agent file the child is
-	// promoted to, read once when that child starts.
 	it("says so for the instructions, the directory, the model and the denial", () => {
 		expect(
 			changesRuntime(stored, { ...value, instructions: "Answer at length." }),
@@ -94,8 +85,6 @@ describe("changesRuntime", () => {
 		).toBe(false)
 	})
 
-	// Everything else about a bot is read where it is shown, or travels with the
-	// next prompt: none of it is worth a process.
 	it("says nothing for a field the process was never started with", () => {
 		expect(changesRuntime(stored, value)).toBe(false)
 		expect(changesRuntime(stored, { ...value, name: "Nyx" })).toBe(false)
@@ -107,8 +96,6 @@ describe("changesRuntime", () => {
 		).toBe(false)
 	})
 
-	// The field is text and the column is an absence: a directory emptied to spaces
-	// is a bot naming none, and one that never named any is unchanged by them.
 	it("reads a directory emptied to spaces the way the store stores it", () => {
 		expect(changesRuntime(stored, { ...value, workingDirectory: "   " })).toBe(
 			true,
@@ -146,8 +133,6 @@ describe("toIdentity", () => {
 		})
 	})
 
-	// Clearing the blot is the picker emitting an identity with none, and the store
-	// keeps that as the absence it is rather than as a tint named "none".
 	it("writes a blot the reader cleared as an absence", () => {
 		const value = toSettingsValue(stored)
 
@@ -164,9 +149,6 @@ describe("toIdentity", () => {
 		).toBeNull()
 	})
 
-	// The panel edits the style beside its value, so every write the value authors
-	// has to leave the bot on the style it already answers under — otherwise saving a
-	// name puts it back on the default one.
 	it("carries the style the bot already answers under", () => {
 		const styled = bot({ outputStyle: "default" })
 
@@ -176,9 +158,6 @@ describe("toIdentity", () => {
 		).toBe("default")
 	})
 
-	// A model label is not a vocabulary this side polices: there is no listing to
-	// check one against, so what the panel emitted is what the store is told —
-	// alias, versioned name or something this build has never seen.
 	it("writes the model label it was given, whatever it is", () => {
 		const value = toSettingsValue(stored)
 
@@ -189,9 +168,6 @@ describe("toIdentity", () => {
 })
 
 describe("toIdentity, on the tools a bot is denied", () => {
-	// The one path the denial is written through: a reader ticking the four tools
-	// one by one and a reader throwing the switch submit the same list, so no order
-	// of writes can make the agent file mean two things.
 	it("writes the same denials for the switch as for the four tools picked by hand", () => {
 		const picked = bot({ deniedTools: [...CHANGING_TOOLS].reverse() })
 		const thrown = bot({ deniedTools: [] })
@@ -206,8 +182,6 @@ describe("toIdentity, on the tools a bot is denied", () => {
 		)
 	})
 
-	// Everything else the reader denied stays denied: the switch owns four names and
-	// no others.
 	it("leaves every other denial standing when the switch goes off", () => {
 		const held = bot({ deniedTools: [...CHANGING_TOOLS, "WebFetch"] })
 
@@ -227,8 +201,6 @@ describe("toIdentity, on the tools a bot is denied", () => {
 })
 
 describe("modelOptionsFor", () => {
-	/** What a machine answers: grouped by tier with the tier's alias first, and a tier
-	 * nothing in this repository names. The point is that nothing here has to. */
 	const CATALOGUE = [
 		"quasar",
 		"quasar[1m]",
@@ -245,8 +217,6 @@ describe("modelOptionsFor", () => {
 		).toEqual(CATALOGUE)
 	})
 
-	// Every label is its value: these are the words Claude Code takes, and a tier this
-	// build never heard of has no friendly name to be given.
 	it("labels every value with itself", () => {
 		expect(modelOptionsFor("quasar", CATALOGUE)).toContainEqual({
 			label: "claude-quasar-5",
@@ -254,15 +224,12 @@ describe("modelOptionsFor", () => {
 		})
 	})
 
-	// The floor, for a machine with no executable to read: the four tier aliases.
 	it("falls back to the aliases every build knows when nothing was read", () => {
 		expect(modelOptionsFor("sonnet", []).map((option) => option.value)).toEqual(
 			FALLBACK_MODELS,
 		)
 	})
 
-	// A bot on a label nothing offers still has to be readable in its own settings,
-	// and selecting another field must not be what moves it off that label.
 	it("offers a label of its own back so the bot can be seen on it", () => {
 		const read = modelOptionsFor("claude-mythos-preview", CATALOGUE)
 		const fallen = modelOptionsFor("claude-mythos-preview", [])
@@ -334,8 +301,6 @@ describe("newBotIdentity", () => {
 		expect(BOT_NAMES).toContain(newBotIdentity(rosterCarrying(BOT_NAMES)).name)
 	})
 
-	// An alias follows its tier; a versioned name pins the bot to whatever was
-	// current the day it was made.
 	it("records an alias rather than a versioned name", () => {
 		const { model } = newBotIdentity([])
 
@@ -350,8 +315,6 @@ describe("toRosterBots", () => {
 		bot({ id: "b-2", name: "Beacon", title: "" }),
 	]
 
-	/** The clock the rows below are labelled from, and a moment twelve hours behind
-	 * the reading it takes. */
 	const NOW = new Date(2025, 2, 12, 21, 30).getTime()
 	const TODAY = new Date(2025, 2, 12, 9, 24).getTime()
 
@@ -369,13 +332,9 @@ describe("toRosterBots", () => {
 			animal: "owl",
 			blot: "green",
 		})
-		// A bot nobody gave a role draws no badge, which is a title left out rather
-		// than an empty one passed through.
 		expect(beacon.title).toBeUndefined()
 	})
 
-	// Every bot runs a process of its own, so every row reads its own: the bot the
-	// reader is not looking at is shown answering when it is.
 	it("gives every bot the working state of its own process", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,
@@ -393,8 +352,6 @@ describe("toRosterBots", () => {
 		expect(beacon).toMatchObject({ status: "working", pose: "searching" })
 	})
 
-	// Every bot holds a conversation of its own, so every row previews its own last
-	// word — the row the reader is not on included.
 	it("gives every bot the last word of its own conversation", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,
@@ -406,13 +363,9 @@ describe("toRosterBots", () => {
 		)
 
 		expect(atlas.lastMessage).toBe("Pulled the three papers.")
-		// A bot nothing has been said to yet previews nothing, and the row keeps the
-		// height it has with a preview.
 		expect(beacon.lastMessage).toBeUndefined()
 	})
 
-	// The line and the time come off the same message, so a row can never date a
-	// preview it is not showing.
 	it("labels a row with the age of the word it previews", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,
@@ -427,8 +380,6 @@ describe("toRosterBots", () => {
 		expect(beacon.timestamp).toBeUndefined()
 	})
 
-	// A turn that ended without saying anything: the row has nothing to preview and
-	// still says when the conversation last moved.
 	it("labels a row whose last message said nothing", () => {
 		const [atlas] = toRosterBots(
 			roster,
@@ -440,8 +391,6 @@ describe("toRosterBots", () => {
 		expect(atlas.timestamp).toBe("12h")
 	})
 
-	// One reading for the whole array: two rows a day apart are aged against the same
-	// now, so they cannot both be read as hours old.
 	it("labels every row of one roster from the one clock it was given", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,

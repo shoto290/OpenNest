@@ -11,9 +11,6 @@ const hoverQuery = () => {
 	return media
 }
 
-/** One native listener for the whole page, however many callers subscribe: a
- * transcript mounts one of these per bubble action, and each would otherwise
- * hold its own. */
 const listeners = new Set<() => void>()
 
 const broadcast = () => {
@@ -31,12 +28,6 @@ const subscribe = (onChange: () => void) => {
 	}
 }
 
-/**
- * Returns true only on devices that have a true hover (mouse / trackpad).
- * Touch devices fire phantom `:hover` on tap that sticks until tap-elsewhere
- * — gate hover-only effects (scale lifts, magnetic pulls) behind this.
- * Read during render, so the first paint already knows.
- */
 export const useHoverCapable = () =>
 	useSyncExternalStore(
 		subscribe,

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import { typesetMath } from "@workspace/ui/lib/typeset-math"
 
-/** The bomb every review reaches for: cheap to type, ruinous to typeset. */
 const matrix = (size: number) => {
 	const row = Array.from({ length: size }, (_, column) => column).join(" & ")
 	return `\\begin{matrix}${Array.from({ length: size }, () => row).join(" \\\\ ")}\\end{matrix}`

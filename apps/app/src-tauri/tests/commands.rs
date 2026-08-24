@@ -1,5 +1,3 @@
-//! Checks the Tauri command layer itself: registration, state handling and the
-//! shape errors take once they cross the IPC boundary.
 
 use std::sync::{Arc, Mutex};
 
@@ -22,9 +20,6 @@ fn app() -> tauri::App<MockRuntime> {
 	build(mock_context(noop_assets()))
 }
 
-/// The scope a frontend holds after opening a run against the durable lineage.
-/// Written out as JSON because that is how it crosses: a field the host spells
-/// differently is a command refused before any code of ours runs.
 fn a_scope() -> Value {
 	json!({
 		"conversationId": "c1",
@@ -41,8 +36,6 @@ fn a_scope_value() -> RuntimeScope {
 fn build(context: tauri::Context<MockRuntime>) -> tauri::App<MockRuntime> {
 	mock_builder()
 		.manage(AgentState::default())
-		// A host that never opened a file: every bot it is asked to start is a bot it
-		// can read nothing about, which is the runtime this suite is about.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(context)
@@ -90,10 +83,6 @@ fn commands_are_registered_and_report_typed_errors_without_a_session() {
 	);
 }
 
-/// A host holding no run has no other run to protect, so it answers about the
-/// session it does not have rather than about the scope it was handed. The
-/// distinction is the whole point: `notStarted` is recoverable by starting one,
-/// while a stale refusal would send the frontend looking for a run that never was.
 #[test]
 fn a_command_reaching_a_host_that_runs_nothing_says_so_whatever_run_it_names() {
 	let app = app();
@@ -137,13 +126,6 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	)));
 }
 
-/// Ending one session is a line on the sidecar's pipe; ending the host is the
-/// whole escalation ladder against a sidecar deaf to EOF. The state lock guards a
-/// pointer, not the process behind it, so the quick one must not be made to queue
-/// behind the slow one.
-///
-/// Both halves run on one task, so the order they finish in is decided by the
-/// lock alone: the shutdown can only report first if the quit let go of it.
 #[test]
 fn shutting_down_a_session_never_queues_behind_the_quit() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
@@ -182,8 +164,6 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 	assert_eq!(*finished.lock().expect("order"), ["shutdown", "terminate"]);
 }
 
-/// The identifier decides the app data directory, so this test claims one of
-/// its own rather than writing where a real install would.
 #[test]
 fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
 	let mut context = mock_context(noop_assets());
@@ -214,10 +194,6 @@ fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
 	std::fs::remove_dir_all(&dir).expect("cleanup");
 }
 
-/// The launch resolves the file from the app data directory, and nothing else in
-/// the suite goes through that resolution: a unit test hands `Database::open` a
-/// path it built itself. So this one drives `bootstrap`, identifier included, and
-/// claims a directory of its own the way the snapshot test above does.
 #[test]
 fn bootstrapping_leaves_a_migrated_file_in_the_app_data_directory() {
 	let mut context = mock_context(noop_assets());

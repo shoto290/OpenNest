@@ -12,72 +12,27 @@ import type { TranscriptStore } from "../conversations/store-port"
 import { type LastWord, lastWordIn } from "../conversations/transcript-state"
 
 export type RosterState = {
-	/** Every bot on the record, oldest first, as the store answered it. */
 	bots: Bot[]
-	/** The last word in each bot's main conversation as the record held it at load,
-	 * and when it was said, keyed by bot. It is what a row previews and dates before
-	 * this launch has opened that bot: a conversation nobody has read is still a
-	 * conversation somebody had. A bot with nothing settled in it, and one whose
-	 * conversation could not be read, are both absent — the row keeps both slots empty
-	 * either way. */
 	previews: Record<string, LastWord | undefined>
-	/** The bot the chat is open on. `null` is a reader who owns none: there is no
-	 * bot to fall back to, which is what makes the empty state real. */
 	selectedBotId: string | null
-	/** Whether the selected bot's settings stand open. It is what mounts the column:
-	 * closed, there is no panel beside the conversation at all, and the gear in the
-	 * conversation's own bar is what brings it back. */
 	isEditing: boolean
-	/** Whether the settings were opened to ask about a delete, which is what lands
-	 * them on the Danger zone rather than on the first group. Only ever about the
-	 * selected bot, because asking to delete one is what selects it. Nothing is
-	 * confirmed here — the confirmation belongs to the panel. */
 	isShowingDanger: boolean
-	/** Whether the record has answered the first read. It is what tells a launch
-	 * from a reader who owns no bot: both hold no rows, and only one of them is a
-	 * reader with nothing to show for it. A read the store refused still counts as
-	 * answered — waiting on a record that will never come is worse than showing
-	 * what it failed to give. */
 	hasLoaded: boolean
 }
 
 export type RosterController = {
 	getState: () => RosterState
 	subscribe: (listener: () => void) => () => void
-	/** The roster as the launch finds it, and the bot the app opens on: the oldest,
-	 * or none at all. Nothing is created here — a launch that wrote a bot back would
-	 * resurrect the one a reader deleted. The rows land first and their previews
-	 * follow: a reader waiting on one conversation to be read is a reader looking at
-	 * no roster at all. */
 	load: () => Promise<void>
 	select: (id: string) => void
-	/** A bot, immediately, with the conversation open on it. There is no dialog to
-	 * fill in first and none opens after: the bot exists and can be talked to, and the
-	 * gear is there for whoever wants to describe it. */
 	create: () => Promise<void>
-	/** A copy of the bot, appended to the roster and selected the way a create is.
-	 * The store owns what travels: a refusal leaves the roster as it was. */
 	duplicate: (id: string) => Promise<void>
 	edit: (id: string) => void
 	setEditing: (isEditing: boolean) => void
-	/** Who the bot is now, from the panel's whole value. Written as it is typed,
-	 * one write at a time per bot: the newest value waits for the one in flight and
-	 * every value in between is dropped, since each of them describes the same bot
-	 * less completely than the one after it. */
 	describe: (id: string, value: BotSettingsValue) => void
-	/** How the bot writes its answers. Written on its own rather than through
-	 * `describe` because the panel edits it beside its value rather than in it: the
-	 * bot on the record is the whole of what the write is built from, so the style
-	 * lands on top of whatever was last typed instead of over it. */
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
-	/** The picture the reader picked, from the bytes of their file. The store owns
-	 * where it goes and answers with the bot wearing it. */
 	uploadAvatar: (id: string, file: File) => Promise<void>
-	/** Selects the bot and opens its settings on the Danger zone. Nothing is asked
-	 * and nothing is deleted here — `remove` is what the panel's confirmation calls. */
 	askToDelete: (id: string) => void
-	/** Deletes the bot, closes the panel that asked and lands the reader at the top of
-	 * the roster: the row a deleted bot left behind is nobody's conversation. */
 	remove: (id: string) => Promise<void>
 }
 
@@ -96,10 +51,6 @@ export const createRosterController = (
 	let state = initialRosterState
 	const listeners = new Set<() => void>()
 
-	/** Every call on the roster in the order it was asked for. A create that landed
-	 * while the first read was in flight would otherwise be overwritten by an answer
-	 * that predates it, and two writes on one bot would land in whichever order the
-	 * host happened to answer. */
 	const enqueue = createQueue()
 
 	const publish = () => {
@@ -115,8 +66,6 @@ export const createRosterController = (
 
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)
 
-	/** A bot the store has just written, at the end of the roster and opened on: a
-	 * create and a duplicate both land the reader in the conversation they asked for. */
 	const admit = (written: Bot) => {
 		set({
 			bots: [...state.bots, written],
@@ -125,17 +74,12 @@ export const createRosterController = (
 		})
 	}
 
-	/** The store's own answer over the row it is about. Applied whole: what a caller
-	 * displays is what the store holds, including a picture it refused to keep. */
 	const apply = (written: Bot) => {
 		set({
 			bots: state.bots.map((bot) => (bot.id === written.id ? written : bot)),
 		})
 	}
 
-	/** What the reader sees while a write is on its way. The panel is controlled by
-	 * this state, so the value has to move on the keystroke rather than on the
-	 * answer — a field that waited for SQLite would drop characters. */
 	const preview = (id: string, value: BotSettingsValue) => {
 		const bot = held(id)
 		if (!bot) {
@@ -144,11 +88,6 @@ export const createRosterController = (
 		apply({ ...bot, ...toIdentity(value, bot) })
 	}
 
-	/** The record, read and shown. It is what a launch opens on and what a refused
-	 * write falls back to: either way the reader ends up on what the file holds, and
-	 * a read that fails leaves them on what they were already looking at. Nothing else
-	 * can be done about a refusal here — neither the roster nor the panel has anywhere
-	 * to say a save did not land. */
 	const reload = () => enqueue(() => read()).catch(() => undefined)
 
 	const read = async () => {
@@ -157,17 +96,11 @@ export const createRosterController = (
 		set({
 			bots,
 			selectedBotId: stillHeld ?? bots[0]?.id ?? null,
-			// The panel belongs to the bot it was opened on: a record that no longer
-			// holds that bot has nothing left for it to edit, and the group it was
-			// opened on is nobody's question.
 			isEditing: state.isEditing && stillHeld !== undefined,
 			isShowingDanger: state.isShowingDanger && stillHeld !== undefined,
 		})
 	}
 
-	/** The tail of one bot's main conversation, or nothing at all. Read per bot and
-	 * refused per bot: a conversation the store will not answer for leaves that row
-	 * blank, and every other row keeps the preview it was read with. */
 	const readPreview = async (botId: string): Promise<LastWord | undefined> => {
 		try {
 			const chat = await store.mainChat(botId)
@@ -178,9 +111,6 @@ export const createRosterController = (
 		}
 	}
 
-	/** Every row's preview, read at once: they are independent conversations, so
-	 * queueing them behind each other would only make the last row wait for the
-	 * first. */
 	const readPreviews = async (bots: Bot[]) => {
 		const previews: Record<string, LastWord | undefined> = {}
 		await Promise.all(
@@ -191,9 +121,6 @@ export const createRosterController = (
 		set({ previews })
 	}
 
-	/** Every keystroke reaches the panel at once and the store once a burst is over.
-	 * A bot the record no longer holds is written nothing: what a reader typed into
-	 * a row that was deleted under them has nowhere to land. */
 	const writes = createWriteLoop<BotSettingsValue, Bot>({
 		enqueue,
 		write: (id, value) => {
@@ -218,9 +145,6 @@ export const createRosterController = (
 
 		load: async () => {
 			await reload()
-			// Answered as soon as the rows are in, before their previews: a launch
-			// waiting on every conversation to be read would hold the boot screen up
-			// over a roster that is already there to be read.
 			set({ hasLoaded: true })
 			await readPreviews(state.bots)
 		},
@@ -244,9 +168,6 @@ export const createRosterController = (
 		edit: (id: string) =>
 			set({ selectedBotId: id, isEditing: true, isShowingDanger: false }),
 
-		/** The group goes with the panel that opened on it: settings reopened with the
-		 * gear are settings nobody asked a delete about, so they land on the first
-		 * group again. */
 		setEditing: (isEditing: boolean) =>
 			set({
 				isEditing,

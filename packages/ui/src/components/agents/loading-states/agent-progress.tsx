@@ -1,6 +1,4 @@
 "use client"
-// Adapted from beui.dev/components/agents/loading-states — the glyph is a slot,
-// so a surface that already shows who is working keeps only label and timer.
 
 import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useEffect, useRef, useState } from "react"
@@ -21,15 +19,10 @@ const GRID_CELLS = [
 ]
 
 export interface AgentProgressProps {
-	/** Verb describing the agent's current activity. */
 	label?: string
-	/** Leading visual. Pass `null` when the surface already has one. */
 	indicator?: ReactNode
-	/** Controlled elapsed time in seconds. */
 	elapsedSeconds?: number
-	/** Starting time for the internal timer, in seconds. */
 	initialSeconds?: number
-	/** Whether the internal timer should advance. Ignored when elapsedSeconds is provided. */
 	running?: boolean
 	className?: string
 }
@@ -75,9 +68,6 @@ export function AgentProgress({
 	className,
 }: AgentProgressProps) {
 	const [internalSeconds, setInternalSeconds] = useState(initialSeconds)
-	// Pausing stops the ticking, not the clock: the origin outlives `running`,
-	// so a surface can stop repainting a time nobody is reading and still show
-	// the true elapsed when they look again.
 	const startedAt = useRef<number | undefined>(undefined)
 	startedAt.current ??= performance.now() - initialSeconds * 1000
 

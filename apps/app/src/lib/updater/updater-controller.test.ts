@@ -20,11 +20,8 @@ const portOf = (
 	restart: UpdaterPort["restart"] = async () => undefined,
 ): UpdaterPort => ({ check, restart })
 
-/** Lets whatever the port answered reach the state before it is read. */
 const settle = () => Promise.resolve()
 
-/** The window the controller follows, and the one way to tell it the reader came
- * back — answering once whatever that reading asked has landed. */
 const stubWindow = () => {
 	const listeners = new Set<() => void>()
 
@@ -110,8 +107,6 @@ describe("createUpdaterController", () => {
 		expect(check).toHaveBeenCalledTimes(1)
 	})
 
-	// A machine that slept through the six hours wakes with a timer that never caught
-	// the drift up, and the window being read again is the only thing that says so.
 	it("asks again when the window is read after four hours", async () => {
 		const check = vi.fn(async () => null)
 		const controller = createUpdaterController(portOf(check))
@@ -134,8 +129,6 @@ describe("createUpdaterController", () => {
 		expect(check).toHaveBeenCalledTimes(1)
 	})
 
-	// A launch is a process that has asked nothing yet, whatever the one before it
-	// asked and whenever it asked it.
 	it("asks the endpoint on a launch that follows a check straight away", async () => {
 		const check = vi.fn(async () => null)
 		createUpdaterController(portOf(check)).start()
@@ -197,8 +190,6 @@ describe("createUpdaterController", () => {
 		expect(check).toHaveBeenCalledTimes(1)
 	})
 
-	// The window is already open by then: an endpoint nobody can reach is something
-	// the app says, not something it fails to start over.
 	it("records an unreachable endpoint without throwing", async () => {
 		const controller = createUpdaterController(
 			portOf(async () => {
@@ -264,8 +255,6 @@ describe("createUpdaterController", () => {
 		expect(seen).toEqual([0, 40, 100, null])
 	})
 
-	// A chunk is a fraction of a percent of a release, and the window has nothing to
-	// show between two readings that round to the same one.
 	it("says nothing for the chunks inside a percent already shown", async () => {
 		const seen: (number | null)[] = []
 		const controller = createUpdaterController(
@@ -355,7 +344,6 @@ describe("createUpdaterController", () => {
 		expect(restart).toHaveBeenCalledTimes(1)
 	})
 
-	// The build on disk is the one already running until an install replaces it.
 	it("starts nothing while no install has landed", async () => {
 		const restart = vi.fn(async () => undefined)
 		const controller = createUpdaterController(

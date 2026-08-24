@@ -20,8 +20,6 @@ const MODELS: BotModelOption[] = [
 const LONG_PATH =
 	"/Users/wren/Projects/opennest/packages/ui/src/components/bot-settings-dialog"
 
-/** The fields are controlled, so a story holds the model the way the settings
- * dialog holds the whole value. */
 const RuntimeFieldsHost = (props: RuntimeFieldsProps) => {
 	const [model, setModel] = useState(props.model)
 	const [outputStyle, setOutputStyle] = useState(props.outputStyle)

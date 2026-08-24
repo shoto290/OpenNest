@@ -36,41 +36,21 @@ import {
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2.5 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
 
-/** Fixed slots: the avatar box and the timestamp box never resize, so a name,
- * a badge and a timestamp land on the same x on every row. The avatar keeps this
- * size whatever it draws — an animal, or a picture the reader uploaded. The
- * timestamp rides the end of the name line and holds its box whether or not the
- * row carries a time, so it is the name that gives way, never the time. */
 const ROW_AVATAR_SIZE = 40
 const TIMESTAMP_SLOT =
 	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-muted-foreground leading-5 tabular-nums"
 
-/** The name line carries the name, the badge and the timestamp, and keeps its
- * height whichever of them the row has — which is what holds the second line
- * — and the row below it — on the same baseline. */
 const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
 const TITLE_BADGE =
 	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
 
-/** The second line has the whole text column to itself, and keeps its height
- * with or without a message. */
 const PREVIEW_LINE = "h-4 truncate text-muted-foreground text-xs leading-4"
 
-/** The row is the only trigger the actions have, so it says it carries them
- * and lights up while they are open. */
 const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
 
-/** The pinned region under the list is one row: the reader's own chip, then
- * whatever the host pinned beside it. On the rail it drops its side padding and
- * centres what it is given, exactly as the header above does — the rail is one
- * avatar wide, and padding either side of it leaves nothing to draw in — and it
- * stacks, the host's slot above the chip, since the chip is the row that stays. */
 const FOOTER_INSET =
 	"flex-row items-center group-data-[state=collapsed]/sidebar:flex-col-reverse group-data-[state=collapsed]/sidebar:items-center group-data-[state=collapsed]/sidebar:px-0"
 
-/** The host's slot holds its size against the chip beside it, and leaves the row
- * entirely when what it was given draws nothing — the update badge is idle most
- * of the time, and an empty box either side of it would still take its gap. */
 const FOOTER_SLOT = "shrink-0 empty:hidden"
 
 const EMPTY_COPY =
@@ -81,22 +61,13 @@ type AgentSidebarStatus = "idle" | "working"
 interface AgentSidebarBot {
 	id: string
 	name: string
-	/** Short role badge after the name. Leave it out and the row draws no badge
-	 * at all, without falling out of line with the rows that have one. */
 	title?: string
-	/** One line of the last message. Clipped, never wrapped. */
 	lastMessage?: string
-	/** Already formatted by the host — the panel never reads a clock. */
 	timestamp?: string
 	animal?: BotAvatarAnimal
-	/** The tint drawn behind the animal — what tells two rows apart at a glance. */
 	blot?: BotAvatarBlot
-	/** A picture the reader uploaded, already a URL the host is happy to load. It
-	 * wins over the animal and never animates — the activity dot is what says the
-	 * bot is busy. */
 	image?: string
 	status?: AgentSidebarStatus
-	/** What the bot is busy with while `status` is `working`. */
 	pose?: BotWorkingKind
 }
 
@@ -203,38 +174,21 @@ const BotRosterRow = ({
 	)
 }
 
-/** What the panel does not name itself is the host's to set — the desktop shell
- * marks the column as the surface its window is dragged by, and the rows, the
- * buttons and the chip in it stay what they are: a press on one selects, it does
- * not move the window. */
 type AgentSidebarPanelProps = Omit<
 	AnimatedSidebarProps,
 	"ariaLabel" | "children" | "collapsible"
 >
 
 interface AgentSidebarProps extends AgentSidebarPanelProps {
-	/** The roster, in the order it is read. Empty is a reader who owns no bot, and
-	 * the panel says so: there is no bot of its own to fall back on. */
 	bots: AgentSidebarBot[]
-	/** The selected row. Controlled: the panel never selects on its own. */
 	selectedBotId?: string
 	onSelectBot?: (id: string) => void
 	onCreateBot?: () => void
 	onEditBot?: (id: string) => void
-	/** A copy of the bot, made by the host and appended to `bots`. The panel only
-	 * says which row was asked about. */
 	onDuplicateBot?: (id: string) => void
 	onDeleteBot?: (id: string) => void
-	/** Pinned under the list, against the bottom of the column. The panel knows
-	 * nothing of what goes in it and reserves nothing for it: leave it out and the
-	 * list runs to the bottom edge as before. The list keeps the scrolling to
-	 * itself, so this stays in sight however long the roster is. */
 	footer?: ReactNode
-	/** The reader themselves. Given one, the pinned region opens with their chip,
-	 * ahead of `footer`; left out, the region is `footer` alone as before. */
 	user?: UserChipIdentity
-	/** Fired when the chip is activated. The panel owns no settings of its own —
-	 * the chip is the way in, and the host decides what opens. */
 	onOpenUserSettings?: () => void
 }
 
@@ -269,8 +223,6 @@ const AgentSidebarBase = ({
 						onClick={onCreateBot}
 						size="icon-sm"
 						tooltip={createLabel}
-						// The header is against the top of the window and the label is taller
-						// than the gap above it, so above is off the screen.
 						tooltipSide="bottom"
 						variant="ghost"
 					>
@@ -316,7 +268,6 @@ const AgentSidebarBase = ({
 	)
 }
 
-/** Hosts render this from a streaming store, so a shallow compare keeps every token from re-measuring the Motion layout projections inside the panel. */
 const AgentSidebar = memo(AgentSidebarBase)
 
 export {

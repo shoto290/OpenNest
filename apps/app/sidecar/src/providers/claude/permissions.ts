@@ -6,8 +6,6 @@ import type { EmitFrame, PermissionDecision } from "../provider"
 
 type Waiting = (decision: PermissionDecision) => void
 
-/** The reader answers every tool call, with one exception: a write inside the bot's
- * own bundle is the bot's to make, so it is allowed here and never reaches them. */
 export const createPermissionGate = (emit: EmitFrame, pluginPath?: string) => {
 	const waiting = new Map<string, Waiting>()
 

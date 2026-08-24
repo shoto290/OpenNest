@@ -1,10 +1,3 @@
-//! Brings an existing file up to the schema this build expects.
-//!
-//! `PRAGMA user_version` is the whole bookkeeping: it lives in the database
-//! header, so it is written inside the same transaction as the DDL it stands for
-//! and a step that fails halfway leaves neither the tables nor the number behind.
-//! A shipped number is spent for good — the next change appends a step, it never
-//! edits one, because an installed file has already run the old text.
 
 use rusqlite::Connection;
 
@@ -26,39 +19,6 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 8, statements: BOT_DENIED_TOOLS },
 ];
 
-/// Timestamps are unix millis, ids are UUID v4 text: both are what the host
-/// already produces, so nothing has to be converted on the way in or out.
-///
-/// `messages` and `turns` are ordered by `(conversation_id, seq)` rather than by
-/// their timestamp — two rows written in the same millisecond must still come
-/// back in the order they were appended. The unique constraints on those pairs
-/// are what makes the order a rule instead of a convention, and each one already
-/// gives SQLite the index that lookup walks.
-///
-/// Nothing here may point across conversations, so a child that belongs to one
-/// says so in its own key and is joined on the pair: `UNIQUE (id,
-/// conversation_id)` on the parent is what lets the two-column foreign key exist,
-/// and the two columns together are what makes "same conversation" a fact SQLite
-/// checks rather than a rule the writer is trusted with. The same technique scopes
-/// a runtime row to a participant, through the pair `conversation_participants`
-/// already keys on: a message's author is a bot the conversation holds rather than
-/// any bot that exists, and a checkpoint's run is its own participant's, over the
-/// three columns `runtime_sessions` is made to expose for it. The optional half of
-/// such a pair stays NULLable — SQLite counts a composite key as satisfied the
-/// moment one of its columns is NULL, which is exactly a user message with no bot
-/// author and a checkpoint taken outside any run.
-///
-/// A state a step reads back after a crash is stored, never derived: an activity
-/// left `running` by a host that died is only recognisable as abandoned because
-/// the row still says `running`. `completion_state` spells the whole lifecycle out
-/// for the same reason — `cancelled` is a user who stopped the stream,
-/// `interrupted` a process that died under one, and the sweep at the next launch
-/// can only tell them apart if both reached the disk.
-///
-/// A checkpoint is frozen whole rather than column by column: it stands for the
-/// messages it folded in, at the count and the moment it folded them, so a later
-/// summary is a new row. Refusing every update covers the id and anything added
-/// later, which enumerating the columns would not.
 const CONVERSATIONS_SCHEMA: &str = "
 CREATE TABLE bots (
 	id TEXT PRIMARY KEY,
@@ -180,44 +140,11 @@ CREATE TABLE app_settings (
 );
 ";
 
-/// What a bot brings to a context rebuilt for it, beside the transcript:
-/// `instructions` is how it was asked to answer, `memory` is what it carries from
-/// one run to the next. Both belong to the bot rather than to a conversation or a
-/// run — a session rotated away takes neither with it.
-///
-/// A step of its own rather than two more columns in [`CONVERSATIONS_SCHEMA`]:
-/// version 1 is shipped, and an installed file has already run its text. `NOT NULL
-/// DEFAULT ''` is what lets `ALTER TABLE` answer for the rows already on disk, and
-/// empty is the honest value for a bot that was never given either — a context
-/// leaves out a part that has no words in it.
 const BOT_CONTEXT: &str = "
 ALTER TABLE bots ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
 ALTER TABLE bots ADD COLUMN memory TEXT NOT NULL DEFAULT '';
 ";
 
-/// Who the bot is, beside what it was told: a short role label, a long free text,
-/// the avatar it is recognised by, and the directory its runs are meant to happen
-/// in. Two of the columns it adds are since abandoned — see the last paragraph.
-/// `title` and `description` are `NOT NULL DEFAULT ''` for the reason step 2's
-/// columns are — empty is the honest value for a bot nobody has described, and it
-/// is what `ALTER TABLE` can answer for the rows already on disk.
-///
-/// The two avatar columns are `CHECK`-constrained to the words the avatar engine
-/// draws, spelled out here rather than trusted to the writer: a row holding a
-/// ninth animal would be a bot the UI has no face for, and nothing downstream
-/// could tell it from a typo. The defaults are what the bot already on the record
-/// is given — it had no face before this step, and every row must come out of the
-/// step with one.
-///
-/// `avatar_image_path` and `working_dir` are NULLable rather than empty-defaulted:
-/// both name something outside the database, and "no picture" and "a picture at
-/// the empty path" are not the same fact.
-///
-/// `description` is left exactly where it is, values included: the settings panel
-/// stopped asking for it and nothing above reads or writes it any more, and
-/// stopping the projection is a smaller step than rewriting an installed file
-/// around its absence. `avatar_pose` is abandoned too, and stays for a reason of
-/// its own — see [`BOT_BLOT`].
 const BOT_IDENTITY: &str = "
 ALTER TABLE bots ADD COLUMN title TEXT NOT NULL DEFAULT '';
 ALTER TABLE bots ADD COLUMN description TEXT NOT NULL DEFAULT '';
@@ -231,69 +158,20 @@ ALTER TABLE bots ADD COLUMN avatar_image_path TEXT;
 ALTER TABLE bots ADD COLUMN working_dir TEXT;
 ";
 
-/// The colour a bot is marked with, which is what replaces the pose as the second
-/// half of a face. NULLable and defaulted to nothing on purpose: no mark is what a
-/// bot is until someone gives it one, and it is a fact the file can hold rather
-/// than a ninth word standing for "none".
-///
-/// `CHECK`-constrained to the eight the palette holds, for the reason step 3's two
-/// avatar columns are — a colour nothing can paint is indistinguishable from a
-/// typo once it is on the disk. The constraint passes `NULL` on its own: `NULL IN
-/// (...)` is `NULL`, and SQLite refuses a `CHECK` only when it is false.
-///
-/// `avatar_pose` is left exactly where it is, values included. SQLite will not drop
-/// a column another constraint mentions, and nothing above reads or writes it any
-/// more, so the honest step is to stop projecting it rather than to rewrite the file
-/// around its absence.
 const BOT_BLOT: &str = "
 ALTER TABLE bots ADD COLUMN avatar_blot TEXT
 	CHECK (avatar_blot IN
 		('coral', 'amber', 'moss', 'water', 'sky', 'lavender', 'rose', 'slate'));
 ";
 
-/// The slash commands the bot's last session announced, held against the bot
-/// rather than against the run that named them. A run only names them on its init
-/// announcement, and a bot gets one of those once a process has been started for it — so a
-/// bot nobody has spoken to yet, on this launch or any other, has no run to ask.
-/// The column is what answers instead.
-///
-/// A JSON array: SQLite holds no list, the order is the child's own, and
-/// the whole point of the column is that it is replaced whole by the next
-/// announcement rather than added to. `NOT NULL DEFAULT '[]'` for the reason step
-/// 2's columns are empty-defaulted — it is what `ALTER TABLE` can answer for the
-/// rows already on disk, and no command is the honest value for a bot no session
-/// has ever spoken for.
 const BOT_COMMANDS: &str = "
 ALTER TABLE bots ADD COLUMN commands TEXT NOT NULL DEFAULT '[]';
 ";
 
-/// Whether the bot is denied the tools that change files and run commands. It
-/// belongs to the bot rather than to a run: the agent file every spawn is promoted
-/// onto is rewritten from this column — see [`crate::bundles`] — so a bot set to
-/// change nothing is denied them again at the next launch.
-///
-/// `NOT NULL DEFAULT 0` for the reason step 2's columns are empty-defaulted: it is
-/// what `ALTER TABLE` can answer for the rows already on disk, and a bot nobody has
-/// held back is a bot that may still change things.
 const BOT_DENIAL: &str = "
 ALTER TABLE bots ADD COLUMN changes_nothing INTEGER NOT NULL DEFAULT 0;
 ";
 
-/// The same mark, under the words an agent file's `color` key reads — the tint now
-/// travels to the bot's bundle and back, and why it is named there rather than here
-/// is `COLOR_KEY` in [`crate::bundles`].
-///
-/// A column of its own rather than an `UPDATE` on the old one, for the reason step
-/// 3 left `description` and `avatar_pose` where they are: [`BOT_BLOT`] pinned its
-/// column to the eight old words with a `CHECK`, SQLite will not edit a `CHECK` in
-/// place, and rebuilding an installed `bots` table around one is a far larger step
-/// than stopping the projection of a column. `avatar_blot` stays exactly where it
-/// is, values included, and nothing above reads it any more.
-///
-/// The `CASE` carries every marked row over by name, which is what keeps a bot from
-/// coming up unmarked on the first launch after this. A row that is `NULL` — or that
-/// somehow holds a word this list does not name — falls out of the `CASE` as `NULL`,
-/// which is a bot marked with none.
 const BOT_COLOUR: &str = "
 ALTER TABLE bots ADD COLUMN avatar_color TEXT
 	CHECK (avatar_color IN
@@ -311,22 +189,6 @@ UPDATE bots SET avatar_color = CASE avatar_blot
 END;
 ";
 
-/// The built-in tools the bot is denied, by name. Numbered 8 rather than 7: the
-/// step that renames the tints holds 7, and a number two steps share is a step that
-/// never runs against a file the other already brought up — the version says the
-/// file is current, and one of the two columns is never written.
-///
-/// Step 6's boolean said "all four or none"; this column says which, and the
-/// boolean becomes a reading of it — a bot denying the four that write files and
-/// run commands is a bot that changes nothing. Carried over rather than asked for
-/// again: a bot held back by an older build keeps its denial, spelled out.
-///
-/// The column that stood for it is dropped in the same step, because two columns
-/// standing for one setting is two writers of one line in the agent file — see
-/// [`crate::bundles`], which owns that line.
-///
-/// A JSON array, for the reason `commands` is one: SQLite holds no list, and the
-/// value is replaced whole by the next write rather than added to.
 const BOT_DENIED_TOOLS: &str = "
 ALTER TABLE bots ADD COLUMN denied_tools TEXT NOT NULL DEFAULT '[]';
 UPDATE bots SET denied_tools = '[\"Bash\",\"Edit\",\"NotebookEdit\",\"Write\"]'
@@ -342,10 +204,6 @@ pub fn apply(connection: &mut Connection) -> Result<(), DatabaseError> {
 	apply_each(connection, MIGRATIONS)
 }
 
-/// Each step is skipped by number rather than by looking for its tables: what an
-/// old build left behind is only knowable from the version it recorded. The
-/// number is read once — this loop is the only writer of it, so a committed step
-/// is all the local has to follow.
 fn apply_each(connection: &mut Connection, migrations: &[Migration]) -> Result<(), DatabaseError> {
 	let mut installed = version(connection)?;
 	for migration in migrations {
@@ -373,9 +231,6 @@ mod tests {
 	use super::*;
 	use crate::db::connection::{open, temp_dir, FILE_NAME};
 
-	/// Two conversations, two bots, and a bot taking part in only one of them: every
-	/// rejection below needs a row that legitimately exists somewhere else, because
-	/// what has to be refused is the reference across, not the row itself.
 	const FIXTURE: &str = "
 		INSERT INTO bots (id, name, model, created_at)
 			VALUES ('b1', 'First', 'sonnet', 1), ('b2', 'Second', 'sonnet', 1);
@@ -411,8 +266,6 @@ mod tests {
 		)
 	}
 
-	/// Always the participant `('c1', 'b1')`, so the run named is the only thing
-	/// under test — `NULL` included, which is why the session comes in quoted.
 	fn a_checkpoint_naming(session: &str, id: &str, last_message_seq: u32) -> String {
 		format!(
 			"INSERT INTO context_checkpoints
@@ -439,8 +292,6 @@ mod tests {
 		connection.execute(statement, [])
 	}
 
-	/// Second statement of step 2 collides with the first, so the step trips after
-	/// having already written to the database.
 	const BROKEN: &[Migration] = &[
 		Migration { version: 1, statements: CONVERSATIONS_SCHEMA },
 		Migration {
@@ -450,8 +301,6 @@ mod tests {
 		},
 	];
 
-	/// A step that fails must cost nothing: neither the table it created before
-	/// tripping, nor the number that would tell the next launch it had run.
 	#[test]
 	fn a_failing_step_rolls_back_its_tables_and_its_version() {
 		let dir = temp_dir();
@@ -470,10 +319,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The one thing a step appended to a shipped schema has to prove: a file that
-	/// stopped at the version before it comes up whole, with the rows it already held
-	/// and the columns the new build reads them through. Empty rather than absent —
-	/// nothing has been said to this bot yet, and a context leaves such a part out.
 	#[test]
 	fn a_file_installed_before_the_later_steps_keeps_its_rows_and_gains_their_columns() {
 		let dir = temp_dir();
@@ -524,9 +369,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// What the install already on disk is: the bot the app shipped with, the chat
-	/// it holds and every word said in it. All of it has to be reachable after the
-	/// step, and the bot has to come out of it wearing a face it never had.
 	#[test]
 	fn the_bot_already_on_the_record_keeps_its_transcript_and_gains_a_face() {
 		let dir = temp_dir();
@@ -556,12 +398,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The two ways a file reaches this build — installed fresh, or upgraded from
-	/// the version before — have to leave the same schema behind. They run the same
-	/// text in the same order, and this is what says so out loud: a step written as
-	/// a `CREATE` for one path and an `ALTER` for the other would pass every other
-	/// test in this file and diverge here, down to the declaration each column
-	/// carries.
 	#[test]
 	fn a_fresh_install_and_an_upgraded_file_come_out_the_same_shape() {
 		let fresh_dir = temp_dir();
@@ -586,9 +422,6 @@ mod tests {
 		fs::remove_dir_all(&upgraded_dir).expect("cleanup");
 	}
 
-	/// Every object the file holds and the text it was declared with. `ALTER TABLE
-	/// ADD COLUMN` rewrites that text, so the column a step appended — its type, its
-	/// default and the `CHECK` on it — is inside what this compares.
 	fn schema_of(connection: &Connection) -> Vec<(String, String)> {
 		let mut statement = connection
 			.prepare(
@@ -603,9 +436,6 @@ mod tests {
 			.expect("rows")
 	}
 
-	/// A launch that has nothing to do must do nothing: the number is the whole
-	/// bookkeeping, so running the steps again on a file already at the latest
-	/// version leaves both the version and the rows exactly as they were.
 	#[test]
 	fn running_the_steps_again_on_an_up_to_date_file_changes_nothing() {
 		let dir = temp_dir();
@@ -638,11 +468,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The eight animals and the eight poses the avatar engine draws, and nothing
-	/// else: a word outside them is a bot the UI has no face for, so it never
-	/// reaches the disk to be read back. The pose is no longer projected, and the
-	/// column keeps its `CHECK` anyway — what an older build wrote is still what
-	/// comes back out.
 	#[test]
 	fn a_face_the_avatar_engine_cannot_draw_is_refused() {
 		let dir = temp_dir();
@@ -673,9 +498,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The eight colours the palette holds, and no mark at all: a bot given none is
-	/// the default, and it is `NULL` rather than a ninth word. Anything else is a
-	/// colour nothing can paint, so it never reaches the disk.
 	#[test]
 	fn a_blot_outside_the_palette_is_refused_and_no_blot_is_allowed() {
 		let dir = temp_dir();
@@ -701,10 +523,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// What the step that spells the denials out owes a file already in use: the bot
-	/// a reader had set to change nothing is still held back, now by the names of the
-	/// four tools, and the bot nobody held back is denied none. The switch is gone
-	/// from the file, so nothing can write that denial twice.
 	#[test]
 	fn the_step_that_names_the_denied_tools_carries_the_switch_it_replaces() {
 		let dir = temp_dir();
@@ -744,9 +562,6 @@ mod tests {
 			.expect("the denials")
 	}
 
-	/// What the step that adds the mark owes a file already in use: the bots it
-	/// holds come out unmarked, everything said to them is still readable, and the
-	/// pose an older build wrote is exactly where it was left.
 	#[test]
 	fn the_step_that_adds_the_mark_leaves_every_bot_unmarked_and_its_transcript_whole() {
 		let dir = temp_dir();
@@ -785,10 +600,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// What the step that renames the marks owes a file already in use: every bot
-	/// comes up under the new word for the colour it was stored with, and the one
-	/// nobody marked comes up marked with nothing. A bot losing its colour on the
-	/// first launch after the rename is the whole of what this step exists to prevent.
 	#[test]
 	fn the_step_that_renames_the_marks_carries_every_bot_to_its_new_name() {
 		let dir = temp_dir();
@@ -836,10 +647,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The install every step below upgrades from: a bot, the one chat it holds and
-	/// the two things said in it. Only the bot row differs between the steps — it is
-	/// written with the columns its version knows — so it is the one part a caller
-	/// spells.
 	fn a_chat_held_by(bot: &str) -> String {
 		format!(
 			"{bot}
@@ -922,8 +729,6 @@ mod tests {
 			> 0
 	}
 
-	/// Foreign keys are off by default on every new connection, so this is what
-	/// proves the pragma is applied where it has to be: on the open, not on the file.
 	#[test]
 	fn a_row_pointing_at_nothing_is_refused() {
 		let dir = temp_dir();
@@ -941,9 +746,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Ordering is a constraint, not a habit: two rows claiming the same place in a
-	/// conversation, a turn or a participant's run of sessions would make the order
-	/// they come back in depend on the query plan.
 	#[test]
 	fn a_second_row_claiming_the_same_place_is_refused() {
 		let dir = temp_dir();
@@ -981,9 +783,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A participant runs one Claude session at a time, and the ones it has already
-	/// spent stay on the record: only the live one is exclusive, and only within the
-	/// pair it belongs to.
 	#[test]
 	fn a_participant_holds_one_live_session_at_a_time() {
 		let dir = temp_dir();
@@ -1018,9 +817,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A reply and a turn are both same-conversation by construction: the pair is
-	/// checked, so a writer cannot quote a message the reader of this conversation
-	/// has never seen.
 	#[test]
 	fn a_message_never_reaches_into_another_conversation() {
 		let dir = temp_dir();
@@ -1055,11 +851,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A bot that never joined a conversation cannot have spoken in it, and joining is
-	/// what makes it able to: `b2` exists and is a participant of `c1`, so `c2` is
-	/// where its authorship has to be refused until it joins. A message with no bot
-	/// author is the other half of the rule — the pair holds a NULL, so a user message
-	/// needs no participant row anywhere.
 	#[test]
 	fn a_message_is_authored_by_a_participant_or_by_no_one() {
 		let dir = temp_dir();
@@ -1107,8 +898,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A runtime row belongs to a participant, not to a conversation and a bot that
-	/// merely both exist: `b2` is in `c1` only, so `c2` is where it has no run.
 	#[test]
 	fn a_runtime_row_only_exists_for_a_participant() {
 		let dir = temp_dir();
@@ -1140,10 +929,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A session id on its own names any run in the file, including another bot's in
-	/// the same conversation and the same bot's in another one. Replaying a summary
-	/// into either would resume the wrong context, so the run is scoped by the
-	/// participant it was opened for, not by its id.
 	#[test]
 	fn a_checkpoint_only_names_its_own_participants_session() {
 		let dir = temp_dir();
@@ -1172,8 +957,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The states a step reads back are the ones it knows how to act on, so a value
-	/// outside the vocabulary never reaches the disk to be found later.
 	#[test]
 	fn a_state_the_schema_has_no_word_for_is_refused() {
 		let dir = temp_dir();
@@ -1211,10 +994,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The two endings nothing derives: `cancelled` is the user stopping the stream and
-	/// `interrupted` is the sweep closing out one the process died under. A step reads
-	/// them back long after the fact, so the vocabulary has to hold them — and hold
-	/// nothing else.
 	#[test]
 	fn a_message_can_be_stored_cancelled_or_interrupted() {
 		let dir = temp_dir();
@@ -1232,10 +1011,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A checkpoint stands for the messages it folded in, at the count, the run and the
-	/// moment it folded them: an edit to any of that leaves a row claiming something it
-	/// never recorded. So the whole row is refused, its id included, and a later
-	/// summary is a new checkpoint.
 	#[test]
 	fn a_stored_checkpoint_cannot_be_rewritten() {
 		let dir = temp_dir();

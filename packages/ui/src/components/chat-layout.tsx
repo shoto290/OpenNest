@@ -8,25 +8,13 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 
 interface ChatLayoutProps {
-	/** Fixed bar above the transcript. */
 	header?: ReactNode
-	/** Notices and banners, stacked directly above the composer. */
 	notice?: ReactNode
-	/** The composer. Keeps its natural height whatever the transcript does. */
 	composer?: ReactNode
-	/** Marks the transcript as waiting for more streamed content. */
 	busy?: boolean
-	/** Accessible name of the scrollable transcript. */
 	label?: string
-	/** Cursor pagination for the history above the transcript, handed straight to
-	 * the scroller. Omit it and no pagination affordance is rendered at all. */
 	older?: MessageScrollerOlder
-	/** The transcript. Stretches to the full height between header and composer,
-	 * so a lone child can centre itself with `m-auto`. Rows here share one mark
-	 * identity, so the bot's mark travels between them rather than reappearing. */
 	children: ReactNode
-	/** Exposes the region a conversation occupies — header, transcript and composer
-	 * — so a host can tell what landed inside it from what landed beside it. */
 	rootRef?: Ref<HTMLDivElement>
 	className?: string
 	contentClassName?: string

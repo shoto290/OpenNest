@@ -21,22 +21,10 @@ type SettingsSelectProps = {
 	value: string
 	onValueChange: (value: string) => void
 	options: SettingsSelectOption[]
-	/** What stands in the trigger while nothing is picked. Left out for a set of
-	 * options that already names its own resting answer. */
 	placeholder?: string
-	/** What the field decides, said under the control — the same place a text
-	 * field's rule is read. Announced after the label. */
 	hint?: string
 }
 
-/**
- * One setting picked from a closed set: the label, the trigger reading the current
- * answer, and the list hanging off it. The same control wherever a settings surface
- * asks a question with a known set of answers, so a model, an effort and a context
- * cannot drift apart.
- *
- * It keeps no state — the surface holds the value and this only reports the pick.
- */
 const SettingsSelect = ({
 	label,
 	value,

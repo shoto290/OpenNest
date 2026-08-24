@@ -14,7 +14,6 @@ import {
 export type TranscriptController = {
 	getState: () => TranscriptState
 	subscribe: (listener: () => void) => () => void
-	/** Reads the tail of a conversation. Re-reading it merges, it never replaces. */
 	load: (conversationId: string) => Promise<void>
 	loadOlder: (conversationId: string) => Promise<void>
 	append: (draft: TranscriptDraft) => void

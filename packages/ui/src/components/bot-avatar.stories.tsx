@@ -21,7 +21,6 @@ const BOT_AVATAR_STATES = Object.keys(STATE_POOLS) as BotAvatarState[]
 const YAW_SWEEP = [-60, -40, -20, 0, 20, 40, 60]
 const PITCH_SWEEP = [-40, -25, -12, 0, 12, 25, 40]
 const WELD_SIZE = 88
-/** Eight bot ids, one per pose a blot can be laid down in. */
 const BLOT_SEEDS = [
 	"bot-1",
 	"bot-2",

@@ -13,22 +13,10 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type SkillsPanelProps = {
 	skills: BotSkillItem[]
-	/** Opens a skill that exists. The editor takes the whole dialog, rail included,
-	 * so it is the surface above that answers rather than this panel. */
 	onOpen: (skill: BotSkillItem) => void
-	/** Opens the editor on a skill nobody has written yet. */
 	onAdd: () => void
 }
 
-/**
- * Every skill a bot carries: a name, when the bot should reach for it, and whether
- * it travels in the prompt. The resting state of the skills group, and nothing
- * more — opening a row hands the whole dialog to that skill, because a skill is a
- * file somebody writes and it needs both the height and a summary of its own.
- *
- * The panel keeps nothing: it lists what it is given and reports which row was
- * taken.
- */
 const SkillsPanel = ({ skills, onOpen, onAdd }: SkillsPanelProps) => {
 	const { t } = useTranslation("bots")
 

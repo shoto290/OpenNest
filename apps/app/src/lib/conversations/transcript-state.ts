@@ -23,8 +23,6 @@ export type TranscriptConversation = {
 	hasMore: boolean
 }
 
-/** Keyed by conversation and by nothing else: a runtime session is a detail of
- * how a message was produced, never of where it is read back. */
 export type TranscriptState = {
 	conversations: Record<string, TranscriptConversation>
 }
@@ -46,7 +44,6 @@ const EMPTY_CONVERSATION: TranscriptConversation = {
 
 const TERMINAL_RANK = 2
 
-/** How far a message has travelled. */
 const COMPLETION_RANK: Record<TranscriptCompletion, number> = {
 	pending: 0,
 	streaming: 1,
@@ -71,24 +68,11 @@ export const selectHasMore = (
 	conversationId: string,
 ): boolean => state.conversations[conversationId]?.hasMore ?? false
 
-/** The last word in a conversation and when it was said, read off one message so
- * the two can never disagree. `text` is absent for a message that ended without
- * saying anything — a turn that stopped before its first word still happened at a
- * time, and the row is entitled to say when. */
 export type LastWord = {
 	text?: string
 	at: number
 }
 
-/** What the last word in a conversation is, whoever said it: it is what a roster
- * row previews, and a reader's own prompt is as much the state of the conversation
- * as the answer to it.
- *
- * A message still being written is skipped. It is worth nothing on a row — the
- * sidebar shows a working bot's pose there instead — and trimming a growing answer
- * on every delta would churn a fresh string per token for a line nobody reads. A
- * settled message says all it will ever say, so the value holds for the whole
- * turn. */
 export const lastWordIn = (
 	messages: TranscriptMessage[],
 ): LastWord | undefined => {
@@ -101,12 +85,9 @@ export const lastWordIn = (
 	return { text: settled.content.trim() || undefined, at: settled.createdAt }
 }
 
-/** Messages are held in ascending order, so the front of the list is as far back
- * as the transcript goes. */
 const oldestSeq = (messages: TranscriptMessage[]): number | null =>
 	messages[0]?.seq ?? null
 
-/** Where the next page of older messages starts. Null while nothing is loaded. */
 export const selectOldestSeq = (
 	state: TranscriptState,
 	conversationId: string,
@@ -125,17 +106,11 @@ const byPosition = (
 	return left.id < right.id ? -1 : 1
 }
 
-/** Nothing on disk can resume a stream, so a row still streaming when it is read
- * back belongs to a process that died under it. Only a message nothing here has
- * ever seen: the same row for one already streaming means the write is behind the
- * live stream, not that anything died. */
 const recoveredFromPort = (message: TranscriptMessage): TranscriptMessage =>
 	message.completion === "streaming"
 		? { ...message, completion: "interrupted" }
 		: message
 
-/** Two nonterminal sides are the same message caught at two moments of the same
- * stream, and the longer text is the later one. */
 const longerContent = (
 	local: TranscriptMessage,
 	durable: TranscriptMessage,
@@ -144,10 +119,6 @@ const longerContent = (
 		? local.content
 		: durable.content
 
-/** The first ending is the one that happened: a page carrying another one is a
- * disagreement about the past, and the transcript keeps what it settled on. Only
- * the very same ending brings text back, and then the stored row is the full one —
- * a locally settled message holds no more than its deltas produced. */
 const reconciledFromEnding = (
 	local: TranscriptMessage,
 	durable: TranscriptMessage,
@@ -158,9 +129,6 @@ const reconciledFromEnding = (
 		durable.completion === local.completion ? durable.content : local.content,
 })
 
-/** An unfinished message follows the durable row as soon as that row has travelled
- * as far, which an ending always has. Behind a live stream it wins nothing: the
- * write is late, not authoritative. */
 const reconciledFromUnfinished = (
 	local: TranscriptMessage,
 	durable: TranscriptMessage,
@@ -177,8 +145,6 @@ const reconciledFromUnfinished = (
 	}
 }
 
-/** Structure comes from the durable row in every case — it owns identity and
- * order, so an optimistic `seq` always gives way. Only the outcome is contested. */
 const reconciled = (
 	local: TranscriptMessage,
 	durable: TranscriptMessage,
@@ -202,9 +168,6 @@ const mergePage = (
 	return [...byId.values()].sort(byPosition)
 }
 
-/** Only a page that reaches further back than what is loaded can say whether more
- * history exists: re-reading the tail after the beginning was reached would
- * otherwise reopen a history the reader has already seen in full. */
 const nextHasMore = (
 	current: TranscriptConversation,
 	page: TranscriptPage,
@@ -244,7 +207,6 @@ const applyPageLoaded = (
 	})
 }
 
-/** The optimistic place: the durable row keeps its own `seq` the moment it lands. */
 const applyMessageAppended = (
 	state: TranscriptState,
 	draft: TranscriptDraft,
@@ -286,9 +248,6 @@ const applyMessageStreamed = (
 	})
 }
 
-/** An ending is final and only an ending settles: the state check stands even
- * though the type says so too, because what reaches a reducer at runtime comes
- * from a transport no type ever checked. */
 const applyMessageSettled = (
 	state: TranscriptState,
 	settlement: TranscriptSettlement,

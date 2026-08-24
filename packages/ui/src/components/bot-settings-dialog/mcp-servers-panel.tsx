@@ -10,23 +10,10 @@ import { SETTINGS_EMPTY_CLASS } from "@workspace/ui/components/settings-styles"
 
 type McpServersPanelProps = {
 	servers: BotMcpServerItem[]
-	/** Opens a server that exists. The editor takes the whole dialog, rail included,
-	 * so it is the surface above that answers rather than this panel. */
 	onOpen: (server: BotMcpServerItem) => void
-	/** Opens the editor on a server nobody has written yet. */
 	onAdd: () => void
 }
 
-/**
- * Every MCP server a bot declares: the name it connects as and the one line that
- * says what starting it means. The resting state of the servers group, and nothing
- * more — opening a row hands the whole dialog to that server, because a server is a
- * program somebody is about to run and it needs both the height and a summary of its
- * own.
- *
- * The panel keeps nothing: it lists what it is given and reports which row was
- * taken.
- */
 const McpServersPanel = ({ servers, onOpen, onAdd }: McpServersPanelProps) => {
 	const { t } = useTranslation("bots")
 

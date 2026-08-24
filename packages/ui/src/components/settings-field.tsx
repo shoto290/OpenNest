@@ -11,25 +11,12 @@ import { cn } from "@workspace/ui/lib/utils"
 type SettingsFieldProps = {
 	label: string
 	value: string
-	/** Left out only for a field that is read rather than written. */
 	onValueChange?: (value: string) => void
 	placeholder?: string
-	/** What the field will and will not take, said under the control rather than in
-	 * the placeholder — a placeholder is gone the moment a reader starts typing,
-	 * which is when a rule is worth reading. Announced after the label. */
 	hint?: string
-	/** Why the value in the field cannot be used, said under the control in place of
-	 * nothing — the hint stays, since a rule is still worth reading while it is being
-	 * broken. It marks the control invalid and is announced with it. */
 	error?: string
-	/** Turns the control into a textarea of this many rows. */
 	rows?: number
-	/** Turns the control into a textarea that takes the height its container has
-	 * left, for a field that is the whole of what a surface shows. */
 	fill?: boolean
-	/** Whether the value is there to be read rather than written. The control keeps
-	 * its place in the tab order and its text stays selectable — it only refuses the
-	 * keystroke. */
 	readOnly?: boolean
 }
 

@@ -1,8 +1,3 @@
-//! Turns the sidecar's wire frames into the stable OpenNest contract.
-//!
-//! This is the only place aware of both vocabularies. Everything crossing to
-//! React is rebuilt here: no raw frame, no raw tool input, no usage or cost
-//! payload leaves this module.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -52,8 +47,6 @@ fn tool_title(name: &str, input: &Value) -> String {
 	}
 }
 
-/// Every branch goes through the redaction rule, including the shell command —
-/// which mentions the user's home directory as often as a path does.
 fn permission_detail(name: &str, input: &Value) -> Option<String> {
 	let raw = match name {
 		"Bash" => string_field(input, "command")?,
@@ -62,7 +55,6 @@ fn permission_detail(name: &str, input: &Value) -> Option<String> {
 	Some(redact::text(&raw))
 }
 
-/// The one tool the reader answers with words rather than with a verdict.
 pub const ASK_USER_QUESTION: &str = "AskUserQuestion";
 
 fn read_list<T>(value: &Value, key: &str, read: impl Fn(&Value) -> Option<T>) -> Vec<T> {
@@ -72,10 +64,6 @@ fn read_list<T>(value: &Value, key: &str, read: impl Fn(&Value) -> Option<T>) ->
 		.map_or_else(Vec::new, |items| items.iter().filter_map(read).collect())
 }
 
-/// What the child asked, read off the tool input it would have run with. A
-/// question missing its text or its header is dropped rather than shown blank,
-/// and so is an option with no label: nothing here is worth putting in front of
-/// the reader without something to answer.
 fn asked_question(value: &Value) -> Option<AskedQuestion> {
 	Some(AskedQuestion {
 		header: string_field(value, "header")?,
@@ -93,19 +81,12 @@ fn question_option(value: &Value) -> Option<QuestionOption> {
 	})
 }
 
-/// The assistant message the stream is in the middle of, and whether it has said
-/// a word yet. A message carrying nothing but tool calls says none: it is over the
-/// moment the next one starts, and there is no answer in it to finish.
 #[derive(Debug)]
 struct StreamingMessage {
 	id: String,
 	spoke: bool,
 }
 
-/// The ending a message the stream never closed reaches. A turn that ended well
-/// leaves nothing of one that never spoke — reporting it as complete would put a
-/// finished reply with no words on the record. Any other ending is the reader's to
-/// see, empty or not: the reply was cut off.
 fn ending_for(outcome: TurnOutcome, spoke: bool) -> Option<MessageCompletion> {
 	match outcome {
 		TurnOutcome::Cancelled => Some(MessageCompletion::Cancelled),
@@ -138,8 +119,6 @@ impl Translator {
 		self.cancelling = true;
 	}
 
-	/// The raw tool input the agent asked about, kept so an approval can echo it
-	/// back verbatim. Removed from the map once answered.
 	pub fn take_permission_input(&mut self, request_id: &str) -> Option<Value> {
 		self.pending_permissions.remove(request_id)
 	}
@@ -172,7 +151,6 @@ impl Translator {
 		}
 	}
 
-	/// The id is announced once, off the init frame it rides on.
 	fn on_system(&mut self, frame: SystemFrame) -> Vec<AgentEvent> {
 		if frame.subtype.as_deref() != Some("init") {
 			return Vec::new();
@@ -184,8 +162,6 @@ impl Translator {
 		vec![AgentEvent::SessionReady { session_id, resumed: self.resumed }]
 	}
 
-	/// The command list belongs to the child that just spoke, so every frame naming
-	/// one republishes it. An empty list says nothing rather than saying "none".
 	fn on_commands(frame: CommandsFrame) -> Vec<AgentEvent> {
 		if frame.commands.is_empty() {
 			return Vec::new();
@@ -314,9 +290,6 @@ impl Translator {
 			}
 		}
 
-		// A turn that ends mid-tool or mid-prompt leaves entries behind, and an
-		// unanswered permission holds the whole tool input — file contents
-		// included. The client drops both on turn end, so this does too.
 		self.cancelling = false;
 		self.activity_titles.clear();
 		self.pending_permissions.clear();
@@ -356,9 +329,6 @@ impl Translator {
 			},
 		};
 
-		// A question is the same ask underneath — the child is blocked on the same
-		// promise, under the same id — so it waits on the same pending row. What
-		// changes is what the reader is shown: choices to answer, not a verdict.
 		let asked = match questions {
 			Some(questions) => AgentEvent::QuestionRequested {
 				request: QuestionRequest { id: request_id, questions },
@@ -395,9 +365,6 @@ mod tests {
 			.collect()
 	}
 
-	/// One tool call in the four frames the CLI spends on it: the assistant message
-	/// it opens, the block, the message itself carrying nothing but the call, and the
-	/// result coming back as a user frame.
 	fn tool_round(round: usize) -> Vec<Value> {
 		let message_id = format!("msg_tool_{round}");
 		let tool_id = format!("toolu_{round}");
@@ -486,8 +453,6 @@ mod tests {
 			.collect()
 	}
 
-	/// A key a build named, or one it left out entirely: `None` is the absent key,
-	/// `Some(Value::Null)` the one set to null.
 	fn with_field(mut object: Value, key: &str, value: Option<Value>) -> Value {
 		if let Some(value) = value {
 			object[key] = value;
@@ -515,10 +480,6 @@ mod tests {
 		})
 	}
 
-	/// The shape one live prompt was measured to have: fourteen assistant messages
-	/// that only ever called a tool, and the answer in the message after them. Every
-	/// tool round is an activity, and the only message the turn finished is the one
-	/// that said something.
 	#[test]
 	fn tools_are_activities_and_the_answer_is_the_only_message_that_ends() {
 		let mut translator = Translator::new(false);
@@ -536,8 +497,6 @@ mod tests {
 				.collect::<Vec<_>>(),
 			vec![(ANSWER, MessageCompletion::Complete)]
 		);
-		// The block and the message both announce the call, under the one tool id the
-		// reader's activity log keys on.
 		assert_eq!(
 			statuses(&events),
 			[ActivityStatus::Running, ActivityStatus::Running, ActivityStatus::Succeeded]
@@ -546,10 +505,6 @@ mod tests {
 		assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
 	}
 
-	/// A turn that ends well straight after a tool call has no answer in it. The
-	/// message the stream opened for that call said nothing, so nothing is reported
-	/// as finished — a message with no text and a completed ending is a row the
-	/// transcript would keep forever for a turn that only ran a tool.
 	#[test]
 	fn a_turn_that_ends_well_after_a_tool_finishes_no_message() {
 		let mut translator = Translator::new(false);
@@ -562,9 +517,6 @@ mod tests {
 		assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
 	}
 
-	/// The other half of the same rule: a turn cut off before a word still owes the
-	/// reader the ending it reached. Nothing was said, and that is exactly what the
-	/// reply has to be shown as.
 	#[test]
 	fn a_turn_cut_off_before_a_word_still_finishes_its_message() {
 		for (subtype, is_error, cancelling, expected) in [
@@ -588,8 +540,6 @@ mod tests {
 		}
 	}
 
-	/// The id is announced once, whether the child is a fresh one or the one a
-	/// resume reached: whichever was reached is the one the reader is talking to.
 	#[test]
 	fn an_init_frame_announces_the_session_it_carries() {
 		for (resumed, session_id) in [(false, "s-1"), (true, "carried-over")] {
@@ -604,9 +554,6 @@ mod tests {
 		}
 	}
 
-	/// The commands reach the reader in the order the child named them, each with
-	/// what the child said it does — and a command the child says nothing about is
-	/// carried just as far as one it describes.
 	#[test]
 	fn a_commands_frame_lists_what_it_carries() {
 		let mut translator = Translator::new(false);
@@ -633,10 +580,6 @@ mod tests {
 		);
 	}
 
-	/// A child naming none — key left out, set to null, or an empty list — lists
-	/// nothing at all. What a bot answers to is held against it between launches, so
-	/// a frame that names none is a frame with nothing to say about it rather than
-	/// one taking the last list away.
 	#[test]
 	fn a_frame_carrying_no_commands_lists_nothing() {
 		for listed in [None, Some(Value::Null), Some(json!([]))] {
@@ -646,11 +589,6 @@ mod tests {
 		}
 	}
 
-	/// `#[serde(default)]` answers a key left out, never one set to null, and `Frame`
-	/// is internally tagged: one null field would cost the whole frame, and the reader
-	/// would be handed an unreadable-frame failure in place of everything that frame
-	/// carried. Content set to null is content there is none of — what a frame leaving
-	/// the key out already says.
 	#[test]
 	fn a_frame_whose_content_is_null_carries_none() {
 		for kind in ["assistant", "user"] {
@@ -664,10 +602,6 @@ mod tests {
 		}
 	}
 
-	/// Text set to null is text never said, in the block as in the delta: nothing is
-	/// streamed and no message is finished, exactly as when the key is left out. The
-	/// frame is still read — the assistant frame it rides on may carry a tool call the
-	/// activity log is owed.
 	#[test]
 	fn a_null_text_reads_as_an_empty_one() {
 		for text in [None, Some(Value::Null)] {
@@ -695,10 +629,6 @@ mod tests {
 		}
 	}
 
-	/// An error flag set to null is a call that worked and a turn that ended well —
-	/// the reading a frame leaving the key out already gets. Both frames carry more
-	/// than the flag: the activity the tool result closes, and the ending the turn
-	/// reached.
 	#[test]
 	fn a_null_error_flag_reads_as_one_that_worked() {
 		for is_error in [None, Some(Value::Null)] {
@@ -749,8 +679,6 @@ mod tests {
 		})
 	}
 
-	/// The ask reaches the reader whole: both questions, the options under each,
-	/// the preview only one of them carries, and which one takes several answers.
 	#[test]
 	fn a_question_is_carried_instead_of_a_permission() {
 		let mut translator = Translator::new(false);
@@ -817,8 +745,6 @@ mod tests {
 		assert!(translator.take_permission_input("req-1").is_some());
 	}
 
-	/// Nothing to answer is still an ask the child is blocked on: the row is
-	/// pending and the reader is shown a question list that says none.
 	#[test]
 	fn a_question_frame_carrying_nothing_readable_asks_nothing() {
 		for input in [json!({}), json!({ "questions": [{ "header": "Only" }] })] {
@@ -830,7 +756,6 @@ mod tests {
 		}
 	}
 
-	/// Any other tool is the permission it has always been.
 	#[test]
 	fn another_tool_still_asks_for_a_permission() {
 		let mut translator = Translator::new(false);
@@ -845,8 +770,6 @@ mod tests {
 		)));
 	}
 
-	/// A turn ending on an unanswered question leaves nothing behind, the way it
-	/// leaves nothing of an unanswered permission.
 	#[test]
 	fn a_question_left_unanswered_is_dropped_when_the_turn_ends() {
 		let mut translator = Translator::new(false);

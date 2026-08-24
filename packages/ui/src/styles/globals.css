@@ -30,9 +30,6 @@
 	--secondary: oklch(0.967 0.001 286.375);
 	--secondary-foreground: oklch(0.21 0.006 285.885);
 	--muted: oklch(0.967 0.001 286.375);
-	/* Dark enough to clear AA text on the whole 0.967 surface family — muted,
-	 * secondary, accent and the sidebar accent a selected row wears — which is
-	 * where this token is read most. */
 	--muted-foreground: oklch(0.54 0.016 285.938);
 	--accent: oklch(0.967 0.001 286.375);
 	--accent-foreground: oklch(0.21 0.006 285.885);
@@ -101,12 +98,6 @@
 	--scrollbar-hover: oklch(0.55 0.01 286.033);
 }
 
-/* Palettes. Each block repaints the whole colour set; amber rides on the
- * default blocks above, so a document with no data-theme still paints.
- *
- * Each dark block is claimed twice: once on the element carrying the scheme, once
- * on any element below it. A subtree naming its own palette — a swatch, a vignette
- * — then paints in that palette's dark tokens rather than in its light ones. */
 [data-theme="slate"] {
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.141 0.021 258);
@@ -499,8 +490,6 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
-	/* The document itself, not only the body: the first frame a webview paints is
-	 * the root element's, and a root left unpainted opens every window on white. */
 	html,
 	body {
 		@apply bg-background text-foreground;
@@ -510,9 +499,6 @@
 		cursor: pointer;
 	}
 
-	/* The gutter is wide, the thumb is not: a transparent border clipped to the
-	 * content box leaves the bar floating inside its own padding instead of
-	 * riding the edge of the pane. */
 	::-webkit-scrollbar {
 		width: 1rem;
 		height: 1rem;
@@ -531,10 +517,6 @@
 		background-color: var(--scrollbar-hover);
 	}
 
-	/* Storybook is the one surface that opens in Gecko, which draws none of the
-	 * above and takes the colours flat. Both properties inherit, so the root
-	 * carries them. Left ungated the block would also win in Chromium and
-	 * Safari, which read `scrollbar-color` ahead of the pseudo-elements. */
 	@supports not selector(::-webkit-scrollbar) {
 		:root {
 			scrollbar-width: thin;
@@ -543,8 +525,6 @@
 	}
 }
 
-/* Claimed by a pane that hides its overflow behind a mask of its own, where a
- * bar would sit on top of the fade. */
 @utility scrollbar-hide {
 	scrollbar-width: none;
 	&::-webkit-scrollbar {

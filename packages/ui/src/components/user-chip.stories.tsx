@@ -22,8 +22,6 @@ const LONG_NAME = "Ada Martin-Vandersteen de la Fontaine"
 const FALLBACK_NAME = "You"
 
 const SINGLE_LINE_HEIGHT = 24
-/** The same inset the panels give their pinned region: on the rail there is no
- * room for padding either side of one avatar. */
 const FOOTER_INSET =
 	"group-data-[state=collapsed]/sidebar:items-center group-data-[state=collapsed]/sidebar:px-0"
 
@@ -54,9 +52,6 @@ const horizontalCentreOf = (element: HTMLElement) => {
 	return box.left + box.width / 2
 }
 
-/** What the row leaves around the picture, leading edge first and trailing edge
- * last — the name is what the trailing edge holds while there is one. One value,
- * or the avatar is off its corner. */
 const avatarInsets = (chip: HTMLElement, avatar: HTMLElement) => {
 	const chipBox = chip.getBoundingClientRect()
 	const box = avatar.getBoundingClientRect()

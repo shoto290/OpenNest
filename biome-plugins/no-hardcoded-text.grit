@@ -1,7 +1,5 @@
 language js
 
-// Two letters in a row is what tells a word from a separator, so a bullet, a dash
-// and a decorative alt="" stay markup rather than copy someone forgot to key.
 or {
 	JsxText() as $text where {
 		$text <: r"(?s).*\p{L}{2}.*",

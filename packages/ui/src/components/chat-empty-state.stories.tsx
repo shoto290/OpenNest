@@ -4,12 +4,9 @@ import preview from "@workspace/storybook/preview"
 import { botIdentityAvatars } from "@workspace/storybook/story-utils"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 
-/** A picture a reader uploaded, inline so the story needs no host to load it. */
 const UPLOADED_IMAGE =
 	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
 
-/** The bot this conversation belongs to, as the app hands it over: a name, an
- * animal, the tint it was marked with and the id its blot is shaped from. */
 const BOT = {
 	name: "Nest Keeper",
 	animal: "rabbit",

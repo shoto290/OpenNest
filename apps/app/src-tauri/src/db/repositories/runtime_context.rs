@@ -1,36 +1,9 @@
-//! Reads and writes what a Claude run leaves behind: `runtime_sessions`,
-//! `context_checkpoints` and `app_settings`.
-//!
-//! A participant's runs are a lineage rather than a set: `seq` says which one came
-//! after which, and `runtime_sessions_active_per_participant` allows exactly one
-//! `active` row per participant. So opening is never an insert on its own — the row
-//! it replaces is rotated away in the same transaction, because the two apart leave
-//! either an insert the index refuses or a live row nothing will ever close.
-//!
-//! Both are counted per participant, never per conversation: two bots talking in
-//! one conversation each hold their own live session and each start at `seq` 1.
-//!
-//! Only a live row can be moved out of `active`, and every write that ends one says
-//! so in its `WHERE`: a process that already lost its session still answers, and its
-//! late callback must not rewrite the ending that won. What the guard skipped is
-//! then read back inside the same transaction — a callback repeating what is already
-//! stored is the same call arriving twice and is answered `Ok`, anything else is
-//! [`DatabaseError::Conflict`] and the row stands.
-//!
-//! A checkpoint is insert-only, and the schema enforces it with a trigger: there is
-//! no update to write here, and a later summary of the same participant is a new
-//! row. Timestamps arrive from the caller for the same reason ids of ours do not
-//! travel the other way — a repository that read the clock itself could not be
-//! asked to write a given moment.
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::db::{Access, DatabaseError};
 
-/// Stored rather than derived, like every other lifecycle in this schema: a host
-/// that died under a run leaves `active` behind, and that row is the only thing the
-/// next launch can recognise an abandoned session from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuntimeSessionStatus {
 	Active,
@@ -66,10 +39,6 @@ impl ToSql for RuntimeSessionStatus {
 	}
 }
 
-/// A status this build has no word for is reported where it is read: the `CHECK`
-/// keeps the vocabulary closed, so a value outside it means the file was written by
-/// something else, and defaulting it would hand a caller a state it would then act
-/// on as if it were real.
 impl FromSql for RuntimeSessionStatus {
 	fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
 		let text = value.as_str()?;
@@ -81,9 +50,6 @@ impl FromSql for RuntimeSessionStatus {
 	}
 }
 
-/// The pair every runtime row is scoped by, carried as one value: the two columns
-/// are both text, so as loose arguments they are an order nothing checks, and the
-/// mistake would file a run under another bot of the same conversation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParticipantKey {
 	pub conversation_id: String,
@@ -94,8 +60,6 @@ pub struct ParticipantKey {
 pub struct RuntimeSession {
 	pub id: String,
 	pub participant: ParticipantKey,
-	/// Claude's own name for the process, and only ever that: it is not this row's
-	/// id and not a conversation's, so nothing is ever looked up by it.
 	pub provider_session_id: Option<String>,
 	pub seq: i64,
 	pub status: RuntimeSessionStatus,
@@ -115,9 +79,6 @@ pub struct ContextCheckpoint {
 	pub created_at: i64,
 }
 
-/// A checkpoint before it has an id. Named fields rather than a row of arguments:
-/// the three numbers it carries are all `i64`, and swapping two of them would store
-/// a summary claiming a stretch of transcript it never folded in.
 pub struct NewCheckpoint {
 	pub participant: ParticipantKey,
 	pub runtime_session_id: Option<String>,
@@ -131,19 +92,12 @@ const ROTATE_LIVE_SESSION: &str = "UPDATE runtime_sessions
 	SET status = 'rotated', ended_at = ?3, rotation_reason = ?4
 	WHERE conversation_id = ?1 AND bot_id = ?2 AND status = 'active'";
 
-/// `seq` is computed inside the insert, over the participant's own rows: read
-/// separately it would be a number the statement is trusted with rather than one
-/// the same transaction saw. `provider_session_id` stays NULL — the run has not
-/// answered yet.
 const OPEN_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, seq, status, started_at)
 	SELECT ?1, ?2, ?3, coalesce(max(seq), 0) + 1, 'active', ?4
 		FROM runtime_sessions WHERE conversation_id = ?2 AND bot_id = ?3
 	RETURNING seq";
 
-/// Write-once, and only while the run is live: `provider_session_id IS NULL` is
-/// what makes a second, different id land on no row instead of quietly replacing
-/// the process the lineage was following.
 const RECORD_PROVIDER_SESSION: &str = "UPDATE runtime_sessions SET provider_session_id = ?4
 	WHERE id = ?1 AND conversation_id = ?2 AND bot_id = ?3
 		AND status = 'active' AND provider_session_id IS NULL";
@@ -152,13 +106,8 @@ const END_LIVE_SESSION: &str = "UPDATE runtime_sessions
 	SET status = ?2, ended_at = ?3, rotation_reason = ?4
 	WHERE id = ?1 AND status = 'active'";
 
-/// The reads take the whole row: `session_from` maps by column name, so naming the
-/// columns here would only be the same list kept in two places.
 const SESSION_BY_ID: &str = "SELECT * FROM runtime_sessions WHERE id = ?1";
 
-/// A session named without its participant is any run in the file, another bot's
-/// included: the pair is part of the lookup so a caller can only ever be answered
-/// about a row of its own.
 const PARTICIPANTS_SESSION_BY_ID: &str =
 	"SELECT * FROM runtime_sessions WHERE id = ?1 AND conversation_id = ?2 AND bot_id = ?3";
 
@@ -208,13 +157,6 @@ impl RuntimeContextRepository {
 		self.access.call_mut(f).await
 	}
 
-	/// Handing over is one transaction: between the rotation and the insert the
-	/// participant either holds two live sessions, which the index refuses, or none,
-	/// which a crash would freeze. `rotation_reason` describes the row being left
-	/// behind, never the new one, and the moment the new run starts is the moment the
-	/// old one ended — one reading of the clock for one handover.
-	///
-	/// A first open has nothing to rotate, so the reason is simply spent on no row.
 	pub async fn open(
 		&self,
 		participant: ParticipantKey,
@@ -254,15 +196,6 @@ impl RuntimeContextRepository {
 			.await
 	}
 
-	/// The CLI only names its session once the run has started, which is why `open`
-	/// cannot take it. It lands in `provider_session_id` and nowhere else: mistaking
-	/// it for one of our ids would attach a lineage to a process another participant
-	/// is running.
-	///
-	/// One run answers with one id, so the column is written once. The same id
-	/// arriving twice is the callback repeating itself; a different one, or any id at
-	/// all once the run is over, is a process talking about a session this row no
-	/// longer stands for.
 	pub async fn record_provider_session(
 		&self,
 		participant: ParticipantKey,
@@ -319,9 +252,6 @@ impl RuntimeContextRepository {
 			.await
 	}
 
-	/// `rotation_reason` is where the reason goes, failure included: it is the one
-	/// column the schema keeps for why a run stopped. Leaving `active` behind is the
-	/// point — the index then lets the participant open again straight away.
 	pub async fn fail(
 		&self,
 		session_id: String,
@@ -341,8 +271,6 @@ impl RuntimeContextRepository {
 			.await
 	}
 
-	/// `None` is the ordinary answer for a participant between two runs, not a row
-	/// that went missing.
 	pub async fn active_session(
 		&self,
 		participant: ParticipantKey,
@@ -360,8 +288,6 @@ impl RuntimeContextRepository {
 			.await
 	}
 
-	/// Ordered by `seq` rather than by `started_at`: two sessions opened in the same
-	/// millisecond still have to come back in the order they were opened.
 	pub async fn sessions_for(
 		&self,
 		participant: ParticipantKey,
@@ -380,9 +306,6 @@ impl RuntimeContextRepository {
 			.await
 	}
 
-	/// The row is frozen the moment it lands, by trigger: what it says about the
-	/// transcript is only true for the count, the run and the moment it folded in, so
-	/// there is no update to reach for — a newer summary is another checkpoint.
 	pub async fn checkpoint(
 		&self,
 		checkpoint: NewCheckpoint,
@@ -416,9 +339,6 @@ impl RuntimeContextRepository {
 			.await
 	}
 
-	/// The checkpoint to resume from is the one that reaches furthest into the
-	/// transcript, which is `last_message_seq` and not `created_at`: the pair is
-	/// unique per participant, so there is no tie for the query plan to settle.
 	pub async fn latest_checkpoint(
 		&self,
 		participant: ParticipantKey,
@@ -455,18 +375,6 @@ impl RuntimeContextRepository {
 	}
 }
 
-/// Both endings are the same write under a different word, and the same guard:
-/// `status = 'active'` in the `WHERE` is what a late callback runs into. Zero rows
-/// is not yet a refusal, so the row is read back in the transaction that just tried
-/// to change it — from anywhere else the answer could already be stale.
-///
-/// An ending identical to the one stored is the same call arriving twice and costs
-/// nothing to accept. An ending that differs is two processes disagreeing about how
-/// the run finished, and the one that got there first is the one that was true.
-///
-/// The id alone is enough here, unlike when a provider names its session: it is the
-/// primary key, and the caller ending a run is holding the row `open` handed it
-/// rather than a name that reached it from outside.
 fn end_live_session(
 	connection: &mut Connection,
 	session_id: &str,
@@ -495,9 +403,6 @@ fn end_live_session(
 	Err(DatabaseError::Conflict)
 }
 
-/// A write naming a session the file does not hold is a caller working from an id
-/// that never existed here, which is a mistake of its own rather than a race: it is
-/// told so, instead of being left believing a run it can no longer find was closed.
 fn no_such_session() -> DatabaseError {
 	DatabaseError::Sqlite(rusqlite::Error::QueryReturnedNoRows)
 }
@@ -542,9 +447,6 @@ mod tests {
 	use crate::db::connection::{temp_dir, FILE_NAME};
 	use crate::db::Database;
 
-	/// Two bots joined to the same conversation: every lineage below has to stay its
-	/// own, and only a shared conversation makes that something to prove rather than
-	/// something the keys give away.
 	const FIXTURE: &str = "
 		INSERT INTO bots (id, name, model, created_at)
 			VALUES ('b1', 'First', 'sonnet', 1), ('b2', 'Second', 'sonnet', 1);
@@ -562,9 +464,6 @@ mod tests {
 		Database::open(&dir.join(FILE_NAME), None).expect("the database opens")
 	}
 
-	/// `bots`, `conversations` and `conversation_participants` are written as raw SQL
-	/// because their own repositories are still empty seams, and no runtime row exists
-	/// without the participant it is scoped by.
 	async fn seeded(dir: &Path) -> Database {
 		let database = opened(dir);
 		database
@@ -587,8 +486,6 @@ mod tests {
 			.expect("query")
 	}
 
-	/// Read back through the lineage rather than by id alone: what a refusal has to
-	/// leave behind is the participant's own row, exactly as it stood.
 	async fn stored_session(database: &Database, bot_id: &str, id: &str) -> RuntimeSession {
 		database
 			.runtime_context()
@@ -624,9 +521,6 @@ mod tests {
 		}
 	}
 
-	/// Two bots in one conversation are two lineages: the numbering and the live
-	/// session are both scoped to the participant, so each starts at 1 and a handover
-	/// on one side cannot touch the other's.
 	#[tokio::test]
 	async fn two_bots_in_one_conversation_keep_their_own_lineage() {
 		let dir = temp_dir();
@@ -658,9 +552,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// `seq` is what orders a lineage, so it only ever counts up: a reused number
-	/// would be refused by `UNIQUE (conversation_id, bot_id, seq)`, and a gap-free
-	/// count is what lets a reader follow the handovers in order.
 	#[tokio::test]
 	async fn a_participants_sessions_are_numbered_in_the_order_they_opened() {
 		let dir = temp_dir();
@@ -693,9 +584,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The row left behind has to say it was left behind: a session still reading
-	/// `active` after a handover is what the next launch would take for a live run,
-	/// and two of them are what the partial index refuses outright.
 	#[tokio::test]
 	async fn opening_a_session_rotates_the_one_it_replaces() {
 		let dir = temp_dir();
@@ -737,9 +625,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A run that died must not cost the participant its next one: the failure is
-	/// recorded on the row, and giving up `active` is what makes the index let the
-	/// following session in immediately.
 	#[tokio::test]
 	async fn a_failed_session_does_not_stand_in_the_way_of_the_next_one() {
 		let dir = temp_dir();
@@ -769,9 +654,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Written out of order on purpose: the checkpoint to resume from is the one
-	/// reaching furthest into the transcript, not the one that happens to have landed
-	/// last.
 	#[tokio::test]
 	async fn the_latest_checkpoint_is_the_furthest_one_into_the_transcript() {
 		let dir = temp_dir();
@@ -810,9 +692,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The lineage is what a restart resumes from, so it has to survive the file being
-	/// closed: everything read back here comes from a second open of the same path,
-	/// with no fixture and no writes of its own.
 	#[tokio::test]
 	async fn sessions_and_checkpoints_are_read_back_as_they_were_written() {
 		let dir = temp_dir();
@@ -860,9 +739,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The one call that names a row instead of a participant: told about a session
-	/// the file does not hold, it has to say so, or the caller goes on believing it
-	/// closed a run that is still `active` for the next launch to sweep up.
 	#[tokio::test]
 	async fn a_call_naming_a_session_the_file_does_not_hold_is_refused() {
 		let dir = temp_dir();
@@ -881,10 +757,6 @@ mod tests {
 		matches!(outcome, Err(DatabaseError::Conflict))
 	}
 
-	/// A process that lost its session still answers: the callback lands after the
-	/// handover, on a row that already says why the run really stopped. Recording the
-	/// ending it was told about would erase that, and put a second live session in
-	/// reach of the participant.
 	#[tokio::test]
 	async fn a_late_callback_never_rewrites_a_session_that_was_already_replaced() {
 		let dir = temp_dir();
@@ -923,9 +795,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The stream ending and the process dying can both be reported for one run, in
-	/// either order. Whichever is recorded first is the one that was true: the second
-	/// describes a session that had already stopped, and is told so.
 	#[tokio::test]
 	async fn two_endings_disagreeing_about_one_session_leave_the_first_one_standing() {
 		let dir = temp_dir();
@@ -963,9 +832,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A callback that is retried says the same thing twice, and the second telling
-	/// asks for the state the row is already in: refusing it would turn a delivery
-	/// nobody controls into a failure the caller has to explain.
 	#[tokio::test]
 	async fn the_same_ending_arriving_twice_is_the_same_ending() {
 		let dir = temp_dir();
@@ -996,9 +862,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A run answers with one id and keeps it. A second, different one means the
-	/// callback is about another process, and following it would point the lineage at
-	/// a session nothing here opened.
 	#[tokio::test]
 	async fn a_second_provider_session_id_never_replaces_the_first() {
 		let dir = temp_dir();
@@ -1047,9 +910,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A session that is over stands for a process that is gone, so it takes no
-	/// writes at all — not even the id it was itself running under, which arriving
-	/// now means the callback is late rather than that the row is incomplete.
 	#[tokio::test]
 	async fn a_session_that_is_no_longer_live_takes_no_provider_id() {
 		let dir = temp_dir();
@@ -1115,9 +975,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Claude's id for its process names a process, and the only column it belongs in
-	/// is `provider_session_id`: taken for a row of ours it would point a lineage, a
-	/// checkpoint or a conversation at whatever else answers to that string.
 	#[tokio::test]
 	async fn a_recorded_provider_session_id_is_never_a_row_of_ours() {
 		let dir = temp_dir();

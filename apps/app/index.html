@@ -4,14 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>opennest</title>
-    <!--
-      The palette on the first frame the webview paints, which is two things React
-      mounts too late to own. The stylesheet is linked on the document rather than
-      only imported from `main.tsx`, where it would reach the page as a tag injected
-      after that frame, so it blocks the frame instead. The scheme and the palette are
-      read off the mirror `src/lib/user/theme-mirror.ts` writes, here rather than
-      through it because a module import cannot block that frame either.
-    -->
     <link rel="stylesheet" href="/src/styles.css" />
     <script>
       (() => {

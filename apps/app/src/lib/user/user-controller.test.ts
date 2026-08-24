@@ -28,9 +28,6 @@ const ALL_NOTIFIED = {
 	notifyOnFinishedTurn: true,
 }
 
-/** The host's own record, answered and replaced the way the three commands do: a
- * write lands whole, and a picture leaves the rest of the record alone. What the
- * controller reads back is what a launch would find. */
 const aHost = (record: UserPreferences = DEFAULTS) => {
 	let held = record
 

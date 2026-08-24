@@ -5,31 +5,13 @@ import type {
 	UpdaterPort,
 } from "./updater-port"
 
-/** Long enough that a machine left running for a week asks a handful of times,
- * short enough that a reader who never quits still learns about a release the day
- * it lands. */
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
-/** How stale the last answer has to be before coming back to the window is worth
- * asking again. This is for the return after a long absence — a machine that slept
- * through the six hours and whose timer never caught the drift up. A window someone
- * leaves and comes back to all day is already covered by that timer, and a new
- * release is never urgent enough to ask again on the way in. */
 const FOCUS_CHECK_MIN_GAP_MS = 4 * 60 * 60 * 1000
 
-/** Everything the window may show about the release it is not running yet. The
- * update itself is not here: what installs it is a handle the host owns, and a
- * handle is not something a view can render. */
 export type UpdaterState = {
 	available: UpdateRelease | null
-	/** How far the download has come, in whole percent, and null while none is
-	 * running. Whole percent because it is already finer than a bar can move: a
-	 * reading per chunk would re-render the window thousands of times for one
-	 * download and show the reader nothing more. */
 	progress: number | null
-	/** Whether the install is done and the new build is waiting for the app to be
-	 * started again. Nothing else finishes an update: the download alone leaves the
-	 * reader on the release they launched. */
 	isRestartPending: boolean
 	error: string | null
 }
@@ -37,13 +19,9 @@ export type UpdaterState = {
 export type UpdaterController = {
 	getState: () => UpdaterState
 	subscribe: (listener: () => void) => () => void
-	/** Asks once, then every six hours and whenever the window is read again, and
-	 * answers with the stop. */
 	start: () => () => void
 	check: () => Promise<void>
-	/** Takes the release the last check found. Nothing to take is not a failure. */
 	install: () => Promise<void>
-	/** Starts the installed build. Nothing installed is not a failure. */
 	restart: () => Promise<void>
 }
 
@@ -64,8 +42,6 @@ const isSameState = (left: UpdaterState, right: UpdaterState): boolean =>
 	left.available?.version === right.available?.version &&
 	left.available?.notes === right.available?.notes
 
-/** A download the endpoint gave no length for has nothing to be a fraction of, and
- * reads as started until it lands. Every GitHub asset comes with one. */
 const percentOf = ({ downloaded, total }: UpdateProgress): number =>
 	total ? Math.floor((downloaded / total) * 100) : 0
 
@@ -77,8 +53,6 @@ export const createUpdaterController = (
 	let lastCheckAt = 0
 	const listeners = new Set<() => void>()
 
-	// A check that answers the same thing as the last one moves nothing on the
-	// screen, and six hours of unchanged answers should not re-render the window.
 	const publish = (next: UpdaterState) => {
 		if (isSameState(state, next)) {
 			return
@@ -89,9 +63,6 @@ export const createUpdaterController = (
 		}
 	}
 
-	// An unreachable endpoint is a state, not a failure to start: the launch goes on
-	// and the next check is six hours away. What an earlier check found stands — the
-	// release did not stop existing because the network did.
 	const check = async () => {
 		lastCheckAt = Date.now()
 		try {
@@ -107,8 +78,6 @@ export const createUpdaterController = (
 		}
 	}
 
-	// Coming back to a window that is downloading, or that is holding a build for the
-	// next launch, asks the endpoint about a release it has already answered for.
 	const checkOnFocus = () => {
 		const isBusy = state.progress !== null || state.isRestartPending
 		if (isBusy || Date.now() - lastCheckAt < FOCUS_CHECK_MIN_GAP_MS) {
@@ -133,8 +102,6 @@ export const createUpdaterController = (
 		}
 	}
 
-	// Asked before an install landed there is nothing to start: the build on disk is
-	// the one already running.
 	const restart = async () => {
 		if (!state.isRestartPending) {
 			return

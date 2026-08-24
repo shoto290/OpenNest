@@ -6,9 +6,6 @@ import preview from "@workspace/storybook/preview"
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { Button } from "@workspace/ui/components/button"
 
-/** The primitive spreads every motion prop, a surface far wider than a story
- * drives. Narrowing it here keeps the declarations this package emits portable
- * while the stories still render the real component. */
 type AgentDisclosureArgs = {
 	id?: string
 	open: boolean
@@ -36,8 +33,6 @@ const LONG_TRACE = [
 
 type TraceProps = {
 	lines?: string[]
-	/** An extra row, for the one story that checks a folded trace keeps its
-	 * focusable content out of the tab order. */
 	children?: ReactNode
 }
 

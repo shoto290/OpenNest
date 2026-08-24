@@ -33,13 +33,8 @@ import { SettingsSwitch } from "@workspace/ui/components/settings-switch"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** The section a skill opens on: what it tells the bot to do is the reason it
- * exists, and every other section answers a question about that one. */
 const FIRST_SECTION = "instructions"
 
-/** The agent and the background run leave with the fork they belong to: kept on a
- * skill that no longer forks, they would be saved from behind a section that no
- * longer shows them. */
 const toContextPatch = (value: string) => {
 	const context = SKILL_CONTEXTS.find((it) => it === value)
 
@@ -50,57 +45,18 @@ const toContextPatch = (value: string) => {
 
 type SkillEditorProps = {
 	draft: BotSkillDraft
-	/** Fired on every keystroke. The editor keeps no draft of its own — and writes
-	 * nothing either: the save is its own press. */
 	onDraftChange: (draft: BotSkillDraft) => void
-	/** The skill as it stands where it is kept, which is what the draft is weighed
-	 * against to know there is something to save. Left out for a skill that does not
-	 * exist yet: the save then reads as a creation and the delete stands down. */
 	saved?: BotSkillDraft
-	/** Back to the list the editor was opened from. Reached through a question while
-	 * anything is unsaved. */
 	onBack: () => void
-	/** Fired with nothing: the surface already holds the draft it asked for. Only
-	 * reachable while the skill is named, something has changed, and the description
-	 * is inside its budget. */
 	onSave: () => void
-	/** Fired only once the confirmation is accepted. Left out for a skill that does
-	 * not exist yet — there is nothing kept to take away. */
 	onDelete?: () => void
-	/** Whether the host wrote this skill. It is then read rather than edited: what it
-	 * says, what it is for and what it tells the bot, and nothing to save, delete or
-	 * carry into the prompt — every one of those is decided where it is generated. */
 	isSystem?: boolean
-	/** Which section the editor mounts on. Read once, as it mounts. */
 	defaultSection?: string
-	/** Whether the delete mounts with its question already up. Read once. */
 	defaultConfirming?: boolean
-	/** Whether the way out mounts with its question already up. Read once. */
 	defaultLeaving?: boolean
 	className?: string
 }
 
-/**
- * One skill, whole, on the whole surface: a rail of sections down the left and one
- * section at a time on the right. The rail is the summary — a reader who opens a
- * skill sees at once everything a skill can carry, rather than three fields and a
- * format they have to know about.
- *
- * Nothing is written as it is typed. Every keystroke reports the draft, and the save
- * is a press: a skill is a file with a frontmatter, and half a paragraph typed into
- * `when_to_use` is not a state worth keeping. So the draft can differ from what is
- * kept, the editor says so, and the way out asks before it drops it.
- *
- * The description and `when_to_use` are read as one paragraph by the bot deciding
- * whether to reach for the skill, so they are budgeted as one and counted against
- * that budget under the field. An agent and a background run only stand under a
- * forked context — they mean nothing in the conversation the skill was reached from.
- *
- * A skill the host wrote drops all of that: what it says, what it is for and what it
- * tells the bot, read-only on one surface, with a sentence saying who keeps it. There
- * is nothing to save, nothing to delete and no prompt to carry it into, so none of
- * those controls stand.
- */
 const SkillEditor = ({
 	draft,
 	onDraftChange,

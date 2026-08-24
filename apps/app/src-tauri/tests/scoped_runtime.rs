@@ -1,16 +1,3 @@
-//! What the scope buys at the host boundary: a command may only reach the run the
-//! host is holding, and every event says which run it came from.
-//!
-//! The host runs one Claude process, and a restart replaces it while the old child
-//! is still alive, still answering and still able to have a command aimed at it by
-//! whatever was talking to it a moment ago. These tests drive that through the IPC
-//! boundary rather than through the command functions: the scope is an argument the
-//! frontend spells by hand, so a name only one side knows is a refusal nothing in
-//! Rust would catch.
-//!
-//! Both tests spawn a real child and share `live_groups()` with each other, which is
-//! process-wide by nature — they take `SERIAL` in turn, and recover from a poisoned
-//! lock rather than propagate it, the way `lifecycle.rs` does.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -36,9 +23,6 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
 	SERIAL.lock().unwrap_or_else(|error| error.into_inner())
 }
 
-/// One participant's lineage, as the durable store hands it out: the same
-/// conversation and bot throughout, a row of its own per run, and the number the
-/// lineage counts handovers with.
 fn a_run(epoch: i64) -> Value {
 	json!({
 		"conversationId": "c1",
@@ -51,16 +35,12 @@ fn a_run(epoch: i64) -> Value {
 struct Harness {
 	window: WebviewWindow<MockRuntime>,
 	log: Arc<Mutex<Vec<ScopedEvent>>>,
-	// Kept for the app handle the window borrows: dropping it would take the host
-	// down mid-test.
 	_app: App<MockRuntime>,
 }
 
 fn launch() -> Harness {
 	let app = mock_builder()
 		.manage(AgentState::default())
-		// A host that never opened a file: what a bot was described as is another
-		// suite's subject, and here every child comes up carrying nothing.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(mock_context(noop_assets()))
@@ -97,7 +77,6 @@ impl Harness {
 		.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 	}
 
-	/// Never `$HOME`: the child inherits this as its working directory.
 	fn start(&self, run: &Value) -> Result<Value, Value> {
 		self.call(
 			"agent_start_or_resume_session",
@@ -121,8 +100,6 @@ impl Harness {
 		self.log.lock().expect("event log").clear();
 	}
 
-	/// Events land by callback, so there is nothing to await: a wait that never
-	/// lands fails naming what it wanted rather than hanging.
 	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[ScopedEvent]) -> Option<T>) -> T {
 		let deadline = Instant::now() + DEADLINE;
 		loop {
@@ -139,8 +116,6 @@ impl Harness {
 	}
 }
 
-/// A second participant: another bot, in a chat of its own. Both fields differ
-/// because both are what makes a run somebody else's.
 fn another_bots_run() -> Value {
 	json!({
 		"conversationId": "c2",
@@ -178,12 +153,6 @@ fn stale(runtime_session_id: &str) -> Result<Value, Value> {
 	Err(json!({ "kind": "staleRuntimeSession", "runtimeSessionId": runtime_session_id }))
 }
 
-/// The window this whole scope exists for. A restart replaces the child, and
-/// whatever was driving the old one — a cancel already in flight, a permission the
-/// reader answered a moment too late, a shutdown for a session that is already
-/// gone — is still holding the run it knew. Every one of those has to be refused
-/// on the run it names, before the session's own rules get a say: answered
-/// instead, they would stop, unblock or tear down the process that took its place.
 #[test]
 fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() {
 	let _serial = serial();
@@ -232,10 +201,6 @@ fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() 
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
 }
 
-/// A frontend has nothing but the envelope to tell one run's stream from another's,
-/// so every event carries the run it came from — and the one host answer that is
-/// about no run at all, the check, carries back exactly the run the caller named,
-/// `null` included. That is what lets a reader compare rather than special-case.
 #[test]
 fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	let _serial = serial();
@@ -244,8 +209,6 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 
 	let harness = launch();
 	let run = a_run(1);
-	// The run as it comes home, so every assertion below compares one value rather
-	// than serializing each event's scope back to JSON to look at it.
 	let named: RuntimeScope = serde_json::from_value(run.clone()).expect("the scope parses");
 
 	harness.call("agent_check", json!({ "scope": Value::Null })).expect("the check reports");
@@ -282,11 +245,6 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
 }
 
-/// The whole point of a runtime per participant: one reader, two bots, and both of
-/// them answering at once. Starting the second hands nothing back to be shut down,
-/// each turn crosses under the run that produced it, and ending one bot's session
-/// leaves the other one answering — which is what a reader who walks away from a
-/// working bot is owed.
 #[test]
 fn two_bots_answer_at_once_and_each_stream_stays_under_its_own_run() {
 	let _serial = serial();

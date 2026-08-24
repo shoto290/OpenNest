@@ -18,9 +18,6 @@ import {
 
 const [CARRIED] = BOT_SKILLS
 
-/** The editor keeps no draft of its own, so a story that lets a reader type holds
- * it — and holds it beside the skill it was opened on, which is what tells the
- * editor there is something to save. */
 const EditorHost = (props: SkillEditorProps) => {
 	const [draft, setDraft] = useState(props.draft)
 
@@ -66,8 +63,6 @@ const meta = preview.meta({
 		onDelete: fn(),
 	},
 	argTypes: {
-		// All three are read once, as the editor mounts, so they are a story's args
-		// rather than knobs.
 		defaultSection: { control: false },
 		defaultConfirming: { control: false },
 		defaultLeaving: { control: false },

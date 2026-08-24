@@ -25,8 +25,6 @@ import { BOT_COMMITS } from "@workspace/ui/components/bot-settings-dialog/histor
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 
-/** The id the store minted for the bot this dialog edits. It is what the shape of
- * its blot is derived from, and the only thing in here a reader cannot change. */
 const BOT_ID = "bot-7"
 
 const MODELS: BotModelOption[] = [
@@ -61,8 +59,6 @@ const UPLOADED_BOT: BotSettingsValue = {
 	identity: { ...FILLED_BOT.identity, image: UPLOADED_AVATAR_IMAGE },
 }
 
-/** The dialog keeps no draft and has no open state of its own, so a story holds
- * both — the value it edits and whether it stands. */
 const DialogHost = (props: BotSettingsDialogProps) => {
 	const [value, setValue] = useState(props.value)
 	const [outputStyle, setOutputStyle] = useState(props.outputStyle)
@@ -108,8 +104,6 @@ const avatarIn = (dialog: HTMLElement) => {
 	return avatar
 }
 
-/** Long enough for a tooltip to have opened if one were wired, so a story can show
- * that none is. */
 const TOOLTIP_SETTLES_MS = 300
 
 const settle = () =>
@@ -165,8 +159,6 @@ const meta = preview.meta({
 	},
 	argTypes: {
 		working: { control: "boolean" },
-		// Read once, as the dialog mounts, so it is a story's arg rather than a knob:
-		// a control that only takes effect on a remount reads as a broken one.
 		showDanger: { control: false },
 	},
 	render: (args) => <DialogHost {...args} />,

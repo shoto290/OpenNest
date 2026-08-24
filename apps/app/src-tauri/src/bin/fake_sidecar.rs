@@ -1,14 +1,3 @@
-//! Deterministic stand-in for the agent sidecar.
-//!
-//! Speaks the same envelope the real sidecar does — one process, many sessions,
-//! every frame naming the session it belongs to — so the transport can be
-//! exercised without the network, a subscription, or a wall clock. Each session
-//! picks its behaviour from `FAKE_AGENT_SCENARIO`, taken from the open command
-//! when it carries one and from the ambient environment otherwise.
-//!
-//! It stands in for the install as well as for the sessions: the sign-in state and
-//! the model catalogue the host asks about are answered from here, so no test needs
-//! an executable on the machine.
 
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
@@ -29,17 +18,11 @@ fn emit(session: &str, frame: Value) {
 	emit_raw(&json!({ "session": session, "frame": frame }).to_string());
 }
 
-/// Unique per process and per turn: a restored transcript and a fresh turn
-/// sharing an id would let the new deltas attach to the hydrated message.
 fn next_message_id() -> String {
 	static TURN: AtomicU64 = AtomicU64::new(0);
 	format!("msg_fake_{}_{}", std::process::id(), TURN.fetch_add(1, Ordering::Relaxed))
 }
 
-/// A grandchild that only a process-group kill can reach. It gets pipes of its
-/// own, the way the real agent hands them to a stdio MCP server: inheriting this
-/// process's stdout would keep it open past this process's death, and the host
-/// would never see the EOF that tells it the sidecar is gone.
 fn spawn_orphan(pid_file: Option<&str>) {
 	let Ok(child) = std::process::Command::new("sleep")
 		.arg("60")
@@ -55,8 +38,6 @@ fn spawn_orphan(pid_file: Option<&str>) {
 	}
 }
 
-/// Stops talking without stopping: the host reads EOF on stdout, which says
-/// nothing about whether the process behind it is still alive.
 #[cfg(unix)]
 fn close_stdout() {
 	unsafe { libc::close(1) };
@@ -65,10 +46,6 @@ fn close_stdout() {
 #[cfg(not(unix))]
 fn close_stdout() {}
 
-/// A sidecar no group signal can reach, which is what every rung of the shutdown
-/// ladder is aimed at. It rejoins the group it was forked out of — the one group
-/// certain to exist in its own session — and the group the host put it in is left
-/// empty.
 #[cfg(unix)]
 fn escape_group() {
 	if std::env::var("FAKE_AGENT_ESCAPE_GROUP").is_err() {
@@ -83,39 +60,22 @@ fn escape_group() {
 #[cfg(not(unix))]
 fn escape_group() {}
 
-/// What the open command said, and the sidecar's own environment behind it: a
-/// session may be told something the process it runs in was not.
 fn read_setting(settings: &HashMap<String, String>, key: &str) -> Option<String> {
 	settings.get(key).cloned().or_else(|| std::env::var(key).ok())
 }
 
-/// The directory a process started there reports, symlinks resolved — what the
-/// real agent's own `cwd` would say.
 fn as_a_child_would_see_it(path: &str) -> String {
 	std::fs::canonicalize(path).map_or_else(|_| path.to_owned(), |real| real.display().to_string())
 }
 
-/// The scenario a caller can change between two sessions of one process. The
-/// sidecar's own environment is fixed at spawn, so a file is the only place a
-/// later session can be told to behave differently from the one before it.
 fn scenario_on_file(path: Option<&str>) -> Option<String> {
 	let named = std::fs::read_to_string(path?).ok()?.trim().to_owned();
 	(!named.is_empty()).then_some(named)
 }
 
-/// What the bot was told, read where the real sidecar makes the agent read it: the
-/// body of `agents/<agent>.md` inside the bundle the open command names. A session
-/// opened with no bundle, or one whose agent file is not there, carries nothing —
-/// which is what a run with no plugin and no agent is.
-///
-/// The frontmatter is stripped here rather than through `bundles::body`, on purpose:
-/// a double that parsed the file with the code under test would agree with a
-/// mis-parse instead of catching it, and this is the only end-to-end reading of a
-/// brief reaching a child.
 fn instructions_in_the_bundle(command: &Value) -> String {
 	let read = || {
 		let path = command["pluginPath"].as_str()?;
-		// The host names the agent by its plugin, the way the real one resolves it.
 		let agent = command["agent"].as_str()?.rsplit(':').next()?;
 		let file = std::path::Path::new(path).join("agents").join(format!("{agent}.md"));
 		let text = std::fs::read_to_string(file).ok()?;
@@ -125,14 +85,6 @@ fn instructions_in_the_bundle(command: &Value) -> String {
 	read().unwrap_or_else(|| "none".to_owned())
 }
 
-/// Which MCP servers the bundle declares, read where the real agent reads them: the
-/// `mcpServers` map of the `.mcp.json` beside the manifest, in the bundle the open
-/// command names. A session opened with no bundle, or one declaring none, carries
-/// nothing.
-///
-/// Names only, never a configuration. What comes back here is spoken into a
-/// transcript, and a configuration is a command to run and an environment that often
-/// holds a token — the names are what says a server reached the child at all.
 fn servers_in_the_bundle(command: &Value) -> String {
 	let read = || {
 		let path = command["pluginPath"].as_str()?;
@@ -146,12 +98,10 @@ fn servers_in_the_bundle(command: &Value) -> String {
 	read().unwrap_or_else(|| "none".to_owned())
 }
 
-/// A sidecar deaf to the EOF on its stdin, so only a signal can end it.
 fn ignores_eof() -> bool {
 	std::env::var("FAKE_AGENT_IGNORE_EOF").is_ok()
 }
 
-/// What one open command asked for, and the behaviour it picked.
 struct Run {
 	settings: HashMap<String, String>,
 	scenario: String,
@@ -209,7 +159,6 @@ impl Run {
 		read_setting(&self.settings, key)
 	}
 
-	/// What the host opened this session as, in the session's own words.
 	fn identity(&self) -> String {
 		format!(
 			"system<{}> told<{}> cwd<{}> mcp<{}>",
@@ -218,9 +167,6 @@ impl Run {
 	}
 }
 
-/// What the real sidecar reads off its provider once the session is up, in the
-/// frame it announces it on: two commands, one described and one not, so a host
-/// reading the frame is read against both shapes it may carry.
 fn emit_commands(key: &str) {
 	emit(
 		key,
@@ -246,9 +192,6 @@ fn emit_init(key: &str, run: &Run) {
 	);
 }
 
-/// Deltas only when the session was opened asking for them. A host whose sidecar
-/// never announced `partialMessages` is answered the way one without the
-/// capability answers: the whole message, once.
 fn emit_text_turn(key: &str, run: &Run, text: &str) {
 	let message_id = next_message_id();
 	if run.partial_messages {
@@ -342,9 +285,6 @@ fn emit_closed(key: &str, detail: &str) {
 	emit(key, json!({ "type": "closed", "detail": detail }));
 }
 
-/// The open handshake, and every way a scenario refuses one. A session that is
-/// never opened is never answered either: the host's own startup timeout is what
-/// ends it.
 fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 	let mut run = Run::open(command);
 
@@ -362,7 +302,6 @@ fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 			return emit_closed(key, "the agent exited during startup");
 		}
 		"slow_open" => {
-			// Long enough for a quit to land inside the open it is racing.
 			std::thread::sleep(std::time::Duration::from_millis(600));
 		}
 		"early_init" => {
@@ -505,8 +444,6 @@ fn on_interrupt(key: &str, runs: &HashMap<String, Run>) {
 	emit_result(key, run, "error_during_execution", false);
 }
 
-/// What the child would read off an answered question, said back so a test can
-/// see the strings arrived whole.
 fn answers_read(input: &Value) -> Option<String> {
 	let answers = input["answers"].as_object()?;
 	let mut read: Vec<String> = answers
@@ -540,8 +477,6 @@ fn on_permission(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 			}
 		}),
 	);
-	// An answered question is said back word for word, since a tool result never
-	// reaches the reader and the strings are what the ask was for.
 	if let Some(read) = answers_read(&command["decision"]["updatedInput"]) {
 		emit_text_turn(key, run, &read);
 	}
@@ -582,15 +517,11 @@ fn serve() {
 		}
 	}
 
-	// Holding past EOF is the whole point: the process outlives its own stdin.
 	while ignores_eof() {
 		std::thread::park();
 	}
 }
 
-/// The asks that name no session. Signed in unless the test says otherwise, and
-/// each catalogue named as a comma-separated list so a suite can prove a name it
-/// made up reaches the frontend untouched.
 fn answer_the_host(command: &Value) {
 	match command["type"].as_str() {
 		Some("check") => emit_raw(&checked().to_string()),
@@ -624,8 +555,6 @@ fn named_list(variable: &str) -> Vec<String> {
 		.unwrap_or_default()
 }
 
-/// What this build announces it can do. Narrowed with `FAKE_AGENT_CAPABILITIES`
-/// so a test can prove the host stops asking for what a sidecar never offered.
 fn capabilities() -> Vec<String> {
 	std::env::var("FAKE_AGENT_CAPABILITIES")
 		.map(|named| named.split(',').filter(|name| !name.is_empty()).map(str::to_owned).collect())

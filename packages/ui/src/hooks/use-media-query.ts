@@ -14,7 +14,6 @@ const mediaQuery = (query: string) => {
 
 const getServerSnapshot = () => false
 
-/** Tracks a CSS media query, reusing one `MediaQueryList` per query string. */
 export const useMediaQuery = (query: string) => {
 	const subscribe = useCallback(
 		(onChange: () => void) => {

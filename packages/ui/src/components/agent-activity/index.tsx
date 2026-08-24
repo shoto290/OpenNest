@@ -1,5 +1,4 @@
 "use client"
-// beui.dev/components/agents/agent-activity
 
 import type { TFunction } from "i18next"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"

@@ -1,5 +1,5 @@
 import { THEME_CLASS_NAMES } from "@workspace/storybook/themed-docs-container"
-import { type Palette, PALETTE_IDS, PALETTES } from "@workspace/ui/lib/palettes"
+import { PALETTE_IDS, PALETTES, type Palette } from "@workspace/ui/lib/palettes"
 
 type PaletteCardProps = {
 	palette: Palette

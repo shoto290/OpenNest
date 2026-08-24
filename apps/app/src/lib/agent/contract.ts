@@ -41,8 +41,6 @@ export type PermissionRequest = {
 	detail: string | null
 }
 
-/** One choice the child offered. `preview` is the longer content it wrote for the
- * option, `null` on one that carries none. */
 export type QuestionOption = {
 	label: string
 	description: string | null
@@ -56,15 +54,11 @@ export type AskedQuestion = {
 	multiSelect: boolean
 }
 
-/** The child asking the reader instead of asking for a permission. Answered under
- * the same id, and dropped with the pending permissions when the turn ends. */
 export type QuestionRequest = {
 	id: string
 	questions: AskedQuestion[]
 }
 
-/** One answer per question, keyed by the question text. Several picked options
- * join with ", ", and words typed instead travel in the same string. */
 export type QuestionAnswers = Record<string, string>
 
 export type PermissionDecision = "allowOnce" | "deny"
@@ -76,11 +70,6 @@ export type TurnEnded = {
 	outcome: TurnOutcome
 }
 
-/** Which run a command is about, and which run an event came from. Every field
- * comes from the durable lineage the frontend opened before asking for a process:
- * the participant is the conversation and the bot, the id is the `runtime_sessions`
- * row, and the epoch is that row's `seq`. Nothing here is minted for the runtime
- * alone — a second identity for one run is a second thing that can disagree. */
 export type RuntimeScope = {
 	conversationId: string
 	botId: string
@@ -88,9 +77,6 @@ export type RuntimeScope = {
 	epoch: number
 }
 
-/** One event and the run it belongs to. `scope` is `null` only for what the host
- * says about the install itself, which is the check — it echoes the run the caller
- * named, and a launch that has not opened one yet names none. */
 export type ScopedEvent = {
 	scope: RuntimeScope | null
 	event: AgentEvent
@@ -104,9 +90,6 @@ export type TransportError =
 	| { kind: "startupTimeout"; timeoutMs: number }
 	| { kind: "crashed"; code: number | null; detail: string | null }
 	| { kind: "resumeFailed"; forgotSessionId: boolean }
-	/** The bot names a folder the machine no longer has, so the run was started
-	 * where one is started for a bot naming none. The process is up and answering —
-	 * somewhere else. */
 	| { kind: "workingDirectoryRefused"; path: string }
 	| { kind: "invalidFrame"; detail: string }
 	| { kind: "notStarted" }
@@ -128,8 +111,6 @@ export type SessionHandle = {
 	resumed: boolean
 }
 
-/** A slash command as the menu lists it. The description is what the child said
- * the command does, absent from one that says nothing. */
 export type AgentCommand = {
 	name: string
 	description?: string

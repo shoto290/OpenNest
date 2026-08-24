@@ -1,5 +1,4 @@
 "use client"
-// beui.dev/components/agents/agent-code
 
 import { Fragment } from "react"
 

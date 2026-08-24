@@ -1,9 +1,3 @@
-//! Keeps the last session snapshot on disk so a restart reopens the transcript.
-//!
-//! Only what the frontend already displays is written: no permission payload,
-//! no transport error, nothing the contract keeps out of the UI. The file is
-//! created `0600` because the redaction discipline this crate applies on the
-//! way to the frontend stops at RAM — on disk the transcript is plain text.
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -29,33 +23,18 @@ struct StoredSession {
 	snapshot: SessionSnapshot,
 }
 
-/// What the last read found. `Unreadable` is kept apart from `Missing` because
-/// only one of the two may be written over: bytes this build cannot parse may
-/// still be a transcript, and an absent file holds nothing to lose.
-///
-/// Reachable across the crate because that distinction belongs to whoever decides
-/// what happens to the file next, and there is only one file to decide about: the
-/// legacy import writes nothing and records nothing on `Unreadable`, so the bytes
-/// are still there for a build that can read them.
 pub(crate) enum Stored {
 	Missing,
 	Snapshot(SessionSnapshot),
 	Unreadable,
 }
 
-/// `app_data_dir()` only computes a path, so the directory is created here: on
-/// a fresh install the first write would otherwise fail.
 pub fn file<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	let dir = app.path().app_data_dir().ok()?;
 	fs::create_dir_all(&dir).ok()?;
 	Some(dir.join(FILE_NAME))
 }
 
-/// The three-way answer, for a caller that cannot afford [`load`]'s collapse:
-/// `load` answers a display, where an unreadable file and an absent one are both
-/// an empty transcript, while anything deciding what becomes of the file itself
-/// has to tell them apart — unreadable bytes may still be a whole conversation,
-/// and treating them as nothing is how one gets written over.
 pub(crate) fn read(path: &Path) -> Stored {
 	let raw = match fs::read_to_string(path) {
 		Ok(raw) => raw,
@@ -68,9 +47,6 @@ pub(crate) fn read(path: &Path) -> Stored {
 	}
 }
 
-/// Any unreadable file yields the default snapshot and stays where it is: a
-/// half-restored transcript is worse than an empty one, and a file this build
-/// cannot parse may still belong to another.
 pub fn load(path: &Path) -> SessionSnapshot {
 	sweep_abandoned_temporaries(path);
 	match read(path) {
@@ -79,12 +55,6 @@ pub fn load(path: &Path) -> SessionSnapshot {
 	}
 }
 
-/// Every write takes its number the moment it is asked for, and the file only
-/// moves forward through those numbers: an older intention that was still on its
-/// way once a newer one has been admitted has nothing left to say, so it is
-/// dropped rather than allowed to land last. The newest number is kept per store
-/// path — a number only orders writes aimed at the same file, and two paths must
-/// never cancel each other's.
 static NEWEST_ADMITTED: Mutex<BTreeMap<PathBuf, u64>> = Mutex::new(BTreeMap::new());
 static NEXT_NUMBER: AtomicU64 = AtomicU64::new(0);
 
@@ -92,12 +62,6 @@ fn take_number() -> u64 {
 	NEXT_NUMBER.fetch_add(1, Ordering::Relaxed)
 }
 
-/// The number is recorded before any I/O and whether or not the write below ever
-/// reaches the disk: what makes an older intention stale is the newer ask, not
-/// the bytes landing. A panic under this lock leaves the numbers in the map
-/// truthful, so a poisoned lock is taken as it is rather than turning every save
-/// after it into a panic. The guard travels with the answer: an admitted write
-/// holds it for its whole run, so admitted writes go one at a time.
 fn admit(path: &Path, number: u64) -> Option<MutexGuard<'static, BTreeMap<PathBuf, u64>>> {
 	let mut newest = NEWEST_ADMITTED.lock().unwrap_or_else(PoisonError::into_inner);
 	if newest.get(path).is_some_and(|&admitted| admitted >= number) {
@@ -118,15 +82,10 @@ fn save_in_order(path: &Path, snapshot: &SessionSnapshot, number: u64) {
 	write_snapshot(path, snapshot);
 }
 
-/// A file this build cannot read holds no id to forget, and rewriting it here
-/// would spend the one copy another build may still be able to open.
 pub fn forget_session_id(path: &Path) {
 	forget_session_id_in_order(path, take_number());
 }
 
-/// The read happens under the same admission as the write it feeds: a save
-/// slipping in between the two would be read back and then written over by a
-/// forget that was already older than it.
 fn forget_session_id_in_order(path: &Path, number: u64) {
 	let Some(_admitted) = admit(path, number) else {
 		return;
@@ -138,10 +97,6 @@ fn forget_session_id_in_order(path: &Path, number: u64) {
 	write_snapshot(path, &snapshot);
 }
 
-/// Never writes over bytes it could not read. Leaving them in place would only
-/// postpone the loss to the next prompt, so they are moved to `session.json.bak`
-/// and the write goes ahead — and if they cannot be moved, nothing is written at
-/// all.
 fn write_snapshot(path: &Path, snapshot: &SessionSnapshot) {
 	if matches!(read(path), Stored::Unreadable) && !keep_as_backup(path) {
 		return;
@@ -156,11 +111,6 @@ fn write_snapshot(path: &Path, snapshot: &SessionSnapshot) {
 	}
 }
 
-/// Answers whether the unreadable bytes are safe. The backup name is spent the
-/// first time it is used: a second unreadable file belongs to another build just
-/// as much as the first, and renaming over it would destroy the only copy that
-/// one has left. A build that cannot make room stops writing rather than trade
-/// one transcript for another.
 fn keep_as_backup(path: &Path) -> bool {
 	let destination = backup(path);
 	!destination.exists() && fs::rename(path, &destination).is_ok()
@@ -172,15 +122,6 @@ fn backup(path: &Path) -> PathBuf {
 	PathBuf::from(name)
 }
 
-/// A crash between a temporary's creation and its rename leaves it behind for
-/// good. The first read of a run is the one moment where every temporary around
-/// is known to be abandoned: nothing this process wrote can exist yet, and the
-/// single-instance lock keeps another one from saving into the same directory.
-///
-/// No read after it carries that promise. `agent_load_session` is a command the
-/// frontend may call whenever it likes, and a save caught between its
-/// `File::create` and its rename would lose the temporary underneath it and
-/// return having written nothing at all.
 fn sweep_abandoned_temporaries(path: &Path) {
 	static ONCE: std::sync::Once = std::sync::Once::new();
 	ONCE.call_once(|| sweep_temporaries(path));
@@ -200,10 +141,6 @@ fn sweep_temporaries(path: &Path) {
 	}
 }
 
-/// Only the exact name a save writes is swept: the stem, a dot, the unique id it
-/// generated, then `.tmp`. Anything looser reaches past our own leftovers —
-/// `session-import.tmp` and `session.draft.tmp` are somebody else's files, and
-/// the sweep deleting them would be a loss no crash of ours caused.
 fn is_temporary(name: &OsStr, stem: &OsStr) -> bool {
 	let Some(after_stem) = name.as_encoded_bytes().strip_prefix(stem.as_encoded_bytes()) else {
 		return false;
@@ -215,9 +152,6 @@ fn is_temporary(name: &OsStr, stem: &OsStr) -> bool {
 	std::str::from_utf8(unique).is_ok_and(|unique| uuid::Uuid::try_parse(unique).is_ok())
 }
 
-/// A crash mid-write must cost the last turn, not the whole transcript, so the
-/// target is only ever replaced by a fully flushed sibling. That sibling is
-/// named uniquely: two overlapping saves sharing one would interleave into it.
 fn write_atomically(path: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()> {
 	if let Some(parent) = path.parent() {
 		fs::create_dir_all(parent)?;
@@ -230,12 +164,6 @@ fn write_atomically(path: &Path, temp: &Path, body: &[u8]) -> std::io::Result<()
 	sync_parent(path)
 }
 
-/// The flushed sibling only becomes the target once the directory entry itself
-/// is durable; a power cut in between leaves the rename unrecorded.
-///
-/// Reachable across the crate, with [`restrict_to_owner`] below: writing a file
-/// beside `session.json` durably and owner-only is this file's discipline, and a
-/// second copy of it elsewhere would be a second thing to keep right.
 #[cfg(unix)]
 pub(crate) fn sync_parent(path: &Path) -> std::io::Result<()> {
 	let Some(parent) = path.parent() else {
@@ -327,8 +255,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The load is not where the promise is kept: the file survives being read
-	/// either way, and it is the first save after it that would replace it.
 	#[test]
 	fn saving_over_an_unreadable_file_keeps_it_as_a_backup() {
 		let dir = temp_dir();
@@ -344,8 +270,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A build that writes version 2 is not a build this one may overwrite: the
-	/// snapshot it left is intact, only unreadable here.
 	#[test]
 	fn saving_over_a_newer_version_keeps_it_as_a_backup() {
 		let dir = temp_dir();
@@ -360,10 +284,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The backup name holds one file, and the bytes already under it are as
-	/// unreadable-here and as valuable-elsewhere as the ones arriving. Trading
-	/// the first for the second would destroy the only copy that build has left,
-	/// so the arriving snapshot stays where it is and the save gives up.
 	#[test]
 	fn a_second_unreadable_file_never_takes_the_first_one_s_backup() {
 		let dir = temp_dir();
@@ -399,9 +319,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The neighbours are the whole point: a name that merely starts like ours,
-	/// and one that ends like ours but carries a middle segment no save of ours
-	/// could have generated. Both belong to somebody else.
 	#[test]
 	fn a_temporary_left_by_a_crashed_save_is_swept_and_nothing_else_is() {
 		let dir = temp_dir();
@@ -425,9 +342,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Loading is a command, not a boot step: the frontend may ask for the
-	/// transcript at any time, and only the first read of a run can tell an
-	/// abandoned temporary from the one a save is holding open right now.
 	#[test]
 	fn a_read_after_the_first_one_leaves_a_save_in_flight_alone() {
 		let dir = temp_dir();
@@ -510,9 +424,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The sleep only makes the stall real; the number is what decides. Whichever
-	/// thread the scheduler favours, the complete snapshot is the last intention
-	/// and the one the file must end up holding.
 	#[test]
 	fn a_save_that_stalled_never_lands_on_top_of_a_newer_one() {
 		let dir = temp_dir();

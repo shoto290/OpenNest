@@ -24,38 +24,21 @@ const PREVIEW_SIZE = 96
 const ANIMAL_SIZE = 40
 const BLOT_SIZE = 24
 
-/** The eight tints and the option that takes the blot off, as one radio group. */
 const BLOT_OPTIONS = [...BLOT_TINTS, undefined] as const
 
 const BLOT_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "p-1")
 
 type BotIdentityFieldsProps = {
 	identity: BotIdentity
-	/** The bot's name, which the preview reads to draw the animal a name alone can
-	 * give. The grids below never read it: they offer what the bot may keep. */
 	name?: string
-	/** The edited bot's id, so every avatar in here wears the blot shape that bot
-	 * will actually wear — the preview and the swatches alike. */
 	seed?: string
-	/** The only thing that makes the preview move. The choices always rest: a grid
-	 * of working animals would say something about the bot that is not true. */
 	working?: boolean
-	/** What the bot is busy with, so the preview performs the work the rest of the
-	 * app is showing rather than a work of its own. */
 	workingKind?: BotWorkingKind
 	onIdentityChange: (identity: BotIdentity) => void
-	/** Receives the dropped, pasted or browsed file. The host turns it into a URL
-	 * and writes it back as `identity.image`. */
 	onAvatarUpload: (file: File) => void
 	className?: string
 }
 
-/**
- * Everything a bot's face is made of, laid out flat: what it looks like now, the
- * eight animals, the eight ink blots plus the option that takes the blot off, and
- * the zone that takes a picture. No popover, no disclosure, no tabs — a reader
- * opening a bot's appearance sees every choice it has at once and can compare them.
- */
 const BotIdentityFields = ({
 	identity,
 	name,

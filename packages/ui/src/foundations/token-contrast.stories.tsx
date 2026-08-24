@@ -33,9 +33,6 @@ const SUFFIXED_PAIRS: TokenPair[] = SEMANTIC_TOKENS.filter((token) =>
 	foreground: `${background}${FOREGROUND_SUFFIX}`,
 }))
 
-/** Pairs the naming convention cannot find: text drawn in one family over a
- * surface from another. A roster row draws its secondary lines in the muted
- * foreground over the sidebar, and over the sidebar accent once it is selected. */
 const CROSS_FAMILY_PAIRS: TokenPair[] = [
 	{ background: "--sidebar", foreground: "--muted-foreground" },
 	{ background: "--sidebar-accent", foreground: "--muted-foreground" },
@@ -43,8 +40,6 @@ const CROSS_FAMILY_PAIRS: TokenPair[] = [
 
 const TOKEN_PAIRS = [ROOT_PAIR, ...SUFFIXED_PAIRS, ...CROSS_FAMILY_PAIRS]
 
-/** Keyed by scheme and pair, never by palette: one exception covers the pair
- * everywhere, and its floor clears the weakest palette that ships it. */
 const PAIRS_AWAITING_DESIGN_DECISION: Record<string, number> = {
 	"light --sidebar-primary-foreground on --sidebar-primary": 2.6,
 	"dark --sidebar-primary-foreground on --sidebar-primary": 1.7,

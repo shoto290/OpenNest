@@ -46,7 +46,6 @@ describe("bundleServers", () => {
 		})
 	})
 
-	// A session opens without the server rather than not at all.
 	it("declares nothing for a bundle with no file, a broken one or a map-less one", () => {
 		for (const contents of [
 			undefined,

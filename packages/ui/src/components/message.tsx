@@ -1,5 +1,3 @@
-// beui.dev/components/agents/message
-
 import { motion, useReducedMotion } from "motion/react"
 import {
 	type ComponentPropsWithRef,
@@ -37,19 +35,16 @@ export interface MessageProps
 		"children" | MotionOwnedProps
 	> {
 	from: MessageFrom
-	/** Plays a trailing-edge pop-up once when this message row mounts. */
 	animateIn?: boolean
 	children: ReactNode
 }
 
 export interface MessageGroupProps extends ComponentPropsWithRef<"div"> {
 	spacing?: "compact" | "default"
-	/** Names the transcript for assistive technology. */
 	label?: string
 }
 
 export interface MessageAvatarProps extends ComponentPropsWithRef<"div"> {
-	/** Keep an empty avatar slot so grouped messages remain aligned. */
 	placeholder?: boolean
 }
 
@@ -63,7 +58,6 @@ export interface MessageTypingProps extends ComponentPropsWithRef<"span"> {
 	label?: string
 }
 
-// A sent row should rise from the live edge without changing measured layout.
 const MESSAGE_POP_UP = {
 	type: "spring",
 	stiffness: 480,

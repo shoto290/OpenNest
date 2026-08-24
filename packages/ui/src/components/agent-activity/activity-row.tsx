@@ -15,9 +15,6 @@ import type {
 	AgentSearchResult,
 } from "./types"
 
-/** The two row heights this panel draws, each with the inset its own glyph asks
- * for: `(row - glyph) / 2` leading, and a wider trailing edge because what ends a
- * row is text. Every row reads from here so they cannot disagree with each other. */
 const ROW_SM = "min-h-7 rounded-md py-1 pr-2.5 pl-1.5"
 const ROW_MD = "min-h-8 rounded-md py-0.5 pr-2.5 pl-2"
 

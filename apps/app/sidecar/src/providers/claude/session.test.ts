@@ -10,7 +10,6 @@ import { bundleLine, layerFor, OPENNEST_LAYER } from "./system-layer"
 
 import type { SessionRequest } from "../provider"
 
-/** Run from source there is no bundle beside the sidecar to resolve. */
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 
 const identity = "You are Bean, the baker."
@@ -37,10 +36,6 @@ describe("buildOptions", () => {
 		expect(options.agent).toBe("bean")
 	})
 
-	// Measured, not documented: an `agent` set without the preset resolves, is
-	// listed, honours its model — and never applies its body. The layer rides as the
-	// preset's `append`, which is measured to compose with the agent rather than
-	// replace it.
 	it("appends the layer to the preset on every spawn, bundled or not", () => {
 		for (const spawned of spawns) {
 			expect(buildOptions(spawned, undefined).systemPrompt).toEqual({
@@ -51,8 +46,6 @@ describe("buildOptions", () => {
 		}
 	})
 
-	// A session holds two plugins and the prompt is the only thing that says which
-	// directory is the bot's own.
 	it("names the bot's own directory under the layer, and only with a bundle", () => {
 		expect(layerFor({ pluginPath: "/bots/b1" })).toBe(
 			`${OPENNEST_LAYER}\n\n${bundleLine("/bots/b1")}`,
@@ -61,26 +54,18 @@ describe("buildOptions", () => {
 		expect(layerFor({})).toBe(OPENNEST_LAYER)
 	})
 
-	// Measured on 2.1.239 in `-p` mode: under the default mode a file write inside
-	// the working directory is refused, and under `auto` the same write lands with
-	// nothing to answer. What `auto` still escalates keeps reaching `canUseTool`, and
-	// a bundle's `disallowedTools` keeps refusing what it names.
 	it("opens every session in auto mode, bundled or not", () => {
 		for (const spawned of spawns) {
 			expect(buildOptions(spawned, undefined).permissionMode).toBe("auto")
 		}
 	})
 
-	// The layer carries the situation only: a bot exported out of this app keeps
-	// everything it can do.
 	it("names no tool in the layer, so it grants no capability", () => {
 		for (const tool of ["Bash", "Edit", "Grep", "Glob", "Task", "WebFetch"]) {
 			expect(OPENNEST_LAYER).not.toContain(tool)
 		}
 	})
 
-	// What is true only inside this app rides here rather than in a bundle: where the
-	// bot runs, and where the person reads back and undoes what it kept.
 	it("places the bot in OpenNest and points its learning at the History", () => {
 		expect(OPENNEST_LAYER).toContain("OpenNest, a desktop app")
 		expect(OPENNEST_LAYER).toContain("one of them")
@@ -88,8 +73,6 @@ describe("buildOptions", () => {
 		expect(OPENNEST_LAYER).toContain("your History")
 	})
 
-	// `settingSources: []` closes every settings file, so an inline object is the
-	// only route the host's style has left.
 	it("passes the output style the host names, and no settings without one", () => {
 		expect(
 			buildOptions({ ...request, outputStyle: "Concise" }, undefined).settings,
@@ -105,8 +88,6 @@ describe("buildOptions", () => {
 		expect(options.agent).toBe("bean")
 	})
 
-	// The bot's model is a key of the agent file in its bundle, and an option here
-	// would override it: the picker would then change a stored value and nothing else.
 	it("names no model, so the bundle's own key is what the child answers under", () => {
 		for (const spawned of [request, { cwd: "/tmp", partialMessages: false }]) {
 			expect(buildOptions(spawned, undefined).model).toBeUndefined()
@@ -122,14 +103,10 @@ describe("buildOptions", () => {
 		}
 	})
 
-	// `strictMcpConfig` drops what a plugin declares, so the bundle's own file is
-	// read and passed as an option: measured, that is the only route left.
 	it("hands over the servers the bundle declares", () => {
 		expect(buildOptions(request, undefined).mcpServers).toEqual({})
 	})
 
-	// Measured on 2.1.239: two local plugins load in one session, each namespacing
-	// its own skills. The bot's comes first — it is the one the agent resolves in.
 	it("loads the app's plugin beside the bot's when the host names one", () => {
 		const options = buildOptions(
 			{ ...request, systemPluginPath: "/app/system" },
@@ -155,8 +132,6 @@ describe("buildOptions", () => {
 		])
 	})
 
-	// The app's plugin is never promoted: without a bot's bundle there is no agent,
-	// and a session that loads nothing loads it neither.
 	it("loads no plugin at all for a session with no bundle of the bot's", () => {
 		expect(
 			buildOptions(
@@ -199,16 +174,12 @@ describe("layerFor", () => {
 		writeFileSync(join(dir, "SKILL.md"), contents)
 	}
 
-	// The app's text reaches a bot through the layer rather than through its bundle:
-	// a change to the app's plugin is in force at the next session of every bot.
 	it("carries the app plugin's preloaded skills under the bot's own directory", () => {
 		dropSkill(
 			"learn",
 			'---\nname: "learn"\nmetadata:\n  opennest:\n    preload: true\n---\n\n## When to write\n\nRules.\n',
 		)
 
-		// The skill is named in a heading of its own, above a body whose sections nest
-		// under it rather than beside it.
 		expect(layerFor({ pluginPath: "/bots/b1", systemPluginPath: system })).toBe(
 			[
 				OPENNEST_LAYER,
@@ -226,8 +197,6 @@ describe("layerFor", () => {
 		)
 	})
 
-	// The host owns the sentences and the bot owns only its name: the identity is
-	// rendered on the other side and appended here, above the app's own text.
 	it("opens on the identity the host rendered, above the OpenNest sentences", () => {
 		expect(layerFor({ identity, pluginPath: "/bots/b1" })).toBe(
 			[identity, OPENNEST_LAYER, bundleLine("/bots/b1")].join("\n\n"),

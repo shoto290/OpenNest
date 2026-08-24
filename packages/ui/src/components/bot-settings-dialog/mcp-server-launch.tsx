@@ -12,27 +12,16 @@ import { Button } from "@workspace/ui/components/button"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { FIELD_LABEL_CLASS } from "@workspace/ui/components/settings-styles"
 
-/** The mask an environment value wears until it is asked for. A fixed run of dots
- * rather than one per character: the length of a token is itself worth hiding. */
 const HIDDEN_VALUE = "••••••••"
 
 type McpServerLaunchReading = {
-	/** The whole command line, ready to read: the program and its arguments, spaced
-	 * the way a shell would show them. */
 	command: string | null
 	url: string | null
 	environment: { name: string; value: string }[]
 }
 
-/** A key the configuration leaves out and one it names as nothing are one answer
- * here: there is no line to draw for either. */
 const readLine = (value: unknown) => readConfigText(value) || null
 
-/**
- * The keys a configuration is understood by, read off whatever else it holds. It
- * recognises rather than validates: a key it does not know is left alone, because the
- * shape belongs to the transport and this side is only here to say what will happen.
- */
 const readMcpServerLaunch = (
 	config: Record<string, unknown>,
 ): McpServerLaunchReading => {
@@ -52,8 +41,6 @@ type LaunchLineProps = {
 	text: string
 }
 
-/** The one thing that will happen, said in the terms it will happen in. It wraps
- * rather than truncates: a reader has to see all of what is about to run. */
 const LaunchLine = ({ icon: LineIcon, text }: LaunchLineProps) => (
 	<p className="flex items-start gap-2 text-foreground text-xs">
 		<LineIcon
@@ -68,20 +55,6 @@ type McpServerLaunchProps = {
 	config: Record<string, unknown>
 }
 
-/**
- * What the configuration above it actually means, in the two terms a reader can act
- * on: the command line that will run on their machine, or the address that will be
- * reached, and the environment it carries.
- *
- * It exists because the configuration is edited as raw JSON — the shape is the
- * transport's to define, so a form of fixed fields would refuse the next kind of
- * server the day it arrives. What a form would have given for free, this gives back:
- * the reader sees the program before it starts.
- *
- * Every environment value is masked. An environment is where a token is pasted, and
- * this panel opens over whatever screen is being shared; a value is shown for one
- * variable at a time, and only once it is asked for.
- */
 const McpServerLaunch = ({ config }: McpServerLaunchProps) => {
 	const { t } = useTranslation("bots")
 	const [revealed, setRevealed] = useState<string[]>([])

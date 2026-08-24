@@ -7,26 +7,13 @@ import { cn } from "@workspace/ui/lib/utils"
 type SwitchProps = {
 	checked: boolean
 	onCheckedChange: (checked: boolean) => void
-	/** What a visible `label` points at, so the words beside the track are part of
-	 * the same target. */
 	id?: string
-	/** The sentence that says what turning it on costs. Announced after the name
-	 * rather than in place of it. */
 	"aria-describedby"?: string
 	"aria-label"?: string
 	disabled?: boolean
 	className?: string
 }
 
-/**
- * One binary setting, on or off, written the moment it is pressed. A switch rather
- * than a checkbox: nothing here is submitted later, so the control has to read as
- * the state itself and not as a choice waiting on a save.
- *
- * It renders a button, so a visible `label` may own it through `htmlFor`, and it
- * keeps no state — the surface holds the value and this only reports the press. The
- * thumb slides, unless the reader asked for no motion, in which case it lands.
- */
 const Switch = ({
 	checked,
 	onCheckedChange,

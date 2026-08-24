@@ -23,11 +23,6 @@ const buttonVariants = cva(
 					"bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
 				link: "text-primary underline-offset-4 hover:underline",
 			},
-			// An icon sits the same distance from the edge it faces as it does from
-			// the top and the bottom — `(height - icon) / 2`, so it reads as centred in
-			// its own square rather than pushed in. Text is the opposite: it wants more
-			// room left and right than above and below, so `px-*` stays wider than that
-			// inset. Icon-only sizes are square and need neither.
 			size: {
 				default:
 					"h-8 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
@@ -49,12 +44,7 @@ const buttonVariants = cva(
 
 type ButtonProps = ButtonPrimitive.Props &
 	VariantProps<typeof buttonVariants> & {
-		/** Label shown on hover and focus. Pair it with `aria-label` on an
-		 * icon-only button: a tooltip describes, it does not name. */
 		tooltip?: string
-		/** Which side of the button the label opens on. Defaults to above it, which is
-		 * wrong for a control pinned to the top of a window: there is nothing above it
-		 * to open into. */
 		tooltipSide?: TooltipProps["side"]
 	}
 

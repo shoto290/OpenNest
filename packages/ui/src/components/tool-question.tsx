@@ -20,8 +20,6 @@ import { SettingsField } from "@workspace/ui/components/settings-field"
 import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** One option of an `AskUserQuestion` question. `preview` is what picking it would
- * produce, shown only once it is picked. */
 export type ToolQuestionOption = {
 	label: string
 	description: string
@@ -44,9 +42,6 @@ export interface ToolQuestionProps {
 	className?: string
 }
 
-/** What a question holds so far. The two ways to answer are exclusive: text is the
- * whole answer when there is any, so picking an option clears it and typing clears
- * the picks. */
 type Draft = { selected: string[]; text: string }
 
 const EMPTY_DRAFT: Draft = { selected: [], text: "" }
@@ -71,8 +66,6 @@ const ToolQuestion = ({
 	const writeDraft = (question: string, draft: Draft) =>
 		setDrafts((current) => ({ ...current, [question]: draft }))
 
-	/** A question that holds one answer is done the moment it is picked, so the card
-	 * moves on to the next one still waiting rather than making the reader find it. */
 	const askNextUnanswered = (answered: ToolQuestionItem) => {
 		const next = questions.find(
 			(item) => item !== answered && answerTo(item.question) === "",
@@ -199,9 +192,6 @@ const ToolQuestion = ({
 type OptionRowProps = {
 	option: ToolQuestionOption
 	isSelected: boolean
-	/** The control the row's label owns, given the id to answer to. It carries no
-	 * text of its own — the whole row is its label, so every pixel of the box picks
-	 * the option, description included. */
 	render: (id: string) => ReactNode
 }
 

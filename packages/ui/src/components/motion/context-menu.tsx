@@ -1,5 +1,4 @@
 "use client"
-// beui.dev/components/motion/context-menu
 
 import { motion, useReducedMotion } from "motion/react"
 import {
@@ -90,8 +89,6 @@ function clamp(value: number, min: number, max: number) {
 	return Math.min(Math.max(value, min), max)
 }
 
-// Collapses to a zero-area rect at the press point, so the closed menu leaves
-// nothing behind — the clip is the whole show/hide, there is no fade under it.
 function collapsedClip(
 	origin: MenuPoint,
 	size: { width: number; height: number },
@@ -227,8 +224,6 @@ export function ContextMenuTrigger({
 		touchOrigin.current = null
 	}, [])
 
-	// Held for the whole press, not just the timer: a gesture that turned into a
-	// drag must not paint a selection under the finger either.
 	const endPress = useCallback(() => {
 		cancelLongPress()
 		releaseSelection.current?.()
@@ -246,18 +241,10 @@ export function ContextMenuTrigger({
 
 	const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
 		childProps.onPointerDown?.(event)
-		// A pen presses the same way a finger does and gets no `contextmenu` out
-		// of the platform for it, so it holds to open too. A mouse has the right
-		// button and is left to `onContextMenu`.
 		const pressToOpen =
 			event.pointerType === "touch" || event.pointerType === "pen"
 		if (event.defaultPrevented || disabled || !pressToOpen) return
 
-		// `pointer-coarse:select-none` misses this press on a laptop whose mouse
-		// is the primary pointer and whose touchscreen is not, and the platform's
-		// own long-press selection then claims the gesture and cancels ours. The
-		// press is the only thing that knows which input is on the glass, so it
-		// takes selection away itself — for its own duration, and no longer.
 		releaseSelection.current?.()
 		releaseSelection.current = holdSelection(event.currentTarget)
 
@@ -307,12 +294,6 @@ export function ContextMenuTrigger({
 		"aria-controls": context.open ? context.menuId : undefined,
 		"aria-haspopup": "menu",
 		"aria-expanded": context.open,
-		// The long press is ours: without this iOS runs its own on the same
-		// gesture and drops the selection callout and its handles on top of the
-		// menu we just opened. Only the press gesture is ours though — the child
-		// is the consumer's content, so a mouse can still select the text in it
-		// and right-click the selection. `touch-none` stays off too: the page
-		// still has to scroll from the trigger.
 		className: cn(TOUCH_GESTURE_CONTENT_CLASS, childProps.className, className),
 		onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
 			childProps.onContextMenu?.(event)
@@ -396,9 +377,6 @@ export function ContextMenuContent({
 			return
 		}
 
-		// Let the measured collapsed clip paint once before expanding it. Without
-		// this preparation frame, the first invocation can batch both states and
-		// appear at full size without the morph.
 		let openFrame = 0
 		const prepareFrame = requestAnimationFrame(() => {
 			openFrame = requestAnimationFrame(() => setMorphReady(true))
@@ -486,8 +464,6 @@ export function ContextMenuContent({
 
 	if (!mounted) return null
 
-	// A closed menu always targets the collapsed clip: reduced motion and the
-	// keyboard skip the morph on the way in, they do not keep the menu open.
 	const shown =
 		context.open &&
 		(context.reduce || context.modality === "keyboard" || morphReady)
@@ -495,11 +471,6 @@ export function ContextMenuContent({
 	const clipShown = "inset(0px 0px 0px 0px round 12px)"
 
 	return createPortal(
-		// The portal stays mounted so the menu can be measured before it opens, and
-		// the clip alone cannot hide it — an unmeasured collapsed clip is the whole
-		// box. A `visibility` transition holds `visible` for its whole duration, so
-		// the menu only leaves the page once it has finished shrinking back to the
-		// press point. Opening zeroes it to show the menu at once.
 		<div
 			data-context-menu-portal=""
 			aria-hidden={!context.open}
@@ -626,10 +597,6 @@ function ContextMenuItemBase({
 							? "bg-destructive/10"
 							: "bg-foreground/[0.065]",
 					)}
-					// Local deviation from the beUI default, which springs the shared
-					// pill from one item to the next: a highlight that travels reads
-					// as a delay under the pointer, so it lands where the pointer is
-					// at once. The shared `layoutId` stays — only its travel is zero.
 					transition={{ duration: 0 }}
 				/>
 			) : null}

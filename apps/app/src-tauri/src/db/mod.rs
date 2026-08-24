@@ -1,18 +1,3 @@
-//! The local SQLite database that will hold the conversations.
-//!
-//! Opening, migrating, importing the legacy snapshot and closing out what a dead
-//! host left open all happen once, at launch, and the outcome is managed as a
-//! whole: a file that cannot be opened or migrated must not stop the host from
-//! starting, and whoever asks for the database later has to be told there is none
-//! rather than handed a half-migrated one — or one still holding a reply recorded
-//! as being written by a process that is gone.
-//!
-//! Every one of those seams reaches the file through [`Access`] and nothing else:
-//! the connection is a `Mutex` no name outside this module can reach, and the
-//! lock is taken inside a blocking task rather than on an async worker. That is
-//! the whole reason the boundary exists. `rusqlite` is synchronous, and a
-//! statement waiting on a busy file would otherwise stall every other task
-//! sharing that thread — the event stream carrying a Claude turn included.
 
 pub mod bootstrap;
 pub mod connection;
@@ -31,12 +16,6 @@ use repositories::{
 	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository, UserRepository,
 };
 
-/// One connection, shared: SQLite serializes writers anyway, and a desktop host
-/// with a single window has no read concurrency to win by opening more.
-///
-/// Private to this module, and handed out only as a closure's argument: a caller
-/// holding the `Connection` itself could keep it across an `await`, which is the
-/// stall the blocking task below exists to prevent.
 #[derive(Clone)]
 struct Access {
 	connection: Arc<Mutex<Connection>>,
@@ -76,19 +55,12 @@ impl Access {
 	}
 }
 
-/// The lock is taken here, inside the blocking task, and never by the caller: on
-/// an async worker it would block the thread the runtime needs to make progress.
-/// A poisoned lock is reported rather than unwrapped — the call that panicked
-/// under it may have left a statement half-run, and a panic of our own would take
-/// the host down with it.
 fn locked(
 	connection: &Arc<Mutex<Connection>>,
 ) -> Result<MutexGuard<'_, Connection>, DatabaseError> {
 	connection.lock().map_err(|_| DatabaseError::PoisonedConnection)
 }
 
-/// What the host manages. `Err` is a first-class outcome, kept so the failure can
-/// be read off the state instead of crashing the launch.
 pub type DatabaseState = Result<Database, DatabaseError>;
 
 pub struct Database {
@@ -101,17 +73,6 @@ pub struct Database {
 }
 
 impl Database {
-	/// The legacy snapshot is imported here, straight after migrating and before
-	/// [`Access`] exists: the schema it writes into is installed, and the connection
-	/// is still exclusively this call's, so the import needs no lock and no runtime.
-	/// Its failures are outcomes rather than errors — the host boots without the
-	/// migration just as it boots without the database.
-	///
-	/// The sweep runs last, on that same exclusive connection, and its failure is not
-	/// an outcome: a launch that could not close out what the dead host left would hand
-	/// the frontend a reply still recorded as being written, which is the one thing a
-	/// durable transcript must never claim. So there is no database rather than a
-	/// dishonest one — the host still boots, and the state says why.
 	fn open(path: &Path, legacy: Option<&Path>) -> DatabaseState {
 		let mut connection = connection::open(path)?;
 		migrations::apply(&mut connection)?;
@@ -128,8 +89,6 @@ impl Database {
 		})
 	}
 
-	/// Reads. The closure runs on a blocking thread, so nothing it waits on is
-	/// waited on by the runtime.
 	pub async fn call<F, T>(&self, f: F) -> Result<T, DatabaseError>
 	where
 		F: FnOnce(&Connection) -> Result<T, DatabaseError> + Send + 'static,
@@ -138,8 +97,6 @@ impl Database {
 		self.access.call(f).await
 	}
 
-	/// Writes that are one unit: `Connection::transaction` needs `&mut`, so this is
-	/// the only way a multi-statement change either lands whole or leaves nothing.
 	pub async fn call_mut<F, T>(&self, f: F) -> Result<T, DatabaseError>
 	where
 		F: FnOnce(&mut Connection) -> Result<T, DatabaseError> + Send + 'static,
@@ -164,19 +121,12 @@ impl Database {
 		&self.user
 	}
 
-	/// Every avatar any row still points at, bots and the user's own record alike.
-	/// The sweep deletes whatever this list does not name, so it is written here
-	/// rather than in either repository: a picture left out of it is a file the next
-	/// write takes off the disk while the record is still pointing at it.
 	pub async fn referenced_avatar_paths(&self) -> Result<Vec<String>, DatabaseError> {
 		let mut referenced = self.conversations.avatar_image_paths().await?;
 		referenced.extend(self.user.avatar_image_path().await?);
 		Ok(referenced)
 	}
 
-	/// What the launch that opened this file did about the legacy `session.json`. Read
-	/// off the state like everything else here: it happened once, before anything
-	/// could ask.
 	pub fn legacy_import(&self) -> &LegacyImport {
 		&self.legacy_import
 	}
@@ -186,13 +136,6 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
 	Database::open(&connection::file(app)?, crate::agent::store::file(app).as_deref())
 }
 
-/// Every test that needs a file opens it the same way, on a directory of its own
-/// from [`connection::temp_dir`]. Lives here rather than in each of them because
-/// `Database::open` is private to this module — and it is reachable from the whole
-/// crate because a rule that spans two repositories is not written in either.
-///
-/// No legacy path: an import is a boot step of its own, and the tests around it are
-/// the ones that ask for it.
 #[cfg(test)]
 pub(crate) fn open(dir: &Path) -> Database {
 	Database::open(&dir.join(connection::FILE_NAME), None).expect("the database opens")
@@ -203,9 +146,6 @@ pub(in crate::db) fn open_with_legacy(dir: &Path, legacy: &Path) -> Database {
 	Database::open(&dir.join(connection::FILE_NAME), Some(legacy)).expect("the database opens")
 }
 
-/// Counting rows is how those modules check that a write landed, or that a
-/// refused one left nothing behind. The table is a literal, never a value from
-/// outside: it is interpolated, not bound.
 #[cfg(test)]
 pub(in crate::db) async fn count_of(database: &Database, table: &'static str) -> u32 {
 	database
@@ -226,14 +166,9 @@ mod tests {
 	use super::connection::{is_busy, temp_dir, FILE_NAME};
 	use super::*;
 
-	/// Short enough to keep the test quick, long enough to be several heartbeats.
 	const CONTENDED_TIMEOUT: Duration = Duration::from_millis(300);
 	const HEARTBEAT: Duration = Duration::from_millis(10);
-	/// Well under what the timeout above has room for: the assertion is that the
-	/// runtime kept running, not how fast the machine is.
 	const MINIMUM_BEATS: u64 = 5;
-	/// Only ever reached by a call that hangs, which is the failure this proves
-	/// impossible — so it is long enough to be nobody's flake.
 	const DEADLINE: Duration = Duration::from_secs(10);
 
 	async fn version(database: &Database) -> u32 {
@@ -281,8 +216,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The second launch is the common one, and the schema it finds is already
-	/// there: the steps must recognise their own work and do nothing.
 	#[tokio::test]
 	async fn reopening_leaves_the_schema_and_the_version_as_they_were() {
 		let dir = temp_dir();
@@ -304,12 +237,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The guarantee the whole boundary exists for, and the one a raw
-	/// `lock()` on an async worker would break silently: the heartbeat is a task
-	/// with nothing to do but tick, and it has to keep ticking while a call sits on
-	/// a file somebody else holds. `#[tokio::test]` gives the runtime a single
-	/// async thread on purpose — synchronous SQLite work running there would starve
-	/// the heartbeat outright, so the beats below are what tells the two apart.
 	#[tokio::test]
 	async fn a_call_waiting_on_the_file_leaves_the_runtime_free() {
 		let dir = temp_dir();
@@ -358,8 +285,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// What `call_mut` is for: the two rows are one change, and the second attempt
-	/// trips on the turn's seq after having already written the conversation.
 	#[tokio::test]
 	async fn a_write_spanning_two_statements_lands_whole_or_not_at_all() {
 		let dir = temp_dir();
@@ -407,10 +332,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A panic under the lock is reported twice over — once to the caller that
-	/// caused it, then to every caller after it — and never as a panic of the
-	/// host's own: the connection is shared, and what a half-run statement left is
-	/// not knowable from here.
 	#[tokio::test]
 	async fn a_call_that_panics_is_reported_instead_of_taking_the_host_down() {
 		let dir = temp_dir();
@@ -433,10 +354,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The file and the two SQLite writes beside it. The `-wal` is the one that
-	/// matters as much as the database: until a checkpoint folds it back, it holds
-	/// the newest stretch of the transcript in plain text, so restricting the
-	/// database alone would leave the last thing that was said out in the open.
 	#[cfg(unix)]
 	#[test]
 	fn the_database_and_what_it_journals_through_are_reachable_by_their_owner_only() {

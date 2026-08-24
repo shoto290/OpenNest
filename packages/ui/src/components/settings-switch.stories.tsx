@@ -7,8 +7,6 @@ import {
 	type SettingsSwitchProps,
 } from "@workspace/ui/components/settings-switch"
 
-/** The row keeps no state of its own, so a story that lets a reader press it holds
- * the state the press produces. */
 const SwitchHost = (props: SettingsSwitchProps) => {
 	const [checked, setChecked] = useState(props.checked)
 

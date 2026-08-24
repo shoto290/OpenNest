@@ -1,5 +1,3 @@
-/** The bots surface in French — the roster, the resource tree, the settings
- * dialog and the delete it guards. */
 const bots = {
 	roster: {
 		label: "Conversations",
@@ -283,9 +281,6 @@ const bots = {
 		transport: {
 			label: "Transport",
 			hint: "C'est lui qui décide de ce que dit le reste de la configuration : un serveur local nomme une commande à lancer, un serveur distant une adresse à joindre.",
-			/** Une clé par transport, indexée sur ce que porte le brouillon : un
-			 * transport que le format gagnerait et que ce catalogue ne nommerait pas
-			 * échoue à la vérification de types. */
 			option: {
 				local: "Démarré sur cette machine",
 				remote: "Joint par le réseau",
@@ -309,9 +304,6 @@ const bots = {
 		endpoint: {
 			label: "Point d'accès",
 			hint: "Le type de point d'accès sur lequel l'adresse est jointe. Un serveur distant écrit sans lui est ignoré, il est donc toujours enregistré à côté de l'URL. Streamable HTTP est le même point d'accès que HTTP, et un fichier qui l'écrit déjà ainsi est laissé tel quel.",
-			/** Une clé par type, indexée sur ce que porte la configuration : un type que
-			 * le format gagnerait et que ce catalogue ne nommerait pas échoue à la
-			 * vérification de types. */
 			option: {
 				http: "HTTP",
 				sse: "Événements envoyés par le serveur",

@@ -12,9 +12,6 @@ export type Updater = {
 	controller: UpdaterController
 }
 
-/** What this launch knows about a newer release. Mounted once, at the top of the
- * window: the polling belongs to the app being open, not to whatever happens to be
- * on the screen. */
 export const useUpdater = (): Updater => {
 	const [controller] = useState(() => createUpdaterController(createUpdater()))
 	const state = useSyncExternalStore(controller.subscribe, controller.getState)

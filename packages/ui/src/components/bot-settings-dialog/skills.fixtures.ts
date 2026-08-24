@@ -1,7 +1,5 @@
 import type { BotSkillItem } from "@workspace/ui/components/bot-settings"
 
-/** A bundle with both marks in it: one skill carried in every prompt, two the bot
- * would have to go and read. */
 export const BOT_SKILLS: BotSkillItem[] = [
 	{
 		id: "release-notes",
@@ -29,8 +27,6 @@ export const BOT_SKILLS: BotSkillItem[] = [
 	},
 ]
 
-/** One skill written long enough to wrap its name, run past its description and
- * fill the body field several times over. */
 export const LONG_SKILL: BotSkillItem = {
 	id: "incident-response-runbook",
 	name: "incident-response-runbook-for-the-nightly-ingestion-pipeline",
@@ -63,8 +59,6 @@ Write the incident down the same day. A runbook that grows after every incident 
 	isSystem: false,
 }
 
-/** A skill that answers everything its format lets it answer, forked context
- * included, so a section is never reviewed on empty fields. */
 export const DETAILED_SKILL: BotSkillItem = {
 	id: "changelog-release",
 	name: "changelog-release",
@@ -94,8 +88,6 @@ export const DETAILED_SKILL: BotSkillItem = {
 	metadata: '{\n  "author": "Ada Martin"\n}',
 }
 
-/** A description and a `when_to_use` that together run past the 1536 characters the
- * two share, so the budget under the field is over rather than near. */
 export const OVER_BUDGET_SKILL: BotSkillItem = {
 	...DETAILED_SKILL,
 	id: "over-budget",
@@ -104,8 +96,6 @@ export const OVER_BUDGET_SKILL: BotSkillItem = {
 		"A release is being cut and nobody wants to read the diff. ".repeat(20),
 }
 
-/** A skill the host wrote: listed and opened like the others, tagged as its own, and
- * read rather than edited — its body is regenerated from what the machine answers. */
 export const SYSTEM_SKILL: BotSkillItem = {
 	id: "environment",
 	name: "environment",

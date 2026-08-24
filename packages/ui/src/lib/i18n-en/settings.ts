@@ -1,11 +1,3 @@
-/** Every string a reader sees on the user settings surface — the breadcrumb, the
- * rail down the left, the profile fields, the notification switches, the language
- * tiles and the appearance tiles. Scheme, palette and notified-event labels are
- * keyed by the ids the value carries, so one added to the app without a key here
- * fails the type check rather than rendering its own id. The languages themselves
- * are not here: each is written in its own language, so English reads English in a
- * French interface. The machine tile is, because following the machine is a word of
- * the interface rather than a language. */
 const settings = {
 	breadcrumb: {
 		title: "Settings",

@@ -34,8 +34,6 @@ const meta = preview.meta({
 		onConfirm: fn(),
 	},
 	argTypes: {
-		// Read once, as the dialog mounts, so it is a story's arg rather than a knob:
-		// a control that only takes effect on a remount reads as a broken one.
 		defaultOpen: { control: false },
 	},
 })

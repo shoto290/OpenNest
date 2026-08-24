@@ -7,8 +7,6 @@ import { notificationWordsFor } from "./notification-words"
 
 import type { ChatState } from "../chat/chat-state"
 
-/** All the source needs of a bot: which conversation it is, and the name a
- * notification is titled with. */
 type NotifiedBot = {
 	id: string
 	name: string
@@ -24,13 +22,6 @@ type RosterSource = {
 	select: (botId: string) => void
 }
 
-/** Everything the source reads from outside itself, handed in rather than reached
- * for: the switches as the record holds them now, the focus the operating system
- * gives the window, and the window coming back to the front.
- *
- * `watchFocus` is what decides, and `hasFocus` is only what is decided on until it
- * reports: outside the Tauri host there is no window to watch, and the document is
- * the closest thing to a reader looking at the app. */
 export type NotificationSourceOptions = {
 	chat: ChatSource
 	roster: RosterSource
@@ -41,16 +32,6 @@ export type NotificationSourceOptions = {
 	raiseWindow: () => void
 }
 
-/** Where a state change becomes a notification, and a click becomes a conversation.
- *
- * Every bot on the roster is compared at every publish, not only the selected one:
- * the reader is told about the bot that answered, which is precisely the one they are
- * not looking at. A bot seen for the first time is only recorded — there is no state
- * before it to compare against, and a launch reading the roster in would otherwise
- * announce every bot it found. A bot the roster no longer holds is dropped with it.
- *
- * The decision itself is `notificationsFor`'s, the words are the catalogues', and
- * what the platform does with either is the port's. */
 export const startNotificationSource = ({
 	chat,
 	roster,
@@ -62,14 +43,8 @@ export const startNotificationSource = ({
 }: NotificationSourceOptions): (() => void) => {
 	const seen = new Map<string, ChatState>()
 
-	/** What the window last reported, kept between publishes rather than asked for at
-	 * each one: the host answers over IPC and a publish decides now. Nothing reported
-	 * yet leaves the document to answer for it. */
 	let windowFocus: boolean | undefined
 
-	/** The bots the roster let go of, dropped from what is compared. Only reached
-	 * when the roster is shorter than what is held: this runs on every word of every
-	 * answer, and a walk per token is the kind of work a stream multiplies. */
 	const forget = (bots: NotifiedBot[]) => {
 		for (const botId of seen.keys()) {
 			if (!bots.some((bot) => bot.id === botId)) {
@@ -80,8 +55,6 @@ export const startNotificationSource = ({
 
 	const compare = () => {
 		const { bots } = roster.getState()
-		// Read once for the whole publish rather than per bot: every bot is being told
-		// about the same moment, with the same switches and the same window.
 		const currentSwitches = switches()
 		const isFocused = windowFocus ?? hasFocus()
 
@@ -115,8 +88,6 @@ export const startNotificationSource = ({
 		}
 	}
 
-	/** The reader answering a notification: the window comes back whether or not the
-	 * bot is still there, and only a bot the roster still holds is opened. */
 	const activate = (botId: string) => {
 		raiseWindow()
 
@@ -126,9 +97,6 @@ export const startNotificationSource = ({
 	}
 
 	const stopChat = chat.subscribe(compare)
-	// Both registrations go through the host, so what is held is the promise rather
-	// than what it answers with: a dispose that lands first still has something to
-	// release once the registration settles.
 	const focus = watchFocus((isFocused) => {
 		windowFocus = isFocused
 	}).catch(() => undefined)

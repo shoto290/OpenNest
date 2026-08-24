@@ -13,8 +13,6 @@ const MODELS = [
 	{ label: "Claude Haiku", value: "claude-haiku" },
 ]
 
-/** The select keeps no answer of its own, so a story that lets a reader pick holds
- * it. */
 const SelectHost = (props: SettingsSelectProps) => {
 	const [value, setValue] = useState(props.value)
 

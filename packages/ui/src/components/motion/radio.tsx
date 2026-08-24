@@ -1,5 +1,4 @@
 "use client"
-// beui.dev/components/motion/radio
 
 import { MotionConfig, motion, useReducedMotion } from "motion/react"
 import {

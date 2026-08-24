@@ -1,11 +1,3 @@
-//! What the host's exit reaches once the graceful paths no longer apply.
-//!
-//! Unix only: the sweep under test is a process-group kill, which is a no-op
-//! everywhere else.
-//!
-//! Deliberately a single test in a binary of its own. The sweep is process-wide
-//! by nature, and `cargo test` runs the tests of one binary in parallel, so a
-//! second one here would have its own child swept out from under it.
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
@@ -18,13 +10,10 @@ use opennest_app::agent::sidecar::{Sidecar, SidecarOptions};
 use opennest_app::agent::AgentState;
 use tokio::sync::mpsc;
 
-
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
 
-/// Long enough that the start is still in flight when the quit arrives, which
-/// is the whole window this test is about.
 const UNREACHED_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
 async fn poll_until(expectation: &str, is_satisfied: impl Fn() -> bool) {
@@ -43,18 +32,12 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
-/// The probe file is named after this test process: worktrees run their suites
-/// side by side and a shared path would have them racing.
 fn probe_file() -> PathBuf {
 	let path = std::env::temp_dir().join(format!("opennest-quit-path-{}.pid", std::process::id()));
 	let _ = std::fs::remove_file(&path);
 	path
 }
 
-/// A session reaches the app's state only once its handshake has returned, and
-/// resuming a large conversation can hold that open for the whole startup
-/// window. A quit landing inside it finds nothing to terminate — and the sidecar
-/// it cannot see has agents of its own by then.
 #[tokio::test]
 async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 	let pid_file = probe_file();

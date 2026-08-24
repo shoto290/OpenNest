@@ -24,52 +24,22 @@ import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import type { Language } from "@workspace/ui/lib/i18n"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** The tab a reader lands on, every time the dialog opens. Who they are comes
- * before how the app is painted. */
 const FIRST_TAB = "profile"
 
 const BREADCRUMB_AVATAR_SIZE = 32
 
 type UserSettingsDialogProps = {
 	open: boolean
-	/** Fired for every way out — Escape, the backdrop, the corner affordance. The
-	 * dialog never asks to confirm: nothing in it is unsaved. */
 	onClose: () => void
 	value: UserSettingsValue
-	/** Fired on every edit — the dialog keeps no draft and owns no persistence. */
 	onValueChange: (value: UserSettingsValue) => void
-	/** Receives the picked, dropped or pasted file. The host turns it into a URL
-	 * and writes it back as `value.image`; the dialog changes nothing it holds. */
 	onPictureUpload: (file: File) => void
-	/** The language that was chosen, or `null` for none chosen — the machine tile,
-	 * which is what the app follows until a reader picks a language themselves. It is
-	 * the one field that does not travel in `value`: what the interface reads in
-	 * lives in the translation runtime, so the host holds the choice apart. */
 	language: Language | null
-	/** Fired with the language chosen, or `null` when the reader hands the choice
-	 * back to the machine. The dialog holds nothing: the host writes the choice down
-	 * and the tick follows. */
 	onLanguageChange: (language: Language | null) => void
-	/** Takes the reader's picture off. Left out, and the control offers no way to —
-	 * the dialog never clears `value.image` itself. */
 	onPictureRemove?: () => void
 	className?: string
 }
 
-/**
- * Everything a reader is to the app, in one overlay: a breadcrumb wearing their own
- * face, a rail of four groups down the left and one group at a time on the right.
- * Profile is who they are — the name the app calls them and the picture it shows;
- * Appearance is how the app is painted for them; Notifications is what it tells them
- * about; Language is the one it speaks to them in.
- *
- * It is the same contract as a bot's settings and for the same reason: fully
- * controlled, saving as you type. Every edit emits the whole value through
- * `onValueChange` — bar the two the value does not carry, the picture and the
- * language, which have a callback each — and the dialog owns no draft, no debounce
- * and no persistence: closing it is never a question, because there is nothing
- * unsaved to lose.
- */
 const UserSettingsDialog = ({
 	open,
 	onClose,

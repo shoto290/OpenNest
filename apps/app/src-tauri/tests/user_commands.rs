@@ -1,13 +1,3 @@
-//! The preferences record as the frontend meets it: over IPC, in JSON.
-//!
-//! What a repository test cannot see is exactly what fails here — a command left
-//! out of the registry, a field renamed on the way out, a refusal flattened into a
-//! string, and above all a picture the bot sweep does not know is referenced. Every
-//! call goes through `get_ipc_response`, so what is asserted is the JSON itself.
-//!
-//! The database is the real one, opened through `db::bootstrap` the way the launch
-//! opens it, and every test takes a `Home` of its own so it writes where no
-//! neighbour is reading — and gets it back off the disk however it ends.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -21,11 +11,6 @@ use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const BOT: &str = "default";
 
-/// One test's application data directory: an identifier no run and no neighbour
-/// claims twice, and the directory it resolves to taken away when the test ends —
-/// returned from or panicked out of, since `Drop` runs either way. Where the
-/// identifier lands is read from the resolver the commands read it from, rather
-/// than rebuilt from platform rules.
 struct Home {
 	identifier: String,
 	dir: PathBuf,
@@ -56,8 +41,6 @@ impl Drop for Home {
 	}
 }
 
-/// Built and no further: it carries the identifier every path below is resolved
-/// from, and without a database under it nothing has touched the disk yet.
 fn host(identifier: &str) -> App<MockRuntime> {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = identifier.into();
@@ -107,8 +90,6 @@ fn stored_avatars(app: &App<MockRuntime>) -> Vec<String> {
 	names
 }
 
-/// Built rather than checked in, so the bytes and the decoder that has to read
-/// them cannot drift apart.
 fn a_png(width: u32, height: u32) -> Vec<u8> {
 	let mut canvas = image::RgbImage::new(width, height);
 	for (x, y, pixel) in canvas.enumerate_pixels_mut() {
@@ -146,8 +127,6 @@ fn a_stored_picture(window: &WebviewWindow<MockRuntime>) -> String {
 		.to_owned()
 }
 
-/// A bot wearing a picture of its own, so every sweep below runs against a
-/// directory holding more than the record's file.
 fn a_bot_wearing_a_picture(window: &WebviewWindow<MockRuntime>) -> String {
 	call(window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	call(window, "conversation_set_bot_avatar_image", json!({ "id": BOT, "bytes": a_png(30, 30) }))
@@ -157,9 +136,6 @@ fn a_bot_wearing_a_picture(window: &WebviewWindow<MockRuntime>) -> String {
 		.to_owned()
 }
 
-/// The command is registered — an unregistered one is not refused, it is not
-/// answered at all — and the reason there is no database survives the crossing
-/// with its shape.
 #[test]
 fn a_host_without_a_database_answers_every_preferences_command_with_why_there_is_none() {
 	let app = app_without_a_database();
@@ -177,7 +153,6 @@ fn a_host_without_a_database_answers_every_preferences_command_with_why_there_is
 	);
 }
 
-/// The record the app opens on, before anyone has chosen anything.
 #[test]
 fn a_record_nobody_has_written_crosses_as_the_defaults() {
 	let home = Home::new();
@@ -213,8 +188,6 @@ fn a_written_record_is_answered_and_read_back_whole() {
 	assert_eq!(read(&window), a_record(Value::Null));
 }
 
-/// A word outside the three is refused before the command is entered, so nothing
-/// reaches the file.
 #[test]
 fn a_scheme_outside_the_vocabulary_never_reaches_the_record() {
 	let home = Home::new();
@@ -230,8 +203,6 @@ fn a_scheme_outside_the_vocabulary_never_reaches_the_record() {
 	assert_eq!(read(&window)["colorScheme"], json!("system"));
 }
 
-/// Bytes in, one normalised file beside the database, and a path the webview can
-/// be pointed at — the same guarantee a bot's picture carries.
 #[test]
 fn an_uploaded_picture_is_stored_squared_and_crosses_as_a_path() {
 	let home = Home::new();
@@ -255,8 +226,6 @@ fn an_uploaded_picture_is_stored_squared_and_crosses_as_a_path() {
 	assert_eq!(read(&window)["profilePicturePath"], json!(recorded));
 }
 
-/// The rule the whole feature turns on: the sweep a bot write runs is told about
-/// the record's picture too, so writing a bot never takes it off the disk.
 #[test]
 fn a_bot_write_leaves_the_record_its_own_picture() {
 	let home = Home::new();
@@ -288,7 +257,6 @@ fn a_bot_write_leaves_the_record_its_own_picture() {
 	assert_eq!(stored_avatars(&app).len(), 2);
 }
 
-/// Replacing leaves exactly one file, and the bot's stays where it is.
 #[test]
 fn replacing_the_picture_leaves_one_file_behind_and_spares_the_bots() {
 	let home = Home::new();
@@ -306,8 +274,6 @@ fn replacing_the_picture_leaves_one_file_behind_and_spares_the_bots() {
 	assert_eq!(stored_avatars(&app).len(), 2);
 }
 
-/// A record written with no picture is a picture taken off, and the sweep that
-/// follows takes the file with it.
 #[test]
 fn a_record_written_without_a_picture_takes_the_file_with_it() {
 	let home = Home::new();
@@ -324,7 +290,6 @@ fn a_record_written_without_a_picture_takes_the_file_with_it() {
 	assert!(Path::new(&worn).exists(), "the bot lost its picture to the record's write");
 }
 
-/// Echoing the path back is how a record keeps the picture it already had.
 #[test]
 fn a_record_written_with_the_path_it_was_handed_keeps_its_picture() {
 	let home = Home::new();
@@ -340,8 +305,6 @@ fn a_record_written_with_the_path_it_was_handed_keeps_its_picture() {
 	assert!(Path::new(&mine).exists(), "an echoed path lost the file it named");
 }
 
-/// Three refusals, three reasons, and the same nothing behind each: no file, and a
-/// record still pointing where it pointed.
 #[test]
 fn a_picture_the_host_refuses_leaves_the_record_on_the_one_it_held() {
 	let home = Home::new();

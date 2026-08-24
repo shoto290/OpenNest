@@ -412,8 +412,6 @@ describe("transcriptReducer", () => {
 		expectOtherUntouched(again)
 	})
 
-	// A settlement crosses a transport no type ever checked, so the reducer is what
-	// keeps a non-ending out of the transcript.
 	it("ignores a settlement to a state that is not an ending", () => {
 		const streaming = transcriptReducer(SEEDED, {
 			type: "messageAppended",
@@ -553,8 +551,6 @@ describe("lastWordIn", () => {
 		expect(lastWordIn([])).toBeUndefined()
 	})
 
-	// The row previews the conversation, not the bot: a reader whose prompt is the
-	// last word in it sees their own prompt, dated when they sent it.
 	it("takes the last word whoever said it, and when it was said", () => {
 		expect(
 			lastWordIn([
@@ -573,8 +569,6 @@ describe("lastWordIn", () => {
 		).toEqual({ text: "Second", at: 20 })
 	})
 
-	// A growing answer is worth nothing on a row — the pose stands there instead —
-	// so the value the roster holds is the last one that finished being written.
 	it("holds the last settled message while the next one streams", () => {
 		expect(
 			lastWordIn([
@@ -594,7 +588,6 @@ describe("lastWordIn", () => {
 		).toBeUndefined()
 	})
 
-	// A turn that ended early still said what it said before it did.
 	it("reads a turn that stopped short as settled", () => {
 		expect(
 			lastWordIn([
@@ -603,8 +596,6 @@ describe("lastWordIn", () => {
 		).toEqual({ text: "Half", at: 30 })
 	})
 
-	// A turn that failed before its first word has nothing to preview and still has a
-	// time: the row says when the conversation last moved and leaves the line empty.
 	it("dates a message that ended without saying anything", () => {
 		expect(
 			lastWordIn([

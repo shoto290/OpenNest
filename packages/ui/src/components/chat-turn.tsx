@@ -30,28 +30,17 @@ import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** Side of the transcript the bot's mark occupies. Whatever fills the gutter —
- * a resting avatar here, the working one under the last row — is this wide, so
- * every bot mark on the screen lines up. */
 const CHAT_AVATAR_SIZE = 40
 
-/** How the turn ended, mirroring the transport's message completion. */
 type ChatTurnState = "streaming" | "complete" | "cancelled" | "failed"
 
-/** Every state the reader's own row can be in: what a turn ended as, plus the
- * one a prompt waits in before it is sent. The composer stays writable whatever
- * is running, so `queued` is where a prompt that cannot land yet reads. */
 type UserTurnState = ChatTurnState | "queued"
 
-/** Where the row sits in a run of messages from the same speaker. */
 type ChatTurnRun = "single" | "first" | "middle" | "last"
 
-/** What `ChatTurnGroup` hands down: facts a row cannot know about itself. */
 type InjectedTurnProps = { run?: ChatTurnRun; carriesMark?: boolean }
 
 interface ChatTurnGroupProps {
-	/** Lets this group's closing row claim the transcript's travelling mark.
-	 * Only the newest group in a transcript may. */
 	carriesMark?: boolean
 	children: ReactNode
 	className?: string
@@ -60,16 +49,9 @@ interface ChatTurnGroupProps {
 interface UserTurnProps {
 	children: ReactNode
 	state?: UserTurnState
-	/** Set by the surrounding `ChatTurnGroup`; only override it to render a row
-	 * out of its group. */
 	run?: ChatTurnRun
-	/** This bubble's own text, behind its copy action. Leave it out — or hand it
-	 * an empty string — and the bubble offers nothing to copy. */
 	copyText?: string
-	/** Offered only on a `failed` turn, whose prompt never reached Claude. */
 	onRetry?: () => void
-	/** Drops a prompt that has not been sent. Offered on `queued`, where the way
-	 * out of the wait has to be on the row that is waiting. */
 	onCancel?: () => void
 	className?: string
 }
@@ -77,27 +59,10 @@ interface UserTurnProps {
 interface AssistantTurnProps {
 	children: ReactNode
 	state?: ChatTurnState
-	/** Set by the surrounding `ChatTurnGroup`; only override it to render a row
-	 * out of its group. */
 	run?: ChatTurnRun
-	/** This bubble's own paragraph, behind its copy action. Every bubble of a run
-	 * carries its own, so a copy takes the part the reader pointed at rather than
-	 * the whole answer. Leave it out — or hand it an empty string, as a turn that
-	 * stopped before writing does — and the bubble offers nothing to copy. */
 	copyText?: string
-	/** Drops the bubble behind this row, for content that already draws its own
-	 * frame — a table. The row keeps its place in the run, its gutter and its
-	 * actions; only the fill and the padding go, so a grid is not boxed twice. */
 	bare?: boolean
-	/** The bot's mark, in the left gutter. Pass it on the row that closes a run
-	 * so one avatar stands for every message the bot sent in a row. */
 	avatar?: ReactNode
-	/** Lets this row's avatar claim the transcript's travelling mark. A
-	 * transcript names one mark, and two rows answering to it at once are
-	 * projected onto each other and jump — so only the newest run may, and
-	 * every older avatar stays plain, exactly where it was drawn. Set by the
-	 * surrounding `ChatTurnGroup`; only override it to render a row out of its
-	 * group. */
 	carriesMark?: boolean
 	className?: string
 }
@@ -110,8 +75,6 @@ const TURN_FOOTER_KEY: Partial<
 	queued: "turn.footer.queued",
 }
 
-/** Corners facing a neighbour in the same run tighten, so a run reads as one
- * column of speech rather than four unrelated bubbles. */
 const RUN_RADIUS = {
 	user: {
 		single: "",
@@ -149,9 +112,6 @@ function CopyAction({ text }: { text: string }) {
 	)
 }
 
-/** Holds one run of messages from the same speaker tight enough to read as a
- * block, while the transcript keeps its own spacing between speakers. It tells
- * each turn where it sits, so no caller counts rows itself. */
 function ChatTurnGroup({
 	carriesMark = false,
 	children,
@@ -176,9 +136,6 @@ function ChatTurnGroup({
 	)
 }
 
-/** The spinner a queued prompt carries beside it: the only thing on the row
- * that moves, since the words are already written and nothing is answering
- * them yet. The footer under the bubble is what names the wait. */
 function PendingSpinner() {
 	return (
 		<Icons.Loading
@@ -189,7 +146,6 @@ function PendingSpinner() {
 	)
 }
 
-/** The reader's own side. It carries no avatar: only the bots are named here. */
 function UserTurn({
 	children,
 	state = "complete",
@@ -206,8 +162,6 @@ function UserTurn({
 	return (
 		<Message from="user" animateIn className={className}>
 			<MessageContent>
-				{/* A prompt on its way keeps a trace of the reader's own fill rather
-				 * than all of it: it is speech that has not been said yet. */}
 				<MessageBubble variant={queued ? "tint" : "solid"}>
 					<MessageActions
 						actions={
@@ -215,8 +169,6 @@ function UserTurn({
 								{queued ? <PendingSpinner /> : null}
 								{copyText ? <CopyAction text={copyText} /> : null}
 								{queued && onCancel ? (
-									// Pinned like the retry: a wait nobody can see the end of is
-									// not a wait, it is a loss.
 									<MessageAction
 										alwaysVisible
 										label={t("turn.cancel")}
@@ -226,8 +178,6 @@ function UserTurn({
 									</MessageAction>
 								) : null}
 								{state === "failed" && onRetry ? (
-									// Pinned: a prompt that never landed has to show its way out
-									// without waiting to be pointed at.
 									<MessageAction
 										alwaysVisible
 										label={t("turn.retry")}
@@ -267,17 +217,10 @@ function AssistantTurn({
 	const markId = carriesMark ? transcriptMarkId : undefined
 	const footerKey = TURN_FOOTER_KEY[state]
 	const footer = footerKey ? t(footerKey) : undefined
-	// This row mounts in the commit that hands it the mark, and its own entrance
-	// fades from nothing — which would blank the mark mid-flight. The bubble
-	// carries the entrance instead, leaving the gutter alone. Frozen at mount:
-	// an entrance replays if it is handed back later, and a row that gives the
-	// mark up to the working row must not pop under the mark as it leaves.
 	const [receivesMark] = useState(Boolean(avatar && markId))
 
 	return (
 		<Message from="assistant" animateIn={!receivesMark} className={className}>
-			{/* The gutter is a grid column so the avatar settles against the bubble
-			 * it belongs to rather than under the footer below it. */}
 			<MessageContent
 				className="grid gap-x-2"
 				style={{ gridTemplateColumns: `${CHAT_AVATAR_SIZE}px 1fr` }}

@@ -118,8 +118,6 @@ export function ThemeProvider({
 		[disableTransitionOnChange],
 	)
 
-	// Before the browser paints, so the window opens on the scheme and the palette
-	// the mirror holds rather than on a frame of the defaults.
 	React.useLayoutEffect(() => {
 		applyTheme(preferences)
 
@@ -139,8 +137,6 @@ export function ThemeProvider({
 		}
 	}, [preferences, applyTheme])
 
-	// The record is the source of truth and arrives after the first paint: what it
-	// holds is painted and mirrored, and what it refuses leaves the mirror painting.
 	React.useEffect(() => {
 		void readStoredTheme().then((stored) => {
 			if (!stored) {

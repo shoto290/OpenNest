@@ -18,8 +18,6 @@ const NOTHING_NOTIFIED: Notifications = {
 	turn: false,
 }
 
-/** The group keeps no switch of its own, so a story that lets a reader flip one
- * holds what the flipping produces. */
 const NotificationHost = (props: NotificationFieldsProps) => {
 	const [notifications, setNotifications] = useState(props.notifications)
 

@@ -1,5 +1,4 @@
 "use client"
-// Adapted from beui.dev/components/agents/tool-approval
 
 import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useId, useState } from "react"
@@ -15,12 +14,8 @@ import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** Mirrors the Claude Code `canUseTool` outcomes: the callback is pending until
- * it returns `{ behavior: "allow" }` or `{ behavior: "deny" }`. */
 export type ToolApprovalStatus = "pending" | "allowed" | "denied"
 
-/** A curated row of the tool input. `sensitive` rows carry no value at all, so a
- * secret cannot reach the DOM even by accident. */
 export type ToolApprovalParameter = {
 	id: string
 	label: ReactNode

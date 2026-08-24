@@ -29,7 +29,6 @@ export interface CitationsProps {
 export interface CitationProps {
 	citationId: string
 	index: number
-	/** Must match the related Citations idPrefix. */
 	idPrefix: string
 	className?: string
 }
@@ -75,9 +74,6 @@ export function Citation({
 	)
 }
 
-/** The source is named, never fetched: a citation asks no site for its icon, so
- * reading an answer tells no one which sources it carries. The initial comes
- * from the URL itself, and a citation without one keeps the generic mark. */
 export function CitationMark({ url, className }: CitationMarkProps) {
 	const initial = url ? hostInitial(url) : null
 

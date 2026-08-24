@@ -38,8 +38,6 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
 
-/** One bot, which is what a roster panel needs to render a row rather than its
- * empty copy. */
 const ROSTER: AgentSidebarBot[] = [
 	{
 		id: "atlas",
@@ -217,8 +215,6 @@ export const OffCanvas = meta.story({
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(main.getBoundingClientRect().height).toBe(mainHeight)
 
-		/** The tooltip on the trigger is still fading once the drawer is gone, and the
-		 * a11y pass reads its colour the moment this returns. */
 		await settled(document.body)
 	},
 })

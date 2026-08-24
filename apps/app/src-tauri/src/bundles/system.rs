@@ -1,21 +1,3 @@
-//! The app's own plugin, loaded beside the bot's for the same session — see
-//! `agent/PLUGINS.md` for what was measured of two local plugins in one session.
-//!
-//! ```text
-//! <app data>/system/opennest/
-//!   .claude-plugin/plugin.json      name: opennest
-//!   skills/learn/SKILL.md           the rules every bot remembers under
-//! ```
-//!
-//! **The host owns every byte of it.** It is written from the text in this module at
-//! every launch, over whatever is there, and nothing reads it back: a hand that edits
-//! it has edited it until the next launch. That is the whole difference from a bot's
-//! bundle, where the disk is the truth — this directory belongs to no bot and is
-//! nobody's memory.
-//!
-//! It carries one skill today. Nothing in it is an agent, so it is never promoted,
-//! and it is out of the bots marketplace and out of every bot's skill listing by
-//! sitting outside `bots/` altogether.
 
 use std::path::{Path, PathBuf};
 
@@ -27,29 +9,15 @@ use super::{
 };
 use crate::private_files;
 
-/// Beside `bots/`, and never inside it: the marketplace lists what is under that
-/// directory, and this plugin is the host's rather than one of the reader's bots.
 const DIR_NAME: &str = "system";
 
-/// What the plugin is called, which is the namespace its skills are listed under —
-/// `opennest:learn`. Never a bot id: a bot's plugin is named by its id, and this one
-/// by the app.
 const PLUGIN_NAME: &str = "opennest";
 
 const DESCRIPTION: &str = "What every bot in OpenNest knows how to do.";
 
-/// The skill every bot remembers through, and the reason this plugin exists: one text
-/// the host rewrites, rather than a copy in each bundle that a bot could edit into
-/// something else.
 const LEARN_DESCRIPTION: &str =
 	"How you remember. Applies when the user corrects you, tells you a preference or a fact you would have needed earlier, or asks you to remember something.";
 
-/// What the skill says. Addressed to the bot, because this is the one text here nobody
-/// wrote for a reader: it is the rules a bot writes its memory under.
-///
-/// The directory is named rather than spelled: the session's own prompt layer tells the
-/// bot where its skills live — see `agent/PROTOCOL.md` — so this text points at what the
-/// bot was already told instead of at a path no plugin of the host's could know.
 const LEARN_BODY: &str = r#"Your own directory is the one your instructions name as the place your skills live.
 
 ## What is yours
@@ -85,16 +53,10 @@ A skill you write is loaded at your next message, not in the turn you wrote it. 
 the turn from what you already know, and do not read the file back as if it were in
 force."#;
 
-/// Where this install keeps the plugin. `None` is a host with no app data directory,
-/// the same answer the bundles give, and it means a session loads the bot's plugin
-/// alone rather than that the launch failed.
 pub fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME).join(PLUGIN_NAME))
 }
 
-/// The plugin, written whole over whatever is at that path. The manifest lands last,
-/// because it is what [`laid_down`] reads the plugin's presence off: a skill that would
-/// not write leaves a path no session names rather than a plugin with nothing in it.
 pub fn write(path: &Path) -> std::io::Result<()> {
 	private_files::replace(
 		&path.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME),
@@ -103,9 +65,6 @@ pub fn write(path: &Path) -> std::io::Result<()> {
 	private_files::replace(&manifest_file(path), manifest().as_bytes())
 }
 
-/// The plugin a session may name, which is the plugin that is really on the disk: a
-/// launch that could not write it leaves a path nothing loads, and naming it would
-/// cost the session the bot's plugin too.
 pub fn laid_down<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	path(app).filter(|path| manifest_file(path).is_file())
 }
@@ -114,8 +73,6 @@ fn manifest_file(path: &Path) -> PathBuf {
 	path.join(MANIFEST_DIR).join(MANIFEST_NAME)
 }
 
-/// Rewritten whole rather than merged, unlike a bot's: there is no key here anybody
-/// else owns.
 fn manifest() -> String {
 	serde_json::json!({
 		"name": PLUGIN_NAME,
@@ -125,14 +82,6 @@ fn manifest() -> String {
 	.to_string()
 }
 
-/// The skill written the way a bot's own is — through [`drafted`] — so the file on the
-/// disk is one the same reader reads back.
-///
-/// It wears the two marks together, as a bot's skill does: the sidecar carries this
-/// plugin's preloaded bodies in the prompt layer, so the text is in context at turn
-/// zero and there is nothing left to invoke it for. Left invocable, the model fetches
-/// what it already holds and pays a round trip to hold it twice — see
-/// [`super::INVOCATION_KEY`].
 fn learn() -> std::io::Result<String> {
 	let draft = SkillDraft {
 		name: LEARN_ID.to_owned(),
@@ -159,9 +108,6 @@ mod tests {
 		path
 	}
 
-	/// The two files the agent loads a plugin from: a manifest naming the plugin, and
-	/// the one skill it carries — marked to be carried, and closed to invocation, since
-	/// the layer already puts its body in context.
 	#[test]
 	fn the_written_plugin_is_the_manifest_and_the_learn_skill() {
 		let path = a_path("written");
@@ -184,8 +130,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&path);
 	}
 
-	/// Host-owned means host-owned: what a hand put in either file is gone at the next
-	/// launch, and two writes over the same path leave the same bytes.
 	#[test]
 	fn a_second_write_lays_the_same_plugin_down_over_a_hand_edit() {
 		let path = a_path("rewritten");

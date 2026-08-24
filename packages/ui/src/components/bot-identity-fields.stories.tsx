@@ -14,13 +14,10 @@ import {
 } from "@workspace/ui/components/bot-identity-fields"
 import type { BotIdentity } from "@workspace/ui/components/bot-settings"
 
-/** The id the store minted for the bot these fields edit. It is what the shape of
- * its blot is derived from, and the only thing in here a reader cannot change. */
 const BOT_ID = "bot-7"
 
 const IDENTITY: BotIdentity = { animal: "owl", blot: "blue" }
 
-/** The block keeps no draft, so a story has to hold the identity it edits. */
 const FieldsHost = (props: BotIdentityFieldsProps) => {
 	const [identity, setIdentity] = useState(props.identity)
 

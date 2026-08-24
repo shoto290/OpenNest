@@ -82,8 +82,6 @@ const NARROW_TABLE = `| nest | occupants |
 | --- | ---: |
 | nest_42 | 3 |`
 
-/** Every cell a spreadsheet could choke on. The `\t` is a real tab inside one
- * cell — the character that separates fields, sitting inside one of them. */
 const AWKWARD_TABLE = `| cell | copies as |
 | --- | --- |
 | **bold** with \`code\` | inline markdown, flattened |
@@ -198,8 +196,6 @@ $$
 
 The next one still typesets: $e^{i\\pi} + 1 = 0$.`
 
-/** 1.8 KB of source for 96 KB of DOM — the shape that costs a bubble more than it can
- * ever show a reader. */
 const OVERSIZED_MATRIX = (() => {
 	const row = Array.from({ length: 20 }, (_, column) => column).join(" & ")
 	return Array.from({ length: 20 }, () => row).join(" \\\\ ")
@@ -319,10 +315,6 @@ const RAW_HTML_IN_LIST = `- \`\`\`ts
     <h2>Pending</h2>
   </section>`
 
-/** Each payload declares something observable: a script and a handler that would flag the
- * document, a rule that would hide the block, a frame and an image that would call out.
- * None of them opens a dialog, so a regression fails an assertion instead of blocking the
- * run on a modal nothing can dismiss. */
 const HOSTILE_PAYLOADS = [
 	`<script>document.documentElement.dataset.nest = "owned"</script>`,
 	`<style>[data-slot="markdown"] { display: none }</style>`,
@@ -385,8 +377,6 @@ const USER_BLOCK = `Run \`bun run test\` before merging — the dedupe now lives
 bun run test --project=unit
 \`\`\``
 
-/** One block of each kind, back to back, opened by a paragraph long enough to wrap:
- * every boundary the parser puts a newline across, in one bubble. */
 const ADJACENT_BLOCKS = `The archive pass finished at 09:12, and every block below follows the one before it with nothing between them but the margin the prose rules declare.
 
 - read the nest
@@ -407,8 +397,6 @@ export const summarise = async (id: string) => {
 
 Two nests archived since the last pass.`
 
-/** A quote and a list item that each hold blocks of their own — the boundaries a rule
- * placed on the root alone would reach, and one placed on the leaves alone would miss. */
 const NESTED_BLOCKS = `> The sync ran twice.
 >
 > The second pass found nothing.
@@ -422,8 +410,6 @@ const NESTED_BLOCKS = `> The sync ran twice.
 
 2. Archive the record.`
 
-/** Every host that carries an author's own spacing: a pasted paragraph, a padded column,
- * a list item wrapped by hand, a code span, a table cell and a quote. */
 const PRESERVED_WHITESPACE = `Walk me through every package.
 
 Start with the design system,
@@ -447,8 +433,6 @@ A code span keeps its own run: \`a     b\` beside \`a b\`.
 
 const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
 
-/** The box the bubble clips against: if the table frame ever loses its clamp,
- * this is what starts scrolling. */
 const bubbleContentOf = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector(
 		'[data-slot="message-bubble-content"]',
@@ -460,30 +444,17 @@ const fragmentOf = (reference: HTMLElement) =>
 const definitionFor = (canvasElement: HTMLElement, fragment: string) =>
 	canvasElement.querySelector(`[id="${fragment}"]`)
 
-/** What the code viewport leaves between its own edge and the copy control. */
 const clearanceOf = (viewport: HTMLElement, copy: HTMLElement) =>
 	copy.getBoundingClientRect().left - viewport.getBoundingClientRect().right
 
-/** `leading-6` at chat size: the height a stray newline between two blocks would add. */
 const BLANK_LINE = 24
 
-/** What `size-3.5` paints: the box the icon used to fill, kept to the pixel so a
- * line breaks where it always did. */
 const MARK_BOX = 14
 
-/** What four extra spaces measure at chat size. A collapsed run measures nothing. */
 const SPACE_RUN = 8
 
-/** What one letter of a host is worth: the mark carries the initial a reader of
- * that language would recognize, so an internationalized host is decoded rather
- * than marked `x` like every other one, and an address gets a neutral dot
- * instead of the bracket or digit it starts with. */
 const EXPECTED_MARKS = ["o", "h", "g", "a", "t", "п", "•"]
 
-/** Anything that would fetch: a request is born when one of these enters the
- * tree, which is where it must be caught — the element can be dropped the
- * moment the transfer fails, so waiting for the transfer to end catches
- * nothing. */
 const FETCHING_ELEMENTS = "img, iframe, object, embed, source, [srcset]"
 
 const offsiteTransfersSince = (start: number) =>
@@ -496,10 +467,6 @@ const offsiteTransfersSince = (start: number) =>
 				name.startsWith("http") && new URL(name).origin !== location.origin,
 		)
 
-/** Watches from before the story renders and reports at the end of its play, so
- * what it finds is this render's doing and no earlier story's. Insertions catch
- * a request while it is still in flight; resource timing catches what leaves
- * without ever touching the tree. */
 const watchForRequests = () => {
 	const start = performance.now()
 	const inserted: string[] = []
@@ -546,8 +513,6 @@ const gapsBetweenChildren = (element: Element) => {
 	return rects.slice(1).map((rect, index) => rect.top - rects[index].bottom)
 }
 
-/** Every space the renderer left between two blocks, at any depth: a stray newline inside
- * anything holding blocks rather than words is what paints as a blank line. */
 const blockGapsIn = (root: HTMLElement) =>
 	[root, ...root.querySelectorAll("blockquote, li, ul, ol")].flatMap(
 		gapsBetweenChildren,
@@ -560,7 +525,6 @@ const contentRangeOf = (element: Element) => {
 	return range
 }
 
-/** How many lines the browser painted for this element's text, whatever the source said. */
 const renderedLinesOf = (element: Element) =>
 	new Set(
 		[...contentRangeOf(element).getClientRects()].map(({ top }) =>
@@ -568,7 +532,6 @@ const renderedLinesOf = (element: Element) =>
 		),
 	).size
 
-/** The width the text of an element actually took, spaces included. */
 const textWidthOf = (element: Element) =>
 	contentRangeOf(element).getBoundingClientRect().width
 
@@ -581,8 +544,6 @@ const textNodesOf = (element: Element) => {
 	return nodes
 }
 
-/** Where a word landed, whatever markup the renderer wrapped it in. Measured on the
- * glyph itself, so whitespace ahead of it is exactly what moves it. */
 const wordLeftOf = (element: Element, word: string) => {
 	const text = textNodesOf(element).find(({ data }) =>
 		data.includes(word),
@@ -598,12 +559,8 @@ const wordLeftOf = (element: Element, word: string) => {
 const paintedTokens = (fence: HTMLElement) =>
 	fence.querySelectorAll("[style*='--code-token-light']").length
 
-/** The first block of its kind on a page pays for fetching KaTeX or mermaid before it
- * can show anything, which is longer than a wait for something already loaded. */
 const RENDERER_ARRIVES = { timeout: 10_000 }
 
-/** What KaTeX and mermaid put on screen, read the way a reader meets it: the typeset
- * output itself, and the diagram inside the frame that names it. */
 const typesetIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelectorAll(".katex")
 
@@ -616,14 +573,9 @@ const diagramsIn = (canvasElement: HTMLElement) =>
 		...(frame.shadowRoot?.querySelectorAll("svg") ?? []),
 	])
 
-/** Everything that names a destination, which is all a request can start from. Read on
- * the block this story rendered rather than on a timeline the whole page writes into, and
- * on the declaration rather than on its completion, so it answers for this payload alone
- * and it fails while a request is still in flight. */
 const destinationsIn = (root: HTMLElement) =>
 	root.querySelectorAll("[href], [src], [srcset]")
 
-/** Nothing mermaid ships may end up in the page itself — its stylesheet least of all. */
 const loosePayloadIn = (canvasElement: HTMLElement) =>
 	canvasElement.querySelectorAll(
 		":is(script, style, iframe, [onerror], [onclick])",
@@ -637,8 +589,6 @@ const rulesOf = (sheet: CSSStyleSheet) => {
 	}
 }
 
-/** Animation names are looked up per tree, so a diagram drawn into the page would put
- * mermaid's own names where every animation in the app resolves them. */
 const globalKeyframeNames = () =>
 	[...document.styleSheets]
 		.flatMap(rulesOf)

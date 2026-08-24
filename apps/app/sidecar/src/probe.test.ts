@@ -6,15 +6,11 @@ import { DEFAULT_PROVIDER_ID, PROVIDER_IDS } from "./providers/registry"
 
 const entrypoint = new URL("./index.ts", import.meta.url).pathname
 
-/** Run from source there is no bundle beside the sidecar to resolve. */
 const environment = {
 	...process.env,
 	[EXECUTABLE_OVERRIDE_ENV]: claudeSourceExecutable(),
 }
 
-/** The probe never runs the provider executable, it only resolves its path and
- * reads the generated manifest: 140ms on an idle machine, 1s beside every other
- * suite of the repository. */
 const SIDECAR_TIMEOUT = 10_000
 
 type ProbeResult = {

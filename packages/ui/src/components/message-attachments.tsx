@@ -14,27 +14,15 @@ const extensionOf = (name: string) => {
 export type MessageAttachment = {
 	id: string
 	name: string
-	/** Anything an `img` can load. Given for a file the host resolved to a picture,
-	 * left out for one it could not. */
 	previewUrl?: string
 }
 
 export interface MessageAttachmentsProps {
-	/** The files the message carries, in the order given. */
 	items: MessageAttachment[]
-	/** Receives the id of the item that was activated. Opening it is the host's
-	 * business: the row holds no state beyond which previews failed to load. */
 	onOpen: (id: string) => void
 	className?: string
 }
 
-/**
- * The files a message carries, drawn inside its bubble above the text. A picture
- * shows itself, bounded so a tall one cannot stretch the bubble; anything else
- * shows a glyph, its name and its extension. Colors are drawn from the bubble's
- * own text color, so the row reads on the reader's solid bubble and the bot's soft
- * one alike. An empty list renders nothing at all.
- */
 export function MessageAttachments({
 	items,
 	onOpen,

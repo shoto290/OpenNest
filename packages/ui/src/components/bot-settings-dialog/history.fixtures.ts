@@ -4,8 +4,6 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
-/** Distances rather than dates: a story that says "3 days ago" has to keep saying it
- * whenever it is opened. */
 const ago = (ms: number) => Date.now() - ms
 
 const INSTRUCTIONS_DIFF = `--- a/AGENTS.md
@@ -44,8 +42,6 @@ const MODEL_DIFF = `--- a/bot.json
 +  "model": "sonnet-4-5",
    "changesNothing": false`
 
-/** The commit the reader made, kept on its own so a story can take its diff away
- * again. */
 const ADDED_SKILL: BotCommitItem = {
 	id: "commit-3",
 	at: ago(5 * HOUR),
@@ -55,8 +51,6 @@ const ADDED_SKILL: BotCommitItem = {
 	diff: SKILL_DIFF,
 }
 
-/** A bundle both hands have written in: two changes the reader made, two the bot
- * made on its own runs, one of them with nothing to say about itself. */
 export const BOT_COMMITS: BotCommitItem[] = [
 	{
 		id: "commit-4",
@@ -85,7 +79,6 @@ export const BOT_COMMITS: BotCommitItem[] = [
 	},
 ]
 
-/** The same commit before the host has answered with its diff. */
 export const AWAITING_DIFF_COMMIT: BotCommitItem = {
 	...ADDED_SKILL,
 	diff: undefined,
