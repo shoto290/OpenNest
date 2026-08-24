@@ -81,6 +81,10 @@ The two are written differently, and that is the whole shape:
 <app data>/system/opennest/           the app's — the host is the truth
   .claude-plugin/plugin.json          name: opennest
   skills/learn/SKILL.md               the rules every bot remembers under
+
+<app data>/user/me/                   the person's — they are the truth
+  .claude-plugin/plugin.json          name: me
+  skills/about-me/SKILL.md            what every bot knows about them
 ```
 
 The bot's bundle is completed rather than written over: a body edited by hand is
@@ -93,6 +97,13 @@ skill listing.
 
 It reaches the sidecar as `systemPluginPath` on the open request, beside the bot's
 `pluginPath` and only ever with one — see `PROTOCOL.md`.
+
+The person's plugin is the opposite of the app's: every file is written only when it is
+missing, and never rewritten, because what is in it is what the bots wrote there for the
+person. It is a git repository of its own, committed at the end of any turn that changed
+it with the bot as author, under the title the bot left in `.learned.md` — the same
+versioning a bot bundle gets. Two sessions ending together are serialised on one lock, so
+neither loses its change. It reaches the sidecar as `userPluginPath`.
 
 Both are bridged for servers the same way — `strictMcpConfig` drops what either
 declares, so both `.mcp.json` files are read and merged into one `mcpServers` option,
@@ -290,9 +301,11 @@ and copying its text into every bundle would put the app's words in files a bot 
 so the app's preloaded skills reach the model through the same `append` the layer rides.
 
 `preloadedSkills` in `sidecar/src/providers/claude/system-skills.ts` reads
-`<systemPluginPath>/skills/*/SKILL.md`, keeps the ones whose frontmatter carries
-`metadata.opennest.preload: true`, and `layerFor` in `system-layer.ts` appends each body
-under a `# <name>` heading, below the sentence naming the bot's own directory.
+`<pluginPath>/skills/*/SKILL.md`, keeps the ones whose frontmatter carries
+`metadata.opennest.preload: true` and whose body is not empty, and `layerFor` in
+`system-layer.ts` appends each body under a `# <name>` heading. The app's land below the
+sentence naming the bot's own directory; the person's land above it, under a sentence
+naming the directory the bot writes what it learns about them into.
 
 - The `append` composes with `agent` and `skills:` preloads nothing on the promoted path
   — both measured above — so the layer is the only route the app's text has.

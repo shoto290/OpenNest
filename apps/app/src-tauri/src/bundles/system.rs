@@ -46,6 +46,18 @@ the text you were given and before anything else.
 
 Write nothing else. Anything only this conversation needs is not memory.
 
+## Yours or the person's
+
+Your instructions name a second directory, the person's own. Every bot reads it, so what
+lands there is what any of them would need: who this person is, what they prefer, a fact
+about them, a way of working that is not tied to one job. What belongs to your own job —
+the steps of a task only you carry out — stays in your own directory.
+
+Read a file of the person's directory again, as it stands on disk, immediately before you
+write it: another bot may have changed it since your session opened. Then merge your line
+into what is there instead of writing over it. Where what you find there contradicts what
+your own memory says, your own memory holds, and you leave the person's file alone.
+
 ## Which of the two
 
 Something true whatever you are asked — who they are, how they want you to answer, a
@@ -62,7 +74,7 @@ overlap into one, and create one only when none of them covers it. Keep each ski
 
 ## What to say afterwards
 
-After any write, overwrite `.learned.md` in that same directory with a title line under
+After any write, overwrite `.learned.md` in the directory you wrote in, with a title line under
 72 characters, a blank line, then one to three lines saying what changed and why. Write
 it in the language of the conversation, for someone who does not read code.
 

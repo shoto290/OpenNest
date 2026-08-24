@@ -16,6 +16,7 @@ type Command = {
 	resume?: string
 	pluginPath?: string
 	systemPluginPath?: string
+	userPluginPath?: string
 	agent?: string
 	identity?: string
 	outputStyle?: string
@@ -45,6 +46,7 @@ export const serve = async (requestedId?: string) => {
 					resume: command.resume,
 					pluginPath: command.pluginPath,
 					systemPluginPath: command.systemPluginPath,
+					userPluginPath: command.userPluginPath,
 					agent: command.agent,
 					identity: command.identity,
 					outputStyle: command.outputStyle,

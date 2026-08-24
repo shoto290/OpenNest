@@ -4,7 +4,7 @@ import type { SessionRequest } from "../provider"
 
 export type LayerContext = Pick<
 	SessionRequest,
-	"identity" | "pluginPath" | "systemPluginPath"
+	"identity" | "pluginPath" | "systemPluginPath" | "userPluginPath"
 >
 
 export const OPENNEST_LAYER = `You run inside OpenNest, a desktop app on this person's computer. They keep several bots there, and you are one of them.
@@ -24,6 +24,9 @@ You are not Claude Code and never present yourself as it. Say nothing about the 
 export const bundleLine = (pluginPath: string): string =>
 	`Your own skills live in ${pluginPath}, and that is the directory to write a new one into.`
 
+export const userLine = (userPluginPath: string): string =>
+	`What you learn about the person you are talking to lives in ${userPluginPath}, the directory every bot here reads, and that is where you write it.`
+
 const skillSection = ({ name, body }: PreloadedSkill): string =>
 	`# ${name}\n\n${body}`
 
@@ -31,10 +34,17 @@ export const layerFor = ({
 	identity,
 	pluginPath,
 	systemPluginPath,
+	userPluginPath,
 }: LayerContext): string =>
 	[
 		...(identity ? [identity] : []),
 		OPENNEST_LAYER,
+		...(userPluginPath
+			? [
+					userLine(userPluginPath),
+					...preloadedSkills(userPluginPath).map(skillSection),
+				]
+			: []),
 		...(pluginPath ? [bundleLine(pluginPath)] : []),
 		...(systemPluginPath
 			? preloadedSkills(systemPluginPath).map(skillSection)

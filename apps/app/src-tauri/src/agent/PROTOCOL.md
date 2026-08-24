@@ -69,7 +69,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -92,6 +92,10 @@ Every other command names its session.
   second, after the bot's, and only carried when a `pluginPath` is: a session with no
   bot bundle loads no plugin at all. Its `.mcp.json` servers are bridged the same way
   the bot's are, with the bot's names winning a clash.
+- `userPluginPath` is the person's own plugin bundle, laid down once and owned by them,
+  loaded third beside the other two and never promoted. Its `.mcp.json` is not read: the
+  person's plugin declares no server. Its preloaded skills ride the layer like the app's,
+  above the sentence naming the bot's directory.
 - the provider's own preset system prompt stays set on every spawn that names an
   `agent`. Measured, not documented: without it the agent resolves and its body is
   never applied. Its `append` is the OpenNest layer, the same text on every session:
