@@ -69,6 +69,19 @@ const bots = {
 			label: "Instructions",
 			placeholder: "L'invite système avec laquelle ce bot tourne toujours",
 		},
+		memory: {
+			label: "Mémoire",
+			hint: "Ce que le bot a noté pour lui-même au fil des conversations. Corrigez-la ou effacez-la — il continue d'écrire.",
+			empty: "Ce bot n'a encore rien noté.",
+			save: "Enregistrer la mémoire",
+			clear: {
+				action: "Effacer",
+				title: "Effacer la mémoire de ce bot ?",
+				description:
+					"Tout ce que le bot a noté pour lui-même est supprimé. Il recommence à apprendre dès la prochaine conversation.",
+				confirm: "Effacer la mémoire",
+			},
+		},
 	},
 	history: {
 		empty: "Rien n'a encore été modifié dans ce bot.",

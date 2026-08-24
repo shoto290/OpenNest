@@ -23,6 +23,7 @@ import {
 } from "@workspace/ui/components/bot-settings-dialog"
 import { BOT_COMMITS } from "@workspace/ui/components/bot-settings-dialog/history.fixtures"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
+import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
 
 const BOT_ID = "bot-7"
@@ -279,6 +280,34 @@ export const Instructions = meta.story({
 
 		await userEvent.type(field, ".")
 		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const WithMemory = meta.story({
+	args: {
+		memory: BOT_MEMORY,
+		onMemoryChange: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same tab for a host that hands the dialog what the bot wrote down for itself. The memory sits under the instructions with its own label, so the two are never mistaken for one field: above is what the user asks of the bot, below is what the bot noticed. It is the one place in the dialog that does not save as you type — the memory is reported on its own control and never through `onValueChange`, because it does not live in the bot's settings.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const panel = await openTab(dialog, "Instructions", userEvent)
+		const memory = within(panel).getByLabelText("Memory")
+
+		await userEvent.type(memory, "!")
+		await expect(args.onValueChange).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			within(panel).getByRole("button", { name: "Save memory" }),
+		)
+		await expect(args.onMemoryChange).toHaveBeenCalledWith(`${BOT_MEMORY}!`)
 	},
 })
 
