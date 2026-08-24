@@ -9,6 +9,7 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
@@ -193,6 +194,35 @@ export const conversationStore: TranscriptStore = {
 		invoke<MessageReference | null>("conversation_message_reference", {
 			conversationId,
 			messageId,
+		}),
+
+	pinMessage: (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+		pinnedAt: number,
+	) =>
+		invoke<void>("conversation_pin_message", {
+			conversationId,
+			messageId,
+			blockIndex,
+			pinnedAt,
+		}),
+
+	unpinMessage: (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+	) =>
+		invoke<void>("conversation_unpin_message", {
+			conversationId,
+			messageId,
+			blockIndex,
+		}),
+
+	pinnedMessages: (conversationId: string) =>
+		invoke<MessagePin[]>("conversation_pinned_messages", {
+			conversationId,
 		}),
 
 	startTurn: (turn: NewTurn) =>

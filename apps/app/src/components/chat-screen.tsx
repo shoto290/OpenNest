@@ -28,6 +28,11 @@ import { Markdown } from "@workspace/ui/components/markdown"
 import { MessageAttachments } from "@workspace/ui/components/message-attachments"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
+import {
+	PINNED_AVATAR_SIZE,
+	type PinnedMessage,
+	PinnedMessages,
+} from "@workspace/ui/components/pinned-messages"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
@@ -40,6 +45,7 @@ import {
 	ToolQuestion,
 	type ToolQuestionItem,
 } from "@workspace/ui/components/tool-question"
+import { UserAvatar } from "@workspace/ui/components/user-avatar"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type {
@@ -61,6 +67,8 @@ import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
 import type { MessageContent } from "@/lib/chat/message-attachments"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
+import { pinTimestamp } from "@/lib/chat/pin-timestamp"
+import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
 import {
 	commandOptionsFor,
 	commandQueryIn,
@@ -68,9 +76,9 @@ import {
 	promptForCommand,
 } from "@/lib/chat/prompt-commands"
 import {
+	bubbleIdOf,
 	claimsComposerFocus,
 	emptyStateStatusFor,
-	messageAnchorsIn,
 	needsFreshSession,
 	noticeTitleFor,
 	type ReplyTarget,
@@ -81,6 +89,7 @@ import {
 } from "@/lib/chat/screen-model"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import type { Chat } from "@/lib/chat/use-chat"
+import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
 import { useQuotedMessages } from "@/lib/chat/use-quoted-messages"
 import type {
 	AvatarAnimal,
@@ -114,6 +123,30 @@ const toQuote = (
 	onJump: () => onJump(target.messageId),
 })
 
+const toPinnedRow = (
+	{ id, bubble }: PinnedBubble,
+	bot: BotFace,
+	reader: string,
+): PinnedMessage => ({
+	id,
+	author: bubble.role === "assistant" ? bot.name : reader,
+	avatar:
+		bubble.role === "assistant" ? (
+			<BotIdentityAvatar
+				animal={bot.animal}
+				blot={bot.blot}
+				image={bot.image}
+				name={bot.name}
+				seed={bot.seed}
+				size={PINNED_AVATAR_SIZE}
+			/>
+		) : (
+			<UserAvatar name={reader} size={PINNED_AVATAR_SIZE} />
+		),
+	timestamp: pinTimestamp(bubble.timestamp),
+	excerpt: messageWithAttachments(bubble.text).text.trim(),
+})
+
 const TurnBody = ({ attachments, text }: MessageContent) => (
 	<>
 		<MessageAttachments items={attachments} onOpen={openAttachment} />
@@ -135,8 +168,10 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	reader,
 	anchor,
 	quoted,
+	pinned,
 	onReply,
 	onJump,
+	onPin,
 }: BotFace & {
 	row: TranscriptRow
 	controller: ChatController
@@ -144,15 +179,20 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	avatar: boolean
 	rejected?: boolean
 	reader: string
-	anchor?: string
+	anchor: string
 	quoted?: ReplyTarget
+	pinned: boolean
 	onReply: (target: ReplyTarget) => void
 	onJump: (messageId: string) => void
+	onPin: (messageId: string, blockIndex: number) => void
 }) {
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = <TurnBody attachments={attachments} text={text} />
 	const reply = () => {
 		onReply({ messageId: row.messageId, role: row.role, excerpt: text })
+	}
+	const pin = () => {
+		onPin(row.messageId, row.blockIndex)
 	}
 
 	if (row.role === "user") {
@@ -165,6 +205,8 @@ const TranscriptTurn = memo(function TranscriptTurn({
 				repliedTo={
 					quoted ? toQuote(quoted, { bot: name, reader }, onJump) : undefined
 				}
+				pinned={pinned}
+				onPin={pin}
 				onReply={reply}
 				onRetry={() => {
 					void controller.retry(row.messageId)
@@ -181,6 +223,8 @@ const TranscriptTurn = memo(function TranscriptTurn({
 			run={run}
 			copyText={text}
 			messageId={anchor}
+			pinned={pinned}
+			onPin={pin}
 			onReply={reply}
 			bare={isTableBlock(text)}
 			avatar={
@@ -531,6 +575,21 @@ export function ChatScreen({
 
 	const quotes = useQuotedMessages(controller, state.messages)
 	const reader = readerName || t("working.name")
+	const pins = usePinnedMessages(controller, state.conversationId)
+	const botFace: BotFace = useMemo(
+		() => ({
+			name: bot.name,
+			animal: bot.avatarAnimal,
+			blot: bot.avatarBlot ?? undefined,
+			seed: bot.id,
+			image: face,
+		}),
+		[bot, face],
+	)
+	const pinnedRows = useMemo(
+		() => pins.bubbles.map((shown) => toPinnedRow(shown, botFace, reader)),
+		[pins.bubbles, botFace, reader],
+	)
 
 	const restart = useCallback(() => {
 		void controller.restart()
@@ -564,6 +623,13 @@ export function ChatScreen({
 			void reachMessage(messageId)
 		},
 		[reachMessage],
+	)
+
+	const jumpToPin = useCallback(
+		(bubbleId: string) => {
+			jumpToMessage(pins.anchorOf(bubbleId))
+		},
+		[jumpToMessage, pins.anchorOf],
 	)
 
 	useEffect(() => () => clearTimeout(heldHighlight.current), [])
@@ -624,6 +690,11 @@ export function ChatScreen({
 							<ConnectionStatus
 								state={state.connection}
 								version={state.binaryVersion}
+							/>
+							<PinnedMessages
+								messages={pinnedRows}
+								onJump={jumpToPin}
+								onUnpin={pins.unpin}
 							/>
 							<Button
 								aria-expanded={isSettingsOpen}
@@ -709,37 +780,37 @@ export function ChatScreen({
 				const newest = runIndex === runs.length - 1
 				const live = working !== null && newest
 				const avatarIndex = live ? -1 : run.length - 1
-				const anchors = messageAnchorsIn(run)
 
 				return (
 					<ChatTurnGroup
-						key={run[0].id}
+						key={bubbleIdOf(run[0].messageId, run[0].blockIndex)}
 						carriesMark={newest}
-						messageId={anchors.group}
 					>
-						{run.map((row, index) => (
-							<TranscriptTurn
-								key={row.id}
-								row={row}
-								controller={controller}
-								avatar={index === avatarIndex}
-								name={bot.name}
-								animal={bot.avatarAnimal}
-								blot={bot.avatarBlot ?? undefined}
-								seed={bot.id}
-								image={face}
-								rejected={row.messageId === state.rejectedPromptId}
-								reader={reader}
-								anchor={anchors.rows.has(row.id) ? row.messageId : undefined}
-								quoted={
-									row.quotedMessageId
-										? quotes.get(row.quotedMessageId)
-										: undefined
-								}
-								onReply={holdReply}
-								onJump={jumpToMessage}
-							/>
-						))}
+						{run.map((row, index) => {
+							const bubble = bubbleIdOf(row.messageId, row.blockIndex)
+
+							return (
+								<TranscriptTurn
+									key={bubble}
+									row={row}
+									controller={controller}
+									avatar={index === avatarIndex}
+									{...botFace}
+									rejected={row.messageId === state.rejectedPromptId}
+									reader={reader}
+									anchor={bubble}
+									quoted={
+										row.quotedMessageId
+											? quotes.get(row.quotedMessageId)
+											: undefined
+									}
+									pinned={pins.isPinned(bubble)}
+									onReply={holdReply}
+									onJump={jumpToMessage}
+									onPin={pins.toggle}
+								/>
+							)
+						})}
 					</ChatTurnGroup>
 				)
 			})}

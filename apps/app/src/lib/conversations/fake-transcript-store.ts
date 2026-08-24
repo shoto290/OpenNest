@@ -11,6 +11,7 @@ import type {
 	BotSkillFront,
 	Chat,
 	ContextCheckpoint,
+	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
@@ -148,6 +149,7 @@ export const createFakeTranscriptStore = (
 	let committed = 0
 	const servers = new Map<string, Map<string, Record<string, unknown>>>()
 	const rows = new Map<string, TranscriptMessage>()
+	const pins = new Map<string, Map<number, number>>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
 	const runs = new Map<string, number>()
@@ -327,6 +329,29 @@ export const createFakeTranscriptStore = (
 		return Promise.resolve(bot)
 	}
 
+	const writePin = (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+		pinnedAt: number | null,
+	) => {
+		const stored = rows.get(messageId)
+		if (!stored || stored.conversationId !== conversationId) {
+			return refuse({
+				kind: "storage",
+				failure: { kind: "sqlite", detail: "no such message" },
+			})
+		}
+		const held = pins.get(messageId) ?? new Map<number, number>()
+		pins.set(messageId, held)
+		if (pinnedAt === null) {
+			held.delete(blockIndex)
+		} else {
+			held.set(blockIndex, pinnedAt)
+		}
+		return Promise.resolve()
+	}
+
 	const append = (message: TranscriptDraft): Promise<number> => {
 		const stored = rows.get(message.id)
 		if (stored) {
@@ -389,6 +414,7 @@ export const createFakeTranscriptStore = (
 			for (const [rowId, row] of rows) {
 				if (row.conversationId === conversationId) {
 					rows.delete(rowId)
+					pins.delete(rowId)
 				}
 			}
 			seqs.delete(conversationId)
@@ -694,6 +720,34 @@ export const createFakeTranscriptStore = (
 				providerSessionId,
 			})
 		},
+
+		pinMessage: (
+			conversationId: string,
+			messageId: string,
+			blockIndex: number,
+			pinnedAt: number,
+		) => writePin(conversationId, messageId, blockIndex, pinnedAt),
+
+		unpinMessage: (
+			conversationId: string,
+			messageId: string,
+			blockIndex: number,
+		) => writePin(conversationId, messageId, blockIndex, null),
+
+		pinnedMessages: (conversationId: string) =>
+			Promise.resolve<MessagePin[]>(
+				ordered(conversationId)
+					.reverse()
+					.flatMap((message) =>
+						[...(pins.get(message.id) ?? [])]
+							.sort(([left], [right]) => left - right)
+							.map(([blockIndex, pinnedAt]) => ({
+								message,
+								blockIndex,
+								pinnedAt,
+							})),
+					),
+			),
 
 		appendUserMessage: (message: NewUserMessage) => {
 			remember(message.id, message.repliedToMessageId)

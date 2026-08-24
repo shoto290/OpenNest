@@ -7,6 +7,7 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
@@ -93,6 +94,18 @@ export type TranscriptStore = TranscriptPort & {
 		conversationId: string,
 		messageId: string,
 	) => Promise<MessageReference | null>
+	pinMessage: (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+		pinnedAt: number,
+	) => Promise<void>
+	unpinMessage: (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+	) => Promise<void>
+	pinnedMessages: (conversationId: string) => Promise<MessagePin[]>
 	startTurn: (turn: NewTurn) => Promise<number>
 	completeTurn: (id: string, completedAt: number) => Promise<void>
 	appendUserMessage: (message: NewUserMessage) => Promise<number>

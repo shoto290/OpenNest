@@ -396,6 +396,66 @@ describe("createFakeTranscriptStore", () => {
 		expect(excerpt.endsWith("…")).toBe(true)
 	})
 
+	it("hands back the pinned bubbles, newest message first", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+		await store.openAssistantMessage(REPLY)
+
+		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 0, 10)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 2, 20)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 1, 30)
+
+		const pinned = await store.pinnedMessages(FAKE_CHAT_ID)
+
+		expect(
+			pinned.map((pin) => [pin.message.id, pin.blockIndex, pin.pinnedAt]),
+		).toEqual([
+			[REPLY.id, 1, 30],
+			[REPLY.id, 2, 20],
+			[PROMPT.id, 0, 10],
+		])
+	})
+
+	it("unpins one bubble and leaves the others of its message standing", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.openAssistantMessage(REPLY)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 0, 10)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 1, 20)
+
+		await store.unpinMessage(FAKE_CHAT_ID, REPLY.id, 0)
+
+		expect(
+			(await store.pinnedMessages(FAKE_CHAT_ID)).map((pin) => pin.blockIndex),
+		).toEqual([1])
+	})
+
+	it("drops a message from the pins once the reader unpins its last bubble", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 0, 10)
+
+		await store.unpinMessage(FAKE_CHAT_ID, PROMPT.id, 0)
+
+		expect(await store.pinnedMessages(FAKE_CHAT_ID)).toEqual([])
+	})
+
+	it("refuses to pin a message another conversation holds", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+
+		await expect(
+			store.pinMessage("elsewhere", PROMPT.id, 0, 10),
+		).rejects.toEqual({
+			kind: "storage",
+			failure: { kind: "sqlite", detail: "no such message" },
+		})
+		expect(await store.pinnedMessages(FAKE_CHAT_ID)).toEqual([])
+	})
+
 	it("takes the picture off a bot described again without a path", async () => {
 		const store = createFakeTranscriptStore()
 		await store.setBotAvatarImage("default", aPng())

@@ -17,8 +17,8 @@ import type {
 import { isTerminalCompletion } from "../conversations/transcript-state"
 
 export type TranscriptRow = {
-	id: string
 	messageId: string
+	blockIndex: number
 	quotedMessageId: string | null
 	role: TranscriptRole
 	text: string
@@ -75,13 +75,13 @@ const WRITE_TOOLS = new Set(["edit", "multiedit", "notebookedit", "write"])
 function toRow(
 	message: TranscriptMessage,
 	fields: Pick<TranscriptRow, "text" | "completion"> & {
-		index?: number
+		blockIndex?: number
 	},
 ): TranscriptRow {
-	const { index, ...rest } = fields
+	const { blockIndex = 0, ...rest } = fields
 	return {
-		id: index === undefined ? message.id : `${message.id}#${index}`,
 		messageId: message.id,
+		blockIndex,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
 		role: message.role,
@@ -98,13 +98,13 @@ function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 	if (blocks.length === 0) {
 		return unfinished || ending === "complete"
 			? []
-			: [toRow(message, { index: 0, text: "", completion: ending })]
+			: [toRow(message, { text: "", completion: ending })]
 	}
 
-	return blocks.map((text, index) => {
-		const closes = index === blocks.length - 1 && !unfinished
+	return blocks.map((text, blockIndex) => {
+		const closes = blockIndex === blocks.length - 1 && !unfinished
 		return toRow(message, {
-			index,
+			blockIndex,
 			text,
 			completion: closes ? ending : "complete",
 		})
@@ -210,25 +210,15 @@ export function quotedTargetsIn(
 	return found
 }
 
-export type MessageAnchors = {
-	group?: string
-	rows: ReadonlySet<string>
-}
+export const bubbleIdOf = (messageId: string, blockIndex: number): string =>
+	blockIndex === 0 ? messageId : `${messageId}#${blockIndex}`
 
-const NO_ANCHORED_ROWS: ReadonlySet<string> = new Set()
-
-export function messageAnchorsIn(run: TranscriptRow[]): MessageAnchors {
-	const [first] = run
-	if (run.every((row) => row.messageId === first.messageId)) {
-		return { group: first.messageId, rows: NO_ANCHORED_ROWS }
-	}
-	const rows = new Set<string>()
-	run.forEach((row, index) => {
-		if (run[index - 1]?.messageId !== row.messageId) {
-			rows.add(row.id)
-		}
-	})
-	return { rows }
+export function bubbleOf(
+	message: TranscriptMessage,
+	blockIndex: number,
+): TranscriptRow | undefined {
+	const bubbles = toTranscriptRows([message])
+	return bubbles[blockIndex] ?? bubbles[0]
 }
 
 function kindForTool(title: string): BotWorkingKind {
