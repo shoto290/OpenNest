@@ -178,6 +178,9 @@ pub enum TranscriptError {
 		from: &'static str,
 		to: &'static str,
 	},
+	UnknownMessage {
+		id: String,
+	},
 	Database(DatabaseError),
 }
 
@@ -230,6 +233,7 @@ pub struct StoredMessage {
 	pub state: MessageState,
 	pub created_at: i64,
 	pub runtime_session_id: Option<String>,
+	pub pinned_at: Option<i64>,
 }
 
 pub struct MessagePageQuery {
@@ -303,15 +307,22 @@ const APPEND_TEXT: &str =
 const FINALIZE_MESSAGE: &str = "UPDATE messages SET completion_state = ?2
 	WHERE id = ?1 AND completion_state IN ('pending', 'streaming')";
 const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
-		content, completion_state, created_at, runtime_session_id
+		content, completion_state, created_at, runtime_session_id, pinned_at
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 const MESSAGE_BY_ID: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
-		content, completion_state, created_at, runtime_session_id
+		content, completion_state, created_at, runtime_session_id, pinned_at
 	FROM messages WHERE conversation_id = ?1 AND id = ?2";
 const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
-		content, completion_state, created_at, runtime_session_id
+		content, completion_state, created_at, runtime_session_id, pinned_at
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
+const KEEP_MESSAGE_PIN: &str = "UPDATE messages SET pinned_at = COALESCE(pinned_at, ?3)
+	WHERE conversation_id = ?1 AND id = ?2";
+const CLEAR_MESSAGE_PIN: &str =
+	"UPDATE messages SET pinned_at = NULL WHERE conversation_id = ?1 AND id = ?2";
+const PINNED_MESSAGES: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
+		content, completion_state, created_at, runtime_session_id, pinned_at
+	FROM messages WHERE conversation_id = ?1 AND pinned_at IS NOT NULL ORDER BY seq DESC";
 const RUN_OF_TURN: &str = "SELECT runtime_session_id FROM messages
 	WHERE turn_id = ?1 AND role = 'assistant' AND runtime_session_id IS NOT NULL
 	ORDER BY seq LIMIT 1";
@@ -449,6 +460,41 @@ impl MessagesRepository {
 					.prepare_cached(MESSAGE_BY_ID)?
 					.query_row(params![conversation_id, id], read_message)
 					.optional()?)
+			})
+			.await?)
+	}
+
+	pub async fn pin_message(
+		&self,
+		conversation_id: String,
+		id: String,
+		pinned_at: i64,
+	) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| {
+			Ok(keep_pin(connection, &conversation_id, &id, pinned_at))
+		})
+		.await?
+	}
+
+	pub async fn unpin_message(
+		&self,
+		conversation_id: String,
+		id: String,
+	) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| Ok(clear_pin(connection, &conversation_id, &id))).await?
+	}
+
+	pub async fn pinned_messages(
+		&self,
+		conversation_id: String,
+	) -> Result<Vec<StoredMessage>, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(PINNED_MESSAGES)?;
+				let messages = statement
+					.query_map(params![conversation_id], read_message)?
+					.collect::<Result<Vec<_>, _>>()?;
+				Ok(messages)
 			})
 			.await?)
 	}
@@ -780,6 +826,32 @@ fn close_message(
 	Ok(())
 }
 
+fn keep_pin(
+	connection: &Connection,
+	conversation_id: &str,
+	id: &str,
+	pinned_at: i64,
+) -> Result<(), TranscriptError> {
+	let marked = connection.execute(KEEP_MESSAGE_PIN, params![conversation_id, id, pinned_at])?;
+	found_the_message(marked, id)
+}
+
+fn clear_pin(
+	connection: &Connection,
+	conversation_id: &str,
+	id: &str,
+) -> Result<(), TranscriptError> {
+	let cleared = connection.execute(CLEAR_MESSAGE_PIN, params![conversation_id, id])?;
+	found_the_message(cleared, id)
+}
+
+fn found_the_message(rows: usize, id: &str) -> Result<(), TranscriptError> {
+	if rows == 0 {
+		return Err(TranscriptError::UnknownMessage { id: id.into() });
+	}
+	Ok(())
+}
+
 fn advance_activity(
 	connection: &mut Connection,
 	id: &str,
@@ -872,6 +944,7 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 		state: row.get(7)?,
 		created_at: row.get(8)?,
 		runtime_session_id: row.get(9)?,
+		pinned_at: row.get(10)?,
 	})
 }
 
@@ -1120,6 +1193,156 @@ mod tests {
 			),
 			"expected the move from {from} to {to} to be refused: {refused:?}"
 		);
+	}
+
+	async fn pinned_ids(database: &Database, conversation_id: &str) -> Vec<(String, Option<i64>)> {
+		database
+			.messages()
+			.pinned_messages(conversation_id.into())
+			.await
+			.expect("the pins are read")
+			.into_iter()
+			.map(|message| (message.id, message.pinned_at))
+			.collect()
+	}
+
+	fn assert_unknown(refused: &Result<(), TranscriptError>, id: &str) {
+		assert!(
+			matches!(refused, Err(TranscriptError::UnknownMessage { id: named }) if named == id),
+			"expected {id} to be refused as a message the conversation does not hold: {refused:?}"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_pin_stands_at_the_moment_it_was_first_set_and_leaves_the_page_alone() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		some_user_messages(&database, 3).await;
+
+		database
+			.messages()
+			.pin_message("c1".into(), "m0".into(), 10)
+			.await
+			.expect("the pin is stored");
+		database
+			.messages()
+			.pin_message("c1".into(), "m0".into(), 20)
+			.await
+			.expect("a second pin is accepted");
+
+		assert_eq!(
+			pinned_ids(&database, "c1").await,
+			vec![("m0".to_owned(), Some(10))],
+			"a pin set twice moved its moment or the read lost it"
+		);
+		assert_eq!(
+			page(&database, None, 3).await.messages[0].pinned_at,
+			Some(10),
+			"the page did not carry the pin the reader set"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn the_pins_of_a_conversation_come_back_newest_first_and_only_its_own() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		a_turn(&database, "t2", "c2").await;
+		some_user_messages(&database, 3).await;
+		database
+			.messages()
+			.append_user_message(NewUserMessage {
+				conversation_id: "c2".into(),
+				turn_id: "t2".into(),
+				..a_user_message("m9", "hello", 1)
+			})
+			.await
+			.expect("the other conversation is written");
+
+		for (id, pinned_at) in [("m0", 10), ("m2", 30)] {
+			database
+				.messages()
+				.pin_message("c1".into(), id.into(), pinned_at)
+				.await
+				.expect("the pin is stored");
+		}
+		database
+			.messages()
+			.pin_message("c2".into(), "m9".into(), 40)
+			.await
+			.expect("the other pin is stored");
+
+		assert_eq!(
+			pinned_ids(&database, "c1").await,
+			vec![("m2".to_owned(), Some(30)), ("m0".to_owned(), Some(10))],
+			"the pins came back out of order or reached across conversations"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_unpin_clears_a_pin_once_and_says_nothing_of_a_message_that_carries_none() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		some_user_messages(&database, 2).await;
+		database
+			.messages()
+			.pin_message("c1".into(), "m0".into(), 10)
+			.await
+			.expect("the pin is stored");
+
+		database
+			.messages()
+			.unpin_message("c1".into(), "m0".into())
+			.await
+			.expect("the pin is cleared");
+		database
+			.messages()
+			.unpin_message("c1".into(), "m1".into())
+			.await
+			.expect("a message with no pin was refused");
+
+		assert!(pinned_ids(&database, "c1").await.is_empty(), "a cleared pin was still read back");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_pin_naming_a_message_the_conversation_does_not_hold_changes_nothing() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		a_turn(&database, "t2", "c2").await;
+		some_user_messages(&database, 2).await;
+		database
+			.messages()
+			.pin_message("c1".into(), "m0".into(), 10)
+			.await
+			.expect("the pin is stored");
+
+		let absent = database.messages().pin_message("c1".into(), "m7".into(), 20).await;
+		let elsewhere = database.messages().pin_message("c2".into(), "m0".into(), 20).await;
+		let unpinned_elsewhere = database.messages().unpin_message("c2".into(), "m0".into()).await;
+
+		assert_unknown(&absent, "m7");
+		assert_unknown(&elsewhere, "m0");
+		assert_unknown(&unpinned_elsewhere, "m0");
+		assert_eq!(
+			pinned_ids(&database, "c1").await,
+			vec![("m0".to_owned(), Some(10))],
+			"a refused pin rewrote the pins the conversation holds"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
 	#[tokio::test]

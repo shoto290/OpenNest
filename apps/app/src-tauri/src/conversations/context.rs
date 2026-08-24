@@ -281,6 +281,7 @@ mod tests {
 			state: MessageState::Complete,
 			created_at: seq,
 			runtime_session_id: None,
+			pinned_at: None,
 		}
 	}
 

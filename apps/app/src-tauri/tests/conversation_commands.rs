@@ -211,6 +211,22 @@ fn a_page(conversation_id: &str, before_seq: Option<i64>, limit: u32) -> Value {
 	json!({ "conversationId": conversation_id, "beforeSeq": before_seq, "limit": limit })
 }
 
+fn a_pin(conversation_id: &str, message_id: &str, pinned_at: i64) -> Value {
+	json!({ "conversationId": conversation_id, "messageId": message_id, "pinnedAt": pinned_at })
+}
+
+fn pins(window: &WebviewWindow<MockRuntime>, conversation_id: &str) -> Vec<(String, Value)> {
+	call(window, "conversation_pinned_messages", json!({ "conversationId": conversation_id }))
+		.expect("the pins")
+		.as_array()
+		.expect("the pins come back as a list")
+		.iter()
+		.map(|message| {
+			(message["id"].as_str().expect("an id").to_owned(), message["pinnedAt"].clone())
+		})
+		.collect()
+}
+
 fn occurrences(text: &str, needle: &str) -> usize {
 	text.matches(needle).count()
 }
@@ -332,7 +348,8 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"completion": "complete",
 					"createdAt": 2,
 					"repliedToMessageId": null,
-					"runtimeSessionId": null
+					"runtimeSessionId": null,
+					"pinnedAt": null
 				},
 				{
 					"id": "m2",
@@ -344,7 +361,8 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"completion": "complete",
 					"createdAt": 3,
 					"repliedToMessageId": "m1",
-					"runtimeSessionId": null
+					"runtimeSessionId": null,
+					"pinnedAt": null
 				}
 			]
 		}))
@@ -578,6 +596,66 @@ fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch(
 }
 
 #[test]
+fn a_pin_is_read_back_from_any_point_of_the_history_whatever_page_the_reader_holds() {
+	const HISTORY: i64 = 120;
+	const PAGE: u32 = 20;
+
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let (_, conversation) = a_bot_and_its_chat(&window);
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn is started");
+	for index in 1..=HISTORY {
+		said(&window, &conversation, index);
+	}
+
+	call(&window, "conversation_pin_message", a_pin(&conversation, "m2", 500))
+		.expect("the oldest pin is stored");
+	call(&window, "conversation_pin_message", a_pin(&conversation, "m2", 900))
+		.expect("a second pin on the same message is accepted");
+	call(&window, "conversation_pin_message", a_pin(&conversation, "m110", 600))
+		.expect("the newer pin is stored");
+	let newest = call(&window, "conversation_message_page", a_page(&conversation, None, PAGE))
+		.expect("the newest page");
+
+	assert!(
+		!seqs(&newest).contains(&2),
+		"the fixture loaded a page that already holds the oldest pinned message"
+	);
+	assert_eq!(
+		pins(&window, &conversation),
+		vec![("m110".to_owned(), json!(600)), ("m2".to_owned(), json!(500))],
+		"the pins came back out of order, moved their moment or missed the loaded window"
+	);
+
+	call(&window, "conversation_unpin_message", a_reference(&conversation, "m110"))
+		.expect("the pin is cleared");
+	call(&window, "conversation_unpin_message", a_reference(&conversation, "m110"))
+		.expect("a message with no pin was refused");
+
+	assert_eq!(
+		pins(&window, &conversation),
+		vec![("m2".to_owned(), json!(500))],
+		"clearing one pin took another with it"
+	);
+	assert_eq!(
+		call(&window, "conversation_pin_message", a_pin(&conversation, "m999", 700)),
+		Err(json!({ "kind": "unknownMessage", "id": "m999" })),
+		"a pin on a message the conversation does not hold was accepted"
+	);
+	assert_eq!(
+		call(&window, "conversation_unpin_message", a_reference(&conversation, "m999")),
+		Err(json!({ "kind": "unknownMessage", "id": "m999" })),
+		"an unpin on a message the conversation does not hold was accepted"
+	);
+	assert_eq!(
+		pins(&window, &conversation),
+		vec![("m2".to_owned(), json!(500))],
+		"a refused pin rewrote the pins the conversation holds"
+	);
+}
+
+#[test]
 fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled() {
 	const HISTORY: i64 = 230;
 	const TAIL: i64 = 20;
@@ -618,7 +696,8 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 			"completion": "interrupted",
 			"createdAt": HISTORY,
 			"repliedToMessageId": null,
-			"runtimeSessionId": null
+			"runtimeSessionId": null,
+			"pinnedAt": null
 		}),
 		"the reply the dead host left came back as something else"
 	);
