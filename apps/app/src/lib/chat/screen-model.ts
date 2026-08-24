@@ -303,3 +303,20 @@ export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
 	}
 	return t("screen.notice.failed")
 }
+
+export type ComposerFocusClaim = {
+	botId: string
+	focusedBotId: string | null
+	isPromptPending: boolean
+	isSettingsOpen: boolean
+	isOverlayOpen: boolean
+}
+
+export function claimsComposerFocus(claim: ComposerFocusClaim): boolean {
+	return (
+		claim.botId !== claim.focusedBotId &&
+		!claim.isPromptPending &&
+		!claim.isSettingsOpen &&
+		!claim.isOverlayOpen
+	)
+}

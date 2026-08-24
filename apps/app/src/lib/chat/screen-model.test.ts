@@ -6,6 +6,7 @@ import { promptWithAttachments } from "./attachments"
 import { type ChatState, initialChatState } from "./chat-state"
 import { storedAttachmentPath } from "./message-attachments"
 import {
+	claimsComposerFocus,
 	emptyStateStatusFor,
 	messageAnchorsIn,
 	needsFreshSession,
@@ -533,5 +534,39 @@ describe("messageAnchorsIn", () => {
 
 		expect(run.map((row) => row.id)).toEqual(["a-1#0", "a-1#1", "a-2#0"])
 		expect(messageAnchorsIn(run).rows).toEqual(new Set(["a-1#0", "a-2#0"]))
+	})
+})
+
+describe("claimsComposerFocus", () => {
+	const claim = {
+		botId: "bot-1",
+		focusedBotId: null,
+		isPromptPending: false,
+		isSettingsOpen: false,
+		isOverlayOpen: false,
+	}
+
+	it("claims the caret when a conversation opens", () => {
+		expect(claimsComposerFocus(claim)).toBe(true)
+	})
+
+	it("claims the caret again when another bot opens", () => {
+		expect(claimsComposerFocus({ ...claim, focusedBotId: "bot-2" })).toBe(true)
+	})
+
+	it("leaves the caret alone on the conversation it already claimed", () => {
+		expect(claimsComposerFocus({ ...claim, focusedBotId: "bot-1" })).toBe(false)
+	})
+
+	it("yields to a card that waits for the reader", () => {
+		expect(claimsComposerFocus({ ...claim, isPromptPending: true })).toBe(false)
+	})
+
+	it("yields to an open settings dialog", () => {
+		expect(claimsComposerFocus({ ...claim, isSettingsOpen: true })).toBe(false)
+	})
+
+	it("yields to an open overlay", () => {
+		expect(claimsComposerFocus({ ...claim, isOverlayOpen: true })).toBe(false)
 	})
 })

@@ -68,6 +68,7 @@ import {
 	promptForCommand,
 } from "@/lib/chat/prompt-commands"
 import {
+	claimsComposerFocus,
 	emptyStateStatusFor,
 	messageAnchorsIn,
 	needsFreshSession,
@@ -364,10 +365,6 @@ const Composer = memo(function Composer({
 
 	const dismiss = useCallback(() => setWasDismissed(true), [])
 
-	useEffect(() => {
-		composerRef.current?.focus({ preventScroll: true })
-	}, [composerRef])
-
 	return (
 		<PromptCommandMenu
 			commands={options}
@@ -483,12 +480,19 @@ export function ChatScreen({
 	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
 	const [highlightedMessageId, setHighlightedMessageId] = useState<string>()
 	const heldHighlight = useRef<ReturnType<typeof setTimeout>>(undefined)
+	const focusedBotId = useRef<string | null>(null)
 
 	const face = avatarSrc(bot.avatarImagePath)
 	const canAttach = isSessionReady(state)
 	const staged = useAttachments(attachments, bot.id, canAttach, conversationRef)
 	const focusComposer = useCallback(() => {
-		composerRef.current?.focus({ preventScroll: true })
+		const composer = composerRef.current
+		if (!composer || composer.disabled) {
+			return
+		}
+		const caret = composer.value.length
+		composer.focus({ preventScroll: true })
+		composer.setSelectionRange(caret, caret)
 	}, [])
 	const holdReply = useCallback(
 		(target: ReplyTarget) => {
@@ -563,6 +567,28 @@ export function ChatScreen({
 	)
 
 	useEffect(() => () => clearTimeout(heldHighlight.current), [])
+
+	useEffect(() => {
+		const claimed = claimsComposerFocus({
+			botId: bot.id,
+			focusedBotId: focusedBotId.current,
+			isPromptPending: state.question !== null || state.permission !== null,
+			isSettingsOpen,
+			isOverlayOpen,
+		})
+		if (!claimed) {
+			return
+		}
+		focusedBotId.current = bot.id
+		focusComposer()
+	}, [
+		bot.id,
+		state.question,
+		state.permission,
+		isSettingsOpen,
+		isOverlayOpen,
+		focusComposer,
+	])
 
 	const loadOlder = useCallback(() => {
 		void controller.loadOlder()
