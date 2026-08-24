@@ -205,6 +205,7 @@ export function App() {
 						bot={selected}
 						chat={chat}
 						attachments={attachments}
+						readerName={user.state.profile.displayName}
 						isSettingsOpen={isEditing}
 						isOverlayOpen={isEditing || user.state.isSettingsOpen}
 						onToggleSettings={toggleSettings}

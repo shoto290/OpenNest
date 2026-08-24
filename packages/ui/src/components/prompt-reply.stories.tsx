@@ -25,20 +25,54 @@ const Composer = () => (
 
 const ReplyingComposer = () => {
 	const [isReplying, setIsReplying] = useState(true)
-	const composer = <Composer />
 
-	return isReplying ? (
+	return (
 		<PromptReply
-			author={AUTHOR}
-			excerpt={EXCERPT}
-			from="assistant"
-			onJump={jump}
-			onDismiss={() => setIsReplying(false)}
+			quote={
+				isReplying
+					? {
+							author: AUTHOR,
+							excerpt: EXCERPT,
+							from: "assistant",
+							onJump: jump,
+							onDismiss: () => setIsReplying(false),
+						}
+					: undefined
+			}
 		>
-			{composer}
+			<Composer />
 		</PromptReply>
-	) : (
-		composer
+	)
+}
+
+const NamingComposer = () => {
+	const [isReplying, setIsReplying] = useState(false)
+
+	return (
+		<>
+			<button
+				type="button"
+				onMouseDown={(event) => event.preventDefault()}
+				onClick={() => setIsReplying(!isReplying)}
+			>
+				Toggle reply
+			</button>
+			<PromptReply
+				quote={
+					isReplying
+						? {
+								author: AUTHOR,
+								excerpt: EXCERPT,
+								from: "assistant",
+								onJump: jump,
+								onDismiss: () => setIsReplying(false),
+							}
+						: undefined
+				}
+			>
+				<Composer />
+			</PromptReply>
+		</>
 	)
 }
 
@@ -55,11 +89,13 @@ const meta = preview.meta({
 		},
 	},
 	args: {
-		author: AUTHOR,
-		excerpt: EXCERPT,
-		from: "assistant" as const,
-		onJump: fn(),
-		onDismiss: fn(),
+		quote: {
+			author: AUTHOR,
+			excerpt: EXCERPT,
+			from: "assistant" as const,
+			onJump: fn(),
+			onDismiss: fn(),
+		},
 		children: <Composer />,
 	},
 	decorators: [
@@ -90,10 +126,10 @@ export const Default = meta.story({
 		).toBeLessThanOrEqual(composer.getBoundingClientRect().top)
 
 		await userEvent.click(canvas.getByRole("button", { name: /Skippy/ }))
-		await expect(args.onJump).toHaveBeenCalledTimes(1)
+		await expect(args.quote?.onJump).toHaveBeenCalledTimes(1)
 
 		await userEvent.click(canvas.getByRole("button", { name: "Cancel reply" }))
-		await expect(args.onDismiss).toHaveBeenCalledTimes(1)
+		await expect(args.quote?.onDismiss).toHaveBeenCalledTimes(1)
 	},
 })
 
@@ -161,5 +197,36 @@ export const Dismissed = meta.story({
 		await expect(canvas.getByRole("textbox", { name: "Prompt" })).toHaveValue(
 			PROMPT,
 		)
+	},
+})
+
+export const Naming = meta.story({
+	render: () => <NamingComposer />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The frame arriving and leaving around a composer the reader is already using. The frame is always mounted and only its quote comes and goes, so the textarea is never rebuilt: check that what was typed survives the quote appearing and the cross taking it away, that the composer keeps the focus it held while the quote arrives, and that it carries no frame of its own while nothing is quoted. Where the focus lands once the cross removes itself is the host's to say, not the frame's.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Prompt" })
+
+		await userEvent.click(textarea)
+		await userEvent.type(textarea, " Twice?")
+		await expect(canvas.queryByRole("group")).not.toBeInTheDocument()
+
+		const toggle = canvas.getByRole("button", { name: "Toggle reply" })
+
+		await userEvent.click(toggle)
+		await expect(canvas.getByRole("group")).toBeVisible()
+		await expect(canvas.getByRole("textbox", { name: "Prompt" })).toBe(textarea)
+		await expect(textarea).toHaveFocus()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Cancel reply" }))
+		await expect(canvas.queryByRole("group")).not.toBeInTheDocument()
+		await expect(canvas.getByRole("textbox", { name: "Prompt" })).toBe(textarea)
+		await expect(textarea).toHaveValue(`${PROMPT} Twice?`)
 	},
 })

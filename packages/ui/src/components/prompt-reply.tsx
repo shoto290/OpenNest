@@ -11,42 +11,40 @@ import {
 } from "@workspace/ui/components/message-quote"
 import { cn } from "@workspace/ui/lib/utils"
 
-export interface PromptReplyProps extends QuotedMessage {
+export interface ReplyQuote extends QuotedMessage {
 	onDismiss: () => void
+}
+
+export interface PromptReplyProps {
+	quote?: ReplyQuote
 	children: ReactNode
 	className?: string
 }
 
-export function PromptReply({
-	author,
-	excerpt,
-	from,
-	onJump,
-	onDismiss,
-	children,
-	className,
-}: PromptReplyProps) {
+export function PromptReply({ quote, children, className }: PromptReplyProps) {
 	const { t } = useTranslation("chat")
 
 	return (
 		<MessageQuote
-			author={author}
-			excerpt={excerpt}
-			from={from}
-			onJump={onJump}
+			author={quote?.author}
+			excerpt={quote?.excerpt}
+			from={quote?.from}
+			onJump={quote?.onJump}
 			size="md"
-			className={cn("w-full rounded-4xl", className)}
+			className={cn("w-full", quote && "rounded-4xl", className)}
 			trailing={
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					aria-label={t("reply.dismiss")}
-					onClick={onDismiss}
-					className="rounded-full text-current opacity-70 hover:opacity-100"
-				>
-					<Icons.Close />
-				</Button>
+				quote ? (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						aria-label={t("reply.dismiss")}
+						onClick={quote.onDismiss}
+						className="rounded-full text-current opacity-70 hover:opacity-100"
+					>
+						<Icons.Close />
+					</Button>
+				) : undefined
 			}
 		>
 			{children}

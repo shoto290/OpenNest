@@ -5,8 +5,10 @@ import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { type ChatState, isTurnBusy } from "./chat-state"
 import { toPublishedBlocks } from "./markdown-blocks"
+import { messageWithAttachments } from "./message-attachments"
 
 import type { ConnectionState, TransportError } from "../agent/contract"
+import type { MessageReference } from "../conversations/store-contract"
 import type {
 	TranscriptCompletion,
 	TranscriptMessage,
@@ -17,6 +19,7 @@ import { isTerminalCompletion } from "../conversations/transcript-state"
 export type TranscriptRow = {
 	id: string
 	messageId: string
+	quotedMessageId: string | null
 	role: TranscriptRole
 	text: string
 	timestamp: number
@@ -79,6 +82,8 @@ function toRow(
 	return {
 		id: index === undefined ? message.id : `${message.id}#${index}`,
 		messageId: message.id,
+		quotedMessageId:
+			message.role === "user" ? message.repliedToMessageId : null,
 		role: message.role,
 		timestamp: message.createdAt,
 		...rest,
@@ -147,6 +152,83 @@ export function toRuns(rows: TranscriptRow[]): TranscriptRow[][] {
 		}
 	}
 	return runs
+}
+
+export type ReplyTarget = {
+	messageId: string
+	role: TranscriptRole
+	excerpt: string
+}
+
+const targetsByMessage = new WeakMap<TranscriptMessage, ReplyTarget>()
+
+export function replyTargetOf(message: TranscriptMessage): ReplyTarget {
+	const held = targetsByMessage.get(message)
+	if (held) {
+		return held
+	}
+	const target: ReplyTarget = {
+		messageId: message.id,
+		role: message.role,
+		excerpt: messageWithAttachments(message.content).text.trim(),
+	}
+	targetsByMessage.set(message, target)
+	return target
+}
+
+export function replyTargetOfReference(
+	reference: MessageReference,
+): ReplyTarget {
+	return {
+		messageId: reference.messageId,
+		role: reference.role,
+		excerpt: reference.excerpt,
+	}
+}
+
+export function quotedMessageIdsIn(messages: TranscriptMessage[]): string[] {
+	const ids = new Set<string>()
+	for (const message of messages) {
+		if (message.role === "user" && message.repliedToMessageId) {
+			ids.add(message.repliedToMessageId)
+		}
+	}
+	return [...ids]
+}
+
+export function quotedTargetsIn(
+	messages: TranscriptMessage[],
+	wanted: string[],
+): Map<string, ReplyTarget> {
+	const asked = new Set(wanted)
+	const found = new Map<string, ReplyTarget>()
+	for (const message of messages) {
+		if (asked.has(message.id)) {
+			found.set(message.id, replyTargetOf(message))
+		}
+	}
+	return found
+}
+
+export type MessageAnchors = {
+	group?: string
+	rows: ReadonlySet<string>
+}
+
+const NO_ANCHORED_ROWS: ReadonlySet<string> = new Set()
+
+export function messageAnchorsIn(run: TranscriptRow[]): MessageAnchors {
+	const [first] = run
+	if (run.every((row) => row.messageId === first.messageId)) {
+		return { group: first.messageId, rows: NO_ANCHORED_ROWS }
+	}
+	const rows = new Set<string>()
+	run.forEach((row, index) => {
+		if (run[index - 1]?.messageId !== row.messageId) {
+			rows.add(row.id)
+		}
+	})
+	return { rows }
 }
 
 function kindForTool(title: string): BotWorkingKind {
