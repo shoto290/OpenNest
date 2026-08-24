@@ -634,6 +634,19 @@ export function ChatScreen({
 						}
 					: undefined
 			}
+			pending={
+				<>
+					{state.question ? (
+						<QuestionPrompt controller={controller} request={state.question} />
+					) : null}
+					{state.permission ? (
+						<PermissionPrompt
+							controller={controller}
+							request={state.permission}
+						/>
+					) : null}
+				</>
+			}
 			composer={
 				<Composer
 					key={bot.id}
@@ -716,14 +729,6 @@ export function ChatScreen({
 					seed={bot.id}
 					onStop={canStopTurn(state.turn) ? stop : undefined}
 				/>
-			) : null}
-
-			{state.question ? (
-				<QuestionPrompt controller={controller} request={state.question} />
-			) : null}
-
-			{state.permission ? (
-				<PermissionPrompt controller={controller} request={state.permission} />
 			) : null}
 
 			{state.outbox.length > 0 ? (

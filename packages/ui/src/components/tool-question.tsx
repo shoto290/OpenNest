@@ -1,7 +1,12 @@
 "use client"
 
-import { motion, useReducedMotion } from "motion/react"
-import { type ReactNode, useId, useState } from "react"
+import {
+	type FormEvent,
+	type KeyboardEvent,
+	type ReactNode,
+	useId,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
@@ -17,7 +22,11 @@ import {
 	TabsTrigger,
 } from "@workspace/ui/components/motion/tabs"
 import { SettingsField } from "@workspace/ui/components/settings-field"
-import { EASE_OUT } from "@workspace/ui/lib/ease"
+import {
+	TOOL_CARD_CLASS,
+	TOOL_CARD_SECTION_CLASS,
+} from "@workspace/ui/components/tool-card-styles"
+import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
 import { cn } from "@workspace/ui/lib/utils"
 
 export type ToolQuestionOption = {
@@ -56,22 +65,22 @@ const ToolQuestion = ({
 	className,
 }: ToolQuestionProps) => {
 	const { t } = useTranslation("chat")
-	const reduce = useReducedMotion() ?? false
+	const cardRef = useAutoFocus<HTMLFormElement>()
+	const askedId = useId()
 	const [drafts, setDrafts] = useState<Record<string, Draft>>({})
 	const [asked, setAsked] = useState(questions[0]?.question)
 
 	const draftOf = (question: string) => drafts[question] ?? EMPTY_DRAFT
-	const answerTo = (question: string) => answerOf(draftOf(question))
 
 	const writeDraft = (question: string, draft: Draft) =>
 		setDrafts((current) => ({ ...current, [question]: draft }))
 
-	const askNextUnanswered = (answered: ToolQuestionItem) => {
-		const next = questions.find(
-			(item) => item !== answered && answerTo(item.question) === "",
-		)
-		if (next) setAsked(next.question)
-	}
+	const answers = Object.fromEntries(
+		questions.map(({ question }) => [question, answerOf(draftOf(question))]),
+	)
+
+	const waitingAfter = (answered: ToolQuestionItem) =>
+		questions.find((item) => item !== answered && answers[item.question] === "")
 
 	const pickOption = (item: ToolQuestionItem, label: string) => {
 		const { selected } = draftOf(item.question)
@@ -84,7 +93,10 @@ const ToolQuestion = ({
 					: [label],
 			text: "",
 		})
-		if (!item.multiSelect && !held) askNextUnanswered(item)
+		if (item.multiSelect || held) return
+
+		const next = waitingAfter(item)
+		if (next) setAsked(next.question)
 	}
 
 	const item = questions.find((candidate) => candidate.question === asked)
@@ -110,21 +122,42 @@ const ToolQuestion = ({
 		/>
 	))
 
-	const answers = Object.fromEntries(
-		questions.map(({ question }) => [question, answerTo(question)]),
-	)
-	const isComplete = questions.every(({ question }) => answers[question] !== "")
+	const isAnswered = answers[item.question] !== ""
+	const waiting = waitingAfter(item)
+
+	const sendOrAdvance = () => {
+		if (!isAnswered) return
+		if (waiting) {
+			setAsked(waiting.question)
+			return
+		}
+		onAnswer?.(answers)
+	}
+
+	const submitForm = (event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault()
+		sendOrAdvance()
+	}
+
+	const readKey = (event: KeyboardEvent<HTMLFormElement>) => {
+		if (event.target !== event.currentTarget) return
+		if (event.key !== "Enter" || event.shiftKey) return
+		event.preventDefault()
+		sendOrAdvance()
+	}
 
 	return (
-		<div
-			className={cn(
-				"w-full overflow-hidden rounded-2xl border border-border bg-card text-sm",
-				className,
-			)}
-			role="group"
+		<form
+			aria-labelledby={askedId}
+			className={cn(TOOL_CARD_CLASS, className)}
+			onKeyDown={readKey}
+			onSubmit={submitForm}
+			ref={cardRef}
+			tabIndex={-1}
 		>
 			<Tabs
-				className="px-3 pt-3"
+				className={TOOL_CARD_SECTION_CLASS}
+				isAnimated={false}
 				onValueChange={setAsked}
 				value={item.question}
 				variant="pill"
@@ -141,8 +174,10 @@ const ToolQuestion = ({
 				</TabsList>
 			</Tabs>
 
-			<div className="grid gap-2 px-4 py-3">
-				<p className="font-medium text-foreground">{item.question}</p>
+			<div className={cn(TOOL_CARD_SECTION_CLASS, "grid gap-2")}>
+				<p className="font-medium text-foreground" id={askedId}>
+					{item.question}
+				</p>
 
 				{item.multiSelect ? (
 					<div className="grid gap-2">{rows}</div>
@@ -166,26 +201,31 @@ const ToolQuestion = ({
 				/>
 			</div>
 
-			<motion.div
-				animate={{ y: 0 }}
-				className="flex flex-wrap items-center gap-2 border-border border-t px-4 py-3"
-				initial={reduce ? false : { y: 4 }}
-				transition={{ duration: 0.22, ease: EASE_OUT }}
+			<div
+				className={cn(
+					TOOL_CARD_SECTION_CLASS,
+					"flex flex-wrap items-center gap-2 border-border border-t",
+				)}
 			>
-				<Button
-					disabled={!isComplete}
-					onClick={() => onAnswer?.(answers)}
-					size="sm"
-				>
-					<Icons.Send data-icon="inline-start" />
-					{t("toolQuestion.submit")}
+				<Button disabled={!isAnswered} size="sm" type="submit">
+					{waiting ? (
+						<>
+							{t("toolQuestion.next")}
+							<Icons.Next data-icon="inline-end" />
+						</>
+					) : (
+						<>
+							<Icons.Send data-icon="inline-start" />
+							{t("toolQuestion.submit")}
+						</>
+					)}
 				</Button>
-				<Button onClick={onDeny} size="sm" variant="outline">
+				<Button onClick={onDeny} size="sm" type="button" variant="outline">
 					<Icons.Close data-icon="inline-start" />
 					{t("toolQuestion.dismiss")}
 				</Button>
-			</motion.div>
-		</div>
+			</div>
+		</form>
 	)
 }
 
@@ -202,13 +242,19 @@ const OptionRow = ({ option, isSelected, render }: OptionRowProps) => {
 	return (
 		<div
 			className={cn(
-				"rounded-xl border border-border transition-colors duration-150 has-focus-visible:border-ring/60 has-focus-visible:ring-3 has-focus-visible:ring-ring/30 motion-reduce:transition-none",
+				"rounded-xl border border-border has-focus-visible:border-ring/60 has-focus-visible:ring-3 has-focus-visible:ring-ring/30",
 				isSelected
 					? "border-primary/50 bg-muted/50"
 					: "bg-background hover:border-muted-foreground/40 hover:bg-muted/40",
 			)}
 		>
-			<label className="flex cursor-pointer items-start gap-3 p-3" htmlFor={id}>
+			<label
+				className={cn(
+					TOOL_CARD_SECTION_CLASS,
+					"flex cursor-pointer items-start gap-3",
+				)}
+				htmlFor={id}
+			>
 				{render(id)}
 				<span className="grid gap-0.5">
 					<span className="font-medium text-foreground leading-5">

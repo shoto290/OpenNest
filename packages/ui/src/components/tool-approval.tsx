@@ -11,7 +11,12 @@ import {
 import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
-import { EASE_OUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
+import {
+	TOOL_CARD_CLASS,
+	TOOL_CARD_SECTION_CLASS,
+} from "@workspace/ui/components/tool-card-styles"
+import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
+import { SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
 export type ToolApprovalStatus = "pending" | "allowed" | "denied"
@@ -52,9 +57,9 @@ const STATUS_BADGE: Record<ToolApprovalStatus, string> = {
 }
 
 function StatusIcon({ status }: { status: ToolApprovalStatus }) {
-	if (status === "allowed") return <Icons.Success className="size-4" />
-	if (status === "denied") return <Icons.Close className="size-4" />
-	return <Icons.Shield className="size-4" />
+	if (status === "allowed") return <Icons.Success className="size-3" />
+	if (status === "denied") return <Icons.Close className="size-3" />
+	return <Icons.Shield className="size-3" />
 }
 
 export function ToolApprovalCode({
@@ -90,6 +95,7 @@ export function ToolApproval({
 }: ToolApprovalProps) {
 	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
+	const cardRef = useAutoFocus<HTMLDivElement>(status === "pending")
 	const baseId = useId()
 	const titleId = `${baseId}-title`
 	const detailsId = `${baseId}-details`
@@ -104,78 +110,69 @@ export function ToolApproval({
 
 	return (
 		<div
+			ref={cardRef}
+			tabIndex={-1}
 			role="group"
 			aria-labelledby={titleId}
 			data-status={status}
-			className={cn(
-				"w-full overflow-hidden rounded-2xl border border-border bg-card text-sm",
-				className,
-			)}
+			className={cn(TOOL_CARD_CLASS, className)}
 		>
-			<div className="flex items-start gap-3 p-4">
-				<span
-					aria-hidden="true"
-					className={cn(
-						"mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl border border-border bg-background text-muted-foreground",
-						status === "denied" && "text-destructive",
-					)}
-				>
-					<StatusIcon status={status} />
-				</span>
-
-				<div className="min-w-0 flex-1">
-					<div className="flex min-w-0 items-start justify-between gap-3">
-						<div className="min-w-0">
-							<div id={titleId} className="font-medium text-foreground">
-								{title ?? t("toolApproval.title")}
-							</div>
-							<div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-								{tool}
-							</div>
+			<div className={cn(TOOL_CARD_SECTION_CLASS, "grid gap-2")}>
+				<div className="flex min-w-0 items-start justify-between gap-3">
+					<div className="min-w-0">
+						<div id={titleId} className="font-medium text-foreground">
+							{title ?? t("toolApproval.title")}
 						</div>
-						<span
-							role="status"
-							className={cn(
-								"shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium",
-								STATUS_BADGE[status],
-							)}
-						>
-							{t(`toolApproval.status.${status}`)}
-						</span>
+						<div className="truncate font-mono text-muted-foreground text-xs">
+							{tool}
+						</div>
 					</div>
-
-					{description ? (
-						<p className="mt-2 leading-5 text-muted-foreground">
-							{description}
-						</p>
-					) : null}
-
-					{children ? <div className="mt-3">{children}</div> : null}
-
-					{parameters.length ? (
-						<Button
-							variant="ghost"
-							size="xs"
-							aria-expanded={currentOpen}
-							aria-controls={detailsId}
-							onClick={toggleDetails}
-							className="mt-2 -ml-2.5 text-muted-foreground"
-						>
-							{t("toolApproval.input")}
-							<motion.span
-								data-icon="inline-end"
-								animate={{ rotate: currentOpen ? 180 : 0 }}
-								transition={reduce ? { duration: 0 } : SPRING_SWAP}
-							>
-								<Icons.Expand className="size-3" />
-							</motion.span>
-						</Button>
-					) : null}
+					<span
+						role="status"
+						className={cn(
+							"inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-medium text-xs",
+							STATUS_BADGE[status],
+						)}
+					>
+						<StatusIcon status={status} />
+						{t(`toolApproval.status.${status}`)}
+					</span>
 				</div>
+
+				{description ? (
+					<p className="leading-5 text-muted-foreground">{description}</p>
+				) : null}
+
+				{children}
+
+				{parameters.length ? (
+					<Button
+						variant="ghost"
+						size="xs"
+						aria-expanded={currentOpen}
+						aria-controls={detailsId}
+						onClick={toggleDetails}
+						className="w-fit text-muted-foreground"
+					>
+						{t("toolApproval.input")}
+						<motion.span
+							data-icon="inline-end"
+							animate={{ rotate: currentOpen ? 180 : 0 }}
+							transition={reduce ? { duration: 0 } : SPRING_SWAP}
+						>
+							<Icons.Expand className="size-3" />
+						</motion.span>
+					</Button>
+				) : null}
 			</div>
 
 			<AgentDisclosure id={detailsId} open={currentOpen}>
-				<dl className="mx-4 mb-4 grid gap-2 rounded-xl border border-border bg-muted/40 p-3">
+				<dl
+					className={cn(
+						TOOL_CARD_SECTION_CLASS,
+						"grid gap-2 border-border border-t",
+					)}
+				>
 					{parameters.map((parameter) => (
 						<div
 							key={parameter.id}
@@ -198,11 +195,11 @@ export function ToolApproval({
 			</AgentDisclosure>
 
 			{status === "pending" ? (
-				<motion.div
-					initial={reduce ? false : { y: 4 }}
-					animate={{ y: 0 }}
-					transition={{ duration: 0.22, ease: EASE_OUT }}
-					className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3"
+				<div
+					className={cn(
+						TOOL_CARD_SECTION_CLASS,
+						"flex flex-wrap items-center gap-2 border-border border-t",
+					)}
 				>
 					<Button size="sm" onClick={onAllowOnce}>
 						<Icons.Success data-icon="inline-start" />
@@ -212,7 +209,7 @@ export function ToolApproval({
 						<Icons.Close data-icon="inline-start" />
 						{t("toolApproval.deny")}
 					</Button>
-				</motion.div>
+				</div>
 			) : null}
 		</div>
 	)

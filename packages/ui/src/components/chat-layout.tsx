@@ -15,6 +15,7 @@ import { cn } from "@workspace/ui/lib/utils"
 interface ChatLayoutProps {
 	header?: ReactNode
 	notice?: ReactNode
+	pending?: ReactNode
 	composer?: ReactNode
 	reply?: ReplyQuote
 	highlightedMessageId?: string
@@ -32,6 +33,7 @@ interface ChatLayoutProps {
 function ChatLayout({
 	header,
 	notice,
+	pending,
 	composer,
 	reply,
 	highlightedMessageId,
@@ -72,9 +74,10 @@ function ChatLayout({
 				<ChatMarkProvider>{children}</ChatMarkProvider>
 			</MessageScroller>
 
-			{notice || composer ? (
+			{notice || pending || composer ? (
 				<div className="flex w-full shrink-0 flex-col gap-3 px-6 pb-6">
 					{notice}
+					{pending}
 					{composer ? (
 						<PromptReply quote={reply}>{composer}</PromptReply>
 					) : null}

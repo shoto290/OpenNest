@@ -95,6 +95,7 @@ const chat = {
 		freeTextPlaceholder: "Écrivez votre propre réponse…",
 		preview: "Aperçu",
 		submit: "Envoyer les réponses",
+		next: "Question suivante",
 		dismiss: "Ignorer",
 	},
 	toolResult: {

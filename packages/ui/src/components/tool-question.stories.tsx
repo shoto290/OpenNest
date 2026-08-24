@@ -64,7 +64,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The surface of one `AskUserQuestion` call: one to four questions, answered in a single pass and submitted once. Only one question is ever on screen — the others wait behind their own tab, which carries a check once it holds an answer — because four question at once is a wall nobody reads. Answering a single-select question moves the card to the next one still waiting.\n\nEvery option is one box, and the whole box is the target: the label, the description, the padding around them. Every question also takes a free-text answer, exclusive with the options — typing clears the picks, picking clears the text. The card reports one string per question: the picked labels joined by `, `, or the typed text.",
+					"The surface of one `AskUserQuestion` call: one to four questions, answered in a single pass and submitted once. Only one question is ever on screen — the others wait behind their own tab, which carries a check once it holds an answer — because four question at once is a wall nobody reads. Answering a single-select question moves the card to the next one still waiting, and the primary button reads `Next question` until none is left to wait for.\n\nEvery option is one box, and the whole box is the target: the label, the description, the padding around them. Every question also takes a free-text answer, exclusive with the options — typing clears the picks, picking clears the text. The card reports one string per question: the picked labels joined by `, `, or the typed text.",
 			},
 		},
 	},
@@ -174,6 +174,47 @@ export const FreeText = meta.story({
 	},
 })
 
+export const KeyboardOnly = meta.story({
+	args: { questions: [SCOPE_QUESTION, RELEASE_QUESTION] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The card as a docked surface reached without the mouse: it is a form that takes focus the moment it appears, so the reader never hunts for it above the composer. Enter does exactly what the primary button does — it hands over the next question still waiting, and sends the answers once none is. Enter on a question holding nothing does nothing, and every control that already answers to Enter — an option, a tab, the free-text field, a footer button — keeps its own behaviour.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const card = canvas.getByRole("form")
+		await expect(card).toHaveFocus()
+
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onAnswer).not.toHaveBeenCalled()
+		await expect(canvas.getByText(SCOPE_QUESTION.question)).toBeVisible()
+
+		await userEvent.click(canvas.getByRole("checkbox", { name: /Chat/ }))
+		await expect(
+			canvas.getByRole("button", { name: /next question/i }),
+		).toBeEnabled()
+
+		card.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(canvas.getByText(RELEASE_QUESTION.question)).toBeVisible()
+
+		await userEvent.click(canvas.getByRole("radio", { name: /Now/ }))
+		await expect(
+			canvas.getByRole("button", { name: /send answers/i }),
+		).toBeEnabled()
+
+		card.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onAnswer).toHaveBeenCalledWith({
+			[SCOPE_QUESTION.question]: "Chat",
+			[RELEASE_QUESTION.question]: "Now",
+		})
+	},
+})
+
 export const FourQuestions = meta.story({
 	args: {
 		questions: [
@@ -187,13 +228,16 @@ export const FourQuestions = meta.story({
 		docs: {
 			description: {
 				story:
-					"The widest call the tool can make: four questions under four tabs, one on screen at a time. Check that answering the first hands over the second by itself, that a tab can be reached in any order once the reader wants to change an answer, that an answered tab carries its check, and that submit stays refused until the last question holds an answer — then reports all four at once, keyed by question.",
+					"The widest call the tool can make: four questions under four tabs, one on screen at a time. The primary button carries the reader through them: it reads `Next question` while another question still waits, and only becomes `Send answers` on the last one, so nothing is sent half-answered. Check that answering a single-select question hands over the next by itself, that the button is refused until the question on screen holds an answer, that a tab can be reached in any order once the reader wants to change an answer, that an answered tab carries its check, and that the send reports all four at once, keyed by question.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const submit = canvas.getByRole("button", { name: /send answers/i })
+		const primary = () =>
+			canvas.getByRole("button", { name: /next question|send answers/i })
+
 		await expect(canvas.getAllByRole("tab")).toHaveLength(4)
+		await expect(primary()).toBeDisabled()
 
 		await userEvent.click(canvas.getByRole("radio", { name: /Next\.js/ }))
 		await expect(canvas.getByText(SCOPE_QUESTION.question)).toBeVisible()
@@ -203,20 +247,29 @@ export const FourQuestions = meta.story({
 
 		await userEvent.click(canvas.getByRole("checkbox", { name: /Settings/ }))
 		await userEvent.click(canvas.getByRole("checkbox", { name: /Chat/ }))
-		await expect(submit).toBeDisabled()
+		await expect(primary()).toHaveAccessibleName(/next question/i)
 
-		await userEvent.click(canvas.getByRole("tab", { name: /naming/i }))
+		await userEvent.click(primary())
+		await expect(canvas.getByText(NAMING_QUESTION.question)).toBeVisible()
+
 		await userEvent.type(
 			canvas.getByLabelText("Other answer"),
 			"@workspace/foundations",
 		)
-		await expect(submit).toBeDisabled()
+		await userEvent.click(primary())
+		await expect(canvas.getByText(RELEASE_QUESTION.question)).toBeVisible()
+		await expect(primary()).toBeDisabled()
+
+		await userEvent.click(canvas.getByRole("tab", { name: /framework/i }))
+		await expect(
+			canvas.getByRole("radio", { name: /Next\.js/ }),
+		).toHaveAttribute("aria-checked", "true")
 
 		await userEvent.click(canvas.getByRole("tab", { name: /release/i }))
 		await userEvent.click(canvas.getByRole("radio", { name: /Next week/ }))
-		await expect(submit).toBeEnabled()
+		await expect(primary()).toHaveAccessibleName(/send answers/i)
 
-		await userEvent.click(submit)
+		await userEvent.click(primary())
 		await expect(args.onAnswer).toHaveBeenCalledWith({
 			[FRAMEWORK_QUESTION.question]: "Next.js",
 			[SCOPE_QUESTION.question]: "Settings, Chat",

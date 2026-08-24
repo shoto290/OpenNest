@@ -7,6 +7,7 @@ import {
 	useReducedMotion,
 } from "motion/react"
 import {
+	type CSSProperties,
 	createContext,
 	type ReactNode,
 	useCallback,
@@ -26,6 +27,7 @@ type Ctx = {
 	setValue: (v: string) => void
 	layoutId: string
 	variant: Variant
+	isAnimated: boolean
 }
 
 const TabsCtx = createContext<Ctx | null>(null)
@@ -48,6 +50,7 @@ export function Tabs({
 	value,
 	onValueChange,
 	variant = "pill",
+	isAnimated = true,
 	children,
 	className,
 }: {
@@ -55,6 +58,7 @@ export function Tabs({
 	value?: string
 	onValueChange?: (v: string) => void
 	variant?: Variant
+	isAnimated?: boolean
 	children: ReactNode
 	className?: string
 }) {
@@ -71,8 +75,8 @@ export function Tabs({
 		[controlled, onValueChange],
 	)
 	const contextValue = useMemo(
-		() => ({ value: current, setValue, layoutId, variant }),
-		[current, layoutId, setValue, variant],
+		() => ({ value: current, setValue, layoutId, variant, isAnimated }),
+		[current, isAnimated, layoutId, setValue, variant],
 	)
 	return (
 		<MotionConfig transition={reduce ? { duration: 0 } : transition}>
@@ -106,6 +110,27 @@ export function TabsList({
 	)
 }
 
+function TabIndicator({
+	className,
+	style,
+}: {
+	className?: string
+	style?: CSSProperties
+}) {
+	const { layoutId, isAnimated } = useTabs()
+
+	if (!isAnimated) return <span className={className} style={style} />
+
+	return (
+		<motion.span
+			layoutId={layoutId}
+			layout="position"
+			className={className}
+			style={style}
+		/>
+	)
+}
+
 export function TabsTrigger({
 	value,
 	children,
@@ -117,7 +142,7 @@ export function TabsTrigger({
 	className?: string
 	indicatorClassName?: string
 }) {
-	const { value: current, setValue, layoutId, variant } = useTabs()
+	const { value: current, setValue, variant } = useTabs()
 	const active = current === value
 
 	if (variant === "underline") {
@@ -137,9 +162,7 @@ export function TabsTrigger({
 			>
 				{children}
 				{active ? (
-					<motion.span
-						layoutId={layoutId}
-						layout="position"
+					<TabIndicator
 						className={cn(
 							"absolute -bottom-px left-0 right-0 h-px bg-primary",
 							indicatorClassName,
@@ -155,9 +178,7 @@ export function TabsTrigger({
 	return (
 		<div className="relative">
 			{active ? (
-				<motion.span
-					layoutId={layoutId}
-					layout="position"
+				<TabIndicator
 					style={{ borderRadius: variant === "pill" ? 9999 : 8 }}
 					className={cn(
 						"absolute inset-0 bg-primary",
