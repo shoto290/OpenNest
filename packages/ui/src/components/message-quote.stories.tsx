@@ -111,6 +111,33 @@ export const LongContent = meta.story({
 	},
 })
 
+export const Sizes = meta.story({
+	render: (args) => (
+		<div className="flex flex-col gap-4">
+			<QuotedBubble {...args} variant="soft" text={ANSWER} />
+			<QuotedBubble {...args} size="md" variant="soft" text={ANSWER} />
+		</div>
+	),
+	args: { excerpt: SHORT_EXCERPT },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The two gutters, compact above and comfortable below. Check that the glyph grows from 14px loose in the row to 16px inside a 32px box, that the quote moves right with it, and that the air above the quote and under it opens from 4px to 8px — the second is what lets the frame sit around a composer without either row looking inset from the other. The quote costs two clipped lines in both.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const [compact, comfortable] = canvas.getAllByRole("group")
+
+		await expect(compact).toHaveAttribute("data-size", "sm")
+		await expect(comfortable).toHaveAttribute("data-size", "md")
+		await expect(
+			comfortable.querySelector("span")?.getBoundingClientRect().width,
+		).toBe(32)
+	},
+})
+
 export const Tones = meta.story({
 	render: (args) => (
 		<div className="flex flex-col gap-4">

@@ -19,7 +19,32 @@ const QUOTE_TONE = {
 	assistant: "bg-muted text-foreground",
 } satisfies Record<MessageFrom, string>
 
+export type MessageQuoteSize = "sm" | "md"
+
+interface QuoteMetrics {
+	body: string
+	row: string
+	glyphBox: string
+	glyph: string
+}
+
+const QUOTE_SIZE = {
+	sm: {
+		body: "gap-1 p-1",
+		row: "gap-1.5 pt-1 pr-1 pl-2.5",
+		glyphBox: "",
+		glyph: "size-3.5",
+	},
+	md: {
+		body: "gap-2 p-1",
+		row: "gap-3 px-[calc(0.5rem+1px)] pt-1",
+		glyphBox: "size-8",
+		glyph: "size-4",
+	},
+} satisfies Record<MessageQuoteSize, QuoteMetrics>
+
 export interface MessageQuoteProps extends QuotedMessage {
+	size?: MessageQuoteSize
 	trailing?: ReactNode
 	children?: ReactNode
 	className?: string
@@ -30,11 +55,13 @@ export function MessageQuote({
 	excerpt,
 	from,
 	onJump,
+	size = "sm",
 	trailing,
 	children,
 	className,
 }: MessageQuoteProps) {
 	const { t } = useTranslation("chat")
+	const metrics = QUOTE_SIZE[size]
 
 	return (
 		<div
@@ -42,18 +69,31 @@ export function MessageQuote({
 			aria-label={t("reply.label", { author })}
 			data-slot="message-quote"
 			data-from={from}
+			data-size={size}
 			className={cn(
 				"w-fit max-w-full rounded-3xl",
 				QUOTE_TONE[from],
 				className,
 			)}
 		>
-			<div className="flex flex-col gap-1 rounded-[inherit] bg-background/10 p-1">
-				<div className="flex items-center gap-1.5 pt-1 pr-1 pl-2.5">
-					<Icons.Reply
-						aria-hidden="true"
-						className="size-3.5 shrink-0 opacity-70"
-					/>
+			<div
+				className={cn(
+					"flex flex-col rounded-[inherit] bg-background/10",
+					metrics.body,
+				)}
+			>
+				<div className={cn("flex items-center", metrics.row)}>
+					<span
+						className={cn(
+							"flex shrink-0 items-center justify-center",
+							metrics.glyphBox,
+						)}
+					>
+						<Icons.Reply
+							aria-hidden="true"
+							className={cn("opacity-70", metrics.glyph)}
+						/>
+					</span>
 					<button
 						type="button"
 						data-slot="message-quote-jump"

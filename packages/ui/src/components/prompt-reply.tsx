@@ -34,12 +34,13 @@ export function PromptReply({
 			excerpt={excerpt}
 			from={from}
 			onJump={onJump}
+			size="md"
 			className={cn("w-full rounded-4xl", className)}
 			trailing={
 				<Button
 					type="button"
 					variant="ghost"
-					size="icon-xs"
+					size="icon"
 					aria-label={t("reply.dismiss")}
 					onClick={onDismiss}
 					className="rounded-full text-current opacity-70 hover:opacity-100"
