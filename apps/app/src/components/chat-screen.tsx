@@ -26,6 +26,7 @@ import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MessageAttachments } from "@workspace/ui/components/message-attachments"
+import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
@@ -257,6 +258,8 @@ function QuestionPrompt({
 
 const Composer = memo(function Composer({
 	composerRef,
+	readDraft,
+	onPromptChange,
 	botName,
 	commands,
 	canAttach,
@@ -268,6 +271,8 @@ const Composer = memo(function Composer({
 	onSubmitPrompt,
 }: {
 	composerRef: RefObject<HTMLTextAreaElement | null>
+	readDraft: () => string
+	onPromptChange: (draft: string) => void
 	botName: string
 	commands: AgentCommand[]
 	canAttach: boolean
@@ -280,7 +285,8 @@ const Composer = memo(function Composer({
 }) {
 	const t = useChatCopy()
 	const [wasDismissed, setWasDismissed] = useState(false)
-	const [prompt, setPrompt] = useState("")
+	const [prompt, setPrompt] = useState(readDraft)
+	const latestPrompt = useRef(prompt)
 	const options = useMemo(() => commandOptionsFor(commands), [commands])
 	const query = isOverlayOpen ? null : commandQueryIn(prompt, commands)
 
@@ -289,25 +295,38 @@ const Composer = memo(function Composer({
 		setWasDismissed(isDismissed)
 	}
 
+	const changePrompt = useCallback(
+		(next: string) => {
+			latestPrompt.current = next
+			setPrompt(next)
+			onPromptChange(next)
+		},
+		[onPromptChange],
+	)
+
 	const submit = useCallback(
 		async (value: string) => {
 			const sent = await onSubmitPrompt(value)
-			if (sent) {
-				setPrompt((current) => (current.trim() === value ? "" : current))
+			if (sent && latestPrompt.current.trim() === value) {
+				changePrompt("")
 			}
 		},
-		[onSubmitPrompt],
+		[changePrompt, onSubmitPrompt],
 	)
 
 	const select = useCallback(
 		(option: string) => {
-			setPrompt(promptForCommand(option))
+			changePrompt(promptForCommand(option))
 			composerRef.current?.focus({ preventScroll: true })
 		},
-		[composerRef],
+		[changePrompt, composerRef],
 	)
 
 	const dismiss = useCallback(() => setWasDismissed(true), [])
+
+	useEffect(() => {
+		composerRef.current?.focus({ preventScroll: true })
+	}, [composerRef])
 
 	return (
 		<PromptCommandMenu
@@ -331,7 +350,7 @@ const Composer = memo(function Composer({
 				dropTarget={isDropTarget}
 				onAttach={canAttach ? onAttach : undefined}
 				onSubmit={submit}
-				onValueChange={setPrompt}
+				onValueChange={changePrompt}
 				value={prompt}
 				placeholder={t("screen.placeholder", { name: botName })}
 			/>
@@ -409,11 +428,27 @@ export function ChatScreen({
 	const { state, controller } = chat
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const conversationRef = useRef<HTMLDivElement>(null)
+	const scrollerRef = useRef<MessageScrollerHandle>(null)
+	const drafts = useRef<Record<string, string>>({})
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
 	const face = avatarSrc(bot.avatarImagePath)
 	const canAttach = isSessionReady(state)
 	const staged = useAttachments(attachments, bot.id, canAttach, conversationRef)
+	const submitPrompt = useCallback(
+		(text: string) => {
+			scrollerRef.current?.scrollToEnd("auto")
+			return staged.submit(text)
+		},
+		[staged.submit],
+	)
+	const readDraft = useCallback(() => drafts.current[bot.id] ?? "", [bot.id])
+	const rememberDraft = useCallback(
+		(draft: string) => {
+			drafts.current[bot.id] = draft
+		},
+		[bot.id],
+	)
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
 	const latestError = state.errors.at(-1)
 	const notice = latestError?.id === dismissedErrorId ? undefined : latestError
@@ -432,13 +467,11 @@ export function ChatScreen({
 		void controller.stop()
 	}, [controller])
 
-	useEffect(() => {
-		composerRef.current?.focus({ preventScroll: true })
-	}, [])
-
 	return (
 		<ChatLayout
 			rootRef={conversationRef}
+			scrollerRef={scrollerRef}
+			transcriptKey={bot.id}
 			busy={isTurnBusy(state.turn)}
 			label={t("screen.label")}
 			older={
@@ -489,7 +522,10 @@ export function ChatScreen({
 			}
 			composer={
 				<Composer
+					key={bot.id}
 					composerRef={composerRef}
+					readDraft={readDraft}
+					onPromptChange={rememberDraft}
 					botName={bot.name}
 					commands={state.commands}
 					canAttach={canAttach}
@@ -498,7 +534,7 @@ export function ChatScreen({
 					isDropTarget={staged.isDropTarget}
 					onAttach={staged.stage}
 					onRemoveAttachment={staged.remove}
-					onSubmitPrompt={staged.submit}
+					onSubmitPrompt={submitPrompt}
 				/>
 			}
 		>

@@ -1,6 +1,11 @@
 "use client"
 
-import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react"
+import {
+	AnimatePresence,
+	type HTMLMotionProps,
+	motion,
+	useReducedMotion,
+} from "motion/react"
 import {
 	type ComponentPropsWithRef,
 	type Ref,
@@ -9,12 +14,21 @@ import {
 	useImperativeHandle,
 	useLayoutEffect,
 	useRef,
+	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
+
+const SETTLE_TIMEOUT = 150
+
+const NOTHING_LANDED = Symbol("nothing landed")
+
+const JUMP_HIDDEN = { opacity: 0, y: 6 } as const
+const JUMP_VISIBLE = { opacity: 1, y: 0 } as const
 
 interface PrependPin {
 	anchor: HTMLElement
@@ -23,6 +37,14 @@ interface PrependPin {
 
 const offsetFromViewportTop = (anchor: HTMLElement, viewportTop: number) =>
 	anchor.getBoundingClientRect().top - viewportTop
+
+const distanceFromEnd = (viewport: HTMLElement) =>
+	viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+
+const hasReachedTarget = (viewport: HTMLElement, targetTop: number) => {
+	const maxTop = viewport.scrollHeight - viewport.clientHeight
+	return Math.abs(viewport.scrollTop - Math.min(targetTop, maxTop)) <= 1
+}
 
 const topVisibleRow = (content: HTMLElement, viewportTop: number) => {
 	const rows = Array.from(content.children) as HTMLElement[]
@@ -43,6 +65,7 @@ export interface MessageScrollerOlder {
 }
 
 export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
+	transcriptKey?: string
 	followOutput?: boolean
 	followThreshold?: number
 	smooth?: boolean
@@ -65,6 +88,7 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
 }
 
 export function MessageScroller({
+	transcriptKey,
 	followOutput = true,
 	followThreshold = 56,
 	smooth = true,
@@ -87,10 +111,16 @@ export function MessageScroller({
 	const viewportRef = useRef<HTMLElement>(null)
 	const contentRef = useRef<HTMLDivElement>(null)
 	const followingRef = useRef(followOutput)
+	const [isAtLiveEdge, setIsAtLiveEdge] = useState(followOutput)
 	const programmaticScrollRef = useRef(false)
+	const targetTopRef = useRef(0)
 	const scrollTimerRef = useRef<number | undefined>(undefined)
 	const frameRef = useRef<number | undefined>(undefined)
+	const landedKeyRef = useRef<string | typeof NOTHING_LANDED | undefined>(
+		NOTHING_LANDED,
+	)
 	const pinRef = useRef<PrependPin | null>(null)
+	const behavior: ScrollBehavior = reduce || !smooth ? "auto" : "smooth"
 	const {
 		onScroll: onViewportScroll,
 		onWheel: onViewportWheel,
@@ -115,32 +145,64 @@ export function MessageScroller({
 		(next: boolean) => {
 			if (followingRef.current === next) return
 			followingRef.current = next
+			setIsAtLiveEdge(next)
 			onFollowChange?.(next)
 		},
 		[onFollowChange],
 	)
 
-	const holdProgrammaticScroll = useCallback((duration: number) => {
-		programmaticScrollRef.current = true
+	const releaseProgrammaticScroll = useCallback(() => {
+		programmaticScrollRef.current = false
 		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
-		scrollTimerRef.current = window.setTimeout(() => {
-			programmaticScrollRef.current = false
-		}, duration)
 	}, [])
 
-	const scrollToEnd = useCallback(
-		(behavior: ScrollBehavior) => {
-			const viewport = viewportRef.current
-			if (!viewport) return
+	const deferSettle = useCallback(() => {
+		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
+		scrollTimerRef.current = window.setTimeout(
+			releaseProgrammaticScroll,
+			SETTLE_TIMEOUT,
+		)
+	}, [releaseProgrammaticScroll])
 
-			holdProgrammaticScroll(behavior === "smooth" ? 320 : 0)
+	const holdProgrammaticScroll = useCallback(
+		(targetTop: number) => {
+			programmaticScrollRef.current = true
+			targetTopRef.current = targetTop
+			deferSettle()
+		},
+		[deferSettle],
+	)
+
+	const scrollToEnd = useCallback(
+		(nextBehavior: ScrollBehavior) => {
+			const viewport = viewportRef.current
+			if (!viewport || distanceFromEnd(viewport) <= 1) return
+
+			holdProgrammaticScroll(viewport.scrollHeight)
 			if (typeof viewport.scrollTo === "function") {
-				viewport.scrollTo({ top: viewport.scrollHeight, behavior })
+				viewport.scrollTo({
+					top: viewport.scrollHeight,
+					behavior: nextBehavior,
+				})
 			} else {
 				viewport.scrollTop = viewport.scrollHeight
 			}
 		},
 		[holdProgrammaticScroll],
+	)
+
+	const landOnLiveEdge = useCallback(() => {
+		const rows = contentRef.current?.children.length ?? 0
+		scrollToEnd(landedKeyRef.current === transcriptKey ? behavior : "auto")
+		if (rows > 0) landedKeyRef.current = transcriptKey
+	}, [behavior, scrollToEnd, transcriptKey])
+
+	const returnToLiveEdge = useCallback(
+		(nextBehavior: ScrollBehavior = behavior) => {
+			setFollowing(true)
+			scrollToEnd(nextBehavior)
+		},
+		[behavior, scrollToEnd, setFollowing],
 	)
 
 	const pinTopVisibleRow = useCallback(() => {
@@ -157,18 +219,26 @@ export function MessageScroller({
 
 	const handleScroll = useCallback(() => {
 		const viewport = viewportRef.current
-		if (!viewport || programmaticScrollRef.current) return
+		if (!viewport) return
+
+		if (programmaticScrollRef.current) {
+			if (!hasReachedTarget(viewport, targetTopRef.current)) {
+				deferSettle()
+				return
+			}
+			releaseProgrammaticScroll()
+		}
 
 		if (pinRef.current) pinTopVisibleRow()
 
-		const distance =
-			viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
-		setFollowing(distance <= followThreshold)
-	}, [followThreshold, pinTopVisibleRow, setFollowing])
-
-	const leaveLiveEdge = useCallback(() => {
-		programmaticScrollRef.current = false
-	}, [])
+		setFollowing(distanceFromEnd(viewport) <= followThreshold)
+	}, [
+		deferSettle,
+		followThreshold,
+		pinTopVisibleRow,
+		releaseProgrammaticScroll,
+		setFollowing,
+	])
 
 	const requestOlder = () => {
 		if (!older || older.isLoading) return
@@ -179,24 +249,21 @@ export function MessageScroller({
 	useImperativeHandle(
 		scrollerRef,
 		() => ({
-			scrollToEnd: (behavior) => {
-				setFollowing(true)
-				scrollToEnd(behavior ?? (reduce || !smooth ? "auto" : "smooth"))
-			},
+			scrollToEnd: returnToLiveEdge,
 			isFollowing: () => followingRef.current,
 		}),
-		[reduce, scrollToEnd, setFollowing, smooth],
+		[returnToLiveEdge],
 	)
 
 	useLayoutEffect(() => {
-		followingRef.current = followOutput
+		setFollowing(followOutput)
 		if (!followOutput) return
 
-		frameRef.current = requestAnimationFrame(() => scrollToEnd("auto"))
+		frameRef.current = requestAnimationFrame(landOnLiveEdge)
 		return () => {
 			if (frameRef.current) cancelAnimationFrame(frameRef.current)
 		}
-	}, [followOutput, scrollToEnd])
+	}, [followOutput, landOnLiveEdge, setFollowing])
 
 	useLayoutEffect(() => {
 		const viewport = viewportRef.current
@@ -211,7 +278,7 @@ export function MessageScroller({
 		const viewportTop = viewport.getBoundingClientRect().top
 		const drift = offsetFromViewportTop(pin.anchor, viewportTop) - pin.offset
 		if (drift !== 0) {
-			holdProgrammaticScroll(0)
+			holdProgrammaticScroll(viewport.scrollTop + drift)
 			viewport.scrollTop += drift
 		}
 		if (!older?.isLoading) pinRef.current = null
@@ -219,17 +286,19 @@ export function MessageScroller({
 
 	useEffect(() => {
 		const content = contentRef.current
-		if (!content || typeof ResizeObserver === "undefined") return
+		const viewport = viewportRef.current
+		if (!content || !viewport || typeof ResizeObserver === "undefined") return
 
 		const observer = new ResizeObserver(() => {
 			if (pinRef.current) return
 			if (!followOutput || !followingRef.current) return
-			scrollToEnd(reduce || !smooth ? "auto" : "smooth")
+			landOnLiveEdge()
 		})
 		observer.observe(content)
+		observer.observe(viewport)
 
 		return () => observer.disconnect()
-	}, [followOutput, reduce, scrollToEnd, smooth])
+	}, [followOutput, landOnLiveEdge])
 
 	useEffect(
 		() => () => {
@@ -242,7 +311,7 @@ export function MessageScroller({
 	return (
 		<div
 			data-slot="message-scroller"
-			className={cn("min-h-0", className)}
+			className={cn("relative min-h-0", className)}
 			{...props}
 		>
 			<motion.section
@@ -256,16 +325,16 @@ export function MessageScroller({
 					onViewportScroll?.(event)
 				}}
 				onWheel={(event) => {
-					leaveLiveEdge()
+					releaseProgrammaticScroll()
 					onViewportWheel?.(event)
 				}}
 				onTouchStart={(event) => {
-					leaveLiveEdge()
+					releaseProgrammaticScroll()
 					onViewportTouchStart?.(event)
 				}}
 				onKeyDown={(event) => {
 					if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
-						leaveLiveEdge()
+						releaseProgrammaticScroll()
 					}
 					onViewportKeyDown?.(event)
 				}}
@@ -316,6 +385,29 @@ export function MessageScroller({
 					{children}
 				</div>
 			</motion.section>
+
+			<AnimatePresence>
+				{isAtLiveEdge ? null : (
+					<motion.div
+						data-slot="message-scroller-live-edge"
+						className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+						initial={JUMP_HIDDEN}
+						animate={JUMP_VISIBLE}
+						exit={JUMP_HIDDEN}
+						transition={reduce ? TRANSITION_NONE : SPRING_PANEL}
+					>
+						<Button
+							variant="secondary"
+							size="sm"
+							className="pointer-events-auto rounded-full shadow-xl"
+							onClick={() => returnToLiveEdge()}
+						>
+							<Icons.ArrowDown data-icon="inline-start" />
+							{t("transcript.jumpToLatest")}
+						</Button>
+					</motion.div>
+				)}
+			</AnimatePresence>
 		</div>
 	)
 }

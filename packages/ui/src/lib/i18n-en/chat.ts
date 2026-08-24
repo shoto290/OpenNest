@@ -22,6 +22,7 @@ const chat = {
 	transcript: {
 		label: "Conversation",
 		loadOlder: "Load older messages",
+		jumpToLatest: "Jump to latest",
 		startOfHistory: "Beginning of the conversation",
 		message: {
 			user: "user message",
