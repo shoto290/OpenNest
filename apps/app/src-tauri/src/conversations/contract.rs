@@ -428,7 +428,6 @@ pub struct TranscriptMessage {
 	pub created_at: i64,
 	pub replied_to_message_id: Option<String>,
 	pub runtime_session_id: Option<String>,
-	pub pinned_at: Option<i64>,
 }
 
 impl TranscriptMessage {
@@ -444,6 +443,23 @@ impl TranscriptMessage {
 			created_at: stored.created_at,
 			replied_to_message_id: stored.replied_to_message_id,
 			runtime_session_id: stored.runtime_session_id,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PinnedBubble {
+	pub message: TranscriptMessage,
+	pub block_index: i64,
+	pub pinned_at: i64,
+}
+
+impl PinnedBubble {
+	pub fn of(conversation_id: &str, stored: messages::StoredPin) -> Self {
+		Self {
+			message: TranscriptMessage::of(conversation_id, stored.message),
+			block_index: stored.block_index,
 			pinned_at: stored.pinned_at,
 		}
 	}
@@ -746,7 +762,6 @@ mod tests {
 			created_at: 2,
 			replied_to_message_id: Some("m0".into()),
 			runtime_session_id: Some("run-1".into()),
-			pinned_at: Some(5),
 		}
 	}
 
@@ -761,8 +776,7 @@ mod tests {
 			"completion": "complete",
 			"createdAt": 2,
 			"repliedToMessageId": "m0",
-			"runtimeSessionId": "run-1",
-			"pinnedAt": 5
+			"runtimeSessionId": "run-1"
 		})
 	}
 
