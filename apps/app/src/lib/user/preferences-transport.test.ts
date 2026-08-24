@@ -22,7 +22,6 @@ const RECORD: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	windowBounds: null,
 	lastBotId: null,
 }
 
@@ -37,7 +36,6 @@ const DEFAULTS: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	windowBounds: null,
 	lastBotId: null,
 }
 

@@ -12,7 +12,6 @@ const NOTIFY_ON_PERMISSION_KEY: &str = "user.notify_on_permission";
 const NOTIFY_ON_FINISHED_TURN_KEY: &str = "user.notify_on_finished_turn";
 const NOTIFY_WITH_SOUND_KEY: &str = "user.notify_with_sound";
 const SIDEBAR_WIDTH_KEY: &str = "user.sidebar_width";
-const WINDOW_BOUNDS_KEY: &str = "user.window_bounds";
 const LAST_BOT_ID_KEY: &str = "user.last_bot_id";
 
 const SWITCH_ON: &str = "on";
@@ -59,31 +58,6 @@ impl ColorScheme {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WindowBounds {
-	pub x: i32,
-	pub y: i32,
-	pub width: u32,
-	pub height: u32,
-}
-
-impl WindowBounds {
-	fn as_stored(self) -> String {
-		format!("{},{},{},{}", self.x, self.y, self.width, self.height)
-	}
-
-	fn of(stored: &str) -> Option<Self> {
-		let mut counts = stored.split(',');
-		let bounds = Self {
-			x: counts.next()?.trim().parse().ok()?,
-			y: counts.next()?.trim().parse().ok()?,
-			width: counts.next()?.trim().parse().ok()?,
-			height: counts.next()?.trim().parse().ok()?,
-		};
-		counts.next().is_none().then_some(bounds)
-	}
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preferences {
 	pub display_name: String,
@@ -96,7 +70,6 @@ pub struct Preferences {
 	pub notify_on_finished_turn: bool,
 	pub notify_with_sound: bool,
 	pub sidebar_width: Option<u32>,
-	pub window_bounds: Option<WindowBounds>,
 	pub last_bot_id: Option<String>,
 }
 
@@ -113,7 +86,6 @@ impl Default for Preferences {
 			notify_on_finished_turn: true,
 			notify_with_sound: true,
 			sidebar_width: None,
-			window_bounds: None,
 			last_bot_id: None,
 		}
 	}
@@ -193,8 +165,6 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		notify_with_sound: switch_in(connection, NOTIFY_WITH_SOUND_KEY)?,
 		sidebar_width: setting_in(connection, SIDEBAR_WIDTH_KEY)?
 			.and_then(|stored| stored.parse().ok()),
-		window_bounds: setting_in(connection, WINDOW_BOUNDS_KEY)?
-			.and_then(|stored| WindowBounds::of(&stored)),
 		last_bot_id: setting_in(connection, LAST_BOT_ID_KEY)?,
 	})
 }
@@ -219,8 +189,6 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	write_switch_in(transaction, NOTIFY_WITH_SOUND_KEY, preferences.notify_with_sound)?;
 	let width = preferences.sidebar_width.map(|width| width.to_string());
 	write_optional_in(transaction, SIDEBAR_WIDTH_KEY, width.as_deref())?;
-	let bounds = preferences.window_bounds.map(WindowBounds::as_stored);
-	write_optional_in(transaction, WINDOW_BOUNDS_KEY, bounds.as_deref())?;
 	write_optional_in(transaction, LAST_BOT_ID_KEY, preferences.last_bot_id.as_deref())?;
 	write_picture_in(transaction, preferences.avatar_image_path.as_deref())
 }
@@ -275,7 +243,6 @@ mod tests {
 			notify_on_finished_turn: false,
 			notify_with_sound: false,
 			sidebar_width: Some(320),
-			window_bounds: Some(WindowBounds { x: -40, y: 12, width: 1280, height: 800 }),
 			last_bot_id: Some("bot-one".to_owned()),
 		}
 	}
@@ -304,7 +271,6 @@ mod tests {
 				notify_on_finished_turn: true,
 				notify_with_sound: true,
 				sidebar_width: None,
-				window_bounds: None,
 				last_bot_id: None,
 			}
 		);
@@ -350,11 +316,6 @@ mod tests {
 			"a sidebar width taken off the record was left in the file"
 		);
 		assert_eq!(
-			setting(&database, WINDOW_BOUNDS_KEY).await,
-			None,
-			"window bounds taken off the record were left in the file"
-		);
-		assert_eq!(
 			setting(&database, LAST_BOT_ID_KEY).await,
 			None,
 			"a last bot taken off the record was left in the file"
@@ -369,7 +330,6 @@ mod tests {
 			.call_mut(|connection| {
 				let transaction = write_transaction(connection)?;
 				transaction.execute(WRITE_SETTING, params![SIDEBAR_WIDTH_KEY, "wide"])?;
-				transaction.execute(WRITE_SETTING, params![WINDOW_BOUNDS_KEY, "40,12,1280"])?;
 				transaction.commit()?;
 				Ok(())
 			})
@@ -379,9 +339,7 @@ mod tests {
 		let read = database.user().preferences().await.expect("the record");
 
 		assert_eq!(read.sidebar_width, None);
-		assert_eq!(read.window_bounds, None);
 		assert_eq!(setting(&database, SIDEBAR_WIDTH_KEY).await, Some("wide".to_owned()));
-		assert_eq!(setting(&database, WINDOW_BOUNDS_KEY).await, Some("40,12,1280".to_owned()));
 	}
 
 	#[tokio::test]
@@ -454,7 +412,6 @@ mod tests {
 
 		assert_eq!(read.language, None);
 		assert_eq!(read.sidebar_width, None);
-		assert_eq!(read.window_bounds, None);
 		assert_eq!(read.last_bot_id, None);
 		assert_eq!(read.display_name, "Nyx");
 		assert_eq!(read.palette, "moss");

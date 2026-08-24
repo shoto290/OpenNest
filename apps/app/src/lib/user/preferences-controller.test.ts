@@ -21,7 +21,6 @@ const DEFAULTS: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	windowBounds: null,
 	lastBotId: null,
 }
 
@@ -226,7 +225,7 @@ describe("the reader's own record", () => {
 	})
 
 	it("reads a field the record leaves out as none, and writes nothing for it", async () => {
-		const { sidebarWidth, windowBounds, lastBotId, ...older } = DEFAULTS
+		const { sidebarWidth, lastBotId, ...older } = DEFAULTS
 		const host = aHost(older as UserPreferences)
 		const controller = await loaded()
 
