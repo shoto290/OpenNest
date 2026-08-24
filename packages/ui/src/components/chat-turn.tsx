@@ -60,6 +60,8 @@ interface UserTurnProps {
 	messageId?: string
 	repliedTo?: QuotedMessage
 	onReply?: () => void
+	onPin?: () => void
+	pinned?: boolean
 	onRetry?: () => void
 	onCancel?: () => void
 	className?: string
@@ -73,6 +75,8 @@ interface AssistantTurnProps {
 	messageId?: string
 	repliedTo?: QuotedMessage
 	onReply?: () => void
+	onPin?: () => void
+	pinned?: boolean
 	bare?: boolean
 	avatar?: ReactNode
 	carriesMark?: boolean
@@ -131,6 +135,11 @@ interface ReplyActionProps {
 	onReply: () => void
 }
 
+interface PinActionProps {
+	pinned: boolean
+	onPin: () => void
+}
+
 interface TurnBodyProps {
 	repliedTo?: QuotedMessage
 	className?: string
@@ -143,6 +152,20 @@ function ReplyAction({ onReply }: ReplyActionProps) {
 	return (
 		<MessageAction label={t("turn.reply")} onClick={onReply}>
 			<Icons.Reply />
+		</MessageAction>
+	)
+}
+
+function PinAction({ pinned, onPin }: PinActionProps) {
+	const { t } = useTranslation("chat")
+
+	return (
+		<MessageAction
+			alwaysVisible={pinned}
+			label={t(pinned ? "turn.unpin" : "turn.pin")}
+			onClick={onPin}
+		>
+			{pinned ? <Icons.Unpin /> : <Icons.Pin />}
 		</MessageAction>
 	)
 }
@@ -202,6 +225,8 @@ function UserTurn({
 	messageId,
 	repliedTo,
 	onReply,
+	onPin,
+	pinned = false,
 	onRetry,
 	onCancel,
 	className,
@@ -243,6 +268,7 @@ function UserTurn({
 									</MessageAction>
 								) : null}
 								{onReply ? <ReplyAction onReply={onReply} /> : null}
+								{onPin ? <PinAction pinned={pinned} onPin={onPin} /> : null}
 								{copyText ? <CopyAction text={copyText} /> : null}
 							</>
 						}
@@ -266,6 +292,8 @@ function AssistantTurn({
 	messageId,
 	repliedTo,
 	onReply,
+	onPin,
+	pinned = false,
 	bare = false,
 	avatar,
 	carriesMark = false,
@@ -306,6 +334,7 @@ function AssistantTurn({
 						actions={
 							<>
 								{onReply ? <ReplyAction onReply={onReply} /> : null}
+								{onPin ? <PinAction pinned={pinned} onPin={onPin} /> : null}
 								{copyText ? <CopyAction text={copyText} /> : null}
 							</>
 						}

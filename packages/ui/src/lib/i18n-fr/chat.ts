@@ -35,6 +35,8 @@ const chat = {
 	turn: {
 		copy: "Copier",
 		reply: "Répondre",
+		pin: "Épingler",
+		unpin: "Retirer l'épingle",
 		copied: "Copié",
 		retry: "Réessayer",
 		cancel: "Annuler cette invite",
@@ -47,6 +49,13 @@ const chat = {
 	reply: {
 		label: "Réponse à {{author}}",
 		dismiss: "Annuler la réponse",
+	},
+	pinned: {
+		title: "Messages épinglés",
+		jump: "Aller",
+		jumpTo: "Aller au message de {{author}}",
+		unpin: "Retirer l'épingle du message de {{author}}",
+		empty: "Aucun message n'est épinglé dans cette conversation.",
 	},
 	working: {
 		name: "Sans nom",
