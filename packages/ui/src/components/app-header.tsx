@@ -19,8 +19,8 @@ function AppHeader({
 		<header
 			data-slot="app-header"
 			className={cn(
-				"flex h-12 shrink-0 items-center gap-3 border-border border-b pr-4",
-				insetWindowControls ? "pl-22" : "pl-4",
+				"flex h-12 shrink-0 items-center gap-3 border-border border-b pr-1.5",
+				insetWindowControls ? "pl-22" : "pl-1.5",
 				className,
 			)}
 			{...props}

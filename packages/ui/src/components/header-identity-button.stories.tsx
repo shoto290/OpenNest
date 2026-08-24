@@ -1,0 +1,165 @@
+import { expect, fn, userEvent } from "storybook/test"
+
+import preview from "@workspace/storybook/preview"
+import { listExhaustively } from "@workspace/storybook/story-utils"
+import { AppHeader } from "@workspace/ui/components/app-header"
+import type { ConnectionStatusState } from "@workspace/ui/components/connection-status"
+import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
+
+const CONNECTION_STATES = listExhaustively<ConnectionStatusState>({
+	checking: true,
+	ready: true,
+	unavailable: true,
+	crashed: true,
+})
+
+const LONG_NAME =
+	"Migration copilot for the legacy billing workspace and its archives"
+
+const meta = preview.meta({
+	title: "Patterns/HeaderIdentityButton",
+	component: HeaderIdentityButton,
+	parameters: {
+		layout: "centered",
+		docs: {
+			description: {
+				component:
+					"The header's leading control: who the reader is talking to, whether Claude Code answers, and the way into that bot's settings, in one ghost button. It is the only focusable thing on that row — the connection mark inside it is decorative markup, never a second target — so the header stays one tab stop. Reach for it in an app header; the sidebar's own bot rows are `AgentSidebar`, not this.",
+			},
+		},
+	},
+	args: {
+		name: "Nest",
+		seed: "nest",
+		connection: "ready",
+		version: "2.1.233",
+		onOpenSettings: fn(),
+	},
+	argTypes: {
+		connection: { control: "inline-radio", options: CONNECTION_STATES },
+	},
+})
+
+export const Default = meta.story({
+	args: { connection: "ready", name: "Nest" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the nominal header: a short bot name, the CLI answering, the settings closed. Check that avatar, name, state and glyph read left to right on one row, that the whole thing is a single button, and that activating it asks for the settings. Pick `InLayout` to see it in the header it belongs to.",
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		const button = canvas.getByRole("button", {
+			name: "Nest — bot settings",
+		})
+
+		await expect(button).toHaveAttribute("aria-expanded", "false")
+		await userEvent.click(button)
+		await expect(args.onOpenSettings).toHaveBeenCalled()
+	},
+})
+
+export const Variants = meta.story({
+	args: { connection: "ready", name: "Nest" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every state the CLI can be in, carried by the same button. Check that the row never reflows between them — only the dot's colour and the screen-reader label change — so the name and the settings glyph hold their place while the connection comes and goes. Pick `Default` for the one state the reader should normally see.",
+			},
+		},
+	},
+	render: (args) => (
+		<div className="flex flex-col items-start gap-2">
+			{CONNECTION_STATES.map((connection) => (
+				<HeaderIdentityButton
+					{...args}
+					connection={connection}
+					key={connection}
+				/>
+			))}
+		</div>
+	),
+})
+
+export const Expanded = meta.story({
+	args: { connection: "ready", isSettingsOpen: true, name: "Nest" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while the bot's settings are open: the button is the trigger that stays lit under its own panel. Check that the ghost surface holds the expanded tint and that assistive tech reads it as expanded. Pick `Default` for the closed state.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByRole("button")).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		)
+	},
+})
+
+export const Working = meta.story({
+	args: {
+		blot: "blue",
+		connection: "ready",
+		kind: "writing",
+		name: "Nest",
+		working: true,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while the bot holds the turn: the header avatar runs the same animation and carries the same pulsing activity dot as the one in the transcript, so the reader can leave the transcript and still see the bot is busy. Check that the row does not reflow while it animates and that the motion stops under `prefers-reduced-motion`. Pick `Default` for the resting bot.",
+			},
+		},
+	},
+})
+
+export const LongContent = meta.story({
+	globals: { viewport: { value: "mobile" } },
+	args: { connection: "ready", name: LONG_NAME },
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"Reach for this when a bot is named in a sentence and the window is narrow. Check that the name clips with an ellipsis while the connection dot and the settings glyph stay fully in view on the right — the name is what gives up room, never the state. Pick `Default` for a name that fits.",
+			},
+		},
+	},
+	render: (args) => <AppHeader leading={<HeaderIdentityButton {...args} />} />,
+	play: async ({ canvas }) => {
+		const name = canvas.getByText(LONG_NAME)
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(canvas.getByRole("button")).toBeVisible()
+	},
+})
+
+export const InLayout = meta.story({
+	args: { connection: "ready", name: "Nest" },
+	parameters: {
+		layout: "fullscreen",
+		docs: {
+			description: {
+				story:
+					"Reach for this to check the button in the header it ships in, with an empty trailing slot. Check that the room left of the button matches the room above and below it, that the header keeps its 48px height, and that nothing pulls to the trailing edge. Pick `Default` to inspect the button alone.",
+			},
+		},
+	},
+	render: (args) => <AppHeader leading={<HeaderIdentityButton {...args} />} />,
+	play: async ({ canvas }) => {
+		const header = canvas.getByRole("banner").getBoundingClientRect()
+		const button = canvas.getByRole("button").getBoundingClientRect()
+
+		await expect(header.height).toBe(48)
+		await expect(button.height).toBe(36)
+		await expect(button.left - header.left).toBe(6)
+		await expect(Math.abs(button.top - header.top - 6)).toBeLessThan(1)
+	},
+})

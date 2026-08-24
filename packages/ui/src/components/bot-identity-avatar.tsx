@@ -72,7 +72,7 @@ function BotIdentityAvatar({
 					animal={drawnAnimal(name, animal)}
 					animated={working}
 					blot={blot}
-					className="block"
+					className="block size-full"
 					seed={seed}
 					size={size}
 					state={working ? busyStateFor(kind) : REST_STATE}

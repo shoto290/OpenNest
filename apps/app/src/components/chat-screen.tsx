@@ -11,7 +11,6 @@ import {
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotWorking } from "@workspace/ui/components/bot-working"
-import { Button } from "@workspace/ui/components/button"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import { ChatNotice } from "@workspace/ui/components/chat-notice"
@@ -22,8 +21,7 @@ import {
 	type ChatTurnRun,
 	UserTurn,
 } from "@workspace/ui/components/chat-turn"
-import { ConnectionStatus } from "@workspace/ui/components/connection-status"
-import { Icons } from "@workspace/ui/components/icons"
+import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MessageAttachments } from "@workspace/ui/components/message-attachments"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
@@ -683,31 +681,28 @@ export function ChatScreen({
 			}
 			header={
 				<AppHeader
-					insetWindowControls
 					data-tauri-drag-region="deep"
+					leading={
+						<HeaderIdentityButton
+							animal={bot.avatarAnimal}
+							blot={bot.avatarBlot ?? undefined}
+							connection={state.connection}
+							image={face}
+							isSettingsOpen={isSettingsOpen}
+							kind={working?.kind}
+							name={bot.name}
+							onOpenSettings={onToggleSettings}
+							seed={bot.id}
+							version={state.binaryVersion}
+							working={working !== null}
+						/>
+					}
 					trailing={
-						<>
-							<ConnectionStatus
-								state={state.connection}
-								version={state.binaryVersion}
-							/>
-							<PinnedMessages
-								messages={pinnedRows}
-								onJump={jumpToPin}
-								onUnpin={pins.unpin}
-							/>
-							<Button
-								aria-expanded={isSettingsOpen}
-								aria-label={t("screen.settings")}
-								onClick={onToggleSettings}
-								size="icon-sm"
-								tooltip={t("screen.settings")}
-								tooltipSide="bottom"
-								variant="ghost"
-							>
-								<Icons.Settings aria-hidden="true" />
-							</Button>
-						</>
+						<PinnedMessages
+							messages={pinnedRows}
+							onJump={jumpToPin}
+							onUnpin={pins.unpin}
+						/>
 					}
 				/>
 			}
