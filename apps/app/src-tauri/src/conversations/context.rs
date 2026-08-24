@@ -5,7 +5,7 @@ use crate::db::repositories::messages::{
 use crate::db::repositories::runtime_context::{ContextCheckpoint, NewCheckpoint, ParticipantKey};
 use crate::db::{Database, DatabaseError};
 
-use super::contract::TranscriptStoreError;
+use super::contract::{MessageRun, TranscriptStoreError, message_uri};
 
 const RECENT_TAIL: u32 = 20;
 
@@ -18,6 +18,8 @@ const SUMMARY_LINE_LIMIT: usize = 200;
 const CHARS_PER_TOKEN: i64 = 4;
 
 const ELIDED: &str = "…";
+
+const UNKNOWN_SESSION: &str = "unknown";
 
 const SUMMARY_LABEL: &str = "The conversation so far:";
 const REPLY_LABEL: &str = "The message this one replies to:";
@@ -45,7 +47,7 @@ pub async fn bounded_context(
 			limit: RECENT_TAIL,
 		})
 		.await?;
-	let replied_to = replied_to_target(database, &conversation_id, &prompt, &recent).await?;
+	let replied_to = replied_to_target(database, &conversation_id, &prompt).await?;
 
 	Ok(compose(Parts {
 		summary: checkpoint.as_ref().map(|checkpoint| checkpoint.summary.as_str()),
@@ -59,15 +61,42 @@ async fn replied_to_target(
 	database: &Database,
 	conversation_id: &str,
 	prompt: &StoredMessage,
-	recent: &[StoredMessage],
-) -> Result<Option<StoredMessage>, TranscriptError> {
+) -> Result<Option<RepliedTo>, TranscriptStoreError> {
 	let Some(target_id) = prompt.replied_to_message_id.as_ref() else {
 		return Ok(None);
 	};
-	if recent.iter().any(|message| &message.id == target_id) {
+	let Some(target) =
+		database.messages().message(conversation_id.to_owned(), target_id.clone()).await?
+	else {
 		return Ok(None);
-	}
-	database.messages().message(conversation_id.to_owned(), target_id.clone()).await
+	};
+	let run = run_behind(database, &target).await?;
+
+	Ok(Some(RepliedTo {
+		uri: message_uri(conversation_id, &target.id),
+		role: target.role,
+		provider_session_id: run.provider_session_id,
+		content: target.content,
+	}))
+}
+
+pub async fn run_behind(
+	database: &Database,
+	stored: &StoredMessage,
+) -> Result<MessageRun, TranscriptStoreError> {
+	let runtime_session_id = match &stored.runtime_session_id {
+		Some(session_id) => Some(session_id.clone()),
+		None => database.messages().run_of_turn(stored.turn_id.clone()).await?,
+	};
+	let provider_session_id = match &runtime_session_id {
+		Some(session_id) => database
+			.runtime_context()
+			.session(session_id.clone())
+			.await?
+			.and_then(|session| session.provider_session_id),
+		None => None,
+	};
+	Ok(MessageRun { runtime_session_id, provider_session_id })
 }
 
 pub async fn capture_checkpoint(
@@ -120,9 +149,16 @@ fn no_such_message() -> TranscriptError {
 	TranscriptError::Database(DatabaseError::Sqlite(rusqlite::Error::QueryReturnedNoRows))
 }
 
+struct RepliedTo {
+	uri: String,
+	role: MessageRole,
+	provider_session_id: Option<String>,
+	content: String,
+}
+
 struct Parts<'a> {
 	summary: Option<&'a str>,
-	replied_to: Option<&'a StoredMessage>,
+	replied_to: Option<&'a RepliedTo>,
 	recent: &'a [StoredMessage],
 	prompt: &'a str,
 }
@@ -133,7 +169,7 @@ fn compose(parts: Parts<'_>) -> String {
 		push_section(&mut sections, SUMMARY_LABEL, summary);
 	}
 	if let Some(replied_to) = parts.replied_to {
-		push_section(&mut sections, REPLY_LABEL, &spoken(replied_to));
+		push_section(&mut sections, REPLY_LABEL, &quoted(replied_to));
 	}
 	if !parts.recent.is_empty() {
 		let spoken: Vec<String> = parts.recent.iter().map(spoken).collect();
@@ -151,6 +187,23 @@ fn push_section(sections: &mut Vec<String>, label: &str, body: &str) {
 		return;
 	}
 	sections.push(format!("{label}\n{body}"));
+}
+
+fn quoted(replied_to: &RepliedTo) -> String {
+	let session = replied_to.provider_session_id.as_deref().unwrap_or(UNKNOWN_SESSION);
+	format!(
+		"uri: {}\nfrom: {}\nclaude session: {session}\n{}",
+		replied_to.uri,
+		quoted_speaker(replied_to.role),
+		replied_to.content
+	)
+}
+
+fn quoted_speaker(role: MessageRole) -> &'static str {
+	match role {
+		MessageRole::User => "user",
+		MessageRole::Assistant => "you",
+	}
 }
 
 fn spoken(message: &StoredMessage) -> String {
@@ -242,7 +295,12 @@ mod tests {
 
 	#[test]
 	fn every_part_is_printed_once_and_the_prompt_comes_last() {
-		let target = a_message(2, MessageRole::User, "what about the roof?");
+		let target = RepliedTo {
+			uri: "opennest://c/c1/m/m2".to_owned(),
+			role: MessageRole::User,
+			provider_session_id: Some("claude-9f3c".to_owned()),
+			content: "what about the roof?".to_owned(),
+		};
 		let recent = [
 			a_message(40, MessageRole::User, "and the walls?"),
 			a_message(41, MessageRole::Assistant, "they are up"),
@@ -258,7 +316,9 @@ mod tests {
 		assert_eq!(
 			context,
 			"The conversation so far:\nuser: we are building a house\n\n\
-			The message this one replies to:\nuser: what about the roof?\n\n\
+			The message this one replies to:\n\
+			uri: opennest://c/c1/m/m2\nfrom: user\nclaude session: claude-9f3c\n\
+			what about the roof?\n\n\
 			The most recent messages:\nuser: and the walls?\nassistant: they are up\n\n\
 			The new message:\nand now?"
 		);
@@ -441,6 +501,64 @@ mod tests {
 			.expect("the prompt is appended");
 	}
 
+	const PROVIDER_SESSION: &str = "claude-9f3c";
+
+	async fn ran(database: &Database, conversation_id: &str, message_id: &'static str) {
+		let participant = participant_of(conversation_id, "default");
+		let session = database
+			.runtime_context()
+			.open(participant.clone(), 1, None)
+			.await
+			.expect("the run is opened");
+		let session_id = session.id.clone();
+		database
+			.runtime_context()
+			.record_provider_session(participant, session.id, PROVIDER_SESSION.to_owned())
+			.await
+			.expect("the provider names its session");
+		database
+			.call(move |connection| {
+				connection.execute(
+					"UPDATE messages SET runtime_session_id = ?2 WHERE id = ?1",
+					rusqlite::params![message_id, session_id],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the message names its run");
+	}
+
+	async fn a_long_message(database: &Database, conversation_id: &str, id: &str) -> String {
+		let content = "a question about the roof ".repeat(30).trim_end().to_owned();
+		database
+			.messages()
+			.append_user_message(NewUserMessage {
+				id: id.to_owned(),
+				conversation_id: conversation_id.to_owned(),
+				turn_id: TURN.to_owned(),
+				author_bot_id: None,
+				replied_to_message_id: None,
+				content: content.clone(),
+				created_at: 98,
+			})
+			.await
+			.expect("the long message is appended");
+		content
+	}
+
+	fn quoting(
+		conversation_id: &str,
+		message_id: &str,
+		from: &str,
+		session: &str,
+		content: &str,
+	) -> String {
+		format!(
+			"uri: {}\nfrom: {from}\nclaude session: {session}\n{content}",
+			message_uri(conversation_id, message_id)
+		)
+	}
+
 	fn asked(id: &str) -> String {
 		format!("and now? ({id})")
 	}
@@ -509,12 +627,12 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_reply_carries_its_target_only_when_the_tail_has_left_it_behind() {
+	async fn a_reply_names_its_target_whether_or_not_the_tail_still_holds_it() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
-		prompt(&database, &conversation, "p1", Some("m2")).await;
+		prompt(&database, &conversation, "p1", Some("m1")).await;
 		prompt(&database, &conversation, "p2", Some("m30")).await;
 
 		let old =
@@ -527,19 +645,88 @@ mod tests {
 				.expect("the context is rebuilt");
 
 		assert_eq!(
-			occurrences(&old, REPLY_LABEL),
-			1,
-			"an answer to an old message lost its target"
-		);
-		assert_eq!(occurrences(&old, "message 2\n"), 1, "the target was carried more than once");
-		assert!(
-			!recent.contains(REPLY_LABEL),
-			"a target the tail already holds was carried a second time: {recent}"
+			section(&old, REPLY_LABEL),
+			Some(quoting(&conversation, "m1", "user", "unknown", "message 1").as_str()),
+			"an answer to an old message lost its target: {old}"
 		);
 		assert_eq!(
-			occurrences(&recent, "message 30"),
-			1,
-			"the tail lost the message being answered"
+			section(&recent, REPLY_LABEL),
+			Some(quoting(&conversation, "m30", "you", "unknown", "message 30").as_str()),
+			"a target the tail already holds was not named: {recent}"
+		);
+		assert!(
+			section(&recent, RECENT_LABEL)
+				.is_some_and(|tail| tail.lines().any(|line| line == "assistant: message 30")),
+			"the tail lost the message being answered: {recent}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_reply_names_the_run_behind_the_message_it_points_at() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, SPOKEN).await;
+		ran(&database, &conversation, "m30").await;
+		prompt(&database, &conversation, "p1", Some("m30")).await;
+
+		let context =
+			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
+				.await
+				.expect("the context is rebuilt");
+
+		assert_eq!(
+			section(&context, REPLY_LABEL),
+			Some(quoting(&conversation, "m30", "you", PROVIDER_SESSION, "message 30").as_str()),
+			"the run behind the quoted message went unnamed: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_quoted_message_is_carried_whole_however_long_it_is() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		let content = a_long_message(&database, &conversation, "long").await;
+		prompt(&database, &conversation, "p1", Some("long")).await;
+
+		let context =
+			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
+				.await
+				.expect("the context is rebuilt");
+
+		assert_eq!(
+			section(&context, REPLY_LABEL),
+			Some(quoting(&conversation, "long", "user", "unknown", &content).as_str()),
+			"a long quoted message was cut short"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_replying_to_nothing_carries_no_section() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, 2).await;
+		prompt(&database, &conversation, "p1", None).await;
+
+		let context =
+			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
+				.await
+				.expect("the context is rebuilt");
+
+		assert!(
+			!context.contains(REPLY_LABEL),
+			"a message replying to nothing was quoted: {context}"
 		);
 
 		drop(database);

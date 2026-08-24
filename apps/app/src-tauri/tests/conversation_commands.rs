@@ -673,8 +673,9 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 		"the tail lost what the dead host had been saying"
 	);
 	assert!(
-		context.contains("The message this one replies to:\nuser: message 3"),
-		"an answer to a message no fold still holds lost its target: {context}"
+		context.contains("The message this one replies to:\nuri: opennest://c/")
+			&& context.contains("from: user\nclaude session: unknown\nmessage 3"),
+		"an answer to an earlier message lost the target it points at: {context}"
 	);
 	assert_eq!(occurrences(&context, "message 3\n"), 1, "the answered message was carried twice");
 	assert_eq!(occurrences(&context, PROMPT_TEXT), 1, "the prompt was carried twice");

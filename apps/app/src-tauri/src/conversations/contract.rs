@@ -449,7 +449,7 @@ impl TranscriptMessage {
 
 const EXCERPT_LIMIT: usize = 280;
 
-fn message_uri(conversation_id: &str, message_id: &str) -> String {
+pub(super) fn message_uri(conversation_id: &str, message_id: &str) -> String {
 	format!("opennest://c/{conversation_id}/m/{message_id}")
 }
 

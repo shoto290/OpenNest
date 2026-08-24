@@ -338,8 +338,8 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 	assert_eq!(occurrences(&told, "message 3\n"), 1, "the summary lost what it folded");
 	assert_eq!(occurrences(&told, "message 30\n"), 1, "the tail lost what was just said");
 	assert!(
-		told.contains("The message this one replies to:\nassistant: message 2"),
-		"an answer to a message no tail still holds lost its target: {told}"
+		told.contains("The message this one replies to:\nuri: opennest://c/"),
+		"an answer to an earlier message lost the target it points at: {told}"
 	);
 	assert!(told.ends_with(PROMPT_TEXT), "the prompt was not the last thing the run was told");
 
