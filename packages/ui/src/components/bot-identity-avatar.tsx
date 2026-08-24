@@ -6,6 +6,7 @@ import {
 } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
+import { drawnAnimal } from "@workspace/ui/components/bot-settings"
 import { cn } from "@workspace/ui/lib/utils"
 
 /** What a bot holds when it is not working. One frame, the same for every bot: what
@@ -48,7 +49,11 @@ const dotSize = (size: number) =>
 	Math.round(Math.min(size * DOT_RATIO, DOT_MAX))
 
 type BotIdentityAvatarProps = {
-	/** The animal the bot was given. Drawn unless it carries a picture. */
+	/** The bot's name, which decides the animal alongside the stored one: a bot
+	 * called Skippy is drawn as Skippy whatever it keeps. */
+	name?: string
+	/** The animal the bot stores. Drawn unless the name says otherwise, and unless
+	 * it carries a picture. */
 	animal?: BotAvatarAnimal
 	/** The tint drawn behind the animal — what tells one bot from another at a
 	 * glance. Leave it out and the animal is drawn on nothing. */
@@ -77,11 +82,12 @@ type BotIdentityAvatarProps = {
  * a bot that picked a rabbit is a rabbit in all of them, and one wearing a picture
  * wears it in all of them too.
  *
- * It draws and nothing else. No name, no live region, no layout around it: the
- * surfaces that need those own them, and a live region per roster row would be a
- * dozen of them announcing at once.
+ * It draws and nothing else. No live region, no layout around it, and the name it
+ * takes is never written out: the surfaces that need those own them, and a live
+ * region per roster row would be a dozen of them announcing at once.
  */
 function BotIdentityAvatar({
+	name,
 	animal,
 	blot,
 	seed,
@@ -101,7 +107,7 @@ function BotIdentityAvatar({
 				<img alt="" aria-hidden="true" className={IMAGE_CLASS} src={image} />
 			) : (
 				<BotAvatar
-					animal={animal}
+					animal={drawnAnimal(name, animal)}
 					animated={working}
 					blot={blot}
 					className="block"

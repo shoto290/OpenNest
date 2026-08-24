@@ -84,9 +84,10 @@ import type {
 import { avatarSrc } from "@/lib/host"
 import { openAttachment } from "@/lib/links/open-attachment"
 
-/** The bot's face as the memoised rows below take it: four strings rather than a
+/** The bot's face as the memoised rows below take it: five strings rather than a
  * node, so a streamed delta still shallow-compares equal. */
 type BotFace = {
+	name: string
 	animal: AvatarAnimal
 	blot?: AvatarBlot
 	/** The bot's id, which is what the shape of its blot is derived from. */
@@ -112,6 +113,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	controller,
 	run,
 	avatar,
+	name,
 	animal,
 	blot,
 	seed,
@@ -156,6 +158,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 						animal={animal}
 						blot={blot}
 						image={image}
+						name={name}
 						seed={seed}
 						size={CHAT_AVATAR_SIZE}
 					/>
@@ -591,6 +594,7 @@ export function ChatScreen({
 								row={row}
 								controller={controller}
 								avatar={index === avatarIndex}
+								name={bot.name}
 								animal={bot.avatarAnimal}
 								blot={bot.avatarBlot ?? undefined}
 								seed={bot.id}

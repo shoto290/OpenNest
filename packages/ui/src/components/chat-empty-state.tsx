@@ -68,6 +68,7 @@ function ChatEmptyState({
 					animal={animal}
 					blot={blot}
 					image={image}
+					name={name}
 					seed={seed}
 					size={MARK_SIZE}
 				/>

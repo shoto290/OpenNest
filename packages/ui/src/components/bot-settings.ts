@@ -17,6 +17,19 @@ const BOT_IDENTITY_ANIMALS = (Object.keys(ANIMALS) as BotAvatarAnimal[]).filter(
 	(animal): animal is BotIdentityAnimal => animal !== UNPICKABLE_ANIMAL,
 )
 
+/** The animal a bot is drawn as: the one it keeps, unless it is called Skippy —
+ * that one is given rather than chosen, so it is read off the name every time it is
+ * drawn. The name it answers to is the animal's own id, deliberately: there is one
+ * Skippy, and a bot called after it wears its face.
+ *
+ * Nothing is written: renaming a bot either way changes its face on the next render
+ * and leaves the animal it stores exactly where it was. */
+const drawnAnimal = <Stored extends BotAvatarAnimal | undefined>(
+	name: string | undefined,
+	animal: Stored,
+) =>
+	name?.trim().toLowerCase() === UNPICKABLE_ANIMAL ? UNPICKABLE_ANIMAL : animal
+
 type BotIdentity = {
 	animal: BotIdentityAnimal
 	/** The tint drawn behind the animal. Left out, the bot wears no blot. */
@@ -575,6 +588,7 @@ export {
 	type BotSkillEffort,
 	type BotSkillItem,
 	DEFAULT_BOT_OUTPUT_STYLE,
+	drawnAnimal,
 	isConfigObject,
 	isMcpServerDraftUnsaved,
 	isSameFieldAnswer,

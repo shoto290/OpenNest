@@ -33,6 +33,21 @@ const EveryPlace = (props: BotIdentityAvatarProps) => (
 	</Row>
 )
 
+/** One bot, with a control that renames it to Skippy and back. Nothing else moves:
+ * the animal it stores is the same rabbit throughout. */
+const Renamed = (props: BotIdentityAvatarProps) => {
+	const [named, setNamed] = useState(false)
+
+	return (
+		<div className="flex flex-col items-start gap-4">
+			<EveryPlace {...props} name={named ? "Skippy" : "Nibbles"} />
+			<Button onClick={() => setNamed(!named)} size="sm" variant="outline">
+				Rename the bot
+			</Button>
+		</div>
+	)
+}
+
 /** One bot, with a control that changes everything a reader is allowed to change
  * about it. Its id is the one thing that stays. */
 const Rebranded = (props: BotIdentityAvatarProps) => {
@@ -304,6 +319,37 @@ export const BoundToOneBot = meta.story({
 				within(avatar).getByRole("img", { name: "Bot avatar rabbit, idle" }),
 			).toBeVisible()
 		}
+	},
+})
+
+export const NamedSkippy = meta.story({
+	render: (args) => <Renamed {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The one animal a reader cannot pick: a bot called Skippy is drawn as Skippy, whatever animal it keeps. Press the button and the rabbit becomes the kangaroo in all three places at once, and pressing it again gives the rabbit back — the name is read on every render and nothing is written, so the stored animal is the same rabbit before and after. The match ignores case and surrounding spaces, because a reader typing a name is not typing an identifier. A bot wearing an uploaded picture keeps the picture: pick `Uploaded` for that.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const expectEveryPlace = async (animal: string) => {
+			for (const avatar of botIdentityAvatars(canvasElement)) {
+				await expect(
+					within(avatar).getByRole("img", {
+						name: `Bot avatar ${animal}, idle`,
+					}),
+				).toBeVisible()
+			}
+		}
+		const rename = () =>
+			userEvent.click(canvas.getByRole("button", { name: "Rename the bot" }))
+
+		await expectEveryPlace("rabbit")
+		await rename()
+		await expectEveryPlace("skippy")
+		await rename()
+		await expectEveryPlace("rabbit")
 	},
 })
 
