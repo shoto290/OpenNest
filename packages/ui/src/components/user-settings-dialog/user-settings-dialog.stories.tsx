@@ -7,6 +7,8 @@ import {
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { PICKED_PICTURE_FILE } from "@workspace/ui/components/picture-dropzone.fixtures"
+import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
+import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
 import {
 	UserSettingsDialog,
 	type UserSettingsDialogProps,
@@ -86,6 +88,16 @@ const meta = preview.meta({
 		onPictureRemove: fn(),
 		language: null,
 		onLanguageChange: fn(),
+		skills: BOT_SKILLS,
+		onSkillCreate: fn(),
+		onSkillChange: fn(),
+		onSkillPreloadedChange: fn(),
+		onSkillDelete: fn(),
+		history: {
+			commits: BOT_COMMITS,
+			onLoadDiff: fn(),
+			onRevert: fn(),
+		},
 	},
 	render: (args) => <DialogHost {...args} />,
 })
@@ -95,7 +107,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the scheme and the palettes, `Notifications` for what the app tells them about, `LanguageTab` for the language the app is read in, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in.",
+					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the scheme and the palettes, `Notifications` for what the app tells them about, `LanguageTab` for the language the app is read in, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in, `Skills` and `History` for the person's own plugin.",
 			},
 		},
 	},
@@ -291,5 +303,85 @@ export const IconRail = meta.story({
 			),
 		)
 		await expect(rows.size).toBe(3)
+	},
+})
+
+export const Skills = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The skills of the person's own plugin — the same panel a bot's settings draws, on the plugin every bot reads before it answers. Check that opening one swaps the whole body for the editor, and that the way back restores the rail — on Profile, as the bot dialog does after the same trip. Pick `NoSkills` for the plugin that holds none yet.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Skills" }))
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Skills",
+		})
+
+		await userEvent.click(
+			within(panel).getByRole("button", { name: /release-notes/ }),
+		)
+		const back = within(dialog).getByRole("button", { name: "All skills" })
+		await expect(back).toBeVisible()
+
+		await userEvent.click(back)
+		await expect(
+			within(dialog).getByRole("tab", { name: "Skills" }),
+		).toBeVisible()
+	},
+})
+
+export const NoSkills = meta.story({
+	args: { skills: [] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The plugin before the person has written anything into it. Check that the tab shows the empty state and its one way forward, not a blank list.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Skills" }))
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Skills",
+		})
+
+		await expect(within(panel).getByText("No skills yet")).toBeVisible()
+		await expect(
+			within(panel).getByRole("button", { name: "Add skill" }),
+		).toBeVisible()
+	},
+})
+
+export const History = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Everything ever written into the person's plugin, newest first, whoever wrote it. Check that a change the person made is signed You and one a bot made is signed generically, and that asking for the changes of an entry calls back for its diff.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "History" }))
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "History",
+		})
+
+		await expect(within(panel).getAllByText("You").length).toBeGreaterThan(0)
+		await userEvent.click(
+			within(panel).getAllByRole("button", { name: "Show changes" })[0],
+		)
+		await expect(args.history.onLoadDiff).toHaveBeenCalled()
 	},
 })

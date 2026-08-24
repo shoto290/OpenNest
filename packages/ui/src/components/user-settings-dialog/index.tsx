@@ -4,12 +4,23 @@ import { Tabs } from "@base-ui/react/tabs"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import type {
+	BotSkillDraft,
+	BotSkillItem,
+} from "@workspace/ui/components/bot-settings"
+import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	HistoryPanel,
+	type PluginHistory,
+} from "@workspace/ui/components/plugin-settings/history-panel"
+import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
+	SETTINGS_PANEL_CLASS,
 	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailItem,
@@ -37,6 +48,12 @@ type UserSettingsDialogProps = {
 	language: Language | null
 	onLanguageChange: (language: Language | null) => void
 	onPictureRemove?: () => void
+	skills: BotSkillItem[]
+	onSkillCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
+	onSkillChange: (id: string, draft: BotSkillDraft) => void
+	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
+	onSkillDelete: (id: string) => void
+	history: PluginHistory
 	className?: string
 }
 
@@ -49,18 +66,39 @@ const UserSettingsDialog = ({
 	onPictureRemove,
 	language,
 	onLanguageChange,
+	skills,
+	onSkillCreate,
+	onSkillChange,
+	onSkillPreloadedChange,
+	onSkillDelete,
+	history,
 	className,
 }: UserSettingsDialogProps) => {
 	const { t } = useTranslation("settings")
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
+	const [isLeaving, setLeaving] = useState(false)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const displayName = displayNameOf(value.name)
+	const skillSession = useSkillSession({
+		skills,
+		onSkillChange,
+		onSkillCreate,
+		onSkillDelete,
+		onSkillPreloadedChange,
+	})
 
 	const patch = (fields: Partial<UserSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
+	const leave = () => {
+		skillSession.discard()
+		onClose()
+	}
+
+	const close = () => (skillSession.isUnsaved ? setLeaving(true) : leave())
+
 	return (
-		<Root onOpenChange={(next) => !next && onClose()} open={open}>
+		<Root onOpenChange={(next) => !next && close()} open={open}>
 			<Content
 				className={cn(
 					"h-[34rem] w-[52rem] gap-0 overflow-hidden p-0",
@@ -85,91 +123,130 @@ const UserSettingsDialog = ({
 					</Title>
 				</header>
 
-				<Tabs.Root
-					className="flex min-h-0 flex-1"
-					defaultValue={FIRST_TAB}
-					orientation="vertical"
-					ref={setTabs}
-				>
-					<SettingsRail iconsOnly={iconsOnly}>
-						<SettingsRailItem
-							icon={Icons.User}
-							iconsOnly={iconsOnly}
-							label={t("rail.profile")}
+				{skillSession.editor ?? (
+					<Tabs.Root
+						className="flex min-h-0 flex-1"
+						defaultValue={FIRST_TAB}
+						orientation="vertical"
+						ref={setTabs}
+					>
+						<SettingsRail iconsOnly={iconsOnly}>
+							<SettingsRailItem
+								icon={Icons.User}
+								iconsOnly={iconsOnly}
+								label={t("rail.profile")}
+								value={FIRST_TAB}
+							/>
+							<SettingsRailItem
+								icon={Icons.Image}
+								iconsOnly={iconsOnly}
+								label={t("rail.appearance")}
+								value="appearance"
+							/>
+							<SettingsRailItem
+								icon={Icons.Bell}
+								iconsOnly={iconsOnly}
+								label={t("rail.notifications")}
+								value="notifications"
+							/>
+							<SettingsRailItem
+								icon={Icons.Language}
+								iconsOnly={iconsOnly}
+								label={t("rail.language")}
+								value="language"
+							/>
+							<SettingsRailItem
+								icon={Icons.Skill}
+								iconsOnly={iconsOnly}
+								label={t("rail.skills")}
+								value="skills"
+							/>
+							<SettingsRailItem
+								icon={Icons.History}
+								iconsOnly={iconsOnly}
+								label={t("rail.history")}
+								value="history"
+							/>
+						</SettingsRail>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value={FIRST_TAB}
-						/>
-						<SettingsRailItem
-							icon={Icons.Image}
-							iconsOnly={iconsOnly}
-							label={t("rail.appearance")}
+						>
+							<ProfilePictureField
+								image={value.image}
+								onPick={onPictureUpload}
+								onRemove={onPictureRemove}
+							/>
+							<SettingsField
+								label={t("profile.name.label")}
+								onValueChange={(name) => patch({ name })}
+								placeholder={t("profile.name.placeholder")}
+								value={value.name}
+							/>
+						</Tabs.Panel>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="appearance"
-						/>
-						<SettingsRailItem
-							icon={Icons.Bell}
-							iconsOnly={iconsOnly}
-							label={t("rail.notifications")}
+						>
+							<AppearanceFields
+								colorScheme={value.colorScheme}
+								compact={iconsOnly}
+								onColorSchemeChange={(colorScheme) => patch({ colorScheme })}
+								onPaletteChange={(palette) => patch({ palette })}
+								palette={value.palette}
+							/>
+						</Tabs.Panel>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="notifications"
-						/>
-						<SettingsRailItem
-							icon={Icons.Language}
-							iconsOnly={iconsOnly}
-							label={t("rail.language")}
+						>
+							<NotificationFields
+								notifications={value.notifications}
+								onNotificationsChange={(notifications) =>
+									patch({ notifications })
+								}
+							/>
+						</Tabs.Panel>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="language"
-						/>
-					</SettingsRail>
+						>
+							<LanguageFields
+								language={language}
+								onLanguageChange={onLanguageChange}
+							/>
+						</Tabs.Panel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value={FIRST_TAB}
-					>
-						<ProfilePictureField
-							image={value.image}
-							onPick={onPictureUpload}
-							onRemove={onPictureRemove}
-						/>
-						<SettingsField
-							label={t("profile.name.label")}
-							onValueChange={(name) => patch({ name })}
-							placeholder={t("profile.name.placeholder")}
-							value={value.name}
-						/>
-					</Tabs.Panel>
+						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
+							{skillSession.panel}
+						</Tabs.Panel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value="appearance"
-					>
-						<AppearanceFields
-							colorScheme={value.colorScheme}
-							compact={iconsOnly}
-							onColorSchemeChange={(colorScheme) => patch({ colorScheme })}
-							onPaletteChange={(palette) => patch({ palette })}
-							palette={value.palette}
-						/>
-					</Tabs.Panel>
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
+							value="history"
+						>
+							<HistoryPanel
+								authorName={t("plugin.author.bot")}
+								commits={history.commits}
+								onLoadDiff={history.onLoadDiff}
+								onRevert={history.onRevert}
+							/>
+						</Tabs.Panel>
+					</Tabs.Root>
+				)}
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value="notifications"
-					>
-						<NotificationFields
-							notifications={value.notifications}
-							onNotificationsChange={(notifications) =>
-								patch({ notifications })
-							}
-						/>
-					</Tabs.Panel>
-
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value="language"
-					>
-						<LanguageFields
-							language={language}
-							onLanguageChange={onLanguageChange}
-						/>
-					</Tabs.Panel>
-				</Tabs.Root>
+				<ConfirmDialog
+					confirmLabel={t("skills.leave.action", { ns: "bots" })}
+					description={t("skills.leave.description", { ns: "bots" })}
+					onConfirm={leave}
+					onOpenChange={setLeaving}
+					open={isLeaving}
+					title={t("skills.leave.title", { ns: "bots" })}
+				/>
 			</Content>
 		</Root>
 	)

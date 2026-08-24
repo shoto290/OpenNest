@@ -92,7 +92,7 @@ const bots = {
 		},
 	},
 	history: {
-		empty: "Nothing has been changed in this bot yet.",
+		empty: "Nothing has been changed here yet.",
 		author: {
 			user: "You",
 		},
@@ -106,7 +106,7 @@ const bots = {
 			action: "Undo",
 			title: "Undo “{{title}}”?",
 			description:
-				"The bot goes back to how it was before this change. It is written as a new change, so the history keeps both.",
+				"Everything goes back to how it was before this change. It is written as a new change, so the history keeps both.",
 			confirm: "Undo this change",
 		},
 	},
@@ -127,7 +127,7 @@ const bots = {
 		empty: {
 			title: "No skills yet",
 			description:
-				"A skill is a piece of know-how this bot can carry. Write one and choose whether it travels in every prompt.",
+				"A skill is a piece of know-how to carry. Write one and choose whether it travels in every prompt.",
 		},
 		name: {
 			label: "Name",

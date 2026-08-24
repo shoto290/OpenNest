@@ -49,6 +49,20 @@ export type TranscriptStore = TranscriptPort & {
 	botHistory: (botId: string) => Promise<BotHistoryEntry[]>
 	botHistoryDiff: (botId: string, commitId: string) => Promise<string>
 	revertBot: (botId: string, commitId: string) => Promise<BotHistoryEntry[]>
+	userPluginSkills: () => Promise<BotSkill[]>
+	createUserPluginSkill: (draft: BotSkillDraft) => Promise<BotSkill>
+	updateUserPluginSkill: (
+		skillId: string,
+		draft: BotSkillDraft,
+	) => Promise<BotSkill>
+	setUserPluginSkillPreloaded: (
+		skillId: string,
+		isPreloaded: boolean,
+	) => Promise<BotSkill>
+	deleteUserPluginSkill: (skillId: string) => Promise<void>
+	userPluginHistory: () => Promise<BotHistoryEntry[]>
+	userPluginHistoryDiff: (commitId: string) => Promise<string>
+	revertUserPlugin: (commitId: string) => Promise<BotHistoryEntry[]>
 	recordBotCommands: (botId: string, commands: AgentCommand[]) => Promise<void>
 	botCommands: (botId: string) => Promise<AgentCommand[]>
 	mainChat: (botId: string) => Promise<Chat>

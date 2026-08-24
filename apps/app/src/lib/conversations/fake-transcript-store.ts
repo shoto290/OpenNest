@@ -81,6 +81,8 @@ const spoken = (message: TranscriptMessage) =>
 
 const refuse = (error: TranscriptStoreError) => Promise.reject(error)
 
+const USER_PLUGIN = "me"
+
 const FAKE_AVATAR_DIR = "/fake/avatars"
 
 const FAKE_AVATAR_LIMIT = 5 * 1024 * 1024
@@ -247,13 +249,51 @@ export const createFakeTranscriptStore = (
 	const historyEntry = (botId: string, commitId: string) =>
 		history.get(botId)?.find((entry) => entry.id === commitId)
 
+	const listSkills = (owner: string) =>
+		Promise.resolve(
+			[...(skills.get(owner) ?? [])].sort((left, right) =>
+				left.id.localeCompare(right.id),
+			),
+		)
+
+	const addSkill = (owner: string, draft: BotSkillDraft) => {
+		const held = skills.get(owner) ?? []
+		const created: BotSkill = {
+			...NO_FRONT,
+			...draft,
+			id: freeSkillId(held, draft.name),
+			isPreloaded: false,
+			isSystem: false,
+		}
+		skills.set(owner, [...held, created])
+		recorded(owner, `Skill "${created.name}" saved from settings`)
+		return Promise.resolve(created)
+	}
+
+	const dropSkill = (owner: string, skillId: string) =>
+		writeSkill(owner, skillId, (skill) => skill, "taken away").then(() => {
+			skills.set(
+				owner,
+				(skills.get(owner) ?? []).filter((skill) => skill.id !== skillId),
+			)
+		})
+
+	const undo = (owner: string, commitId: string) => {
+		const entry = historyEntry(owner, commitId)
+		if (!entry) {
+			return refuse({ kind: "unwritableBundle", detail: "no such commit" })
+		}
+		recorded(owner, `Undone: ${entry.title}`)
+		return Promise.resolve(historyOf(owner))
+	}
+
 	const writeSkill = (
 		botId: string,
 		skillId: string,
 		change: (skill: BotSkill) => BotSkill,
 		verb = "saved from settings",
 	): Promise<BotSkill> => {
-		if (!bots.has(botId)) {
+		if (botId !== USER_PLUGIN && !bots.has(botId)) {
 			return refuse({ kind: "unknownBot", id: botId })
 		}
 		const held = skills.get(botId) ?? []
@@ -395,29 +435,12 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve(learned)
 		},
 
-		botSkills: (botId: string) =>
-			Promise.resolve(
-				[...(skills.get(botId) ?? [])].sort((left, right) =>
-					left.id.localeCompare(right.id),
-				),
-			),
+		botSkills: (botId: string) => listSkills(botId),
 
-		createBotSkill: (botId: string, draft: BotSkillDraft) => {
-			if (!bots.has(botId)) {
-				return refuse({ kind: "unknownBot", id: botId })
-			}
-			const held = skills.get(botId) ?? []
-			const created: BotSkill = {
-				...NO_FRONT,
-				...draft,
-				id: freeSkillId(held, draft.name),
-				isPreloaded: false,
-				isSystem: false,
-			}
-			skills.set(botId, [...held, created])
-			recorded(botId, `Skill "${created.name}" saved from settings`)
-			return Promise.resolve(created)
-		},
+		createBotSkill: (botId: string, draft: BotSkillDraft) =>
+			bots.has(botId)
+				? addSkill(botId, draft)
+				: refuse({ kind: "unknownBot", id: botId }),
 
 		updateBotSkill: (botId: string, skillId: string, draft: BotSkillDraft) =>
 			writeSkill(botId, skillId, (skill) => ({ ...skill, ...draft })),
@@ -429,12 +452,7 @@ export const createFakeTranscriptStore = (
 		) => writeSkill(botId, skillId, (skill) => ({ ...skill, isPreloaded })),
 
 		deleteBotSkill: (botId: string, skillId: string) =>
-			writeSkill(botId, skillId, (skill) => skill, "taken away").then(() => {
-				skills.set(
-					botId,
-					(skills.get(botId) ?? []).filter((skill) => skill.id !== skillId),
-				)
-			}),
+			dropSkill(botId, skillId),
 
 		botMcpServers: (botId: string): Promise<BotMcpServer[]> =>
 			Promise.resolve(
@@ -484,14 +502,31 @@ export const createFakeTranscriptStore = (
 				: refuse({ kind: "unwritableBundle", detail: "no such commit" })
 		},
 
-		revertBot: (botId: string, commitId: string) => {
-			const entry = historyEntry(botId, commitId)
-			if (!entry) {
-				return refuse({ kind: "unwritableBundle", detail: "no such commit" })
-			}
-			recorded(botId, `Undone: ${entry.title}`)
-			return Promise.resolve(historyOf(botId))
+		revertBot: (botId: string, commitId: string) => undo(botId, commitId),
+
+		userPluginSkills: () => listSkills(USER_PLUGIN),
+
+		createUserPluginSkill: (draft: BotSkillDraft) =>
+			addSkill(USER_PLUGIN, draft),
+
+		updateUserPluginSkill: (skillId: string, draft: BotSkillDraft) =>
+			writeSkill(USER_PLUGIN, skillId, (skill) => ({ ...skill, ...draft })),
+
+		setUserPluginSkillPreloaded: (skillId: string, isPreloaded: boolean) =>
+			writeSkill(USER_PLUGIN, skillId, (skill) => ({ ...skill, isPreloaded })),
+
+		deleteUserPluginSkill: (skillId: string) => dropSkill(USER_PLUGIN, skillId),
+
+		userPluginHistory: () => Promise.resolve(historyOf(USER_PLUGIN)),
+
+		userPluginHistoryDiff: (commitId: string) => {
+			const entry = historyEntry(USER_PLUGIN, commitId)
+			return entry
+				? Promise.resolve(`@@ ${entry.title} @@`)
+				: refuse({ kind: "unwritableBundle", detail: "no such commit" })
 		},
+
+		revertUserPlugin: (commitId: string) => undo(USER_PLUGIN, commitId),
 
 		recordBotCommands: (botId: string, listed: AgentCommand[]) => {
 			if (!bots.has(botId)) {

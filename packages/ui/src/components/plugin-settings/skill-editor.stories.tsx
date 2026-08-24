@@ -7,14 +7,14 @@ import { BLANK_SKILL_DRAFT } from "@workspace/ui/components/bot-settings"
 import {
 	SkillEditor,
 	type SkillEditorProps,
-} from "@workspace/ui/components/bot-settings-dialog/skill-editor"
+} from "@workspace/ui/components/plugin-settings/skill-editor"
 import {
 	BOT_SKILLS,
 	DETAILED_SKILL,
 	LONG_SKILL,
 	OVER_BUDGET_SKILL,
 	SYSTEM_SKILL,
-} from "@workspace/ui/components/bot-settings-dialog/skills.fixtures"
+} from "@workspace/ui/components/plugin-settings/skills.fixtures"
 
 const [CARRIED] = BOT_SKILLS
 

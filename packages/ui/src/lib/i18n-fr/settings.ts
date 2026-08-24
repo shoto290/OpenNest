@@ -7,6 +7,13 @@ const settings = {
 		appearance: "Apparence",
 		notifications: "Notifications",
 		language: "Langue",
+		skills: "Compétences",
+		history: "Historique",
+	},
+	plugin: {
+		author: {
+			bot: "Un bot",
+		},
 	},
 	profile: {
 		name: {

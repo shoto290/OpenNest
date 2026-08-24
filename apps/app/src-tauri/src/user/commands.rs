@@ -1,8 +1,13 @@
 
+use std::path::{Path, PathBuf};
+
 use tauri::{AppHandle, Runtime, State};
 
 use super::contract::{UserPreferences, UserPreferencesError};
 use crate::avatars;
+use crate::bundles;
+use crate::conversations::commands::{bundled, recounted};
+use crate::conversations::contract::{BotHistoryEntry, Skill, SkillDraft, TranscriptStoreError};
 use crate::db;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, UserPreferencesError> {
@@ -53,4 +58,93 @@ pub async fn user_set_profile_picture<R: Runtime>(
 	}
 	avatars::sweep_referenced(database, Some(&dir)).await;
 	Ok(UserPreferences::of(swapped.stored, Some(&dir)))
+}
+
+fn plugin_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, TranscriptStoreError> {
+	bundles::user::laid_down(app).ok_or_else(|| TranscriptStoreError::UnwritableBundle {
+		detail: "the person's own plugin has not been laid down yet".to_owned(),
+	})
+}
+
+fn read_history(path: &Path) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+	recounted(bundles::user::history(path))
+		.map(|entries| entries.into_iter().map(BotHistoryEntry::from).collect())
+}
+
+#[tauri::command]
+pub async fn user_plugin_skills<R: Runtime>(
+	app: AppHandle<R>,
+) -> Result<Vec<Skill>, TranscriptStoreError> {
+	let Some(path) = bundles::user::laid_down(&app) else {
+		return Ok(Vec::new());
+	};
+	Ok(bundles::user::skills(&path).into_iter().map(Skill::from).collect())
+}
+
+#[tauri::command]
+pub async fn user_plugin_create_skill<R: Runtime>(
+	app: AppHandle<R>,
+	draft: SkillDraft,
+) -> Result<Skill, TranscriptStoreError> {
+	let path = plugin_path(&app)?;
+	bundled(bundles::user::create_skill(&path, &draft.into())).map(Skill::from)
+}
+
+#[tauri::command]
+pub async fn user_plugin_update_skill<R: Runtime>(
+	app: AppHandle<R>,
+	skill_id: String,
+	draft: SkillDraft,
+) -> Result<Skill, TranscriptStoreError> {
+	let path = plugin_path(&app)?;
+	bundled(bundles::user::update_skill(&path, &skill_id, &draft.into())).map(Skill::from)
+}
+
+#[tauri::command]
+pub async fn user_plugin_set_skill_preloaded<R: Runtime>(
+	app: AppHandle<R>,
+	skill_id: String,
+	is_preloaded: bool,
+) -> Result<Skill, TranscriptStoreError> {
+	let path = plugin_path(&app)?;
+	bundled(bundles::user::set_skill_preloaded(&path, &skill_id, is_preloaded)).map(Skill::from)
+}
+
+#[tauri::command]
+pub async fn user_plugin_delete_skill<R: Runtime>(
+	app: AppHandle<R>,
+	skill_id: String,
+) -> Result<(), TranscriptStoreError> {
+	let path = plugin_path(&app)?;
+	bundled(bundles::user::remove_skill(&path, &skill_id))
+}
+
+#[tauri::command]
+pub async fn user_plugin_history<R: Runtime>(
+	app: AppHandle<R>,
+) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+	let Some(path) = bundles::user::laid_down(&app) else {
+		return Ok(Vec::new());
+	};
+	read_history(&path)
+}
+
+#[tauri::command]
+pub async fn user_plugin_history_diff<R: Runtime>(
+	app: AppHandle<R>,
+	commit_id: String,
+) -> Result<String, TranscriptStoreError> {
+	let path = plugin_path(&app)?;
+	recounted(bundles::user::diff(&path, &commit_id))
+}
+
+#[tauri::command]
+pub async fn user_plugin_revert<R: Runtime>(
+	app: AppHandle<R>,
+	commit_id: String,
+) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+	let path = plugin_path(&app)?;
+	bundles::user::revert(&path, &commit_id)
+		.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })?;
+	read_history(&path)
 }

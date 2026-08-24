@@ -4,8 +4,8 @@ import preview from "@workspace/storybook/preview"
 import {
 	AWAITING_DIFF_COMMIT,
 	BOT_COMMITS,
-} from "@workspace/ui/components/bot-settings-dialog/history.fixtures"
-import { HistoryPanel } from "@workspace/ui/components/bot-settings-dialog/history-panel"
+} from "@workspace/ui/components/plugin-settings/history.fixtures"
+import { HistoryPanel } from "@workspace/ui/components/plugin-settings/history-panel"
 
 const [NEWEST] = BOT_COMMITS
 
@@ -30,7 +30,7 @@ const meta = preview.meta({
 	],
 	args: {
 		commits: BOT_COMMITS,
-		botName: "Nest Keeper",
+		authorName: "Nest Keeper",
 		onLoadDiff: fn(),
 		onRevert: fn(),
 	},
@@ -63,13 +63,13 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A bot nobody has changed yet. One sentence and nothing else — there is no action to offer here, because a change is made on the other tabs rather than on this one.",
+					"A plugin nobody has changed yet. One sentence and nothing else — there is no action to offer here, because a change is made on the other tabs rather than on this one.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.getByText("Nothing has been changed in this bot yet."),
+			canvas.getByText("Nothing has been changed here yet."),
 		).toBeVisible()
 		await expect(canvas.queryAllByRole("listitem")).toHaveLength(0)
 	},
