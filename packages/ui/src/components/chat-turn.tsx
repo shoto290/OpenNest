@@ -3,6 +3,7 @@
 import {
 	Children,
 	cloneElement,
+	Fragment,
 	isValidElement,
 	type ReactElement,
 	type ReactNode,
@@ -11,7 +12,7 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
-import { Icons } from "@workspace/ui/components/icons"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	Message,
 	MessageContent,
@@ -31,6 +32,10 @@ import {
 	MessageQuote,
 	type QuotedMessage,
 } from "@workspace/ui/components/message-quote"
+import {
+	ContextMenuItem,
+	ContextMenuSeparator,
+} from "@workspace/ui/components/motion/context-menu"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
@@ -115,29 +120,23 @@ function runPositionFor(index: number, length: number): ChatTurnRun {
 	return index === length - 1 ? "last" : "middle"
 }
 
-function CopyAction({ text }: { text: string }) {
-	const { t } = useTranslation("chat")
-	const { copied, copy } = useCopyText(text)
-
-	return (
-		<MessageAction
-			label={copied ? t("turn.copied") : t("turn.copy")}
-			onClick={() => {
-				void copy()
-			}}
-		>
-			{copied ? <Icons.Check /> : <Icons.Copy />}
-		</MessageAction>
-	)
+interface TurnAction {
+	key: "pin" | "reply" | "copy"
+	label: string
+	icon: Icon
+	onSelect: () => void
+	alwaysVisible?: boolean
 }
 
-interface ReplyActionProps {
-	onReply: () => void
-}
-
-interface PinActionProps {
+interface TurnActionsInput {
+	copyText?: string
+	onReply?: () => void
+	onPin?: () => void
 	pinned: boolean
-	onPin: () => void
+}
+
+interface TurnActionListProps {
+	actions: TurnAction[]
 }
 
 interface TurnBodyProps {
@@ -146,28 +145,86 @@ interface TurnBodyProps {
 	children: ReactNode
 }
 
-function ReplyAction({ onReply }: ReplyActionProps) {
+function useTurnActions({
+	copyText,
+	onReply,
+	onPin,
+	pinned,
+}: TurnActionsInput) {
 	const { t } = useTranslation("chat")
+	const { copied, copy } = useCopyText(copyText ?? "")
+	const actions: TurnAction[] = []
 
+	if (onPin) {
+		actions.push({
+			key: "pin",
+			label: t(pinned ? "turn.unpin" : "turn.pin"),
+			icon: pinned ? Icons.Unpin : Icons.Pin,
+			onSelect: onPin,
+			alwaysVisible: pinned,
+		})
+	}
+
+	if (onReply) {
+		actions.push({
+			key: "reply",
+			label: t("turn.reply"),
+			icon: Icons.Reply,
+			onSelect: onReply,
+		})
+	}
+
+	if (copyText) {
+		actions.push({
+			key: "copy",
+			label: copied ? t("turn.copied") : t("turn.copy"),
+			icon: copied ? Icons.Check : Icons.Copy,
+			onSelect: () => {
+				void copy()
+			},
+		})
+	}
+
+	return actions
+}
+
+function TurnActionButtons({ actions }: TurnActionListProps) {
 	return (
-		<MessageAction label={t("turn.reply")} onClick={onReply}>
-			<Icons.Reply />
-		</MessageAction>
+		<>
+			{actions.map(
+				({ key, label, icon: ActionIcon, onSelect, alwaysVisible }) => (
+					<MessageAction
+						key={key}
+						label={label}
+						onClick={onSelect}
+						alwaysVisible={alwaysVisible}
+					>
+						<ActionIcon />
+					</MessageAction>
+				),
+			)}
+		</>
 	)
 }
 
-function PinAction({ pinned, onPin }: PinActionProps) {
-	const { t } = useTranslation("chat")
-
+function TurnActionMenu({ actions }: TurnActionListProps) {
 	return (
-		<MessageAction
-			alwaysVisible={pinned}
-			label={t(pinned ? "turn.unpin" : "turn.pin")}
-			onClick={onPin}
-		>
-			{pinned ? <Icons.Unpin /> : <Icons.Pin />}
-		</MessageAction>
+		<>
+			{actions.map(({ key, label, icon: ActionIcon, onSelect }, index) => (
+				<Fragment key={key}>
+					{actions[index - 1]?.key === "pin" ? <ContextMenuSeparator /> : null}
+					<ContextMenuItem onSelect={onSelect} textValue={label}>
+						<ActionIcon aria-hidden="true" className="size-3.5" />
+						{label}
+					</ContextMenuItem>
+				</Fragment>
+			))}
+		</>
 	)
+}
+
+function turnMenuOf(actions: TurnAction[]) {
+	return actions.length > 0 ? <TurnActionMenu actions={actions} /> : undefined
 }
 
 function TurnBody({ repliedTo, className, children }: TurnBodyProps) {
@@ -235,6 +292,7 @@ function UserTurn({
 	const queued = state === "queued"
 	const footerKey = queued ? TURN_FOOTER_KEY.queued : undefined
 	const anchor = useMessageAnchor(messageId)
+	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 
 	return (
 		<Message
@@ -267,11 +325,10 @@ function UserTurn({
 										<Icons.Retry />
 									</MessageAction>
 								) : null}
-								{onPin ? <PinAction pinned={pinned} onPin={onPin} /> : null}
-								{onReply ? <ReplyAction onReply={onReply} /> : null}
-								{copyText ? <CopyAction text={copyText} /> : null}
+								<TurnActionButtons actions={actions} />
 							</>
 						}
+						menu={turnMenuOf(actions)}
 					>
 						<TurnBody repliedTo={repliedTo} className={RUN_RADIUS.user[run]}>
 							{children}
@@ -306,6 +363,7 @@ function AssistantTurn({
 	const footer = footerKey ? t(footerKey) : undefined
 	const [receivesMark] = useState(Boolean(avatar && markId))
 	const anchor = useMessageAnchor(messageId)
+	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 
 	return (
 		<Message
@@ -331,13 +389,8 @@ function AssistantTurn({
 					className="col-start-2 row-start-1 min-w-0"
 				>
 					<MessageActions
-						actions={
-							<>
-								{onPin ? <PinAction pinned={pinned} onPin={onPin} /> : null}
-								{onReply ? <ReplyAction onReply={onReply} /> : null}
-								{copyText ? <CopyAction text={copyText} /> : null}
-							</>
-						}
+						actions={<TurnActionButtons actions={actions} />}
+						menu={turnMenuOf(actions)}
 					>
 						<TurnBody
 							repliedTo={repliedTo}

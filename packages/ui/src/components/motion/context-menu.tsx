@@ -203,12 +203,14 @@ export function ContextMenu({
 export interface ContextMenuTriggerProps {
 	children: ReactElement<TriggerElementProps>
 	disabled?: boolean
+	announcesPopup?: boolean
 	className?: string
 }
 
 export function ContextMenuTrigger({
 	children,
 	disabled = false,
+	announcesPopup = true,
 	className,
 }: ContextMenuTriggerProps) {
 	const context = useContextMenuContext("ContextMenuTrigger")
@@ -291,9 +293,10 @@ export function ContextMenuTrigger({
 			context.triggerRef.current = node
 			assignRef(childRef, node)
 		},
-		"aria-controls": context.open ? context.menuId : undefined,
-		"aria-haspopup": "menu",
-		"aria-expanded": context.open,
+		"aria-controls":
+			announcesPopup && context.open ? context.menuId : undefined,
+		"aria-haspopup": announcesPopup ? "menu" : undefined,
+		"aria-expanded": announcesPopup ? context.open : undefined,
 		className: cn(TOUCH_GESTURE_CONTENT_CLASS, childProps.className, className),
 		onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
 			childProps.onContextMenu?.(event)

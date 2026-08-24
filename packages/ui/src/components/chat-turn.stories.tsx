@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, waitFor } from "storybook/test"
+import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
@@ -50,6 +50,21 @@ const QUOTED_READER = {
 	from: "user",
 	onJump: jumpToQuoted,
 } as const
+
+const rightClickOn = async (target: HTMLElement) => {
+	const bounds = target.getBoundingClientRect()
+	const coords = { clientX: bounds.left + 8, clientY: bounds.top + 8 }
+
+	fireEvent.pointerDown(target, { button: 2, ...coords })
+	const defaulted = fireEvent.contextMenu(target, coords)
+
+	return { defaulted }
+}
+
+const openTurnMenu = async (target: HTMLElement) => {
+	await rightClickOn(target)
+	return screen.findByRole("menu")
+}
 
 const PASTED = `Walk me through every package.\n\nStart with the design system, then the Tauri shell, and call out anything that crosses between them.`
 
@@ -504,6 +519,65 @@ export const Pinned = meta.story({
 
 		await userEvent.click(canvas.getByRole("button", { name: "Pin" }))
 		await expect(pin).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const Menu = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<UserTurn copyText={QUESTION} onReply={reply} onPin={pin}>
+				{QUESTION}
+			</UserTurn>
+			<AssistantTurn
+				copyText={ANSWER}
+				avatar={<Avatar />}
+				onReply={reply}
+				pinned
+				onPin={pin}
+			>
+				{ANSWER}
+			</AssistantTurn>
+			<AssistantTurn avatar={<Avatar />}>{TESTS}</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same actions the hover row offers, reached by right-clicking the bubble instead of hunting for a button: pin, then reply and copy behind a separator, each carrying the icon and the label its button carries — a pinned row says `Unpin` in both places. A row is handed only the actions it was given a handler for, and the last row here, given none at all, keeps the browser's own menu rather than drawing an empty one. Check that the menu grows out of the pointer, that choosing a row reports it and closes, and that right-clicking a second bubble hands the menu over rather than leaving two open.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		reply.mockClear()
+
+		const menu = await openTurnMenu(canvas.getByText(QUESTION))
+		const items = within(menu).getAllByRole("menuitem")
+
+		await expect(items.map((item) => item.textContent)).toEqual([
+			"Pin",
+			"Reply",
+			"Copy",
+		])
+		await expect(menu.querySelector("hr")).toBeInTheDocument()
+
+		const pinned = await openTurnMenu(canvas.getByText(ANSWER))
+
+		await expect(screen.getAllByRole("menu")).toHaveLength(1)
+		await expect(
+			within(pinned).getByRole("menuitem", { name: "Unpin" }),
+		).toBeVisible()
+
+		await userEvent.click(
+			within(pinned).getByRole("menuitem", { name: "Reply" }),
+		)
+		await expect(reply).toHaveBeenCalledTimes(1)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		const { defaulted } = await rightClickOn(canvas.getByText(TESTS))
+
+		await expect(defaulted).toBe(true)
+		await expect(screen.queryByRole("menu")).toBeNull()
 	},
 })
 
