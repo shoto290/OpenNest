@@ -279,6 +279,15 @@ impl ConversationsRepository {
 		.await?
 	}
 
+	pub async fn adopt_memory(&self, id: String, memory: String) -> Result<(), ConversationError> {
+		self.call(move |connection| {
+			let written = connection
+				.execute("UPDATE bots SET memory = ?2 WHERE id = ?1", params![&id, memory])?;
+			Ok(refuse_if_untouched(written, &id))
+		})
+		.await?
+	}
+
 	pub async fn record_bot_commands(
 		&self,
 		id: String,

@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::{
-	drafted, SkillDraft, SkillFront, LEARN_ID, MANIFEST_DIR, MANIFEST_NAME, OPENNEST_KEY,
-	PRELOAD_KEY, SKILLS_DIR, SKILL_NAME, VERSION,
+	drafted, SkillDraft, SkillFront, LEARN_ID, MANIFEST_DIR, MANIFEST_NAME, MEMORY_CLOSE,
+	MEMORY_OPEN, OPENNEST_KEY, PRELOAD_KEY, SKILLS_DIR, SKILL_NAME, VERSION,
 };
 use crate::private_files;
 
@@ -18,13 +18,25 @@ const DESCRIPTION: &str = "What every bot in OpenNest knows how to do.";
 const LEARN_DESCRIPTION: &str =
 	"How you remember. Applies when the user corrects you, tells you a preference or a fact you would have needed earlier, or asks you to remember something.";
 
-const LEARN_BODY: &str = r#"Your own directory is the one your instructions name as the place your skills live.
+fn learn_body() -> String {
+	format!(
+		r#"Your own directory is the one your instructions name as the place your skills live.
 
 ## What is yours
 
-The `skills/<name>/SKILL.md` files under that directory are your only memory. Nothing
-else there is yours: never edit `agents/`, `.claude-plugin/` or `.mcp.json`.
-What you were told and who you are belong to the person you are talking to.
+Two places under that directory are yours. Your agent file, under `agents/`, holds what
+you always know. The `skills/<name>/SKILL.md` files hold what a task calls for. Nothing
+else there is yours: never edit `.claude-plugin/` or `.mcp.json`.
+
+In your agent file, only the block between these two lines is yours to write:
+
+{MEMORY_OPEN}
+{MEMORY_CLOSE}
+
+Everything above the opening line is who you are and what you were told. It belongs to
+the person you are talking to and you never edit it. Everything below the block is
+generated and gets overwritten. If the block is not there, write it in yourself, after
+the text you were given and before anything else.
 
 ## When to write
 
@@ -34,12 +46,19 @@ What you were told and who you are belong to the person you are talking to.
 
 Write nothing else. Anything only this conversation needs is not memory.
 
+## Which of the two
+
+Something true whatever you are asked — who they are, how they want you to answer, a
+standing fact about their work — goes in the block, in a line or two. A procedure a task
+triggers — the steps of a job you only do when it comes up — goes in a skill.
+
 ## How to write
 
-Read the skills you already have first. Then update the one that covers the subject
-rather than writing beside it, merge two that overlap into one, and create a skill
-only when none of them covers it. Keep each skill's `description` naming when it
-applies, so the next session knows when to reach for it.
+Read what the block already says, and the skills you already have. Then rewrite the line
+that covers the subject rather than adding beside it, and keep the block short enough to
+read at a glance. For a skill, update the one that covers the subject, merge two that
+overlap into one, and create one only when none of them covers it. Keep each skill's
+`description` naming when it applies, so the next session knows when to reach for it.
 
 ## What to say afterwards
 
@@ -49,9 +68,10 @@ it in the language of the conversation, for someone who does not read code.
 
 ## When it takes effect
 
-A skill you write is loaded at your next message, not in the turn you wrote it. Answer
-the turn from what you already know, and do not read the file back as if it were in
-force."#;
+What you write is loaded at your next message, not in the turn you wrote it. Answer the
+turn from what you already know, and do not read the file back as if it were in force."#
+	)
+}
 
 pub fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME).join(PLUGIN_NAME))
@@ -86,7 +106,7 @@ fn learn() -> std::io::Result<String> {
 	let draft = SkillDraft {
 		name: LEARN_ID.to_owned(),
 		description: LEARN_DESCRIPTION.to_owned(),
-		body: LEARN_BODY.to_owned(),
+		body: learn_body(),
 		front: SkillFront {
 			metadata: Some(serde_json::json!({ OPENNEST_KEY: { PRELOAD_KEY: true } })),
 			disable_model_invocation: Some(true),

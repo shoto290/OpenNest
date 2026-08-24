@@ -103,6 +103,9 @@ const INDENT: usize = 2;
 const CARRIED_OPEN: &str = "<!-- opennest: generated from this bot's skills, do not edit -->";
 const CARRIED_CLOSE: &str = "<!-- opennest: end of generated skills -->";
 
+const MEMORY_OPEN: &str = "<!-- opennest: what the bot learned, the bot keeps this -->";
+const MEMORY_CLOSE: &str = "<!-- opennest: end of what the bot learned -->";
+
 const IDENTITY_CLOSE: &str = "<!-- opennest: end of generated identity -->";
 
 const IDENTITY_STANCE: &str = "You are a bot with your own personality, and you accompany the person you talk to.
@@ -168,6 +171,7 @@ pub fn agent_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 
 pub struct Generated {
 	pub instructions: String,
+	pub memory: String,
 	pub model: Option<String>,
 	pub blot: Option<AvatarBlot>,
 	pub denied_tools: Vec<String>,
@@ -184,6 +188,7 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let output_style = front_output_style(&text);
 	Some(Generated {
 		instructions: body(&text).to_owned(),
+		memory: remembered(&text).to_owned(),
 		model,
 		blot,
 		denied_tools,
@@ -259,7 +264,11 @@ fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std
 	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
 
 	rewrite_manifest(root, bot)?;
-	private_files::replace(&agent_path, agent(root, bot, &name, brief, output_style).as_bytes())?;
+	let memory = kept_memory(root, bot);
+	private_files::replace(
+		&agent_path,
+		agent(root, bot, &name, brief, &memory, output_style).as_bytes(),
+	)?;
 	if let Some(generated) = generated.filter(|path| path != &agent_path) {
 		let _ = fs::remove_file(generated);
 	}
@@ -333,6 +342,10 @@ fn learned(root: &Path, bot_id: &str) -> Option<(String, String)> {
 
 pub fn adopted(root: &Path, bot: &Bot) -> Option<String> {
 	instructions(root, &bot.id).filter(|found| edited(found, &bot.instructions))
+}
+
+pub fn adopted_memory(root: &Path, bot: &Bot) -> Option<String> {
+	generated(root, &bot.id).map(|held| held.memory).filter(|found| edited(found, &bot.memory))
 }
 
 pub fn edited(found: &str, stored: &str) -> bool {
@@ -417,7 +430,21 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	private_files::replace(&path, serde_json::Value::Object(kept).to_string().as_bytes())
 }
 
-fn agent(root: &Path, bot: &Bot, name: &str, brief: &str, output_style: &str) -> String {
+fn kept_memory(root: &Path, bot: &Bot) -> String {
+	generated(root, &bot.id)
+		.map(|held| held.memory)
+		.filter(|held| !held.is_empty())
+		.unwrap_or_else(|| bot.memory.trim().to_owned())
+}
+
+fn agent(
+	root: &Path,
+	bot: &Bot,
+	name: &str,
+	brief: &str,
+	memory: &str,
+	output_style: &str,
+) -> String {
 	format!(
 		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n  {OPENNEST_KEY}:\n    {OUTPUT_STYLE_KEY}: {}\n{FENCE}\n\n{}\n",
 		quoted(name),
@@ -427,7 +454,7 @@ fn agent(root: &Path, bot: &Bot, name: &str, brief: &str, output_style: &str) ->
 		denial_line(&bot.denied_tools),
 		quoted(&bot.id),
 		quoted(styled(output_style)),
-		briefed_with_skills(root, &bot.id, brief)
+		briefed_with_skills(root, &bot.id, brief, memory)
 	)
 }
 
@@ -455,20 +482,32 @@ fn one_line(text: &str) -> String {
 	text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn briefed_with_skills(root: &Path, bot_id: &str, brief: &str) -> String {
-	let brief = without_generated(brief);
-	let level = (deepest_heading(brief) + 1).min(MAX_HEADING);
+fn briefed_with_skills(root: &Path, bot_id: &str, brief: &str, memory: &str) -> String {
+	let remembered = block(MEMORY_OPEN, memory.trim(), MEMORY_CLOSE);
+	let above = paragraphs(&[without_generated(brief), &remembered]);
+	paragraphs(&[&above, &carried_skills(root, bot_id, &above)])
+}
+
+fn carried_skills(root: &Path, bot_id: &str, above: &str) -> String {
+	let level = (deepest_heading(above) + 1).min(MAX_HEADING);
 	let bodies: Vec<String> = preloaded(root, bot_id)
 		.into_iter()
 		.map(|skill| {
 			format!("{} {}\n\n{}", "#".repeat(level), skill.name, demoted(&skill.body, level))
 		})
 		.collect();
-	let carried = bodies.join("\n\n");
-	if carried.is_empty() {
-		return brief.to_owned();
+	block(CARRIED_OPEN, &bodies.join("\n\n"), CARRIED_CLOSE)
+}
+
+fn block(open: &str, body: &str, close: &str) -> String {
+	if body.is_empty() {
+		return String::new();
 	}
-	format!("{brief}\n\n{CARRIED_OPEN}\n\n{carried}\n\n{CARRIED_CLOSE}")
+	format!("{open}\n\n{body}\n\n{close}")
+}
+
+fn paragraphs(parts: &[&str]) -> String {
+	parts.iter().filter(|part| !part.is_empty()).copied().collect::<Vec<_>>().join("\n\n")
 }
 
 fn preloaded(root: &Path, bot_id: &str) -> Vec<Skill> {
@@ -1037,7 +1076,16 @@ fn key_of(line: &str) -> Option<&str> {
 
 fn without_generated(text: &str) -> &str {
 	let below = text.split_once(IDENTITY_CLOSE).map_or(text, |(_, brief)| brief);
-	below.split_once(CARRIED_OPEN).map_or(below, |(brief, _)| brief).trim()
+	let above = below.split_once(MEMORY_OPEN).map_or(below, |(brief, _)| brief);
+	above.split_once(CARRIED_OPEN).map_or(above, |(brief, _)| brief).trim()
+}
+
+fn remembered(text: &str) -> &str {
+	let Some((_, kept)) = below_front(text).split_once(MEMORY_OPEN) else {
+		return "";
+	};
+	let kept = kept.split_once(CARRIED_OPEN).map_or(kept, |(kept, _)| kept);
+	kept.split_once(MEMORY_CLOSE).map_or(kept, |(kept, _)| kept).trim()
 }
 
 fn deepest_heading(text: &str) -> usize {
@@ -1130,7 +1178,11 @@ fn quoted(value: &str) -> String {
 }
 
 fn body(text: &str) -> &str {
-	without_generated(split_frontmatter(text).map_or(text, |(_, body)| body))
+	without_generated(below_front(text))
+}
+
+fn below_front(text: &str) -> &str {
+	split_frontmatter(text).map_or(text, |(_, body)| body)
 }
 
 fn split_frontmatter(text: &str) -> Option<(&str, &str)> {
@@ -1600,7 +1652,7 @@ mod tests {
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		bot.title = "skills: everything\npermissionMode: bypassPermissions".to_owned();
 		let written =
-			agent(Path::new("/nowhere"), &bot, "bean", &bot.instructions, DEFAULT_OUTPUT_STYLE);
+			agent(Path::new("/nowhere"), &bot, "bean", &bot.instructions, "", DEFAULT_OUTPUT_STYLE);
 
 		for line in written.lines() {
 			assert!(!line.starts_with("skills:"), "got {written}");
@@ -2016,6 +2068,86 @@ mod tests {
 		assert!(!written.contains("You are somebody else."), "got {written}");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer at length."));
 		assert_eq!(adopted(&root, &bot).as_deref(), Some("Answer at length."));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bot_that_learned_nothing_gets_an_agent_file_without_the_markers() {
+		let root = a_root("unlearned");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(!written.contains(MEMORY_OPEN), "got {written}");
+		assert!(!written.contains(MEMORY_CLOSE), "got {written}");
+		assert_eq!(generated(&root, &bot.id).expect("the file reads").memory, "");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn what_the_bot_learned_sits_under_the_brief_and_over_the_carried_skills() {
+		let root = a_root("learned");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		bot.memory = "They bake on Sundays.".to_owned();
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let written = written_agent(&root, &bot.id);
+		let brief = written.find("Answer briefly.").expect("the brief is there");
+		let open = written.find(MEMORY_OPEN).expect("the block opens");
+		let close = written.find(MEMORY_CLOSE).expect("the block closes");
+		let carried = written.find(CARRIED_OPEN).expect("the skills are carried");
+		assert!(brief < open && open < close && close < carried, "got {written}");
+		assert!(written.contains("They bake on Sundays."), "got {written}");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_save_from_settings_carries_the_block_the_bot_wrote_over_unchanged() {
+		let root = a_root("carried-memory");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
+		rewrite_the_brief(
+			&agent,
+			&format!("Answer briefly.\n\n{MEMORY_OPEN}\n\nThey bake on Sundays.\n\n{MEMORY_CLOSE}"),
+		);
+
+		assert_eq!(adopted_memory(&root, &bot).as_deref(), Some("They bake on Sundays."));
+		bot.instructions = "Answer at length.".to_owned();
+		write(&root, &bot).expect("the bundle is written again");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains("They bake on Sundays."), "got {written}");
+		assert_eq!(written.matches(MEMORY_OPEN).count(), 1, "got {written}");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer at length."));
+
+		bot.memory = "They bake on Sundays.".to_owned();
+		assert_eq!(adopted_memory(&root, &bot), None, "an unchanged block was adopted again");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_block_the_bot_left_open_is_read_to_the_end_of_the_body() {
+		let root = a_root("unclosed-memory");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
+		rewrite_the_brief(
+			&agent,
+			&format!("Answer briefly.\n\n{MEMORY_OPEN}\n\nThey bake on Sundays."),
+		);
+
+		assert_eq!(
+			generated(&root, &bot.id).expect("the file reads").memory,
+			"They bake on Sundays."
+		);
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);
 	}
