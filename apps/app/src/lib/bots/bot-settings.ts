@@ -188,12 +188,20 @@ export type RosterActivity = {
 	previews: Record<string, LastWord | undefined>
 }
 
+const lastSpokeAt = (bot: Bot, activity: RosterActivity): number =>
+	activity.previews[bot.id]?.at ?? bot.createdAt
+
+const mostRecentFirst = (bots: Bot[], activity: RosterActivity): Bot[] =>
+	bots.toSorted(
+		(one, other) => lastSpokeAt(other, activity) - lastSpokeAt(one, activity),
+	)
+
 export const toRosterBots = (
 	bots: Bot[],
 	activity: RosterActivity,
 	now: number,
 ): AgentSidebarBot[] =>
-	bots.map((bot) => {
+	mostRecentFirst(bots, activity).map((bot) => {
 		const working = activity.working[bot.id]
 		const preview = activity.previews[bot.id]
 		return {
