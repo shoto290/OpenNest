@@ -21,6 +21,12 @@ export const A11Y_CONTRAST_AWAITING_DESIGN_DECISION = {
 	},
 }
 
+export const A11Y_FLOATING_FOCUS_GUARDS = {
+	config: {
+		rules: [{ id: "aria-hidden-focus", reviewOnFail: true }],
+	},
+}
+
 export const FRAME_POLL = { interval: 10 }
 
 export const settled = async (element: HTMLElement) => {

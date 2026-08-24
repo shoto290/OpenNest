@@ -9,7 +9,7 @@ import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@workspace/ui/components/motion/popover"
+} from "@workspace/ui/components/popover"
 
 const PINNED_AVATAR_SIZE = 24
 

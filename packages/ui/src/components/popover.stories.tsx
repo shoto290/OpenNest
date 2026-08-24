@@ -10,7 +10,7 @@ import {
 	PopoverTrigger,
 	type Side,
 	type TriggerMode,
-} from "@workspace/ui/components/motion/popover"
+} from "@workspace/ui/components/popover"
 
 const SIDES = listExhaustively<Side>({ top: true, bottom: true })
 
@@ -53,7 +53,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A panel that grows out of its own trigger: one clip path drives both the surface and the content, so the panel unfolds from the trigger's box and folds back into it. The panel is portalled to the body at fixed viewport coordinates, which is what lets it escape a sidebar's overflow, and it stays mounted-but-`inert` while closed. It anchors, it does not flip — `side` and `align` are honoured literally, so place it yourself rather than expecting collision detection. `role=\"dialog\"` carries no name of its own: always pass `aria-label` to `PopoverContent`. Under reduced motion the panel simply appears.",
+					'A plain panel anchored to its trigger: it appears where you put it and leaves when it is dismissed, with no transition of its own. The panel is portalled to the body, which is what lets it escape a sidebar\'s overflow, and it is unmounted while closed, so nothing inside it can be tabbed into. It anchors, it does not flip — `side` and `align` are honoured literally, so place it yourself rather than expecting collision detection. `role="dialog"` carries no name of its own: always pass `aria-label` to `PopoverContent`.',
 			},
 		},
 	},
@@ -79,7 +79,7 @@ export const Playground = meta.story({
 		docs: {
 			description: {
 				story:
-					"The knob story: turn `sideOffset` up to see how far the panel has to travel from its trigger, and `panelRadius` to see how it rounds off when it lands. Check that the panel opens on the first click and closes on the second — the trigger toggles, it does not only open — and that `onOpenChange` fires once per gesture. Pick `Open` to review the resting shape without driving it.",
+					"The knob story: turn `sideOffset` up to push the panel further from its trigger, and `panelRadius` to change how its corners round off. Check that the panel opens on the first click and closes on the second — the trigger toggles, it does not only open — and that `onOpenChange` fires once per gesture. Pick `Open` to review the resting shape without driving it.",
 			},
 		},
 	},
@@ -106,7 +106,7 @@ export const Open = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel already out, which is what to review the surface against: the neck has retracted, the panel edge is crisp, and the trigger still reads as a button rather than a piece of the panel. Check that the panel keeps `sideOffset` of clearance below its trigger and that `aria-expanded` starts at `true`. Pick `Playground` to watch the transition instead of its end state.",
+					"The panel already out, which is what to review the surface against: a crisp edge, the popover fill, and a trigger that still reads as a button rather than a piece of the panel. Check that the panel keeps `sideOffset` of clearance below its trigger and that `aria-expanded` starts at `true`.",
 			},
 		},
 	},
@@ -192,7 +192,7 @@ export const Dismiss = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three ways out, since the panel has no close button of its own: the trigger toggles it shut, Escape dismisses it from anywhere, and a pointer landing outside dismisses it too. Check that the button beside it still receives its own click on that same gesture — dismissing must not eat the press that caused it — and that the panel is `inert` once closed, so nothing inside it can be tabbed into. Pick `Playground` for the toggle on its own.",
+					"The three ways out, since the panel has no close button of its own: the trigger toggles it shut, Escape dismisses it from anywhere, and a pointer landing outside dismisses it too. Check that the button beside it still receives its own click on that same gesture — dismissing must not eat the press that caused it — and that the panel is gone from the document once closed, so nothing inside it can be tabbed into. Pick `Playground` for the toggle on its own.",
 			},
 		},
 	},
@@ -247,8 +247,11 @@ export const OnHover = meta.story({
 		).toBeVisible()
 
 		await userEvent.unhover(trigger)
-		const panel = body.getByRole("dialog", { name: PANEL_TITLE })
-		await waitFor(() => expect(panel.closest("[inert]")).not.toBeNull())
+		await waitFor(() =>
+			expect(
+				body.queryByRole("dialog", { name: PANEL_TITLE }),
+			).not.toBeInTheDocument(),
+		)
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 	},
 })
@@ -258,7 +261,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A panel far wider than the trigger it grew from. Check that it stops at the `min(92vw, 20rem)` clamp and wraps instead of running off the viewport, and that the neck still reads as coming from the trigger rather than from the middle of a wide slab. Anything longer than this belongs in a dialog — see `Overlays/Dialog`.",
+					"A panel far wider than the trigger it grew from. Check that it stops at the `min(92vw, 20rem)` clamp and wraps instead of running off the viewport, and that it still lines up with the trigger rather than drifting off it. Anything longer than this belongs in a dialog — see `Overlays/Dialog`.",
 			},
 		},
 	},

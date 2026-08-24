@@ -19,7 +19,7 @@ import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@workspace/ui/components/motion/popover"
+} from "@workspace/ui/components/popover"
 import { SPRING_LAYOUT, TWEEN_REDUCED } from "@workspace/ui/lib/ease"
 import { useHoverCapable } from "@workspace/ui/lib/hooks/use-hover-capable"
 import { cn } from "@workspace/ui/lib/utils"
