@@ -25,6 +25,7 @@ export type TranscriptStore = TranscriptPort & {
 	updateBot: (id: string, identity: BotIdentity) => Promise<Bot>
 	deleteBot: (id: string) => Promise<void>
 	setBotAvatarImage: (id: string, bytes: Uint8Array) => Promise<Bot>
+	setBotMemory: (id: string, memory: string) => Promise<Bot>
 	botSkills: (botId: string) => Promise<BotSkill[]>
 	createBotSkill: (botId: string, draft: BotSkillDraft) => Promise<BotSkill>
 	updateBotSkill: (

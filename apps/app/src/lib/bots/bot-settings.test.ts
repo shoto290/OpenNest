@@ -20,7 +20,13 @@ import type { Bot } from "../conversations/store-contract"
 import { botIdentity } from "../conversations/transcript-fixtures"
 
 const bot = (overrides: Partial<Bot> = {}): Bot => {
-	const described = { ...botIdentity(), id: "b-1", createdAt: 1, ...overrides }
+	const described = {
+		...botIdentity(),
+		id: "b-1",
+		createdAt: 1,
+		memory: "",
+		...overrides,
+	}
 	return { ...described, changesNothing: deniesChanges(described.deniedTools) }
 }
 

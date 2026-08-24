@@ -50,6 +50,7 @@ const DEFAULT_BOT: Bot = {
 	deniedTools: [],
 	outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 	changesNothing: false,
+	memory: "",
 	createdAt: 0,
 }
 
@@ -312,6 +313,7 @@ export const createFakeTranscriptStore = (
 			mint({
 				...identity,
 				changesNothing: deniesChanges(identity.deniedTools),
+				memory: "",
 			}),
 
 		duplicateBot: (botId: string) => {
@@ -381,6 +383,16 @@ export const createFakeTranscriptStore = (
 			}
 			bots.set(id, worn)
 			return Promise.resolve(worn)
+		},
+
+		setBotMemory: (id: string, memory: string) => {
+			const stored = bots.get(id)
+			if (!stored) {
+				return refuse({ kind: "unknownBot", id })
+			}
+			const learned: Bot = { ...stored, memory: memory.trim() }
+			bots.set(id, learned)
+			return Promise.resolve(learned)
 		},
 
 		botSkills: (botId: string) =>

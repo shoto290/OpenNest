@@ -32,6 +32,7 @@ export type RosterController = {
 	describe: (id: string, value: BotSettingsValue) => void
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
 	uploadAvatar: (id: string, file: File) => Promise<void>
+	remember: (id: string, memory: string) => Promise<void>
 	askToDelete: (id: string) => void
 	remove: (id: string) => Promise<void>
 }
@@ -193,6 +194,11 @@ export const createRosterController = (
 			enqueue(async () => {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				apply(await store.setBotAvatarImage(id, bytes))
+			}).catch(reload),
+
+		remember: (id: string, memory: string) =>
+			enqueue(async () => {
+				apply(await store.setBotMemory(id, memory))
 			}).catch(reload),
 
 		askToDelete: (id: string) =>
