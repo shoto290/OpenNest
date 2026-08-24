@@ -17,6 +17,10 @@ import {
 } from "@workspace/ui/components/chat-turn"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import {
+	ToolApproval,
+	ToolApprovalCode,
+} from "@workspace/ui/components/tool-approval"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
@@ -237,6 +241,42 @@ export const Error = meta.story({
 			canvas.getByRole("button", { name: "Restart session" }),
 		).toBeVisible()
 		await expect(canvas.getByLabelText("user message")).toBeVisible()
+	},
+})
+
+export const Pending = meta.story({
+	args: {
+		children: SCROLLING_TRANSCRIPT,
+		pending: (
+			<ToolApproval
+				tool="Bash"
+				description="Claude wants to clear the build output before rebuilding it."
+				parameters={[
+					{ id: "command", label: "command", value: "bun run build" },
+				]}
+				onAllowOnce={fn()}
+				onDeny={fn()}
+			>
+				<ToolApprovalCode code="rm -rf apps/app/dist && bun run build" />
+			</ToolApproval>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this while the agent waits on an answer. The pending card takes its own row between the notice and the composer, so it is docked to the question it answers instead of scrolling away with the transcript. Check that scrolling the rows above leaves the card on screen, that it sits one notice gap above the composer, and that it holds focus as soon as it appears. Pick `Default` once the answer has been sent.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const card = canvas.getByRole("group")
+		const scroller = canvasElement.querySelector(
+			'[data-slot="message-scroller"]',
+		)
+
+		await expect(card).toHaveFocus()
+		await expect(scroller?.contains(card)).toBe(false)
 	},
 })
 

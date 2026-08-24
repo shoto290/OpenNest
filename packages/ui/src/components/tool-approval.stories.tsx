@@ -70,6 +70,8 @@ export const Default = meta.story({
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
+		await expect(canvas.getByRole("group")).toHaveFocus()
+
 		const details = canvas.getByRole("button", { name: /tool input/i })
 		const allowOnce = canvas.getByRole("button", { name: /allow once/i })
 		const deny = canvas.getByRole("button", { name: /deny/i })
@@ -104,6 +106,7 @@ export const Allowed = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByRole("status")).toHaveTextContent("Allowed once")
+		await expect(canvas.getByRole("group")).not.toHaveFocus()
 		await expect(
 			canvas.queryByRole("button", { name: /allow once/i }),
 		).not.toBeInTheDocument()

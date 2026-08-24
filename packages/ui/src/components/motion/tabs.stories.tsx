@@ -64,6 +64,36 @@ export const Variants = meta.story({
 	),
 })
 
+export const Still = meta.story({
+	args: { defaultValue: "framework", isAnimated: false, variant: "pill" },
+	render: (args) => (
+		<Tabs {...args}>
+			<TabsList>
+				{SECTIONS.map((section) => (
+					<TabsTrigger key={section.value} value={section.value}>
+						{section.label}
+					</TabsTrigger>
+				))}
+			</TabsList>
+		</Tabs>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same row with `isAnimated` false: the indicator is drawn on the tab it belongs to instead of travelling there. Reach for this where the tabs are one section of a surface that must not move under the reader — a pending tool card docked above the composer. Check that the selected tab is marked as firmly as in `Variants`, and that nothing else about the row changes.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("tab", { name: "Release" }))
+		await expect(canvas.getByRole("tab", { name: "Release" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
+	},
+})
+
 export const Keyboard = meta.story({
 	args: { defaultValue: "framework", variant: "pill" },
 	render: (args) => (
