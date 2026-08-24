@@ -203,6 +203,10 @@ fn checkpoint(
 	.expect("the checkpoint is considered")
 }
 
+fn a_reference(conversation_id: &str, message_id: &str) -> Value {
+	json!({ "conversationId": conversation_id, "messageId": message_id })
+}
+
 fn a_page(conversation_id: &str, before_seq: Option<i64>, limit: u32) -> Value {
 	json!({ "conversationId": conversation_id, "beforeSeq": before_seq, "limit": limit })
 }
@@ -326,7 +330,9 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"role": "user",
 					"content": "hello",
 					"completion": "complete",
-					"createdAt": 2
+					"createdAt": 2,
+					"repliedToMessageId": null,
+					"runtimeSessionId": null
 				},
 				{
 					"id": "m2",
@@ -336,7 +342,9 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"role": "assistant",
 					"content": "hi there",
 					"completion": "complete",
-					"createdAt": 3
+					"createdAt": 3,
+					"repliedToMessageId": "m1",
+					"runtimeSessionId": null
 				}
 			]
 		}))
@@ -608,7 +616,9 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 			"role": "assistant",
 			"content": format!("message {HISTORY}"),
 			"completion": "interrupted",
-			"createdAt": HISTORY
+			"createdAt": HISTORY,
+			"repliedToMessageId": null,
+			"runtimeSessionId": null
 		}),
 		"the reply the dead host left came back as something else"
 	);
@@ -1809,4 +1819,140 @@ fn a_duplicate_of_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 		Err(json!({ "kind": "unknownBot", "id": "missing" }))
 	);
 	assert_eq!(call(&window, "conversation_bots", json!({})), Ok(json!([])));
+}
+
+#[test]
+fn a_reference_resolves_a_message_to_the_uri_and_the_run_that_produced_it() {
+	const ANNOUNCED: &str = "claude-7b21";
+
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let (bot, conversation) = a_bot_and_its_chat(&window);
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn starts");
+	call(&window, "conversation_append_user_message", a_user_message("m1", &conversation, "hi", 1))
+		.expect("the prompt is appended");
+	let run = call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 2))
+		.expect("the run opens");
+	call(
+		&window,
+		"conversation_record_provider_session",
+		a_provider_session(&conversation, &bot["id"], &run, ANNOUNCED),
+	)
+	.expect("the run takes the id it answers under");
+	let reply = a_streaming_reply(&window, &conversation, 2);
+	call(
+		&window,
+		"conversation_finalize_message",
+		json!({ "id": reply, "completion": "complete" }),
+	)
+	.expect("the reply ends");
+
+	let prompt = call(&window, "conversation_message_reference", a_reference(&conversation, "m1"))
+		.expect("the prompt reference");
+	let answer =
+		call(&window, "conversation_message_reference", a_reference(&conversation, &reply))
+			.expect("the reply reference");
+
+	assert_eq!(prompt["uri"], json!(format!("opennest://c/{conversation}/m/m1")));
+	assert_eq!(prompt["conversationId"], json!(conversation));
+	assert_eq!(prompt["messageId"], json!("m1"));
+	assert_eq!(prompt["role"], json!("user"));
+	assert_eq!(prompt["seq"], json!(1));
+	assert_eq!(prompt["createdAt"], json!(1));
+	assert_eq!(prompt["excerpt"], json!("hi"));
+	assert_eq!(prompt["runtimeSessionId"], Value::Null, "a prompt spoken by nobody took a run");
+	assert_eq!(prompt["providerSessionId"], Value::Null);
+
+	assert_eq!(answer["role"], json!("assistant"));
+	assert_eq!(answer["excerpt"], json!("message 2"));
+	assert_eq!(answer["runtimeSessionId"], run["id"], "the reply forgot the run that spoke it");
+	assert_eq!(answer["providerSessionId"], json!(ANNOUNCED));
+}
+
+#[test]
+fn a_reference_to_a_message_outside_the_conversation_comes_back_empty() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let (_, conversation) = a_bot_and_its_chat(&window);
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn starts");
+	call(&window, "conversation_append_user_message", a_user_message("m1", &conversation, "hi", 1))
+		.expect("the prompt is appended");
+
+	assert_eq!(
+		call(&window, "conversation_message_reference", a_reference(&conversation, "missing")),
+		Ok(Value::Null)
+	);
+	assert_eq!(
+		call(&window, "conversation_message_reference", a_reference("elsewhere", "m1")),
+		Ok(Value::Null)
+	);
+}
+
+#[test]
+fn a_long_message_crosses_as_an_excerpt_that_says_it_was_cut() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let (_, conversation) = a_bot_and_its_chat(&window);
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn starts");
+	let spoken = "é".repeat(400);
+	call(
+		&window,
+		"conversation_append_user_message",
+		a_user_message("m1", &conversation, &spoken, 1),
+	)
+	.expect("the prompt is appended");
+
+	let reference =
+		call(&window, "conversation_message_reference", a_reference(&conversation, "m1"))
+			.expect("the reference");
+	let excerpt = reference["excerpt"].as_str().expect("an excerpt");
+
+	assert_eq!(excerpt.chars().count(), 280, "the excerpt was not capped at 280 characters");
+	assert!(excerpt.ends_with('…'), "the cut excerpt did not say it was cut: {excerpt}");
+	assert!(spoken.starts_with(&excerpt[..excerpt.len() - '…'.len_utf8()]));
+}
+
+#[test]
+fn the_page_carries_the_reply_and_the_run_of_every_message_it_holds() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let (bot, conversation) = a_bot_and_its_chat(&window);
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn starts");
+	call(&window, "conversation_append_user_message", a_user_message("m1", &conversation, "hi", 1))
+		.expect("the prompt is appended");
+	let run = call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 2))
+		.expect("the run opens");
+	call(
+		&window,
+		"conversation_append_user_message",
+		an_answer_to("m1", "m2", &conversation, "again", 2),
+	)
+	.expect("the answer is appended");
+	let reply = a_streaming_reply(&window, &conversation, 3);
+
+	let page = call(&window, "conversation_message_page", a_page(&conversation, None, 50))
+		.expect("the page");
+	let held = page["messages"].as_array().expect("a list of messages");
+	let of = |id: &str| {
+		held.iter().find(|message| message["id"] == json!(id)).cloned().expect("the message")
+	};
+
+	assert_eq!(of("m1")["repliedToMessageId"], Value::Null);
+	assert_eq!(of("m1")["runtimeSessionId"], Value::Null, "a prompt older than the run took it");
+	assert_eq!(of("m2")["repliedToMessageId"], json!("m1"));
+	assert_eq!(
+		of("m2")["runtimeSessionId"],
+		run["id"],
+		"a prompt spoken into a live run forgot it"
+	);
+	assert_eq!(of(&reply)["repliedToMessageId"], Value::Null);
+	assert_eq!(of(&reply)["runtimeSessionId"], run["id"]);
 }

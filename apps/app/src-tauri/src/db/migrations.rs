@@ -17,6 +17,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 6, statements: BOT_DENIAL },
 	Migration { version: 7, statements: BOT_COLOUR },
 	Migration { version: 8, statements: BOT_DENIED_TOOLS },
+	Migration { version: 9, statements: MESSAGE_RUNTIME_SESSION },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -194,6 +195,10 @@ ALTER TABLE bots ADD COLUMN denied_tools TEXT NOT NULL DEFAULT '[]';
 UPDATE bots SET denied_tools = '[\"Bash\",\"Edit\",\"NotebookEdit\",\"Write\"]'
 	WHERE changes_nothing = 1;
 ALTER TABLE bots DROP COLUMN changes_nothing;
+";
+
+const MESSAGE_RUNTIME_SESSION: &str = "
+ALTER TABLE messages ADD COLUMN runtime_session_id TEXT REFERENCES runtime_sessions(id);
 ";
 
 pub fn latest_version() -> u32 {
@@ -554,6 +559,50 @@ mod tests {
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_step_that_names_the_run_leaves_every_message_already_written_without_one() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..8]).expect("the shipped schema installs");
+		connection
+			.execute_batch(&a_chat_held_by(
+				"INSERT INTO bots (id, name, model, created_at)
+					VALUES ('default', 'Claude', 'sonnet', 1);",
+			))
+			.expect("the install this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			transcript_of(&connection, "c1"),
+			vec!["hello".to_owned(), "hi there".to_owned()],
+			"the step the messages gained a run in cost the chat its transcript"
+		);
+		assert_eq!(
+			runs_named_in(&connection, "c1"),
+			vec![None, None],
+			"the step named a run on a message written before there was one"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn runs_named_in(connection: &Connection, conversation_id: &str) -> Vec<Option<String>> {
+		let mut statement = connection
+			.prepare(
+				"SELECT runtime_session_id FROM messages
+					WHERE conversation_id = ?1 ORDER BY seq ASC",
+			)
+			.expect("prepare");
+		statement
+			.query_map([conversation_id], |row| row.get::<_, Option<String>>(0))
+			.expect("query")
+			.collect::<rusqlite::Result<Vec<_>>>()
+			.expect("rows")
 	}
 
 	fn denied_tools_of(connection: &Connection, id: &str) -> String {

@@ -229,6 +229,7 @@ pub struct StoredMessage {
 	pub content: String,
 	pub state: MessageState,
 	pub created_at: i64,
+	pub runtime_session_id: Option<String>,
 }
 
 pub struct MessagePageQuery {
@@ -288,10 +289,13 @@ const MESSAGE_KEY: &str = "SELECT seq, conversation_id, turn_id, author_bot_id,
 const MESSAGE_STATE: &str = "SELECT completion_state FROM messages WHERE id = ?1";
 const INSERT_MESSAGE: &str = "INSERT INTO messages
 	(id, conversation_id, turn_id, author_bot_id, replied_to_message_id, seq, role, content,
-		completion_state, created_at)
+		completion_state, created_at, runtime_session_id)
 	VALUES (?1, ?2, ?3, ?4, ?5,
 		(SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE conversation_id = ?2),
-		?6, ?7, ?8, ?9)
+		?6, ?7, ?8, ?9,
+		(SELECT id FROM runtime_sessions
+			WHERE conversation_id = ?2 AND status = 'active'
+			ORDER BY seq DESC LIMIT 1))
 	RETURNING seq";
 const APPEND_TEXT: &str =
 	"UPDATE messages SET content = content || ?2, completion_state = 'streaming'
@@ -299,13 +303,13 @@ const APPEND_TEXT: &str =
 const FINALIZE_MESSAGE: &str = "UPDATE messages SET completion_state = ?2
 	WHERE id = ?1 AND completion_state IN ('pending', 'streaming')";
 const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
-		content, completion_state, created_at
+		content, completion_state, created_at, runtime_session_id
 	FROM messages WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC LIMIT ?3";
 const MESSAGE_BY_ID: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
-		content, completion_state, created_at
+		content, completion_state, created_at, runtime_session_id
 	FROM messages WHERE conversation_id = ?1 AND id = ?2";
 const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
-		content, completion_state, created_at
+		content, completion_state, created_at, runtime_session_id
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
 const LAST_MESSAGE_SEQ: &str =
@@ -853,6 +857,7 @@ fn read_message(row: &Row<'_>) -> rusqlite::Result<StoredMessage> {
 		content: row.get(6)?,
 		state: row.get(7)?,
 		created_at: row.get(8)?,
+		runtime_session_id: row.get(9)?,
 	})
 }
 
@@ -874,6 +879,7 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
+	use crate::db::repositories::runtime_context::ParticipantKey;
 	use crate::db::{open, Database};
 
 	const FIXTURE: &str = "
@@ -937,6 +943,24 @@ mod tests {
 			content: content.into(),
 			created_at,
 		}
+	}
+
+	async fn a_stored_reply(database: &Database, id: &str) {
+		database
+			.messages()
+			.open_assistant_message(a_reply(id, None))
+			.await
+			.expect("the reply is opened");
+	}
+
+	async fn run_named_on(database: &Database, id: &str) -> Option<String> {
+		database
+			.messages()
+			.message("c1".into(), id.into())
+			.await
+			.expect("the message")
+			.expect("a stored message")
+			.runtime_session_id
 	}
 
 	fn a_reply(id: &str, replied_to: Option<&str>) -> NewAssistantMessage {
@@ -1082,6 +1106,53 @@ mod tests {
 			),
 			"expected the move from {from} to {to} to be refused: {refused:?}"
 		);
+	}
+
+	#[tokio::test]
+	async fn a_message_takes_the_run_its_chat_is_speaking_through_and_nothing_otherwise() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let participant = ParticipantKey { conversation_id: "c1".into(), bot_id: "b1".into() };
+
+		a_stored_reply(&database, "before").await;
+		let run = database
+			.runtime_context()
+			.open(participant, 1, None)
+			.await
+			.expect("the run opens");
+		a_stored_reply(&database, "during").await;
+		database
+			.messages()
+			.append_user_message(a_user_message("spoken", "hello", 1))
+			.await
+			.expect("the message is appended");
+		database.runtime_context().close(run.id.clone(), 2).await.expect("the run ends");
+		a_stored_reply(&database, "after").await;
+
+		assert_eq!(
+			run_named_on(&database, "before").await,
+			None,
+			"a reply older than the run took it"
+		);
+		assert_eq!(
+			run_named_on(&database, "during").await,
+			Some(run.id.clone()),
+			"a reply forgot its run"
+		);
+		assert_eq!(
+			run_named_on(&database, "spoken").await,
+			Some(run.id.clone()),
+			"a message the reader spoke into a live run forgot it"
+		);
+		assert_eq!(
+			run_named_on(&database, "after").await,
+			None,
+			"a reply took a run that had ended"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
 	#[tokio::test]

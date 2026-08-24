@@ -227,6 +227,7 @@ mod tests {
 			content: content.to_owned(),
 			state: MessageState::Complete,
 			created_at: seq,
+			runtime_session_id: None,
 		}
 	}
 

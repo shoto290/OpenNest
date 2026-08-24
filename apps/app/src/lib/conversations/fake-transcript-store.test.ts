@@ -339,6 +339,63 @@ describe("createFakeTranscriptStore", () => {
 		).rejects.toMatchObject({ kind: "unknownBot", id: "missing" })
 	})
 
+	it("resolves a message to the uri and the run that produced it", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+		const run = await store.openRuntimeSession(FAKE_CHAT_ID, "default", 3, null)
+		await store.recordProviderSession(
+			FAKE_CHAT_ID,
+			"default",
+			run.id,
+			"claude-7b21",
+		)
+		await store.openAssistantMessage(REPLY)
+		await store.appendText(REPLY.id, "hi there")
+
+		const prompt = await store.messageReference(FAKE_CHAT_ID, PROMPT.id)
+		const answer = await store.messageReference(FAKE_CHAT_ID, REPLY.id)
+
+		expect(prompt).toEqual({
+			uri: `opennest://c/${FAKE_CHAT_ID}/m/${PROMPT.id}`,
+			conversationId: FAKE_CHAT_ID,
+			messageId: PROMPT.id,
+			role: "user",
+			seq: 1,
+			createdAt: PROMPT.createdAt,
+			excerpt: "hello",
+			runtimeSessionId: null,
+			providerSessionId: null,
+		})
+		expect(answer).toMatchObject({
+			role: "assistant",
+			excerpt: "hi there",
+			runtimeSessionId: run.id,
+			providerSessionId: "claude-7b21",
+		})
+	})
+
+	it("has nothing to resolve for a message outside the conversation", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage(PROMPT)
+
+		expect(await store.messageReference(FAKE_CHAT_ID, "missing")).toBeNull()
+		expect(await store.messageReference("elsewhere", PROMPT.id)).toBeNull()
+	})
+
+	it("cuts a long message down to an excerpt that says it was cut", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.appendUserMessage({ ...PROMPT, content: "é".repeat(400) })
+
+		const reference = await store.messageReference(FAKE_CHAT_ID, PROMPT.id)
+		const excerpt = reference?.excerpt ?? ""
+
+		expect([...excerpt]).toHaveLength(280)
+		expect(excerpt.endsWith("…")).toBe(true)
+	})
+
 	it("takes the picture off a bot described again without a path", async () => {
 		const store = createFakeTranscriptStore()
 		await store.setBotAvatarImage("default", aPng())

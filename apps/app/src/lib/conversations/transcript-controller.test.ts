@@ -56,6 +56,8 @@ const draft = (overrides: Partial<TranscriptDraft>): TranscriptDraft => ({
 	content: "hello",
 	completion: "pending",
 	createdAt: 0,
+	repliedToMessageId: null,
+	runtimeSessionId: null,
 	...overrides,
 })
 

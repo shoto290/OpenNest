@@ -64,6 +64,8 @@ const streamingDraft = (id: string) => ({
 	content: "",
 	completion: "streaming" as const,
 	createdAt: 0,
+	repliedToMessageId: null,
+	runtimeSessionId: null,
 })
 
 describe("transcriptReducer", () => {
@@ -148,6 +150,8 @@ describe("transcriptReducer", () => {
 					content: "hello",
 					completion: "pending",
 					createdAt: 0,
+					repliedToMessageId: null,
+					runtimeSessionId: null,
 				},
 			},
 		)
@@ -189,6 +193,8 @@ describe("transcriptReducer", () => {
 			content: "hello",
 			completion: "pending" as const,
 			createdAt: 0,
+			repliedToMessageId: null,
+			runtimeSessionId: null,
 		}
 		const appended = transcriptReducer(initialTranscriptState, {
 			type: "messageAppended",

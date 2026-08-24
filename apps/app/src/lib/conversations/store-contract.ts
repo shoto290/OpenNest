@@ -1,3 +1,5 @@
+import type { TranscriptRole } from "./transcript-contract"
+
 export type BotModel = string
 
 export type AvatarAnimal =
@@ -137,6 +139,18 @@ export type NewAssistantMessage = {
 	authorBotId: string | null
 	repliedToMessageId: string | null
 	createdAt: number
+}
+
+export type MessageReference = {
+	uri: string
+	conversationId: string
+	messageId: string
+	role: TranscriptRole
+	seq: number
+	createdAt: number
+	excerpt: string
+	runtimeSessionId: string | null
+	providerSessionId: string | null
 }
 
 export type StorageFailure =

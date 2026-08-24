@@ -9,6 +9,7 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -158,6 +159,12 @@ export const conversationStore: TranscriptStore = {
 			botId,
 			runtimeSessionId,
 			createdAt,
+		}),
+
+	messageReference: (conversationId: string, messageId: string) =>
+		invoke<MessageReference | null>("conversation_message_reference", {
+			conversationId,
+			messageId,
 		}),
 
 	startTurn: (turn: NewTurn) =>

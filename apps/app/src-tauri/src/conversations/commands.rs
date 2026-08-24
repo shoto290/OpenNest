@@ -5,9 +5,9 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
-	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, NewAssistantMessage,
-	NewTurn, NewUserMessage, RuntimeSession, Skill, SkillDraft, TerminalCompletion, TranscriptPage,
-	TranscriptStoreError,
+	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, MessageReference,
+	NewAssistantMessage, NewTurn, NewUserMessage, RuntimeSession, Skill, SkillDraft,
+	TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
@@ -518,6 +518,28 @@ pub async fn conversation_message_page(
 	let query = MessagePageQuery { conversation_id: conversation_id.clone(), before_seq, limit };
 	let page = ready(&state)?.messages().page_messages(query).await?;
 	Ok(TranscriptPage::of(conversation_id, page))
+}
+
+#[tauri::command]
+pub async fn conversation_message_reference(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	message_id: String,
+) -> Result<Option<MessageReference>, TranscriptStoreError> {
+	let database = ready(&state)?;
+	let Some(stored) = database.messages().message(conversation_id.clone(), message_id).await?
+	else {
+		return Ok(None);
+	};
+	let provider_session_id = match stored.runtime_session_id.clone() {
+		Some(session_id) => database
+			.runtime_context()
+			.session(session_id)
+			.await?
+			.and_then(|session| session.provider_session_id),
+		None => None,
+	};
+	Ok(Some(MessageReference::of(conversation_id, stored, provider_session_id)))
 }
 
 #[tauri::command]

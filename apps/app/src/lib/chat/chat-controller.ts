@@ -294,6 +294,8 @@ export function createChatController(
 					content: "",
 					completion: "streaming",
 					createdAt: message.timestamp,
+					repliedToMessageId: turn.promptId,
+					runtimeSessionId: null,
 				}),
 		)
 		streamReply(bot, message.id, 1, message.text, conversationId)
@@ -817,6 +819,8 @@ export function createChatController(
 			content: said.content,
 			completion: "complete",
 			createdAt: said.createdAt,
+			repliedToMessageId: said.repliedToMessageId,
+			runtimeSessionId: null,
 		})
 
 	const sendPrompt = async (
@@ -1034,6 +1038,8 @@ export function createChatController(
 					content,
 					completion: "complete",
 					createdAt,
+					repliedToMessageId: null,
+					runtimeSessionId: null,
 				}),
 		)
 	}
