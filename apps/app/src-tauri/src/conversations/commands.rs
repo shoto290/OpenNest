@@ -31,12 +31,25 @@ async fn write_bundle(
 	output_style: &str,
 ) -> Result<(), TranscriptStoreError> {
 	if let Some(root) = root {
-		bundles::write_styled(root, bot, output_style).map_err(|error| {
-			TranscriptStoreError::UnwritableBundle { detail: error.to_string() }
-		})?;
+		bundles::write_styled(root, bot, output_style).map_err(unwritable)?;
 	}
 	list_bundles(root, database).await;
 	Ok(())
+}
+
+fn remember_bundle(
+	root: Option<&Path>,
+	bot: &StoredBot,
+	memory: &str,
+) -> Result<(), TranscriptStoreError> {
+	let Some(root) = root else {
+		return Ok(());
+	};
+	bundles::write_remembered(root, bot, memory).map_err(unwritable)
+}
+
+fn unwritable(error: std::io::Error) -> TranscriptStoreError {
+	TranscriptStoreError::UnwritableBundle { detail: error.to_string() }
 }
 
 async fn forget_bundle(root: Option<&Path>, database: &db::Database, bot_id: &str) {
@@ -212,6 +225,29 @@ pub async fn conversation_update_bot<R: Runtime>(
 		if let Some(previous) = previous {
 			let _ = database.conversations().update_bot(id, previous.into()).await;
 			avatars::sweep_referenced(database, dir.as_deref()).await;
+		}
+		return Err(refusal);
+	}
+	Ok(Bot::of(updated, dir.as_deref(), bundle_root.as_deref()))
+}
+
+#[tauri::command]
+pub async fn conversation_set_bot_memory<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	id: String,
+	memory: String,
+) -> Result<Bot, TranscriptStoreError> {
+	let dir = avatars::dir(&app);
+	let bundle_root = bundles::root(&app);
+	let database = ready(&state)?;
+	let repository = database.conversations();
+	let previous = repository.bot(id.clone()).await?;
+	let learned = memory.trim().to_owned();
+	let updated = repository.set_memory(id.clone(), learned.clone()).await?;
+	if let Err(refusal) = remember_bundle(bundle_root.as_deref(), &updated, &learned) {
+		if let Some(previous) = previous {
+			let _ = repository.set_memory(id, previous.memory).await;
 		}
 		return Err(refusal);
 	}
@@ -609,6 +645,7 @@ mod tests {
 			avatar_image_path: Some("/pictures/bean.png".to_owned()),
 			working_dir: Some("/loaves".to_owned()),
 			instructions: "Answer briefly.".to_owned(),
+			memory: "They bake on Sundays.".to_owned(),
 			denied_tools: vec!["Bash".to_owned()],
 			changes_nothing: true,
 			output_style: "terse".to_owned(),

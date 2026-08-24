@@ -214,8 +214,14 @@ pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
 }
 
 pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
-	write_briefed(root, bot, &bot.instructions, output_style)?;
+	write_briefed(root, bot, &bot.instructions, &kept_memory(root, bot), output_style)?;
 	recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "saved from settings");
+	Ok(())
+}
+
+pub fn write_remembered(root: &Path, bot: &Bot, memory: &str) -> std::io::Result<()> {
+	rewrite_agent_holding(root, bot, memory)?;
+	recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "memory saved from settings");
 	Ok(())
 }
 
@@ -257,17 +263,22 @@ fn recorded(root: &Path, bot_id: &str, subject: &str, name: &str, verb: &str) {
 	let _ = git::commit(root, bot_id, Author::User, &title, "");
 }
 
-fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std::io::Result<()> {
+fn write_briefed(
+	root: &Path,
+	bot: &Bot,
+	brief: &str,
+	memory: &str,
+	output_style: &str,
+) -> std::io::Result<()> {
 	unequip(root, &bot.id);
 	let generated = generated_agent(root, &bot.id);
 	let agent_path = free_agent_path(root, bot, generated.as_deref());
 	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
 
 	rewrite_manifest(root, bot)?;
-	let memory = kept_memory(root, bot);
 	private_files::replace(
 		&agent_path,
-		agent(root, bot, &name, brief, &memory, output_style).as_bytes(),
+		agent(root, bot, &name, brief, memory, output_style).as_bytes(),
 	)?;
 	if let Some(generated) = generated.filter(|path| path != &agent_path) {
 		let _ = fs::remove_file(generated);
@@ -430,11 +441,15 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	private_files::replace(&path, serde_json::Value::Object(kept).to_string().as_bytes())
 }
 
-fn kept_memory(root: &Path, bot: &Bot) -> String {
-	generated(root, &bot.id)
-		.map(|held| held.memory)
+pub fn held_memory(written: Option<&Generated>, stored: &str) -> String {
+	written
+		.map(|held| held.memory.clone())
 		.filter(|held| !held.is_empty())
-		.unwrap_or_else(|| bot.memory.trim().to_owned())
+		.unwrap_or_else(|| stored.trim().to_owned())
+}
+
+fn kept_memory(root: &Path, bot: &Bot) -> String {
+	held_memory(generated(root, &bot.id).as_ref(), &bot.memory)
 }
 
 fn agent(
@@ -718,10 +733,14 @@ fn written_skill(root: &Path, bot: &Bot, path: &Path, text: String) -> std::io::
 }
 
 fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	rewrite_agent_holding(root, bot, &kept_memory(root, bot))
+}
+
+fn rewrite_agent_holding(root: &Path, bot: &Bot, memory: &str) -> std::io::Result<()> {
 	let held = generated(root, &bot.id);
 	let brief = held.as_ref().map_or(&bot.instructions, |held| &held.instructions);
 	let style = held.as_ref().map_or(DEFAULT_OUTPUT_STYLE, |held| held.output_style.as_str());
-	write_briefed(root, bot, brief, style)
+	write_briefed(root, bot, brief, memory, style)
 }
 
 fn read_skill(path: &Path) -> Option<Skill> {
@@ -2128,6 +2147,30 @@ mod tests {
 
 		bot.memory = "They bake on Sundays.".to_owned();
 		assert_eq!(adopted_memory(&root, &bot), None, "an unchanged block was adopted again");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_memory_saved_from_settings_lands_in_the_block_and_clearing_it_empties_it_for_good() {
+		let root = a_root("saved-memory");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		write_remembered(&root, &bot, "They bake on Sundays.").expect("the memory is saved");
+		let held = generated(&root, &bot.id).expect("the file reads");
+		assert_eq!(held.memory, "They bake on Sundays.");
+		assert_eq!(held.instructions, "Answer briefly.");
+
+		write_remembered(&root, &bot, "").expect("the memory is cleared");
+		let cleared = written_agent(&root, &bot.id);
+		assert!(!cleared.contains(MEMORY_OPEN), "got {cleared}");
+
+		bot.instructions = "Answer at length.".to_owned();
+		write(&root, &bot).expect("the bundle is written again");
+		let saved = written_agent(&root, &bot.id);
+		assert!(!saved.contains(MEMORY_OPEN), "got {saved}");
+		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer at length."));
 
 		let _ = fs::remove_dir_all(&root);
 	}
