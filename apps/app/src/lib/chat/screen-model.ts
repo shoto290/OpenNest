@@ -19,6 +19,7 @@ import { isTerminalCompletion } from "../conversations/transcript-state"
 export type TranscriptRow = {
 	id: string
 	messageId: string
+	blockIndex: number
 	quotedMessageId: string | null
 	role: TranscriptRole
 	text: string
@@ -79,9 +80,11 @@ function toRow(
 	},
 ): TranscriptRow {
 	const { index, ...rest } = fields
+	const blockIndex = index ?? 0
 	return {
 		id: index === undefined ? message.id : `${message.id}#${index}`,
 		messageId: message.id,
+		blockIndex,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
 		role: message.role,
@@ -210,28 +213,15 @@ export function quotedTargetsIn(
 	return found
 }
 
-export type MessageAnchors = {
-	group?: string
-	rows: ReadonlySet<string>
-	closing: ReadonlySet<string>
-}
+export const bubbleIdOf = (messageId: string, blockIndex: number): string =>
+	blockIndex === 0 ? messageId : `${messageId}#${blockIndex}`
 
-const NO_ANCHORED_ROWS: ReadonlySet<string> = new Set()
-
-export function messageAnchorsIn(run: TranscriptRow[]): MessageAnchors {
-	const rows = new Set<string>()
-	const closing = new Set<string>()
-	run.forEach((row, index) => {
-		if (run[index - 1]?.messageId !== row.messageId) {
-			rows.add(row.id)
-		}
-		if (run[index + 1]?.messageId !== row.messageId) {
-			closing.add(row.id)
-		}
-	})
-	return rows.size === 1
-		? { group: run[0].messageId, rows: NO_ANCHORED_ROWS, closing }
-		: { rows, closing }
+export function bubbleOf(
+	message: TranscriptMessage,
+	blockIndex: number,
+): TranscriptRow | undefined {
+	const bubbles = toTranscriptRows([message])
+	return bubbles[blockIndex] ?? bubbles[0]
 }
 
 function kindForTool(title: string): BotWorkingKind {

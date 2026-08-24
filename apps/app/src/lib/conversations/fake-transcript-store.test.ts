@@ -396,31 +396,50 @@ describe("createFakeTranscriptStore", () => {
 		expect(excerpt.endsWith("…")).toBe(true)
 	})
 
-	it("hands back the messages a reader pinned, newest first", async () => {
+	it("hands back the pinned bubbles, newest message first", async () => {
 		const store = createFakeTranscriptStore()
 		await store.startTurn(TURN)
 		await store.appendUserMessage(PROMPT)
 		await store.openAssistantMessage(REPLY)
 
-		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 10)
-		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 20)
+		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 0, 10)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 2, 20)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 1, 30)
 
 		const pinned = await store.pinnedMessages(FAKE_CHAT_ID)
 
-		expect(pinned.map((entry) => entry.id)).toEqual([REPLY.id, PROMPT.id])
-		expect(pinned.map((entry) => entry.pinnedAt)).toEqual([20, 10])
+		expect(
+			pinned.map((pin) => [pin.message.id, pin.blockIndex, pin.pinnedAt]),
+		).toEqual([
+			[REPLY.id, 1, 30],
+			[REPLY.id, 2, 20],
+			[PROMPT.id, 0, 10],
+		])
 	})
 
-	it("drops a message from the pins once the reader unpins it", async () => {
+	it("unpins one bubble and leaves the others of its message standing", async () => {
+		const store = createFakeTranscriptStore()
+		await store.startTurn(TURN)
+		await store.openAssistantMessage(REPLY)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 0, 10)
+		await store.pinMessage(FAKE_CHAT_ID, REPLY.id, 1, 20)
+
+		await store.unpinMessage(FAKE_CHAT_ID, REPLY.id, 0)
+
+		expect(
+			(await store.pinnedMessages(FAKE_CHAT_ID)).map((pin) => pin.blockIndex),
+		).toEqual([1])
+	})
+
+	it("drops a message from the pins once the reader unpins its last bubble", async () => {
 		const store = createFakeTranscriptStore()
 		await store.startTurn(TURN)
 		await store.appendUserMessage(PROMPT)
-		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 10)
+		await store.pinMessage(FAKE_CHAT_ID, PROMPT.id, 0, 10)
 
-		await store.unpinMessage(FAKE_CHAT_ID, PROMPT.id)
+		await store.unpinMessage(FAKE_CHAT_ID, PROMPT.id, 0)
 
 		expect(await store.pinnedMessages(FAKE_CHAT_ID)).toEqual([])
-		expect((await contentOf(store, PROMPT.id))?.pinnedAt).toBeNull()
 	})
 
 	it("refuses to pin a message another conversation holds", async () => {
@@ -428,7 +447,9 @@ describe("createFakeTranscriptStore", () => {
 		await store.startTurn(TURN)
 		await store.appendUserMessage(PROMPT)
 
-		await expect(store.pinMessage("elsewhere", PROMPT.id, 10)).rejects.toEqual({
+		await expect(
+			store.pinMessage("elsewhere", PROMPT.id, 0, 10),
+		).rejects.toEqual({
 			kind: "storage",
 			failure: { kind: "sqlite", detail: "no such message" },
 		})

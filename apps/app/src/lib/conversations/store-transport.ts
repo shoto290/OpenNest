@@ -9,6 +9,7 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
@@ -20,7 +21,6 @@ import {
 	type TerminalCompletion,
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptCursor,
-	type TranscriptMessage,
 	type TranscriptPage,
 } from "./transcript-contract"
 
@@ -196,18 +196,32 @@ export const conversationStore: TranscriptStore = {
 			messageId,
 		}),
 
-	pinMessage: (conversationId: string, messageId: string, pinnedAt: number) =>
+	pinMessage: (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+		pinnedAt: number,
+	) =>
 		invoke<void>("conversation_pin_message", {
 			conversationId,
 			messageId,
+			blockIndex,
 			pinnedAt,
 		}),
 
-	unpinMessage: (conversationId: string, messageId: string) =>
-		invoke<void>("conversation_unpin_message", { conversationId, messageId }),
+	unpinMessage: (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+	) =>
+		invoke<void>("conversation_unpin_message", {
+			conversationId,
+			messageId,
+			blockIndex,
+		}),
 
 	pinnedMessages: (conversationId: string) =>
-		invoke<TranscriptMessage[]>("conversation_pinned_messages", {
+		invoke<MessagePin[]>("conversation_pinned_messages", {
 			conversationId,
 		}),
 

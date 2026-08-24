@@ -11,6 +11,7 @@ import type {
 	BotSkillFront,
 	Chat,
 	ContextCheckpoint,
+	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
@@ -148,6 +149,7 @@ export const createFakeTranscriptStore = (
 	let committed = 0
 	const servers = new Map<string, Map<string, Record<string, unknown>>>()
 	const rows = new Map<string, TranscriptMessage>()
+	const pins = new Map<string, Map<number, number>>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
 	const runs = new Map<string, number>()
@@ -330,6 +332,7 @@ export const createFakeTranscriptStore = (
 	const writePin = (
 		conversationId: string,
 		messageId: string,
+		blockIndex: number,
 		pinnedAt: number | null,
 	) => {
 		const stored = rows.get(messageId)
@@ -339,7 +342,13 @@ export const createFakeTranscriptStore = (
 				failure: { kind: "sqlite", detail: "no such message" },
 			})
 		}
-		rows.set(messageId, { ...stored, pinnedAt })
+		const held = pins.get(messageId) ?? new Map<number, number>()
+		pins.set(messageId, held)
+		if (pinnedAt === null) {
+			held.delete(blockIndex)
+		} else {
+			held.set(blockIndex, pinnedAt)
+		}
 		return Promise.resolve()
 	}
 
@@ -405,6 +414,7 @@ export const createFakeTranscriptStore = (
 			for (const [rowId, row] of rows) {
 				if (row.conversationId === conversationId) {
 					rows.delete(rowId)
+					pins.delete(rowId)
 				}
 			}
 			seqs.delete(conversationId)
@@ -711,17 +721,32 @@ export const createFakeTranscriptStore = (
 			})
 		},
 
-		pinMessage: (conversationId: string, messageId: string, pinnedAt: number) =>
-			writePin(conversationId, messageId, pinnedAt),
+		pinMessage: (
+			conversationId: string,
+			messageId: string,
+			blockIndex: number,
+			pinnedAt: number,
+		) => writePin(conversationId, messageId, blockIndex, pinnedAt),
 
-		unpinMessage: (conversationId: string, messageId: string) =>
-			writePin(conversationId, messageId, null),
+		unpinMessage: (
+			conversationId: string,
+			messageId: string,
+			blockIndex: number,
+		) => writePin(conversationId, messageId, blockIndex, null),
 
 		pinnedMessages: (conversationId: string) =>
-			Promise.resolve(
+			Promise.resolve<MessagePin[]>(
 				ordered(conversationId)
-					.filter((row) => row.pinnedAt !== null)
-					.reverse(),
+					.reverse()
+					.flatMap((message) =>
+						[...(pins.get(message.id) ?? [])]
+							.sort(([left], [right]) => left - right)
+							.map(([blockIndex, pinnedAt]) => ({
+								message,
+								blockIndex,
+								pinnedAt,
+							})),
+					),
 			),
 
 		appendUserMessage: (message: NewUserMessage) => {
@@ -730,7 +755,6 @@ export const createFakeTranscriptStore = (
 				...message,
 				role: "user",
 				completion: "complete",
-				pinnedAt: null,
 				runtimeSessionId: liveSessionOf(
 					message.conversationId,
 					message.authorBotId,
@@ -745,7 +769,6 @@ export const createFakeTranscriptStore = (
 				role: "assistant",
 				content: "",
 				completion: "pending",
-				pinnedAt: null,
 				runtimeSessionId: liveSessionOf(
 					message.conversationId,
 					message.authorBotId,

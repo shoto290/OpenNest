@@ -58,7 +58,6 @@ const draft = (overrides: Partial<TranscriptDraft>): TranscriptDraft => ({
 	createdAt: 0,
 	repliedToMessageId: null,
 	runtimeSessionId: null,
-	pinnedAt: null,
 	...overrides,
 })
 

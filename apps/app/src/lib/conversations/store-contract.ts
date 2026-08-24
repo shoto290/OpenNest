@@ -1,4 +1,4 @@
-import type { TranscriptRole } from "./transcript-contract"
+import type { TranscriptMessage, TranscriptRole } from "./transcript-contract"
 
 export type BotModel = string
 
@@ -152,6 +152,12 @@ export type MessageReference = {
 	excerpt: string
 	runtimeSessionId: string | null
 	providerSessionId: string | null
+}
+
+export type MessagePin = {
+	message: TranscriptMessage
+	blockIndex: number
+	pinnedAt: number
 }
 
 export type StorageFailure =

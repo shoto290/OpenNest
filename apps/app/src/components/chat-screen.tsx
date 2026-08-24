@@ -75,13 +75,12 @@ import {
 	promptForCommand,
 } from "@/lib/chat/prompt-commands"
 import {
+	bubbleIdOf,
 	claimsComposerFocus,
 	emptyStateStatusFor,
-	messageAnchorsIn,
 	needsFreshSession,
 	noticeTitleFor,
 	type ReplyTarget,
-	replyTargetOf,
 	type TranscriptRow,
 	toRuns,
 	toTranscriptRows,
@@ -89,14 +88,16 @@ import {
 } from "@/lib/chat/screen-model"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import type { Chat } from "@/lib/chat/use-chat"
-import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
+import {
+	type PinnedBubble,
+	usePinnedMessages,
+} from "@/lib/chat/use-pinned-messages"
 import { useQuotedMessages } from "@/lib/chat/use-quoted-messages"
 import type {
 	AvatarAnimal,
 	AvatarBlot,
 	Bot,
 } from "@/lib/conversations/store-contract"
-import type { TranscriptMessage } from "@/lib/conversations/transcript-contract"
 import { avatarSrc } from "@/lib/host"
 import { openAttachment } from "@/lib/links/open-attachment"
 
@@ -125,14 +126,14 @@ const toQuote = (
 })
 
 const toPinnedRow = (
-	pinned: TranscriptMessage,
+	{ id, bubble }: PinnedBubble,
 	bot: BotFace,
 	reader: string,
 ): PinnedMessage => ({
-	id: pinned.id,
-	author: pinned.role === "assistant" ? bot.name : reader,
+	id,
+	author: bubble.role === "assistant" ? bot.name : reader,
 	avatar:
-		pinned.role === "assistant" ? (
+		bubble.role === "assistant" ? (
 			<BotIdentityAvatar
 				animal={bot.animal}
 				blot={bot.blot}
@@ -144,8 +145,8 @@ const toPinnedRow = (
 		) : (
 			<UserAvatar name={reader} size={PINNED_AVATAR_SIZE} />
 		),
-	timestamp: pinTimestamp(pinned.createdAt),
-	excerpt: replyTargetOf(pinned).excerpt,
+	timestamp: pinTimestamp(bubble.timestamp),
+	excerpt: messageWithAttachments(bubble.text).text.trim(),
 })
 
 const TurnBody = ({ attachments, text }: MessageContent) => (
@@ -180,19 +181,21 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	avatar: boolean
 	rejected?: boolean
 	reader: string
-	anchor?: string
+	anchor: string
 	quoted?: ReplyTarget
 	pinned: boolean
 	onReply: (target: ReplyTarget) => void
 	onJump: (messageId: string) => void
-	onPin?: (messageId: string) => void
+	onPin: (messageId: string, blockIndex: number) => void
 }) {
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = <TurnBody attachments={attachments} text={text} />
 	const reply = () => {
 		onReply({ messageId: row.messageId, role: row.role, excerpt: text })
 	}
-	const pin = onPin ? () => onPin(row.messageId) : undefined
+	const pin = () => {
+		onPin(row.messageId, row.blockIndex)
+	}
 
 	if (row.role === "user") {
 		return (
@@ -577,9 +580,9 @@ export function ChatScreen({
 	const pins = usePinnedMessages(controller, state.conversationId)
 	const pinnedRows = useMemo(
 		() =>
-			pins.messages.map((pinned) =>
+			pins.bubbles.map((shown) =>
 				toPinnedRow(
-					pinned,
+					shown,
 					{
 						name: bot.name,
 						animal: bot.avatarAnimal,
@@ -590,7 +593,7 @@ export function ChatScreen({
 					reader,
 				),
 			),
-		[pins.messages, bot, face, reader],
+		[pins.bubbles, bot, face, reader],
 	)
 
 	const restart = useCallback(() => {
@@ -775,14 +778,9 @@ export function ChatScreen({
 				const newest = runIndex === runs.length - 1
 				const live = working !== null && newest
 				const avatarIndex = live ? -1 : run.length - 1
-				const anchors = messageAnchorsIn(run)
 
 				return (
-					<ChatTurnGroup
-						key={run[0].id}
-						carriesMark={newest}
-						messageId={anchors.group}
-					>
+					<ChatTurnGroup key={run[0].id} carriesMark={newest}>
 						{run.map((row, index) => (
 							<TranscriptTurn
 								key={row.id}
@@ -796,16 +794,16 @@ export function ChatScreen({
 								image={face}
 								rejected={row.messageId === state.rejectedPromptId}
 								reader={reader}
-								anchor={anchors.rows.has(row.id) ? row.messageId : undefined}
+								anchor={bubbleIdOf(row.messageId, row.blockIndex)}
 								quoted={
 									row.quotedMessageId
 										? quotes.get(row.quotedMessageId)
 										: undefined
 								}
-								pinned={pins.ids.has(row.messageId)}
+								pinned={pins.ids.has(bubbleIdOf(row.messageId, row.blockIndex))}
 								onReply={holdReply}
 								onJump={jumpToMessage}
-								onPin={anchors.closing.has(row.id) ? pins.toggle : undefined}
+								onPin={pins.toggle}
 							/>
 						))}
 					</ChatTurnGroup>

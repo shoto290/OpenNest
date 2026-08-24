@@ -66,7 +66,6 @@ const streamingDraft = (id: string) => ({
 	createdAt: 0,
 	repliedToMessageId: null,
 	runtimeSessionId: null,
-	pinnedAt: null,
 })
 
 describe("transcriptReducer", () => {
@@ -153,7 +152,6 @@ describe("transcriptReducer", () => {
 					createdAt: 0,
 					repliedToMessageId: null,
 					runtimeSessionId: null,
-					pinnedAt: null,
 				},
 			},
 		)
@@ -197,7 +195,6 @@ describe("transcriptReducer", () => {
 			createdAt: 0,
 			repliedToMessageId: null,
 			runtimeSessionId: null,
-			pinnedAt: null,
 		}
 		const appended = transcriptReducer(initialTranscriptState, {
 			type: "messageAppended",

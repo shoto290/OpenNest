@@ -22,7 +22,6 @@ export const message = (
 	createdAt: 0,
 	repliedToMessageId: null,
 	runtimeSessionId: null,
-	pinnedAt: null,
 	...overrides,
 })
 

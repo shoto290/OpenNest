@@ -7,16 +7,14 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
 	RuntimeSession,
 } from "./store-contract"
-import type {
-	TerminalCompletion,
-	TranscriptMessage,
-} from "./transcript-contract"
+import type { TerminalCompletion } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
 
 import type { AgentCommand } from "@/lib/agent/contract"
@@ -99,10 +97,15 @@ export type TranscriptStore = TranscriptPort & {
 	pinMessage: (
 		conversationId: string,
 		messageId: string,
+		blockIndex: number,
 		pinnedAt: number,
 	) => Promise<void>
-	unpinMessage: (conversationId: string, messageId: string) => Promise<void>
-	pinnedMessages: (conversationId: string) => Promise<TranscriptMessage[]>
+	unpinMessage: (
+		conversationId: string,
+		messageId: string,
+		blockIndex: number,
+	) => Promise<void>
+	pinnedMessages: (conversationId: string) => Promise<MessagePin[]>
 	startTurn: (turn: NewTurn) => Promise<number>
 	completeTurn: (id: string, completedAt: number) => Promise<void>
 	appendUserMessage: (message: NewUserMessage) => Promise<number>

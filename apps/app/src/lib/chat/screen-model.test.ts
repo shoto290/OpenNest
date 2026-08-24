@@ -6,9 +6,10 @@ import { promptWithAttachments } from "./attachments"
 import { type ChatState, initialChatState } from "./chat-state"
 import { storedAttachmentPath } from "./message-attachments"
 import {
+	bubbleIdOf,
+	bubbleOf,
 	claimsComposerFocus,
 	emptyStateStatusFor,
-	messageAnchorsIn,
 	needsFreshSession,
 	noticeTitleFor,
 	quotedMessageIdsIn,
@@ -508,56 +509,51 @@ describe("quoted messages", () => {
 	})
 })
 
-describe("messageAnchorsIn", () => {
-	it("anchors the group of a run that split one message into paragraphs", () => {
-		const run = toTranscriptRows([
-			message({ id: "a-1", content: "One.\n\nTwo.", completion: "complete" }),
-		])
-
-		expect(messageAnchorsIn(run)).toEqual({
-			group: "a-1",
-			rows: new Set(),
-			closing: new Set(["a-1#1"]),
-		})
-	})
-
-	it("anchors each message of a run that merged two of them", () => {
-		const run = toTranscriptRows([prompt({ id: "p-1" }), prompt({ id: "p-2" })])
-
-		expect(messageAnchorsIn(run)).toEqual({
-			group: undefined,
-			rows: new Set(["p-1", "p-2"]),
-			closing: new Set(["p-1", "p-2"]),
-		})
-	})
-
-	it("anchors a merged message on its opening paragraph alone", () => {
-		const run = toTranscriptRows([
-			message({ id: "a-1", content: "One.\n\nTwo.", completion: "complete" }),
-			message({ id: "a-2", content: "Three.", completion: "complete" }),
-		])
-
-		expect(run.map((row) => row.id)).toEqual(["a-1#0", "a-1#1", "a-2#0"])
-		expect(messageAnchorsIn(run).rows).toEqual(new Set(["a-1#0", "a-2#0"]))
-	})
-
-	it("closes a message split into paragraphs on its last one alone", () => {
+describe("bubbleIdOf", () => {
+	it("gives every bubble of a message an identifier of its own", () => {
 		const run = toTranscriptRows([
 			message({
 				id: "a-1",
 				content: "One.\n\nTwo.\n\nThree.",
 				completion: "complete",
 			}),
-			message({ id: "a-2", content: "Four.", completion: "complete" }),
+			prompt({ id: "p-1" }),
 		])
 
-		expect(run.map((row) => row.id)).toEqual([
-			"a-1#0",
-			"a-1#1",
-			"a-1#2",
-			"a-2#0",
-		])
-		expect(messageAnchorsIn(run).closing).toEqual(new Set(["a-1#2", "a-2#0"]))
+		const anchors = run.map((row) => bubbleIdOf(row.messageId, row.blockIndex))
+
+		expect(anchors).toEqual(["a-1", "a-1#1", "a-1#2", "p-1"])
+		expect(new Set(anchors).size).toBe(anchors.length)
+	})
+})
+
+describe("bubbleOf", () => {
+	it("picks the bubble a block index names", () => {
+		const split = message({
+			id: "a-1",
+			content: "One.\n\nTwo.",
+			completion: "complete",
+		})
+
+		expect(bubbleOf(split, 1)).toMatchObject({
+			messageId: "a-1",
+			blockIndex: 1,
+			text: "Two.",
+		})
+	})
+
+	it("falls back to the first bubble when the block is gone", () => {
+		const split = message({
+			id: "a-1",
+			content: "One.\n\nTwo.",
+			completion: "complete",
+		})
+
+		expect(bubbleOf(split, 7)).toMatchObject({
+			messageId: "a-1",
+			blockIndex: 0,
+			text: "One.",
+		})
 	})
 })
 
