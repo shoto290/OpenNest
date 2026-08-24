@@ -2,6 +2,7 @@ import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptReply } from "@workspace/ui/components/prompt-reply"
 
@@ -14,9 +15,17 @@ const PROMPT = "Then what happens to the invites table?"
 
 const jump = fn()
 
+const Composer = () => (
+	<PromptInput
+		aria-label="Prompt"
+		defaultValue={PROMPT}
+		leading={<PromptAttachButton onAttach={fn()} />}
+	/>
+)
+
 const ReplyingComposer = () => {
 	const [isReplying, setIsReplying] = useState(true)
-	const composer = <PromptInput aria-label="Prompt" defaultValue={PROMPT} />
+	const composer = <Composer />
 
 	return isReplying ? (
 		<PromptReply
@@ -51,7 +60,7 @@ const meta = preview.meta({
 		from: "assistant" as const,
 		onJump: fn(),
 		onDismiss: fn(),
-		children: <PromptInput aria-label="Prompt" defaultValue={PROMPT} />,
+		children: <Composer />,
 	},
 	decorators: [
 		(Story) => (
@@ -85,6 +94,52 @@ export const Default = meta.story({
 
 		await userEvent.click(canvas.getByRole("button", { name: "Cancel reply" }))
 		await expect(args.onDismiss).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const Alignment = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The gutters the frame shares with the composer it wraps. The reply glyph sits in the box the attach button sits in and the cross sits in the box the send button sits in, both 32px holding a 16px glyph, so the two rows read as one column of controls; the author and the excerpt start where the placeholder starts. Eight pixels sit above the quote and eight between it and the pill, the same air the composer keeps around its own row. Check the four edges line up and that the quote still costs two clipped lines whatever it holds.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const frame = canvas.getByRole("group")
+		const textarea = canvas.getByRole("textbox", { name: "Prompt" })
+		const glyph = frame.querySelector("span")?.getBoundingClientRect()
+		const quote = canvas
+			.getByRole("button", { name: /Skippy/ })
+			.getBoundingClientRect()
+		const dismiss = canvas
+			.getByRole("button", { name: "Cancel reply" })
+			.getBoundingClientRect()
+		const attach = canvas
+			.getByRole("button", { name: "Attach files" })
+			.getBoundingClientRect()
+		const send = canvas
+			.getByRole("button", { name: "Send prompt" })
+			.getBoundingClientRect()
+		const composer = textarea
+			.closest('[data-slot="prompt-input"]')
+			?.getBoundingClientRect()
+		const placeholderLeft =
+			textarea.getBoundingClientRect().left +
+			Number.parseFloat(getComputedStyle(textarea).paddingLeft)
+
+		await expect(glyph?.width).toBe(32)
+		await expect(glyph?.height).toBe(32)
+		await expect(glyph?.left).toBeCloseTo(attach.left, 1)
+		await expect(dismiss.width).toBe(32)
+		await expect(dismiss.right).toBeCloseTo(send.right, 1)
+		await expect(quote.left).toBeCloseTo(placeholderLeft, 1)
+		await expect(quote.top - frame.getBoundingClientRect().top).toBeCloseTo(
+			8,
+			1,
+		)
+		await expect((composer?.top ?? 0) - quote.bottom).toBeCloseTo(8, 1)
 	},
 })
 
