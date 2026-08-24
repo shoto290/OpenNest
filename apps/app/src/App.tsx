@@ -81,8 +81,10 @@ export function App() {
 	const selected = bots.find((bot) => bot.id === selectedBotId)
 
 	useEffect(() => {
-		void roster.controller.load()
-	}, [roster.controller])
+		void roster.controller.load(
+			user.controller.getState().preferences.lastBotId,
+		)
+	}, [roster.controller, user.controller])
 
 	useEffect(() => {
 		void user.controller.load()
@@ -105,8 +107,9 @@ export function App() {
 	useEffect(() => {
 		if (selectedBotId) {
 			void chat.controller.open(selectedBotId)
+			void user.controller.setLastBot(selectedBotId)
 		}
-	}, [chat.controller, selectedBotId])
+	}, [chat.controller, user.controller, selectedBotId])
 
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
@@ -161,6 +164,13 @@ export function App() {
 		[preferences],
 	)
 
+	const changeSidebarWidth = useCallback(
+		(sidebarWidth: number) => {
+			void user.controller.setSidebarWidth(sidebarWidth)
+		},
+		[user.controller],
+	)
+
 	const changeColorScheme = useCallback(
 		(colorScheme: ColorScheme) => {
 			void user.controller.setColorScheme(colorScheme)
@@ -183,6 +193,8 @@ export function App() {
 		<>
 			<WorkspaceShell
 				defaultOpen
+				width={preferences.sidebarWidth ?? undefined}
+				onWidthChange={changeSidebarWidth}
 				sidebar={
 					<AgentSidebar
 						data-tauri-drag-region="deep"

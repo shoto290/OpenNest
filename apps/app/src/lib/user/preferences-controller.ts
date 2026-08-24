@@ -42,6 +42,8 @@ export type UserController = {
 	setColorScheme: (colorScheme: ColorScheme) => Promise<void>
 	setPalette: (palette: Palette) => Promise<void>
 	setLanguage: (language: Language | null) => Promise<void>
+	setSidebarWidth: (sidebarWidth: number) => Promise<void>
+	setLastBot: (lastBotId: string) => Promise<void>
 	uploadPicture: (file: File) => Promise<void>
 	removePicture: () => Promise<void>
 }
@@ -53,9 +55,7 @@ const UNMIRRORED_DEFAULTS = {
 	notifyOnPermission: true,
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
-	sidebarWidth: null,
 	windowBounds: null,
-	lastBotId: null,
 } satisfies Omit<UserPreferences, keyof MirroredPreferences>
 
 const openingPreferences = (): ReaderPreferences => ({
@@ -128,6 +128,9 @@ export const createUserController = (): UserController => {
 
 	const changeMirrored = (fields: Partial<MirroredPreferences>) => {
 		const preferences = { ...state.preferences, ...fields }
+		if (sameMirror(preferences, state.preferences)) {
+			return Promise.resolve()
+		}
 		show(preferences)
 		mirror(preferences)
 		return changePreferences((record) => ({ ...record, ...fields }))
@@ -194,6 +197,10 @@ export const createUserController = (): UserController => {
 		setPalette: (palette: Palette) => changeMirrored({ palette }),
 
 		setLanguage: (language: Language | null) => changeMirrored({ language }),
+
+		setSidebarWidth: (sidebarWidth: number) => changeMirrored({ sidebarWidth }),
+
+		setLastBot: (lastBotId: string) => changeMirrored({ lastBotId }),
 
 		uploadPicture: async (file: File) => {
 			const bytes = new Uint8Array(await file.arrayBuffer())

@@ -404,6 +404,52 @@ describe("a preference another window changed", () => {
 	})
 })
 
+describe("the sidebar edge the reader drags", () => {
+	it("writes the width once, and shows it before the host answers", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		await controller.setSidebarWidth(320)
+
+		expect(controller.getState().preferences.sidebarWidth).toBe(320)
+		expect(localStorage.getItem("sidebarWidth")).toBe("320")
+		expect(host()).toEqual({ ...DEFAULTS, sidebarWidth: 320 })
+	})
+
+	it("writes nothing for a width the record already holds", async () => {
+		aHost({ ...DEFAULTS, sidebarWidth: 320 })
+		const controller = await loaded()
+		hostInvoke.mockClear()
+
+		await controller.setSidebarWidth(320)
+
+		expect(hostInvoke).not.toHaveBeenCalled()
+	})
+})
+
+describe("the conversation the reader opens", () => {
+	it("is written to the record and to the mirror", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		await controller.setLastBot("nyx")
+
+		expect(controller.getState().preferences.lastBotId).toBe("nyx")
+		expect(localStorage.getItem("lastBotId")).toBe("nyx")
+		expect(host()).toEqual({ ...DEFAULTS, lastBotId: "nyx" })
+	})
+
+	it("is written once when it is the bot the record already names", async () => {
+		aHost({ ...DEFAULTS, lastBotId: "nyx" })
+		const controller = await loaded()
+		hostInvoke.mockClear()
+
+		await controller.setLastBot("nyx")
+
+		expect(hostInvoke).not.toHaveBeenCalled()
+	})
+})
+
 describe("the settings the chip opens", () => {
 	it("stand open until they are closed, and nothing else moves", async () => {
 		aHost()
