@@ -17,6 +17,7 @@ import {
 	type MouseEvent,
 	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
+	type PointerEvent as ReactPointerEvent,
 	type Ref,
 	type RefObject,
 	useCallback,
@@ -46,6 +47,10 @@ export type AnimatedSidebarVariant = "sidebar" | "floating" | "inset"
 export type AnimatedSidebarCollapsible = "offcanvas" | "icon" | "none"
 
 const MOBILE_QUERY = "(max-width: 767px)"
+export const SIDEBAR_DEFAULT_WIDTH = 256
+export const SIDEBAR_MIN_WIDTH = 192
+export const SIDEBAR_MAX_WIDTH = 416
+export const SIDEBAR_WIDTH_STEP = 16
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 const SIDEBAR_KEYBOARD_SHORTCUT_UPPER = "B"
 
@@ -103,16 +108,24 @@ const FOCUSABLE_SELECTOR = [
 
 const useIsMobile = () => useMediaQuery(MOBILE_QUERY)
 
+const clampSidebarWidth = (width: number) =>
+	Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH)
+
 interface AnimatedSidebarContextValue {
+	commitWidth: (width: number) => void
+	defaultWidth: number
 	isMobile: boolean
 	open: boolean
 	openMobile: boolean
 	reduce: boolean
+	resizeTo: (width: number) => void
+	resizing: boolean
 	setOpen: (open: boolean) => void
 	setOpenMobile: (open: boolean) => void
 	state: AnimatedSidebarState
 	toggleSidebar: () => void
 	triggerRef: RefObject<HTMLButtonElement | null>
+	width: number
 }
 
 const AnimatedSidebarContext =
@@ -161,6 +174,9 @@ export interface AnimatedSidebarProviderProps
 	openMobile?: boolean
 	defaultOpenMobile?: boolean
 	onOpenMobileChange?: (open: boolean) => void
+	width?: number
+	defaultWidth?: number
+	onWidthChange?: (width: number) => void
 	style?: SidebarProviderStyle
 }
 
@@ -172,6 +188,9 @@ export function AnimatedSidebarProvider({
 	openMobile,
 	defaultOpenMobile = false,
 	onOpenMobileChange,
+	width,
+	defaultWidth = SIDEBAR_DEFAULT_WIDTH,
+	onWidthChange,
 	className,
 	style,
 	...props
@@ -179,11 +198,30 @@ export function AnimatedSidebarProvider({
 	const [internalOpen, setInternalOpen] = useState(defaultOpen)
 	const [internalOpenMobile, setInternalOpenMobile] =
 		useState(defaultOpenMobile)
+	const boundedDefaultWidth = clampSidebarWidth(defaultWidth)
+	const [internalWidth, setInternalWidth] = useState(boundedDefaultWidth)
+	const [draftWidth, setDraftWidth] = useState<number | null>(null)
 	const isMobile = useIsMobile()
 	const reduce = useReducedMotion() ?? false
 	const triggerRef = useRef<HTMLButtonElement>(null)
 	const desktopOpen = open ?? internalOpen
 	const mobileOpen = openMobile ?? internalOpenMobile
+	const resizing = draftWidth !== null
+	const widthInForce = draftWidth ?? clampSidebarWidth(width ?? internalWidth)
+
+	const resizeTo = useCallback((nextWidth: number) => {
+		setDraftWidth(clampSidebarWidth(nextWidth))
+	}, [])
+
+	const commitWidth = useCallback(
+		(nextWidth: number) => {
+			const bounded = clampSidebarWidth(nextWidth)
+			setDraftWidth(null)
+			if (width === undefined) setInternalWidth(bounded)
+			onWidthChange?.(bounded)
+		},
+		[onWidthChange, width],
+	)
 
 	const setOpen = useCallback(
 		(nextOpen: boolean) => {
@@ -226,26 +264,41 @@ export function AnimatedSidebarProvider({
 		return () => window.removeEventListener("keydown", handleShortcut)
 	}, [])
 
+	const widthStyle: SidebarProviderStyle = {
+		...style,
+		"--sidebar-width": `${widthInForce}px`,
+	}
+
 	const contextValue = useMemo<AnimatedSidebarContextValue>(
 		() => ({
+			commitWidth,
+			defaultWidth: boundedDefaultWidth,
 			isMobile,
 			open: desktopOpen,
 			openMobile: mobileOpen,
 			reduce,
+			resizeTo,
+			resizing,
 			setOpen,
 			setOpenMobile,
 			state: desktopOpen ? "expanded" : "collapsed",
 			toggleSidebar,
 			triggerRef,
+			width: widthInForce,
 		}),
 		[
+			boundedDefaultWidth,
+			commitWidth,
 			desktopOpen,
 			isMobile,
 			mobileOpen,
 			reduce,
+			resizeTo,
+			resizing,
 			setOpen,
 			setOpenMobile,
 			toggleSidebar,
+			widthInForce,
 		],
 	)
 
@@ -255,9 +308,11 @@ export function AnimatedSidebarProvider({
 				data-slot="sidebar-wrapper"
 				{...props}
 				data-state={desktopOpen ? "expanded" : "collapsed"}
-				style={style}
+				data-resizing={resizing}
+				style={widthStyle}
 				className={cn(
 					"group/sidebar-wrapper flex min-h-svh w-full min-w-0",
+					"data-[resizing=true]:cursor-col-resize data-[resizing=true]:select-none",
 					className,
 				)}
 			>
@@ -454,6 +509,68 @@ export interface AnimatedSidebarProps extends SidebarAsideAttributes {
 	panelClassName?: string
 }
 
+interface SidebarResizeHandleProps {
+	side: AnimatedSidebarSide
+}
+
+const SidebarResizeHandle = ({ side }: SidebarResizeHandleProps) => {
+	const { t } = useTranslation("common")
+	const context = useAnimatedSidebar()
+	const towardsWider = side === "left" ? 1 : -1
+
+	const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+		if (event.button !== 0) return
+		const originX = event.clientX
+		const originWidth = context.width
+		const widthAt = (clientX: number) =>
+			originWidth + towardsWider * (clientX - originX)
+
+		let dragged = false
+
+		const follow = (move: PointerEvent) => {
+			dragged = true
+			context.resizeTo(widthAt(move.clientX))
+		}
+		const stop = (release: PointerEvent) => {
+			window.removeEventListener("pointermove", follow)
+			if (dragged) context.commitWidth(widthAt(release.clientX))
+		}
+
+		window.addEventListener("pointermove", follow)
+		window.addEventListener("pointerup", stop, { once: true })
+	}
+
+	const stepWidth = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+		event.preventDefault()
+		const step = event.key === "ArrowRight" ? towardsWider : -towardsWider
+		context.commitWidth(context.width + step * SIDEBAR_WIDTH_STEP)
+	}
+
+	return (
+		<div
+			role="separator"
+			aria-orientation="vertical"
+			aria-label={t("sidebar.resize")}
+			aria-valuenow={context.width}
+			aria-valuemin={SIDEBAR_MIN_WIDTH}
+			aria-valuemax={SIDEBAR_MAX_WIDTH}
+			tabIndex={0}
+			data-slot="sidebar-resize-handle"
+			data-side={side}
+			onPointerDown={startResize}
+			onDoubleClick={() => context.commitWidth(context.defaultWidth)}
+			onKeyDown={stepWidth}
+			className={cn(
+				"absolute inset-y-0 z-30 hidden w-2 cursor-col-resize touch-none outline-none md:block",
+				"data-[side=left]:-end-1 data-[side=right]:-start-1",
+				"after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent",
+				"hover:after:bg-sidebar-ring focus-visible:after:w-0.5 focus-visible:after:bg-sidebar-ring",
+			)}
+		/>
+	)
+}
+
 export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 	function AnimatedSidebar(
 		{
@@ -513,7 +630,11 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 				data-variant={variant}
 				data-side={side}
 				animate={{ width }}
-				transition={context.reduce ? { duration: 0 } : SIDEBAR_MORPH_TRANSITION}
+				transition={
+					context.resizing || context.reduce
+						? TRANSITION_NONE
+						: SIDEBAR_MORPH_TRANSITION
+				}
 				style={style}
 				className={cn(
 					"group/sidebar relative hidden h-auto shrink-0 will-change-[width] md:block",
@@ -546,6 +667,7 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 						{children}
 					</AnimatedSidebarPanelContext.Provider>
 				</motion.div>
+				{collapsed ? null : <SidebarResizeHandle side={side} />}
 			</motion.aside>
 		)
 	},

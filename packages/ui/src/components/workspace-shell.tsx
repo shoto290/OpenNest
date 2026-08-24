@@ -10,7 +10,13 @@ import { cn } from "@workspace/ui/lib/utils"
 interface WorkspaceShellProps
 	extends Pick<
 		AnimatedSidebarProviderProps,
-		"open" | "defaultOpen" | "onOpenChange" | "className"
+		| "open"
+		| "defaultOpen"
+		| "onOpenChange"
+		| "width"
+		| "defaultWidth"
+		| "onWidthChange"
+		| "className"
 	> {
 	sidebar?: ReactNode
 	children: ReactNode
@@ -23,6 +29,9 @@ const WorkspaceShell = ({
 	open,
 	defaultOpen,
 	onOpenChange,
+	width,
+	defaultWidth,
+	onWidthChange,
 	children,
 	className,
 }: WorkspaceShellProps) => (
@@ -31,6 +40,9 @@ const WorkspaceShell = ({
 		open={open}
 		defaultOpen={defaultOpen}
 		onOpenChange={onOpenChange}
+		width={width}
+		defaultWidth={defaultWidth}
+		onWidthChange={onWidthChange}
 		className={cn(SHELL_ROW, className)}
 	>
 		{sidebar}
