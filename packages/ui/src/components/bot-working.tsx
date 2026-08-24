@@ -96,6 +96,7 @@ function BotWorking({
 			blot={blot}
 			image={image}
 			kind={kind}
+			name={name}
 			seed={seed}
 			size={size}
 			working

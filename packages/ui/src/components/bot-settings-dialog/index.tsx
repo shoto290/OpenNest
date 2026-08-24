@@ -333,6 +333,7 @@ const BotSettingsDialog = ({
 						blot={value.identity.blot}
 						image={value.identity.image}
 						kind={workingKind}
+						name={botName}
 						seed={seed}
 						size={32}
 						working={working}
@@ -435,6 +436,7 @@ const BotSettingsDialog = ({
 						>
 							<BotIdentityFields
 								identity={value.identity}
+								name={botName}
 								onAvatarUpload={onAvatarUpload}
 								onIdentityChange={(identity: BotIdentity) =>
 									patch({ identity })

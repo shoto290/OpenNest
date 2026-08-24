@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
 	type BotSkillDraft,
+	drawnAnimal,
 	isMcpServerDraftUnsaved,
 	isSkillDraftUnsaved,
 	readMcpServerFields,
@@ -17,6 +18,28 @@ const SKILL: BotSkillDraft = {
 	description: "How this project words a changelog entry",
 	body: "One line per change.",
 }
+
+describe("drawnAnimal", () => {
+	it("draws skippy for a bot called Skippy, whatever it keeps", () => {
+		expect(drawnAnimal("Skippy", "rabbit")).toBe("skippy")
+	})
+
+	it("reads the name past its case and its spaces", () => {
+		expect(drawnAnimal("  sKiPpY  ", "rabbit")).toBe("skippy")
+	})
+
+	it("draws the stored animal under any other name", () => {
+		expect(drawnAnimal("Skippy the second", "rabbit")).toBe("rabbit")
+	})
+
+	it("draws the stored animal for a bot with no name", () => {
+		expect(drawnAnimal(undefined, "rabbit")).toBe("rabbit")
+	})
+
+	it("keeps drawing nothing where nothing is stored", () => {
+		expect(drawnAnimal("Nibbles", undefined)).toBeUndefined()
+	})
+})
 
 describe("isSkillDraftUnsaved", () => {
 	it("reads a draft as untouched while every answer holds", () => {

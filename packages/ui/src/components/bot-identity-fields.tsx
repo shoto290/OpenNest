@@ -13,6 +13,7 @@ import {
 	BOT_IDENTITY_ANIMALS,
 	type BotAvatarBlot,
 	type BotIdentity,
+	drawnAnimal,
 } from "@workspace/ui/components/bot-settings"
 import { PictureDropzone } from "@workspace/ui/components/picture-dropzone"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
@@ -30,6 +31,9 @@ const BLOT_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "p-1")
 
 type BotIdentityFieldsProps = {
 	identity: BotIdentity
+	/** The bot's name, which the preview reads to draw the animal a name alone can
+	 * give. The grids below never read it: they offer what the bot may keep. */
+	name?: string
 	/** The edited bot's id, so every avatar in here wears the blot shape that bot
 	 * will actually wear — the preview and the swatches alike. */
 	seed?: string
@@ -54,6 +58,7 @@ type BotIdentityFieldsProps = {
  */
 const BotIdentityFields = ({
 	identity,
+	name,
 	seed,
 	working = false,
 	workingKind,
@@ -70,7 +75,9 @@ const BotIdentityFields = ({
 	const currentLabel = identity.image
 		? t("identity.uploadedImage")
 		: t("identity.current", {
-				animal: t(`identity.animal.option.${identity.animal}`),
+				animal: t(
+					`identity.animal.option.${drawnAnimal(name, identity.animal)}`,
+				),
 				blot: blotLabel(identity.blot),
 			})
 
@@ -85,6 +92,7 @@ const BotIdentityFields = ({
 					blot={identity.blot}
 					image={identity.image}
 					kind={workingKind}
+					name={name}
 					seed={seed}
 					size={PREVIEW_SIZE}
 					working={working}
