@@ -4,6 +4,7 @@ import { type ReactNode, useContext } from "react"
 
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Button } from "@workspace/ui/components/button"
+import { cn } from "@workspace/ui/lib/utils"
 
 interface MessageActionsProps {
 	actions?: ReactNode
@@ -32,7 +33,12 @@ function MessageActions({ actions, children }: MessageActionsProps) {
 			className={side === "end" ? ROW_SIDE_END : ROW_SIDE_START}
 		>
 			{children}
-			<div className="mt-2.5 flex items-center gap-0.5 empty:hidden">
+			<div
+				className={cn(
+					"mt-2.5 flex items-center gap-0.5 empty:hidden",
+					side === "end" && "flex-row-reverse",
+				)}
+			>
 				{actions}
 			</div>
 		</div>

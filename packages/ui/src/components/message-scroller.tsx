@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { MessageHighlightProvider } from "@workspace/ui/components/message-highlight-context"
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -46,6 +47,23 @@ const hasReachedTarget = (viewport: HTMLElement, targetTop: number) => {
 	return Math.abs(viewport.scrollTop - Math.min(targetTop, maxTop)) <= 1
 }
 
+const anchorFor = (viewport: HTMLElement, messageId: string) => {
+	for (const anchor of viewport.querySelectorAll<HTMLElement>(
+		"[data-message-id]",
+	)) {
+		if (anchor.dataset.messageId === messageId) return anchor
+	}
+}
+
+const centeredTop = (viewport: HTMLElement, anchor: HTMLElement) => {
+	const offset = offsetFromViewportTop(
+		anchor,
+		viewport.getBoundingClientRect().top,
+	)
+	const gutter = (viewport.clientHeight - anchor.clientHeight) / 2
+	return Math.max(viewport.scrollTop + offset - gutter, 0)
+}
+
 const topVisibleRow = (content: HTMLElement, viewportTop: number) => {
 	const rows = Array.from(content.children) as HTMLElement[]
 	return rows.find((row) => row.getBoundingClientRect().bottom > viewportTop)
@@ -53,6 +71,7 @@ const topVisibleRow = (content: HTMLElement, viewportTop: number) => {
 
 export interface MessageScrollerHandle {
 	scrollToEnd: (behavior?: ScrollBehavior) => void
+	scrollToMessage: (messageId: string, behavior?: ScrollBehavior) => boolean
 	isFollowing: () => boolean
 }
 
@@ -72,6 +91,7 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
 	onFollowChange?: (following: boolean) => void
 	label?: string
 	busy?: boolean
+	highlightedMessageId?: string
 	older?: MessageScrollerOlder
 	viewportClassName?: string
 	contentClassName?: string
@@ -95,6 +115,7 @@ export function MessageScroller({
 	onFollowChange,
 	label,
 	busy,
+	highlightedMessageId,
 	older,
 	viewportClassName,
 	contentClassName,
@@ -216,6 +237,20 @@ export function MessageScroller({
 		[behavior, scrollToEnd, setFollowing],
 	)
 
+	const scrollToMessage = useCallback(
+		(messageId: string, nextBehavior: ScrollBehavior) => {
+			const viewport = viewportRef.current
+			const anchor = viewport && anchorFor(viewport, messageId)
+			if (!anchor) return false
+
+			setFollowing(false)
+			holdProgrammaticScroll(centeredTop(viewport, anchor))
+			anchor.scrollIntoView({ behavior: nextBehavior, block: "center" })
+			return true
+		},
+		[holdProgrammaticScroll, setFollowing],
+	)
+
 	const pinTopVisibleRow = useCallback(() => {
 		const viewport = viewportRef.current
 		const content = contentRef.current
@@ -255,9 +290,11 @@ export function MessageScroller({
 		scrollerRef,
 		() => ({
 			scrollToEnd: returnToLiveEdge,
+			scrollToMessage: (messageId, nextBehavior) =>
+				scrollToMessage(messageId, nextBehavior ?? behavior),
 			isFollowing: () => followingRef.current,
 		}),
-		[returnToLiveEdge],
+		[behavior, returnToLiveEdge, scrollToMessage],
 	)
 
 	useLayoutEffect(() => {
@@ -387,7 +424,9 @@ export function MessageScroller({
 					className={contentClassName}
 					{...contentProps}
 				>
-					{children}
+					<MessageHighlightProvider messageId={highlightedMessageId}>
+						{children}
+					</MessageHighlightProvider>
 				</div>
 			</motion.section>
 

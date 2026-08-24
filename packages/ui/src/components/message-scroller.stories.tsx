@@ -3,6 +3,7 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Button } from "@workspace/ui/components/button"
+import { AssistantTurn, UserTurn } from "@workspace/ui/components/chat-turn"
 import {
 	MessageScroller,
 	type MessageScrollerHandle,
@@ -308,6 +309,60 @@ const ConversationSwitcher = (
 	)
 }
 
+const DROPPED_MESSAGE_ID = "turn-9-user"
+
+const AnchoredTranscript = () => {
+	const scrollerRef = useRef<MessageScrollerHandle>(null)
+	const [highlightedMessageId, setHighlightedMessageId] = useState<string>()
+	const [isMissing, setIsMissing] = useState(false)
+
+	const jumpTo = (messageId: string) => {
+		const reached =
+			scrollerRef.current?.scrollToMessage(messageId, "auto") ?? false
+		setHighlightedMessageId(reached ? messageId : undefined)
+		setIsMissing(!reached)
+	}
+
+	return (
+		<div className={FRAME_CLASS}>
+			<MessageScroller
+				label="Conversation"
+				scrollerRef={scrollerRef}
+				highlightedMessageId={highlightedMessageId}
+				className="flex-1"
+				contentClassName="flex flex-col gap-3 p-3"
+			>
+				{TRANSCRIPT.map((entry) =>
+					entry.from === "user" ? (
+						<UserTurn key={entry.id} messageId={entry.id}>
+							{entry.text}
+						</UserTurn>
+					) : (
+						<AssistantTurn key={entry.id} messageId={entry.id}>
+							{entry.text}
+						</AssistantTurn>
+					),
+				)}
+			</MessageScroller>
+			<div className="flex items-center gap-2 border-border border-t p-2">
+				<Button size="sm" onClick={() => jumpTo(TRANSCRIPT[0].id)}>
+					Jump to the quoted message
+				</Button>
+				<Button
+					size="sm"
+					variant="outline"
+					onClick={() => jumpTo(DROPPED_MESSAGE_ID)}
+				>
+					Jump to a dropped message
+				</Button>
+				{isMissing ? (
+					<span className="text-muted-foreground text-xs">Not on screen</span>
+				) : null}
+			</div>
+		</div>
+	)
+}
+
 const meta = preview.meta({
 	title: "AI/MessageScroller",
 	component: MessageScroller,
@@ -316,7 +371,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. It renders its own jump-to-latest control while the reader sits away from the live edge, reports the switch through `onFollowChange`, and exposes `scrollerRef.scrollToEnd()` so a host can return to the live edge when it accepts a prompt. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all.",
+					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. It renders its own jump-to-latest control while the reader sits away from the live edge, reports the switch through `onFollowChange`, and exposes `scrollerRef.scrollToEnd()` so a host can return to the live edge when it accepts a prompt. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all. `scrollerRef.scrollToMessage(id)` brings a message anchored under `data-message-id` back into the middle of the viewport and answers whether it found one, and `highlightedMessageId` marks that message while the host names it.",
 			},
 		},
 	},
@@ -869,5 +924,39 @@ export const ConversationChange = meta.story({
 		await expect(
 			canvas.queryByRole("button", { name: "Jump to latest" }),
 		).toBeNull()
+	},
+})
+
+export const Jump = meta.story({
+	render: () => <AnchoredTranscript />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The other end of a quoted message: the host calls `scrollerRef.scrollToMessage(id)` and the viewport brings that message to the middle. Every message anchors itself once, on the row itself, so a run split into paragraphs is still one target. The call answers whether it found anything — a message dropped from the window, paged out or never loaded, moves nothing and reports false, which is what the screen needs to fall back on fetching it. While the host names a message as highlighted, that row marks itself, so the reader sees where they landed instead of hunting for it. Check both buttons, then check that leaving the live edge this way is reported as such: the transcript stops following, so a reply landing next does not yank the reader back down.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const highlighted = () =>
+			canvasElement
+				.querySelector("[data-highlighted]")
+				?.getAttribute("data-message-id")
+
+		await waitFor(() => expect(viewport.scrollTop).toBeGreaterThan(0))
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Jump to the quoted message" }),
+		)
+		await waitFor(() => expect(viewport.scrollTop).toBe(0))
+		await expect(highlighted()).toBe(TRANSCRIPT[0].id)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Jump to a dropped message" }),
+		)
+		await expect(canvas.getByText("Not on screen")).toBeVisible()
+		await expect(viewport.scrollTop).toBe(0)
+		await expect(highlighted()).toBeUndefined()
 	},
 })
