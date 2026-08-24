@@ -55,7 +55,6 @@ const UNMIRRORED_DEFAULTS = {
 	notifyOnPermission: true,
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
-	windowBounds: null,
 } satisfies Omit<UserPreferences, keyof MirroredPreferences>
 
 const openingPreferences = (): ReaderPreferences => ({
