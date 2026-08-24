@@ -52,6 +52,8 @@ const chat = {
 	},
 	pinned: {
 		title: "Pinned messages",
+		counted_one: "Pinned messages, {{count}} pinned",
+		counted_other: "Pinned messages, {{count}} pinned",
 		jump: "Jump",
 		jumpTo: "Jump to the message from {{author}}",
 		unpin: "Unpin the message from {{author}}",

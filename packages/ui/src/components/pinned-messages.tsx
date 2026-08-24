@@ -1,13 +1,15 @@
 "use client"
 
-import { Popover } from "@base-ui/react/popover"
 import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
-import { POPUP_CLASS } from "@workspace/ui/components/settings-styles"
-import { cn } from "@workspace/ui/lib/utils"
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@workspace/ui/components/motion/popover"
 
 const PINNED_AVATAR_SIZE = 24
 
@@ -87,7 +89,8 @@ const PinnedMessages = ({
 	const { t } = useTranslation("chat")
 	const [isOpen, setIsOpen] = useState(false)
 	const title = t("pinned.title")
-	const hasPins = messages.length > 0
+	const count = messages.length
+	const hasPins = count > 0
 
 	const jumpTo = (messageId: string) => {
 		setIsOpen(false)
@@ -95,60 +98,56 @@ const PinnedMessages = ({
 	}
 
 	return (
-		<Popover.Root open={isOpen} onOpenChange={setIsOpen}>
-			<Popover.Trigger
-				render={
-					<Button
-						data-slot="pinned-messages-trigger"
-						size="icon-sm"
-						variant="ghost"
-						aria-label={title}
-						className={cn("relative", className)}
-					/>
-				}
-			>
-				<Icons.Pin />
-				{hasPins ? (
-					<span
-						data-slot="pinned-messages-dot"
-						aria-hidden="true"
-						className="absolute right-0.5 bottom-0.5 size-1.5 rounded-full bg-primary ring-2 ring-background"
-					/>
-				) : null}
-			</Popover.Trigger>
-			<Popover.Portal>
-				<Popover.Positioner
-					side="bottom"
-					align="end"
-					sideOffset={8}
-					className="z-50 outline-none"
+		<Popover
+			open={isOpen}
+			onOpenChange={setIsOpen}
+			side="bottom"
+			align="end"
+			className={className}
+		>
+			<PopoverTrigger>
+				<Button
+					data-slot="pinned-messages-trigger"
+					size="icon-sm"
+					variant="ghost"
+					aria-label={hasPins ? t("pinned.counted", { count }) : title}
+					className="relative"
 				>
-					<Popover.Popup
-						className={cn(POPUP_CLASS, "w-80 overflow-hidden rounded-2xl")}
-					>
-						<Popover.Title className="border-border border-b px-4 py-3 font-medium text-sm">
-							{title}
-						</Popover.Title>
-						{hasPins ? (
-							<ul className="flex max-h-80 flex-col divide-y divide-border overflow-y-auto">
-								{messages.map((message) => (
-									<PinnedMessageRow
-										key={message.id}
-										message={message}
-										onJump={() => jumpTo(message.id)}
-										onUnpin={() => onUnpin(message.id)}
-									/>
-								))}
-							</ul>
-						) : (
-							<p className="px-4 py-3 text-muted-foreground text-sm">
-								{t("pinned.empty")}
-							</p>
-						)}
-					</Popover.Popup>
-				</Popover.Positioner>
-			</Popover.Portal>
-		</Popover.Root>
+					<Icons.Pin />
+					{hasPins ? (
+						<span
+							data-slot="pinned-messages-dot"
+							aria-hidden="true"
+							className="absolute right-0.5 bottom-0.5 size-1.5 rounded-full bg-primary ring-2 ring-background"
+						/>
+					) : null}
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent
+				aria-label={title}
+				className="w-80 overflow-hidden rounded-2xl p-0"
+			>
+				<p className="border-border border-b px-4 py-3 font-medium text-sm">
+					{title}
+				</p>
+				{hasPins ? (
+					<ul className="flex max-h-80 flex-col divide-y divide-border overflow-y-auto">
+						{messages.map((message) => (
+							<PinnedMessageRow
+								key={message.id}
+								message={message}
+								onJump={() => jumpTo(message.id)}
+								onUnpin={() => onUnpin(message.id)}
+							/>
+						))}
+					</ul>
+				) : (
+					<p className="px-4 py-3 text-muted-foreground text-sm">
+						{t("pinned.empty")}
+					</p>
+				)}
+			</PopoverContent>
+		</Popover>
 	)
 }
 

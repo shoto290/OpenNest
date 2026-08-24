@@ -52,6 +52,9 @@ const chat = {
 	},
 	pinned: {
 		title: "Messages épinglés",
+		counted_one: "Messages épinglés, {{count}} épinglé",
+		counted_many: "Messages épinglés, {{count}} épinglés",
+		counted_other: "Messages épinglés, {{count}} épinglés",
 		jump: "Aller",
 		jumpTo: "Aller au message de {{author}}",
 		unpin: "Retirer l'épingle du message de {{author}}",

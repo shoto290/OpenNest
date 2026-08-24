@@ -14,6 +14,8 @@ import { UserAvatar } from "@workspace/ui/components/user-avatar"
 
 const TITLE = "Pinned messages"
 
+const TRIGGER = /^Pinned messages/
+
 const BOT = <BotIdentityAvatar name="Skippy" size={PINNED_AVATAR_SIZE} />
 
 const READER = <UserAvatar name="You" size={PINNED_AVATAR_SIZE} />
@@ -80,7 +82,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The reader's bookmarks over a conversation, reached from a pin button in the chat header. The button wears a dot while anything is pinned, and pressing it drops a plain panel under it holding one row per pinned message: the author's avatar, their name, when they wrote it, the first three lines of what they said, a jump control and an unpin control. A rule separates one row from the next, and the avatar arrives as a node the host draws — `BotIdentityAvatar` for a bot, `UserAvatar` for the reader — so the face here is the same face the transcript shows. Jumping closes the panel because the reader is leaving for the transcript; unpinning leaves it open because the reader is still tidying. Nothing here animates. It draws only — the host holds the list, moves the transcript on a jump and drops the pin on an unpin. `AI/ChatTurn` carries the pin action that fills this list.",
+					"The reader's bookmarks over a conversation, reached from a pin button in the chat header. The button wears a dot while anything is pinned and says how many it holds to a screen reader, and pressing it drops a plain panel under it holding one row per pinned message: the author's avatar, their name, when they wrote it, the first three lines of what they said, a jump control and an unpin control. A rule separates one row from the next, and the avatar arrives as a node the host draws — `BotIdentityAvatar` for a bot, `UserAvatar` for the reader — so the face here is the same face the transcript shows. Jumping closes the panel because the reader is leaving for the transcript; unpinning leaves it open because the reader is still tidying. Nothing here animates. It draws only — the host holds the list, moves the transcript on a jump and drops the pin on an unpin. `AI/ChatTurn` carries the pin action that fills this list.",
 			},
 		},
 	},
@@ -102,7 +104,9 @@ export const Default = meta.story({
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const body = within(canvasElement.ownerDocument.body)
-		const trigger = canvas.getByRole("button", { name: TITLE })
+		const trigger = canvas.getByRole("button", { name: TRIGGER })
+
+		await expect(trigger).toHaveAccessibleName(`${TITLE}, 2 pinned`)
 
 		await userEvent.click(trigger)
 		const panel = await body.findByRole("dialog", { name: TITLE })
@@ -142,12 +146,13 @@ export const Empty = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
-		const trigger = canvas.getByRole("button", { name: TITLE })
+		const trigger = canvas.getByRole("button", { name: TRIGGER })
 
 		await expect(
 			trigger.querySelector('[data-slot="pinned-messages-dot"]'),
 		).toBeNull()
 		await expect(trigger.tagName).toBe("BUTTON")
+		await expect(trigger).toHaveAccessibleName(TITLE)
 
 		await userEvent.click(trigger)
 		const body = within(canvasElement.ownerDocument.body)
@@ -173,7 +178,7 @@ export const Overflowing = meta.story({
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		const body = within(canvasElement.ownerDocument.body)
 
-		await userEvent.click(canvas.getByRole("button", { name: TITLE }))
+		await userEvent.click(canvas.getByRole("button", { name: TRIGGER }))
 		const panel = await body.findByRole("dialog", { name: TITLE })
 		const excerpt = within(panel).getByText(OVERFLOWING[0].excerpt)
 		const lineHeight = Number.parseFloat(getComputedStyle(excerpt).lineHeight)
@@ -197,7 +202,7 @@ export const Unpinning = meta.story({
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		const body = within(canvasElement.ownerDocument.body)
-		const trigger = canvas.getByRole("button", { name: TITLE })
+		const trigger = canvas.getByRole("button", { name: TRIGGER })
 
 		await userEvent.click(trigger)
 		const panel = await body.findByRole("dialog", { name: TITLE })
