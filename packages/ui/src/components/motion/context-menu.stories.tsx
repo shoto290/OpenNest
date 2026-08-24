@@ -122,7 +122,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The menu a surface offers when it is asked what it can do. It morphs open from the exact point the request came from — the cursor on a right-click, the finger after a 520ms long press, the trigger's own edge when it is opened from the keyboard — then clamps itself inside the viewport so it never opens off screen. It is portalled to `document.body` and `inert` while closed, so nothing inside it is reachable until it is open. Keyboard is first class: the ContextMenu key or Shift+F10 opens it, arrows walk it, typing jumps by label, Escape closes it and returns focus. Three item kinds compose inside it — plain, checkbox and radio — alongside `ContextMenuLabel`, `ContextMenuSeparator` and `ContextMenuShortcut`, which is decorative and hidden from readers. The trigger clones its single child and hands it `aria-haspopup` and `aria-expanded`, so that child must be a real element with a widget role — a `<button>`, not a `<div>`, which is also the only way the keyboard path exists at all. Reach for it for actions on a specific object; a menu that is the only way to reach an action is a menu most readers will never find.",
+					"The menu a surface offers when it is asked what it can do. It morphs open from the exact point the request came from — the cursor on a right-click, the finger after a 520ms long press, the trigger's own edge when it is opened from the keyboard — then clamps itself inside the viewport so it never opens off screen. It is portalled to `document.body` and `inert` while closed, so nothing inside it is reachable until it is open. Keyboard is first class: the ContextMenu key or Shift+F10 opens it, arrows walk it, typing jumps by label, Escape closes it and returns focus. Three item kinds compose inside it — plain, checkbox and radio — alongside `ContextMenuLabel`, `ContextMenuSeparator` and `ContextMenuShortcut`, which is decorative and hidden from readers. The trigger clones its single child and hands it `aria-haspopup` and `aria-expanded`, so that child must be a real element with a widget role — a `<button>`, not a `<div>`, which is also the only way the keyboard path exists at all. A passage of a page that is not a control — a chat bubble, say — takes `announcesPopup={false}` instead: the right-click still opens the menu, and the region is left without the popup ARIA no reader could act on there. Reach for it for actions on a specific object; a menu that is the only way to reach an action is a menu most readers will never find.",
 			},
 		},
 	},
@@ -314,5 +314,33 @@ export const LongContent = meta.story({
 					"Labels long enough to fight the menu's minimum width, with `textValue` set so typeahead still matches a short word rather than the whole sentence. Check no row wraps to two lines — a menu is scanned, not read — and treat anything this long as a sign the action needs a dialog to explain itself instead.",
 			},
 		},
+	},
+})
+
+export const PassiveTrigger = meta.story({
+	render: () => (
+		<ContextMenu>
+			<ContextMenuTrigger announcesPopup={false}>
+				<div className={SURFACE_CLASS}>Right-click this passage</div>
+			</ContextMenuTrigger>
+			<FileMenu />
+		</ContextMenu>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A region rather than a control: the menu is a shortcut to actions that are already reachable elsewhere, so the passage stays plain markup and takes `announcesPopup={false}`. Check the right-click still opens the menu and that the region carries no `aria-haspopup` or `aria-expanded` — attributes a generic element does not support, and which would promise a keyboard path that a non-focusable region cannot offer.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const passage = canvas.getByText("Right-click this passage")
+
+		await expect(passage).not.toHaveAttribute("aria-haspopup")
+		await expect(passage).not.toHaveAttribute("aria-expanded")
+
+		await openMenuOn(passage)
+		await expect(screen.getByRole("menu")).toBeVisible()
 	},
 })
