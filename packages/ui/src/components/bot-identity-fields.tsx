@@ -8,6 +8,7 @@ import {
 	BotIdentityAvatar,
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
+import { BotPictureField } from "@workspace/ui/components/bot-picture-field"
 import {
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
@@ -15,7 +16,6 @@ import {
 	type BotIdentity,
 	drawnAnimal,
 } from "@workspace/ui/components/bot-settings"
-import { PictureDropzone } from "@workspace/ui/components/picture-dropzone"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
 import { FIELD_OPTION_CLASS } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
@@ -153,10 +153,15 @@ const BotIdentityFields = ({
 				))}
 			</SettingsGroup>
 
-			<SettingsGroup grid="grid-cols-1" label={t("identity.picture")}>
-				<PictureDropzone
-					label={t("identity.pictureFile")}
+			<SettingsGroup grid="grid-cols-1" label={t("identity.picture.label")}>
+				<BotPictureField
+					identity={identity}
+					name={name}
 					onPick={onAvatarUpload}
+					onRemove={() =>
+						onIdentityChange({ animal: identity.animal, blot: identity.blot })
+					}
+					seed={seed}
 				/>
 			</SettingsGroup>
 		</div>
