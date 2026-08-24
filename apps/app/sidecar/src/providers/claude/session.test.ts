@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { buildOptions } from "./session"
-import { bundleLine, layerFor, OPENNEST_LAYER } from "./system-layer"
+import { bundleLine, layerFor, OPENNEST_LAYER, userLine } from "./system-layer"
 
 import type { SessionRequest } from "../provider"
 
@@ -109,13 +109,18 @@ describe("buildOptions", () => {
 
 	it("loads the app's plugin beside the bot's when the host names one", () => {
 		const options = buildOptions(
-			{ ...request, systemPluginPath: "/app/system" },
+			{
+				...request,
+				systemPluginPath: "/app/system",
+				userPluginPath: "/user/me",
+			},
 			undefined,
 		)
 
 		expect(options.plugins).toEqual([
 			{ type: "local", path: "/bots/b1" },
 			{ type: "local", path: "/app/system" },
+			{ type: "local", path: "/user/me" },
 		])
 		expect(options.agent).toBe("bean")
 	})
@@ -186,6 +191,33 @@ describe("layerFor", () => {
 				bundleLine("/bots/b1"),
 				"# learn\n\n## When to write\n\nRules.",
 			].join("\n\n"),
+		)
+	})
+
+	it("carries the person's plugin above the bot's own directory", () => {
+		dropSkill(
+			"about-me",
+			'---\nname: "about-me"\nmetadata:\n  opennest:\n    preload: true\n---\n\nThey like figs.\n',
+		)
+
+		expect(layerFor({ pluginPath: "/bots/b1", userPluginPath: system })).toBe(
+			[
+				OPENNEST_LAYER,
+				userLine(system),
+				"# about-me\n\nThey like figs.",
+				bundleLine("/bots/b1"),
+			].join("\n\n"),
+		)
+	})
+
+	it("leaves out a preloaded skill the person has written nothing in yet", () => {
+		dropSkill(
+			"about-me",
+			'---\nname: "about-me"\nmetadata:\n  opennest:\n    preload: true\n---\n\n',
+		)
+
+		expect(layerFor({ pluginPath: "/bots/b1", userPluginPath: system })).toBe(
+			[OPENNEST_LAYER, userLine(system), bundleLine("/bots/b1")].join("\n\n"),
 		)
 	})
 

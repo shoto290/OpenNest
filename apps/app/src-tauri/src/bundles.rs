@@ -10,8 +10,9 @@ use crate::private_files;
 
 mod git;
 pub mod system;
+pub mod user;
 
-pub use git::{commit, diff, history, revert, Author, HistoryEntry};
+pub use git::{Author, HistoryEntry};
 
 const DIR_NAME: &str = "bots";
 
@@ -254,7 +255,7 @@ fn copied_file(source: &Path, target: &Path) -> std::io::Result<()> {
 
 fn recorded(root: &Path, bot_id: &str, subject: &str, name: &str, verb: &str) {
 	let title = format!("{subject} \"{}\" {verb}", name.trim());
-	let _ = git::commit(root, bot_id, Author::User, &title, "");
+	let _ = git::commit(&dir(root, bot_id), Author::User, &title, "");
 }
 
 fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std::io::Result<()> {
@@ -318,20 +319,21 @@ pub struct Evolution {
 }
 
 pub fn evolve(root: &Path, bot: &Bot) -> Option<Evolution> {
-	let changed = git::changes(root, &bot.id);
+	let bundle = dir(root, &bot.id);
+	let changed = git::changes(&bundle);
 	if changed.is_empty() {
 		return None;
 	}
 	let _ = rewrite_agent(root, bot);
 	let (title, body) =
-		learned(root, &bot.id).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
-	let commit_id = git::commit(root, &bot.id, Author::Bot, &title, &body).ok().flatten()?;
-	let _ = fs::remove_file(dir(root, &bot.id).join(LEARNED_NAME));
+		learned(&bundle).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
+	let commit_id = git::commit(&bundle, Author::Bot, &title, &body).ok().flatten()?;
+	let _ = fs::remove_file(bundle.join(LEARNED_NAME));
 	Some(Evolution { commit_id, title })
 }
 
-fn learned(root: &Path, bot_id: &str) -> Option<(String, String)> {
-	let text = fs::read_to_string(dir(root, bot_id).join(LEARNED_NAME)).ok()?;
+fn learned(bundle: &Path) -> Option<(String, String)> {
+	let text = fs::read_to_string(bundle.join(LEARNED_NAME)).ok()?;
 	let (title, body) = text.split_once('\n').unwrap_or((&text, ""));
 	let title = title.trim();
 	if title.is_empty() {
@@ -357,6 +359,18 @@ pub fn reconciled(root: &Path, bot: &Bot, submitted: &str) -> String {
 		return submitted.to_owned();
 	}
 	adopted(root, bot).unwrap_or_else(|| bot.instructions.clone())
+}
+
+pub fn history(root: &Path, bot_id: &str) -> Result<Vec<HistoryEntry>, git2::Error> {
+	git::history(&dir(root, bot_id))
+}
+
+pub fn diff(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2::Error> {
+	git::diff(&dir(root, bot_id), commit_id)
+}
+
+pub fn revert(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2::Error> {
+	git::revert(&dir(root, bot_id), commit_id)
 }
 
 pub fn remove(root: &Path, bot_id: &str) {
@@ -2923,7 +2937,7 @@ mod tests {
 		evolve(&root, &bot).expect("the turn is recorded");
 
 		assert!(written_agent(&root, &bot.id).contains("Bean likes figs."));
-		assert!(git::changes(&root, &bot.id).is_empty(), "the bundle is left uncommitted");
+		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
 
 		let _ = fs::remove_dir_all(&root);
 	}

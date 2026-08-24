@@ -50,6 +50,9 @@ pub async fn list_bundles_at_launch<R: Runtime>(app: &AppHandle<R>) {
 	if let Some(path) = bundles::system::path(app) {
 		let _ = bundles::system::write(&path);
 	}
+	if let Some(path) = bundles::user::path(app) {
+		let _ = bundles::user::lay_down(&path);
+	}
 	let state = app.state::<db::DatabaseState>();
 	let Ok(database) = state.inner().as_ref() else {
 		return;

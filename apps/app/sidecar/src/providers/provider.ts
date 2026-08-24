@@ -11,6 +11,7 @@ export type SessionRequest = {
 	pluginPath?: string
 	agent?: string
 	systemPluginPath?: string
+	userPluginPath?: string
 	identity?: string
 	outputStyle?: string
 	partialMessages: boolean

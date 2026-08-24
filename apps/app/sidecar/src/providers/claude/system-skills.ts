@@ -53,14 +53,15 @@ const preloadedIn = (
 	if (frontValue(front, PRELOAD_KEY) !== MARKED) {
 		return undefined
 	}
-	return {
-		name: frontValue(front, NAME_KEY) || id,
-		body: text.slice(head.length).trim(),
+	const body = text.slice(head.length).trim()
+	if (!body) {
+		return undefined
 	}
+	return { name: frontValue(front, NAME_KEY) || id, body }
 }
 
-export const preloadedSkills = (systemPluginPath: string): PreloadedSkill[] => {
-	const skillsDir = join(systemPluginPath, SKILLS_DIR)
+export const preloadedSkills = (pluginPath: string): PreloadedSkill[] => {
+	const skillsDir = join(pluginPath, SKILLS_DIR)
 	try {
 		return readdirSync(skillsDir)
 			.sort()

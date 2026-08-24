@@ -73,6 +73,7 @@ impl EventSink for GatedSink {
 pub struct Bundle {
 	pub path: String,
 	pub system_path: Option<String>,
+	pub user_path: Option<String>,
 	pub agent: String,
 	pub identity: String,
 	pub output_style: String,
@@ -119,6 +120,7 @@ impl SessionOptions {
 			resume: self.resume.clone(),
 			plugin_path: self.bundle.as_ref().map(|bundle| bundle.path.clone()),
 			system_plugin_path: self.bundle.as_ref().and_then(|bundle| bundle.system_path.clone()),
+			user_plugin_path: self.bundle.as_ref().and_then(|bundle| bundle.user_path.clone()),
 			agent: self.bundle.as_ref().map(|bundle| bundle.agent.clone()),
 			identity: self.bundle.as_ref().map(|bundle| bundle.identity.clone()),
 			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
@@ -444,6 +446,7 @@ mod tests {
 		let bundle = Bundle {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
+			user_path: Some("/user/me".to_owned()),
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
@@ -460,6 +463,7 @@ mod tests {
 		let bundle = Bundle {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
+			user_path: Some("/user/me".to_owned()),
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
@@ -477,6 +481,7 @@ mod tests {
 		let bundle = Bundle {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
+			user_path: Some("/user/me".to_owned()),
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "default".to_owned(),

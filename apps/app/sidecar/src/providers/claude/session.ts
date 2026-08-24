@@ -32,12 +32,11 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
 const localPlugins = (
 	pluginPath: string,
 	systemPluginPath?: string,
-): NonNullable<Options["plugins"]> => [
-	{ type: "local", path: pluginPath },
-	...(systemPluginPath
-		? [{ type: "local" as const, path: systemPluginPath }]
-		: []),
-]
+	userPluginPath?: string,
+): NonNullable<Options["plugins"]> =>
+	[pluginPath, systemPluginPath, userPluginPath]
+		.filter((path): path is string => Boolean(path))
+		.map((path) => ({ type: "local" as const, path }))
 
 export const buildOptions = (
 	request: SessionRequest,
@@ -50,7 +49,11 @@ export const buildOptions = (
 	canUseTool,
 	...(request.pluginPath && request.agent
 		? {
-				plugins: localPlugins(request.pluginPath, request.systemPluginPath),
+				plugins: localPlugins(
+					request.pluginPath,
+					request.systemPluginPath,
+					request.userPluginPath,
+				),
 				agent: request.agent,
 				mcpServers: sessionServers(
 					request.pluginPath,

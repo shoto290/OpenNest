@@ -139,6 +139,9 @@ impl<R: Runtime> RunSink<R> {
 }
 
 async fn evolution<R: Runtime>(app: &AppHandle<R>, bot_id: &str) -> Option<bundles::Evolution> {
+	if let Some(path) = bundles::user::laid_down(app) {
+		bundles::user::evolve(&path);
+	}
 	let root = bundles::root(app)?;
 	let state = app.try_state::<db::DatabaseState>()?;
 	let database = state.inner().as_ref().ok()?;
@@ -304,7 +307,10 @@ async fn runtime_identity<R: Runtime>(
 	};
 	let root = bundles::root(app);
 	let system = bundles::system::laid_down(app);
-	let bundle = root.as_deref().and_then(|root| laid_down_bundle(root, &bot, system.as_deref()));
+	let user = bundles::user::laid_down(app);
+	let bundle = root
+		.as_deref()
+		.and_then(|root| laid_down_bundle(root, &bot, system.as_deref(), user.as_deref()));
 	if let Some(found) = root.as_deref().and_then(|root| bundles::adopted(root, &bot)) {
 		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
 	}
@@ -314,11 +320,17 @@ async fn runtime_identity<R: Runtime>(
 	RuntimeIdentity { bundle, working_dir: bot.working_dir }
 }
 
-fn laid_down_bundle(root: &Path, bot: &StoredBot, system: Option<&Path>) -> Option<Bundle> {
+fn laid_down_bundle(
+	root: &Path,
+	bot: &StoredBot,
+	system: Option<&Path>,
+	user: Option<&Path>,
+) -> Option<Bundle> {
 	bundles::ensure(root, bot).ok()?;
 	Some(Bundle {
 		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
 		system_path: system.map(|path| path.to_string_lossy().into_owned()),
+		user_path: user.map(|path| path.to_string_lossy().into_owned()),
 		agent: bundles::agent_ref(root, bot),
 		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),

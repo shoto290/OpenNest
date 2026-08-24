@@ -7,7 +7,7 @@ use git2::{
 	Commit, Diff, DiffFormat, IndexAddOption, Oid, Repository, Signature, Sort, StatusOptions, Tree,
 };
 
-use super::{dir, LEARNED_NAME};
+use super::LEARNED_NAME;
 use crate::private_files;
 
 const EXCLUDED: &str = LEARNED_NAME;
@@ -42,13 +42,12 @@ pub struct HistoryEntry {
 }
 
 pub fn commit(
-	root: &Path,
-	bot_id: &str,
+	bundle: &Path,
 	author: Author,
 	title: &str,
 	body: &str,
 ) -> Result<Option<String>, git2::Error> {
-	let repository = opened(root, bot_id)?;
+	let repository = opened(bundle)?;
 	let tree = staged(&repository)?;
 	let parent = head(&repository);
 	if parent.as_ref().is_some_and(|found| found.tree_id() == tree.id()) {
@@ -67,8 +66,8 @@ pub fn commit(
 	Ok(Some(id.to_string()))
 }
 
-pub fn changes(root: &Path, bot_id: &str) -> Vec<String> {
-	let Ok(repository) = Repository::open(dir(root, bot_id)) else {
+pub fn changes(bundle: &Path) -> Vec<String> {
+	let Ok(repository) = Repository::open(bundle) else {
 		return Vec::new();
 	};
 	let mut options = StatusOptions::new();
@@ -82,8 +81,8 @@ pub fn changes(root: &Path, bot_id: &str) -> Vec<String> {
 	paths
 }
 
-pub fn history(root: &Path, bot_id: &str) -> Result<Vec<HistoryEntry>, git2::Error> {
-	let repository = Repository::open(dir(root, bot_id))?;
+pub fn history(bundle: &Path) -> Result<Vec<HistoryEntry>, git2::Error> {
+	let repository = Repository::open(bundle)?;
 	let Some(head) = head(&repository) else {
 		return Ok(Vec::new());
 	};
@@ -97,8 +96,8 @@ pub fn history(root: &Path, bot_id: &str) -> Result<Vec<HistoryEntry>, git2::Err
 		.collect())
 }
 
-pub fn diff(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2::Error> {
-	let repository = Repository::open(dir(root, bot_id))?;
+pub fn diff(bundle: &Path, commit_id: &str) -> Result<String, git2::Error> {
+	let repository = Repository::open(bundle)?;
 	let commit = repository.find_commit(Oid::from_str(commit_id)?)?;
 	let parent = commit.parent(0).ok();
 	let before = parent.as_ref().map(Commit::tree).transpose()?;
@@ -107,8 +106,8 @@ pub fn diff(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2::
 	printed(&diff)
 }
 
-pub fn revert(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2::Error> {
-	let repository = Repository::open(dir(root, bot_id))?;
+pub fn revert(bundle: &Path, commit_id: &str) -> Result<String, git2::Error> {
+	let repository = Repository::open(bundle)?;
 	let commit = repository.find_commit(Oid::from_str(commit_id)?)?;
 	let head = head(&repository)
 		.ok_or_else(|| git2::Error::from_str("this bundle has no write to undo"))?;
@@ -130,11 +129,10 @@ pub fn revert(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2
 	Ok(id.to_string())
 }
 
-fn opened(root: &Path, bot_id: &str) -> Result<Repository, git2::Error> {
-	let bundle = dir(root, bot_id);
-	let repository = match Repository::open(&bundle) {
+fn opened(bundle: &Path) -> Result<Repository, git2::Error> {
+	let repository = match Repository::open(bundle) {
 		Ok(repository) => repository,
-		Err(_) => Repository::init(&bundle)?,
+		Err(_) => Repository::init(bundle)?,
 	};
 	exclude(&repository);
 	Ok(repository)
