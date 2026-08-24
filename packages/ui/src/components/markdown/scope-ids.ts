@@ -16,7 +16,6 @@ const eachNode = (node: HastNode, visit: (node: HastNode) => void) => {
 const scopedId = (value: string, ids: Set<string>, scope: string) =>
 	ids.has(value) ? `${scope}-${value}` : value
 
-/** Aria references arrive as one string or as a list of tokens. */
 const scopedReference = (value: unknown, ids: Set<string>, scope: string) => {
 	if (typeof value === "string") return scopedId(value, ids, scope)
 
@@ -29,9 +28,6 @@ const scopedReference = (value: unknown, ids: Set<string>, scope: string) => {
 	return value
 }
 
-/** Footnote ids are fixed strings, so two blocks on one page would collide and every
- * reference would jump to the first block. Scoping ids per instance — and the
- * references that point at them — keeps each block self-contained. */
 export const rehypeScopeIds =
 	({ scope }: ScopeIdsOptions) =>
 	(tree: HastNode) => {

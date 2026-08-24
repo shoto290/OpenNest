@@ -55,7 +55,6 @@ describe("promptForCommand", () => {
 })
 
 describe("holdsDismissal", () => {
-	/** The drafts the reader writes after dismissing the menu, in order. */
 	function afterDismissal(drafts: string[]): boolean {
 		return drafts.reduce(
 			(held, draft) => holdsDismissal(held, commandQueryIn(draft, COMMANDS)),

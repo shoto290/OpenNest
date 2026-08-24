@@ -18,12 +18,8 @@ const opened = async (store: TranscriptStore, botId = "default") => {
 	return controller
 }
 
-/** The queue behind every write answers on its own turn, so a test reads what the
- * store holds only after the loop it was handed to has run out. */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-/** What a reader wrote, without the skill the bundle came with: every bot's bundle
- * carries the host's own, and none of these tests are about it. */
 const readers = (skills: BotSkill[]) =>
 	skills.filter((skill) => !skill.isSystem)
 

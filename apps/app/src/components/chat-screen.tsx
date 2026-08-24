@@ -84,19 +84,14 @@ import type {
 import { avatarSrc } from "@/lib/host"
 import { openAttachment } from "@/lib/links/open-attachment"
 
-/** The bot's face as the memoised rows below take it: five strings rather than a
- * node, so a streamed delta still shallow-compares equal. */
 type BotFace = {
 	name: string
 	animal: AvatarAnimal
 	blot?: AvatarBlot
-	/** The bot's id, which is what the shape of its blot is derived from. */
 	seed: string
 	image?: string
 }
 
-/** What a turn reads as under its bubble: the files the prompt named, then the
- * words themselves. The same on a stored row and on one still waiting to go. */
 const TurnBody = ({ attachments, text }: MessageContent) => (
 	<>
 		<MessageAttachments items={attachments} onOpen={openAttachment} />
@@ -104,10 +99,6 @@ const TurnBody = ({ attachments, text }: MessageContent) => (
 	</>
 )
 
-/** Memoised: a streamed delta rewrites one message, and the view model hands
- * back the same rows for the rest. `run` arrives from the enclosing group and
- * `avatar` stays a boolean, so the shallow compare holds through a stream — which
- * is also why the bot's face arrives spread rather than as an object. */
 const TranscriptTurn = memo(function TranscriptTurn({
 	row,
 	controller,
@@ -124,8 +115,6 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	controller: ChatController
 	run?: ChatTurnRun
 	avatar: boolean
-	/** Claude refused this prompt. The stored row is whole either way — the reader
-	 * wrote it and the store took it — so the retry lives on the screen alone. */
 	rejected?: boolean
 }) {
 	const { text, attachments } = messageWithAttachments(row.text)
@@ -170,9 +159,6 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	)
 })
 
-/** A prompt the reader has sent and nothing has taken yet. It reads like the
- * transcript row it is about to become — the same words, the same files named in
- * them — and carries the only way back out of the wait. */
 const QueuedTurn = memo(function QueuedTurn({
 	entry,
 	controller,
@@ -238,9 +224,6 @@ function PermissionPrompt({
 	)
 }
 
-/** A question the child asked, read as the card takes it: an option that describes
- * itself in no words describes itself in none, and one that previews nothing
- * previews nothing. */
 const toQuestionItem = (asked: AskedQuestion): ToolQuestionItem => ({
 	question: asked.question,
 	header: asked.header,
@@ -252,8 +235,6 @@ const toQuestionItem = (asked: AskedQuestion): ToolQuestionItem => ({
 	})),
 })
 
-/** Refusing to answer refuses the tool, which is the same denial any permission
- * gets and travels the same way. */
 function QuestionPrompt({
 	controller,
 	request,
@@ -274,9 +255,6 @@ function QuestionPrompt({
 	)
 }
 
-/** Memoised: the draft mirror must not re-render per token. Nothing here reads the
- * turn or the connection — the composer takes a prompt whatever either is doing,
- * and the outbox is where one that cannot land yet waits. */
 const Composer = memo(function Composer({
 	composerRef,
 	botName,
@@ -290,26 +268,14 @@ const Composer = memo(function Composer({
 	onSubmitPrompt,
 }: {
 	composerRef: RefObject<HTMLTextAreaElement | null>
-	/** The bot the prompt is addressed to, which the placeholder names. */
 	botName: string
-	/** What the bot last answered to: the live session's own list once it has
-	 * announced one, and until then the list the store kept from the session before
-	 * it. Empty only for a bot no session has ever announced anything for. */
 	commands: AgentCommand[]
-	/** Whether files may be staged at all: they are written to disk against an open
-	 * session, which a held prompt does not have. */
 	canAttach: boolean
-	/** Something is drawn over the conversation. */
 	isOverlayOpen: boolean
-	/** The files staged for this prompt, drawn as chips inside the composer. */
 	attachments: StagedAttachment[]
-	/** Files are being dragged over the conversation, which the composer wears even
-	 * though the drag never reached it. */
 	isDropTarget: boolean
 	onAttach: (files: File[]) => void
 	onRemoveAttachment: (id: string) => void
-	/** Stores the staged files, then sends the prompt naming them. Answers whether
-	 * it was taken: a refused store keeps the draft where the reader left it. */
 	onSubmitPrompt: (text: string) => Promise<boolean>
 }) {
 	const t = useChatCopy()
@@ -318,17 +284,11 @@ const Composer = memo(function Composer({
 	const options = useMemo(() => commandOptionsFor(commands), [commands])
 	const query = isOverlayOpen ? null : commandQueryIn(prompt, commands)
 
-	// A dismissal covers every draft that stays in the command shape, one edited
-	// back to the shape it was dismissed on included. It rearms when the draft
-	// leaves that shape, and while an overlay covers the conversation — so an
-	// overlay closing offers the menu the draft under it asks for.
 	const isDismissed = holdsDismissal(wasDismissed, query)
 	if (wasDismissed !== isDismissed) {
 		setWasDismissed(isDismissed)
 	}
 
-	// The draft only goes if it is still the one that was sent: storing the files
-	// takes a round trip, and whatever the reader typed meanwhile is theirs.
 	const submit = useCallback(
 		async (value: string) => {
 			const sent = await onSubmitPrompt(value)
@@ -339,8 +299,6 @@ const Composer = memo(function Composer({
 		[onSubmitPrompt],
 	)
 
-	// Held stable: the menu listens for the keyboard and for a press outside while
-	// it is open, and a fresh callback per keystroke would resubscribe both.
 	const select = useCallback(
 		(option: string) => {
 			setPrompt(promptForCommand(option))
@@ -381,9 +339,6 @@ const Composer = memo(function Composer({
 	)
 })
 
-/** The one notice standing over the composer. A refused store takes the place of
- * the session's own while it stands: it is the newer fact, and the only one the
- * reader is still holding files for. */
 function ConversationNotice({
 	refusal,
 	onDismissRefusal,
@@ -391,10 +346,8 @@ function ConversationNotice({
 	onDismissError,
 	onRestart,
 }: {
-	/** Why the staged files were not stored, while the reader still holds them. */
 	refusal: AttachmentStoreError | null
 	onDismissRefusal: () => void
-	/** The newest transport error the reader has not dismissed. */
 	error?: ChatError
 	onDismissError: (id: string) => void
 	onRestart: (id: string) => void
@@ -436,19 +389,10 @@ function ConversationNotice({
 }
 
 type ChatScreenProps = {
-	/** The bot this conversation belongs to. Its face is the one the replies wear —
-	 * an uploaded picture is not among them: the transcript draws the animal. */
 	bot: Bot
 	chat: Chat
-	/** Whether the settings dialog stands open over this one. The gear says so, and
-	 * pressing it is what closes the dialog again. */
-	/** The files staged for every bot, so the ones this reader attached survive a
-	 * switch to another bot and back. */
 	attachments: AttachmentsController
 	isSettingsOpen: boolean
-	/** Whether anything at all is drawn over the conversation, this bot's settings
-	 * included. What the composer reads: a menu of its own may not answer the
-	 * keyboard from under a surface that has the reader's attention. */
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
 }
@@ -467,8 +411,6 @@ export function ChatScreen({
 	const conversationRef = useRef<HTMLDivElement>(null)
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
-	// The picture the bot wears, as something a webview may load. Resolved once per
-	// render and handed down: every avatar on this screen is the same bot's.
 	const face = avatarSrc(bot.avatarImagePath)
 	const canAttach = isSessionReady(state)
 	const staged = useAttachments(attachments, bot.id, canAttach, conversationRef)
@@ -490,9 +432,6 @@ export function ChatScreen({
 		void controller.stop()
 	}, [controller])
 
-	// The caret waits for nothing: a prompt written before the session is up is
-	// held rather than refused, so the composer takes it the moment the screen is
-	// there.
 	useEffect(() => {
 		composerRef.current?.focus({ preventScroll: true })
 	}, [])
@@ -502,8 +441,6 @@ export function ChatScreen({
 			rootRef={conversationRef}
 			busy={isTurnBusy(state.turn)}
 			label={t("screen.label")}
-			// Offered only once there is a transcript to sit above: an empty
-			// conversation has no beginning to announce.
 			older={
 				state.messages.length > 0
 					? {
@@ -580,8 +517,6 @@ export function ChatScreen({
 			) : null}
 
 			{runs.map((run, runIndex) => {
-				// Only the newest run may hold the mark, and only once the working
-				// row below has given it up.
 				const newest = runIndex === runs.length - 1
 				const live = working !== null && newest
 				const avatarIndex = live ? -1 : run.length - 1
@@ -627,8 +562,6 @@ export function ChatScreen({
 				<PermissionPrompt controller={controller} request={state.permission} />
 			) : null}
 
-			{/* Under everything the bot is doing: these are the words said after it,
-			 * and the last of them is the newest thing on the screen. */}
 			{state.outbox.length > 0 ? (
 				<ChatTurnGroup>
 					{state.outbox.map((entry) => (

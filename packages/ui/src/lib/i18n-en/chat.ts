@@ -1,6 +1,3 @@
-/** Every string a reader sees on the chat surface — transcript, composer, tool
- * cards, agent activity and markdown — plus the two the host hands down as
- * props. */
 const chat = {
 	emptyState: {
 		ready: {

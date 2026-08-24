@@ -1,5 +1,3 @@
-/** The distances a moment is read at, largest first. Anything under a minute is
- * read as now: a reader counting seconds is reading the wrong surface. */
 const UNITS = [
 	["year", 31_536_000_000],
 	["month", 2_592_000_000],
@@ -9,8 +7,6 @@ const UNITS = [
 	["minute", 60_000],
 ] as const satisfies readonly (readonly [Intl.RelativeTimeFormatUnit, number])[]
 
-/** One formatter per language, kept: a list of a hundred commits builds one, not a
- * hundred. */
 const formatters = new Map<string, Intl.RelativeTimeFormat>()
 
 const formatterFor = (locale: string) => {
@@ -22,12 +18,6 @@ const formatterFor = (locale: string) => {
 	return made
 }
 
-/**
- * A moment said as a distance from another one — "2 hours ago", "il y a 2 heures".
- * The wording is the platform's, in the language it is asked in, so no catalogue
- * carries a phrase per unit. `now` is a parameter rather than a reading of the clock
- * so the same input always says the same thing.
- */
 const toRelativeTime = (at: number, locale: string, now: number) => {
 	const format = formatterFor(locale)
 	const elapsed = at - now

@@ -1,5 +1,4 @@
 "use client"
-// beui.dev/components/motion/tooltip
 
 import {
 	AnimatePresence,
@@ -31,22 +30,15 @@ export interface TooltipProps {
 	content: ReactNode
 	children: ReactElement
 	side?: Side
-	/** Delay before showing (ms). Default 120. */
 	delay?: number
 	className?: string
-	/** Classes for the outer wrapper span. Use to fix baseline / fill parent. */
 	wrapperClassName?: string
 }
 
-// Gap between trigger and tooltip, in px.
 const GAP = 8
 
-// How close to the edge of the window the tooltip may come, in px.
 const EDGE = 8
 
-// The centring step back, held inside the window: `-50%` and `-100%` resolve
-// against the tooltip's own box, so a trigger in the corner of the window keeps
-// its label on the screen without the label ever being measured.
 const centredInside = (centre: number, extent: number) =>
 	`min(max(-50%, ${EDGE - centre}px), calc(${extent - EDGE - centre}px - 100%))`
 
@@ -59,8 +51,6 @@ const transformOrigin: Record<Side, string> = {
 	right: "left center",
 }
 
-// Offset is in the direction *away* from the trigger — content originates near
-// the trigger and rises into resting position.
 const offsetFrom: Record<Side, { x?: number; y?: number }> = {
 	top: { y: 8 },
 	bottom: { y: -8 },
@@ -91,8 +81,6 @@ function buildVariants(side: Side): Variants {
 	}
 }
 
-// Once any tooltip has just closed, neighbouring tooltips open without the
-// initial delay — moving along a toolbar feels instant after the first one.
 const WARM_WINDOW_MS = 300
 let lastHiddenAt = 0
 
@@ -112,9 +100,6 @@ export function Tooltip({
 	const reduce = useReducedMotion()
 	const canHover = useHoverCapable()
 
-	// Anchor point in viewport coords, on the edge of the trigger facing `side`.
-	// Position:fixed means these viewport coords place the tooltip directly, so
-	// it escapes every ancestor's stacking context and overflow.
 	const place = useCallback(() => {
 		const el = anchorRef.current
 		if (!el) return
@@ -170,8 +155,6 @@ export function Tooltip({
 		setOpen(false)
 	}, [open])
 
-	// Keep the tooltip pinned to the trigger while it's open and the page scrolls
-	// or resizes (fixed coords are viewport-relative).
 	useEffect(() => {
 		if (!open) return
 		const onMove = () => place()
@@ -183,8 +166,6 @@ export function Tooltip({
 		}
 	}, [open, place])
 
-	// A trigger hovered and then dropped — a transcript trimming its oldest rows
-	// — would otherwise leave a pending show firing into a gone component.
 	useEffect(
 		() => () => {
 			if (timer.current) clearTimeout(timer.current)
@@ -206,8 +187,6 @@ export function Tooltip({
 			onMouseLeave: hide,
 			onFocus: show,
 			onBlur: hide,
-			// Only while it exists: a description pointing at nothing is dropped by
-			// assistive tech and hides the trigger's own name in some readers.
 			"aria-describedby": open ? id : undefined,
 		},
 	)

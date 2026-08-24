@@ -17,8 +17,6 @@ import {
 	named,
 } from "../conversations/transcript-fixtures"
 
-/** One participant's lineage, a run at a time: the number and the row change
- * together, the way a restart takes the next one. */
 function run(epoch: number): RuntimeScope {
 	return {
 		conversationId: CONVERSATION,
@@ -65,8 +63,6 @@ const opened: ChatState = chatReducer(initialChatState, {
 })
 
 describe("chatReducer", () => {
-	// What was said belongs to the transcript, which is read back from the store.
-	// A reducer that also held it would be a second answer to the same question.
 	it("leaves every message event to the durable transcript", () => {
 		const state = applyEvents(opened, [
 			...streamedTurn,
@@ -191,9 +187,6 @@ describe("chatReducer", () => {
 		expect(stale.turn).toBe("idle")
 	})
 
-	// A replaced run is still alive for as long as its child takes to die, and it
-	// keeps reporting. None of it may move the screen — not the run before this
-	// one, not another bot's, not one carrying this row's id under another number.
 	it("drops every event from a run this state is not about", () => {
 		const reset = chatReducer(initialChatState, {
 			type: "sessionReset",
@@ -226,8 +219,6 @@ describe("chatReducer", () => {
 		).toBe("submitting")
 	})
 
-	// The check a launch makes before it has opened a run: it names none, the host
-	// echoes none, and the reader must still be told what the install answered.
 	it("takes an unscoped event while it holds no run of its own", () => {
 		const checked = chatReducer(initialChatState, {
 			type: "driverEvent",
@@ -343,8 +334,6 @@ describe("chatReducer", () => {
 		expect(state.permission).toBeNull()
 	})
 
-	// The stored prompt is whole whatever Claude did with it, so the refusal is
-	// held here and never written onto the row.
 	it("marks the refused prompt on the screen alone, and clears it on retry", () => {
 		const submitted = chatReducer(opened, { type: "promptSubmitted" })
 		expect(submitted.turn).toBe("submitting")
@@ -374,7 +363,6 @@ describe("chatReducer", () => {
 		)
 	})
 
-	// A prompt the store refused has no row to point at, so nothing is marked.
 	it("fails the turn without a row when the store refused the prompt", () => {
 		const rejected = chatReducer(
 			chatReducer(opened, { type: "promptSubmitted" }),
@@ -430,8 +418,6 @@ describe("runtime scope", () => {
 		expect(isSameRuntimeScope(run(1), null)).toBe(false)
 		expect(isSameRuntimeScope(null, run(1))).toBe(false)
 		expect(isSameRuntimeScope(run(1), run(2))).toBe(false)
-		// The id alone is not which run this is: the same row named under another
-		// number, another bot or another conversation is somebody else's.
 		expect(isSameRuntimeScope(run(1), { ...run(1), epoch: 2 })).toBe(false)
 		expect(isSameRuntimeScope(run(1), { ...run(1), botId: "other" })).toBe(
 			false,
@@ -468,7 +454,6 @@ describe("turn predicates", () => {
 				sessionOpen: true,
 			}),
 		).toBe(false)
-		// `sessionReady` only lands once a turn starts, so an id alone must not gate the composer.
 		expect(
 			isSessionReady({
 				...initialChatState,
@@ -601,9 +586,6 @@ describe("session reset", () => {
 		expect(reset.runtime).toEqual(run(1))
 	})
 
-	// A step is something a running provider was doing. Carrying a pending one
-	// across the restart leaves the screen reporting work with nothing behind it,
-	// and a cold launch — which reads no step at all — would disagree.
 	it("leaves no step running once the provider that was running it is gone", () => {
 		const working = applyEvents({ ...initialChatState, connection: "ready" }, [
 			{ type: "turnChanged", state: "submitting" },
@@ -639,8 +621,6 @@ describe("session reset", () => {
 		expect(reset.turn).toBe("idle")
 	})
 
-	// The child re-announces its id only on the first prompt of the new session,
-	// so a reset that drops the id leaves the app unable to name what it resumed.
 	it("carries the resumed id through the reset that opens it", () => {
 		const live = applyEvents(
 			{ ...initialChatState, connection: "ready" },
@@ -684,8 +664,6 @@ describe("the outbox a prompt waits in", () => {
 		)
 	})
 
-	// A prompt taken for submission that was never written down is still one nobody
-	// has seen. It goes back to the front, ahead of what was sent after it.
 	it("returns an entry nothing was written for to the front", () => {
 		const taken = chatReducer(three, { type: "outboxEntryRemoved", id: "a" })
 		const returned = chatReducer(taken, {
@@ -696,8 +674,6 @@ describe("the outbox a prompt waits in", () => {
 		expect(queued(returned)).toEqual(["one", "two", "three"])
 	})
 
-	// A stop puts every held prompt on the record. None of them is waiting to be
-	// sent afterwards, so the line the reader was in is empty rather than paused.
 	it("empties whole when a stop takes what it was holding", () => {
 		const cleared = chatReducer(three, { type: "outboxCleared" })
 
@@ -705,8 +681,6 @@ describe("the outbox a prompt waits in", () => {
 		expect(chatReducer(cleared, { type: "outboxCleared" })).toBe(cleared)
 	})
 
-	// The session going away is exactly why a prompt is waiting. Losing the line on
-	// the restart that was going to send it would be the one moment it must not.
 	it("survives the session it was waiting for being reset", () => {
 		const reset = chatReducer(three, {
 			type: "sessionReset",

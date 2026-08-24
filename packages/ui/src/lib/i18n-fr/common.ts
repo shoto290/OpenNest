@@ -1,6 +1,3 @@
-/** The French chrome every surface shares — the boot screen, the sidebar, the
- * context menu, the dialog frame, the picture dropzone, the stateful button and
- * the update pastille. */
 const common = {
 	boot: {
 		status: "Démarrage d'OpenNest",

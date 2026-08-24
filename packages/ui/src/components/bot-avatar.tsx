@@ -64,15 +64,6 @@ const ROLE_PROPS = {
 
 const HEAD_MASK_BOUNDS = { x: -240, y: -240, width: 720, height: 720 } as const
 
-/** The eight tints a bot can be marked with, named with the vocabulary an agent
- * file's `color` key reads. The names are the agent format's and the ink is this
- * system's own: seven kept theirs through the renaming — `purple` is the lavender it
- * always was. `orange` is the one that had to be drawn again. The grey it used to be
- * said one thing and showed another, here and in the reader's own agent display, so
- * it is an apricot now, between `red` and `yellow` where the word puts it.
- *
- * Light ones only: the ink line and the ear accent are near-black, and they stop
- * reading over anything darker. */
 const BLOT_TINTS = [
 	"red",
 	"yellow",
@@ -92,9 +83,6 @@ const BLOT_SPAN = VIEW_BOX * BLOT_RATIO
 const BLOT_INSET = round2((VIEW_BOX - BLOT_SPAN) / 2)
 const BLOT_PLACEMENT = `translate(${BLOT_INSET} ${BLOT_INSET}) scale(${round2(BLOT_SPAN / BLOT_BOX)})`
 
-/** A blot brings its own ink. The tint is the same under `.dark`, and the near-white
- * line the dark theme draws would vanish on it — the eyes read off `currentColor`
- * and the rest off the ink token, so both are pinned back to the dark line. */
 const BLOT_INK_STYLE = {
 	color: "var(--bot-blot-ink)",
 	"--bot-avatar-ink": "var(--bot-blot-ink)",
@@ -179,11 +167,7 @@ type BotAvatarProps = {
 	roll?: number
 	perspective?: number
 	ink?: BotAvatarInk
-	/** A tint drawn behind the whole animal. Leave it out and nothing is drawn. */
 	blot?: BotAvatarBlot
-	/** What the blot's shape is derived from — the bot's id, and nothing a reader
-	 * can edit. The same seed lands on the same shape on every machine and after
-	 * every restart; leave it out and the blot is drawn as authored. */
 	seed?: string
 	interactive?: boolean
 	wireframe?: boolean
@@ -224,11 +208,6 @@ function BotAvatar({
 
 	const engine = useMemo(() => new BotAvatarEngine(definition), [definition])
 
-	// A layout effect, not a passive one: the eyes and ears carry no geometry
-	// until the engine draws them, so a passive first pass paints a faceless
-	// frame. It poses the rig before starting it, so the first drawn frame is
-	// already the one asked for; the effects below only ever redraw an SVG that
-	// is on screen and posed, and can stay passive.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-time setup — the effects below own every later change
 	useLayoutEffect(() => {
 		if (!svgRef.current) return

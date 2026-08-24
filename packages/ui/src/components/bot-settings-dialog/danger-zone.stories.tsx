@@ -35,8 +35,6 @@ const meta = preview.meta({
 		onDelete: fn(),
 	},
 	argTypes: {
-		// Read once, as the group mounts, so it is a story's arg rather than a knob:
-		// a control that only takes effect on a remount reads as a broken one.
 		defaultConfirming: { control: false },
 	},
 })

@@ -1,8 +1,5 @@
 import type { BotMcpServerItem } from "@workspace/ui/components/bot-settings"
 
-/** A bundle holding both kinds a reader meets: one local server started with a
- * command and carrying a token in its environment, one reached over the network, and
- * one whose configuration names neither. */
 export const BOT_MCP_SERVERS: BotMcpServerItem[] = [
 	{
 		name: "atlas",
@@ -27,8 +24,6 @@ export const BOT_MCP_SERVERS: BotMcpServerItem[] = [
 	},
 ]
 
-/** One server written long enough to run its command past the row and its
- * environment past a line. */
 export const LONG_MCP_SERVER: BotMcpServerItem = {
 	name: "nightly-ingestion-pipeline-inspector",
 	config: {

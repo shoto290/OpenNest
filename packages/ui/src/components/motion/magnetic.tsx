@@ -26,7 +26,6 @@ export function Magnetic({
 	const ref = useRef<HTMLDivElement>(null)
 	const reduce = useReducedMotion()
 	const canHover = useHoverCapable()
-	// Decorative cursor-follow: skip on touch (phantom hover) and reduced motion.
 	const enabled = !reduce && canHover
 	const x = useMotionValue(0)
 	const y = useMotionValue(0)

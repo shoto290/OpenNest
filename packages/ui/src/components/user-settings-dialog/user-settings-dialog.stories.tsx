@@ -32,9 +32,6 @@ const PICTURED_USER: UserSettingsValue = {
 	palette: "lavender",
 }
 
-/** The dialog keeps no draft and has no open state of its own, so a story holds
- * what the host holds — the value it edits, the language chosen apart from it, and
- * whether it stands. */
 const DialogHost = (props: UserSettingsDialogProps) => {
 	const [value, setValue] = useState(props.value)
 	const [language, setLanguage] = useState(props.language)

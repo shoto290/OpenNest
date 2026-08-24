@@ -14,11 +14,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type HistoryPanelProps = {
 	commits: BotCommitItem[]
-	/** The name the bot's own commits are signed with. The reader's are signed
-	 * "You" — a reader knows their own name. */
 	botName: string
-	/** Fired the moment a commit is opened. The diff is the host's to fetch and to
-	 * write back on the commit; this panel asks and waits. */
 	onLoadDiff: (commitId: string) => void
 	onRevert: (commitId: string) => void
 }
@@ -26,20 +22,8 @@ type HistoryPanelProps = {
 const ROW_CLASS =
 	"flex flex-col gap-2 rounded-xl border border-border px-3 py-2.5"
 
-/** The dot standing between who and when. Drawn rather than written: a separator
- * is punctuation, not a word anybody translates. */
 const SEPARATOR_CLASS = "before:mr-1.5 before:content-['·']"
 
-/**
- * Everything that has ever changed in a bot's bundle, newest first: what the change
- * was, who made it and when. It is written for a reader who does not read diffs —
- * the title leads, the body says what it meant, and the diff itself is folded away
- * behind a disclosure, asked for only once somebody opens it.
- *
- * The panel keeps only what is open. The commits, their diffs and the undoing are
- * all the host's: opening a commit asks for its diff and shows it once it arrives,
- * and Undo asks its question here but is answered upstream, as a new commit.
- */
 const HistoryPanel = ({
 	commits,
 	botName,

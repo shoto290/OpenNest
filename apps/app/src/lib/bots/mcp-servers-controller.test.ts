@@ -15,8 +15,6 @@ const opened = async (store: TranscriptStore, botId = "default") => {
 	return controller
 }
 
-/** The queue behind every write answers on its own turn, so a test reads what the
- * store holds only after the loop it was handed to has run out. */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe("mcp servers controller", () => {

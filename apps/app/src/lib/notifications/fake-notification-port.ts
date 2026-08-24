@@ -4,12 +4,8 @@ import type {
 	NotificationRequest,
 } from "./notification-port"
 
-/** The port with the platform taken out of it: every send is kept where a test can
- * read it, and the click nobody can perform in a test is performed by calling
- * `activate`. */
 export type FakeNotificationPort = NotificationPort & {
 	sent: NotificationRequest[]
-	/** The reader clicking the notification that was sent for this bot. */
 	activate: (botId: string) => void
 }
 

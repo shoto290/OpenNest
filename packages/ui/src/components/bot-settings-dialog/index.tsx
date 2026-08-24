@@ -50,41 +50,23 @@ import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { useSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** The tab a reader lands on whenever the dialog opens on its own account. Settings
- * a bot has none of yet are still the first thing to fill in — unless the host opened
- * it from a row's own delete, which lands on [`DANGER_TAB`] instead. */
 const FIRST_TAB = "general"
 
 const DANGER_TAB = "danger"
 
-/** A skill held open on the whole dialog: the draft as it is being written, and the
- * skill it was opened on to weigh it against. No skill for a creation — there is
- * nothing kept to compare a first draft to. */
 type SkillSession = {
 	draft: BotSkillDraft
 	opened?: BotSkillItem
 }
 
-/** A server held open on the whole dialog: the draft as it is being written, and the
- * server it was opened on to weigh it against — which is also where it is filed, so a
- * rename is reported against that name. No server for a creation. */
 type McpSession = {
 	draft: BotMcpServerDraft
 	saved?: BotMcpServerDraft
 }
 
-/** Everything the History tab needs, travelling together: a host that has no
- * bundle to read cannot half-wire it, and one that leaves it out gets no tab rather
- * than an empty one. */
 type BotHistory = {
-	/** Every commit of the bundle. Order is this side's — it lists them newest
-	 * first whatever order they arrive in. */
 	commits: BotCommitItem[]
-	/** Fired the moment a commit is opened. The diff comes back on the commit's own
-	 * `diff`, so an opened commit without one is still loading. */
 	onLoadDiff: (commitId: string) => void
-	/** Fired only once the question on the row is accepted. The host answers with a
-	 * new commit; nothing here is removed. */
 	onRevert: (commitId: string) => void
 }
 
@@ -95,79 +77,36 @@ const DANGER_RAIL_ITEM_CLASS = cn(
 
 type BotSettingsDialogProps = {
 	open: boolean
-	/** Fired for every way out — Escape, the backdrop, the corner affordance. Asked
-	 * through a question while a skill is open with something unsaved: the editor
-	 * saves on a press, so closing over it would drop what was typed. */
 	onClose: () => void
 	value: BotSettingsValue
-	/** Fired on every edit — the dialog keeps no draft and owns no persistence. */
 	onValueChange: (value: BotSettingsValue) => void
 	models: BotModelOption[]
-	/** How the bot writes its answers, as the host stores it raw. Read and written
-	 * beside `value` rather than in it: the style lives in the host's own settings,
-	 * not in the row the rest of this panel edits. Left out, the concise style the
-	 * bot is given by default, reported to nobody. */
 	outputStyle?: BotOutputStyle
 	onOutputStyleChange?: (outputStyle: BotOutputStyle) => void
-	/** Receives the picked, dropped or pasted file. The host turns it into a URL
-	 * and writes it back as `value.identity.image`. */
 	onAvatarUpload: (file: File) => void
-	/** Opens the host's folder picker. */
 	onBrowseWorkingDirectory: () => void
-	/** Every skill the bot carries. Read and written on its own tab rather than
-	 * through `value`: a skill lives in the bot's bundle, not in the row the rest of
-	 * this panel edits. */
 	skills: BotSkillItem[]
 	onSkillCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
-	/** Addressed by id, never by name: renaming a skill moves nothing on the disk. */
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
-	/** Every MCP server the bot declares. Read and written on its own tab, like the
-	 * skills and for the same reason: a server lives in the bot's bundle rather than
-	 * in the row the rest of this panel edits. */
 	mcpServers: BotMcpServerItem[]
 	onMcpServerCreate: (name: string, config: Record<string, unknown>) => void
-	/** Addressed by the name the editor was opened on: the name is the key the
-	 * server is filed under, so a rename moves it. */
 	onMcpServerChange: (
 		openedName: string,
 		name: string,
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
-	/** Everything that has ever changed in the bot's bundle, and the two ways to act
-	 * on it. Left out, the dialog carries no History tab at all. */
 	history?: BotHistory
-	/** The edited bot's id. It is what its blot's shape is derived from, so the
-	 * breadcrumb shows the mark the roster row behind it is already showing. */
 	seed?: string
-	/** Fired only once the confirmation is accepted. */
 	onDelete: () => void
-	/** Whether the dialog opens on the Danger zone rather than on the first group, for
-	 * a host opened from a row's own delete. It only picks the group — the question is
-	 * still the reader's to ask, on the tab's own button. Read once, as the dialog
-	 * mounts: a host that keeps it mounted across opens has to key it to be heard. */
 	showDanger?: boolean
-	/** The only thing that makes the breadcrumb avatar move. */
 	working?: boolean
-	/** What the bot is busy with while `working`. Its own animal performs it. */
 	workingKind?: BotWorkingKind
 	className?: string
 }
 
-/**
- * Everything a bot is, in one overlay: a breadcrumb naming the bot it belongs to,
- * a rail of groups down the left and one group at a time on the right. It is fully
- * controlled and saves as you type — every keystroke emits `onValueChange` with the
- * whole value, and the dialog owns no draft, no debounce and no persistence. A skill
- * is the exception: its editor saves on a press, so a way out taken over one with
- * something unsaved asks before it drops the draft.
- *
- * The breadcrumb and the rail hold still; only the open group scrolls. Below 42rem
- * of content the rail drops to its icons, and only then do its items carry a
- * tooltip — a name a reader can already read is not worth saying twice.
- */
 const BotSettingsDialog = ({
 	open,
 	onClose,
@@ -206,15 +145,10 @@ const BotSettingsDialog = ({
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
-	// The open skill weighed against what is kept, exactly as its editor weighs it:
-	// the same draft is unsaved on both sides, so the way out of the dialog asks the
-	// same question the way back to the list does.
 	const isSkillUnsaved = Boolean(
 		skill && isSkillDraftUnsaved(skill.draft, skill.opened),
 	)
 
-	// The open server weighed the same way, so a dialog closed over one asks before it
-	// drops the draft its own editor would have asked about.
 	const isServerUnsaved = Boolean(
 		server && isMcpServerDraftUnsaved(server.draft, server.saved),
 	)
@@ -228,7 +162,6 @@ const BotSettingsDialog = ({
 	const close = () =>
 		isSkillUnsaved || isServerUnsaved ? setLeaving(true) : leave()
 
-	// The question names what is about to be dropped, so it is the open editor's own.
 	const leaveCopy = server
 		? {
 				title: t("mcp.leave.title"),
@@ -241,14 +174,8 @@ const BotSettingsDialog = ({
 				action: t("skills.leave.action"),
 			}
 
-	// The chord that opened the dialog closes it, and closes it the way Escape and
-	// the backdrop do: a host that flipped `open` itself would take an unsaved skill
-	// with it without ever asking.
 	useSettingsShortcut({ isEnabled: open, onToggle: close })
 
-	// The mark is written with the rest of the skill rather than the moment it is
-	// pressed: the editor saves on a press, so what the bot was told and what the
-	// skill says leave together, and only when either actually moved.
 	const saveSkill = ({ draft, opened }: SkillSession) => {
 		const isPreloaded = draft.isPreloaded ?? false
 
@@ -310,8 +237,6 @@ const BotSettingsDialog = ({
 		/>
 	)
 
-	// One editor at a time, and either of them takes the whole dialog: a skill and a
-	// server both replace the rail with one of their own.
 	const openEditor = () => {
 		if (skill) return openSkillEditor(skill)
 		if (server) return openServerEditor(server)

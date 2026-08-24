@@ -39,22 +39,14 @@ import { SETTINGS_TAG_CLASS } from "@workspace/ui/components/settings-styles"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
 import { cn } from "@workspace/ui/lib/utils"
 
-/** The section a server opens on: where it is reached and what it is called is the
- * whole of what makes a server that server, and every other section is an answer
- * about that one. */
 const FIRST_SECTION = "connection"
 
 type EditorNoticeProps = {
 	icon: Icon
 	text: string
-	/** Whether the notice is about something being wrong rather than about something
-	 * being worth knowing. */
 	danger?: boolean
 }
 
-/** One sentence standing above the fields it is about. Two of them are needed here
- * and both are the same object: what a server is before one is added, and why a
- * section has no fields to show. */
 const EditorNotice = ({
 	icon: NoticeIcon,
 	text,
@@ -81,48 +73,17 @@ const EditorNotice = ({
 
 type McpServerEditorProps = {
 	draft: BotMcpServerDraft
-	/** Fired on every keystroke — the editor keeps no draft of its own. Nothing is
-	 * written from it: the save is its own press. */
 	onDraftChange: (draft: BotMcpServerDraft) => void
-	/** The server as it stands where it is kept, which is what the draft is weighed
-	 * against to know there is something to save. Left out for a server that does not
-	 * exist yet: the save then reads as a creation. */
 	saved?: BotMcpServerDraft
-	/** Back to the list the editor was opened from. Reached through a question while
-	 * anything is unsaved. */
 	onBack: () => void
-	/** Fired with the parsed configuration, never with the text. Only reachable while
-	 * the name is filled, the JSON parses and something has changed. */
 	onSave: (config: Record<string, unknown>) => void
-	/** Fired only once the confirmation is accepted. Left out for a server that does
-	 * not exist yet — there is nothing kept to take away. */
 	onDelete?: () => void
-	/** Which section the editor mounts on. Read once, as it mounts. */
 	defaultSection?: string
-	/** Whether the delete mounts with its question already up. Read once. */
 	defaultConfirming?: boolean
-	/** Whether the way out mounts with its question already up. Read once. */
 	defaultLeaving?: boolean
 	className?: string
 }
 
-/**
- * One MCP server, whole, on the whole surface: a rail of sections down the left and
- * one section at a time on the right. Connection is where the server is reached,
- * Environment is what it starts with, Advanced is the configuration itself.
- *
- * The fields and the JSON are two readings of one thing. A field answered is carried
- * into the text, the text edited is carried back into the fields, and every key no
- * field names is kept untouched — the shape belongs to the transport, so a form of
- * fixed fields would be a lie the day a server names something this side has never
- * heard of. Which fields stand under Connection is the transport's answer: a local
- * server names a command and its arguments, a remote one an address and its headers.
- *
- * Nothing is written as it is typed. The name is the key the server is filed under,
- * so a rename typed letter by letter would file one server per keystroke, and a
- * half-written configuration is not JSON at all. The save is a press, and the way out
- * asks before it drops a draft.
- */
 const McpServerEditor = ({
 	draft,
 	onDraftChange,
@@ -144,9 +105,6 @@ const McpServerEditor = ({
 	const name = draft.name.trim() || t("mcp.untitled")
 	const config = parseMcpServerConfig(draft.config)
 	const fields = readMcpServerFields(config ?? {})
-	// What the save would write, which is not always what the text shows: a remote
-	// server is written with the kind of endpoint it is reached by, because an address
-	// with no `type` beside it is a server the runtime skips outright.
 	const written = config && toMcpServerWrittenConfig(config, draft.transport)
 	const isWritten = Boolean(saved)
 	const isUnsaved = isMcpServerDraftUnsaved(draft, saved)
@@ -156,11 +114,6 @@ const McpServerEditor = ({
 	const patch = (next: Partial<BotMcpServerDraft>) =>
 		onDraftChange({ ...draft, ...next })
 
-	// Every field is read back out of the configuration on every keystroke, and a
-	// half-typed line laid out again under the caret would take the line back from the
-	// typist — `A` becoming `A: ` before the second letter arrives. So what was typed
-	// stands for as long as it says what the configuration says, and the configuration
-	// wins the moment it says anything else, which is what an edit to the JSON is.
 	const shown = (field: keyof BotMcpServerFields) => {
 		const raw = typed[field]
 
@@ -192,9 +145,6 @@ const McpServerEditor = ({
 		})
 	}
 
-	// The text is the configuration, so what it names is what the fields answer —
-	// the transport included: a text that has grown an address is a remote server
-	// whatever the select was left on. A text naming neither is left as it stands.
 	const editConfig = (value: string) => {
 		const next = parseMcpServerConfig(value)
 
@@ -218,8 +168,6 @@ const McpServerEditor = ({
 		value: kind,
 	}))
 
-	// A section whose fields are read out of the configuration has none to show while
-	// the text is not one: writing a field back would drop everything typed around it.
 	const unreadable = (
 		<EditorNotice danger icon={Icons.Error} text={t("mcp.config.invalid")} />
 	)

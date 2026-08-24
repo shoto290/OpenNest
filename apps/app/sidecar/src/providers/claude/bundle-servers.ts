@@ -3,8 +3,6 @@ import { join } from "node:path"
 
 import type { Options } from "@anthropic-ai/claude-agent-sdk"
 
-/** Where a bundle declares its servers, and the one key of that file read here.
- * The host owns everything else in it. */
 const MCP_NAME = ".mcp.json"
 const SERVERS_KEY = "mcpServers"
 
@@ -15,13 +13,6 @@ const objectAt = (value: unknown): Record<string, unknown> =>
 		? (value as Record<string, unknown>)
 		: {}
 
-/** The servers a bundle declares, handed over under the names the bundle gives them.
- * `strictMcpConfig` drops every MCP configuration the session was not passed as an
- * option — measured: a plugin's own `.mcp.json` among them — so the file is read here
- * and its map passed on, which is the only route left from a bundle to a server.
- *
- * A bundle with no file, an unreadable one, or one holding anything but a map
- * declares nothing: a session opens without the server rather than not at all. */
 export const bundleServers = (pluginPath: string): Servers => {
 	try {
 		const declared = objectAt(
@@ -33,10 +24,6 @@ export const bundleServers = (pluginPath: string): Servers => {
 	}
 }
 
-/** Both bundles of a session bridged into one map: the app's own plugin declares
- * servers the same way a bot's does, and the same `strictMcpConfig` drops both. The
- * bot's names are applied last, so a bot that declares a server the app also names
- * keeps its own. */
 export const sessionServers = (
 	pluginPath: string,
 	systemPluginPath?: string,

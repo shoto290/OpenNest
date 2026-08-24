@@ -1,6 +1,3 @@
-/** The user settings surface in French — the breadcrumb, the rail down the
- * left, the profile fields, the notification switches, the language tiles and the
- * appearance tiles. */
 const settings = {
 	breadcrumb: {
 		title: "Réglages",

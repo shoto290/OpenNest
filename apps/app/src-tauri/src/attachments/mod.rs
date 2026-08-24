@@ -1,23 +1,3 @@
-//! The directory a conversation's attached files live in, beside the avatars and
-//! the conversation database, and the rules that decide what a stored one is
-//! called.
-//!
-//! An attachment reaches Claude as an absolute path appended to the prompt, never
-//! as bytes in a message, so a path is the whole of what storing one produces —
-//! nothing here decodes, resizes or even looks at what was handed over. One
-//! directory per conversation, because that is the unit the files are thrown away
-//! in: a conversation gone is a directory gone.
-//!
-//! Nothing a caller sent reaches the path but the extension. The name a user's file
-//! carried is their word, arriving from a webview, and a word is not a place —
-//! [`minted_name`] answers a separator, a `..` and a name with no extension at all
-//! the same way, with an identifier this host minted.
-//!
-//! The invariant is the avatars': **the directory holds exactly the conversations
-//! the record still has.** It is restored by [`sweep`] after a bot is deleted rather
-//! than maintained by remembering to delete, so a conversation deleted with its bot
-//! and a directory left behind by a host that died mid-write are the same fact to
-//! it, answered the same way.
 
 pub mod commands;
 pub mod contract;
@@ -32,78 +12,31 @@ use uuid::Uuid;
 use crate::private_files;
 use contract::SubmittedAttachment;
 
-/// Beside `conversations.sqlite3` rather than in it, for the reason avatars are:
-/// an attachment is bytes nothing queries, and rows of megabytes would sit in the
-/// way of every read of the transcript.
 const DIR_NAME: &str = "attachments";
 
-/// The largest file accepted, counted on the bytes as they arrived. The whole call
-/// is refused when one file is over it — a prompt is submitted with the files it
-/// names, so storing the rest would leave the user to notice which one is missing.
-///
-/// Ten, because a byte here is not a byte on the way: a byte array nested in an
-/// object misses Tauri's binary path, so a file crosses as JSON numbers, three to
-/// four characters a byte, and is parsed back whole on this side. Ten megabytes of
-/// file is some forty of text in transit.
 const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
-/// What one call may carry. The per-file limit bounds a mistake; these two bound a
-/// prompt, which the per-file limit alone does not — twenty files just under it is
-/// two hundred megabytes, at three to four times that once encoded.
-///
-/// Thirty keeps the worst accepted call in the tens of megabytes on each side rather
-/// than the hundreds. It is a bound, not a fix: the fix is to send dropped files as
-/// paths instead of copying their bytes across the bridge, and it is not written yet.
 const MAX_ATTACHMENTS: usize = 20;
 const MAX_TOTAL_BYTES: u64 = 30 * 1024 * 1024;
 
-/// How much of a submitted name may become an extension. Long enough for the ones
-/// that exist, short enough that the tail of a name a user typed cannot become the
-/// bulk of a path.
 const MAX_EXTENSION_LENGTH: usize = 16;
 
-/// Why nothing was stored. Every variant leaves the disk as it was: a call either
-/// puts every file down or none of them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Rejection {
-	/// More files than one prompt may carry.
 	TooMany { count: usize, limit: usize },
-	/// One file was over the limit, named so the UI can say which. Carries the
-	/// limit too, so the frontend does not hold a second copy of the number.
 	TooLarge { name: String, bytes: u64, limit: u64 },
-	/// Every file under the limit and too much of them at once.
 	TooLargeTogether { bytes: u64, limit: u64 },
-	/// The disk refused, or there was nowhere to put the file.
 	Unwritable { detail: String },
 }
 
-/// Where attachments live for this install: a path, and nothing on the disk.
-/// [`store`] makes the place, on the one path that is about to put a file in it, so
-/// a directory that is not there yet is normal — it is what an install that has
-/// never attached anything looks like, and [`sweep`] has nothing to sweep.
-///
-/// `None` is a host with no app data directory, the same outcome the database
-/// reports: attachments are unavailable for the run rather than the launch failing.
 pub fn dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
 }
 
-/// The one directory a conversation's files go in. The id is used verbatim because
-/// the caller has already matched it against the record — see
-/// [`commands::chat_store_attachments`], where being a known conversation is what
-/// makes an id a name rather than a caller's word.
 fn conversation_dir(root: &Path, conversation_id: &str) -> PathBuf {
 	root.join(conversation_id)
 }
 
-/// The name a submitted file takes on this disk: a fresh identifier, plus the
-/// extension of the submitted name when it has a plain one.
-///
-/// The extension is kept because it is what tells Claude and the editor a user
-/// opens the file in what it is. It is lowercased so two spellings of one format
-/// are one name, and it is bounded and restricted to ASCII alphanumerics because
-/// what comes after the last dot of a name from a webview is still that webview's
-/// text — a name with no plain extension is stored under the identifier alone.
 fn minted_name(submitted: &str) -> String {
 	let id = Uuid::new_v4();
 	match plain_extension(submitted) {
@@ -112,15 +45,6 @@ fn minted_name(submitted: &str) -> String {
 	}
 }
 
-/// Every file down, or none. What comes back is the absolute path of each one, in
-/// the order they were submitted — the order the prompt names them in.
-///
-/// The names are minted before the first write so that what a failure takes back
-/// is the whole list rather than a tally kept as it went. The file a write stopped
-/// in the middle of is on that list, which is the point: it exists, it holds part
-/// of what a user picked, and nothing else would ever come back for it. Paths the
-/// call never reached are on it too, and [`take_back`] answers those the way it
-/// answers any file that is not there.
 pub fn store(
 	root: &Path,
 	conversation_id: &str,
@@ -139,16 +63,6 @@ pub fn store(
 	Ok(paths)
 }
 
-/// The sweep as its caller runs it: after a bot is deleted, against the whole of
-/// what the file still holds. Kept here beside the invariant it restores, the way
-/// [`crate::avatars::sweep_referenced`] is — a second copy of "which conversations
-/// survive" would be a second answer, and the one that forgot a record would delete
-/// files somebody is still talking about.
-///
-/// Silent by design, and `None` for the directory is a run with nowhere to keep
-/// attachments: a sweep is housekeeping after a delete that already landed, so
-/// telling a caller a leftover file could not be removed would be handing it a
-/// failure it has nothing to do about.
 pub async fn sweep_referenced(database: &crate::db::Database, dir: Option<&Path>) {
 	let Some(dir) = dir else {
 		return;
@@ -158,9 +72,6 @@ pub async fn sweep_referenced(database: &crate::db::Database, dir: Option<&Path>
 	}
 }
 
-/// Leaves the root holding exactly the conversations `referenced` names, and
-/// removes every other entry with everything under it. Run after a bot is deleted,
-/// which is when the conversations it held stop being on the record.
 pub fn sweep(root: &Path, referenced: &[String]) {
 	let Ok(entries) = fs::read_dir(root) else {
 		return;
@@ -174,13 +85,6 @@ pub fn sweep(root: &Path, referenced: &[String]) {
 	}
 }
 
-/// The three limits a call is under, all of them read before anything reaches the
-/// disk so a refusal is a value returned rather than files to take back.
-///
-/// The count first because it costs nothing to know, then the one file a user has
-/// to swap — named, because that is what they can act on — and last what the files
-/// weigh together, which is the only one of the three that answers a caller sending
-/// twenty perfectly acceptable files at once.
 fn refuse(submitted: &[SubmittedAttachment]) -> Result<(), Rejection> {
 	if submitted.len() > MAX_ATTACHMENTS {
 		return Err(Rejection::TooMany { count: submitted.len(), limit: MAX_ATTACHMENTS });
@@ -245,9 +149,6 @@ mod tests {
 		path.extension()?.to_str().map(str::to_owned)
 	}
 
-	/// The whole of what storing does: the bytes are on the disk, under the
-	/// conversation, and the answer is the absolute path of each one in the order
-	/// they were handed over — which is the order the prompt will name them in.
 	#[test]
 	fn every_submitted_file_is_written_under_its_conversation_and_answered_as_a_path() {
 		let root = temp_root();
@@ -270,8 +171,6 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
-	/// Two files called the same thing are two files: the name is minted, so a
-	/// second submission cannot land on the first one's path.
 	#[test]
 	fn two_files_submitted_under_one_name_are_two_files() {
 		let root = temp_root();
@@ -289,8 +188,6 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
-	/// Two conversations never share a directory, which is what lets one be thrown
-	/// away without reading the other.
 	#[test]
 	fn two_conversations_store_into_directories_of_their_own() {
 		let root = temp_root();
@@ -303,9 +200,6 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
-	/// The extension is what survives a name, and nothing else does. Every one of
-	/// these lands directly inside the conversation's directory — a name that tried
-	/// to say where the file goes was not asked.
 	#[test]
 	fn a_name_that_names_a_place_stores_under_the_minted_one_anyway() {
 		let root = temp_root();
@@ -337,8 +231,6 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
-	/// An extension is text from a webview until it is proved plain: anything that
-	/// is not short and alphanumeric is left off rather than carried into a path.
 	#[test]
 	fn an_extension_that_is_not_plain_is_left_off_the_minted_name() {
 		let overlong = format!("archive.{}", "z".repeat(MAX_EXTENSION_LENGTH + 1));
@@ -353,9 +245,6 @@ mod tests {
 		assert_eq!(plain_extension("plain"), None);
 	}
 
-	/// One file over the limit refuses the call, and the ones beside it are not
-	/// stored either: a prompt goes out with the files it names, so a partial store
-	/// would be a prompt naming a file nobody accepted.
 	#[test]
 	fn one_oversized_file_refuses_the_whole_call_and_leaves_nothing_behind() {
 		let root = temp_root();
@@ -383,9 +272,6 @@ mod tests {
 		assert!(!root.exists(), "a refused call made the place its files would have gone");
 	}
 
-	/// The failure the disk cannot be asked for: a file created, half of it written,
-	/// and the write refused. What must not survive it is that half — nothing else
-	/// would ever come back for it — and neither must the file written before it.
 	#[test]
 	fn a_write_that_stops_partway_takes_back_its_own_file_and_the_ones_before_it() {
 		let root = temp_root();
@@ -411,9 +297,6 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
-	/// A count is not a size: twenty acceptable files are still twenty files this
-	/// host holds in memory whole, and the prompt they would be appended to is not
-	/// a list nobody bounded.
 	#[test]
 	fn more_files_than_one_prompt_may_carry_are_refused_and_nothing_is_written() {
 		let root = temp_root();
@@ -429,8 +312,6 @@ mod tests {
 		assert!(!root.exists(), "a refused call made the place its files would have gone");
 	}
 
-	/// The limit the per-file one does not answer: every file here would be accepted
-	/// on its own, and the call is what is too big.
 	#[test]
 	fn files_that_are_each_accepted_and_too_much_together_are_refused() {
 		let root = temp_root();
@@ -448,7 +329,6 @@ mod tests {
 		assert!(!root.exists(), "a refused call made the place its files would have gone");
 	}
 
-	/// Exactly at the limit is accepted: the refusal is what is over it.
 	#[test]
 	fn a_file_at_the_limit_is_stored() {
 		let root = temp_root();
@@ -476,8 +356,6 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
-	/// Nothing on the record is every bot deleted: the root is left empty rather
-	/// than left holding what those conversations carried.
 	#[test]
 	fn a_sweep_with_nothing_referenced_empties_the_root() {
 		let root = temp_root();
@@ -490,8 +368,6 @@ mod tests {
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 
-	/// A root that was never made is not a failure to sweep — it is an install that
-	/// has never attached anything, and the sweep must not create one.
 	#[test]
 	fn a_sweep_of_a_root_that_is_not_there_creates_nothing() {
 		let root = temp_root();
@@ -501,9 +377,6 @@ mod tests {
 		assert!(!root.exists(), "sweeping made the directory it had nothing to sweep");
 	}
 
-	/// The directory is asserted beside the files because writing one makes the
-	/// other: a file nobody else can read, in a directory anybody can list, still
-	/// tells them what a user attached and when.
 	#[cfg(unix)]
 	#[test]
 	fn what_a_user_attached_is_reachable_by_its_owner_only() {

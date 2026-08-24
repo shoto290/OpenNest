@@ -26,8 +26,6 @@ const REACHED = toMcpServerDraft(REMOTE)
 
 const LONG = toMcpServerDraft(LONG_MCP_SERVER)
 
-/** A remote server written the way the runtime refuses: an address with no kind of
- * endpoint beside it. It is skipped outright and the reader is told to add one. */
 const UNREACHABLE: BotMcpServerDraft = {
 	name: "ledger",
 	transport: "remote",
@@ -40,9 +38,6 @@ const BROKEN: BotMcpServerDraft = {
 	config: '{\n  "command": "npx",\n  "args": ["-y",\n}',
 }
 
-/** The editor keeps no draft of its own, so a story that lets a reader type holds
- * it — and holds it beside the server it was opened on, which is what tells the
- * editor there is something to save. */
 const EditorHost = (props: McpServerEditorProps) => {
 	const [draft, setDraft] = useState(props.draft)
 
@@ -88,8 +83,6 @@ const meta = preview.meta({
 		onDelete: fn(),
 	},
 	argTypes: {
-		// All three are read once, as the editor mounts, so they are a story's args
-		// rather than knobs.
 		defaultSection: { control: false },
 		defaultConfirming: { control: false },
 		defaultLeaving: { control: false },
@@ -199,8 +192,6 @@ export const Environment = meta.story({
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		// The rail names its section after the one field it holds, so the field is
-		// asked for as a control rather than by its label alone.
 		const environment = canvas.getByRole("textbox", { name: "Environment" })
 
 		await expect(environment).toHaveValue(

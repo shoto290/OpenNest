@@ -1,5 +1,4 @@
 "use client"
-// Adapted from beui.dev/components/agents/message-bubble
 
 import { motion, useReducedMotion } from "motion/react"
 import {
@@ -22,11 +21,6 @@ import { MARKDOWN_PROSE_CLASS } from "@workspace/ui/components/markdown/prose"
 import { SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
-/** What a bubble paints behind its content. Two of them paint nothing: `ghost`
- * fills the row for content that lays out its own surface, and `bare` hugs its
- * content for content that arrives already framed — a table, which would
- * otherwise be boxed twice, and whose row keeps its actions beside that frame
- * rather than out at the edge of the transcript. */
 export type MessageBubbleVariant =
 	| "solid"
 	| "soft"
@@ -60,16 +54,13 @@ type MotionOwnedProps =
 export interface MessageBubbleProps
 	extends Omit<ComponentPropsWithRef<"div">, "children" | MotionOwnedProps> {
 	variant?: MessageBubbleVariant
-	/** Defaults to the surrounding Message alignment when omitted. */
 	align?: MessageBubbleAlign
-	/** Plays the bubble entrance once when this component mounts. */
 	animateIn?: boolean
 	children?: ReactNode
 }
 
 export interface MessageBubbleContentProps
 	extends ComponentPropsWithRef<"div"> {
-	/** Replaces the content element while preserving bubble styling. */
 	render?: ReactElement
 }
 
@@ -90,7 +81,6 @@ export interface MessageBubbleCollapsibleProps
 	children?: ReactNode
 }
 
-// Sent bubbles should pop into place quickly with one restrained overshoot.
 const BUBBLE_POP = {
 	type: "spring",
 	stiffness: 520,
@@ -98,8 +88,6 @@ const BUBBLE_POP = {
 	mass: 0.52,
 } as const
 
-/** Whether a bubble paints a surface of its own, and so is held short of the
- * transcript's full width. */
 function isCapped(variant: MessageBubbleVariant) {
 	return variant !== "ghost" && variant !== "bare"
 }
@@ -129,10 +117,6 @@ export function MessageBubble({
 				transition={SPRING_LAYOUT}
 				className={cn(
 					"group/bubble flex w-full flex-col",
-					// A bubble that spans the transcript reads as a page rather than as
-					// speech: the eye loses the line it was on, and the two sides stop
-					// looking like a conversation. Content that draws its own surface —
-					// a table, a card — keeps every pixel it was given.
 					isCapped(variant) && "max-w-[75%]",
 					resolvedAlign === "end" ? "items-end" : "items-start",
 					className,
@@ -154,8 +138,6 @@ function bubbleContentClass(
 		MARKDOWN_PROSE_CLASS,
 		variant === "solid" && "text-primary-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
-		// A framed block keeps a hair of the padding it gives up: the run's gap is
-		// measured for bubbles, which hold themselves off their neighbours by it.
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
 		variant === "danger" && "text-destructive",
 		interactive &&

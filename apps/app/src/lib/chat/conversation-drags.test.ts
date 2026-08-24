@@ -2,8 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { watchConversationDrags } from "./conversation-drags"
 
-/** The page as the containment rule reads it: a node belongs to the conversation
- * while a parent chain still leads to its region. */
 class FakeNode {
 	parent: FakeNode | null = null
 
@@ -48,9 +46,6 @@ const dragOf = ({
 
 type FiredDrag = ReturnType<typeof dragOf>
 
-/** The window the drags reach, and the conversation the layout hands back: the
- * transcript and the composer are inside its region, the roster beside it is
- * not. */
 const watchedConversation = () => {
 	const listeners = new Map<string, Set<(event: FiredDrag) => void>>()
 	vi.stubGlobal("Node", FakeNode)
@@ -87,8 +82,6 @@ const watchedConversation = () => {
 		hovers,
 		dropped,
 		stop,
-		/** What a streamed message does to the node under the pointer: it replaces
-		 * it, and the leave is reported on one the page no longer holds. */
 		detach: (node: FakeNode) => {
 			node.parent = null
 		},

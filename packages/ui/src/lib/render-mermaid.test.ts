@@ -22,7 +22,6 @@ vi.mock("mermaid", () => ({ default: { initialize, render } }))
 
 let renderMermaid: typeof RenderMermaid
 
-/** Module state carries the theme in force, so every case starts from a clean one. */
 const loadRenderer = async () => {
 	vi.resetModules()
 	started.length = 0

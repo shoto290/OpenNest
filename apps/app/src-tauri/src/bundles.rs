@@ -1,66 +1,3 @@
-//! The plugin bundle a bot runs as, beside the avatars and the database.
-//!
-//! A bot is not a system prompt the host appends any more: it is a directory the
-//! agent loads for the session and never installs — a manifest and one agent file,
-//! handed over as `pluginPath` and `agent`. What the bot was told is the body of
-//! that file. See `agent/PLUGINS.md` for what was measured against the real install
-//! before any of this was written.
-//!
-//! ```text
-//! <app data>/bots/
-//!   .claude-plugin/marketplace.json   every bot, by id and relative source
-//!   plugins/<bot id>/
-//!     .claude-plugin/plugin.json      name: <bot id>, displayName: <bot name>
-//!     agents/<slug>.md                metadata carries the bot id
-//!     skills/<name>/SKILL.md          what the bot remembered, one directory each
-//! ```
-//!
-//! What the host owns is not in there: the `learn` rules every bot writes its memory
-//! under are one plugin of the app's own, loaded beside the bot's for the same
-//! session — see [`system`].
-//!
-//! **A name is not an identity.** It changes, and two bots can share one, so the id
-//! names the plugin, marks the generated agent as this bot's, and qualifies the agent
-//! a session promotes. What the reader calls the bot is display only.
-//!
-//! One marketplace over a directory of bundles, so a reader adds this one path and
-//! has every bot — rather than installing each directory by hand.
-//!
-//! **The disk is the truth.** The agent file is what a process is actually started
-//! on, so it is what a bot is read from, and a body edited by hand is adopted rather
-//! than written over: the stored value is the fallback for a bundle that has gone
-//! missing, not the record the bundle is kept in step with.
-//!
-//! **Only generated files are written.** A bundle is a directory somebody else also
-//! writes into — a skill dropped in by hand, an executable the next wave puts there
-//! — so nothing here removes what it did not put down, and the
-//! manifest keeps every key it did not set. The one file it takes away is the agent it
-//! generated under a name the bot has stopped answering to, and it knows that file
-//! because the frontmatter it wrote still carries the bot's id.
-//!
-//! Two keys are deliberately never emitted. `skills` preloads its content only when
-//! an agent is delegated, so a file carrying it would behave differently depending
-//! on who launched it; `permissionMode` is ignored on the promoted path and the host
-//! owns permissions either way.
-//!
-//! **A skill reaches a promoted bot only as text in the body.** A `skills/<name>/SKILL.md`
-//! whose frontmatter carries `metadata.opennest.preload` is copied into a generated
-//! region at the end of the agent file, between two markers. The brief is everything
-//! before the opening marker and never anything after it — a write that read the
-//! region back as brief would carry the last write's copy into the next one, and the
-//! file would grow on every save.
-//!
-//! **A bot is told where its own directory is through the prompt layer.** Every bundle
-//! carried a `SessionStart` hook printing `CLAUDE_PLUGIN_ROOT` for as long as that was
-//! the only route the path had; a session names it in the appended layer now — see
-//! `agent/PROTOCOL.md` — so the hook and the per-bundle copy of `learn` are taken back
-//! out of a bundle that still has them.
-//!
-//! **A server reaches a bot through `.mcp.json`.** The one surface that raises a
-//! bot's capability rather than reducing it: a declared server starts a process on
-//! the reader's machine at the next launch. This module owns the `mcpServers` map in
-//! that file and nothing else in it, and the manifest's pointer at the file is a
-//! projection of whether the file is there.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -76,176 +13,73 @@ pub mod system;
 
 pub use git::{commit, diff, history, revert, Author, HistoryEntry};
 
-/// Beside `conversations.sqlite3` and the avatars.
 const DIR_NAME: &str = "bots";
 
-/// Where the bundles themselves sit, one level under the marketplace that lists
-/// them: a marketplace names its plugins by a source relative to itself, so the
-/// directory it lives in cannot also be one of them.
 const PLUGINS_DIR: &str = "plugins";
 
-/// Under the bot's own id, which is minted by the host and never a name a user
-/// wrote: one bot's bundle can never land in another's directory, whatever the two
-/// are called.
 const MANIFEST_DIR: &str = ".claude-plugin";
 const MANIFEST_NAME: &str = "plugin.json";
 const MARKETPLACE_NAME: &str = "marketplace.json";
 const AGENTS_DIR: &str = "agents";
 const AGENT_EXTENSION: &str = "md";
 
-/// Where a bot's skills sit, one directory each — written from here, or dropped in
-/// by hand: the disk holds both the same way.
 const SKILLS_DIR: &str = "skills";
 const SKILL_NAME: &str = "SKILL.md";
 
-/// The hook this module used to write into every bundle, and the only reason either
-/// name is still spelled here: they are what [`unequip`] takes back out of a bundle
-/// written before the prompt layer named the bot's directory — see `agent/PLUGINS.md`.
 const HOOKS_DIR: &str = "hooks";
 const HOOKS_NAME: &str = "hooks.json";
 const SESSION_START_NAME: &str = "session-start.sh";
 
-/// What the bot leaves behind for the write that records its turn: a title line, a
-/// blank line, then what it changed and why, as the `learn` skill asks it to — see
-/// [`system`]. Read once the turn is over and deleted with the commit that carries it,
-/// so the next turn speaks for itself.
 const LEARNED_NAME: &str = ".learned.md";
 
-/// The title a turn is recorded under when the bot wrote files and left no sentence
-/// about them. Deliberately plain: it says who wrote and that something changed,
-/// which is all this app can honestly say about a write nobody described.
 const EVOLVED_TITLE: &str = "The bot changed its files";
 
-/// The directory the host's `learn` skill lives in, in the app's own plugin — see
-/// [`system`], which is where its text is. Named here because it is also what
-/// [`unequip`] takes back out of a bundle carrying the copy this module used to write
-/// into every one of them.
 const LEARN_ID: &str = "learn";
 
-/// Where a bot's MCP servers are declared, and what the manifest points at so they
-/// are loaded with the bundle — measured connecting as `plugin:<bot id>:<server>`,
-/// see `agent/PLUGINS.md`. This module owns the `mcpServers` map inside that file
-/// and nothing else in it.
 const MCP_NAME: &str = ".mcp.json";
 const SERVERS_KEY: &str = "mcpServers";
 const MCP_SOURCE: &str = "./.mcp.json";
 
-/// What the marketplace calls itself, and what a reader would type after an `@`.
 const MARKETPLACE: &str = "opennest-bots";
 const OWNER: &str = "OpenNest";
 
-/// What the manifest declares. The agent never installs a bundle and nothing
-/// resolves one version against another, so this is a field the format asks for
-/// rather than a number anything reads.
 const VERSION: &str = "0.1.0";
 
-/// What a bot whose name survives no slug is called. A name is free text and may be
-/// emoji alone; the file still has to have one.
 const UNNAMED: &str = "bot";
 
-/// What a commit title calls the thing a write was about, in the words the settings
-/// dialog uses for it — see [`recorded`].
 const BOT_SUBJECT: &str = "Bot";
 const SKILL_SUBJECT: &str = "Skill";
 const SERVER_SUBJECT: &str = "MCP server";
 
-/// The frontmatter key a generated agent carries its bot's id under, inside the
-/// `metadata` map the agent format keeps free for exactly this: Claude Code accepts
-/// it and acts on none of it, so the marker costs the file nothing of its meaning.
-///
-/// It is what "generated" means here. A name is not an identity — it changes, and two
-/// bots can share one — so the file this module rewrites is the file that says it
-/// belongs to this bot, and anything else under `agents/` belongs to whoever wrote it.
 const OWNER_KEY: &str = "opennestBotId";
 
-/// The frontmatter key the agent format reads a model from. Honoured on the promoted
-/// path — see `agent/PLUGINS.md` — which is why writing it is the whole of how a bot
-/// runs on the model its reader picked.
 const MODEL_KEY: &str = "model";
 
-/// The frontmatter key a generated agent carries its answer style under, inside the
-/// same `metadata` map the owner mark lives in — see [`OWNER_KEY`]. The agent format
-/// acts on none of it: the style is read back out here and handed to the session on
-/// the open request, which is the only route it has to a run.
-///
-/// It rides in the file rather than in a column for the same reason `model` does —
-/// the file is what a session is really started on, so the file is what a reader's
-/// pick has to reach.
 const OUTPUT_STYLE_KEY: &str = "outputStyle";
 
-/// The style a bot answers in until a reader picks another. A file naming no style is
-/// a bot on this one, so the key's absence and the key spelling it out say the same
-/// thing — which is what makes a bundle written before there was a key readable.
 pub const DEFAULT_OUTPUT_STYLE: &str = "Concise";
 
-/// The frontmatter key the agent format reads a colour from, and the whole reason
-/// the tints are named `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`
-/// and `cyan` rather than in a vocabulary of this app's own: the word the bundle
-/// carries is the word the bot is stored under, so a tint written out here is the
-/// same tint read back in — see [`AvatarBlot`].
-///
-/// A colour the format does not know costs the file nothing: the agent resolves and
-/// applies its brief either way. So a hand that writes one is answered by reporting
-/// the bot as marked with none and leaving the word exactly where it stands.
 const COLOR_KEY: &str = "color";
 
-/// The frontmatter key the agent format reads a denial from, honoured on the
-/// promoted path — see `agent/PLUGINS.md`, where a session named by four of them
-/// dropped from 33 tools to 29.
-///
-/// One writer, and one only: every denial a bot carries is a name in the list this
-/// key is written from — see [`denial_line`] — so no second setting can reach the
-/// key and no two writes can disagree about it.
 const DISALLOWED_KEY: &str = "disallowedTools";
 
-/// The built-in tools that write files and run commands. Named here and nowhere
-/// else on this side: a bot denying all four is what "changes nothing" reads as —
-/// see [`denies_changes`] — rather than a switch of its own.
-///
-/// What denying them does not stop: a server the bundle declares writes wherever
-/// its own process may. This denies built-in tools, not the ability to have an effect.
 pub const CHANGING_TOOLS: [&str; 4] = ["Bash", "Edit", "Write", "NotebookEdit"];
 
-/// What the binary lists delegation by, measured off the `init` frame's tool list —
-/// see `agent/PLUGINS.md`. Denied with the four rather than beside them: the key
-/// binds the promoted thread and not the one delegation starts, so a bot held back
-/// from writing and left free to delegate had a subagent write the file.
-///
-/// Never a name a caller submits. [`denials`] lays it down with the lock and takes
-/// it away with it, so "changes nothing" stays one switch over one list.
 const DELEGATION_TOOL: &str = "Task";
 
-/// What a tool an MCP server provides is named. Never denied here: a server's tool
-/// is the bundle's own capability, declared in `.mcp.json`, and taking it away
-/// through this key would be one surface undoing another.
 const MCP_PREFIX: &str = "mcp__";
 
-/// The frontmatter key a skill asks to be carried under, read from wherever it sits
-/// in the map — `metadata.opennest.preload` — the same way [`OWNER_KEY`] is read.
 const PRELOAD_KEY: &str = "preload";
 const METADATA_KEY: &str = "metadata";
 const OPENNEST_KEY: &str = "opennest";
 
-/// The frontmatter key that says the host generated the skill and owns it —
-/// `metadata.opennest.system`, read the same way. It is what makes the settings
-/// refuse to change or take away a skill, and the bot's own tools go on writing the
-/// file: the mark travels with the text, so a rewrite that keeps the key keeps the
-/// skill the host's.
 const SYSTEM_KEY: &str = "system";
 
-/// What a carried skill is also marked with. Its body is already in the prompt, and
-/// a skill left model-invocable is fetched again anyway — measured against the real
-/// install, see `agent/PLUGINS.md` — so the two marks are written and taken away
-/// together and never one without the other.
 const INVOCATION_KEY: &str = "disable-model-invocation";
 
-/// What a skill is titled and summarised by, and what a caller edits.
 const NAME_KEY: &str = "name";
 const DESCRIPTION_KEY: &str = "description";
 
-/// Every other frontmatter key a `SKILL.md` is read and written under. The list is
-/// the whole of what this module names: a key outside it is somebody else's, kept
-/// exactly where it was found on every write — see [`drafted`].
 const WHEN_TO_USE_KEY: &str = "when_to_use";
 const ARGUMENT_HINT_KEY: &str = "argument-hint";
 const ARGUMENTS_KEY: &str = "arguments";
@@ -262,57 +96,33 @@ const SHELL_KEY: &str = "shell";
 const LICENSE_KEY: &str = "license";
 const COMPATIBILITY_KEY: &str = "compatibility";
 
-/// What both marks are worth when they are there. Read back through
-/// [`front_value`], which is why it is the word rather than a boolean.
 const MARKED: &str = "true";
 
-/// One level of a frontmatter map, in spaces. What this module writes when it adds
-/// one; a file already nesting another way keeps its own.
 const INDENT: usize = 2;
 
-/// What fences the carried bodies off from the brief. HTML comments, so the region
-/// says what it is to a reader opening the file and nothing to the model reading it
-/// as markdown.
 const CARRIED_OPEN: &str = "<!-- opennest: generated from this bot's skills, do not edit -->";
 const CARRIED_CLOSE: &str = "<!-- opennest: end of generated skills -->";
 
-/// What closed the identity zone this module used to write at the head of every
-/// body. The sentences are the host's text, so they travel on the open request now
-/// and no bundle carries a copy of them: the marker is only what a brief is cut off
-/// at, so a rewrite takes an old zone back out — see [`without_generated`].
 const IDENTITY_CLOSE: &str = "<!-- opennest: end of generated identity -->";
 
-/// What the host says the bot is, over the bot's own name and title. The brief is the
-/// reader's; these lines are what the bot is before anybody wrote one.
 const IDENTITY_STANCE: &str = "You are a bot with your own personality, and you accompany the person you talk to.
 You are not Claude Code, and you never present yourself as such.
 You do not narrate your own machinery — plugin, skills, files, sessions — unprompted, but when you are asked what you are or what you can do, you say so plainly.
 The brief below is who you are for that person.";
 
-/// The deepest heading markdown has. A skill carried under a brief that already goes
-/// that deep keeps its own levels rather than growing a seventh.
 const MAX_HEADING: usize = 6;
 
 const FENCE: &str = "---";
 const CLOSING_FENCE: &str = "\n---";
 
-/// Where this install keeps bundles: a path, and nothing on the disk. `None` is a
-/// host with no app data directory — the same answer the database and the avatars
-/// give, and it means a bot runs as it did before there were bundles rather than
-/// that the launch failed.
 pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
 }
 
-/// The one directory a bot's bundle lives in, and what a session is handed as its
-/// local plugin.
 pub fn dir(root: &Path, bot_id: &str) -> PathBuf {
 	root.join(PLUGINS_DIR).join(bot_id)
 }
 
-/// The name the agent is promoted under, and the name its file takes. Derived from
-/// what the bot is called so a reader recognises it in a transcript, and reduced to
-/// what an agent name may hold: a run of anything else is one separator.
 pub fn slug(name: &str) -> String {
 	let mut slug = String::new();
 	for character in name.chars() {
@@ -330,26 +140,16 @@ pub fn slug(name: &str) -> String {
 	}
 }
 
-/// The agent a session promotes, namespaced by the plugin it comes from. The bare
-/// name resolves too, and it resolves against the reader's own `~/.claude/agents/`
-/// and the project's — so a bot called `Reviewer` would race a `reviewer.md` the
-/// reader wrote. Qualified by the plugin's name, which is the bot's id, it cannot.
 pub fn agent_ref(root: &Path, bot: &Bot) -> String {
 	format!("{}:{}", bot.id, agent_name(root, bot))
 }
 
-/// What the agent on the disk is called: the name of the file this module generated
-/// for the bot, or the one the bot's own name would generate when there is none yet.
 fn agent_name(root: &Path, bot: &Bot) -> String {
 	generated_agent(root, &bot.id)
 		.and_then(|path| Some(path.file_stem()?.to_string_lossy().into_owned()))
 		.unwrap_or_else(|| slug(&bot.name))
 }
 
-/// The agent file this module wrote for the bot: the one under `agents/` whose
-/// frontmatter carries the bot's id. Found by what it says rather than by where it
-/// is, so a rename finds the file it is moving and a file nobody generated is never
-/// mistaken for one.
 fn generated_agent(root: &Path, bot_id: &str) -> Option<PathBuf> {
 	fs::read_dir(dir(root, bot_id).join(AGENTS_DIR)).ok()?.flatten().find_map(|entry| {
 		let path = entry.path();
@@ -358,42 +158,22 @@ fn generated_agent(root: &Path, bot_id: &str) -> Option<PathBuf> {
 	})
 }
 
-/// The one file that lists every bundle, at the root a reader adds as a marketplace.
 pub fn marketplace_file(root: &Path) -> PathBuf {
 	root.join(MANIFEST_DIR).join(MARKETPLACE_NAME)
 }
 
-/// The bot's own agent file. `None` is a bundle with nothing to read — none written
-/// yet, or one a reader has taken the agent out of — which is what a caller falls
-/// back to the stored value for.
 pub fn agent_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 	generated_agent(root, bot_id)
 }
 
-/// What the agent file says the bot is: the brief a process would really be started
-/// on, and the model it would really answer under. Both in one read, since a caller
-/// that shows a bot shows both.
 pub struct Generated {
 	pub instructions: String,
-	/// `None` for a file whose frontmatter names no model — a bundle written for a
-	/// bot carrying no label, or an agent a reader wrote themselves.
 	pub model: Option<String>,
-	/// The tint the file marks the bot with. `None` for a file naming no colour, and
-	/// for one naming a word that is no tint of this build's — see [`COLOR_KEY`].
 	pub blot: Option<AvatarBlot>,
-	/// The built-in tools the file denies, in the order it names them. The whole of
-	/// how a denial reaches a run, and the only thing "changes nothing" is read
-	/// from — see [`denies_changes`].
 	pub denied_tools: Vec<String>,
-	/// How the file says the bot writes its answers, never empty: a file naming no
-	/// style answers with [`DEFAULT_OUTPUT_STYLE`], since that is what a session
-	/// started on it would be opened under anyway.
 	pub output_style: String,
 }
 
-/// The bot as its own agent file holds it. `None` is a bundle this install has not
-/// written yet, or one a reader has taken the agent out of, and the caller answers
-/// with the stored values instead.
 pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	let text = fs::read_to_string(agent_file(root, bot_id)?).ok()?;
 	let model = front_value(&text, MODEL_KEY)
@@ -411,57 +191,29 @@ pub fn generated(root: &Path, bot_id: &str) -> Option<Generated> {
 	})
 }
 
-/// The style a bot's session is opened under, read off the one file a session is
-/// really started on. A bundle this install has not written answers with the default
-/// too: no file is no reason to open a run on a style nobody picked.
 pub fn output_style(root: &Path, bot_id: &str) -> String {
 	generated(root, bot_id)
 		.map_or_else(|| DEFAULT_OUTPUT_STYLE.to_owned(), |written| written.output_style)
 }
 
-/// The `metadata.opennest.outputStyle` of a file, or the default for one naming none
-/// — a bundle written before there was a key, or an agent a reader wrote themselves.
-/// Read through the same normaliser the write goes through, so a key a hand left
-/// blank reads as the style it would have been rewritten under.
 fn front_output_style(text: &str) -> String {
 	styled(&front_value(text, OUTPUT_STYLE_KEY).unwrap_or_default()).to_owned()
 }
 
-/// What the bot was told, as the file holds it.
 pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
 	Some(generated(root, bot_id)?.instructions)
 }
 
-/// The bundle as the bot stands right now: the keys this module owns in the manifest,
-/// and the one agent file that carries the bot's id. Nothing else in the directory is
-/// touched, and nothing else in the manifest is either.
-///
-/// A rename moves the agent rather than adding one — the marked file is taken away
-/// once its body has been carried over — so a bundle holds exactly one generated
-/// agent however many times the bot is renamed. Anything else under `agents/` was put
-/// there by somebody else and keeps both its name and its content.
 pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	write_styled(root, bot, &output_style(root, &bot.id))
 }
 
-/// The same write, on a style the caller named rather than the one the file already
-/// carries. The one door a reader's pick comes through — every other write keeps what
-/// is on the disk, so a skill saved or an avatar changed never moves a bot off the
-/// style it answers in.
 pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
 	write_briefed(root, bot, &bot.instructions, output_style)?;
 	recorded(root, &bot.id, BOT_SUBJECT, &bot.name, "saved from settings");
 	Ok(())
 }
 
-/// Everything a duplicate inherits from the bundle it was copied from: the skills it
-/// carries, the servers it declares and the hooks a reader gave it. What names the
-/// source is not among them — the manifest and the agent file are generated for the
-/// new bot by the write that follows this one, and the repository under the source is
-/// its own history, so the duplicate starts one of its own.
-///
-/// `.learned.md` stays behind too: it is what the source came to remember over the
-/// turns it was spoken to, and a duplicate has been spoken to none.
 pub fn inherit(root: &Path, source_id: &str, bot_id: &str) -> std::io::Result<()> {
 	let source = dir(root, source_id);
 	let target = dir(root, bot_id);
@@ -470,9 +222,6 @@ pub fn inherit(root: &Path, source_id: &str, bot_id: &str) -> std::io::Result<()
 	copied_file(&source.join(MCP_NAME), &target.join(MCP_NAME))
 }
 
-/// One directory copied whole, owner-only the way everything else in a bundle is
-/// written. A directory that is not there is copied as nothing: a bundle with no
-/// skills and no hooks is the ordinary one.
 fn copied_tree(source: &Path, target: &Path) -> std::io::Result<()> {
 	if !source.is_dir() {
 		return Ok(());
@@ -498,24 +247,11 @@ fn copied_file(source: &Path, target: &Path) -> std::io::Result<()> {
 	private_files::replace(target, &fs::read(source)?)
 }
 
-/// The write that just landed, recorded in the bundle's own repository — see
-/// [`git`]. A repository that would not open or write is swallowed here on purpose:
-/// the files are already on the disk and are what a session is really started on, so
-/// refusing the save now would undo a bundle that is perfectly good over a history
-/// nobody has asked to see yet. The failure surfaces from the history commands.
-///
-/// The title is spelled here and nowhere else, so every write in a reader's history
-/// reads the same way: what was written, what it was called, and what happened to
-/// it. No path, and nothing a reader would have to be a developer to place.
 fn recorded(root: &Path, bot_id: &str, subject: &str, name: &str, verb: &str) {
 	let title = format!("{subject} \"{}\" {verb}", name.trim());
 	let _ = git::commit(root, bot_id, Author::User, &title, "");
 }
 
-/// The same write, over a brief named rather than taken from the row. What a skill
-/// change lays down: the row it holds may be behind the file — the disk is the
-/// truth — and nothing about a skill is a reason to write a brief over the one the
-/// bot is really running on.
 fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std::io::Result<()> {
 	unequip(root, &bot.id);
 	let generated = generated_agent(root, &bot.id);
@@ -530,21 +266,6 @@ fn write_briefed(root: &Path, bot: &Bot, brief: &str, output_style: &str) -> std
 	Ok(())
 }
 
-/// What this module used to put in every bundle and now takes back out: the hook pair
-/// that printed the bot's own directory, and the copy of the host's `learn` text. The
-/// prompt layer names the directory, and the app's own plugin carries the text — see
-/// [`system`] — so both are the host's writes still sitting in the reader's bundle.
-///
-/// Only what this module generated goes. The two hook files while the declaration is
-/// still the one it wrote — a `hooks.json` a reader filled with hooks of their own is
-/// theirs, and so is everything else in a `hooks/`, which is why the directory itself
-/// only goes when it is empty afterwards; and `skills/learn` only while it carries the
-/// mark that says the host wrote it — see [`SYSTEM_KEY`]. A `learn` skill a reader made
-/// their own, by dropping the key or by writing the directory themselves, is theirs.
-///
-/// Nothing here fails a write. A file that is not there is the ordinary case — every
-/// bundle written from now on — and a file that will not go is a bundle that is still
-/// perfectly good to start a session on.
 fn unequip(root: &Path, bot_id: &str) {
 	let bundle = dir(root, bot_id);
 	let hooks = bundle.join(HOOKS_DIR);
@@ -559,17 +280,10 @@ fn unequip(root: &Path, bot_id: &str) {
 	}
 }
 
-/// Whether a declaration is the one this module used to write, which is the only one it
-/// takes away: the file names the script it laid down beside it, and a `hooks.json`
-/// naming anything else is a reader's own.
 fn generated_hooks(path: &Path) -> bool {
 	fs::read_to_string(path).is_ok_and(|text| text.contains(SESSION_START_NAME))
 }
 
-/// Where this bot's agent goes: the name it answers to, unless a file nobody
-/// generated is already sitting there. A reader who hand-wrote `agents/helper.md` and
-/// then renamed their bot to Helper keeps their file — the generated one steps aside
-/// onto a name derived from the id, which nothing a human wrote can collide with.
 fn free_agent_path(root: &Path, bot: &Bot, generated: Option<&Path>) -> PathBuf {
 	let agents = dir(root, &bot.id).join(AGENTS_DIR);
 	let preferred = agents.join(format!("{}.{AGENT_EXTENSION}", slug(&bot.name)));
@@ -579,15 +293,6 @@ fn free_agent_path(root: &Path, bot: &Bot, generated: Option<&Path>) -> PathBuf 
 	agents.join(format!("{}-{}.{AGENT_EXTENSION}", slug(&bot.name), bot.id))
 }
 
-/// The bundle, written if the disk holds no brief to start on: a directory removed
-/// behind the app's back — restored from a backup, tidied up — is not a reason to
-/// start a bot without one.
-///
-/// A bundle that is already there is completed rather than written over: the brief
-/// comes off the disk, so a hand edit survives, and what this module used to write into
-/// every bundle and no longer does is taken back out of it — see [`unequip`]. The brief
-/// is laid down again from that same disk on the way through, which is what carries a
-/// skill that has just appeared into the body the session is really started on.
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	if agent_file(root, &bot.id).is_some() {
 		rewrite_agent(root, bot)?;
@@ -597,24 +302,12 @@ pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	write(root, bot)
 }
 
-/// One write of the bot's own, as the reader is told about it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Evolution {
 	pub commit_id: String,
 	pub title: String,
 }
 
-/// What the bot wrote in its own bundle during the turn that just ended, recorded.
-/// `None` for a bundle it left exactly as it found it, which is most turns.
-///
-/// The agent file is laid down again before the commit, so a skill written mid-turn
-/// is carried into the body the next session is started on and the history holds the
-/// bundle as the bot will really run it — the write and its effect in one commit
-/// rather than one now and one at the next launch.
-///
-/// A commit that will not be made leaves everything on the disk, [`LEARNED_NAME`]
-/// included: the next turn to end reads the same sentence and records the same
-/// write, rather than a turn's work being lost to a repository that would not open.
 pub fn evolve(root: &Path, bot: &Bot) -> Option<Evolution> {
 	let changed = git::changes(root, &bot.id);
 	if changed.is_empty() {
@@ -628,9 +321,6 @@ pub fn evolve(root: &Path, bot: &Bot) -> Option<Evolution> {
 	Some(Evolution { commit_id, title })
 }
 
-/// What the bot said about its own write: the first line as the title, everything
-/// under it as the body. A file that is not there, or one whose first line is blank,
-/// is a bot that said nothing — the caller speaks for it then.
 fn learned(root: &Path, bot_id: &str) -> Option<(String, String)> {
 	let text = fs::read_to_string(dir(root, bot_id).join(LEARNED_NAME)).ok()?;
 	let (title, body) = text.split_once('\n').unwrap_or((&text, ""));
@@ -641,37 +331,14 @@ fn learned(root: &Path, bot_id: &str) -> Option<(String, String)> {
 	Some((title.to_owned(), body.trim().to_owned()))
 }
 
-/// What the disk says the bot was told, when that is not what is stored. `None`
-/// means the two already agree, or there is nothing on the disk to agree with —
-/// either way the caller has nothing to write down.
-///
-/// This is the whole of the direction of truth: a body edited by hand, by another
-/// tool, or by an editor left open is adopted the next time anything reads or starts
-/// the bot, rather than being written over by a value it never saw.
-///
-/// See [`edited`] for what counts as a difference at all.
 pub fn adopted(root: &Path, bot: &Bot) -> Option<String> {
 	instructions(root, &bot.id).filter(|found| edited(found, &bot.instructions))
 }
 
-/// Whether a body read off the disk is a brief somebody really wrote, rather than the
-/// stored one as the file holds it.
-///
-/// [`agent`] lays the body down trimmed, so a brief the reader is in the middle of
-/// typing differs from its own file by the space at the end of it. Preferring the
-/// file there takes that space back out from under them, one answer after they
-/// pressed it — which is a brief that can never be given a second word.
 pub fn edited(found: &str, stored: &str) -> bool {
 	found != stored.trim()
 }
 
-/// What a write submitting a whole identity should lay down. The panel wins when the
-/// reader changed the brief in it, and the disk wins when they did not: a rename, a
-/// new title or another model carries whatever the agent file says rather than a
-/// value the reader never saw.
-///
-/// `bot` is the row as it stood before this write, which is the only thing that says
-/// whether the submitted brief is a new one or an echo of what was already there.
 pub fn reconciled(root: &Path, bot: &Bot, submitted: &str) -> String {
 	if submitted != bot.instructions {
 		return submitted.to_owned();
@@ -679,20 +346,10 @@ pub fn reconciled(root: &Path, bot: &Bot, submitted: &str) -> String {
 	adopted(root, bot).unwrap_or_else(|| bot.instructions.clone())
 }
 
-/// The bundle of a bot that is gone, taken away whole: nothing derives one for a bot
-/// the file no longer holds, so nothing in it is anybody's to keep.
 pub fn remove(root: &Path, bot_id: &str) {
 	let _ = fs::remove_dir_all(dir(root, bot_id));
 }
 
-/// Every bot as one marketplace, so a reader adds this directory once and has all of
-/// them. Rewritten whole from the roster rather than amended: the file is a
-/// projection of the `bots` table, and a projection rebuilt from the table cannot
-/// drift out of step with it.
-///
-/// Each entry names the bundle the way the bundle names itself: by the bot's id, which
-/// is the one name two bots cannot share. What the reader calls them is in each
-/// bundle's own manifest, and in the description here.
 pub fn write_marketplace(root: &Path, bots: &[Bot]) -> std::io::Result<()> {
 	let plugins: Vec<serde_json::Value> = bots
 		.iter()
@@ -712,9 +369,6 @@ pub fn write_marketplace(root: &Path, bots: &[Bot]) -> std::io::Result<()> {
 	private_files::replace(&marketplace_file(root), listed.to_string().as_bytes())
 }
 
-/// What the bot is for, in one line. The title is the role a reader gave it; a bot
-/// nobody gave one is described by its name, because the field routes delegation and
-/// an empty one would offer nothing to route on.
 fn describe(bot: &Bot) -> &str {
 	if bot.title.trim().is_empty() {
 		&bot.name
@@ -723,14 +377,6 @@ fn describe(bot: &Bot) -> &str {
 	}
 }
 
-/// The manifest with this module's own keys set and every other one left as it was
-/// found. A bundle is a directory somebody else writes into: a reader who pointed
-/// their bot's manifest at `mcpServers`, or gave it hooks, is not doing so between
-/// panel edits.
-///
-/// The plugin is named by the bot's id rather than by the bot — a name changes, and
-/// two bots can share one, so neither the marketplace nor the promoted agent could be
-/// told apart by it. What the reader calls the bot travels as `displayName`.
 fn manifest(path: &Path, bundle: &Path, bot: &Bot) -> String {
 	let mut kept = object_at(path);
 	kept.insert("name".to_owned(), bot.id.clone().into());
@@ -741,9 +387,6 @@ fn manifest(path: &Path, bundle: &Path, bot: &Bot) -> String {
 	serde_json::Value::Object(kept).to_string()
 }
 
-/// The manifest laid down again over whatever it says now, without touching the
-/// agent file. What a server write needs: the declaration is derived from the disk,
-/// and nothing about a server is a reason to rewrite a brief.
 fn rewrite_manifest(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let bundle = dir(root, &bot.id);
 	let path = manifest_file(&bundle);
@@ -754,26 +397,12 @@ fn manifest_file(bundle: &Path) -> PathBuf {
 	bundle.join(MANIFEST_DIR).join(MANIFEST_NAME)
 }
 
-/// The manifest's pointer at the bundle's own server file, added while that file is
-/// there and the manifest carries no pointer of its own.
-///
-/// Never taken away here. A value written by hand cannot be told from this module's
-/// by looking at it, and a brief being saved is no reason to decide: the one write
-/// that knows the file has gone is the one that took it — see
-/// [`undeclare_servers`].
 fn declare_servers(kept: &mut serde_json::Map<String, serde_json::Value>, bundle: &Path) {
 	if bundle.join(MCP_NAME).is_file() && !kept.contains_key(SERVERS_KEY) {
 		kept.insert(SERVERS_KEY.to_owned(), MCP_SOURCE.into());
 	}
 }
 
-/// This module's own pointer taken back out once the file it pointed at has gone. A
-/// manifest left aimed at a file that is not there is a bundle that fails to load,
-/// and it is the one key this module removes at all.
-///
-/// Nothing happens while the file is still there, and a value the reader wrote
-/// themselves is left exactly where it is — it may be aimed at something this module
-/// knows nothing about.
 fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let bundle = dir(root, &bot.id);
 	if bundle.join(MCP_NAME).is_file() {
@@ -788,28 +417,6 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	private_files::replace(&path, serde_json::Value::Object(kept).to_string().as_bytes())
 }
 
-/// Frontmatter and body. Every value is emitted as a quoted scalar rather than
-/// written in raw, because a name or a title is free text: a colon, a hash or a
-/// newline in either would otherwise make the file mean something else.
-///
-/// The `metadata` map is what marks the file as this bot's — see [`OWNER_KEY`] — and
-/// what carries the bot's answer style, on every write and never absent: the format
-/// reads none of the map, so the style travels to the host and reaches a run on the
-/// open request rather than through the file — see [`OUTPUT_STYLE_KEY`].
-///
-/// `model` is the whole of how a reader's choice reaches the runtime: the key is
-/// honoured on the promoted path, and a model option passed alongside would override
-/// it — so nothing passes one. A bot holding no label writes no key at all, which is
-/// the agent running on whatever the install defaults to rather than on the empty
-/// string.
-///
-/// `color` carries the bot's tint out to the file the same way, under the words the
-/// agent format already reads colours by — see [`COLOR_KEY`]. A bot marked with none
-/// writes no key, so the mark and its absence are the key and its absence.
-///
-/// `disallowedTools` is the same shape and the whole of how a bot is held back from
-/// a built-in tool: the key is honoured on the promoted path, and a bot denying
-/// nothing writes none of it — see [`denial_line`].
 fn agent(root: &Path, bot: &Bot, name: &str, brief: &str, output_style: &str) -> String {
 	format!(
 		"{FENCE}\nname: {}\ndescription: {}\n{}{}{}metadata:\n  {OWNER_KEY}: {}\n  {OPENNEST_KEY}:\n    {OUTPUT_STYLE_KEY}: {}\n{FENCE}\n\n{}\n",
@@ -824,9 +431,6 @@ fn agent(root: &Path, bot: &Bot, name: &str, brief: &str, output_style: &str) ->
 	)
 }
 
-/// The style really written, so a caller submitting nothing at all is a bot on the
-/// default rather than a file carrying an empty key that would open a session under
-/// no style the provider knows.
 fn styled(output_style: &str) -> &str {
 	let named = output_style.trim();
 	if named.is_empty() {
@@ -836,14 +440,6 @@ fn styled(output_style: &str) -> &str {
 	}
 }
 
-/// Who the bot is: the host's own sentences over the bot's own name and title.
-///
-/// It travels on the open request and is appended to the prompt layer rather than
-/// written into the bundle — see `agent/PROTOCOL.md`. The sentences are the app's
-/// text, so no bot's file carries a copy of them, and a rename or a new title reaches
-/// the next session from the row it was read from.
-///
-/// A bot nobody gave a title is named alone rather than named with an empty one.
 pub fn identity(bot: &Bot) -> String {
 	let name = one_line(&bot.name);
 	let title = one_line(&bot.title);
@@ -855,20 +451,10 @@ pub fn identity(bot: &Bot) -> String {
 	format!("{named}\n{IDENTITY_STANCE}")
 }
 
-/// A name or a title as one line of prose. Both are single-line fields to a reader,
-/// so a value carrying a break is flattened rather than allowed to open a line of its
-/// own inside the identity.
 fn one_line(text: &str) -> String {
 	text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The brief, and under it the body of every skill the bot marked for preloading.
-/// The brief is taken from outside both generated regions even when it arrives already
-/// carrying them, so this one is rebuilt from the skills on the disk on every write
-/// rather than accumulated across writes.
-///
-/// A bot with nothing to carry writes no markers at all: the file is the brief, as it
-/// was before there were skills.
 fn briefed_with_skills(root: &Path, bot_id: &str, brief: &str) -> String {
 	let brief = without_generated(brief);
 	let level = (deepest_heading(brief) + 1).min(MAX_HEADING);
@@ -885,15 +471,10 @@ fn briefed_with_skills(root: &Path, bot_id: &str, brief: &str) -> String {
 	format!("{brief}\n\n{CARRIED_OPEN}\n\n{carried}\n\n{CARRIED_CLOSE}")
 }
 
-/// Every skill of the bot's that asked to be carried, in the order the disk names
-/// them: two writes over the same directory produce the same file. A bundle with no
-/// `skills/` directory has none, which is every bot nobody dropped one into.
 fn preloaded(root: &Path, bot_id: &str) -> Vec<Skill> {
 	skills(root, bot_id).into_iter().filter(|skill| skill.is_preloaded).collect()
 }
 
-/// Every directory under the bot's `skills/`, by name. Sorted so two writes over the
-/// same disk produce the same file, and empty for a bundle nobody has put a skill in.
 fn skill_dirs(root: &Path, bot_id: &str) -> Vec<PathBuf> {
 	let mut directories: Vec<PathBuf> = fs::read_dir(dir(root, bot_id).join(SKILLS_DIR))
 		.into_iter()
@@ -905,15 +486,6 @@ fn skill_dirs(root: &Path, bot_id: &str) -> Vec<PathBuf> {
 	directories
 }
 
-/// A skill of the bot's, whole. `id` is the directory it lives in, which is the one
-/// name two of them cannot share and the only one that survives a rename: what the
-/// skill is called is free text in its frontmatter, and changing it moves nothing on
-/// the disk.
-///
-/// `is_preloaded` is whether its body is carried into the agent file — see
-/// [`set_skill_preloaded`]. `is_system` is whether this module generated it: the
-/// settings show such a skill and change nothing about it, while the bot rewrites it
-/// through its own tools — see [`SYSTEM_KEY`].
 pub struct Skill {
 	pub id: String,
 	pub name: String,
@@ -924,8 +496,6 @@ pub struct Skill {
 	pub front: SkillFront,
 }
 
-/// What a skill is written from. The mark is not here: it is set on its own, because
-/// it changes what the bot is rather than what the skill says.
 pub struct SkillDraft {
 	pub name: String,
 	pub description: String,
@@ -933,26 +503,6 @@ pub struct SkillDraft {
 	pub front: SkillFront,
 }
 
-/// Every frontmatter key of a skill past its name and its description, read off the
-/// disk and written back under the spelling the agent reads them by.
-///
-/// `None` is a key the file does not carry, and — on the way in — a key the caller
-/// did not offer, which is left exactly as the file has it. An empty value is a key
-/// asked to go: a caller clears a field by sending it empty, not by leaving it out,
-/// so a panel showing three fields never takes away the seventeen it does not show.
-///
-/// The four lists are lists here whatever the file spells them as: a `SKILL.md`
-/// written by hand carries `allowed-tools: Read, Write` as often as it carries a
-/// sequence, and both mean the same two tools.
-///
-/// `hooks`, `metadata` and `compatibility` are whatever the file says. Their shape is
-/// the agent's to define and nothing here narrows it — `metadata` in particular is
-/// where this app keeps its own mark, which a write puts back under
-/// `metadata.opennest.preload` however the caller spelled the rest.
-///
-/// This is the type the frontend meets, camelCased and flattened into a skill by
-/// [`crate::conversations::contract`] rather than mirrored there: these are the
-/// frontmatter's own keys, so there is no second spelling for a mirror to protect.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SkillFront {
@@ -976,15 +526,10 @@ pub struct SkillFront {
 	pub compatibility: Option<serde_json::Value>,
 }
 
-/// Every skill in the bot's bundle, by directory name. A skill dropped in by hand is
-/// one of them: nothing here asks who wrote a file.
 pub fn skills(root: &Path, bot_id: &str) -> Vec<Skill> {
 	skill_dirs(root, bot_id).iter().filter_map(|path| read_skill(path)).collect()
 }
 
-/// Whether the skill at that id is one this module generated. Read off the file
-/// every time rather than held: the bot rewrites its own skills between two calls,
-/// and an id naming no skill of this bot's is not a system skill.
 pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
 	skill_dir(root, bot_id, skill_id)
 		.ok()
@@ -992,10 +537,6 @@ pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
 		.is_some_and(|skill| skill.is_system)
 }
 
-/// A new skill, at the directory its name slugs to — or beside it, when something is
-/// already there. The name and the description are the frontmatter a skill is
-/// offered by; the mark is not written, so a new skill is text on the disk and
-/// nothing in the bot's prompt until it is marked.
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
 	let path = free_skill_dir(root, &bot.id, &draft.name);
 	let skill = written_skill(root, bot, &path, drafted(None, draft)?)?;
@@ -1003,12 +544,6 @@ pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Resu
 	Ok(skill)
 }
 
-/// What the skill says, changed. The file is read and edited rather than written
-/// from a template: a `SKILL.md` a hand or another tool wrote carries keys this app
-/// knows nothing about, and they are put back exactly as they were found.
-///
-/// Frontmatter this module cannot read refuses the write and leaves the file exactly
-/// as it is — see [`checked_front`].
 pub fn update_skill(
 	root: &Path,
 	bot: &Bot,
@@ -1022,9 +557,6 @@ pub fn update_skill(
 	Ok(skill)
 }
 
-/// Whether the skill's body is carried into the bot's agent file. Both marks move
-/// together — see [`INVOCATION_KEY`] — and the agent is rewritten, since this is the
-/// one skill change that changes what the bot was told.
 pub fn set_skill_preloaded(
 	root: &Path,
 	bot: &Bot,
@@ -1038,8 +570,6 @@ pub fn set_skill_preloaded(
 	Ok(skill)
 }
 
-/// What a mark reads as to somebody who never sees a frontmatter key: a skill is
-/// carried in what the bot was told, or it is not.
 fn marking(is_preloaded: bool) -> &'static str {
 	if is_preloaded {
 		"added to the brief from settings"
@@ -1048,9 +578,6 @@ fn marking(is_preloaded: bool) -> &'static str {
 	}
 }
 
-/// The skill, taken away whole: its own directory and nothing outside it. The path
-/// is resolved by scanning the bot's own skills rather than joined from the id, so
-/// an id naming anything else names no skill at all.
 pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<()> {
 	let path = skill_dir(root, &bot.id, skill_id)?;
 	let name = read_skill(&path).map(|skill| skill.name).unwrap_or_else(|| skill_id.to_owned());
@@ -1060,18 +587,11 @@ pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<(
 	Ok(())
 }
 
-/// An MCP server the bot's bundle declares. `name` is the key it is declared under,
-/// which is the one name two of a bundle's servers cannot share and what it connects
-/// as — `plugin:<bot id>:<name>`. `config` is what the file says, verbatim: a command
-/// to run, its arguments and its environment, or whatever else a transport asks for.
 pub struct McpServer {
 	pub name: String,
 	pub config: serde_json::Value,
 }
 
-/// Every server the bot's bundle declares, by name. A `.mcp.json` a hand or another
-/// tool wrote is read the same way, and a bundle carrying none — which is every
-/// bundle until something writes one — declares none.
 pub fn mcp_servers(root: &Path, bot_id: &str) -> Vec<McpServer> {
 	declared(&mcp_file(root, bot_id))
 		.into_iter()
@@ -1079,18 +599,6 @@ pub fn mcp_servers(root: &Path, bot_id: &str) -> Vec<McpServer> {
 		.collect()
 }
 
-/// The server written under the name given, added or replaced. Every other server in
-/// the file stays exactly as it was, and so does every key of the file this module
-/// does not own: it is read and edited, never written from a template.
-///
-/// A configuration that is not a JSON object is refused before anything is written.
-/// The refusal says what was wrong with the shape and never what was offered — a
-/// configuration is a command to run and an environment that often holds a token,
-/// and neither belongs in a message that travels.
-///
-/// The answer is the write rather than a read back off the disk, unlike
-/// [`written_skill`]: a skill goes into frontmatter this module has to spell and read
-/// again, and a configuration goes into the file as the JSON value it already is.
 pub fn set_mcp_server(
 	root: &Path,
 	bot: &Bot,
@@ -1112,9 +620,6 @@ pub fn set_mcp_server(
 	Ok(McpServer { name: name.to_owned(), config: config.clone() })
 }
 
-/// The server taken out of the file, and the rest of it left as it was. A name the
-/// bundle does not declare is `NotFound`, which is also what a caller holding a list
-/// one gesture out of date gets.
 pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<()> {
 	let path = mcp_file(root, &bot.id);
 	let mut servers = declared(&path);
@@ -1128,11 +633,6 @@ pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<
 	Ok(())
 }
 
-/// The file with its `mcpServers` map replaced and every other key put back where it
-/// was found. The last server going takes the file with it, so a bundle declaring
-/// nothing is a bundle with no server file rather than one holding an empty map —
-/// unless the file carries keys of somebody else's, which are not this module's to
-/// take away with its own.
 fn write_servers(
 	path: &Path,
 	servers: serde_json::Map<String, serde_json::Value>,
@@ -1156,9 +656,6 @@ fn mcp_file(root: &Path, bot_id: &str) -> PathBuf {
 	dir(root, bot_id).join(MCP_NAME)
 }
 
-/// What a server file declares, as something to edit. Sorted by name, because the
-/// map is one: two reads over one disk answer in one order, and two writes leave one
-/// file.
 fn declared(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 	match object_at(path).remove(SERVERS_KEY) {
 		Some(serde_json::Value::Object(servers)) => servers,
@@ -1166,9 +663,6 @@ fn declared(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 	}
 }
 
-/// A JSON object off the disk. A file that is not there, is not JSON, or is JSON that
-/// is not an object reads as an empty one — which is a file with nothing of anyone's
-/// to keep.
 fn object_at(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 	fs::read_to_string(path)
 		.ok()
@@ -1176,9 +670,6 @@ fn object_at(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 		.unwrap_or_default()
 }
 
-/// The file written, the agent rewritten, and the skill read back off the disk —
-/// which is what a caller is answered with, so what it holds is what the file says
-/// rather than what the write meant.
 fn written_skill(root: &Path, bot: &Bot, path: &Path, text: String) -> std::io::Result<Skill> {
 	private_files::replace(&path.join(SKILL_NAME), text.as_bytes())?;
 	rewrite_agent(root, bot)?;
@@ -1187,10 +678,6 @@ fn written_skill(root: &Path, bot: &Bot, path: &Path, text: String) -> std::io::
 	})
 }
 
-/// The bot's agent file, laid down again over the brief the disk holds. The brief is
-/// nobody's to change here: a skill was marked, not a prompt rewritten, so what comes
-/// through is what the file already said — the stored value only for a bundle there
-/// is nothing to read.
 fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let held = generated(root, &bot.id);
 	let brief = held.as_ref().map_or(&bot.instructions, |held| &held.instructions);
@@ -1198,9 +685,6 @@ fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	write_briefed(root, bot, brief, style)
 }
 
-/// The skill in a directory, whatever it says about being carried. A name the
-/// frontmatter does not carry is the directory's own, so a file somebody wrote
-/// without one is still offered under something a reader recognises.
 fn read_skill(path: &Path) -> Option<Skill> {
 	let text = fs::read_to_string(path.join(SKILL_NAME)).ok()?;
 	let id = path.file_name()?.to_string_lossy().into_owned();
@@ -1216,10 +700,6 @@ fn read_skill(path: &Path) -> Option<Skill> {
 	})
 }
 
-/// Every key of [`SkillFront`] the file carries. Frontmatter this module cannot read
-/// answers as a skill carrying none rather than as no skill at all: a listing is not
-/// where a reader should first hear that a file is malformed, and a write over the
-/// same file refuses — see [`checked_front`].
 fn read_front(text: &str) -> SkillFront {
 	let map = mapped_lines(split_frontmatter(text).map_or("", |(front, _)| front));
 	let text_at = |key: &str| map.get(key).map(as_text);
@@ -1247,8 +727,6 @@ fn read_front(text: &str) -> SkillFront {
 	}
 }
 
-/// Where one of the bot's own skills lives. `NotFound` for an id that is not the name
-/// of one of them, which is also what a caller reaching for a path of its own gets.
 fn skill_dir(root: &Path, bot_id: &str, skill_id: &str) -> std::io::Result<PathBuf> {
 	skill_dirs(root, bot_id)
 		.into_iter()
@@ -1256,9 +734,6 @@ fn skill_dir(root: &Path, bot_id: &str, skill_id: &str) -> std::io::Result<PathB
 		.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no such skill"))
 }
 
-/// Where a new skill goes: the directory its name slugs to, unless something is
-/// already sitting there. Two skills a reader called the same thing are two
-/// directories, and a skill dropped in by hand is never written over.
 fn free_skill_dir(root: &Path, bot_id: &str, name: &str) -> PathBuf {
 	let skills = dir(root, bot_id).join(SKILLS_DIR);
 	let base = slug(name);
@@ -1272,13 +747,6 @@ fn free_skill_dir(root: &Path, bot_id: &str, name: &str) -> PathBuf {
 		.unwrap_or(preferred)
 }
 
-/// The file a draft leaves: the keys the draft carries set, the body replaced, and
-/// every other key of a file that was already there left exactly where it was.
-///
-/// The name and the description are written on every save, empty or not — the two
-/// keys the format asks a skill for are the file's shape rather than fields a reader
-/// may leave out. Every other key is written only when the draft offers it, taken
-/// away when the draft offers it empty, and never touched otherwise.
 fn drafted(existing: Option<&str>, draft: &SkillDraft) -> std::io::Result<String> {
 	let existing = existing.unwrap_or_default();
 	let mut parts = checked_front(existing)?;
@@ -1291,10 +759,6 @@ fn drafted(existing: Option<&str>, draft: &SkillDraft) -> std::io::Result<String
 	Ok(rendered(&parts))
 }
 
-/// What a draft asks of the frontmatter, key by key: the value it offered, or nothing
-/// at all for a key it left out. `metadata` is the one value the caller does not have
-/// the last word on — the mark the file carries goes back into it, since whether a
-/// bot carries the skill is not a field of the skill.
 fn offered(front: &SkillFront, existing: &str) -> Vec<(&'static str, Option<serde_json::Value>)> {
 	let text = |value: &Option<String>| value.clone().map(serde_json::Value::from);
 	let list = |value: &Option<Vec<String>>| value.clone().map(serde_json::Value::from);
@@ -1321,10 +785,6 @@ fn offered(front: &SkillFront, existing: &str) -> Vec<(&'static str, Option<serd
 	]
 }
 
-/// The metadata a caller offered, with the mark the file already carries put back
-/// under `metadata.opennest.preload`. A caller rewriting the map has no way to know
-/// what the bot was told, and a mark lost this way is a body silently dropped out of
-/// a prompt on the next write.
 fn remarked(offered: serde_json::Value, existing: &str) -> serde_json::Value {
 	let Some(mark) = front_value(existing, PRELOAD_KEY) else {
 		return offered;
@@ -1342,8 +802,6 @@ fn remarked(offered: serde_json::Value, existing: &str) -> serde_json::Value {
 	serde_json::Value::Object(map)
 }
 
-/// The same file with both marks written, or with both taken away. The body is not
-/// touched — this is a key changing, not a skill being rewritten.
 fn marked(text: &str, is_preloaded: bool) -> std::io::Result<String> {
 	let path = [METADATA_KEY, OPENNEST_KEY, PRELOAD_KEY];
 	let mut parts = checked_front(text)?;
@@ -1355,11 +813,6 @@ fn marked(text: &str, is_preloaded: bool) -> std::io::Result<String> {
 	Ok(rendered(&parts))
 }
 
-/// The file split, and refused when its frontmatter is not something this module can
-/// read: an opening fence nothing closes, or a line at the top of the map that names
-/// no key. Either would be rewritten into something else, so nothing is written at
-/// all and the caller is told — a `SKILL.md` a reader is in the middle of editing by
-/// hand is theirs, not this app's to flatten.
 fn checked_front(text: &str) -> std::io::Result<Parts> {
 	let unreadable = |detail: &str| {
 		std::io::Error::new(std::io::ErrorKind::InvalidData, format!("the frontmatter {detail}"))
@@ -1377,17 +830,11 @@ fn checked_front(text: &str) -> std::io::Result<Parts> {
 	}
 }
 
-/// Whether a frontmatter line is one this module can put back where it found it: a
-/// blank, a comment, anything nested under a key, or a key of its own. A top-level
-/// line that is none of those is a file spelled some other way.
 fn readable(line: &str) -> bool {
 	let trimmed = line.trim();
 	trimmed.is_empty() || trimmed.starts_with('#') || indent_of(line) > 0 || keyed(trimmed)
 }
 
-/// A skill file as something to edit: its frontmatter, and everything under it
-/// verbatim. A file carrying none is all body, and one written back grows the
-/// frontmatter it never had.
 struct Parts {
 	front: String,
 	body: String,
@@ -1408,17 +855,11 @@ fn rendered(parts: &Parts) -> String {
 	format!("{FENCE}\n{}\n{FENCE}\n{}", parts.front, parts.body)
 }
 
-/// Frontmatter with one key set, wherever in the map it sits. A key already there is
-/// replaced along with whatever was nested under it; a key that is not is added at
-/// the end of the deepest map on its path that does exist, and the rest of the path
-/// is written under it.
 fn with_key(front: &str, path: &[&str], value: &str) -> String {
 	let leaf = path.last().copied().unwrap_or_default();
 	with_block(front, path, vec![format!("{leaf}: {value}")])
 }
 
-/// The same, for a key worth more than one line: `written` is the key's whole block
-/// spelled at the left margin, and it lands wherever on the path the key belongs.
 fn with_block(front: &str, path: &[&str], written: Vec<String>) -> String {
 	let mut lines: Vec<String> = front.lines().map(str::to_owned).collect();
 	let mut from = 0;
@@ -1442,13 +883,6 @@ fn with_block(front: &str, path: &[&str], written: Vec<String>) -> String {
 	lines.join("\n")
 }
 
-/// Frontmatter with one top-level key written whole, or taken away when what it was
-/// offered is empty. A value the caller did not offer at all leaves the file alone,
-/// down to the spelling: a key nobody edited is a key nobody rewrote.
-///
-/// The value goes in as block YAML rather than as one flow line, because that is the
-/// shape the rest of this module reads a file back in — see [`front_value`], which
-/// finds the mark by the line it sits on.
 fn written_front(front: &str, key: &str, value: Option<&serde_json::Value>) -> String {
 	match value {
 		None => front.to_owned(),
@@ -1457,8 +891,6 @@ fn written_front(front: &str, key: &str, value: Option<&serde_json::Value>) -> S
 	}
 }
 
-/// Whether a value asks for its key to go: nothing, the empty word, the empty list
-/// and the empty map all mean a field a reader left empty.
 fn is_blank(value: &serde_json::Value) -> bool {
 	match value {
 		serde_json::Value::Null => true,
@@ -1469,9 +901,6 @@ fn is_blank(value: &serde_json::Value) -> bool {
 	}
 }
 
-/// A value written out as YAML under its key. Scalars sit on the key's own line and
-/// everything else is nested under it, so a file this module writes reads the way a
-/// file a hand wrote does.
 fn yaml_lines(key: &str, value: &serde_json::Value, indent: usize) -> Vec<String> {
 	let pad = " ".repeat(indent);
 	match value {
@@ -1491,8 +920,6 @@ fn yaml_lines(key: &str, value: &serde_json::Value, indent: usize) -> Vec<String
 	}
 }
 
-/// One item of a sequence. A map under a dash keeps its first key on the dash's own
-/// line, which is how YAML spells it and how [`sequenced`] reads it back.
 fn item_lines(item: &serde_json::Value, indent: usize) -> Vec<String> {
 	let pad = " ".repeat(indent);
 	match item {
@@ -1511,9 +938,6 @@ fn item_lines(item: &serde_json::Value, indent: usize) -> Vec<String> {
 	}
 }
 
-/// A scalar as the file spells it. Text is quoted whatever it says — a colon, a hash
-/// or a newline in a description would otherwise make the file mean something else —
-/// and a flag, a number and nothing keep the words YAML reads them by.
 fn written_scalar(value: &serde_json::Value) -> String {
 	match value {
 		serde_json::Value::String(text) => quoted(text),
@@ -1522,9 +946,6 @@ fn written_scalar(value: &serde_json::Value) -> String {
 	}
 }
 
-/// Frontmatter with one key taken away, and with every map its going leaves empty
-/// taken away too — a `metadata` holding nothing else is a key this module put there
-/// and nobody else's to keep. A path the file does not carry changes nothing.
 fn without_key(front: &str, path: &[&str]) -> String {
 	let mut lines: Vec<String> = front.lines().map(str::to_owned).collect();
 	let mut found: Vec<usize> = Vec::new();
@@ -1554,7 +975,6 @@ fn without_key(front: &str, path: &[&str]) -> String {
 	lines.join("\n")
 }
 
-/// A path written out as nested lines, the deepest of them carrying the block.
 fn branch(path: &[&str], indent: usize, written: Vec<String>) -> Vec<String> {
 	let depth = path.len().saturating_sub(1);
 	let mut grown: Vec<String> = path[..depth]
@@ -1566,15 +986,11 @@ fn branch(path: &[&str], indent: usize, written: Vec<String>) -> Vec<String> {
 	grown
 }
 
-/// The same lines, moved in by one map's worth of depth.
 fn indented(lines: Vec<String>, indent: usize) -> Vec<String> {
 	let pad = " ".repeat(indent);
 	lines.into_iter().map(|line| format!("{pad}{line}")).collect()
 }
 
-/// Where a key sits at one depth of one map, or `None` for a map that does not carry
-/// it. Found by indentation, so a `name` nested in a map is never mistaken for the
-/// one at the top.
 fn key_line(
 	lines: &[String],
 	from: usize,
@@ -1588,9 +1004,6 @@ fn key_line(
 	})
 }
 
-/// Where a key's block ends: the first line after it that is indented no deeper than
-/// it is. Blank lines belong to whatever follows them, so a map ending the
-/// frontmatter is not held open by one.
 fn block_end(lines: &[String], at: usize) -> usize {
 	let indent = indent_of(&lines[at]);
 	let mut end = at + 1;
@@ -1606,9 +1019,6 @@ fn block_end(lines: &[String], at: usize) -> usize {
 	end
 }
 
-/// How deep the lines of a block are indented, or `None` for a block with none. What
-/// a key added to it is indented by, so a file nesting with four spaces keeps doing
-/// so.
 fn child_indent(lines: &[String], from: usize, until: usize) -> Option<usize> {
 	lines
 		.get(from..until.min(lines.len()))?
@@ -1625,29 +1035,15 @@ fn key_of(line: &str) -> Option<&str> {
 	Some(line.split_once(':')?.0.trim())
 }
 
-/// The brief: what is left once the carried skills below it are taken off, and once
-/// the identity zone an older build wrote above it is taken off too.
-///
-/// The skills zone is cut at its opening marker and the identity zone at its closing
-/// one, so in both cases a file whose other marker was lost to a hand edit still
-/// reads as the brief that is really there.
-///
-/// Cutting the old zone is the whole of how it goes: the brief is read back from
-/// outside it, and the next write lays that brief down with no zone above it.
 fn without_generated(text: &str) -> &str {
 	let below = text.split_once(IDENTITY_CLOSE).map_or(text, |(_, brief)| brief);
 	below.split_once(CARRIED_OPEN).map_or(below, |(brief, _)| brief).trim()
 }
 
-/// The deepest heading a text uses, or `0` for one using none. What the carried
-/// bodies are demoted below, so a skill's own `#` can never read as a section of the
-/// brief.
 fn deepest_heading(text: &str) -> usize {
 	headed_lines(text).filter_map(|(_, level)| level).max().unwrap_or(0)
 }
 
-/// The same text with every heading pushed down by `shift` levels, and everything
-/// else left exactly as it was.
 fn demoted(text: &str, shift: usize) -> String {
 	let lines: Vec<String> = headed_lines(text)
 		.map(|(line, level)| match level {
@@ -1660,8 +1056,6 @@ fn demoted(text: &str, shift: usize) -> String {
 	lines.join("\n")
 }
 
-/// Every line, with the heading level it carries. `None` is a line that is not a
-/// heading — and a `# comment` inside a code fence is code, not a heading.
 fn headed_lines(text: &str) -> impl Iterator<Item = (&str, Option<usize>)> {
 	let mut fenced = false;
 	text.lines().map(move |line| {
@@ -1673,19 +1067,11 @@ fn headed_lines(text: &str) -> impl Iterator<Item = (&str, Option<usize>)> {
 	})
 }
 
-/// How deep a heading goes, or `None` for a line that is not one.
 fn heading_level(line: &str) -> Option<usize> {
 	let level = line.len() - line.trim_start_matches('#').len();
 	(level > 0 && line[level..].starts_with(' ')).then_some(level)
 }
 
-/// The `disallowedTools` key and its line ending, or nothing for a bot that denies
-/// no tool. A flow sequence, which is both YAML and JSON, so the list reads the same
-/// to whatever opens the file.
-///
-/// The one writer of the key. Whatever a caller submits is laid down through
-/// [`denials`], so a list picked tool by tool and one standing for "changes
-/// nothing" produce the same line rather than two lines that have to be ordered.
 fn denial_line(denied: &[String]) -> String {
 	let named = denials(denied);
 	if named.is_empty() {
@@ -1694,15 +1080,6 @@ fn denial_line(denied: &[String]) -> String {
 	format!("{DISALLOWED_KEY}: {}\n", serde_json::json!(named))
 }
 
-/// What is really written: each name once, in one order, and nothing an MCP server
-/// provides. Sorted so two callers asking for the same denials write the same file
-/// whatever order they named them in, and so a file rewritten from what it holds is
-/// the file it already was.
-///
-/// [`DELEGATION_TOOL`] is derived here and only here: dropped from whatever was
-/// submitted, then written back for a list that denies every changing tool. A bot
-/// that changes nothing starts nothing that changes anything either, and the same
-/// derivation takes the name away the moment the lock is lifted.
 fn denials(denied: &[String]) -> Vec<String> {
 	let mut named: Vec<String> = denied
 		.iter()
@@ -1717,21 +1094,10 @@ fn denials(denied: &[String]) -> Vec<String> {
 	named
 }
 
-/// Whether these denials cover the tools that write files and run commands, which
-/// is the whole of what "changes nothing" means. All four or it is off: a bot
-/// denying three of them is a bot that can still change something.
-///
-/// The four and nothing else: a bundle written before there was a delegation to deny
-/// still reads as locked, and is given the name back the next time it is written.
 pub fn denies_changes(denied: &[String]) -> bool {
 	CHANGING_TOOLS.iter().all(|tool| denied.iter().any(|named| named == tool))
 }
 
-/// The tools the file's own `disallowedTools` names, in the order it names them.
-/// The line is a flow sequence — that is what [`denial_line`] lays down — and a
-/// hand-written one is read the same way, quotes or none. A file naming the key on
-/// a shape this cannot read denies nothing here, and the next write replaces the
-/// line with the list the caller submitted.
 fn front_denials(text: &str) -> Vec<String> {
 	let Some(named) = front_value(text, DISALLOWED_KEY) else {
 		return Vec::new();
@@ -1747,7 +1113,6 @@ fn front_denials(text: &str) -> Vec<String> {
 		.collect()
 }
 
-/// The `model` key and its line ending, or nothing for a bot carrying no label.
 fn model_line(model: &str) -> String {
 	let named = model.trim();
 	if named.is_empty() {
@@ -1756,8 +1121,6 @@ fn model_line(model: &str) -> String {
 	format!("{MODEL_KEY}: {}\n", quoted(named))
 }
 
-/// The `color` key and its line ending, or nothing at all for a bot marked with no
-/// tint: no mark is the absence of the key, never a word standing for "none".
 fn color_line(blot: Option<AvatarBlot>) -> String {
 	blot.map_or_else(String::new, |blot| format!("{COLOR_KEY}: {}\n", quoted(blot.named())))
 }
@@ -1766,38 +1129,20 @@ fn quoted(value: &str) -> String {
 	serde_json::Value::String(value.to_owned()).to_string()
 }
 
-/// What is left once the frontmatter is taken off. A file with no frontmatter at
-/// all is body from its first line — this reads back what [`agent`] wrote, and a
-/// file a user opened and simplified is still their brief.
-///
-/// A fence is the three dashes and the end of their line, whatever the editor that
-/// wrote it ended lines with: a file saved with CRLF is one a reader edited on
-/// Windows, not a file with no frontmatter whose YAML is part of the brief.
-///
-/// Neither generated region is body: the carried skills below the brief, and the
-/// identity zone an older build wrote above it. Both are written from what was
-/// already on the disk, so reading one back would hand a caller a brief holding the
-/// last write's copy, and the next write would carry that copy again.
 fn body(text: &str) -> &str {
 	without_generated(split_frontmatter(text).map_or(text, |(_, body)| body))
 }
 
-/// The frontmatter and what follows it, or `None` for a file carrying none.
 fn split_frontmatter(text: &str) -> Option<(&str, &str)> {
 	let rest = text.trim_start().strip_prefix(FENCE)?;
 	let (front, closing) = rest.split_once(CLOSING_FENCE)?;
 	Some((front, closing.split_once('\n')?.1))
 }
 
-/// The bot a file says it was generated for, or `None` for one that says nothing —
-/// which is every file this module did not write.
 fn marked_bot_id(text: &str) -> Option<String> {
 	front_value(text, OWNER_KEY)
 }
 
-/// A frontmatter key's scalar, as whoever wrote it meant it, or `None` for a file
-/// that names none. Lines are read trimmed, so a key nested in a map answers under
-/// its own name — which is how [`OWNER_KEY`] is found inside `metadata`.
 fn front_value(text: &str, key: &str) -> Option<String> {
 	let (front, _) = split_frontmatter(text)?;
 	front.lines().find_map(|line| {
@@ -1806,28 +1151,16 @@ fn front_value(text: &str, key: &str) -> Option<String> {
 	})
 }
 
-/// A scalar as it went in. Everything this module writes is a quoted JSON string —
-/// see [`quoted`] — so a name carrying a quotation mark, an apostrophe, a colon or a
-/// newline is read back as the reader typed it rather than as the file spells it. A
-/// bare scalar a hand wrote is its own text, which is the same answer for every value
-/// nothing had to escape.
 fn unquoted(value: &str) -> String {
 	serde_json::from_str::<String>(value).unwrap_or_else(|_| value.trim_matches('"').to_owned())
 }
 
-/// The whole of a frontmatter as values, by key. Every map this module writes it
-/// reads back, and a `SKILL.md` a hand wrote reads the same way: nested maps,
-/// sequences, flow lists and folded text all answer as what they say.
 fn mapped_lines(front: &str) -> serde_json::Map<String, serde_json::Value> {
 	let lines: Vec<String> = front.lines().map(str::to_owned).collect();
 	let end = lines.len();
 	mapped(&lines, 0, end)
 }
 
-/// One map, from its first line to the end of its block. Lines nested deeper belong
-/// to the key above them, and a line naming no key at this depth is skipped rather
-/// than guessed at — a write over that file is refused elsewhere, see
-/// [`checked_front`].
 fn mapped(
 	lines: &[String],
 	from: usize,
@@ -1852,9 +1185,6 @@ fn mapped(
 	map
 }
 
-/// One sequence. An item carrying a key of its own is the map that starts on the
-/// dash's line — `- matcher: Bash` and everything indented under it — which is how a
-/// hooks block is spelled.
 fn sequenced(lines: &[String], from: usize, until: usize) -> Vec<serde_json::Value> {
 	let until = until.min(lines.len());
 	let indent = child_indent(lines, from, until).unwrap_or(0);
@@ -1882,8 +1212,6 @@ fn sequenced(lines: &[String], from: usize, until: usize) -> Vec<serde_json::Val
 	items
 }
 
-/// What a key or a sequence item is worth: what sits on its own line, or the block
-/// nested under it. A key with neither is nothing at all.
 fn valued(inline: &str, lines: &[String], from: usize, until: usize) -> serde_json::Value {
 	if matches!(inline, "|" | "|-" | "|+" | ">" | ">-" | ">+") {
 		return serde_json::Value::String(folded(lines, from, until, inline.starts_with('>')));
@@ -1901,13 +1229,6 @@ fn valued(inline: &str, lines: &[String], from: usize, until: usize) -> serde_js
 	}
 }
 
-/// The text under a `|` or a `>`, dedented by however far its first line sits in. A
-/// folded block joins its lines with spaces and a literal one keeps the newlines,
-/// which is the difference the two marks name.
-///
-/// A line sitting shallower than the first keeps what indentation it has. Cutting it
-/// at the block's depth would be cutting a string at a byte a hand never chose — and
-/// a `pâte` two spaces in would take the whole listing down with it.
 fn folded(lines: &[String], from: usize, until: usize, is_folded: bool) -> String {
 	let until = until.min(lines.len());
 	let indent = child_indent(lines, from, until).unwrap_or(0);
@@ -1918,8 +1239,6 @@ fn folded(lines: &[String], from: usize, until: usize, is_folded: bool) -> Strin
 	held.join(if is_folded { " " } else { "\n" }).trim().to_owned()
 }
 
-/// Whether a block is a sequence rather than a map: its first line carries a dash and
-/// nothing else claims it.
 fn is_sequence(lines: &[String], from: usize, until: usize) -> bool {
 	lines[from.min(lines.len())..until.min(lines.len())]
 		.iter()
@@ -1930,8 +1249,6 @@ fn is_sequence(lines: &[String], from: usize, until: usize) -> bool {
 		})
 }
 
-/// Whether a line names a key. A colon ends the key or is followed by a space, so a
-/// URL and a quoted sentence carrying one are values rather than maps.
 fn keyed(text: &str) -> bool {
 	if text.starts_with('"') || text.starts_with('\'') || text.starts_with('-') {
 		return false;
@@ -1939,8 +1256,6 @@ fn keyed(text: &str) -> bool {
 	text.ends_with(':') || text.split_once(": ").is_some()
 }
 
-/// One scalar as the file means it: a flag, a number, nothing, or text — quoted
-/// either way round, or bare, in which case it is its own words.
 fn scalar(text: &str) -> serde_json::Value {
 	if let Some(held) = text.strip_prefix('\'').and_then(|rest| rest.strip_suffix('\'')) {
 		return serde_json::Value::String(held.replace("''", "'"));
@@ -1948,8 +1263,6 @@ fn scalar(text: &str) -> serde_json::Value {
 	serde_json::from_str(text).unwrap_or_else(|_| serde_json::Value::String(unquoted(text)))
 }
 
-/// A value as text. Anything that is not text answers as the file spells it, so a
-/// `model: 4` reads back as `4` rather than as nothing.
 fn as_text(value: &serde_json::Value) -> String {
 	match value {
 		serde_json::Value::String(text) => text.clone(),
@@ -1958,9 +1271,6 @@ fn as_text(value: &serde_json::Value) -> String {
 	}
 }
 
-/// A value as a list. A sequence is one already; a single word is a list of one; and
-/// a line a hand wrote as `Read, Write` or as `Read Write` is the two tools it names
-/// — commas first, since a tool may be spelled `Bash(git status:*)`.
 fn as_list(value: &serde_json::Value) -> Vec<String> {
 	match value {
 		serde_json::Value::Array(items) => items.iter().map(as_text).collect(),
@@ -1983,8 +1293,6 @@ fn split_list(text: &str) -> Vec<String> {
 		.collect()
 }
 
-/// A value as a flag. A file saying anything but yes or no says nothing this module
-/// can carry as one, and answers as a key the skill does not hold.
 fn as_flag(value: &serde_json::Value) -> Option<bool> {
 	match value {
 		serde_json::Value::Bool(flag) => Some(*flag),
@@ -2019,8 +1327,6 @@ mod tests {
 		}
 	}
 
-	/// A brief rewritten the way a reader does it: the file's own frontmatter left
-	/// where it is, the body under it replaced.
 	fn rewrite_the_brief(agent: &Path, brief: &str) {
 		let text = fs::read_to_string(agent).expect("the agent file is there");
 		let (front, _) = text.rsplit_once(FENCE).expect("the closing fence");
@@ -2042,8 +1348,6 @@ mod tests {
 		root
 	}
 
-	/// A name is free text and an agent name is not. What survives is what the agent
-	/// resolves; a name that leaves nothing still has a file to live in.
 	#[test]
 	fn a_name_is_reduced_to_something_an_agent_can_be_promoted_under() {
 		assert_eq!(slug("Bean"), "bean");
@@ -2052,8 +1356,6 @@ mod tests {
 		assert_eq!(slug("🐈"), UNNAMED);
 	}
 
-	/// What is written is what is read back, through the two files the agent loads
-	/// and under the name it will be promoted as.
 	#[test]
 	fn a_written_bundle_is_the_two_files_the_agent_loads() {
 		let root = a_root("written");
@@ -2071,10 +1373,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The picked model is a key of the file the session is promoted to, and that key
-	/// is the whole of how it reaches the runtime — nothing passes an option beside
-	/// it. Read back the way the frontend reads it, so a bot runs on what the panel
-	/// showed.
 	#[test]
 	fn a_written_bundle_names_the_model_the_bot_answers_under() {
 		let root = a_root("modelled");
@@ -2091,8 +1389,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bot carrying no label writes no key: the agent then runs on whatever the
-	/// install defaults to, rather than on a model named by the empty string.
 	#[test]
 	fn a_bot_naming_no_model_writes_no_key() {
 		let root = a_root("modelless");
@@ -2109,9 +1405,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The tint is a key of the file too, under the word the agent format reads a
-	/// colour by. It goes out and comes back as the same tint, which is the whole
-	/// point of naming it in the format's own vocabulary rather than in one of ours.
 	#[test]
 	fn a_written_bundle_names_the_tint_the_bot_is_marked_with() {
 		let root = a_root("tinted");
@@ -2129,8 +1422,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bot nobody marked writes no key at all: no mark is the absence of the
-	/// colour, never a word standing for "none".
 	#[test]
 	fn a_bot_marked_with_no_tint_writes_no_key() {
 		let root = a_root("untinted");
@@ -2146,9 +1437,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A colour a reader wrote by hand that names no tint of this build's is a bot
-	/// marked with none — and the word stays exactly where they put it. The agent
-	/// resolves and applies its brief either way, so there is nothing to correct.
 	#[test]
 	fn a_colour_this_build_has_no_tint_for_is_left_alone_and_reported_as_no_tint() {
 		let root = a_root("teal");
@@ -2167,10 +1455,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bot denied a tool names it in the file its session is promoted onto, and
-	/// names nothing else: the key is honoured on the promoted path, so a session
-	/// opened on this file is given every other built-in. Read back the way the panel
-	/// reads it, so what a reader is shown is what the run is held to.
 	#[test]
 	fn a_bot_denied_a_tool_names_that_tool_and_no_other() {
 		let root = a_root("denied-one");
@@ -2190,10 +1474,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The one path the key is written through, proved from both ends: denying the
-	/// four tools one by one lays down the file a bot set to change nothing lays
-	/// down, in the same order, and that file reads back as changing nothing. Two
-	/// settings writing this key would make the file depend on which wrote last.
 	#[test]
 	fn denying_the_changing_tools_one_by_one_writes_the_change_nothing_file() {
 		let root = a_root("denied-each");
@@ -2217,9 +1497,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bot that changes nothing starts nothing that changes anything either. The
-	/// key binds the promoted thread only, so the delegation tool is named beside the
-	/// four: a subagent is how a held-back bot had the file written for it.
 	#[test]
 	fn a_bot_that_changes_nothing_is_denied_delegation_too() {
 		let root = a_root("denied-delegation");
@@ -2238,9 +1515,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The lock lifted gives delegation back, and a caller naming the tool on its own
-	/// never takes it away: the name is derived from the four and from nothing else,
-	/// so one switch writes it and the same switch removes it.
 	#[test]
 	fn delegation_is_left_alone_wherever_the_changing_tools_are_allowed() {
 		let root = a_root("allowed-delegation");
@@ -2258,9 +1532,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bundle written before there was a delegation to deny is read as changing
-	/// nothing all the same — the reading is the four — and is given the name on the
-	/// next launch, which is what ensuring one is for.
 	#[test]
 	fn a_locked_bundle_written_without_the_delegation_tool_is_given_it_when_ensured() {
 		let root = a_root("older-delegation");
@@ -2283,8 +1554,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A tool an MCP server provides is the bundle's own capability, declared in
-	/// `.mcp.json`: it never reaches the key, whoever asks for it.
 	#[test]
 	fn a_server_s_tool_is_never_denied() {
 		let root = a_root("denied-server");
@@ -2302,8 +1571,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A tool allowed again is a tool the file stops naming: the key goes with the
-	/// last denial, so the next session is given back what the last one was refused.
 	#[test]
 	fn a_tool_allowed_again_is_left_unnamed() {
 		let root = a_root("allowed");
@@ -2328,9 +1595,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Neither key may ever reach a generated file: one preloads its content only
-	/// when the agent is delegated, the other is ignored on the promoted path and the
-	/// host owns permissions regardless.
 	#[test]
 	fn a_generated_agent_declares_neither_skills_nor_a_permission_mode() {
 		let mut bot = a_bot("Bean", "Answer briefly.");
@@ -2344,9 +1608,6 @@ mod tests {
 		}
 	}
 
-	/// The style a reader picked is the style the file carries and the style a session
-	/// would be opened under. Nothing else on this side holds it, so a value that did
-	/// not survive the round trip is a pick that never reached a run.
 	#[test]
 	fn the_style_a_reader_picks_is_the_style_the_file_carries() {
 		let root = a_root("styled");
@@ -2362,9 +1623,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Every write that is not a reader picking a style keeps the one on the disk: a
-	/// skill saved, a name changed, a server declared. One writer of the key and one
-	/// only, or a bot would drift back to the default behind its reader.
 	#[test]
 	fn a_write_that_names_no_style_keeps_the_one_on_the_disk() {
 		let root = a_root("styled-kept");
@@ -2379,11 +1637,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Everything that names no style is a bot on the default one: a bundle written
-	/// before there was a key, an agent a reader wrote themselves, a pick submitted
-	/// blank, and a bot with no bundle at all. One normaliser answers for all four —
-	/// see [`styled`] — so none of them can open a session under a style the provider
-	/// cannot resolve.
 	#[test]
 	fn everything_that_names_no_style_reads_as_the_default_one() {
 		let styleless = format!("{FENCE}\nname: \"bean\"\n{FENCE}\n\nA brief.\n");
@@ -2393,9 +1646,6 @@ mod tests {
 		assert_eq!(output_style(&a_root("styleless"), "b1"), DEFAULT_OUTPUT_STYLE);
 	}
 
-	/// A bundle is a directory somebody else writes into too. A skill dropped in by
-	/// hand, an agent nobody generated, a server config: an unrelated edit to the bot
-	/// leaves every one of them exactly where it was.
 	#[test]
 	fn a_write_leaves_everything_it_did_not_generate_alone() {
 		let root = a_root("shared");
@@ -2423,9 +1673,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A manifest is a file a reader also writes in: the keys this module owns are set
-	/// and every other one is found again afterwards, whatever else the bot is edited
-	/// for in between.
 	#[test]
 	fn a_write_sets_the_keys_it_owns_and_keeps_every_other_one() {
 		let root = a_root("manifest");
@@ -2454,9 +1701,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A name is not an identity, so a generated agent never claims a file that does
-	/// not carry the bot's id: a reader who wrote their own `helper.md` and then
-	/// renamed their bot to Helper keeps it, and the generated one steps aside.
 	#[test]
 	fn a_generated_agent_steps_aside_rather_than_take_a_file_nobody_generated() {
 		let root = a_root("collision");
@@ -2475,8 +1719,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Renaming a bot moves the agent it generated: the new name answers, the old
-	/// file is gone, and the brief the old file held came with it.
 	#[test]
 	fn a_renamed_bot_leaves_no_generated_agent_under_the_name_it_dropped() {
 		let root = a_root("renamed");
@@ -2494,9 +1736,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The disk is the truth. A body edited by hand is what the bot is, so it is what
-	/// a caller is told to store — and an unrelated write, a rename, carries it rather
-	/// than writing over it.
 	#[test]
 	fn a_body_edited_by_hand_is_adopted_and_never_written_over() {
 		let root = a_root("adopted");
@@ -2508,8 +1747,6 @@ mod tests {
 		rewrite_the_brief(&agent, "Answer only in French.");
 		assert_eq!(adopted(&root, &bot).as_deref(), Some("Answer only in French."));
 
-		// The rename, as a caller performs it: what the disk says is stored first, and
-		// the write that follows lays that down under the new name.
 		bot.instructions = reconciled(&root, &bot, "Answer briefly.");
 		bot.name = "Fig".to_owned();
 		write(&root, &bot).expect("the rename is written");
@@ -2518,10 +1755,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The space a reader has just typed is not a hand edit. The agent file holds the
-	/// brief trimmed, so a brief the reader is still in the middle of writing differs
-	/// from its own file by the space at the end of it — and adopting that difference
-	/// takes the space back out from under them, one keystroke after they typed it.
 	#[test]
 	fn a_brief_ending_in_a_space_is_not_taken_for_a_hand_edit() {
 		let root = a_root("still-typing");
@@ -2542,9 +1775,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A fence is the dashes and the end of their line, whatever wrote it: a hand
-	/// edit saved on Windows is a brief, not a file whose frontmatter is part of what
-	/// the bot was told.
 	#[test]
 	fn a_brief_saved_with_windows_line_endings_is_read_as_the_body_it_is() {
 		let by_hand = "---\r\nname: \"bean\"\r\n---\r\n\r\nAnswer only in French.\r\n";
@@ -2553,8 +1783,6 @@ mod tests {
 		assert_eq!(body("Answer only in French.\r\n"), "Answer only in French.");
 	}
 
-	/// The one case the disk does not win: a reader who typed a new brief into the
-	/// panel is submitting something the file has never held, and that is the write.
 	#[test]
 	fn a_brief_the_reader_changed_is_what_lands_over_the_file() {
 		let root = a_root("reconciled");
@@ -2567,8 +1795,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bundle nothing wrote, and a bundle taken away since: both read as no
-	/// bundle, which is the caller reading the stored value instead.
 	#[test]
 	fn a_bundle_that_is_not_there_reads_as_none_and_is_written_again() {
 		let root = a_root("absent");
@@ -2584,10 +1810,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// What a bundle no longer carries: the hook that printed its own directory, and a
-	/// copy of the host's `learn` text. The prompt layer names the directory and the
-	/// app's own plugin holds the text, so a bundle written today is the bot and nothing
-	/// of the host's beside it.
 	#[test]
 	fn a_written_bundle_carries_neither_a_hook_nor_a_learn_skill() {
 		let root = a_root("unhooked");
@@ -2606,10 +1828,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The mark that says the host wrote a skill, read off the file every time: a
-	/// bundle from before the app had a plugin of its own still holds one, and the
-	/// settings answer for it — see `conversations::commands::refuse_system_skill`.
-	/// A skill a reader created carries none of it.
 	#[test]
 	fn a_skill_reads_as_the_hosts_while_it_carries_the_mark() {
 		let root = a_root("system-mark");
@@ -2647,8 +1865,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bot nobody has told anything still carries what it remembered — and still
-	/// reads back as told nothing, since the carried region is not a brief.
 	#[test]
 	fn a_bot_told_nothing_carries_its_skills_and_still_reads_as_told_nothing() {
 		let root = a_root("untold");
@@ -2663,10 +1879,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bundle written when the host still put a hook and a copy of `learn` in every
-	/// one of them: both are taken back the next time anything ensures it, the reader's
-	/// own skills are left where they are, and the brief the disk holds is still what
-	/// the bot is afterwards.
 	#[test]
 	fn a_bundle_from_before_the_system_plugin_has_the_hosts_files_taken_back() {
 		let root = a_root("unequipped");
@@ -2703,10 +1915,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The `learn` a bot's reader made their own: the mark is gone, so the directory is
-	/// theirs and nothing here takes it away. Same for a `hooks/` somebody else filled —
-	/// only the two files this module wrote go, and the directory goes with them only if
-	/// it is empty afterwards.
 	#[test]
 	fn a_learn_a_reader_owns_and_a_hook_somebody_else_wrote_both_stay() {
 		let root = a_root("kept");
@@ -2738,8 +1946,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A skill as a reader drops one in: a directory, a `SKILL.md`, and the mark that
-	/// asks for it to be carried.
 	fn drop_a_skill(root: &Path, bot_id: &str, name: &str, preload: bool, body: &str) -> PathBuf {
 		let path = dir(root, bot_id).join(SKILLS_DIR).join(name).join(SKILL_NAME);
 		let mark = if preload { "metadata:\n  opennest:\n    preload: true\n" } else { "" };
@@ -2756,10 +1962,6 @@ mod tests {
 			.expect("the agent file reads")
 	}
 
-	/// The `skills` key is inert once an agent is promoted, so a skill only reaches a
-	/// bot at turn zero as text in the body. Carried under the name it came from,
-	/// between markers saying the region is generated — and a skill that never asked
-	/// stays on the disk and out of the file.
 	#[test]
 	fn a_skill_marked_for_preloading_is_carried_in_the_agent_body() {
 		let root = a_root("preloaded");
@@ -2780,8 +1982,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The identity is the host's text, so no bundle carries a copy of it: the body
-	/// opens on the brief the reader wrote and on nothing else.
 	#[test]
 	fn an_agent_body_opens_on_the_brief_and_carries_no_identity() {
 		let root = a_root("identity");
@@ -2798,9 +1998,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bundle an older build wrote carries a zone this one does not: writing or
-	/// ensuring the bot takes it back out, and the brief it was already running on
-	/// comes through untouched.
 	#[test]
 	fn an_identity_zone_an_older_build_wrote_is_taken_back_out() {
 		let root = a_root("unidentified");
@@ -2823,9 +2020,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// What the host tells a session the bot is: the bot's own name and title, and the
-	/// stance the app owns rather than the reader. A bot nobody gave a title is named
-	/// alone rather than named with an empty one.
 	#[test]
 	fn the_identity_names_the_bot_over_the_stance_the_host_owns() {
 		let mut bot = a_bot("Bean", "Answer briefly.");
@@ -2839,10 +2033,6 @@ mod tests {
 		assert!(told.contains("you say so plainly"), "got {told}");
 	}
 
-	/// The one failure that is invisible until a bot's file is enormous: a write that
-	/// read the carried region back as the brief would lay it down again inside the
-	/// next one, and the file would grow on every save. The brief comes from outside
-	/// the region, so two writes over the same inputs produce the same file.
 	#[test]
 	fn a_brief_survives_two_consecutive_writes_with_a_skill_carried() {
 		let root = a_root("twice");
@@ -2864,8 +2054,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A skill that stops asking, and a skill that is gone: the region is rebuilt from
-	/// what the disk holds on every write, so neither is still in the file afterwards.
 	#[test]
 	fn a_skill_that_loses_its_mark_or_its_file_is_dropped_on_the_next_write() {
 		let root = a_root("dropped");
@@ -2887,9 +2075,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Carried headings go below the deepest one the brief uses, so a skill's own `#`
-	/// can never read as a section of the brief. What is inside a code fence is code:
-	/// a shell comment comes out as it went in.
 	#[test]
 	fn a_carried_skill_keeps_its_structure_under_the_brief() {
 		let root = a_root("demoted");
@@ -2912,8 +2097,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A draft offering nothing past the three values a panel has always sent, which
-	/// is also what every key the draft leaves out is written from: nothing at all.
 	fn a_draft(name: &str, description: &str, body: &str) -> SkillDraft {
 		SkillDraft {
 			name: name.to_owned(),
@@ -2928,8 +2111,6 @@ mod tests {
 			.expect("the skill file reads")
 	}
 
-	/// What a caller writes and what it reads back: a directory named after the name,
-	/// the frontmatter the skill is offered by, and a skill nobody has marked yet.
 	#[test]
 	fn a_created_skill_is_a_file_a_caller_reads_back_whole() {
 		let root = a_root("skill-created");
@@ -2952,9 +2133,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A `SKILL.md` a hand or another tool wrote carries keys this app knows nothing
-	/// about. An edit changes what was asked and puts the rest back where it was —
-	/// the same rule the agent writer follows for a bundle it does not own.
 	#[test]
 	fn an_edited_skill_keeps_every_key_this_app_does_not_own() {
 		let root = a_root("skill-edited");
@@ -2994,11 +2172,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A `SKILL.md` a hand wrote spells the same key half a dozen ways: a list as a
-	/// sequence, as a comma-separated line or as words on one; a paragraph folded
-	/// under a bar; a map nested under a map. Every one of them is one value here,
-	/// and a panel binding a field to a key never has to know which way the file
-	/// happened to say it.
 	#[test]
 	fn every_frontmatter_key_a_skill_carries_is_read_back_whatever_the_file_spells() {
 		let root = a_root("skill-front-read");
@@ -3089,11 +2262,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A `SKILL.md` a hand wrote indents a folded block however it likes, and its text
-	/// is written in whatever language the reader thinks in. Dedenting every line to
-	/// the depth of the first would cut a shallower one at a byte in the middle of a
-	/// letter — which is not a wrong answer but a panic, taken by a caller who asked
-	/// for nothing more than the list of a bot's skills.
 	#[test]
 	fn a_folded_block_a_hand_indented_survives_a_letter_that_is_not_ascii() {
 		let root = a_root("skill-folded");
@@ -3121,9 +2289,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// What a draft asks for and what it does not. A key it offers is written, a key
-	/// it offers empty goes, a key it says nothing about is left exactly as the file
-	/// has it — and a key this app has never heard of is not its business either way.
 	#[test]
 	fn a_draft_writes_what_it_offers_and_leaves_alone_what_it_does_not() {
 		let root = a_root("skill-front-write");
@@ -3175,10 +2340,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// `metadata` is a reader's map to write and this app keeps its own mark inside
-	/// it. A caller rewriting the map has no way to know what the bot was told, so the
-	/// mark goes back where it was — losing it would drop the body out of the prompt
-	/// on the next write, silently.
 	#[test]
 	fn metadata_a_caller_writes_keeps_the_mark_the_bot_carries() {
 		let root = a_root("skill-metadata");
@@ -3209,10 +2370,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A `SKILL.md` this module cannot read is not one it may rewrite: a fence nothing
-	/// closes and a line naming no key would both come back as something else. Nothing
-	/// is written, the caller is told, and the file is left for the hand that is in
-	/// the middle of it.
 	#[test]
 	fn frontmatter_this_app_cannot_read_refuses_the_write_and_leaves_the_file() {
 		let root = a_root("skill-unreadable");
@@ -3242,9 +2399,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The two marks belong together: a carried skill left model-invocable is fetched
-	/// again even though its text is already in the prompt. Whatever writes one writes
-	/// the other, and whatever takes one away takes both.
 	#[test]
 	fn marking_a_skill_writes_both_marks_and_unmarking_takes_both_away() {
 		let root = a_root("skill-marked");
@@ -3274,8 +2428,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A skill goes with its own directory and with nothing else: what a reader put
-	/// beside it is theirs.
 	#[test]
 	fn a_removed_skill_takes_its_own_directory_and_nothing_beside_it() {
 		let root = a_root("skill-removed");
@@ -3295,9 +2447,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Two skills a reader called the same thing are two skills. The second lands
-	/// beside the first rather than over it, and a directory a hand put there is not
-	/// written into either.
 	#[test]
 	fn a_name_landing_on_a_directory_that_is_taken_is_written_beside_it() {
 		let root = a_root("skill-collided");
@@ -3318,10 +2467,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Every one of these changes what the bot is, since a carried skill ends up in
-	/// its prompt — and none of them is a brief being rewritten. The brief lives
-	/// outside the generated region and comes through untouched, even when the row
-	/// the call carries is behind the file.
 	#[test]
 	fn marking_unmarking_and_removing_a_skill_leave_the_brief_untouched() {
 		let root = a_root("skill-brief");
@@ -3347,11 +2492,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The directory a skill lives in never moves, and the name a reader gives it does.
-	/// What the bot reads at the top of the carried region is the name the skill
-	/// declares — otherwise a rename in the panel would leave the bot reading the old
-	/// one in its own prompt — and a skill declaring none is still known by its
-	/// directory.
 	#[test]
 	fn a_carried_skill_is_titled_by_the_name_it_declares() {
 		let root = a_root("skill-titled");
@@ -3379,10 +2519,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Someone types an apostrophe on the first afternoon. Every value written here is
-	/// a quoted JSON string, so a quotation mark, a colon, a hash or a newline comes
-	/// back as it was typed rather than as the file had to spell it — and the file is
-	/// still frontmatter afterwards, which is what reading the rest of it back proves.
 	#[test]
 	fn a_value_written_into_a_skill_comes_back_as_it_went_in() {
 		let root = a_root("skill-quoted");
@@ -3409,9 +2545,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Every bot in one marketplace, each named by the id its bundle is named by — two
-	/// bots called the same thing are still two entries — and sourced relative to the
-	/// file that lists them.
 	#[test]
 	fn the_marketplace_lists_every_bot_by_id_and_relative_source() {
 		let root = a_root("marketplace");
@@ -3443,8 +2576,6 @@ mod tests {
 			.collect()
 	}
 
-	/// The first write makes the repository and puts everything already in the
-	/// directory into one commit, under a title naming the bot rather than a path.
 	#[test]
 	fn the_first_write_records_the_whole_bundle_under_one_title() {
 		let root = a_root("git-first");
@@ -3465,8 +2596,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Every gesture a reader makes in the settings dialog is one sentence in the
-	/// history, newest first, naming what was written and what it was about.
 	#[test]
 	fn every_write_is_one_sentence_naming_what_it_changed() {
 		let root = a_root("git-every");
@@ -3501,8 +2630,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A save of values nobody changed is not a write, so it is not a line in a
-	/// reader's history either.
 	#[test]
 	fn a_write_that_changes_nothing_records_nothing() {
 		let root = a_root("git-unchanged");
@@ -3516,8 +2643,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bundle written before this app kept any history joins it whole on the next
-	/// launch rather than starting empty.
 	#[test]
 	fn a_bundle_with_no_repository_is_taken_into_one_when_it_is_ensured() {
 		let root = a_root("git-ensured");
@@ -3532,8 +2657,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// What the bot writes for itself is memory, not history: it is excluded, and it
-	/// never lands in a commit however many writes go past it.
 	#[test]
 	fn what_the_bot_writes_for_itself_is_left_out_of_the_history() {
 		let root = a_root("git-learned");
@@ -3555,10 +2678,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// What a duplicate is given of the bundle it came from: the skills it carries,
-	/// the hooks a reader gave it and the servers it declares, nested files and all.
-	/// What the source came to remember stays behind, and so does the repository
-	/// under it — a duplicate has been spoken to none of those turns.
 	#[test]
 	fn a_duplicate_inherits_the_bundle_without_the_memory_or_the_history() {
 		let root = a_root("inherit");
@@ -3597,8 +2716,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// Undoing puts the bundle back the way it was and says so, on top of the
-	/// history rather than instead of it.
 	#[test]
 	fn an_undone_write_lands_on_the_disk_and_on_top_of_the_history() {
 		let root = a_root("git-revert");
@@ -3620,9 +2737,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A skill the bot wrote by hand, as it lands on the disk mid-turn: nothing has
-	/// been through this module, so the bundle holds a file its history and its agent
-	/// file have never heard of.
 	fn a_bot_writes(root: &Path, bot_id: &str, name: &str, body: &str) {
 		let path = dir(root, bot_id).join(SKILLS_DIR).join(name).join(SKILL_NAME);
 		let text = format!(
@@ -3631,8 +2745,6 @@ mod tests {
 		private_files::replace(&path, text.as_bytes()).expect("the bot's write lands");
 	}
 
-	/// A turn the bot answered without touching its own directory is not a write, so
-	/// there is nothing to record and nothing to tell the reader about.
 	#[test]
 	fn a_turn_that_left_the_bundle_alone_records_nothing() {
 		let root = a_root("evolve-clean");
@@ -3645,9 +2757,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// What the bot left in its note is what the reader reads back: the first line as
-	/// the title, the rest as the body, under the bot's own name. The note itself is
-	/// taken away with the commit that carries it.
 	#[test]
 	fn what_the_bot_wrote_is_recorded_under_what_it_said_about_it() {
 		let root = a_root("evolve-learned");
@@ -3672,9 +2781,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The write is recorded with the agent file rebuilt around it, so the commit
-	/// holds the bundle as the next session will really be started on it rather than
-	/// a skill sitting beside a body that has never heard of it.
 	#[test]
 	fn a_recorded_turn_carries_the_agent_file_the_next_session_starts_on() {
 		let root = a_root("evolve-agent");
@@ -3690,8 +2796,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A bot that wrote and said nothing about it is still a write the reader can
-	/// see: a plain title, and the paths it touched under it.
 	#[test]
 	fn a_turn_the_bot_said_nothing_about_is_recorded_under_the_paths_it_changed() {
 		let root = a_root("evolve-silent");
@@ -3708,8 +2812,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A note is the bot's only say in what its write is called, so a note it left
-	/// blank is no say at all rather than a commit with no title.
 	#[test]
 	fn a_note_with_no_title_leaves_the_write_named_by_this_app() {
 		let root = a_root("evolve-blank");
@@ -3726,8 +2828,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// The repository is at the bundle root and nothing that reads the bundle looks
-	/// there: not the agent, not the skills, not the marketplace.
 	#[test]
 	fn the_repository_is_never_taken_for_part_of_the_bundle() {
 		let root = a_root("git-invisible");
@@ -3748,8 +2848,6 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	/// A history nobody can open is the one place a caller is told so — the bundle
-	/// itself is on the disk and the bot runs exactly as it did.
 	#[test]
 	fn a_bundle_with_no_repository_reads_as_a_refusal_and_writes_anyway() {
 		let root = a_root("git-missing");

@@ -36,9 +36,6 @@ const isSamePhase = (left: SidebarPhase, right: SidebarPhase): boolean =>
 	left.isWorking === right.isWorking &&
 	left.kind === right.kind
 
-/** Every phase the sidebar renders from here on. Reading state per dispatch is
- * what the screen does, so a phase opened and closed inside one task is caught
- * here rather than slipping between two timer samples. */
 const collectPhases = (controller: ChatController): SidebarPhase[] => {
 	let latest = phaseOf(controller)
 	const phases = [latest]

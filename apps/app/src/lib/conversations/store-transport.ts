@@ -24,8 +24,6 @@ import {
 
 import type { AgentCommand } from "@/lib/agent/contract"
 
-/** The host owns the page and the failure: nothing here reshapes what came back
- * and nothing catches, so a `TranscriptStoreError` reaches the caller as sent. */
 export const conversationStore: TranscriptStore = {
 	loadPage: (conversationId: string, cursor: TranscriptCursor | null) =>
 		invoke<TranscriptPage>("conversation_message_page", {

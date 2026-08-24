@@ -13,16 +13,11 @@ import type {
 	SubmittedAttachment,
 } from "./attachments-contract"
 
-/** What the composer is holding, per bot: a reader who switches bots comes back to
- * the files they had staged, and to why the ones before them were refused. */
 export type AttachmentsState = {
 	staged: Record<string, StagedAttachment[]>
 	refusals: Record<string, AttachmentStoreError | null>
 }
 
-/** The two crossings a submission makes, both named by bot: a prompt that had to
- * store files first outlives the selection it started on, so nothing here is aimed
- * at whichever conversation happens to be on the screen when the disk answers. */
 export type AttachmentsPort = {
 	store: (
 		botId: string,
@@ -37,13 +32,8 @@ export type AttachmentsController = {
 	stage: (botId: string, files: File[]) => void
 	remove: (botId: string, id: string) => void
 	dismissRefusal: (botId: string) => void
-	/** Stores what this bot has staged, then hands it the prompt naming the stored
-	 * paths. Answers whether the prompt was taken — a refused store and a second
-	 * submission over the first both answer no, and both leave the draft. */
 	submit: (botId: string, text: string) => Promise<boolean>
-	/** A bot that is going away, with everything it was holding. */
 	forget: (botId: string) => void
-	/** Every bot's, for a composer that is going away. */
 	release: () => void
 }
 
@@ -53,9 +43,6 @@ export function createAttachmentsController(
 	let state: AttachmentsState = { staged: {}, refusals: {} }
 	const listeners = new Set<() => void>()
 
-	/** The bots with a store call in flight. A second submission over one of them is
-	 * refused rather than queued: it would store the same files twice and send the
-	 * prompt naming them twice. */
 	const sending = new Set<string>()
 
 	const publish = (next: AttachmentsState) => {
@@ -77,8 +64,6 @@ export function createAttachmentsController(
 		publish({ ...state, refusals: { ...state.refusals, [botId]: refusal } })
 	}
 
-	/** The files that were sent, and only those: what the reader staged while the
-	 * disk was answering is still theirs to send next. */
 	const dropSent = (botId: string, sent: StagedAttachment[]) => {
 		const ids = new Set(sent.map((item) => item.id))
 		hold(

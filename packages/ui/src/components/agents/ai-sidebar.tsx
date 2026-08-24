@@ -51,7 +51,6 @@ export interface AISidebarProps {
 	items?: SidebarResource[]
 	defaultItems?: SidebarResource[]
 	onItemsChange?: (items: SidebarResource[]) => void
-	/** Reject the promise to roll the optimistic move back. */
 	onMove?: (move: SidebarResourceMove) => void | Promise<void>
 	onMoveError?: (error: unknown, move: SidebarResourceMove) => void
 	onRename?: (item: SidebarResource, label: string) => void | Promise<void>
@@ -64,11 +63,6 @@ export interface AISidebarProps {
 		item: SidebarResource,
 		controls: SidebarResourceMenuControls,
 	) => ReactNode
-	/**
-	 * Browse-only tree: selection, expand/collapse and the whole keyboard set stay
-	 * live, while every mutation affordance is dropped rather than disabled —
-	 * no drag-and-drop, no rename, no overflow menu, no move shortcuts.
-	 */
 	isReadOnly?: boolean
 	ariaLabel?: string
 	className?: string

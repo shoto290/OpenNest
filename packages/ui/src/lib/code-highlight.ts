@@ -74,7 +74,6 @@ const LANGUAGE_ALIASES: Record<string, CodeLanguage> = {
 const isCodeLanguage = (value: string): value is CodeLanguage =>
 	CODE_LANGUAGES.includes(value as CodeLanguage)
 
-/** Anything unknown degrades to plain text rather than throwing on an unloaded grammar. */
 export function resolveCodeLanguage(language?: string): CodeLanguage {
 	const requested = language?.trim().toLowerCase() ?? ""
 	if (isCodeLanguage(requested)) return requested
@@ -117,7 +116,6 @@ function remember(key: string, lines: CodeTokenLines) {
 	return lines
 }
 
-/** Synchronous by design: no grammar fetch, no WASM, identical output on every run. */
 export function highlightCode(code: string, language?: string): CodeTokenLines {
 	const resolved = resolveCodeLanguage(language)
 	const key = `${resolved}:${code}`
@@ -141,8 +139,6 @@ export function highlightCode(code: string, language?: string): CodeTokenLines {
 	return remember(key, lines)
 }
 
-/** Pairs every source line with the tokens painted for it. Tokens are optional so a
- * caller can show the source first and hand the highlighting over on a later pass. */
 export function toCodeLines(
 	code: string,
 	tokens?: CodeTokenLines,

@@ -1,34 +1,3 @@
-//! What a provider session has to be told before it can carry on a conversation
-//! it never saw.
-//!
-//! A durable chat outlives every process that ever answered in it, so a new run
-//! starts knowing nothing. What it is given is rebuilt here, out of the file alone
-//! and in plain text: what the bot remembers, the summary of what came before, the
-//! messages since that summary, the older message this prompt explicitly answers,
-//! and the prompt. Nothing in it is a provider's feature — there is no transcript
-//! replay and no session to resume, so the same words would serve any model that
-//! reads.
-//!
-//! What the bot was told to be is not in it. Instructions reach the process as its
-//! system prompt, spelled on the command line that starts it — see
-//! [`crate::agent::session::SessionOptions`] — so a context that also printed them
-//! would say the same thing twice, once with less standing than the other.
-//!
-//! Bounded is the whole point. Every part has a limit that does not grow with the
-//! conversation: the tail is a count of messages, the summary is a count of
-//! characters, and a checkpoint folds a bounded stretch at a time. A context that
-//! grew with the transcript would fail at exactly the length this module exists
-//! for.
-//!
-//! The prompt is read from the transcript rather than taken from the caller, and
-//! the window stops below its `seq`. That is what makes duplication impossible
-//! rather than unlikely: the row is written once, it is the upper bound of its own
-//! context, and it is printed once at the end.
-//!
-//! A checkpoint is only ever added. The one a context resumes from is the furthest
-//! into the transcript, so a fold that produces nothing and a write the file
-//! refuses both leave the previous recovery point exactly where it was — and the
-//! messages it does not cover are still on the record to be read verbatim.
 
 use crate::db::repositories::conversations::Bot;
 use crate::db::repositories::messages::{
@@ -39,32 +8,16 @@ use crate::db::{Database, DatabaseError};
 
 use super::contract::TranscriptStoreError;
 
-/// How many messages a context carries word for word. The bound belongs at the
-/// recent end: what a reconstruction can afford to hold as a summary is what was
-/// said long ago, never what was just said.
 const RECENT_TAIL: u32 = 20;
 
-/// How many messages one checkpoint folds into its summary. A checkpoint is taken
-/// at every rotation, so the stretch between two of them is normally far shorter
-/// than this — the limit is for the first one taken over a transcript that grew
-/// before there were any.
 const FOLDED_PER_CHECKPOINT: u32 = 200;
 
-/// How long a summary may get, in characters. It is rolled forward from one
-/// checkpoint to the next, so without a limit it would grow with the conversation
-/// and take the context with it. What is dropped is the oldest end.
 const SUMMARY_LIMIT: usize = 4_000;
 
-/// How much of one message a summary line keeps. A single long message would
-/// otherwise spend the whole summary on itself.
 const SUMMARY_LINE_LIMIT: usize = 200;
 
-/// Tokens are the provider's unit and this module counts characters, so
-/// `token_count` is stored as an estimate at the usual rule of thumb. Nothing
-/// budgets against it — it is there for a reader comparing two checkpoints.
 const CHARS_PER_TOKEN: i64 = 4;
 
-/// What stands in for the words a bound left out, wherever one did.
 const ELIDED: &str = "…";
 
 const MEMORY_LABEL: &str = "What you remember:";
@@ -73,12 +26,6 @@ const REPLY_LABEL: &str = "The message this one replies to:";
 const RECENT_LABEL: &str = "The most recent messages:";
 const PROMPT_LABEL: &str = "The new message:";
 
-/// The context for one prompt of one participant, ready to be submitted as it is.
-///
-/// A conversation with nothing behind it comes back as the prompt itself, with no
-/// label and no heading: a first message deserves to reach the provider as the
-/// user wrote it, and a section naming parts that are all empty would be noise the
-/// model has to read past.
 pub async fn bounded_context(
 	database: &Database,
 	participant: ParticipantKey,
@@ -112,9 +59,6 @@ pub async fn bounded_context(
 	}))
 }
 
-/// The message a prompt answers, and only when the window does not already hold
-/// it: a target inside the tail is about to be printed there, and printing it
-/// twice would tell the model the same thing was said twice.
 async fn replied_to_target(
 	database: &Database,
 	conversation_id: &str,
@@ -130,16 +74,6 @@ async fn replied_to_target(
 	database.messages().message(conversation_id.to_owned(), target_id.clone()).await
 }
 
-/// The next recovery point for a participant, folded from the file and stored
-/// whole. `None` when there is nothing new to fold, which is the ordinary answer
-/// for a rotation that follows another closely: the previous checkpoint already
-/// stands for everything but the tail, and the tail is what a context reads
-/// verbatim anyway.
-///
-/// The write is the last thing that happens, and it adds a row rather than
-/// replacing one. So a fold with nothing in it, a file that refuses the insert and
-/// a host that dies in the middle all leave the previous checkpoint answering for
-/// the conversation exactly as it did before.
 pub async fn capture_checkpoint(
 	database: &Database,
 	participant: ParticipantKey,
@@ -186,10 +120,6 @@ pub async fn capture_checkpoint(
 	))
 }
 
-/// A call naming a message the file does not hold is a caller working from an id
-/// that never reached the transcript, which is a mistake of its own rather than an
-/// empty conversation: it is told so, instead of being handed a context built
-/// around a prompt nobody can read back.
 fn no_such_message() -> TranscriptError {
 	TranscriptError::Database(DatabaseError::Sqlite(rusqlite::Error::QueryReturnedNoRows))
 }
@@ -224,8 +154,6 @@ fn compose(parts: Parts<'_>) -> String {
 	sections.join("\n\n")
 }
 
-/// A part with no words in it is left out whole, heading included: an empty
-/// heading says a bot has instructions and then shows none.
 fn push_section(sections: &mut Vec<String>, label: &str, body: &str) {
 	if body.trim().is_empty() {
 		return;
@@ -244,10 +172,6 @@ fn speaker(role: MessageRole) -> &'static str {
 	}
 }
 
-/// The previous summary, then what this fold adds, oldest last. Rolled forward
-/// rather than rewritten: what an earlier checkpoint stood for is not on the file
-/// as messages this one would read again, so dropping it would lose the beginning
-/// of the conversation for good.
 fn folded_summary(previous: Option<&str>, folded: &[StoredMessage], elided: bool) -> String {
 	let mut lines: Vec<String> = Vec::new();
 	if let Some(previous) = previous {
@@ -265,8 +189,6 @@ fn folded_summary(previous: Option<&str>, folded: &[StoredMessage], elided: bool
 	format!("{ELIDED}\n{kept}")
 }
 
-/// One message on one line: a summary is read as a list, and a reply that spans
-/// paragraphs would otherwise look like several.
 fn summary_line(message: &StoredMessage) -> String {
 	let flattened = message.content.split_whitespace().collect::<Vec<_>>().join(" ");
 	format!("{}: {}", speaker(message.role), clipped(&flattened, SUMMARY_LINE_LIMIT))
@@ -280,8 +202,6 @@ fn clipped(text: &str, limit: usize) -> String {
 	kept
 }
 
-/// The last `limit` characters, cut on a character and never in the middle of
-/// one: a summary holds whatever the conversation was written in.
 fn last_chars(text: &str, limit: usize) -> &str {
 	match text.char_indices().nth_back(limit.saturating_sub(1)) {
 		Some((index, _)) => &text[index..],
@@ -340,22 +260,12 @@ mod tests {
 		Parts { bot: None, summary: None, replied_to: None, recent: &[], prompt }
 	}
 
-	/// The first message of a conversation that has nothing behind it: no summary,
-	/// no tail, no instructions. What reaches the provider is what the user typed,
-	/// because a heading over five empty parts is noise the model pays for.
 	#[test]
 	fn a_context_with_nothing_behind_it_is_the_prompt_itself() {
 		assert_eq!(compose(only("hello")), "hello");
 		assert_eq!(compose(Parts { bot: Some(&a_bot("", "")), ..only("hello") }), "hello");
 	}
 
-	/// Every part in its place, once each, with the prompt last. The order is what a
-	/// reader of the context meets: what it remembers, what came before, what is
-	/// being answered, what was just said, and only then the question.
-	///
-	/// The instructions are not among them, however loudly the bot carries them: they
-	/// are the process's system prompt, and a context that repeated them would be the
-	/// weaker of two copies of the same thing.
 	#[test]
 	fn every_part_is_printed_once_and_the_prompt_comes_last() {
 		let bot = a_bot("Answer briefly.", "The reader prefers French.");
@@ -385,8 +295,6 @@ mod tests {
 		assert!(!context.contains("Answer briefly."), "the system prompt was said twice");
 	}
 
-	/// A part nobody filled in is left out whole. A heading with nothing under it
-	/// tells the model there is something to read and then shows it nothing.
 	#[test]
 	fn a_part_with_no_words_in_it_is_left_out_with_its_heading() {
 		let context = compose(Parts {
@@ -401,9 +309,6 @@ mod tests {
 		assert!(context.contains(RECENT_LABEL), "the tail that was there went missing");
 	}
 
-	/// The summary is rolled forward, so what an earlier checkpoint stood for is
-	/// never read off the file again. Dropping it would lose the beginning of the
-	/// conversation for good.
 	#[test]
 	fn a_fold_carries_the_previous_summary_forward_and_adds_to_it() {
 		let folded = [
@@ -416,9 +321,6 @@ mod tests {
 		assert_eq!(summary, "user: we are building a house\nuser: and the roof?\nassistant: tiled");
 	}
 
-	/// Both bounds, on the two ways a summary grows: one message that will not stop,
-	/// and a conversation that will not stop. Neither may push a summary past its
-	/// limit, and what is dropped is always the older end.
 	#[test]
 	fn a_summary_stays_within_its_bound_however_long_the_conversation_is() {
 		let long = a_message(1, MessageRole::Assistant, &"word ".repeat(400));
@@ -444,8 +346,6 @@ mod tests {
 		assert!(summary.ends_with("user: now"), "a bounded summary dropped the newest end");
 	}
 
-	/// A fold that could not reach the whole stretch says so where the summary is
-	/// read, rather than leaving a gap nothing accounts for.
 	#[test]
 	fn a_fold_that_left_messages_out_says_so_in_the_summary() {
 		let summary = folded_summary(None, &[a_message(9, MessageRole::User, "the rest")], true);
@@ -453,9 +353,6 @@ mod tests {
 		assert_eq!(summary, "…\nuser: the rest");
 	}
 
-	/// A summary is measured in characters and stored in the provider's unit, so the
-	/// number written down is an estimate of one from the other — never a count of
-	/// something nobody measured.
 	#[test]
 	fn the_stored_token_count_is_an_estimate_of_the_summary_it_stands_for() {
 		assert_eq!(estimated_tokens(""), 0);
@@ -463,13 +360,8 @@ mod tests {
 	}
 
 	const TURN: &str = "t1";
-	/// Long enough that a checkpoint has something to fold under [`RECENT_TAIL`],
-	/// and that the tail cannot reach back to the beginning.
 	const SPOKEN: usize = 30;
 
-	/// The chat as the app opens it, with a turn to write into: the participant is
-	/// what every runtime row and every checkpoint below is scoped by, and only
-	/// `ensure_chat` writes the seat that makes one exist.
 	async fn a_conversation(database: &Database) -> String {
 		let bot = database.conversations().ensure_default_bot().await.expect("the bot");
 		let chat = database.conversations().ensure_chat(bot.id).await.expect("the chat");
@@ -489,9 +381,6 @@ mod tests {
 		ParticipantKey { conversation_id: conversation_id.to_owned(), bot_id: bot_id.to_owned() }
 	}
 
-	/// A second bot seated in the same conversation, written straight into the file:
-	/// the repository seeds one bot only, and what has to be proven here is that two
-	/// participants of one transcript never read each other's context.
 	async fn another_bot(database: &Database, conversation_id: &str, id: &'static str) {
 		let conversation_id = conversation_id.to_owned();
 		database
@@ -524,9 +413,6 @@ mod tests {
 			.expect("the bot is told how to answer");
 	}
 
-	/// One message under an id the assertions can name, alternating speakers so a
-	/// rebuilt tail shows the conversation and not a monologue. Answers the `seq` the
-	/// file gave it.
 	async fn say(database: &Database, conversation_id: &str, index: usize) -> i64 {
 		let id = format!("m{index}");
 		let content = format!("message {index}");
@@ -566,10 +452,6 @@ mod tests {
 		seq
 	}
 
-	/// The prompt a context is built for, written the way the app writes one: on the
-	/// record first, and the upper bound of its own context afterwards. Its text
-	/// names it, so a prompt still on the transcript when the next one is asked about
-	/// can be told from the one being asked.
 	async fn prompt(
 		database: &Database,
 		conversation_id: &str,
@@ -595,8 +477,6 @@ mod tests {
 		format!("and now? ({id})")
 	}
 
-	/// The body of one section, for an assertion about what a bound really kept. The
-	/// sections are joined by a blank line and nothing in these fixtures holds one.
 	fn section<'a>(context: &'a str, label: &str) -> Option<&'a str> {
 		context
 			.split("\n\n")
@@ -614,10 +494,6 @@ mod tests {
 		context.matches(needle).count()
 	}
 
-	/// The whole reconstruction over a real file: what the summary stands for is in
-	/// the summary, what came after it is there word for word, and the prompt is at
-	/// the end exactly once. The tail is what bounds it — twenty messages of thirty,
-	/// however long the conversation gets.
 	#[tokio::test]
 	async fn a_rebuilt_context_carries_the_summary_the_tail_and_the_prompt_once() {
 		let dir = temp_dir();
@@ -664,9 +540,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The one message a bound may not drop: the reader pointed at it. It travels
-	/// with the prompt when the tail has already left it behind, and is not repeated
-	/// when the tail still holds it.
 	#[tokio::test]
 	async fn a_reply_carries_its_target_only_when_the_tail_has_left_it_behind() {
 		let dir = temp_dir();
@@ -705,9 +578,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Two checkpoints in a row: the second folds what the first left, carries the
-	/// first's summary forward, and becomes the one a context resumes from. Nothing
-	/// the first stood for is read off the file again, and nothing is lost.
 	#[tokio::test]
 	async fn a_second_checkpoint_folds_what_the_first_left_and_keeps_what_it_held() {
 		let dir = temp_dir();
@@ -751,10 +621,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A capture the file refuses — here a run that is not this participant's, which
-	/// the schema will not have a checkpoint point at. The previous recovery point
-	/// has to answer for the conversation exactly as it did, and the messages the
-	/// refused one would have folded are still there to be read.
 	#[tokio::test]
 	async fn a_refused_capture_leaves_the_previous_checkpoint_answering_for_the_chat() {
 		let dir = temp_dir();
@@ -806,10 +672,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Two bots in one conversation read the same transcript and nothing else in
-	/// common: a checkpoint is a participant's own, and one rotating has no effect on
-	/// what the other is rebuilt from. What either of them was told to be is in
-	/// neither context — that reaches each process as its own system prompt.
 	#[tokio::test]
 	async fn two_bots_in_one_conversation_are_rebuilt_from_their_own_recovery_points() {
 		let dir = temp_dir();
@@ -856,9 +718,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A context is built around a prompt the file holds. Asked for one it does not,
-	/// it says so rather than answering with a conversation that has no question at
-	/// the end of it.
 	#[tokio::test]
 	async fn a_context_for_a_prompt_the_file_does_not_hold_is_refused() {
 		let dir = temp_dir();

@@ -41,10 +41,6 @@ import {
 	toUserSettingsValue,
 } from "@/lib/user/user-settings"
 
-/** The folder picker the working directory field opens. There is none on this
- * build: choosing a directory needs a host dialog this app does not carry yet, and
- * what a bot's runs happen in is the next ticket's. The field still shows what the
- * store holds. */
 const browseWorkingDirectory = () => undefined
 
 export function App() {
@@ -52,9 +48,6 @@ export function App() {
 	const store = useMemo(createTranscriptStore, [])
 	const chat = useChat(driver, store)
 
-	// One composer holds files for every bot, so a switch does not take away what
-	// was attached, and a submission that had to store them first still names the
-	// bot it started on.
 	const attachments = useMemo(
 		() =>
 			createAttachmentsController({
@@ -71,17 +64,10 @@ export function App() {
 	const user = useUser()
 	const theme = useTheme()
 
-	// Mounted at the top of the window: the release check belongs to the app being
-	// open, and the pastille under the roster is where what it found is read.
 	const updater = useUpdater()
 
-	// Mounted here for the same reason: a link is followed wherever the reader is,
-	// and the window is what has to stay on the view they were reading.
 	useExternalLinks()
 
-	// Above every bot rather than inside the conversation: what a reader looking
-	// elsewhere is told about is the bot they are not reading, and the click that
-	// answers it is what selects that bot.
 	useNotifications({
 		chat: chat.controller,
 		roster: roster.controller,
@@ -100,9 +86,6 @@ export function App() {
 		void user.controller.load()
 	}, [user.controller])
 
-	// The skills, the MCP servers and the history follow the selection for the reason
-	// the conversation does: all three live in the selected bot's own bundle, so the
-	// panels open on what that bot carries rather than on what the bot before it did.
 	useEffect(() => {
 		if (selectedBotId) {
 			void skills.controller.open(selectedBotId)
@@ -116,27 +99,18 @@ export function App() {
 		selectedBotId,
 	])
 
-	// The conversation follows the selection: opening a bot paints its transcript and
-	// puts a process of its own behind it. Coming back to one that is already
-	// answering shows it as it is — every bot keeps its runtime until it is deleted
-	// or the app quits.
 	useEffect(() => {
 		if (selectedBotId) {
 			void chat.controller.open(selectedBotId)
 		}
 	}, [chat.controller, selectedBotId])
 
-	// The runtime goes first: a process left running would answer into a conversation
-	// the delete is about to take away.
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
 		attachments.forget(id)
 		await roster.controller.remove(id)
 	}
 
-	// Every bot's own, because every bot has a process of its own and a conversation
-	// of its own: the roster shows the ones answering in the background as busy, and
-	// previews what each of them last said, not only the one being read.
 	const botIds = useMemo(() => bots.map((bot) => bot.id), [bots])
 	const working = useBotActivity(chat.controller, botIds)
 	const previews = useBotPreviews(
@@ -146,16 +120,11 @@ export function App() {
 	)
 	const activity = selectedBotId ? working[selectedBotId] : undefined
 
-	// Read off the same activity the roster is drawn from: a bot busy in the sidebar
-	// is a bot a restart would interrupt.
 	const busyBotCount = useMemo(
 		() => Object.values(working).filter((bot) => bot.isWorking).length,
 		[working],
 	)
 
-	// Held between renders for the reason the roster is: a streamed token must not
-	// hand the sidebar a new footer and re-measure the column behind it. Every input
-	// here settles when the download does, or when a bot starts or finishes a turn.
 	const updateBadge = useMemo(
 		() => (
 			<UpdateBadge
@@ -163,8 +132,6 @@ export function App() {
 				onDownload={() => {
 					void updater.controller.install()
 				}}
-				// A restart while a bot is answering would take that answer away, and the
-				// count the badge was handed is what says so.
 				onRestart={() => {
 					if (busyBotCount === 0) {
 						void updater.controller.restart()
@@ -175,31 +142,17 @@ export function App() {
 		[updater.state, updater.controller, busyBotCount],
 	)
 
-	// The roster is memoised inside the design system so a streamed token does not
-	// re-measure its layout projections, which only holds if the array it is handed
-	// is the same one between renders. Every input here is stable through a turn —
-	// the last settled message of every bot included — and the clock hands down one
-	// reading a minute, so every row of the array it builds is aged against the same
-	// now and no row's age goes stale under the reader.
 	const now = useRosterClock()
 	const rosterBots = useMemo(
 		() => toRosterBots(bots, { working, previews }, now),
 		[bots, working, previews, now],
 	)
 
-	// One way to ask, whichever way it is asked: the gear in the conversation's bar
-	// and the chord below it are the same toggle. The chord is off while there is no
-	// conversation, because the settings it would open belong to the bot being read.
 	const toggleSettings = useCallback(
 		() => roster.controller.setEditing(!isEditing),
 		[roster.controller, isEditing],
 	)
 
-	// The name, the picture and the three switches come from the record, the scheme
-	// and the palette from the provider painting the window: what the dialog edits is
-	// the two halves read as one. The chip is handed the same value — it draws the
-	// identity the dialog's breadcrumb draws, so there is nothing for a second
-	// reading to disagree with.
 	const userSettings = useMemo(
 		() =>
 			toUserSettingsValue(user.state.profile, {
@@ -209,13 +162,8 @@ export function App() {
 		[user.state.profile, theme.theme, theme.palette],
 	)
 
-	// The language is the one setting the record holds and the value does not: what
-	// the interface reads in lives in the translation runtime, so the mirror is
-	// where it is read from and this only holds what the settings mark as chosen.
 	const [language, setLanguage] = useState(chosenLanguage)
 
-	// Only the way in: the dialog listens for the same chord while it is open, so a
-	// way out asks whatever Escape asks instead of taking the draft with it.
 	useSettingsShortcut({
 		isEnabled: Boolean(selected) && !isEditing,
 		onToggle: toggleSettings,
@@ -227,9 +175,6 @@ export function App() {
 				defaultOpen
 				sidebar={
 					<AgentSidebar
-						// The column the window is carried by: a press on a row, a button
-						// or the chip is still theirs, and only the space between them
-						// moves the window.
 						data-tauri-drag-region="deep"
 						bots={rosterBots}
 						footer={updateBadge}
@@ -249,9 +194,6 @@ export function App() {
 				}
 			>
 				{!hasLoaded ? (
-					// The record is still being read: an empty state here would tell a
-					// reader who owns bots that they own none. The drag region is what
-					// keeps a window with nothing in it movable.
 					<AppBootScreen data-tauri-drag-region="deep" />
 				) : selected ? (
 					<ChatScreen
@@ -263,18 +205,11 @@ export function App() {
 						onToggleSettings={toggleSettings}
 					/>
 				) : (
-					// No bot, so no chat: the roster's create button is the way out of here,
-					// and the header is what keeps the window draggable in the meantime.
 					<AppHeader insetWindowControls data-tauri-drag-region="deep" />
 				)}
 			</WorkspaceShell>
-			{/* Over the conversation rather than beside it: closing the settings gives
-			the width back without touching what is selected or where it is scrolled. */}
 			{selected ? (
 				<BotSettingsDialog
-					// An undo is the bundle changing under the bot the same way a
-					// redescription is: the process answering for it was started on files
-					// that no longer read as they did, so it is spent from here.
 					history={{
 						commits: history.state.commits.map(toCommitItem),
 						onLoadDiff: history.controller.loadDiff,
@@ -294,10 +229,6 @@ export function App() {
 					onDelete={() => {
 						void deleteBot(selected.id)
 					}}
-					// The style is the model's twin: a bot writing in another one is a bot
-					// whose live process was started under the one before it, so the record
-					// takes the style and the runtime is retired with it. A pick landing on
-					// the style the bot already answers under changes neither.
 					onOutputStyleChange={(outputStyle) => {
 						if (outputStyle === selected.outputStyle) {
 							return
@@ -305,9 +236,6 @@ export function App() {
 						roster.controller.restyle(selected.id, outputStyle)
 						chat.controller.redescribe(selected.id)
 					}}
-					// The record first, then the runtime: a bot that changed what a
-					// process is started as retires the one answering for it, and the
-					// next prompt is carried by a process started as it reads now.
 					onValueChange={(value) => {
 						roster.controller.describe(selected.id, value)
 						if (changesRuntime(selected, value)) {
@@ -317,9 +245,6 @@ export function App() {
 					onMcpServerChange={mcpServers.controller.rename}
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}
-					// The skill as the bundle holds it goes with the draft: it is what
-					// tells a mark the file carries from one standing on its default,
-					// which is the difference between writing the key and leaving it out.
 					onSkillChange={(id, draft) =>
 						skills.controller.save(
 							id,
@@ -343,9 +268,6 @@ export function App() {
 					workingKind={activity?.kind}
 				/>
 			) : null}
-			{/* Mounted whether or not a bot is selected, and over the window rather
-			than inside it: the reader's own settings belong to the app, so opening
-			them leaves the conversation and where it is scrolled alone. */}
 			<UserSettingsDialog
 				onClose={() => user.controller.setSettingsOpen(false)}
 				language={language}
@@ -359,9 +281,6 @@ export function App() {
 				onPictureUpload={(file) => {
 					void user.controller.uploadPicture(file)
 				}}
-				// One field at a time, each to whichever half holds it: a scheme or a
-				// palette goes to the provider, which paints the window before it
-				// writes, and the name and the switches go to the record.
 				onValueChange={(value) => {
 					if (value.name !== userSettings.name) {
 						user.controller.rename(value.name)

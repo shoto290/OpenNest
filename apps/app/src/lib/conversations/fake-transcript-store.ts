@@ -51,18 +51,12 @@ const DEFAULT_BOT: Bot = {
 	createdAt: 0,
 }
 
-/** A bot holds one chat and the chat is named after it, the way `ensure_chat`
- * answers the same thread for the same bot every time it is asked. Derived rather
- * than minted so a caller can name the chat of a bot it created. */
 const chatIdOf = (botId: string) => `chat-${botId}`
 
-/** The chat of the bot a launch finds already on the record here. */
 export const FAKE_CHAT_ID = chatIdOf(DEFAULT_BOT.id)
 
 const OPEN: TranscriptCompletion[] = ["pending", "streaming"]
 
-/** The bound the host holds, mirrored here: how many messages a rebuilt context
- * carries word for word, and where a checkpoint stops folding. */
 const RECENT_TAIL = 20
 
 const SUMMARY_LABEL = "The conversation so far:"
@@ -75,12 +69,8 @@ const spoken = (message: TranscriptMessage) =>
 
 const refuse = (error: TranscriptStoreError) => Promise.reject(error)
 
-/** Where this fake pretends the host keeps avatars. Nothing reads it — it only has
- * to be the same shape every time, so a caller cannot come to depend on the name. */
 const FAKE_AVATAR_DIR = "/fake/avatars"
 
-/** The host's own limit, spelled here so a test can cross it without holding a
- * number the host would have to be asked for. */
 const FAKE_AVATAR_LIMIT = 5 * 1024 * 1024
 
 const IMAGE_SIGNATURES = [
@@ -88,8 +78,6 @@ const IMAGE_SIGNATURES = [
 	[0xff, 0xd8, 0xff],
 ] as const
 
-/** Png and jpeg by their leading bytes, and webp by the two windows RIFF splits it
- * across — the same three the host decodes, decided the same way. */
 const isStorableImage = (bytes: Uint8Array) =>
 	IMAGE_SIGNATURES.some((signature) =>
 		signature.every((byte, index) => bytes[index] === byte),
@@ -103,13 +91,6 @@ const isWebp = (bytes: Uint8Array) => {
 	)
 }
 
-/** The durable transcript without a database: the same rules, in memory, so a test
- * meets what the host would have answered rather than a store that says yes to
- * everything. Replays are idempotent on identity, an ending is final, and text
- * only ever appends to a message still open — the three rules the frontend leans
- * on, held here the way `messages.rs` holds them. */
-/** What a skill carries before anyone has written a key of its frontmatter: the
- * same nothing the host reads back off a file that names none. */
 const NO_FRONT: BotSkillFront = {
 	whenToUse: null,
 	argumentHint: null,
@@ -131,10 +112,6 @@ const NO_FRONT: BotSkillFront = {
 	compatibility: null,
 }
 
-/** The skill the host writes into every bundle it lays down: the bot's own rules for
- * remembering, carried into its brief and never the settings' to write. Here so a
- * caller meets a bundle shaped like the one production hands out — a roster with a
- * skill nothing on this side may change. */
 const learnSkill = (): BotSkill => ({
 	...NO_FRONT,
 	id: "learn",
@@ -149,47 +126,26 @@ export const createFakeTranscriptStore = (
 	options: FakeTranscriptStoreOptions = {},
 ): TranscriptStore => {
 	const pageSize = options.pageSize ?? TRANSCRIPT_PAGE_SIZE
-	/** The bot the app ships with is already on the record, the way a launch finds
-	 * it seeded. Insertion order is what `bots` answers in. */
 	const bots = new Map<string, Bot>([[DEFAULT_BOT.id, DEFAULT_BOT]])
 	let minted = 0
-	/** What each bot's last session announced, the way the column holds it: written
-	 * whole, read back whole, and absent for a bot no session has spoken for. */
 	const commands = new Map<string, AgentCommand[]>()
-	/** What each bot's bundle holds, the way the disk holds it: no row, one entry per
-	 * bot, and a skill named by the directory it would live in. */
 	const skills = new Map<string, BotSkill[]>([[DEFAULT_BOT.id, [learnSkill()]]])
-	/** Every write to each bot's bundle, newest first, the way the repository inside
-	 * it reads: one entry per bot, and nothing at all for a bundle nobody has written
-	 * to. */
 	const history = new Map<string, BotHistoryEntry[]>()
 	let committed = 0
-	/** What each bot's server file declares, the way the disk holds it: one entry per
-	 * bot, and a server named by the key it is declared under. */
 	const servers = new Map<string, Map<string, Record<string, unknown>>>()
 	const rows = new Map<string, TranscriptMessage>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
 	const seqs = new Map<string, number>()
-	/** One lineage per participant, the way `runtime_sessions` numbers them: the
-	 * pair is the key, and the count is what the next run takes as its seq. */
 	const runs = new Map<string, number>()
-	/** Every run a lineage holds, live or already replaced, and the provider session
-	 * it answered under. The column starts empty and is written once while the run is
-	 * live, which is what keeps a late callback off a row that has moved on. */
 	const runRows = new Map<
 		string,
 		{ participant: string; live: boolean; providerSessionId: string | null }
 	>()
-	/** One recovery point per participant, replaced only by one that reaches
-	 * further: a capture that never lands leaves the previous one answering. */
 	const checkpoints = new Map<
 		string,
 		{ summary: string; lastMessageSeq: number }
 	>()
 
-	/** Which message a row explicitly answers. Kept beside the rows because it is a
-	 * column the file holds and the reader is never shown — the transcript the
-	 * screen displays has no link on it, and a rebuilt context does. */
 	const answered = new Map<string, string>()
 
 	const participantKey = (conversationId: string, botId: string) =>
@@ -213,10 +169,6 @@ export const createFakeTranscriptStore = (
 		return seq
 	}
 
-	/** Every column a row is written with and never updated, so an append that
-	 * describes any of them differently is describing another message. A reply's
-	 * text is not among them on purpose: it is written after the row, delta by
-	 * delta, and the append that created it carried none of it. */
 	const divergingField = (
 		stored: TranscriptMessage,
 		message: TranscriptDraft,
@@ -231,16 +183,12 @@ export const createFakeTranscriptStore = (
 		return null
 	}
 
-	/** What a name reduces to as a directory, the way the host reduces it: a run of
-	 * anything a directory name would not carry is one separator. */
 	const slugged = (name: string) =>
 		name
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, "-")
 			.replace(/^-+|-+$/g, "") || "bot"
 
-	/** Where a new skill goes: the directory its name reduces to, unless one of the
-	 * bot's own is already there. */
 	const freeSkillId = (held: BotSkill[], name: string) => {
 		const base = slugged(name)
 		const taken = (id: string) => held.some((skill) => skill.id === id)
@@ -254,14 +202,9 @@ export const createFakeTranscriptStore = (
 		return `${base}-${next}`
 	}
 
-	/** What the host will take as a server configuration: a JSON object, which an
-	 * array and a scalar are not. */
 	const isPlainObject = (value: unknown) =>
 		typeof value === "object" && value !== null && !Array.isArray(value)
 
-	/** The write that just landed, recorded the way the host records it: a title a
-	 * reader can place without seeing a diff, and an id the diff and the undo address
-	 * it by. */
 	const recorded = (botId: string, title: string) => {
 		committed += 1
 		const entry: BotHistoryEntry = {
@@ -274,17 +217,11 @@ export const createFakeTranscriptStore = (
 		history.set(botId, [entry, ...(history.get(botId) ?? [])])
 	}
 
-	/** The bot's writes, newest first and copied out, so a caller holding one list
-	 * does not see the next write land in it. */
 	const historyOf = (botId: string) => [...(history.get(botId) ?? [])]
 
 	const historyEntry = (botId: string, commitId: string) =>
 		history.get(botId)?.find((entry) => entry.id === commitId)
 
-	/** One of a bot's skills, changed. A bot that is not there, a skill that is not
-	 * one of its own and a skill the host owns are the three refusals the host answers
-	 * with — the second is a file that is not on the disk to be written, and the third
-	 * a file only the bot rewrites. */
 	const writeSkill = (
 		botId: string,
 		skillId: string,
@@ -317,8 +254,6 @@ export const createFakeTranscriptStore = (
 		}
 	}
 
-	/** Every bot the store mints, however it was asked for: the next id and moment
-	 * in the order it holds them, and the learn skill a new bundle opens with. */
 	const mint = (fields: Omit<Bot, "id" | "createdAt">) => {
 		minted += 1
 		const bot: Bot = { ...fields, id: `bot-${minted}`, createdAt: minted }
@@ -341,8 +276,6 @@ export const createFakeTranscriptStore = (
 	}
 
 	return {
-		/** Read through the port the transcript tests already page with, so both
-		 * fakes answer a cursor the same way and only one of them defines how. */
 		loadPage: (conversationId: string, cursor: TranscriptCursor | null) =>
 			createFakeTranscriptPort({
 				messages: [...rows.values()],
@@ -351,18 +284,12 @@ export const createFakeTranscriptStore = (
 
 		bots: () => Promise.resolve([...bots.values()]),
 
-		/** Insertion order is creation order here, which is what the file answers with
-		 * too. The chat is not written alongside because it does not have to be: a
-		 * bot's thread is named after it, so the one it was created with is the one
-		 * `mainChat` answers. */
 		createBot: (identity: BotIdentity) =>
 			mint({
 				...identity,
 				changesNothing: deniesChanges(identity.deniedTools),
 			}),
 
-		/** A copy minted like any other bot, so its thread is named after it and opens
-		 * empty. What the source has said stays with the source. */
 		duplicateBot: (botId: string) => {
 			const source = bots.get(botId)
 			if (!source) {
@@ -371,8 +298,6 @@ export const createFakeTranscriptStore = (
 			return mint({ ...source, name: `${source.name} copy` })
 		},
 
-		/** Who the bot is, replaced whole. Its id and the moment it was written are
-		 * not a caller's to change, so they are carried over rather than taken. */
 		updateBot: (id: string, identity: BotIdentity) => {
 			const stored = bots.get(id)
 			if (!stored) {
@@ -387,11 +312,6 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve(updated)
 		},
 
-		/** A bot that is already gone is refused rather than silently accepted: a
-		 * caller told its delete landed would go on showing a list that is behind the
-		 * store. Everything said in its chat goes with it, the way the file cascades
-		 * the thread and the transcript under the bot that held them — and so does what
-		 * its sessions announced, which the file drops with the row it is a column of. */
 		deleteBot: (id: string) => {
 			if (!bots.delete(id)) {
 				return refuse({ kind: "unknownBot", id })
@@ -409,12 +329,6 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve()
 		},
 
-		/** The two refusals a caller has to handle either way: a bot that is gone, and
-		 * bytes that are not one of the three formats the host stores. The signature is
-		 * read here too — the host reads it and nothing else, so a fake that trusted a
-		 * name would let a test pass on a path production refuses. Everything past the
-		 * signature is the host's own work and is not imitated: the path answered is a
-		 * marker, not a file. */
 		setBotAvatarImage: (id: string, bytes: Uint8Array) => {
 			const stored = bots.get(id)
 			if (!stored) {
@@ -445,10 +359,6 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve(worn)
 		},
 
-		/** Replaced whole, and refused for a bot that is not on the record — the two
-		 * rules the column is written under. */
-		/** By directory name, the way the host reads them off the disk, and none at
-		 * all for a bot nobody has written one for. */
 		botSkills: (botId: string) =>
 			Promise.resolve(
 				[...(skills.get(botId) ?? [])].sort((left, right) =>
@@ -490,8 +400,6 @@ export const createFakeTranscriptStore = (
 				)
 			}),
 
-		/** By the name each is declared under, the way the host reads them out of the
-		 * map, and none at all for a bot nobody has written one for. */
 		botMcpServers: (botId: string): Promise<BotMcpServer[]> =>
 			Promise.resolve(
 				[...(servers.get(botId)?.entries() ?? [])]
@@ -499,9 +407,6 @@ export const createFakeTranscriptStore = (
 					.sort((left, right) => left.name.localeCompare(right.name)),
 			),
 
-		/** The two refusals the host answers with: a bot that is not there, and a
-		 * configuration that is not an object — the second is a file that would fail at
-		 * launch, and the refusal never carries what was offered. */
 		setBotMcpServer: (
 			botId: string,
 			name: string,
@@ -534,12 +439,8 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve()
 		},
 
-		/** Newest first, the way the host reads the repository, and none at all for a
-		 * bundle nobody has written to. */
 		botHistory: (botId: string) => Promise.resolve(historyOf(botId)),
 
-		/** No file is kept here to diff, so what comes back only stands for one: a
-		 * commit that is not the bot's own is the refusal the host answers with. */
 		botHistoryDiff: (botId: string, commitId: string) => {
 			const entry = historyEntry(botId, commitId)
 			return entry
@@ -547,8 +448,6 @@ export const createFakeTranscriptStore = (
 				: refuse({ kind: "unwritableBundle", detail: "no such commit" })
 		},
 
-		/** A new write on top rather than a past rewritten, and the history as it now
-		 * reads — the same two rules the host undoes under. */
 		revertBot: (botId: string, commitId: string) => {
 			const entry = historyEntry(botId, commitId)
 			if (!entry) {
@@ -566,8 +465,6 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve()
 		},
 
-		/** No command is what a bot no session has announced anything for offers, and
-		 * a bot that is gone offers the same: neither has a list to answer with. */
 		botCommands: (botId: string) =>
 			Promise.resolve([...(commands.get(botId) ?? [])]),
 
@@ -578,10 +475,6 @@ export const createFakeTranscriptStore = (
 				updatedAt: 0,
 			}),
 
-		/** The row the frontend scopes a process with, numbered per participant the
-		 * way the file numbers it. The id is derived from the pair and the number
-		 * rather than minted at random: a run named the same twice would be a
-		 * handover no reader could see. */
 		openRuntimeSession: (
 			conversationId: string,
 			botId: string,
@@ -607,10 +500,6 @@ export const createFakeTranscriptStore = (
 			})
 		},
 
-		/** Write-once while the run is live, the way the column is: the same id again
-		 * is the callback arriving twice and changes nothing, and a second id — or any
-		 * id once the run has been replaced — is refused as the stale write it is. A
-		 * run the participant does not hold is not theirs to name at all. */
 		recordProviderSession: (
 			conversationId: string,
 			botId: string,
@@ -628,18 +517,11 @@ export const createFakeTranscriptStore = (
 				row.providerSessionId = providerSessionId
 				return Promise.resolve()
 			}
-			// What the write skipped, read back the way the statement's caller reads it:
-			// the same id on a live run is the callback repeating itself, anything else
-			// is a write the row has already moved past.
 			return row.live && row.providerSessionId === providerSessionId
 				? Promise.resolve()
 				: refuse({ kind: "storage", failure: { kind: "staleWrite" } })
 		},
 
-		/** The host's composition, mirrored: the summary, the target of an explicit
-		 * reply the tail no longer holds, the tail itself, and the prompt last — read
-		 * from the row rather than taken from a caller, which is what makes carrying it
-		 * twice impossible. A conversation with nothing behind it is the prompt alone. */
 		boundedContext: (
 			conversationId: string,
 			botId: string,
@@ -676,9 +558,6 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve(sections.join("\n\n"))
 		},
 
-		/** Folds everything but the tail, carrying the previous summary forward. A
-		 * capture with nothing new to fold answers `null` and leaves the recovery
-		 * point where it was. */
 		captureCheckpoint: (
 			conversationId: string,
 			botId: string,
@@ -709,8 +588,6 @@ export const createFakeTranscriptStore = (
 			})
 		},
 
-		/** A replay answers with the place the turn already has, the way an append
-		 * does: a caller cannot tell its own duplicate from a refusal otherwise. */
 		startTurn: (turn: NewTurn) => {
 			const stored = turns.get(turn.id)
 			if (stored) {
@@ -741,8 +618,6 @@ export const createFakeTranscriptStore = (
 			})
 		},
 
-		/** Silently dropped once the message has ended, the way the statement that
-		 * writes it matches nothing. */
 		appendText: (id: string, delta: string) => {
 			const stored = rows.get(id)
 			if (stored && OPEN.includes(stored.completion)) {

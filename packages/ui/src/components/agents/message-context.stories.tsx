@@ -23,7 +23,6 @@ const ANSWER =
 const noop = fn()
 
 type TurnProps = {
-	/** Set only by the story that shows a bubble overriding the context. */
 	align?: MessageBubbleAlign
 }
 

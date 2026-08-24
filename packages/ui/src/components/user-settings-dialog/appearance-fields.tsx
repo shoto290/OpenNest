@@ -19,18 +19,11 @@ const SCHEME_ICONS: Record<ColorScheme, Icon> = {
 	system: Icons.SystemScheme,
 }
 
-/** One named scheme on a row of them, its icon above its name. */
 const OPTION_CLASS = cn(FIELD_OPTION_CLASS, "gap-1.5 px-2 py-3 text-xs")
 
-/** A tile drawn in the palette it offers. Its edge is that palette's own primary
- * once chosen, so the mark that says "this one" is itself a sample of the choice. */
 const VIGNETTE_CLASS =
 	"flex cursor-pointer flex-col gap-1.5 rounded-xl border border-border bg-background p-1.5 text-foreground hover:border-primary/50 has-[:checked]:border-primary has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
 
-/** The app in miniature: the sidebar down the left, a heading and two lines of
- * text beside it. Every band is a token read live from the palette the tile names,
- * never a colour copied out of it — so a palette repainted in the stylesheet is
- * repainted here, in both schemes, with nothing to keep in sync. */
 const PaletteVignette = () => (
 	<span
 		aria-hidden="true"
@@ -53,18 +46,10 @@ type AppearanceFieldsProps = {
 	palette: Palette
 	onColorSchemeChange: (colorScheme: ColorScheme) => void
 	onPaletteChange: (palette: Palette) => void
-	/** Two palettes a row instead of three — what a panel has room for once the rail
-	 * beside it has dropped to its icons. */
 	compact?: boolean
 	className?: string
 }
 
-/**
- * How the app is painted: the scheme it follows, then the six palettes as tiles that
- * each paint themselves in what they offer. Nothing is folded away behind a popover
- * — a reader comparing two palettes sees both at once, in the scheme they are
- * reading in.
- */
 const AppearanceFields = ({
 	colorScheme,
 	palette,

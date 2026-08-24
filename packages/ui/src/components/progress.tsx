@@ -2,8 +2,6 @@ import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
 
 import { cn } from "@workspace/ui/lib/utils"
 
-/** The bare semantic root — `role="progressbar"` and its aria value, no track.
- * What a progress shaped as anything but a bar composes. */
 const ProgressRoot = ProgressPrimitive.Root
 
 const RING_BOX = 36
@@ -12,14 +10,9 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
 interface ProgressRingProps
 	extends Omit<ProgressPrimitive.Root.Props, "value"> {
-	/** A ring has no indeterminate arc to draw, so it takes a number where the
-	 * bar takes `number | null`. */
 	value: number
 }
 
-/** The same progress closing as an arc instead of filling a bar — for the places
- * a bar cannot go, around a button or inside a badge. Size it from `className`
- * and the arc scales with it; anything passed as children sits in the middle. */
 const ProgressRing = ({
 	children,
 	className,

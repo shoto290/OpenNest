@@ -10,26 +10,10 @@ const LIST_PROSE =
 const FOOTNOTE_PROSE =
 	"[&_.footnotes]:mt-4 [&_.footnotes]:border-border [&_.footnotes]:border-t [&_.footnotes]:pt-2 [&_.footnotes]:text-foreground/70 [&_.footnotes]:text-xs [&_.footnotes_p]:inline"
 
-/** Owned by the markdown renderer; MessageBubbleContent applies the same rules so a
- * bubble styles markdown identically whether the HTML comes from here or elsewhere. */
 export const MARKDOWN_PROSE_CLASS = `${INLINE_PROSE} ${BLOCK_PROSE} ${LIST_PROSE} ${FOOTNOTE_PROSE}`
 
-/** Whitespace is markup between blocks and text inside them, so it is declared per role.
- * A bubble sets `whitespace-pre-wrap` to keep the line breaks and runs of spaces its author
- * typed, and the parser leaves a newline text node between every two block elements: a
- * container inheriting that rule paints each of them as a blank line. So a container
- * collapses and a leaf preserves, and inline markup needs none of its own — a link, an
- * emphasis and a code span read their whitespace from the leaf holding them. A list item is
- * both, so it collapses once it holds blocks, the wrapped fence and table among them. A
- * fence needs nothing: `pre` carries `white-space: pre`, beyond the reach of inheritance. */
 export const MARKDOWN_WHITESPACE_CLASS =
 	"whitespace-normal [&_:is(p,h1,h2,h3,h4,h5,h6,li,td,th)]:whitespace-pre-wrap [&_li:has(>:is(p,ul,ol,blockquote,div,hr))]:whitespace-normal"
 
-/** Applied by `<Markdown>` alone, overriding the code fill above through `cn`. A
- * background-tinted chip disappears on the page background and darkens a solid bubble
- * past its contrast budget, so code surfaces derive from the foreground and lean on a
- * hairline: the chip reads on every bubble variant, in both themes, without dimming
- * the text on it. Here a fence is wrapped for its copy control, so the block rhythm
- * moves to that wrapper while the fence keeps the surface it scrolls inside. */
 export const MARKDOWN_CODE_SURFACE_CLASS =
 	"[&_code]:bg-foreground/5 [&_code]:ring-1 [&_code]:ring-foreground/15 [&_pre]:my-0 [&_pre]:bg-foreground/5 [&_pre]:ring-1 [&_pre]:ring-foreground/10 [&_pre_code]:ring-0"

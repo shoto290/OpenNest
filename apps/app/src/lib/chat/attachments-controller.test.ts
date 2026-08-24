@@ -11,8 +11,6 @@ const fileNamed = (name: string, type = "text/markdown") =>
 
 type Sent = { botId: string; text: string }
 
-/** A store the test holds open, so a submission can be caught mid-flight: the
- * round trip is where the reader goes on typing, staging and switching bots. */
 const heldPort = () => {
 	const stored: { botId: string; names: string[] }[] = []
 	const sent: Sent[] = []
@@ -42,8 +40,6 @@ const heldPort = () => {
 		port,
 		stored,
 		sent,
-		// The files are read before the store is called, so a test that answers one
-		// has to wait for the call it is answering.
 		whenStored: () =>
 			new Promise<void>((resolve) => {
 				if (stored.length > 0) {

@@ -7,14 +7,8 @@ import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
 
 type DangerZoneProps = {
-	/** Named in the question, so a reader who opened the wrong bot's settings sees
-	 * it before they answer. */
 	botName: string
-	/** Whether the group mounts with the question already up. Read once, as the group
-	 * mounts: the group owns the question from there, and a question goes with the
-	 * panel it was asked in. */
 	defaultConfirming?: boolean
-	/** Fired only once the confirmation is accepted. */
 	onDelete: () => void
 }
 

@@ -8,8 +8,6 @@ import {
 	type SettingsFieldProps,
 } from "@workspace/ui/components/settings-field"
 
-/** The field keeps no value of its own, so a story that lets a reader type holds
- * the one the typing produces. */
 const FieldHost = (props: SettingsFieldProps) => {
 	const [value, setValue] = useState(props.value)
 

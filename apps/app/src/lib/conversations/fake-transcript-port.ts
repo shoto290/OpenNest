@@ -9,8 +9,6 @@ export type FakeTranscriptPortOptions = {
 	pageSize?: number
 }
 
-/** An in-memory stand-in for the stored conversation: the same rows in, the same
- * pages out, so a test reads what a query would have returned. */
 export const createFakeTranscriptPort = (
 	options: FakeTranscriptPortOptions,
 ): TranscriptPort => {

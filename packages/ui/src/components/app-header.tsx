@@ -3,12 +3,8 @@ import type { ComponentProps, ReactNode } from "react"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface AppHeaderProps extends Omit<ComponentProps<"header">, "children"> {
-	/** Brand, title or breadcrumbs. Sits against the leading edge. */
 	leading?: ReactNode
-	/** Status and actions. Pinned to the trailing edge whatever `leading` holds. */
 	trailing?: ReactNode
-	/** Reserves the leading gutter a desktop window paints its own controls into,
-	 * so the bar can sit level with them instead of below. */
 	insetWindowControls?: boolean
 }
 

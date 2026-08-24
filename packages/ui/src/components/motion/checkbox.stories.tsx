@@ -7,8 +7,6 @@ import {
 	type CheckboxProps,
 } from "@workspace/ui/components/motion/checkbox"
 
-/** The checkbox keeps no state of its own, so a story that lets a reader press it
- * holds the one the press produces. */
 const CheckboxHost = (props: CheckboxProps) => {
 	const [checked, setChecked] = useState(props.checked)
 

@@ -79,8 +79,6 @@ pub struct PermissionRequest {
 	pub detail: Option<String>,
 }
 
-/// One choice the child offered for a question. `preview` is the longer content
-/// it wrote for the option, absent from one that carries none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuestionOption {
@@ -98,9 +96,6 @@ pub struct AskedQuestion {
 	pub multi_select: bool,
 }
 
-/// The child asking the reader rather than asking for a permission. Answered
-/// under the same request id, which is why an unanswered one is dropped with the
-/// pending permissions when the turn ends.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuestionRequest {
@@ -130,8 +125,6 @@ pub enum TurnOutcome {
 	Failed,
 }
 
-/// Every failure the frontend can act on. Never carries a credential, an
-/// environment value, or a raw provider frame.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TransportError {
@@ -157,18 +150,10 @@ pub enum TransportError {
 		code: Option<i32>,
 		detail: Option<String>,
 	},
-	/// The stored id was refused and a fresh session took its place. The
-	/// underlying failure is spent and nothing about it is actionable once the
-	/// replacement session is up — but whether the host gave the id up is, since
-	/// the frontend holds a copy of it that would otherwise be written back.
 	#[serde(rename_all = "camelCase")]
 	ResumeFailed {
 		forgot_session_id: bool,
 	},
-	/// The bot names a working directory that is not there any more, so the run was
-	/// started where one is started for a bot that names none. Not fatal and not a
-	/// session to replace: the process is up and answering — somewhere else. The
-	/// path is carried so the reader can be shown which one was refused.
 	#[serde(rename_all = "camelCase")]
 	WorkingDirectoryRefused {
 		path: String,
@@ -179,15 +164,8 @@ pub enum TransportError {
 	},
 	NotStarted,
 	TurnAlreadyRunning,
-	/// A lifecycle transition already owns the session. Transient: the caller is
-	/// refused rather than queued, so it never launches a second child behind the
-	/// first one's back.
 	TransitionInProgress,
 	NoActiveTurn,
-	/// The call named a run the host is not the one holding any more. Transient in
-	/// the same way [`TransportError::TransitionInProgress`] is, and refused for a
-	/// stronger reason: the process the caller is talking about is gone, and the one
-	/// that took its place is somebody else's turn to cancel, answer or shut down.
 	#[serde(rename_all = "camelCase")]
 	StaleRuntimeSession {
 		runtime_session_id: String,
@@ -250,16 +228,6 @@ impl std::fmt::Display for TransportError {
 
 impl std::error::Error for TransportError {}
 
-/// Which run a command is about, and which run an event came from. Every field is
-/// a durable one: the participant is `conversation_participants`' own pair, the id
-/// is the `runtime_sessions` row the frontend opened for this process, and the
-/// epoch is that row's `seq` — the number the lineage already counts handovers
-/// with. Nothing here is minted for the runtime alone, because a second identity
-/// for one run is a second thing that can disagree.
-///
-/// Carried whole rather than as an id: the id says which row, and the participant
-/// says whose, so a scope that names another bot's run is refused on what it says
-/// rather than on what a lookup would have to go and find.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeScope {
@@ -269,15 +237,6 @@ pub struct RuntimeScope {
 	pub epoch: i64,
 }
 
-/// One event and the run it belongs to. The scope is an envelope rather than a
-/// field on every variant: it says where the event came from, which is not part of
-/// what any of them says.
-///
-/// `None` is what a caller holding no run gets its own answer under — a check
-/// asks about the install, and the first one of a launch happens before there is a
-/// lineage to name. The host never invents a scope for those: it echoes the
-/// caller's, so a reader can compare what came back against what it holds without
-/// a second rule for the one event that would otherwise have none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScopedEvent {
@@ -294,17 +253,12 @@ pub struct CheckReport {
 	pub error: Option<TransportError>,
 }
 
-/// Deliberately carries no session id: the only trustworthy one arrives later
-/// on [`AgentEvent::SessionReady`], straight from the child.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionHandle {
 	pub resumed: bool,
 }
 
-/// What survives a restart: the visible transcript and the id needed to resume
-/// it. Pending permissions and transport errors describe a moment, not a
-/// conversation, so they are left out.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
@@ -313,12 +267,6 @@ pub struct SessionSnapshot {
 	pub activities: Vec<ActivityEvent>,
 }
 
-/// A slash command as the menu lists it. The description is what the child said
-/// the command does, left out by one that says nothing.
-///
-/// A bare name reads as one too. That is the shape `bots.commands` was written in
-/// before descriptions were asked for, and those rows outlive the build that wrote
-/// them — see [`Self::deserialize`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentCommand {
@@ -328,7 +276,6 @@ pub struct AgentCommand {
 }
 
 impl AgentCommand {
-	/// A command with nothing said about it.
 	pub(crate) fn named(name: impl Into<String>) -> Self {
 		Self { name: name.into(), description: None }
 	}
@@ -354,7 +301,6 @@ impl<'de> Deserialize<'de> for AgentCommand {
 	}
 }
 
-/// The single stream React consumes. One tagged union, no raw provider payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AgentEvent {
@@ -364,9 +310,6 @@ pub enum AgentEvent {
 	TurnChanged { state: TurnState },
 	#[serde(rename_all = "camelCase")]
 	SessionReady { session_id: String, resumed: bool },
-	/// The slash commands the child announced when it started, in the order it
-	/// named them, and never empty: a child naming none announces nothing, which
-	/// leaves the list the bot was already holding standing.
 	#[serde(rename_all = "camelCase")]
 	CommandsListed { commands: Vec<AgentCommand> },
 	#[serde(rename_all = "camelCase")]
@@ -385,10 +328,6 @@ pub enum AgentEvent {
 	PermissionResolved { id: String, decision: PermissionDecision },
 	#[serde(rename_all = "camelCase")]
 	TurnEnded { ended: TurnEnded },
-	/// The bot wrote in its own bundle during the turn that just ended, and the
-	/// write was recorded. Always after the [`AgentEvent::TurnEnded`] it belongs to,
-	/// and only for a turn that changed something: the reader is told their bot has
-	/// a new self, and what it is called.
 	#[serde(rename_all = "camelCase")]
 	BotEvolved { commit_id: String, title: String },
 	#[serde(rename_all = "camelCase")]

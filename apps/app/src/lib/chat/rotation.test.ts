@@ -18,9 +18,6 @@ import type { TransportError } from "../agent/contract"
 const PROMPTS_PER_RUN = 3
 
 describe("when a run has to be replaced", () => {
-	// The one place these words are pinned. They are written to the durable
-	// lineage, so whoever reads a rotated row a month later reads them — a rename
-	// leaves the rows already on disk saying something this build no longer says.
 	it("records a handover under the words the lineage keeps", () => {
 		expect([
 			ASKED_FOR,
@@ -37,8 +34,6 @@ describe("when a run has to be replaced", () => {
 		])
 	})
 
-	// The threshold is preventive: the run is replaced while it still answers, so
-	// the conversation is never recovered from a refusal it could have avoided.
 	it("replaces a run once it has carried its share, and not before", () => {
 		const run = openedRun(false)
 
@@ -49,17 +44,12 @@ describe("when a run has to be replaced", () => {
 		expect(rotationFor(run, PROMPTS_PER_RUN)).toBe(NEARING_THE_BOUND)
 	})
 
-	// A run known to be spent is replaced for the reason it was spent for, however
-	// little it has carried: the process behind it is gone either way.
 	it("replaces a spent run for the reason it was spent for", () => {
 		const run: LiveRun = { ...openedRun(false), spent: REFUSED }
 
 		expect(rotationFor(run, PROMPTS_PER_RUN)).toBe(REFUSED)
 	})
 
-	// Only two failures say the provider session itself is gone. The rest describe
-	// the install or a single call, and rotating on those would open a run per
-	// attempt and start none of them.
 	it.each([
 		[{ kind: "resumeFailed", forgotSessionId: true }, REFUSED],
 		[{ kind: "crashed", code: 1, detail: null }, STOPPED],
@@ -72,10 +62,6 @@ describe("when a run has to be replaced", () => {
 		expect(rotationReasonForFailure(error)).toBe(reason)
 	})
 
-	// A start is the other half: the row was opened before the process was asked
-	// for, so a failure there always leaves a run to replace, whatever it says. The
-	// two failures that name the session keep their word; everything else says what
-	// actually happened — nothing ever came up in that run.
 	it.each([
 		[{ kind: "resumeFailed", forgotSessionId: false }, REFUSED],
 		[{ kind: "crashed", code: 1, detail: null }, STOPPED],

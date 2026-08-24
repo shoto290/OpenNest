@@ -4,8 +4,6 @@ import { expect, fn } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import { Switch, type SwitchProps } from "@workspace/ui/components/switch"
 
-/** The switch keeps no state of its own, so a story that lets a reader press it
- * holds the one the press produces. */
 const SwitchHost = (props: SwitchProps) => {
 	const [checked, setChecked] = useState(props.checked)
 

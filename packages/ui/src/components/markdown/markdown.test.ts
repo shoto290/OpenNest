@@ -12,14 +12,11 @@ const ALIGNED_TABLE =
 
 const MALFORMED_TABLE = "| a | b\n| ---\n| 1"
 
-/** The markdown surface reads its labels off the chat catalogue, so every render
- * here needs the translation runtime above it. */
 const render = (source: string) =>
 	renderToStaticMarkup(
 		createElement(I18nProvider, null, createElement(Markdown, null, source)),
 	)
 
-/** Two blocks in one tree, split back into the markup each one owns. */
 const renderTwice = (source: string) =>
 	renderToStaticMarkup(
 		createElement(
@@ -110,8 +107,6 @@ describe("markdown constructions", () => {
 		expect(html).toContain('<a href="mailto:me@opennest.dev"')
 	})
 
-	/** One-line fences, so every colour captured belongs to the same line: a grammar that
-	 * failed to resolve paints that line in one colour and fails the count. */
 	const HIGHLIGHTED_FENCES = [
 		"```ts\nconst nest = 1\n```",
 		"```rust\nlet nest: usize = 1;\n```",
@@ -197,7 +192,6 @@ describe("markdown tables", () => {
 })
 
 describe("markdown raw html", () => {
-	/** What a browser prints for a character it must not read as markup. */
 	const ENTITIES: Record<string, string> = {
 		"&": "&amp;",
 		"<": "&lt;",
@@ -209,12 +203,9 @@ describe("markdown raw html", () => {
 	const asSourceText = (source: string) =>
 		source.replace(/[&<>"']/g, (character) => ENTITIES[character])
 
-	/** What the block holds, without the wrapper the renderer always draws around it. */
 	const bodyOf = (html: string) =>
 		html.replace(/^<div [^>]*>/, "").replace(/<\/div>$/, "")
 
-	/** Every element the renderer built. A payload that became markup shows up here;
-	 * one that stayed source text leaves nothing but the block and its paragraph. */
 	const elementsIn = (html: string) =>
 		new Set(capturedValues(html, /<\/?([a-z][\w-]*)/gi))
 
@@ -229,7 +220,6 @@ describe("markdown raw html", () => {
 		'<svg><animate onbegin="alert(1)" /></svg>',
 	]
 
-	/** Every payload here is nothing but HTML, so the block is nothing but its source. */
 	it.each(HOSTILE)("shows %j as the source it was written with", (source) => {
 		expect(bodyOf(render(source))).toBe(`<p>${asSourceText(source)}</p>`)
 	})
@@ -255,8 +245,6 @@ describe("markdown raw html", () => {
 		expect(render(source)).toContain(asSourceText(source))
 	})
 
-	/** A tight item unwraps the paragraphs inside it, so the source lands in the item
-	 * itself — which collapses its whitespace the moment it holds one of these. */
 	const NESTED_IN_LIST_ITEM = [
 		"- <div>\n    <span>x</span>\n  </div>",
 		"- ```ts\n  const a = 1\n  ```\n  <div>\n    <span>x</span>\n  </div>",
@@ -305,8 +293,6 @@ describe("markdown links", () => {
 	const shownHost = (html: string) =>
 		capturedValues(html, /data-slot="markdown-link-host"[^>]*>\(([^)]+)\)/g)
 
-	/** The pairs an independent review used to defeat comparing the link text
-	 * with the href. Each one now reports the same destination as any other. */
 	const DECEIVING = [
 		{
 			case: "userinfo before the host",
@@ -398,8 +384,6 @@ describe("markdown links", () => {
 		expect(html).not.toContain("target=")
 	})
 
-	/** `tel:` is anchored by this component but never reaches it: the allowlist
-	 * upstream drops the href, so the text arrives inert. */
 	it("renders a tel link as plain text while the allowlist drops it", () => {
 		expect(render("[call us](tel:+33123456789)")).not.toContain("<a")
 	})

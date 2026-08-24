@@ -5,7 +5,6 @@ import { createRosterClock } from "./roster-clock"
 const MINUTE_MS = 60 * 1000
 const START = new Date(2025, 2, 12, 21, 30).getTime()
 
-/** The window the clock follows: shown or hidden, and told when that changes. */
 const stubWindow = () => {
 	const listeners = new Set<() => void>()
 	const stub = {
@@ -34,8 +33,6 @@ const stubWindow = () => {
 	}
 }
 
-/** A clock with a roster reading it, past the reading subscribing takes: what the
- * tests below assert is what the clock does after that one. */
 const readClock = () => {
 	const clock = createRosterClock()
 	const onReading = vi.fn()
@@ -62,8 +59,6 @@ describe("createRosterClock", () => {
 		expect(createRosterClock().read()).toBe(START)
 	})
 
-	// A row labelled "3m" is wrong a minute later, so the reading behind it is taken
-	// again every minute the roster is on screen.
 	it("takes a reading every minute the roster is read", () => {
 		stubWindow()
 		const { clock, onReading } = readClock()
@@ -78,7 +73,6 @@ describe("createRosterClock", () => {
 		expect(onReading).toHaveBeenCalledTimes(3)
 	})
 
-	// Nobody is reading a hidden window, so the labels it drew stay as they were.
 	it("holds its reading while the window is hidden", () => {
 		const window = stubWindow()
 		const { clock, onReading } = readClock()
@@ -90,8 +84,6 @@ describe("createRosterClock", () => {
 		expect(onReading).not.toHaveBeenCalled()
 	})
 
-	// The first thing a reader does with a window they just showed is read it, and
-	// that is worth a reading of its own rather than a wait for the next minute.
 	it("reads the clock again the moment the window is shown", () => {
 		const window = stubWindow()
 		const { clock, onReading } = readClock()
@@ -108,7 +100,6 @@ describe("createRosterClock", () => {
 		expect(clock.read()).toBe(START + 6 * MINUTE_MS)
 	})
 
-	// A clock nobody is labelled from is a timer nobody needs.
 	it("stops reading once nothing is subscribed", () => {
 		const window = stubWindow()
 		const { clock, onReading, unsubscribe } = readClock()

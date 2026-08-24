@@ -79,8 +79,8 @@ Only **technical composition** — it places things, it does not draw them:
 
 - **No new dependencies without approval** — Ask before adding any package.
 - **Shared deps live in the root `package.json`** — Sub-package `package.json` only for truly package-specific deps. Check root first; duplicate versions cause type conflicts.
-- **English only** — All code, comments, and identifiers in English.
-- **Self-documenting code over comments** — Comments are the exception, not the default. Only for a non-obvious "why".
+- **English only** — All code and identifiers in English.
+- **No comments** — A comment is the signal that the code is not explicit enough: rename, split, or extract until it reads on its own. Only two things survive. Machine-read directives — `// biome-ignore`, `// @ts-*`, `/// <reference … />` — which are instructions to a tool, not prose. And `TODO:` / `FIXME:`, which mark work that is genuinely not done. No JSDoc, no "why" paragraph, no section banner, no commented-out code.
 - **Named exports only** — No default exports (except Storybook stories).
 - **Files in kebab-case** — `chat-screen.tsx`, not `ChatScreen.tsx`.
 - **Check before creating** — Search `packages/ui/src/components` for an existing component before adding a new one.

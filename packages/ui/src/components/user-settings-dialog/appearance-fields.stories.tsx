@@ -22,8 +22,6 @@ const CHOSEN_DARK: Appearance = {
 	palette: "lavender",
 }
 
-/** The fields keep no scheme or palette of their own, so a story that lets a reader
- * choose holds what the choosing produces. */
 const AppearanceHost = (props: AppearanceFieldsProps) => {
 	const [colorScheme, setColorScheme] = useState(props.colorScheme)
 	const [palette, setPalette] = useState(props.palette)

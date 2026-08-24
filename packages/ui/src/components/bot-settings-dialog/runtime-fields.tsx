@@ -23,24 +23,14 @@ type RuntimeFieldsProps = {
 	models: BotModelOption[]
 	model: string
 	onModelChange: (model: string) => void
-	/** How the bot writes its answers, as the host stores it raw. Left out, the
-	 * concise style the bot is given by default, reported to nobody: a host that has
-	 * not wired the question yet still shows the field rather than a gap. */
 	outputStyle?: BotOutputStyle
 	onOutputStyleChange?: (outputStyle: BotOutputStyle) => void
 	workingDirectory: string
 	onBrowseWorkingDirectory: () => void
-	/** Whether the bot is denied the tools that edit files and run commands. What it
-	 * stops is those four and nothing else, which is why the sentence beside it says
-	 * so — see the catalogue. */
 	changesNothing: boolean
 	onChangesNothingChange: (changesNothing: boolean) => void
 }
 
-/** What the bot runs on: the model behind it, the way it writes its answers, the
- * folder it works in, and whether it may change anything there. The three first are
- * pickers rather than text — none of them is something a reader can type correctly —
- * and the last is a switch, since it is on or off. */
 const RuntimeFields = ({
 	models,
 	model,

@@ -5,13 +5,10 @@ import preview from "@workspace/storybook/preview"
 import { Button } from "@workspace/ui/components/button"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 
-/** `size-10`, read back by the stories that measure the box. */
 const MARK_SIZE = 40
 
 const Mark = () => <span className="size-10 rounded-full bg-primary" />
 
-/** The two homes are mutually exclusive, so exactly one holds the id at a time
- * and Motion moves the survivor instead of blinking between them. */
 const Journey = () => {
 	const markId = useId()
 	const [arrived, setArrived] = useState(false)

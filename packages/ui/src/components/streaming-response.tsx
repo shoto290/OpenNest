@@ -1,5 +1,4 @@
 "use client"
-// Adapted from beui.dev/components/agents/streaming-response
 
 import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
@@ -13,20 +12,15 @@ export type StreamingResponseStatus = "streaming" | "complete" | "error"
 export type StreamingResponseFeedback = "up" | "down" | null
 
 export interface StreamingResponseProps {
-	/** Rendered response content. Pass plain text or the output of a Markdown renderer. */
 	children: ReactNode
 	status?: StreamingResponseStatus
-	/** Plain-text value copied by the built-in copy action. */
 	copyText?: string
-	/** Overrides the built-in clipboard action. */
 	onCopy?: () => void | Promise<void>
 	onRetry?: () => void
 	feedback?: StreamingResponseFeedback
 	defaultFeedback?: StreamingResponseFeedback
 	onFeedbackChange?: (feedback: StreamingResponseFeedback) => void
-	/** Set false when a surrounding conversation log announces streamed text. */
 	announce?: boolean
-	/** Hides the built-in completion actions without changing response status. */
 	showActions?: boolean
 	className?: string
 	contentClassName?: string
@@ -40,9 +34,6 @@ function ResponseAction({
 	children,
 }: {
 	label: string
-	/** Given only by an action that holds a pressed state — the feedback pair. It
-	 * is what puts `aria-pressed` on the button, so a copy or a retry stays a
-	 * plain button rather than one that reads as unpressed. */
 	active?: boolean
 	onClick: () => void
 	children: ReactNode

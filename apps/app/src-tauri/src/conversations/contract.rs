@@ -1,37 +1,3 @@
-//! The vocabulary the durable transcript crosses to the frontend in.
-//!
-//! Every type here mirrors one the repositories under [`crate::db::repositories`]
-//! already hold, and mirrors it rather than deriving serde on the stored type on
-//! purpose. [`crate::db::repositories::messages`] keeps its vocabulary
-//! deliberately apart from what crosses this boundary, and this file is the other
-//! half of that sentence: a field the frontend needs renamed, split off or left
-//! out is renamed, split off or left out here, and the rows already on disk read
-//! back exactly as they were written. A `#[serde(rename)]` on a stored enum would
-//! have made the same change a migration.
-//!
-//! Its sibling [`crate::agent::contract`] already spells a `MessageRole` with the
-//! same two words, and the two are kept apart for the same reason: the vocabulary of
-//! a live session and the vocabulary of a durable transcript answer to different
-//! boundaries, and sharing one enum would make a rename asked for by either a rename
-//! forced on both.
-//!
-//! It is also why the mirror is written by hand. The storage vocabularies convert
-//! themselves to SQLite through helpers that are private to their module, so the
-//! conversions below `match` on the public variants: a variant added to either
-//! side stops compiling here instead of quietly crossing under a word the
-//! frontend has no meaning for.
-//!
-//! Nothing here carries what a conversation said except
-//! [`TranscriptMessage::content`], which is the transcript itself and the whole
-//! reason a page was asked for, and the context
-//! [`crate::conversations::commands::conversation_bounded_context`] answers with,
-//! which is that transcript rebuilt for the run that is about to be told it. A
-//! checkpoint's summary is left out for the same reason the rest is in: nothing on
-//! the other side displays or submits it, so it stays in the file. The `detail` of
-//! [`StorageFailure::Sqlite`] is
-//! SQLite's own account of a statement — a constraint, a column, a schema — and
-//! never a row's content: a transcript is personal data, and an error on its way
-//! to the UI is the last place it may leak into.
 
 use std::path::Path;
 
@@ -42,10 +8,6 @@ use crate::bundles;
 use crate::db::repositories::{conversations, messages, runtime_context};
 use crate::db::DatabaseError;
 
-/// The eight animals the avatar engine draws, as the frontend spells them. It is
-/// the deserializer that makes a ninth impossible: a word outside this list is
-/// refused before a statement runs, so the `CHECK` on the column is the second
-/// answer to the same question rather than the only one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AvatarAnimal {
@@ -89,12 +51,6 @@ impl From<AvatarAnimal> for conversations::AvatarAnimal {
 	}
 }
 
-/// The eight colours a bot may be marked with, spelled the way
-/// [`conversations::AvatarBlot`] spells them and for the reason given there.
-///
-/// `null` crosses for a bot marked with none, which is what a bot is until someone
-/// marks it: an `Option` rather than a ninth word, so "no mark" and a mark named
-/// "none" cannot be confused on either side.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AvatarBlot {
@@ -138,72 +94,25 @@ impl From<AvatarBlot> for conversations::AvatarBlot {
 	}
 }
 
-/// A bot as the frontend meets it. `instructions` is projected because the
-/// settings panel is where a bot is told how to answer: it is displayed, edited and
-/// submitted back, so a reload that could not read it would show an empty field over
-/// a stored prompt. It is read out of the bot's plugin bundle — see [`Bot::of`].
-/// `memory` is not — it is what a run leaves behind for the next one, and nothing
-/// over there displays or writes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bot {
 	pub id: String,
 	pub name: String,
 	pub title: String,
-	/// The model label the bot answers under, read out of its plugin bundle the way
-	/// `instructions` is — see [`Bot::of`]. Free text at this boundary, unlike the
-	/// two faces below: which aliases exist is Claude Code's to change and nothing
-	/// here can list them, so a label this build has never heard of crosses, is
-	/// stored, and comes back the way it went in. The frontend offers the aliases it
-	/// knows and shows anything else as it stands.
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_blot: Option<AvatarBlot>,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
-	/// The built-in tools the bot is denied, by name, read out of its plugin bundle
-	/// the way `instructions` is — the agent file is what a run is really promoted
-	/// onto, so the file is what the panel has to show. What an MCP server provides
-	/// is never among them: a server's tool is the bundle's own capability.
 	pub denied_tools: Vec<String>,
-	/// Whether those denials cover the tools that write files and run commands. A
-	/// reading of `denied_tools` and never a setting of its own — one list is written
-	/// into the agent file, and a second switch over the same key would be a second
-	/// author of one line.
 	pub changes_nothing: bool,
-	/// How the bot writes its answers, read out of its plugin bundle the way `model`
-	/// is — `metadata.opennest.outputStyle` in the agent frontmatter, and nothing in
-	/// the database. Never empty: a bundle naming no style, and a bot whose bundle is
-	/// not there at all, answer with the default one, since that is what a session
-	/// opened for them would be opened under.
 	pub output_style: String,
 	pub created_at: i64,
 }
 
 impl Bot {
-	/// The stored row as the frontend meets it. `avatars` is the one directory a
-	/// picture may live in, and the projection is where the recorded path stops being
-	/// a column and becomes something a webview will be pointed at: anything
-	/// [`avatars::readable`] refuses — outside the directory, gone, not a file — comes
-	/// back as no picture at all, which is a bot wearing its animal rather than a
-	/// fetch the UI has to recover from.
-	///
-	/// `None` for the directory is a run with nowhere to keep avatars. Same answer:
-	/// every bot wears its animal.
-	///
-	/// `bundles` is where the same bot's plugin bundle lives, and `instructions`,
-	/// `model` and `avatarBlot` are read from the agent file inside it rather than
-	/// from the columns: the file is what the process is actually started with — its
-	/// `model` key is what the child answers under — so it is what the panel that
-	/// edits them has to show. A bundle this install has not written — a bot from
-	/// before there were any, a host with no data directory — falls back to the
-	/// columns, which is what the bundle is rewritten from anyway.
-	///
-	/// A bundle that is there answers for the tint whichever way it answers: its
-	/// `color` key is the mark, and a file naming no colour — or naming a word that is
-	/// no tint here — is a bot marked with none rather than a reason to go back to the
-	/// column. The file is what a reader edits, so the file is what a reader is shown.
 	pub fn of(bot: conversations::Bot, avatars: Option<&Path>, bundles: Option<&Path>) -> Self {
 		let written = bundles.and_then(|root| crate::bundles::generated(root, &bot.id));
 		let model = written
@@ -246,35 +155,18 @@ impl Bot {
 	}
 }
 
-/// Who a bot is, as a caller submits it — whole, both to create one and to change
-/// one. `id` and `createdAt` are absent because neither is a caller's to choose:
-/// one is minted by the host, the other is when it did so. `model` is here — a
-/// bot is moved between models from its own settings — and so is `instructions`,
-/// which the settings panel edits in the same form as the name: one value the
-/// caller emits whole, one write that replaces it. `memory` stays out: nothing over
-/// there shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
-	/// See [`Bot::model`]: a label, not a vocabulary.
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_blot: Option<AvatarBlot>,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
-	/// See [`Bot::denied_tools`]: submitted beside the name, since they are set from
-	/// the same panel, and laid down in the agent file by the write that follows. The
-	/// one thing a caller submits about denials — "changes nothing" is read back off
-	/// this list rather than sent alongside it.
 	pub denied_tools: Vec<String>,
-	/// See [`Bot::output_style`]: submitted beside the model, since a bot is moved
-	/// between styles from the same panel, and laid down in the agent file by the
-	/// write that follows rather than in a column. A caller leaving it out asks for
-	/// the default one — this is a whole identity, so a field nobody sent is a field
-	/// nobody meant to keep.
 	#[serde(default = "default_output_style")]
 	pub output_style: String,
 }
@@ -299,20 +191,6 @@ impl From<BotIdentity> for conversations::BotIdentity {
 	}
 }
 
-/// A skill of a bot's, as the frontend meets it. It lives in the bot's plugin
-/// bundle and nowhere else: no column holds any of this, and a skill a hand dropped
-/// into the directory is answered here beside the ones this app wrote.
-///
-/// `id` is the directory the skill lives in — the one name two of a bot's skills
-/// cannot share, and the name every write below addresses one by. What the skill is
-/// called is free text and changing it moves nothing on the disk.
-///
-/// `isPreloaded` is whether the body is carried into the bot's agent file, which is
-/// the whole of how a skill reaches a promoted bot — see [`crate::bundles`].
-///
-/// `isSystem` is whether the host generated it. Such a skill is shown like any other
-/// and none of the writes below will touch it: it is the bot's to rewrite through its
-/// own tools, and nobody's to change from the settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
@@ -340,19 +218,12 @@ impl From<bundles::Skill> for Skill {
 	}
 }
 
-/// What a caller writes a skill with, whole: the values a reader edits. The mark is
-/// not one of them — it is set by its own command, because it changes what the bot
-/// was told rather than what the skill says.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillDraft {
 	pub name: String,
 	pub description: String,
 	pub body: String,
-	/// The one type on this boundary that is not mirrored. Its fields are the
-	/// frontmatter's own keys, which the agent's file format spells and this app only
-	/// reads: there is no wording here for a mirror to hold apart from the writer's,
-	/// and a second copy of the list would be eighteen chances for the two to drift.
 	#[serde(flatten)]
 	pub front: bundles::SkillFront,
 }
@@ -368,29 +239,16 @@ impl From<SkillDraft> for bundles::SkillDraft {
 	}
 }
 
-/// One write to a bot's bundle, as the frontend meets it. It comes off the
-/// repository inside the bundle and nowhere else: no column holds any of it.
-///
-/// `title` is a sentence somebody who has never seen a diff can read — the write
-/// and what it was about, no path — and `body` is whatever was said under it, empty
-/// for the writes that needed no second sentence. `id` is what
-/// [`super::commands::conversation_bot_history_diff`] and
-/// [`super::commands::conversation_bot_revert`] address one by.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BotHistoryEntry {
 	pub id: String,
-	/// Seconds since the epoch, which is what the commit itself holds. The frontend
-	/// renders it in the reader's own zone; nothing here guesses at one.
 	pub timestamp: i64,
 	pub author: HistoryAuthor,
 	pub title: String,
 	pub body: String,
 }
 
-/// Whose gesture a write was. Two words rather than a name, because that is the
-/// whole of what the frontend distinguishes: what the reader did, and what the bot
-/// did to itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HistoryAuthor {
@@ -419,14 +277,6 @@ impl From<bundles::HistoryEntry> for BotHistoryEntry {
 	}
 }
 
-/// An MCP server a bot's bundle declares, as the frontend meets it. Like a skill it
-/// lives in the bundle and nowhere else: no column holds any of it, and a `.mcp.json`
-/// a hand wrote is answered beside what this app wrote.
-///
-/// `name` is what it is declared under and what it connects as —
-/// `plugin:<bot id>:<name>`, see `agent/PLUGINS.md`. `config` travels verbatim: the
-/// shape a transport asks for is the agent's to define, not this app's, so nothing
-/// here narrows it past being an object.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServer {
@@ -454,15 +304,6 @@ impl From<conversations::Chat> for Chat {
 	}
 }
 
-/// A run just opened in a participant's lineage, as the frontend meets it. It
-/// carries what a runtime scope is made of and nothing else: `status` is `active`
-/// or the call would not have answered, `ended_at` and `rotation_reason` belong to
-/// the row this one replaced, and `provider_session_id` is a name the process has
-/// not given yet.
-///
-/// `seq` keeps the storage's word rather than borrowing the runtime's: it is the
-/// number the lineage counts with, and what the runtime does with it — take it for
-/// the epoch of the scope it stamps every event with — is the runtime's business.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSession {
@@ -485,10 +326,6 @@ impl From<runtime_context::RuntimeSession> for RuntimeSession {
 	}
 }
 
-/// A recovery point as the frontend meets it: which run took it, how far into the
-/// transcript it reaches, and what it is estimated to cost to replay. The summary
-/// itself does not cross — the context that carries it is built on this side, and
-/// the caller only has to know a checkpoint landed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextCheckpoint {
@@ -531,10 +368,6 @@ impl From<messages::MessageRole> for TranscriptRole {
 	}
 }
 
-/// Where a message got to, the reader's word for what the file calls its
-/// completion state. `Pending` and `Streaming` are in here and absent from
-/// [`TerminalCompletion`]: a page may hold a message still being written, and no
-/// caller may ask for one to go back to that.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TranscriptCompletion {
@@ -559,11 +392,6 @@ impl From<messages::MessageState> for TranscriptCompletion {
 	}
 }
 
-/// The endings on their own, and the only thing
-/// [`crate::conversations::commands::conversation_finalize_message`] will take.
-/// The rule [`messages::TerminalState`] holds for the host is held for the
-/// frontend by the same means: reopening a message is not a call this vocabulary
-/// can express, so the deserializer refuses it before any code runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TerminalCompletion {
@@ -584,14 +412,6 @@ impl From<TerminalCompletion> for messages::TerminalState {
 	}
 }
 
-/// A message as the reader receives it. It names its conversation, which
-/// [`messages::StoredMessage`] does not have to: the file is read one
-/// conversation at a time by a caller that said which, while a page crossing to
-/// the frontend arrives on a channel that carries no such context.
-///
-/// `author_bot_id` and `replied_to_message_id` are stored and not projected. One
-/// bot answers today, and a reply the frontend never links to is a column it has
-/// nothing to do with — the row keeps both regardless.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptMessage {
@@ -620,11 +440,6 @@ impl TranscriptMessage {
 	}
 }
 
-/// `messages` in display order, oldest first. `has_more` is [`messages::MessagePage`]'s
-/// own answer carried through: the frontend asks for the page before the one it
-/// holds by the lowest `seq` it already has, so no cursor crosses — it would be a
-/// second copy of a number already in `messages` — and whether anything older is
-/// there at all is the one thing that cannot be read off the page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptPage {
@@ -658,9 +473,6 @@ impl From<NewTurn> for messages::NewTurn {
 	}
 }
 
-/// A message authored on the frontend's side, whole. It carries its text because
-/// it has all of it already — see [`messages::NewUserMessage`], which is what
-/// makes a replay of it comparable field for field.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewUserMessage {
@@ -687,10 +499,6 @@ impl From<NewUserMessage> for messages::NewUserMessage {
 	}
 }
 
-/// A reply about to be streamed into, with no text field for the same reason
-/// [`messages::NewAssistantMessage`] has none: its id is known before a word of
-/// it exists, and every word reaches it through
-/// [`crate::conversations::commands::conversation_append_text`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewAssistantMessage {
@@ -715,10 +523,6 @@ impl From<NewAssistantMessage> for messages::NewAssistantMessage {
 	}
 }
 
-/// Why the file could not serve a call, one variant per [`DatabaseError`]. None
-/// of them is actionable in the UI beyond saying the transcript is not being
-/// written — they are told apart so a bug report can name which, not so the
-/// frontend can branch on them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum StorageFailure {
@@ -729,20 +533,13 @@ pub enum StorageFailure {
 	},
 	PoisonedConnection,
 	CallInterrupted,
-	/// [`DatabaseError::Conflict`] under the name it goes by out here: a write the
-	/// row it names has already moved past.
 	StaleWrite,
-	/// SQLite's own account of the statement it refused, and nothing the statement
-	/// was carrying — see this module's header.
 	#[serde(rename_all = "camelCase")]
 	Sqlite {
 		detail: String,
 	},
 }
 
-/// By reference on purpose: [`DatabaseError`] is neither `Clone` nor `Copy`, and
-/// the one that stopped the launch is held by [`crate::db::DatabaseState`] for as
-/// long as the host runs, so every call that reports it only borrows it.
 impl From<&DatabaseError> for StorageFailure {
 	fn from(error: &DatabaseError) -> Self {
 		match error {
@@ -758,67 +555,32 @@ impl From<&DatabaseError> for StorageFailure {
 	}
 }
 
-/// Every way a conversation command can refuse. The two storage failures are kept
-/// apart because they mean different things to a reader: `Unavailable` says
-/// nothing has been written this whole run and nothing will be, while `Storage`
-/// says this one call did not land and the next may.
-///
-/// The other three are rules the repositories hold rather than a file gone wrong,
-/// and they carry what disagreed: an id, the field it diverged on, the two states
-/// or the two values. A caller that replayed an event needs to know that much to
-/// tell its own duplicate from two events claiming one place.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TranscriptStoreError {
-	/// The database never opened.
 	#[serde(rename_all = "camelCase")]
 	Unavailable { failure: StorageFailure },
-	/// The file is there, this call failed.
 	#[serde(rename_all = "camelCase")]
 	Storage { failure: StorageFailure },
 	#[serde(rename_all = "camelCase")]
 	Conflict { id: String, field: String },
 	#[serde(rename_all = "camelCase")]
 	InvalidTransition { id: String, from: String, to: String },
-	/// A write named a bot that is not on the record. The one refusal here a caller
-	/// can act on: the list it is holding is behind the file, and reloading it is
-	/// what puts them back together.
 	#[serde(rename_all = "camelCase")]
 	UnknownBot { id: String },
-	/// The bytes offered as an avatar were not stored, and nothing on the disk or on
-	/// the bot changed. Carries which of the four things went wrong, because three of
-	/// them are the user's to fix by picking another file.
 	#[serde(rename_all = "camelCase")]
 	RejectedAvatarImage { reason: AvatarRejection },
-	/// The bot's plugin bundle could not be written, so the save was undone and the
-	/// bot is as it was. It is a refusal rather than a warning because the bundle is
-	/// what a process is really started on: a save reported as done while the disk
-	/// kept the old brief would leave the bot answering by it for good — see
-	/// [`crate::bundles`].
 	#[serde(rename_all = "camelCase")]
 	UnwritableBundle { detail: String },
-	/// A write from the settings named a skill the host generates and owns. The file
-	/// is exactly as it was and the bot still has the skill: it is carried, and the
-	/// bot rewrites it through its own tools — this refuses the settings, not the
-	/// skill changing.
 	#[serde(rename_all = "camelCase")]
 	SystemSkill { id: String },
-	/// The bundle's own history could not be read. Nothing on the disk is wrong and
-	/// the bot runs exactly as it did: the repository inside the bundle is what
-	/// would not open, so the writes are all there and the account of them is not —
-	/// see [`crate::bundles`].
 	#[serde(rename_all = "camelCase")]
 	UnreadableHistory { detail: String },
 }
 
-/// Why an avatar was not stored, in the frontend's vocabulary. `tooLarge` carries
-/// both numbers so the UI can say the limit without holding a copy of it, and the
-/// two `detail` strings are the decoder's and the filesystem's own accounts — never
-/// a path, which is the host's business and not the webview's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AvatarRejection {
-	/// The leading bytes are not png, jpeg or webp — whatever the file was called.
 	UnknownFormat,
 	#[serde(rename_all = "camelCase")]
 	TooLarge { bytes: u64, limit: u64 },
@@ -828,9 +590,6 @@ pub enum AvatarRejection {
 	Unwritable { detail: String },
 }
 
-/// Written on the rejection rather than on the error, because the same four
-/// reasons refuse a bot's picture and the user's own — see
-/// [`crate::user::contract::UserPreferencesError`].
 impl From<avatars::Rejection> for AvatarRejection {
 	fn from(rejection: avatars::Rejection) -> Self {
 		match rejection {
@@ -870,9 +629,6 @@ impl From<messages::TranscriptError> for TranscriptStoreError {
 	}
 }
 
-/// The runtime lineage answers in [`DatabaseError`] directly: its rules are the
-/// schema's — a live row per participant, a number per handover — so there is no
-/// vocabulary of its own between it and the file.
 impl From<DatabaseError> for TranscriptStoreError {
 	fn from(error: DatabaseError) -> Self {
 		TranscriptStoreError::Storage { failure: (&error).into() }
@@ -899,12 +655,6 @@ mod tests {
 
 	use super::*;
 
-	/// The frontend and the host agree on nothing but these field names, so the
-	/// wire shape is asserted literally rather than round-tripped through serde
-	/// alone: a rename would survive a round trip and break every reader.
-	///
-	/// Parsing it back matters just as much for the input types — a page is written
-	/// by a frontend that builds this JSON by hand.
 	fn assert_crosses_as<T>(value: T, wire: Value)
 	where
 		T: std::fmt::Debug + PartialEq + Serialize + DeserializeOwned,
@@ -992,9 +742,6 @@ mod tests {
 		);
 	}
 
-	/// What a bot nobody has described looks like on the wire: empty where the
-	/// column is `NOT NULL DEFAULT ''`, `null` where it names something outside the
-	/// database. The two are not the same fact, and neither may arrive as the other.
 	#[test]
 	fn a_bot_with_nothing_said_about_it_crosses_with_its_absences_intact() {
 		assert_crosses_as(
@@ -1025,11 +772,6 @@ mod tests {
 		);
 	}
 
-	/// The eight animals and the eight colours, each crossing as the one word the
-	/// avatar engine draws it under. A ninth is not a value this vocabulary can
-	/// express, so the deserializer refuses it before any code runs — which is the
-	/// whole reason a face never reaches the file misspelled. `null` is the ninth
-	/// answer for a mark and the only one: a bot wearing no colour.
 	#[test]
 	fn every_face_crosses_as_one_word_and_nothing_else_parses() {
 		for (animal, wire) in [
@@ -1067,12 +809,6 @@ mod tests {
 		);
 	}
 
-	/// The boundary no longer has a word for the pose, for the description, or for
-	/// the switch that stood for four denials, and a caller that still spells one is
-	/// answered the way this vocabulary answers anything it has no field for: the
-	/// word carries nothing, and the mark it did not name is no mark. That is what a
-	/// caller written against the older shape gets — an unmarked bot, not a refusal,
-	/// and neither a pose nor a denial smuggled in under another name.
 	#[test]
 	fn an_identity_still_spelling_the_abandoned_words_crosses_as_a_bot_with_no_mark() {
 		let submitted = json!({
@@ -1095,8 +831,6 @@ mod tests {
 		assert!(parsed.denied_tools.is_empty(), "a switch reached the list it is not");
 	}
 
-	/// What the frontend builds a runtime scope out of. A rename here is a launch
-	/// that scopes its events with `undefined` and rejects every one of them.
 	#[test]
 	fn an_opened_run_crosses_as_camel_case() {
 		assert_crosses_as(
@@ -1117,9 +851,6 @@ mod tests {
 		);
 	}
 
-	/// What a caller learns about the recovery point it just paid for. The summary is
-	/// deliberately not among the fields: it is the conversation's own words, and the
-	/// only thing that reads them is the context builder on this side.
 	#[test]
 	fn a_stored_checkpoint_crosses_as_camel_case_without_its_summary() {
 		let wire = json!({
@@ -1149,9 +880,6 @@ mod tests {
 		);
 	}
 
-	/// The lineage answers in the file's own vocabulary, so what a caller reads is
-	/// the same `storage` refusal every other write speaks — a run refused because
-	/// the row moved on must not arrive under a word the frontend has no branch for.
 	#[test]
 	fn a_lineage_failure_crosses_as_a_storage_refusal() {
 		assert_eq!(
@@ -1246,8 +974,6 @@ mod tests {
 		);
 	}
 
-	/// Every failure is tagged, so a reader switches on `kind` and never on the
-	/// presence of a field.
 	#[test]
 	fn every_failure_crosses_as_a_tagged_camel_case_object() {
 		for (failure, wire) in [
@@ -1339,9 +1065,6 @@ mod tests {
 		}
 	}
 
-	/// The limit crossing as a number rather than as prose: it is the frontend that
-	/// tells a user how big a picture may be, and it reads that off the refusal
-	/// instead of holding a second copy of the number.
 	#[test]
 	fn every_reason_a_picture_is_refused_keeps_its_shape_on_the_way_out() {
 		for (rejection, reason) in [
@@ -1366,7 +1089,6 @@ mod tests {
 		}
 	}
 
-	/// A row as the database hands it over, on the model it names.
 	fn a_stored_bot(model: &str) -> conversations::Bot {
 		conversations::Bot {
 			id: "b1".into(),
@@ -1384,16 +1106,12 @@ mod tests {
 		}
 	}
 
-	/// A scratch bundle directory of this test's own, empty before it is written to.
 	fn a_bundle_root(name: &str) -> std::path::PathBuf {
 		let root = std::env::temp_dir().join(format!("opennest-contract-{name}"));
 		let _ = std::fs::remove_dir_all(&root);
 		root
 	}
 
-	/// The projection every read of a bot goes through, on the two answers that are
-	/// not a picture: a path pointing out of the directory, and a run with no
-	/// directory at all. Both come back as no picture, which is the bot in its animal.
 	#[test]
 	fn a_bot_wearing_a_path_the_host_will_not_serve_crosses_without_one() {
 		let stored = |path: Option<&str>| conversations::Bot {
@@ -1407,9 +1125,6 @@ mod tests {
 		assert_eq!(Bot::of(stored(None), Some(&dir), None).avatar_image_path, None);
 	}
 
-	/// The disk is the truth for what a child is started on, and the model is one of
-	/// those: a bundle naming one is reported over the column, and a run with no
-	/// bundle to read falls back to it.
 	#[test]
 	fn a_bot_is_reported_on_the_model_its_bundle_names() {
 		let root = a_bundle_root("model");
@@ -1421,9 +1136,6 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&root);
 	}
 
-	/// The style has no column at all, so the bundle is the only truth: a bot whose
-	/// file names one is reported on it, and a bot with no bundle to read is reported
-	/// on the default rather than on nothing.
 	#[test]
 	fn a_bot_is_reported_on_the_style_its_bundle_names() {
 		let root = a_bundle_root("style");
@@ -1439,10 +1151,6 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&root);
 	}
 
-	/// The tint takes the same road as the model: the bundle is the truth once there
-	/// is one, and the column answers only for a bot that has none. A bundle that
-	/// names no colour is a bot marked with none — the reader took the key out, and
-	/// taking it out is how a mark is removed.
 	#[test]
 	fn a_bot_is_reported_on_the_tint_its_bundle_names() {
 		let root = a_bundle_root("tint");
@@ -1465,10 +1173,6 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&root);
 	}
 
-	/// The brief a reader is still writing crosses as they typed it. The agent file
-	/// holds the body trimmed, so a projection that always preferred the file would
-	/// answer every write with the space taken back off the end — and a reader who
-	/// pressed space would watch it appear and leave again.
 	#[test]
 	fn a_brief_ending_in_a_space_crosses_as_the_reader_typed_it() {
 		let root = a_bundle_root("still-typing");
@@ -1480,9 +1184,6 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&root);
 	}
 
-	/// The ending a caller reports is the one the file records: a mapping that
-	/// slipped by one would close a message under a word nobody asked for, and no
-	/// later read could tell.
 	#[test]
 	fn every_ending_a_caller_may_report_maps_onto_the_one_the_transcript_stores() {
 		for (reported, stored) in [
@@ -1495,9 +1196,6 @@ mod tests {
 		}
 	}
 
-	/// A launch that could not open the file keeps the reason all the way out, so
-	/// the frontend can say which failure it is looking at rather than that there
-	/// was one.
 	#[test]
 	fn an_unusable_database_keeps_its_reason_on_the_way_to_the_frontend() {
 		for (error, failure) in [

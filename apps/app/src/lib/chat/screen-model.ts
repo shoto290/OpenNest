@@ -14,9 +14,6 @@ import type {
 } from "../conversations/transcript-contract"
 import { isTerminalCompletion } from "../conversations/transcript-state"
 
-/** One bubble in the transcript. An answer is published markdown block by
- * markdown block, so a long reply reads as a run of messages rather than one
- * growing block. */
 export type TranscriptRow = {
 	id: string
 	messageId: string
@@ -26,10 +23,6 @@ export type TranscriptRow = {
 	completion: ChatTurnState
 }
 
-/** How a stored ending reads on screen. `pending` is a message the store has a
- * place for and no words yet, so it reads as one still being written. A stream
- * the process died under has no state of its own here and borrows the stopped
- * one: the turn ended early either way, and the reader is not told it failed. */
 const TURN_STATE: Record<TranscriptCompletion, ChatTurnState> = {
 	pending: "streaming",
 	streaming: "streaming",
@@ -39,14 +32,11 @@ const TURN_STATE: Record<TranscriptCompletion, ChatTurnState> = {
 	interrupted: "cancelled",
 }
 
-/** What the bot is busy with, and what it is busy on. */
 export type WorkingState = {
 	kind: BotWorkingKind
 	label?: string
 }
 
-/** Errors that leave no usable session behind, so only a fresh preflight recovers.
- * Keyed by kind so a new transport error cannot silently default to recoverable. */
 const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	binaryNotFound: true,
 	notAuthenticated: true,
@@ -56,16 +46,11 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	crashed: true,
 	notStarted: true,
 	resumeFailed: false,
-	// The process came up and is answering: what it could not do was start in the
-	// folder the bot names, and a fresh session would land in the same place.
 	workingDirectoryRefused: false,
 	invalidFrame: false,
 	turnAlreadyRunning: false,
 	transitionInProgress: false,
 	noActiveTurn: false,
-	// The run the caller named is gone, but the one that replaced it is the
-	// session this launch is already on: nothing to recover, and a setup card
-	// offered here would be about a process nobody is waiting for.
 	staleRuntimeSession: false,
 	unknownPermission: false,
 	writeFailed: false,
@@ -73,8 +58,6 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 
 const RUN_GAP_MS = 5 * 60_000
 
-/** Tools that read rather than change something, keyed by the leading word of
- * the activity title. Anything else is plain work. */
 const SEARCH_TOOLS = new Set([
 	"glob",
 	"grep",
@@ -108,7 +91,6 @@ function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 	const blocks = toPublishedBlocks(message.content, unfinished)
 
 	if (blocks.length === 0) {
-		// A turn stopped or failed before its first block still has to say so.
 		return unfinished || ending === "complete"
 			? []
 			: [toRow(message, { index: 0, text: "", completion: ending })]
@@ -124,9 +106,6 @@ function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 	})
 }
 
-/** Rows keyed by the message they came from. The reducer replaces only the
- * message a delta touched, so every other row keeps its identity and the
- * memoised transcript rows stay put through a stream. */
 const rowsByMessage = new WeakMap<TranscriptMessage, TranscriptRow[]>()
 
 export function toTranscriptRows(
@@ -151,9 +130,6 @@ export function toTranscriptRows(
 	})
 }
 
-/** Consecutive rows from the same speaker sent close in time, so the screen can
- * tie them into one block and give the whole run a single avatar. A pause longer
- * than RUN_GAP_MS reads as a new thought, so it opens a new block. */
 export function toRuns(rows: TranscriptRow[]): TranscriptRow[][] {
 	const runs: TranscriptRow[][] = []
 	for (const row of rows) {
@@ -180,11 +156,6 @@ function kindForTool(title: string): BotWorkingKind {
 	return "working"
 }
 
-/** What to show while the turn runs. The newest unfinished step wins: it is the
- * one the reader is waiting on. An answer that has landed holds the writing pose
- * until the turn ends: a settled message with the turn still running is the turn
- * winding down, not fresh thinking, and falling back would flick the sidebar to
- * "thinking" for one frame at the end of every turn. */
 export function workingStateFor(state: ChatState): WorkingState | null {
 	if (!isTurnBusy(state.turn)) {
 		return null
@@ -209,9 +180,6 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 	return { kind: isWriting ? "writing" : "thinking" }
 }
 
-/** Whether the sidebar shows the bot as busy, and with what. A pending
- * permission or an unanswered question counts as busy: the turn is waiting on the
- * reader, not over. */
 export type SidebarActivity = {
 	isWorking: boolean
 	kind?: BotWorkingKind

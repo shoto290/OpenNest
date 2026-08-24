@@ -1,30 +1,3 @@
-//! The durable chat a bot holds, and the bot itself: `conversations`,
-//! `conversation_participants` and `bots`.
-//!
-//! The product shows one continuous chat per bot, and a bot is what a user makes,
-//! describes and throws away. So bots are listed, written and deleted here while
-//! chats still are not: the chat is not a thing anyone picks between — it is the
-//! one thread its bot has, created with it and gone with it. That is also why
-//! creating a bot writes the chat and the seat in the same transaction: a bot with
-//! no thread would be a row nothing could ever be said to.
-//!
-//! The table names are the schema's, not the product's. `conversations` is
-//! shipped and stays as it is; `Chat` is what the row means here, and the columns
-//! the product no longer distinguishes are given a fixed value on the way in.
-//!
-//! Ids and moments are minted here rather than taken from a caller: two call
-//! sites reading their own clock would disagree about which row came first, and
-//! an id handed in is an id something outside this module could reuse.
-//!
-//! The one rule the file cannot state for itself lives in
-//! [`ConversationError::UnknownBot`]. Everything else SQLite already refuses on
-//! its own — the eight animals and the eight poses included, which the
-//! vocabularies below and the `CHECK` on those two columns spell the same way on
-//! purpose. `model` is the one field with no vocabulary at all: the column is
-//! shipped as free text and stays that way, because what a model may be called is
-//! the provider's to change. The aliases the product offers are a list the frontend
-//! holds, and a label outside it is a label this side stores and reads back
-//! unchanged rather than one it refuses.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -37,30 +10,13 @@ use crate::agent::contract::AgentCommand;
 use crate::db::bootstrap::unserializable;
 use crate::db::{Access, DatabaseError};
 
-/// The bot the app ships with. Fixed rather than generated: seeding has to
-/// recognise its own work on the next launch, which a UUID minted at install time
-/// would make impossible.
 pub const DEFAULT_BOT_ID: &str = "default";
 const DEFAULT_BOT_NAME: &str = "Claude";
-/// What a bot is seeded on: an alias, never a versioned name. Claude Code resolves
-/// an alias to the latest model of its tier, so a row that holds one keeps answering
-/// under the current model without anything here being rewritten. Which alias a bot
-/// answers under is a user's to change from there.
 const DEFAULT_BOT_MODEL: &str = "sonnet";
-/// The only role a participant takes today. It stays free text in the schema —
-/// which words are allowed is this module's business, and the schema is shipped.
 const PARTICIPANT_ROLE: &str = "assistant";
-/// `conversations.title` is `NOT NULL` and the product has nowhere to show or
-/// change a chat's title, so every chat is written under this one. It is not user
-/// copy and nothing renames it.
 const CHAT_TITLE: &str = "Chat";
-/// `conversations.kind` is `CHECK`-constrained to two words the product no longer
-/// tells apart. One of them has to be written, nothing here reads it back.
 const CHAT_KIND: &str = "main";
 
-/// The eight animals the avatar engine draws, and the only ones a row may hold.
-/// The words are the engine's own, so a face read out of the file names a shape
-/// the UI already has: a ninth animal would be a bot nothing could draw.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AvatarAnimal {
 	Cat,
@@ -102,16 +58,6 @@ impl AvatarAnimal {
 	}
 }
 
-/// The eight colours a bot may be marked with, named with the vocabulary an agent
-/// file's `color` key reads. One word for one tint on both ends: it is what the
-/// column holds, what the bundle is written with and what is read back out of it —
-/// see [`crate::bundles`] — so nothing has to be translated between them and no tint
-/// can be lost in the translating. The ink each one is drawn with is the UI's own
-/// and unchanged by the words: `purple` is the lavender it always was.
-///
-/// A bot wears one or none, and none is the default: it is `Option::None` here and
-/// `NULL` on the disk, never a ninth word — a bot nobody marked and a bot marked
-/// "unmarked" would otherwise be the same row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AvatarBlot {
 	Red,
@@ -129,8 +75,6 @@ impl AvatarBlot {
 		self.named()
 	}
 
-	/// The one word the tint answers to, wherever it is written down — the column,
-	/// and the `color` key of the bot's agent file.
 	pub fn named(self) -> &'static str {
 		match self {
 			AvatarBlot::Red => "red",
@@ -144,9 +88,6 @@ impl AvatarBlot {
 		}
 	}
 
-	/// The tint that word names, and nothing for any other word: a `color` an agent
-	/// file was given by hand and this build has no tint for is a bot marked with
-	/// none, not a read that fails.
 	pub fn parse(text: &str) -> Option<Self> {
 		match text {
 			"red" => Some(AvatarBlot::Red),
@@ -165,23 +106,11 @@ impl AvatarBlot {
 stored_as_text!(AvatarAnimal);
 stored_as_text!(AvatarBlot);
 
-/// What the bot the app ships with is given when the step that added a face runs
-/// over it, and what a caller gets nowhere else: every other bot arrives with a
-/// face of its own. There is no default mark — the shipped bot wears none, which
-/// is the column left out of the seed and `NULL` on the disk.
 const DEFAULT_BOT_ANIMAL: AvatarAnimal = AvatarAnimal::Cat;
 
-/// What this module refuses that SQLite would have accepted. It stays here rather
-/// than joining `DatabaseError`: it is not a database that went wrong, and a
-/// caller reading it off the same enum as a poisoned connection would have no way
-/// to tell a bug from a rule.
 #[derive(Debug)]
 pub enum ConversationError {
 	Database(DatabaseError),
-	/// A write named a bot the file does not hold. SQLite answers a `WHERE` that
-	/// matches nothing with success and no rows, which is the one refusal a caller
-	/// must not be told twice about: an update that changed nothing and a delete
-	/// that removed nothing are the same fact, and it is that the bot is gone.
 	UnknownBot {
 		id: String,
 	},
@@ -199,9 +128,6 @@ impl From<rusqlite::Error> for ConversationError {
 	}
 }
 
-/// A row of `conversations`, under the name the product gives it. `title`, `kind`
-/// and `archived_at` are not projected: they are columns the schema keeps and
-/// this module writes blind or not at all.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Chat {
 	pub id: String,
@@ -209,8 +135,6 @@ pub struct Chat {
 	pub updated_at: i64,
 }
 
-/// `role` is not projected for the same reason: every seat is written under
-/// [`PARTICIPANT_ROLE`], so reading it back says nothing.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Participant {
 	pub conversation_id: String,
@@ -218,18 +142,11 @@ pub struct Participant {
 	pub joined_at: i64,
 }
 
-/// `instructions` and `memory` are what the bot brings to a context rebuilt for
-/// it. Both are empty until something says otherwise, and empty is a part a
-/// context leaves out rather than a value it prints. `instructions` is part of
-/// [`BotIdentity`] — it is written from the same panel as the name — and `memory`
-/// is not: no write here touches it.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Bot {
 	pub id: String,
 	pub name: String,
 	pub title: String,
-	/// An alias, or whatever else a caller wrote: free text, on purpose. See
-	/// [`DEFAULT_BOT_MODEL`].
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_blot: Option<AvatarBlot>,
@@ -237,43 +154,23 @@ pub struct Bot {
 	pub working_dir: Option<String>,
 	pub instructions: String,
 	pub memory: String,
-	/// The built-in tools the bot is denied, by name. Part of [`BotIdentity`] — they
-	/// are set from the same panel as the name — and written into the bot's agent
-	/// file, which is where a denial reaches a run.
 	pub denied_tools: Vec<String>,
 	pub created_at: i64,
 }
 
-/// Who a bot is, as the one thing a caller submits: [`ConversationsRepository::create_bot`]
-/// writes it under an id it mints, [`ConversationsRepository::update_bot`] writes
-/// it over the one it names. Whole rather than field by field — a partial write
-/// would have to tell "leave this alone" from "clear this", which for the two
-/// nullable columns is a distinction no wire shape carries for free.
-///
-/// `model` is in here because a bot is moved between models from its own settings,
-/// and so is `instructions`: the settings panel edits it beside the name, and a
-/// write that replaces the identity replaces the prompt with it. `created_at` and
-/// `memory` are not — the first is when the row was written, the second is what a
-/// run left behind for the next one, and neither is a caller's to set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BotIdentity {
 	pub name: String,
 	pub title: String,
-	/// An alias, or whatever else a caller wrote: free text, on purpose. See
-	/// [`DEFAULT_BOT_MODEL`].
 	pub model: String,
 	pub avatar_animal: AvatarAnimal,
 	pub avatar_blot: Option<AvatarBlot>,
 	pub avatar_image_path: Option<String>,
 	pub working_dir: Option<String>,
 	pub instructions: String,
-	/// See [`Bot::denied_tools`].
 	pub denied_tools: Vec<String>,
 }
 
-/// Who the bot is, taken off the row it is on. What the row holds and nothing else:
-/// the id, the moment and the memory are not part of an identity, so a row written
-/// back through this is the same bot described the same way.
 impl From<Bot> for BotIdentity {
 	fn from(bot: Bot) -> Self {
 		Self {
@@ -295,16 +192,10 @@ pub struct ConversationsRepository {
 }
 
 impl ConversationsRepository {
-	/// Only the `db` module builds a repository: `Access` is what makes one able to
-	/// reach the file, and it is not a capability the rest of the host may hand out.
 	pub(in crate::db) fn new(access: Access) -> Self {
 		Self { access }
 	}
 
-	/// The one way the queries below reach SQLite — see [`crate::db::Database::call`]
-	/// for why the connection is only ever a closure's argument. Kept inside `db`:
-	/// the rules this module holds are in the operations, and a caller writing
-	/// `bots` or `conversations` through the raw seam would meet none of them.
 	pub(in crate::db) async fn call<F, T>(&self, f: F) -> Result<T, DatabaseError>
 	where
 		F: FnOnce(&Connection) -> Result<T, DatabaseError> + Send + 'static,
@@ -321,41 +212,24 @@ impl ConversationsRepository {
 		self.access.call_mut(f).await
 	}
 
-	/// Idempotent by the primary key: a second call neither duplicates the bot nor
-	/// rewrites what the first one wrote, and the row that is actually in the file
-	/// is what comes back — including every change a user has made to it since,
-	/// which is all of it.
 	pub async fn ensure_default_bot(&self) -> Result<Bot, ConversationError> {
 		self.call_mut(|connection| Ok(ensured_default_bot(connection))).await?
 	}
 
-	/// The same row, read and never seeded.
 	pub async fn default_bot(&self) -> Result<Option<Bot>, ConversationError> {
 		self.call(|connection| Ok(stored_default_bot(connection))).await?
 	}
 
-	/// The chat a bot holds, created on the first ask and handed back unchanged on
-	/// every one after: the same id, the same moment, never rewritten. That is what
-	/// makes it the durable place a transcript accumulates in.
-	///
-	/// The lookup goes through the participant link, so the chat belongs to the bot
-	/// rather than to the app.
 	pub async fn ensure_chat(&self, bot_id: String) -> Result<Chat, ConversationError> {
 		self.call_mut(move |connection| Ok(ensured_chat(connection, &bot_id))).await?
 	}
 
-	/// Any bot by its id, read and not seeded: a context is rebuilt for the bot a
-	/// participant names, which is not always the one this build ships. `None` is a
-	/// bot the file does not hold, and the caller says what that means for it.
 	pub async fn bot(&self, id: String) -> Result<Option<Bot>, ConversationError> {
 		Ok(self
 			.call(move |connection| Ok(connection.query_row(SELECT_BOT, [id], bot).optional()?))
 			.await?)
 	}
 
-	/// Every bot on the record, oldest first. The id breaks a tie between two
-	/// written in the same millisecond, so a list rendered twice is in the same
-	/// order both times.
 	pub async fn bots(&self) -> Result<Vec<Bot>, DatabaseError> {
 		self.call(|connection| {
 			let mut statement = connection.prepare_cached(SELECT_BOTS)?;
@@ -365,16 +239,10 @@ impl ConversationsRepository {
 		.await
 	}
 
-	/// A bot and the chat it will be spoken to in, written together: a bot with no
-	/// thread is a row the product has nowhere to show, so the two land as one unit
-	/// or neither does.
 	pub async fn create_bot(&self, identity: BotIdentity) -> Result<Bot, ConversationError> {
 		self.call_mut(move |connection| Ok(created_bot(connection, &identity))).await?
 	}
 
-	/// Who the bot is, replaced whole — see [`BotIdentity`]. What it has said is
-	/// untouched: `memory` and the transcript belong to the bot across every rename
-	/// it lives through.
 	pub async fn update_bot(
 		&self,
 		id: String,
@@ -383,20 +251,10 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(updated_bot(connection, &id, &identity))).await?
 	}
 
-	/// The bot, its chat and everything said in it. Nothing is left pointing at a
-	/// bot that is gone — see [`deleted_bot`] for how the file is made to prove it
-	/// rather than the statement order being trusted to.
 	pub async fn delete_bot(&self, id: String) -> Result<(), ConversationError> {
 		self.call_mut(move |connection| Ok(deleted_bot(connection, &id))).await?
 	}
 
-	/// The one column the picture a bot wears is named in, written on its own.
-	///
-	/// Apart from the rest of the identity because the file it names has a lifetime
-	/// the other fields do not: it is recorded here *before* the bytes are on the
-	/// disk, so that whatever sweeps the directory next already counts the name as
-	/// referenced. A bot the file does not hold is refused, which is what keeps a
-	/// picture from being written for nobody.
 	pub async fn set_avatar_image_path(
 		&self,
 		id: String,
@@ -406,16 +264,6 @@ impl ConversationsRepository {
 			.await?
 	}
 
-	/// What the bot's agent file says it was told, written down over what the row
-	/// held. The disk is the truth for a brief — it is what a process is really
-	/// started on — and this is the row catching up with it, so that a bundle which
-	/// later goes missing is rebuilt from the last thing that was true rather than
-	/// from a value nothing has obeyed for weeks.
-	///
-	/// Apart from the rest of the identity for the reason the picture is: this column
-	/// answers to a file, and no caller of it is describing a bot. One statement, so
-	/// no transaction — a `WHERE` that matched nothing wrote nothing, which is the
-	/// very thing the row count is read for.
 	pub async fn adopt_instructions(
 		&self,
 		id: String,
@@ -431,14 +279,6 @@ impl ConversationsRepository {
 		.await?
 	}
 
-	/// The slash commands a session announced, written down against the bot it was
-	/// answering for. Replaced whole rather than merged: a list is what one child
-	/// named, and a command the next one leaves out is one it will
-	/// refuse. A bot the file does not hold is refused, which keeps a list from being
-	/// written for nobody.
-	///
-	/// One statement, so no transaction: a `WHERE` that matched nothing wrote
-	/// nothing, which is the very thing the row count is read for.
 	pub async fn record_bot_commands(
 		&self,
 		id: String,
@@ -453,12 +293,6 @@ impl ConversationsRepository {
 		.await?
 	}
 
-	/// What the last session to speak for this bot announced. Empty covers the three
-	/// cases a caller answers the same way — a bot no session ever announced anything
-	/// for, a bot the file does not hold, and text this build cannot read — because
-	/// none of them has a command to offer, and a menu built from broken JSON would
-	/// be worse than the empty one. A row written before descriptions were asked for
-	/// holds bare names, and still reads: see [`AgentCommand`].
 	pub async fn bot_commands(&self, id: String) -> Result<Vec<AgentCommand>, DatabaseError> {
 		self.call(move |connection| {
 			let stored: Option<String> = connection
@@ -469,11 +303,6 @@ impl ConversationsRepository {
 		.await
 	}
 
-	/// Every picture a bot still points at — one half of what a sweep keeps, the
-	/// other being the user's own record: see
-	/// [`crate::db::Database::referenced_avatar_paths`]. A path is answered exactly
-	/// as it is stored, because the rule about where a path may point is not this
-	/// module's and narrowing the list here would be narrowing what survives.
 	pub async fn avatar_image_paths(&self) -> Result<Vec<String>, DatabaseError> {
 		self.call(|connection| {
 			let mut statement = connection.prepare_cached(
@@ -485,10 +314,6 @@ impl ConversationsRepository {
 		.await
 	}
 
-	/// Every conversation on the record. Two callers ask the same question of it —
-	/// whether an id a frontend named is one, and which attachment directories are
-	/// still referenced — so the whole list is answered rather than a row probed:
-	/// a bot holds one chat, and the set is the size of the roster.
 	pub async fn conversation_ids(&self) -> Result<Vec<String>, DatabaseError> {
 		self.call(|connection| {
 			let mut statement = connection.prepare_cached("SELECT id FROM conversations")?;
@@ -516,9 +341,6 @@ impl ConversationsRepository {
 	}
 }
 
-/// [`bot`] reads the row by column name, so the two statements only have to name
-/// the same columns — the order they list them in is theirs to choose, and a
-/// column dropped from both is a line deleted rather than a projection renumbered.
 const SELECT_BOT: &str = "SELECT id, name, title, model, avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
 	FROM bots WHERE id = ?1";
@@ -527,9 +349,6 @@ const SELECT_BOTS: &str = "SELECT id, name, title, model, avatar_animal, avatar_
 		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
 	FROM bots ORDER BY created_at ASC, id ASC";
 
-/// A bot holds one chat, and the participant link is what says which. The order
-/// and the limit are for the case nothing here can create: a file that somehow
-/// holds two must still answer the same one every time it is asked.
 const SELECT_CHAT_OF_BOT: &str = "SELECT conversations.id,
 		conversations.created_at, conversations.updated_at
 	FROM conversations
@@ -538,10 +357,6 @@ const SELECT_CHAT_OF_BOT: &str = "SELECT conversations.id,
 	ORDER BY conversations.created_at ASC, conversations.id ASC
 	LIMIT 1";
 
-/// The steady state is a row that already exists, and reading it needs no
-/// transaction at all: the write lock is taken only once the first read comes back
-/// empty. The read inside the transaction is the one that decides — between the
-/// two, another connection may have written the very row this was about to.
 fn ensured_default_bot(connection: &mut Connection) -> Result<Bot, ConversationError> {
 	if let Some(stored) = stored_default_bot(connection)? {
 		return Ok(stored);
@@ -556,8 +371,6 @@ fn stored_default_bot(connection: &Connection) -> Result<Option<Bot>, Conversati
 	Ok(connection.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot).optional()?)
 }
 
-/// Same shape as [`ensured_default_bot`], for the same reason: every launch asks
-/// for the chat, and all but the first find it.
 fn ensured_chat(connection: &mut Connection, bot_id: &str) -> Result<Chat, ConversationError> {
 	if let Some(held) = chat_of(connection, bot_id)? {
 		return Ok(held);
@@ -568,15 +381,6 @@ fn ensured_chat(connection: &mut Connection, bot_id: &str) -> Result<Chat, Conve
 	Ok(held)
 }
 
-/// Which chat the bot has, and — when it has none yet — the bot, the chat and the
-/// seat written together. One decision, so it reads inside the same transaction
-/// that would write: between a read outside and a write inside, another connection
-/// may have written the very row this was about to.
-///
-/// Takes the caller's transaction rather than opening one, which is the whole reason
-/// it is reachable across `db`: a caller with more to land in the same unit — the
-/// legacy import, which writes a whole transcript beside it — meets these rules
-/// instead of composing them again from the outside.
 pub(in crate::db) fn ensure_chat_in(
 	transaction: &Transaction<'_>,
 	bot_id: &str,
@@ -591,20 +395,10 @@ fn chat_of(connection: &Connection, bot_id: &str) -> Result<Option<Chat>, Conver
 	Ok(connection.query_row(SELECT_CHAT_OF_BOT, [bot_id], chat).optional()?)
 }
 
-/// Immediate rather than deferred wherever a read decides what is written next:
-/// the write lock is taken on `BEGIN`, so nothing can land between the two.
 fn write_transaction(connection: &mut Connection) -> Result<Transaction<'_>, DatabaseError> {
 	Ok(connection.transaction_with_behavior(TransactionBehavior::Immediate)?)
 }
 
-/// A chat is never member-less, so the seat is written in the same transaction as
-/// the chat itself: a crash between the two would leave a thread nothing can
-/// speak in.
-///
-/// Only the default bot is seeded on the way in: it is the one bot this build
-/// owns, and its fixed id is the only one that can already be taken by another
-/// build's row. A chat asked for any other bot needs that bot on the record
-/// already, which the participant's foreign key is what enforces.
 fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, ConversationError> {
 	if bot_id == DEFAULT_BOT_ID {
 		seed_default_bot(transaction)?;
@@ -626,9 +420,6 @@ fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, Conv
 	Ok(created)
 }
 
-/// A bot and its chat, as one unit. The id and the moment are minted here and
-/// the chat is written through [`ensure_chat_in`], so a bot created this way is
-/// seated exactly the way the launch seats the one the app ships with.
 fn created_bot(
 	connection: &mut Connection,
 	identity: &BotIdentity,
@@ -659,8 +450,6 @@ fn created_bot(
 	Ok(created)
 }
 
-/// The row as it stands after the write, read back inside the same transaction:
-/// what the caller displays is what the file holds, not what it asked for.
 fn updated_bot(
 	connection: &mut Connection,
 	id: &str,
@@ -691,16 +480,6 @@ fn updated_bot(
 	Ok(stored)
 }
 
-/// The chat goes first and the bot after it, and both are one unit: a bot deleted
-/// without its thread would leave a transcript nobody can open, and a thread
-/// deleted without its bot a bot nothing can be said to.
-///
-/// A message names its author through the seat the bot holds, and that reference
-/// is the schema's one refusal to cascade — it is what keeps a participant from
-/// being dropped out from under the words it spoke. Deferring the checks to the
-/// commit is what lets the two statements below stand for the whole deletion
-/// anyway: SQLite walks every cascade first and verifies the file after, so an
-/// orphan of any kind is the transaction failing rather than a row nobody notices.
 fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), ConversationError> {
 	let transaction = write_transaction(connection)?;
 	transaction.pragma_update(None, "defer_foreign_keys", true)?;
@@ -715,9 +494,6 @@ fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), Conversation
 	Ok(())
 }
 
-/// The picture column alone, and the row as it stands after. Read back inside the
-/// same transaction for the reason every other write here is: what the caller
-/// displays is the file's answer, not the argument it passed.
 fn set_avatar_image_path(
 	connection: &mut Connection,
 	id: &str,
@@ -732,9 +508,6 @@ fn set_avatar_image_path(
 	Ok(stored)
 }
 
-/// What a write that matched no row means, spelled once for the two that can
-/// meet it — see [`ConversationError::UnknownBot`]. Called inside the
-/// transaction, so the refusal takes the rest of the write back with it.
 fn refuse_if_untouched(rows: usize, id: &str) -> Result<(), ConversationError> {
 	match rows {
 		0 => Err(ConversationError::UnknownBot { id: id.to_owned() }),
@@ -742,10 +515,6 @@ fn refuse_if_untouched(rows: usize, id: &str) -> Result<(), ConversationError> {
 	}
 }
 
-/// The only way the default bot is written, and `INSERT OR IGNORE` is the whole
-/// of it: a row already sitting at that id is the seed's own work from an earlier
-/// launch, changed since by the only thing that changes it, which is a user. It is
-/// read back rather than compared — every field of it is now theirs to set.
 fn seed_default_bot(transaction: &Transaction<'_>) -> Result<Bot, ConversationError> {
 	transaction.execute(
 		"INSERT OR IGNORE INTO bots (id, name, model, avatar_animal, created_at)
@@ -780,22 +549,14 @@ fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 	})
 }
 
-/// The denials as the column holds them: one JSON array, replaced whole by the
-/// next write. A caller that submitted a name no JSON can hold is refused rather
-/// than written half-way, which is the same answer a command list gets.
 fn denied(identity: &BotIdentity) -> Result<String, ConversationError> {
 	serde_json::to_string(&identity.denied_tools).map_err(unserializable)
 }
 
-/// What the column says, or nothing at all: text this build cannot read is a bot
-/// denying no tool, the same answer a command list gives, because a denial nobody
-/// can name is one nothing can be written from.
 fn listed(stored: String) -> Vec<String> {
 	serde_json::from_str(&stored).unwrap_or_default()
 }
 
-/// Unix millis, the unit the schema stores. A clock behind the epoch answers zero
-/// rather than an error: it is not a reason to refuse the write it is part of.
 fn now() -> i64 {
 	SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64
 }
@@ -808,9 +569,6 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::{count_of, open, Database};
 
-	/// The plainest identity there is: a name, the model a bot is seeded on and the
-	/// face the shipped one wears. Every test that only cares about one field says
-	/// that field and takes the rest from here.
 	fn an_identity(name: &str) -> BotIdentity {
 		BotIdentity {
 			name: name.to_owned(),
@@ -825,10 +583,6 @@ mod tests {
 		}
 	}
 
-	/// Everything that can hang off a bot, written at once: a turn, a message with
-	/// no author and one the bot signed, a step under that turn, the run it was
-	/// answered in and the recovery point folded out of it. Deleting the bot has to
-	/// take every one of them, and a test that wrote fewer would not prove it.
 	async fn a_transcript_for(database: &Database, conversation_id: &str, bot_id: &str) {
 		let conversation_id = conversation_id.to_owned();
 		let bot_id = bot_id.to_owned();
@@ -861,8 +615,6 @@ mod tests {
 			.expect("the transcript is written")
 	}
 
-	/// Nothing at all is left of a bot that was deleted: not a row that pointed at
-	/// it, not one that pointed at its chat.
 	async fn assert_file_is_empty(database: &Database) {
 		for table in [
 			"bots",
@@ -878,8 +630,6 @@ mod tests {
 		}
 	}
 
-	/// A launch on a fresh file asks before anything has been written, and neither
-	/// answer may be invented: the bot is not seeded by opening either.
 	#[tokio::test]
 	async fn a_database_nobody_has_written_to_has_no_bot_and_no_participants() {
 		let dir = temp_dir();
@@ -893,9 +643,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Every launch seeds, so all but the first find the row already there: as long
-	/// as it says what this build would have written, the second call must neither
-	/// add a bot, rewrite the one it finds, nor refuse it.
 	#[tokio::test]
 	async fn seeding_the_default_bot_again_leaves_the_row_the_first_seed_wrote() {
 		let dir = temp_dir();
@@ -915,9 +662,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The bot the app ships with is renameable, and every launch after the rename
-	/// has to hand it back under the name it was given: the seed recognising its own
-	/// work by the name would undo the first thing the product lets anyone do.
 	#[tokio::test]
 	async fn a_renamed_default_bot_comes_back_under_its_new_name_on_every_launch() {
 		let dir = temp_dir();
@@ -941,9 +685,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The whole point of the chat being durable: every ask after the first is the
-	/// same row, seated by the same participant, and the transcript a later step
-	/// hangs off it has one place to be.
 	#[tokio::test]
 	async fn asking_for_the_chat_again_gives_back_the_one_the_bot_already_has() {
 		let dir = temp_dir();
@@ -963,9 +704,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The launch this module exists for: the chat a bot had before the app closed
-	/// is the one it is handed when the file is opened again, down to the id and the
-	/// moment it was created.
 	#[tokio::test]
 	async fn the_chat_a_bot_has_is_the_same_one_after_the_file_is_reopened() {
 		let dir = temp_dir();
@@ -987,9 +725,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A bot is created with the thread it will be spoken to in, so the frontend can
-	/// open it straight away: the chat and the seat land in the same transaction as
-	/// the bot itself.
 	#[tokio::test]
 	async fn creating_a_bot_writes_the_chat_and_the_seat_it_is_spoken_in() {
 		let dir = temp_dir();
@@ -1013,9 +748,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Every field of an identity, read back off the disk as it was given. The two
-	/// nullable ones are the point: they name something outside the database, and a
-	/// path that turned them into empty strings would be a picture at no path.
 	#[tokio::test]
 	async fn a_bot_is_read_back_exactly_as_it_was_described() {
 		let dir = temp_dir();
@@ -1052,13 +784,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Who the bot is is replaced whole, instructions included; its memory, the moment
-	/// it was written and the pose nothing projects any more are not. The panel edits
-	/// the prompt beside the name, so a write that left the old instructions standing
-	/// would be a bot that ignored what it was just told — and one that cleared the
-	/// memory would be a bot that forgot the user to be renamed. The pose is the third
-	/// kind of survivor: a column this build stopped listing, which an update naming
-	/// it would quietly reset on every row it touched.
 	#[tokio::test]
 	async fn updating_a_bot_replaces_who_it_is_but_not_its_memory_or_the_pose_it_dropped() {
 		let dir = temp_dir();
@@ -1127,11 +852,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// What a session announced outlives the process that announced it, and the next
-	/// announcement replaces it whole: a command the newest child left out is one it
-	/// would refuse, so the list is the last one named rather than everything ever
-	/// named. A bot no session has spoken for offers none — which is also what a bot
-	/// the file does not hold answers, since neither has anything to offer.
 	#[tokio::test]
 	async fn a_bot_holds_the_commands_its_last_session_announced() {
 		let dir = temp_dir();
@@ -1192,10 +912,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The shape the column was written in before descriptions were asked for: a bare
-	/// list of names. Those rows outlive the build that wrote them, and a reader that
-	/// refused them would empty the menu of every bot an installed build ever spoke
-	/// for. They read as the commands they are, with nothing said about them.
 	#[tokio::test]
 	async fn commands_the_column_holds_as_bare_names_are_offered_as_commands() {
 		let dir = temp_dir();
@@ -1223,10 +939,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Text no list can be read out of is no command rather than an error: the column
-	/// answers a menu, and a build that meets what another one wrote — or a row edited
-	/// by hand — offers the nothing a bot that never ran offers instead of refusing the
-	/// read the whole screen waits on.
 	#[tokio::test]
 	async fn commands_the_column_holds_unreadably_are_offered_as_none() {
 		let dir = temp_dir();
@@ -1254,9 +966,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A `WHERE` matching nothing is a success SQLite reports with a row count, and
-	/// both writes have to read it: a caller told its update landed would go on
-	/// showing a bot that is not there.
 	#[tokio::test]
 	async fn a_write_naming_a_bot_the_file_does_not_hold_is_refused() {
 		let dir = temp_dir();
@@ -1278,10 +987,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Deleting a bot takes the thread it was spoken to in and everything under it,
-	/// and touches nothing that belongs to another bot. The message signed by the
-	/// bot is what makes this more than a cascade: its author is the seat, which the
-	/// schema refuses to drop out from under it.
 	#[tokio::test]
 	async fn deleting_a_bot_takes_its_chat_and_everything_said_in_it() {
 		let dir = temp_dir();
@@ -1313,9 +1018,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The last bot is deletable like any other, and what is left is what a fresh
-	/// install comes up as: no bots, no chats, and a read that answers `None`
-	/// instead of failing.
 	#[tokio::test]
 	async fn deleting_the_last_bot_leaves_the_file_a_fresh_install_would_open() {
 		let dir = temp_dir();
@@ -1335,9 +1037,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// Two creations racing on the one connection the host shares: both land, each
-	/// under an id and a chat of its own. The ids are minted inside the write, so
-	/// nothing outside can hand the same one in twice.
 	#[tokio::test]
 	async fn two_bots_created_at_once_each_get_their_own_id_and_their_own_chat() {
 		let dir = temp_dir();
@@ -1360,11 +1059,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The boot path, over a model the user changed. Every launch reads the default
-	/// bot before anything else can, so a build that recognised its own row by the
-	/// model would meet `opus` on the second launch and refuse to hand the app its
-	/// own bot. Reopening is the whole point: the row is read off the disk by a
-	/// connection that never saw it written.
 	#[tokio::test]
 	async fn a_default_bot_moved_to_another_model_still_reads_back_after_a_reopen() {
 		let dir = temp_dir();

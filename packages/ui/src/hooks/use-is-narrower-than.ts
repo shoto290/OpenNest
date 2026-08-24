@@ -6,15 +6,6 @@ const NO_OP = () => {}
 
 const getServerSnapshot = () => false
 
-/**
- * Whether an element is narrower than `width` px, kept current as it resizes.
- * The element-level counterpart of a media query: a surface a caller sized narrow
- * inside a wide window answers true, which is what a window query would miss.
- *
- * The answer is measured in the observer and read from a ref, so a component that
- * re-renders on every keystroke never forces a layout, and it re-renders only when
- * the threshold is actually crossed.
- */
 export const useIsNarrowerThan = (
 	element: HTMLElement | null,
 	width: number,

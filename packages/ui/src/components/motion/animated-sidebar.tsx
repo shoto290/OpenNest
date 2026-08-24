@@ -54,9 +54,6 @@ const PANEL_TRANSITION = {
 	ease: EASE_DRAWER,
 } as const
 
-// The desktop rail settles at a hard zero-width boundary. Keep the spring
-// critically damped so it cannot overshoot, pause against that boundary, and
-// then snap back during the final frame.
 const SIDEBAR_MORPH_TRANSITION = {
 	type: "spring",
 	stiffness: 380,
@@ -130,7 +127,6 @@ interface AnimatedSidebarPanelContextValue {
 const AnimatedSidebarPanelContext =
 	createContext<AnimatedSidebarPanelContextValue | null>(null)
 
-/** Reads the sidebar state — open, collapsed, mobile — from the nearest provider. */
 export function useAnimatedSidebar() {
 	const context = useContext(AnimatedSidebarContext)
 	if (!context) {
@@ -159,24 +155,15 @@ type SidebarProviderStyle = CSSProperties & {
 
 export interface AnimatedSidebarProviderProps
 	extends HTMLAttributes<HTMLDivElement> {
-	/** Controlled desktop open state. */
 	open?: boolean
-	/** Uncontrolled initial desktop open state. */
 	defaultOpen?: boolean
 	onOpenChange?: (open: boolean) => void
-	/** Controlled mobile drawer state. */
 	openMobile?: boolean
-	/** Uncontrolled initial mobile drawer state. */
 	defaultOpenMobile?: boolean
 	onOpenMobileChange?: (open: boolean) => void
-	/** Override `--sidebar-width`, `--sidebar-width-icon` or `--sidebar-width-mobile`. */
 	style?: SidebarProviderStyle
 }
 
-/**
- * Owns the open state shared by the sidebar, its trigger and its inset, and
- * lays the shell row out. Binds Cmd/Ctrl+B to the toggle.
- */
 export function AnimatedSidebarProvider({
 	children,
 	open,
@@ -388,9 +375,6 @@ function MobileSidebar({
 	}
 
 	return createPortal(
-		// A `visibility` transition holds `visible` for its whole duration, so the
-		// layer only leaves the accessibility tree once the drawer has finished
-		// animating out. Opening zeroes it to show it at once.
 		<div
 			data-slot="sidebar-mobile-layer"
 			style={{
@@ -456,8 +440,6 @@ function MobileSidebar({
 	)
 }
 
-// The panel owns its own animation, so consumers get plain aside attributes
-// rather than motion props they would only fight with.
 type SidebarAsideAttributes = Omit<
 	HTMLAttributes<HTMLElement>,
 	"children" | "onAnimationStart" | "onDrag" | "onDragStart" | "onDragEnd"
@@ -465,22 +447,13 @@ type SidebarAsideAttributes = Omit<
 
 export interface AnimatedSidebarProps extends SidebarAsideAttributes {
 	children?: ReactNode
-	/** Edge the panel is docked to. */
 	side?: AnimatedSidebarSide
-	/** `sidebar` sits flush against the inset, `floating` and `inset` detach it. */
 	variant?: AnimatedSidebarVariant
-	/** `icon` keeps a rail of icons, `offcanvas` slides the panel away, `none` pins it open. */
 	collapsible?: AnimatedSidebarCollapsible
-	/** Accessible name of the panel landmark and of the mobile dialog. */
 	ariaLabel?: string
-	/** Class applied to the scrolling panel inside the animated width track. */
 	panelClassName?: string
 }
 
-/**
- * The panel itself: animates its width between the full and icon rails on
- * desktop, and becomes a focus-trapped drawer below the `md` breakpoint.
- */
 export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 	function AnimatedSidebar(
 		{
@@ -581,7 +554,6 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 export type AnimatedSidebarTriggerProps =
 	ButtonHTMLAttributes<HTMLButtonElement>
 
-/** Toggles the sidebar and reports the current state through `aria-expanded`. */
 export const AnimatedSidebarTrigger = forwardRef<
 	HTMLButtonElement,
 	AnimatedSidebarTriggerProps
@@ -619,7 +591,6 @@ export const AnimatedSidebarTrigger = forwardRef<
 
 export type AnimatedSidebarCloseProps = ButtonHTMLAttributes<HTMLButtonElement>
 
-/** Closes the sidebar without reopening it — the drawer's dismiss affordance. */
 export const AnimatedSidebarClose = forwardRef<
 	HTMLButtonElement,
 	AnimatedSidebarCloseProps
@@ -654,10 +625,6 @@ export const AnimatedSidebarClose = forwardRef<
 
 export type AnimatedSidebarRailProps = ButtonHTMLAttributes<HTMLButtonElement>
 
-/**
- * The hairline seam along the panel edge, dragged or clicked to toggle. Kept
- * out of the tab order on purpose — the trigger is the keyboard path.
- */
 export const AnimatedSidebarRail = forwardRef<
 	HTMLButtonElement,
 	AnimatedSidebarRailProps
@@ -695,7 +662,6 @@ export const AnimatedSidebarRail = forwardRef<
 
 export type AnimatedSidebarInsetProps = HTMLMotionProps<"main">
 
-/** The page area beside the sidebar. Reacts to `variant="inset"` through the peer selector. */
 export const AnimatedSidebarInset = forwardRef<
 	HTMLElement,
 	AnimatedSidebarInsetProps
@@ -714,7 +680,6 @@ export const AnimatedSidebarInset = forwardRef<
 	)
 })
 
-/** Pinned top region of the panel — brand, trigger, search. */
 export const AnimatedSidebarHeader = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
@@ -729,7 +694,6 @@ export const AnimatedSidebarHeader = forwardRef<
 	)
 })
 
-/** The single scrolling region between header and footer. */
 export const AnimatedSidebarContent = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
@@ -747,7 +711,6 @@ export const AnimatedSidebarContent = forwardRef<
 	)
 })
 
-/** Pinned bottom region of the panel — account, settings, status. */
 export const AnimatedSidebarFooter = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
@@ -765,7 +728,6 @@ export const AnimatedSidebarFooter = forwardRef<
 	)
 })
 
-/** One labelled section of the content region. */
 export const AnimatedSidebarGroup = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
@@ -780,7 +742,6 @@ export const AnimatedSidebarGroup = forwardRef<
 	)
 })
 
-/** Section heading. Fades out, gives up its box and leaves the accessibility tree once collapsed. */
 export const AnimatedSidebarGroupLabel = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
@@ -807,7 +768,6 @@ export const AnimatedSidebarGroupLabel = forwardRef<
 	)
 })
 
-/** Body of a group, below its label. */
 export const AnimatedSidebarGroupContent = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
@@ -822,11 +782,6 @@ export const AnimatedSidebarGroupContent = forwardRef<
 	)
 })
 
-/**
- * The list. `layoutRoot` keeps it the projection parent of the layout
- * animations its rows own — the active pill and the row reflow — so a scrolled
- * ancestor can't smear its offset into their movement.
- */
 export const AnimatedSidebarMenu = forwardRef<
 	HTMLUListElement,
 	HTMLAttributes<HTMLUListElement>
@@ -850,7 +805,6 @@ export const AnimatedSidebarMenu = forwardRef<
 	)
 })
 
-/** One row of the menu, holding a button and optionally its submenu. */
 export const AnimatedSidebarMenuItem = forwardRef<
 	HTMLLIElement,
 	HTMLMotionProps<"li">
@@ -871,12 +825,10 @@ export const AnimatedSidebarMenuItem = forwardRef<
 
 export interface AnimatedSidebarMenuSubProps
 	extends Omit<HTMLMotionProps<"ul">, "children"> {
-	/** Disclosure state driven by the parent menu button. */
 	open: boolean
 	children?: ReactNode
 }
 
-/** Nested list revealed under a menu button. Stays closed while the panel is collapsed. */
 export const AnimatedSidebarMenuSub = forwardRef<
 	HTMLUListElement,
 	AnimatedSidebarMenuSubProps
@@ -911,7 +863,6 @@ export const AnimatedSidebarMenuSub = forwardRef<
 	)
 })
 
-/** One row of a submenu. */
 export const AnimatedSidebarMenuSubItem = forwardRef<
 	HTMLLIElement,
 	HTMLMotionProps<"li">
@@ -929,14 +880,10 @@ export const AnimatedSidebarMenuSubItem = forwardRef<
 
 export interface AnimatedSidebarMenuSubButtonProps {
 	children: ReactNode
-	/** Leading glyph. Falls back to a dot so rows stay aligned. */
 	icon?: ReactNode
-	/** Renders an anchor instead of a button. */
 	href?: string
-	/** Marks the row as the current page. */
 	isActive?: boolean
 	disabled?: boolean
-	/** Dismiss the mobile drawer on select. Default `true`. */
 	closeOnSelect?: boolean
 	target?: "_blank" | "_self" | "_parent" | "_top"
 	rel?: string
@@ -944,7 +891,6 @@ export interface AnimatedSidebarMenuSubButtonProps {
 	className?: string
 }
 
-/** Interactive row of a submenu, rendered as a link when `href` is given. */
 export function AnimatedSidebarMenuSubButton({
 	children,
 	icon,
@@ -1019,10 +965,6 @@ export function AnimatedSidebarMenuSubButton({
 	)
 }
 
-/** What a row can be handed to act as something else's trigger: a context menu
- * clones its child and gives it press and key listeners, a ref, and the
- * `aria-haspopup` state of the popup it opens. They land on the row element
- * itself, after the props the row sets for itself. */
 type MenuButtonElementProps = AriaAttributes &
 	Pick<
 		HTMLAttributes<HTMLElement>,
@@ -1037,20 +979,13 @@ type MenuButtonElementProps = AriaAttributes &
 export interface AnimatedSidebarMenuButtonProps extends MenuButtonElementProps {
 	ref?: Ref<HTMLElement>
 	children: ReactNode
-	/** Leading visual. The only thing left visible once the panel collapses. */
 	icon?: ReactNode
-	/** Hides `icon` from the accessibility tree. Turn off for a visual that carries its own name. */
 	isIconDecorative?: boolean
-	/** Accessible name once the panel collapses. Defaults to string children. */
 	label?: string
-	/** Renders an anchor instead of a button. */
 	href?: string
-	/** Marks the row as the current page and gives it the shared active pill. */
 	isActive?: boolean
-	/** Turns the row into a disclosure: rotates the chevron and sets `aria-expanded`. */
 	ariaExpanded?: boolean
 	disabled?: boolean
-	/** Dismiss the mobile drawer on select. Defaults to `true` unless the row is a disclosure. */
 	closeOnSelect?: boolean
 	target?: "_blank" | "_self" | "_parent" | "_top"
 	rel?: string
@@ -1058,12 +993,6 @@ export interface AnimatedSidebarMenuButtonProps extends MenuButtonElementProps {
 	className?: string
 }
 
-/**
- * A top-level row. The active row carries its own background, so selecting
- * another one swaps the highlight outright rather than gliding it across.
- * String children double as the accessible name once the panel collapses to
- * icons.
- */
 export function AnimatedSidebarMenuButton({
 	children,
 	icon,
@@ -1136,7 +1065,6 @@ export function AnimatedSidebarMenuButton({
 
 	const interactiveClassName = cn(
 		"relative flex min-h-9 w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-xl text-left font-medium text-sm outline-none",
-		// `(row - glyph) / 2` on the leading edge, as `buttonVariants` explains.
 		"px-3",
 		icon && "pl-2",
 		"text-sidebar-foreground/70",

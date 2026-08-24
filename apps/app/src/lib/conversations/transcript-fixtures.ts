@@ -39,6 +39,5 @@ export const botIdentity = (
 	...overrides,
 })
 
-/** Slash commands with nothing said about them. */
 export const named = (...names: string[]): AgentCommand[] =>
 	names.map((name) => ({ name }))

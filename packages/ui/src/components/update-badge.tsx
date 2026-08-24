@@ -23,27 +23,17 @@ type UpdateBadgeStatus =
 
 interface UpdateBadgeProps {
 	status: UpdateBadgeStatus
-	/** Version the download carries, rendered in the panel once it is ready. */
 	version?: string
-	/** One line per change, rendered as the panel's release notes. */
 	releaseNotes?: string[]
-	/** Web address of the full release notes. Given one, the panel offers a way
-	 * out to it; without one, the summarised lines are all the reader gets. */
 	releaseNotesUrl?: string
-	/** Share of the download already on disk, 0 to 100. */
 	progress?: number
-	/** Bots still running. Above zero the restart is refused and counted. */
 	activeBotCount?: number
 	onDownload?: () => void
 	onRestart?: () => void
-	/** Fired once when the reader postpones. Postponing is final: the panel
-	 * never opens itself again. */
 	onPostpone?: () => void
 	className?: string
 }
 
-/** A fixed footprint, so the sidebar column does not shift when the ring
- * appears around the button or the glyph changes. */
 const BADGE_SIZE = "size-9"
 
 const BADGE_FRAME = "inline-flex items-center justify-center"
@@ -57,8 +47,6 @@ interface UpdateActionProps {
 	className?: string
 }
 
-/** Everything before the update is on disk: one circular button that starts, or
- * restarts, the download — and the ring while it runs. */
 const UpdateAction = ({
 	status,
 	progress,
@@ -106,10 +94,6 @@ interface ReleaseNotesLinkProps {
 	href: string
 }
 
-/** The way out of the panel, held at the trailing edge so it never competes
- * with the restart: the summary above is three lines, the changelog is a page.
- * Its name says in the same breath that following it leaves the window — the
- * glyph alone carries that only for those who can see it. */
 const ReleaseNotesLink = ({ href }: ReleaseNotesLinkProps) => {
 	const { t } = useTranslation("common")
 	const label = t("update.panel.releaseNotes")
@@ -143,9 +127,6 @@ interface UpdateReadyProps {
 	className?: string
 }
 
-/** The download landed: the glyph turns into a restart and the panel opens on
- * its own — once. Postponing closes it for good; only a deliberate click on the
- * badge brings it back. */
 const UpdateReady = ({
 	version,
 	releaseNotes,
@@ -224,9 +205,6 @@ const UpdateReady = ({
 	)
 }
 
-/** The sidebar's update pastille. Props say everything: it never reaches the
- * network and never talks to the host — the caller polls the updater and hands
- * down a status. Nothing is rendered until there is something to install. */
 const UpdateBadge = ({
 	status,
 	version,

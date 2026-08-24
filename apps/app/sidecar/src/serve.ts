@@ -29,8 +29,6 @@ const write = (payload: unknown) => {
 	process.stdout.write(`${JSON.stringify(payload)}\n`)
 }
 
-/** Every session's stream leaves through the same pipe, so every frame names the
- * session it came from. Nothing else tells two runs apart on one process. */
 const emitter = (session: string) => (frame: SessionFrame) =>
 	write({ session, frame })
 
@@ -81,12 +79,6 @@ export const serve = async (requestedId?: string) => {
 		opening.delete(session)
 	}
 
-	/** The asks that belong to the install rather than to a conversation: none of them
-	 * names a session, and each is answered under the type it was asked. Each is asked
-	 * once per launch and cached by the host.
-	 *
-	 * A catalogue nobody could produce is empty rather than refused: what to offer
-	 * instead is the host's to decide, and a provider naming no model is not broken. */
 	const answerHost = async ({ type }: Command) => {
 		switch (type) {
 			case "check":

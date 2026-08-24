@@ -22,28 +22,16 @@ const formatSize = (bytes: number) => {
 export type PromptAttachment = {
 	id: string
 	name: string
-	/** Size in bytes, formatted for reading — the host never formats it itself. */
 	size: number
-	/** Anything an `img` can load. Given for a file the host could preview, left
-	 * out for one it could not. */
 	previewUrl?: string
 }
 
 export interface PromptAttachmentsProps {
-	/** The files staged for the next prompt, in the order given. */
 	items: PromptAttachment[]
-	/** Receives the id of the chip whose remove control was pressed. The host drops
-	 * it from the list: the row holds no state of its own. */
 	onRemove: (id: string) => void
 	className?: string
 }
 
-/**
- * The files staged for the next prompt, one chip each, sitting inside the composer
- * above the text. It draws what it is given and takes one back — reading a file or
- * sending it is the host's business. An empty list renders nothing at all, so the
- * composer keeps its resting shape.
- */
 export function PromptAttachments({
 	items,
 	onRemove,

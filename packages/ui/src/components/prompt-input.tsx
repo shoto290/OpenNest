@@ -1,5 +1,4 @@
 "use client"
-// Adapted from beui.dev/components/agents/prompt-input — write and send.
 
 import {
 	type ClipboardEvent,
@@ -22,13 +21,8 @@ import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
-/** Matches `leading-6` on the textarea and its measurement mirrors. */
 const LINE_HEIGHT = 24
-/** Matches `py-1` on the textarea, which makes one row exactly as tall as the send
- * button beside it — any taller and the row centres the button, pushing it off the
- * even inset the composer's padding gives it. */
 const PADDING_Y = 8
-/** Typography the mirrors share with the textarea, so both measure what it renders. */
 const MIRROR =
 	"pointer-events-none invisible absolute top-0 left-0 px-2 text-sm leading-6"
 
@@ -39,9 +33,6 @@ const rowsIn = (element: HTMLElement) =>
 
 const filesIn = (transfer: DataTransfer) => Array.from(transfer.files)
 
-/** The files of a payload made of files and nothing else. One that also carries
- * text is the browser's business: it is a paste into the prompt, not an
- * attachment. */
 const pastedFiles = (transfer: DataTransfer) =>
 	transfer.types.every((type) => type === FILES) ? filesIn(transfer) : []
 
@@ -53,30 +44,14 @@ export interface PromptInputProps
 	value?: string
 	defaultValue?: string
 	onValueChange?: (value: string) => void
-	/** Receives the trimmed prompt, empty when the turn is carried by its
-	 * attachments alone. Fired by Enter or by the send button. A prompt written
-	 * while a turn is running is sent like any other: the transcript is where a
-	 * prompt that cannot land yet waits, not the composer. */
 	onSubmit?: (value: string) => void
-	/** Controls held on the leading edge of the composer: before the prompt while it
-	 * fits on one line, opening the control row once it wraps. */
 	leading?: ReactNode
-	/** Controls held right before the send button, on the trailing edge. */
 	trailing?: ReactNode
-	/** The files staged for this prompt, rendered above the textarea and inside the
-	 * composer. A slot holding nothing takes no room and leaves the pill untouched;
-	 * one holding a chip expands the composer. */
 	attachments?: ReactNode
-	/** Receives the files dropped on the composer or pasted into the textarea. Left
-	 * out, the composer lets the browser handle both. */
 	onAttach?: (files: File[]) => void
-	/** Marks the composer as the target of a drag it never saw, for a host tracking
-	 * one over a wider surface. Its own drag events keep marking it on their own, and
-	 * a composer that cannot take a file stays unmarked whatever the host asks. */
 	dropTarget?: boolean
 	minRows?: number
 	maxRows?: number
-	/** Exposes the textarea so a host can restore focus after its own interactions. */
 	textareaRef?: Ref<HTMLTextAreaElement>
 }
 
@@ -133,8 +108,6 @@ export function PromptInput({
 		if (!textarea || !measurement || !singleLine || !prompt || !controls) return
 		if (textarea.value !== currentValue) return
 
-		// A slot given a node that renders nothing still leaves the row empty, so the
-		// answer comes from the DOM the last commit produced.
 		const isCarryingFiles =
 			Boolean(attachments) &&
 			(attachmentsRef.current?.childElementCount ?? 0) > 0
@@ -185,9 +158,6 @@ export function PromptInput({
 		setIsDragOver(true)
 	}
 
-	/** A drag entering a child leaves the form on its way in: only a target outside
-	 * the composer ends what its own events started — a host still asking for the
-	 * mark keeps it. */
 	const handleDragLeave = (event: DragEvent<HTMLFormElement>) => {
 		if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
 		setIsDragOver(false)
@@ -242,8 +212,6 @@ export function PromptInput({
 				className,
 			)}
 		>
-			{/* Always mounted so the slot can be measured: a chip in it turns the pill
-			into the expanded composer, and an empty row takes no room at all. */}
 			<div
 				ref={attachmentsRef}
 				inert={disabled}
@@ -288,8 +256,6 @@ export function PromptInput({
 				/>
 			</div>
 
-			{/* Ordered before the prompt while they share a row, so the slot reads on the
-			leading edge of the pill instead of beside the send button. */}
 			<div
 				inert={disabled}
 				className={cn(

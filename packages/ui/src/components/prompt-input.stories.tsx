@@ -38,7 +38,6 @@ const stagedFiles = (
 const formOf = (element: HTMLElement) =>
 	element.closest("form") as HTMLFormElement
 
-/** A real `DataTransfer`, the only kind Chromium lets a drag or a paste carry. */
 const filesTransfer = (files: File[]) => {
 	const transfer = new DataTransfer()
 	for (const file of files) transfer.items.add(file)
@@ -51,8 +50,6 @@ const textTransfer = (text: string) => {
 	return transfer
 }
 
-/** Every event is cancelable, so the answer is whether the composer suppressed the
- * browser's own handling — the whole point of a drop the page keeps for itself. */
 const drag = (
 	kind: "dragover" | "dragleave" | "dragend" | "drop",
 	target: HTMLElement,

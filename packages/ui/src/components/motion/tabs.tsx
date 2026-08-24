@@ -1,5 +1,4 @@
 "use client"
-// beui.dev/components/motion/tabs
 
 import {
 	MotionConfig,
@@ -37,8 +36,6 @@ function useTabs() {
 	return ctx
 }
 
-// Weighty spring for the active-tab indicator: a touch of overshoot so it
-// settles with life instead of snapping.
 const transition: Transition = {
 	type: "spring",
 	stiffness: 170,
@@ -80,10 +77,6 @@ export function Tabs({
 	return (
 		<MotionConfig transition={reduce ? { duration: 0 } : transition}>
 			<TabsCtx.Provider value={contextValue}>
-				{/* layoutRoot: the indicator's layoutId measures in page coordinates, so
-            inside fixed/scrolled containers it would replay scroll offsets as
-            movement. The pill only ever travels within the list, so scoping
-            projection to the Tabs wrapper is always correct. */}
 				<motion.div layoutRoot className={className}>
 					{children}
 				</motion.div>
@@ -206,9 +199,6 @@ export function TabsContent({
 	const { value: current } = useTabs()
 	const reduce = useReducedMotion()
 	const active = current === value
-	// Inactive panels stay mounted but hidden, so their content (e.g. source
-	// code) is present in the server-rendered HTML for crawlers and assistive
-	// tech, instead of being dropped from the DOM.
 	if (!active) {
 		return (
 			<div hidden className={className}>

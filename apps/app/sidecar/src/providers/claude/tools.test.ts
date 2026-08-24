@@ -12,8 +12,6 @@ describe("builtInTools", () => {
 		])
 	})
 
-	// A server is a bot's own, or the reader's: what it provides is not a built-in
-	// the catalogue may offer to hold back.
 	it("leaves out every tool an MCP server provides", () => {
 		expect(
 			builtInTools([

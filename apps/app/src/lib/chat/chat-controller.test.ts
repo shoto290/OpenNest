@@ -41,8 +41,6 @@ import {
 
 const STEP_MS = 10
 const REPLY = "one two three four five six"
-/** The bot every launch below opens on: the one the fake store already holds, and
- * the only one a test names when it does not care which bot is speaking. */
 const BOT = "default"
 
 const STREAMING_MESSAGE: ChatMessage = {
@@ -53,9 +51,6 @@ const STREAMING_MESSAGE: ChatMessage = {
 	timestamp: 0,
 }
 
-/** A whole turn, from a process that is still talking. Everything a late frame
- * could move is in it: the turn state, a reply of its own, words for it, the
- * provider's id and an ending. */
 const STALE_TURN: AgentEvent[] = [
 	{ type: "turnChanged", state: "running" },
 	{ type: "sessionReady", sessionId: "dead", resumed: false },
@@ -76,16 +71,10 @@ const STALE_TURN: AgentEvent[] = [
 	{ type: "turnEnded", ended: { sessionId: "dead", outcome: "failed" } },
 ]
 
-/** How many tool-only assistant messages one live prompt was measured to produce
- * before the message that answered it. */
 const ROUNDS = 14
 
-/** The name the child gives itself, announced once and repeated by the ending of
- * every turn it answers. */
 const ANNOUNCED = "s-1"
 
-/** What the host reports for a tool call: an assistant message of its own,
- * announced and never spoken in, and the tool it ran. */
 const toolRounds = (rounds: number): AgentEvent[] =>
 	Array.from({ length: rounds }, (_, index) => index + 1).flatMap(
 		(round): AgentEvent[] => [
@@ -114,8 +103,6 @@ const toolRounds = (rounds: number): AgentEvent[] =>
 		],
 	)
 
-/** The message that does say something, streamed word by word the way the
- * transport numbers its deltas. */
 const spokenAnswer = (text: string): AgentEvent[] => [
 	{
 		type: "messageStarted",
@@ -140,8 +127,6 @@ const spokenAnswer = (text: string): AgentEvent[] => [
 	},
 ]
 
-/** The host reporting that a bot rewrote itself: a commit in its bundle, which
- * the process that wrote it was not spawned on. */
 const EVOLUTION: AgentEvent = {
 	type: "botEvolved",
 	commitId: "c-1",
@@ -153,10 +138,6 @@ const ended = (outcome: "completed" | "cancelled" | "failed"): AgentEvent => ({
 	ended: { sessionId: ANNOUNCED, outcome },
 })
 
-/** The store, and every provider session it was asked to write down as the pair a
- * lineage is made of: the run named, and the id named for it. The write itself is
- * the real one — what the store does with a replay or a disagreement is the store's
- * to answer, here as anywhere. */
 const recordingStore = (base: TranscriptStore) => {
 	const recorded: [string, string][] = []
 	const store: TranscriptStore = {
@@ -179,8 +160,6 @@ const recordingStore = (base: TranscriptStore) => {
 	return { store, recorded }
 }
 
-/** A promise a test releases by hand. The window a race lives in is only ever a
- * few microtasks wide, so it is held open here instead of waited for. */
 const deferred = () => {
 	let release: () => void = () => undefined
 	const promise = new Promise<void>((resolve) => {
@@ -206,8 +185,6 @@ type HarnessOptions = {
 
 let launches = 0
 
-/** One controller over one store, with ids of its own so a second launch on the
- * same store can never mint an id the first one already wrote. */
 const createHarness = (options: HarnessOptions = {}): Harness => {
 	launches += 1
 	const launch = launches
@@ -242,7 +219,6 @@ const bootedHarness = async (
 	return harness
 }
 
-/** What a cold start paints: a controller that has only ever read the store. */
 const reload = async (store: TranscriptStore): Promise<TranscriptMessage[]> => {
 	const harness = await bootedHarness({ store })
 	const { messages } = harness.controller.getState()
@@ -250,9 +226,6 @@ const reload = async (store: TranscriptStore): Promise<TranscriptMessage[]> => {
 	return messages
 }
 
-/** The run the launch is holding, for a test that has to name it the way the host
- * does. Refuses rather than narrows: a controller with no run is a test that never
- * got as far as what it is about. */
 const runOf = (controller: ChatController): RuntimeScope => {
 	const runtime = controller.getState().runtime
 	if (!runtime) {
@@ -261,8 +234,6 @@ const runOf = (controller: ChatController): RuntimeScope => {
 	return runtime
 }
 
-/** The line a roster row would preview for a bot, read where the sidebar reads it:
- * off the bot's own state, whether the reader is on it or not. */
 const previewFor = (controller: ChatController, botId: string) =>
 	lastWordIn(controller.stateFor(botId).messages)
 
@@ -292,7 +263,6 @@ describe("createChatController", () => {
 	it("runs a happy-path turn and stores everything the reader can see", async () => {
 		const { controller, store, detach } = await bootedHarness()
 
-		// Submitted, and the turn still on its way: the driver answers on a timer.
 		await controller.send("hello")
 		expect(controller.getState().turn).toBe("submitting")
 
@@ -310,8 +280,6 @@ describe("createChatController", () => {
 		detach()
 	})
 
-	// The prompt is on the record before Claude is asked anything: an answer to a
-	// question no reload could show is worse than a prompt that never left.
 	it("writes the prompt down before it submits it", async () => {
 		const order: string[] = []
 		const store = createFakeTranscriptStore()
@@ -365,9 +333,6 @@ describe("createChatController", () => {
 		},
 	)
 
-	/** The reader may be shown less than the store holds — a write still in flight
-	 * is not a lie — but never more: no id, no word and no ending on screen that a
-	 * relaunch would fail to bring back. */
 	const neverAheadOfStorage = (
 		visible: TranscriptMessage[],
 		stored: TranscriptMessage[],
@@ -399,8 +364,6 @@ describe("createChatController", () => {
 		}
 	}
 
-	// A reply the store never took has nothing on screen to lose: the row is not
-	// shown, and the deltas and the ending that follow it find nothing to move.
 	it("shows no reply at all when the store refuses to open it", async () => {
 		const store = refusingStore("openAssistantMessage")
 		const { controller } = await bootedHarness({ store })
@@ -417,8 +380,6 @@ describe("createChatController", () => {
 		neverAheadOfStorage(state.messages, await reload(store))
 	})
 
-	// The words are the write. One the store refused is one the reader must not be
-	// reading, however far the stream got.
 	it("shows no word of a reply the store refused to write", async () => {
 		const store = refusingStore("appendText")
 		const { controller } = await bootedHarness({ store })
@@ -435,8 +396,6 @@ describe("createChatController", () => {
 		neverAheadOfStorage(state.messages, await reload(store))
 	})
 
-	// An ending the store refused leaves the message open on disk. The screen says
-	// the same: still unfinished, which is what the next launch reads back.
 	it("never settles a reply the store refused to close", async () => {
 		const store = refusingStore("finalizeMessage")
 		const { controller } = await bootedHarness({ store })
@@ -514,8 +473,6 @@ describe("createChatController", () => {
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 	})
 
-	// The process went away under the stream. Nothing observed it fail and nobody
-	// stopped it, so it is neither failed nor cancelled.
 	it("stores a reply the session died under as interrupted", async () => {
 		const { driver, controller, store } = await bootedHarness()
 		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
@@ -541,8 +498,6 @@ describe("createChatController", () => {
 		)
 	})
 
-	// Nothing on disk can resume a stream, so a launch that finds one reads it as
-	// the interruption it is, rather than as a message still being written.
 	it("reads a reply left mid-stream by a dead host back as interrupted", async () => {
 		const store = createFakeTranscriptStore({
 			messages: [
@@ -609,11 +564,6 @@ describe("createChatController", () => {
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 	})
 
-	// The whole point of scoping the stream. A replaced session keeps streaming
-	// until its child is gone, and the host delivers on one channel — so these
-	// frames reach the live subscription, under the run that produced them. Not one
-	// of them may reach the transcript or the screen, and the run this launch does
-	// hold has to go on working right after.
 	it("lets nothing from a replaced run touch the transcript or the screen", async () => {
 		const { driver, controller, store } = await bootedHarness()
 		await controller.send("hello")
@@ -650,10 +600,6 @@ describe("createChatController", () => {
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 	})
 
-	// The dangerous half: a replaced run reporting while the run that took its place
-	// is mid-turn. Its words are addressed to a row that really is open and its
-	// ending really would settle it, so nothing but the run it names keeps it off
-	// the transcript.
 	it("lets a replaced run end nothing of the turn running in its place", async () => {
 		const { driver, controller, store } = await bootedHarness()
 		await controller.send("hello")
@@ -698,8 +644,6 @@ describe("createChatController", () => {
 		expect(spoken(await reload(store))).toEqual(spoken(settled.messages))
 	})
 
-	// The same frames under the run this launch holds: they are taken. Without
-	// this, the test above would pass on a controller that ignores everything.
 	it("still takes the same frames when they come from the run it holds", async () => {
 		const { driver, controller } = await bootedHarness()
 		vi.spyOn(driver, "submitPrompt").mockResolvedValue()
@@ -911,7 +855,6 @@ describe("createChatController", () => {
 		const state = harness.controller.getState()
 		expect(state.turn).toBe("failed")
 		expect(state.errors.at(-1)?.error.kind).toBe("notStarted")
-		// It was written down all the same: the reader wrote it, and the store took it.
 		expect(spoken(state.messages)).toEqual([["user", "hello", "complete"]])
 	})
 
@@ -956,8 +899,6 @@ describe("createChatController", () => {
 		expect(state.sessionId).toBeNull()
 	})
 
-	// A process nothing can attribute is a process whose every event is a guess, so
-	// a launch with no conversation opens no run and asks for no child.
 	it("starts nothing at all while there is no conversation to scope it by", async () => {
 		const store = createFakeTranscriptStore()
 		const { driver, controller } = createHarness({
@@ -981,8 +922,6 @@ describe("createChatController", () => {
 		})
 	})
 
-	// The run is a durable row, and a store that cannot open one has not given this
-	// launch a scope: starting anyway would put a child behind an epoch nobody wrote.
 	it("starts nothing when the store cannot open the run", async () => {
 		const store = createFakeTranscriptStore()
 		const { driver, controller } = createHarness({
@@ -1020,8 +959,6 @@ describe("createChatController", () => {
 			error: { kind: "notAuthenticated" },
 		})
 
-		// The bot is opened first: what a preflight reports is reported about a bot,
-		// and before one is selected there is no screen for it to land on.
 		await controller.open(BOT)
 		expect(await controller.preflight()).toBeNull()
 		expect(startSpy).not.toHaveBeenCalled()
@@ -1031,9 +968,6 @@ describe("createChatController", () => {
 		expect(state.errors.at(-1)?.error.kind).toBe("notAuthenticated")
 	})
 
-	// Tauri registers event listeners over IPC, so a subscription is not live the
-	// moment `subscribe()` is called. A session that emits from inside
-	// `startOrResumeSession` is exactly the window this guards.
 	it("waits for the subscription before starting, so startup events are not lost", async () => {
 		let listener: ((event: ScopedEvent) => void) | null = null
 		const { controller } = createHarness({
@@ -1063,8 +997,6 @@ describe("createChatController", () => {
 		expect(controller.getState().sessionId).toBe("s-1")
 	})
 
-	// The transcript is durable; the session that produced it is not. Resuming a
-	// provider session across launches is a runtime concern this no longer keeps.
 	it("boots on the stored transcript without resuming anything", async () => {
 		const store = createFakeTranscriptStore({ messages: seeded(4) })
 		const { driver, controller } = createHarness({ store })
@@ -1086,10 +1018,6 @@ describe("createChatController", () => {
 		expect(isSessionReady(state)).toBe(true)
 	})
 
-	// Selecting a bot is the same three steps a launch takes: the other bot's
-	// transcript is painted, and the one process this build runs is put behind it.
-	// Coming back finds the first conversation exactly where it was left, because the
-	// switch moved the screen and the run rather than the record.
 	it("switches the visible conversation and the run to the bot it is opened on", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1114,11 +1042,6 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
-	// The one thing a switch may never do: put a bot's words in another bot's
-	// transcript — and the one thing it may never cost: the answer a bot was in the
-	// middle of. The bot the reader leaves keeps its process, goes on streaming into
-	// the conversation it was started for, and is found finished there on the way
-	// back.
 	it("keeps a bot streaming into its own conversation after the reader switches", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1179,11 +1102,6 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
-	// The way back re-reads the tail of a conversation the bot never stopped writing
-	// into, so the page carries words whose deltas have not reached the screen yet.
-	// Read and write go through the one queue for that reason: every delta the store
-	// has taken has been shown by the time the page merges, so the tail is never
-	// counted twice.
 	it("re-reads a streaming transcript on the way back without doubling its tail", async () => {
 		const base = createFakeTranscriptStore()
 		const other = await base.createBot(botIdentity({ name: "Second" }))
@@ -1218,8 +1136,6 @@ describe("createChatController", () => {
 		await harness.controller.open(other.id)
 		await vi.runAllTimersAsync()
 
-		// The store takes the rest of the answer and nothing shows it yet: this is the
-		// moment a re-read of the tail would see more than the screen holds.
 		holdsTheWrite = true
 		harness.driver.pushEvent(
 			{ type: "messageDelta", id: "msg-1", seq: 2, text: " an answer" },
@@ -1239,8 +1155,6 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
-	// Two bots, two processes, one reader. Neither turn is refused because the other
-	// is running, and each answer lands in the conversation of the bot that gave it.
 	it("lets two bots answer at once, each into its own conversation", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1272,8 +1186,6 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
-	// What the roster reads while the reader is somewhere else: the bot left behind
-	// is still answering, and its own state is where that shows.
 	it("reports a bot answering in the background as busy", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1292,9 +1204,6 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
-	// The other half of what the roster reads from here: the row of the bot the
-	// reader walked away from previews what it went on to say, so a reply that lands
-	// while they are elsewhere is on the row it belongs to.
 	it("holds the last word of a bot answering in the background", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1304,8 +1213,6 @@ describe("createChatController", () => {
 
 		await harness.controller.open(other.id)
 
-		// The prompt is settled the moment it is written, so the row previews it while
-		// the answer to it is still being streamed into the same conversation.
 		expect(previewFor(harness.controller, BOT)).toMatchObject({
 			text: "hello",
 		})
@@ -1316,9 +1223,6 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
-	// A bot holds one process at a time. Selecting it again — which is what the app
-	// does on every switch — shows the one it has rather than replacing it, because
-	// a second process would leave the first answering with nobody holding it.
 	it("opens no second process for a bot that already holds one", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1340,8 +1244,6 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
-	// A bot that is going away takes its process with it: one left running would go
-	// on answering into a conversation the delete is about to remove.
 	it("ends the runtime of a bot that is deleted while it streams", async () => {
 		const harness = await bootedHarness()
 		const shutdownSpy = vi.spyOn(harness.driver, "shutdown")
@@ -1374,8 +1276,6 @@ describe("createChatController", () => {
 		expect(isSessionReady(state)).toBe(true)
 	})
 
-	// The id carries over, the run does not: a restart is a new process, so it takes
-	// the next row of the lineage and every command after it names that one.
 	it("resumes the id this launch learned under a run of its own", async () => {
 		const { driver, controller } = await bootedHarness()
 		await controller.send("hello")
@@ -1397,9 +1297,6 @@ describe("createChatController", () => {
 		expect(live?.runtimeSessionId).not.toBe(replaced?.runtimeSessionId)
 	})
 
-	// Stopping, dying and shutting down all end a run, and none of them may end the
-	// one that came after. The refusals are the host's — the fake holds the same
-	// rule — and a shutdown asked for twice stays a shutdown.
 	it("keeps a stop and a shutdown from reaching the run that replaced them", async () => {
 		const { driver, controller, store } = await bootedHarness()
 		await controller.send("hello")
@@ -1573,8 +1470,6 @@ describe("history above the transcript", () => {
 })
 
 describe("a run replaced under a conversation that carries on", () => {
-	/** Long enough that a checkpoint has something to fold under the tail, and that
-	 * the tail cannot reach the beginning of the chat. */
 	const HISTORY = 30
 	const REFUSAL = {
 		kind: "storage",
@@ -1595,10 +1490,6 @@ describe("a run replaced under a conversation that carries on", () => {
 	const occurrences = (text: string, needle: string) =>
 		text.split(needle).length - 1
 
-	/** A store that answers as the host would until it is told to refuse one of the
-	 * two calls a reconstruction is made of. The switch is the point: the same
-	 * conversation is shown before the refusal, under it, and after it, which is the
-	 * only way to prove a refusal cost nothing the recovery could not put back. */
 	const refusingStoreAt = (
 		member: "captureCheckpoint" | "boundedContext",
 	): TranscriptStore & { refuse: (on: boolean) => void } => {
@@ -1621,10 +1512,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		}
 	}
 
-	/** Everything the chat has ever said, in a context made of a summary and a tail
-	 * alone. What the tail cannot reach has to have been folded, so a message in
-	 * neither is a stretch of the conversation the reconstruction lost — which is
-	 * exactly what a refused fold would take with it if a run were replaced anyway. */
 	const expectWholeChat = (context: string, alsoSaid: string[]) => {
 		for (let index = 1; index <= HISTORY; index += 1) {
 			expect(context).toContain(`stored ${index}\n`)
@@ -1634,21 +1521,14 @@ describe("a run replaced under a conversation that carries on", () => {
 		}
 	}
 
-	/** What the run was really told, which is not what the reader typed: the first
-	 * prompt of a run carries the whole context rebuilt for it. */
 	const told = (submitted: { mock: { calls: unknown[][] } }) =>
 		String(submitted.mock.calls.at(-1)?.[1] ?? "")
 
-	/** Every run this bot opened, in order, and why it replaced the one before it.
-	 * The first is always `null`: it replaces nothing. */
 	const reasons = (opened: { mock: { calls: unknown[][] } }, botId: string) =>
 		opened.mock.calls
 			.filter((call) => call[1] === botId)
 			.map((call) => call[3] ?? null)
 
-	// The preventive rotation: the run is replaced while it still answers, and the
-	// prompt that triggered it is written once, submitted once, and carried into the
-	// new process with everything it needs to answer.
 	it("replaces a run that has carried its share and hands the new one the conversation", async () => {
 		const store = withHistory()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -1689,9 +1569,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		)
 	})
 
-	// A provider session refused: the host put a fresh child behind the same run, so
-	// the conversation has to reach it some other way. The next prompt is what
-	// rotates, and what it carries is the transcript rebuilt from the store.
 	it("replaces a run whose provider session was refused, on the next prompt", async () => {
 		const store = withHistory()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -1718,9 +1595,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		expect(controller.getState().messages.at(-1)?.completion).toBe("complete")
 	})
 
-	// The child exited, which is what a provider refusing to carry a session any
-	// further looks like from here — the CLI ends the process rather than the turn.
-	// The run is spent, and the next prompt is answered by its replacement.
 	it("replaces a run the provider stopped answering in", async () => {
 		const store = withHistory()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -1751,8 +1625,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		])
 	})
 
-	// Asked for by hand, with nothing wrong: the fold lands, the run is closed out
-	// under the reason, and the reader sees the same transcript before and after.
 	it("replaces a run on request without moving anything the reader can see", async () => {
 		const store = withHistory()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -1770,11 +1642,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		expect(controller.getState().errors).toEqual([])
 	})
 
-	// A handover the store cannot fold for is not a handover. The run answering the
-	// conversation is the only place it is still whole — a successor would be told
-	// the summary that did land and the tail, and everything between them would be
-	// gone from the answer while staying on the reader's screen. So the run stays,
-	// keeps answering the prompts it can, and is replaced once the fold lands.
 	it("retires no run while the fold its successor needs is refused", async () => {
 		const store = refusingStoreAt("captureCheckpoint")
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -1791,8 +1658,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		await controller.send("second")
 		await vi.runAllTimersAsync()
 
-		// Nothing retired, nothing opened, and the run that holds the conversation
-		// answered the prompt itself — it needs no context to be rebuilt for it.
 		expect(runOf(controller)).toEqual(holding)
 		expect(reasons(opened, "default")).toEqual([null])
 		expect(told(submitted)).toBe("second")
@@ -1810,20 +1675,12 @@ describe("a run replaced under a conversation that carries on", () => {
 		await controller.send("third")
 		await vi.runAllTimersAsync()
 
-		// The handover the refusal held back, once the store answers: the successor is
-		// told the whole chat, the stretch no tail could reach included.
 		expect(reasons(opened, "default")).toEqual([null, NEARING_THE_BOUND])
 		expect(runOf(controller).epoch).toBe(holding.epoch + 1)
 		expectWholeChat(told(submitted), ["first", "second"])
 		expect(occurrences(told(submitted), "third")).toBe(1)
 	})
 
-	// The other half of the same rule, on the two calls a reconstruction is made of.
-	// A run that was told nothing and cannot be told the conversation is given no
-	// prompt at all: answered on its own, in the middle of a chat, it would reply as
-	// if none of it had happened and nothing on the screen would say why. The prompt
-	// stays on the record, and sending it again once the store answers carries the
-	// whole of it, once.
 	it.each(["captureCheckpoint", "boundedContext"] as const)(
 		"gives a run that was told nothing no prompt of its own when %s is refused",
 		async (member) => {
@@ -1842,7 +1699,6 @@ describe("a run replaced under a conversation that carries on", () => {
 				kind: "writeFailed",
 				detail: "the transcript store refused it (storage)",
 			})
-			// Written, shown, and the one the reader may send again.
 			expect(spoken(refused.messages).at(-1)).toEqual([
 				"user",
 				"where were we?",
@@ -1869,9 +1725,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		},
 	)
 
-	// The dangerous one: a refused resume leaves a fresh child answering under the
-	// same run, alive and knowing none of the chat. The run cannot be replaced while
-	// the fold is refused, and that child must not be handed the question anyway.
 	it("never lets a spent run answer on its own while the fold is refused", async () => {
 		const store = refusingStoreAt("captureCheckpoint")
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -1910,9 +1763,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		expect(occurrences(told(submitted), "and now?")).toBe(1)
 	})
 
-	// A chat longer than any tail, on a launch that never rotated: what the tail
-	// cannot reach is folded before the context is built, so the reconstruction is
-	// the summary and the tail with nothing between them left out.
 	it("leaves no stretch of the chat between the summary and the tail", async () => {
 		const store = withHistory()
 		const { controller, driver } = await bootedHarness({ store })
@@ -1929,10 +1779,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		expect(occurrences(told(submitted), "where were we?")).toBe(1)
 	})
 
-	// The bot was described again while a process was answering for it. A child is
-	// given its system prompt and its directory at spawn and there is no frame that
-	// changes either, so the run is spent from there and the next prompt is carried
-	// by a process started as the bot reads now. The reader sees none of it.
 	it("replaces the run of a bot that was described again, on the next prompt", async () => {
 		const store = withHistory()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -1945,8 +1791,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		controller.redescribe(BOT)
 		await vi.runAllTimersAsync()
 
-		// Nothing yet: a reader still typing into the settings would otherwise spend a
-		// process per keystroke, and nothing is waiting on the one it would spawn.
 		expect(started).not.toHaveBeenCalled()
 		expect(reasons(opened, BOT)).toEqual([null])
 
@@ -1968,9 +1812,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		detach()
 	})
 
-	// Every bot holds a runtime of its own, so being told one bot is not what its
-	// process was started as says nothing about any other — and a bot with no
-	// process at all has nothing to retire.
 	it("retires the run of the bot that was described and no other", async () => {
 		const store = withHistory()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1979,7 +1820,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		await controller.open(other.id)
 		await vi.runAllTimersAsync()
 
-		// A bot this launch never opened, and one that is not the bot being edited.
 		controller.redescribe("nobody")
 		controller.redescribe(BOT)
 		await controller.send("and me?")
@@ -1988,9 +1828,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		expect(reasons(opened, "nobody")).toEqual([])
 		expect(reasons(opened, other.id)).toEqual([null])
 
-		// Back to the bot that was described: the process answering for it is replaced
-		// under the reason it was retired for, and the run it takes is the next of its
-		// own lineage.
 		await controller.open(BOT)
 		await vi.runAllTimersAsync()
 
@@ -1999,11 +1836,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		detach()
 	})
 
-	// The bot rewrote its own instructions in the middle of a run. The child that
-	// wrote them is the one that cannot read them — it was spawned on what the
-	// bundle said before — so the run is spent from there and the next prompt is
-	// carried by a process started on what the bot says now. The reader sees
-	// nothing of it, neither a notice nor a spawn.
 	it("replaces the run of a bot that evolved, on the next prompt", async () => {
 		const store = withHistory()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -2034,8 +1866,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		detach()
 	})
 
-	// The same frame under no run at all. It names no process this launch holds, so
-	// there is nothing to retire and the run it would spend is never opened.
 	it("ignores an evolution reported under a run it does not hold", async () => {
 		const store = withHistory()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -2052,9 +1882,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		detach()
 	})
 
-	// A launch that never saw any of it. The run it opens is told nothing by the
-	// process it starts, so the first prompt of that run carries the conversation —
-	// summary, tail and question — out of the file the previous launch left.
 	it("carries the stored conversation into the first prompt of a cold launch", async () => {
 		const store = withHistory()
 		const first = await bootedHarness({ store })
@@ -2074,14 +1901,7 @@ describe("a run replaced under a conversation that carries on", () => {
 		second.detach()
 	})
 
-	// Two bots in one chat keep two lineages and two recovery points. One rotating
-	// numbers its own runs and folds its own history; the other is left exactly
-	// where it was, and is rebuilt from what it has itself.
 	it("keeps two bots' runs and recovery points apart in one chat", async () => {
-		// The chat two bots share. A bot holds a chat of its own today — the store
-		// names a thread after the bot that was seated in it — so the one conversation
-		// both of these are spoken to in is arranged here rather than assumed, and what
-		// is left telling their runs apart is the participant and nothing else.
 		const held = withHistory()
 		const store: TranscriptStore = {
 			...held,
@@ -2104,8 +1924,6 @@ describe("a run replaced under a conversation that carries on", () => {
 		expect(runOf(first.controller).epoch).toBe(2)
 		expect(runOf(second.controller).epoch).toBe(1)
 		expect(runOf(second.controller).botId).toBe("second")
-		// Each bot folds its own recovery point, naming a run of its own: one bot
-		// rotating leaves the other exactly where it was.
 		expect(captured.mock.calls.map((call) => [call[1], call[2]])).toEqual([
 			["default", replaced.runtimeSessionId],
 			["second", runOf(second.controller).runtimeSessionId],
@@ -2137,9 +1955,6 @@ describe("a turn Claude answered with tools", () => {
 		await vi.runAllTimersAsync()
 	}
 
-	// The defect this covers: every tool-only message was opened, left empty, and
-	// closed as complete by the turn ending — fourteen rows taking fourteen places in
-	// the transcript, in its pages and in every context rebuilt from it.
 	it("stores the answer alone, and nothing for the tools before it", async () => {
 		const harness = await bootedHarness()
 		await streamed(harness, [
@@ -2155,7 +1970,6 @@ describe("a turn Claude answered with tools", () => {
 		])
 		const stored = await reload(harness.store)
 		expect(spoken(stored)).toEqual(spoken(state.messages))
-		// Two rows, two places: nothing empty took a seq, a page slot or a tail place.
 		expect(stored.map((message) => message.seq)).toEqual([1, 2])
 		expect(
 			state.activities.filter((entry) => entry.status === "succeeded"),
@@ -2163,10 +1977,6 @@ describe("a turn Claude answered with tools", () => {
 		harness.detach()
 	})
 
-	// Both halves of the same turn, which is the only place they can disagree: the
-	// tools leave the transcript alone, and the run still comes out of it holding the
-	// name of the process that ran them. A held reply that was never written must not
-	// cost the announcement its write, and the announcement must not put a row back.
 	it("records the session it answered under while keeping the tools out of the transcript", async () => {
 		const base = createFakeTranscriptStore()
 		const { store, recorded } = recordingStore(base)
@@ -2187,8 +1997,6 @@ describe("a turn Claude answered with tools", () => {
 		expect(
 			state.activities.filter((entry) => entry.status === "succeeded"),
 		).toHaveLength(ROUNDS)
-		// The run holds the id durably: a row that took none would take any. Asked
-		// before the reload below, which replaces the run and would refuse either way.
 		await expect(
 			base.recordProviderSession(
 				run.conversationId,
@@ -2225,8 +2033,6 @@ describe("a turn Claude answered with tools", () => {
 		harness.detach()
 	})
 
-	// Honesty is the other half: a reply cut off before it said anything is still the
-	// reader's to see, and the row that says so is the only one the turn leaves.
 	it.each(["cancelled", "failed"] as const)(
 		"keeps one honest row for a turn that %s before a word",
 		async (outcome) => {
@@ -2256,8 +2062,6 @@ describe("a turn Claude answered with tools", () => {
 		},
 	)
 
-	// The process went away between two tools, so nothing observed the reply fail and
-	// nobody stopped it. It is still an answer that stopped, and it is written down.
 	it("keeps one honest row when the session dies between two tools", async () => {
 		const harness = await bootedHarness()
 		await streamed(harness, toolRounds(2))
@@ -2302,10 +2106,6 @@ describe("every ending survives a launch", () => {
 	)
 })
 
-/** The name Claude gives the process answering in a run, on the record beside the
- * run rather than instead of it. Everything here is composed: the driver announces
- * the id the way the CLI does, the controller writes it down, and the store holds
- * it under the rules the file holds it under. */
 describe("the provider session a run answered under", () => {
 	const REFUSED_BY_THE_STORE = {
 		kind: "writeFailed",
@@ -2328,8 +2128,6 @@ describe("the provider session a run answered under", () => {
 		resumed: false,
 	})
 
-	// The defect this locks: a real turn ran, a real child answered, and the run it
-	// answered in kept no word of the process it was holding.
 	it("writes the id the child announces against the run it is answering in", async () => {
 		const base = createFakeTranscriptStore()
 		const { store, recorded } = recordingStore(base)
@@ -2343,7 +2141,6 @@ describe("the provider session a run answered under", () => {
 		expect(state.sessionId).not.toBeNull()
 		expect(recorded).toEqual([[run.runtimeSessionId, state.sessionId]])
 		expect(state.errors).toEqual([])
-		// The row holds it: one that did not would take any id at all.
 		await expect(
 			base.recordProviderSession(
 				run.conversationId,
@@ -2376,8 +2173,6 @@ describe("the provider session a run answered under", () => {
 		expect(state.runtime).toEqual(run)
 	})
 
-	// One run answers under one provider session. A second, different id is a
-	// disagreement the store settles, and the reader is told it was not written.
 	it("reports a second, different id without moving the run it holds", async () => {
 		const base = createFakeTranscriptStore()
 		const { store } = recordingStore(base)
@@ -2395,9 +2190,6 @@ describe("the provider session a run answered under", () => {
 		expect(state.turn).toBe("idle")
 	})
 
-	// The write is issued under the run that announced and lands after that run has
-	// been replaced. The row it names is the one it was announced in, whatever the
-	// controller holds by the time the store answers.
 	it("cannot write a replaced run's id onto the run that took its place", async () => {
 		const base = createFakeTranscriptStore()
 		const { store: recording, recorded } = recordingStore(base)
@@ -2435,8 +2227,6 @@ describe("the provider session a run answered under", () => {
 		expect(recorded).toEqual([[replaced.runtimeSessionId, "stale-process"]])
 		expect(state.runtime).toEqual(replacement)
 		expect(state.errors.at(-1)?.error).toEqual(REFUSED_BY_THE_STORE)
-		// The replacement never took the replaced run's word for it: its own id
-		// still lands, which a row already holding one would refuse.
 		await expect(
 			base.recordProviderSession(
 				replacement.conversationId,
@@ -2448,10 +2238,6 @@ describe("the provider session a run answered under", () => {
 	})
 })
 
-/** The slash commands a session announces, held where the next one can find them.
- * A child names them once as it comes up and nowhere else, and no child exists until
- * a prompt has started one — so a bot just opened, and every bot after a restart,
- * has nothing of its own to ask. */
 describe("the commands a bot last announced", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
@@ -2461,9 +2247,6 @@ describe("the commands a bot last announced", () => {
 		vi.useRealTimers()
 	})
 
-	/** A driver whose sessions come up saying nothing, the way a real one that has
-	 * not been prompted yet does: what the screen offers is then what was held for
-	 * the bot and nothing else. */
 	const silentDriver = (fake: FakeChatDriver): ChatDriver => ({
 		...fake,
 		startOrResumeSession: () => Promise.resolve({ resumed: false }),
@@ -2521,17 +2304,12 @@ describe("the commands a bot last announced", () => {
 		detach()
 	})
 
-	// The read is off the write queue, so nothing orders it against the session that
-	// may answer while it is out. The child that just named its own list is the
-	// authority on what it takes, whenever the older answer comes back.
 	it("keeps what the session named over a recall still in flight", async () => {
 		const base = createFakeTranscriptStore()
 		await base.recordBotCommands(BOT, named("from-the-record"))
 		const read = deferred()
 		const store: TranscriptStore = {
 			...base,
-			// Read before the session spoke, answered after it: the window the recall
-			// is the older of the two lists in.
 			botCommands: async (botId: string) => {
 				const held = await base.botCommands(botId)
 				await read.promise
@@ -2575,10 +2353,6 @@ describe("the commands a bot last announced", () => {
 	})
 })
 
-/** The handover as a thing that happens once. Everything here holds one of its
- * three steps open — the fold, the row, the process — and asks for a second prompt
- * or a second rotation while it is: a lineage the reader cannot see is exactly
- * where two of anything goes unnoticed. */
 describe("a handover nothing may run twice", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
@@ -2593,9 +2367,6 @@ describe("a handover nothing may run twice", () => {
 		submits: [RuntimeScope, string][]
 	}
 
-	/** The driver as the controller reaches it, with every start and every prompt
-	 * written down under the run it named — and a start that can be made to fail the
-	 * way a child that never comes up fails. */
 	const watchedDriver =
 		(watched: Watched, failing: () => boolean) =>
 		(fake: FakeChatDriver): ChatDriver => ({
@@ -2614,7 +2385,6 @@ describe("a handover nothing may run twice", () => {
 
 	const watching = (): Watched => ({ starts: [], submits: [] })
 
-	/** The store, with the fold a handover begins with held open on demand. */
 	const foldingStore = (base: TranscriptStore, held: Promise<void>) => {
 		let holding = false
 		return {
@@ -2643,10 +2413,6 @@ describe("a handover nothing may run twice", () => {
 		}
 	}
 
-	// The gap the audit found: the row was opened, the process behind it never came
-	// up, and the prompt went to it anyway — to a run with a place in the lineage and
-	// nothing running in it. The reader's words stay on the record, and the next send
-	// is what tries the handover again rather than aiming at the dead row once more.
 	it("gives no prompt to a run whose process never came up, and hands over again next time", async () => {
 		const store = createFakeTranscriptStore()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -2670,7 +2436,6 @@ describe("a handover nothing may run twice", () => {
 		expect(dead.runtimeSessionId).not.toBe(carried.runtimeSessionId)
 		expect(watched.submits.map(([scope]) => scope)).not.toContainEqual(dead)
 		expect(refused.turn).toBe("failed")
-		// Written and shown: the reader's words are not what a failed start costs.
 		expect(spoken(refused.messages).at(-1)).toEqual([
 			"user",
 			"second",
@@ -2686,17 +2451,12 @@ describe("a handover nothing may run twice", () => {
 		expect(live.runtimeSessionId).not.toBe(dead.runtimeSessionId)
 		expect(opened).toHaveBeenCalledTimes(3)
 		expect(watched.submits.at(-1)?.[0]).toEqual(live)
-		// Nothing the reader said was lost with the run that could not take it.
 		expect(watched.submits.at(-1)?.[1]).toContain("second")
 		expect(watched.submits.at(-1)?.[1]).toContain("third")
 		expect(harness.controller.getState().turn).toBe("idle")
 		harness.detach()
 	})
 
-	// The same dead row, reached the other way. Retry is the button the reader is
-	// actually offered on a prompt that did not go through, and it resubmits a prompt
-	// the store already holds — so without the handover it would aim the same words
-	// at the same run with no child, for as long as the reader kept asking.
 	it("hands over before retrying a prompt the dead run refused", async () => {
 		const store = createFakeTranscriptStore()
 		const opened = vi.spyOn(store, "openRuntimeSession")
@@ -2728,7 +2488,6 @@ describe("a handover nothing may run twice", () => {
 		expect(watched.submits.map(([scope]) => scope)).not.toContainEqual(dead)
 		expect(watched.submits.at(-1)?.[0]).toEqual(live)
 		expect(watched.submits.at(-1)?.[1]).toContain("second")
-		// Retried, not written again: the prompt was on the record all along.
 		expect(state.messages).toHaveLength(written + 1)
 		expect(state.rejectedPromptId).toBeNull()
 		expect(spoken(state.messages).at(-1)).toEqual([
@@ -2739,10 +2498,6 @@ describe("a handover nothing may run twice", () => {
 		harness.detach()
 	})
 
-	// The handover that could not happen, on a run that is perfectly well: the store
-	// would not open the successor, and the process holding the conversation is still
-	// there and still carrying it. It answers, exactly as it did before — a prompt
-	// refused here would cost the reader an answer nothing was wrong with.
 	it("lets the live run it could not replace answer the prompt itself", async () => {
 		const base = createFakeTranscriptStore()
 		let refusing = false
@@ -2783,11 +2538,6 @@ describe("a handover nothing may run twice", () => {
 		harness.detach()
 	})
 
-	// Two prompts arriving at the threshold. Both pass a busy check that is only ever
-	// true once a turn has started, and the turn starts after the handover — so
-	// without a claim taken before the first await, each opens a run of its own and
-	// asks the host for a process the host will refuse one of. The second waits in
-	// the outbox instead, and takes a handover of its own when its place comes.
 	it("holds the second of two prompts at the threshold for its own handover", async () => {
 		const base = createFakeTranscriptStore()
 		const released = deferred()
@@ -2833,8 +2583,6 @@ describe("a handover nothing may run twice", () => {
 		harness.detach()
 	})
 
-	// The same rule, asked for by hand: two rotations in flight are one handover.
-	// A second row here is a run the reader never sees, opened and left behind.
 	it("takes two rotations asked for at once as the one handover they are", async () => {
 		const base = createFakeTranscriptStore()
 		const released = deferred()
@@ -2866,10 +2614,6 @@ describe("a handover nothing may run twice", () => {
 		harness.detach()
 	})
 
-	// What the two waves before this one proved, under the run that won a handover
-	// two callers asked for: the id its child announces lands on that run and no
-	// other, every tool it ran is still on the screen, and the transcript keeps the
-	// one row that said something.
 	it("keeps the provider id, the activities and the empty rows out under one handover", async () => {
 		const { store, recorded } = recordingStore(createFakeTranscriptStore())
 		const harness = await bootedHarness({ store })
@@ -2915,8 +2659,6 @@ describe("a handover nothing may run twice", () => {
 	})
 })
 
-/** A prompt is never refused for arriving early or over a turn: what nothing can
- * take yet waits its place in the bot's outbox, and the outbox sends itself. */
 describe("prompts the session cannot take yet", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
@@ -2932,9 +2674,6 @@ describe("prompts the session cannot take yet", () => {
 	const promptsIn = (messages: TranscriptMessage[]) =>
 		spoken(messages).filter(([role]) => role === "user")
 
-	/** The driver as the controller reaches it, with every prompt it was really
-	 * asked written down as it was asked — and a submission that can be made to
-	 * refuse the way one aimed at a session that is gone refuses. */
 	const submitting =
 		(submits: string[], refusing: () => boolean = () => false) =>
 		(fake: FakeChatDriver): ChatDriver => ({
@@ -2947,9 +2686,6 @@ describe("prompts the session cannot take yet", () => {
 			},
 		})
 
-	// A prompt sent into a bot whose conversation is still being read has nowhere to
-	// be written and nothing to answer it. It waits, and the store answering is what
-	// sends it — the transcript row is written then, and not a moment before.
 	it("holds a prompt sent before the conversation is open", async () => {
 		const base = createFakeTranscriptStore()
 		const reading = deferred()
@@ -2980,8 +2716,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// Three prompts, one turn at a time: the outbox is a line, not a batch, and the
-	// transcript reads as the alternation the reader would have typed by hand.
 	it("sends what it holds in the order it was sent, one turn at a time", async () => {
 		const harness = await bootedHarness()
 
@@ -3008,9 +2742,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// A reader who cut an answer short did not ask for the questions behind it to go
-	// out on their own. They are not thrown away either: they are on the record, in
-	// the order they were said, and nothing is left waiting to be sent.
 	it("records what it was holding when the turn is stopped, and sends none of it", async () => {
 		const submits: string[] = []
 		const harness = await bootedHarness({ driver: submitting(submits) })
@@ -3036,9 +2767,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// The bot was never told what the reader said while it was answering, and the
-	// answer it was cut off mid-sentence is not what it thinks it said either. So the
-	// prompt that starts it again hands it the conversation as the record now reads.
 	it("carries the rebuilt conversation on the prompt after a stop", async () => {
 		const submits: string[] = []
 		const harness = await bootedHarness({ driver: submitting(submits) })
@@ -3058,8 +2786,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// The reader changed their mind about one of the questions in the line. Only that
-	// one goes, and the rest are still in the order they were sent.
 	it("drops one held prompt and keeps the order of the rest", async () => {
 		const harness = await bootedHarness()
 		await harness.controller.send("first")
@@ -3082,8 +2808,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// The line stops at the first refusal: whatever would not take one prompt is not
-	// going to take the two behind it, and the reader keeps them either way.
 	it("leaves the rest in the outbox when a submission is refused", async () => {
 		let refusing = false
 		const harness = await bootedHarness({
@@ -3106,9 +2830,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// The composer clears on send, so a prompt the store refused on its way out is
-	// gone from everywhere unless it waits: nothing was written, nothing was shown,
-	// and the reader would have to remember what they typed.
 	it("holds the words when the store refuses a prompt that could have gone out", async () => {
 		const base = createFakeTranscriptStore()
 		let refusing = true
@@ -3141,9 +2862,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// A prompt the store would not write down is one nobody has seen: it never
-	// reached Claude and it is on no record, so it goes back to the front of the line
-	// rather than being lost between the two.
 	it("returns a held prompt the store refused to the front of the outbox", async () => {
 		const base = createFakeTranscriptStore()
 		let refusing = false
@@ -3168,8 +2886,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// One line per bot. What one is holding is not another's to send, and neither of
-	// them waits on the other's turn.
 	it("keeps each bot's held prompts to itself", async () => {
 		const store = createFakeTranscriptStore()
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -3206,8 +2922,6 @@ describe("prompts the session cannot take yet", () => {
 		harness.detach()
 	})
 
-	// The composer names the files it stored in the prompt itself, so a prompt that
-	// waited names them exactly as it would have if it had gone out at once.
 	it("submits a held prompt naming the files it was staged with", async () => {
 		const submits: string[] = []
 		const harness = await bootedHarness({ driver: submitting(submits) })

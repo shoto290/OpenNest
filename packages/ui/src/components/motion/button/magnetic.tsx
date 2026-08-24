@@ -7,9 +7,7 @@ import { Button, type ButtonProps } from "./base"
 import { Magnetic } from "../magnetic"
 
 export interface MagneticButtonProps extends ButtonProps {
-	/** Magnetic pull strength. Default 0.25. */
 	strength?: number
-	/** Class applied to the magnetic wrapper. */
 	magneticClassName?: string
 }
 

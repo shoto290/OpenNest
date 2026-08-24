@@ -27,7 +27,6 @@ const NARROW_VIEWPORT = {
 	narrow: { name: "Narrow", styles: { width: "800px", height: "900px" } },
 }
 
-/** A picture the reader uploaded, inline so the story needs no host to load it. */
 const UPLOADED_IMAGE =
 	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
 
@@ -138,8 +137,6 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 ]
 
-/** Every blot a bot can be given in its settings, one bot each and none of them
- * running, so the rows and the assertions read off the same list. */
 const IDENTITY_BLOTS: BotAvatarBlot[] = [
 	"red",
 	"yellow",
@@ -165,24 +162,17 @@ const blotsIn = (canvasElement: HTMLElement) =>
 const blotFillsIn = (canvasElement: HTMLElement) =>
 	blotsIn(canvasElement).map((path) => path.getAttribute("fill"))
 
-/** The same rows as `IDENTITY_ROSTER` on one tint, so the only thing left to tell
- * them apart is the shape each bot's id lands on. */
 const SHARED_TINT_ROSTER: AgentSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
 	...bot,
 	blot: "blue",
 }))
 
-/** Three passes over the roster, ids kept apart, so the list is taller than any
- * window a story is rendered in and the pinned region has something to hold
- * against. */
 const LONG_ROSTER: AgentSidebarBot[] = [0, 1, 2].flatMap((pass) =>
 	ROSTER.map((bot) => ({ ...bot, id: `${bot.id}-${pass}` })),
 )
 
 const FOOTER_LABEL = "Workspace settings"
 
-/** Whatever a host pins under the list — the slot knows nothing of it, so one
- * ordinary control stands in for it. */
 const FOOTER_CONTENT = (
 	<Button
 		aria-label={FOOTER_LABEL}
@@ -201,14 +191,10 @@ const READER: UserChipIdentity = {
 	image: UPLOADED_IMAGE,
 }
 
-/** What the update badge is nearly all the time: a node the host pinned that
- * draws nothing at all. */
 const SilentSlot = () => null
 
 const SILENT_FOOTER_CONTENT = <SilentSlot />
 
-/** The width the pinned region has to give, once its own padding is taken off —
- * what the chip covers when nothing else is drawn beside it. */
 const footerRowWidth = (footer: HTMLElement) => {
 	const style = getComputedStyle(footer)
 	return (
@@ -225,7 +211,6 @@ const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	title: undefined,
 })
 
-/** A bot nobody has talked to yet: no message to preview and no time to stamp. */
 const withoutHistory = (bot: AgentSidebarBot): AgentSidebarBot => ({
 	...bot,
 	lastMessage: undefined,
@@ -257,9 +242,6 @@ const rowButton = (row: HTMLElement) => slotIn(row, "sidebar-menu-button")
 
 const bottomOf = (node: HTMLElement) => node.getBoundingClientRect().bottom
 
-/** The whole of the pinned region's contract, whatever the list above it holds:
- * it stands under the list rather than beside it, and its bottom edge is the
- * bottom edge of the column. */
 const expectFooterAtColumnBottom = async (canvasElement: HTMLElement) => {
 	const footer = slotIn(canvasElement, "sidebar-footer")
 	await expect(footer.getBoundingClientRect().top).toBeCloseTo(
@@ -272,8 +254,6 @@ const expectFooterAtColumnBottom = async (canvasElement: HTMLElement) => {
 	)
 }
 
-/** Where a slot sits inside its own row, measured from one edge, so every row
- * can be compared to every other one whatever its content is. */
 const offsetsFrom =
 	(edge: (rowBox: DOMRect, box: DOMRect) => number) =>
 	(rows: HTMLElement[], slot: string) =>
@@ -294,9 +274,6 @@ const rowHeights = (rows: HTMLElement[]) =>
 
 const isClipped = (node: HTMLElement) => node.scrollWidth > node.clientWidth
 
-/** How far short of the trailing edge of the text column each preview stops.
- * Zero is the whole width: the timestamp shares the name line above it rather
- * than standing beside both lines and cutting the second one short. */
 const previewShortfalls = (rows: HTMLElement[]) =>
 	rows.map((row) => {
 		const preview = slotIn(row, "roster-row-preview").getBoundingClientRect()
@@ -304,10 +281,6 @@ const previewShortfalls = (rows: HTMLElement[]) =>
 		return Math.round(column.right - preview.right)
 	})
 
-/** The columns a roster stands on: name, preview and timestamp each sit at the
- * same offset inside every row, the timestamp holds both its edges, the preview
- * runs the full width under it, and no row is taller than another — whatever
- * any of them carries. */
 const expectAlignedRows = async (rows: HTMLElement[]) => {
 	await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
@@ -320,8 +293,6 @@ const expectAlignedRows = async (rows: HTMLElement[]) => {
 const colorOf = (row: HTMLElement, slot: string) =>
 	getComputedStyle(slotIn(row, slot)).color
 
-/** What a token resolves to in the theme the story is rendered in, so an
- * assertion names the token rather than a hex the theme is free to move. */
 const tokenColor = (scope: HTMLElement, token: string) => {
 	const probe = document.createElement("div")
 	probe.style.color = `var(${token})`
@@ -331,16 +302,12 @@ const tokenColor = (scope: HTMLElement, token: string) => {
 	return color
 }
 
-/** The two secondary lines of a row read as muted and read alike: the timestamp
- * is never louder than the message it dates, and neither is the name. */
 const expectMutedSecondaryText = async (row: HTMLElement, muted: string) => {
 	await expect(colorOf(row, "roster-row-preview")).toBe(muted)
 	await expect(colorOf(row, "roster-row-timestamp")).toBe(muted)
 	await expect(colorOf(row, "roster-row-name")).not.toBe(muted)
 }
 
-/** The highlight behind a menu item, which belongs to the highlighted item and
- * to no other — it is drawn where the pointer is rather than travelling there. */
 const highlightIn = (item: HTMLElement) => item.querySelector("span")
 
 const railWidth = () => {
@@ -471,8 +438,6 @@ export const CreateLabel = meta.story({
 		await userEvent.unhover(create)
 		await waitFor(async () => expect(label()).toBeNull())
 
-		// The same label, reached the other way: Tab is what a reader who never
-		// touches the mouse gets, and it must not be drawn where hover was not.
 		await userEvent.tab()
 		await expect(create).toHaveFocus()
 		await opensBelow()
@@ -641,8 +606,6 @@ export const UploadedPictures = meta.story({
 		const rows = rowsIn(canvasElement)
 		const [wearing, running, drawn] = rows
 
-		// Queried off the DOM rather than by role: the picture says nothing a screen
-		// reader needs, so it is hidden from the tree the roles are read from.
 		await expect(wearing.querySelector("img")).toHaveAttribute(
 			"src",
 			UPLOADED_IMAGE,
@@ -751,8 +714,6 @@ export const Working = meta.story({
 		await expect(slotIn(running, "roster-row-preview")).toHaveTextContent(
 			"writing…",
 		)
-		// Cinder's own dog is what performs the work. A run that drew the engine's
-		// default animal would put a different bot in the row than the reader chose.
 		await expect(
 			within(running).getByRole("img", { name: "Bot avatar dog, writing" }),
 		).toBeVisible()

@@ -36,9 +36,6 @@ const contentOf = async (
 	return page.messages.find((entry) => entry.id === id)
 }
 
-/** The fake stands in for the host in every controller test, so the rules it is
- * trusted to hold are asserted here rather than assumed. Each one mirrors a rule
- * `messages.rs` holds inside the transaction that writes it. */
 describe("createFakeTranscriptStore", () => {
 	it("answers a replayed write with the place it already gave the row", async () => {
 		const store = createFakeTranscriptStore()
@@ -211,8 +208,6 @@ describe("createFakeTranscriptStore", () => {
 		expect(await store.bots()).toEqual([])
 	})
 
-	// The list is a column of the bot's own row, so the file drops it with the row.
-	// A bot created at the id a deleted one held is a new bot, offering nothing.
 	it("forgets what a deleted bot's sessions announced", async () => {
 		const store = createFakeTranscriptStore()
 		await store.recordBotCommands("default", named("review"))
@@ -231,8 +226,6 @@ describe("createFakeTranscriptStore", () => {
 		expect((await store.bots())[0].avatarImagePath).toBe(worn.avatarImagePath)
 	})
 
-	/** The refusal the host decides on the bytes and nothing else, so the fake decides
-	 * it the same way: a caller that handled a rejection here handles the real one. */
 	it("refuses bytes that are not one of the formats a picture may arrive as", async () => {
 		const store = createFakeTranscriptStore()
 
@@ -267,10 +260,6 @@ describe("createFakeTranscriptStore", () => {
 		})
 	})
 
-	/** The same shape the host answers: the bundle's own `learn` skill already there,
-	 * a skill named by the directory it would live in, a second one of the same name
-	 * written beside the first rather than over it, a mark that is its own write, a
-	 * skill that is gone reported as one, and a write over the host's own refused. */
 	it("writes, marks and takes away a bot's skills", async () => {
 		const store = createFakeTranscriptStore()
 		const draft = { name: "Baking Bread", description: "How.", body: "Bake." }
@@ -311,10 +300,6 @@ describe("createFakeTranscriptStore", () => {
 		})
 	})
 
-	/** The same shape the host answers: a server named by the key it is declared
-	 * under, a second write over that name replacing it rather than growing a second,
-	 * every other server left where it was, and a configuration that is not an object
-	 * refused whole. */
 	it("writes and takes away a bot's mcp servers", async () => {
 		const store = createFakeTranscriptStore()
 		const atlas = { command: "atlas-mcp", args: ["--stdio"] }
@@ -354,8 +339,6 @@ describe("createFakeTranscriptStore", () => {
 		).rejects.toMatchObject({ kind: "unknownBot", id: "missing" })
 	})
 
-	/** Taking a picture off is an identity write, the same one that puts an animal
-	 * back — there is no second call for it on either side of the boundary. */
 	it("takes the picture off a bot described again without a path", async () => {
 		const store = createFakeTranscriptStore()
 		await store.setBotAvatarImage("default", aPng())
@@ -366,7 +349,5 @@ describe("createFakeTranscriptStore", () => {
 	})
 })
 
-/** A png signature and nothing behind it: the fake reads the leading bytes, which is
- * what the host reads to decide the same thing. */
 const aPng = () =>
 	new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])

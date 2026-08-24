@@ -1,15 +1,3 @@
-//! The conversation commands as the frontend meets them: over IPC, in JSON.
-//!
-//! What the repository tests around the database cannot see is exactly what fails
-//! here — a command left out of the registry, an argument the frontend spells
-//! another way, a field renamed on the way out, a refusal flattened into a string.
-//! Every call below goes through `get_ipc_response`, so what is asserted is the
-//! JSON itself and not a Rust value that happens to serialize.
-//!
-//! The database is the real one, opened through `db::bootstrap` the way the launch
-//! opens it. The identifier decides the app data directory, so every test takes a
-//! `Home` of its own rather than writing where a real install would — or where its
-//! neighbour is reading — and gets it back off the disk however it ends.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,16 +11,8 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const TURN: &str = "t1";
-/// The one bot whose id this side knows before it is written: the host seats it
-/// itself, under a fixed id, so a message can name its author as a constant.
 const BOT: &str = "default";
 
-/// One test's application data directory: an identifier no run and no neighbour
-/// claims twice, and the directory it resolves to taken away when the test ends —
-/// returned from or panicked out of, since `Drop` runs either way. Where the
-/// identifier lands is read from the resolver the commands read it from, rather
-/// than rebuilt from platform rules. The test holds it rather than a host, so every
-/// relaunch below comes back to the same directory.
 struct Home {
 	identifier: String,
 	dir: PathBuf,
@@ -50,11 +30,6 @@ impl Home {
 		Self { identifier, dir }
 	}
 
-	/// The host as it launches: the same `bootstrap`, resolved from the same app
-	/// handle, and the outcome managed whole. `lib.rs` runs it from the setup hook
-	/// because only a built app carries the identifier the data directory comes from —
-	/// and the hook fires with the event loop, which `MockRuntime` never starts, so
-	/// here it runs immediately after the build instead.
 	fn app(&self) -> App<MockRuntime> {
 		let app = host(&self.identifier);
 		app.manage(db::bootstrap(app.handle()));
@@ -68,16 +43,12 @@ impl Drop for Home {
 	}
 }
 
-/// Built and no further: it carries the identifier every path below is resolved
-/// from, and without a database under it nothing has touched the disk yet.
 fn host(identifier: &str) -> App<MockRuntime> {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = identifier.into();
 	mock_builder().invoke_handler(invoke_handler()).build(context).expect("app builds")
 }
 
-/// A host that came up without a database, managed the way a failed launch manages
-/// it. No identifier of its own: nothing here touches the disk.
 fn app_without_a_database() -> App<MockRuntime> {
 	mock_builder()
 		.invoke_handler(invoke_handler())
@@ -107,11 +78,6 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str, body: Value) -> Result<V
 	.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 }
 
-/// The bot and the id of the one chat it holds. Nothing is seeded at launch any
-/// more, so the seat comes from asking for the chat of the one bot whose id the host
-/// writes itself — the path the legacy import takes on an install that predates the
-/// roster — and the roster is read back for the row that left. A fixed id is what
-/// lets every message below name its author without threading one through.
 fn a_bot_and_its_chat(window: &WebviewWindow<MockRuntime>) -> (Value, String) {
 	let chat = call(window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let conversation_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
@@ -140,8 +106,6 @@ fn a_user_message(id: &str, conversation_id: &str, content: &str, created_at: i6
 	}})
 }
 
-/// The same message, pointed at the one it answers. `repliedToMessageId` is the
-/// only field a prompt adds to a plain one, and the shape stays spelled once.
 fn an_answer_to(
 	target: &str,
 	id: &str,
@@ -154,9 +118,6 @@ fn an_answer_to(
 	message
 }
 
-/// A reply as the transport writes one before it ends: opened empty and streamed
-/// into. Left exactly there is what a host dying under a stream leaves behind, so
-/// the ending belongs to the caller and not here. Answers the id it wrote under.
 fn a_streaming_reply(
 	window: &WebviewWindow<MockRuntime>,
 	conversation_id: &str,
@@ -185,8 +146,6 @@ fn a_streaming_reply(
 	id
 }
 
-/// One message under an id the assertions can name, alternating speakers so a
-/// rebuilt tail reads as a conversation rather than a monologue.
 fn said(window: &WebviewWindow<MockRuntime>, conversation_id: &str, index: i64) {
 	if index % 2 == 1 {
 		call(
@@ -207,16 +166,10 @@ fn said(window: &WebviewWindow<MockRuntime>, conversation_id: &str, index: i64) 
 		.expect("the reply ends");
 }
 
-/// The run the frontend opens against the durable lineage before it asks for a
-/// process. No `reason`: it is the caller's word for the run this one replaces, and
-/// nothing here has a policy to describe.
 fn a_run(conversation_id: &str, bot: &Value, started_at: i64) -> Value {
 	json!({ "conversationId": conversation_id, "botId": bot["id"], "startedAt": started_at })
 }
 
-/// The name the provider gave the process answering in a run, addressed to that
-/// run and to the participant holding it. Claude's id travels here and nowhere
-/// else: the run keeps its own id, which no caller may name it by out there.
 fn a_provider_session(
 	conversation_id: &str,
 	bot_id: &Value,
@@ -231,8 +184,6 @@ fn a_provider_session(
 	})
 }
 
-/// The fold the app takes before a run depends on one. `null` comes back when
-/// there was nothing new to fold, which is an answer rather than a failure.
 fn checkpoint(
 	window: &WebviewWindow<MockRuntime>,
 	conversation_id: &str,
@@ -260,10 +211,6 @@ fn occurrences(text: &str, needle: &str) -> usize {
 	text.matches(needle).count()
 }
 
-/// Every message the reader can reach, oldest first, walked the way the frontend
-/// walks it: the newest page, then the one above it named by the lowest `seq`
-/// already held — and what the walk cost in crossings. A gap or a repeat here is a
-/// message the user never sees or sees twice.
 fn walked_back(
 	window: &WebviewWindow<MockRuntime>,
 	conversation_id: &str,
@@ -297,11 +244,6 @@ fn seqs(page: &Value) -> Vec<i64> {
 		.collect()
 }
 
-/// Two things at once, and neither is provable without the other: the command is
-/// registered — an unregistered one is not refused, it is not answered at all —
-/// and the reason there is no database survives the crossing with its shape. A
-/// frontend that meets `{"kind":"unavailable"}` can say the transcript is not being
-/// written; one that meets a string cannot.
 #[test]
 fn a_host_without_a_database_answers_a_registered_command_with_why_there_is_none() {
 	let app = app_without_a_database();
@@ -313,9 +255,6 @@ fn a_host_without_a_database_answers_a_registered_command_with_why_there_is_none
 	);
 }
 
-/// A whole turn written the way the frontend will write one, then read back as the
-/// page it displays: both roles, a streamed reply closed at its ending, oldest
-/// first, and every field under the name the reader expects.
 #[test]
 fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 	let home = Home::new();
@@ -404,15 +343,6 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 	);
 }
 
-/// What the frontend scopes a Claude process with, over the boundary it really
-/// crosses. The lineage rules are the repository's and are proven there; what can
-/// only fail here is the crossing — the command registered, the participant named
-/// under the two words the frontend spells, and a row coming back with the id and
-/// the number a runtime scope is built out of.
-///
-/// The second open is the restart every scope test downstream depends on: it has to
-/// answer with another id and the next number, or a replaced run and its
-/// replacement would be indistinguishable to every reader of an event.
 #[test]
 fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
 	let home = Home::new();
@@ -438,18 +368,6 @@ fn opening_a_run_answers_with_the_row_a_runtime_scope_is_built_from() {
 	assert_ne!(replacement["id"], opened["id"], "the restart reused the replaced run's id");
 }
 
-/// The id the child announces, over the boundary the frontend really crosses. The
-/// lineage rules are the repository's and are proven there; what can only fail here
-/// is the crossing — the command registered, the four words the frontend spells its
-/// arguments with, and a refusal reaching the reader as the storage failure it is.
-///
-/// The whole callback is walked because each answer means something different to
-/// the caller: the live run takes the id, the same callback again is the one write
-/// it already was, a second different id is refused, and a run that has been
-/// replaced takes nothing — least of all onto the run that replaced it, which is
-/// still free to record its own. A run named under another bot is refused for the
-/// same reason: an id landing there would file a process under a participant that
-/// never ran it.
 #[test]
 fn the_id_a_run_answers_under_is_recorded_once_and_only_while_it_is_live() {
 	const ANNOUNCED: &str = "claude-9f3c";
@@ -491,11 +409,6 @@ fn the_id_a_run_answers_under_is_recorded_once_and_only_while_it_is_live() {
 	);
 }
 
-/// The same scope, across the crash that ended the run before it. A host that died
-/// left its run `active` on the record, and the next launch has to step over that
-/// row rather than start the lineage again — a `seq` back at 1 would give the run
-/// answering now the very name a caller from before the crash is still holding, and
-/// every refusal the scope buys would land on the wrong process.
 #[test]
 fn a_run_opened_after_a_crash_continues_the_lineage_instead_of_reusing_its_names() {
 	let home = Home::new();
@@ -520,9 +433,6 @@ fn a_run_opened_after_a_crash_continues_the_lineage_instead_of_reusing_its_names
 	assert_ne!(recovered["id"], crashed["id"], "the run after the crash took the crashed one's id");
 }
 
-/// A run cannot be opened for a bot the conversation does not hold, and the
-/// refusal has to reach the frontend as the storage failure it is: a launch that
-/// meets a string here has nothing to say about why it never got a scope.
 #[test]
 fn opening_a_run_for_a_bot_the_conversation_does_not_hold_is_refused_as_storage() {
 	let home = Home::new();
@@ -543,10 +453,6 @@ fn opening_a_run_for_a_bot_the_conversation_does_not_hold_is_refused_as_storage(
 	);
 }
 
-/// The read a long chat is opened with, over the boundary the cursor crosses:
-/// the newest page first, then the one before it, named by the lowest `seq` the
-/// reader already holds. A gap or a repeat here is a message the user never sees
-/// or sees twice.
 #[test]
 fn the_newest_page_comes_first_and_its_oldest_seq_walks_back_to_the_rest() {
 	let home = Home::new();
@@ -577,9 +483,6 @@ fn the_newest_page_comes_first_and_its_oldest_seq_walks_back_to_the_rest() {
 	assert_eq!(older["hasMore"], json!(false), "a partial page offered more");
 }
 
-/// The two rules the repositories hold, seen from the other side of the boundary.
-/// Both carry what disagreed, because a caller that may have replayed an event has
-/// no other way to tell its own duplicate from two events claiming one place.
 #[test]
 fn a_refused_write_keeps_the_shape_that_says_what_disagreed() {
 	let home = Home::new();
@@ -629,11 +532,6 @@ fn a_refused_write_keeps_the_shape_that_says_what_disagreed() {
 	);
 }
 
-/// The launch the app now boots on, at the boundary it really crosses. One host
-/// writes a transcript longer than the snapshot the old store kept whole, and is
-/// gone before the next one opens the file it left — nothing is carried over in
-/// memory. What the reader can reach afterwards is every message of it, in the
-/// crossings the frontend pages with, each exactly once.
 #[test]
 fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch() {
 	const HISTORY: i64 = 250;
@@ -671,33 +569,17 @@ fn a_history_longer_than_the_old_snapshot_cap_reads_back_whole_after_a_relaunch(
 	assert_eq!(crossings, 13, "the reader paid for more crossings than the history needed");
 }
 
-/// The chat as it really gets long, at the boundary the frontend crosses: more
-/// messages than one fold can reach, a host that died under the last reply, folds
-/// taken over what it left, and a prompt answering something no tail still holds.
-///
-/// One claim throughout, and it is the whole point of a durable chat — nothing is
-/// lost and nothing is said twice. Not by the sweep that closes out the dead host's
-/// reply, not by the two folds, not by the pages the reader walks, and not by the
-/// context the next run is told.
 #[test]
 fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled() {
-	/// Past what one checkpoint folds, so the first one cannot reach the beginning
-	/// and has to say so where the summary is read.
 	const HISTORY: i64 = 230;
-	/// The count of messages a context carries word for word, mirrored from the host:
-	/// it is what decides where every fold below stops.
 	const TAIL: i64 = 20;
 	const PAGE: u32 = 20;
-	/// Answered by the prompt, and far enough back that neither the tail nor either
-	/// fold still holds it.
 	const ANSWERED: &str = "m3";
 	const PROMPT: &str = "p1";
 	const PROMPT_TEXT: &str = "so where does that leave the roof?";
 
 	let home = Home::new();
 
-	// The host that dies: it writes the whole history and goes under the last reply,
-	// which is left open exactly as it was being streamed.
 	{
 		let app = home.app();
 		let window = window(&app);
@@ -714,9 +596,6 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	let window = window(&app);
 	let (bot, conversation) = a_bot_and_its_chat(&window);
 
-	// What the dead host left is on the record as what it was: the words it had
-	// reached, and an ending that says the stream stopped rather than one still
-	// being written.
 	let newest = call(&window, "conversation_message_page", a_page(&conversation, None, 1))
 		.expect("the newest page");
 	assert_eq!(
@@ -742,8 +621,6 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	);
 	assert!(folded["tokenCount"].as_i64().is_some_and(|count| count > 0));
 
-	// The prompt reaches the transcript first, and it answers a message the fold
-	// could not even reach.
 	call(
 		&window,
 		"conversation_append_user_message",
@@ -751,8 +628,6 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	)
 	.expect("the prompt is appended");
 
-	// The second fold, the way the app takes one: before a run that was told nothing
-	// is told everything, so that no stretch falls between the summary and the tail.
 	let again = checkpoint(&window, &conversation, &bot, 2);
 	assert_eq!(
 		again["lastMessageSeq"],
@@ -795,8 +670,6 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	assert_eq!(occurrences(&context, PROMPT_TEXT), 1, "the prompt was carried twice");
 	assert!(context.ends_with(PROMPT_TEXT), "the prompt was not the last thing the run is told");
 
-	// Nothing the folds read moved anything the reader can see: the transcript is
-	// still every message that was ever written, once each, with the prompt at the end.
 	let (reached, _) = walked_back(&window, &conversation, PAGE);
 	assert_eq!(
 		reached,
@@ -811,9 +684,6 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	);
 }
 
-/// An identity as the frontend submits one. Spelled here in JSON rather than
-/// built from a Rust type, because what is under test is exactly the crossing: a
-/// field the host reads under another name is a bot created with half a face.
 fn an_identity(name: &str, model: &str, animal: &str, blot: Value) -> Value {
 	json!({
 		"name": name,
@@ -828,10 +698,6 @@ fn an_identity(name: &str, model: &str, animal: &str, blot: Value) -> Value {
 	})
 }
 
-/// The whole of a bot's life over IPC: created with a chat of its own, listed,
-/// described again, and deleted with everything said in it. The chat is what
-/// makes a created bot immediately a thread the frontend can open, so it is
-/// asked for rather than assumed.
 #[test]
 fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	let home = Home::new();
@@ -903,15 +769,6 @@ fn a_bot_created_over_ipc_is_listed_described_and_deleted_with_its_chat() {
 	);
 }
 
-/// The boundary is where a closed vocabulary is checked, not the file: a word
-/// outside one fails to parse, so the command is never entered and no bot is
-/// written. What the caller gets back is Tauri's own account of the argument it
-/// could not read — the point being that nothing landed, in either of the two.
-///
-/// The face is closed and the model is not, which is the whole distinction: the
-/// engine draws eight animals and the palette holds eight colours, and a ninth of
-/// either is a bot the UI could not show, while what a model may be called belongs
-/// to Claude Code and nothing here can list it.
 #[test]
 fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
 	let home = Home::new();
@@ -938,12 +795,6 @@ fn a_face_outside_the_closed_vocabulary_is_refused_before_it_is_written() {
 	);
 }
 
-/// A model label this build has never heard of, stored and read back as it was
-/// given. There is no listing to check it against — no `claude models`, and the
-/// init frame only names the model already answering — so a label the host refused
-/// would be a bot the provider could run and this app could not describe. An alias
-/// the product does not offer yet and a versioned name a user pasted are the same
-/// case, and both survive the round trip.
 #[test]
 fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 	let home = Home::new();
@@ -965,7 +816,6 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 		"a label the file holds came back changed"
 	);
 
-	// And it is still a field a caller replaces whole, alias or not.
 	assert_eq!(
 		call(
 			&window,
@@ -977,16 +827,6 @@ fn a_model_label_outside_the_offered_aliases_is_stored_and_read_back_whole() {
 	);
 }
 
-/// The tools a bot is denied, over IPC and back: the list is submitted with the
-/// rest of the identity, it is read back from the agent file the session is
-/// promoted onto, and a tool allowed again leaves no denial behind. The file is the
-/// answer, not the row — a caller that saw a tool denied over a file naming none
-/// would be telling a reader the bot is held back while it is not.
-///
-/// The bot that denies the four tools that write files and run commands is answered
-/// as changing nothing, without ever having been asked a second question: one list
-/// crosses, and the switch is a reading of it. The delegation tool comes back with
-/// them: a bot that changes nothing starts nothing that changes anything either.
 #[test]
 fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() {
 	let home = Home::new();
@@ -1017,9 +857,6 @@ fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() 
 	assert_eq!(updated["changesNothing"], json!(false));
 }
 
-/// The one refusal a caller can act on: the list it is holding is behind the
-/// file. Both writes have to say it, and the second delete is the honest case —
-/// the bot really is gone, and saying so is not the same as saying it worked.
 #[test]
 fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 	let home = Home::new();
@@ -1049,15 +886,10 @@ fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 	);
 }
 
-/// The avatar directory as the host resolves it, from the same app handle the
-/// commands resolve it from: an assertion built on any other path would prove
-/// something about this test rather than about where pictures go.
 fn avatar_dir(app: &App<MockRuntime>) -> PathBuf {
 	app.path().app_data_dir().expect("data dir").join("avatars")
 }
 
-/// What is in that directory, sorted. Absent counts as empty: nothing has stored a
-/// picture yet, which is the same fact as nothing being left behind.
 fn stored_avatars(app: &App<MockRuntime>) -> Vec<String> {
 	let Ok(entries) = std::fs::read_dir(avatar_dir(app)) else {
 		return Vec::new();
@@ -1068,9 +900,6 @@ fn stored_avatars(app: &App<MockRuntime>) -> Vec<String> {
 	names
 }
 
-/// Built rather than checked in, so the bytes and the decoder that has to read them
-/// cannot drift apart. Deliberately not square and not 512: what is asserted on the
-/// far side is that the host squared and resized it, not that it copied a file.
 fn a_picture(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
 	let mut canvas = image::RgbImage::new(width, height);
 	for (x, y, pixel) in canvas.enumerate_pixels_mut() {
@@ -1087,8 +916,6 @@ fn a_png(width: u32, height: u32) -> Vec<u8> {
 	a_picture(width, height, image::ImageFormat::Png)
 }
 
-/// The upload as the frontend sends it: `Uint8Array` reaches the host as a JSON
-/// array of numbers, so the crossing is spelled that way here too.
 fn an_upload(id: &str, bytes: &[u8]) -> Value {
 	json!({ "id": id, "bytes": bytes })
 }
@@ -1116,10 +943,6 @@ fn wearing(window: &WebviewWindow<MockRuntime>, id: &str) -> Value {
 		.clone()
 }
 
-/// The whole point of the feature, over IPC: bytes in, one normalised file beside
-/// the database, and a path the webview can be pointed at. The stored file is
-/// decoded rather than measured, because "512×512 png" is what the UI is allowed to
-/// assume and a copy of the upload would have satisfied every other assertion here.
 #[test]
 fn an_uploaded_picture_is_stored_squared_beside_the_database_and_crosses_as_a_path() {
 	let home = Home::new();
@@ -1156,8 +979,6 @@ fn an_uploaded_picture_is_stored_squared_beside_the_database_and_crosses_as_a_pa
 	);
 }
 
-/// A jpeg goes in and a png comes out, which is the whole of what "every avatar
-/// renders identically" costs the UI: it never learns what was uploaded.
 #[test]
 fn a_jpeg_is_accepted_and_stored_as_the_one_format() {
 	let home = Home::new();
@@ -1179,9 +1000,6 @@ fn a_jpeg_is_accepted_and_stored_as_the_one_format() {
 	);
 }
 
-/// The acceptance the whole ordering exists for: nothing this host refuses may leave
-/// a file in that directory or a path on the bot. Three refusals, three reasons, and
-/// the same nothing behind each of them.
 #[test]
 fn a_picture_the_host_refuses_leaves_nothing_on_the_disk_and_nothing_on_the_bot() {
 	let home = Home::new();
@@ -1215,9 +1033,6 @@ fn a_picture_the_host_refuses_leaves_nothing_on_the_disk_and_nothing_on_the_bot(
 	assert_eq!(wearing(&window, &id), json!(null), "a refused picture reached the bot");
 }
 
-/// The limit, on the path a user actually crosses. Asserted here and not only in
-/// the unit around `normalised` because the number is part of the contract: the UI
-/// tells the user what it is by reading it off this refusal.
 #[test]
 fn a_picture_over_the_limit_is_refused_with_the_limit_it_broke() {
 	let home = Home::new();
@@ -1239,9 +1054,6 @@ fn a_picture_over_the_limit_is_refused_with_the_limit_it_broke() {
 	assert_eq!(stored_avatars(&app), Vec::<String>::new());
 }
 
-/// Exactly one file, not two. The new picture is written before the old one is
-/// swept, so this also proves the sweep took the right one — a sweep reading the
-/// table a moment too early would have taken the new one.
 #[test]
 fn replacing_a_picture_leaves_exactly_one_file_behind() {
 	let home = Home::new();
@@ -1267,9 +1079,6 @@ fn replacing_a_picture_leaves_exactly_one_file_behind() {
 	assert_eq!(wearing(&window, &id), json!(second));
 }
 
-/// A bot is thrown away with everything it wore. The other bot's picture is in the
-/// same directory on purpose: a sweep that answered "delete everything" would pass
-/// the first assertion and fail this one.
 #[test]
 fn deleting_a_bot_leaves_no_picture_behind_and_leaves_every_other_bot_its_own() {
 	let home = Home::new();
@@ -1292,9 +1101,6 @@ fn deleting_a_bot_leaves_no_picture_behind_and_leaves_every_other_bot_its_own() 
 	assert!(Path::new(&kept).exists(), "deleting one bot took another bot's picture");
 }
 
-/// Putting an animal back on is an identity write with no path, and the file goes
-/// with it. Echoing the path back is the other half of the same rule and the one a
-/// frontend does on every unrelated edit — it must keep the picture, not re-upload it.
 #[test]
 fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with_it_keeps_it() {
 	let home = Home::new();
@@ -1327,9 +1133,6 @@ fn an_identity_written_without_a_path_takes_the_picture_off_and_one_written_with
 	assert_eq!(stored_avatars(&app), Vec::<String>::new(), "the picture taken off stayed on disk");
 }
 
-/// A path is a column until something says it names a file in the one directory the
-/// host serves from. The file outside is left exactly as it was — the point is that
-/// it is refused rather than read, and rather than swept.
 #[test]
 fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
 	let home = Home::new();
@@ -1363,9 +1166,6 @@ fn a_recorded_path_outside_the_avatar_directory_is_refused_rather_than_read() {
 	assert!(Path::new("/etc/passwd").exists(), "the sweep reached outside its own directory");
 }
 
-/// What an install whose data directory moved leaves behind: a row naming a file
-/// that is not there. The bot comes back with no picture, which is the animal, and
-/// nothing about the read fails.
 #[test]
 fn a_picture_missing_from_the_disk_reads_as_no_picture_rather_than_a_broken_one() {
 	let home = Home::new();
@@ -1387,9 +1187,6 @@ fn a_picture_missing_from_the_disk_reads_as_no_picture_rather_than_a_broken_one(
 	);
 }
 
-/// A picture is written for a bot that exists or for nobody. The column write is
-/// what refuses, and it runs before the bytes do — so an upload naming a bot that is
-/// gone leaves the directory as empty as it found it.
 #[test]
 fn an_upload_naming_a_bot_that_is_gone_is_refused_before_any_file_is_written() {
 	let home = Home::new();
@@ -1405,9 +1202,6 @@ fn an_upload_naming_a_bot_that_is_gone_is_refused_before_any_file_is_written() {
 	assert_eq!(stored_avatars(&app), Vec::<String>::new());
 }
 
-/// A host with no database refuses an upload the way it refuses every other write,
-/// and refuses it before it has anywhere to write: the picture is normalised in
-/// memory, so nothing is on the disk to take back.
 #[test]
 fn a_host_without_a_database_refuses_an_upload_with_why_there_is_none() {
 	let app = app_without_a_database();
@@ -1419,11 +1213,6 @@ fn a_host_without_a_database_refuses_an_upload_with_why_there_is_none() {
 	);
 }
 
-/// The launch as it now opens: it reads the roster and seeds nothing. A fresh
-/// install answers with no bots, a bot created is the only reason there is one, and
-/// deleting the last one leaves a host that comes back up empty — which is the whole
-/// of the empty state being real. A launch that insisted on a bot would write the
-/// shipped one back here, and a user would find the bot they deleted alive again.
 #[test]
 fn a_launch_reads_the_roster_it_finds_and_never_writes_a_bot_back_into_it() {
 	let home = Home::new();
@@ -1465,17 +1254,10 @@ fn a_launch_reads_the_roster_it_finds_and_never_writes_a_bot_back_into_it() {
 	);
 }
 
-/// The attachments directory as the host resolves it, from the same app handle the
-/// command resolves it from — see [`avatar_dir`] for why it is not spelled out.
 fn attachment_dir(app: &App<MockRuntime>) -> PathBuf {
 	app.path().app_data_dir().expect("data dir").join("attachments")
 }
 
-/// A bot created here and the id of the one chat it holds, which is the
-/// conversation attachments hang off. Its sibling [`a_bot_and_its_chat`] answers
-/// for the one bot the host writes itself; this one is for the bots a test creates,
-/// and it hands back both ids because deleting a bot is asserted on what happens to
-/// its conversation.
 fn a_new_bot_and_its_chat(window: &WebviewWindow<MockRuntime>, name: &str) -> (String, String) {
 	let id = a_bot(window, name);
 	let conversation_id = call(window, "conversation_main_chat", json!({ "botId": id }))
@@ -1486,14 +1268,10 @@ fn a_new_bot_and_its_chat(window: &WebviewWindow<MockRuntime>, name: &str) -> (S
 	(id, conversation_id)
 }
 
-/// The submission as the frontend sends it: `Uint8Array` reaches the host as a
-/// JSON array of numbers, so the crossing is spelled that way here too.
 fn an_attachment(name: &str, bytes: &[u8]) -> Value {
 	json!({ "name": name, "bytes": bytes })
 }
 
-/// One file stored for a conversation, answered as the path it took — the shape
-/// every assertion about what a deletion sweeps is built on.
 fn an_attachment_stored_for(
 	window: &WebviewWindow<MockRuntime>,
 	conversation_id: &str,
@@ -1510,10 +1288,6 @@ fn an_attachment_stored_for(
 		.to_owned()
 }
 
-/// The whole point of the feature, over IPC: bytes in, files under the
-/// conversation, and absolute paths back — which is the only form an attachment
-/// reaches Claude in. The name a user's file carried is submitted as a path on
-/// purpose: what comes back must be inside the conversation's directory anyway.
 #[test]
 fn attachments_submitted_for_a_chat_are_written_under_it_and_cross_as_absolute_paths() {
 	let home = Home::new();
@@ -1559,10 +1333,6 @@ fn attachments_submitted_for_a_chat_are_written_under_it_and_cross_as_absolute_p
 	);
 }
 
-/// A conversation the file does not hold is refused before anything reaches the
-/// disk, which is what keeps files from accumulating under an id nothing will ever
-/// sweep — the directory is not even made. A real conversation is seated beside it
-/// so what is refused is the id rather than an empty table.
 #[test]
 fn attachments_for_a_conversation_that_is_not_on_the_record_are_refused_and_nothing_is_written() {
 	let home = Home::new();
@@ -1587,9 +1357,6 @@ fn attachments_for_a_conversation_that_is_not_on_the_record_are_refused_and_noth
 	);
 }
 
-/// A bot is thrown away with everything attached to what was said to it. The other
-/// bot's conversation is in the same directory on purpose: a sweep that answered
-/// "delete everything" would pass the first assertion and fail the second.
 #[test]
 fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_other_one_its_own() {
 	let home = Home::new();
@@ -1610,15 +1377,6 @@ fn deleting_a_bot_takes_the_attachments_of_its_conversation_and_leaves_every_oth
 	assert!(Path::new(&kept).exists(), "deleting one bot took another conversation's attachments");
 }
 
-/// What a session announced, kept where the next launch finds it. The commands only
-/// ever reach this side once a session is up and a session is only started by a
-/// prompt, so what crosses here is what the composer offers a bot nobody has spoken
-/// to yet: the last list named, replaced whole by the next one, and nothing at all
-/// for a bot no session has ever answered for.
-///
-/// The first list is written as bare names, which is what a list stored before
-/// descriptions were asked for holds: it still reads, as commands nothing is said
-/// about.
 #[test]
 fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the_next() {
 	let home = Home::new();
@@ -1676,10 +1434,6 @@ fn the_commands_a_session_announced_are_held_against_the_bot_and_replaced_by_the
 	);
 }
 
-/// A bot's skills as the frontend meets them: written, listed, marked, unmarked and
-/// taken away over IPC, in the words a panel will spell. Nothing about a skill is in
-/// the database — the bundle on the disk is the whole record — so this is also the
-/// only place the surface can be seen answering at all.
 #[test]
 fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	let home = Home::new();
@@ -1775,8 +1529,6 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	);
 }
 
-/// The bot's skills as a panel lists them, minus the `learn` skill every bundle
-/// carries: what a reader writes is what this test is about.
 fn readers_skills(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Value {
 	let listed =
 		call(window, "conversation_bot_skills", json!({ "botId": bot_id })).expect("the skills");
@@ -1790,15 +1542,11 @@ fn readers_skills(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Value {
 	Value::Array(readers)
 }
 
-/// Where the bot's bundle sits, resolved the way the host resolves it rather than
-/// spelled again here.
 fn bundle_of(app: &App<MockRuntime>, bot_id: &str) -> PathBuf {
 	let root = bundles::root(app.handle()).expect("the bundle root");
 	bundles::dir(&root, bot_id)
 }
 
-/// A JSON file off the disk, or `null` for one that is not there — which is how the
-/// absence of the server file is asserted beside its contents.
 fn json_at(path: &Path) -> Value {
 	std::fs::read_to_string(path)
 		.ok()
@@ -1806,10 +1554,6 @@ fn json_at(path: &Path) -> Value {
 		.unwrap_or(Value::Null)
 }
 
-/// A bot's MCP servers as the frontend meets them: written, listed, replaced and
-/// taken away over IPC. Nothing about a server is in the database — the bundle on
-/// the disk is the whole record — so the file itself is read alongside every call,
-/// since it is what the agent will really be started on.
 #[test]
 fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	let home = Home::new();
@@ -1848,12 +1592,8 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	);
 	assert_eq!(json_at(&servers)["mcpServers"], json!({ "atlas": atlas, "ledger": ledger }));
 
-	// The manifest points at the file, which is what has the agent load it with the
-	// bundle at all.
 	assert_eq!(json_at(&manifest)["mcpServers"], json!("./.mcp.json"));
 
-	// A reader put a key of their own in the file. It is not this app's to carry away
-	// on the next write, and neither is the server it is not about.
 	let mut theirs = json_at(&servers);
 	theirs["opennestIsNotToTouchThis"] = json!(true);
 	std::fs::write(&servers, theirs.to_string()).expect("the hand edit lands");
@@ -1869,9 +1609,6 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	assert_eq!(after["mcpServers"], json!({ "atlas": replaced, "ledger": ledger }));
 	assert_eq!(after["opennestIsNotToTouchThis"], json!(true));
 
-	// A configuration that is not a map is refused before anything is written, and
-	// the refusal says what shape was wrong without carrying what was offered — a
-	// configuration is a command to run and an environment that often holds a token.
 	let refused = call(
 		&window,
 		"conversation_set_bot_mcp_server",
@@ -1898,16 +1635,12 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 		json!("unwritableBundle")
 	);
 
-	// The last one going leaves the reader's own key behind and nothing of this
-	// module's — not an empty map, and not a manifest pointing at a map that is gone.
 	call(&window, "conversation_delete_bot_mcp_server", json!({ "botId": BOT, "name": "ledger" }))
 		.expect("the last server is taken away");
 	let bare = json_at(&servers);
 	assert_eq!(bare["mcpServers"], Value::Null);
 	assert_eq!(bare["opennestIsNotToTouchThis"], json!(true));
 
-	// And with the reader's key taken out by hand too, the file itself goes rather
-	// than sitting there declaring nothing.
 	std::fs::write(&servers, json!({ "mcpServers": { "atlas": atlas } }).to_string())
 		.expect("a file with nothing but servers in it");
 	call(&window, "conversation_delete_bot_mcp_server", json!({ "botId": BOT, "name": "atlas" }))
@@ -1925,11 +1658,6 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	);
 }
 
-/// A bot duplicated over IPC: everything the panel showed of the first one, the
-/// bundle it is really started on, and none of what it said. The bundle is read off
-/// the disk rather than through the listing commands where it can be, because the
-/// duplicate has to be a directory an agent could be launched on and not a row that
-/// answers like one.
 #[test]
 fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 	let home = Home::new();
@@ -1965,9 +1693,6 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 	)
 	.expect("the server is written");
 
-	// A hook of the reader's own and the source's own memory, neither of which any
-	// command writes: one is a bundle the reader filled in by hand, the other is what
-	// the bot came to remember over the turns it was spoken to.
 	let source_bundle = bundle_of(&app, &source_id);
 	let theirs =
 		r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo theirs"}]}]}}"#;
@@ -2003,8 +1728,6 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 	assert_eq!(duplicate["deniedTools"], source["deniedTools"]);
 	assert_eq!(duplicate["outputStyle"], source["outputStyle"]);
 
-	// A thread of its own, with nothing in it: the duplicate is a bot to start with
-	// rather than a conversation to continue.
 	let duplicate_chat = call(&window, "conversation_main_chat", json!({ "botId": duplicate_id }))
 		.expect("the chat the duplicate was created with");
 	let duplicate_conversation =
@@ -2042,8 +1765,6 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 		"what the source remembered was copied into a bot that has been told nothing"
 	);
 
-	// Generated for the duplicate rather than copied: the manifest names its id, the
-	// agent file carries it, and the history under it starts here.
 	let root = bundles::root(app.handle()).expect("the bundle root");
 	let manifest = json_at(&bundle.join(".claude-plugin").join("plugin.json"));
 	assert_eq!(manifest["name"], json!(duplicate_id));
@@ -2059,7 +1780,6 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 		"the duplicate has no history of its own"
 	);
 
-	// And the source is exactly as it was: duplicating a bot moves nothing on it.
 	assert!(source_bundle.join(".learned.md").exists(), "the source lost what it remembered");
 	assert_eq!(
 		json_at(&source_bundle.join(".mcp.json"))["mcpServers"],
@@ -2078,8 +1798,6 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 	);
 }
 
-/// The one refusal a caller can act on, on this command too: the list it is holding
-/// names a bot the file no longer does, and nothing is written for the id it sent.
 #[test]
 fn a_duplicate_of_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 	let home = Home::new();

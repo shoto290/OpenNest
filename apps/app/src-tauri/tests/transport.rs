@@ -1,4 +1,3 @@
-//! Transport tests driven by the deterministic fake sidecar.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,9 +17,6 @@ const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SETTLE: Duration = Duration::from_millis(400);
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
-/// Every rung of the escalation and then some. The ladder's own waits are the
-/// only thing a shutdown may spend time on, and each is bounded by
-/// `SHUTDOWN_GRACE`.
 const LADDER_CEILING: Duration = Duration::from_secs(12);
 
 struct Harness {
@@ -29,9 +25,6 @@ struct Harness {
 	events: mpsc::UnboundedReceiver<AgentEvent>,
 }
 
-/// The scenario travels with the session rather than with the process now: one
-/// sidecar serves every run, so what one of them is asked to be has to be said
-/// when it is opened.
 fn options(scenario: &str) -> SessionOptions {
 	let mut options = SessionOptions::new(std::env::temp_dir())
 		.with_env("FAKE_AGENT_SCENARIO", scenario);
@@ -49,8 +42,6 @@ async fn sidecar() -> Arc<Sidecar> {
 	Sidecar::start(sidecar_options()).await.expect("the fake sidecar announces itself")
 }
 
-/// A sidecar started under variables of its own — what the session env cannot
-/// carry, because it describes the process rather than the run.
 async fn sidecar_with(env: &[(&str, &str)]) -> Arc<Sidecar> {
 	let options = env
 		.iter()
@@ -81,8 +72,6 @@ impl Harness {
 		self.session.cancel_turn().await
 	}
 
-	/// Drains until the turn closes, or gives up so a hung transport fails the
-	/// test instead of hanging it.
 	async fn drain_turn(&mut self) -> Vec<AgentEvent> {
 		let mut seen = Vec::new();
 		let deadline = tokio::time::Instant::now() + DEADLINE;
@@ -101,9 +90,6 @@ impl Harness {
 		}
 	}
 
-	/// Collects until the caller's expectation holds. A wait that runs out says
-	/// what it was waiting for and what arrived instead, which a fixed sleep
-	/// cannot: it just leaves the next assertion to fail somewhere else.
 	async fn wait_for(
 		&mut self,
 		expectation: &str,
@@ -135,8 +121,6 @@ impl Harness {
 	}
 }
 
-/// The one wait that cannot be an expectation: proving nothing arrives needs a
-/// window for it to arrive in. Every other caller states what it awaits.
 async fn drain_after_settling(
 	events: &mut mpsc::UnboundedReceiver<AgentEvent>,
 ) -> Vec<AgentEvent> {
@@ -220,9 +204,6 @@ async fn streams_a_normal_turn_and_closes_it() {
 	harness.session.shutdown().await;
 }
 
-/// The two asks about the install travel down the pipe every session shares, so
-/// both are answered by the one process the host already holds — and both come back
-/// as an answer rather than as a frame no session was owed.
 #[tokio::test]
 async fn the_install_is_asked_of_the_sidecar_the_sessions_are_served_from() {
 	let live = sidecar_with(&[("FAKE_AGENT_MODELS", "quasar,nimbus-preview")]).await;
@@ -236,8 +217,6 @@ async fn the_install_is_asked_of_the_sidecar_the_sessions_are_served_from() {
 	harness.session.shutdown().await;
 }
 
-/// Two callers asking at the same moment are both answered from the one line: the
-/// second is not left waiting on a channel the first replaced.
 #[tokio::test]
 async fn two_asks_landing_together_are_both_answered() {
 	let live = sidecar_with(&[("FAKE_AGENT_MODELS", "quasar")]).await;
@@ -249,9 +228,6 @@ async fn two_asks_landing_together_are_both_answered() {
 	live.shutdown().await;
 }
 
-/// An ask on a sidecar that has stopped talking is refused on the spot. It is the
-/// launch that waits on this answer, and a caller left hanging on a dead pipe is a
-/// reader shown nothing at all.
 #[tokio::test]
 async fn an_ask_on_a_dead_sidecar_is_refused_rather_than_left_hanging() {
 	let gone = sidecar().await;
@@ -267,9 +243,6 @@ async fn an_ask_on_a_dead_sidecar_is_refused_rather_than_left_hanging() {
 	));
 }
 
-/// A capability the sidecar never announced is one the host never asks for. The
-/// reader is answered with the whole message instead of a stream that would never
-/// arrive — the same reply, said once.
 #[tokio::test]
 async fn a_sidecar_that_names_no_deltas_answers_in_whole_messages() {
 	let plain = sidecar_with(&[("FAKE_AGENT_CAPABILITIES", "resume")]).await;
@@ -284,8 +257,6 @@ async fn a_sidecar_that_names_no_deltas_answers_in_whole_messages() {
 	assert_eq!(outcome(&events), Some(TurnOutcome::Completed));
 }
 
-/// Every session is a lane on one process, and a lane outlives the turns it
-/// carries: the second prompt reaches the same run as the first.
 #[tokio::test]
 async fn a_second_turn_reuses_the_same_session() {
 	let mut harness = start(options("normal")).await.expect("session starts");
@@ -400,10 +371,6 @@ async fn a_refused_resume_falls_back_to_a_fresh_session() {
 	started.session.shutdown().await;
 }
 
-/// A resume that only ran out of time has proven nothing about the id. Claude
-/// replays a conversation before it acknowledges anything, so the bigger the
-/// transcript the likelier the wait — and that transcript is exactly what
-/// blaming the id would cost.
 #[tokio::test]
 async fn a_resume_that_timed_out_is_reported_as_a_timeout() {
 	let (tx, _events) = mpsc::unbounded_channel();
@@ -422,9 +389,6 @@ async fn a_resume_that_timed_out_is_reported_as_a_timeout() {
 	started.session.shutdown().await;
 }
 
-/// The fallback is expected to work, so the attempt it replaces has nothing to
-/// report: a crash banner would flash on the one path built never to fail the
-/// reader.
 #[tokio::test]
 async fn a_refused_resume_keeps_its_crash_off_the_channel() {
 	let (tx, events) = mpsc::unbounded_channel();
@@ -442,10 +406,6 @@ async fn a_refused_resume_keeps_its_crash_off_the_channel() {
 	harness.session.shutdown().await;
 }
 
-/// A start that fails is reported by the command that owns it, once. The child
-/// it kills on the way out reaches `on_exit` too, on a task of its own, and a
-/// second account of the same failure racing the first can leave a startup
-/// timeout on screen as "claude exited unexpectedly".
 #[tokio::test]
 async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
 	let (tx, mut events) = mpsc::unbounded_channel();
@@ -460,10 +420,6 @@ async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
 	assert!(!reports_a_crash(&seen), "the killed child reported a crash of its own: {seen:#?}");
 }
 
-/// The commands a session announces cross as their own frame, with what each one
-/// does. The unit tests read the frame off a hand-built value; this one reads it
-/// off a real child, through the envelope and the tag that resolves it, and proves
-/// the list lands before the reader is told the session is open.
 #[tokio::test]
 async fn the_commands_a_session_announces_reach_the_reader() {
 	let mut harness = start(options("commands")).await.expect("the session opens");
@@ -488,8 +444,6 @@ async fn the_commands_a_session_announces_reach_the_reader() {
 	harness.session.shutdown().await;
 }
 
-/// A resume that works must lose nothing it emitted while it was still being
-/// judged, and the announcement has to lead the turn it belongs to.
 #[tokio::test]
 async fn an_accepted_resume_keeps_what_it_buffered() {
 	let (tx, events) = mpsc::unbounded_channel();
@@ -531,8 +485,6 @@ async fn an_accepted_resume_keeps_what_it_buffered() {
 	harness.session.shutdown().await;
 }
 
-/// A failure the fresh start reproduces belongs to the install, so it travels
-/// upward and the caller never reaches the branch that would drop the stored id.
 #[tokio::test]
 async fn a_start_failing_without_the_resume_flag_too_stays_a_failure() {
 	let (tx, _events) = mpsc::unbounded_channel();
@@ -547,9 +499,6 @@ async fn a_start_failing_without_the_resume_flag_too_stays_a_failure() {
 	assert!(matches!(error, TransportError::Crashed { .. }));
 }
 
-/// When the two attempts fail differently the reader is owed the fresh one:
-/// the resume attempt's verdict is the older of the two and the one about a
-/// flag that is no longer in play.
 #[tokio::test]
 async fn two_different_failures_surface_the_fresh_one() {
 	let (tx, _events) = mpsc::unbounded_channel();
@@ -667,9 +616,6 @@ async fn a_permission_request_can_be_denied() {
 	harness.session.shutdown().await;
 }
 
-/// The ask travels as questions rather than as a permission, and the answers go
-/// back as the tool input the child reads: one label, several joined, and words
-/// typed instead all arrive as they were written.
 #[tokio::test]
 async fn a_question_is_answered_with_what_the_reader_said() {
 	let mut harness = start(options("question")).await.expect("session starts");
@@ -712,8 +658,6 @@ async fn a_question_is_answered_with_what_the_reader_said() {
 	harness.session.shutdown().await;
 }
 
-/// Refusing to answer is refusing the tool: the question goes back through the
-/// permission path and the child is denied.
 #[tokio::test]
 async fn a_question_can_be_denied() {
 	let mut harness = start(options("question")).await.expect("session starts");
@@ -758,9 +702,6 @@ async fn answering_an_unknown_permission_is_rejected() {
 	harness.session.shutdown().await;
 }
 
-/// The grace window is a ceiling, not a schedule: a child handed EOF exits on
-/// its own, so the shutdown returns inside it and never reaches a signal.
-/// Anything at or past it means the escalation had to do the work.
 #[tokio::test]
 async fn closing_stdin_ends_a_healthy_sidecar_without_reaching_the_signal() {
 	let harness = start(options("normal")).await.expect("session starts");
@@ -772,9 +713,6 @@ async fn closing_stdin_ends_a_healthy_sidecar_without_reaching_the_signal() {
 	assert!(elapsed < SHUTDOWN_GRACE, "shutdown waited {elapsed:?} instead of taking EOF");
 }
 
-/// EOF on stdout says the child stopped talking, not that it stopped running.
-/// The wait that follows holds the child lock, so an unbounded one leaves the
-/// quit path blocked on the very child it exists to end.
 #[tokio::test]
 async fn a_sidecar_that_closes_stdout_and_keeps_running_is_reported_and_still_terminable() {
 	let deaf = sidecar_with(&[("FAKE_AGENT_IGNORE_EOF", "1")]).await;
@@ -794,8 +732,6 @@ async fn a_sidecar_that_closes_stdout_and_keeps_running_is_reported_and_still_te
 		.expect("the quit path never got the child lock back");
 }
 
-/// The probe file is named after this test process: worktrees run their suites
-/// side by side and a shared path would have them racing.
 #[cfg(unix)]
 fn probe_file(label: &str) -> PathBuf {
 	let path = std::env::temp_dir()
@@ -804,8 +740,6 @@ fn probe_file(label: &str) -> PathBuf {
 	path
 }
 
-/// Runs a session that has spawned a grandchild only a process-group kill can
-/// reach.
 #[cfg(unix)]
 async fn orphan_probe(
 	label: &str,
@@ -829,8 +763,6 @@ async fn orphan_probe(
 	(harness, orphan)
 }
 
-/// The filesystem and the process table cannot be awaited, so these two are the
-/// only waits left that genuinely have to sample.
 #[cfg(unix)]
 async fn poll_until(expectation: &str, is_satisfied: impl Fn() -> bool) {
 	let deadline = tokio::time::Instant::now() + DEADLINE;
@@ -855,9 +787,6 @@ async fn shutdown_takes_the_whole_process_group_down() {
 	poll_until("the shutdown to leave no orphan behind", || !is_alive(orphan)).await;
 }
 
-/// A child deaf to EOF is the only thing the escalation is left for, and it
-/// still has to be reached — bounded, so a wedged child cannot hold the app on
-/// its way out.
 #[cfg(unix)]
 #[tokio::test]
 async fn shutdown_escalates_on_a_sidecar_that_ignores_stdin_close() {
@@ -871,9 +800,6 @@ async fn shutdown_escalates_on_a_sidecar_that_ignores_stdin_close() {
 	poll_until("the escalation to leave no orphan behind", || !is_alive(orphan)).await;
 }
 
-/// A start that fails still spent time as a live agent, and the real one has its
-/// stdio MCP servers up by then. Reaping the sidecar reaches none of them, so the
-/// group has to be swept on the way out.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_start_that_crashes_leaves_its_group_to_the_sweep() {
@@ -897,12 +823,6 @@ async fn a_start_that_crashes_leaves_its_group_to_the_sweep() {
 	let _ = std::fs::remove_file(&pid_file);
 }
 
-/// The last rung of the ladder waits on a child the signal before it may never
-/// have reached — one that left the group, a platform where a group signal does
-/// nothing at all — and that wait holds the child lock. `agent_shutdown` and
-/// every restart go through it, so an unbounded one leaves the command
-/// unresolved and the frontend deduplicating every later attempt into a promise
-/// that can no longer settle.
 #[cfg(unix)]
 #[tokio::test]
 async fn shutting_down_returns_even_when_no_group_signal_reaches_the_sidecar() {
@@ -921,11 +841,6 @@ async fn shutting_down_returns_even_when_no_group_signal_reaches_the_sidecar() {
 		.expect("the shutdown never gave the child lock back");
 }
 
-/// A child that dies on its own is reaped where it is read, and the pid it held
-/// goes back to the system the moment it is. Anything still tracking that pid —
-/// the exit sweep, the quit path, a restart — would be aiming a `SIGKILL` at
-/// whoever holds it by then, so the group has to be spent and dropped in the
-/// same breath as the reaping.
 #[cfg(unix)]
 #[tokio::test]
 async fn a_sidecar_that_exits_on_its_own_spends_its_group_and_stops_tracking_it() {

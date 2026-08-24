@@ -40,8 +40,6 @@ describe("isBundleWrite", () => {
 		}
 	})
 
-	// A name is not a place: `..` and a symlink both leave the bundle, and the
-	// resolved path is what says so.
 	it("asks for a path that only looks like it is inside", () => {
 		expect(writes(join(bundle, "..", "b2", "skills", "SKILL.md"))).toBe(false)
 		expect(writes(join(bundle, "away", "notes.md"))).toBe(false)

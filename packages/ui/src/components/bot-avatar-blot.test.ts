@@ -20,13 +20,8 @@ import {
 	outlineBounds,
 } from "@workspace/ui/components/bot-avatar-silhouette"
 
-/** Bot ids of the shape the store hands out. Comfortably past the point where all
- * eight poses have been drawn at least once. */
 const SEEDS = Array.from({ length: 64 }, (_, at) => `bot-${at}-9f3c${at * 7}`)
 
-/** The outline is a fifth of a unit wider than it is tall, so a quarter turn spends
- * half of that difference outside the bounds it started in — a twentieth of a pixel
- * at the largest size the blot is ever drawn. */
 const BOUNDS_SLACK = 0.25
 
 const posed = (points: Vec2[], { turn, mirrored }: BlotPose): Vec2[] => {

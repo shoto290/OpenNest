@@ -1,7 +1,3 @@
-/** Every string a reader sees on the chrome every surface shares — the boot
- * screen, the sidebar, the context menu, the dialog frame, the picture dropzone,
- * the stateful button and the update pastille. These belong to no single surface,
- * so they answer to none of their namespaces. */
 const common = {
 	boot: {
 		status: "Starting OpenNest",
@@ -29,9 +25,6 @@ const common = {
 		success: "Done",
 		error: "Try again",
 	},
-	/** What a reader looking elsewhere is told. The bot's name is the title, so the
-	 * body only has to say what happened: macOS keeps a notification in its centre
-	 * until the reader clears it, and nothing of a conversation belongs there. */
 	notification: {
 		question: "Asked you a question",
 		permission: "Wants your permission",

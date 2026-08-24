@@ -69,38 +69,24 @@ export type AgentActivityItem =
 export type AgentActivityContentType = AgentActivityItem["type"] | "mixed"
 
 export interface AgentActivityProps {
-	/** Chronological activity entries. Append or update items as events stream. */
 	items: AgentActivityItem[]
-	/** Expected activity kind before the first streamed item arrives. */
 	contentType?: AgentActivityContentType
-	/** Current run phase. Active runs always stay expanded. */
 	status?: AgentActivityStatus
-	/** Elapsed run time, in seconds. Used by the step-only and failed summaries. */
 	duration?: number
-	/** Controlled expanded state used once the run is over. */
 	open?: boolean
-	/** Initial expanded state used once the run is over. Failed runs open anyway. */
 	defaultOpen?: boolean
-	/** Called when the settled activity disclosure changes state. */
 	onOpenChange?: (open: boolean) => void
-	/** Collapse the disclosure when status changes from working to complete.
-	 * Never applies to failed runs, which expand so the trace stays readable. */
 	collapseOnComplete?: boolean
-	/** Optional label shown while the run is active. */
 	activeLabel?: ReactNode
-	/** Optional completed summary. Derived from the item types by default. */
 	summary?: ReactNode
-	/** Optional renderer for the contents of the active status row. */
 	renderWorkingStatus?: (context: {
 		label: ReactNode
 		duration: number
 	}) => ReactNode
-	/** Optional renderer for the contents before the built-in disclosure chevron. */
 	renderCompletedStatus?: (context: {
 		summary: ReactNode
 		duration: number
 	}) => ReactNode
-	/** Maximum visible activity height before the stream begins gliding. */
 	maxHeight?: number
 	className?: string
 	contentClassName?: string

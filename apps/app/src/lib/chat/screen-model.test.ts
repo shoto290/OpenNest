@@ -47,7 +47,6 @@ function prompt(overrides: Partial<TranscriptMessage> = {}): TranscriptMessage {
 	})
 }
 
-/** The bubbles one message becomes, for the tests that read nothing else. */
 function bubbles(
 	content: string,
 	completion: TranscriptCompletion = "complete",
@@ -85,8 +84,6 @@ describe("toTranscriptRows", () => {
 			{ ...live, content: "Two.\n\nThr" },
 		])
 
-		// The row the reader is already looking at must keep its identity, or the
-		// memoised transcript re-renders every row on every delta.
 		expect(second[0]).toBe(first[0])
 	})
 
@@ -118,7 +115,6 @@ describe("toTranscriptRows", () => {
 		const stopped = toTranscriptRows([message({ completion: "failed" })])
 
 		expect(stopped).toHaveLength(1)
-		// The screen reads the emptiness back to withhold a copy action.
 		expect(stopped[0].text).toBe("")
 		expect(
 			toTranscriptRows([message({ completion: "complete" })]),
@@ -186,12 +182,10 @@ describe("toTranscriptRows", () => {
 		for (let length = 1; length <= answer.length; length += 1) {
 			const texts = bubbles(answer.slice(0, length), "streaming")
 
-			// Everything already on screen has to still be there, word for word.
 			expect(texts.slice(0, published.length)).toEqual(published)
 			published = texts
 		}
 
-		// Every block but the last, which only the end of the turn releases.
 		expect(published).toEqual(written.slice(0, -1))
 	})
 

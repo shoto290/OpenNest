@@ -19,22 +19,17 @@ const scrollActiveIntoView = (row: HTMLButtonElement | null) => {
 	row?.scrollIntoView({ block: "nearest" })
 }
 
-/** A row of the menu: the name the reader types, and the one line said about it. */
 export interface PromptCommandOption {
 	name: string
 	description?: string
 }
 
 export interface PromptCommandMenuProps {
-	/** Commands, rendered in the order given. */
 	commands: PromptCommandOption[]
 	open: boolean
-	/** Filters the list, case-insensitively, on a contained match. */
 	query: string
 	onSelect: (command: string) => void
-	/** Escape, or a pointer press outside the menu. */
 	onDismiss: () => void
-	/** The composer the menu is anchored above. */
 	children: ReactNode
 	className?: string
 }

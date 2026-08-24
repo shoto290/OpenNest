@@ -25,7 +25,6 @@ describe("preloadedSkills", () => {
 		rmSync(plugin, { recursive: true, force: true })
 	})
 
-	// The mark the host writes into the frontmatter is the only thing read here.
 	it("carries the body of every skill marked for preloading", () => {
 		dropSkill(plugin, "learn", marked("learn", "## How to write\n\nRules."))
 
@@ -54,7 +53,6 @@ describe("preloadedSkills", () => {
 		])
 	})
 
-	// A skill the plugin exposes for invocation is not a skill the prompt carries.
 	it("carries nothing for a skill that does not ask to be preloaded", () => {
 		dropSkill(plugin, "quiet", '---\nname: "quiet"\n---\n\nRules.\n')
 		dropSkill(
@@ -66,7 +64,6 @@ describe("preloadedSkills", () => {
 		expect(preloadedSkills(plugin)).toEqual([])
 	})
 
-	// A session opens on the layer alone rather than not at all.
 	it("carries nothing for a plugin with no skills, no directory, or a broken file", () => {
 		expect(preloadedSkills(plugin)).toEqual([])
 		expect(preloadedSkills(join(plugin, "nowhere"))).toEqual([])

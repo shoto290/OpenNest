@@ -25,8 +25,6 @@ const SAMPLES: Record<AgentCodeLanguage, string> = {
 	yaml: `nest:\n  tint: sky\n  animals: 12`,
 }
 
-/** The block scrolls sideways but takes no focus, so a keyboard cannot reach the
- * rest of a long command. It belongs to the primitive, not to a story. */
 const A11Y_SCROLL_FOCUS_AWAITING_DESIGN_DECISION = {
 	config: {
 		rules: [{ id: "scrollable-region-focusable", reviewOnFail: true }],

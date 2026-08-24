@@ -8,22 +8,10 @@ export type ProviderCapability =
 export type SessionRequest = {
 	cwd: string
 	resume?: string
-	/** The bot's plugin bundle, loaded for the session and never installed, and the
-	 * agent inside it the main thread is promoted to. Named apart from any provider's
-	 * spelling of them: the provider module turns the pair into its own options. */
 	pluginPath?: string
 	agent?: string
-	/** The app's own plugin bundle, loaded beside the bot's for the same session and
-	 * carrying the capabilities the host owns rather than the bot. Only ever loaded
-	 * with a bot's bundle, and never promoted: nothing in it is an agent. */
 	systemPluginPath?: string
-	/** Who the bot is, as the host renders it from the bot's own name and title. The
-	 * sentences are the app's, so they arrive on the request rather than in the bot's
-	 * bundle: the provider appends them to the prompt layer. Left out for a session
-	 * opened with no bot to name. */
 	identity?: string
-	/** The output style the host names for this session, by the name the provider
-	 * knows it under. Left out, the provider's own default stands. */
 	outputStyle?: string
 	partialMessages: boolean
 }
@@ -34,9 +22,6 @@ export type PermissionDecision =
 
 export type SessionFrame = Record<string, unknown>
 
-/** A slash command as the host lists it: what the reader types, and the one line
- * the provider said about it. Mirrors `AgentCommand` on the Rust side — a
- * provider naming no description leaves the key out. */
 export type AgentCommand = {
 	name: string
 	description?: string
@@ -51,9 +36,6 @@ export type AgentSession = {
 	close: () => Promise<void>
 }
 
-/** Whether the provider's own credentials are good for a session right now.
- * `detail` says the question could not be answered at all, which is not the same
- * answer as a provider that is simply not signed in. */
 export type ProviderAuth = {
 	authenticated: boolean
 	detail?: string
@@ -67,15 +49,10 @@ export type AgentProvider = {
 	assertReady: () => void
 	authenticate: () => Promise<ProviderAuth>
 	models: () => Promise<string[]>
-	/** The built-in tools a session of this provider can be given, without the ones
-	 * an MCP server provides: those belong to a server rather than to the install,
-	 * and nothing here offers to hold one back. */
 	tools: () => Promise<string[]>
 	open: (request: SessionRequest, emit: EmitFrame) => Promise<AgentSession>
 }
 
-/** Where a build drops the files a provider ships beside the sidecar, under the
- * name Tauri reads an external binary as. */
 export type StageTarget = {
 	directory: string
 	targetTriple: string

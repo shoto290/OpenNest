@@ -1,18 +1,3 @@
-//! The session lifecycle driven end to end through the Tauri command layer.
-//!
-//! "End to end" stops at that layer: command handlers, `AgentState`, the real
-//! `Session` and its transport, the fake Claude child, and a relaunch through the
-//! on-disk store. Nothing above the IPC boundary runs — no React mount, no
-//! `chat-screen.tsx`, no `use-chat` subscription, no rendering — and `MockRuntime`
-//! never emits `RunEvent::Exit`, so shutdown-on-quit is unproven here too.
-//! `SMOKE.md` covers both by hand.
-//!
-//! No WebDriver alternative exists: macOS WKWebView exposes no WebDriver endpoint,
-//! so `tauri-driver` supports Linux and Windows only.
-//!
-//! Deliberately a single test: the binary override and the fake's scenario are
-//! process-global, and `cargo test` runs the tests of one binary in parallel, so
-//! a second `#[test]` here would race on them.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -41,9 +26,6 @@ struct Harness {
 	app: App<MockRuntime>,
 	window: WebviewWindow<MockRuntime>,
 	log: Arc<Mutex<Vec<ScopedEvent>>>,
-	/// The run every command below names. The frontend opens a row in the durable
-	/// lineage before it asks for a process, so a start here mints the next one the
-	/// same way — same participant, next number.
 	run: Mutex<RuntimeScope>,
 }
 
@@ -56,16 +38,12 @@ fn a_run(epoch: i64) -> RuntimeScope {
 	}
 }
 
-/// The identifier decides the app data directory, so this suite claims one of
-/// its own rather than writing where a real install would.
 fn launch() -> Harness {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = IDENTIFIER.into();
 
 	let app = mock_builder()
 		.manage(AgentState::default())
-		// A host that never opened a file: the session lifecycle is what this suite
-		// drives, and a bot it can read nothing about starts the way one always has.
 		.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
 		.invoke_handler(invoke_handler())
 		.build(context)
@@ -102,7 +80,6 @@ impl Harness {
 		.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 	}
 
-	/// The host leaving, the way its event loop does on the way out.
 	fn quit(&self) {
 		let runtime = tokio::runtime::Runtime::new().expect("runtime");
 		runtime.block_on(terminate_session(&self.app.state::<AgentState>()));
@@ -112,7 +89,6 @@ impl Harness {
 		serde_json::to_value(&*self.run.lock().expect("run")).expect("the scope serializes")
 	}
 
-	/// Never `$HOME`: the child inherits this as its working directory.
 	fn start(&self, resume: Option<&str>) -> Result<Value, Value> {
 		{
 			let mut run = self.run.lock().expect("run");
@@ -132,9 +108,6 @@ impl Harness {
 		self.log.lock().expect("event log").iter().map(|scoped| scoped.event.clone()).collect()
 	}
 
-	/// Every event the host emitted since the log was last cleared, with the run it
-	/// named. What crosses the channel is the envelope, so this is what a frontend
-	/// really has to decide on.
 	fn scoped_events(&self) -> Vec<ScopedEvent> {
 		self.log.lock().expect("event log").clone()
 	}
@@ -143,9 +116,6 @@ impl Harness {
 		self.log.lock().expect("event log").clear();
 	}
 
-	/// Events land by callback, so there is nothing to await. Everything this
-	/// test waits on is polled here, and a wait that never lands fails the test
-	/// naming what it wanted instead of hanging a developer's afternoon.
 	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[AgentEvent]) -> Option<T>) -> T {
 		let deadline = Instant::now() + DEADLINE;
 		loop {
@@ -162,9 +132,6 @@ impl Harness {
 	}
 }
 
-/// The sidecar's own environment is fixed when it is spawned, and one process
-/// serves every session — so a scenario that changes between two of them travels
-/// on a file the fake reads each time it opens one.
 fn scenario(name: &str) {
 	let path = std::env::temp_dir()
 		.join(format!("opennest-fake-scenario-{}.txt", std::process::id()));
@@ -225,8 +192,6 @@ fn deltas(seen: &[AgentEvent]) -> String {
 		.collect()
 }
 
-/// The probe file is named after this test process: worktrees run their suites
-/// side by side and a shared path would have them racing.
 fn orphan_pid_file() -> std::path::PathBuf {
 	std::env::temp_dir().join(format!("opennest-e2e-orphan-{}.pid", std::process::id()))
 }
@@ -236,11 +201,6 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
-/// The fake spawns a grandchild only a process-group kill can reach. Ending the
-/// session hands the sidecar a line; the group behind it belongs to the host, so
-/// what has to leave nothing behind is the quit. The probe
-/// file is named after this test process: worktrees run their suites side by
-/// side and a shared path would have them racing.
 #[cfg(unix)]
 fn shut_down_leaving_no_orphan(harness: &Harness) {
 	let pid_file = orphan_pid_file();
@@ -278,14 +238,9 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 	);
 }
 
-/// Launch, stream, persist, permission, stop, shutdown, then a second app over
-/// the same store: restoration, resume, and the fallback when the stored id is
-/// refused. The relaunch drops the first app rather than running its event-loop
-/// exit path, so this proves file-based restoration, not shutdown-on-quit.
 #[test]
 fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	// Named before the sidecar is spawned: its own environment is fixed from then on.
 	std::env::set_var("FAKE_AGENT_PID_FILE", orphan_pid_file());
 	scenario("normal");
 
@@ -313,8 +268,6 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	let (session_id, resumed) = session_ready(&streamed).expect("the child announced its session");
 	assert_eq!(session_id, "fake-session-0001");
 	assert!(!resumed, "a fresh launch must not claim a resume");
-	// The whole turn crossed under the run it came from. A frontend has nothing else
-	// to tell this stream from the one a restart will put in its place.
 	assert!(
 		first.scoped_events().iter().all(|scoped| scoped.scope.as_ref() == Some(&a_run(1))),
 		"an event crossed without naming the run it came from: {:#?}",

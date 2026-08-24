@@ -11,20 +11,15 @@ import {
 	MessageBubbleGroup,
 } from "@workspace/ui/components/message-bubble"
 
-/** Drawn inline so the stories never reach the network: a preview is only ever a
- * URL an `img` can load, and a data URL is the same one on every run. */
 const SCREENSHOT_PREVIEW =
 	"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22480%22%20height%3D%22320%22%20viewBox%3D%220%200%2096%2064%22%3E%3Crect%20width%3D%2296%22%20height%3D%2264%22%20fill%3D%22%231e293b%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2210%22%20width%3D%2252%22%20height%3D%228%22%20rx%3D%224%22%20fill%3D%22%23f97316%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2226%22%20width%3D%2280%22%20height%3D%226%22%20rx%3D%223%22%20fill%3D%22%23475569%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2240%22%20width%3D%2264%22%20height%3D%226%22%20rx%3D%223%22%20fill%3D%22%23475569%22%2F%3E%3C%2Fsvg%3E"
 
-/** Twice as tall as it is wide — the shape that would stretch the bubble if the
- * thumbnail were not bounded. */
 const TALL_PREVIEW =
 	"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22800%22%20viewBox%3D%220%200%2048%20120%22%3E%3Crect%20width%3D%2248%22%20height%3D%22120%22%20fill%3D%22%230f766e%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2232%22%20r%3D%2214%22%20fill%3D%22%23a7f3d0%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%2260%22%20width%3D%2232%22%20height%3D%2248%22%20rx%3D%226%22%20fill%3D%22%23134e4a%22%2F%3E%3C%2Fsvg%3E"
 
 const DIAGRAM_PREVIEW =
 	"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22240%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20fill%3D%22%23312e81%22%2F%3E%3Ccircle%20cx%3D%2240%22%20cy%3D%2224%22%20r%3D%2214%22%20fill%3D%22%23c7d2fe%22%2F%3E%3C%2Fsvg%3E"
 
-/** A source the host handed over in good faith and no decoder accepts. */
 const BROKEN_PREVIEW = "data:image/png;base64,bm90LWFuLWltYWdl"
 
 const ONE_IMAGE: MessageAttachment[] = [

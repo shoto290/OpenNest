@@ -9,7 +9,6 @@ type ConnectionStatusState = "checking" | "ready" | "unavailable" | "crashed"
 interface ConnectionStatusProps
 	extends Omit<ComponentProps<"div">, "children"> {
 	state: ConnectionStatusState
-	/** Version of the local CLI, shown once it has answered. */
 	version?: string | null
 }
 

@@ -22,15 +22,6 @@ export function useChat(driver: ChatDriver, store: TranscriptStore): Chat {
 	return { state, controller }
 }
 
-/** What each bot is busy with, its own process each. Read from the controller
- * rather than from the chat on the screen: a bot answering while the reader is
- * elsewhere moves nothing the selected state can show, and the roster is where they
- * see that it is still working.
- *
- * Held between reads on a signature of what it derives, because React reads a
- * snapshot on every publish and a fresh object each time would re-render the roster
- * on every token of every bot. It changes when a bot starts, stops, or changes what
- * it is doing, and not once in between. */
 type BotActivity = Record<string, SidebarActivity>
 
 const signatureOf = (busy: [string, SidebarActivity][]): string =>
@@ -59,18 +50,6 @@ export function useBotActivity(
 	})
 }
 
-/** The last word in each bot's conversation and when it was said, whoever said it.
- * Read from the controller for the reason the activity is: a message that settles
- * while the reader is elsewhere moves the row it belongs to, not the row they are
- * on.
- *
- * `stored` is what the roster read off the record, and it answers for every bot this
- * launch has not opened — a bot with no runtime yet has no messages here, which is
- * an empty conversation to this side and a preview waiting to be shown to the
- * reader. Once a bot is open its own transcript is the newer of the two.
- *
- * Held on a signature of what it derives, so a streamed token does not re-render the
- * roster. */
 type BotPreviews = Record<string, LastWord | undefined>
 
 const previewSignatureOf = (shown: [string, LastWord | undefined][]): string =>

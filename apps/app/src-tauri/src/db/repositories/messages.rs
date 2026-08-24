@@ -1,46 +1,3 @@
-//! Reads and writes a transcript: `turns`, `messages` and `activities`.
-//!
-//! Nothing here rewrites history. A row is appended, a stream is concatenated
-//! onto the row it belongs to, and a state moves once — forward, into the ending
-//! it reached. That is what makes an exact replay harmless: the caller of a turn
-//! is an event loop that may be handed the same event twice, and the id it
-//! supplies is the whole reason the second one costs nothing.
-//!
-//! An id that comes back carrying something else is not a replay, though. It is
-//! two different things claiming one place, so an append reads the stored row and
-//! compares it inside the transaction that would have written it, and answers a
-//! conflict rather than a place. A second, different ending reported for a
-//! message that has already ended is refused the same way: the two disagree about
-//! what happened, and dropping one of them silently is how a transcript stops
-//! matching what the reader saw.
-//!
-//! For that comparison to mean anything, a message is written the way it actually
-//! comes into being, and the two ways are not one. A reply is opened with no text
-//! and grows a delta at a time; a message authored here is whole the moment it
-//! exists and never streams. So a reply's creation carries no text at all, and an
-//! authored message's text is the one it keeps for life — which is what leaves
-//! every field a replay submits comparable exactly, with nothing left to guess at.
-//!
-//! The place a row takes is allocated here rather than by the caller. `seq` is
-//! `MAX + 1` inside the insert it stands for, so the order a transcript comes
-//! back in is decided by the database that holds it and not by a writer guessing
-//! what the file already contains — two rows written in the same millisecond
-//! included.
-//!
-//! Reads are paged from the newest backwards, because that is the end a long
-//! conversation is opened at, and handed back the other way round: the caller
-//! reads a page in the order it displays it. The cursor is the lowest `seq` a
-//! page held, and it is exclusive, so the page after it starts exactly where the
-//! last one stopped.
-//!
-//! An id no row answers to is a silent `Ok` rather than a refusal — in
-//! `complete_turn`, `append_text`, `finalize_message` and the two activity
-//! transitions alike — because a state that is not on the record has nothing to
-//! move and nothing to disagree with.
-//!
-//! The vocabularies below are this file's own, deliberately apart from the
-//! same-named types in [`crate::agent::contract`]: what crosses to a model and
-//! to the frontend may change without rewriting rows already on disk.
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
@@ -105,11 +62,6 @@ impl MessageState {
 	}
 }
 
-/// The endings on their own, and the only thing
-/// [`MessagesRepository::finalize_message`] will take. `Pending` and `Streaming`
-/// are absent rather than refused: reopening a message is not a call this
-/// vocabulary can express, so the compiler holds that half of the rule and no
-/// run of the code can.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminalState {
 	Complete,
@@ -161,10 +113,6 @@ impl ActivityStatus {
 	}
 }
 
-/// The open statuses on their own, and the only thing
-/// [`MessagesRepository::append_activity`] will take. A step is appended open and
-/// ends through [`MessagesRepository::finish_activity`], so a step that has
-/// already ended cannot be claimed to have been written that way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InitialStatus {
 	Pending,
@@ -180,11 +128,6 @@ impl From<InitialStatus> for ActivityStatus {
 	}
 }
 
-/// The endings of a step on their own, and the only thing
-/// [`MessagesRepository::finish_activity`] will take. `Pending` and `Running` are
-/// absent rather than refused: a step going back to pending, or starting twice,
-/// is not a call this vocabulary can express, so the compiler holds that half of
-/// the rule and no run of the code can.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminalStatus {
 	Succeeded,
@@ -202,9 +145,6 @@ impl From<TerminalStatus> for ActivityStatus {
 	}
 }
 
-/// The vocabularies above are what crosses to SQLite and back, so the conversion
-/// lives on the type rather than at each call site: a column holding a word this
-/// build has no meaning for fails the read instead of reaching a `match`.
 macro_rules! stored_as_text {
 	($name:ident) => {
 		impl ToSql for $name {
@@ -225,22 +165,14 @@ stored_as_text!(MessageRole);
 stored_as_text!(MessageState);
 stored_as_text!(ActivityStatus);
 
-/// Reachable across `db` so a sibling repository spelling its own vocabulary
-/// reaches SQLite through the same conversion rather than a second copy of it.
 pub(in crate::db) use stored_as_text;
 
-/// Why a write the transcript could not take was refused. Kept apart from
-/// [`DatabaseError`], which says why the file is unusable: these two say the file
-/// is fine and the caller is holding two versions of one event.
 #[derive(Debug)]
 pub enum TranscriptError {
-	/// An id already on the record, appended again describing something else.
-	/// `field` is the first one that diverged.
 	Conflict {
 		id: String,
 		field: &'static str,
 	},
-	/// A state the row is not allowed to move to from the one it holds.
 	InvalidTransition {
 		id: String,
 		from: &'static str,
@@ -267,10 +199,6 @@ pub struct NewTurn {
 	pub started_at: i64,
 }
 
-/// A reply about to be streamed into. It has no content field: the host learns
-/// the id of an assistant message before a single word of it exists, so the row
-/// is created empty and every word reaches it through
-/// [`MessagesRepository::append_text`].
 pub struct NewAssistantMessage {
 	pub id: String,
 	pub conversation_id: String,
@@ -280,8 +208,6 @@ pub struct NewAssistantMessage {
 	pub created_at: i64,
 }
 
-/// A message authored here, whole. It is written complete in one go, so nothing
-/// is ever appended to it afterwards.
 pub struct NewUserMessage {
 	pub id: String,
 	pub conversation_id: String,
@@ -292,8 +218,6 @@ pub struct NewUserMessage {
 	pub created_at: i64,
 }
 
-/// A message as the file holds it. No `conversation_id`: it is read one
-/// conversation at a time, by a caller that named which.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredMessage {
 	pub id: String,
@@ -307,31 +231,18 @@ pub struct StoredMessage {
 	pub created_at: i64,
 }
 
-/// `before_seq` is exclusive and `None` on the first page: the page it asks for
-/// is the newest `limit` messages of the conversation.
 pub struct MessagePageQuery {
 	pub conversation_id: String,
 	pub before_seq: Option<i64>,
 	pub limit: u32,
 }
 
-/// `messages` in display order, oldest first. `has_more` says whether anything
-/// older than this page is on file, which is the one thing a caller cannot read off
-/// the page it holds: it names the next page by the lowest `seq` of this one, so the
-/// store hands out no cursor of its own.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessagePage {
 	pub messages: Vec<StoredMessage>,
 	pub has_more: bool,
 }
 
-/// A stretch of one conversation, bounded at both ends and by a count. Both bounds
-/// are exclusive: `after_seq` is the last message something else already stands for
-/// — a checkpoint's summary — and `before_seq` is the message the window is being
-/// built for, which is never part of its own context.
-///
-/// `limit` keeps the newest rows of that stretch, so what comes back is bounded by
-/// the count however long the stretch is.
 pub struct MessageWindowQuery {
 	pub conversation_id: String,
 	pub after_seq: i64,
@@ -358,8 +269,6 @@ pub struct StoredActivity {
 	pub created_at: i64,
 }
 
-/// What the sweep closed out at launch. Both are zero on a clean shutdown, which
-/// is what makes running it on every boot free.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecoveryReport {
 	pub interrupted_messages: usize,
@@ -373,8 +282,6 @@ const INSERT_TURN: &str = "INSERT INTO turns (id, conversation_id, seq, started_
 const COMPLETE_TURN: &str =
 	"UPDATE turns SET completed_at = ?2 WHERE id = ?1 AND completed_at IS NULL";
 
-/// `content` comes last so a read with nothing to compare it against can stop
-/// before it: it is the one column here that holds a whole streamed reply.
 const MESSAGE_KEY: &str = "SELECT seq, conversation_id, turn_id, author_bot_id,
 		replied_to_message_id, role, created_at, content
 	FROM messages WHERE id = ?1";
@@ -478,8 +385,6 @@ impl MessagesRepository {
 		self.call_mut(move |connection| Ok(store_message(connection, message.into()))).await?
 	}
 
-	/// Runs once per delta, so the statement is taken from the connection's cache
-	/// rather than compiled again for every word the host streams.
 	pub async fn append_text(&self, id: String, delta: String) -> Result<(), TranscriptError> {
 		Ok(self
 			.call(move |connection| {
@@ -503,8 +408,6 @@ impl MessagesRepository {
 	) -> Result<MessagePage, TranscriptError> {
 		Ok(self
 			.call(move |connection| {
-				// No cursor is every seq there is: the first page is the one before the end
-				// of a sequence that only ever counts up from 1.
 				let before_seq = query.before_seq.unwrap_or(i64::MAX);
 				let limit = query.limit as usize;
 				let mut statement = connection.prepare_cached(MESSAGE_PAGE)?;
@@ -513,18 +416,6 @@ impl MessagesRepository {
 					before_seq,
 					i64::from(query.limit) + 1
 				])?;
-				// A page that filled says nothing about what is behind it — a conversation
-				// of exactly `limit` messages fills one and has nothing older — so one row
-				// beyond what the caller asked for is asked of SQLite, and its arrival is
-				// the only evidence older messages exist. Nothing else is taken from it: the
-				// read is newest first, so it is the oldest row of the answer, and decoding
-				// it would pull a whole streamed reply off the file only to drop it a line
-				// later.
-				//
-				// Deliberately not `Vec::with_capacity(limit)`: `limit` arrives from the
-				// frontend, and reserving from it would let a caller name the size of an
-				// allocation. Growing on the rows that are really there is bounded by the
-				// conversation.
 				let mut messages = Vec::new();
 				let mut has_more = false;
 				while let Some(row) = rows.next()? {
@@ -540,10 +431,6 @@ impl MessagesRepository {
 			.await?)
 	}
 
-	/// One message of one conversation, by the id something else is holding: a reply
-	/// names its target, and a context is built for a prompt already on the record.
-	/// The conversation is part of the lookup rather than trusted from the id — an id
-	/// alone names any row in the file.
 	pub async fn message(
 		&self,
 		conversation_id: String,
@@ -559,10 +446,6 @@ impl MessagesRepository {
 			.await?)
 	}
 
-	/// The newest messages of a bounded stretch, handed back oldest first. Read
-	/// newest first because the bound belongs at the recent end: what a context can
-	/// afford to leave out is the beginning of the stretch, never the words just
-	/// spoken.
 	pub async fn window_messages(
 		&self,
 		query: MessageWindowQuery,
@@ -587,9 +470,6 @@ impl MessagesRepository {
 			.await?)
 	}
 
-	/// How far the transcript reaches, in the one order that counts. Zero for a
-	/// conversation with nothing in it, which is the same number a participant with
-	/// no checkpoint resumes from.
 	pub async fn last_seq(&self, conversation_id: String) -> Result<i64, TranscriptError> {
 		Ok(self
 			.call(move |connection| {
@@ -620,8 +500,6 @@ impl MessagesRepository {
 			.await?
 	}
 
-	/// Read apart from the messages of the same turn: a step a turn took is not a
-	/// message, and paging the transcript must not have to carry it.
 	pub async fn activities_for_turn(
 		&self,
 		turn_id: String,
@@ -637,32 +515,11 @@ impl MessagesRepository {
 			.await?)
 	}
 
-	/// The same sweep the launch already ran, for a caller that holds the repository
-	/// rather than the opener's connection.
-	///
-	/// Nothing on the boot path needs it — [`crate::db::Database`] runs the sweep
-	/// itself, while the connection is still nobody's but the opener's. It belongs to
-	/// a launch and not to a session: run while a turn is live it would close out the
-	/// reply that turn is streaming.
 	pub async fn recover_unfinished(&self) -> Result<RecoveryReport, TranscriptError> {
 		Ok(self.call_mut(sweep_unfinished).await?)
 	}
 }
 
-/// What a host that died under a turn left behind, closed out at the next launch.
-/// A message keeps the text it had streamed so far — the point of `interrupted` is
-/// that a reader can be told the stream stopped without losing what came before it
-/// — and a step nobody is running any more is `terminated` rather than failed,
-/// because nothing observed it fail.
-///
-/// Takes a plain connection so the launch can run it on the opener's own, before
-/// [`Access`] exists and before a command can read a row: a reply the host died
-/// under is already `interrupted` on disk by the time anything asks for the page it
-/// sits in.
-///
-/// Both statements are one transaction, so a transcript is never half swept. Safe on
-/// every boot: the two `WHERE` clauses match nothing a previous sweep closed out, so
-/// a file with nothing open reports two zeroes and writes nothing.
 pub(in crate::db) fn sweep_unfinished(
 	connection: &mut Connection,
 ) -> Result<RecoveryReport, DatabaseError> {
@@ -673,9 +530,6 @@ pub(in crate::db) fn sweep_unfinished(
 	Ok(RecoveryReport { interrupted_messages, terminated_activities })
 }
 
-/// The stored side of a turn's identity, read before an append answers. Every
-/// column here is written once and never updated, so an append that describes
-/// any of them differently is describing another turn.
 struct StoredTurnKey {
 	seq: i64,
 	conversation_id: String,
@@ -694,10 +548,6 @@ impl StoredTurnKey {
 	}
 }
 
-/// A message resolved to the row it will be inserted as, whichever of the two
-/// paths it arrived by. `role` and the presence of `content` are decided here
-/// rather than submitted, which is what stops either from being part of what a
-/// caller could get wrong twice.
 struct AppendedMessage {
 	id: String,
 	conversation_id: String,
@@ -705,9 +555,6 @@ struct AppendedMessage {
 	author_bot_id: Option<String>,
 	replied_to_message_id: Option<String>,
 	role: MessageRole,
-	/// `None` on the assistant path: the row is created empty there, so its
-	/// creation has no text for a replay to carry or to be checked against, and
-	/// the state it is written in follows from that alone.
 	content: Option<String>,
 	created_at: i64,
 }
@@ -750,16 +597,10 @@ struct StoredMessageKey {
 	replied_to_message_id: Option<String>,
 	role: MessageRole,
 	created_at: i64,
-	/// Read only when the append it is compared against was authored whole, so it
-	/// is `Some` exactly when the other side is.
 	content: Option<String>,
 }
 
 impl StoredMessageKey {
-	/// Every field compared here is written once and never updated, so equality is
-	/// the whole rule. `completion_state` is absent because no caller states it, and
-	/// a reply's text is absent on both sides because it is written after the
-	/// creation this compares — it belongs to `append_text`.
 	fn diverging_field(&self, message: &AppendedMessage) -> Option<&'static str> {
 		if self.conversation_id != message.conversation_id {
 			return Some("conversation_id");
@@ -812,10 +653,6 @@ impl StoredActivityKey {
 	}
 }
 
-/// How far along its life a step is: `pending` before `running`, `running` before
-/// any ending. A step only ever moves up this order, and a replay is allowed to be
-/// behind what the row now holds — that is what a second copy of an event looks
-/// like once the step has run — but never ahead of it.
 fn activity_stage(status: ActivityStatus) -> u8 {
 	match status {
 		ActivityStatus::Pending => 0,
@@ -947,12 +784,6 @@ fn advance_activity(
 	Ok(())
 }
 
-/// Immediate rather than deferred: an append reads the place it is about to take
-/// a statement before it takes it, and a deferred transaction only claims the
-/// file at that insert — two writers would both read the same `MAX` and the
-/// second would be refused after having already decided where it belonged.
-/// Claiming the file at `BEGIN` is what makes reading the stored row, allocating
-/// and inserting one step.
 fn write_transaction(connection: &mut Connection) -> Result<Transaction<'_>, DatabaseError> {
 	Ok(connection.transaction_with_behavior(TransactionBehavior::Immediate)?)
 }
@@ -1045,9 +876,6 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
 
-	/// Two conversations and a bot taking part in both: the second one is what a
-	/// reference reaching across has to be refused for, and the participant rows
-	/// are what lets a message name an author at all.
 	const FIXTURE: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
 		INSERT INTO conversations (id, kind, title, created_at, updated_at)
@@ -1056,8 +884,6 @@ mod tests {
 			VALUES ('c1', 'b1', 'assistant', 1), ('c2', 'b1', 'assistant', 1);
 	";
 
-	/// Long enough that the paging below crosses several boundaries, and not a
-	/// multiple of the page size, so the last page is a short one.
 	const LONG_CONVERSATION: usize = 205;
 	const PAGE: u32 = 50;
 
@@ -1091,8 +917,6 @@ mod tests {
 			.expect("the turn is started")
 	}
 
-	/// The transcript a paging test needs before it can page: `count` user messages
-	/// on `t1` of `c1`, told apart by their ids alone.
 	async fn some_user_messages(database: &Database, count: usize) {
 		for index in 0..count {
 			database
@@ -1145,10 +969,6 @@ mod tests {
 			.expect("the page is read")
 	}
 
-	/// Walks the whole transcript the way a caller would: newest page first, each one
-	/// prepended to what is already known, the next asked for by the lowest `seq` the
-	/// last one held. It stops on a page that says nothing is older, and on a page that
-	/// came back empty — there is no `seq` in one of those to ask the next by.
 	async fn whole_transcript(database: &Database, limit: u32) -> Vec<StoredMessage> {
 		let mut collected: Vec<StoredMessage> = Vec::new();
 		let mut before_seq = None;
@@ -1164,8 +984,6 @@ mod tests {
 		}
 	}
 
-	/// What the frontend's own `selectOldestSeq` works out, and the only cursor there
-	/// is: the page names the one before it by the lowest `seq` it holds.
 	fn oldest_seq(page: &MessagePage) -> Option<i64> {
 		page.messages.first().map(|message| message.seq)
 	}
@@ -1189,9 +1007,6 @@ mod tests {
 			.collect()
 	}
 
-	/// Every column of a message as the file holds it, `conversation_id` and
-	/// `completion_state` included — what [`StoredMessage`] leaves out, and what a
-	/// refused replay has to have left byte for byte where it was.
 	#[derive(Debug, Clone, PartialEq, Eq)]
 	struct StoredRow {
 		id: String,
@@ -1234,8 +1049,6 @@ mod tests {
 			.expect("the message row is read")
 	}
 
-	/// What a turn holds, which no read of this repository hands back on its own:
-	/// what a refused replay must have left untouched.
 	async fn stored_turn(database: &Database, id: &'static str) -> (String, i64) {
 		database
 			.call(move |connection| {
@@ -1271,8 +1084,6 @@ mod tests {
 		);
 	}
 
-	/// The read a long-lived chat is opened with: every message has to come back,
-	/// once, in the order it was appended, across every boundary the paging draws.
 	#[tokio::test]
 	async fn a_long_conversation_pages_through_every_message_exactly_once_in_order() {
 		let dir = temp_dir();
@@ -1315,8 +1126,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A turn writes faster than the clock it is stamped with, so the timestamp is
-	/// not what the order can rest on: the place the database allocated is.
 	#[tokio::test]
 	async fn messages_stamped_at_the_same_moment_still_come_back_in_the_order_they_were_written() {
 		let dir = temp_dir();
@@ -1350,9 +1159,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A reply is stored as the link it is, and the link is checked: the pair
-	/// `(replied_to_message_id, conversation_id)` is what stops a message from
-	/// quoting one the reader of this conversation has never seen.
 	#[tokio::test]
 	async fn a_reply_names_a_message_of_its_own_conversation_and_nothing_else() {
 		let dir = temp_dir();
@@ -1393,9 +1199,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The edges of the cursor, where a gap or a repeat would come from: a page
-	/// that fills exactly, the short one after it, and a cursor already past the
-	/// oldest message.
 	#[tokio::test]
 	async fn the_cursor_leaves_no_gap_and_no_duplicate_at_its_edges() {
 		let dir = temp_dir();
@@ -1427,10 +1230,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// A conversation of exactly one page, which is what filling to the brim without
-	/// anything behind it looks like: the whole transcript comes back in display
-	/// order and the walk back ends there, because the row that would have proved
-	/// there is more was never there to read.
 	#[tokio::test]
 	async fn a_conversation_of_exactly_one_page_comes_back_whole_and_offers_no_cursor() {
 		let dir = temp_dir();
@@ -1459,9 +1258,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The other side of that boundary, one message further: the row beyond the page
-	/// is there this time, so the same full page does offer a cursor, and what it
-	/// leads to is the one message left behind it.
 	#[tokio::test]
 	async fn one_message_more_than_a_page_offers_a_cursor_onto_the_rest() {
 		let dir = temp_dir();
@@ -1497,11 +1293,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// What a host that died under a turn is owed at the next launch: the stream
-	/// is closed out as interrupted with everything it had already written, the
-	/// step nobody is running any more is terminated, and what had already ended
-	/// is left alone. The second sweep finds nothing, which is what makes it safe
-	/// on every boot.
 	#[tokio::test]
 	async fn a_turn_the_host_died_under_is_closed_out_with_its_partial_text() {
 		let dir = temp_dir();
@@ -1561,18 +1352,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The sweep as a launch actually runs it: nobody asks for it, opening the file is
-	/// what closes out the turn a dead host left, and the first thing any command can
-	/// read is already honest.
-	///
-	/// `m2` is the row a frontend that normalises streaming replies in memory can never
-	/// repair — the host died between opening the reply and its first delta, so what is
-	/// on disk is `pending`, and it would come back `pending` at every launch after.
-	/// `m3` is the one that had streamed.
-	///
-	/// The second relaunch is the same file with nothing left open, and it has to come
-	/// back byte for byte: the sweep is on the boot path for the life of the install, so
-	/// a launch that rewrote anything would rewrite it every time.
 	#[tokio::test]
 	async fn opening_the_database_closes_out_what_a_dead_host_left_open() {
 		let dir = temp_dir();
@@ -1653,8 +1432,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The whole point of writing a transcript down: what the next launch reads is
-	/// what the last one wrote, activities included.
 	#[tokio::test]
 	async fn a_transcript_reads_back_identically_after_the_file_is_closed_and_reopened() {
 		let dir = temp_dir();
@@ -1712,9 +1489,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The event loop above this may be handed the same event twice, so a replay
-	/// has to cost nothing: no second row, no error, and no ending rewritten by
-	/// something that happened after it.
 	#[tokio::test]
 	async fn replaying_a_write_changes_nothing_and_is_not_an_error() {
 		let dir = temp_dir();
@@ -1785,11 +1559,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The whole matrix of endings, from both states a message can be written in,
-	/// and then pushed at from every ending it must not leave. The other half of
-	/// the rule — that no caller can ask for `pending` or `streaming` back — is not
-	/// tested here because it cannot be written: `finalize_message` takes a
-	/// [`TerminalState`], so the compiler refuses the call.
 	#[tokio::test]
 	async fn a_message_keeps_the_first_ending_it_reached_and_refuses_every_other_one() {
 		let dir = temp_dir();
@@ -1856,12 +1625,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The graph a step walks, then the moves that are not on it: an ending
-	/// reopening and an ending becoming another one. The rest of the rule — that no
-	/// caller can ask for `pending` back, from a run or from an ending — is not
-	/// tested here because it cannot be written: [`MessagesRepository::start_activity`]
-	/// takes no status and [`MessagesRepository::finish_activity`] takes a
-	/// [`TerminalStatus`], so the compiler refuses the call.
 	#[tokio::test]
 	async fn an_activity_walks_its_graph_forward_and_refuses_every_other_move() {
 		let dir = temp_dir();
@@ -1926,11 +1689,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// An id that comes back describing something else is not a replay, and the row
-	/// that reached the place first is what the reader keeps — whether the second
-	/// event disagrees about which row it is or about how that row came to be. The
-	/// state a message was created in is not among the fields compared: no caller
-	/// states it, so there is nothing to disagree about.
 	#[tokio::test]
 	async fn an_id_appended_again_describing_something_else_is_refused_and_writes_nothing() {
 		let dir = temp_dir();
@@ -2070,11 +1828,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The replay an event loop actually produces: the same event again, after the
-	/// row it opened has moved on. The text has grown from nothing, the state has
-	/// walked to its ending, the step has walked its whole graph — none of which
-	/// the event ever carried, so an exact replay still answers the place it holds
-	/// and leaves every column of the row where it was.
 	#[tokio::test]
 	async fn replaying_an_append_after_the_row_moved_on_answers_the_place_it_already_holds() {
 		let dir = temp_dir();
@@ -2157,14 +1910,6 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	/// The two creation paths, replayed on what actually created them. A reply
-	/// carries no text at all — [`NewAssistantMessage`] has no content field, so the
-	/// compiler refuses to submit the beginning of a half-streamed word — and the
-	/// deltas it grew are no part of what a replay is compared against. An authored
-	/// message is written whole and ends the moment it is written, so its text is
-	/// part of the event: the same text again is the same event, the beginning of it
-	/// is another message claiming an id that is taken, and nothing may be appended
-	/// to it afterwards.
 	#[tokio::test]
 	async fn a_message_is_replayed_on_what_created_it_and_never_on_the_text_it_grew() {
 		let dir = temp_dir();

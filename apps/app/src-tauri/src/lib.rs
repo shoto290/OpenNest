@@ -34,23 +34,12 @@ pub fn run() {
 				.build(),
 		)
 		.plugin(tauri_plugin_updater::Builder::new().build())
-		// What finishes an update: the installed build only replaces the running one
-		// once the app is started again.
 		.plugin(tauri_plugin_process::init())
-		// A link followed in the conversation goes to the system browser: the
-		// webview has nowhere to open it but over the app itself.
 		.plugin(tauri_plugin_opener::init())
-		// What tells a reader a bot has answered while they were looking elsewhere.
 		.plugin(tauri_plugin_notification::init())
 		.manage(AgentState::default())
-		// The database is opened once, here, because `app_data_dir()` needs the
-		// resolved identifier only the built app carries. A failure is managed like
-		// any other outcome: the window still opens, and the state says why there is
-		// no database.
 		.setup(|app| {
 			app.manage(db::bootstrap(app.handle()));
-			// Off the launch path: a bot is spoken to long after the window is up, and
-			// the marketplace is for a reader who goes looking for one.
 			let handle = app.handle().clone();
 			tauri::async_runtime::spawn(async move {
 				conversations::commands::list_bundles_at_launch(&handle).await;
@@ -60,9 +49,6 @@ pub fn run() {
 		.invoke_handler(invoke_handler())
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application")
-		// Tauri quits through `std::process::exit`, so no destructor runs and
-		// `kill_on_drop` never fires. `Exit` is the last, uncancellable event
-		// before that call — unlike `ExitRequested`, which a listener may veto.
 		.run(|app, event| {
 			if matches!(event, RunEvent::Exit) {
 				tauri::async_runtime::block_on(terminate_session(

@@ -6,8 +6,6 @@ import type {
 	BotSkillEffort,
 } from "@workspace/ui/components/bot-settings"
 
-/** Every string a reader sees on the bots surface — the roster, the resource tree,
- * the settings dialog and the delete it guards. */
 const bots = {
 	roster: {
 		label: "Conversations",
@@ -183,8 +181,6 @@ const bots = {
 		effort: {
 			label: "Effort",
 			default: "The bot's own",
-			/** One key per effort, keyed by what the draft carries, so an effort the
-			 * format gains and this catalogue has no name for fails the type check. */
 			option: {
 				low: "Low",
 				medium: "Medium",
@@ -195,7 +191,6 @@ const bots = {
 			label: "Context",
 			default: "The conversation it was reached from",
 			hint: "A fork runs the skill in a copy of the conversation, with a runner of its own — which is the only place an agent and a background run mean anything.",
-			/** One key per context, on the same terms as the efforts above. */
 			option: {
 				shared: "Shared",
 				fork: "Fork",
@@ -294,8 +289,6 @@ const bots = {
 		transport: {
 			label: "Transport",
 			hint: "It decides what the rest of the configuration says: a local server names a command to run, a remote one an address to reach.",
-			/** One key per transport, keyed by what the draft carries, so a transport
-			 * the format gains and this catalogue has no name for fails the type check. */
 			option: {
 				local: "Started on this machine",
 				remote: "Reached over the network",
@@ -319,8 +312,6 @@ const bots = {
 		endpoint: {
 			label: "Endpoint",
 			hint: "The kind of endpoint the address is reached on. A remote server written without one is skipped, so it is always saved beside the URL. Streamable HTTP is the same endpoint as HTTP, and a file already spelling it that way is left alone.",
-			/** One key per kind, keyed by what the configuration carries, so a kind the
-			 * format gains and this catalogue has no name for fails the type check. */
 			option: {
 				http: "HTTP",
 				sse: "Server-sent events",
@@ -366,9 +357,6 @@ const bots = {
 		},
 		outputStyle: {
 			label: "Answer style",
-			/** One key per style, keyed by the value the host stores raw, so a style
-			 * the host gains and this catalogue has no name for fails the type check
-			 * rather than reaching a reader as it is written on disk. */
 			option: {
 				Concise: {
 					label: "Concise",
@@ -400,9 +388,6 @@ const bots = {
 		current: "{{animal}}, {{blot}}",
 		animal: {
 			label: "Animal",
-			/** One key per animal, keyed by the id the identity carries, so an animal
-			 * the engine gains and this catalogue has no name for fails the type check
-			 * rather than rendering its id at a reader. */
 			option: {
 				rabbit: "Rabbit",
 				cat: "Cat",
@@ -418,7 +403,6 @@ const bots = {
 		blot: {
 			label: "Blot",
 			none: "No blot",
-			/** One key per tint, on the same terms as the animals above. */
 			option: {
 				red: "Red",
 				yellow: "Yellow",
