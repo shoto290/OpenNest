@@ -1,6 +1,8 @@
 "use client"
 
-import { useId, useState } from "react"
+import { parsePatchFiles } from "@pierre/diffs"
+import { PatchDiff } from "@pierre/diffs/react"
+import { useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { BotCommitItem } from "@workspace/ui/components/bot-settings"
@@ -9,6 +11,7 @@ import { CodeBlock } from "@workspace/ui/components/code-block"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
 import { SETTINGS_EMPTY_CLASS } from "@workspace/ui/components/settings-styles"
+import { useColorScheme } from "@workspace/ui/hooks/use-color-scheme"
 import { toRelativeTime } from "@workspace/ui/lib/relative-time"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -26,6 +29,62 @@ const ROW_CLASS =
 	"flex flex-col gap-2 rounded-xl border border-border px-3 py-2.5"
 
 const SEPARATOR_CLASS = "before:mr-1.5 before:content-['·']"
+
+const PATCH_THEME = {
+	dark: "github-dark-high-contrast",
+	light: "github-light-high-contrast",
+}
+
+const holdsOneFile = (patch: string) => {
+	try {
+		const patches = parsePatchFiles(patch)
+		return patches.length === 1 && patches[0]?.files.length === 1
+	} catch {
+		return false
+	}
+}
+
+type CommitDiffProps = {
+	patch: string
+}
+
+const CommitDiff = ({ patch }: CommitDiffProps) => {
+	const { t } = useTranslation("bots")
+	const frame = useRef<HTMLDivElement>(null)
+	const themeType = useColorScheme(frame)
+	const isReadable = useMemo(() => holdsOneFile(patch), [patch])
+
+	if (!isReadable) {
+		return (
+			<CodeBlock
+				code={patch}
+				filename={t("history.diff.filename")}
+				language="diff"
+				showLineNumbers={false}
+				wrap
+			/>
+		)
+	}
+
+	return (
+		<div
+			aria-label={t("history.diff.filename")}
+			className="min-w-0 overflow-hidden rounded-xl border"
+			ref={frame}
+			role="group"
+		>
+			<PatchDiff
+				options={{
+					diffStyle: "unified",
+					overflow: "wrap",
+					theme: PATCH_THEME,
+					themeType,
+				}}
+				patch={patch}
+			/>
+		</div>
+	)
+}
 
 const HistoryPanel = ({
 	commits,
@@ -133,12 +192,7 @@ const HistoryPanel = ({
 											{t("history.diff.loading")}
 										</span>
 									) : (
-										<CodeBlock
-											code={commit.diff}
-											filename={t("history.diff.filename")}
-											language="diff"
-											showLineNumbers={false}
-										/>
+										<CommitDiff patch={commit.diff} />
 									)}
 								</div>
 							) : null}

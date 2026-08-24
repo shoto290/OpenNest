@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 import type { DiagramScheme } from "@workspace/ui/lib/render-mermaid"
 
 export const MERMAID_LANGUAGE = "mermaid"
@@ -11,17 +12,10 @@ export interface MarkdownMermaidProps {
 	source: string
 }
 
-const SCHEME_PROPERTY = "--diagram-scheme"
-
 const FRAME_CLASS = "my-2 w-fit max-w-full"
 
 const VIEWPORT_CLASS =
 	"overflow-x-auto rounded-xl border border-foreground/15 p-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-
-const schemeOf = (element: HTMLElement) =>
-	getComputedStyle(element).getPropertyValue(SCHEME_PROPERTY).trim() === "dark"
-		? "dark"
-		: "light"
 
 let drawn = 0
 
