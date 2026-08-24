@@ -23,7 +23,11 @@ export type AttachmentsPort = {
 		botId: string,
 		attachments: SubmittedAttachment[],
 	) => Promise<string[]>
-	send: (botId: string, text: string) => Promise<void>
+	send: (
+		botId: string,
+		text: string,
+		repliedToMessageId?: string,
+	) => Promise<void>
 }
 
 export type AttachmentsController = {
@@ -32,7 +36,11 @@ export type AttachmentsController = {
 	stage: (botId: string, files: File[]) => void
 	remove: (botId: string, id: string) => void
 	dismissRefusal: (botId: string) => void
-	submit: (botId: string, text: string) => Promise<boolean>
+	submit: (
+		botId: string,
+		text: string,
+		repliedToMessageId?: string,
+	) => Promise<boolean>
 	forget: (botId: string) => void
 	release: () => void
 }
@@ -72,14 +80,18 @@ export function createAttachmentsController(
 		)
 	}
 
-	const submit = async (botId: string, text: string) => {
+	const submit = async (
+		botId: string,
+		text: string,
+		repliedToMessageId?: string,
+	) => {
 		if (sending.has(botId)) {
 			return false
 		}
 		const items = stagedFor(botId)
 		if (items.length === 0) {
 			holdRefusal(botId, null)
-			void port.send(botId, text)
+			void port.send(botId, text, repliedToMessageId)
 			return true
 		}
 
@@ -97,7 +109,11 @@ export function createAttachmentsController(
 		releasePreviews(items)
 		dropSent(botId, items)
 		holdRefusal(botId, null)
-		void port.send(botId, promptWithAttachments(text, paths))
+		void port.send(
+			botId,
+			promptWithAttachments(text, paths),
+			repliedToMessageId,
+		)
 		return true
 	}
 

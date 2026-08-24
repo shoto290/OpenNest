@@ -17,7 +17,7 @@ export type StagedFiles = {
 	isDropTarget: boolean
 	stage: (files: File[]) => void
 	remove: (id: string) => void
-	submit: (text: string) => Promise<boolean>
+	submit: (text: string, repliedToMessageId?: string) => Promise<boolean>
 	dismissRefusal: () => void
 }
 
@@ -34,7 +34,8 @@ export function useAttachments(
 		() => ({
 			stage: (files: File[]) => controller.stage(botId, files),
 			remove: (id: string) => controller.remove(botId, id),
-			submit: (text: string) => controller.submit(botId, text),
+			submit: (text: string, repliedToMessageId?: string) =>
+				controller.submit(botId, text, repliedToMessageId),
 			dismissRefusal: () => controller.dismissRefusal(botId),
 		}),
 		[controller, botId],

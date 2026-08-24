@@ -6,12 +6,18 @@ import {
 	type MessageScrollerHandle,
 	type MessageScrollerOlder,
 } from "@workspace/ui/components/message-scroller"
+import {
+	PromptReply,
+	type ReplyQuote,
+} from "@workspace/ui/components/prompt-reply"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface ChatLayoutProps {
 	header?: ReactNode
 	notice?: ReactNode
 	composer?: ReactNode
+	reply?: ReplyQuote
+	highlightedMessageId?: string
 	transcriptKey?: string
 	busy?: boolean
 	label?: string
@@ -27,6 +33,8 @@ function ChatLayout({
 	header,
 	notice,
 	composer,
+	reply,
+	highlightedMessageId,
 	transcriptKey,
 	busy,
 	label,
@@ -54,6 +62,7 @@ function ChatLayout({
 				busy={busy}
 				label={label}
 				older={older}
+				highlightedMessageId={highlightedMessageId}
 				scrollerRef={scrollerRef}
 				contentClassName={cn(
 					"flex min-h-full w-full flex-col gap-6 px-6 py-8",
@@ -66,7 +75,9 @@ function ChatLayout({
 			{notice || composer ? (
 				<div className="flex w-full shrink-0 flex-col gap-3 px-6 pb-6">
 					{notice}
-					{composer}
+					{composer ? (
+						<PromptReply quote={reply}>{composer}</PromptReply>
+					) : null}
 				</div>
 			) : null}
 		</div>

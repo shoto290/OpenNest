@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { promptWithAttachments } from "./attachments"
 import { type ChatState, initialChatState } from "./chat-state"
+import { storedAttachmentPath } from "./message-attachments"
 import {
 	emptyStateStatusFor,
+	messageAnchorsIn,
 	needsFreshSession,
 	noticeTitleFor,
+	quotedMessageIdsIn,
+	quotedTargetsIn,
+	replyTargetOfReference,
 	sidebarActivityFor,
 	toRuns,
 	toTranscriptRows,
@@ -21,6 +27,12 @@ import type {
 import { message as storedMessage } from "../conversations/transcript-fixtures"
 
 const t = i18n.getFixedT(null, "chat")
+
+const ATTACHMENT = storedAttachmentPath({
+	root: "/tmp/opennest",
+	conversationId: "c-1",
+	submittedName: "shot.png",
+})
 
 function activity(overrides: Partial<ActivityEvent> = {}): ActivityEvent {
 	return {
@@ -428,5 +440,98 @@ describe("notices", () => {
 		expect(noticeTitleFor(t, refused)).toBe(
 			"Previous conversation could not be resumed",
 		)
+	})
+})
+
+describe("quoted messages", () => {
+	it("carries the reply of a prompt and drops the bookkeeping of an answer", () => {
+		const rows = toTranscriptRows([
+			prompt({ id: "p-2", repliedToMessageId: "m-9" }),
+			message({
+				id: "a-2",
+				content: "Sure.",
+				completion: "complete",
+				repliedToMessageId: "p-2",
+			}),
+		])
+
+		expect(rows.map((row) => row.quotedMessageId)).toEqual(["m-9", null])
+	})
+
+	it("names the messages a prompt points at, once each", () => {
+		expect(
+			quotedMessageIdsIn([
+				prompt({ id: "p-1", repliedToMessageId: "m-9" }),
+				prompt({ id: "p-2", repliedToMessageId: "m-9" }),
+				prompt({ id: "p-3" }),
+				message({ id: "a-1", repliedToMessageId: "p-1" }),
+			]),
+		).toEqual(["m-9"])
+	})
+
+	it("quotes a loaded message without its attachment markers", () => {
+		const quoted = message({
+			id: "m-9",
+			content: promptWithAttachments("Look at this", [ATTACHMENT]),
+		})
+		const targets = quotedTargetsIn(
+			[quoted, prompt({ id: "p-1", repliedToMessageId: "m-9" })],
+			["m-9"],
+		)
+
+		expect(targets.get("m-9")).toEqual({
+			messageId: "m-9",
+			role: "assistant",
+			excerpt: "Look at this",
+		})
+	})
+
+	it("leaves a message nobody points at out of the quotes", () => {
+		expect(quotedTargetsIn([message({ id: "m-9" })], []).size).toBe(0)
+	})
+
+	it("quotes a message that was paged out from its stored reference", () => {
+		expect(
+			replyTargetOfReference({
+				uri: "opennest://c-1/m-9",
+				conversationId: "c-1",
+				messageId: "m-9",
+				role: "user",
+				seq: 3,
+				createdAt: 0,
+				excerpt: "Look at this",
+				runtimeSessionId: null,
+				providerSessionId: null,
+			}),
+		).toEqual({ messageId: "m-9", role: "user", excerpt: "Look at this" })
+	})
+})
+
+describe("messageAnchorsIn", () => {
+	it("anchors the group of a run that split one message into paragraphs", () => {
+		const run = toTranscriptRows([
+			message({ id: "a-1", content: "One.\n\nTwo.", completion: "complete" }),
+		])
+
+		expect(messageAnchorsIn(run)).toEqual({ group: "a-1", rows: new Set() })
+	})
+
+	it("anchors each message of a run that merged two of them", () => {
+		const run = toTranscriptRows([prompt({ id: "p-1" }), prompt({ id: "p-2" })])
+
+		expect(messageAnchorsIn(run)).toEqual({
+			group: undefined,
+			rows: new Set(["p-1", "p-2"]),
+		})
+	})
+
+	it("anchors a merged message on its opening paragraph alone", () => {
+		const run = toTranscriptRows([
+			message({ id: "a-1", content: "One.\n\nTwo.", completion: "complete" }),
+			message({ id: "a-2", content: "Three.", completion: "complete" }),
+		])
+
+		expect(run.map((row) => row.id)).toEqual(["a-1#0", "a-1#1", "a-2#0"])
+		expect(messageAnchorsIn(run).rows).toEqual(new Set(["a-1#0", "a-2#0"]))
 	})
 })

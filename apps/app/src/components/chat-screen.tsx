@@ -26,6 +26,7 @@ import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { MessageAttachments } from "@workspace/ui/components/message-attachments"
+import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
@@ -68,8 +69,10 @@ import {
 } from "@/lib/chat/prompt-commands"
 import {
 	emptyStateStatusFor,
+	messageAnchorsIn,
 	needsFreshSession,
 	noticeTitleFor,
+	type ReplyTarget,
 	type TranscriptRow,
 	toRuns,
 	toTranscriptRows,
@@ -77,6 +80,7 @@ import {
 } from "@/lib/chat/screen-model"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import type { Chat } from "@/lib/chat/use-chat"
+import { useQuotedMessages } from "@/lib/chat/use-quoted-messages"
 import type {
 	AvatarAnimal,
 	AvatarBlot,
@@ -92,6 +96,22 @@ type BotFace = {
 	seed: string
 	image?: string
 }
+
+type QuoteAuthors = {
+	bot: string
+	reader: string
+}
+
+const toQuote = (
+	target: ReplyTarget,
+	authors: QuoteAuthors,
+	onJump: (messageId: string) => void,
+): QuotedMessage => ({
+	author: target.role === "assistant" ? authors.bot : authors.reader,
+	excerpt: target.excerpt,
+	from: target.role,
+	onJump: () => onJump(target.messageId),
+})
 
 const TurnBody = ({ attachments, text }: MessageContent) => (
 	<>
@@ -111,15 +131,28 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	seed,
 	image,
 	rejected,
+	reader,
+	anchor,
+	quoted,
+	onReply,
+	onJump,
 }: BotFace & {
 	row: TranscriptRow
 	controller: ChatController
 	run?: ChatTurnRun
 	avatar: boolean
 	rejected?: boolean
+	reader: string
+	anchor?: string
+	quoted?: ReplyTarget
+	onReply: (target: ReplyTarget) => void
+	onJump: (messageId: string) => void
 }) {
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = <TurnBody attachments={attachments} text={text} />
+	const reply = () => {
+		onReply({ messageId: row.messageId, role: row.role, excerpt: text })
+	}
 
 	if (row.role === "user") {
 		return (
@@ -127,6 +160,11 @@ const TranscriptTurn = memo(function TranscriptTurn({
 				state={rejected ? "failed" : row.completion}
 				run={run}
 				copyText={text}
+				messageId={anchor}
+				repliedTo={
+					quoted ? toQuote(quoted, { bot: name, reader }, onJump) : undefined
+				}
+				onReply={reply}
 				onRetry={() => {
 					void controller.retry(row.messageId)
 				}}
@@ -141,6 +179,8 @@ const TranscriptTurn = memo(function TranscriptTurn({
 			state={row.completion}
 			run={run}
 			copyText={text}
+			messageId={anchor}
+			onReply={reply}
 			bare={isTableBlock(text)}
 			avatar={
 				avatar ? (
@@ -407,10 +447,18 @@ function ConversationNotice({
 	)
 }
 
+const HIGHLIGHT_MS = 2_000
+
+const nextFrame = () =>
+	new Promise<void>((resolve) => {
+		requestAnimationFrame(() => resolve())
+	})
+
 type ChatScreenProps = {
 	bot: Bot
 	chat: Chat
 	attachments: AttachmentsController
+	readerName: string
 	isSettingsOpen: boolean
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
@@ -420,6 +468,7 @@ export function ChatScreen({
 	bot,
 	chat,
 	attachments,
+	readerName,
 	isSettingsOpen,
 	isOverlayOpen,
 	onToggleSettings,
@@ -431,17 +480,27 @@ export function ChatScreen({
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
 	const drafts = useRef<Record<string, string>>({})
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
+	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+	const [highlightedMessageId, setHighlightedMessageId] = useState<string>()
+	const heldHighlight = useRef<ReturnType<typeof setTimeout>>(undefined)
 
 	const face = avatarSrc(bot.avatarImagePath)
 	const canAttach = isSessionReady(state)
 	const staged = useAttachments(attachments, bot.id, canAttach, conversationRef)
-	const submitPrompt = useCallback(
-		(text: string) => {
-			scrollerRef.current?.scrollToEnd("auto")
-			return staged.submit(text)
+	const focusComposer = useCallback(() => {
+		composerRef.current?.focus({ preventScroll: true })
+	}, [])
+	const holdReply = useCallback(
+		(target: ReplyTarget) => {
+			setReplyTarget(target)
+			focusComposer()
 		},
-		[staged.submit],
+		[focusComposer],
 	)
+	const releaseReply = useCallback(() => {
+		setReplyTarget(null)
+		focusComposer()
+	}, [focusComposer])
 	const readDraft = useCallback(() => drafts.current[bot.id] ?? "", [bot.id])
 	const rememberDraft = useCallback(
 		(draft: string) => {
@@ -449,15 +508,61 @@ export function ChatScreen({
 		},
 		[bot.id],
 	)
+	const submitPrompt = useCallback(
+		async (text: string) => {
+			scrollerRef.current?.scrollToEnd("auto")
+			const sent = await staged.submit(text, replyTarget?.messageId)
+			if (sent) {
+				setReplyTarget(null)
+			}
+			return sent
+		},
+		[staged.submit, replyTarget],
+	)
 	const emptyStateStatus = emptyStateStatusFor(state.connection)
 	const latestError = state.errors.at(-1)
 	const notice = latestError?.id === dismissedErrorId ? undefined : latestError
 	const runs = toRuns(toTranscriptRows(state.messages))
 	const working = workingStateFor(state)
 
+	const quotes = useQuotedMessages(controller, state.messages)
+	const reader = readerName || t("working.name")
+
 	const restart = useCallback(() => {
 		void controller.restart()
 	}, [controller])
+
+	const reachMessage = useCallback(
+		async (messageId: string) => {
+			while (scrollerRef.current?.scrollToMessage(messageId) === false) {
+				const shown = controller.getState()
+				if (!shown.hasOlder) {
+					return
+				}
+				await controller.loadOlder()
+				await nextFrame()
+				if (controller.getState().messages.length === shown.messages.length) {
+					return
+				}
+			}
+		},
+		[controller],
+	)
+
+	const jumpToMessage = useCallback(
+		(messageId: string) => {
+			clearTimeout(heldHighlight.current)
+			setHighlightedMessageId(messageId)
+			heldHighlight.current = setTimeout(
+				() => setHighlightedMessageId(undefined),
+				HIGHLIGHT_MS,
+			)
+			void reachMessage(messageId)
+		},
+		[reachMessage],
+	)
+
+	useEffect(() => () => clearTimeout(heldHighlight.current), [])
 
 	const loadOlder = useCallback(() => {
 		void controller.loadOlder()
@@ -474,6 +579,7 @@ export function ChatScreen({
 			transcriptKey={bot.id}
 			busy={isTurnBusy(state.turn)}
 			label={t("screen.label")}
+			highlightedMessageId={highlightedMessageId}
 			older={
 				state.messages.length > 0
 					? {
@@ -520,6 +626,14 @@ export function ChatScreen({
 					}}
 				/>
 			}
+			reply={
+				replyTarget
+					? {
+							...toQuote(replyTarget, { bot: bot.name, reader }, jumpToMessage),
+							onDismiss: releaseReply,
+						}
+					: undefined
+			}
 			composer={
 				<Composer
 					key={bot.id}
@@ -556,9 +670,14 @@ export function ChatScreen({
 				const newest = runIndex === runs.length - 1
 				const live = working !== null && newest
 				const avatarIndex = live ? -1 : run.length - 1
+				const anchors = messageAnchorsIn(run)
 
 				return (
-					<ChatTurnGroup key={run[0].id} carriesMark={newest}>
+					<ChatTurnGroup
+						key={run[0].id}
+						carriesMark={newest}
+						messageId={anchors.group}
+					>
 						{run.map((row, index) => (
 							<TranscriptTurn
 								key={row.id}
@@ -571,6 +690,15 @@ export function ChatScreen({
 								seed={bot.id}
 								image={face}
 								rejected={row.messageId === state.rejectedPromptId}
+								reader={reader}
+								anchor={anchors.rows.has(row.id) ? row.messageId : undefined}
+								quoted={
+									row.quotedMessageId
+										? quotes.get(row.quotedMessageId)
+										: undefined
+								}
+								onReply={holdReply}
+								onJump={jumpToMessage}
 							/>
 						))}
 					</ChatTurnGroup>

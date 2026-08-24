@@ -39,6 +39,7 @@ import type {
 	TransportError,
 	TurnOutcome,
 } from "../agent/contract"
+import type { MessageReference } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import type { TerminalCompletion } from "../conversations/transcript-contract"
 import { createTranscriptController } from "../conversations/transcript-controller"
@@ -62,7 +63,12 @@ export type ChatController = {
 	rotate: () => Promise<SessionHandle | null>
 	loadOlder: () => Promise<void>
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
-	sendTo: (botId: string, text: string) => Promise<void>
+	sendTo: (
+		botId: string,
+		text: string,
+		repliedToMessageId?: string,
+	) => Promise<void>
+	reference: (messageId: string) => Promise<MessageReference | null>
 	storeAttachments: (
 		botId: string,
 		attachments: SubmittedAttachment[],
@@ -716,6 +722,13 @@ export function createChatController(
 		}
 	}
 
+	const referenceFor = (bot: BotChat, messageId: string) => {
+		const conversationId = bot.state.conversationId
+		return conversationId
+			? enqueue(() => store.messageReference(conversationId, messageId))
+			: Promise.resolve(null)
+	}
+
 	const contextFor = async (bot: BotChat, promptId: string, text: string) => {
 		const conversationId = bot.state.conversationId
 		if (bot.run.carried || !conversationId) {
@@ -1105,12 +1118,14 @@ export function createChatController(
 		loadOlder: () => onSelected(loadOlder, undefined),
 		send: (text, repliedToMessageId) =>
 			onSelected((bot) => send(bot, text, repliedToMessageId), undefined),
-		sendTo: async (botId, text) => {
+		sendTo: async (botId, text, repliedToMessageId) => {
 			const bot = bots.get(botId)
 			if (bot) {
-				await send(bot, text)
+				await send(bot, text, repliedToMessageId)
 			}
 		},
+		reference: (messageId) =>
+			onSelected((bot) => referenceFor(bot, messageId), null),
 		storeAttachments,
 		stop: () => onSelected(stop, undefined),
 		discard: (id) =>

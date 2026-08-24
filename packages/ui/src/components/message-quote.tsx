@@ -43,7 +43,7 @@ const QUOTE_SIZE = {
 	},
 } satisfies Record<MessageQuoteSize, QuoteMetrics>
 
-export interface MessageQuoteProps extends QuotedMessage {
+export interface MessageQuoteProps extends Partial<QuotedMessage> {
 	size?: MessageQuoteSize
 	trailing?: ReactNode
 	children?: ReactNode
@@ -62,51 +62,58 @@ export function MessageQuote({
 }: MessageQuoteProps) {
 	const { t } = useTranslation("chat")
 	const metrics = QUOTE_SIZE[size]
+	const quoted = author !== undefined && from !== undefined
+	const grouping = quoted
+		? { role: "group" as const, "aria-label": t("reply.label", { author }) }
+		: undefined
 
 	return (
 		<div
-			role="group"
-			aria-label={t("reply.label", { author })}
+			{...grouping}
 			data-slot="message-quote"
 			data-from={from}
 			data-size={size}
 			className={cn(
-				"w-fit max-w-full rounded-3xl",
-				QUOTE_TONE[from],
+				quoted && "w-fit max-w-full rounded-3xl",
+				quoted && from && QUOTE_TONE[from],
 				className,
 			)}
 		>
 			<div
 				className={cn(
-					"flex flex-col rounded-[inherit] bg-background/10",
-					metrics.body,
+					"flex flex-col",
+					quoted && ["rounded-[inherit] bg-background/10", metrics.body],
 				)}
 			>
-				<div className={cn("flex items-center", metrics.row)}>
-					<span
-						className={cn(
-							"flex shrink-0 items-center justify-center",
-							metrics.glyphBox,
-						)}
-					>
-						<Icons.Reply
-							aria-hidden="true"
-							className={cn("opacity-70", metrics.glyph)}
-						/>
-					</span>
-					<button
-						type="button"
-						data-slot="message-quote-jump"
-						onClick={onJump}
-						className="flex min-w-0 flex-1 flex-col items-start rounded-md text-left transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-current motion-reduce:transition-none"
-					>
-						<span className="w-full truncate font-medium text-xs leading-4">
-							{author}
+				{quoted ? (
+					<div className={cn("flex items-center", metrics.row)}>
+						<span
+							className={cn(
+								"flex shrink-0 items-center justify-center",
+								metrics.glyphBox,
+							)}
+						>
+							<Icons.Reply
+								aria-hidden="true"
+								className={cn("opacity-70", metrics.glyph)}
+							/>
 						</span>
-						<span className="w-full truncate text-xs leading-4">{excerpt}</span>
-					</button>
-					{trailing}
-				</div>
+						<button
+							type="button"
+							data-slot="message-quote-jump"
+							onClick={onJump}
+							className="flex min-w-0 flex-1 flex-col items-start rounded-md text-left transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-current motion-reduce:transition-none"
+						>
+							<span className="w-full truncate font-medium text-xs leading-4">
+								{author}
+							</span>
+							<span className="w-full truncate text-xs leading-4">
+								{excerpt}
+							</span>
+						</button>
+						{trailing}
+					</div>
+				) : null}
 				{children}
 			</div>
 		</div>
