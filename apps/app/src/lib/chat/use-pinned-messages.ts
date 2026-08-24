@@ -10,7 +10,7 @@ const NO_PINS: MessagePin[] = []
 
 export type PinnedBubbles = {
 	bubbles: PinnedBubble[]
-	ids: ReadonlySet<string>
+	isPinned: (bubbleId: string) => boolean
 	anchorOf: (bubbleId: string) => string
 	toggle: (messageId: string, blockIndex: number) => void
 	unpin: (bubbleId: string) => void
@@ -38,6 +38,8 @@ export function usePinnedMessages(
 		[bubbles],
 	)
 
+	const isPinned = useCallback((bubbleId: string) => held.has(bubbleId), [held])
+
 	const anchorOf = useCallback(
 		(bubbleId: string) => held.get(bubbleId)?.anchor ?? bubbleId,
 		[held],
@@ -45,12 +47,12 @@ export function usePinnedMessages(
 
 	const toggle = useCallback(
 		(messageId: string, blockIndex: number) => {
-			const act = held.has(bubbleIdOf(messageId, blockIndex))
+			const act = isPinned(bubbleIdOf(messageId, blockIndex))
 				? controller.unpin(messageId, blockIndex)
 				: controller.pin(messageId, blockIndex)
 			void act.then(recall, () => undefined)
 		},
-		[controller, held, recall],
+		[controller, isPinned, recall],
 	)
 
 	const unpin = useCallback(
@@ -67,7 +69,7 @@ export function usePinnedMessages(
 	)
 
 	return useMemo(
-		() => ({ bubbles, ids: new Set(held.keys()), anchorOf, toggle, unpin }),
-		[bubbles, held, anchorOf, toggle, unpin],
+		() => ({ bubbles, isPinned, anchorOf, toggle, unpin }),
+		[bubbles, isPinned, anchorOf, toggle, unpin],
 	)
 }

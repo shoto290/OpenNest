@@ -576,22 +576,19 @@ export function ChatScreen({
 	const quotes = useQuotedMessages(controller, state.messages)
 	const reader = readerName || t("working.name")
 	const pins = usePinnedMessages(controller, state.conversationId)
+	const botFace: BotFace = useMemo(
+		() => ({
+			name: bot.name,
+			animal: bot.avatarAnimal,
+			blot: bot.avatarBlot ?? undefined,
+			seed: bot.id,
+			image: face,
+		}),
+		[bot, face],
+	)
 	const pinnedRows = useMemo(
-		() =>
-			pins.bubbles.map((shown) =>
-				toPinnedRow(
-					shown,
-					{
-						name: bot.name,
-						animal: bot.avatarAnimal,
-						blot: bot.avatarBlot ?? undefined,
-						seed: bot.id,
-						image: face,
-					},
-					reader,
-				),
-			),
-		[pins.bubbles, bot, face, reader],
+		() => pins.bubbles.map((shown) => toPinnedRow(shown, botFace, reader)),
+		[pins.bubbles, botFace, reader],
 	)
 
 	const restart = useCallback(() => {
@@ -785,32 +782,35 @@ export function ChatScreen({
 				const avatarIndex = live ? -1 : run.length - 1
 
 				return (
-					<ChatTurnGroup key={run[0].id} carriesMark={newest}>
-						{run.map((row, index) => (
-							<TranscriptTurn
-								key={row.id}
-								row={row}
-								controller={controller}
-								avatar={index === avatarIndex}
-								name={bot.name}
-								animal={bot.avatarAnimal}
-								blot={bot.avatarBlot ?? undefined}
-								seed={bot.id}
-								image={face}
-								rejected={row.messageId === state.rejectedPromptId}
-								reader={reader}
-								anchor={bubbleIdOf(row.messageId, row.blockIndex)}
-								quoted={
-									row.quotedMessageId
-										? quotes.get(row.quotedMessageId)
-										: undefined
-								}
-								pinned={pins.ids.has(bubbleIdOf(row.messageId, row.blockIndex))}
-								onReply={holdReply}
-								onJump={jumpToMessage}
-								onPin={pins.toggle}
-							/>
-						))}
+					<ChatTurnGroup
+						key={bubbleIdOf(run[0].messageId, run[0].blockIndex)}
+						carriesMark={newest}
+					>
+						{run.map((row, index) => {
+							const bubble = bubbleIdOf(row.messageId, row.blockIndex)
+
+							return (
+								<TranscriptTurn
+									key={bubble}
+									row={row}
+									controller={controller}
+									avatar={index === avatarIndex}
+									{...botFace}
+									rejected={row.messageId === state.rejectedPromptId}
+									reader={reader}
+									anchor={bubble}
+									quoted={
+										row.quotedMessageId
+											? quotes.get(row.quotedMessageId)
+											: undefined
+									}
+									pinned={pins.isPinned(bubble)}
+									onReply={holdReply}
+									onJump={jumpToMessage}
+									onPin={pins.toggle}
+								/>
+							)
+						})}
 					</ChatTurnGroup>
 				)
 			})}

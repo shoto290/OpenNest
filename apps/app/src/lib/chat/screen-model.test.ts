@@ -107,7 +107,7 @@ describe("toTranscriptRows", () => {
 		])
 
 		expect(rows.map((row) => row.text)).toEqual(["One.", "Two."])
-		expect(rows.map((row) => row.id)).toEqual(["msg-1#0", "msg-1#1"])
+		expect(rows.map((row) => row.blockIndex)).toEqual([0, 1])
 	})
 
 	it("carries how the turn ended on its closing row alone", () => {

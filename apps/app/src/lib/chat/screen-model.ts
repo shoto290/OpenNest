@@ -17,7 +17,6 @@ import type {
 import { isTerminalCompletion } from "../conversations/transcript-state"
 
 export type TranscriptRow = {
-	id: string
 	messageId: string
 	blockIndex: number
 	quotedMessageId: string | null
@@ -76,13 +75,11 @@ const WRITE_TOOLS = new Set(["edit", "multiedit", "notebookedit", "write"])
 function toRow(
 	message: TranscriptMessage,
 	fields: Pick<TranscriptRow, "text" | "completion"> & {
-		index?: number
+		blockIndex?: number
 	},
 ): TranscriptRow {
-	const { index, ...rest } = fields
-	const blockIndex = index ?? 0
+	const { blockIndex = 0, ...rest } = fields
 	return {
-		id: index === undefined ? message.id : `${message.id}#${index}`,
 		messageId: message.id,
 		blockIndex,
 		quotedMessageId:
@@ -101,13 +98,13 @@ function assistantRows(message: TranscriptMessage): TranscriptRow[] {
 	if (blocks.length === 0) {
 		return unfinished || ending === "complete"
 			? []
-			: [toRow(message, { index: 0, text: "", completion: ending })]
+			: [toRow(message, { text: "", completion: ending })]
 	}
 
-	return blocks.map((text, index) => {
-		const closes = index === blocks.length - 1 && !unfinished
+	return blocks.map((text, blockIndex) => {
+		const closes = blockIndex === blocks.length - 1 && !unfinished
 		return toRow(message, {
-			index,
+			blockIndex,
 			text,
 			completion: closes ? ending : "complete",
 		})
