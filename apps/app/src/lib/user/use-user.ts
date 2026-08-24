@@ -4,7 +4,7 @@ import {
 	createUserController,
 	type UserController,
 	type UserState,
-} from "./user-controller"
+} from "./preferences-controller"
 
 export type User = {
 	state: UserState

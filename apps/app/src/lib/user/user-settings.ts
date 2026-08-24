@@ -6,8 +6,11 @@ import {
 	type UserSettingsValue,
 } from "@workspace/ui/components/user-settings"
 
-import type { ThemePreferences } from "./theme-mirror"
-import type { NotificationChange, UserProfile } from "./user-controller"
+import type { UserPreferences } from "./preferences-contract"
+import type {
+	NotificationChange,
+	ReaderPreferences,
+} from "./preferences-controller"
 
 import { avatarSrc } from "../host"
 
@@ -21,22 +24,21 @@ const NOTIFICATION_FIELDS: Record<
 	sound: "notifyWithSound",
 }
 
-const toNotifications = (profile: UserProfile): Notifications => ({
-	question: profile.notifyOnQuestion,
-	permission: profile.notifyOnPermission,
-	turn: profile.notifyOnFinishedTurn,
-	sound: profile.notifyWithSound,
+const toNotifications = (record: UserPreferences): Notifications => ({
+	question: record.notifyOnQuestion,
+	permission: record.notifyOnPermission,
+	turn: record.notifyOnFinishedTurn,
+	sound: record.notifyWithSound,
 })
 
 export const toUserSettingsValue = (
-	profile: UserProfile,
-	theme: ThemePreferences,
+	record: ReaderPreferences,
 ): UserSettingsValue => ({
-	name: profile.displayName,
-	image: avatarSrc(profile.profilePicturePath),
-	colorScheme: theme.colorScheme,
-	palette: theme.palette,
-	notifications: toNotifications(profile),
+	name: record.displayName,
+	image: avatarSrc(record.profilePicturePath),
+	colorScheme: record.colorScheme,
+	palette: record.palette,
+	notifications: toNotifications(record),
 })
 
 export const toNotificationChange = (
