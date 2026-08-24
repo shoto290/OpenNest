@@ -16,6 +16,7 @@ const common = {
 		label: "Sidebar",
 		toggle: "Toggle sidebar",
 		close: "Close sidebar",
+		resize: "Resize sidebar",
 	},
 	contextMenu: {
 		label: "Context menu",

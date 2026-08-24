@@ -16,6 +16,7 @@ const common = {
 		label: "Barre latérale",
 		toggle: "Afficher ou masquer la barre latérale",
 		close: "Fermer la barre latérale",
+		resize: "Redimensionner la barre latérale",
 	},
 	contextMenu: {
 		label: "Menu contextuel",

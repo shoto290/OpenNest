@@ -52,13 +52,14 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					'The control in a header beside an expanded panel. Check that it is a single square target with the glyph centred in it, that it announces itself as "Toggle sidebar" with `aria-expanded=true`, and that one click flips the attribute to false while a second brings it back. Focus stays on the button across the toggle — it must not fall back to the page, or a second press would be unreachable — and Tab reaches it with a visible ring. Pick `Collapsed` for the resting rail, `Labelled` for a control named after what it opens.',
+					'The control in a header beside an expanded panel. Check that it is a single square target with the glyph centred in it, that it announces itself as "Toggle sidebar" with `aria-expanded=true`, and that one click flips the attribute to false while a second brings it back. Focus stays on the button across the toggle — it must not fall back to the page, or a second press would be unreachable — and Tab reaches it with a visible ring, one stop after the resize handle on the panel edge. Pick `Collapsed` for the resting rail, `Labelled` for a control named after what it opens.',
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const toggle = canvas.getByRole("button", { name: "Toggle sidebar" })
 
+		await userEvent.tab()
 		await userEvent.tab()
 		await expect(toggle).toHaveFocus()
 		await expect(toggle.matches(":focus-visible")).toBe(true)
