@@ -34,6 +34,7 @@ const chat = {
 	},
 	turn: {
 		copy: "Copy",
+		reply: "Reply",
 		copied: "Copied",
 		retry: "Retry",
 		cancel: "Cancel this prompt",
@@ -42,6 +43,10 @@ const chat = {
 			failed: "This response failed",
 			queued: "Waiting to be sent",
 		},
+	},
+	reply: {
+		label: "Replying to {{author}}",
+		dismiss: "Cancel reply",
 	},
 	working: {
 		name: "No name",

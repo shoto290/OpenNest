@@ -34,6 +34,7 @@ const chat = {
 	},
 	turn: {
 		copy: "Copier",
+		reply: "Répondre",
 		copied: "Copié",
 		retry: "Réessayer",
 		cancel: "Annuler cette invite",
@@ -42,6 +43,10 @@ const chat = {
 			failed: "Cette réponse a échoué",
 			queued: "En attente d'envoi",
 		},
+	},
+	reply: {
+		label: "Réponse à {{author}}",
+		dismiss: "Annuler la réponse",
 	},
 	working: {
 		name: "Sans nom",

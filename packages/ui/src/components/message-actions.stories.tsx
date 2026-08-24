@@ -65,7 +65,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A bubble's actions, put on the far side of it: right of the bot, left of the reader. It reads the side off `MessageSideContext`, so no caller says which way round it is, and it wraps the bubble body rather than sitting beside it — that is what keeps the row as narrow as the bubble, so the buttons land against the bubble's own edge and never against the transcript's. Their room is held from the first paint: revealing them reflows nothing, and a bubble that runs the full width still leaves them inside the transcript. They fade in on hover of the bubble and stay put whenever anything inside the bubble holds focus, so a keyboard reaches them; under reduced motion they simply appear. Each `MessageAction` decides that for itself: `alwaysVisible` pins the one action a reader must not have to hunt for, and the rest of the row still waits to be pointed at. Hand the row nothing that renders and it collapses, leaving no gap behind. `AI/ChatTurn` composes it with the copy and retry a real transcript offers.",
+					"A bubble's actions, put on the far side of it: right of the bot, left of the reader. It reads the side off `MessageSideContext`, so no caller says which way round it is — the row itself is mirrored on the reader's side, so the first action given is always the one nearest the bubble whichever way round the row runs — and it wraps the bubble body rather than sitting beside it — that is what keeps the row as narrow as the bubble, so the buttons land against the bubble's own edge and never against the transcript's. Their room is held from the first paint: revealing them reflows nothing, and a bubble that runs the full width still leaves them inside the transcript. They fade in on hover of the bubble and stay put whenever anything inside the bubble holds focus, so a keyboard reaches them; under reduced motion they simply appear. Each `MessageAction` decides that for itself: `alwaysVisible` pins the one action a reader must not have to hunt for, and the rest of the row still waits to be pointed at. Hand the row nothing that renders and it collapses, leaving no gap behind. `AI/ChatTurn` composes it with the copy and retry a real transcript offers.",
 			},
 		},
 	},
@@ -143,8 +143,8 @@ export const Pinned = meta.story({
 				text="How is this workspace laid out?"
 				actions={
 					<>
-						<CopyAction />
 						<RetryAction />
+						<CopyAction />
 					</>
 				}
 			/>
@@ -154,7 +154,7 @@ export const Pinned = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two actions on one bubble that must not behave alike. The retry is `alwaysVisible` — a prompt that never reached Claude has to show its way out before the reader goes looking — while the copy beside it stays behind a hover like every other. Check that the pinned one sits nearest the bubble, so the faded one never puts a gap between it and the words it acts on.",
+					"Two actions on one bubble that must not behave alike. The retry is `alwaysVisible` — a prompt that never reached Claude has to show its way out before the reader goes looking — while the copy beside it stays behind a hover like every other. Check that the pinned one sits nearest the bubble, so the faded one never puts a gap between it and the words it acts on — it is given first, and on the reader's side the row runs the other way so that first action still lands against the bubble.",
 			},
 		},
 	},

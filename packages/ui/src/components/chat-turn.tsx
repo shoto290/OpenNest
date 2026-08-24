@@ -26,6 +26,11 @@ import {
 	MessageBubbleContent,
 	MessageBubbleGroup,
 } from "@workspace/ui/components/message-bubble"
+import { useMessageAnchor } from "@workspace/ui/components/message-highlight-context"
+import {
+	MessageQuote,
+	type QuotedMessage,
+} from "@workspace/ui/components/message-quote"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
@@ -42,6 +47,7 @@ type InjectedTurnProps = { run?: ChatTurnRun; carriesMark?: boolean }
 
 interface ChatTurnGroupProps {
 	carriesMark?: boolean
+	messageId?: string
 	children: ReactNode
 	className?: string
 }
@@ -51,6 +57,9 @@ interface UserTurnProps {
 	state?: UserTurnState
 	run?: ChatTurnRun
 	copyText?: string
+	messageId?: string
+	repliedTo?: QuotedMessage
+	onReply?: () => void
 	onRetry?: () => void
 	onCancel?: () => void
 	className?: string
@@ -61,6 +70,9 @@ interface AssistantTurnProps {
 	state?: ChatTurnState
 	run?: ChatTurnRun
 	copyText?: string
+	messageId?: string
+	repliedTo?: QuotedMessage
+	onReply?: () => void
 	bare?: boolean
 	avatar?: ReactNode
 	carriesMark?: boolean
@@ -74,6 +86,9 @@ const TURN_FOOTER_KEY: Partial<
 	failed: "turn.footer.failed",
 	queued: "turn.footer.queued",
 }
+
+const HIGHLIGHT =
+	"rounded-xl transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
 
 const RUN_RADIUS = {
 	user: {
@@ -112,17 +127,50 @@ function CopyAction({ text }: { text: string }) {
 	)
 }
 
+interface ReplyActionProps {
+	onReply: () => void
+}
+
+interface TurnBodyProps {
+	repliedTo?: QuotedMessage
+	className?: string
+	children: ReactNode
+}
+
+function ReplyAction({ onReply }: ReplyActionProps) {
+	const { t } = useTranslation("chat")
+
+	return (
+		<MessageAction label={t("turn.reply")} onClick={onReply}>
+			<Icons.Reply />
+		</MessageAction>
+	)
+}
+
+function TurnBody({ repliedTo, className, children }: TurnBodyProps) {
+	const body = (
+		<MessageBubbleContent className={cn("whitespace-pre-wrap", className)}>
+			{children}
+		</MessageBubbleContent>
+	)
+
+	return repliedTo ? <MessageQuote {...repliedTo}>{body}</MessageQuote> : body
+}
+
 function ChatTurnGroup({
 	carriesMark = false,
+	messageId,
 	children,
 	className,
 }: ChatTurnGroupProps) {
 	const turns = Children.toArray(children).filter(isValidElement)
+	const anchor = useMessageAnchor(messageId)
 
 	return (
 		<MessageBubbleGroup
 			data-slot="chat-turn-group"
-			className={cn("gap-1", className)}
+			{...anchor}
+			className={cn("gap-1", messageId && HIGHLIGHT, className)}
 		>
 			{turns.map((turn, index) => {
 				const row = turn as ReactElement<InjectedTurnProps>
@@ -151,6 +199,9 @@ function UserTurn({
 	state = "complete",
 	run = "single",
 	copyText,
+	messageId,
+	repliedTo,
+	onReply,
 	onRetry,
 	onCancel,
 	className,
@@ -158,16 +209,21 @@ function UserTurn({
 	const { t } = useTranslation("chat")
 	const queued = state === "queued"
 	const footerKey = queued ? TURN_FOOTER_KEY.queued : undefined
+	const anchor = useMessageAnchor(messageId)
 
 	return (
-		<Message from="user" animateIn className={className}>
+		<Message
+			from="user"
+			animateIn
+			{...anchor}
+			className={cn(messageId && HIGHLIGHT, className)}
+		>
 			<MessageContent>
 				<MessageBubble variant={queued ? "tint" : "solid"}>
 					<MessageActions
 						actions={
 							<>
 								{queued ? <PendingSpinner /> : null}
-								{copyText ? <CopyAction text={copyText} /> : null}
 								{queued && onCancel ? (
 									<MessageAction
 										alwaysVisible
@@ -186,14 +242,14 @@ function UserTurn({
 										<Icons.Retry />
 									</MessageAction>
 								) : null}
+								{onReply ? <ReplyAction onReply={onReply} /> : null}
+								{copyText ? <CopyAction text={copyText} /> : null}
 							</>
 						}
 					>
-						<MessageBubbleContent
-							className={cn("whitespace-pre-wrap", RUN_RADIUS.user[run])}
-						>
+						<TurnBody repliedTo={repliedTo} className={RUN_RADIUS.user[run]}>
 							{children}
-						</MessageBubbleContent>
+						</TurnBody>
 					</MessageActions>
 				</MessageBubble>
 				{footerKey ? <MessageFooter>{t(footerKey)}</MessageFooter> : null}
@@ -207,6 +263,9 @@ function AssistantTurn({
 	state = "complete",
 	run = "single",
 	copyText,
+	messageId,
+	repliedTo,
+	onReply,
 	bare = false,
 	avatar,
 	carriesMark = false,
@@ -218,9 +277,15 @@ function AssistantTurn({
 	const footerKey = TURN_FOOTER_KEY[state]
 	const footer = footerKey ? t(footerKey) : undefined
 	const [receivesMark] = useState(Boolean(avatar && markId))
+	const anchor = useMessageAnchor(messageId)
 
 	return (
-		<Message from="assistant" animateIn={!receivesMark} className={className}>
+		<Message
+			from="assistant"
+			animateIn={!receivesMark}
+			{...anchor}
+			className={cn(messageId && HIGHLIGHT, className)}
+		>
 			<MessageContent
 				className="grid gap-x-2"
 				style={{ gridTemplateColumns: `${CHAT_AVATAR_SIZE}px 1fr` }}
@@ -238,16 +303,19 @@ function AssistantTurn({
 					className="col-start-2 row-start-1 min-w-0"
 				>
 					<MessageActions
-						actions={copyText ? <CopyAction text={copyText} /> : null}
+						actions={
+							<>
+								{onReply ? <ReplyAction onReply={onReply} /> : null}
+								{copyText ? <CopyAction text={copyText} /> : null}
+							</>
+						}
 					>
-						<MessageBubbleContent
-							className={cn(
-								"whitespace-pre-wrap",
-								!bare && RUN_RADIUS.assistant[run],
-							)}
+						<TurnBody
+							repliedTo={repliedTo}
+							className={bare ? undefined : RUN_RADIUS.assistant[run]}
 						>
 							{children}
-						</MessageBubbleContent>
+						</TurnBody>
 					</MessageActions>
 				</MessageBubble>
 				{footer ? (
