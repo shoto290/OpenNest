@@ -1,7 +1,11 @@
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	A11Y_FLOATING_FOCUS_GUARDS,
+	listExhaustively,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	UpdateBadge,
 	type UpdateBadgeStatus,
@@ -138,6 +142,7 @@ export const Ready = meta.story({
 export const WithActiveBots = meta.story({
 	args: { status: "ready", activeBotCount: 2 },
 	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
@@ -159,6 +164,7 @@ export const WithActiveBots = meta.story({
 export const WithReleaseNotes = meta.story({
 	args: { status: "ready", releaseNotesUrl: RELEASE_NOTES_URL },
 	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:

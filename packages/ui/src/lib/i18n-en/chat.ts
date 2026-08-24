@@ -35,6 +35,8 @@ const chat = {
 	turn: {
 		copy: "Copy",
 		reply: "Reply",
+		pin: "Pin",
+		unpin: "Unpin",
 		copied: "Copied",
 		retry: "Retry",
 		cancel: "Cancel this prompt",
@@ -47,6 +49,15 @@ const chat = {
 	reply: {
 		label: "Replying to {{author}}",
 		dismiss: "Cancel reply",
+	},
+	pinned: {
+		title: "Pinned messages",
+		counted_one: "Pinned messages, {{count}} pinned",
+		counted_other: "Pinned messages, {{count}} pinned",
+		jump: "Jump",
+		jumpTo: "Jump to the message from {{author}}",
+		unpin: "Unpin the message from {{author}}",
+		empty: "No message is pinned in this conversation yet.",
 	},
 	working: {
 		name: "No name",

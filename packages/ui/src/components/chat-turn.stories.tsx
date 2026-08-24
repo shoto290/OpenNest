@@ -31,6 +31,8 @@ const cancelQueued = fn()
 
 const reply = fn()
 
+const pin = fn()
+
 const jumpToQuoted = fn()
 
 const QUESTION = "Is any of that destructive?"
@@ -464,6 +466,44 @@ export const Reply = meta.story({
 
 		await userEvent.click(replies[0])
 		await expect(reply).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const Pinned = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<UserTurn copyText={QUESTION} onReply={reply} onPin={pin}>
+				{QUESTION}
+			</UserTurn>
+			<AssistantTurn
+				copyText={ANSWER}
+				avatar={<Avatar />}
+				onReply={reply}
+				pinned
+				onPin={pin}
+			>
+				{ANSWER}
+			</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bookmark a reader drops on a row, beside the reply it sits next to. A row given `onPin` offers it on hover or on keyboard focus like the rest; a row already pinned keeps the control on screen without hover and names it `Unpin`, so the transcript shows at a glance what is bookmarked. Pressing it reports the row and changes nothing here — holding the list is the screen's business, and `AI/PinnedMessages` is where it reads.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		pin.mockClear()
+
+		const unpin = canvas.getByRole("button", { name: "Unpin" })
+
+		await expect(unpin).toBeVisible()
+		await expect(unpin).not.toHaveClass(/opacity-0/)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Pin" }))
+		await expect(pin).toHaveBeenCalledTimes(1)
 	},
 })
 

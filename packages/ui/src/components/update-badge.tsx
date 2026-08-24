@@ -5,12 +5,12 @@ import { useTranslation } from "react-i18next"
 
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { Tooltip } from "@workspace/ui/components/motion/tooltip"
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
-} from "@workspace/ui/components/motion/popover"
-import { Tooltip } from "@workspace/ui/components/motion/tooltip"
+} from "@workspace/ui/components/popover"
 import { ProgressRing } from "@workspace/ui/components/progress"
 import { cn } from "@workspace/ui/lib/utils"
 
