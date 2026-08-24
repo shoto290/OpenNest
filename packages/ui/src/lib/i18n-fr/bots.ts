@@ -416,8 +416,13 @@ const bots = {
 				orange: "Orange",
 			},
 		},
-		picture: "Image",
-		pictureFile: "Fichier image de l'avatar",
+		picture: {
+			label: "Image",
+			file: "Fichier image de l'avatar",
+			add: "Ajouter une image",
+			change: "Changer l'image",
+			remove: "Retirer l'image",
+		},
 	},
 	danger: {
 		delete: "Supprimer le bot",

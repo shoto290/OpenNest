@@ -427,8 +427,13 @@ const bots = {
 				orange: "Orange",
 			} as const satisfies Record<BotAvatarBlot, string>,
 		},
-		picture: "Picture",
-		pictureFile: "Avatar image file",
+		picture: {
+			label: "Picture",
+			file: "Avatar image file",
+			add: "Add picture",
+			change: "Change picture",
+			remove: "Remove picture",
+		},
 	},
 	danger: {
 		delete: "Delete bot",

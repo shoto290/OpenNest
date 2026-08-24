@@ -46,6 +46,12 @@ const previewAvatar = (canvasElement: HTMLElement) => {
 	return preview
 }
 
+const pictureField = (canvasElement: HTMLElement) => {
+	const [field] = slotsIn(canvasElement, "bot-picture-field")
+	if (!field) throw new Error("The block is missing its picture field")
+	return field
+}
+
 const drawnLabels = (canvasElement: HTMLElement) =>
 	Array.from(canvasElement.querySelectorAll('svg[role="img"]')).map((svg) =>
 		svg.getAttribute("aria-label"),
@@ -59,7 +65,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a bot's face is made of, flat: what it looks like now, the eight animals the avatar engine draws, the eight ink blots that mark it plus the option that takes the blot off, and the zone that takes a picture. Nothing is behind a popover, a disclosure or a tab set — a reader in a bot's appearance sees every choice at once and compares them instead of opening one to find out. Each grid is a real radio group, so arrow keys move within it and the current choice is announced; the ring is the same answer for the eye. Every thumbnail wears the animal, the blot and the id currently in play, so both rows preview the actual outcome. Picking an animal or a blot takes the picture off, because the picture is what wins over both. The block never reads a file: it hands the host a `File` and waits for the picture to come back as `identity.image`. Only the preview is allowed to move, and only while `working` — the choices always rest.",
+					"Everything a bot's face is made of, flat: what it looks like now, the eight animals the avatar engine draws, the eight ink blots that mark it plus the option that takes the blot off, and the round field that takes a picture and takes it back off. Nothing is behind a popover, a disclosure or a tab set — a reader in a bot's appearance sees every choice at once and compares them instead of opening one to find out. Each grid is a real radio group, so arrow keys move within it and the current choice is announced; the ring is the same answer for the eye. Every thumbnail wears the animal, the blot and the id currently in play, so both rows preview the actual outcome. Picking an animal or a blot takes the picture off, because the picture is what wins over both. The block never reads a file: it hands the host a `File` and waits for the picture to come back as `identity.image`. Only the preview is allowed to move, and only while `working` — the choices always rest.",
 			},
 		},
 	},
@@ -87,7 +93,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal case: a bot that already picked an owl and a blue blot. Reach for it to check that the preview, both grids and the picture zone stand at once with nothing to open first, that the two current choices are the checked ones, and that Tab walks the block in reading order.",
+					"The nominal case: a bot that already picked an owl and a blue blot. Reach for it to check that the preview, both grids and the picture field stand at once with nothing to open first, that the two current choices are the checked ones, and that Tab walks the block in reading order.",
 			},
 		},
 	},
@@ -96,7 +102,7 @@ export const Default = meta.story({
 		await expect(canvas.getByRole("radio", { name: "Blue" })).toBeChecked()
 		await expect(canvas.getAllByRole("radio")).toHaveLength(17)
 		await expect(
-			canvas.getByRole("button", { name: /Drag, drop or paste an image/ }),
+			canvas.getByRole("button", { name: "Add picture" }),
 		).toBeVisible()
 		await expect(canvas.queryByRole("dialog")).toBeNull()
 		await expect(canvas.queryAllByRole("tab")).toHaveLength(0)
@@ -187,6 +193,43 @@ export const WithPicture = meta.story({
 	},
 })
 
+export const RemovesThePicture = meta.story({
+	args: { identity: { ...IDENTITY, image: UPLOADED_AVATAR_IMAGE } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Taking the picture off, from the picture field itself rather than by picking an animal to overwrite it. The remove button reports the identity the bot already carries — the same animal, the same blot, no image — so the host clears the stored path on that one report and needs no command of its own. Check that the field falls back to the drawn face the moment the identity comes back without an image, and that the button goes with the picture.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const field = pictureField(canvasElement)
+
+		await expect(field.querySelector("img")).toHaveAttribute(
+			"src",
+			UPLOADED_AVATAR_IMAGE,
+		)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Remove picture" }),
+		)
+
+		await expect(args.onIdentityChange).toHaveBeenCalledWith({
+			animal: "owl",
+			blot: "blue",
+		})
+		await expect(field.querySelector("img")).toBeNull()
+		await expect(field.querySelector('svg[role="img"]')).toHaveAttribute(
+			"aria-label",
+			"Bot avatar owl, idle",
+		)
+		await expect(
+			canvas.queryByRole("button", { name: "Remove picture" }),
+		).toBeNull()
+	},
+})
+
 export const Working = meta.story({
 	args: { working: true, workingKind: "writing" },
 	parameters: {
@@ -231,7 +274,7 @@ export const ChoosesTheSameFileTwice = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who picks a file, crops it outside the app and picks the very same file again. The zone clears its input after every choice, so the second pick is a change like any other and the host hears about it — without that, the second attempt is silence and the reader presses again harder. Check that both picks reach the host.",
+					"A reader who picks a file, crops it outside the app and picks the very same file again. The field clears its input after every choice, so the second pick is a change like any other and the host hears about it — without that, the second attempt is silence and the reader presses again harder. Check that both picks reach the host.",
 			},
 		},
 	},
@@ -253,14 +296,12 @@ export const DroppedAndPasted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The two paths that never touch the file dialog: a file dropped on the zone, and a file pasted into it while it holds focus. Both hand the host the same `File`. The zone is a real button, so it is a tab stop a paste can land in and Enter and Space open the dialog for a reader who has no file yet.",
+					"The two paths that never touch the file dialog: a file dropped on the zone, and a file pasted into it while it holds focus. Both hand the host the same `File`. The field is a real button, so it is a tab stop a paste can land in and Enter and Space open the dialog for a reader who has no file yet.",
 			},
 		},
 	},
 	play: async ({ args, canvas }) => {
-		const dropzone = canvas.getByRole("button", {
-			name: /Drag, drop or paste an image/,
-		})
+		const dropzone = canvas.getByRole("button", { name: "Add picture" })
 
 		const dropped = new File(["dropped"], "dropped.png", { type: "image/png" })
 		const transfer = new DataTransfer()

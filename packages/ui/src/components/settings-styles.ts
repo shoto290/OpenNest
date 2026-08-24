@@ -16,6 +16,17 @@ const FIELD_OPTION_CLASS = `${FIELD_OPTION_MARKS_CLASS} flex flex-col items-cent
 const PICTURE_TARGET_CLASS =
 	"cursor-pointer border border-border outline-none hover:border-primary/50 hover:bg-muted focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/30 data-dragging:border-primary data-dragging:bg-primary/10"
 
+const PICTURE_FIELD_SIZE = 72
+
+const PICTURE_REMOVE_SIZE = 24
+
+const PICTURE_REMOVE_INSET =
+	(PICTURE_FIELD_SIZE / 2) * (1 - Math.SQRT1_2) - PICTURE_REMOVE_SIZE / 2
+
+const PICTURE_REMOVE_CLASS = "absolute rounded-full ring-2 ring-popover"
+
+const PICTURE_CONTROL_CLASS = `${PICTURE_TARGET_CLASS} grid place-items-center overflow-hidden rounded-full`
+
 const SETTINGS_TAG_CLASS =
 	"shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-xs"
 
@@ -45,6 +56,10 @@ export {
 	FIELD_LABEL_CLASS,
 	FIELD_OPTION_CLASS,
 	FIELD_OPTION_MARKS_CLASS,
+	PICTURE_CONTROL_CLASS,
+	PICTURE_FIELD_SIZE,
+	PICTURE_REMOVE_CLASS,
+	PICTURE_REMOVE_INSET,
 	PICTURE_TARGET_CLASS,
 	POPUP_CLASS,
 	POPUP_DROP_SHADOW_CLASS,
