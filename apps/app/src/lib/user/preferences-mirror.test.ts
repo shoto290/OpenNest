@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { UserPreferences } from "./preferences-contract"
+import type { MirroredPreferences } from "./preferences-mirror"
 import {
 	activeLanguageOf,
 	applyLanguage,
@@ -25,6 +26,14 @@ const RECORD: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	windowBounds: null,
+	lastBotId: null,
+}
+
+const MIRRORED: MirroredPreferences = {
+	colorScheme: "light",
+	palette: "water",
+	language: null,
+	sidebarWidth: null,
 	lastBotId: null,
 }
 
@@ -53,22 +62,18 @@ beforeEach(() => {
 
 describe("the mirror", () => {
 	it("holds the scheme, the palette and the language that were chosen", () => {
-		writeMirror({ colorScheme: "light", palette: "water", language: "fr" })
+		writeMirror({ ...MIRRORED, language: "fr" })
 
 		expect(localStorage.getItem("theme")).toBe("light")
 		expect(localStorage.getItem("palette")).toBe("water")
 		expect(localStorage.getItem("language")).toBe("fr")
-		expect(readMirror()).toEqual({
-			colorScheme: "light",
-			palette: "water",
-			language: "fr",
-		})
+		expect(readMirror()).toEqual({ ...MIRRORED, language: "fr" })
 	})
 
 	it("holds no language while the record follows the machine", () => {
-		writeMirror({ colorScheme: "light", palette: "water", language: "fr" })
+		writeMirror({ ...MIRRORED, language: "fr" })
 
-		writeMirror({ colorScheme: "light", palette: "water", language: null })
+		writeMirror({ ...MIRRORED, language: null })
 
 		expect(localStorage.getItem("language")).toBeNull()
 		expect(readMirror().language).toBeNull()
@@ -79,6 +84,8 @@ describe("the mirror", () => {
 			colorScheme: "system",
 			palette: "amber",
 			language: null,
+			sidebarWidth: null,
+			lastBotId: null,
 		})
 	})
 
@@ -95,6 +102,35 @@ describe("the mirror", () => {
 		expect(readMirror().colorScheme).toBe("system")
 	})
 
+	it("holds the width the reader dragged the edge to", () => {
+		writeMirror({ ...MIRRORED, sidebarWidth: 320 })
+
+		expect(localStorage.getItem("sidebarWidth")).toBe("320")
+		expect(readMirror().sidebarWidth).toBe(320)
+	})
+
+	it("holds no width once the record holds none", () => {
+		writeMirror({ ...MIRRORED, sidebarWidth: 320 })
+
+		writeMirror({ ...MIRRORED, sidebarWidth: null })
+
+		expect(localStorage.getItem("sidebarWidth")).toBeNull()
+		expect(readMirror().sidebarWidth).toBeNull()
+	})
+
+	it("reads no width for a width that is not a count of pixels", () => {
+		localStorage.setItem("sidebarWidth", "wide")
+
+		expect(readMirror().sidebarWidth).toBeNull()
+	})
+
+	it("holds the bot whose conversation was left open", () => {
+		writeMirror({ ...MIRRORED, lastBotId: "nyx" })
+
+		expect(localStorage.getItem("lastBotId")).toBe("nyx")
+		expect(readMirror().lastBotId).toBe("nyx")
+	})
+
 	it("reads no language for a catalogue this build does not ship", () => {
 		localStorage.setItem("language", "br")
 
@@ -104,17 +140,27 @@ describe("the mirror", () => {
 
 describe("the record the host holds", () => {
 	it("is read down to the fields the mirror serves", () => {
-		expect(mirrorOf(RECORD)).toEqual({
+		expect(
+			mirrorOf({ ...RECORD, sidebarWidth: 320, lastBotId: "nyx" }),
+		).toEqual({
 			colorScheme: "dark",
 			palette: "moss",
 			language: "fr",
+			sidebarWidth: 320,
+			lastBotId: "nyx",
 		})
 	})
 
 	it("is read on its defaults for the values this build does not ship", () => {
 		expect(
 			mirrorOf({ ...RECORD, palette: "chartreuse", language: "br" }),
-		).toEqual({ colorScheme: "dark", palette: "amber", language: null })
+		).toEqual({
+			colorScheme: "dark",
+			palette: "amber",
+			language: null,
+			sidebarWidth: null,
+			lastBotId: null,
+		})
 	})
 })
 
@@ -151,6 +197,8 @@ describe("isMirrorKey", () => {
 		expect(isMirrorKey("theme")).toBe(true)
 		expect(isMirrorKey("palette")).toBe(true)
 		expect(isMirrorKey("language")).toBe(true)
+		expect(isMirrorKey("sidebarWidth")).toBe(true)
+		expect(isMirrorKey("lastBotId")).toBe(true)
 		expect(isMirrorKey("conversations")).toBe(false)
 		expect(isMirrorKey(null)).toBe(false)
 	})
@@ -162,6 +210,8 @@ describe("sameMirror", () => {
 			colorScheme: "dark",
 			palette: "moss",
 			language: "fr",
+			sidebarWidth: 320,
+			lastBotId: "nyx",
 		} as const
 
 		expect(sameMirror(mirrored, { ...mirrored })).toBe(true)
@@ -170,5 +220,7 @@ describe("sameMirror", () => {
 			false,
 		)
 		expect(sameMirror(mirrored, { ...mirrored, language: null })).toBe(false)
+		expect(sameMirror(mirrored, { ...mirrored, sidebarWidth: 256 })).toBe(false)
+		expect(sameMirror(mirrored, { ...mirrored, lastBotId: null })).toBe(false)
 	})
 })

@@ -23,7 +23,7 @@ export type RosterState = {
 export type RosterController = {
 	getState: () => RosterState
 	subscribe: (listener: () => void) => () => void
-	load: () => Promise<void>
+	load: (lastBotId: string | null) => Promise<void>
 	select: (id: string) => void
 	create: () => Promise<void>
 	duplicate: (id: string) => Promise<void>
@@ -89,14 +89,18 @@ export const createRosterController = (
 		apply({ ...bot, ...toIdentity(value, bot) })
 	}
 
-	const reload = () => enqueue(() => read()).catch(() => undefined)
+	const readFrom = (lastBotId: string | null) =>
+		enqueue(() => read(lastBotId)).catch(() => undefined)
 
-	const read = async () => {
+	const reload = () => readFrom(null)
+
+	const read = async (lastBotId: string | null) => {
 		const bots = await store.bots()
 		const stillHeld = bots.find((bot) => bot.id === state.selectedBotId)?.id
+		const remembered = bots.find((bot) => bot.id === lastBotId)?.id
 		set({
 			bots,
-			selectedBotId: stillHeld ?? bots[0]?.id ?? null,
+			selectedBotId: stillHeld ?? remembered ?? bots[0]?.id ?? null,
 			isEditing: state.isEditing && stillHeld !== undefined,
 			isShowingDanger: state.isShowingDanger && stillHeld !== undefined,
 		})
@@ -144,8 +148,8 @@ export const createRosterController = (
 			}
 		},
 
-		load: async () => {
-			await reload()
+		load: async (lastBotId: string | null) => {
+			await readFrom(lastBotId)
 			set({ hasLoaded: true })
 			await readPreviews(state.bots)
 		},

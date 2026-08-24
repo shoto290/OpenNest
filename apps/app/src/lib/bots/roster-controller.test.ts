@@ -17,7 +17,7 @@ const anEmptyStore = async (): Promise<TranscriptStore> => {
 
 const loaded = async (store: TranscriptStore) => {
 	const controller = createRosterController(store)
-	await controller.load()
+	await controller.load(null)
 	return controller
 }
 
@@ -99,12 +99,34 @@ describe("createRosterController", () => {
 		expect(controller.getState().selectedBotId).toBeNull()
 	})
 
+	it("opens on the bot it was left on when the roster still holds it", async () => {
+		const store = createFakeTranscriptStore()
+		const opened = await loaded(store)
+		await opened.create()
+		const left = opened.getState().selectedBotId
+
+		const reopened = createRosterController(store)
+		await reopened.load(left)
+
+		expect(left).not.toBe("default")
+		expect(reopened.getState().selectedBotId).toBe(left)
+	})
+
+	it("opens on the first bot when the roster no longer holds that one", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = createRosterController(store)
+
+		await controller.load("gone")
+
+		expect(controller.getState().selectedBotId).toBe("default")
+	})
+
 	it("says nothing has been read until the rows land", async () => {
 		const controller = createRosterController(await anEmptyStore())
 
 		expect(controller.getState().hasLoaded).toBe(false)
 
-		await controller.load()
+		await controller.load(null)
 
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
@@ -114,7 +136,7 @@ describe("createRosterController", () => {
 		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
 		const controller = createRosterController(store)
 
-		await controller.load()
+		await controller.load(null)
 
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
@@ -400,7 +422,7 @@ describe("createRosterController", () => {
 		controller.askToDelete("default")
 		await store.deleteBot("default")
 
-		await controller.load()
+		await controller.load(null)
 
 		expect(controller.getState()).toMatchObject({
 			isEditing: false,
