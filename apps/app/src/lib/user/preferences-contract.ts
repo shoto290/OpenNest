@@ -9,6 +9,13 @@ export type Palette = string
 
 export type Language = string | null
 
+export type WindowBounds = {
+	x: number
+	y: number
+	width: number
+	height: number
+}
+
 export type UserPreferences = {
 	displayName: string
 	profilePicturePath: string | null
@@ -19,6 +26,9 @@ export type UserPreferences = {
 	notifyOnPermission: boolean
 	notifyOnFinishedTurn: boolean
 	notifyWithSound: boolean
+	sidebarWidth: number | null
+	windowBounds: WindowBounds | null
+	lastBotId: string | null
 }
 
 export type UserPreferencesError =

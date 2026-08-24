@@ -7,7 +7,7 @@ import { startNotificationSource } from "./notification-source"
 import { revealWindow, watchWindowFocus } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
-import type { UserController } from "../user/user-controller"
+import type { UserController } from "../user/preferences-controller"
 
 export type NotificationsMount = {
 	chat: ChatController
@@ -26,7 +26,7 @@ export const useNotifications = ({
 				chat,
 				roster,
 				notifications: createNotifications(),
-				switches: () => user.getState().profile,
+				switches: () => user.getState().preferences,
 				hasFocus: () => document.hasFocus(),
 				watchFocus: watchWindowFocus,
 				raiseWindow: () => revealWindow({ withFocus: true }),

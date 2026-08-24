@@ -1,21 +1,31 @@
 import { describe, expect, it } from "vitest"
 
-import type { UserProfile } from "./user-controller"
+import type { ReaderPreferences } from "./preferences-controller"
 import { toNotificationChange, toUserSettingsValue } from "./user-settings"
 
-const PROFILE: UserProfile = {
+const RECORD: ReaderPreferences = {
 	displayName: "Nyx",
 	profilePicturePath: null,
+	colorScheme: "dark",
+	palette: "moss",
+	language: null,
 	notifyOnQuestion: true,
 	notifyOnPermission: false,
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
+	sidebarWidth: null,
+	windowBounds: null,
+	lastBotId: null,
 }
 
-const THEME = { colorScheme: "dark", palette: "moss" } as const
+const shown = (record: ReaderPreferences = RECORD) =>
+	toUserSettingsValue(record)
 
-const shown = (profile: UserProfile = PROFILE) =>
-	toUserSettingsValue(profile, THEME)
+describe("the theme the dialog draws", () => {
+	it("stands where the record holds it", () => {
+		expect(shown()).toMatchObject({ colorScheme: "dark", palette: "moss" })
+	})
+})
 
 describe("the switches the dialog draws", () => {
 	it("stands each one where the record holds it", () => {
@@ -28,7 +38,7 @@ describe("the switches the dialog draws", () => {
 	})
 
 	it("reads the sound the dialog flipped as the field the record names", () => {
-		const silenced = shown({ ...PROFILE, notifyWithSound: false })
+		const silenced = shown({ ...RECORD, notifyWithSound: false })
 
 		expect(toNotificationChange(silenced, shown())).toEqual({
 			field: "notifyWithSound",
@@ -37,7 +47,7 @@ describe("the switches the dialog draws", () => {
 	})
 
 	it("reads a flipped switch as the field the record names", () => {
-		const flipped = shown({ ...PROFILE, notifyOnFinishedTurn: false })
+		const flipped = shown({ ...RECORD, notifyOnFinishedTurn: false })
 
 		expect(toNotificationChange(flipped, shown())).toEqual({
 			field: "notifyOnFinishedTurn",
@@ -46,7 +56,7 @@ describe("the switches the dialog draws", () => {
 	})
 
 	it("reads an edit of another field as no switch at all", () => {
-		const renamed = shown({ ...PROFILE, displayName: "Nyxie" })
+		const renamed = shown({ ...RECORD, displayName: "Nyxie" })
 
 		expect(toNotificationChange(renamed, shown())).toBeNull()
 	})

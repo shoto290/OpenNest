@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
@@ -11,7 +11,6 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
 
 import { ChatScreen } from "@/components/chat-screen"
-import { useTheme } from "@/components/theme-provider"
 import {
 	changesRuntime,
 	modelOptionsFor,
@@ -32,9 +31,10 @@ import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
+import { useTheme } from "@/lib/theme/use-theme"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
-import { chosenLanguage, storeLanguage } from "@/lib/user/language-mirror"
+import type { ColorScheme } from "@/lib/user/preferences-contract"
 import { useUser } from "@/lib/user/use-user"
 import { useUserPlugin } from "@/lib/user/use-user-plugin"
 import {
@@ -64,7 +64,7 @@ export function App() {
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const userPlugin = useUserPlugin(store)
-	const theme = useTheme()
+	const preferences = user.state.preferences
 
 	const updater = useUpdater()
 
@@ -86,6 +86,7 @@ export function App() {
 
 	useEffect(() => {
 		void user.controller.load()
+		return user.controller.followOtherWindows()
 	}, [user.controller])
 
 	useEffect(() => {
@@ -156,15 +157,22 @@ export function App() {
 	)
 
 	const userSettings = useMemo(
-		() =>
-			toUserSettingsValue(user.state.profile, {
-				colorScheme: theme.theme,
-				palette: theme.palette,
-			}),
-		[user.state.profile, theme.theme, theme.palette],
+		() => toUserSettingsValue(preferences),
+		[preferences],
 	)
 
-	const [language, setLanguage] = useState(chosenLanguage)
+	const changeColorScheme = useCallback(
+		(colorScheme: ColorScheme) => {
+			void user.controller.setColorScheme(colorScheme)
+		},
+		[user.controller],
+	)
+
+	useTheme({
+		colorScheme: preferences.colorScheme,
+		palette: preferences.palette,
+		onColorSchemeChange: changeColorScheme,
+	})
 
 	useSettingsShortcut({
 		isEnabled: Boolean(selected) && !isEditing,
@@ -205,7 +213,7 @@ export function App() {
 						bot={selected}
 						chat={chat}
 						attachments={attachments}
-						readerName={user.state.profile.displayName}
+						readerName={preferences.displayName}
 						isSettingsOpen={isEditing}
 						isOverlayOpen={isEditing || user.state.isSettingsOpen}
 						onToggleSettings={toggleSettings}
@@ -285,10 +293,9 @@ export function App() {
 					onRevert: userPlugin.controller.revert,
 				}}
 				onClose={() => user.controller.setSettingsOpen(false)}
-				language={language}
+				language={preferences.language}
 				onLanguageChange={(next) => {
-					setLanguage(next)
-					void storeLanguage(next)
+					void user.controller.setLanguage(next)
 				}}
 				onPictureRemove={() => {
 					void user.controller.removePicture()
@@ -301,10 +308,10 @@ export function App() {
 						user.controller.rename(value.name)
 					}
 					if (value.colorScheme !== userSettings.colorScheme) {
-						theme.setTheme(value.colorScheme)
+						void user.controller.setColorScheme(value.colorScheme)
 					}
 					if (value.palette !== userSettings.palette) {
-						theme.setPalette(value.palette)
+						void user.controller.setPalette(value.palette)
 					}
 					const notification = toNotificationChange(value, userSettings)
 					if (notification) {
