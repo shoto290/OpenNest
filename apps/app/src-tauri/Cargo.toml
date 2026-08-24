@@ -5,14 +5,14 @@ description = "OpenNest desktop app"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/shoto290/OpenNest"
-default-run = "opennest-app"
+default-run = "OpenNest"
 
 [lib]
 name = "opennest_app"
 path = "src/lib.rs"
 
 [[bin]]
-name = "opennest-app"
+name = "OpenNest"
 path = "src/main.rs"
 
 # Every suite but real_claude.rs spawns this, so run them with
