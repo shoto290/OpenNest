@@ -2,6 +2,7 @@ import { useState } from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { slotsIn } from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import {
@@ -15,6 +16,19 @@ import { UserAvatar } from "@workspace/ui/components/user-avatar"
 const TITLE = "Pinned messages"
 
 const TRIGGER = /^Pinned messages/
+
+const DOT_RING = 2
+
+const dotGapsIn = (trigger: HTMLElement) => {
+	const [dot] = slotsIn(trigger, "pinned-messages-dot")
+	const box = trigger.getBoundingClientRect()
+	const ringed = dot.getBoundingClientRect()
+
+	return {
+		right: Math.round(box.right - ringed.right),
+		bottom: Math.round(box.bottom - ringed.bottom),
+	}
+}
 
 const BOT = <BotIdentityAvatar name="Skippy" size={PINNED_AVATAR_SIZE} />
 
@@ -98,7 +112,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal panel. Check that the button carries a dot while the list holds anything, that the panel is headed by the pinned-messages title, and that each row reads avatar, author, timestamp and excerpt with its two controls to the right, one rule apart from its neighbour. Pressing jump reports the message id and closes the panel — the reader is going to the transcript; pressing unpin reports the id and leaves the panel where it is, so several pins can be dropped in one visit.",
+					"The nominal panel. Check that the button carries a dot while the list holds anything, ring included, inside the button's own box so the header's corner stays square, that the panel is headed by the pinned-messages title, and that each row reads avatar, author, timestamp and excerpt with its two controls to the right, one rule apart from its neighbour. Pressing jump reports the message id and closes the panel — the reader is going to the transcript; pressing unpin reports the id and leaves the panel where it is, so several pins can be dropped in one visit.",
 			},
 		},
 	},
@@ -107,6 +121,10 @@ export const Default = meta.story({
 		const trigger = canvas.getByRole("button", { name: TRIGGER })
 
 		await expect(trigger).toHaveAccessibleName(`${TITLE}, 2 pinned`)
+		const dotGaps = dotGapsIn(trigger)
+
+		await expect(dotGaps.right).toBeGreaterThanOrEqual(DOT_RING)
+		await expect(dotGaps.bottom).toBeGreaterThanOrEqual(DOT_RING)
 
 		await userEvent.click(trigger)
 		const panel = await body.findByRole("dialog", { name: TITLE })

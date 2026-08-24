@@ -6,6 +6,12 @@ import { Button } from "@workspace/ui/components/button"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 
+const HEADER_HEIGHT = 48
+
+const TRAILING_CONTROL_SIZE = 28
+
+const TRAILING_INSET = (HEADER_HEIGHT - TRAILING_CONTROL_SIZE) / 2
+
 const meta = preview.meta({
 	title: "Layout/AppHeader",
 	component: AppHeader,
@@ -120,5 +126,42 @@ export const LongContent = meta.story({
 					"Reach for this to check the collision the two slots can have: a leading label wider than the bar. Check that the trailing status keeps its full width and stays legible while the leading side gives up the space. Pick `WithIcons` for the nominal width.",
 			},
 		},
+	},
+})
+
+export const TrailingInset = meta.story({
+	args: {
+		leading: <>OpenNest</>,
+		trailing: (
+			<Button aria-label="Pinned messages" size="icon-sm" variant="ghost">
+				<Icons.Pin />
+			</Button>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to check the corner an icon-only control lands in: the bar owes it the same air above, below and to its right, so it reads as placed rather than pushed into the angle. Check the three gaps measure the same pixel — the bottom rule is part of the bar, so the row leans a pixel down to pay for it. Pick `WithAction` for a trailing slot carrying a labelled button instead.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const header = canvas.getByRole("banner").getBoundingClientRect()
+		const control = canvas
+			.getByRole("button", { name: "Pinned messages" })
+			.getBoundingClientRect()
+
+		await expect(control.height).toBe(TRAILING_CONTROL_SIZE)
+		await expect(header.height).toBe(HEADER_HEIGHT)
+		await expect({
+			top: Math.round(control.top - header.top),
+			bottom: Math.round(header.bottom - control.bottom),
+			right: Math.round(header.right - control.right),
+		}).toEqual({
+			top: TRAILING_INSET,
+			bottom: TRAILING_INSET,
+			right: TRAILING_INSET,
+		})
 	},
 })
