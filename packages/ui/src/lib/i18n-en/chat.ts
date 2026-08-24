@@ -182,7 +182,7 @@ const chat = {
 	},
 	screen: {
 		label: "Claude Code conversation",
-		settings: "Bot settings",
+		identity: "{{name}} — bot settings",
 		placeholder: "Ask {{name}} to do something…",
 		permission: {
 			description: "Claude Code is waiting on you before it runs this tool.",

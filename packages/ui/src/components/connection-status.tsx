@@ -1,7 +1,6 @@
 import type { ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ConnectionStatusState = "checking" | "ready" | "unavailable" | "crashed"
@@ -31,13 +30,9 @@ function ConnectionStatus({
 		<div
 			data-slot="connection-status"
 			data-state={state}
-			className={cn(
-				"flex items-center gap-1.5 text-muted-foreground",
-				className,
-			)}
+			className={cn("flex items-center", className)}
 			{...props}
 		>
-			<Icons.Claude aria-hidden="true" className="size-4" />
 			<span
 				aria-hidden="true"
 				className={cn("size-1.5 rounded-full", CONNECTION_STATUS_DOT[state])}
