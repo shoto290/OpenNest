@@ -267,8 +267,8 @@ function UserTurn({
 										<Icons.Retry />
 									</MessageAction>
 								) : null}
-								{onReply ? <ReplyAction onReply={onReply} /> : null}
 								{onPin ? <PinAction pinned={pinned} onPin={onPin} /> : null}
+								{onReply ? <ReplyAction onReply={onReply} /> : null}
 								{copyText ? <CopyAction text={copyText} /> : null}
 							</>
 						}
@@ -333,8 +333,8 @@ function AssistantTurn({
 					<MessageActions
 						actions={
 							<>
-								{onReply ? <ReplyAction onReply={onReply} /> : null}
 								{onPin ? <PinAction pinned={pinned} onPin={onPin} /> : null}
+								{onReply ? <ReplyAction onReply={onReply} /> : null}
 								{copyText ? <CopyAction text={copyText} /> : null}
 							</>
 						}
