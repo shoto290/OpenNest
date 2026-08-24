@@ -152,6 +152,9 @@ const scrollToHistoryStart = async ({
 	return { viewport, anchorOffset }
 }
 
+const FRAME_CLASS =
+	"flex h-80 w-96 flex-col overflow-hidden rounded-xl border border-border bg-background"
+
 const TranscriptRow = ({ entry }: { entry: TranscriptEntry }) => (
 	<div
 		className={cn(
@@ -170,12 +173,14 @@ interface TranscriptScrollerProps
 	entries?: TranscriptEntry[]
 	incoming?: TranscriptEntry[]
 	olderPages?: TranscriptEntry[][]
+	hasComposer?: boolean
 }
 
 const TranscriptScroller = ({
 	entries = TRANSCRIPT,
 	incoming = INCOMING,
 	olderPages,
+	hasComposer,
 	onFollowChange,
 	...scrollerProps
 }: TranscriptScrollerProps) => {
@@ -183,7 +188,7 @@ const TranscriptScroller = ({
 	const [sent, setSent] = useState(0)
 	const [pending, setPending] = useState(olderPages ?? [])
 	const [isLoadingOlder, setIsLoadingOlder] = useState(false)
-	const [following, setFollowing] = useState(true)
+	const [composerRows, setComposerRows] = useState(1)
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
 	const nextIncoming = incoming[sent]
 
@@ -210,15 +215,12 @@ const TranscriptScroller = ({
 		: scrollerProps.older
 
 	return (
-		<div className="flex h-80 w-96 flex-col overflow-hidden rounded-xl border border-border bg-background">
+		<div className={FRAME_CLASS}>
 			<MessageScroller
 				{...scrollerProps}
 				older={older}
 				scrollerRef={scrollerRef}
-				onFollowChange={(next) => {
-					setFollowing(next)
-					onFollowChange?.(next)
-				}}
+				onFollowChange={onFollowChange}
 				className="flex-1"
 				contentClassName="flex flex-col gap-2 p-3"
 			>
@@ -243,14 +245,64 @@ const TranscriptScroller = ({
 						Deliver older page
 					</Button>
 				) : null}
-				{following ? null : (
+				{hasComposer ? (
 					<Button
 						size="sm"
+						variant="outline"
+						onClick={() => setComposerRows((rows) => rows + 3)}
+					>
+						Grow composer
+					</Button>
+				) : null}
+				{hasComposer ? (
+					<Button
+						size="sm"
+						variant="outline"
 						onClick={() => scrollerRef.current?.scrollToEnd("auto")}
 					>
-						Jump to latest
+						Send prompt
 					</Button>
-				)}
+				) : null}
+			</div>
+			{hasComposer ? (
+				<div
+					className="shrink-0 border-border border-t p-2 text-muted-foreground text-xs"
+					style={{ height: composerRows * 28 }}
+				>
+					Composer
+				</div>
+			) : null}
+		</div>
+	)
+}
+
+const OTHER_TRANSCRIPT: TranscriptEntry[] = TRANSCRIPT.map((entry) => ({
+	...entry,
+	id: `other-${entry.id}`,
+	text: `Second conversation — ${entry.text}`,
+}))
+
+const ConversationSwitcher = (
+	props: Omit<MessageScrollerProps, "children" | "transcriptKey">,
+) => {
+	const [isSecond, setIsSecond] = useState(false)
+
+	return (
+		<div className={FRAME_CLASS}>
+			<MessageScroller
+				{...props}
+				transcriptKey={isSecond ? "second" : "first"}
+				className="flex-1"
+				contentClassName="flex flex-col gap-2 p-3"
+			>
+				{(isSecond ? OTHER_TRANSCRIPT : TRANSCRIPT).map((entry) => (
+					<TranscriptRow key={entry.id} entry={entry} />
+				))}
+			</MessageScroller>
+			<div className="border-border border-t p-2">
+				<Button size="sm" onClick={() => setIsSecond((current) => !current)}>
+					Open other conversation
+				</Button>
 			</div>
 		</div>
 	)
@@ -264,7 +316,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. `onFollowChange` reports that switch and `scrollerRef.scrollToEnd()` returns to the live edge, so the host owns its own jump-to-latest control. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all.",
+					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. It renders its own jump-to-latest control while the reader sits away from the live edge, reports the switch through `onFollowChange`, and exposes `scrollerRef.scrollToEnd()` so a host can return to the live edge when it accepts a prompt. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all.",
 			},
 		},
 	},
@@ -393,7 +445,7 @@ export const ReturnToLatest = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to exercise the way back: from up in the history, the host's jump control calls `scrollerRef.scrollToEnd()`. Check that the viewport lands on the newest message, that the control disappears because follow is re-armed, and that the next reply is followed again — returning to the live edge must restore the pinning `ScrolledBack` suspended.",
+					"Reach for this to exercise the way back: from up in the history, the scroller's own jump control returns to the live edge. Check that the control appears only once the reader is away from it, that the viewport lands on the newest message, that the control disappears because follow is re-armed, and that the next reply is followed again — returning to the live edge must restore the pinning `ScrolledBack` suspended.",
 			},
 		},
 	},
@@ -663,5 +715,159 @@ export const PaginatedStickToBottom = meta.story({
 		)
 		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
 		await expect(args.older?.onLoad).not.toHaveBeenCalled()
+	},
+})
+
+export const ComposerGrowth = meta.story({
+	render: (args) => <TranscriptScroller {...args} hasComposer />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the frame itself shrinks under a reader who never moved — a prompt taking a second line is the everyday case. Check that growing the composer returns the newest message above it and that no follow change is reported: a viewport losing height is not the reader leaving. `StickToBottom` covers the transcript growing instead.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		const heightBefore = viewport.clientHeight
+
+		await userEvent.click(canvas.getByRole("button", { name: "Grow composer" }))
+
+		await waitFor(() =>
+			expect(viewport.clientHeight).toBeLessThan(heightBefore),
+		)
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+	},
+})
+
+export const PromptReturnsToLiveEdge = meta.story({
+	render: (args) => <TranscriptScroller {...args} hasComposer />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the host's own way back: a submitted prompt calls `scrollerRef.scrollToEnd()` whatever the reader was reading. Check that the viewport returns to the newest message from up in the history, that follow is re-armed, and that the jump control removes itself — the answer the reader just asked for is what they want in front of them.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		await waitFor(() =>
+			expect(
+				canvas.queryByRole("button", { name: "Jump to latest" }),
+			).toBeNull(),
+		)
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(true)
+	},
+})
+
+export const SmoothFollow = meta.story({
+	args: { smooth: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the transcript should travel to new output rather than jump to it. The animation is the system's own scroll, so it must never register as the reader leaving: check that follow survives the whole run and that the viewport still ends on the live edge. Under a reader who asked for less motion — the test environment included — the travel collapses to an instant jump.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+		await expect(
+			canvas.queryByRole("button", { name: "Jump to latest" }),
+		).toBeNull()
+	},
+})
+
+export const RowsArriveAfterEmpty = meta.story({
+	render: (args) => (
+		<TranscriptScroller {...args} entries={[]} incoming={TRANSCRIPT} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the transcript is laid out before it holds anything — a conversation opening on its first exchange. The empty layouts spend nothing: the landing is owed to the first layout that actually carries rows. Check that the viewport sits on the newest message once the rows have filled past the frame, and that follow was never reported as lost. `LongContent` covers the transcript that already overflows on the very first layout.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const send = () =>
+			canvas.getByRole<HTMLButtonElement>("button", { name: "Send reply" })
+
+		while (!send().disabled) {
+			await userEvent.click(send())
+		}
+
+		await waitFor(() =>
+			expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+		)
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+	},
+})
+
+export const ConversationChange = meta.story({
+	render: (args) => <ConversationSwitcher {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the host swaps the conversation under a scroller it keeps mounted. A new `transcriptKey` is a new transcript: check that the reader lands on its live edge with follow armed even though they were up in the history of the one before it, and that the landing is instant rather than a travel through rows they never read.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Open other conversation" }),
+		)
+
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(true)
+		await expect(
+			canvas.queryByRole("button", { name: "Jump to latest" }),
+		).toBeNull()
 	},
 })
