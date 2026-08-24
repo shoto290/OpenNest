@@ -1,13 +1,29 @@
-import { expect, fn, screen, within } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	ADDED_SKILL_COMMIT,
 	AWAITING_DIFF_COMMIT,
 	BOT_COMMITS,
+	UNREADABLE_DIFF_COMMIT,
+	WIDE_LINE_COMMIT,
 } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import { HistoryPanel } from "@workspace/ui/components/plugin-settings/history-panel"
 
 const [NEWEST] = BOT_COMMITS
+
+const patchElement = (canvasElement: HTMLElement) => {
+	const patch = canvasElement.querySelector("diffs-container")
+	if (!patch) throw new Error("The diff was never rendered as a patch")
+	return patch
+}
+
+const readPatch = async (canvasElement: HTMLElement) =>
+	await waitFor(() => {
+		const text = patchElement(canvasElement).shadowRoot?.textContent ?? ""
+		if (text.trim() === "") throw new Error("The patch is still being read")
+		return text
+	})
 
 const meta = preview.meta({
 	title: "AI/HistoryPanel",
@@ -80,11 +96,11 @@ export const ExpandedDiff = meta.story({
 		docs: {
 			description: {
 				story:
-					"A commit opened on its changes. Check that opening it asks the host for the diff exactly once, that added and removed lines are told apart by their colour rather than by counting the leading characters, and that the disclosure says `Hide changes` once it is open. The rest of the list is untouched: opening one commit closes none.",
+					"A commit opened on the patch that edits a file. Check that opening it asks the host for the diff exactly once, that the patch is drawn as a diff — one column, the old line above the new one, each side told apart by its colour rather than by counting the leading characters — and that the disclosure says `Hide changes` once it is open. The rest of the list is untouched: opening one commit closes none.",
 			},
 		},
 	},
-	play: async ({ args, canvas, userEvent }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const [first] = canvas.getAllByRole("button", { name: "Show changes" })
 		if (!first) throw new Error("The list is missing its disclosures")
 
@@ -92,12 +108,77 @@ export const ExpandedDiff = meta.story({
 
 		await expect(args.onLoadDiff).toHaveBeenCalledWith(NEWEST?.id)
 		await expect(first).toHaveAttribute("aria-expanded", "true")
-		const diff = canvas.getByRole("group", { name: /Changes/ })
-		await expect(diff).toHaveTextContent('+ "model": "sonnet-4-5",')
-		await expect(diff).toHaveTextContent('- "model": "haiku-4-5",')
+		await expect(canvas.getByRole("group", { name: /Changes/ })).toBeVisible()
+
+		const patch = await readPatch(canvasElement)
+		await expect(patch).toContain('"model": "sonnet-4-5",')
+		await expect(patch).toContain('"model": "haiku-4-5",')
+		await expect(patch).toContain("bot.json")
 		await expect(
 			canvas.getAllByRole("button", { name: "Show changes" }),
 		).toHaveLength(3)
+	},
+})
+
+export const AddedFileDiff = meta.story({
+	args: { commits: [ADDED_SKILL_COMMIT] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A commit opened on the patch that adds a file. There is no old side to read against, so every line is an addition and the header carries the path the file was written to.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Show changes" }))
+
+		const patch = await readPatch(canvasElement)
+		await expect(patch).toContain("skills/release-notes/SKILL.md")
+		await expect(patch).toContain("One line per change, in the past tense.")
+	},
+})
+
+export const WideLineDiff = meta.story({
+	args: { commits: [WIDE_LINE_COMMIT] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A patch carrying a line far wider than the panel. The line wraps instead of running off the edge, so nothing sends the row — or the dialog around it — sideways.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Show changes" }))
+
+		await readPatch(canvasElement)
+
+		const patch = patchElement(canvasElement)
+		await expect(patch.scrollWidth).toBeLessThanOrEqual(patch.clientWidth)
+		await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
+			canvasElement.clientWidth,
+		)
+	},
+})
+
+export const UnreadableDiff = meta.story({
+	args: { commits: [UNREADABLE_DIFF_COMMIT] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A commit whose diff is not a patch. Rather than an empty frame, the row falls back to showing whatever the host handed over as plain text, so a reader still sees the note behind the change.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Show changes" }))
+
+		await expect(
+			canvas.getByRole("group", { name: /Changes/ }),
+		).toHaveTextContent("restored from a snapshot")
+		await expect(canvasElement.querySelector("diffs-container")).toBeNull()
 	},
 })
 

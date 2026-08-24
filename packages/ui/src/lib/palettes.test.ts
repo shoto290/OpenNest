@@ -13,7 +13,7 @@ import {
 const AA_TEXT_RATIO = 4.5
 
 const EXEMPT_TOKENS =
-	/^--(bot-blot-|bot-avatar-ink$|diagram-scheme$|radius$|scrollbar|sidebar-width)/
+	/^--(bot-blot-|bot-avatar-ink$|color-scheme$|radius$|scrollbar|sidebar-width)/
 
 const STYLESHEET = readFileSync(
 	fileURLToPath(new URL("../styles/globals.css", import.meta.url)),
