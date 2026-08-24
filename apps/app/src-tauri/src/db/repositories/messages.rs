@@ -312,6 +312,9 @@ const MESSAGE_WINDOW: &str = "SELECT id, turn_id, author_bot_id, replied_to_mess
 		content, completion_state, created_at, runtime_session_id
 	FROM messages WHERE conversation_id = ?1 AND seq > ?2 AND seq < ?3
 	ORDER BY seq DESC LIMIT ?4";
+const RUN_OF_TURN: &str = "SELECT runtime_session_id FROM messages
+	WHERE turn_id = ?1 AND role = 'assistant' AND runtime_session_id IS NOT NULL
+	ORDER BY seq LIMIT 1";
 const LAST_MESSAGE_SEQ: &str =
 	"SELECT COALESCE(MAX(seq), 0) FROM messages WHERE conversation_id = ?1";
 
@@ -445,6 +448,17 @@ impl MessagesRepository {
 				Ok(connection
 					.prepare_cached(MESSAGE_BY_ID)?
 					.query_row(params![conversation_id, id], read_message)
+					.optional()?)
+			})
+			.await?)
+	}
+
+	pub async fn run_of_turn(&self, turn_id: String) -> Result<Option<String>, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				Ok(connection
+					.prepare_cached(RUN_OF_TURN)?
+					.query_row(params![turn_id], |row| row.get(0))
 					.optional()?)
 			})
 			.await?)
@@ -1116,11 +1130,8 @@ mod tests {
 		let participant = ParticipantKey { conversation_id: "c1".into(), bot_id: "b1".into() };
 
 		a_stored_reply(&database, "before").await;
-		let run = database
-			.runtime_context()
-			.open(participant, 1, None)
-			.await
-			.expect("the run opens");
+		let run =
+			database.runtime_context().open(participant, 1, None).await.expect("the run opens");
 		a_stored_reply(&database, "during").await;
 		database
 			.messages()

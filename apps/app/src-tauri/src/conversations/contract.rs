@@ -458,6 +458,11 @@ fn excerpt_of(content: &str) -> String {
 	format!("{kept}\u{2026}")
 }
 
+pub struct MessageRun {
+	pub runtime_session_id: Option<String>,
+	pub provider_session_id: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageReference {
@@ -473,11 +478,7 @@ pub struct MessageReference {
 }
 
 impl MessageReference {
-	pub fn of(
-		conversation_id: String,
-		stored: messages::StoredMessage,
-		provider_session_id: Option<String>,
-	) -> Self {
+	pub fn of(conversation_id: String, stored: messages::StoredMessage, run: MessageRun) -> Self {
 		Self {
 			uri: message_uri(&conversation_id, &stored.id),
 			conversation_id,
@@ -486,8 +487,8 @@ impl MessageReference {
 			seq: stored.seq,
 			created_at: stored.created_at,
 			excerpt: excerpt_of(&stored.content),
-			runtime_session_id: stored.runtime_session_id,
-			provider_session_id,
+			runtime_session_id: run.runtime_session_id,
+			provider_session_id: run.provider_session_id,
 		}
 	}
 }

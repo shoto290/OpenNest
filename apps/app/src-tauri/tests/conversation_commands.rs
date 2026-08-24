@@ -1862,13 +1862,66 @@ fn a_reference_resolves_a_message_to_the_uri_and_the_run_that_produced_it() {
 	assert_eq!(prompt["seq"], json!(1));
 	assert_eq!(prompt["createdAt"], json!(1));
 	assert_eq!(prompt["excerpt"], json!("hi"));
-	assert_eq!(prompt["runtimeSessionId"], Value::Null, "a prompt spoken by nobody took a run");
-	assert_eq!(prompt["providerSessionId"], Value::Null);
+	assert_eq!(
+		prompt["runtimeSessionId"], run["id"],
+		"the prompt did not reach the run its turn was answered by"
+	);
+	assert_eq!(prompt["providerSessionId"], json!(ANNOUNCED));
 
 	assert_eq!(answer["role"], json!("assistant"));
 	assert_eq!(answer["excerpt"], json!("message 2"));
 	assert_eq!(answer["runtimeSessionId"], run["id"], "the reply forgot the run that spoke it");
 	assert_eq!(answer["providerSessionId"], json!(ANNOUNCED));
+}
+
+#[test]
+fn a_turn_no_run_ever_answered_leaves_its_prompt_without_one() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let (_, conversation) = a_bot_and_its_chat(&window);
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn starts");
+	call(&window, "conversation_append_user_message", a_user_message("m1", &conversation, "hi", 1))
+		.expect("the prompt is appended");
+	a_streaming_reply(&window, &conversation, 2);
+
+	let prompt = call(&window, "conversation_message_reference", a_reference(&conversation, "m1"))
+		.expect("the prompt reference");
+
+	assert_eq!(
+		prompt["runtimeSessionId"],
+		Value::Null,
+		"a prompt of a turn no run ever answered took one"
+	);
+	assert_eq!(prompt["providerSessionId"], Value::Null);
+}
+
+#[test]
+fn a_prompt_reaches_the_first_run_of_its_turn_and_never_a_later_one() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let (bot, conversation) = a_bot_and_its_chat(&window);
+	call(&window, "conversation_start_turn", a_turn(&conversation)).expect("the turn starts");
+	call(&window, "conversation_append_user_message", a_user_message("m1", &conversation, "hi", 1))
+		.expect("the prompt is appended");
+	let first = call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 2))
+		.expect("the run opens");
+	a_streaming_reply(&window, &conversation, 2);
+	let second = call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 3))
+		.expect("the run that replaces it opens");
+	a_streaming_reply(&window, &conversation, 3);
+
+	let prompt = call(&window, "conversation_message_reference", a_reference(&conversation, "m1"))
+		.expect("the prompt reference");
+
+	assert_ne!(first["id"], second["id"], "the restart reused the replaced run's id");
+	assert_eq!(
+		prompt["runtimeSessionId"], first["id"],
+		"the prompt reached a later run than the one that first answered its turn"
+	);
 }
 
 #[test]
