@@ -156,7 +156,14 @@ export function App() {
 		await roster.controller.remove(id)
 	}
 
-	const botIds = useMemo(() => bots.map((bot) => bot.id), [bots])
+	const rosters = roster.state.rosters
+	const botIds = useMemo(
+		() =>
+			Object.values(rosters).flatMap((spaceBots) =>
+				spaceBots.map((bot) => bot.id),
+			),
+		[rosters],
+	)
 	const working = useBotActivity(chat.controller, botIds)
 	const previews = useBotPreviews(
 		chat.controller,
@@ -192,6 +199,19 @@ export function App() {
 		() => toRosterBots(bots, { working, previews }, now),
 		[bots, working, previews, now],
 	)
+
+	const rosterBotsBySpace = useMemo(
+		() =>
+			Object.fromEntries(
+				Object.entries(rosters).map(([spaceId, spaceBots]) => [
+					spaceId,
+					toRosterBots(spaceBots, { working, previews }, now),
+				]),
+			),
+		[rosters, working, previews, now],
+	)
+
+	const isOverlayOpen = isEditing || user.state.isSettingsOpen || isSpaceEditing
 
 	const toggleSettings = useCallback(
 		() => roster.controller.setEditing(!isEditing),
@@ -238,7 +258,9 @@ export function App() {
 					<AgentSidebar
 						data-tauri-drag-region="deep"
 						bots={rosterBots}
+						botsBySpaceId={rosterBotsBySpace}
 						footer={updateBadge}
+						isSpaceSwitchingEnabled={!isOverlayOpen}
 						onCreateBot={() => {
 							void roster.controller.create()
 						}}
@@ -278,9 +300,7 @@ export function App() {
 						attachments={attachments}
 						readerName={preferences.displayName}
 						isSettingsOpen={isEditing}
-						isOverlayOpen={
-							isEditing || user.state.isSettingsOpen || isSpaceEditing
-						}
+						isOverlayOpen={isOverlayOpen}
 						onToggleSettings={toggleSettings}
 					/>
 				) : (
