@@ -1939,7 +1939,7 @@ export const SpaceScrollMemory = meta.story({
 
 const HEADER_HEIGHT = 48
 
-const WINDOW_CONTROLS_RESERVE = 88
+const WINDOW_CONTROLS_RESERVE = 85
 
 const WINDOW_CONTROLS_END = 70
 
