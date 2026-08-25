@@ -2,7 +2,15 @@
 
 import type { TFunction } from "i18next"
 import { useReducedMotion } from "motion/react"
-import { memo, type ReactNode, type UIEvent, useEffect, useRef } from "react"
+import {
+	memo,
+	type ReactNode,
+	type UIEvent,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react"
 import { useTranslation } from "react-i18next"
 
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
@@ -297,33 +305,44 @@ const SpaceCarousel = ({
 }: SpaceCarouselProps) => {
 	const viewport = useRef<HTMLDivElement>(null)
 	const scrolls = useRef(new Map<string, number>()).current
-	const hasLanded = useRef(false)
-	const isMoving = useRef(false)
 	const isCut = useReducedMotion() ?? false
-	const inView = Math.max(
+	const chosen = Math.max(
 		spaces.findIndex((space) => space.id === selectedSpaceId),
 		0,
 	)
+	const [restingOn, setRestingOn] = useState(chosen)
+
+	const restsOn = Math.min(restingOn, spaces.length - 1)
+	const firstDrawn = Math.max(restsOn - NEIGHBOURING, 0)
+	const nearby = spaces.slice(firstDrawn, restsOn + NEIGHBOURING + 1)
+	const restingSlot = restsOn - firstDrawn
+	const chosenSlot = chosen - firstDrawn
+	const isBeside = chosenSlot >= 0 && chosenSlot < nearby.length
+
+	useLayoutEffect(() => {
+		const node = viewport.current
+		if (node) node.scrollLeft = restingSlot * node.clientWidth
+	}, [restingSlot])
 
 	useEffect(() => {
 		const node = viewport.current
-		if (!node || isMoving.current) return
-
-		const alignTo = (behavior: ScrollBehavior) => {
-			const landing = inView * node.clientWidth
-			if (Math.abs(node.scrollLeft - landing) > 1)
-				node.scrollTo({ behavior, left: landing })
+		if (!node) return
+		if (!isBeside || isCut) {
+			setRestingOn(chosen)
+			return
 		}
-
-		alignTo(isCut || !hasLanded.current ? "auto" : "smooth")
-		hasLanded.current = true
-	}, [inView, isCut])
+		const landing = chosenSlot * node.clientWidth
+		if (Math.abs(node.scrollLeft - landing) > 1)
+			node.scrollTo({ behavior: "smooth", left: landing })
+	}, [chosen, chosenSlot, isBeside, isCut])
 
 	const land = (event: UIEvent<HTMLDivElement>) => {
-		isMoving.current = false
 		const node = event.currentTarget
-		const landed = spaces[Math.round(node.scrollLeft / node.clientWidth)]
-		if (landed && landed.id !== selectedSpaceId) onSelectSpace?.(landed.id)
+		const landedOn = firstDrawn + Math.round(node.scrollLeft / node.clientWidth)
+		const landed = spaces[landedOn]
+		if (!landed) return
+		setRestingOn(landedOn)
+		if (landed.id !== selectedSpaceId) onSelectSpace?.(landed.id)
 	}
 
 	return (
@@ -333,20 +352,17 @@ const SpaceCarousel = ({
 				isSwipeEnabled ? CAROUSEL_SWIPEABLE : CAROUSEL_HELD,
 			)}
 			data-slot="space-carousel"
-			onScroll={() => {
-				isMoving.current = true
-			}}
 			onScrollEnd={land}
 			ref={viewport}
 		>
-			{spaces.map((space, rank) => (
+			{nearby.map((space) => (
 				<SpacePanel
 					isInView={space.id === selectedSpaceId}
 					key={space.id}
 					scrolls={scrolls}
 					spaceId={space.id}
 				>
-					{Math.abs(rank - inView) > NEIGHBOURING ? null : renderSpace(space)}
+					{renderSpace(space)}
 				</SpacePanel>
 			))}
 		</div>

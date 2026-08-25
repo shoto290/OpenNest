@@ -1330,21 +1330,15 @@ const panelInView = (canvasElement: HTMLElement) => {
 	return panel
 }
 
-const panelsDrawn = (canvasElement: HTMLElement) =>
-	panelsIn(canvasElement).filter((panel) => panel.childElementCount > 0)
+const SETTLE = 250
 
-const SETTLE = 80
+const slotShown = (carousel: HTMLElement) =>
+	Math.round(carousel.scrollLeft / carousel.clientWidth)
 
-const swipeTo = async (carousel: HTMLElement, rank: number) => {
-	carousel.scrollLeft = rank * carousel.clientWidth
-	await waitFor(async () => {
-		await expect(rankShown(carousel)).toBe(rank)
-	}, FRAME_POLL)
+const swipeBeside = async (carousel: HTMLElement, step: number) => {
+	carousel.scrollLeft = (slotShown(carousel) + step) * carousel.clientWidth
 	await new Promise((resolve) => setTimeout(resolve, SETTLE))
 }
-
-const rankShown = (carousel: HTMLElement) =>
-	Math.round(carousel.scrollLeft / carousel.clientWidth)
 
 const rostersAcross = (spaces: Space[]): Record<string, AgentSidebarBot[]> =>
 	Object.fromEntries(
@@ -1431,7 +1425,7 @@ export const OneSpace = meta.story({
 
 		await expect(carousel.scrollWidth).toBe(carousel.clientWidth)
 
-		await swipeTo(carousel, 0)
+		await swipeBeside(carousel, 1)
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 	},
 })
@@ -1447,7 +1441,7 @@ export const FiveSpaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Five spaces with the second one open, each with its own roster — the everyday case, and the one that exercises all four ways in. Check the dot strip is centred in the pinned region with only the open dot filled and full size, that pressing a dot reports its id, that landing the row on a space reports that space and only it, and that Cmd and a digit reaches a space directly while a digit past the last one is left alone. Pick `NineSpaces` for the strip at its widest, `SpacesOnRail` for the same panel collapsed, `SpaceScrolling` for the row under the gesture, `SpacesWithoutRosters` for the same spaces before a host hands its rosters over.",
+					"Five spaces with the second one open, each with its own roster — the everyday case, and the one that exercises all four ways in. Check the dot strip is centred in the pinned region with only the open dot filled and full size, that pressing a dot reports its id, that the row is three panels wide however many spaces there are, so one swipe reaches one space, that landing on it reports it and only it, and that Cmd and a digit reaches a space directly while a digit past the last one is left alone. Pick `NineSpaces` for the strip at its widest, `SpacesOnRail` for the same panel collapsed, `SpaceScrolling` for the gesture itself against a host that follows it, `SpacesWithoutRosters` for the same spaces before a host hands its rosters over.",
 			},
 		},
 	},
@@ -1475,21 +1469,14 @@ export const FiveSpaces = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("veille")
 
 		const carousel = carouselIn(canvasElement)
-		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 5)
-
-		await swipeTo(carousel, 2)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
-
-		await swipeTo(carousel, 0)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(3)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
+		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 3)
 
 		await userEvent.keyboard("{Meta>}5{/Meta}")
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("archives")
 
 		await userEvent.keyboard("{Meta>}7{/Meta}")
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(4)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 	},
 })
 
@@ -1504,7 +1491,7 @@ export const NineSpaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Nine spaces each with its own roster, which is as many as the Cmd+digit chords can name and the widest the dot strip ever gets. Check every dot stays inside the pinned region rather than clipping against its edges, that the row draws the space in view and the one waiting off each edge and no more — a reader can never see a third panel, so drawing nine rosters would be paint the window throws away, and a panel that leaves the row is remembered where it was scrolled — that the menu lists all nine with `⌘1` through `⌘9`, that Cmd+9 reaches the last one, and that a swipe back while the first space is open reports nothing and holds the row still. Pick `FiveSpaces` for the everyday width, `OneSpace` for the row that cannot travel.",
+					"Nine spaces each with its own roster, which is as many as the Cmd+digit chords can name and the widest the dot strip ever gets. Check every dot stays inside the pinned region rather than clipping against its edges, that the row draws the space in view and the one waiting off each edge and no more, even with nine spaces to choose from — a reader can never see a third panel, and with the first space open there is only one panel to reach, so the hardest flick lands on the second and no further — that the menu lists all nine with `⌘1` through `⌘9`, that Cmd+9 reaches the last one, and that a swipe back while the first space is open reports nothing and holds the row still. Pick `FiveSpaces` for the everyday width, `OneSpace` for the row that cannot travel.",
 			},
 		},
 	},
@@ -1534,13 +1521,13 @@ export const NineSpaces = meta.story({
 
 		const carousel = carouselIn(canvasElement)
 		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(9)
-		await expect(panelsDrawn(canvasElement)).toHaveLength(2)
+		await expect(panels).toHaveLength(2)
+		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 2)
 		const viewport = carousel.getBoundingClientRect()
 		await expect(leftOf(panels[0])).toBeCloseTo(viewport.left, 0)
 		await expect(leftOf(panels[1])).toBeCloseTo(viewport.right, 0)
 
-		await swipeTo(carousel, 0)
+		await swipeBeside(carousel, -1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(leftOf(panels[0])).toBeCloseTo(viewport.left, 0)
 	},
@@ -1611,27 +1598,28 @@ export const LiveSpaceSelection = meta.story({
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const carousel = carouselIn(canvasElement)
 
-		await swipeTo(carousel, 1)
+		await swipeBeside(carousel, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(
 			canvas.getByRole("button", { name: "Change space, Vocca open" }),
 		).toBeVisible()
 
-		await swipeTo(carousel, 2)
+		await swipeBeside(carousel, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(
 			canvas.getByRole("button", { name: "Change space, Atelier open" }),
 		).toBeVisible()
 
-		await expect(rankShown(carousel)).toBe(2)
+		await expect(slotShown(carousel)).toBe(1)
 
 		await userEvent.keyboard("{Meta>}5{/Meta}")
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(3)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("archives")
 
 		await waitFor(async () => {
-			await expect(rankShown(carousel)).toBe(4)
+			await expect(panelsIn(canvasElement)).toHaveLength(2)
 		}, FRAME_POLL)
+		await expect(slotShown(carousel)).toBe(1)
 		await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
 			carousel.getBoundingClientRect().left,
 			0,
@@ -1640,6 +1628,7 @@ export const LiveSpaceSelection = meta.story({
 })
 
 export const SpaceScrolling = meta.story({
+	render: (args) => <LiveSpaces {...args} />,
 	args: {
 		spaces: FIVE_SPACES,
 		selectedSpaceId: "vocca",
@@ -1650,20 +1639,19 @@ export const SpaceScrolling = meta.story({
 		docs: {
 			description: {
 				story:
-					"The row itself, which is one scrolling box a panel wide with a roster in each panel — the swipe is the reader scrolling it sideways, so the trackpad tracks their fingers, coasts, rubber-bands at the ends and magnetises on release the way it does in every native window, none of it ours to write. Check the contract that gets that for free: the box snaps on the x axis and snaps hard, each panel is a snap point the scroll may never pass over — that is what holds a flick to one space — every panel is exactly the width of the box, and the box is as wide as its spaces. Check too that a panel is its own scrolling box, so a reader coming back to a space finds it where they left it — and that it holds only its own axis: a panel that keeps a sideways gesture to itself is a panel the row can never be swiped out of, since the innermost box a gesture lands in is the one that answers it. Check that landing on a space reports it once. Pick `LiveSpaceSelection` for the row against a host that moves its selection, `SpaceScrollMemory` for a space walked past and come back to.",
+					"The row itself, which is one scrolling box a panel wide with a roster in each panel — the swipe is the reader scrolling it sideways, so the trackpad tracks their fingers, coasts, rubber-bands at the ends and magnetises on release the way it does in every native window, none of it ours to write. Check the contract that gets that for free: the box snaps on the x axis and snaps hard, every panel is exactly the width of the box, and the box holds the space in view and the one waiting off each edge and no more. That last one is what holds a flick to one space, and it holds it the only way a browser cannot argue with — there is nowhere further to scroll. `scroll-snap-stop: always` says the same thing and no engine honours it for a swipe, so the row is three panels wide and the reach of a gesture is the width of the row. Check too that a panel is its own scrolling box, so a reader coming back to a space finds it where they left it — and that it holds only its own axis: a panel that keeps a sideways gesture to itself is a panel the row can never be swiped out of, since the innermost box a gesture lands in is the one that answers it. Check that landing on a space reports it once, and that a host which does not follow gets its row back: the space in view is the host's to say, so a row left on a space the host never opened walks back to the one it did. Pick `LiveSpaceSelection` for the row against a host that moves its selection, `SpaceScrollMemory` for a space walked past and come back to.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
 		const carousel = carouselIn(canvasElement)
 		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(5)
-		await expect(panelsDrawn(canvasElement)).toHaveLength(3)
+		await expect(panels).toHaveLength(3)
 
 		const box = getComputedStyle(carousel)
 		await expect(box.scrollSnapType).toBe("x mandatory")
 		await expect(box.overflowX).toBe("auto")
-		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 5)
+		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 3)
 
 		for (const panel of panels) {
 			const style = getComputedStyle(panel)
@@ -1680,7 +1668,7 @@ export const SpaceScrolling = meta.story({
 			leftOf(slotIn(canvasElement, "space-dots")),
 		]
 
-		await swipeTo(carousel, 2)
+		await swipeBeside(carousel, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
 		await expect([
@@ -1688,8 +1676,13 @@ export const SpaceScrolling = meta.story({
 			leftOf(slotIn(canvasElement, "space-dots")),
 		]).toEqual(still)
 
-		await swipeTo(carousel, 1)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(panelsIn(canvasElement)).toHaveLength(3)
+		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 3)
+		await expect(slotShown(carousel)).toBe(1)
+
+		await swipeBeside(carousel, -1)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("vocca")
 	},
 })
 
@@ -1796,14 +1789,14 @@ export const SpaceScrollMemory = meta.story({
 		await nextTask()
 		await expect(left.scrollTop).toBe(90)
 
-		await swipeTo(carousel, 1)
+		await swipeBeside(carousel, 1)
 		await expect(panelInView(canvasElement).scrollTop).toBe(0)
 
-		await swipeTo(carousel, 2)
-		await expect(panelsDrawn(canvasElement)).toHaveLength(3)
+		await swipeBeside(carousel, 1)
+		await expect(panelsIn(canvasElement)).toHaveLength(3)
 
-		await swipeTo(carousel, 1)
-		await swipeTo(carousel, 0)
+		await swipeBeside(carousel, -1)
+		await swipeBeside(carousel, -1)
 		await waitFor(async () => {
 			await expect(panelInView(canvasElement).scrollTop).toBe(90)
 		}, FRAME_POLL)
