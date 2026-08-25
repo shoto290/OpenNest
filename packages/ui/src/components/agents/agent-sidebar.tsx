@@ -49,8 +49,13 @@ import {
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 import { cn } from "@workspace/ui/lib/utils"
 
+const HEADER =
+	"h-12 flex-row items-center justify-end py-0 pr-2.5 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
+
 const WINDOW_CONTROLS_INSET =
-	"h-12 flex-row items-center justify-end px-2.5 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
+	"pl-22 group-data-[state=collapsed]/sidebar:*:hidden"
+
+const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
 
 const ROW_AVATAR_SIZE = 40
 const TIMESTAMP_SLOT =
@@ -391,6 +396,7 @@ interface AgentSidebarProps extends AgentSidebarPanelProps, BotRosterActions {
 	footer?: ReactNode
 	user?: UserChipIdentity
 	onOpenUserSettings?: () => void
+	insetWindowControls?: boolean
 }
 
 const AgentSidebarBase = ({
@@ -411,6 +417,7 @@ const AgentSidebarBase = ({
 	footer,
 	user,
 	onOpenUserSettings,
+	insetWindowControls = false,
 	...panel
 }: AgentSidebarProps) => {
 	const { t } = useTranslation("bots")
@@ -448,7 +455,14 @@ const AgentSidebarBase = ({
 				ariaLabel={t("roster.label")}
 				collapsible="icon"
 			>
-				<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET}>
+				<AnimatedSidebarHeader
+					className={cn(
+						HEADER,
+						insetWindowControls
+							? WINDOW_CONTROLS_INSET
+							: NO_WINDOW_CONTROLS_INSET,
+					)}
+				>
 					<SpaceSwitcher
 						onCreateSpace={onCreateSpace}
 						onOpenSpaceSettings={onOpenSpaceSettings}

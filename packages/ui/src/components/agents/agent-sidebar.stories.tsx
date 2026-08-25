@@ -355,7 +355,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. A bot wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Settings, duplicate and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
+					"The roster panel of an agent app, mounted whole: the animated sidebar shell around every bot the reader owns. It carries no chrome of its own beyond the create button — the pinned region above the list clears the window controls when `insetWindowControls` says a transparent title bar sits over it, and the open state comes from the `WorkspaceShell` above it, so Cmd/Ctrl+B and whatever trigger the page mounts drive the panel and the column beside it together. A row is the bot avatar, its name, an optional title badge and the time of its last message, over one clipped line of that message. A bot at rest holds the pose it was given in its settings, drawn as a still frame; a bot that is running holds its work pose, animates, and wears an activity dot. A bot wearing a picture its reader uploaded shows that instead, and it never moves — the dot is what says it is working. Settings, duplicate and delete live behind a right-click on the row — there is no actions button to reveal — and selection and running state are props, so a host maps its store onto `bots` and `selectedBotId` and nothing here polls the transport.",
 			},
 		},
 	},
@@ -1800,5 +1800,98 @@ export const SpaceScrollMemory = meta.story({
 		await waitFor(async () => {
 			await expect(panelInView(canvasElement).scrollTop).toBe(90)
 		}, FRAME_POLL)
+	},
+})
+
+const HEADER_HEIGHT = 48
+
+const WINDOW_CONTROLS_RESERVE = 88
+
+const WINDOW_CONTROLS_END = 70
+
+const HEADER_PADDING = 10
+
+const headerIn = (canvasElement: HTMLElement) =>
+	slotIn(canvasElement, "sidebar-header")
+
+const RESERVE_ARGS = {
+	spaces: FIVE_SPACES,
+	selectedSpaceId: FIVE_SPACES[0].id,
+	botsBySpaceId: FIVE_ROSTERS,
+}
+
+export const WindowControlsReserved = meta.story({
+	args: { ...RESERVE_ARGS, insetWindowControls: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this in a desktop window whose title bar is transparent, so the OS paints its close/minimise/zoom buttons over the top of this panel. Check that the header holds a gutter wide enough that the space switcher and the create button both start past those buttons, and that the list below is untouched — the reserve is owed by the header alone. Pick `NoWindowControlsReserve` in a browser tab or on a host that draws its own title bar, `WindowControlsReservedOnRail` for the same window with the panel collapsed.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const header = headerIn(canvasElement)
+		await expect(getComputedStyle(header).paddingLeft).toBe(
+			`${WINDOW_CONTROLS_RESERVE}px`,
+		)
+
+		const controls = within(header).getAllByRole("button")
+		await expect(controls.length).toBeGreaterThan(1)
+		for (const control of controls) {
+			await expect(control.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+				WINDOW_CONTROLS_END,
+			)
+		}
+	},
+})
+
+export const NoWindowControlsReserve = meta.story({
+	args: RESERVE_ARGS,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same panel where nothing is owed: a browser tab, or a Windows or Linux window whose system title bar sits above the web view rather than over it. Check that the header opens on the same narrow gutter as every other row in the panel, so the space switcher starts at the leading edge instead of a third of the way in. Pick `WindowControlsReserved` for the macOS window.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const header = headerIn(canvasElement)
+		await expect(getComputedStyle(header).paddingLeft).toBe(
+			`${HEADER_PADDING}px`,
+		)
+		await expect(
+			slotIn(header, "space-switcher").getBoundingClientRect().left,
+		).toBeLessThan(WINDOW_CONTROLS_END)
+	},
+})
+
+export const WindowControlsReservedOnRail = meta.story({
+	args: { ...RESERVE_ARGS, insetWindowControls: true },
+	render: renderShell(false),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The reserved header on the icon rail, which is narrower than the window controls are wide — there is no room left of them to put anything, so the header keeps its height and gives up its contents rather than parking the switcher under a button the reader cannot see through. Check that the rail header holds no control at all, that it is gone from the accessibility tree rather than merely faded, and that the first row still starts below it. Pick `Collapsed` for the same rail with nothing owed.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const panel = canvas.getByRole("complementary", { name: "Conversations" })
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(
+				railWidth(),
+				0,
+			)
+		}, FRAME_POLL)
+
+		const header = headerIn(canvasElement)
+		await expect(within(header).queryAllByRole("button")).toHaveLength(0)
+		await expect(header.getBoundingClientRect().height).toBe(HEADER_HEIGHT)
+		await expect(
+			rowsIn(canvasElement)[0].getBoundingClientRect().top,
+		).toBeGreaterThanOrEqual(header.getBoundingClientRect().bottom)
 	},
 })
