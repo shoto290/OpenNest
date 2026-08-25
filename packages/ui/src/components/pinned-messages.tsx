@@ -111,16 +111,8 @@ const PinnedMessages = ({
 					size="icon-sm"
 					variant="ghost"
 					aria-label={hasPins ? t("pinned.counted", { count }) : title}
-					className="relative"
 				>
 					<Icons.Pin />
-					{hasPins ? (
-						<span
-							data-slot="pinned-messages-dot"
-							aria-hidden="true"
-							className="absolute right-0.5 bottom-0.5 size-1.5 rounded-full bg-primary ring-2 ring-background"
-						/>
-					) : null}
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent
