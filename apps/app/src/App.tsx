@@ -33,6 +33,7 @@ import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
+import { spaceForNewSection } from "@/lib/sections/section-space"
 import { spaceOfSection } from "@/lib/sections/sections-controller"
 import { useSections } from "@/lib/sections/use-sections"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
@@ -157,11 +158,18 @@ export function App() {
 		}
 	}, [chat.controller, user.controller, selectedBotId])
 
+	const rosters = roster.state.rosters
+
 	const createSection = (name: string, botId?: string) => {
-		if (!selectedSpaceId) {
+		const spaceId = spaceForNewSection({
+			rosters,
+			shownSpaceId: selectedSpaceId,
+			botId,
+		})
+		if (!spaceId) {
 			return
 		}
-		void sections.controller.create(selectedSpaceId, name, botId ?? null)
+		void sections.controller.create(spaceId, name, botId ?? null)
 	}
 
 	const reorderSections = (ids: string[]) => {
@@ -178,7 +186,6 @@ export function App() {
 		await roster.controller.remove(id)
 	}
 
-	const rosters = roster.state.rosters
 	const botIds = useMemo(
 		() =>
 			Object.values(rosters).flatMap((spaceBots) =>

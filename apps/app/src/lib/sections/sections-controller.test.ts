@@ -5,6 +5,7 @@ import {
 	createSectionsController,
 	type SectionsController,
 	sectionsIn,
+	spaceOfSection,
 } from "./sections-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -250,5 +251,26 @@ describe("createSectionsController", () => {
 		await controller.remove(written.id)
 
 		await vi.waitFor(() => expect(names(controller)).toEqual(["Writers"]))
+	})
+})
+
+describe("spaceOfSection", () => {
+	it("names the space holding the section", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const callers = await store.createSection(elsewhere.id, "Callers")
+		await store.createSection("personal", "Writers")
+
+		const controller = await entered(store)
+		await controller.enter(elsewhere.id)
+
+		expect(spaceOfSection(controller.getState(), callers.id)).toBe(elsewhere.id)
+	})
+
+	it("names no space for a section it does not hold", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await entered(store)
+
+		expect(spaceOfSection(controller.getState(), "gone")).toBeUndefined()
 	})
 })
