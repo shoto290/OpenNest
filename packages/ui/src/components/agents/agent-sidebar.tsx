@@ -22,6 +22,7 @@ import {
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
 import {
+	type BotBadge,
 	BotIdentityAvatar,
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
@@ -176,6 +177,7 @@ interface AgentSidebarBot {
 	image?: string
 	status?: AgentSidebarStatus
 	pose?: BotWorkingKind
+	badge?: BotBadge
 }
 
 const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
@@ -309,6 +311,7 @@ const BotRosterRow = ({
 						icon={
 							<BotIdentityAvatar
 								animal={bot.animal}
+								badge={bot.badge}
 								blot={bot.blot}
 								image={bot.image}
 								kind={pose}
@@ -821,6 +824,7 @@ interface AgentSidebarProps
 		SectionActions {
 	bots: AgentSidebarBot[]
 	botsBySpaceId?: Record<string, AgentSidebarBot[]>
+	badgesBySpaceId?: Record<string, BotBadge>
 	sections?: AgentSidebarSection[]
 	sectionsBySpaceId?: Record<string, AgentSidebarSection[]>
 	selectedBotId?: string
@@ -840,6 +844,7 @@ interface AgentSidebarProps
 const AgentSidebarBase = ({
 	bots: roster,
 	botsBySpaceId,
+	badgesBySpaceId,
 	sections = NO_SECTIONS,
 	sectionsBySpaceId,
 	selectedBotId: selectedId,
@@ -922,6 +927,7 @@ const AgentSidebarBase = ({
 					)}
 				>
 					<SpaceSwitcher
+						badgesBySpaceId={badgesBySpaceId}
 						onCreateSpace={onCreateSpace}
 						onOpenSpaceSettings={onOpenSpaceSettings}
 						onSelectSpace={onSelectSpace}
@@ -971,6 +977,7 @@ const AgentSidebarBase = ({
 				{user || footer || spaces.length > 1 ? (
 					<AnimatedSidebarFooter className={FOOTER_INSET}>
 						<SpaceDots
+							badgesBySpaceId={badgesBySpaceId}
 							onSelectSpace={onSelectSpace}
 							selectedSpaceId={selectedSpaceId}
 							spaces={spaces}

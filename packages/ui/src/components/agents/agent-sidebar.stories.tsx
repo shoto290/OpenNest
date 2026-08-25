@@ -145,6 +145,13 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 ]
 
+const BADGED_ROSTER: AgentSidebarBot[] = [
+	{ ...ROSTER[0], badge: "attention" },
+	{ ...ROSTER[1], badge: "done" },
+	{ ...ROSTER[2], badge: "failed" },
+	ROSTER[3],
+]
+
 const IDENTITY_BLOTS: BotAvatarBlot[] = [
 	"red",
 	"yellow",
@@ -259,6 +266,10 @@ const rowFor = (canvasElement: HTMLElement, name: string) => {
 }
 
 const rowButton = (row: HTMLElement) => slotIn(row, "sidebar-menu-button")
+
+const badgeIn = (row: HTMLElement) =>
+	row.querySelector<HTMLElement>('[data-slot="bot-activity-dot"]')?.dataset
+		.badge
 
 const bottomOf = (node: HTMLElement) => node.getBoundingClientRect().bottom
 
@@ -804,6 +815,65 @@ export const PermissionPending = meta.story({
 		const liveRegion = canvas.getByRole("status")
 		await expect(liveRegion).toHaveTextContent("Atlas selected, waiting")
 		await expect(panel.contains(liveRegion)).toBe(false)
+	},
+})
+
+export const Badges = meta.story({
+	args: { bots: BADGED_ROSTER, selectedBotId: "beacon" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three rows carrying the badge a host derived from their chat — one asking for the reader, one done, one that failed — over a fourth with nothing to say. Check the badge rides the avatar rather than the text, so it lands in the same slot on every row and a row without one keeps its name, its preview and its timestamp on the columns the rest of the list holds; that the row heights are untouched, since the dot sits over the avatar rather than beside it; and that the three read apart by colour and by the pulse on attention rather than by position alone. The badge is drawn and not spoken here: the row is named by its own text and the news is in the message line under it. Pick `BadgesOnRail` for the same marks once the panel is a rail, `Working` for the running rows that carry no badge of their own.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(rows.map(badgeIn)).toEqual([
+			"attention",
+			"done",
+			"failed",
+			undefined,
+		])
+		await expectAlignedRows(rows)
+		await expect(uniqueCount(rowHeights(rows))).toBe(1)
+	},
+})
+
+export const BadgesOnRail = meta.story({
+	args: { bots: BADGED_ROSTER, selectedBotId: "beacon" },
+	render: renderShell(false),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same three badges once the panel is down to its icon rail, where the avatar is all that is left of a row. Check every badge is still drawn and still inside the rail rather than clipped against its trailing edge — a reader who collapses the panel is the one who most needs to be told a bot wants them — and that a row with nothing waiting still draws no dot. Pick `Badges` for the open panel, `Collapsed` for the rail without any.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const panel = canvas.getByRole("complementary", { name: "Conversations" })
+		const rail = railWidth()
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(rail, 0)
+		}, FRAME_POLL)
+
+		const rows = rowsIn(canvasElement)
+		await expect(rows.map(badgeIn)).toEqual([
+			"attention",
+			"done",
+			"failed",
+			undefined,
+		])
+
+		const panelBox = panel.getBoundingClientRect()
+		for (const row of rows.slice(0, 3)) {
+			const dot = slotIn(row, "bot-activity-dot").getBoundingClientRect()
+			await expect(dot.right).toBeLessThanOrEqual(panelBox.right)
+			await expect(dot.left).toBeGreaterThanOrEqual(panelBox.left)
+		}
 	},
 })
 
@@ -1662,6 +1732,43 @@ export const NineSpaces = meta.story({
 		await swipeBeside(carousel, -1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(leftOf(panels[0])).toBeCloseTo(viewport.left, 0)
+	},
+})
+
+export const SpaceBadges = meta.story({
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: FIVE_ROSTERS,
+		badgesBySpaceId: { perso: "done", atelier: "attention", veille: "failed" },
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three spaces the reader is not in, each with a bot that has something to say. Check each dot in the strip keeps its space's tint and takes the badge as a ring around it, that the spaces with nothing are drawn exactly as they are without badges, and that the switcher takes a single mark for the strongest of the three — attention here — so a reader looking at one roster still knows another one wants them. Pick `FiveSpaces` for the same strip with nothing waiting, `Badges` for the marks on the rows inside a space.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const dots = spaceDotsIn(canvasElement).map(
+			(button) => slotsIn(button, "space-dot")[0]?.dataset.badge,
+		)
+		await expect(dots).toEqual([
+			"done",
+			undefined,
+			"attention",
+			"failed",
+			undefined,
+		])
+
+		const trigger = canvas.getByRole("button", {
+			name: "Change space, Vocca open",
+		})
+		await expect(
+			slotsIn(trigger, "space-switcher-badge")[0]?.dataset.badge,
+		).toBe("attention")
 	},
 })
 
