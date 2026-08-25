@@ -2,6 +2,7 @@ import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
 
 import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
+	AvatarBlot,
 	Bot,
 	BotHistoryEntry,
 	BotIdentity,
@@ -17,6 +18,8 @@ import type {
 	NewTurn,
 	NewUserMessage,
 	RuntimeSession,
+	Space,
+	SpaceError,
 	TranscriptStoreError,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -55,6 +58,25 @@ const DEFAULT_BOT: Bot = {
 	createdAt: 0,
 }
 
+const DEFAULT_SPACE: Space = {
+	id: "personal",
+	name: "Personal",
+	colour: "red",
+	position: 0,
+	createdAt: 0,
+}
+
+const SPACE_TINTS = [
+	"red",
+	"yellow",
+	"green",
+	"cyan",
+	"blue",
+	"purple",
+	"pink",
+	"orange",
+] as const
+
 const chatIdOf = (botId: string) => `chat-${botId}`
 
 export const FAKE_CHAT_ID = chatIdOf(DEFAULT_BOT.id)
@@ -80,7 +102,8 @@ const PROMPT_LABEL = "The new message:"
 const spoken = (message: TranscriptMessage) =>
 	`${message.role}: ${message.content}`
 
-const refuse = (error: TranscriptStoreError) => Promise.reject(error)
+const refuse = (error: TranscriptStoreError | SpaceError) =>
+	Promise.reject(error)
 
 const USER_PLUGIN = "me"
 
@@ -142,7 +165,10 @@ export const createFakeTranscriptStore = (
 ): TranscriptStore => {
 	const pageSize = options.pageSize ?? TRANSCRIPT_PAGE_SIZE
 	const bots = new Map<string, Bot>([[DEFAULT_BOT.id, DEFAULT_BOT]])
+	const spaces = new Map<string, Space>([[DEFAULT_SPACE.id, DEFAULT_SPACE]])
+	const spaceOf = new Map<string, string>([[DEFAULT_BOT.id, DEFAULT_SPACE.id]])
 	let minted = 0
+	let mintedSpaces = 0
 	const commands = new Map<string, AgentCommand[]>()
 	const skills = new Map<string, BotSkill[]>([[DEFAULT_BOT.id, [learnSkill()]]])
 	const history = new Map<string, BotHistoryEntry[]>()
@@ -321,13 +347,16 @@ export const createFakeTranscriptStore = (
 		}
 	}
 
-	const mint = (fields: Omit<Bot, "id" | "createdAt">) => {
+	const mint = (fields: Omit<Bot, "id" | "createdAt">, spaceId: string) => {
 		minted += 1
 		const bot: Bot = { ...fields, id: `bot-${minted}`, createdAt: minted }
 		bots.set(bot.id, bot)
+		spaceOf.set(bot.id, spaceId)
 		skills.set(bot.id, [learnSkill()])
 		return Promise.resolve(bot)
 	}
+
+	const firstSpace = () => [...spaces.keys()][0]
 
 	const writePin = (
 		conversationId: string,
@@ -372,21 +401,74 @@ export const createFakeTranscriptStore = (
 				pageSize,
 			}).loadPage(conversationId, cursor),
 
-		bots: () => Promise.resolve([...bots.values()]),
+		spaces: () => Promise.resolve([...spaces.values()]),
 
-		createBot: (identity: BotIdentity) =>
-			mint({
-				...identity,
-				changesNothing: deniesChanges(identity.deniedTools),
-				memory: "",
-			}),
+		createSpace: (name: string) => {
+			mintedSpaces += 1
+			const space: Space = {
+				id: `space-${mintedSpaces}`,
+				name,
+				colour: SPACE_TINTS[spaces.size % SPACE_TINTS.length],
+				position: mintedSpaces,
+				createdAt: mintedSpaces,
+			}
+			spaces.set(space.id, space)
+			return Promise.resolve(space)
+		},
+
+		updateSpace: (id: string, name: string, colour: AvatarBlot) => {
+			const stored = spaces.get(id)
+			if (!stored) {
+				return refuse({ kind: "unknownSpace", id })
+			}
+			const written: Space = { ...stored, name, colour }
+			spaces.set(id, written)
+			return Promise.resolve(written)
+		},
+
+		deleteSpace: (id: string) => {
+			if (!spaces.has(id)) {
+				return refuse({ kind: "unknownSpace", id })
+			}
+			if (spaces.size <= 1) {
+				return refuse({ kind: "lastSpace" })
+			}
+			spaces.delete(id)
+			for (const [botId, held] of spaceOf) {
+				if (held === id) {
+					bots.delete(botId)
+					spaceOf.delete(botId)
+				}
+			}
+			return Promise.resolve()
+		},
+
+		bots: (spaceId?: string | null) =>
+			Promise.resolve(
+				[...bots.values()].filter(
+					(bot) => !spaceId || spaceOf.get(bot.id) === spaceId,
+				),
+			),
+
+		createBot: (identity: BotIdentity, spaceId?: string | null) =>
+			mint(
+				{
+					...identity,
+					changesNothing: deniesChanges(identity.deniedTools),
+					memory: "",
+				},
+				spaceId ?? firstSpace(),
+			),
 
 		duplicateBot: (botId: string) => {
 			const source = bots.get(botId)
 			if (!source) {
 				return refuse({ kind: "unknownBot", id: botId })
 			}
-			return mint({ ...source, name: `${source.name} copy` })
+			return mint(
+				{ ...source, name: `${source.name} copy` },
+				spaceOf.get(botId) ?? firstSpace(),
+			)
 		},
 
 		updateBot: (id: string, identity: BotIdentity) => {
@@ -407,6 +489,7 @@ export const createFakeTranscriptStore = (
 			if (!bots.delete(id)) {
 				return refuse({ kind: "unknownBot", id })
 			}
+			spaceOf.delete(id)
 			commands.delete(id)
 			skills.delete(id)
 			servers.delete(id)

@@ -145,6 +145,7 @@ pub struct Participant {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Bot {
 	pub id: String,
+	pub space_id: String,
 	pub name: String,
 	pub title: String,
 	pub model: String,
@@ -230,17 +231,22 @@ impl ConversationsRepository {
 			.await?)
 	}
 
-	pub async fn bots(&self) -> Result<Vec<Bot>, DatabaseError> {
-		self.call(|connection| {
+	pub async fn bots(&self, space_id: Option<String>) -> Result<Vec<Bot>, DatabaseError> {
+		self.call(move |connection| {
 			let mut statement = connection.prepare_cached(SELECT_BOTS)?;
-			let rows = statement.query_map([], bot)?;
+			let rows = statement.query_map([space_id], bot)?;
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 		})
 		.await
 	}
 
-	pub async fn create_bot(&self, identity: BotIdentity) -> Result<Bot, ConversationError> {
-		self.call_mut(move |connection| Ok(created_bot(connection, &identity))).await?
+	pub async fn create_bot(
+		&self,
+		identity: BotIdentity,
+		space_id: Option<String>,
+	) -> Result<Bot, ConversationError> {
+		self.call_mut(move |connection| Ok(created_bot(connection, &identity, space_id.as_deref())))
+			.await?
 	}
 
 	pub async fn update_bot(
@@ -354,13 +360,16 @@ impl ConversationsRepository {
 	}
 }
 
-const SELECT_BOT: &str = "SELECT id, name, title, model, avatar_animal, avatar_color,
+const SELECT_BOT: &str = "SELECT id, space_id, name, title, model, avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
 	FROM bots WHERE id = ?1";
 
-const SELECT_BOTS: &str = "SELECT id, name, title, model, avatar_animal, avatar_color,
+const SELECT_BOTS: &str = "SELECT id, space_id, name, title, model, avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
-	FROM bots ORDER BY created_at ASC, id ASC";
+	FROM bots WHERE ?1 IS NULL OR space_id = ?1
+	ORDER BY created_at ASC, id ASC";
+
+const SELECT_FIRST_SPACE: &str = "SELECT id FROM spaces ORDER BY position ASC, id ASC LIMIT 1";
 
 const SELECT_CHAT_OF_BOT: &str = "SELECT conversations.id,
 		conversations.created_at, conversations.updated_at
@@ -436,15 +445,17 @@ fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, Conv
 fn created_bot(
 	connection: &mut Connection,
 	identity: &BotIdentity,
+	space_id: Option<&str>,
 ) -> Result<Bot, ConversationError> {
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
-		"INSERT INTO bots (id, name, title, model, avatar_animal, avatar_color,
+		"INSERT INTO bots (id, space_id, name, title, model, avatar_animal, avatar_color,
 				avatar_image_path, working_dir, instructions, denied_tools, created_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
 		params![
 			id,
+			space_of(&transaction, space_id)?,
 			identity.name,
 			identity.title,
 			identity.model,
@@ -535,6 +546,16 @@ fn set_memory(
 	Ok(stored)
 }
 
+fn space_of(
+	connection: &Connection,
+	wanted: Option<&str>,
+) -> Result<String, ConversationError> {
+	match wanted {
+		Some(id) => Ok(id.to_owned()),
+		None => Ok(connection.query_row(SELECT_FIRST_SPACE, [], |row| row.get(0))?),
+	}
+}
+
 fn refuse_if_untouched(rows: usize, id: &str) -> Result<(), ConversationError> {
 	match rows {
 		0 => Err(ConversationError::UnknownBot { id: id.to_owned() }),
@@ -544,9 +565,16 @@ fn refuse_if_untouched(rows: usize, id: &str) -> Result<(), ConversationError> {
 
 fn seed_default_bot(transaction: &Transaction<'_>) -> Result<Bot, ConversationError> {
 	transaction.execute(
-		"INSERT OR IGNORE INTO bots (id, name, model, avatar_animal, created_at)
-			VALUES (?1, ?2, ?3, ?4, ?5)",
-		params![DEFAULT_BOT_ID, DEFAULT_BOT_NAME, DEFAULT_BOT_MODEL, DEFAULT_BOT_ANIMAL, now()],
+		"INSERT OR IGNORE INTO bots (id, space_id, name, model, avatar_animal, created_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+		params![
+			DEFAULT_BOT_ID,
+			space_of(transaction, None)?,
+			DEFAULT_BOT_NAME,
+			DEFAULT_BOT_MODEL,
+			DEFAULT_BOT_ANIMAL,
+			now(),
+		],
 	)?;
 	Ok(transaction.query_row(SELECT_BOT, [DEFAULT_BOT_ID], bot)?)
 }
@@ -562,6 +590,7 @@ fn participant(row: &Row<'_>) -> rusqlite::Result<Participant> {
 fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 	Ok(Bot {
 		id: row.get("id")?,
+		space_id: row.get("space_id")?,
 		name: row.get("name")?,
 		title: row.get("title")?,
 		model: row.get("model")?,
@@ -758,7 +787,7 @@ mod tests {
 		let database = open(&dir);
 		let repository = database.conversations();
 
-		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
 
 		let chat = repository.ensure_chat(created.id.clone()).await.expect("the chat");
 		let seats = repository.participants(chat.id.clone()).await.expect("the participants");
@@ -792,9 +821,9 @@ mod tests {
 		};
 
 		let created =
-			database.conversations().create_bot(described.clone()).await.expect("the bot");
+			database.conversations().create_bot(described.clone(), None).await.expect("the bot");
 
-		let listed = database.conversations().bots().await.expect("the bots");
+		let listed = database.conversations().bots(None).await.expect("the bots");
 		assert_eq!(listed.len(), 1);
 		assert_eq!(listed[0].name, described.name);
 		assert_eq!(listed[0].title, described.title);
@@ -816,7 +845,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
 
 		let saved = repository
 			.set_memory(created.id.clone(), "they use bun".to_owned())
@@ -843,7 +872,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
 		let id = created.id.clone();
 		let written = id.clone();
 		repository
@@ -911,8 +940,8 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
-		let silent = repository.create_bot(an_identity("Ada")).await.expect("the other bot");
+		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
+		let silent = repository.create_bot(an_identity("Ada"), None).await.expect("the other bot");
 
 		assert_eq!(
 			repository.bot_commands(created.id.clone()).await.expect("the commands"),
@@ -971,7 +1000,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
 		let id = created.id.clone();
 		repository
 			.call(move |connection| {
@@ -998,7 +1027,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
 		let id = created.id.clone();
 		repository
 			.call(move |connection| {
@@ -1046,8 +1075,8 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let deleted = repository.create_bot(an_identity("Nyx")).await.expect("the bot");
-		let kept = repository.create_bot(an_identity("Ada")).await.expect("the bot");
+		let deleted = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
+		let kept = repository.create_bot(an_identity("Ada"), None).await.expect("the bot");
 		let chat = repository.ensure_chat(deleted.id.clone()).await.expect("the chat");
 		let kept_chat = repository.ensure_chat(kept.id.clone()).await.expect("the chat");
 		a_transcript_for(&database, &chat.id, &deleted.id).await;
@@ -1085,7 +1114,7 @@ mod tests {
 
 		assert_file_is_empty(&database).await;
 		assert_eq!(repository.default_bot().await.expect("the default bot"), None);
-		assert!(repository.bots().await.expect("the bots").is_empty());
+		assert!(repository.bots(None).await.expect("the bots").is_empty());
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1098,8 +1127,8 @@ mod tests {
 		let repository = database.conversations();
 
 		let (first, second) = tokio::join!(
-			repository.create_bot(an_identity("Nyx")),
-			repository.create_bot(an_identity("Ada"))
+			repository.create_bot(an_identity("Nyx"), None),
+			repository.create_bot(an_identity("Ada"), None)
 		);
 
 		let first = first.expect("the first bot");

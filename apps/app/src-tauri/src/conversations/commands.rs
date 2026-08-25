@@ -77,7 +77,7 @@ async fn list_bundles(root: Option<&Path>, database: &db::Database) {
 	let Some(root) = root else {
 		return;
 	};
-	if let Ok(roster) = database.conversations().bots().await {
+	if let Ok(roster) = database.conversations().bots(None).await {
 		for bot in &roster {
 			let _ = bundles::ensure(root, bot);
 		}
@@ -101,10 +101,11 @@ fn reconciled_identity(
 pub async fn conversation_bots<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
+	space_id: Option<String>,
 ) -> Result<Vec<Bot>, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
 	let bundle_root = bundles::root(&app);
-	let stored = ready(&state)?.conversations().bots().await?;
+	let stored = ready(&state)?.conversations().bots(space_id).await?;
 	Ok(stored.into_iter().map(|bot| Bot::of(bot, dir.as_deref(), bundle_root.as_deref())).collect())
 }
 
@@ -113,12 +114,13 @@ pub async fn conversation_create_bot<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	identity: BotIdentity,
+	space_id: Option<String>,
 ) -> Result<Bot, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
 	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
 	let output_style = identity.output_style.clone();
-	let created = database.conversations().create_bot(identity.into()).await?;
+	let created = database.conversations().create_bot(identity.into(), space_id).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	if let Err(refusal) =
 		write_bundle(bundle_root.as_deref(), database, &created, &output_style).await
@@ -144,12 +146,13 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 		.bot(bot_id.clone())
 		.await?
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.clone() })?;
+	let space_id = source.space_id.clone();
 	let taken: Vec<String> =
-		database.conversations().bots().await?.into_iter().map(|bot| bot.name).collect();
+		database.conversations().bots(None).await?.into_iter().map(|bot| bot.name).collect();
 	let identity =
 		duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()), &taken);
 	let output_style = identity.output_style.clone();
-	let created = database.conversations().create_bot(identity.into()).await?;
+	let created = database.conversations().create_bot(identity.into(), Some(space_id)).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	if let Err(refusal) =
 		duplicated_bundle(bundle_root.as_deref(), database, &bot_id, &created, &output_style).await
@@ -668,6 +671,7 @@ mod tests {
 	fn a_bot() -> StoredBot {
 		StoredBot {
 			id: "b1".to_owned(),
+			space_id: "personal".to_owned(),
 			name: "Bean".to_owned(),
 			title: String::new(),
 			model: "sonnet".to_owned(),

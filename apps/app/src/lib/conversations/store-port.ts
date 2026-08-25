@@ -1,4 +1,5 @@
 import type {
+	AvatarBlot,
 	Bot,
 	BotHistoryEntry,
 	BotIdentity,
@@ -13,6 +14,7 @@ import type {
 	NewTurn,
 	NewUserMessage,
 	RuntimeSession,
+	Space,
 } from "./store-contract"
 import type { TerminalCompletion } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
@@ -20,8 +22,12 @@ import type { TranscriptPort } from "./transcript-port"
 import type { AgentCommand } from "@/lib/agent/contract"
 
 export type TranscriptStore = TranscriptPort & {
-	bots: () => Promise<Bot[]>
-	createBot: (identity: BotIdentity) => Promise<Bot>
+	spaces: () => Promise<Space[]>
+	createSpace: (name: string) => Promise<Space>
+	updateSpace: (id: string, name: string, colour: AvatarBlot) => Promise<Space>
+	deleteSpace: (id: string) => Promise<void>
+	bots: (spaceId?: string | null) => Promise<Bot[]>
+	createBot: (identity: BotIdentity, spaceId?: string | null) => Promise<Bot>
 	duplicateBot: (botId: string) => Promise<Bot>
 	updateBot: (id: string, identity: BotIdentity) => Promise<Bot>
 	deleteBot: (id: string) => Promise<void>

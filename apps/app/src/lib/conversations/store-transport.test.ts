@@ -81,14 +81,34 @@ const SERVER = { command: "atlas-mcp", args: ["--stdio"] }
 
 const WRITES: WriteCase[] = [
 	{
+		member: "spaces",
+		write: () => conversationStore.spaces(),
+		call: ["space_list"],
+	},
+	{
+		member: "createSpace",
+		write: () => conversationStore.createSpace("Vocca"),
+		call: ["space_create", { name: "Vocca" }],
+	},
+	{
+		member: "updateSpace",
+		write: () => conversationStore.updateSpace("s-1", "Work", "cyan"),
+		call: ["space_update", { id: "s-1", name: "Work", colour: "cyan" }],
+	},
+	{
+		member: "deleteSpace",
+		write: () => conversationStore.deleteSpace("s-1"),
+		call: ["space_delete", { id: "s-1" }],
+	},
+	{
 		member: "bots",
-		write: () => conversationStore.bots(),
-		call: ["conversation_bots"],
+		write: () => conversationStore.bots("s-1"),
+		call: ["conversation_bots", { spaceId: "s-1" }],
 	},
 	{
 		member: "createBot",
-		write: () => conversationStore.createBot(IDENTITY),
-		call: ["conversation_create_bot", { identity: IDENTITY }],
+		write: () => conversationStore.createBot(IDENTITY, "s-1"),
+		call: ["conversation_create_bot", { identity: IDENTITY, spaceId: "s-1" }],
 	},
 	{
 		member: "duplicateBot",
