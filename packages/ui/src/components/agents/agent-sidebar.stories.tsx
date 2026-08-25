@@ -30,6 +30,10 @@ const NARROW_VIEWPORT = {
 	narrow: { name: "Narrow", styles: { width: "800px", height: "900px" } },
 }
 
+const SHORT_VIEWPORT = {
+	short: { name: "Short", styles: { width: "1000px", height: "420px" } },
+}
+
 const UPLOADED_IMAGE =
 	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
 
@@ -1338,6 +1342,14 @@ const carouselIn = (canvasElement: HTMLElement) =>
 const panelsIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "space-panel")
 
+const panelInView = (canvasElement: HTMLElement) => {
+	const panel = panelsIn(canvasElement).find(
+		(box) => !box.hasAttribute("inert"),
+	)
+	if (!panel) throw new Error("No space panel is in view")
+	return panel
+}
+
 const rostersAcross = (spaces: Space[]): Record<string, AgentSidebarBot[]> =>
 	Object.fromEntries(
 		spaces.map((space, rank) => [
@@ -1494,7 +1506,7 @@ export const NineSpaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Nine spaces each with its own roster, which is as many as the Cmd+digit chords can name and the widest the dot strip ever gets. Check every dot stays inside the pinned region rather than clipping against its edges, that the row holds nine panels — one per space, each the width of the list area, with the open one in view and the rest waiting off both edges — that the menu lists all nine with `⌘1` through `⌘9`, that Cmd+9 reaches the last one, and that a swipe back while the first space is open reports nothing and holds the row still. Pick `FiveSpaces` for the everyday width, `OneSpace` for the row that cannot travel.",
+					"Nine spaces each with its own roster, which is as many as the Cmd+digit chords can name and the widest the dot strip ever gets. Check every dot stays inside the pinned region rather than clipping against its edges, that the row draws the space in view and the one waiting off each edge and no more — a reader can never see a third panel, so drawing nine rosters would be paint the window throws away, and a panel that leaves the row is remembered where it was scrolled — that the menu lists all nine with `⌘1` through `⌘9`, that Cmd+9 reaches the last one, and that a swipe back while the first space is open reports nothing and holds the row still. Pick `FiveSpaces` for the everyday width, `OneSpace` for the row that cannot travel.",
 			},
 		},
 	},
@@ -1524,7 +1536,7 @@ export const NineSpaces = meta.story({
 
 		const carousel = carouselIn(canvasElement)
 		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(9)
+		await expect(panels).toHaveLength(2)
 		const viewport = carousel.getBoundingClientRect()
 		await expect(leftOf(panels[0])).toBeCloseTo(viewport.left, 0)
 		await expect(leftOf(panels[1])).toBeCloseTo(viewport.right, 0)
@@ -1613,7 +1625,7 @@ export const LiveSpaceSelection = meta.story({
 		).toBeVisible()
 
 		await waitFor(async () => {
-			await expect(leftOf(panelsIn(canvasElement)[2])).toBeCloseTo(
+			await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
 				carousel.getBoundingClientRect().left,
 				0,
 			)
@@ -1624,7 +1636,7 @@ export const LiveSpaceSelection = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("archives")
 
 		await waitFor(async () => {
-			await expect(leftOf(panelsIn(canvasElement)[4])).toBeCloseTo(
+			await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
 				carousel.getBoundingClientRect().left,
 				0,
 			)
@@ -1650,7 +1662,7 @@ export const SpaceMidTravel = meta.story({
 	play: async ({ args, canvasElement }) => {
 		const carousel = carouselIn(canvasElement)
 		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(5)
+		await expect(panels).toHaveLength(3)
 		for (const panel of panels) {
 			await expect(getComputedStyle(panel).overflowY).toBe("auto")
 		}
@@ -1764,5 +1776,45 @@ export const SpacesWithoutRosters = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "Change space, Vocca open" }),
 		).toBeVisible()
+	},
+})
+
+export const SpaceScrollMemory = meta.story({
+	render: (args) => <LiveSpaces {...args} />,
+	globals: { viewport: { value: "short" } },
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "perso",
+		botsBySpaceId: Object.fromEntries(
+			FIVE_SPACES.map((space) => [space.id, ROSTER]),
+		),
+		user: READER,
+	},
+	parameters: {
+		viewport: { options: SHORT_VIEWPORT },
+		docs: {
+			description: {
+				story:
+					"A window too short to show a roster whole, which is where a space has to remember where its reader had got to. Only the space in view and the one waiting off each edge are drawn, so a space walked two along leaves the row entirely — check that scrolling one space down, walking two spaces on and walking back finds it exactly where it was left rather than back at the top, and that a space arriving starts at its own top rather than inheriting the scroll of the one before it. Pick `SpaceMidTravel` for the gesture itself, `NineSpaces` for the row at its widest.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const carousel = carouselIn(canvasElement)
+		const left = panelInView(canvasElement)
+		await expect(left.scrollHeight).toBeGreaterThan(left.clientHeight)
+
+		left.scrollTop = 90
+		await expect(left.scrollTop).toBe(90)
+
+		await swipeAndSettle(carousel, 240)
+		await expect(panelInView(canvasElement).scrollTop).toBe(0)
+
+		await swipeAndSettle(carousel, 240)
+		await expect(panelsIn(canvasElement)).toHaveLength(3)
+
+		await swipeAndSettle(carousel, -240)
+		await swipeAndSettle(carousel, -240)
+		await expect(panelInView(canvasElement).scrollTop).toBe(90)
 	},
 })

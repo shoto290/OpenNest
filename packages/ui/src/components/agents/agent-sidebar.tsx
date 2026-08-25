@@ -2,10 +2,11 @@
 
 import type { TFunction } from "i18next"
 import {
+	type AnimationPlaybackControls,
+	animate,
 	motion,
 	useMotionValue,
 	useReducedMotion,
-	useSpring,
 } from "motion/react"
 import { memo, type ReactNode, useRef } from "react"
 import { useTranslation } from "react-i18next"
@@ -78,12 +79,12 @@ const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
 
 const CAROUSEL = "flex min-h-0 flex-1 overflow-hidden"
 
-const CAROUSEL_TRACK = "flex min-h-0 w-full"
+const CAROUSEL_TRACK = "flex min-h-0 w-full will-change-transform"
 
-const CAROUSEL_ROW = "flex min-h-0 w-full"
+const CAROUSEL_ROW = "relative min-h-0 w-full"
 
 const CAROUSEL_PANEL =
-	"flex w-full shrink-0 flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
+	"absolute inset-y-0 flex w-full flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
 
 type AgentSidebarStatus = "idle" | "working"
 
@@ -247,6 +248,39 @@ const BotRoster = ({
 	)
 }
 
+const NEIGHBOURING = 1
+
+interface SpacePanelProps {
+	rank: number
+	spaceId: string
+	isInView: boolean
+	scrolls: Map<string, number>
+	children: ReactNode
+}
+
+const SpacePanel = ({
+	rank,
+	spaceId,
+	isInView,
+	scrolls,
+	children,
+}: SpacePanelProps) => (
+	<div
+		className={CAROUSEL_PANEL}
+		data-slot="space-panel"
+		inert={!isInView}
+		onScroll={(event) => {
+			scrolls.set(spaceId, event.currentTarget.scrollTop)
+		}}
+		ref={(node) => {
+			if (node) node.scrollTop = scrolls.get(spaceId) ?? 0
+		}}
+		style={{ left: `${rank * 100}%` }}
+	>
+		{children}
+	</div>
+)
+
 interface SpaceCarouselProps {
 	spaces: Space[]
 	selectedSpaceId?: string
@@ -263,17 +297,22 @@ const SpaceCarousel = ({
 	renderSpace,
 }: SpaceCarouselProps) => {
 	const viewport = useRef<HTMLDivElement>(null)
+	const scrolls = useRef(new Map<string, number>()).current
+	const settling = useRef<AnimationPlaybackControls | null>(null)
 	const travel = useMotionValue(0)
-	const glide = useSpring(travel, SPRING_PANEL)
-	const isCut = useReducedMotion() ?? false
-	const transition = isCut ? TRANSITION_NONE : SPRING_PANEL
+	const transition = useReducedMotion() ? TRANSITION_NONE : SPRING_PANEL
 	const inView = Math.max(
 		spaces.findIndex((space) => space.id === selectedSpaceId),
 		0,
 	)
 
+	const follow = (travelled: number) => {
+		settling.current?.stop()
+		travel.set(-travelled)
+	}
+
 	const settleOn = (settled: number) => {
-		travel.set(0)
+		settling.current = animate(travel, 0, transition)
 		const space = spaces[settled]
 		if (space && space.id !== selectedSpaceId) onSelectSpace?.(space.id)
 	}
@@ -283,7 +322,7 @@ const SpaceCarousel = ({
 		index: inView,
 		isEnabled: isSwipeEnabled,
 		onSettle: settleOn,
-		onTravel: (travelled) => travel.set(-travelled),
+		onTravel: follow,
 		target: viewport,
 	})
 
@@ -292,7 +331,7 @@ const SpaceCarousel = ({
 			<motion.div
 				className={CAROUSEL_TRACK}
 				data-slot="space-carousel-track"
-				style={{ x: isCut ? travel : glide }}
+				style={{ x: travel }}
 			>
 				<motion.div
 					animate={{ x: `${inView * -100}%` }}
@@ -301,16 +340,19 @@ const SpaceCarousel = ({
 					initial={false}
 					transition={transition}
 				>
-					{spaces.map((space) => (
-						<div
-							className={CAROUSEL_PANEL}
-							data-slot="space-panel"
-							inert={space.id !== selectedSpaceId}
-							key={space.id}
-						>
-							{renderSpace(space)}
-						</div>
-					))}
+					{spaces.map((space, rank) =>
+						Math.abs(rank - inView) > NEIGHBOURING ? null : (
+							<SpacePanel
+								isInView={space.id === selectedSpaceId}
+								key={space.id}
+								rank={rank}
+								scrolls={scrolls}
+								spaceId={space.id}
+							>
+								{renderSpace(space)}
+							</SpacePanel>
+						),
+					)}
 				</motion.div>
 			</motion.div>
 		</div>
