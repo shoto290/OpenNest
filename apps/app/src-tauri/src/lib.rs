@@ -9,6 +9,7 @@ pub mod notifications;
 pub mod spaces;
 pub mod user;
 mod private_files;
+mod window_controls;
 
 use tauri::{Manager, RunEvent};
 
@@ -42,6 +43,9 @@ pub fn run() {
 		.manage(AgentState::default())
 		.setup(|app| {
 			app.manage(db::bootstrap(app.handle()));
+			if let Some(window) = app.get_webview_window("main") {
+				window_controls::center_in_header(&window);
+			}
 			let handle = app.handle().clone();
 			tauri::async_runtime::spawn(async move {
 				conversations::commands::list_bundles_at_launch(&handle).await;
