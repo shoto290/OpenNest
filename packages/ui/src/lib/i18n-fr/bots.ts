@@ -21,6 +21,14 @@ const bots = {
 			selected: "{{name}} sélectionné, {{state}}",
 		},
 	},
+	spaces: {
+		label: "Espaces",
+		switch: "Changer d'espace, {{name}} ouvert",
+		open: "Ouvrir {{name}}",
+		create: "Nouvel espace",
+		settings: "Réglages des espaces",
+		shortcut: "⌘{{rank}}",
+	},
 	resources: {
 		label: "Ressources",
 		actions: "Actions pour {{name}}",

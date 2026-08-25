@@ -843,7 +843,7 @@ export const AnimatedSidebarFooter = forwardRef<
 			ref={forwardedRef}
 			data-slot="sidebar-footer"
 			className={cn(
-				"flex shrink-0 flex-col gap-2 border-sidebar-border border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+				"flex shrink-0 flex-col gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
 				className,
 			)}
 		/>

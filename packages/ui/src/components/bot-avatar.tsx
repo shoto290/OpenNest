@@ -77,6 +77,8 @@ const BLOT_TINTS = [
 
 type BotAvatarBlot = (typeof BLOT_TINTS)[number]
 
+const blotTint = (blot: BotAvatarBlot) => `var(--bot-blot-${blot})`
+
 const VIEW_BOX = 240
 const BLOT_RATIO = 16 / 15
 const BLOT_SPAN = VIEW_BOX * BLOT_RATIO
@@ -317,7 +319,7 @@ function BotAvatar({
 					<path
 						d={BLOT_PATH}
 						data-slot="bot-avatar-blot"
-						fill={`var(--bot-blot-${blot})`}
+						fill={blotTint(blot)}
 						stroke="none"
 						transform={`${BLOT_PLACEMENT} ${blotTransform(seed)}`}
 					/>
@@ -416,4 +418,5 @@ export {
 	type BotAvatarInk,
 	type BotAvatarOrientation,
 	type BotAvatarProps,
+	blotTint,
 }
