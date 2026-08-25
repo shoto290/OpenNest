@@ -168,6 +168,39 @@ describe("createFakeTranscriptStore", () => {
 		})
 	})
 
+	it("seats a copy in the space the reader named", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Elsewhere")
+
+		const copy = await store.duplicateBot("default", elsewhere.id)
+
+		expect(copy.name).toBe("Claude copy")
+		expect(await store.bots(elsewhere.id)).toEqual([copy])
+	})
+
+	it("hands a copy a name no bot in the space it lands in carries", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Elsewhere")
+		await store.duplicateBot("default", elsewhere.id)
+
+		const second = await store.duplicateBot("default", elsewhere.id)
+
+		expect(second.name).toBe("Claude copy 2")
+		expect((await store.bots("personal")).map((bot) => bot.name)).toEqual([
+			"Claude",
+		])
+	})
+
+	it("refuses a copy into a space it does not hold", async () => {
+		const store = createFakeTranscriptStore()
+
+		await expect(store.duplicateBot("default", "missing")).rejects.toEqual({
+			kind: "unknownSpace",
+			id: "missing",
+		})
+		expect(await store.bots(null)).toHaveLength(1)
+	})
+
 	it("replaces who a bot is and leaves its id and its moment alone", async () => {
 		const store = createFakeTranscriptStore()
 		const created = await store.createBot(botIdentity())

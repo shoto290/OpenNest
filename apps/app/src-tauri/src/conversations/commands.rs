@@ -147,6 +147,7 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	bot_id: String,
+	space_id: Option<String>,
 ) -> Result<Bot, TranscriptStoreError> {
 	let dir = avatars::dir(&app);
 	let bundle_root = bundles::root(&app);
@@ -156,13 +157,18 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 		.bot(bot_id.clone())
 		.await?
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.clone() })?;
-	let space_id = source.space_id.clone();
-	let taken: Vec<String> =
-		database.conversations().bots(None).await?.into_iter().map(|bot| bot.name).collect();
+	let destination = space_id.unwrap_or_else(|| source.space_id.clone());
+	let taken: Vec<String> = database
+		.conversations()
+		.bots(Some(destination.clone()))
+		.await?
+		.into_iter()
+		.map(|bot| bot.name)
+		.collect();
 	let identity =
 		duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()), &taken);
 	let output_style = identity.output_style.clone();
-	let created = database.conversations().create_bot(identity.into(), Some(space_id)).await?;
+	let created = database.conversations().create_bot(identity.into(), Some(destination)).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	if let Err(refusal) =
 		duplicated_bundle(bundle_root.as_deref(), database, &bot_id, &created, &output_style).await
