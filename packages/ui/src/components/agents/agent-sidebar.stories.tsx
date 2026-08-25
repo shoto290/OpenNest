@@ -1335,7 +1335,7 @@ export const DragRegion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel as a frameless desktop window mounts it: the column is what the window is carried by. Check that the attribute lands on the panel itself, so the space between the rows drags the window, and that nothing the reader presses carries it — a row, the create button and the chip are buttons, and a button with no drag region of its own is what stops the drag.",
+					'The panel as a frameless desktop window mounts it: the column is what the window is carried by. Check that the attribute lands on the panel itself, so the space between the rows drags the window, and that nothing the reader presses carries it — a row, the create button and the chip are buttons, and a button with no drag region of its own is what stops the drag. The resize handle is no button, so it says so itself: it carries `data-tauri-drag-region="false"`, which is what keeps a press on the panel edge sizing the sidebar instead of moving the window.',
 			},
 		},
 	},
@@ -1354,6 +1354,10 @@ export const DragRegion = meta.story({
 			await expect(target.tagName).toBe("BUTTON")
 			await expect(target).not.toHaveAttribute("data-tauri-drag-region")
 		}
+
+		await expect(
+			slotIn(canvasElement, "sidebar-resize-handle"),
+		).toHaveAttribute("data-tauri-drag-region", "false")
 	},
 })
 
