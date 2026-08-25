@@ -1,6 +1,7 @@
 "use client"
 
 import type { TFunction } from "i18next"
+import { animate, motion, useMotionValue, useReducedMotion } from "motion/react"
 import { memo, type ReactNode, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -28,11 +29,7 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
-import {
-	type Space,
-	spaceAtRank,
-	spaceBeside,
-} from "@workspace/ui/components/space"
+import { type Space, spaceAtRank } from "@workspace/ui/components/space"
 import {
 	SpaceDots,
 	SpaceSwitcher,
@@ -43,6 +40,7 @@ import {
 } from "@workspace/ui/components/user-chip"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
+import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2.5 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
@@ -69,7 +67,22 @@ const FOOTER_SLOT = "shrink-0 empty:hidden"
 const EMPTY_COPY =
 	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
 
+const CONTENT_INSET = "pt-0 group-data-[state=collapsed]/sidebar:px-0"
+
+const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
+
+const CAROUSEL = "flex min-h-0 flex-1 overflow-hidden"
+
+const CAROUSEL_TRACK = "flex min-h-0 w-full"
+
+const CAROUSEL_ROW = "flex min-h-0 w-full"
+
+const CAROUSEL_PANEL =
+	"flex w-full shrink-0 flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
+
 type AgentSidebarStatus = "idle" | "working"
+
+const NO_BOTS: AgentSidebarBot[] = []
 
 interface AgentSidebarBot {
 	id: string
@@ -94,6 +107,13 @@ const announcementFor = (t: TFunction<"bots">, bot?: AgentSidebarBot) => {
 		name: bot.name,
 		state: isBusy(bot) ? t(`roster.pose.${poseOf(bot)}`) : t("roster.idle"),
 	})
+}
+
+interface BotRosterActions {
+	onSelectBot?: (id: string) => void
+	onEditBot?: (id: string) => void
+	onDuplicateBot?: (id: string) => void
+	onDeleteBot?: (id: string) => void
 }
 
 interface BotRosterRowProps {
@@ -187,21 +207,123 @@ const BotRosterRow = ({
 	)
 }
 
+interface BotRosterProps extends BotRosterActions {
+	bots: AgentSidebarBot[]
+	selectedBotId?: string
+}
+
+const BotRoster = ({
+	bots,
+	selectedBotId,
+	onSelectBot,
+	onEditBot,
+	onDuplicateBot,
+	onDeleteBot,
+}: BotRosterProps) => {
+	const { t } = useTranslation("bots")
+
+	if (bots.length === 0)
+		return <p className={EMPTY_COPY}>{t("roster.empty")}</p>
+
+	return (
+		<AnimatedSidebarMenu>
+			{bots.map((bot) => (
+				<BotRosterRow
+					bot={bot}
+					isSelected={bot.id === selectedBotId}
+					key={bot.id}
+					onDelete={onDeleteBot}
+					onDuplicate={onDuplicateBot}
+					onEdit={onEditBot}
+					onSelect={onSelectBot}
+				/>
+			))}
+		</AnimatedSidebarMenu>
+	)
+}
+
+interface SpaceCarouselProps {
+	spaces: Space[]
+	selectedSpaceId?: string
+	isSwipeEnabled: boolean
+	onSelectSpace?: (id: string) => void
+	renderSpace: (space: Space) => ReactNode
+}
+
+const SpaceCarousel = ({
+	spaces,
+	selectedSpaceId,
+	isSwipeEnabled,
+	onSelectSpace,
+	renderSpace,
+}: SpaceCarouselProps) => {
+	const viewport = useRef<HTMLDivElement>(null)
+	const travel = useMotionValue(0)
+	const isCut = useReducedMotion() ?? false
+	const transition = isCut ? TRANSITION_NONE : SPRING_PANEL
+	const inView = Math.max(
+		spaces.findIndex((space) => space.id === selectedSpaceId),
+		0,
+	)
+
+	const settleOn = (settled: number) => {
+		animate(travel, 0, transition)
+		const space = spaces[settled]
+		if (space && space.id !== selectedSpaceId) onSelectSpace?.(space.id)
+	}
+
+	useSpaceSwipe({
+		count: spaces.length,
+		index: inView,
+		isEnabled: isSwipeEnabled,
+		onSettle: settleOn,
+		onTravel: (travelled) => travel.set(-travelled),
+		target: viewport,
+	})
+
+	return (
+		<div className={CAROUSEL} data-slot="space-carousel" ref={viewport}>
+			<motion.div
+				className={CAROUSEL_TRACK}
+				data-slot="space-carousel-track"
+				style={{ x: travel }}
+			>
+				<motion.div
+					animate={{ x: `${inView * -100}%` }}
+					className={CAROUSEL_ROW}
+					data-slot="space-carousel-row"
+					initial={false}
+					transition={transition}
+				>
+					{spaces.map((space) => (
+						<div
+							className={CAROUSEL_PANEL}
+							data-slot="space-panel"
+							inert={space.id !== selectedSpaceId}
+							key={space.id}
+						>
+							{renderSpace(space)}
+						</div>
+					))}
+				</motion.div>
+			</motion.div>
+		</div>
+	)
+}
+
 type AgentSidebarPanelProps = Omit<
 	AnimatedSidebarProps,
 	"ariaLabel" | "children" | "collapsible"
 >
 
-interface AgentSidebarProps extends AgentSidebarPanelProps {
+interface AgentSidebarProps extends AgentSidebarPanelProps, BotRosterActions {
 	bots: AgentSidebarBot[]
+	botsBySpaceId?: Record<string, AgentSidebarBot[]>
 	selectedBotId?: string
-	onSelectBot?: (id: string) => void
 	onCreateBot?: () => void
-	onEditBot?: (id: string) => void
-	onDuplicateBot?: (id: string) => void
-	onDeleteBot?: (id: string) => void
 	spaces?: Space[]
 	selectedSpaceId?: string
+	isSpaceSwitchingEnabled?: boolean
 	onSelectSpace?: (id: string) => void
 	onCreateSpace?: () => void
 	onOpenSpaceSettings?: () => void
@@ -212,6 +334,7 @@ interface AgentSidebarProps extends AgentSidebarPanelProps {
 
 const AgentSidebarBase = ({
 	bots: roster,
+	botsBySpaceId,
 	selectedBotId: selectedId,
 	onSelectBot,
 	onCreateBot,
@@ -220,6 +343,7 @@ const AgentSidebarBase = ({
 	onDeleteBot,
 	spaces = [],
 	selectedSpaceId,
+	isSpaceSwitchingEnabled = true,
 	onSelectSpace,
 	onCreateSpace,
 	onOpenSpaceSettings,
@@ -229,35 +353,39 @@ const AgentSidebarBase = ({
 	...panel
 }: AgentSidebarProps) => {
 	const { t } = useTranslation("bots")
-	const panelRef = useRef<HTMLElement>(null)
-	const selectedBot = roster.find((bot) => bot.id === selectedId)
 	const createLabel = t("roster.create")
-
-	const selectBeside = (step: number) => {
-		const space = spaceBeside(spaces, selectedSpaceId, step)
-		if (space) onSelectSpace?.(space.id)
+	const actions: BotRosterActions = {
+		onDeleteBot,
+		onDuplicateBot,
+		onEditBot,
+		onSelectBot,
 	}
+
+	const rosterOf = (spaceId: string) => botsBySpaceId?.[spaceId] ?? NO_BOTS
+
+	const hasRosterPerSpace = Boolean(botsBySpaceId) && spaces.length > 0
+	const shown =
+		hasRosterPerSpace && selectedSpaceId ? rosterOf(selectedSpaceId) : roster
+	const selectedBot = shown.find((bot) => bot.id === selectedId)
 
 	const selectRank = (rank: number) => {
 		const space = spaceAtRank(spaces, rank)
 		if (space) onSelectSpace?.(space.id)
 	}
 
-	useSpaceSwipe({
-		isEnabled: spaces.length > 1,
-		onStep: selectBeside,
-		target: panelRef,
+	useSpaceShortcut({
+		count: spaces.length,
+		isEnabled: isSpaceSwitchingEnabled,
+		onRank: selectRank,
 	})
-	useSpaceShortcut({ count: spaces.length, onRank: selectRank })
 
 	return (
 		<>
 			<AnimatedSidebar
 				{...panel}
-				aria-busy={roster.some(isBusy)}
+				aria-busy={shown.some(isBusy)}
 				ariaLabel={t("roster.label")}
 				collapsible="icon"
-				ref={panelRef}
 			>
 				<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET}>
 					<SpaceSwitcher
@@ -278,23 +406,25 @@ const AgentSidebarBase = ({
 						<Icons.Add aria-hidden="true" />
 					</Button>
 				</AnimatedSidebarHeader>
-				<AnimatedSidebarContent className="pt-0 group-data-[state=collapsed]/sidebar:px-0">
-					{roster.length === 0 ? (
-						<p className={EMPTY_COPY}>{t("roster.empty")}</p>
-					) : (
-						<AnimatedSidebarMenu>
-							{roster.map((bot) => (
-								<BotRosterRow
-									bot={bot}
-									isSelected={bot.id === selectedId}
-									key={bot.id}
-									onDelete={onDeleteBot}
-									onDuplicate={onDuplicateBot}
-									onEdit={onEditBot}
-									onSelect={onSelectBot}
+				<AnimatedSidebarContent
+					className={hasRosterPerSpace ? CAROUSEL_CONTENT : CONTENT_INSET}
+				>
+					{hasRosterPerSpace ? (
+						<SpaceCarousel
+							isSwipeEnabled={isSpaceSwitchingEnabled && spaces.length > 1}
+							onSelectSpace={onSelectSpace}
+							renderSpace={(space) => (
+								<BotRoster
+									{...actions}
+									bots={rosterOf(space.id)}
+									selectedBotId={selectedId}
 								/>
-							))}
-						</AnimatedSidebarMenu>
+							)}
+							selectedSpaceId={selectedSpaceId}
+							spaces={spaces}
+						/>
+					) : (
+						<BotRoster {...actions} bots={roster} selectedBotId={selectedId} />
 					)}
 				</AnimatedSidebarContent>
 				{user || footer || spaces.length > 1 ? (
