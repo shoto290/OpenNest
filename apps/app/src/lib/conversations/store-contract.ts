@@ -40,12 +40,21 @@ export type Bot = BotIdentity & {
 	createdAt: number
 	changesNothing: boolean
 	memory: string
+	sectionId: string | null
 }
 
 export type Space = {
 	id: string
 	name: string
 	colour: AvatarBlot
+	position: number
+	createdAt: number
+}
+
+export type Section = {
+	id: string
+	spaceId: string
+	name: string
 	position: number
 	createdAt: number
 }
@@ -198,3 +207,10 @@ export type SpaceError =
 	| { kind: "storage"; failure: StorageFailure }
 	| { kind: "unknownSpace"; id: string }
 	| { kind: "lastSpace" }
+
+export type SectionError =
+	| { kind: "unavailable"; failure: StorageFailure }
+	| { kind: "storage"; failure: StorageFailure }
+	| { kind: "unknownSection"; id: string }
+	| { kind: "unknownBot"; id: string }
+	| { kind: "foreignSection"; id: string }

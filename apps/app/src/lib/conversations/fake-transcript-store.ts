@@ -18,6 +18,8 @@ import type {
 	NewTurn,
 	NewUserMessage,
 	RuntimeSession,
+	Section,
+	SectionError,
 	Space,
 	SpaceError,
 	TranscriptStoreError,
@@ -56,6 +58,7 @@ const DEFAULT_BOT: Bot = {
 	changesNothing: false,
 	memory: "",
 	createdAt: 0,
+	sectionId: null,
 }
 
 const DEFAULT_SPACE: Space = {
@@ -102,7 +105,7 @@ const PROMPT_LABEL = "The new message:"
 const spoken = (message: TranscriptMessage) =>
 	`${message.role}: ${message.content}`
 
-const refuse = (error: TranscriptStoreError | SpaceError) =>
+const refuse = (error: TranscriptStoreError | SpaceError | SectionError) =>
 	Promise.reject(error)
 
 const USER_PLUGIN = "me"
@@ -174,8 +177,10 @@ export const createFakeTranscriptStore = (
 	const bots = new Map<string, Bot>([[DEFAULT_BOT.id, DEFAULT_BOT]])
 	const spaces = new Map<string, Space>([[DEFAULT_SPACE.id, DEFAULT_SPACE]])
 	const spaceOf = new Map<string, string>([[DEFAULT_BOT.id, DEFAULT_SPACE.id]])
+	const sections = new Map<string, Section>()
 	let minted = 0
 	let mintedSpaces = 0
+	let mintedSections = 0
 	const commands = new Map<string, AgentCommand[]>()
 	const skills = new Map<string, BotSkill[]>([[DEFAULT_BOT.id, [learnSkill()]]])
 	const history = new Map<string, BotHistoryEntry[]>()
@@ -368,6 +373,11 @@ export const createFakeTranscriptStore = (
 
 	const firstSpace = () => [...spaces.keys()][0]
 
+	const sectionsOf = (spaceId: string) =>
+		[...sections.values()]
+			.filter((section) => section.spaceId === spaceId)
+			.sort((one, other) => one.position - other.position)
+
 	const unsharedName = (wanted: string, spaceId: string) => {
 		const carried = new Set(
 			[...bots.values()]
@@ -466,6 +476,83 @@ export const createFakeTranscriptStore = (
 					spaceOf.delete(botId)
 				}
 			}
+			for (const [sectionId, section] of sections) {
+				if (section.spaceId === id) {
+					sections.delete(sectionId)
+				}
+			}
+			return Promise.resolve()
+		},
+
+		sections: (spaceId: string) => Promise.resolve(sectionsOf(spaceId)),
+
+		createSection: (spaceId: string, name: string) => {
+			if (!spaces.has(spaceId)) {
+				return refuse({ kind: "unknownSpace", id: spaceId })
+			}
+			mintedSections += 1
+			const section: Section = {
+				id: `section-${mintedSections}`,
+				spaceId,
+				name,
+				position: sectionsOf(spaceId).length,
+				createdAt: mintedSections,
+			}
+			sections.set(section.id, section)
+			return Promise.resolve(section)
+		},
+
+		renameSection: (id: string, name: string) => {
+			const stored = sections.get(id)
+			if (!stored) {
+				return refuse({ kind: "unknownSection", id })
+			}
+			const written: Section = { ...stored, name }
+			sections.set(id, written)
+			return Promise.resolve(written)
+		},
+
+		reorderSections: (spaceId: string, ids: string[]) => {
+			const foreign = ids.find((id) => sections.get(id)?.spaceId !== spaceId)
+			if (foreign) {
+				return refuse({ kind: "foreignSection", id: foreign })
+			}
+			ids.forEach((id, position) => {
+				const stored = sections.get(id)
+				if (stored) {
+					sections.set(id, { ...stored, position })
+				}
+			})
+			return Promise.resolve()
+		},
+
+		deleteSection: (id: string) => {
+			if (!sections.delete(id)) {
+				return refuse({ kind: "unknownSection", id })
+			}
+			for (const [botId, bot] of bots) {
+				if (bot.sectionId === id) {
+					bots.set(botId, { ...bot, sectionId: null })
+				}
+			}
+			return Promise.resolve()
+		},
+
+		moveBotToSection: (botId: string, sectionId: string | null) => {
+			const bot = bots.get(botId)
+			if (!bot) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			if (sectionId !== null) {
+				const section = sections.get(sectionId)
+				if (!section) {
+					return refuse({ kind: "unknownSection", id: sectionId })
+				}
+				if (section.spaceId !== spaceOf.get(botId)) {
+					return refuse({ kind: "foreignSection", id: sectionId })
+				}
+			}
+			bots.set(botId, { ...bot, sectionId })
 			return Promise.resolve()
 		},
 
@@ -482,6 +569,7 @@ export const createFakeTranscriptStore = (
 					...identity,
 					changesNothing: deniesChanges(identity.deniedTools),
 					memory: "",
+					sectionId: null,
 				},
 				spaceId ?? firstSpace(),
 			),
@@ -493,7 +581,12 @@ export const createFakeTranscriptStore = (
 			}
 			const destination = spaceId ?? spaceOf.get(botId) ?? firstSpace()
 			return mint(
-				{ ...source, name: unsharedName(`${source.name} copy`, destination) },
+				{
+					...source,
+					name: unsharedName(`${source.name} copy`, destination),
+					sectionId:
+						spaceOf.get(botId) === destination ? source.sectionId : null,
+				},
 				destination,
 			)
 		},
