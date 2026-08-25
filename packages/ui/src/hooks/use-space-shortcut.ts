@@ -10,15 +10,20 @@ export const spaceRankOf = ({ key, metaKey }: KeyboardEvent) => {
 
 type SpaceShortcut = {
 	count: number
+	isEnabled: boolean
 	onRank: (rank: number) => void
 }
 
-export const useSpaceShortcut = ({ count, onRank }: SpaceShortcut) => {
+export const useSpaceShortcut = ({
+	count,
+	isEnabled,
+	onRank,
+}: SpaceShortcut) => {
 	const reach = useRef(onRank)
 	reach.current = onRank
 
 	useEffect(() => {
-		if (count === 0) return
+		if (!isEnabled || count === 0) return
 
 		const pick = (event: KeyboardEvent) => {
 			const rank = spaceRankOf(event)
@@ -29,5 +34,5 @@ export const useSpaceShortcut = ({ count, onRank }: SpaceShortcut) => {
 
 		window.addEventListener("keydown", pick, true)
 		return () => window.removeEventListener("keydown", pick, true)
-	}, [count])
+	}, [count, isEnabled])
 }
