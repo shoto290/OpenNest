@@ -1177,6 +1177,7 @@ mod tests {
 	fn a_stored_bot(model: &str) -> conversations::Bot {
 		conversations::Bot {
 			id: "b1".into(),
+			space_id: "personal".into(),
 			name: "Nyx".into(),
 			title: String::new(),
 			model: model.to_owned(),

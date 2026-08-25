@@ -20,6 +20,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 9, statements: MESSAGE_RUNTIME_SESSION },
 	Migration { version: 10, statements: MESSAGE_PIN },
 	Migration { version: 11, statements: BUBBLE_PIN },
+	Migration { version: 12, statements: BOT_SPACE },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -226,6 +227,62 @@ DROP INDEX messages_pinned;
 ALTER TABLE messages DROP COLUMN pinned_at;
 ";
 
+const BOT_SPACE: &str = "
+CREATE TABLE spaces (
+	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL,
+	colour TEXT NOT NULL CHECK (colour IN
+		('red', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'orange')),
+	position INTEGER NOT NULL,
+	created_at INTEGER NOT NULL
+);
+
+INSERT INTO spaces (id, name, colour, position, created_at)
+	VALUES ('personal', 'Personal', 'red', 0, unixepoch() * 1000);
+
+PRAGMA legacy_alter_table = ON;
+ALTER TABLE bots RENAME TO bots_without_space;
+PRAGMA legacy_alter_table = OFF;
+
+CREATE TABLE bots (
+	id TEXT PRIMARY KEY,
+	space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	model TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	instructions TEXT NOT NULL DEFAULT '',
+	memory TEXT NOT NULL DEFAULT '',
+	title TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	avatar_animal TEXT NOT NULL DEFAULT 'cat'
+		CHECK (avatar_animal IN
+			('cat', 'rabbit', 'bear', 'chick', 'dog', 'mouse', 'owl', 'koala')),
+	avatar_pose TEXT NOT NULL DEFAULT 'idle'
+		CHECK (avatar_pose IN
+			('idle', 'happy', 'curious', 'proud', 'shy', 'playful', 'bored', 'sleeping')),
+	avatar_image_path TEXT,
+	working_dir TEXT,
+	avatar_blot TEXT
+		CHECK (avatar_blot IN
+			('coral', 'amber', 'moss', 'water', 'sky', 'lavender', 'rose', 'slate')),
+	commands TEXT NOT NULL DEFAULT '[]',
+	avatar_color TEXT
+		CHECK (avatar_color IN
+			('red', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'orange')),
+	denied_tools TEXT NOT NULL DEFAULT '[]'
+);
+
+INSERT INTO bots (id, space_id, name, model, created_at, instructions, memory, title,
+		description, avatar_animal, avatar_pose, avatar_image_path, working_dir, avatar_blot,
+		commands, avatar_color, denied_tools)
+	SELECT id, 'personal', name, model, created_at, instructions, memory, title,
+		description, avatar_animal, avatar_pose, avatar_image_path, working_dir, avatar_blot,
+		commands, avatar_color, denied_tools
+	FROM bots_without_space;
+
+DROP TABLE bots_without_space;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -235,6 +292,16 @@ pub fn apply(connection: &mut Connection) -> Result<(), DatabaseError> {
 }
 
 fn apply_each(connection: &mut Connection, migrations: &[Migration]) -> Result<(), DatabaseError> {
+	connection.pragma_update(None, "foreign_keys", "OFF")?;
+	let applied = apply_pending(connection, migrations);
+	connection.pragma_update(None, "foreign_keys", "ON")?;
+	applied
+}
+
+fn apply_pending(
+	connection: &mut Connection,
+	migrations: &[Migration],
+) -> Result<(), DatabaseError> {
 	let mut installed = version(connection)?;
 	for migration in migrations {
 		if installed >= migration.version {
@@ -262,8 +329,9 @@ mod tests {
 	use crate::db::connection::{open, temp_dir, FILE_NAME};
 
 	const FIXTURE: &str = "
-		INSERT INTO bots (id, name, model, created_at)
-			VALUES ('b1', 'First', 'sonnet', 1), ('b2', 'Second', 'sonnet', 1);
+		INSERT INTO bots (id, space_id, name, model, created_at)
+			VALUES ('b1', 'personal', 'First', 'sonnet', 1),
+				('b2', 'personal', 'Second', 'sonnet', 1);
 		INSERT INTO conversations (id, kind, title, created_at, updated_at)
 			VALUES ('c1', 'main', 'First', 1, 1), ('c2', 'topic', 'Second', 1, 1);
 		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
@@ -429,6 +497,97 @@ mod tests {
 	}
 
 	#[test]
+	fn the_bots_a_file_already_held_come_out_of_the_step_in_one_space() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..11]).expect("the shipped schema installs");
+		connection
+			.execute_batch(
+				"INSERT INTO bots (id, name, model, created_at)
+					VALUES ('b1', 'First', 'sonnet', 1), ('b2', 'Second', 'sonnet', 2);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'main', 'First', 1, 1);
+				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
+					VALUES ('c1', 'b1', 'assistant', 1);",
+			)
+			.expect("the bots this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(
+			spaces_of(&connection),
+			vec![("personal".to_owned(), "Personal".to_owned(), "red".to_owned(), 0)],
+			"the step did not lay down the one space every bot belongs to"
+		);
+		assert_eq!(
+			bot_spaces_of(&connection),
+			vec![
+				("b1".to_owned(), "personal".to_owned()),
+				("b2".to_owned(), "personal".to_owned())
+			],
+			"a bot came out of the step without the space it belongs to"
+		);
+		assert_eq!(
+			rows_in(&connection, "conversation_participants"),
+			1,
+			"rebuilding the table the bots live in cost them their seats"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn an_empty_file_comes_out_of_the_step_holding_the_one_space() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+
+		apply(&mut connection).expect("the schema installs");
+
+		assert_eq!(
+			spaces_of(&connection),
+			vec![("personal".to_owned(), "Personal".to_owned(), "red".to_owned(), 0)]
+		);
+		assert_eq!(
+			connection
+				.pragma_query_value(None, "foreign_keys", |row| row.get::<_, i64>(0))
+				.expect("the foreign key switch"),
+			1,
+			"the steps left the file with nothing holding its references together"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn spaces_of(connection: &Connection) -> Vec<(String, String, String, i64)> {
+		let mut statement = connection
+			.prepare("SELECT id, name, colour, position FROM spaces ORDER BY position, id")
+			.expect("prepare");
+		statement
+			.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+			.expect("query")
+			.collect::<rusqlite::Result<Vec<_>>>()
+			.expect("rows")
+	}
+
+	fn bot_spaces_of(connection: &Connection) -> Vec<(String, String)> {
+		let mut statement =
+			connection.prepare("SELECT id, space_id FROM bots ORDER BY id").expect("prepare");
+		statement
+			.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+			.expect("query")
+			.collect::<rusqlite::Result<Vec<_>>>()
+			.expect("rows")
+	}
+
+	fn rows_in(connection: &Connection, table: &str) -> i64 {
+		connection
+			.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0))
+			.expect("query")
+	}
+
+	#[test]
 	fn a_fresh_install_and_an_upgraded_file_come_out_the_same_shape() {
 		let fresh_dir = temp_dir();
 		let upgraded_dir = temp_dir();
@@ -473,8 +632,9 @@ mod tests {
 		apply(&mut connection).expect("the schema installs");
 		write(
 			&connection,
-			"INSERT INTO bots (id, name, model, created_at, title, avatar_animal, avatar_pose)
-				VALUES ('b1', 'First', 'sonnet', 1, 'Reviewer', 'owl', 'curious')",
+			"INSERT INTO bots (id, space_id, name, model, created_at, title, avatar_animal,
+					avatar_pose)
+				VALUES ('b1', 'personal', 'First', 'sonnet', 1, 'Reviewer', 'owl', 'curious')",
 		)
 		.expect("a bot written between the two runs");
 
@@ -808,8 +968,8 @@ mod tests {
 	fn a_bot_marked(blot: Option<&str>, id: &str) -> String {
 		let mark = blot.map_or("NULL".to_owned(), |blot| format!("'{blot}'"));
 		format!(
-			"INSERT INTO bots (id, name, model, created_at, avatar_color)
-				VALUES ('{id}', 'A bot', 'sonnet', 1, {mark})"
+			"INSERT INTO bots (id, space_id, name, model, created_at, avatar_color)
+				VALUES ('{id}', 'personal', 'A bot', 'sonnet', 1, {mark})"
 		)
 	}
 
@@ -821,8 +981,8 @@ mod tests {
 
 	fn a_bot_shown_as(animal: &str, pose: &str, id: &str) -> String {
 		format!(
-			"INSERT INTO bots (id, name, model, created_at, avatar_animal, avatar_pose)
-				VALUES ('{id}', 'A bot', 'sonnet', 1, '{animal}', '{pose}')"
+			"INSERT INTO bots (id, space_id, name, model, created_at, avatar_animal, avatar_pose)
+				VALUES ('{id}', 'personal', 'A bot', 'sonnet', 1, '{animal}', '{pose}')"
 		)
 	}
 

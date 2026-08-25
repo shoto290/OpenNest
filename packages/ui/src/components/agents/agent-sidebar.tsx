@@ -1,7 +1,7 @@
 "use client"
 
 import type { TFunction } from "i18next"
-import { memo, type ReactNode } from "react"
+import { memo, type ReactNode, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
@@ -29,9 +29,20 @@ import {
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
 import {
+	type Space,
+	spaceAtRank,
+	spaceBeside,
+} from "@workspace/ui/components/space"
+import {
+	SpaceDots,
+	SpaceSwitcher,
+} from "@workspace/ui/components/space-switcher"
+import {
 	UserChip,
 	type UserChipIdentity,
 } from "@workspace/ui/components/user-chip"
+import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
+import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
 
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2.5 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
@@ -48,8 +59,10 @@ const PREVIEW_LINE = "h-4 truncate text-muted-foreground text-xs leading-4"
 
 const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
 
-const FOOTER_INSET =
-	"flex-row items-center group-data-[state=collapsed]/sidebar:flex-col-reverse group-data-[state=collapsed]/sidebar:items-center group-data-[state=collapsed]/sidebar:px-0"
+const FOOTER_INSET = "group-data-[state=collapsed]/sidebar:px-0"
+
+const FOOTER_ROW =
+	"flex flex-row items-center gap-2 group-data-[state=collapsed]/sidebar:flex-col-reverse group-data-[state=collapsed]/sidebar:items-center"
 
 const FOOTER_SLOT = "shrink-0 empty:hidden"
 
@@ -187,6 +200,11 @@ interface AgentSidebarProps extends AgentSidebarPanelProps {
 	onEditBot?: (id: string) => void
 	onDuplicateBot?: (id: string) => void
 	onDeleteBot?: (id: string) => void
+	spaces?: Space[]
+	selectedSpaceId?: string
+	onSelectSpace?: (id: string) => void
+	onCreateSpace?: () => void
+	onOpenSpaceSettings?: () => void
 	footer?: ReactNode
 	user?: UserChipIdentity
 	onOpenUserSettings?: () => void
@@ -200,14 +218,37 @@ const AgentSidebarBase = ({
 	onEditBot,
 	onDuplicateBot,
 	onDeleteBot,
+	spaces = [],
+	selectedSpaceId,
+	onSelectSpace,
+	onCreateSpace,
+	onOpenSpaceSettings,
 	footer,
 	user,
 	onOpenUserSettings,
 	...panel
 }: AgentSidebarProps) => {
 	const { t } = useTranslation("bots")
+	const panelRef = useRef<HTMLElement>(null)
 	const selectedBot = roster.find((bot) => bot.id === selectedId)
 	const createLabel = t("roster.create")
+
+	const selectBeside = (step: number) => {
+		const space = spaceBeside(spaces, selectedSpaceId, step)
+		if (space) onSelectSpace?.(space.id)
+	}
+
+	const selectRank = (rank: number) => {
+		const space = spaceAtRank(spaces, rank)
+		if (space) onSelectSpace?.(space.id)
+	}
+
+	useSpaceSwipe({
+		isEnabled: spaces.length > 1,
+		onStep: selectBeside,
+		target: panelRef,
+	})
+	useSpaceShortcut({ count: spaces.length, onRank: selectRank })
 
 	return (
 		<>
@@ -216,8 +257,16 @@ const AgentSidebarBase = ({
 				aria-busy={roster.some(isBusy)}
 				ariaLabel={t("roster.label")}
 				collapsible="icon"
+				ref={panelRef}
 			>
 				<AnimatedSidebarHeader className={WINDOW_CONTROLS_INSET}>
+					<SpaceSwitcher
+						onCreateSpace={onCreateSpace}
+						onOpenSpaceSettings={onOpenSpaceSettings}
+						onSelectSpace={onSelectSpace}
+						selectedSpaceId={selectedSpaceId}
+						spaces={spaces}
+					/>
 					<Button
 						aria-label={createLabel}
 						onClick={onCreateBot}
@@ -248,16 +297,25 @@ const AgentSidebarBase = ({
 						</AnimatedSidebarMenu>
 					)}
 				</AnimatedSidebarContent>
-				{user || footer ? (
+				{user || footer || spaces.length > 1 ? (
 					<AnimatedSidebarFooter className={FOOTER_INSET}>
-						{user ? (
-							<UserChip
-								image={user.image}
-								name={user.name}
-								onOpen={onOpenUserSettings}
-							/>
+						<SpaceDots
+							onSelectSpace={onSelectSpace}
+							selectedSpaceId={selectedSpaceId}
+							spaces={spaces}
+						/>
+						{user || footer ? (
+							<span className={FOOTER_ROW}>
+								{user ? (
+									<UserChip
+										image={user.image}
+										name={user.name}
+										onOpen={onOpenUserSettings}
+									/>
+								) : null}
+								<span className={FOOTER_SLOT}>{footer}</span>
+							</span>
 						) : null}
-						<span className={FOOTER_SLOT}>{footer}</span>
 					</AnimatedSidebarFooter>
 				) : null}
 			</AnimatedSidebar>
@@ -275,5 +333,6 @@ export {
 	type AgentSidebarBot,
 	type AgentSidebarProps,
 	type BotAvatarBlot,
+	type Space,
 	type UserChipIdentity,
 }

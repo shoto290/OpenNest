@@ -414,7 +414,8 @@ mod tests {
 		database
 			.call(move |connection| {
 				connection.execute(
-					"INSERT INTO bots (id, name, model, created_at) VALUES (?1, 'Second', 'sonnet', 1)",
+					"INSERT INTO bots (id, space_id, name, model, created_at)
+						VALUES (?1, 'personal', 'Second', 'sonnet', 1)",
 					rusqlite::params![id],
 				)?;
 				connection.execute(

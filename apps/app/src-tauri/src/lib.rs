@@ -6,6 +6,7 @@ pub mod commands;
 pub mod conversations;
 pub mod db;
 pub mod notifications;
+pub mod spaces;
 pub mod user;
 mod private_files;
 

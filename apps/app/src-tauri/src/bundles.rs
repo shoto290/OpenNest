@@ -1464,6 +1464,7 @@ mod tests {
 	fn a_bot(name: &str, instructions: &str) -> Bot {
 		Bot {
 			id: "b1".to_owned(),
+			space_id: "personal".to_owned(),
 			name: name.to_owned(),
 			title: String::new(),
 			model: "sonnet".to_owned(),

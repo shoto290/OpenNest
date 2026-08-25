@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 
 import type {
+	AvatarBlot,
 	Bot,
 	BotHistoryEntry,
 	BotIdentity,
@@ -15,6 +16,7 @@ import type {
 	NewTurn,
 	NewUserMessage,
 	RuntimeSession,
+	Space,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import {
@@ -34,10 +36,23 @@ export const conversationStore: TranscriptStore = {
 			limit: TRANSCRIPT_PAGE_SIZE,
 		}),
 
-	bots: () => invoke<Bot[]>("conversation_bots"),
+	spaces: () => invoke<Space[]>("space_list"),
 
-	createBot: (identity: BotIdentity) =>
-		invoke<Bot>("conversation_create_bot", { identity }),
+	createSpace: (name: string) => invoke<Space>("space_create", { name }),
+
+	updateSpace: (id: string, name: string, colour: AvatarBlot) =>
+		invoke<Space>("space_update", { id, name, colour }),
+
+	deleteSpace: (id: string) => invoke<void>("space_delete", { id }),
+
+	bots: (spaceId?: string | null) =>
+		invoke<Bot[]>("conversation_bots", { spaceId: spaceId ?? null }),
+
+	createBot: (identity: BotIdentity, spaceId?: string | null) =>
+		invoke<Bot>("conversation_create_bot", {
+			identity,
+			spaceId: spaceId ?? null,
+		}),
 
 	duplicateBot: (botId: string) =>
 		invoke<Bot>("conversation_duplicate_bot", { botId }),
