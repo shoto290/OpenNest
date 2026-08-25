@@ -1012,7 +1012,8 @@ mod tests {
 	use crate::db::{open, Database};
 
 	const FIXTURE: &str = "
-		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
+		INSERT INTO bots (id, space_id, name, model, created_at)
+			VALUES ('b1', 'personal', 'First', 'sonnet', 1);
 		INSERT INTO conversations (id, kind, title, created_at, updated_at)
 			VALUES ('c1', 'main', 'First', 1, 1), ('c2', 'topic', 'Second', 1, 1);
 		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)

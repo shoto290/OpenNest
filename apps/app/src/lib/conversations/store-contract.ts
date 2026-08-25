@@ -42,6 +42,14 @@ export type Bot = BotIdentity & {
 	memory: string
 }
 
+export type Space = {
+	id: string
+	name: string
+	colour: AvatarBlot
+	position: number
+	createdAt: number
+}
+
 export type BotSkill = BotSkillFront & {
 	id: string
 	name: string
@@ -184,3 +192,9 @@ export type TranscriptStoreError =
 	| { kind: "unwritableBundle"; detail: string }
 	| { kind: "systemSkill"; id: string }
 	| { kind: "unreadableHistory"; detail: string }
+
+export type SpaceError =
+	| { kind: "unavailable"; failure: StorageFailure }
+	| { kind: "storage"; failure: StorageFailure }
+	| { kind: "unknownSpace"; id: string }
+	| { kind: "lastSpace" }

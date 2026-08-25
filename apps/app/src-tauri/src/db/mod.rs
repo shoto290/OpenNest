@@ -13,7 +13,8 @@ use tauri::{AppHandle, Runtime};
 use bootstrap::LegacyImport;
 pub use connection::DatabaseError;
 use repositories::{
-	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository, UserRepository,
+	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository,
+	SpacesRepository, UserRepository,
 };
 
 #[derive(Clone)]
@@ -68,6 +69,7 @@ pub struct Database {
 	conversations: ConversationsRepository,
 	messages: MessagesRepository,
 	runtime_context: RuntimeContextRepository,
+	spaces: SpacesRepository,
 	user: UserRepository,
 	legacy_import: LegacyImport,
 }
@@ -83,6 +85,7 @@ impl Database {
 			conversations: ConversationsRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			runtime_context: RuntimeContextRepository::new(access.clone()),
+			spaces: SpacesRepository::new(access.clone()),
 			user: UserRepository::new(access.clone()),
 			legacy_import,
 			access,
@@ -115,6 +118,10 @@ impl Database {
 
 	pub fn runtime_context(&self) -> &RuntimeContextRepository {
 		&self.runtime_context
+	}
+
+	pub fn spaces(&self) -> &SpacesRepository {
+		&self.spaces
 	}
 
 	pub fn user(&self) -> &UserRepository {
