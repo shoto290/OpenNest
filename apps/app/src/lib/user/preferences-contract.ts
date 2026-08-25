@@ -21,6 +21,7 @@ export type UserPreferences = {
 	notifyWithSound: boolean
 	sidebarWidth: number | null
 	lastBotId: string | null
+	lastSpaceId: string | null
 }
 
 export type UserPreferencesError =

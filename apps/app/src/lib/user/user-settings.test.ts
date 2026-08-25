@@ -15,6 +15,7 @@ const RECORD: ReaderPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	lastBotId: null,
+	lastSpaceId: null,
 }
 
 const shown = (record: ReaderPreferences = RECORD) =>

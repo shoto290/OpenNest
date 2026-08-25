@@ -23,6 +23,7 @@ const RECORD: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	lastBotId: null,
+	lastSpaceId: null,
 }
 
 const DEFAULTS: UserPreferences = {
@@ -37,6 +38,7 @@ const DEFAULTS: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	lastBotId: null,
+	lastSpaceId: null,
 }
 
 const FAILURES: UserPreferencesError[] = [

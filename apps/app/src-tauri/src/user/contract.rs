@@ -49,6 +49,7 @@ pub struct UserPreferences {
 	pub notify_with_sound: bool,
 	pub sidebar_width: Option<u32>,
 	pub last_bot_id: Option<String>,
+	pub last_space_id: Option<String>,
 }
 
 impl UserPreferences {
@@ -71,6 +72,7 @@ impl UserPreferences {
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
 			last_bot_id: preferences.last_bot_id,
+			last_space_id: preferences.last_space_id,
 		}
 	}
 }
@@ -89,6 +91,7 @@ impl From<UserPreferences> for user::Preferences {
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
 			last_bot_id: preferences.last_bot_id,
+			last_space_id: preferences.last_space_id,
 		}
 	}
 }

@@ -44,6 +44,7 @@ export type UserController = {
 	setLanguage: (language: Language | null) => Promise<void>
 	setSidebarWidth: (sidebarWidth: number) => Promise<void>
 	setLastBot: (lastBotId: string) => Promise<void>
+	setLastSpace: (lastSpaceId: string) => Promise<void>
 	uploadPicture: (file: File) => Promise<void>
 	removePicture: () => Promise<void>
 }
@@ -200,6 +201,8 @@ export const createUserController = (): UserController => {
 		setSidebarWidth: (sidebarWidth: number) => changeMirrored({ sidebarWidth }),
 
 		setLastBot: (lastBotId: string) => changeMirrored({ lastBotId }),
+
+		setLastSpace: (lastSpaceId: string) => changeMirrored({ lastSpaceId }),
 
 		uploadPicture: async (file: File) => {
 			const bytes = new Uint8Array(await file.arrayBuffer())
