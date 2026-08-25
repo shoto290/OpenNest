@@ -14,6 +14,7 @@ import { cn } from "@workspace/ui/lib/utils"
 type ConfirmDialogProps = {
 	trigger?: ReactNode
 	triggerClassName?: string
+	isTriggerDisabled?: boolean
 	open?: boolean
 	onOpenChange?: (open: boolean) => void
 	title: string
@@ -26,6 +27,7 @@ type ConfirmDialogProps = {
 const ConfirmDialog = ({
 	trigger,
 	triggerClassName,
+	isTriggerDisabled,
 	open,
 	onOpenChange,
 	title,
@@ -43,7 +45,10 @@ const ConfirmDialog = ({
 			open={open}
 		>
 			{trigger ? (
-				<AlertDialog.Trigger className={triggerClassName}>
+				<AlertDialog.Trigger
+					className={triggerClassName}
+					disabled={isTriggerDisabled}
+				>
 					{trigger}
 				</AlertDialog.Trigger>
 			) : null}

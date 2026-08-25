@@ -38,7 +38,7 @@ import {
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
-	RAIL_ITEM_CLASS,
+	DANGER_RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
 	SETTINGS_SCROLLING_PANEL_CLASS,
@@ -59,11 +59,6 @@ type McpSession = {
 	draft: BotMcpServerDraft
 	saved?: BotMcpServerDraft
 }
-
-const DANGER_RAIL_ITEM_CLASS = cn(
-	RAIL_ITEM_CLASS,
-	"text-destructive hover:bg-destructive/10 hover:text-destructive data-active:bg-destructive/10 data-active:text-destructive",
-)
 
 type BotSettingsDialogProps = {
 	open: boolean

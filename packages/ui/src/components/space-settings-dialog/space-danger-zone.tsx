@@ -7,39 +7,42 @@ import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
 import { DANGER_BLOCK_CLASS } from "@workspace/ui/components/settings-styles"
 
-type DangerZoneProps = {
-	botName: string
-	defaultConfirming?: boolean
+type SpaceDangerZoneProps = {
+	spaceName: string
 	onDelete: () => void
+	isDeletable?: boolean
+	defaultConfirming?: boolean
 }
 
-const DangerZone = ({
-	botName,
-	defaultConfirming,
+const SpaceDangerZone = ({
+	spaceName,
 	onDelete,
-}: DangerZoneProps) => {
-	const { t } = useTranslation("bots")
+	isDeletable = true,
+	defaultConfirming,
+}: SpaceDangerZoneProps) => {
+	const { t } = useTranslation("settings")
 
 	return (
-		<div className={DANGER_BLOCK_CLASS}>
+		<div className={DANGER_BLOCK_CLASS} data-slot="space-danger-zone">
 			<div className="flex flex-col gap-1">
 				<span className="font-medium text-destructive text-sm">
-					{t("danger.delete")}
+					{t("space.danger.delete")}
 				</span>
 				<p className="text-muted-foreground text-sm">
-					{t("danger.description")}
+					{isDeletable ? t("space.danger.description") : t("space.danger.last")}
 				</p>
 			</div>
 			<ConfirmDialog
-				confirmLabel={t("danger.delete")}
+				confirmLabel={t("space.danger.delete")}
 				defaultOpen={defaultConfirming}
-				description={t("danger.description")}
+				description={t("space.danger.description")}
+				isTriggerDisabled={!isDeletable}
 				onConfirm={onDelete}
-				title={t("danger.confirm.title", { name: botName })}
+				title={t("space.danger.confirm.title", { name: spaceName })}
 				trigger={
 					<>
 						<Icons.Delete aria-hidden="true" className="size-3.5" />
-						{t("danger.delete")}
+						{t("space.danger.delete")}
 					</>
 				}
 				triggerClassName={buttonVariants({
@@ -51,4 +54,4 @@ const DangerZone = ({
 	)
 }
 
-export { DangerZone, type DangerZoneProps }
+export { SpaceDangerZone, type SpaceDangerZoneProps }

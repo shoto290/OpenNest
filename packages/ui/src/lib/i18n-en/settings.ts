@@ -4,11 +4,13 @@ const settings = {
 	},
 	rail: {
 		profile: "Profile",
+		space: "Space",
 		appearance: "Appearance",
 		notifications: "Notifications",
 		language: "Language",
 		skills: "Skills",
 		history: "History",
+		danger: "Danger zone",
 	},
 	plugin: {
 		author: {
@@ -74,6 +76,24 @@ const settings = {
 				moss: "Moss",
 				coral: "Coral",
 				lavender: "Lavender",
+			},
+		},
+	},
+	space: {
+		untitled: "Untitled space",
+		name: {
+			label: "Name",
+			placeholder: "No name",
+		},
+		colour: {
+			label: "Colour",
+		},
+		danger: {
+			delete: "Delete space",
+			description: "Its bots and its plugin go with it. This cannot be undone.",
+			last: "The last space cannot be deleted — the app always keeps one.",
+			confirm: {
+				title: "Delete {{name}}?",
 			},
 		},
 	},
