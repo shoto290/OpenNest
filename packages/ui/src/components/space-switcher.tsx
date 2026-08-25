@@ -166,4 +166,4 @@ const SpaceDots = ({
 	)
 }
 
-export { SpaceDots, SpaceSwitcher, type SpaceSwitcherProps }
+export { SpaceDot, SpaceDots, SpaceSwitcher, type SpaceSwitcherProps }

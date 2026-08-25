@@ -270,6 +270,13 @@ export function App() {
 						onDuplicateBot={(id) => {
 							void roster.controller.duplicate(id)
 						}}
+						onDuplicateBotToSpace={(id, spaceId) => {
+							void roster.controller.duplicate(id, spaceId).then((copy) => {
+								if (copy) {
+									spaces.controller.select(spaceId)
+								}
+							})
+						}}
 						onEditBot={roster.controller.edit}
 						onOpenUserSettings={() => {
 							user.controller.setSettingsOpen(true)

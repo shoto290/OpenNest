@@ -527,6 +527,39 @@ describe("createRosterController on a space", () => {
 		expect(await store.bots(elsewhere.id)).toEqual(bots)
 	})
 
+	it("lands the copy in the space it was sent to and opens that space on it", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		const copy = await controller.duplicate("default", elsewhere.id)
+
+		const state = controller.getState()
+		expect(copy?.name).toBe("Claude copy")
+		expect(state.spaceId).toBe(elsewhere.id)
+		expect(state.selectedBotId).toBe(copy?.id)
+		expect(state.rosters[elsewhere.id].map((bot) => bot.id)).toEqual([copy?.id])
+		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
+	})
+
+	it("stays where it is when the copy the other space was sent is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		vi.spyOn(store, "duplicateBot").mockRejectedValue(new Error("no room"))
+
+		const copy = await controller.duplicate("default", elsewhere.id)
+
+		const state = controller.getState()
+		expect(copy).toBeNull()
+		expect(state.spaceId).toBe("personal")
+		expect(state.selectedBotId).toBe("default")
+		expect(state.rosters[elsewhere.id]).toEqual([])
+		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
+	})
+
 	it("leaves the roster of the other spaces untouched when a bot is deleted", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")

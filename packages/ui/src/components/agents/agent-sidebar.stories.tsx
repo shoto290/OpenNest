@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	FRAME_POLL,
+	settled,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import {
@@ -366,6 +367,7 @@ const meta = preview.meta({
 		onCreateBot: fn(),
 		onEditBot: fn(),
 		onDuplicateBot: fn(),
+		onDuplicateBotToSpace: fn(),
 		onDeleteBot: fn(),
 		onOpenUserSettings: fn(),
 		onSelectSpace: fn(),
@@ -1518,6 +1520,93 @@ export const FiveSpaces = meta.story({
 
 		await userEvent.keyboard("{Meta>}7{/Meta}")
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+	},
+})
+
+const openRowMenu = async (canvasElement: HTMLElement, name: string) => {
+	fireEvent.contextMenu(rowButton(rowFor(canvasElement, name)))
+	return within(
+		await screen.findByRole("menu", { name: `Actions for ${name}` }),
+	)
+}
+
+const DUPLICATE_TO = "Duplicate to"
+
+const tintOf = (node: HTMLElement) => getComputedStyle(node).backgroundColor
+
+export const RowDuplicateToSpace = meta.story({
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The branch under a row that sends a copy of the bot somewhere else. It sits directly under the plain duplicate, which still copies into the space the bot already lives in and leaves the reader where they are. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations keep the order and the tint the space switcher gives them, and that choosing one reports the bot and the space it was sent to. Pick `RowContextMenu` for the actions above it, `OneSpaceRowMenu` for the account that has nowhere to send a copy.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openRowMenu(canvasElement, "Beacon")
+
+		const branch = menu.getByRole("menuitem", { name: DUPLICATE_TO })
+		await expect(branch).toHaveAttribute("aria-haspopup", "menu")
+
+		await userEvent.hover(branch)
+		const panel = await settled(
+			await screen.findByRole("menu", { name: DUPLICATE_TO }),
+		)
+		const destinations = within(panel).getAllByRole("menuitem")
+		const offered = FIVE_SPACES.filter((space) => space.id !== "vocca")
+		await expect(destinations.map((item) => item.textContent)).toEqual(
+			offered.map((space) => space.name),
+		)
+		await expect(slotsIn(panel, "space-dot").map(tintOf)).toEqual(
+			offered.map((space) =>
+				tokenColor(canvasElement, `--bot-blot-${space.colour}`),
+			),
+		)
+
+		await userEvent.click(destinations[2])
+		await waitFor(async () => {
+			await expect(screen.queryByRole("menu")).toBeNull()
+		}, FRAME_POLL)
+		await expect(args.onDuplicateBotToSpace).toHaveBeenCalledWith(
+			"beacon",
+			"veille",
+		)
+	},
+})
+
+export const OneSpaceRowMenu = meta.story({
+	args: {
+		spaces: [SPACES[0]],
+		selectedSpaceId: "perso",
+		botsBySpaceId: { perso: ROSTER },
+		user: READER,
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The same row menu in the account that has only one space. There is nowhere to send a copy, so the branch is not drawn at all rather than drawn empty or drawn offering the space the bot is already in — a submenu that opens onto nothing is worse than no submenu. Check the menu is the three plain actions and that the plain duplicate is still there, since copying a bot beside itself has nothing to do with spaces.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const menu = await openRowMenu(canvasElement, "Beacon")
+
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["Settings", "Duplicate", "Delete"])
+		await expect(
+			menu.queryByRole("menuitem", { name: DUPLICATE_TO }),
+		).toBeNull()
 	},
 })
 

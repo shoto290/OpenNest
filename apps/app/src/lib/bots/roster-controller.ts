@@ -40,7 +40,7 @@ export type RosterController = {
 	enter: (entry: RosterEntry) => void
 	select: (id: string) => void
 	create: () => Promise<void>
-	duplicate: (id: string) => Promise<void>
+	duplicate: (id: string, spaceId?: string) => Promise<Bot | null>
 	edit: (id: string) => void
 	setEditing: (isEditing: boolean) => void
 	describe: (id: string, value: BotSettingsValue) => void
@@ -86,10 +86,8 @@ export const createRosterController = (
 		publish()
 	}
 
-	const withRoster = (bots: Bot[]) =>
-		state.spaceId === null
-			? state.rosters
-			: { ...state.rosters, [state.spaceId]: bots }
+	const withRoster = (spaceId: string | null, bots: Bot[]) =>
+		spaceId === null ? state.rosters : { ...state.rosters, [spaceId]: bots }
 
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)
 
@@ -103,9 +101,13 @@ export const createRosterController = (
 		}
 	}
 
-	const admit = (written: Bot) => {
+	const admit = (written: Bot, spaceId: string | null) => {
 		set({
-			rosters: withRoster([...state.bots, written]),
+			rosters: withRoster(spaceId, [
+				...rosterIn(state.rosters, spaceId),
+				written,
+			]),
+			spaceId,
 			selectedBotId: written.id,
 			isShowingDanger: false,
 		})
@@ -114,6 +116,7 @@ export const createRosterController = (
 	const apply = (written: Bot) => {
 		set({
 			rosters: withRoster(
+				state.spaceId,
 				state.bots.map((bot) => (bot.id === written.id ? written : bot)),
 			),
 		})
@@ -215,13 +218,22 @@ export const createRosterController = (
 
 		create: () =>
 			enqueue(async () => {
-				admit(await store.createBot(newBotIdentity(state.bots), state.spaceId))
+				admit(
+					await store.createBot(newBotIdentity(state.bots), state.spaceId),
+					state.spaceId,
+				)
 			}).catch(reload),
 
-		duplicate: (id: string) =>
+		duplicate: (id: string, spaceId?: string) =>
 			enqueue(async () => {
-				admit(await store.duplicateBot(id))
-			}).catch(reload),
+				const destination = spaceId ?? state.spaceId
+				const written = await store.duplicateBot(id, destination)
+				admit(written, destination)
+				return written
+			}).catch(async () => {
+				await reload()
+				return null
+			}),
 
 		edit: (id: string) =>
 			set({ selectedBotId: id, isEditing: true, isShowingDanger: false }),
@@ -268,7 +280,7 @@ export const createRosterController = (
 				const bots = state.bots.filter((bot) => bot.id !== id)
 				const { [id]: _deleted, ...previews } = state.previews
 				set({
-					rosters: withRoster(bots),
+					rosters: withRoster(state.spaceId, bots),
 					previews,
 					selectedBotId: bots[0]?.id ?? null,
 					isEditing: false,
