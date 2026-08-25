@@ -270,12 +270,12 @@ mod tests {
 		let dropped = spaces.create("Vocca".to_owned()).await.expect("the space");
 		database
 			.conversations()
-			.create_bot(an_identity("Nyx"), Some(kept))
+			.create_bot(an_identity("Nyx"), Some(kept), None)
 			.await
 			.expect("the kept bot");
 		database
 			.conversations()
-			.create_bot(an_identity("Ada"), Some(dropped.id.clone()))
+			.create_bot(an_identity("Ada"), Some(dropped.id.clone()), None)
 			.await
 			.expect("the bot of the space that goes");
 
@@ -311,7 +311,7 @@ mod tests {
 		let only = spaces.list().await.expect("the spaces")[0].id.clone();
 		database
 			.conversations()
-			.create_bot(an_identity("Nyx"), Some(only.clone()))
+			.create_bot(an_identity("Nyx"), Some(only.clone()), None)
 			.await
 			.expect("the bot");
 

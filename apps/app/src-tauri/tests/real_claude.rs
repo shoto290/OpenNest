@@ -61,6 +61,7 @@ fn probe_bot(id: &str, instructions: &str, model: &str) -> Bot {
 	Bot {
 		id: id.to_owned(),
 		space_id: "personal".to_owned(),
+		section_id: None,
 		name: PROBE_NAME.to_owned(),
 		title: String::new(),
 		model: model.to_owned(),
