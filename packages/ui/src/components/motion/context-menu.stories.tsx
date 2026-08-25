@@ -17,6 +17,9 @@ import {
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
 
+const BUTTON_CLASS =
+	"rounded-xl border border-border bg-card px-3 py-1.5 text-foreground text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+
 const SURFACE_CLASS =
 	"flex h-40 w-72 items-center justify-center rounded-xl border border-border border-dashed bg-card text-muted-foreground text-sm"
 
@@ -342,5 +345,46 @@ export const PassiveTrigger = meta.story({
 
 		await openMenuOn(passage)
 		await expect(screen.getByRole("menu")).toBeVisible()
+	},
+})
+
+export const AsMenuButton = meta.story({
+	render: () => (
+		<ContextMenu>
+			<ContextMenuTrigger opensOnPress>
+				<button type="button" className={BUTTON_CLASS}>
+					Transcript
+				</button>
+			</ContextMenuTrigger>
+			<FileMenu />
+		</ContextMenu>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same menu hung off a control that opens on a plain press, for a header button whose only job is to reveal it — `opensOnPress`. Check the menu opens from the button's bottom edge rather than from the cursor, that a second press closes it instead of reopening it, that Enter and Space open it from the keyboard with focus landing on the first row, and that Escape hands focus back to the button. Pick `Default` for the right-click path, which is what every other trigger here does.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const trigger = canvas.getByRole("button", { name: "Transcript" })
+
+		fireEvent.pointerDown(trigger, { button: 0 })
+		const menu = await settledMenu()
+		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+		await expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+			trigger.getBoundingClientRect().bottom,
+		)
+
+		fireEvent.pointerDown(trigger, { button: 0 })
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		trigger.focus()
+		await userEvent.keyboard("{Enter}")
+		await settledMenu()
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+		await expect(trigger).toHaveFocus()
 	},
 })

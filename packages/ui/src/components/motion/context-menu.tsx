@@ -38,6 +38,7 @@ const VIEWPORT_PADDING = 8
 const LONG_PRESS_DELAY = 520
 const LONG_PRESS_TOLERANCE = 10
 const MORPH_DURATION = 0.3
+const PRESS_GAP = 6
 
 type TriggerElementProps = React.HTMLAttributes<HTMLElement> & {
 	ref?: Ref<HTMLElement>
@@ -204,6 +205,7 @@ export interface ContextMenuTriggerProps {
 	children: ReactElement<TriggerElementProps>
 	disabled?: boolean
 	announcesPopup?: boolean
+	opensOnPress?: boolean
 	className?: string
 }
 
@@ -211,6 +213,7 @@ export function ContextMenuTrigger({
 	children,
 	disabled = false,
 	announcesPopup = true,
+	opensOnPress = false,
 	className,
 }: ContextMenuTriggerProps) {
 	const context = useContextMenuContext("ContextMenuTrigger")
@@ -288,15 +291,56 @@ export function ContextMenuTrigger({
 		)
 	}
 
-	return cloneElement(children, {
+	const openBelow = (
+		element: HTMLElement,
+		modality: Exclude<OpenModality, "touch">,
+	) => {
+		const rect = element.getBoundingClientRect()
+		context.openAt({ x: rect.left, y: rect.bottom + PRESS_GAP }, modality)
+	}
+
+	const onPressDown = (event: ReactPointerEvent<HTMLElement>) => {
+		childProps.onPointerDown?.(event)
+		if (event.defaultPrevented || disabled || event.button !== 0) return
+		event.preventDefault()
+		event.stopPropagation()
+		if (context.open) {
+			context.setOpen(false)
+			return
+		}
+		openBelow(event.currentTarget, "pointer")
+	}
+
+	const onPressKey = (event: ReactKeyboardEvent<HTMLElement>) => {
+		childProps.onKeyDown?.(event)
+		if (event.defaultPrevented || disabled) return
+		if (event.key !== "Enter" && event.key !== " ") return
+		event.preventDefault()
+		openBelow(event.currentTarget, "keyboard")
+	}
+
+	const popupProps = {
 		ref: (node: HTMLElement | null) => {
 			context.triggerRef.current = node
 			assignRef(childRef, node)
 		},
 		"aria-controls":
 			announcesPopup && context.open ? context.menuId : undefined,
-		"aria-haspopup": announcesPopup ? "menu" : undefined,
+		"aria-haspopup": announcesPopup ? ("menu" as const) : undefined,
 		"aria-expanded": announcesPopup ? context.open : undefined,
+	}
+
+	if (opensOnPress) {
+		return cloneElement(children, {
+			...popupProps,
+			className: cn(childProps.className, className),
+			onKeyDown: onPressKey,
+			onPointerDown: onPressDown,
+		})
+	}
+
+	return cloneElement(children, {
+		...popupProps,
 		className: cn(TOUCH_GESTURE_CONTENT_CLASS, childProps.className, className),
 		onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
 			childProps.onContextMenu?.(event)

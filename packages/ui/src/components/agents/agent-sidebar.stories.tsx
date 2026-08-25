@@ -1,4 +1,5 @@
-import { expect, fn, waitFor, within } from "storybook/test"
+import { useState } from "react"
+import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -11,12 +12,14 @@ import {
 	type AgentSidebarBot,
 	type AgentSidebarProps,
 	type BotAvatarBlot,
+	type Space,
 	type UserChipIdentity,
 } from "@workspace/ui/components/agents/agent-sidebar"
 import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
+import { SWIPE_SETTLE } from "@workspace/ui/hooks/use-space-swipe"
 
 const LAST_MESSAGE =
 	"Renamed the transport module and updated every caller, so the second turn resumes the first one cleanly again."
@@ -184,6 +187,18 @@ const FOOTER_CONTENT = (
 	</Button>
 )
 
+const SPACES: Space[] = [
+	{ id: "perso", name: "Perso", colour: "blue" },
+	{ id: "vocca", name: "Vocca", colour: "green" },
+	{ id: "atelier", name: "Atelier", colour: "pink" },
+	{ id: "veille", name: "Veille", colour: "yellow" },
+	{ id: "archives", name: "Archives", colour: "purple" },
+	{ id: "chantier", name: "Chantier", colour: "orange" },
+	{ id: "lecture", name: "Lecture", colour: "cyan" },
+	{ id: "brouillons", name: "Brouillons", colour: "red" },
+	{ id: "essais", name: "Essais", colour: "green" },
+]
+
 const READER_NAME = "Ada Martin"
 
 const READER: UserChipIdentity = {
@@ -350,6 +365,9 @@ const meta = preview.meta({
 		onDuplicateBot: fn(),
 		onDeleteBot: fn(),
 		onOpenUserSettings: fn(),
+		onSelectSpace: fn(),
+		onCreateSpace: fn(),
+		onOpenSpaceSettings: fn(),
 	},
 	argTypes: {
 		selectedBotId: { control: "text" },
@@ -1290,5 +1308,268 @@ export const DragRegion = meta.story({
 			await expect(target.tagName).toBe("BUTTON")
 			await expect(target).not.toHaveAttribute("data-tauri-drag-region")
 		}
+	},
+})
+
+const WHEEL_TICKS = 5
+
+const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+const swipeOver = async (panel: HTMLElement, deltaX: number) => {
+	for (let tick = 0; tick < WHEEL_TICKS; tick += 1) {
+		fireEvent.wheel(panel, { deltaX: deltaX / WHEEL_TICKS, deltaY: 0 })
+		await nextTask()
+	}
+}
+
+const afterSwipeSettles = () =>
+	new Promise((resolve) => setTimeout(resolve, SWIPE_SETTLE + 40))
+
+const LiveSpaces = (args: AgentSidebarProps) => {
+	const [selectedSpaceId, setSelectedSpaceId] = useState(args.selectedSpaceId)
+
+	return (
+		<WorkspaceShell
+			defaultOpen
+			sidebar={
+				<AgentSidebar
+					{...args}
+					onSelectSpace={(id) => {
+						args.onSelectSpace?.(id)
+						setSelectedSpaceId(id)
+					}}
+					selectedSpaceId={selectedSpaceId}
+				/>
+			}
+		>
+			{null}
+		</WorkspaceShell>
+	)
+}
+
+const spaceDotsIn = (canvasElement: HTMLElement) =>
+	slotsIn(canvasElement, "space-dot-button")
+
+const openSpaceMenu = async (trigger: HTMLElement) => {
+	fireEvent.pointerDown(trigger, { button: 0 })
+	return within(await screen.findByRole("menu", { name: "Spaces" }))
+}
+
+export const OneSpace = meta.story({
+	args: {
+		spaces: [SPACES[0]],
+		selectedSpaceId: "perso",
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The state every account opens in: one space, so the header names it and nothing else navigates. Check the switcher sits left of the create button on the same line with the create button's three insets untouched, that no dot strip is drawn in the pinned region, and that a horizontal swipe over the column reports nothing — there is nowhere to go, and a gesture that silently does nothing is better than one that jumps. Pick `FiveSpaces` for the navigating case.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const switcher = canvas.getByRole("button", {
+			name: "Change space, Perso open",
+		})
+		const create = canvas.getByRole("button", { name: "New bot" })
+		const header = slotIn(canvasElement, "sidebar-header")
+
+		await expect(switcher.getBoundingClientRect().right).toBeLessThanOrEqual(
+			create.getBoundingClientRect().left,
+		)
+
+		const headerBox = header.getBoundingClientRect()
+		const createBox = create.getBoundingClientRect()
+		const inset = Math.round(headerBox.right - createBox.right)
+		await expect(Math.round(createBox.top - headerBox.top)).toBe(inset)
+		await expect(Math.round(headerBox.bottom - createBox.bottom)).toBe(inset)
+
+		await expect(spaceDotsIn(canvasElement)).toHaveLength(0)
+
+		await swipeOver(slotIn(canvasElement, "sidebar"), 240)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+	},
+})
+
+export const FiveSpaces = meta.story({
+	args: {
+		spaces: SPACES.slice(0, 5),
+		selectedSpaceId: "vocca",
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Five spaces with the second one open — the everyday case, and the one that exercises all four ways in. Check the dot strip is centred in the pinned region with only the open dot filled and full size, that pressing a dot reports its id, that one horizontal swipe reports exactly one neighbour rather than one per wheel tick, and that Cmd and a digit reaches a space directly while a digit past the last one is left alone. Pick `NineSpaces` for the strip at its widest, `SpacesOnRail` for the same panel collapsed.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		await expect(
+			canvas.getByRole("button", { name: "Change space, Vocca open" }),
+		).toBeVisible()
+
+		const dots = spaceDotsIn(canvasElement)
+		await expect(dots).toHaveLength(5)
+		await expect(dots[1]).toHaveAttribute("aria-current", "true")
+		await expect(dots[0]).toHaveAttribute("aria-current", "false")
+
+		const strip = slotIn(canvasElement, "space-dots").getBoundingClientRect()
+		const region = slotIn(
+			canvasElement,
+			"sidebar-footer",
+		).getBoundingClientRect()
+		await expect(verticalCentreOf(strip)).toBeLessThan(verticalCentreOf(region))
+		await expect(Math.round(strip.left - region.left)).toBe(
+			Math.round(region.right - strip.right),
+		)
+
+		await userEvent.click(dots[3])
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("veille")
+
+		const panel = slotIn(canvasElement, "sidebar")
+		await swipeOver(panel, 240)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
+
+		await afterSwipeSettles()
+		await swipeOver(panel, -240)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(3)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
+
+		await userEvent.keyboard("{Meta>}5{/Meta}")
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("archives")
+
+		await userEvent.keyboard("{Meta>}7{/Meta}")
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(4)
+	},
+})
+
+export const NineSpaces = meta.story({
+	args: {
+		spaces: SPACES,
+		selectedSpaceId: "perso",
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Nine spaces, which is as many as the Cmd+digit chords can name and the widest the dot strip ever gets. Check every dot stays inside the pinned region rather than clipping against its edges, that the menu lists all nine with `⌘1` through `⌘9`, that Cmd+9 reaches the last one, and that a swipe back while the first space is open reports nothing. Pick `FiveSpaces` for the everyday width.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const dots = spaceDotsIn(canvasElement)
+		await expect(dots).toHaveLength(9)
+
+		const region = slotIn(
+			canvasElement,
+			"sidebar-footer",
+		).getBoundingClientRect()
+		for (const dot of dots) {
+			const box = dot.getBoundingClientRect()
+			await expect(box.left).toBeGreaterThanOrEqual(region.left)
+			await expect(box.right).toBeLessThanOrEqual(region.right)
+		}
+
+		const menu = await openSpaceMenu(
+			canvas.getByRole("button", { name: /^Change space/ }),
+		)
+		await expect(menu.getAllByRole("menuitemradio")).toHaveLength(9)
+		await expect(menu.getByText("⌘9")).toBeInTheDocument()
+		await userEvent.keyboard("{Escape}")
+
+		await userEvent.keyboard("{Meta>}9{/Meta}")
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("essais")
+
+		await swipeOver(slotIn(canvasElement, "sidebar"), -240)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const SpacesOnRail = meta.story({
+	render: renderShell(false),
+	args: {
+		spaces: SPACES.slice(0, 5),
+		selectedSpaceId: "vocca",
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same navigation once the panel is on its icon rail. Check the switcher keeps the open space's tint as a dot and drops its name, that it and the create button sit side by side without clipping against either edge of the rail, and that the dot strip is gone — a rail is too narrow to hold nine targets, and the tint on the switcher already says where the reader is. Pick `FiveSpaces` for the expanded panel.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const panel = slotIn(canvasElement, "sidebar-panel")
+		const rail = railWidth()
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBeCloseTo(rail, 0)
+		}, FRAME_POLL)
+
+		const switcher = canvas.getByRole("button", {
+			name: "Change space, Vocca open",
+		})
+		await expect(
+			slotIn(switcher, "space-switcher-name").checkVisibility(),
+		).toBe(false)
+		await expect(slotIn(switcher, "space-dot")).toBeInTheDocument()
+
+		const panelBox = panel.getBoundingClientRect()
+		for (const control of [
+			switcher,
+			canvas.getByRole("button", { name: "New bot" }),
+		]) {
+			const box = control.getBoundingClientRect()
+			await expect(box.left).toBeGreaterThanOrEqual(panelBox.left)
+			await expect(box.right).toBeLessThanOrEqual(panelBox.right)
+		}
+
+		await expect(
+			slotsIn(canvasElement, "space-dots")[0]?.checkVisibility(),
+		).toBe(false)
+	},
+})
+
+export const LiveSpaceSelection = meta.story({
+	render: (args) => <LiveSpaces {...args} />,
+	args: {
+		spaces: SPACES.slice(0, 5),
+		selectedSpaceId: "perso",
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel wired to a host that actually moves its selection, which is the only way the gesture is honest: the step changes `selectedSpaceId`, so every callback the panel was handed is a new function while the trackpad is still coasting. Check one physical swipe moves exactly one space and never two — the latch that spends a gesture has to outlive the re-render it causes — that the next swipe after the wheel goes quiet moves again, and that a rank chord still reports once after all those re-renders rather than once per listener left behind. Pick `FiveSpaces` for the same navigation against a fixed selection.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const panel = slotIn(canvasElement, "sidebar")
+
+		await swipeOver(panel, 240)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(
+			canvas.getByRole("button", { name: "Change space, Vocca open" }),
+		).toBeVisible()
+
+		await afterSwipeSettles()
+		await swipeOver(panel, 240)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+		await expect(
+			canvas.getByRole("button", { name: "Change space, Atelier open" }),
+		).toBeVisible()
+
+		await userEvent.keyboard("{Meta>}5{/Meta}")
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(3)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("archives")
 	},
 })
