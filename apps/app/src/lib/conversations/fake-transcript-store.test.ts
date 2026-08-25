@@ -489,6 +489,38 @@ describe("createFakeTranscriptStore", () => {
 		expect(await store.pinnedMessages(FAKE_CHAT_ID)).toEqual([])
 	})
 
+	it("frees every bot a deleted section held", async () => {
+		const store = createFakeTranscriptStore()
+		const written = await store.createSection("personal", "Writers")
+		await store.moveBotToSection("default", written.id)
+
+		await store.deleteSection(written.id)
+
+		expect((await store.bots("personal"))[0].sectionId).toBeNull()
+		expect(await store.sections("personal")).toEqual([])
+	})
+
+	it("refuses a bot the section of another space", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const written = await store.createSection(elsewhere.id, "Callers")
+
+		await expect(store.moveBotToSection("default", written.id)).rejects.toEqual(
+			{ kind: "foreignSection", id: written.id },
+		)
+	})
+
+	it("leaves a copy landing in another space out of every section", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const written = await store.createSection("personal", "Writers")
+		await store.moveBotToSection("default", written.id)
+
+		const copy = await store.duplicateBot("default", elsewhere.id)
+
+		expect(copy.sectionId).toBeNull()
+	})
+
 	it("takes the picture off a bot described again without a path", async () => {
 		const store = createFakeTranscriptStore()
 		await store.setBotAvatarImage("default", aPng())

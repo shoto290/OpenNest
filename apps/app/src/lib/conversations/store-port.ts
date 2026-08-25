@@ -14,6 +14,7 @@ import type {
 	NewTurn,
 	NewUserMessage,
 	RuntimeSession,
+	Section,
 	Space,
 } from "./store-contract"
 import type { TerminalCompletion } from "./transcript-contract"
@@ -26,6 +27,12 @@ export type TranscriptStore = TranscriptPort & {
 	createSpace: (name: string) => Promise<Space>
 	updateSpace: (id: string, name: string, colour: AvatarBlot) => Promise<Space>
 	deleteSpace: (id: string) => Promise<void>
+	sections: (spaceId: string) => Promise<Section[]>
+	createSection: (spaceId: string, name: string) => Promise<Section>
+	renameSection: (id: string, name: string) => Promise<Section>
+	reorderSections: (spaceId: string, ids: string[]) => Promise<void>
+	deleteSection: (id: string) => Promise<void>
+	moveBotToSection: (botId: string, sectionId: string | null) => Promise<void>
 	bots: (spaceId?: string | null) => Promise<Bot[]>
 	createBot: (identity: BotIdentity, spaceId?: string | null) => Promise<Bot>
 	duplicateBot: (botId: string, spaceId?: string | null) => Promise<Bot>

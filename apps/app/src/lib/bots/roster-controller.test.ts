@@ -682,4 +682,26 @@ describe("createRosterController previews", () => {
 		})
 		expect(state.bots).toHaveLength(2)
 	})
+	it("carries the section a bot is moved into", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+
+		controller.moveToSection("default", "n-1")
+
+		expect(held(controller, "default").sectionId).toBe("n-1")
+	})
+
+	it("carries no section for every bot a dropped section held", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		await controller.create()
+		const [first, second] = controller.getState().bots
+		controller.moveToSection(first.id, "n-1")
+		controller.moveToSection(second.id, "n-2")
+
+		controller.clearSection("n-1")
+
+		expect(held(controller, first.id).sectionId).toBeNull()
+		expect(held(controller, second.id).sectionId).toBe("n-2")
+	})
 })

@@ -101,6 +101,41 @@ const WRITES: WriteCase[] = [
 		call: ["space_delete", { id: "s-1" }],
 	},
 	{
+		member: "sections",
+		write: () => conversationStore.sections("s-1"),
+		call: ["section_list", { spaceId: "s-1" }],
+	},
+	{
+		member: "createSection",
+		write: () => conversationStore.createSection("s-1", "Writers"),
+		call: ["section_create", { spaceId: "s-1", name: "Writers" }],
+	},
+	{
+		member: "renameSection",
+		write: () => conversationStore.renameSection("n-1", "Readers"),
+		call: ["section_rename", { id: "n-1", name: "Readers" }],
+	},
+	{
+		member: "reorderSections",
+		write: () => conversationStore.reorderSections("s-1", ["n-2", "n-1"]),
+		call: ["section_reorder", { spaceId: "s-1", ids: ["n-2", "n-1"] }],
+	},
+	{
+		member: "deleteSection",
+		write: () => conversationStore.deleteSection("n-1"),
+		call: ["section_delete", { id: "n-1" }],
+	},
+	{
+		member: "moveBotToSection",
+		write: () => conversationStore.moveBotToSection("b-1", "n-1"),
+		call: ["bot_move_to_section", { botId: "b-1", sectionId: "n-1" }],
+	},
+	{
+		member: "moveBotToSection out of every section",
+		write: () => conversationStore.moveBotToSection("b-1", null),
+		call: ["bot_move_to_section", { botId: "b-1", sectionId: null }],
+	},
+	{
 		member: "bots",
 		write: () => conversationStore.bots("s-1"),
 		call: ["conversation_bots", { spaceId: "s-1" }],

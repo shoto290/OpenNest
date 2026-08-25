@@ -47,6 +47,8 @@ export type RosterController = {
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
 	uploadAvatar: (id: string, file: File) => Promise<void>
 	remember: (id: string, memory: string) => Promise<void>
+	moveToSection: (botId: string, sectionId: string | null) => void
+	clearSection: (sectionId: string) => void
 	askToDelete: (id: string) => void
 	remove: (id: string) => Promise<void>
 }
@@ -269,6 +271,24 @@ export const createRosterController = (
 			enqueue(async () => {
 				apply(await store.setBotMemory(id, memory))
 			}).catch(reload),
+
+		moveToSection: (botId: string, sectionId: string | null) => {
+			const bot = held(botId)
+			if (bot) {
+				apply({ ...bot, sectionId })
+			}
+		},
+
+		clearSection: (sectionId: string) => {
+			set({
+				rosters: withRoster(
+					state.spaceId,
+					state.bots.map((bot) =>
+						bot.sectionId === sectionId ? { ...bot, sectionId: null } : bot,
+					),
+				),
+			})
+		},
 
 		askToDelete: (id: string) =>
 			set({ selectedBotId: id, isEditing: true, isShowingDanger: true }),

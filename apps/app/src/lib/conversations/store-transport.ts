@@ -16,6 +16,7 @@ import type {
 	NewTurn,
 	NewUserMessage,
 	RuntimeSession,
+	Section,
 	Space,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -44,6 +45,22 @@ export const conversationStore: TranscriptStore = {
 		invoke<Space>("space_update", { id, name, colour }),
 
 	deleteSpace: (id: string) => invoke<void>("space_delete", { id }),
+
+	sections: (spaceId: string) => invoke<Section[]>("section_list", { spaceId }),
+
+	createSection: (spaceId: string, name: string) =>
+		invoke<Section>("section_create", { spaceId, name }),
+
+	renameSection: (id: string, name: string) =>
+		invoke<Section>("section_rename", { id, name }),
+
+	reorderSections: (spaceId: string, ids: string[]) =>
+		invoke<void>("section_reorder", { spaceId, ids }),
+
+	deleteSection: (id: string) => invoke<void>("section_delete", { id }),
+
+	moveBotToSection: (botId: string, sectionId: string | null) =>
+		invoke<void>("bot_move_to_section", { botId, sectionId }),
 
 	bots: (spaceId?: string | null) =>
 		invoke<Bot[]>("conversation_bots", { spaceId: spaceId ?? null }),

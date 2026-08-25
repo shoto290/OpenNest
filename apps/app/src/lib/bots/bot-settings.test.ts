@@ -25,6 +25,7 @@ const bot = (overrides: Partial<Bot> = {}): Bot => {
 		id: "b-1",
 		createdAt: 1,
 		memory: "",
+		sectionId: null,
 		...overrides,
 	}
 	return { ...described, changesNothing: deniesChanges(described.deniedTools) }
