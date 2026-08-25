@@ -21,21 +21,9 @@ const MessageContext = createContext<MessageContextValue>({
 	from: "assistant",
 })
 
-type MotionOwnedProps =
-	| "onDrag"
-	| "onDragStart"
-	| "onDragEnd"
-	| "onAnimationStart"
-	| "onAnimationEnd"
-	| "onAnimationIteration"
-
 export interface MessageProps
-	extends Omit<
-		ComponentPropsWithRef<"article">,
-		"children" | MotionOwnedProps
-	> {
+	extends Omit<ComponentPropsWithRef<"article">, "children"> {
 	from: MessageFrom
-	animateIn?: boolean
 	children: ReactNode
 }
 
@@ -58,46 +46,16 @@ export interface MessageTypingProps extends ComponentPropsWithRef<"span"> {
 	label?: string
 }
 
-const MESSAGE_POP_UP = {
-	type: "spring",
-	stiffness: 480,
-	damping: 32,
-	mass: 0.62,
-} as const
-
-export function Message({
-	from,
-	animateIn = false,
-	children,
-	className,
-	style,
-	...props
-}: MessageProps) {
+export function Message({ from, children, className, ...props }: MessageProps) {
 	const { t } = useTranslation("chat")
-	const reduce = useReducedMotion() ?? false
-	const entrance = animateIn && !reduce
 
 	return (
 		<MessageSideContext.Provider value={from === "user" ? "end" : "start"}>
 			<MessageContext.Provider value={{ from }}>
-				<motion.article
+				<article
 					data-slot="message"
 					data-from={from}
 					aria-label={props["aria-label"] ?? t(`transcript.message.${from}`)}
-					initial={
-						entrance ? { transform: "translateY(8px) scale(0.95)" } : false
-					}
-					animate={
-						entrance ? { transform: "translateY(0px) scale(1)" } : undefined
-					}
-					exit={
-						reduce ? undefined : { transform: "translateY(-3px) scale(0.99)" }
-					}
-					transition={MESSAGE_POP_UP}
-					style={{
-						transformOrigin: from === "user" ? "100% 100%" : "0% 100%",
-						...style,
-					}}
 					className={cn(
 						"group/message flex w-full items-start gap-2",
 						from === "user" ? "flex-row-reverse" : "flex-row",
@@ -106,7 +64,7 @@ export function Message({
 					{...props}
 				>
 					{children}
-				</motion.article>
+				</article>
 			</MessageContext.Provider>
 		</MessageSideContext.Provider>
 	)

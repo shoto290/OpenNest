@@ -60,12 +60,10 @@ const meta = preview.meta({
 	args: {
 		variant: "soft",
 		align: "start",
-		animateIn: false,
 	},
 	argTypes: {
 		variant: { control: "select", options: MESSAGE_BUBBLE_VARIANTS },
 		align: { control: "inline-radio", options: ["start", "end"] },
-		animateIn: { control: "boolean" },
 	},
 	render: (args) => (
 		<MessageBubbleGroup className={THREAD_WIDTH}>
@@ -194,7 +192,7 @@ export const Streaming = meta.story({
 		docs: {
 			description: {
 				story:
-					"Tokens are landing: a partial sentence cut mid-word with the dots trailing it inline. Check that the indicator sits on the text baseline and that the growing surface animates its own size rather than popping — this is the state that exercises the bubble's layout spring. Pick `Loading` when nothing has arrived yet.",
+					"Tokens are landing: a partial sentence cut mid-word with the dots trailing it inline. Check that the indicator sits on the text baseline and that the surface takes each new size straight away, without animating. Pick `Loading` when nothing has arrived yet.",
 			},
 		},
 	},

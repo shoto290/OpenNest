@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next"
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Icons } from "@workspace/ui/components/icons"
 import { MARKDOWN_PROSE_CLASS } from "@workspace/ui/components/markdown/prose"
-import { SPRING_LAYOUT, SPRING_SWAP } from "@workspace/ui/lib/ease"
+import { SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 export type MessageBubbleVariant =
@@ -31,31 +31,12 @@ export type MessageBubbleVariant =
 	| "danger"
 export type MessageBubbleAlign = "start" | "end"
 
-interface MessageBubbleContextValue {
-	align?: MessageBubbleAlign
-	animateIn: boolean
-	variant: MessageBubbleVariant
-}
-
-const MessageBubbleContext = createContext<MessageBubbleContextValue>({
-	animateIn: true,
-	variant: "soft",
-})
-const MessageBubbleLayoutContext = createContext<() => void>(() => {})
-
-type MotionOwnedProps =
-	| "onDrag"
-	| "onDragStart"
-	| "onDragEnd"
-	| "onAnimationStart"
-	| "onAnimationEnd"
-	| "onAnimationIteration"
+const MessageBubbleVariantContext = createContext<MessageBubbleVariant>("soft")
 
 export interface MessageBubbleProps
-	extends Omit<ComponentPropsWithRef<"div">, "children" | MotionOwnedProps> {
+	extends Omit<ComponentPropsWithRef<"div">, "children"> {
 	variant?: MessageBubbleVariant
 	align?: MessageBubbleAlign
-	animateIn?: boolean
 	children?: ReactNode
 }
 
@@ -81,13 +62,6 @@ export interface MessageBubbleCollapsibleProps
 	children?: ReactNode
 }
 
-const BUBBLE_POP = {
-	type: "spring",
-	stiffness: 520,
-	damping: 27,
-	mass: 0.52,
-} as const
-
 function isCapped(variant: MessageBubbleVariant) {
 	return variant !== "ghost" && variant !== "bare"
 }
@@ -95,26 +69,19 @@ function isCapped(variant: MessageBubbleVariant) {
 export function MessageBubble({
 	variant = "soft",
 	align,
-	animateIn = false,
 	className,
 	children,
 	...props
 }: MessageBubbleProps) {
-	const reduce = useReducedMotion() ?? false
 	const messageSide = useContext(MessageSideContext)
 	const resolvedAlign = align ?? messageSide ?? "start"
 
 	return (
-		<MessageBubbleContext.Provider
-			value={{ align: resolvedAlign, animateIn, variant }}
-		>
-			<motion.div
+		<MessageBubbleVariantContext.Provider value={variant}>
+			<div
 				data-slot="message-bubble"
 				data-align={resolvedAlign}
 				data-variant={variant}
-				initial={false}
-				exit={reduce ? undefined : { y: -3, scale: 0.99 }}
-				transition={SPRING_LAYOUT}
 				className={cn(
 					"group/bubble flex w-full flex-col",
 					isCapped(variant) && "max-w-[75%]",
@@ -124,8 +91,8 @@ export function MessageBubble({
 				{...props}
 			>
 				{children}
-			</motion.div>
-		</MessageBubbleContext.Provider>
+			</div>
+		</MessageBubbleVariantContext.Provider>
 	)
 }
 
@@ -145,13 +112,9 @@ function bubbleContentClass(
 	)
 }
 
-function bubbleSurfaceClass(
-	variant: MessageBubbleVariant,
-	align: MessageBubbleAlign,
-) {
+function bubbleSurfaceClass(variant: MessageBubbleVariant) {
 	return cn(
 		"pointer-events-none absolute inset-0 -z-10 rounded-[inherit]",
-		align === "end" ? "origin-bottom-right" : "origin-bottom-left",
 		variant === "solid" && "bg-primary",
 		variant === "soft" && "bg-muted",
 		variant === "tint" && "bg-primary/10",
@@ -167,40 +130,16 @@ export function MessageBubbleContent({
 	ref,
 	...props
 }: MessageBubbleContentProps) {
-	const reduce = useReducedMotion() ?? false
-	const {
-		align = "start",
-		animateIn,
-		variant,
-	} = useContext(MessageBubbleContext)
-	const [layoutVersion, setLayoutVersion] = useState(0)
-	const notifyLayout = useCallback(
-		() => setLayoutVersion((version) => version + 1),
-		[],
-	)
+	const variant = useContext(MessageBubbleVariantContext)
 	const interactive = render?.type === "button" || render?.type === "a"
 	const filled = variant !== "ghost" && variant !== "bare"
 	const classes = cn(bubbleContentClass(variant, interactive), className)
 	const composedChildren = (
 		<>
 			{filled ? (
-				<motion.span
-					aria-hidden="true"
-					layout={reduce ? false : "size"}
-					layoutDependency={layoutVersion}
-					initial={animateIn && !reduce ? { scale: 0.92 } : false}
-					animate={{ scale: 1 }}
-					transition={
-						reduce
-							? { duration: 0 }
-							: { scale: BUBBLE_POP, layout: SPRING_LAYOUT }
-					}
-					className={bubbleSurfaceClass(variant, align)}
-				/>
+				<span aria-hidden="true" className={bubbleSurfaceClass(variant)} />
 			) : null}
-			<MessageBubbleLayoutContext.Provider value={notifyLayout}>
-				<div className="relative">{children}</div>
-			</MessageBubbleLayoutContext.Provider>
+			<div className="relative">{children}</div>
 		</>
 	)
 
@@ -272,7 +211,6 @@ export function MessageBubbleCollapsible({
 	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const contentId = useId()
-	const notifyLayout = useContext(MessageBubbleLayoutContext)
 	const [internalOpen, setInternalOpen] = useState(defaultOpen)
 	const currentOpen = open ?? internalOpen
 	const triggerLabel = currentOpen
@@ -281,11 +219,10 @@ export function MessageBubbleCollapsible({
 
 	const setOpen = useCallback(
 		(next: boolean) => {
-			notifyLayout()
 			if (open === undefined) setInternalOpen(next)
 			onOpenChange?.(next)
 		},
-		[notifyLayout, onOpenChange, open],
+		[onOpenChange, open],
 	)
 
 	return (
