@@ -7,7 +7,6 @@ import {
 	isValidElement,
 	type ReactElement,
 	type ReactNode,
-	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -297,7 +296,6 @@ function UserTurn({
 	return (
 		<Message
 			from="user"
-			animateIn
 			{...anchor}
 			className={cn(messageId && HIGHLIGHT, className)}
 		>
@@ -361,14 +359,12 @@ function AssistantTurn({
 	const markId = carriesMark ? transcriptMarkId : undefined
 	const footerKey = TURN_FOOTER_KEY[state]
 	const footer = footerKey ? t(footerKey) : undefined
-	const [receivesMark] = useState(Boolean(avatar && markId))
 	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 
 	return (
 		<Message
 			from="assistant"
-			animateIn={!receivesMark}
 			{...anchor}
 			className={cn(messageId && HIGHLIGHT, className)}
 		>
@@ -385,7 +381,6 @@ function AssistantTurn({
 				</span>
 				<MessageBubble
 					variant={bare ? "bare" : "soft"}
-					animateIn={receivesMark}
 					className="col-start-2 row-start-1 min-w-0"
 				>
 					<MessageActions

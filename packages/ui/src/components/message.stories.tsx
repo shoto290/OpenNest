@@ -70,7 +70,6 @@ const meta = preview.meta({
 	},
 	argTypes: {
 		from: { control: "inline-radio", options: MESSAGE_FROM },
-		animateIn: { control: "boolean" },
 		children: { control: "text" },
 	},
 	render: ({ children, ...args }) => (
