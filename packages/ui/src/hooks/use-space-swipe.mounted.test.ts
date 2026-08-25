@@ -113,6 +113,34 @@ describe("useSpaceSwipe mounted", () => {
 		expect(onSettle).toHaveBeenCalledTimes(2)
 	})
 
+	it("hears the swipe that follows a flick instead of taking it for momentum", () => {
+		const node = listAreaOf()
+		const onSettle = vi.fn()
+		mountSwipe(node, onSettle)
+
+		swipe(node, PANEL_WIDTH)
+		for (let tick = 0; tick < MOMENTUM_TICKS; tick += 1) swipe(node, 80)
+		swipe(node, 1)
+		swipe(node, PANEL_WIDTH)
+
+		expect(onSettle).toHaveBeenCalledTimes(2)
+		expect(onSettle).toHaveBeenLastCalledWith(2)
+	})
+
+	it("hears a swipe back the other way while the flick is still coasting", () => {
+		const node = listAreaOf()
+		const onSettle = vi.fn()
+		mountSwipe(node, onSettle)
+
+		swipe(node, PANEL_WIDTH)
+		for (let tick = 0; tick < MOMENTUM_TICKS; tick += 1) swipe(node, 80)
+		swipe(node, -80)
+		swipe(node, -PANEL_WIDTH)
+
+		expect(onSettle).toHaveBeenCalledTimes(2)
+		expect(onSettle).toHaveBeenLastCalledWith(0)
+	})
+
 	it("holds that latch up for as long as the momentum keeps sending events", () => {
 		const node = listAreaOf()
 		const onSettle = vi.fn()

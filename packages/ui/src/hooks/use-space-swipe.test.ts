@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	hasStoppedCoasting,
 	isHorizontalSwipe,
 	type SpaceDrag,
 	spaceAtRest,
@@ -34,12 +35,12 @@ describe("spaceDragged", () => {
 		expect(dragBy(spaceAtRest(1), [20, 30, 40])).toEqual({
 			index: 1,
 			travel: 90,
-			isCommitted: false,
+			coasting: 0,
 		})
 		expect(dragBy(spaceAtRest(1), [-20, -30])).toEqual({
 			index: 1,
 			travel: -50,
-			isCommitted: false,
+			coasting: 0,
 		})
 	})
 
@@ -54,12 +55,12 @@ describe("spaceDragged", () => {
 		expect(dragBy(spaceAtRest(1), [100, 50])).toEqual({
 			index: 2,
 			travel: 0,
-			isCommitted: true,
+			coasting: 1,
 		})
 		expect(dragBy(spaceAtRest(1), [-100, -50])).toEqual({
 			index: 0,
 			travel: 0,
-			isCommitted: true,
+			coasting: -1,
 		})
 	})
 
@@ -67,7 +68,7 @@ describe("spaceDragged", () => {
 		expect(dragBy(spaceAtRest(1), [100, 49])).toEqual({
 			index: 1,
 			travel: 149,
-			isCommitted: false,
+			coasting: 0,
 		})
 	})
 
@@ -75,7 +76,7 @@ describe("spaceDragged", () => {
 		expect(dragBy(spaceAtRest(0), [2000])).toEqual({
 			index: 1,
 			travel: 0,
-			isCommitted: true,
+			coasting: 1,
 		})
 	})
 
@@ -87,6 +88,24 @@ describe("spaceDragged", () => {
 				drag: spaceAtRest(1),
 				width: 0,
 			}),
-		).toEqual({ index: 1, travel: 400, isCommitted: false })
+		).toEqual({ index: 1, travel: 400, coasting: 0 })
+	})
+})
+
+describe("hasStoppedCoasting", () => {
+	const coasting: SpaceDrag = { index: 2, travel: 0, coasting: 1 }
+
+	it("reads the momentum of the flick that committed as still running", () => {
+		expect(hasStoppedCoasting({ deltaX: 40, drag: coasting })).toBe(false)
+		expect(hasStoppedCoasting({ deltaX: 2, drag: coasting })).toBe(false)
+	})
+
+	it("reads a lull as the end of it, since momentum only ever decays", () => {
+		expect(hasStoppedCoasting({ deltaX: 1.5, drag: coasting })).toBe(true)
+		expect(hasStoppedCoasting({ deltaX: 0, drag: coasting })).toBe(true)
+	})
+
+	it("reads a push the other way as the end of it, since momentum never turns", () => {
+		expect(hasStoppedCoasting({ deltaX: -40, drag: coasting })).toBe(true)
 	})
 })

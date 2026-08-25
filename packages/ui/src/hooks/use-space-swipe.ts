@@ -10,17 +10,27 @@ type SwipeDelta = {
 export const isHorizontalSwipe = ({ deltaX, deltaY }: SwipeDelta) =>
 	Math.abs(deltaX) > Math.abs(deltaY)
 
+const COASTING_FLOOR = 2
+
 export type SpaceDrag = {
 	index: number
 	travel: number
-	isCommitted: boolean
+	coasting: number
 }
 
 export const spaceAtRest = (index: number): SpaceDrag => ({
 	index,
 	travel: 0,
-	isCommitted: false,
+	coasting: 0,
 })
+
+type SpaceCoasting = {
+	drag: SpaceDrag
+	deltaX: number
+}
+
+export const hasStoppedCoasting = ({ drag, deltaX }: SpaceCoasting) =>
+	Math.abs(deltaX) < COASTING_FLOOR || Math.sign(deltaX) !== drag.coasting
 
 type SpaceDragged = {
 	drag: SpaceDrag
@@ -44,7 +54,7 @@ export const spaceDragged = ({
 	const isHeldAtStart = step < 0 && drag.index <= 0
 	if (isHeldAtEnd || isHeldAtStart) return { ...drag, travel: 0 }
 	if (hasCrossedHalf(travel, width))
-		return { index: drag.index + step, travel: 0, isCommitted: true }
+		return { index: drag.index + step, travel: 0, coasting: step }
 	return { ...drag, travel }
 }
 
@@ -55,6 +65,58 @@ type SpaceSwipe = {
 	isEnabled: boolean
 	onTravel: (travel: number) => void
 	onSettle: (index: number) => void
+}
+
+type SpaceGesture = {
+	node: HTMLElement
+	count: number
+	indexInView: () => number
+	onTravel: (travel: number) => void
+	onSettle: (index: number) => void
+}
+
+const readSpaceGesture = ({
+	node,
+	count,
+	indexInView,
+	onTravel,
+	onSettle,
+}: SpaceGesture) => {
+	let drag = spaceAtRest(indexInView())
+	let quiet: ReturnType<typeof setTimeout> | null = null
+
+	const goQuiet = () => {
+		quiet = null
+		const released = drag
+		drag = spaceAtRest(indexInView())
+		if (released.coasting === 0 && released.travel !== 0)
+			onSettle(released.index)
+	}
+
+	const coast = (deltaX: number) => {
+		if (hasStoppedCoasting({ deltaX, drag })) drag = spaceAtRest(indexInView())
+	}
+
+	const gather = (deltaX: number) => {
+		if (drag.travel === 0) drag = spaceAtRest(indexInView())
+		drag = spaceDragged({ count, deltaX, drag, width: node.clientWidth })
+		if (drag.coasting === 0) onTravel(drag.travel)
+		else onSettle(drag.index)
+	}
+
+	const onWheel = (event: WheelEvent) => {
+		if (quiet) clearTimeout(quiet)
+		quiet = setTimeout(goQuiet, SWIPE_SETTLE)
+
+		if (drag.coasting !== 0) coast(event.deltaX)
+		else if (isHorizontalSwipe(event)) gather(event.deltaX)
+	}
+
+	node.addEventListener("wheel", onWheel, { passive: true })
+	return () => {
+		node.removeEventListener("wheel", onWheel)
+		if (quiet) clearTimeout(quiet)
+	}
 }
 
 export const useSpaceSwipe = ({
@@ -76,38 +138,12 @@ export const useSpaceSwipe = ({
 		const node = target.current
 		if (!isEnabled || !node) return
 
-		let drag = spaceAtRest(inView.current)
-		let quiet: ReturnType<typeof setTimeout> | null = null
-
-		const goQuiet = () => {
-			quiet = null
-			const released = drag
-			drag = spaceAtRest(inView.current)
-			if (released.isCommitted || released.travel === 0) return
-			settled.current(released.index)
-		}
-
-		const onWheel = (event: WheelEvent) => {
-			if (quiet) clearTimeout(quiet)
-			quiet = setTimeout(goQuiet, SWIPE_SETTLE)
-
-			if (drag.isCommitted || !isHorizontalSwipe(event)) return
-			if (drag.travel === 0) drag = spaceAtRest(inView.current)
-
-			drag = spaceDragged({
-				count,
-				deltaX: event.deltaX,
-				drag,
-				width: node.clientWidth,
-			})
-			if (drag.isCommitted) settled.current(drag.index)
-			else travelled.current(drag.travel)
-		}
-
-		node.addEventListener("wheel", onWheel, { passive: true })
-		return () => {
-			node.removeEventListener("wheel", onWheel)
-			if (quiet) clearTimeout(quiet)
-		}
+		return readSpaceGesture({
+			count,
+			indexInView: () => inView.current,
+			node,
+			onSettle: (settledOn) => settled.current(settledOn),
+			onTravel: (travel) => travelled.current(travel),
+		})
 	}, [target, isEnabled, count])
 }
