@@ -14,6 +14,9 @@ import {
 	ContextMenuRadioItem,
 	ContextMenuSeparator,
 	ContextMenuShortcut,
+	ContextMenuSub,
+	ContextMenuSubContent,
+	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
 
@@ -29,10 +32,57 @@ const settledMenu = async () => {
 	return menu
 }
 
-const openMenuOn = async (target: HTMLElement) => {
-	fireEvent.contextMenu(target, { clientX: 180, clientY: 140 })
+const openMenuOn = async (target: HTMLElement, at = { x: 180, y: 140 }) => {
+	fireEvent.contextMenu(target, { clientX: at.x, clientY: at.y })
 	return settledMenu()
 }
+
+const SUBMENU_NAME = "Move to"
+
+const settledSubmenu = async () =>
+	settled(await screen.findByRole("menu", { name: SUBMENU_NAME }))
+
+const branchTrigger = () => screen.getByRole("menuitem", { name: SUBMENU_NAME })
+
+const MoveToSubmenu = () => (
+	<ContextMenuSub>
+		<ContextMenuSubTrigger>
+			<Icons.Folder className="h-4 w-4" />
+			{SUBMENU_NAME}
+		</ContextMenuSubTrigger>
+		<ContextMenuSubContent>
+			<ContextMenuItem>Inbox</ContextMenuItem>
+			<ContextMenuItem>Later</ContextMenuItem>
+			<ContextMenuItem>Archive</ContextMenuItem>
+		</ContextMenuSubContent>
+	</ContextMenuSub>
+)
+
+const BranchMenu = () => (
+	<ContextMenuContent ariaLabel="Transcript actions">
+		<ContextMenuItem>
+			<Icons.Copy className="h-4 w-4" />
+			Copy transcript
+		</ContextMenuItem>
+		<MoveToSubmenu />
+		<ContextMenuSeparator />
+		<ContextMenuItem tone="destructive">
+			<Icons.Delete className="h-4 w-4" />
+			Delete
+		</ContextMenuItem>
+	</ContextMenuContent>
+)
+
+const BranchCard = ({ label }: { label: string }) => (
+	<ContextMenu>
+		<ContextMenuTrigger>
+			<button type="button" className={SURFACE_CLASS}>
+				{label}
+			</button>
+		</ContextMenuTrigger>
+		<BranchMenu />
+	</ContextMenu>
+)
 
 const FileMenu = () => (
 	<ContextMenuContent ariaLabel="Transcript actions">
@@ -125,7 +175,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The menu a surface offers when it is asked what it can do. It morphs open from the exact point the request came from — the cursor on a right-click, the finger after a 520ms long press, the trigger's own edge when it is opened from the keyboard — then clamps itself inside the viewport so it never opens off screen. It is portalled to `document.body` and `inert` while closed, so nothing inside it is reachable until it is open. Keyboard is first class: the ContextMenu key or Shift+F10 opens it, arrows walk it, typing jumps by label, Escape closes it and returns focus. Three item kinds compose inside it — plain, checkbox and radio — alongside `ContextMenuLabel`, `ContextMenuSeparator` and `ContextMenuShortcut`, which is decorative and hidden from readers. The trigger clones its single child and hands it `aria-haspopup` and `aria-expanded`, so that child must be a real element with a widget role — a `<button>`, not a `<div>`, which is also the only way the keyboard path exists at all. A passage of a page that is not a control — a chat bubble, say — takes `announcesPopup={false}` instead: the right-click still opens the menu, and the region is left without the popup ARIA no reader could act on there. Reach for it for actions on a specific object; a menu that is the only way to reach an action is a menu most readers will never find.",
+					"The menu a surface offers when it is asked what it can do. It morphs open from the exact point the request came from — the cursor on a right-click, the finger after a 520ms long press, the trigger's own edge when it is opened from the keyboard — then clamps itself inside the viewport so it never opens off screen. It is portalled to `document.body` and `inert` while closed, so nothing inside it is reachable until it is open. Keyboard is first class: the ContextMenu key or Shift+F10 opens it, arrows walk it, typing jumps by label, Escape closes it and returns focus. Three item kinds compose inside it — plain, checkbox and radio — alongside `ContextMenuLabel`, `ContextMenuSeparator` and `ContextMenuShortcut`, which is decorative and hidden from readers. A row that carries a menu of its own is wrapped in `ContextMenuSub`, whose `ContextMenuSubTrigger` opens `ContextMenuSubContent` beside it on hover and on the arrow that points at it, flipping to the other side when the edge of the screen leaves it no room. The trigger clones its single child and hands it `aria-haspopup` and `aria-expanded`, so that child must be a real element with a widget role — a `<button>`, not a `<div>`, which is also the only way the keyboard path exists at all. A passage of a page that is not a control — a chat bubble, say — takes `announcesPopup={false}` instead: the right-click still opens the menu, and the region is left without the popup ARIA no reader could act on there. Reach for it for actions on a specific object; a menu that is the only way to reach an action is a menu most readers will never find.",
 			},
 		},
 	},
@@ -429,5 +479,106 @@ export const SeparatorAlignment = meta.story({
 		await expect(separatorStyles.backgroundColor).toBe(
 			menuStyles.borderTopColor,
 		)
+	},
+})
+
+export const WithSubmenu = meta.story({
+	render: () => <BranchCard label="Right-click this card" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A branch item that carries a menu of its own. Resting the pointer on it opens the submenu beside it — no click — and the branch keeps the highlight of an open row while the pointer is away in the panel. Travelling from the branch across to the submenu never closes it: the submenu only gives way once the pointer comes to rest on another row, which is what tells us the reader changed their mind. Choosing inside the submenu closes the whole menu, branch and all, because the action is done. Check the chevron sits at the end of the row and is hidden from readers — the item already announces that it opens a menu.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await openMenuOn(canvas.getByText("Right-click this card"))
+
+		const branch = branchTrigger()
+		await expect(branch).toHaveAttribute("aria-haspopup", "menu")
+		await expect(branch).toHaveAttribute("aria-expanded", "false")
+
+		await userEvent.hover(branch)
+		const panel = (await settledSubmenu()).getBoundingClientRect()
+		await expect(branch).toHaveAttribute("aria-expanded", "true")
+		await expect(branch).toHaveAttribute("data-state", "open")
+
+		await expect(panel.left).toBeGreaterThanOrEqual(
+			branch.getBoundingClientRect().right,
+		)
+
+		await userEvent.hover(screen.getByRole("menuitem", { name: /Copy/ }))
+		await waitFor(() =>
+			expect(screen.queryByRole("menu", { name: SUBMENU_NAME })).toBeNull(),
+		)
+
+		await userEvent.hover(branchTrigger())
+		await settledSubmenu()
+		await userEvent.click(screen.getByRole("menuitem", { name: "Archive" }))
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+	},
+})
+
+export const SubmenuByKeyboard = meta.story({
+	render: () => <BranchCard label="Focus me, then press Shift+F10" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same branch reached without a pointer. ArrowRight — the arrow pointing at the submenu — opens it and hands focus to its first row; ArrowLeft closes it and puts focus back on the branch, so the reader never loses their place in the parent list. Enter and Space open it too. Check Escape inside the submenu closes only that submenu, and that typing while it is open matches its rows rather than the parent's.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const trigger = canvas.getByRole("button", {
+			name: /Focus me, then press Shift\+F10/,
+		})
+
+		await userEvent.click(trigger)
+		await userEvent.keyboard("{Shift>}{F10}{/Shift}")
+		await settledMenu()
+
+		await userEvent.keyboard("{ArrowDown}")
+		await waitFor(() => expect(branchTrigger()).toHaveFocus())
+
+		await userEvent.keyboard("{ArrowRight}")
+		await settledSubmenu()
+		await waitFor(() =>
+			expect(screen.getByRole("menuitem", { name: "Inbox" })).toHaveFocus(),
+		)
+
+		await userEvent.keyboard("{ArrowLeft}")
+		await waitFor(() =>
+			expect(screen.queryByRole("menu", { name: SUBMENU_NAME })).toBeNull(),
+		)
+		await expect(branchTrigger()).toHaveFocus()
+	},
+})
+
+export const SubmenuWithoutRoom = meta.story({
+	render: () => <BranchCard label="Right-click this card" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The menu opened hard against the right edge, where the submenu has no room on the side it prefers. It flips to the other side of the branch rather than hanging off screen or squeezing itself narrow. Check it stays whole — both edges inside the viewport padding — and that the keyboard still reads ArrowRight as open and ArrowLeft as close whichever side it landed on.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await openMenuOn(canvas.getByText("Right-click this card"), {
+			x: window.innerWidth - 4,
+			y: 120,
+		})
+
+		const branch = branchTrigger()
+		await userEvent.hover(branch)
+		const panel = (await settledSubmenu()).getBoundingClientRect()
+		await expect(panel.right).toBeLessThanOrEqual(
+			branch.getBoundingClientRect().left,
+		)
+		await expect(panel.left).toBeGreaterThanOrEqual(0)
+		await expect(panel.right).toBeLessThanOrEqual(window.innerWidth)
 	},
 })

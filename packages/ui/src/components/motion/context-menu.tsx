@@ -33,12 +33,23 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type OpenModality = "pointer" | "keyboard" | "touch"
 type MenuPoint = { x: number; y: number }
+type SubSide = "start" | "end"
 
 const VIEWPORT_PADDING = 8
 const LONG_PRESS_DELAY = 520
 const LONG_PRESS_TOLERANCE = 10
 const MORPH_DURATION = 0.3
+const SUB_DURATION = 0.14
 const PRESS_GAP = 6
+const PANEL_INSET = 6
+const SUB_REST_DELAY = 150
+const TYPEAHEAD_RESET = 500
+
+const PANEL_CLASS =
+	"min-w-56 overflow-hidden rounded-xl border border-border bg-card p-1.5 text-foreground outline-none"
+const SHADOW_CLASS = "[filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.2))]"
+const SUB_PANEL_SELECTOR = '[data-context-menu-panel="sub"]'
+const BRANCH_OPEN_KEYS = new Set(["ArrowRight", "Enter", " "])
 
 type TriggerElementProps = React.HTMLAttributes<HTMLElement> & {
 	ref?: Ref<HTMLElement>
@@ -56,10 +67,17 @@ interface ContextMenuContextValue {
 	contentRef: React.MutableRefObject<HTMLDivElement | null>
 	activeId: string | null
 	setActiveId: (id: string | null) => void
+	openSubId: string | null
+	openSub: (id: string) => void
+	keepSub: () => void
+	closeSubOnRest: () => void
+	closeSub: () => void
 	reduce: boolean
 }
 
 const ContextMenuContext = createContext<ContextMenuContextValue | null>(null)
+
+const ContextMenuPanelContext = createContext<"root" | "sub">("root")
 
 function useContextMenuContext(component: string) {
 	const context = useContext(ContextMenuContext)
@@ -83,6 +101,106 @@ function getEnabledItems(container: HTMLElement | null) {
 		container.querySelectorAll<HTMLElement>(
 			'[data-context-menu-item="true"]:not([data-disabled="true"])',
 		),
+	)
+}
+
+function useMenuNavigation(
+	containerRef: React.MutableRefObject<HTMLDivElement | null>,
+) {
+	const typeahead = useRef("")
+	const typeaheadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+	useEffect(
+		() => () => {
+			if (typeaheadTimer.current) clearTimeout(typeaheadTimer.current)
+		},
+		[],
+	)
+
+	return (event: ReactKeyboardEvent<HTMLElement>) => {
+		const items = getEnabledItems(containerRef.current)
+
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+			event.preventDefault()
+			if (items.length === 0) return true
+			const direction = event.key === "ArrowDown" ? 1 : -1
+			const current = items.indexOf(document.activeElement as HTMLElement)
+			const next =
+				current < 0 ? 0 : (current + direction + items.length) % items.length
+			items[next]?.focus()
+			return true
+		}
+		if (event.key === "Home" || event.key === "End") {
+			event.preventDefault()
+			items[event.key === "Home" ? 0 : items.length - 1]?.focus()
+			return true
+		}
+		if (
+			event.key.length === 1 &&
+			!event.ctrlKey &&
+			!event.metaKey &&
+			!event.altKey
+		) {
+			typeahead.current += event.key.toLocaleLowerCase()
+			if (typeaheadTimer.current) clearTimeout(typeaheadTimer.current)
+			typeaheadTimer.current = setTimeout(() => {
+				typeahead.current = ""
+			}, TYPEAHEAD_RESET)
+			const match = items.find((item) =>
+				(item.dataset.label ?? item.textContent ?? "")
+					.trim()
+					.toLocaleLowerCase()
+					.startsWith(typeahead.current),
+			)
+			match?.focus()
+			return true
+		}
+		return false
+	}
+}
+
+type MenuPortalProps = {
+	open: boolean
+	position: MenuPoint
+	closeDuration: number
+	panel?: "sub"
+	children: ReactNode
+}
+
+function MenuPortal({
+	open,
+	position,
+	closeDuration,
+	panel,
+	children,
+}: MenuPortalProps) {
+	const [mounted, setMounted] = useState(false)
+
+	useEffect(() => setMounted(true), [])
+
+	if (!mounted) return null
+
+	return createPortal(
+		<div
+			data-context-menu-portal=""
+			data-context-menu-panel={panel}
+			aria-hidden={!open}
+			inert={!open}
+			style={{
+				left: position.x,
+				top: position.y,
+				transitionDuration: open ? "0s" : `${closeDuration}s`,
+			}}
+			className={cn(
+				"fixed transition-[visibility]",
+				panel === "sub" ? "z-[101]" : "z-[100]",
+				SHADOW_CLASS,
+				open ? "pointer-events-auto visible" : "pointer-events-none invisible",
+			)}
+		>
+			{children}
+		</div>,
+		document.body,
 	)
 }
 
@@ -121,20 +239,54 @@ export function ContextMenu({
 	const [modality, setModality] = useState<OpenModality>("pointer")
 	const [invocation, setInvocation] = useState(0)
 	const [activeId, setActiveId] = useState<string | null>(null)
+	const [openSubId, setOpenSubId] = useState<string | null>(null)
 	const controlled = controlledOpen !== undefined
 	const open = controlled ? controlledOpen : internalOpen
 	const triggerRef = useRef<HTMLElement | null>(null)
 	const contentRef = useRef<HTMLDivElement | null>(null)
+	const subRestTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const menuId = useId()
 	const reduce = useReducedMotion() ?? false
+
+	const keepSub = useCallback(() => {
+		if (!subRestTimer.current) return
+		clearTimeout(subRestTimer.current)
+		subRestTimer.current = null
+	}, [])
+
+	const openSub = useCallback(
+		(id: string) => {
+			keepSub()
+			setOpenSubId((current) => (current === id ? current : id))
+		},
+		[keepSub],
+	)
+
+	const closeSub = useCallback(() => {
+		keepSub()
+		setOpenSubId(null)
+	}, [keepSub])
+
+	const closeSubOnRest = useCallback(() => {
+		if (!openSubId) return
+		keepSub()
+		subRestTimer.current = setTimeout(() => {
+			subRestTimer.current = null
+			setOpenSubId(null)
+		}, SUB_REST_DELAY)
+	}, [keepSub, openSubId])
+
+	useEffect(() => keepSub, [keepSub])
 
 	const setOpen = useCallback(
 		(next: boolean) => {
 			if (!controlled) setInternalOpen(next)
 			onOpenChange?.(next)
-			if (!next) setActiveId(null)
+			if (next) return
+			setActiveId(null)
+			closeSub()
 		},
-		[controlled, onOpenChange],
+		[controlled, onOpenChange, closeSub],
 	)
 
 	const openAt = useCallback(
@@ -152,7 +304,11 @@ export function ContextMenu({
 		if (!open) return
 
 		const onPointerDown = (event: PointerEvent) => {
-			if (!contentRef.current?.contains(event.target as Node)) setOpen(false)
+			const target = event.target as Node
+			if (contentRef.current?.contains(target)) return
+			if (target instanceof Element && target.closest(SUB_PANEL_SELECTOR))
+				return
+			setOpen(false)
 		}
 		const onWindowChange = () => setOpen(false)
 
@@ -179,6 +335,11 @@ export function ContextMenu({
 			contentRef,
 			activeId,
 			setActiveId,
+			openSubId,
+			openSub,
+			keepSub,
+			closeSubOnRest,
+			closeSub,
 			reduce,
 		}),
 		[
@@ -190,6 +351,11 @@ export function ContextMenu({
 			invocation,
 			menuId,
 			activeId,
+			openSubId,
+			openSub,
+			keepSub,
+			closeSubOnRest,
+			closeSub,
 			reduce,
 		],
 	)
@@ -376,15 +542,11 @@ export function ContextMenuContent({
 }: ContextMenuContentProps) {
 	const { t } = useTranslation("common")
 	const context = useContextMenuContext("ContextMenuContent")
-	const [mounted, setMounted] = useState(false)
 	const [position, setPosition] = useState<MenuPoint>(context.point)
 	const [origin, setOrigin] = useState<MenuPoint>({ x: 0, y: 0 })
 	const [size, setSize] = useState({ width: 0, height: 0 })
 	const [morphReady, setMorphReady] = useState(false)
-	const typeahead = useRef("")
-	const typeaheadTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-	useEffect(() => setMounted(true), [])
+	const navigate = useMenuNavigation(context.contentRef)
 
 	useLayoutEffect(() => {
 		if (!context.open) {
@@ -450,22 +612,6 @@ export function ContextMenuContent({
 		return () => cancelAnimationFrame(frame)
 	}, [context.open, context.contentRef])
 
-	useEffect(
-		() => () => {
-			if (typeaheadTimer.current) clearTimeout(typeaheadTimer.current)
-		},
-		[],
-	)
-
-	const moveFocus = (direction: 1 | -1) => {
-		const items = getEnabledItems(context.contentRef.current)
-		if (items.length === 0) return
-		const current = items.indexOf(document.activeElement as HTMLElement)
-		const next =
-			current < 0 ? 0 : (current + direction + items.length) % items.length
-		items[next]?.focus()
-	}
-
 	const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Escape") {
 			event.preventDefault()
@@ -477,39 +623,8 @@ export function ContextMenuContent({
 			context.setOpen(false)
 			return
 		}
-		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-			event.preventDefault()
-			moveFocus(event.key === "ArrowDown" ? 1 : -1)
-			return
-		}
-		if (event.key === "Home" || event.key === "End") {
-			event.preventDefault()
-			const items = getEnabledItems(context.contentRef.current)
-			items[event.key === "Home" ? 0 : items.length - 1]?.focus()
-			return
-		}
-		if (
-			event.key.length === 1 &&
-			!event.ctrlKey &&
-			!event.metaKey &&
-			!event.altKey
-		) {
-			typeahead.current += event.key.toLocaleLowerCase()
-			if (typeaheadTimer.current) clearTimeout(typeaheadTimer.current)
-			typeaheadTimer.current = setTimeout(() => {
-				typeahead.current = ""
-			}, 500)
-			const match = getEnabledItems(context.contentRef.current).find((item) =>
-				(item.dataset.label ?? item.textContent ?? "")
-					.trim()
-					.toLocaleLowerCase()
-					.startsWith(typeahead.current),
-			)
-			match?.focus()
-		}
+		navigate(event)
 	}
-
-	if (!mounted) return null
 
 	const shown =
 		context.open &&
@@ -517,22 +632,11 @@ export function ContextMenuContent({
 	const clipHidden = collapsedClip(origin, size)
 	const clipShown = "inset(0px 0px 0px 0px round 12px)"
 
-	return createPortal(
-		<div
-			data-context-menu-portal=""
-			aria-hidden={!context.open}
-			inert={!context.open}
-			style={{
-				left: position.x,
-				top: position.y,
-				transitionDuration: context.open ? "0s" : `${MORPH_DURATION}s`,
-			}}
-			className={cn(
-				"fixed z-[100] transition-[visibility] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.2))]",
-				context.open
-					? "pointer-events-auto visible"
-					: "pointer-events-none invisible",
-			)}
+	return (
+		<MenuPortal
+			open={context.open}
+			position={position}
+			closeDuration={MORPH_DURATION}
 		>
 			<motion.div
 				ref={context.contentRef}
@@ -559,15 +663,11 @@ export function ContextMenuContent({
 				}
 				onKeyDown={onKeyDown}
 				onContextMenu={(event) => event.preventDefault()}
-				className={cn(
-					"min-w-56 overflow-hidden rounded-xl border border-border bg-card p-1.5 text-foreground outline-none",
-					className,
-				)}
+				className={cn(PANEL_CLASS, className)}
 			>
 				{children}
 			</motion.div>
-		</div>,
-		document.body,
+		</MenuPortal>
 	)
 }
 
@@ -584,6 +684,14 @@ export interface ContextMenuItemProps {
 	textValue?: string
 }
 
+type ItemBranch = {
+	id: string
+	contentId: string
+	open: boolean
+	reveal: () => void
+	revealWithFocus: () => void
+}
+
 function ContextMenuItemBase({
 	children,
 	onSelect,
@@ -595,34 +703,64 @@ function ContextMenuItemBase({
 	textValue,
 	role = "menuitem",
 	ariaChecked,
+	branch,
+	itemRef,
 }: ContextMenuItemProps & {
 	role?: "menuitem" | "menuitemcheckbox" | "menuitemradio"
 	ariaChecked?: boolean
+	branch?: ItemBranch
+	itemRef?: Ref<HTMLButtonElement>
 }) {
 	const context = useContextMenuContext("ContextMenuItem")
-	const id = useId()
+	const panel = useContext(ContextMenuPanelContext)
+	const ownId = useId()
+	const id = branch?.id ?? ownId
 	const active = context.activeId === id
 	const checkedProps =
 		role === "menuitem" ? {} : { "aria-checked": ariaChecked }
 
+	const onPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+		if (disabled || event.pointerType === "touch") return
+		event.currentTarget.focus()
+		if (branch) branch.reveal()
+		else if (panel === "sub") context.keepSub()
+		else context.closeSubOnRest()
+	}
+
+	const onBranchKeyDown =
+		branch &&
+		((event: ReactKeyboardEvent<HTMLButtonElement>) => {
+			if (!BRANCH_OPEN_KEYS.has(event.key)) return
+			event.preventDefault()
+			event.stopPropagation()
+			branch.revealWithFocus()
+		})
+
 	return (
 		<button
 			type="button"
+			ref={itemRef}
 			id={id}
 			role={role}
 			{...checkedProps}
+			aria-haspopup={branch ? "menu" : undefined}
+			aria-expanded={branch ? branch.open : undefined}
+			aria-controls={branch?.open ? branch.contentId : undefined}
 			disabled={disabled}
 			data-context-menu-item="true"
 			data-disabled={disabled ? "true" : undefined}
+			data-state={branch ? (branch.open ? "open" : "closed") : undefined}
 			data-label={textValue}
 			tabIndex={-1}
 			onFocus={() => context.setActiveId(id)}
-			onPointerMove={(event) => {
-				if (!disabled && event.pointerType !== "touch")
-					event.currentTarget.focus()
-			}}
+			onPointerMove={onPointerMove}
+			onKeyDown={onBranchKeyDown || undefined}
 			onClick={() => {
 				if (disabled) return
+				if (branch) {
+					branch.reveal()
+					return
+				}
 				onSelect?.()
 				if (closeOnSelect) context.setOpen(false)
 			}}
@@ -632,6 +770,7 @@ function ContextMenuItemBase({
 				"disabled:pointer-events-none disabled:opacity-40",
 				inset && "pl-8",
 				tone === "destructive" ? "text-destructive" : "text-foreground",
+				branch?.open && !active && "bg-foreground/[0.065]",
 				className,
 			)}
 		>
@@ -654,6 +793,217 @@ function ContextMenuItemBase({
 
 export function ContextMenuItem(props: ContextMenuItemProps) {
 	return <ContextMenuItemBase {...props} />
+}
+
+interface ContextMenuSubContextValue {
+	triggerId: string
+	contentId: string
+	open: boolean
+	triggerRef: React.MutableRefObject<HTMLButtonElement | null>
+	contentRef: React.MutableRefObject<HTMLDivElement | null>
+	reveal: () => void
+	revealWithFocus: () => void
+	close: () => void
+}
+
+const ContextMenuSubContext = createContext<ContextMenuSubContextValue | null>(
+	null,
+)
+
+function useContextMenuSubContext(component: string) {
+	const context = useContext(ContextMenuSubContext)
+	if (!context) {
+		throw new Error(`${component} must be used within <ContextMenuSub>`)
+	}
+	return context
+}
+
+export interface ContextMenuSubProps {
+	children: ReactNode
+}
+
+export function ContextMenuSub({ children }: ContextMenuSubProps) {
+	const context = useContextMenuContext("ContextMenuSub")
+	const triggerId = useId()
+	const contentId = useId()
+	const triggerRef = useRef<HTMLButtonElement | null>(null)
+	const contentRef = useRef<HTMLDivElement | null>(null)
+	const open = context.openSubId === triggerId
+	const { openSub, closeSub } = context
+
+	const reveal = useCallback(() => {
+		openSub(triggerId)
+	}, [openSub, triggerId])
+
+	const revealWithFocus = useCallback(() => {
+		reveal()
+		requestAnimationFrame(() =>
+			getEnabledItems(contentRef.current)[0]?.focus({ preventScroll: true }),
+		)
+	}, [reveal])
+
+	const close = useCallback(() => {
+		closeSub()
+		triggerRef.current?.focus({ preventScroll: true })
+	}, [closeSub])
+
+	const value = useMemo<ContextMenuSubContextValue>(
+		() => ({
+			triggerId,
+			contentId,
+			open,
+			triggerRef,
+			contentRef,
+			reveal,
+			revealWithFocus,
+			close,
+		}),
+		[triggerId, contentId, open, reveal, revealWithFocus, close],
+	)
+
+	return (
+		<ContextMenuSubContext.Provider value={value}>
+			{children}
+		</ContextMenuSubContext.Provider>
+	)
+}
+
+export type ContextMenuSubTriggerProps = Omit<
+	ContextMenuItemProps,
+	"onSelect" | "closeOnSelect"
+>
+
+export function ContextMenuSubTrigger({
+	children,
+	...props
+}: ContextMenuSubTriggerProps) {
+	const sub = useContextMenuSubContext("ContextMenuSubTrigger")
+
+	return (
+		<ContextMenuItemBase
+			{...props}
+			itemRef={sub.triggerRef}
+			branch={{
+				id: sub.triggerId,
+				contentId: sub.contentId,
+				open: sub.open,
+				reveal: sub.reveal,
+				revealWithFocus: sub.revealWithFocus,
+			}}
+		>
+			{children}
+			<Icons.Next
+				aria-hidden="true"
+				className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground"
+			/>
+		</ContextMenuItemBase>
+	)
+}
+
+export interface ContextMenuSubContentProps {
+	children: ReactNode
+	className?: string
+}
+
+export function ContextMenuSubContent({
+	children,
+	className,
+}: ContextMenuSubContentProps) {
+	const context = useContextMenuContext("ContextMenuSubContent")
+	const sub = useContextMenuSubContext("ContextMenuSubContent")
+	const [placement, setPlacement] = useState<MenuPoint & { side: SubSide }>({
+		x: 0,
+		y: 0,
+		side: "end",
+	})
+	const navigate = useMenuNavigation(sub.contentRef)
+
+	useLayoutEffect(() => {
+		if (!sub.open) return
+		const trigger = sub.triggerRef.current
+		const panel = sub.contentRef.current
+		const parent = context.contentRef.current
+		if (!trigger || !panel || !parent) return
+
+		const triggerBox = trigger.getBoundingClientRect()
+		const parentBox = parent.getBoundingClientRect()
+		const { offsetWidth, offsetHeight } = panel
+		const room =
+			window.innerWidth - parentBox.right + PANEL_INSET - VIEWPORT_PADDING
+		const side: SubSide = offsetWidth <= room ? "end" : "start"
+
+		setPlacement({
+			side,
+			x:
+				side === "end"
+					? parentBox.right - PANEL_INSET
+					: Math.max(
+							VIEWPORT_PADDING,
+							parentBox.left + PANEL_INSET - offsetWidth,
+						),
+			y: clamp(
+				triggerBox.top - PANEL_INSET,
+				VIEWPORT_PADDING,
+				Math.max(
+					VIEWPORT_PADDING,
+					window.innerHeight - offsetHeight - VIEWPORT_PADDING,
+				),
+			),
+		})
+	}, [sub.open, sub.triggerRef, sub.contentRef, context.contentRef])
+
+	useEffect(() => {
+		if (sub.open) return
+		if (!sub.contentRef.current?.contains(document.activeElement)) return
+		sub.triggerRef.current?.focus({ preventScroll: true })
+	}, [sub.open, sub.contentRef, sub.triggerRef])
+
+	const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (event.key === "Escape" || event.key === "ArrowLeft") {
+			event.preventDefault()
+			event.stopPropagation()
+			sub.close()
+			return
+		}
+		if (navigate(event)) event.stopPropagation()
+	}
+
+	return (
+		<MenuPortal
+			open={sub.open}
+			position={placement}
+			closeDuration={SUB_DURATION}
+			panel="sub"
+		>
+			<motion.div
+				ref={sub.contentRef}
+				id={sub.contentId}
+				role="menu"
+				aria-labelledby={sub.triggerId}
+				tabIndex={-1}
+				initial={false}
+				animate={{
+					opacity: sub.open ? 1 : 0,
+					scale: sub.open ? 1 : 0.97,
+				}}
+				transition={
+					context.reduce
+						? { duration: 0 }
+						: { duration: SUB_DURATION, ease: EASE_OUT }
+				}
+				style={{
+					transformOrigin: placement.side === "end" ? "left top" : "right top",
+				}}
+				onKeyDown={onKeyDown}
+				onContextMenu={(event) => event.preventDefault()}
+				className={cn(PANEL_CLASS, className)}
+			>
+				<ContextMenuPanelContext.Provider value="sub">
+					{children}
+				</ContextMenuPanelContext.Provider>
+			</motion.div>
+		</MenuPortal>
+	)
 }
 
 export interface ContextMenuCheckboxItemProps
