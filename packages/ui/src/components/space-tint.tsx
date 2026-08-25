@@ -1,4 +1,7 @@
-import type { BotAvatarBlot } from "@workspace/ui/components/bot-settings"
+import {
+	type BotAvatarBlot,
+	blotTint,
+} from "@workspace/ui/components/bot-avatar"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SpaceTintProps = {
@@ -12,7 +15,7 @@ const SpaceTint = ({ tint, className }: SpaceTintProps) => (
 		className={cn("block size-4 shrink-0 rounded-full", className)}
 		data-slot="space-tint"
 		data-tint={tint}
-		style={{ backgroundColor: `var(--bot-blot-${tint})` }}
+		style={{ backgroundColor: blotTint(tint) }}
 	/>
 )
 
