@@ -1,4 +1,3 @@
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -1466,6 +1465,7 @@ mod tests {
 		Bot {
 			id: "b1".to_owned(),
 			space_id: "personal".to_owned(),
+			section_id: None,
 			name: name.to_owned(),
 			title: String::new(),
 			model: "sonnet".to_owned(),

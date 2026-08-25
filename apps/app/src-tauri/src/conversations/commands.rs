@@ -1,4 +1,3 @@
-
 use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -130,7 +129,7 @@ pub async fn conversation_create_bot<R: Runtime>(
 	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
 	let output_style = identity.output_style.clone();
-	let created = database.conversations().create_bot(identity.into(), space_id).await?;
+	let created = database.conversations().create_bot(identity.into(), space_id, None).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	if let Err(refusal) =
 		write_bundle(bundle_root.as_deref(), database, &created, &output_style).await
@@ -158,6 +157,7 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 		.await?
 		.ok_or_else(|| TranscriptStoreError::UnknownBot { id: bot_id.clone() })?;
 	let destination = space_id.unwrap_or_else(|| source.space_id.clone());
+	let section = carried_section(&source, &destination);
 	let taken: Vec<String> = database
 		.conversations()
 		.bots(Some(destination.clone()))
@@ -168,7 +168,10 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	let identity =
 		duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()), &taken);
 	let output_style = identity.output_style.clone();
-	let created = database.conversations().create_bot(identity.into(), Some(destination)).await?;
+	let created = database
+		.conversations()
+		.create_bot(identity.into(), Some(destination), section)
+		.await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	if let Err(refusal) =
 		duplicated_bundle(bundle_root.as_deref(), database, &bot_id, &created, &output_style).await
@@ -179,6 +182,10 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 		return Err(refusal);
 	}
 	Ok(Bot::of(created, dir.as_deref(), bundle_root.as_deref()))
+}
+
+fn carried_section(source: &StoredBot, destination: &str) -> Option<String> {
+	source.section_id.clone().filter(|_| source.space_id == destination)
 }
 
 async fn duplicated_bundle(
@@ -688,6 +695,7 @@ mod tests {
 		StoredBot {
 			id: "b1".to_owned(),
 			space_id: "personal".to_owned(),
+			section_id: None,
 			name: "Bean".to_owned(),
 			title: String::new(),
 			model: "sonnet".to_owned(),
@@ -703,11 +711,21 @@ mod tests {
 	}
 
 	#[test]
+	fn a_copy_staying_home_keeps_the_section_and_one_leaving_lands_in_none() {
+		let held = StoredBot { section_id: Some("n1".to_owned()), ..a_bot() };
+
+		assert_eq!(carried_section(&held, "personal"), Some("n1".to_owned()));
+		assert_eq!(carried_section(&held, "vocca"), None);
+		assert_eq!(carried_section(&a_bot(), "personal"), None);
+	}
+
+	#[test]
 	fn a_duplicate_is_the_source_under_a_name_that_says_where_it_came_from() {
 		use crate::conversations::contract::{AvatarAnimal, AvatarBlot};
 
 		let source = Bot {
 			id: "b1".to_owned(),
+			section_id: None,
 			name: "Bean".to_owned(),
 			title: "Bakes".to_owned(),
 			model: "opus".to_owned(),

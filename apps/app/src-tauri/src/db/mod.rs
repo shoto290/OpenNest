@@ -1,4 +1,3 @@
-
 pub mod bootstrap;
 pub mod connection;
 pub mod migrations;
@@ -14,7 +13,7 @@ use bootstrap::LegacyImport;
 pub use connection::DatabaseError;
 use repositories::{
 	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository,
-	SpacesRepository, UserRepository,
+	SectionsRepository, SpacesRepository, UserRepository,
 };
 
 #[derive(Clone)]
@@ -69,6 +68,7 @@ pub struct Database {
 	conversations: ConversationsRepository,
 	messages: MessagesRepository,
 	runtime_context: RuntimeContextRepository,
+	sections: SectionsRepository,
 	spaces: SpacesRepository,
 	user: UserRepository,
 	legacy_import: LegacyImport,
@@ -85,6 +85,7 @@ impl Database {
 			conversations: ConversationsRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			runtime_context: RuntimeContextRepository::new(access.clone()),
+			sections: SectionsRepository::new(access.clone()),
 			spaces: SpacesRepository::new(access.clone()),
 			user: UserRepository::new(access.clone()),
 			legacy_import,
@@ -118,6 +119,10 @@ impl Database {
 
 	pub fn runtime_context(&self) -> &RuntimeContextRepository {
 		&self.runtime_context
+	}
+
+	pub fn sections(&self) -> &SectionsRepository {
+		&self.sections
 	}
 
 	pub fn spaces(&self) -> &SpacesRepository {

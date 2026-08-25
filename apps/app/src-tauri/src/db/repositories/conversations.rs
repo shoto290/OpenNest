@@ -1,4 +1,3 @@
-
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
@@ -146,6 +145,7 @@ pub struct Participant {
 pub struct Bot {
 	pub id: String,
 	pub space_id: String,
+	pub section_id: Option<String>,
 	pub name: String,
 	pub title: String,
 	pub model: String,
@@ -244,9 +244,12 @@ impl ConversationsRepository {
 		&self,
 		identity: BotIdentity,
 		space_id: Option<String>,
+		section_id: Option<String>,
 	) -> Result<Bot, ConversationError> {
-		self.call_mut(move |connection| Ok(created_bot(connection, &identity, space_id.as_deref())))
-			.await?
+		self.call_mut(move |connection| {
+			Ok(created_bot(connection, &identity, space_id.as_deref(), section_id.as_deref()))
+		})
+		.await?
 	}
 
 	pub async fn update_bot(
@@ -360,11 +363,13 @@ impl ConversationsRepository {
 	}
 }
 
-const SELECT_BOT: &str = "SELECT id, space_id, name, title, model, avatar_animal, avatar_color,
+const SELECT_BOT: &str = "SELECT id, space_id, section_id, name, title, model,
+		avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
 	FROM bots WHERE id = ?1";
 
-const SELECT_BOTS: &str = "SELECT id, space_id, name, title, model, avatar_animal, avatar_color,
+const SELECT_BOTS: &str = "SELECT id, space_id, section_id, name, title, model,
+		avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
 	FROM bots WHERE ?1 IS NULL OR space_id = ?1
 	ORDER BY created_at ASC, id ASC";
@@ -446,16 +451,19 @@ fn created_bot(
 	connection: &mut Connection,
 	identity: &BotIdentity,
 	space_id: Option<&str>,
+	section_id: Option<&str>,
 ) -> Result<Bot, ConversationError> {
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
-		"INSERT INTO bots (id, space_id, name, title, model, avatar_animal, avatar_color,
-				avatar_image_path, working_dir, instructions, denied_tools, created_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+		"INSERT INTO bots (id, space_id, section_id, name, title, model, avatar_animal,
+				avatar_color, avatar_image_path, working_dir, instructions, denied_tools,
+				created_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
 		params![
 			id,
 			space_of(&transaction, space_id)?,
+			section_id,
 			identity.name,
 			identity.title,
 			identity.model,
@@ -591,6 +599,7 @@ fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 	Ok(Bot {
 		id: row.get("id")?,
 		space_id: row.get("space_id")?,
+		section_id: row.get("section_id")?,
 		name: row.get("name")?,
 		title: row.get("title")?,
 		model: row.get("model")?,
@@ -787,7 +796,7 @@ mod tests {
 		let database = open(&dir);
 		let repository = database.conversations();
 
-		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 
 		let chat = repository.ensure_chat(created.id.clone()).await.expect("the chat");
 		let seats = repository.participants(chat.id.clone()).await.expect("the participants");
@@ -820,8 +829,11 @@ mod tests {
 			instructions: "Answer briefly.".to_owned(),
 		};
 
-		let created =
-			database.conversations().create_bot(described.clone(), None).await.expect("the bot");
+		let created = database
+			.conversations()
+			.create_bot(described.clone(), None, None)
+			.await
+			.expect("the bot");
 
 		let listed = database.conversations().bots(None).await.expect("the bots");
 		assert_eq!(listed.len(), 1);
@@ -845,7 +857,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 
 		let saved = repository
 			.set_memory(created.id.clone(), "they use bun".to_owned())
@@ -872,7 +884,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 		let id = created.id.clone();
 		let written = id.clone();
 		repository
@@ -940,8 +952,9 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
-		let silent = repository.create_bot(an_identity("Ada"), None).await.expect("the other bot");
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let silent =
+			repository.create_bot(an_identity("Ada"), None, None).await.expect("the other bot");
 
 		assert_eq!(
 			repository.bot_commands(created.id.clone()).await.expect("the commands"),
@@ -1000,7 +1013,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 		let id = created.id.clone();
 		repository
 			.call(move |connection| {
@@ -1027,7 +1040,7 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let created = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
 		let id = created.id.clone();
 		repository
 			.call(move |connection| {
@@ -1075,8 +1088,8 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
-		let deleted = repository.create_bot(an_identity("Nyx"), None).await.expect("the bot");
-		let kept = repository.create_bot(an_identity("Ada"), None).await.expect("the bot");
+		let deleted = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let kept = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
 		let chat = repository.ensure_chat(deleted.id.clone()).await.expect("the chat");
 		let kept_chat = repository.ensure_chat(kept.id.clone()).await.expect("the chat");
 		a_transcript_for(&database, &chat.id, &deleted.id).await;
@@ -1127,8 +1140,8 @@ mod tests {
 		let repository = database.conversations();
 
 		let (first, second) = tokio::join!(
-			repository.create_bot(an_identity("Nyx"), None),
-			repository.create_bot(an_identity("Ada"), None)
+			repository.create_bot(an_identity("Nyx"), None, None),
+			repository.create_bot(an_identity("Ada"), None, None)
 		);
 
 		let first = first.expect("the first bot");

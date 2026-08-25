@@ -1,4 +1,3 @@
-
 use rusqlite::Connection;
 
 use super::connection::DatabaseError;
@@ -21,6 +20,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 10, statements: MESSAGE_PIN },
 	Migration { version: 11, statements: BUBBLE_PIN },
 	Migration { version: 12, statements: BOT_SPACE },
+	Migration { version: 13, statements: BOT_SECTION },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -281,6 +281,19 @@ INSERT INTO bots (id, space_id, name, model, created_at, instructions, memory, t
 	FROM bots_without_space;
 
 DROP TABLE bots_without_space;
+";
+
+const BOT_SECTION: &str = "
+CREATE TABLE sections (
+	id TEXT PRIMARY KEY,
+	space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	position INTEGER NOT NULL,
+	created_at INTEGER NOT NULL
+);
+
+ALTER TABLE bots ADD COLUMN section_id TEXT
+	REFERENCES sections(id) ON DELETE SET NULL;
 ";
 
 pub fn latest_version() -> u32 {

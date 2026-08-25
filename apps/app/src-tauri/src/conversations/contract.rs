@@ -1,4 +1,3 @@
-
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -98,6 +97,7 @@ impl From<AvatarBlot> for conversations::AvatarBlot {
 #[serde(rename_all = "camelCase")]
 pub struct Bot {
 	pub id: String,
+	pub section_id: Option<String>,
 	pub name: String,
 	pub title: String,
 	pub model: String,
@@ -141,6 +141,7 @@ impl Bot {
 			.map(|path| path.to_string_lossy().into_owned());
 		Self {
 			id: bot.id,
+			section_id: bot.section_id,
 			name: bot.name,
 			title: bot.title,
 			model,
@@ -785,6 +786,7 @@ mod tests {
 		assert_crosses_as(
 			Bot {
 				id: "default".into(),
+				section_id: None,
 				name: "Claude".into(),
 				title: "Reviewer".into(),
 				model: "opus".into(),
@@ -806,6 +808,7 @@ mod tests {
 			},
 			json!({
 				"id": "default",
+				"sectionId": null,
 				"name": "Claude",
 				"title": "Reviewer",
 				"model": "opus",
@@ -1178,6 +1181,7 @@ mod tests {
 		conversations::Bot {
 			id: "b1".into(),
 			space_id: "personal".into(),
+			section_id: None,
 			name: "Nyx".into(),
 			title: String::new(),
 			model: model.to_owned(),
