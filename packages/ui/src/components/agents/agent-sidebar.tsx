@@ -311,6 +311,8 @@ const SpaceCarousel = ({
 		0,
 	)
 	const [restingOn, setRestingOn] = useState(chosen)
+	const told = useRef(selectedSpaceId)
+	const isMoving = useRef(false)
 
 	const restsOn = Math.min(restingOn, spaces.length - 1)
 	const firstDrawn = Math.max(restsOn - NEIGHBOURING, 0)
@@ -326,7 +328,7 @@ const SpaceCarousel = ({
 
 	useEffect(() => {
 		const node = viewport.current
-		if (!node) return
+		if (!node || isMoving.current) return
 		if (!isBeside || isCut) {
 			setRestingOn(chosen)
 			return
@@ -336,13 +338,21 @@ const SpaceCarousel = ({
 			node.scrollTo({ behavior: "smooth", left: landing })
 	}, [chosen, chosenSlot, isBeside, isCut])
 
+	const spaceUnder = (node: HTMLDivElement) =>
+		firstDrawn + Math.round(node.scrollLeft / node.clientWidth)
+
+	const follow = (event: UIEvent<HTMLDivElement>) => {
+		isMoving.current = true
+		const crossed = spaces[spaceUnder(event.currentTarget)]
+		if (!crossed || crossed.id === told.current) return
+		told.current = crossed.id
+		if (crossed.id !== selectedSpaceId) onSelectSpace?.(crossed.id)
+	}
+
 	const land = (event: UIEvent<HTMLDivElement>) => {
-		const node = event.currentTarget
-		const landedOn = firstDrawn + Math.round(node.scrollLeft / node.clientWidth)
-		const landed = spaces[landedOn]
-		if (!landed) return
-		setRestingOn(landedOn)
-		if (landed.id !== selectedSpaceId) onSelectSpace?.(landed.id)
+		isMoving.current = false
+		const landedOn = spaceUnder(event.currentTarget)
+		if (spaces[landedOn]) setRestingOn(landedOn)
 	}
 
 	return (
@@ -352,6 +362,7 @@ const SpaceCarousel = ({
 				isSwipeEnabled ? CAROUSEL_SWIPEABLE : CAROUSEL_HELD,
 			)}
 			data-slot="space-carousel"
+			onScroll={follow}
 			onScrollEnd={land}
 			ref={viewport}
 		>
