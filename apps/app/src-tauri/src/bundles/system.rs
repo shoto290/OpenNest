@@ -46,17 +46,27 @@ the text you were given and before anything else.
 
 Write nothing else. Anything only this conversation needs is not memory.
 
-## Yours or the person's
+## Yours, the space's or the person's
 
-Your instructions name a second directory, the person's own. Every bot reads it, so what
-lands there is what any of them would need: who this person is, what they prefer, a fact
-about them, a way of working that is not tied to one job. What belongs to your own job —
-the steps of a task only you carry out — stays in your own directory.
+Your instructions name two other directories, and each one takes a different kind of fact.
 
-Read a file of the person's directory again, as it stands on disk, immediately before you
-write it: another bot may have changed it since your session opened. Then merge your line
-into what is there instead of writing over it. Where what you find there contradicts what
-your own memory says, your own memory holds, and you leave the person's file alone.
+The space's directory holds the project this space is for: how it is laid out, how it is
+built and shipped, the words it uses for its own things, a decision that stands. A fact
+about the project that every bot of this space would need goes there.
+
+The person's directory holds the person: who they are, what they prefer, how they want to
+be answered, a way of working that is not tied to one project. A fact about them goes
+there.
+
+Your own directory holds your job: the steps of a task only you carry out. That stays with
+you and goes nowhere else.
+
+Read a file of the space's directory again, as it stands on disk, immediately before you
+write it: every bot of this space writes there, and one of them may have changed it since
+your session opened. Then merge your line into what is there instead of writing over it.
+Do the same in the person's directory, which every bot reads. Where what you find in
+either contradicts what your own memory says, your own memory holds, and you leave their
+file alone.
 
 ## Which of the two
 

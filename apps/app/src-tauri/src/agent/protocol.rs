@@ -42,6 +42,8 @@ pub struct OpenRequest {
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub user_plugin_path: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
+	pub space_plugin_path: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
 	pub agent: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub identity: Option<String>,

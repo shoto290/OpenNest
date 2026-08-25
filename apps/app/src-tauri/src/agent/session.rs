@@ -74,6 +74,7 @@ pub struct Bundle {
 	pub path: String,
 	pub system_path: Option<String>,
 	pub user_path: Option<String>,
+	pub space_path: Option<String>,
 	pub agent: String,
 	pub identity: String,
 	pub output_style: String,
@@ -121,6 +122,7 @@ impl SessionOptions {
 			plugin_path: self.bundle.as_ref().map(|bundle| bundle.path.clone()),
 			system_plugin_path: self.bundle.as_ref().and_then(|bundle| bundle.system_path.clone()),
 			user_plugin_path: self.bundle.as_ref().and_then(|bundle| bundle.user_path.clone()),
+			space_plugin_path: self.bundle.as_ref().and_then(|bundle| bundle.space_path.clone()),
 			agent: self.bundle.as_ref().map(|bundle| bundle.agent.clone()),
 			identity: self.bundle.as_ref().map(|bundle| bundle.identity.clone()),
 			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
@@ -447,6 +449,7 @@ mod tests {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
 			user_path: Some("/user/me".to_owned()),
+			space_path: Some("/spaces/s1".to_owned()),
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
@@ -454,6 +457,7 @@ mod tests {
 		let request = options().bundled(Some(bundle)).open_request(true);
 
 		assert_eq!(request.plugin_path.as_deref(), Some("/bots/b1"));
+		assert_eq!(request.space_plugin_path.as_deref(), Some("/spaces/s1"));
 		assert_eq!(request.agent.as_deref(), Some("bean"));
 		assert_eq!(request.identity.as_deref(), Some("You are Bean, the baker."));
 	}
@@ -464,6 +468,7 @@ mod tests {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
 			user_path: Some("/user/me".to_owned()),
+			space_path: Some("/spaces/s1".to_owned()),
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
@@ -482,6 +487,7 @@ mod tests {
 			path: "/bots/b1".to_owned(),
 			system_path: Some("/system/opennest".to_owned()),
 			user_path: Some("/user/me".to_owned()),
+			space_path: Some("/spaces/s1".to_owned()),
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "default".to_owned(),
@@ -496,6 +502,7 @@ mod tests {
 		let plain = options().bundled(None).open_request(true);
 
 		assert_eq!(plain.plugin_path, None);
+		assert_eq!(plain.space_plugin_path, None);
 		assert_eq!(plain.agent, None);
 		assert_eq!(plain.identity, None);
 		assert_eq!(plain.output_style, None);

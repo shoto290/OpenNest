@@ -96,6 +96,7 @@ fn handed_over(root: &Path, bot: &Bot) -> Bundle {
 		path: bundles::dir(root, &bot.id).display().to_string(),
 		system_path: Some(system_plugin().display().to_string()),
 		user_path: Some(user_plugin().display().to_string()),
+		space_path: Some(space_plugin().display().to_string()),
 		agent: bundles::slug(&bot.name),
 		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),
@@ -111,6 +112,12 @@ fn system_plugin() -> PathBuf {
 fn user_plugin() -> PathBuf {
 	let path = std::env::temp_dir().join("opennest-real-claude-user");
 	bundles::user::lay_down(&path).expect("the person's plugin is laid down");
+	path
+}
+
+fn space_plugin() -> PathBuf {
+	let path = std::env::temp_dir().join("opennest-real-claude-space");
+	bundles::space::lay_down_at(&path).expect("the space's plugin is laid down");
 	path
 }
 

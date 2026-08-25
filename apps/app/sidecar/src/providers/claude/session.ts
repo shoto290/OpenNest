@@ -33,8 +33,9 @@ const localPlugins = (
 	pluginPath: string,
 	systemPluginPath?: string,
 	userPluginPath?: string,
+	spacePluginPath?: string,
 ): NonNullable<Options["plugins"]> =>
-	[pluginPath, systemPluginPath, userPluginPath]
+	[pluginPath, systemPluginPath, userPluginPath, spacePluginPath]
 		.filter((path): path is string => Boolean(path))
 		.map((path) => ({ type: "local" as const, path }))
 
@@ -53,6 +54,7 @@ export const buildOptions = (
 					request.pluginPath,
 					request.systemPluginPath,
 					request.userPluginPath,
+					request.spacePluginPath,
 				),
 				agent: request.agent,
 				mcpServers: sessionServers(

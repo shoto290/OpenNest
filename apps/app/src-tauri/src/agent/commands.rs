@@ -142,11 +142,13 @@ async fn evolution<R: Runtime>(app: &AppHandle<R>, bot_id: &str) -> Option<bundl
 	if let Some(path) = bundles::user::laid_down(app) {
 		bundles::user::evolve(&path);
 	}
-	let root = bundles::root(app)?;
 	let state = app.try_state::<db::DatabaseState>()?;
 	let database = state.inner().as_ref().ok()?;
 	let bot = database.conversations().bot(bot_id.to_owned()).await.ok()??;
-	bundles::evolve(&root, &bot)
+	if let Some(path) = bundles::space::laid_down(app, &bot.space_id) {
+		bundles::space::evolve(&path);
+	}
+	bundles::evolve(&bundles::root(app)?, &bot)
 }
 
 #[derive(Default)]
@@ -308,9 +310,10 @@ async fn runtime_identity<R: Runtime>(
 	let root = bundles::root(app);
 	let system = bundles::system::laid_down(app);
 	let user = bundles::user::laid_down(app);
-	let bundle = root
-		.as_deref()
-		.and_then(|root| laid_down_bundle(root, &bot, system.as_deref(), user.as_deref()));
+	let space = bundles::space::laid_down(app, &bot.space_id);
+	let bundle = root.as_deref().and_then(|root| {
+		laid_down_bundle(root, &bot, system.as_deref(), user.as_deref(), space.as_deref())
+	});
 	if let Some(found) = root.as_deref().and_then(|root| bundles::adopted(root, &bot)) {
 		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
 	}
@@ -325,12 +328,14 @@ fn laid_down_bundle(
 	bot: &StoredBot,
 	system: Option<&Path>,
 	user: Option<&Path>,
+	space: Option<&Path>,
 ) -> Option<Bundle> {
 	bundles::ensure(root, bot).ok()?;
 	Some(Bundle {
 		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
 		system_path: system.map(|path| path.to_string_lossy().into_owned()),
 		user_path: user.map(|path| path.to_string_lossy().into_owned()),
+		space_path: space.map(|path| path.to_string_lossy().into_owned()),
 		agent: bundles::agent_ref(root, bot),
 		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),
