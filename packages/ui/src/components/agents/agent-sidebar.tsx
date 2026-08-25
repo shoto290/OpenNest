@@ -264,29 +264,21 @@ const SpacePanel = ({
 	isInView,
 	scrolls,
 	children,
-}: SpacePanelProps) => {
-	const panel = useRef<HTMLDivElement>(null)
-	const hasRoster = children !== null
-
-	useEffect(() => {
-		if (hasRoster && panel.current)
-			panel.current.scrollTop = scrolls.get(spaceId) ?? 0
-	}, [hasRoster, scrolls, spaceId])
-
-	return (
-		<div
-			className={CAROUSEL_PANEL}
-			data-slot="space-panel"
-			inert={!isInView}
-			onScroll={(event) => {
-				if (hasRoster) scrolls.set(spaceId, event.currentTarget.scrollTop)
-			}}
-			ref={panel}
-		>
-			{children}
-		</div>
-	)
-}
+}: SpacePanelProps) => (
+	<div
+		className={CAROUSEL_PANEL}
+		data-slot="space-panel"
+		inert={!isInView}
+		onScroll={(event) => {
+			scrolls.set(spaceId, event.currentTarget.scrollTop)
+		}}
+		ref={(node) => {
+			if (node) node.scrollTop = scrolls.get(spaceId) ?? 0
+		}}
+	>
+		{children}
+	</div>
+)
 
 interface SpaceCarouselProps {
 	spaces: Space[]
