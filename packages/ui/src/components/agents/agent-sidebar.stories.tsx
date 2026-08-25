@@ -1333,15 +1333,14 @@ const panelInView = (canvasElement: HTMLElement) => {
 const panelsDrawn = (canvasElement: HTMLElement) =>
 	panelsIn(canvasElement).filter((panel) => panel.childElementCount > 0)
 
+const SETTLE = 80
+
 const swipeTo = async (carousel: HTMLElement, rank: number) => {
-	const landing = rank * carousel.clientWidth
-	if (carousel.scrollLeft === landing) return
-	const landed = new Promise((resolve) => {
-		carousel.addEventListener("scrollend", resolve, { once: true })
-	})
-	carousel.scrollLeft = landing
-	await landed
-	await nextTask()
+	carousel.scrollLeft = rank * carousel.clientWidth
+	await waitFor(async () => {
+		await expect(rankShown(carousel)).toBe(rank)
+	}, FRAME_POLL)
+	await new Promise((resolve) => setTimeout(resolve, SETTLE))
 }
 
 const rankShown = (carousel: HTMLElement) =>
@@ -1651,7 +1650,7 @@ export const SpaceScrolling = meta.story({
 		docs: {
 			description: {
 				story:
-					"The row itself, which is one scrolling box a panel wide with a roster in each panel — the swipe is the reader scrolling it sideways, so the trackpad tracks their fingers, coasts, rubber-bands at the ends and magnetises on release the way it does in every native window, none of it ours to write. Check the contract that gets that for free: the box snaps on the x axis and snaps hard, each panel is a snap point the scroll may never pass over — that is what holds a flick to one space — every panel is exactly the width of the box, and the box is as wide as its spaces. Check too that a panel is its own scrolling box, so a reader coming back to a space finds it where they left it, and that landing on a space reports it once. Pick `LiveSpaceSelection` for the row against a host that moves its selection, `SpaceScrollMemory` for a space walked past and come back to.",
+					"The row itself, which is one scrolling box a panel wide with a roster in each panel — the swipe is the reader scrolling it sideways, so the trackpad tracks their fingers, coasts, rubber-bands at the ends and magnetises on release the way it does in every native window, none of it ours to write. Check the contract that gets that for free: the box snaps on the x axis and snaps hard, each panel is a snap point the scroll may never pass over — that is what holds a flick to one space — every panel is exactly the width of the box, and the box is as wide as its spaces. Check too that a panel is its own scrolling box, so a reader coming back to a space finds it where they left it — and that it holds only its own axis: a panel that keeps a sideways gesture to itself is a panel the row can never be swiped out of, since the innermost box a gesture lands in is the one that answers it. Check that landing on a space reports it once. Pick `LiveSpaceSelection` for the row against a host that moves its selection, `SpaceScrollMemory` for a space walked past and come back to.",
 			},
 		},
 	},
@@ -1671,6 +1670,8 @@ export const SpaceScrolling = meta.story({
 			await expect(style.scrollSnapAlign).toBe("start")
 			await expect(style.scrollSnapStop).toBe("always")
 			await expect(style.overflowY).toBe("auto")
+			await expect(style.overscrollBehaviorY).toBe("contain")
+			await expect(style.overscrollBehaviorX).toBe("auto")
 			await expect(panel.clientWidth).toBe(carousel.clientWidth)
 		}
 
@@ -1781,7 +1782,7 @@ export const SpaceScrollMemory = meta.story({
 		docs: {
 			description: {
 				story:
-					"A window too short to show a roster whole, which is where a space has to remember where its reader had got to. Only the space in view and the one waiting off each edge are drawn, so a space walked two along leaves the row entirely — check that scrolling one space down, walking two spaces on and walking back finds it exactly where it was left rather than back at the top, and that a space arriving starts at its own top rather than inheriting the scroll of the one before it. Pick `SpaceScrolling` for the gesture itself, `NineSpaces` for the row at its widest.",
+					"A window too short to show a roster whole, which is where a space has to remember where its reader had got to — and the only shape in which a panel is a scrolling box at all, so it is also where a panel could swallow the sideways gesture meant for the row. Only the space in view and the one waiting off each edge are drawn, so a space walked two along leaves the row entirely — check that scrolling one space down, walking two spaces on and walking back finds it exactly where it was left rather than back at the top, and that a space arriving starts at its own top rather than inheriting the scroll of the one before it. Pick `SpaceScrolling` for the gesture itself, `NineSpaces` for the row at its widest.",
 			},
 		},
 	},
@@ -1789,6 +1790,7 @@ export const SpaceScrollMemory = meta.story({
 		const carousel = carouselIn(canvasElement)
 		const left = panelInView(canvasElement)
 		await expect(left.scrollHeight).toBeGreaterThan(left.clientHeight)
+		await expect(getComputedStyle(left).overscrollBehaviorX).toBe("auto")
 
 		left.scrollTop = 90
 		await nextTask()

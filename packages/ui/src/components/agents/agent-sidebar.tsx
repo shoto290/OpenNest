@@ -78,7 +78,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-y-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
 
 type AgentSidebarStatus = "idle" | "working"
 
@@ -298,6 +298,7 @@ const SpaceCarousel = ({
 	const viewport = useRef<HTMLDivElement>(null)
 	const scrolls = useRef(new Map<string, number>()).current
 	const hasLanded = useRef(false)
+	const isMoving = useRef(false)
 	const isCut = useReducedMotion() ?? false
 	const inView = Math.max(
 		spaces.findIndex((space) => space.id === selectedSpaceId),
@@ -306,15 +307,20 @@ const SpaceCarousel = ({
 
 	useEffect(() => {
 		const node = viewport.current
-		if (!node) return
-		const landing = inView * node.clientWidth
-		const isThere = Math.abs(node.scrollLeft - landing) < 1
-		const behavior = isCut || !hasLanded.current ? "auto" : "smooth"
+		if (!node || isMoving.current) return
+
+		const alignTo = (behavior: ScrollBehavior) => {
+			const landing = inView * node.clientWidth
+			if (Math.abs(node.scrollLeft - landing) > 1)
+				node.scrollTo({ behavior, left: landing })
+		}
+
+		alignTo(isCut || !hasLanded.current ? "auto" : "smooth")
 		hasLanded.current = true
-		if (!isThere) node.scrollTo({ behavior, left: landing })
 	}, [inView, isCut])
 
 	const land = (event: UIEvent<HTMLDivElement>) => {
+		isMoving.current = false
 		const node = event.currentTarget
 		const landed = spaces[Math.round(node.scrollLeft / node.clientWidth)]
 		if (landed && landed.id !== selectedSpaceId) onSelectSpace?.(landed.id)
@@ -327,6 +333,9 @@ const SpaceCarousel = ({
 				isSwipeEnabled ? CAROUSEL_SWIPEABLE : CAROUSEL_HELD,
 			)}
 			data-slot="space-carousel"
+			onScroll={() => {
+				isMoving.current = true
+			}}
 			onScrollEnd={land}
 			ref={viewport}
 		>
