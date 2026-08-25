@@ -490,10 +490,13 @@ export function ContextMenuTrigger({
 			context.triggerRef.current = node
 			assignRef(childRef, node)
 		},
-		"aria-controls":
-			announcesPopup && context.open ? context.menuId : undefined,
-		"aria-haspopup": announcesPopup ? ("menu" as const) : undefined,
-		"aria-expanded": announcesPopup ? context.open : undefined,
+		...(announcesPopup
+			? {
+					"aria-controls": context.open ? context.menuId : undefined,
+					"aria-haspopup": "menu" as const,
+					"aria-expanded": context.open,
+				}
+			: {}),
 	}
 
 	if (opensOnPress) {
