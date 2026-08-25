@@ -1923,6 +1923,106 @@ fn a_duplicate_of_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 	assert_eq!(call(&window, "conversation_bots", json!({})), Ok(json!([])));
 }
 
+fn a_space(window: &WebviewWindow<MockRuntime>, name: &str) -> String {
+	call(window, "space_create", json!({ "name": name })).expect("the space is created")["id"]
+		.as_str()
+		.expect("the space holds an id")
+		.to_owned()
+}
+
+fn names_in(window: &WebviewWindow<MockRuntime>, space_id: &str) -> Vec<Value> {
+	call(window, "conversation_bots", json!({ "spaceId": space_id }))
+		.expect("the bots")
+		.as_array()
+		.expect("a list")
+		.iter()
+		.map(|bot| bot["name"].clone())
+		.collect()
+}
+
+#[test]
+fn a_duplicate_lands_in_the_space_the_reader_named_and_keeps_what_the_source_carries() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let source_id = a_bot(&window, "Nyx");
+	let destination = a_space(&window, "Away");
+
+	let duplicate = call(
+		&window,
+		"conversation_duplicate_bot",
+		json!({ "botId": source_id, "spaceId": destination }),
+	)
+	.expect("the bot is duplicated");
+	let duplicate_id = duplicate["id"].as_str().expect("the duplicate holds an id").to_owned();
+
+	assert_eq!(duplicate["name"], json!("Nyx copy"));
+	assert_eq!(names_in(&window, &destination), vec![json!("Nyx copy")]);
+	assert_eq!(
+		readers_skills(&window, &duplicate_id),
+		readers_skills(&window, &source_id),
+		"the skills the source carries did not come over"
+	);
+	assert_eq!(duplicate["instructions"], json!("Answer with the file you would touch."));
+	assert!(
+		bundle_of(&app, &duplicate_id).join(".claude-plugin").join("plugin.json").exists(),
+		"the duplicate has no bundle of its own"
+	);
+}
+
+#[test]
+fn a_duplicate_only_dodges_the_names_the_space_it_lands_in_already_carries() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let source_id = a_bot(&window, "Nyx");
+	let away = a_space(&window, "Away");
+	call(
+		&window,
+		"conversation_create_bot",
+		json!({
+			"identity": an_identity("Nyx copy", "sonnet", "owl", json!("red")),
+			"spaceId": away,
+		}),
+	)
+	.expect("the namesake is created");
+
+	let duplicate =
+		call(&window, "conversation_duplicate_bot", json!({ "botId": source_id, "spaceId": away }))
+			.expect("the bot is duplicated");
+
+	assert_eq!(duplicate["name"], json!("Nyx copy 2"));
+	assert_eq!(names_in(&window, &away), vec![json!("Nyx copy"), json!("Nyx copy 2")]);
+}
+
+#[test]
+fn a_duplicate_into_a_space_that_is_gone_leaves_every_bot_and_every_bundle_alone() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let source_id = a_bot(&window, "Nyx");
+	let before = call(&window, "conversation_bots", json!({})).expect("the bots");
+
+	let refusal = call(
+		&window,
+		"conversation_duplicate_bot",
+		json!({ "botId": source_id, "spaceId": "missing" }),
+	)
+	.expect_err("a copy into a space that is gone was taken");
+
+	assert_eq!(refusal["kind"], json!("storage"));
+	assert_eq!(call(&window, "conversation_bots", json!({})), Ok(before));
+	let root = bundles::root(app.handle()).expect("the bundle root");
+	assert_eq!(
+		std::fs::read_dir(root.join("plugins")).map(|entries| entries.count()).unwrap_or_default(),
+		1,
+		"a bundle was left behind by a copy that was refused"
+	);
+}
+
 #[test]
 fn a_reference_resolves_a_message_to_the_uri_and_the_run_that_produced_it() {
 	const ANNOUNCED: &str = "claude-7b21";

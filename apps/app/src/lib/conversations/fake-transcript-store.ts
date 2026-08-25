@@ -355,6 +355,9 @@ export const createFakeTranscriptStore = (
 	}
 
 	const mint = (fields: Omit<Bot, "id" | "createdAt">, spaceId: string) => {
+		if (!spaces.has(spaceId)) {
+			return refuse({ kind: "unknownSpace", id: spaceId })
+		}
 		minted += 1
 		const bot: Bot = { ...fields, id: `bot-${minted}`, createdAt: minted }
 		bots.set(bot.id, bot)
@@ -364,6 +367,22 @@ export const createFakeTranscriptStore = (
 	}
 
 	const firstSpace = () => [...spaces.keys()][0]
+
+	const unsharedName = (wanted: string, spaceId: string) => {
+		const carried = new Set(
+			[...bots.values()]
+				.filter((bot) => spaceOf.get(bot.id) === spaceId)
+				.map((bot) => bot.name),
+		)
+		if (!carried.has(wanted)) {
+			return wanted
+		}
+		let number = 2
+		while (carried.has(`${wanted} ${number}`)) {
+			number += 1
+		}
+		return `${wanted} ${number}`
+	}
 
 	const writePin = (
 		conversationId: string,
@@ -467,14 +486,15 @@ export const createFakeTranscriptStore = (
 				spaceId ?? firstSpace(),
 			),
 
-		duplicateBot: (botId: string) => {
+		duplicateBot: (botId: string, spaceId?: string | null) => {
 			const source = bots.get(botId)
 			if (!source) {
 				return refuse({ kind: "unknownBot", id: botId })
 			}
+			const destination = spaceId ?? spaceOf.get(botId) ?? firstSpace()
 			return mint(
-				{ ...source, name: `${source.name} copy` },
-				spaceOf.get(botId) ?? firstSpace(),
+				{ ...source, name: unsharedName(`${source.name} copy`, destination) },
+				destination,
 			)
 		},
 

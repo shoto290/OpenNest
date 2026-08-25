@@ -113,7 +113,7 @@ const WRITES: WriteCase[] = [
 	{
 		member: "duplicateBot",
 		write: () => conversationStore.duplicateBot("b-1"),
-		call: ["conversation_duplicate_bot", { botId: "b-1" }],
+		call: ["conversation_duplicate_bot", { botId: "b-1", spaceId: null }],
 	},
 	{
 		member: "updateBot",

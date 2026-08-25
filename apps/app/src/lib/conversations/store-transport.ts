@@ -54,8 +54,11 @@ export const conversationStore: TranscriptStore = {
 			spaceId: spaceId ?? null,
 		}),
 
-	duplicateBot: (botId: string) =>
-		invoke<Bot>("conversation_duplicate_bot", { botId }),
+	duplicateBot: (botId: string, spaceId?: string | null) =>
+		invoke<Bot>("conversation_duplicate_bot", {
+			botId,
+			spaceId: spaceId ?? null,
+		}),
 
 	updateBot: (id: string, identity: BotIdentity) =>
 		invoke<Bot>("conversation_update_bot", { id, identity }),
