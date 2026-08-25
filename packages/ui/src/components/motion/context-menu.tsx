@@ -32,7 +32,6 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 
 type OpenModality = "pointer" | "keyboard" | "touch"
-type SubModality = "pointer" | "keyboard"
 type MenuPoint = { x: number; y: number }
 type SubSide = "start" | "end"
 
@@ -51,6 +50,7 @@ const PANEL_CLASS =
 	"min-w-56 overflow-hidden rounded-xl border border-border bg-card p-1.5 text-foreground outline-none"
 const SHADOW_CLASS = "[filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.2))]"
 const SUB_PANEL_SELECTOR = '[data-context-menu-panel="sub"]'
+const BRANCH_OPEN_KEYS = new Set(["ArrowRight", "Enter", " "])
 
 type TriggerElementProps = React.HTMLAttributes<HTMLElement> & {
 	ref?: Ref<HTMLElement>
@@ -158,6 +158,50 @@ function useMenuNavigation(
 		}
 		return false
 	}
+}
+
+type MenuPortalProps = {
+	open: boolean
+	position: MenuPoint
+	closeDuration: number
+	panel?: "sub"
+	children: ReactNode
+}
+
+function MenuPortal({
+	open,
+	position,
+	closeDuration,
+	panel,
+	children,
+}: MenuPortalProps) {
+	const [mounted, setMounted] = useState(false)
+
+	useEffect(() => setMounted(true), [])
+
+	if (!mounted) return null
+
+	return createPortal(
+		<div
+			data-context-menu-portal=""
+			data-context-menu-panel={panel}
+			aria-hidden={!open}
+			inert={!open}
+			style={{
+				left: position.x,
+				top: position.y,
+				transitionDuration: open ? "0s" : `${closeDuration}s`,
+			}}
+			className={cn(
+				"fixed z-[100] transition-[visibility]",
+				SHADOW_CLASS,
+				open ? "pointer-events-auto visible" : "pointer-events-none invisible",
+			)}
+		>
+			{children}
+		</div>,
+		document.body,
+	)
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -498,14 +542,11 @@ export function ContextMenuContent({
 }: ContextMenuContentProps) {
 	const { t } = useTranslation("common")
 	const context = useContextMenuContext("ContextMenuContent")
-	const [mounted, setMounted] = useState(false)
 	const [position, setPosition] = useState<MenuPoint>(context.point)
 	const [origin, setOrigin] = useState<MenuPoint>({ x: 0, y: 0 })
 	const [size, setSize] = useState({ width: 0, height: 0 })
 	const [morphReady, setMorphReady] = useState(false)
 	const navigate = useMenuNavigation(context.contentRef)
-
-	useEffect(() => setMounted(true), [])
 
 	useLayoutEffect(() => {
 		if (!context.open) {
@@ -585,31 +626,17 @@ export function ContextMenuContent({
 		navigate(event)
 	}
 
-	if (!mounted) return null
-
 	const shown =
 		context.open &&
 		(context.reduce || context.modality === "keyboard" || morphReady)
 	const clipHidden = collapsedClip(origin, size)
 	const clipShown = "inset(0px 0px 0px 0px round 12px)"
 
-	return createPortal(
-		<div
-			data-context-menu-portal=""
-			aria-hidden={!context.open}
-			inert={!context.open}
-			style={{
-				left: position.x,
-				top: position.y,
-				transitionDuration: context.open ? "0s" : `${MORPH_DURATION}s`,
-			}}
-			className={cn(
-				"fixed z-[100] transition-[visibility]",
-				SHADOW_CLASS,
-				context.open
-					? "pointer-events-auto visible"
-					: "pointer-events-none invisible",
-			)}
+	return (
+		<MenuPortal
+			open={context.open}
+			position={position}
+			closeDuration={MORPH_DURATION}
 		>
 			<motion.div
 				ref={context.contentRef}
@@ -640,8 +667,7 @@ export function ContextMenuContent({
 			>
 				{children}
 			</motion.div>
-		</div>,
-		document.body,
+		</MenuPortal>
 	)
 }
 
@@ -662,7 +688,8 @@ type ItemBranch = {
 	id: string
 	contentId: string
 	open: boolean
-	reveal: (modality: SubModality) => void
+	reveal: () => void
+	revealWithFocus: () => void
 }
 
 function ContextMenuItemBase({
@@ -695,23 +722,19 @@ function ContextMenuItemBase({
 	const onPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
 		if (disabled || event.pointerType === "touch") return
 		event.currentTarget.focus()
-		if (branch) branch.reveal("pointer")
+		if (branch) branch.reveal()
 		else if (panel === "sub") context.keepSub()
 		else context.closeSubOnRest()
 	}
 
-	const onBranchKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-		if (!branch) return
-		if (
-			event.key !== "ArrowRight" &&
-			event.key !== "Enter" &&
-			event.key !== " "
-		)
-			return
-		event.preventDefault()
-		event.stopPropagation()
-		branch.reveal("keyboard")
-	}
+	const onBranchKeyDown =
+		branch &&
+		((event: ReactKeyboardEvent<HTMLButtonElement>) => {
+			if (!BRANCH_OPEN_KEYS.has(event.key)) return
+			event.preventDefault()
+			event.stopPropagation()
+			branch.revealWithFocus()
+		})
 
 	return (
 		<button
@@ -731,11 +754,11 @@ function ContextMenuItemBase({
 			tabIndex={-1}
 			onFocus={() => context.setActiveId(id)}
 			onPointerMove={onPointerMove}
-			onKeyDown={branch ? onBranchKeyDown : undefined}
+			onKeyDown={onBranchKeyDown || undefined}
 			onClick={() => {
 				if (disabled) return
 				if (branch) {
-					branch.reveal("pointer")
+					branch.reveal()
 					return
 				}
 				onSelect?.()
@@ -778,7 +801,8 @@ interface ContextMenuSubContextValue {
 	open: boolean
 	triggerRef: React.MutableRefObject<HTMLButtonElement | null>
 	contentRef: React.MutableRefObject<HTMLDivElement | null>
-	reveal: (modality: SubModality) => void
+	reveal: () => void
+	revealWithFocus: () => void
 	close: () => void
 }
 
@@ -807,16 +831,16 @@ export function ContextMenuSub({ children }: ContextMenuSubProps) {
 	const open = context.openSubId === triggerId
 	const { openSub, closeSub } = context
 
-	const reveal = useCallback(
-		(modality: SubModality) => {
-			openSub(triggerId)
-			if (modality !== "keyboard") return
-			requestAnimationFrame(() =>
-				getEnabledItems(contentRef.current)[0]?.focus({ preventScroll: true }),
-			)
-		},
-		[openSub, triggerId],
-	)
+	const reveal = useCallback(() => {
+		openSub(triggerId)
+	}, [openSub, triggerId])
+
+	const revealWithFocus = useCallback(() => {
+		reveal()
+		requestAnimationFrame(() =>
+			getEnabledItems(contentRef.current)[0]?.focus({ preventScroll: true }),
+		)
+	}, [reveal])
 
 	const close = useCallback(() => {
 		closeSub()
@@ -831,9 +855,10 @@ export function ContextMenuSub({ children }: ContextMenuSubProps) {
 			triggerRef,
 			contentRef,
 			reveal,
+			revealWithFocus,
 			close,
 		}),
-		[triggerId, contentId, open, reveal, close],
+		[triggerId, contentId, open, reveal, revealWithFocus, close],
 	)
 
 	return (
@@ -863,6 +888,7 @@ export function ContextMenuSubTrigger({
 				contentId: sub.contentId,
 				open: sub.open,
 				reveal: sub.reveal,
+				revealWithFocus: sub.revealWithFocus,
 			}}
 		>
 			{children}
@@ -885,15 +911,12 @@ export function ContextMenuSubContent({
 }: ContextMenuSubContentProps) {
 	const context = useContextMenuContext("ContextMenuSubContent")
 	const sub = useContextMenuSubContext("ContextMenuSubContent")
-	const [mounted, setMounted] = useState(false)
 	const [placement, setPlacement] = useState<MenuPoint & { side: SubSide }>({
 		x: 0,
 		y: 0,
 		side: "end",
 	})
 	const navigate = useMenuNavigation(sub.contentRef)
-
-	useEffect(() => setMounted(true), [])
 
 	useLayoutEffect(() => {
 		if (!sub.open) return
@@ -902,25 +925,23 @@ export function ContextMenuSubContent({
 		if (!trigger || !panel) return
 
 		const triggerBox = trigger.getBoundingClientRect()
+		const { offsetWidth, offsetHeight } = panel
 		const room =
 			window.innerWidth - triggerBox.right - SUB_GAP - VIEWPORT_PADDING
-		const side: SubSide = panel.offsetWidth <= room ? "end" : "start"
+		const side: SubSide = offsetWidth <= room ? "end" : "start"
 
 		setPlacement({
 			side,
 			x:
 				side === "end"
 					? triggerBox.right + SUB_GAP
-					: Math.max(
-							VIEWPORT_PADDING,
-							triggerBox.left - SUB_GAP - panel.offsetWidth,
-						),
+					: Math.max(VIEWPORT_PADDING, triggerBox.left - SUB_GAP - offsetWidth),
 			y: clamp(
 				triggerBox.top - PANEL_INSET,
 				VIEWPORT_PADDING,
 				Math.max(
 					VIEWPORT_PADDING,
-					window.innerHeight - panel.offsetHeight - VIEWPORT_PADDING,
+					window.innerHeight - offsetHeight - VIEWPORT_PADDING,
 				),
 			),
 		})
@@ -941,8 +962,6 @@ export function ContextMenuSubContent({
 		}
 		if (navigate(event)) event.stopPropagation()
 	}
-
-	if (!mounted) return null
 
 	return createPortal(
 		<div

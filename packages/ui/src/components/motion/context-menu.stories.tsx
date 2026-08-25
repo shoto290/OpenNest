@@ -39,7 +39,8 @@ const openMenuOn = async (target: HTMLElement, at = { x: 180, y: 140 }) => {
 
 const SUBMENU_NAME = "Move to"
 
-const submenu = () => screen.getByRole("menu", { name: SUBMENU_NAME })
+const settledSubmenu = async () =>
+	settled(await screen.findByRole("menu", { name: SUBMENU_NAME }))
 
 const branchTrigger = () => screen.getByRole("menuitem", { name: SUBMENU_NAME })
 
@@ -499,11 +500,10 @@ export const WithSubmenu = meta.story({
 		await expect(branch).toHaveAttribute("aria-expanded", "false")
 
 		await userEvent.hover(branch)
-		await settled(await screen.findByRole("menu", { name: SUBMENU_NAME }))
+		const panel = (await settledSubmenu()).getBoundingClientRect()
 		await expect(branch).toHaveAttribute("aria-expanded", "true")
 		await expect(branch).toHaveAttribute("data-state", "open")
 
-		const panel = submenu().getBoundingClientRect()
 		await expect(panel.left).toBeGreaterThanOrEqual(
 			branch.getBoundingClientRect().right,
 		)
@@ -514,7 +514,7 @@ export const WithSubmenu = meta.story({
 		)
 
 		await userEvent.hover(branchTrigger())
-		await settled(await screen.findByRole("menu", { name: SUBMENU_NAME }))
+		await settledSubmenu()
 		await userEvent.click(screen.getByRole("menuitem", { name: "Archive" }))
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	},
@@ -543,7 +543,7 @@ export const SubmenuByKeyboard = meta.story({
 		await waitFor(() => expect(branchTrigger()).toHaveFocus())
 
 		await userEvent.keyboard("{ArrowRight}")
-		await settled(await screen.findByRole("menu", { name: SUBMENU_NAME }))
+		await settledSubmenu()
 		await waitFor(() =>
 			expect(screen.getByRole("menuitem", { name: "Inbox" })).toHaveFocus(),
 		)
@@ -574,9 +574,7 @@ export const SubmenuWithoutRoom = meta.story({
 
 		const branch = branchTrigger()
 		await userEvent.hover(branch)
-		await settled(await screen.findByRole("menu", { name: SUBMENU_NAME }))
-
-		const panel = submenu().getBoundingClientRect()
+		const panel = (await settledSubmenu()).getBoundingClientRect()
 		await expect(panel.right).toBeLessThanOrEqual(
 			branch.getBoundingClientRect().left,
 		)
