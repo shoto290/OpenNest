@@ -42,7 +42,6 @@ const MORPH_DURATION = 0.3
 const SUB_DURATION = 0.14
 const PRESS_GAP = 6
 const PANEL_INSET = 6
-const SUB_GAP = 4
 const SUB_REST_DELAY = 150
 const TYPEAHEAD_RESET = 500
 
@@ -930,15 +929,18 @@ export function ContextMenuSubContent({
 		const parentBox = parent.getBoundingClientRect()
 		const { offsetWidth, offsetHeight } = panel
 		const room =
-			window.innerWidth - parentBox.right - SUB_GAP - VIEWPORT_PADDING
+			window.innerWidth - parentBox.right + PANEL_INSET - VIEWPORT_PADDING
 		const side: SubSide = offsetWidth <= room ? "end" : "start"
 
 		setPlacement({
 			side,
 			x:
 				side === "end"
-					? parentBox.right + SUB_GAP
-					: Math.max(VIEWPORT_PADDING, parentBox.left - SUB_GAP - offsetWidth),
+					? parentBox.right - PANEL_INSET
+					: Math.max(
+							VIEWPORT_PADDING,
+							parentBox.left + PANEL_INSET - offsetWidth,
+						),
 			y: clamp(
 				triggerBox.top - PANEL_INSET,
 				VIEWPORT_PADDING,
@@ -966,24 +968,12 @@ export function ContextMenuSubContent({
 		if (navigate(event)) event.stopPropagation()
 	}
 
-	return createPortal(
-		<div
-			data-context-menu-portal=""
-			data-context-menu-panel="sub"
-			aria-hidden={!sub.open}
-			inert={!sub.open}
-			style={{
-				left: placement.x,
-				top: placement.y,
-				transitionDuration: sub.open ? "0s" : `${SUB_DURATION}s`,
-			}}
-			className={cn(
-				"fixed z-[100] transition-[visibility]",
-				SHADOW_CLASS,
-				sub.open
-					? "pointer-events-auto visible"
-					: "pointer-events-none invisible",
-			)}
+	return (
+		<MenuPortal
+			open={sub.open}
+			position={placement}
+			closeDuration={SUB_DURATION}
+			panel="sub"
 		>
 			<motion.div
 				ref={sub.contentRef}
@@ -1012,8 +1002,7 @@ export function ContextMenuSubContent({
 					{children}
 				</ContextMenuPanelContext.Provider>
 			</motion.div>
-		</div>,
-		document.body,
+		</MenuPortal>
 	)
 }
 
