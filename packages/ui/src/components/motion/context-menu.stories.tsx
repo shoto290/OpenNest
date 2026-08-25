@@ -388,3 +388,46 @@ export const AsMenuButton = meta.story({
 		await expect(trigger).toHaveFocus()
 	},
 })
+
+export const SeparatorAlignment = meta.story({
+	render: () => (
+		<ContextMenu>
+			<ContextMenuTrigger>
+				<button type="button" className={SURFACE_CLASS}>
+					Right-click this card
+				</button>
+			</ContextMenuTrigger>
+			<FileMenu />
+		</ContextMenu>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The separator measured against the rows it parts. It starts and ends exactly where an item does rather than running to the popup's edges, and the air it leaves above and below matches the air the popup leaves at its sides. Check the rule stays a single hairline in the border colour.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const menu = await openMenuOn(canvas.getByText("Right-click this card"))
+
+		const separator = screen.getByRole("separator")
+		const separatorBox = separator.getBoundingClientRect()
+		const itemBox = screen
+			.getByRole("menuitem", { name: "Rename" })
+			.getBoundingClientRect()
+
+		await expect(Math.round(separatorBox.left)).toBe(Math.round(itemBox.left))
+		await expect(Math.round(separatorBox.right)).toBe(Math.round(itemBox.right))
+		await expect(Math.round(separatorBox.height)).toBe(1)
+
+		const separatorStyles = getComputedStyle(separator)
+		const menuStyles = getComputedStyle(menu)
+
+		await expect(separatorStyles.marginTop).toBe(menuStyles.paddingLeft)
+		await expect(separatorStyles.marginBottom).toBe(menuStyles.paddingLeft)
+		await expect(separatorStyles.backgroundColor).toBe(
+			menuStyles.borderTopColor,
+		)
+	},
+})

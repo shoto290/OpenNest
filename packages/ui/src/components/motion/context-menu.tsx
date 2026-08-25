@@ -787,7 +787,7 @@ export interface ContextMenuSeparatorProps {
 }
 
 export function ContextMenuSeparator({ className }: ContextMenuSeparatorProps) {
-	return <hr className={cn("-mx-1 my-1 h-px border-0 bg-border", className)} />
+	return <hr className={cn("my-1.5 h-px border-0 bg-border", className)} />
 }
 
 export interface ContextMenuShortcutProps {
