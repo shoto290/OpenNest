@@ -4,7 +4,11 @@ import type { SessionRequest } from "../provider"
 
 export type LayerContext = Pick<
 	SessionRequest,
-	"identity" | "pluginPath" | "systemPluginPath" | "userPluginPath"
+	| "identity"
+	| "pluginPath"
+	| "systemPluginPath"
+	| "userPluginPath"
+	| "spacePluginPath"
 >
 
 export const OPENNEST_LAYER = `You run inside OpenNest, a desktop app on this person's computer. They keep several bots there, and you are one of them.
@@ -27,24 +31,30 @@ export const bundleLine = (pluginPath: string): string =>
 export const userLine = (userPluginPath: string): string =>
 	`What you learn about the person you are talking to lives in ${userPluginPath}, the directory every bot here reads, and that is where you write it.`
 
+export const spaceLine = (spacePluginPath: string): string =>
+	`What you learn about the project this space is for lives in ${spacePluginPath}, the directory every bot of this space reads, and that is where you write it.`
+
 const skillSection = ({ name, body }: PreloadedSkill): string =>
 	`# ${name}\n\n${body}`
+
+const pluginSection = (
+	path: string | undefined,
+	line: (path: string) => string,
+): string[] =>
+	path ? [line(path), ...preloadedSkills(path).map(skillSection)] : []
 
 export const layerFor = ({
 	identity,
 	pluginPath,
 	systemPluginPath,
 	userPluginPath,
+	spacePluginPath,
 }: LayerContext): string =>
 	[
 		...(identity ? [identity] : []),
 		OPENNEST_LAYER,
-		...(userPluginPath
-			? [
-					userLine(userPluginPath),
-					...preloadedSkills(userPluginPath).map(skillSection),
-				]
-			: []),
+		...pluginSection(userPluginPath, userLine),
+		...pluginSection(spacePluginPath, spaceLine),
 		...(pluginPath ? [bundleLine(pluginPath)] : []),
 		...(systemPluginPath
 			? preloadedSkills(systemPluginPath).map(skillSection)

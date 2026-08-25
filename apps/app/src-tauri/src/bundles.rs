@@ -9,6 +9,7 @@ use crate::db::repositories::conversations::{AvatarBlot, Bot};
 use crate::private_files;
 
 mod git;
+pub mod space;
 pub mod system;
 pub mod user;
 

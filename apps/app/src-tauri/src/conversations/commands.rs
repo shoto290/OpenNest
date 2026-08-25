@@ -70,7 +70,17 @@ pub async fn list_bundles_at_launch<R: Runtime>(app: &AppHandle<R>) {
 	let Ok(database) = state.inner().as_ref() else {
 		return;
 	};
+	lay_down_space_plugins(app, database).await;
 	list_bundles(bundles::root(app).as_deref(), database).await;
+}
+
+async fn lay_down_space_plugins<R: Runtime>(app: &AppHandle<R>, database: &db::Database) {
+	let Ok(spaces) = database.spaces().list().await else {
+		return;
+	};
+	for space in &spaces {
+		bundles::space::lay_down(app, &space.id);
+	}
 }
 
 async fn list_bundles(root: Option<&Path>, database: &db::Database) {

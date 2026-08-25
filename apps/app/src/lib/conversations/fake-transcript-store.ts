@@ -107,6 +107,13 @@ const refuse = (error: TranscriptStoreError | SpaceError) =>
 
 const USER_PLUGIN = "me"
 
+const SPACE_PLUGIN_PREFIX = "space:"
+
+const spacePlugin = (spaceId: string) => `${SPACE_PLUGIN_PREFIX}${spaceId}`
+
+const isPluginOwner = (owner: string) =>
+	owner === USER_PLUGIN || owner.startsWith(SPACE_PLUGIN_PREFIX)
+
 const FAKE_AVATAR_DIR = "/fake/avatars"
 
 const FAKE_AVATAR_LIMIT = 5 * 1024 * 1024
@@ -321,7 +328,7 @@ export const createFakeTranscriptStore = (
 		change: (skill: BotSkill) => BotSkill,
 		verb = "saved from settings",
 	): Promise<BotSkill> => {
-		if (botId !== USER_PLUGIN && !bots.has(botId)) {
+		if (!isPluginOwner(botId) && !bots.has(botId)) {
 			return refuse({ kind: "unknownBot", id: botId })
 		}
 		const held = skills.get(botId) ?? []
@@ -636,6 +643,47 @@ export const createFakeTranscriptStore = (
 		},
 
 		revertUserPlugin: (commitId: string) => undo(USER_PLUGIN, commitId),
+
+		spacePluginSkills: (spaceId: string) => listSkills(spacePlugin(spaceId)),
+
+		createSpacePluginSkill: (spaceId: string, draft: BotSkillDraft) =>
+			addSkill(spacePlugin(spaceId), draft),
+
+		updateSpacePluginSkill: (
+			spaceId: string,
+			skillId: string,
+			draft: BotSkillDraft,
+		) =>
+			writeSkill(spacePlugin(spaceId), skillId, (skill) => ({
+				...skill,
+				...draft,
+			})),
+
+		setSpacePluginSkillPreloaded: (
+			spaceId: string,
+			skillId: string,
+			isPreloaded: boolean,
+		) =>
+			writeSkill(spacePlugin(spaceId), skillId, (skill) => ({
+				...skill,
+				isPreloaded,
+			})),
+
+		deleteSpacePluginSkill: (spaceId: string, skillId: string) =>
+			dropSkill(spacePlugin(spaceId), skillId),
+
+		spacePluginHistory: (spaceId: string) =>
+			Promise.resolve(historyOf(spacePlugin(spaceId))),
+
+		spacePluginHistoryDiff: (spaceId: string, commitId: string) => {
+			const entry = historyEntry(spacePlugin(spaceId), commitId)
+			return entry
+				? Promise.resolve(`@@ ${entry.title} @@`)
+				: refuse({ kind: "unwritableBundle", detail: "no such commit" })
+		},
+
+		revertSpacePlugin: (spaceId: string, commitId: string) =>
+			undo(spacePlugin(spaceId), commitId),
 
 		recordBotCommands: (botId: string, listed: AgentCommand[]) => {
 			if (!bots.has(botId)) {

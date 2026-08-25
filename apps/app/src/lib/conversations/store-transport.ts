@@ -146,6 +146,42 @@ export const conversationStore: TranscriptStore = {
 	revertUserPlugin: (commitId: string) =>
 		invoke<BotHistoryEntry[]>("user_plugin_revert", { commitId }),
 
+	spacePluginSkills: (spaceId: string) =>
+		invoke<BotSkill[]>("space_plugin_skills", { spaceId }),
+
+	createSpacePluginSkill: (spaceId: string, draft: BotSkillDraft) =>
+		invoke<BotSkill>("space_plugin_create_skill", { spaceId, draft }),
+
+	updateSpacePluginSkill: (
+		spaceId: string,
+		skillId: string,
+		draft: BotSkillDraft,
+	) =>
+		invoke<BotSkill>("space_plugin_update_skill", { spaceId, skillId, draft }),
+
+	setSpacePluginSkillPreloaded: (
+		spaceId: string,
+		skillId: string,
+		isPreloaded: boolean,
+	) =>
+		invoke<BotSkill>("space_plugin_set_skill_preloaded", {
+			spaceId,
+			skillId,
+			isPreloaded,
+		}),
+
+	deleteSpacePluginSkill: (spaceId: string, skillId: string) =>
+		invoke<void>("space_plugin_delete_skill", { spaceId, skillId }),
+
+	spacePluginHistory: (spaceId: string) =>
+		invoke<BotHistoryEntry[]>("space_plugin_history", { spaceId }),
+
+	spacePluginHistoryDiff: (spaceId: string, commitId: string) =>
+		invoke<string>("space_plugin_history_diff", { spaceId, commitId }),
+
+	revertSpacePlugin: (spaceId: string, commitId: string) =>
+		invoke<BotHistoryEntry[]>("space_plugin_revert", { spaceId, commitId }),
+
 	recordBotCommands: (botId: string, commands: AgentCommand[]) =>
 		invoke<void>("conversation_record_bot_commands", { botId, commands }),
 

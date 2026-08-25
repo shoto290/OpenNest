@@ -12,6 +12,7 @@ export type SessionRequest = {
 	agent?: string
 	systemPluginPath?: string
 	userPluginPath?: string
+	spacePluginPath?: string
 	identity?: string
 	outputStyle?: string
 	partialMessages: boolean

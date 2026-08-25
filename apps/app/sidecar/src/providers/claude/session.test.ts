@@ -6,7 +6,13 @@ import { join } from "node:path"
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { buildOptions } from "./session"
-import { bundleLine, layerFor, OPENNEST_LAYER, userLine } from "./system-layer"
+import {
+	bundleLine,
+	layerFor,
+	OPENNEST_LAYER,
+	spaceLine,
+	userLine,
+} from "./system-layer"
 
 import type { SessionRequest } from "../provider"
 
@@ -113,6 +119,7 @@ describe("buildOptions", () => {
 				...request,
 				systemPluginPath: "/app/system",
 				userPluginPath: "/user/me",
+				spacePluginPath: "/spaces/s1",
 			},
 			undefined,
 		)
@@ -121,6 +128,7 @@ describe("buildOptions", () => {
 			{ type: "local", path: "/bots/b1" },
 			{ type: "local", path: "/app/system" },
 			{ type: "local", path: "/user/me" },
+			{ type: "local", path: "/spaces/s1" },
 		])
 		expect(options.agent).toBe("bean")
 	})
@@ -207,6 +215,45 @@ describe("layerFor", () => {
 				"# about-me\n\nThey like figs.",
 				bundleLine("/bots/b1"),
 			].join("\n\n"),
+		)
+	})
+
+	it("carries the space's plugin below the person's", () => {
+		dropSkill(
+			"about-this-space",
+			'---\nname: "about-this-space"\nmetadata:\n  opennest:\n    preload: true\n---\n\nThe API lives in apps/api.\n',
+		)
+
+		expect(layerFor({ pluginPath: "/bots/b1", spacePluginPath: system })).toBe(
+			[
+				OPENNEST_LAYER,
+				spaceLine(system),
+				"# about-this-space\n\nThe API lives in apps/api.",
+				bundleLine("/bots/b1"),
+			].join("\n\n"),
+		)
+	})
+
+	it("reads the person before the project when both are laid down", () => {
+		expect(
+			layerFor({
+				pluginPath: "/bots/b1",
+				userPluginPath: "/user/me",
+				spacePluginPath: "/spaces/s1",
+			}),
+		).toBe(
+			[
+				OPENNEST_LAYER,
+				userLine("/user/me"),
+				spaceLine("/spaces/s1"),
+				bundleLine("/bots/b1"),
+			].join("\n\n"),
+		)
+	})
+
+	it("names no space when the bot's space has no plugin laid down", () => {
+		expect(layerFor({ pluginPath: "/bots/b1" })).toBe(
+			[OPENNEST_LAYER, bundleLine("/bots/b1")].join("\n\n"),
 		)
 	})
 
