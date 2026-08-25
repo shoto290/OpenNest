@@ -30,6 +30,12 @@ const LONG_SPACES: Space[] = [
 const HEADER_LINE =
 	"flex h-12 w-64 items-center justify-end rounded-xl border border-border border-dashed px-2.5"
 
+const RAIL_LINE =
+	"group/sidebar flex h-12 w-12 items-center justify-center rounded-xl border border-border border-dashed"
+
+const tintVisibleIn = (trigger: HTMLElement) =>
+	slotsIn(trigger, "space-dot")[0]?.checkVisibility()
+
 const openMenu = async (trigger: HTMLElement) => {
 	fireEvent.pointerDown(trigger, { button: 0 })
 	const menu = await settled(await screen.findByRole("menu"))
@@ -39,6 +45,12 @@ const openMenu = async (trigger: HTMLElement) => {
 
 const SwitcherLine = (props: SpaceSwitcherProps) => (
 	<div className={HEADER_LINE}>
+		<SpaceSwitcher {...props} />
+	</div>
+)
+
+const SwitcherRail = (props: SpaceSwitcherProps) => (
+	<div className={RAIL_LINE} data-state="collapsed">
 		<SpaceSwitcher {...props} />
 	</div>
 )
@@ -70,7 +82,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The control that says which space a reader is in and moves them to another one. It is a ghost button carrying the space's tint as a dot and its name, sized to sit on a header line beside a trailing icon button, and pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then an item to create one, then an item to open the space settings. `SpaceDots` is its companion for a pinned strip — one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same three props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callback. A single space still shows the button, since creating a second one lives in its menu, but draws no dots — there is nothing to count. Reach for this at the top of a sidebar; `AgentSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
+					"The control that says which space a reader is in and moves them to another one. On an open panel it is a ghost button carrying the space's name alone, sized to sit on a header line beside a trailing icon button; on the icon rail the name goes and the space's tint takes its place as a dot, which is all a rail has room for. Pressing it opens a single-choice menu: every space with its tint and its rank as a Cmd shortcut hint, then an item to create one, then an item to open the space settings. `SpaceDots` is its companion for a pinned strip — one dot per space, the open one filled with its tint and larger, the rest muted and smaller, so the reader knows how many spaces exist and where they stand without opening anything. Both take the same three props, so a host maps its store onto `spaces` and `selectedSpaceId` once and hands the pair the same callback. A single space still shows the button, since creating a second one lives in its menu, but draws no dots — there is nothing to count. Reach for this at the top of a sidebar; `AgentSidebar` mounts both and adds the swipe and the Cmd+digit chords that go with them.",
 			},
 		},
 	},
@@ -89,7 +101,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Five spaces with the second one open, on the header line it was sized for. Check the button reads as the space's name first and its tint second — the dot is 10px, not a badge — that the name sits flush with the line's leading inset while the trailing icon slot keeps its own, and that the button is one Tab stop announcing the open space rather than the word `button`. Pick `Open` for the menu it opens, `SingleSpace` for a reader who has never made a second one.",
+					"Five spaces with the second one open, on the header line it was sized for. Check the button reads as the space's name and nothing else — no dot beside it, since the header already says where the reader is and the tint would only compete with the name — that the name sits flush with the line's leading inset while the trailing icon slot keeps its own, and that the button is one Tab stop announcing the open space rather than the word `button`. Pick `Collapsed` for the rail, where the tint comes back as the only mark, `Open` for the menu it opens, `SingleSpace` for a reader who has never made a second one.",
 			},
 		},
 	},
@@ -101,6 +113,29 @@ export const Default = meta.story({
 		await expect(trigger).toHaveAttribute("aria-haspopup", "menu")
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(within(trigger).getByText("Vocca")).toBeVisible()
+		await expect(tintVisibleIn(trigger)).toBe(false)
+	},
+})
+
+export const Collapsed = meta.story({
+	render: (args) => <SwitcherRail {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same button once the sidebar is on its icon rail, where the name cannot fit. Check the name is gone and the open space's tint is drawn in its place as the only mark left, that the button still announces the open space so a screen reader loses nothing, and that it still opens the same menu. Pick `Default` for the open panel, where the name carries it alone.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const trigger = canvas.getByRole("button", {
+			name: "Change space, Vocca open",
+		})
+
+		await expect(
+			slotsIn(trigger, "space-switcher-name")[0]?.checkVisibility(),
+		).toBe(false)
+		await expect(tintVisibleIn(trigger)).toBe(true)
 	},
 })
 
@@ -190,7 +225,7 @@ export const WithDots = meta.story({
 		docs: {
 			description: {
 				story:
-					"The button and its dot strip driven by one selection, which is how a sidebar mounts them. Check that pressing a dot moves the button's name and tint with it, that the open dot is the only filled and full-size one so the state never rests on colour alone, and that every dot is a named stop for a screen reader instead of an anonymous circle. Pick `Open` for the menu, `SingleSpace` for the strip's absent case.",
+					"The button and its dot strip driven by one selection, which is how a sidebar mounts them. Check that pressing a dot moves the button's name with it, that the open dot is the only filled and full-size one so the state never rests on colour alone, and that every dot is a named stop for a screen reader instead of an anonymous circle. Pick `Open` for the menu, `SingleSpace` for the strip's absent case.",
 			},
 		},
 	},

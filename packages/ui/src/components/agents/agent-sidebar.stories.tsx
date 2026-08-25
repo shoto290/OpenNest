@@ -1691,7 +1691,7 @@ export const SpacesOnRail = meta.story({
 		await expect(
 			slotIn(switcher, "space-switcher-name").checkVisibility(),
 		).toBe(false)
-		await expect(slotIn(switcher, "space-dot")).toBeInTheDocument()
+		await expect(slotIn(switcher, "space-dot").checkVisibility()).toBe(true)
 
 		const panelBox = panel.getBoundingClientRect()
 		for (const control of [
