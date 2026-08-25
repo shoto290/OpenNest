@@ -109,7 +109,7 @@ const FOCUSABLE_SELECTOR = [
 const useIsMobile = () => useMediaQuery(MOBILE_QUERY)
 
 const clampSidebarWidth = (width: number) =>
-	Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH)
+	Math.round(Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH))
 
 interface AnimatedSidebarContextValue {
 	commitWidth: (width: number) => void
@@ -525,27 +525,28 @@ const SidebarResizeHandle = ({ side }: SidebarResizeHandleProps) => {
 		const widthAt = (clientX: number) =>
 			originWidth + towardsWider * (clientX - originX)
 
-		let dragged = false
+		let followedWidth: number | null = null
 
 		const stream = new AbortController()
 		const { signal } = stream
 
 		const follow = (move: PointerEvent) => {
-			dragged = true
-			context.resizeTo(widthAt(move.clientX))
+			followedWidth = widthAt(move.clientX)
+			context.resizeTo(followedWidth)
 		}
-		const endAt = (width: number) => {
+		const endAt = (width: number | null) => {
 			stream.abort()
-			if (dragged) context.commitWidth(width)
+			if (width !== null) context.commitWidth(width)
 		}
 
 		window.addEventListener("pointermove", follow, { signal })
 		window.addEventListener(
 			"pointerup",
-			(up: PointerEvent) => endAt(widthAt(up.clientX)),
+			(up: PointerEvent) =>
+				endAt(followedWidth === null ? null : widthAt(up.clientX)),
 			{ signal },
 		)
-		window.addEventListener("pointercancel", () => endAt(originWidth), {
+		window.addEventListener("pointercancel", () => endAt(followedWidth), {
 			signal,
 		})
 	}
