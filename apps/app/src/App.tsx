@@ -223,20 +223,18 @@ export function App() {
 	)
 
 	const listedRosters = Object.keys(rosters).join(" ")
-	const rosterSpaceIds = useMemo(
-		() => (listedRosters === "" ? [] : listedRosters.split(" ")),
-		[listedRosters],
-	)
 
 	useEffect(() => {
-		sections.controller.keep(rosterSpaceIds)
+		const rosteredSpaceIds =
+			listedRosters === "" ? [] : listedRosters.split(" ")
+		sections.controller.keep(rosteredSpaceIds)
 		const held = sections.controller.getState().sections
-		for (const spaceId of rosterSpaceIds) {
+		for (const spaceId of rosteredSpaceIds) {
 			if (!held[spaceId]) {
 				void sections.controller.enter(spaceId)
 			}
 		}
-	}, [sections.controller, rosterSpaceIds])
+	}, [sections.controller, listedRosters])
 
 	const rosterBotsBySpace = useMemo(
 		() =>
