@@ -268,12 +268,16 @@ interface DragParams {
 	pointer: (steps: PointerStep[]) => Promise<void>
 }
 
-const dragHandleBy = async ({ by, handle, pointer }: DragParams) => {
+const gripCenter = (handle: HTMLElement) => {
 	const grip = handle.getBoundingClientRect()
-	const from = {
+	return {
 		clientX: grip.left + grip.width / 2,
 		clientY: grip.top + grip.height / 2,
 	}
+}
+
+const dragHandleBy = async ({ by, handle, pointer }: DragParams) => {
+	const from = gripCenter(handle)
 	const to = { clientX: from.clientX + by, clientY: from.clientY }
 	await pointer([
 		{ keys: "[MouseLeft>]", target: handle, coords: from },
@@ -379,6 +383,46 @@ export const ResizeReset = meta.story({
 		await expect(args.onWidthChange).toHaveBeenLastCalledWith(
 			SIDEBAR_DEFAULT_WIDTH,
 		)
+	},
+})
+
+export const ResizeAbandoned = meta.story({
+	args: {
+		sidebar: SIDEBAR,
+		onWidthChange: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the pointer stream dies mid-drag — the window manager or the desktop shell takes the pointer over and no release ever reaches the page. Check that the panel stops following at once and sits back at the width it had before the press, rather than freezing wherever the last frame left it. Pick `Resized` for the drag that ends properly.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const handle = handleIn(canvas)
+		const sidebar = canvas.getByRole("complementary", { name: "Workspace" })
+		const start = widthOf(sidebar)
+		const from = gripCenter(handle)
+
+		await userEvent.pointer([
+			{ keys: "[MouseLeft>]", target: handle, coords: from },
+			{ coords: { clientX: from.clientX + WIDER_BY, clientY: from.clientY } },
+		])
+		await expectWidth(sidebar, start + WIDER_BY)
+
+		handle.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }))
+		await expectWidth(sidebar, start)
+
+		await userEvent.pointer([
+			{
+				coords: { clientX: from.clientX + WIDER_BY * 2, clientY: from.clientY },
+			},
+			{ keys: "[/MouseLeft]" },
+		])
+		await expectWidth(sidebar, start)
+		await expect(args.onWidthChange).toHaveBeenCalledTimes(1)
+		await expect(args.onWidthChange).toHaveBeenLastCalledWith(start)
 	},
 })
 

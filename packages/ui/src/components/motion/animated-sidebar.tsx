@@ -527,17 +527,27 @@ const SidebarResizeHandle = ({ side }: SidebarResizeHandleProps) => {
 
 		let dragged = false
 
+		const stream = new AbortController()
+		const { signal } = stream
+
 		const follow = (move: PointerEvent) => {
 			dragged = true
 			context.resizeTo(widthAt(move.clientX))
 		}
-		const stop = (release: PointerEvent) => {
-			window.removeEventListener("pointermove", follow)
-			if (dragged) context.commitWidth(widthAt(release.clientX))
+		const endAt = (width: number) => {
+			stream.abort()
+			if (dragged) context.commitWidth(width)
 		}
 
-		window.addEventListener("pointermove", follow)
-		window.addEventListener("pointerup", stop, { once: true })
+		window.addEventListener("pointermove", follow, { signal })
+		window.addEventListener(
+			"pointerup",
+			(up: PointerEvent) => endAt(widthAt(up.clientX)),
+			{ signal },
+		)
+		window.addEventListener("pointercancel", () => endAt(originWidth), {
+			signal,
+		})
 	}
 
 	const stepWidth = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -558,6 +568,7 @@ const SidebarResizeHandle = ({ side }: SidebarResizeHandleProps) => {
 			tabIndex={0}
 			data-slot="sidebar-resize-handle"
 			data-side={side}
+			data-tauri-drag-region="false"
 			onPointerDown={startResize}
 			onDoubleClick={() => context.commitWidth(context.defaultWidth)}
 			onKeyDown={stepWidth}
