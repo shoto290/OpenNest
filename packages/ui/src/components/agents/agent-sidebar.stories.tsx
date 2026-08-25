@@ -856,6 +856,47 @@ export const LongContent = meta.story({
 	},
 })
 
+export const MarkdownPreview = meta.story({
+	args: {
+		bots: [
+			{
+				id: "marked",
+				name: "Atlas",
+				animal: "owl",
+				lastMessage:
+					"## Release notes\n\n- **Renamed** the `transport` module\n- Read [the report](https://example.com/report)\n\n```ts\nconst turn = resume()\n```",
+				timestamp: "12:07",
+			},
+			{
+				id: "plain",
+				name: "Beacon",
+				animal: "bear",
+				lastMessage: "Ran the suite twice, both green.",
+				timestamp: "11:40",
+			},
+		],
+		selectedBotId: "marked",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A message written in markdown. The preview is one clipped line, so the marks are reduced away rather than styled: headings, list markers, emphasis, links, inline code and fences leave only their words, and the several lines read as one. Compare with the second row, whose message carries no markup and comes through untouched.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+
+		await expect(slotIn(rows[0], "roster-row-preview")).toHaveTextContent(
+			"Release notes Renamed the transport module Read the report const turn = resume()",
+		)
+		await expect(slotIn(rows[1], "roster-row-preview")).toHaveTextContent(
+			"Ran the suite twice, both green.",
+		)
+	},
+})
+
 export const RowContextMenu = meta.story({
 	args: { bots: ROSTER.slice(0, 4), selectedBotId: "beacon" },
 	parameters: {

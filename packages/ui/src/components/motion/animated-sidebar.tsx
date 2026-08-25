@@ -1186,7 +1186,7 @@ export function AnimatedSidebarMenuButton({
 	)
 
 	const interactiveClassName = cn(
-		"relative flex min-h-9 w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-xl text-left font-medium text-sm outline-none",
+		"relative flex min-h-9 w-full min-w-0 select-none items-center gap-2.5 overflow-hidden rounded-xl text-left font-medium text-sm outline-none",
 		"px-3",
 		icon && "pl-2",
 		"text-sidebar-foreground/70",
