@@ -12,6 +12,11 @@ const RAIL_LABELS_MIN_WIDTH = 672
 const RAIL_ITEM_CLASS =
 	"flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-muted-foreground text-sm outline-none select-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-active:bg-muted data-active:font-medium data-active:text-foreground"
 
+const DANGER_RAIL_ITEM_CLASS = cn(
+	RAIL_ITEM_CLASS,
+	"text-destructive hover:bg-destructive/10 hover:text-destructive data-active:bg-destructive/10 data-active:text-destructive",
+)
+
 const SETTINGS_PANEL_CLASS =
 	"flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-5 outline-none data-ending-style:hidden"
 
@@ -113,6 +118,7 @@ const SettingsRail = ({
 )
 
 export {
+	DANGER_RAIL_ITEM_CLASS,
 	RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,

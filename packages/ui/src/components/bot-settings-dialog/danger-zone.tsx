@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
+import { DANGER_BLOCK_CLASS } from "@workspace/ui/components/settings-styles"
 
 type DangerZoneProps = {
 	botName: string
@@ -20,7 +21,7 @@ const DangerZone = ({
 	const { t } = useTranslation("bots")
 
 	return (
-		<div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 p-4">
+		<div className={DANGER_BLOCK_CLASS}>
 			<div className="flex flex-col gap-1">
 				<span className="font-medium text-destructive text-sm">
 					{t("danger.delete")}
