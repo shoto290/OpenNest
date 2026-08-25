@@ -16,6 +16,7 @@ interface WorkspaceShellProps
 		| "width"
 		| "defaultWidth"
 		| "onWidthChange"
+		| "isResizable"
 		| "className"
 	> {
 	sidebar?: ReactNode
@@ -32,6 +33,7 @@ const WorkspaceShell = ({
 	width,
 	defaultWidth,
 	onWidthChange,
+	isResizable,
 	children,
 	className,
 }: WorkspaceShellProps) => (
@@ -43,6 +45,7 @@ const WorkspaceShell = ({
 		width={width}
 		defaultWidth={defaultWidth}
 		onWidthChange={onWidthChange}
+		isResizable={isResizable}
 		className={cn(SHELL_ROW, className)}
 	>
 		{sidebar}

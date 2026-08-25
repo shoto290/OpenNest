@@ -98,4 +98,14 @@ describe("AnimatedSidebar resize handle mounted", () => {
 
 		expect(onWidthChange).toHaveBeenCalledExactlyOnceWith(SIDEBAR_MAX_WIDTH)
 	})
+
+	it("mounts no handle when the host forbids resizing", () => {
+		render(
+			<AnimatedSidebarProvider defaultWidth={START_WIDTH} isResizable={false}>
+				<AnimatedSidebar />
+			</AnimatedSidebarProvider>,
+		)
+
+		expect(screen.queryByRole("separator")).toBeNull()
+	})
 })
