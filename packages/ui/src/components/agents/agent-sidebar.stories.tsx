@@ -19,7 +19,6 @@ import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
-import { SWIPE_SETTLE } from "@workspace/ui/hooks/use-space-swipe"
 
 const LAST_MESSAGE =
 	"Renamed the transport module and updated every caller, so the second turn resumes the first one cleanly again."
@@ -1315,26 +1314,7 @@ export const DragRegion = meta.story({
 	},
 })
 
-const WHEEL_TICKS = 5
-
-const MID_TRAVEL_POLL = { interval: 5, timeout: SWIPE_SETTLE - 60 }
-
 const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0))
-
-const swipeOver = async (carousel: HTMLElement, deltaX: number) => {
-	for (let tick = 0; tick < WHEEL_TICKS; tick += 1) {
-		fireEvent.wheel(carousel, { deltaX: deltaX / WHEEL_TICKS, deltaY: 0 })
-		await nextTask()
-	}
-}
-
-const afterSwipeSettles = () =>
-	new Promise((resolve) => setTimeout(resolve, SWIPE_SETTLE + 40))
-
-const swipeAndSettle = async (carousel: HTMLElement, deltaX: number) => {
-	await swipeOver(carousel, deltaX)
-	await afterSwipeSettles()
-}
 
 const carouselIn = (canvasElement: HTMLElement) =>
 	slotIn(canvasElement, "space-carousel")
@@ -1349,6 +1329,23 @@ const panelInView = (canvasElement: HTMLElement) => {
 	if (!panel) throw new Error("No space panel is in view")
 	return panel
 }
+
+const panelsDrawn = (canvasElement: HTMLElement) =>
+	panelsIn(canvasElement).filter((panel) => panel.childElementCount > 0)
+
+const swipeTo = async (carousel: HTMLElement, rank: number) => {
+	const landing = rank * carousel.clientWidth
+	if (carousel.scrollLeft === landing) return
+	const landed = new Promise((resolve) => {
+		carousel.addEventListener("scrollend", resolve, { once: true })
+	})
+	carousel.scrollLeft = landing
+	await landed
+	await nextTask()
+}
+
+const rankShown = (carousel: HTMLElement) =>
+	Math.round(carousel.scrollLeft / carousel.clientWidth)
 
 const rostersAcross = (spaces: Space[]): Record<string, AgentSidebarBot[]> =>
 	Object.fromEntries(
@@ -1405,7 +1402,7 @@ export const OneSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The state every account opens in: one space, so the header names it and nothing else navigates. Check the switcher sits left of the create button on the same line with the create button's three insets untouched, that no dot strip is drawn in the pinned region, that the row holds exactly one panel filling the list area, and that a horizontal swipe over it reports nothing and does not move the row — there is nowhere to go, and a gesture that silently does nothing is better than one that rubber-bands. Pick `FiveSpaces` for the navigating case, `SpaceMidTravel` for the row under the gesture.",
+					"The state every account opens in: one space, so the header names it and nothing else navigates. Check the switcher sits left of the create button on the same line with the create button's three insets untouched, that no dot strip is drawn in the pinned region, that the row holds exactly one panel filling the list area, and that the row is no wider than that panel, so the trackpad has nothing to scroll and lands nowhere new — there is nowhere to go, and a gesture that silently does nothing is better than one that rubber-bands. Pick `FiveSpaces` for the navigating case, `SpaceScrolling` for the row under the gesture.",
 			},
 		},
 	},
@@ -1433,10 +1430,10 @@ export const OneSpace = meta.story({
 		await expect(panels).toHaveLength(1)
 		await expect(panels[0].clientWidth).toBe(carousel.clientWidth)
 
-		const resting = leftOf(panels[0])
-		await swipeAndSettle(carousel, 240)
+		await expect(carousel.scrollWidth).toBe(carousel.clientWidth)
+
+		await swipeTo(carousel, 0)
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-		await expect(leftOf(panels[0])).toBe(resting)
 	},
 })
 
@@ -1451,7 +1448,7 @@ export const FiveSpaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Five spaces with the second one open, each with its own roster — the everyday case, and the one that exercises all four ways in. Check the dot strip is centred in the pinned region with only the open dot filled and full size, that pressing a dot reports its id, that one horizontal swipe reaches exactly one neighbour rather than one space per wheel tick, and that Cmd and a digit reaches a space directly while a digit past the last one is left alone. Pick `NineSpaces` for the strip at its widest, `SpacesOnRail` for the same panel collapsed, `SpaceMidTravel` for the row under the gesture, `SpacesWithoutRosters` for the same spaces before a host hands its rosters over.",
+					"Five spaces with the second one open, each with its own roster — the everyday case, and the one that exercises all four ways in. Check the dot strip is centred in the pinned region with only the open dot filled and full size, that pressing a dot reports its id, that landing the row on a space reports that space and only it, and that Cmd and a digit reaches a space directly while a digit past the last one is left alone. Pick `NineSpaces` for the strip at its widest, `SpacesOnRail` for the same panel collapsed, `SpaceScrolling` for the row under the gesture, `SpacesWithoutRosters` for the same spaces before a host hands its rosters over.",
 			},
 		},
 	},
@@ -1479,11 +1476,13 @@ export const FiveSpaces = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("veille")
 
 		const carousel = carouselIn(canvasElement)
-		await swipeAndSettle(carousel, 240)
+		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 5)
+
+		await swipeTo(carousel, 2)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
 
-		await swipeAndSettle(carousel, -240)
+		await swipeTo(carousel, 0)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(3)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("perso")
 
@@ -1536,12 +1535,13 @@ export const NineSpaces = meta.story({
 
 		const carousel = carouselIn(canvasElement)
 		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(2)
+		await expect(panels).toHaveLength(9)
+		await expect(panelsDrawn(canvasElement)).toHaveLength(2)
 		const viewport = carousel.getBoundingClientRect()
 		await expect(leftOf(panels[0])).toBeCloseTo(viewport.left, 0)
 		await expect(leftOf(panels[1])).toBeCloseTo(viewport.right, 0)
 
-		await swipeAndSettle(carousel, -240)
+		await swipeTo(carousel, 0)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(leftOf(panels[0])).toBeCloseTo(viewport.left, 0)
 	},
@@ -1605,46 +1605,42 @@ export const LiveSpaceSelection = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel wired to a host that actually moves its selection, which is the only way the gesture is honest: letting go past half a panel changes `selectedSpaceId`, so every callback the panel was handed is a new function while the trackpad is still coasting. Check one physical swipe moves exactly one space and never two — the drag a gesture accumulates has to outlive the re-render its own landing causes — that the row comes to rest on the space that arrived rather than between two, that the next swipe after the wheel goes quiet moves again, and that a rank chord still reports once after all those re-renders rather than once per listener left behind. Pick `FiveSpaces` for the same navigation against a fixed selection, `SpaceMidTravel` for the row under the gesture.",
+					"The panel wired to a host that actually moves its selection, which is the only way the row is honest: landing on a space reports it, the host moves `selectedSpaceId`, and the row must already be where the reader left it rather than scroll itself there a second time. Check a landing reports once and only once, that the space the reader landed on is the one the header names, that the row stays put afterwards instead of bouncing, and that a rank chord scrolls the row to that space and reports it once, however many re-renders came before. Pick `FiveSpaces` for the same navigation against a fixed selection, `SpaceScrolling` for the snapping the row is built on.",
 			},
 		},
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const carousel = carouselIn(canvasElement)
 
-		await swipeAndSettle(carousel, 240)
+		await swipeTo(carousel, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(
 			canvas.getByRole("button", { name: "Change space, Vocca open" }),
 		).toBeVisible()
 
-		await swipeAndSettle(carousel, 240)
+		await swipeTo(carousel, 2)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(
 			canvas.getByRole("button", { name: "Change space, Atelier open" }),
 		).toBeVisible()
 
-		await waitFor(async () => {
-			await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
-				carousel.getBoundingClientRect().left,
-				0,
-			)
-		}, FRAME_POLL)
+		await expect(rankShown(carousel)).toBe(2)
 
 		await userEvent.keyboard("{Meta>}5{/Meta}")
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(3)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("archives")
 
 		await waitFor(async () => {
-			await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
-				carousel.getBoundingClientRect().left,
-				0,
-			)
+			await expect(rankShown(carousel)).toBe(4)
 		}, FRAME_POLL)
+		await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
+			carousel.getBoundingClientRect().left,
+			0,
+		)
 	},
 })
 
-export const SpaceMidTravel = meta.story({
+export const SpaceScrolling = meta.story({
 	args: {
 		spaces: FIVE_SPACES,
 		selectedSpaceId: "vocca",
@@ -1655,55 +1651,44 @@ export const SpaceMidTravel = meta.story({
 		docs: {
 			description: {
 				story:
-					"The row caught halfway between two spaces, which is the whole point of drawing every roster in one line: the space being left travels out one side while the space arriving travels in the other, by exactly as much as the fingers have moved, and nothing is decided until they let go. Check the row follows a gesture the whole way without ever snapping under the fingers; that being let go short of half a panel takes it back to the space it started from and reports nothing; that being let go past half a panel magnetises it onto the neighbour and reports it once; that a flick carrying the row a whole panel arrives straight away, since there is nowhere further for it to go, and that the momentum behind that flick is then spent, so one flick is one space; that the pinned region above and below — the space name, the create button, the dot strip and the reader's chip — never moves by a pixel while the row does, because the window controls share that top line; and that each panel is its own scrolling box, so a reader coming back to a space finds it where they left it. Pick `LiveSpaceSelection` for the same gesture against a host that moves its selection.",
+					"The row itself, which is one scrolling box a panel wide with a roster in each panel — the swipe is the reader scrolling it sideways, so the trackpad tracks their fingers, coasts, rubber-bands at the ends and magnetises on release the way it does in every native window, none of it ours to write. Check the contract that gets that for free: the box snaps on the x axis and snaps hard, each panel is a snap point the scroll may never pass over — that is what holds a flick to one space — every panel is exactly the width of the box, and the box is as wide as its spaces. Check too that a panel is its own scrolling box, so a reader coming back to a space finds it where they left it, and that landing on a space reports it once. Pick `LiveSpaceSelection` for the row against a host that moves its selection, `SpaceScrollMemory` for a space walked past and come back to.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement }) => {
 		const carousel = carouselIn(canvasElement)
 		const panels = panelsIn(canvasElement)
-		await expect(panels).toHaveLength(3)
+		await expect(panels).toHaveLength(5)
+		await expect(panelsDrawn(canvasElement)).toHaveLength(3)
+
+		const box = getComputedStyle(carousel)
+		await expect(box.scrollSnapType).toBe("x mandatory")
+		await expect(box.overflowX).toBe("auto")
+		await expect(carousel.scrollWidth).toBe(carousel.clientWidth * 5)
+
 		for (const panel of panels) {
-			await expect(getComputedStyle(panel).overflowY).toBe("auto")
+			const style = getComputedStyle(panel)
+			await expect(style.scrollSnapAlign).toBe("start")
+			await expect(style.scrollSnapStop).toBe("always")
+			await expect(style.overflowY).toBe("auto")
+			await expect(panel.clientWidth).toBe(carousel.clientWidth)
 		}
 
-		const width = carousel.clientWidth
-		const viewport = carousel.getBoundingClientRect()
 		const still = [
 			leftOf(slotIn(canvasElement, "space-switcher-name")),
 			leftOf(slotIn(canvasElement, "space-dots")),
 		]
 
-		await swipeOver(carousel, width * 0.3)
-		await waitFor(async () => {
-			await expect(leftOf(panels[1])).toBeLessThan(viewport.left - 1)
-		}, MID_TRAVEL_POLL)
-		await expect(leftOf(panels[2])).toBeLessThan(viewport.right)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+		await swipeTo(carousel, 2)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
 		await expect([
 			leftOf(slotIn(canvasElement, "space-switcher-name")),
 			leftOf(slotIn(canvasElement, "space-dots")),
 		]).toEqual(still)
 
-		await afterSwipeSettles()
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-		await waitFor(async () => {
-			await expect(leftOf(panels[1])).toBeCloseTo(viewport.left, 0)
-		}, FRAME_POLL)
-
-		await swipeOver(carousel, width * 0.7)
-		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-
-		await afterSwipeSettles()
+		await swipeTo(carousel, 1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
-
-		await swipeOver(carousel, width * 3)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
-
-		await swipeOver(carousel, width * 3)
-		await afterSwipeSettles()
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 	},
 })
 
@@ -1719,18 +1704,15 @@ export const SpaceSwitchingOff = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same panel with space switching turned off, which is how a host holds the reader still while a dialog or a running turn owns the screen. Check a horizontal swipe over the row neither moves it nor reports anything, that the meta-digit chord reports nothing and is left unprevented so whatever else the app binds to it still hears it, and that the dot strip and the switcher menu keep working — a deliberate press is never the thing being guarded against. Pick `FiveSpaces` for the same panel with switching on.",
+					"The same panel with space switching turned off, which is how a host holds the reader still while a dialog or a running turn owns the screen. Check the row is not the reader's to scroll at all — the box refuses the gesture itself rather than answering it and thinking better of it — that the meta-digit chord reports nothing and is left unprevented so whatever else the app binds to it still hears it, and that the dot strip and the switcher menu keep working — a deliberate press is never the thing being guarded against. Pick `FiveSpaces` for the same panel with switching on.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const carousel = carouselIn(canvasElement)
-		const panels = panelsIn(canvasElement)
-		const resting = leftOf(panels[1])
 
-		await swipeAndSettle(carousel, 240)
+		await expect(getComputedStyle(carousel).overflowX).toBe("hidden")
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
-		await expect(leftOf(panels[1])).toBe(resting)
 
 		let prevented = true
 		const watch = (event: KeyboardEvent) => {
@@ -1757,7 +1739,7 @@ export const SpacesWithoutRosters = meta.story({
 		docs: {
 			description: {
 				story:
-					"Five spaces and no roster handed over per space, which is every host that has not wired `botsBySpaceId` yet. Check the row is not drawn at all — one list, scrolling in the content region as it did before the carousel existed — that a horizontal swipe over it reports nothing, because dragging towards panels a host never filled would be a promise the sidebar cannot keep, and that the dots and the meta-digit chord still change space. Pick `FiveSpaces` for the same five spaces once their rosters arrive.",
+					"Five spaces and no roster handed over per space, which is every host that has not wired `botsBySpaceId` yet. Check the row is not drawn at all — one list, scrolling in the content region as it did before the carousel existed — that it does not scroll sideways at all, because a row towards panels a host never filled would be a promise the sidebar cannot keep, and that the dots and the meta-digit chord still change space. Pick `FiveSpaces` for the same five spaces once their rosters arrive.",
 			},
 		},
 	},
@@ -1768,7 +1750,7 @@ export const SpacesWithoutRosters = meta.story({
 		const content = slotIn(canvasElement, "sidebar-content")
 		await expect(getComputedStyle(content).overflowY).toBe("auto")
 
-		await swipeAndSettle(content, 240)
+		await expect(content.scrollWidth).toBe(content.clientWidth)
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 
 		await userEvent.click(spaceDotsIn(canvasElement)[3])
@@ -1799,7 +1781,7 @@ export const SpaceScrollMemory = meta.story({
 		docs: {
 			description: {
 				story:
-					"A window too short to show a roster whole, which is where a space has to remember where its reader had got to. Only the space in view and the one waiting off each edge are drawn, so a space walked two along leaves the row entirely — check that scrolling one space down, walking two spaces on and walking back finds it exactly where it was left rather than back at the top, and that a space arriving starts at its own top rather than inheriting the scroll of the one before it. Pick `SpaceMidTravel` for the gesture itself, `NineSpaces` for the row at its widest.",
+					"A window too short to show a roster whole, which is where a space has to remember where its reader had got to. Only the space in view and the one waiting off each edge are drawn, so a space walked two along leaves the row entirely — check that scrolling one space down, walking two spaces on and walking back finds it exactly where it was left rather than back at the top, and that a space arriving starts at its own top rather than inheriting the scroll of the one before it. Pick `SpaceScrolling` for the gesture itself, `NineSpaces` for the row at its widest.",
 			},
 		},
 	},
@@ -1809,16 +1791,19 @@ export const SpaceScrollMemory = meta.story({
 		await expect(left.scrollHeight).toBeGreaterThan(left.clientHeight)
 
 		left.scrollTop = 90
+		await nextTask()
 		await expect(left.scrollTop).toBe(90)
 
-		await swipeAndSettle(carousel, 240)
+		await swipeTo(carousel, 1)
 		await expect(panelInView(canvasElement).scrollTop).toBe(0)
 
-		await swipeAndSettle(carousel, 240)
-		await expect(panelsIn(canvasElement)).toHaveLength(3)
+		await swipeTo(carousel, 2)
+		await expect(panelsDrawn(canvasElement)).toHaveLength(3)
 
-		await swipeAndSettle(carousel, -240)
-		await swipeAndSettle(carousel, -240)
-		await expect(panelInView(canvasElement).scrollTop).toBe(90)
+		await swipeTo(carousel, 1)
+		await swipeTo(carousel, 0)
+		await waitFor(async () => {
+			await expect(panelInView(canvasElement).scrollTop).toBe(90)
+		}, FRAME_POLL)
 	},
 })

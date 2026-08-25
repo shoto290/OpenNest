@@ -1,14 +1,8 @@
 "use client"
 
 import type { TFunction } from "i18next"
-import {
-	type AnimationPlaybackControls,
-	animate,
-	motion,
-	useMotionValue,
-	useReducedMotion,
-} from "motion/react"
-import { memo, type ReactNode, useRef } from "react"
+import { useReducedMotion } from "motion/react"
+import { memo, type ReactNode, type UIEvent, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
@@ -45,8 +39,7 @@ import {
 	type UserChipIdentity,
 } from "@workspace/ui/components/user-chip"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
-import { useSpaceSwipe } from "@workspace/ui/hooks/use-space-swipe"
-import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
+import { cn } from "@workspace/ui/lib/utils"
 
 const WINDOW_CONTROLS_INSET =
 	"h-12 flex-row items-center justify-end px-2.5 py-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
@@ -77,14 +70,15 @@ const CONTENT_INSET = "pt-0 group-data-[state=collapsed]/sidebar:px-0"
 
 const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
 
-const CAROUSEL = "flex min-h-0 flex-1 overflow-hidden"
+const CAROUSEL =
+	"flex min-h-0 flex-1 snap-x snap-mandatory overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 
-const CAROUSEL_TRACK = "flex min-h-0 w-full will-change-transform"
+const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 
-const CAROUSEL_ROW = "relative min-h-0 w-full"
+const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"absolute inset-y-0 flex w-full flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
 
 type AgentSidebarStatus = "idle" | "working"
 
@@ -251,7 +245,6 @@ const BotRoster = ({
 const NEIGHBOURING = 1
 
 interface SpacePanelProps {
-	rank: number
 	spaceId: string
 	isInView: boolean
 	scrolls: Map<string, number>
@@ -259,27 +252,33 @@ interface SpacePanelProps {
 }
 
 const SpacePanel = ({
-	rank,
 	spaceId,
 	isInView,
 	scrolls,
 	children,
-}: SpacePanelProps) => (
-	<div
-		className={CAROUSEL_PANEL}
-		data-slot="space-panel"
-		inert={!isInView}
-		onScroll={(event) => {
-			scrolls.set(spaceId, event.currentTarget.scrollTop)
-		}}
-		ref={(node) => {
-			if (node) node.scrollTop = scrolls.get(spaceId) ?? 0
-		}}
-		style={{ left: `${rank * 100}%` }}
-	>
-		{children}
-	</div>
-)
+}: SpacePanelProps) => {
+	const panel = useRef<HTMLDivElement>(null)
+	const hasRoster = children !== null
+
+	useEffect(() => {
+		if (hasRoster && panel.current)
+			panel.current.scrollTop = scrolls.get(spaceId) ?? 0
+	}, [hasRoster, scrolls, spaceId])
+
+	return (
+		<div
+			className={CAROUSEL_PANEL}
+			data-slot="space-panel"
+			inert={!isInView}
+			onScroll={(event) => {
+				if (hasRoster) scrolls.set(spaceId, event.currentTarget.scrollTop)
+			}}
+			ref={panel}
+		>
+			{children}
+		</div>
+	)
+}
 
 interface SpaceCarouselProps {
 	spaces: Space[]
@@ -298,63 +297,49 @@ const SpaceCarousel = ({
 }: SpaceCarouselProps) => {
 	const viewport = useRef<HTMLDivElement>(null)
 	const scrolls = useRef(new Map<string, number>()).current
-	const settling = useRef<AnimationPlaybackControls | null>(null)
-	const travel = useMotionValue(0)
-	const transition = useReducedMotion() ? TRANSITION_NONE : SPRING_PANEL
+	const hasLanded = useRef(false)
+	const isCut = useReducedMotion() ?? false
 	const inView = Math.max(
 		spaces.findIndex((space) => space.id === selectedSpaceId),
 		0,
 	)
 
-	const follow = (travelled: number) => {
-		settling.current?.stop()
-		travel.set(-travelled)
-	}
+	useEffect(() => {
+		const node = viewport.current
+		if (!node) return
+		const landing = inView * node.clientWidth
+		const isThere = Math.abs(node.scrollLeft - landing) < 1
+		const behavior = isCut || !hasLanded.current ? "auto" : "smooth"
+		hasLanded.current = true
+		if (!isThere) node.scrollTo({ behavior, left: landing })
+	}, [inView, isCut])
 
-	const settleOn = (settled: number) => {
-		settling.current = animate(travel, 0, transition)
-		const space = spaces[settled]
-		if (space && space.id !== selectedSpaceId) onSelectSpace?.(space.id)
+	const land = (event: UIEvent<HTMLDivElement>) => {
+		const node = event.currentTarget
+		const landed = spaces[Math.round(node.scrollLeft / node.clientWidth)]
+		if (landed && landed.id !== selectedSpaceId) onSelectSpace?.(landed.id)
 	}
-
-	useSpaceSwipe({
-		count: spaces.length,
-		index: inView,
-		isEnabled: isSwipeEnabled,
-		onSettle: settleOn,
-		onTravel: follow,
-		target: viewport,
-	})
 
 	return (
-		<div className={CAROUSEL} data-slot="space-carousel" ref={viewport}>
-			<motion.div
-				className={CAROUSEL_TRACK}
-				data-slot="space-carousel-track"
-				style={{ x: travel }}
-			>
-				<motion.div
-					animate={{ x: `${inView * -100}%` }}
-					className={CAROUSEL_ROW}
-					data-slot="space-carousel-row"
-					initial={false}
-					transition={transition}
+		<div
+			className={cn(
+				CAROUSEL,
+				isSwipeEnabled ? CAROUSEL_SWIPEABLE : CAROUSEL_HELD,
+			)}
+			data-slot="space-carousel"
+			onScrollEnd={land}
+			ref={viewport}
+		>
+			{spaces.map((space, rank) => (
+				<SpacePanel
+					isInView={space.id === selectedSpaceId}
+					key={space.id}
+					scrolls={scrolls}
+					spaceId={space.id}
 				>
-					{spaces.map((space, rank) =>
-						Math.abs(rank - inView) > NEIGHBOURING ? null : (
-							<SpacePanel
-								isInView={space.id === selectedSpaceId}
-								key={space.id}
-								rank={rank}
-								scrolls={scrolls}
-								spaceId={space.id}
-							>
-								{renderSpace(space)}
-							</SpacePanel>
-						),
-					)}
-				</motion.div>
-			</motion.div>
+					{Math.abs(rank - inView) > NEIGHBOURING ? null : renderSpace(space)}
+				</SpacePanel>
+			))}
 		</div>
 	)
 }
