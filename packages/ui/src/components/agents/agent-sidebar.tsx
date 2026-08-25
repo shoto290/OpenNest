@@ -71,7 +71,7 @@ const HEADER =
 	"h-12 flex-row items-center justify-end py-0 pr-2.5 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
 
 const WINDOW_CONTROLS_INSET =
-	"pl-[85px] group-data-[state=collapsed]/sidebar:*:hidden"
+	"pl-[78px] group-data-[state=collapsed]/sidebar:*:hidden"
 
 const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
 

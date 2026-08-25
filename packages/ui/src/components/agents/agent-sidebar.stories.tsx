@@ -1937,9 +1937,13 @@ export const SpaceScrollMemory = meta.story({
 
 const HEADER_HEIGHT = 48
 
-const WINDOW_CONTROLS_RESERVE = 85
+const WINDOW_CONTROLS_RESERVE = 78
 
-const WINDOW_CONTROLS_END = 70
+const WINDOW_CONTROLS_END = 69.5
+
+const WINDOW_CONTROLS_LEADING_INSET = 17.5
+
+const SPACE_NAME_START = WINDOW_CONTROLS_END + WINDOW_CONTROLS_LEADING_INSET
 
 const HEADER_PADDING = 10
 
@@ -1958,7 +1962,7 @@ export const WindowControlsReserved = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this in a desktop window whose title bar is transparent, so the OS paints its close/minimise/zoom buttons over the top of this panel. Check that the header holds a gutter wide enough that the space switcher and the create button both start past those buttons, and that the list below is untouched — the reserve is owed by the header alone. Pick `NoWindowControlsReserve` in a browser tab or on a host that draws its own title bar, `WindowControlsReservedOnRail` for the same window with the panel collapsed.",
+					"Reach for this in a desktop window whose title bar is transparent, so the OS paints its close/minimise/zoom buttons over the top of this panel. Check that the header holds a gutter wide enough that the space switcher and the create button both start past those buttons, that the space name reads as far from the last button as the first button is from the window edge, and that the list below is untouched — the reserve is owed by the header alone. The gutter is measured to the first glyph of the name, not to the switcher's box, so it subtracts the padding the switcher already carries. Pick `NoWindowControlsReserve` in a browser tab or on a host that draws its own title bar, `WindowControlsReservedOnRail` for the same window with the panel collapsed.",
 			},
 		},
 	},
@@ -1968,13 +1972,20 @@ export const WindowControlsReserved = meta.story({
 			`${WINDOW_CONTROLS_RESERVE}px`,
 		)
 
+		const headerStart = header.getBoundingClientRect().left
 		const controls = within(header).getAllByRole("button")
 		await expect(controls.length).toBeGreaterThan(1)
 		for (const control of controls) {
-			await expect(control.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-				WINDOW_CONTROLS_END,
-			)
+			await expect(
+				control.getBoundingClientRect().left - headerStart,
+			).toBeGreaterThanOrEqual(WINDOW_CONTROLS_END)
 		}
+
+		const name = slotIn(header, "space-switcher-name")
+		await expect(name.getBoundingClientRect().left - headerStart).toBeCloseTo(
+			SPACE_NAME_START,
+			0,
+		)
 	},
 })
 
@@ -1994,7 +2005,8 @@ export const NoWindowControlsReserve = meta.story({
 			`${HEADER_PADDING}px`,
 		)
 		await expect(
-			slotIn(header, "space-switcher").getBoundingClientRect().left,
+			slotIn(header, "space-switcher").getBoundingClientRect().left -
+				header.getBoundingClientRect().left,
 		).toBeLessThan(WINDOW_CONTROLS_END)
 	},
 })
