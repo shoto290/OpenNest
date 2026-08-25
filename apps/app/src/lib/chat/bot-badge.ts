@@ -18,17 +18,6 @@ const hasTurnEnded = (before: ChatState, after: ChatState): boolean =>
 	before.turn !== "stopping" &&
 	!isTurnBusy(after.turn)
 
-const badgeForEndedTurn = (
-	after: ChatState,
-	isSelected: boolean,
-	hasFocus: boolean,
-): BotBadge => {
-	if (isSelected && hasFocus) {
-		return "none"
-	}
-	return after.turn === "failed" ? "failed" : "done"
-}
-
 export const badgeAfter = ({
 	held,
 	before,
@@ -39,11 +28,14 @@ export const badgeAfter = ({
 	if (wantsAttention(after)) {
 		return "attention"
 	}
+	if (isSelected && hasFocus) {
+		return "none"
+	}
 	if (isTurnBusy(after.turn)) {
 		return "none"
 	}
 	if (before && hasTurnEnded(before, after)) {
-		return badgeForEndedTurn(after, isSelected, hasFocus)
+		return after.turn === "failed" ? "failed" : "done"
 	}
 	return held === "attention" ? "none" : held
 }

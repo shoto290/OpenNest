@@ -110,6 +110,7 @@ const start = ({
 		roster,
 		source,
 		blur: () => tellFocus?.(false),
+		focus: () => tellFocus?.(true),
 		stop,
 	}
 }
@@ -191,6 +192,48 @@ describe("createBotBadgeSource", () => {
 		blur()
 		chat.publish("bot-one", runs)
 		chat.publish("bot-one", idles)
+
+		expect(source.getBadges()["bot-one"]).toBe("done")
+	})
+
+	it("drops the badge of the selected bot when the window comes back", () => {
+		const { chat, blur, focus, source } = start({ selectedBotId: "bot-one" })
+
+		blur()
+		chat.publish("bot-one", runs)
+		chat.publish("bot-one", fails)
+		focus()
+
+		expect(source.getBadges()["bot-one"]).toBe("none")
+	})
+
+	it("keeps the badge of an unselected bot when the window comes back", () => {
+		const { chat, blur, focus, source } = start({ selectedBotId: "bot-two" })
+
+		blur()
+		chat.publish("bot-one", runs)
+		chat.publish("bot-one", idles)
+		focus()
+
+		expect(source.getBadges()["bot-one"]).toBe("done")
+	})
+
+	it("keeps attention on the selected bot when the window comes back", () => {
+		const { chat, blur, focus, source } = start({ selectedBotId: "bot-one" })
+
+		blur()
+		chat.publish("bot-one", { ...runs, question: question("q-1") })
+		focus()
+
+		expect(source.getBadges()["bot-one"]).toBe("attention")
+	})
+
+	it("keeps every badge when the window loses focus", () => {
+		const { chat, blur, source } = start({ selectedBotId: "bot-two" })
+
+		chat.publish("bot-one", runs)
+		chat.publish("bot-one", idles)
+		blur()
 
 		expect(source.getBadges()["bot-one"]).toBe("done")
 	})

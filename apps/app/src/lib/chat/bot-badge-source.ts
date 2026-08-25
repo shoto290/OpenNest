@@ -95,6 +95,13 @@ export const createBotBadgeSource = ({
 		publish()
 	}
 
+	const followFocus = (isFocused: boolean) => {
+		windowFocus = isFocused
+		if (isFocused) {
+			refresh()
+		}
+	}
+
 	const followSelection = () => {
 		const selected = roster.getState().selectedBotId
 		if (selected === selectedBotId) {
@@ -116,9 +123,7 @@ export const createBotBadgeSource = ({
 		start: () => {
 			const stopChat = chat.subscribe(refresh)
 			const stopRoster = roster.subscribe(followSelection)
-			const focus = watchFocus((isFocused) => {
-				windowFocus = isFocused
-			}).catch(() => undefined)
+			const focus = watchFocus(followFocus).catch(() => undefined)
 
 			followSelection()
 
