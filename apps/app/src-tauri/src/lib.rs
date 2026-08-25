@@ -38,6 +38,7 @@ pub fn run() {
 		.plugin(tauri_plugin_process::init())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_notification::init())
+		.plugin(tauri_plugin_os::init())
 		.manage(AgentState::default())
 		.setup(|app| {
 			app.manage(db::bootstrap(app.handle()));

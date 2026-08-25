@@ -1,8 +1,13 @@
 import { convertFileSrc } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { platform } from "@tauri-apps/plugin-os"
 
 export function isDesktopHost(): boolean {
 	return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+}
+
+export function hasOverlayWindowControls(): boolean {
+	return isDesktopHost() && platform() === "macos"
 }
 
 export function assetSrc(path: string): string {

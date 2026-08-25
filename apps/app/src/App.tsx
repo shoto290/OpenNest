@@ -30,6 +30,7 @@ import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
+import { hasOverlayWindowControls } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
@@ -257,6 +258,7 @@ export function App() {
 				sidebar={
 					<AgentSidebar
 						data-tauri-drag-region="deep"
+						insetWindowControls={hasOverlayWindowControls()}
 						bots={rosterBots}
 						botsBySpaceId={rosterBotsBySpace}
 						footer={updateBadge}
@@ -304,7 +306,10 @@ export function App() {
 						onToggleSettings={toggleSettings}
 					/>
 				) : (
-					<AppHeader insetWindowControls data-tauri-drag-region="deep" />
+					<AppHeader
+						insetWindowControls={hasOverlayWindowControls()}
+						data-tauri-drag-region="deep"
+					/>
 				)}
 			</WorkspaceShell>
 			{selected ? (

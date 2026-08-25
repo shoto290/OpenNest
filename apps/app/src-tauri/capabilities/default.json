@@ -9,6 +9,7 @@
 		"core:window:allow-show",
 		"updater:default",
 		"process:allow-restart",
+		"os:allow-platform",
 		"opener:allow-open-url",
 		"opener:allow-default-urls",
 		{
