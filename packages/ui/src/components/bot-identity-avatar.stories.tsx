@@ -11,6 +11,7 @@ import {
 import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
 import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
 import {
+	BOT_BADGES,
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
 } from "@workspace/ui/components/bot-identity-avatar"
@@ -20,6 +21,9 @@ const SIZES = [40, 96, 24]
 
 const blotShapeOf = (avatar: HTMLElement) =>
 	slotsIn(avatar, "bot-avatar-blot")[0]?.getAttribute("transform")
+
+const activityDotOf = (avatar: HTMLElement) =>
+	slotsIn(avatar, "bot-activity-dot")[0]
 
 const EveryPlace = (props: BotIdentityAvatarProps) => (
 	<Row>
@@ -89,7 +93,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"A bot's face, wherever it is shown: the roster row, its settings column, the replies it signs, the row that says it is working. One component for all of them, because a bot that picked a rabbit is a rabbit everywhere or it is not an identity — three renderings drift the moment one of them learns something the others do not. It draws and nothing else: no name, no live region, no layout. What tells one bot from another is its animal and the ink blot behind it; every bot at rest holds the same idle frame, so a resting panel says nothing about what anyone is doing. A picture wins over both and never moves, so work is said with the dot at its corner; an animal performs the work itself, in the pose the work is named after. Size is the only thing a call site changes.",
+					"A bot's face, wherever it is shown: the roster row, its settings column, the replies it signs, the row that says it is working. One component for all of them, because a bot that picked a rabbit is a rabbit everywhere or it is not an identity — three renderings drift the moment one of them learns something the others do not. It draws and nothing else: no name, no live region, no layout. What tells one bot from another is its animal and the ink blot behind it; every bot at rest holds the same idle frame, so a resting panel says nothing about what anyone is doing. Work is said by the pose alone; the dot at the corner is not work but a badge the caller hands down — attention, a finished turn, or a failed one — and a bot carrying none wears no dot at all. Size is the only thing a call site changes.",
 			},
 		},
 	},
@@ -100,6 +104,7 @@ const meta = preview.meta({
 		size: 96,
 	},
 	argTypes: {
+		badge: { control: "select", options: [undefined, ...BOT_BADGES] },
 		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
 		seed: { control: "text" },
 		size: { control: { type: "range", min: 16, max: 160, step: 8 } },
@@ -185,6 +190,60 @@ export const EveryBlot = meta.story({
 	},
 })
 
+export const EveryBadge = meta.story({
+	render: (args) => (
+		<Row>
+			<BotIdentityAvatar {...args} badge={undefined} />
+			{BOT_BADGES.map((badge) => (
+				<BotIdentityAvatar {...args} badge={badge} key={badge} />
+			))}
+		</Row>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The three things a dot can mean, and the bot that means none of them. Attention is orange and breathes, because it is the only one asking the reader for something; a finished turn is green and a failed one is red, and both hold perfectly still — a turn that is over has nothing left to signal. The three colours are fixed and do not follow the theme: green cannot become teal on the water theme without the dot losing the only thing it says. Switch the Storybook theme, and light to dark, and check that all three hold. The first avatar carries no badge and must draw no dot at all.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [none, ...badged] =
+			botIdentityAvatars(canvasElement).map(activityDotOf)
+
+		await expect(none).toBeUndefined()
+		await expect(badged.map((dot) => dot.dataset.badge)).toEqual([
+			...BOT_BADGES,
+		])
+		await expect(
+			badged.map((dot) => dot.classList.contains("motion-safe:animate-pulse")),
+		).toEqual([true, false, false])
+	},
+})
+
+export const BadgedWhileWorking = meta.story({
+	args: { badge: "failed", working: true, kind: "searching" },
+	render: (args) => <EveryPlace {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A badge and a run are two different things, and the component keeps them apart: the animal is searching because `working` says so, and the dot is red because the caller said the last turn failed. Neither reads the other. Check that the dot is sized from the avatar so it lands the same on a 24px reply as on a 96px preview, and that the red is the same red at all three.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		for (const avatar of botIdentityAvatars(canvasElement)) {
+			await expect(
+				within(avatar).getByRole("img", {
+					name: "Bot avatar rabbit, searching",
+				}),
+			).toBeVisible()
+			await expect(activityDotOf(avatar).dataset.badge).toBe("failed")
+		}
+	},
+})
+
 export const Working = meta.story({
 	args: { working: true, kind: "writing" },
 	render: (args) => <EveryPlace {...args} />,
@@ -192,7 +251,7 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bot at work, in all three places. The animal doing the work is the bot's own and it keeps its blot throughout — a run must never put a different creature or a different mark on the screen than the one the reader chose — and the pose is the work: writing, searching, thinking, or listening while it waits on the reader. Every size also wears the dot, sized from the avatar so it reads the same on a 24px reply as on a 96px preview. Open this in Storybook for the movement; the test browser forces reduced motion.",
+					"The bot at work, in all three places. The animal doing the work is the bot's own and it keeps its blot throughout — a run must never put a different creature or a different mark on the screen than the one the reader chose — and the pose is the work: writing, searching, thinking, or listening while it waits on the reader. No size wears a dot: a running bot is read from its pose and its message line, and the corner is reserved for a badge the caller passes. Pick `EveryBadge` for the three badges. Open this in Storybook for the movement; the test browser forces reduced motion.",
 			},
 		},
 	},
@@ -203,7 +262,7 @@ export const Working = meta.story({
 			).toBeVisible()
 			await expect(
 				avatar.querySelector('[data-slot="bot-activity-dot"]'),
-			).not.toBeNull()
+			).toBeNull()
 		}
 	},
 })
@@ -256,7 +315,7 @@ export const UploadedWorking = meta.story({
 		docs: {
 			description: {
 				story:
-					"A bot with a picture, working. The picture stays: swapping it for an animal that can move would put somebody else on the screen mid-run. A photograph cannot act, so the work is the dot at its corner and nothing else. Check that the dot is drawn at every size and that the picture is untouched.",
+					"A bot with a picture, working. The picture stays: swapping it for an animal that can move would put somebody else on the screen mid-run. A photograph cannot act, so a running picture is read from the line beside it: the corner belongs to the badge and stays empty while none is given. Check that no dot is drawn at any size and that the picture is untouched.",
 			},
 		},
 	},
@@ -268,7 +327,7 @@ export const UploadedWorking = meta.story({
 			)
 			await expect(
 				avatar.querySelector('[data-slot="bot-activity-dot"]'),
-			).not.toBeNull()
+			).toBeNull()
 		}
 	},
 })

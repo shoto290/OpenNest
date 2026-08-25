@@ -621,7 +621,7 @@ export const UploadedPictures = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two bots wearing a picture their reader uploaded, beside one wearing its animal. A picture is a still image whatever the bot is doing, so the row that is running says so with its activity dot and its message line rather than by moving — and it lands in the same slot as a drawing, so the names and the timestamps stay on the column the rest of the roster holds. Check that a row with a picture draws no animal and no blot at all, and that the picture is decorative: the row is already named by its own text. Pick `Identities` for the animals a bot wears when it has no picture.",
+					"Two bots wearing a picture their reader uploaded, beside one wearing its animal. A picture is a still image whatever the bot is doing, so the row that is running says so with its message line rather than by moving — and it lands in the same slot as a drawing, so the names and the timestamps stay on the column the rest of the roster holds. Check that a row with a picture draws no animal and no blot at all, and that the picture is decorative: the row is already named by its own text. Pick `Identities` for the animals a bot wears when it has no picture.",
 			},
 		},
 	},
@@ -638,7 +638,7 @@ export const UploadedPictures = meta.story({
 		await expect(within(drawn).getByRole("img")).toBeVisible()
 		await expect(
 			running.querySelector('[data-slot="bot-activity-dot"]'),
-		).not.toBeNull()
+		).toBeNull()
 		await expectAlignedRows(rows)
 	},
 })
@@ -722,7 +722,7 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four bots running at once and one at rest. Check that each running row holds its own work pose in the avatar and wears the activity dot, that the verb takes over the message line while it runs, and that the row at rest wears neither and keeps its blot and its idle frame instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `Identities` for the rows that hold still, `PermissionPending` for the one running state that looks like rest.",
+					"Four bots running at once and one at rest. Check that each running row holds its own work pose in the avatar and no activity dot, that the verb takes over the message line while it runs, and that the row at rest keeps its blot and its idle frame instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `Identities` for the rows that hold still, `PermissionPending` for the one running state that looks like rest.",
 			},
 		},
 	},
@@ -733,7 +733,7 @@ export const Working = meta.story({
 		const running = rowFor(canvasElement, "Cinder")
 		await expect(
 			running.querySelector('[data-slot="bot-activity-dot"]'),
-		).not.toBeNull()
+		).toBeNull()
 		await expect(slotIn(running, "roster-row-preview")).toHaveTextContent(
 			"writing…",
 		)
@@ -782,7 +782,7 @@ export const PermissionPending = meta.story({
 		docs: {
 			description: {
 				story:
-					'A turn blocked on a permission prompt, which a host maps to `status="working"` with `pose="waiting"` — the turn is waiting on the reader, not over. Check that the avatar holds its listening pose rather than the idle frame it wears at rest, that it is still animating, and that the dot is there: the panel reports itself busy and the announcement says the bot is waiting, so a row that looked idle here would contradict both at once. Pick `Working` for the work poses that cannot be mistaken for rest, `Identities` for the still frame this state must not fall back to.',
+					'A turn blocked on a permission prompt, which a host maps to `status="working"` with `pose="waiting"` — the turn is waiting on the reader, not over. Check that the avatar holds its listening pose rather than the idle frame it wears at rest and that it is still animating: the panel reports itself busy and the announcement says the bot is waiting, so a row that looked idle here would contradict both at once. Pick `Working` for the work poses that cannot be mistaken for rest, `Identities` for the still frame this state must not fall back to.',
 			},
 		},
 	},
@@ -795,9 +795,7 @@ export const PermissionPending = meta.story({
 		await expect(slotIn(row, "roster-row-preview")).toHaveTextContent(
 			"waiting…",
 		)
-		await expect(
-			row.querySelector('[data-slot="bot-activity-dot"]'),
-		).not.toBeNull()
+		await expect(row.querySelector('[data-slot="bot-activity-dot"]')).toBeNull()
 
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
 		await expect(panel).toHaveAttribute("aria-busy", "true")
@@ -1089,16 +1087,14 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel under `prefers-reduced-motion: reduce`, which is how the test browser renders every story here. Check that the running avatar settles on a static frame of its pose and the activity dot stops pulsing, that the shell drops its width and row springs to zero duration, and that nothing else changes: the rows keep their selection, their focus ring and their two lines, so the state is still readable without motion.",
+					"The panel under `prefers-reduced-motion: reduce`, which is how the test browser renders every story here. Check that the running avatar settles on a static frame of its pose, that the shell drops its width and row springs to zero duration, and that nothing else changes: the rows keep their selection, their focus ring and their two lines, so the state is still readable without motion.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		const row = rowFor(canvasElement, "Cinder")
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
-		await expect(
-			row.querySelector('[data-slot="bot-activity-dot"]'),
-		).not.toBeNull()
+		await expect(row.querySelector('[data-slot="bot-activity-dot"]')).toBeNull()
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Cinder selected, working",
 		)

@@ -25,13 +25,23 @@ const avatarShape = (image?: string) => (image ? UPLOADED_IMAGE_SHAPE : "")
 
 const IMAGE_CLASS = `size-full border border-border object-cover ${UPLOADED_IMAGE_SHAPE}`
 
+const BOT_BADGES = ["attention", "done", "failed"] as const
+
+type BotBadge = (typeof BOT_BADGES)[number]
+
 const DOT_CLASS =
-	"absolute right-[6%] bottom-[6%] block rounded-full bg-sidebar-primary ring-2 ring-sidebar motion-safe:animate-pulse"
+	"absolute right-[6%] bottom-[6%] block rounded-full ring-2 ring-sidebar"
+
+const DOT_TONE: Record<BotBadge, string> = {
+	attention: "bg-bot-badge-attention motion-safe:animate-pulse",
+	done: "bg-bot-badge-done",
+	failed: "bg-bot-badge-failed",
+}
 
 const DEFAULT_SIZE = 40
 
-const DOT_RATIO = 0.25
-const DOT_MAX = 12
+const DOT_RATIO = 0.34
+const DOT_MAX = 16
 
 const dotSize = (size: number) =>
 	Math.round(Math.min(size * DOT_RATIO, DOT_MAX))
@@ -42,6 +52,7 @@ type BotIdentityAvatarProps = {
 	blot?: BotAvatarBlot
 	seed?: string
 	image?: string
+	badge?: BotBadge
 	working?: boolean
 	kind?: BotWorkingKind
 	size?: number
@@ -54,6 +65,7 @@ function BotIdentityAvatar({
 	blot,
 	seed,
 	image,
+	badge,
 	working = false,
 	kind = "thinking",
 	size = DEFAULT_SIZE,
@@ -78,10 +90,11 @@ function BotIdentityAvatar({
 					state={working ? busyStateFor(kind) : REST_STATE}
 				/>
 			)}
-			{working ? (
+			{badge ? (
 				<span
 					aria-hidden="true"
-					className={DOT_CLASS}
+					className={cn(DOT_CLASS, DOT_TONE[badge])}
+					data-badge={badge}
 					data-slot="bot-activity-dot"
 					style={{ width: dotSize(size), height: dotSize(size) }}
 				/>
@@ -92,6 +105,8 @@ function BotIdentityAvatar({
 
 export {
 	avatarShape,
+	BOT_BADGES,
+	type BotBadge,
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
 	type BotWorkingKind,

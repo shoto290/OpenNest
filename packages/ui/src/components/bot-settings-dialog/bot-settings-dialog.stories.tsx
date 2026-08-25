@@ -575,7 +575,7 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"The bot is mid-run while its settings are open. Check that the breadcrumb avatar is the same face the roster row is showing, doing the same thing — a picture cannot act, so its liveness is the dot at its corner. Editing a bot never stops it.",
+					"The bot is mid-run while its settings are open. Check that the breadcrumb avatar is the same face the roster row is showing, doing the same thing — and that it carries no dot, because a run is not a badge. Editing a bot never stops it.",
 			},
 		},
 	},
@@ -589,7 +589,7 @@ export const Working = meta.story({
 		)
 		await expect(
 			avatar.querySelector('[data-slot="bot-activity-dot"]'),
-		).not.toBeNull()
+		).toBeNull()
 	},
 })
 

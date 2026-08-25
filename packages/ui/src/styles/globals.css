@@ -20,6 +20,9 @@
 	--bot-blot-orange: #f2b57e;
 	--bot-blot-ink: oklch(0.08 0 0);
 	--bot-avatar-ink: var(--bot-blot-ink);
+	--bot-badge-attention: oklch(0.72 0.18 62);
+	--bot-badge-done: oklch(0.68 0.17 148);
+	--bot-badge-failed: oklch(0.62 0.22 27);
 	--color-scheme: light;
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.141 0.005 285.823);
@@ -467,6 +470,9 @@
 	--color-chart-3: var(--chart-3);
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
+	--color-bot-badge-attention: var(--bot-badge-attention);
+	--color-bot-badge-done: var(--bot-badge-done);
+	--color-bot-badge-failed: var(--bot-badge-failed);
 	--radius-sm: calc(var(--radius) * 0.6);
 	--radius-md: calc(var(--radius) * 0.8);
 	--radius-lg: var(--radius);
