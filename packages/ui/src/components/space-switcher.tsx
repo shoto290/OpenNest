@@ -37,6 +37,8 @@ const SWITCHER_DOT = "hidden group-data-[state=collapsed]/sidebar:block"
 const SWITCHER_BADGE =
 	"pointer-events-none absolute top-1 right-1 size-2 rounded-full ring-2 ring-sidebar"
 
+const SWITCHER_BADGE_INSET = "pr-4"
+
 const DOT = "size-2.5 shrink-0 rounded-full"
 
 const DOTS =
@@ -128,7 +130,7 @@ const SpaceSwitcher = ({
 			<ContextMenuTrigger opensOnPress>
 				<Button
 					aria-label={t("spaces.switch", { name: selected.name })}
-					className={SWITCHER}
+					className={cn(SWITCHER, elsewhere && SWITCHER_BADGE_INSET)}
 					data-slot="space-switcher"
 					size="sm"
 					variant="ghost"

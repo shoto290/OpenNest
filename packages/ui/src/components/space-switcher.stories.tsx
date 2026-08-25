@@ -336,6 +336,53 @@ export const BadgeHere = meta.story({
 	},
 })
 
+export const BadgeAndLongName = meta.story({
+	args: {
+		spaces: LONG_SPACES,
+		selectedSpaceId: "perso",
+		badgesBySpaceId: { vocca: "attention" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space named as a sentence while another one is asking for the reader — the pair that puts the mark and the truncation on the same edge. Check the name gives way to the badge instead of running under it: the clipped end and its ellipsis stop before the mark, so the reader never reads a name through a coloured dot, and the button still holds the width it had. Pick `LongContent` for the same name with nothing waiting, `Badges` for the mark on names that fit.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const trigger = canvas.getByRole("button", { name: /^Change space/ })
+		const name = slotsIn(canvasElement, "space-switcher-name")[0]
+		const badge = slotsIn(canvasElement, "space-switcher-badge")[0]
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
+			badge.getBoundingClientRect().left,
+		)
+		await expect(trigger.getBoundingClientRect().width).toBeLessThan(256)
+	},
+})
+
+export const BadgeOnRail = meta.story({
+	args: { badgesBySpaceId: BADGES },
+	render: (args) => <SwitcherRail {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The mark once the sidebar is on its icon rail, where the name is gone and the open space's tint is all that is left. Check the badge is still drawn, still in the same corner, and that the button keeps the rail's square rather than growing to make room for it — the room the name needed is not needed here. Pick `Collapsed` for the rail with nothing waiting.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const trigger = canvas.getByRole("button", { name: /^Change space/ })
+
+		await expect(badgeOn(canvasElement)).toBe("attention")
+		await expect(tintVisibleIn(trigger)).toBe(true)
+		await expect(trigger.getBoundingClientRect().width).toBeCloseTo(28, 0)
+	},
+})
+
 export const LongContent = meta.story({
 	args: { spaces: LONG_SPACES, selectedSpaceId: "perso" },
 	parameters: {
