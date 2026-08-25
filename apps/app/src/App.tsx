@@ -33,6 +33,8 @@ import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
+import { spaceOfSection } from "@/lib/sections/sections-controller"
+import { useSections } from "@/lib/sections/use-sections"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
 import { useSpacePlugin } from "@/lib/spaces/use-space-plugin"
 import { useSpaces } from "@/lib/spaces/use-spaces"
@@ -63,6 +65,10 @@ export function App() {
 		[chat.controller],
 	)
 	const roster = useRoster(store)
+	const sections = useSections(store, {
+		move: roster.controller.moveToSection,
+		clear: roster.controller.clearSection,
+	})
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
 	const history = useBotHistory(store)
@@ -151,6 +157,21 @@ export function App() {
 		}
 	}, [chat.controller, user.controller, selectedBotId])
 
+	const createSection = (name: string, botId?: string) => {
+		if (!selectedSpaceId) {
+			return
+		}
+		void sections.controller.create(selectedSpaceId, name, botId ?? null)
+	}
+
+	const reorderSections = (ids: string[]) => {
+		const spaceId =
+			ids.length > 0 ? spaceOfSection(sections.state, ids[0]) : undefined
+		if (spaceId) {
+			void sections.controller.reorder(spaceId, ids)
+		}
+	}
+
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
 		attachments.forget(id)
@@ -200,6 +221,22 @@ export function App() {
 		() => toRosterBots(bots, { working, previews }, now),
 		[bots, working, previews, now],
 	)
+
+	const listedRosters = Object.keys(rosters).join(" ")
+	const rosterSpaceIds = useMemo(
+		() => (listedRosters === "" ? [] : listedRosters.split(" ")),
+		[listedRosters],
+	)
+
+	useEffect(() => {
+		sections.controller.keep(rosterSpaceIds)
+		const held = sections.controller.getState().sections
+		for (const spaceId of rosterSpaceIds) {
+			if (!held[spaceId]) {
+				void sections.controller.enter(spaceId)
+			}
+		}
+	}, [sections.controller, rosterSpaceIds])
 
 	const rosterBotsBySpace = useMemo(
 		() =>
@@ -262,6 +299,7 @@ export function App() {
 						insetWindowControls={hasOverlayWindowControls()}
 						bots={rosterBots}
 						botsBySpaceId={rosterBotsBySpace}
+						sectionsBySpaceId={sections.state.sections}
 						footer={updateBadge}
 						isSpaceSwitchingEnabled={!isOverlayOpen}
 						onCreateBot={() => {
@@ -279,6 +317,15 @@ export function App() {
 							})
 						}}
 						onEditBot={roster.controller.edit}
+						onCreateSection={createSection}
+						onRenameSection={sections.controller.rename}
+						onReorderSections={reorderSections}
+						onDeleteSection={(id) => {
+							void sections.controller.remove(id)
+						}}
+						onMoveBotToSection={(botId, sectionId) => {
+							void sections.controller.moveBot(botId, sectionId)
+						}}
 						onOpenUserSettings={() => {
 							user.controller.setSettingsOpen(true)
 							void userPlugin.controller.open()

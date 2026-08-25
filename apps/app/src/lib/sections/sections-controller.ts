@@ -33,6 +33,11 @@ export const initialSectionsState: SectionsState = { sections: {} }
 export const sectionsIn = (state: SectionsState, spaceId: string) =>
 	state.sections[spaceId] ?? []
 
+export const spaceOfSection = (state: SectionsState, id: string) =>
+	Object.keys(state.sections).find((spaceId) =>
+		sectionsIn(state, spaceId).some((section) => section.id === id),
+	)
+
 const repositioned = (sections: Section[], ids: string[]) =>
 	ids.flatMap((id, position) => {
 		const held = sections.find((section) => section.id === id)
@@ -63,10 +68,7 @@ export const createSectionsController = (
 			.flat()
 			.find((section) => section.id === id)
 
-	const spaceOf = (id: string) =>
-		Object.keys(state.sections).find((spaceId) =>
-			sectionsIn(state, spaceId).some((section) => section.id === id),
-		)
+	const spaceOf = (id: string) => spaceOfSection(state, id)
 
 	const apply = (written: Section) => {
 		const spaceId = spaceOf(written.id)
