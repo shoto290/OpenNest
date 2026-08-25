@@ -193,7 +193,8 @@ function MenuPortal({
 				transitionDuration: open ? "0s" : `${closeDuration}s`,
 			}}
 			className={cn(
-				"fixed z-[100] transition-[visibility]",
+				"fixed transition-[visibility]",
+				panel === "sub" ? "z-[101]" : "z-[100]",
 				SHADOW_CLASS,
 				open ? "pointer-events-auto visible" : "pointer-events-none invisible",
 			)}
@@ -922,20 +923,22 @@ export function ContextMenuSubContent({
 		if (!sub.open) return
 		const trigger = sub.triggerRef.current
 		const panel = sub.contentRef.current
-		if (!trigger || !panel) return
+		const parent = context.contentRef.current
+		if (!trigger || !panel || !parent) return
 
 		const triggerBox = trigger.getBoundingClientRect()
+		const parentBox = parent.getBoundingClientRect()
 		const { offsetWidth, offsetHeight } = panel
 		const room =
-			window.innerWidth - triggerBox.right - SUB_GAP - VIEWPORT_PADDING
+			window.innerWidth - parentBox.right - SUB_GAP - VIEWPORT_PADDING
 		const side: SubSide = offsetWidth <= room ? "end" : "start"
 
 		setPlacement({
 			side,
 			x:
 				side === "end"
-					? triggerBox.right + SUB_GAP
-					: Math.max(VIEWPORT_PADDING, triggerBox.left - SUB_GAP - offsetWidth),
+					? parentBox.right + SUB_GAP
+					: Math.max(VIEWPORT_PADDING, parentBox.left - SUB_GAP - offsetWidth),
 			y: clamp(
 				triggerBox.top - PANEL_INSET,
 				VIEWPORT_PADDING,
@@ -945,7 +948,7 @@ export function ContextMenuSubContent({
 				),
 			),
 		})
-	}, [sub.open, sub.triggerRef, sub.contentRef])
+	}, [sub.open, sub.triggerRef, sub.contentRef, context.contentRef])
 
 	useEffect(() => {
 		if (sub.open) return
