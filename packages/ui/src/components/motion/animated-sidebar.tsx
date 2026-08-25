@@ -115,6 +115,7 @@ interface AnimatedSidebarContextValue {
 	commitWidth: (width: number) => void
 	defaultWidth: number
 	isMobile: boolean
+	isResizable: boolean
 	open: boolean
 	openMobile: boolean
 	reduce: boolean
@@ -177,6 +178,7 @@ export interface AnimatedSidebarProviderProps
 	width?: number
 	defaultWidth?: number
 	onWidthChange?: (width: number) => void
+	isResizable?: boolean
 	style?: SidebarProviderStyle
 }
 
@@ -191,6 +193,7 @@ export function AnimatedSidebarProvider({
 	width,
 	defaultWidth = SIDEBAR_DEFAULT_WIDTH,
 	onWidthChange,
+	isResizable = true,
 	className,
 	style,
 	...props
@@ -274,6 +277,7 @@ export function AnimatedSidebarProvider({
 			commitWidth,
 			defaultWidth: boundedDefaultWidth,
 			isMobile,
+			isResizable,
 			open: desktopOpen,
 			openMobile: mobileOpen,
 			reduce,
@@ -291,6 +295,7 @@ export function AnimatedSidebarProvider({
 			commitWidth,
 			desktopOpen,
 			isMobile,
+			isResizable,
 			mobileOpen,
 			reduce,
 			resizeTo,
@@ -679,7 +684,9 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 						{children}
 					</AnimatedSidebarPanelContext.Provider>
 				</motion.div>
-				{collapsed ? null : <SidebarResizeHandle side={side} />}
+				{collapsed || !context.isResizable ? null : (
+					<SidebarResizeHandle side={side} />
+				)}
 			</motion.aside>
 		)
 	},

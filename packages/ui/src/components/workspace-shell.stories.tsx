@@ -461,3 +461,32 @@ export const ResizeByKeyboard = meta.story({
 		await expectWidth(sidebar, start)
 	},
 })
+
+export const NotResizable = meta.story({
+	args: {
+		sidebar: SIDEBAR,
+		width: SIDEBAR_DEFAULT_WIDTH + WIDER_BY,
+		isResizable: false,
+		onWidthChange: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the host runs somewhere the reader may not change the width — every desktop platform but macOS. Check that the panel's inner edge carries no handle, that nothing along it takes focus or turns the cursor into a resize arrow, and that the panel still sits at the width the host stored rather than falling back to the default. The collapse toggle is untouched: the reader can still fold the panel to its rail. Pick `Resized` for the same shell where dragging is allowed.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const sidebar = canvas.getByRole("complementary", { name: "Workspace" })
+		await expectWidth(sidebar, SIDEBAR_DEFAULT_WIDTH + WIDER_BY)
+		await expect(
+			canvas.queryByRole("separator", { name: "Resize sidebar" }),
+		).toBeNull()
+
+		const trigger = canvas.getByRole("button", { name: "Toggle workspace" })
+		await userEvent.click(trigger)
+		await expect(trigger).toHaveAttribute("aria-expanded", "false")
+		await expect(args.onWidthChange).not.toHaveBeenCalled()
+	},
+})

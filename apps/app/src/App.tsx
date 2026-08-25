@@ -30,7 +30,7 @@ import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
-import { hasOverlayWindowControls } from "@/lib/host"
+import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
@@ -255,6 +255,7 @@ export function App() {
 				defaultOpen
 				width={preferences.sidebarWidth ?? undefined}
 				onWidthChange={changeSidebarWidth}
+				isResizable={isSidebarResizable()}
 				sidebar={
 					<AgentSidebar
 						data-tauri-drag-region="deep"

@@ -10,6 +10,10 @@ export function hasOverlayWindowControls(): boolean {
 	return isDesktopHost() && platform() === "macos"
 }
 
+export function isSidebarResizable(): boolean {
+	return !isDesktopHost() || platform() === "macos"
+}
+
 export function assetSrc(path: string): string {
 	return isDesktopHost() ? convertFileSrc(path) : path
 }
