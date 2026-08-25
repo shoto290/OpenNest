@@ -22,6 +22,7 @@ const DEFAULTS: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	lastBotId: null,
+	lastSpaceId: null,
 }
 
 const WORN = "/data/avatars/worn.png"
@@ -225,7 +226,7 @@ describe("the reader's own record", () => {
 	})
 
 	it("reads a field the record leaves out as none, and writes nothing for it", async () => {
-		const { sidebarWidth, lastBotId, ...older } = DEFAULTS
+		const { sidebarWidth, lastBotId, lastSpaceId, ...older } = DEFAULTS
 		const host = aHost(older as UserPreferences)
 		const controller = await loaded()
 
@@ -444,6 +445,29 @@ describe("the conversation the reader opens", () => {
 		hostInvoke.mockClear()
 
 		await controller.setLastBot("nyx")
+
+		expect(hostInvoke).not.toHaveBeenCalled()
+	})
+})
+
+describe("the space the reader is in", () => {
+	it("is written to the record and to the mirror", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		await controller.setLastSpace("vocca")
+
+		expect(controller.getState().preferences.lastSpaceId).toBe("vocca")
+		expect(localStorage.getItem("lastSpaceId")).toBe("vocca")
+		expect(host()).toEqual({ ...DEFAULTS, lastSpaceId: "vocca" })
+	})
+
+	it("is written once when it is the space the record already names", async () => {
+		aHost({ ...DEFAULTS, lastSpaceId: "vocca" })
+		const controller = await loaded()
+		hostInvoke.mockClear()
+
+		await controller.setLastSpace("vocca")
 
 		expect(hostInvoke).not.toHaveBeenCalled()
 	})

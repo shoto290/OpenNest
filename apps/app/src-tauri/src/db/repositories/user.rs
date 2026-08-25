@@ -13,6 +13,7 @@ const NOTIFY_ON_FINISHED_TURN_KEY: &str = "user.notify_on_finished_turn";
 const NOTIFY_WITH_SOUND_KEY: &str = "user.notify_with_sound";
 const SIDEBAR_WIDTH_KEY: &str = "user.sidebar_width";
 const LAST_BOT_ID_KEY: &str = "user.last_bot_id";
+const LAST_SPACE_ID_KEY: &str = "user.last_space_id";
 
 const SWITCH_ON: &str = "on";
 const SWITCH_OFF: &str = "off";
@@ -71,6 +72,7 @@ pub struct Preferences {
 	pub notify_with_sound: bool,
 	pub sidebar_width: Option<u32>,
 	pub last_bot_id: Option<String>,
+	pub last_space_id: Option<String>,
 }
 
 impl Default for Preferences {
@@ -87,6 +89,7 @@ impl Default for Preferences {
 			notify_with_sound: true,
 			sidebar_width: None,
 			last_bot_id: None,
+			last_space_id: None,
 		}
 	}
 }
@@ -166,6 +169,7 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		sidebar_width: setting_in(connection, SIDEBAR_WIDTH_KEY)?
 			.and_then(|stored| stored.parse().ok()),
 		last_bot_id: setting_in(connection, LAST_BOT_ID_KEY)?,
+		last_space_id: setting_in(connection, LAST_SPACE_ID_KEY)?,
 	})
 }
 
@@ -190,6 +194,7 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	let width = preferences.sidebar_width.map(|width| width.to_string());
 	write_optional_in(transaction, SIDEBAR_WIDTH_KEY, width.as_deref())?;
 	write_optional_in(transaction, LAST_BOT_ID_KEY, preferences.last_bot_id.as_deref())?;
+	write_optional_in(transaction, LAST_SPACE_ID_KEY, preferences.last_space_id.as_deref())?;
 	write_picture_in(transaction, preferences.avatar_image_path.as_deref())
 }
 
@@ -244,6 +249,7 @@ mod tests {
 			notify_with_sound: false,
 			sidebar_width: Some(320),
 			last_bot_id: Some("bot-one".to_owned()),
+			last_space_id: Some("space-one".to_owned()),
 		}
 	}
 
@@ -272,6 +278,7 @@ mod tests {
 				notify_with_sound: true,
 				sidebar_width: None,
 				last_bot_id: None,
+				last_space_id: None,
 			}
 		);
 	}
@@ -413,6 +420,7 @@ mod tests {
 		assert_eq!(read.language, None);
 		assert_eq!(read.sidebar_width, None);
 		assert_eq!(read.last_bot_id, None);
+		assert_eq!(read.last_space_id, None);
 		assert_eq!(read.display_name, "Nyx");
 		assert_eq!(read.palette, "moss");
 		assert!(read.notify_on_question, "a switch the older build never wrote must read as on");

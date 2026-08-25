@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
 
-import { BOT_NAMES, toSettingsValue } from "./bot-settings"
+import {
+	BOT_NAMES,
+	newBotIdentity,
+	toRosterBots,
+	toSettingsValue,
+} from "./bot-settings"
 import { createRosterController } from "./roster-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -15,9 +20,19 @@ const anEmptyStore = async (): Promise<TranscriptStore> => {
 	return store
 }
 
+const opening = (
+	lastBotId: string | null = null,
+	spaceId = "personal",
+	spaceIds: string[] = [spaceId],
+) => ({
+	spaceIds,
+	spaceId,
+	lastBotId,
+})
+
 const loaded = async (store: TranscriptStore) => {
 	const controller = createRosterController(store)
-	await controller.load(null)
+	await controller.load(opening())
 	return controller
 }
 
@@ -106,7 +121,7 @@ describe("createRosterController", () => {
 		const left = opened.getState().selectedBotId
 
 		const reopened = createRosterController(store)
-		await reopened.load(left)
+		await reopened.load(opening(left))
 
 		expect(left).not.toBe("default")
 		expect(reopened.getState().selectedBotId).toBe(left)
@@ -116,7 +131,7 @@ describe("createRosterController", () => {
 		const store = createFakeTranscriptStore()
 		const controller = createRosterController(store)
 
-		await controller.load("gone")
+		await controller.load(opening("gone"))
 
 		expect(controller.getState().selectedBotId).toBe("default")
 	})
@@ -126,7 +141,7 @@ describe("createRosterController", () => {
 
 		expect(controller.getState().hasLoaded).toBe(false)
 
-		await controller.load(null)
+		await controller.load(opening())
 
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
@@ -136,7 +151,7 @@ describe("createRosterController", () => {
 		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
 		const controller = createRosterController(store)
 
-		await controller.load(null)
+		await controller.load(opening())
 
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
@@ -422,7 +437,7 @@ describe("createRosterController", () => {
 		controller.askToDelete("default")
 		await store.deleteBot("default")
 
-		await controller.load(null)
+		await controller.load(opening())
 
 		expect(controller.getState()).toMatchObject({
 			isEditing: false,
@@ -431,7 +446,125 @@ describe("createRosterController", () => {
 	})
 })
 
+describe("createRosterController on a space", () => {
+	it("reads the roster of every space at launch", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
+		const controller = createRosterController(store)
+
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		const { rosters, bots } = controller.getState()
+		expect(rosters.personal.map((bot) => bot.id)).toEqual(["default"])
+		expect(rosters[elsewhere.id].map((bot) => bot.id)).toEqual([away.id])
+		expect(bots.map((bot) => bot.id)).toEqual(["default"])
+	})
+
+	it("shows the roster it already holds when the reader lands on another space", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		const read = vi.spyOn(store, "bots")
+
+		controller.enter({ spaceId: elsewhere.id, lastBotId: null })
+
+		const state = controller.getState()
+		expect(state.bots.map((bot) => bot.id)).toEqual([away.id])
+		expect(state.selectedBotId).toBe(away.id)
+		expect(read).not.toHaveBeenCalled()
+	})
+
+	it("selects nothing when the space it lands on holds no bot", async () => {
+		const store = createFakeTranscriptStore()
+		const empty = await store.createSpace("Vacances")
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", empty.id]))
+
+		controller.enter({ spaceId: empty.id, lastBotId: null })
+
+		expect(controller.getState().bots).toEqual([])
+		expect(controller.getState().selectedBotId).toBeNull()
+	})
+
+	it("holds an empty roster for a space it has never read", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = createRosterController(store)
+		await controller.load(opening())
+
+		controller.enter({ spaceId: "vacances", lastBotId: null })
+
+		expect(controller.getState().rosters.vacances).toEqual([])
+	})
+
+	it("drops the roster of a space that is no longer listed", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		await controller.load(opening(null, "personal"))
+
+		expect(Object.keys(controller.getState().rosters)).toEqual(["personal"])
+	})
+
+	it("creates a bot in the space the reader is in and nowhere else", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const controller = createRosterController(store)
+		await controller.load(
+			opening(null, elsewhere.id, ["personal", elsewhere.id]),
+		)
+
+		await controller.create()
+
+		const { rosters, bots } = controller.getState()
+		expect(bots).toHaveLength(1)
+		expect(rosters[elsewhere.id]).toEqual(bots)
+		expect(rosters.personal.map((bot) => bot.id)).toEqual(["default"])
+		expect(await store.bots(elsewhere.id)).toEqual(bots)
+	})
+
+	it("leaves the roster of the other spaces untouched when a bot is deleted", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		await controller.remove("default")
+
+		const { rosters } = controller.getState()
+		expect(rosters.personal).toEqual([])
+		expect(rosters[elsewhere.id].map((bot) => bot.id)).toEqual([away.id])
+	})
+})
+
 describe("createRosterController previews", () => {
+	it("reads the last word of a bot outside the space it opens on", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const quiet = await store.createBot(newBotIdentity([]), elsewhere.id)
+		const loud = await store.createBot(newBotIdentity([quiet]), elsewhere.id)
+		await saidTo(store, quiet.id, "Pulled the three papers.")
+		await saidTo(store, loud.id, "Rebuilding the bundle.")
+		const controller = createRosterController(store)
+
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		const { rosters, previews } = controller.getState()
+		expect(previews[loud.id]).toMatchObject({
+			text: "Rebuilding the bundle.",
+		})
+		expect(
+			toRosterBots(rosters[elsewhere.id], { working: {}, previews }, 0).map(
+				(bot) => bot.id,
+			),
+		).toEqual([loud.id, quiet.id])
+	})
+
 	it("reads the last word of every bot's conversation, not only the open one", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

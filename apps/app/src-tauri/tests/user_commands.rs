@@ -115,6 +115,7 @@ fn a_record(picture: Value) -> Value {
 		"notifyWithSound": false,
 		"sidebarWidth": 320,
 		"lastBotId": "bot-one",
+		"lastSpaceId": "space-one",
 	})
 }
 
@@ -176,6 +177,7 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"notifyWithSound": true,
 			"sidebarWidth": null,
 			"lastBotId": null,
+			"lastSpaceId": null,
 		})
 	);
 }

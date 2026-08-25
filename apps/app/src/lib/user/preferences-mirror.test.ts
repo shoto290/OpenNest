@@ -26,6 +26,7 @@ const RECORD: UserPreferences = {
 	notifyWithSound: true,
 	sidebarWidth: null,
 	lastBotId: null,
+	lastSpaceId: null,
 }
 
 const MIRRORED: MirroredPreferences = {
@@ -34,6 +35,7 @@ const MIRRORED: MirroredPreferences = {
 	language: null,
 	sidebarWidth: null,
 	lastBotId: null,
+	lastSpaceId: null,
 }
 
 const createStorage = () => {
@@ -85,6 +87,7 @@ describe("the mirror", () => {
 			language: null,
 			sidebarWidth: null,
 			lastBotId: null,
+			lastSpaceId: null,
 		})
 	})
 
@@ -130,6 +133,13 @@ describe("the mirror", () => {
 		expect(readMirror().lastBotId).toBe("nyx")
 	})
 
+	it("holds the space the reader was left in", () => {
+		writeMirror({ ...MIRRORED, lastSpaceId: "vocca" })
+
+		expect(localStorage.getItem("lastSpaceId")).toBe("vocca")
+		expect(readMirror().lastSpaceId).toBe("vocca")
+	})
+
 	it("reads no language for a catalogue this build does not ship", () => {
 		localStorage.setItem("language", "br")
 
@@ -140,13 +150,19 @@ describe("the mirror", () => {
 describe("the record the host holds", () => {
 	it("is read down to the fields the mirror serves", () => {
 		expect(
-			mirrorOf({ ...RECORD, sidebarWidth: 320, lastBotId: "nyx" }),
+			mirrorOf({
+				...RECORD,
+				sidebarWidth: 320,
+				lastBotId: "nyx",
+				lastSpaceId: "vocca",
+			}),
 		).toEqual({
 			colorScheme: "dark",
 			palette: "moss",
 			language: "fr",
 			sidebarWidth: 320,
 			lastBotId: "nyx",
+			lastSpaceId: "vocca",
 		})
 	})
 
@@ -159,6 +175,7 @@ describe("the record the host holds", () => {
 			language: null,
 			sidebarWidth: null,
 			lastBotId: null,
+			lastSpaceId: null,
 		})
 	})
 })
@@ -198,6 +215,7 @@ describe("isMirrorKey", () => {
 		expect(isMirrorKey("language")).toBe(true)
 		expect(isMirrorKey("sidebarWidth")).toBe(true)
 		expect(isMirrorKey("lastBotId")).toBe(true)
+		expect(isMirrorKey("lastSpaceId")).toBe(true)
 		expect(isMirrorKey("conversations")).toBe(false)
 		expect(isMirrorKey(null)).toBe(false)
 	})
@@ -211,6 +229,7 @@ describe("sameMirror", () => {
 			language: "fr",
 			sidebarWidth: 320,
 			lastBotId: "nyx",
+			lastSpaceId: "vocca",
 		} as const
 
 		expect(sameMirror(mirrored, { ...mirrored })).toBe(true)
@@ -221,5 +240,6 @@ describe("sameMirror", () => {
 		expect(sameMirror(mirrored, { ...mirrored, language: null })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, sidebarWidth: 256 })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, lastBotId: null })).toBe(false)
+		expect(sameMirror(mirrored, { ...mirrored, lastSpaceId: null })).toBe(false)
 	})
 })

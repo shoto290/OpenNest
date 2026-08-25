@@ -5,6 +5,7 @@ import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
+import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
@@ -31,6 +32,9 @@ import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
+import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
+import { useSpacePlugin } from "@/lib/spaces/use-space-plugin"
+import { useSpaces } from "@/lib/spaces/use-spaces"
 import { useTheme } from "@/lib/theme/use-theme"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
@@ -64,6 +68,8 @@ export function App() {
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const userPlugin = useUserPlugin(store)
+	const spaces = useSpaces(store)
+	const spacePlugin = useSpacePlugin(store)
 	const preferences = user.state.preferences
 
 	const updater = useUpdater()
@@ -80,11 +86,44 @@ export function App() {
 		roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
 
+	const { selectedSpaceId, isSettingsOpen: isSpaceEditing } = spaces.state
+	const selectedSpace = spaces.state.spaces.find(
+		(space) => space.id === selectedSpaceId,
+	)
+
+	const listedSpaces = spaces.state.spaces.map((space) => space.id).join(" ")
+	const spaceIds = useMemo(
+		() => (listedSpaces === "" ? [] : listedSpaces.split(" ")),
+		[listedSpaces],
+	)
+
 	useEffect(() => {
-		void roster.controller.load(
-			user.controller.getState().preferences.lastBotId,
+		void spaces.controller.load(
+			user.controller.getState().preferences.lastSpaceId,
 		)
-	}, [roster.controller, user.controller])
+	}, [spaces.controller, user.controller])
+
+	useEffect(() => {
+		if (spaceIds.length === 0) {
+			return
+		}
+		void roster.controller.load({
+			spaceIds,
+			spaceId: spaces.controller.getState().selectedSpaceId,
+			lastBotId: user.controller.getState().preferences.lastBotId,
+		})
+	}, [roster.controller, spaces.controller, user.controller, spaceIds])
+
+	useEffect(() => {
+		if (!selectedSpaceId) {
+			return
+		}
+		void user.controller.setLastSpace(selectedSpaceId)
+		roster.controller.enter({
+			spaceId: selectedSpaceId,
+			lastBotId: user.controller.getState().preferences.lastBotId,
+		})
+	}, [roster.controller, user.controller, selectedSpaceId])
 
 	useEffect(() => {
 		void user.controller.load()
@@ -212,8 +251,20 @@ export function App() {
 							user.controller.setSettingsOpen(true)
 							void userPlugin.controller.open()
 						}}
+						onCreateSpace={() => {
+							void spaces.controller.create()
+						}}
+						onOpenSpaceSettings={() => {
+							spaces.controller.setSettingsOpen(true)
+							if (selectedSpaceId) {
+								void spacePlugin.controller.open(selectedSpaceId)
+							}
+						}}
 						onSelectBot={roster.controller.select}
+						onSelectSpace={spaces.controller.select}
 						selectedBotId={selectedBotId ?? undefined}
+						selectedSpaceId={selectedSpaceId ?? undefined}
+						spaces={spaces.state.spaces}
 						user={userSettings}
 					/>
 				}
@@ -227,7 +278,9 @@ export function App() {
 						attachments={attachments}
 						readerName={preferences.displayName}
 						isSettingsOpen={isEditing}
-						isOverlayOpen={isEditing || user.state.isSettingsOpen}
+						isOverlayOpen={
+							isEditing || user.state.isSettingsOpen || isSpaceEditing
+						}
 						onToggleSettings={toggleSettings}
 					/>
 				) : (
@@ -296,6 +349,40 @@ export function App() {
 					value={toSettingsValue(selected)}
 					working={activity?.isWorking ?? false}
 					workingKind={activity?.kind}
+				/>
+			) : null}
+			{selectedSpace ? (
+				<SpaceSettingsDialog
+					history={{
+						commits: spacePlugin.state.commits.map(toCommitItem),
+						onLoadDiff: spacePlugin.controller.loadDiff,
+						onRevert: spacePlugin.controller.revert,
+					}}
+					isDeletable={spaces.state.spaces.length > 1}
+					onClose={() => spaces.controller.setSettingsOpen(false)}
+					onDelete={() => {
+						void spaces.controller.remove(selectedSpace.id)
+					}}
+					onSkillChange={(id, draft) =>
+						spacePlugin.controller.saveSkill(
+							id,
+							toSkillDraft(
+								draft,
+								spacePlugin.state.skills.find((skill) => skill.id === id),
+							),
+						)
+					}
+					onSkillCreate={(draft, isPreloaded) =>
+						spacePlugin.controller.createSkill(toSkillDraft(draft), isPreloaded)
+					}
+					onSkillDelete={spacePlugin.controller.removeSkill}
+					onSkillPreloadedChange={spacePlugin.controller.setSkillPreloaded}
+					onValueChange={(value) =>
+						spaces.controller.describe(selectedSpace.id, value)
+					}
+					open={isSpaceEditing}
+					skills={spacePlugin.state.skills.map(toSkillItem)}
+					value={toSpaceSettingsValue(selectedSpace)}
 				/>
 			) : null}
 			<UserSettingsDialog

@@ -12,7 +12,9 @@ import type { TranscriptStore } from "../conversations/store-port"
 import { type LastWord, lastWordIn } from "../conversations/transcript-state"
 
 export type RosterState = {
+	rosters: Record<string, Bot[]>
 	bots: Bot[]
+	spaceId: string | null
 	previews: Record<string, LastWord | undefined>
 	selectedBotId: string | null
 	isEditing: boolean
@@ -20,10 +22,22 @@ export type RosterState = {
 	hasLoaded: boolean
 }
 
+export type RosterOpening = {
+	spaceIds: string[]
+	spaceId: string | null
+	lastBotId: string | null
+}
+
+export type RosterEntry = {
+	spaceId: string
+	lastBotId: string | null
+}
+
 export type RosterController = {
 	getState: () => RosterState
 	subscribe: (listener: () => void) => () => void
-	load: (lastBotId: string | null) => Promise<void>
+	load: (opening: RosterOpening) => Promise<void>
+	enter: (entry: RosterEntry) => void
 	select: (id: string) => void
 	create: () => Promise<void>
 	duplicate: (id: string) => Promise<void>
@@ -38,7 +52,9 @@ export type RosterController = {
 }
 
 export const initialRosterState: RosterState = {
+	rosters: {},
 	bots: [],
+	spaceId: null,
 	previews: {},
 	selectedBotId: null,
 	isEditing: false,
@@ -50,6 +66,7 @@ export const createRosterController = (
 	store: TranscriptStore,
 ): RosterController => {
 	let state = initialRosterState
+	let listedSpaceIds: string[] = []
 	const listeners = new Set<() => void>()
 
 	const enqueue = createQueue()
@@ -60,16 +77,35 @@ export const createRosterController = (
 		}
 	}
 
+	const rosterIn = (rosters: Record<string, Bot[]>, spaceId: string | null) =>
+		spaceId === null ? [] : (rosters[spaceId] ?? [])
+
 	const set = (fields: Partial<RosterState>) => {
-		state = { ...state, ...fields }
+		const next = { ...state, ...fields }
+		state = { ...next, bots: rosterIn(next.rosters, next.spaceId) }
 		publish()
 	}
 
+	const withRoster = (bots: Bot[]) =>
+		state.spaceId === null
+			? state.rosters
+			: { ...state.rosters, [state.spaceId]: bots }
+
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)
+
+	const landOn = (bots: Bot[], lastBotId: string | null) => {
+		const stillHeld = bots.find((bot) => bot.id === state.selectedBotId)?.id
+		const remembered = bots.find((bot) => bot.id === lastBotId)?.id
+		return {
+			selectedBotId: stillHeld ?? remembered ?? bots[0]?.id ?? null,
+			isEditing: state.isEditing && stillHeld !== undefined,
+			isShowingDanger: state.isShowingDanger && stillHeld !== undefined,
+		}
+	}
 
 	const admit = (written: Bot) => {
 		set({
-			bots: [...state.bots, written],
+			rosters: withRoster([...state.bots, written]),
 			selectedBotId: written.id,
 			isShowingDanger: false,
 		})
@@ -77,7 +113,9 @@ export const createRosterController = (
 
 	const apply = (written: Bot) => {
 		set({
-			bots: state.bots.map((bot) => (bot.id === written.id ? written : bot)),
+			rosters: withRoster(
+				state.bots.map((bot) => (bot.id === written.id ? written : bot)),
+			),
 		})
 	}
 
@@ -89,20 +127,26 @@ export const createRosterController = (
 		apply({ ...bot, ...toIdentity(value, bot) })
 	}
 
-	const readFrom = (lastBotId: string | null) =>
-		enqueue(() => read(lastBotId)).catch(() => undefined)
+	const readFrom = (opening: RosterOpening) =>
+		enqueue(() => read(opening)).catch(() => undefined)
 
-	const reload = () => readFrom(null)
+	const reload = () =>
+		readFrom({
+			spaceIds: listedSpaceIds,
+			spaceId: state.spaceId,
+			lastBotId: null,
+		})
 
-	const read = async (lastBotId: string | null) => {
-		const bots = await store.bots()
-		const stillHeld = bots.find((bot) => bot.id === state.selectedBotId)?.id
-		const remembered = bots.find((bot) => bot.id === lastBotId)?.id
+	const read = async ({ spaceIds, spaceId, lastBotId }: RosterOpening) => {
+		listedSpaceIds = spaceIds
+		const listed = await Promise.all(
+			spaceIds.map(async (id) => [id, await store.bots(id)] as const),
+		)
+		const rosters = Object.fromEntries(listed)
 		set({
-			bots,
-			selectedBotId: stillHeld ?? remembered ?? bots[0]?.id ?? null,
-			isEditing: state.isEditing && stillHeld !== undefined,
-			isShowingDanger: state.isShowingDanger && stillHeld !== undefined,
+			rosters,
+			spaceId,
+			...landOn(rosterIn(rosters, spaceId), lastBotId),
 		})
 	}
 
@@ -117,13 +161,13 @@ export const createRosterController = (
 	}
 
 	const readPreviews = async (bots: Bot[]) => {
-		const previews: Record<string, LastWord | undefined> = {}
+		const read: Record<string, LastWord | undefined> = {}
 		await Promise.all(
 			bots.map(async (bot) => {
-				previews[bot.id] = await readPreview(bot.id)
+				read[bot.id] = await readPreview(bot.id)
 			}),
 		)
-		set({ previews })
+		set({ previews: { ...state.previews, ...read } })
 	}
 
 	const writes = createWriteLoop<BotSettingsValue, Bot>({
@@ -148,10 +192,19 @@ export const createRosterController = (
 			}
 		},
 
-		load: async (lastBotId: string | null) => {
-			await readFrom(lastBotId)
+		load: async (opening: RosterOpening) => {
+			await readFrom(opening)
 			set({ hasLoaded: true })
-			await readPreviews(state.bots)
+			await readPreviews(Object.values(state.rosters).flat())
+		},
+
+		enter: ({ spaceId, lastBotId }: RosterEntry) => {
+			const bots = rosterIn(state.rosters, spaceId)
+			set({
+				rosters: { ...state.rosters, [spaceId]: bots },
+				spaceId,
+				...landOn(bots, lastBotId),
+			})
 		},
 
 		select: (id: string) => {
@@ -162,7 +215,7 @@ export const createRosterController = (
 
 		create: () =>
 			enqueue(async () => {
-				admit(await store.createBot(newBotIdentity(state.bots)))
+				admit(await store.createBot(newBotIdentity(state.bots), state.spaceId))
 			}).catch(reload),
 
 		duplicate: (id: string) =>
@@ -215,7 +268,7 @@ export const createRosterController = (
 				const bots = state.bots.filter((bot) => bot.id !== id)
 				const { [id]: _deleted, ...previews } = state.previews
 				set({
-					bots,
+					rosters: withRoster(bots),
 					previews,
 					selectedBotId: bots[0]?.id ?? null,
 					isEditing: false,
