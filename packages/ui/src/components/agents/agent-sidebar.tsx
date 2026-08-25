@@ -35,10 +35,14 @@ import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
+	ContextMenuSub,
+	ContextMenuSubContent,
+	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
 import {
+	SpaceDot,
 	SpaceDots,
 	SpaceSwitcher,
 } from "@workspace/ui/components/space-switcher"
@@ -67,6 +71,8 @@ const TITLE_BADGE =
 	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
 
 const PREVIEW_LINE = "h-4 truncate text-muted-foreground text-xs leading-4"
+
+const DESTINATION_NAME = "min-w-0 truncate"
 
 const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
 
@@ -127,24 +133,29 @@ interface BotRosterActions {
 	onSelectBot?: (id: string) => void
 	onEditBot?: (id: string) => void
 	onDuplicateBot?: (id: string) => void
+	onDuplicateBotToSpace?: (id: string, spaceId: string) => void
 	onDeleteBot?: (id: string) => void
 }
 
 interface BotRosterRowProps {
 	bot: AgentSidebarBot
 	isSelected: boolean
+	destinations: Space[]
 	onSelect?: (id: string) => void
 	onEdit?: (id: string) => void
 	onDuplicate?: (id: string) => void
+	onDuplicateToSpace?: (id: string, spaceId: string) => void
 	onDelete?: (id: string) => void
 }
 
 const BotRosterRow = ({
 	bot,
 	isSelected,
+	destinations,
 	onSelect,
 	onEdit,
 	onDuplicate,
+	onDuplicateToSpace,
 	onDelete,
 }: BotRosterRowProps) => {
 	const { t } = useTranslation("bots")
@@ -208,6 +219,26 @@ const BotRosterRow = ({
 						<Icons.Copy aria-hidden="true" className="size-3.5" />
 						{t("roster.duplicate")}
 					</ContextMenuItem>
+					{destinations.length > 0 ? (
+						<ContextMenuSub>
+							<ContextMenuSubTrigger>
+								<Icons.Copy aria-hidden="true" className="size-3.5" />
+								{t("roster.duplicateTo")}
+							</ContextMenuSubTrigger>
+							<ContextMenuSubContent>
+								{destinations.map((space) => (
+									<ContextMenuItem
+										key={space.id}
+										onSelect={() => onDuplicateToSpace?.(bot.id, space.id)}
+										textValue={space.name}
+									>
+										<SpaceDot colour={space.colour} />
+										<span className={DESTINATION_NAME}>{space.name}</span>
+									</ContextMenuItem>
+								))}
+							</ContextMenuSubContent>
+						</ContextMenuSub>
+					) : null}
 					<ContextMenuItem
 						onSelect={() => onDelete?.(bot.id)}
 						tone="destructive"
@@ -224,14 +255,17 @@ const BotRosterRow = ({
 interface BotRosterProps extends BotRosterActions {
 	bots: AgentSidebarBot[]
 	selectedBotId?: string
+	destinations: Space[]
 }
 
 const BotRoster = ({
 	bots,
 	selectedBotId,
+	destinations,
 	onSelectBot,
 	onEditBot,
 	onDuplicateBot,
+	onDuplicateBotToSpace,
 	onDeleteBot,
 }: BotRosterProps) => {
 	const { t } = useTranslation("bots")
@@ -244,10 +278,12 @@ const BotRoster = ({
 			{bots.map((bot) => (
 				<BotRosterRow
 					bot={bot}
+					destinations={destinations}
 					isSelected={bot.id === selectedBotId}
 					key={bot.id}
 					onDelete={onDeleteBot}
 					onDuplicate={onDuplicateBot}
+					onDuplicateToSpace={onDuplicateBotToSpace}
 					onEdit={onEditBot}
 					onSelect={onSelectBot}
 				/>
@@ -408,6 +444,7 @@ const AgentSidebarBase = ({
 	onCreateBot,
 	onEditBot,
 	onDuplicateBot,
+	onDuplicateBotToSpace,
 	onDeleteBot,
 	spaces = [],
 	selectedSpaceId,
@@ -426,11 +463,15 @@ const AgentSidebarBase = ({
 	const actions: BotRosterActions = {
 		onDeleteBot,
 		onDuplicateBot,
+		onDuplicateBotToSpace,
 		onEditBot,
 		onSelectBot,
 	}
 
 	const rosterOf = (spaceId: string) => botsBySpaceId?.[spaceId] ?? NO_BOTS
+
+	const destinationsFrom = (spaceId?: string) =>
+		spaces.filter((space) => space.id !== spaceId)
 
 	const hasRosterPerSpace = Boolean(botsBySpaceId) && spaces.length > 0
 	const shown =
@@ -493,6 +534,7 @@ const AgentSidebarBase = ({
 								<BotRoster
 									{...actions}
 									bots={rosterOf(space.id)}
+									destinations={destinationsFrom(space.id)}
 									selectedBotId={selectedId}
 								/>
 							)}
@@ -500,7 +542,12 @@ const AgentSidebarBase = ({
 							spaces={spaces}
 						/>
 					) : (
-						<BotRoster {...actions} bots={roster} selectedBotId={selectedId} />
+						<BotRoster
+							{...actions}
+							bots={roster}
+							destinations={destinationsFrom(selectedSpaceId)}
+							selectedBotId={selectedId}
+						/>
 					)}
 				</AnimatedSidebarContent>
 				{user || footer || spaces.length > 1 ? (

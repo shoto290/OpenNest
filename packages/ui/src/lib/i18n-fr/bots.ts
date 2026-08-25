@@ -6,6 +6,7 @@ const bots = {
 		actions: "Actions pour {{name}}",
 		settings: "Réglages",
 		duplicate: "Dupliquer",
+		duplicateTo: "Dupliquer vers",
 		delete: "Supprimer",
 		working: "{{pose}}…",
 		pose: {
