@@ -47,7 +47,7 @@ export type AnimatedSidebarVariant = "sidebar" | "floating" | "inset"
 export type AnimatedSidebarCollapsible = "offcanvas" | "icon" | "none"
 
 const MOBILE_QUERY = "(max-width: 767px)"
-export const SIDEBAR_DEFAULT_WIDTH = 256
+export const SIDEBAR_DEFAULT_WIDTH = 304
 export const SIDEBAR_MIN_WIDTH = 192
 export const SIDEBAR_MAX_WIDTH = 416
 export const SIDEBAR_WIDTH_STEP = 16
