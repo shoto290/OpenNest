@@ -12,6 +12,7 @@ import {
 	AgentSidebar,
 	type AgentSidebarBot,
 	type AgentSidebarProps,
+	type AgentSidebarSection,
 	type BotAvatarBlot,
 	type Space,
 	type UserChipIdentity,
@@ -1598,7 +1599,7 @@ export const OneSpaceRowMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same row menu in the account that has only one space. There is nowhere to send a copy, so the branch is not drawn at all rather than drawn empty or drawn offering the space the bot is already in — a submenu that opens onto nothing is worse than no submenu. Check the menu is the three plain actions and that the plain duplicate is still there, since copying a bot beside itself has nothing to do with spaces.",
+					"The same row menu in the account that has only one space. There is nowhere to send a copy, so the branch is not drawn at all rather than drawn empty or drawn offering the space the bot is already in — a submenu that opens onto nothing is worse than no submenu. Check the menu is the three plain actions and that the plain duplicate is still there, since copying a bot beside itself has nothing to do with spaces. The two rules that fence settings and delete off from the middle stay put whatever the middle holds: a menu never opens on a rule with nothing on one side of it.",
 			},
 		},
 	},
@@ -1611,6 +1612,7 @@ export const OneSpaceRowMenu = meta.story({
 		await expect(
 			menu.queryByRole("menuitem", { name: DUPLICATE_TO }),
 		).toBeNull()
+		await expect(menu.getAllByRole("separator")).toHaveLength(2)
 	},
 })
 
@@ -2027,5 +2029,469 @@ export const WindowControlsReservedOnRail = meta.story({
 		await expect(
 			rowsIn(canvasElement)[0].getBoundingClientRect().top,
 		).toBeGreaterThanOrEqual(header.getBoundingClientRect().bottom)
+	},
+})
+
+const SECTIONS: AgentSidebarSection[] = [
+	{ id: "research", name: "Research" },
+	{ id: "shipping", name: "Shipping" },
+	{ id: "archive", name: "Archive" },
+]
+
+const PLACEMENTS: Record<string, string | null> = {
+	atlas: null,
+	beacon: "research",
+	cinder: null,
+	dune: "shipping",
+	ember: "research",
+	flint: "shipping",
+}
+
+const SECTIONED_ROSTER: AgentSidebarBot[] = ROSTER.slice(0, 6).map((bot) => ({
+	...bot,
+	sectionId: PLACEMENTS[bot.id] ?? null,
+}))
+
+const GROUPED_ORDER = ["Atlas", "Cinder", "Beacon", "Ember", "Dune", "Flint"]
+
+const sectionArgs = () => ({
+	bots: SECTIONED_ROSTER,
+	sections: SECTIONS,
+	selectedBotId: "beacon",
+	onCreateSection: fn(),
+	onRenameSection: fn(),
+	onReorderSections: fn(),
+	onDeleteSection: fn(),
+	onMoveBotToSection: fn(),
+})
+
+const rowNames = (canvasElement: HTMLElement) =>
+	rowsIn(canvasElement).map(
+		(row) => slotIn(row, "roster-row-name").textContent ?? "",
+	)
+
+const sectionHeadersIn = (canvasElement: HTMLElement) =>
+	Array.from(
+		canvasElement.querySelectorAll<HTMLElement>(
+			'[data-slot="roster-section-name"]',
+		),
+	)
+
+const sectionNames = (canvasElement: HTMLElement) =>
+	sectionHeadersIn(canvasElement).map((name) => name.textContent ?? "")
+
+const sectionHeader = (canvasElement: HTMLElement, name: string) => {
+	const header = sectionHeadersIn(canvasElement).find(
+		(node) => node.textContent === name,
+	)?.parentElement
+	if (!header) throw new Error(`No section header named ${name}`)
+	return header
+}
+
+const openSectionMenu = async (canvasElement: HTMLElement, name: string) => {
+	fireEvent.contextMenu(sectionHeader(canvasElement, name))
+	return within(
+		await screen.findByRole("menu", {
+			name: `Actions for the ${name} section`,
+		}),
+	)
+}
+
+const sectionField = (canvasElement: HTMLElement) => {
+	const field = canvasElement.querySelector<HTMLInputElement>(
+		'[data-slot="roster-section-field"]',
+	)
+	if (!field) throw new Error("Nothing here draws a section field")
+	return field
+}
+
+const MOVE_TO = "Move to"
+
+type Gestures = {
+	click: (node: Element) => Promise<void>
+	hover: (node: Element) => Promise<void>
+}
+
+const openMoveToBranch = async (
+	canvasElement: HTMLElement,
+	bot: string,
+	userEvent: Gestures,
+) => {
+	const menu = await openRowMenu(canvasElement, bot)
+	await userEvent.hover(menu.getByRole("menuitem", { name: MOVE_TO }))
+	return within(
+		await settled(await screen.findByRole("menu", { name: MOVE_TO })),
+	)
+}
+
+const startRename = async (
+	canvasElement: HTMLElement,
+	name: string,
+	userEvent: Gestures,
+) => {
+	const menu = await openSectionMenu(canvasElement, name)
+	await userEvent.click(menu.getByRole("menuitem", { name: "Rename" }))
+	return sectionField(canvasElement)
+}
+
+const typeOf = (node: HTMLElement) => {
+	const style = getComputedStyle(node)
+	return {
+		fontFamily: style.fontFamily,
+		fontSize: style.fontSize,
+		fontWeight: style.fontWeight,
+		letterSpacing: style.letterSpacing,
+		textTransform: style.textTransform,
+	}
+}
+
+export const Sections = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The roster carved into sections. The bots holding no section come first, under no header at all and in the order they arrived, so an account that never made a section reads exactly as `Roster` does. Each section follows in the order the host gave, under a header carrying its name — the header is quiet chrome, smaller and dimmer than any row, and it is a disclosure: it opens and shuts the group under it, and a chevron parked on the far right says which way it stands, out of the way of the name so a long name runs to the same edge in every section. The actions that rename, reorder and delete the section live behind a right-click on the header, exactly as a row\u2019s actions do, so the plain click is never spent on a menu. Check the rows keep one column down the whole panel whatever section they sit in — a header must never indent the bots under it — that every row is still one stop and one button, and that the headers are stops of their own between the groups they open. Pick `SectionCollapse` for the disclosure, `EmptySection` for a section nothing has been filed into yet, `MoveBotToSection` for the branch that files a bot.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+		await expect(sectionNames(canvasElement)).toEqual([
+			"Research",
+			"Shipping",
+			"Archive",
+		])
+
+		await expectAlignedRows(rowsIn(canvasElement))
+
+		const research = sectionHeader(canvasElement, "Research")
+		await expect(research).toHaveAttribute("aria-expanded", "true")
+		await expect(research.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			rowFor(canvasElement, "Beacon").getBoundingClientRect().top,
+		)
+		await expect(
+			rowFor(canvasElement, "Cinder").getBoundingClientRect().bottom,
+		).toBeLessThanOrEqual(research.getBoundingClientRect().top)
+	},
+})
+
+export const EmptySection = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A section nothing has been filed into. It is drawn, not hidden: the header stays where the host put it and a dashed zone under it stands in for the rows that are not there yet. The zone wears a faded bot of its own, drawn from the section\u2019s name so it is the same bot every time that section is empty rather than a new face on every render — it is at rest and never animates, since a placeholder that moves competes with the bots that are actually working. It is decoration and is kept out of the accessibility tree; the invitation beside it is what a reader hears. Check it is drawn under the Archive header, that no row is drawn with it, and that it goes with the headers on the icon rail, where there is nothing to drop onto.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const invitation = canvas.getByText("Drop a bot here")
+		await expect(invitation).toBeVisible()
+
+		const zone = slotIn(canvasElement, "roster-section-drop")
+		const placeholder = zone.querySelector("svg")
+		await expect(placeholder?.closest("[aria-hidden='true']")).not.toBeNull()
+		await expect(placeholder).toHaveAttribute(
+			"aria-label",
+			expect.stringMatching(/^Bot avatar \w+, (?!idle)\w+$/),
+		)
+		await expect(getComputedStyle(zone).color).toBe(
+			tokenColor(canvasElement, "--muted-foreground"),
+		)
+		await expect(
+			sectionHeader(canvasElement, "Archive").getBoundingClientRect().bottom,
+		).toBeLessThanOrEqual(invitation.getBoundingClientRect().top)
+		await expect(rowsIn(canvasElement)).toHaveLength(GROUPED_ORDER.length)
+	},
+})
+
+export const SectionCollapse = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The header as a disclosure. A plain click shuts the group under it and another opens it back, the chevron on the right turns to say which way it stands, and `aria-expanded` says the same thing to a reader — Enter and Space do it too, since the header is a real button. Shutting a section never touches the sections around it and never reports anything to the host: this is the reader tidying their own panel, not a change to the space. The rows of a shut section stay in the markup rather than being torn out, so the rail still lists every bot when the panel itself is collapsed and no header is left to reopen anything. Check both directions, that the bots of the other sections hold their place, and that the chevron turn is dropped under `prefers-reduced-motion`. Pick `SectionRename` for what a right-click on the same header offers.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const header = sectionHeader(canvasElement, "Research")
+		await expect(header).toHaveAttribute("aria-expanded", "true")
+		await expect(rowFor(canvasElement, "Beacon")).toBeVisible()
+
+		await userEvent.click(header)
+		await expect(header).toHaveAttribute("aria-expanded", "false")
+		await expect(rowFor(canvasElement, "Beacon")).not.toBeVisible()
+		await expect(rowFor(canvasElement, "Ember")).not.toBeVisible()
+		await expect(rowFor(canvasElement, "Dune")).toBeVisible()
+		await expect(rowFor(canvasElement, "Atlas")).toBeVisible()
+		await expect(sectionNames(canvasElement)).toEqual([
+			"Research",
+			"Shipping",
+			"Archive",
+		])
+
+		await expect(header).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+		await expect(header).toHaveAttribute("aria-expanded", "true")
+		await expect(rowFor(canvasElement, "Beacon")).toBeVisible()
+
+		await expect(args.onReorderSections).not.toHaveBeenCalled()
+		await expect(args.onDeleteSection).not.toHaveBeenCalled()
+	},
+})
+
+export const SectionRename = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Renaming a section where it stands, from the right-click menu on its header. The name does not open a dialogue over the panel and does not grow a boxed field: it simply becomes editable in place, in the same type and at the same spot, with no border and no fill of its own, so the only thing that changes is that there is now a caret in the name. The old name arrives selected, so typing replaces it. Enter confirms and reports the new name. Escape reports nothing and puts the old name back, and so does confirming an empty field: a section is never left nameless by a slip of the keyboard. Check all three, and that the field is named for the section it renames so a screen reader says which one is being typed over.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const headerType = typeOf(sectionHeader(canvasElement, "Research"))
+
+		const field = await startRename(canvasElement, "Research", userEvent)
+		await expect(field).toHaveFocus()
+		await expect(field).toHaveAccessibleName("Rename Research")
+		await expect(field).toHaveValue("Research")
+		await expect(typeOf(field)).toEqual(headerType)
+
+		await userEvent.keyboard("Reading{Enter}")
+		await expect(args.onRenameSection).toHaveBeenCalledWith(
+			"research",
+			"Reading",
+		)
+		await expect(sectionNames(canvasElement)).toContain("Research")
+
+		await startRename(canvasElement, "Shipping", userEvent)
+		await userEvent.keyboard("Sent{Escape}")
+		await expect(args.onRenameSection).toHaveBeenCalledTimes(1)
+		await expect(sectionNames(canvasElement)).toContain("Shipping")
+
+		await userEvent.clear(
+			await startRename(canvasElement, "Shipping", userEvent),
+		)
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onRenameSection).toHaveBeenCalledTimes(1)
+		await expect(sectionNames(canvasElement)).toContain("Shipping")
+	},
+})
+
+export const SectionReorder = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Moving a section up or down the panel. The header reports the whole new order of section ids rather than the one step it took, so a host writes the order it was given and never replays a move. The first section cannot go up and the last cannot go down — those entries are drawn disabled rather than dropped, so the menu keeps the same shape wherever it is opened. Check the two edges and one move in each direction. Dragging a bot into a section is not here; that lands with the drop targets.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const first = await openSectionMenu(canvasElement, "Research")
+		await expect(
+			first.getByRole("menuitem", { name: "Move up" }),
+		).toBeDisabled()
+		await userEvent.click(first.getByRole("menuitem", { name: "Move down" }))
+		await expect(args.onReorderSections).toHaveBeenCalledWith([
+			"shipping",
+			"research",
+			"archive",
+		])
+
+		const last = await openSectionMenu(canvasElement, "Archive")
+		await expect(
+			last.getByRole("menuitem", { name: "Move down" }),
+		).toBeDisabled()
+		await userEvent.click(last.getByRole("menuitem", { name: "Move up" }))
+		await expect(args.onReorderSections).toHaveBeenCalledWith([
+			"research",
+			"archive",
+			"shipping",
+		])
+	},
+})
+
+export const SectionDelete = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Deleting a section from its own header. It reads as destructive, sits last under the reordering entries, and reports only the section — what becomes of the bots filed under it is the host's decision, not this panel's, so nothing is removed here and the panel redraws from the props it is given next. Delete carries `--destructive`, which does not clear AA against a light popup at this size, the same open token question `RowContextMenu` already carries.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openSectionMenu(canvasElement, "Shipping")
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["Rename", "Move up", "Move down", "Delete"])
+
+		await userEvent.click(menu.getByRole("menuitem", { name: "Delete" }))
+		await expect(args.onDeleteSection).toHaveBeenCalledWith("shipping")
+		await expect(sectionNames(canvasElement)).toContain("Shipping")
+	},
+})
+
+export const MoveBotToSection = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The branch under a row that files the bot. It sits directly under the copying entries, in the same band as them — copying a bot and filing a bot are both a reader arranging their roster, so nothing is drawn between them; the rules are spent where they matter, one under settings and one over delete, so a hand aimed at anything in the middle can never land on delete. It offers every section plus the entry that files it under none, and it marks the one the bot holds now, so the branch reads as where the bot is before it reads as where it could go — Beacon sits in Research here. Choosing one reports the bot and the section, and the entry that clears it reports `null` rather than an empty string, so a host never has to guess what no section means. The branch is only drawn to a host that listens for it: `RowContextMenu` and `OneSpaceRowMenu` pass no section handlers and keep the three plain actions they always had.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openRowMenu(canvasElement, "Beacon")
+		const branch = menu.getByRole("menuitem", { name: MOVE_TO })
+		await expect(branch).toHaveAttribute("aria-haspopup", "menu")
+		await expect(menu.getAllByRole("separator")).toHaveLength(2)
+
+		await userEvent.hover(branch)
+		const panel = within(
+			await settled(await screen.findByRole("menu", { name: MOVE_TO })),
+		)
+		const targets = panel.getAllByRole("menuitemradio")
+		await expect(targets.map((item) => item.textContent)).toEqual([
+			"No section",
+			"Research",
+			"Shipping",
+			"Archive",
+		])
+		await expect(targets[1]).toHaveAttribute("aria-checked", "true")
+		await expect(targets[0]).toHaveAttribute("aria-checked", "false")
+
+		await userEvent.click(targets[2])
+		await waitFor(async () => {
+			await expect(screen.queryByRole("menu")).toBeNull()
+		}, FRAME_POLL)
+		await expect(args.onMoveBotToSection).toHaveBeenCalledWith(
+			"beacon",
+			"shipping",
+		)
+
+		const again = await openMoveToBranch(canvasElement, "Beacon", userEvent)
+		await userEvent.click(again.getAllByRole("menuitemradio")[0])
+		await expect(args.onMoveBotToSection).toHaveBeenCalledWith("beacon", null)
+	},
+})
+
+export const NewSectionForABot = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Making a section from the bot that needs it. The last entry under `Move to` opens a field at the foot of the roster instead of a dialogue, so the reader stays in the panel and names the thing they are about to fill. Enter reports the name together with the bot it was made for, and the host is the one that creates the section and files the bot — nothing is drawn here until it comes back through the props. Escape and an empty name both close the field and report nothing.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const branch = await openMoveToBranch(canvasElement, "Atlas", userEvent)
+		await userEvent.click(branch.getByRole("menuitem", { name: "New section" }))
+
+		const field = sectionField(canvasElement)
+		await expect(field).toHaveFocus()
+		await expect(field).toHaveAccessibleName("New section name")
+		await expect(field).toHaveValue("")
+
+		await userEvent.keyboard("Reading{Escape}")
+		await expect(args.onCreateSection).not.toHaveBeenCalled()
+
+		await userEvent.click(
+			(await openMoveToBranch(canvasElement, "Atlas", userEvent)).getByRole(
+				"menuitem",
+				{ name: "New section" },
+			),
+		)
+		await userEvent.keyboard("Reading{Enter}")
+		await expect(args.onCreateSection).toHaveBeenCalledWith("Reading", "atlas")
+	},
+})
+
+export const CollapsedSections = meta.story({
+	args: sectionArgs(),
+	render: renderShell(false),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The sectioned roster on the icon rail. There is no room for a header a reader could read, so the headers go from the picture and from the accessibility tree entirely rather than shrinking into an unreadable stub, and the invitation under an empty section goes with them. The bots stay in exactly the order the sections gave them, so collapsing never reshuffles the rail. Check the rail holds the same six avatars in the same order as `Sections`, that no header is reachable by Tab, and that the create button is still the first stop.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await waitFor(async () => {
+			await expect(
+				canvas
+					.getByRole("complementary", { name: "Conversations" })
+					.getBoundingClientRect().width,
+			).toBeCloseTo(railWidth(), 0)
+		}, FRAME_POLL)
+
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+		for (const header of sectionHeadersIn(canvasElement)) {
+			await expect(header).not.toBeVisible()
+		}
+		await expect(canvas.queryByRole("button", { name: "Research" })).toBeNull()
+		await expect(canvas.getByText("Drop a bot here")).not.toBeVisible()
+
+		await userEvent.tab()
+		await expect(canvas.getByRole("button", { name: "New bot" })).toHaveFocus()
+		await userEvent.tab()
+		await expect(rowButton(rowsIn(canvasElement)[0])).toHaveFocus()
+	},
+})
+
+const SECTIONS_IN_VIEW_ONLY = { vocca: SECTIONS }
+
+export const SectionsPerSpace = meta.story({
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: FIVE_ROSTERS,
+		sectionsBySpaceId: SECTIONS_IN_VIEW_ONLY,
+		user: READER,
+		onCreateSection: fn(),
+		onRenameSection: fn(),
+		onReorderSections: fn(),
+		onDeleteSection: fn(),
+		onMoveBotToSection: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Sections belong to a space, not to the panel. A host that keeps them per space passes `sectionsBySpaceId`, and from then on that map is the whole truth: a space it does not list holds no section and is drawn flat, rather than borrowing the sections of whichever space happens to be open. It matters at the edges of the carousel, which draws the panel waiting either side of the one in view — a host that has only loaded the space in view would otherwise see its headers bleed into both neighbours and watch them vanish mid-swipe. The `sections` prop stays for the single panel, where there is no map to consult. Check that Vocca carries its three headers and that the panel beside it carries none while listing its own bots.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const panels = panelsIn(canvasElement)
+		await expect(sectionNames(panelInView(canvasElement))).toEqual([
+			"Research",
+			"Shipping",
+			"Archive",
+		])
+
+		const waiting = panels.filter((panel) => panel.hasAttribute("inert"))
+		await expect(waiting.length).toBeGreaterThan(0)
+		for (const panel of waiting) {
+			await expect(sectionNames(panel)).toEqual([])
+			await expect(rowsIn(panel).length).toBeGreaterThan(0)
+		}
 	},
 })
