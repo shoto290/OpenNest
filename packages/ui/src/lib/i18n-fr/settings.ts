@@ -4,11 +4,13 @@ const settings = {
 	},
 	rail: {
 		profile: "Profil",
+		space: "Espace",
 		appearance: "Apparence",
 		notifications: "Notifications",
 		language: "Langue",
 		skills: "Compétences",
 		history: "Historique",
+		danger: "Zone sensible",
 	},
 	plugin: {
 		author: {
@@ -74,6 +76,25 @@ const settings = {
 				moss: "Mousse",
 				coral: "Corail",
 				lavender: "Lavande",
+			},
+		},
+	},
+	space: {
+		untitled: "Espace sans nom",
+		name: {
+			label: "Nom",
+			placeholder: "Sans nom",
+		},
+		colour: {
+			label: "Couleur",
+		},
+		danger: {
+			delete: "Supprimer l'espace",
+			description:
+				"Ses bots et son plugin partent avec lui. C'est irréversible.",
+			last: "Le dernier espace ne peut pas être supprimé — l'application en garde toujours un.",
+			confirm: {
+				title: "Supprimer {{name}} ?",
 			},
 		},
 	},

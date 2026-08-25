@@ -1,0 +1,68 @@
+import { expect } from "storybook/test"
+
+import preview from "@workspace/storybook/preview"
+import { slotsIn } from "@workspace/storybook/story-utils"
+import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
+import {
+	SpaceTint,
+	type SpaceTintProps,
+} from "@workspace/ui/components/space-tint"
+
+const BLUE_TINT = { tint: "blue" } satisfies SpaceTintProps
+
+const meta = preview.meta({
+	title: "Branding/SpaceTint",
+	component: SpaceTint,
+	parameters: {
+		layout: "centered",
+		docs: {
+			description: {
+				component:
+					"The mark a space is recognised by: one filled dot, painted in one of the eight tints a bot's blot is painted in — the same eight, so a space and the bots living in it read as one family. It draws nothing but colour, which is why it is decorative to a screen reader: whatever names the space names it in words next to the dot. Reach for it wherever a space has to be told apart at a glance — the breadcrumb of its settings, the row that chooses its tint.",
+			},
+		},
+	},
+	args: BLUE_TINT,
+})
+
+export const Default = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The dot at its resting size, in one tint. Check that it stays a circle rather than an ellipse when a flex row squeezes it, and that it is hidden from the accessibility tree — a colour is not a name. Pick `Variants` for all eight at once.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [dot] = slotsIn(canvasElement, "space-tint")
+
+		await expect(dot).toHaveAttribute("aria-hidden", "true")
+		await expect(dot?.getBoundingClientRect().width).toBe(
+			dot?.getBoundingClientRect().height,
+		)
+	},
+})
+
+export const Variants = meta.story({
+	render: () => (
+		<div className="flex items-center gap-2">
+			{BLOT_TINTS.map((tint) => (
+				<SpaceTint className="size-6" key={tint} tint={tint} />
+			))}
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every tint a space can wear, in the order the swatch row offers them. Check that each dot reads as its own colour against both schemes — flip `theme_layout` to side-by-side — and that the row is derived from `BLOT_TINTS` rather than hand-listed, so a ninth tint shows up here on its own.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const dots = slotsIn(canvasElement, "space-tint")
+
+		await expect(dots.map((dot) => dot.dataset.tint)).toEqual([...BLOT_TINTS])
+	},
+})
