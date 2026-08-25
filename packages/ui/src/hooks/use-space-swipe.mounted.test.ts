@@ -76,13 +76,14 @@ describe("useSpaceSwipe mounted", () => {
 		swipe(node, HALF_PANEL - 10)
 		view.rerenderWith(laterSettle)
 		swipe(node, 10)
+		gestureEnds()
 
 		expect(firstSettle).not.toHaveBeenCalled()
 		expect(laterSettle).toHaveBeenCalledTimes(1)
 		expect(laterSettle).toHaveBeenCalledWith(2)
 	})
 
-	it("reaches the neighbour as the row crosses half a panel, before the wheel goes quiet", () => {
+	it("follows the whole gesture and only magnetises once it is let go", () => {
 		const node = listAreaOf()
 		const onSettle = vi.fn()
 		const onTravel = vi.fn()
@@ -92,9 +93,25 @@ describe("useSpaceSwipe mounted", () => {
 		expect(onTravel).toHaveBeenLastCalledWith(HALF_PANEL - 10)
 		expect(onSettle).not.toHaveBeenCalled()
 
-		swipe(node, 10)
+		swipe(node, 20)
+		expect(onTravel).toHaveBeenLastCalledWith(HALF_PANEL + 10)
+		expect(onSettle).not.toHaveBeenCalled()
+
+		gestureEnds()
 		expect(onSettle).toHaveBeenCalledTimes(1)
 		expect(onSettle).toHaveBeenCalledWith(2)
+	})
+
+	it("reaches the neighbour without waiting once the row can travel no further", () => {
+		const node = listAreaOf()
+		const onSettle = vi.fn()
+		const onTravel = vi.fn()
+		mountSwipe(node, onSettle, onTravel)
+
+		swipe(node, PANEL_WIDTH)
+		expect(onSettle).toHaveBeenCalledTimes(1)
+		expect(onSettle).toHaveBeenCalledWith(2)
+		expect(onTravel).not.toHaveBeenCalled()
 	})
 
 	it("spends the gesture, so the momentum behind it cannot walk on to another space", () => {
