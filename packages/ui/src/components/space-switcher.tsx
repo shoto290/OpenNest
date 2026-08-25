@@ -23,10 +23,12 @@ import { SPACE_RANK_LIMIT } from "@workspace/ui/hooks/use-space-shortcut"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER =
-	"mr-auto min-w-0 max-w-[62%] gap-2 px-2 group-data-[state=collapsed]/sidebar:mr-0 group-data-[state=collapsed]/sidebar:size-7 group-data-[state=collapsed]/sidebar:px-0"
+	"mr-auto min-w-0 max-w-[62%] px-2 group-data-[state=collapsed]/sidebar:mr-0 group-data-[state=collapsed]/sidebar:size-7 group-data-[state=collapsed]/sidebar:px-0"
 
 const SWITCHER_NAME =
 	"min-w-0 truncate group-data-[state=collapsed]/sidebar:hidden"
+
+const SWITCHER_DOT = "hidden group-data-[state=collapsed]/sidebar:block"
 
 const DOT = "size-2.5 shrink-0 rounded-full"
 
@@ -44,12 +46,13 @@ const DOT_RESTING = "scale-75 bg-sidebar-foreground/30"
 type SpaceDotProps = {
 	colour: BotAvatarBlot
 	isFilled?: boolean
+	className?: string
 }
 
-const SpaceDot = ({ colour, isFilled = true }: SpaceDotProps) => (
+const SpaceDot = ({ colour, isFilled = true, className }: SpaceDotProps) => (
 	<span
 		aria-hidden="true"
-		className={cn(DOT, DOT_MOTION, !isFilled && DOT_RESTING)}
+		className={cn(DOT, DOT_MOTION, !isFilled && DOT_RESTING, className)}
 		data-slot="space-dot"
 		style={isFilled ? { backgroundColor: blotTint(colour) } : undefined}
 	/>
@@ -89,7 +92,7 @@ const SpaceSwitcher = ({
 					size="sm"
 					variant="ghost"
 				>
-					<SpaceDot colour={selected.colour} />
+					<SpaceDot className={SWITCHER_DOT} colour={selected.colour} />
 					<span className={SWITCHER_NAME} data-slot="space-switcher-name">
 						{selected.name}
 					</span>
