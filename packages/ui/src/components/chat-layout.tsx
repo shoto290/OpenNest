@@ -71,7 +71,9 @@ function ChatLayout({
 					contentClassName,
 				)}
 			>
-				<ChatMarkProvider>{children}</ChatMarkProvider>
+				<ChatMarkProvider transcriptKey={transcriptKey}>
+					{children}
+				</ChatMarkProvider>
 			</MessageScroller>
 
 			{notice || pending || composer ? (

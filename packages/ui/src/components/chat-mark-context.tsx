@@ -3,16 +3,17 @@
 import { createContext, type ReactNode, useContext, useId } from "react"
 
 interface ChatMarkProviderProps {
+	transcriptKey?: string
 	children: ReactNode
 }
 
 const ChatMarkContext = createContext<string | undefined>(undefined)
 
-function ChatMarkProvider({ children }: ChatMarkProviderProps) {
-	const markId = useId()
+function ChatMarkProvider({ transcriptKey, children }: ChatMarkProviderProps) {
+	const mintedKey = useId()
 
 	return (
-		<ChatMarkContext.Provider value={markId}>
+		<ChatMarkContext.Provider value={`chat-mark-${transcriptKey ?? mintedKey}`}>
 			{children}
 		</ChatMarkContext.Provider>
 	)
