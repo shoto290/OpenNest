@@ -395,7 +395,7 @@ export const ResizeAbandoned = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the pointer stream dies mid-drag — the window manager or the desktop shell takes the pointer over and no release ever reaches the page. Check that the panel stops following at once and sits back at the width it had before the press, rather than freezing wherever the last frame left it. Pick `Resized` for the drag that ends properly.",
+					"Reach for this when the pointer stream dies mid-drag — the window manager or the desktop shell takes the pointer over and no release ever reaches the page. Check that the panel stops following at once and keeps the last width it followed, rather than throwing the drag away and snapping back to the width it had before the press. Pick `Resized` for the drag that ends properly.",
 			},
 		},
 	},
@@ -405,14 +405,16 @@ export const ResizeAbandoned = meta.story({
 		const start = widthOf(sidebar)
 		const from = gripCenter(handle)
 
+		const abandoned = start + WIDER_BY
+
 		await userEvent.pointer([
 			{ keys: "[MouseLeft>]", target: handle, coords: from },
 			{ coords: { clientX: from.clientX + WIDER_BY, clientY: from.clientY } },
 		])
-		await expectWidth(sidebar, start + WIDER_BY)
+		await expectWidth(sidebar, abandoned)
 
 		handle.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }))
-		await expectWidth(sidebar, start)
+		await expectWidth(sidebar, abandoned)
 
 		await userEvent.pointer([
 			{
@@ -420,9 +422,9 @@ export const ResizeAbandoned = meta.story({
 			},
 			{ keys: "[/MouseLeft]" },
 		])
-		await expectWidth(sidebar, start)
+		await expectWidth(sidebar, abandoned)
 		await expect(args.onWidthChange).toHaveBeenCalledTimes(1)
-		await expect(args.onWidthChange).toHaveBeenLastCalledWith(start)
+		await expect(args.onWidthChange).toHaveBeenLastCalledWith(abandoned)
 	},
 })
 
