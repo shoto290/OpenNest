@@ -47,6 +47,7 @@ import {
 	type UserChipIdentity,
 } from "@workspace/ui/components/user-chip"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
+import { toPlainText } from "@workspace/ui/lib/plain-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER =
@@ -193,7 +194,7 @@ const BotRosterRow = ({
 							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
 								{working
 									? t("roster.working", { pose: t(`roster.pose.${pose}`) })
-									: bot.lastMessage}
+									: bot.lastMessage && toPlainText(bot.lastMessage)}
 							</span>
 						</span>
 					</AnimatedSidebarMenuButton>
