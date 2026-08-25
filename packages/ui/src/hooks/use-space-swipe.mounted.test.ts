@@ -12,6 +12,8 @@ const PANEL_WIDTH = 300
 
 const HALF_PANEL = PANEL_WIDTH / 2
 
+const MOMENTUM_TICKS = 20
+
 const listAreaOf = () => {
 	const node = document.createElement("div")
 	Object.defineProperty(node, "clientWidth", { value: PANEL_WIDTH })
@@ -23,26 +25,37 @@ const swipe = (node: HTMLElement, deltaX: number) => {
 	node.dispatchEvent(new WheelEvent("wheel", { deltaX, deltaY: 0 }))
 }
 
+const scroll = (node: HTMLElement, deltaY: number) => {
+	node.dispatchEvent(new WheelEvent("wheel", { deltaX: 0, deltaY }))
+}
+
 const gestureEnds = () => vi.advanceTimersByTime(SWIPE_SETTLE + 1)
 
 type Swipe = Parameters<typeof useSpaceSwipe>[0]
 
 const swipeOn =
 	(target: Swipe["target"]) =>
-	(onSettle: Swipe["onSettle"]): Swipe => ({
+	(onSettle: Swipe["onSettle"], onTravel: Swipe["onTravel"]): Swipe => ({
 		count: 3,
 		index: 1,
 		isEnabled: true,
 		onSettle,
-		onTravel: () => undefined,
+		onTravel,
 		target,
 	})
 
-const mountSwipe = (node: HTMLElement, onSettle: Swipe["onSettle"]) => {
+const mountSwipe = (
+	node: HTMLElement,
+	onSettle: Swipe["onSettle"],
+	onTravel: Swipe["onTravel"] = () => undefined,
+) => {
 	const propsFor = swipeOn({ current: node })
-	const view = renderHook(useSpaceSwipe, { initialProps: propsFor(onSettle) })
+	const view = renderHook(useSpaceSwipe, {
+		initialProps: propsFor(onSettle, onTravel),
+	})
 	return {
-		rerenderWith: (later: Swipe["onSettle"]) => view.rerender(propsFor(later)),
+		rerenderWith: (later: Swipe["onSettle"]) =>
+			view.rerender(propsFor(later, onTravel)),
 	}
 }
 
@@ -62,25 +75,56 @@ describe("useSpaceSwipe mounted", () => {
 
 		swipe(node, HALF_PANEL - 10)
 		view.rerenderWith(laterSettle)
-		swipe(node, HALF_PANEL - 10)
-		gestureEnds()
+		swipe(node, 10)
 
 		expect(firstSettle).not.toHaveBeenCalled()
 		expect(laterSettle).toHaveBeenCalledTimes(1)
 		expect(laterSettle).toHaveBeenCalledWith(2)
 	})
 
-	it("settles once however many wheel events the gesture is made of", () => {
+	it("reaches the neighbour as the row crosses half a panel, before the wheel goes quiet", () => {
+		const node = listAreaOf()
+		const onSettle = vi.fn()
+		const onTravel = vi.fn()
+		mountSwipe(node, onSettle, onTravel)
+
+		swipe(node, HALF_PANEL - 10)
+		expect(onTravel).toHaveBeenLastCalledWith(HALF_PANEL - 10)
+		expect(onSettle).not.toHaveBeenCalled()
+
+		swipe(node, 10)
+		expect(onSettle).toHaveBeenCalledTimes(1)
+		expect(onSettle).toHaveBeenCalledWith(2)
+	})
+
+	it("spends the gesture, so the momentum behind it cannot walk on to another space", () => {
 		const node = listAreaOf()
 		const onSettle = vi.fn()
 		mountSwipe(node, onSettle)
 
-		for (let tick = 0; tick < 6; tick += 1) swipe(node, 40)
-		expect(onSettle).not.toHaveBeenCalled()
+		swipe(node, PANEL_WIDTH)
+		for (let tick = 0; tick < MOMENTUM_TICKS; tick += 1) swipe(node, 80)
+		expect(onSettle).toHaveBeenCalledTimes(1)
 
 		gestureEnds()
 		expect(onSettle).toHaveBeenCalledTimes(1)
-		expect(onSettle).toHaveBeenCalledWith(2)
+
+		swipe(node, PANEL_WIDTH)
+		expect(onSettle).toHaveBeenCalledTimes(2)
+	})
+
+	it("holds that latch up for as long as the momentum keeps sending events", () => {
+		const node = listAreaOf()
+		const onSettle = vi.fn()
+		mountSwipe(node, onSettle)
+
+		swipe(node, PANEL_WIDTH)
+		for (let tick = 0; tick < MOMENTUM_TICKS; tick += 1) {
+			vi.advanceTimersByTime(SWIPE_SETTLE - 20)
+			swipe(node, 80)
+		}
+
+		expect(onSettle).toHaveBeenCalledTimes(1)
 	})
 
 	it("settles back on the space it started from short of half a panel", () => {
@@ -93,5 +137,18 @@ describe("useSpaceSwipe mounted", () => {
 
 		expect(onSettle).toHaveBeenCalledTimes(1)
 		expect(onSettle).toHaveBeenCalledWith(1)
+	})
+
+	it("says nothing at all when the reader only scrolls the list", () => {
+		const node = listAreaOf()
+		const onSettle = vi.fn()
+		const onTravel = vi.fn()
+		mountSwipe(node, onSettle, onTravel)
+
+		scroll(node, 400)
+		gestureEnds()
+
+		expect(onTravel).not.toHaveBeenCalled()
+		expect(onSettle).not.toHaveBeenCalled()
 	})
 })

@@ -13,7 +13,14 @@ export const isHorizontalSwipe = ({ deltaX, deltaY }: SwipeDelta) =>
 export type SpaceDrag = {
 	index: number
 	travel: number
+	isCommitted: boolean
 }
+
+export const spaceAtRest = (index: number): SpaceDrag => ({
+	index,
+	travel: 0,
+	isCommitted: false,
+})
 
 type SpaceDragged = {
 	drag: SpaceDrag
@@ -22,8 +29,8 @@ type SpaceDragged = {
 	width: number
 }
 
-const withinOnePanel = (travel: number, width: number) =>
-	Math.max(Math.min(travel, width), -width)
+const hasCrossedHalf = (travel: number, width: number) =>
+	width > 0 && Math.abs(travel) * 2 >= width
 
 export const spaceDragged = ({
 	drag,
@@ -32,20 +39,13 @@ export const spaceDragged = ({
 	width,
 }: SpaceDragged): SpaceDrag => {
 	const travel = drag.travel + deltaX
-	const isHeldAtEnd = travel > 0 && drag.index >= count - 1
-	const isHeldAtStart = travel < 0 && drag.index <= 0
+	const step = travel > 0 ? 1 : -1
+	const isHeldAtEnd = step > 0 && drag.index >= count - 1
+	const isHeldAtStart = step < 0 && drag.index <= 0
 	if (isHeldAtEnd || isHeldAtStart) return { ...drag, travel: 0 }
-	return { ...drag, travel: withinOnePanel(travel, width) }
-}
-
-type SpaceSettled = {
-	drag: SpaceDrag
-	width: number
-}
-
-export const spaceSettled = ({ drag, width }: SpaceSettled) => {
-	if (width <= 0 || Math.abs(drag.travel) * 2 < width) return drag.index
-	return drag.index + (drag.travel > 0 ? 1 : -1)
+	if (hasCrossedHalf(travel, width))
+		return { index: drag.index + step, travel: 0, isCommitted: true }
+	return { ...drag, travel }
 }
 
 type SpaceSwipe = {
@@ -76,20 +76,23 @@ export const useSpaceSwipe = ({
 		const node = target.current
 		if (!isEnabled || !node) return
 
-		let drag: SpaceDrag = { index: inView.current, travel: 0 }
-		let settle: ReturnType<typeof setTimeout> | null = null
+		let drag = spaceAtRest(inView.current)
+		let quiet: ReturnType<typeof setTimeout> | null = null
 
-		const rest = () => {
-			settle = null
-			settled.current(spaceSettled({ drag, width: node.clientWidth }))
+		const goQuiet = () => {
+			quiet = null
+			const released = drag
+			drag = spaceAtRest(inView.current)
+			if (released.isCommitted || released.travel === 0) return
+			settled.current(released.index)
 		}
 
 		const onWheel = (event: WheelEvent) => {
-			if (!isHorizontalSwipe(event)) return
+			if (quiet) clearTimeout(quiet)
+			quiet = setTimeout(goQuiet, SWIPE_SETTLE)
 
-			if (settle) clearTimeout(settle)
-			else drag = { index: inView.current, travel: 0 }
-			settle = setTimeout(rest, SWIPE_SETTLE)
+			if (drag.isCommitted || !isHorizontalSwipe(event)) return
+			if (drag.travel === 0) drag = spaceAtRest(inView.current)
 
 			drag = spaceDragged({
 				count,
@@ -97,13 +100,14 @@ export const useSpaceSwipe = ({
 				drag,
 				width: node.clientWidth,
 			})
-			travelled.current(drag.travel)
+			if (drag.isCommitted) settled.current(drag.index)
+			else travelled.current(drag.travel)
 		}
 
 		node.addEventListener("wheel", onWheel, { passive: true })
 		return () => {
 			node.removeEventListener("wheel", onWheel)
-			if (settle) clearTimeout(settle)
+			if (quiet) clearTimeout(quiet)
 		}
 	}, [target, isEnabled, count])
 }

@@ -1439,7 +1439,7 @@ export const FiveSpaces = meta.story({
 		docs: {
 			description: {
 				story:
-					"Five spaces with the second one open, each with its own roster — the everyday case, and the one that exercises all four ways in. Check the dot strip is centred in the pinned region with only the open dot filled and full size, that pressing a dot reports its id, that one horizontal swipe settles on exactly one neighbour rather than one space per wheel tick, and that Cmd and a digit reaches a space directly while a digit past the last one is left alone. Pick `NineSpaces` for the strip at its widest, `SpacesOnRail` for the same panel collapsed, `SpaceMidTravel` for the row under the gesture, `SpacesWithoutRosters` for the same spaces before a host hands its rosters over.",
+					"Five spaces with the second one open, each with its own roster — the everyday case, and the one that exercises all four ways in. Check the dot strip is centred in the pinned region with only the open dot filled and full size, that pressing a dot reports its id, that one horizontal swipe reaches exactly one neighbour rather than one space per wheel tick, and that Cmd and a digit reaches a space directly while a digit past the last one is left alone. Pick `NineSpaces` for the strip at its widest, `SpacesOnRail` for the same panel collapsed, `SpaceMidTravel` for the row under the gesture, `SpacesWithoutRosters` for the same spaces before a host hands its rosters over.",
 			},
 		},
 	},
@@ -1593,7 +1593,7 @@ export const LiveSpaceSelection = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel wired to a host that actually moves its selection, which is the only way the gesture is honest: the settle changes `selectedSpaceId`, so every callback the panel was handed is a new function while the trackpad is still coasting. Check one physical swipe moves exactly one space and never two — the drag that a gesture accumulates has to outlive the re-render its settle causes — that the row comes to rest on the space that arrived rather than between two, that the next swipe after the wheel goes quiet moves again, and that a rank chord still reports once after all those re-renders rather than once per listener left behind. Pick `FiveSpaces` for the same navigation against a fixed selection, `SpaceMidTravel` for the row under the gesture.",
+					"The panel wired to a host that actually moves its selection, which is the only way the gesture is honest: crossing half a panel changes `selectedSpaceId`, so every callback the panel was handed is a new function while the trackpad is still coasting. Check one physical swipe moves exactly one space and never two — the drag a gesture accumulates has to outlive the re-render its own commit causes — that the row comes to rest on the space that arrived rather than between two, that the next swipe after the wheel goes quiet moves again, and that a rank chord still reports once after all those re-renders rather than once per listener left behind. Pick `FiveSpaces` for the same navigation against a fixed selection, `SpaceMidTravel` for the row under the gesture.",
 			},
 		},
 	},
@@ -1643,7 +1643,7 @@ export const SpaceMidTravel = meta.story({
 		docs: {
 			description: {
 				story:
-					"The row caught halfway between two spaces, which is the whole point of drawing every roster in one line: the space being left travels out one side while the space arriving travels in the other, by exactly as much as the fingers have moved. Check a gesture short of half a panel leaves the row visibly displaced while it lasts, then settles back on the space it started from and reports nothing; that a gesture past half a panel settles on the neighbour and reports it once; that the pinned region above and below — the space name, the create button, the dot strip and the reader's chip — never moves by a pixel while the row does, because the window controls share that top line; and that each panel is its own scrolling box, so a reader coming back to a space finds it where they left it. Pick `FiveSpaces` for the same navigation without rosters per space.",
+					"The row caught halfway between two spaces, which is the whole point of drawing every roster in one line: the space being left travels out one side while the space arriving travels in the other, by exactly as much as the fingers have moved. Check a gesture short of half a panel leaves the row visibly displaced while it lasts, then settles back on the space it started from and reports nothing; that the space changes the moment the row crosses half a panel, under the fingers rather than a beat after they lift, so the dot strip and the header name answer during the swipe; that the rest of that gesture is spent, so the momentum a trackpad coasts on cannot walk from the first space to the last; that the pinned region above and below — the space name, the create button, the dot strip and the reader's chip — never moves by a pixel while the row does, because the window controls share that top line; and that each panel is its own scrolling box, so a reader coming back to a space finds it where they left it. Pick `LiveSpaceSelection` for the same gesture against a host that moves its selection.",
 			},
 		},
 	},
@@ -1679,9 +1679,15 @@ export const SpaceMidTravel = meta.story({
 			await expect(leftOf(panels[1])).toBeCloseTo(viewport.left, 0)
 		}, FRAME_POLL)
 
-		await swipeAndSettle(carousel, width * 0.7)
+		await swipeOver(carousel, width * 0.7)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
+
+		await swipeOver(carousel, width * 3)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+
+		await afterSwipeSettles()
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
 	},
 })
 

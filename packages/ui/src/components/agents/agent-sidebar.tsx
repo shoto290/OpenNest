@@ -1,7 +1,12 @@
 "use client"
 
 import type { TFunction } from "i18next"
-import { animate, motion, useMotionValue, useReducedMotion } from "motion/react"
+import {
+	motion,
+	useMotionValue,
+	useReducedMotion,
+	useSpring,
+} from "motion/react"
 import { memo, type ReactNode, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -259,6 +264,7 @@ const SpaceCarousel = ({
 }: SpaceCarouselProps) => {
 	const viewport = useRef<HTMLDivElement>(null)
 	const travel = useMotionValue(0)
+	const glide = useSpring(travel, SPRING_PANEL)
 	const isCut = useReducedMotion() ?? false
 	const transition = isCut ? TRANSITION_NONE : SPRING_PANEL
 	const inView = Math.max(
@@ -267,7 +273,7 @@ const SpaceCarousel = ({
 	)
 
 	const settleOn = (settled: number) => {
-		animate(travel, 0, transition)
+		travel.set(0)
 		const space = spaces[settled]
 		if (space && space.id !== selectedSpaceId) onSelectSpace?.(space.id)
 	}
@@ -286,7 +292,7 @@ const SpaceCarousel = ({
 			<motion.div
 				className={CAROUSEL_TRACK}
 				data-slot="space-carousel-track"
-				style={{ x: travel }}
+				style={{ x: isCut ? travel : glide }}
 			>
 				<motion.div
 					animate={{ x: `${inView * -100}%` }}
