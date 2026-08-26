@@ -238,6 +238,25 @@ const chat = {
 			unwritable: "Les fichiers n'ont pas pu être enregistrés : {{detail}}",
 		},
 	},
+	newConversation: {
+		title: "Nouvelle conversation",
+		description:
+			"Nommez-la, puis choisissez les participants. Le premier bot choisi mène la conversation.",
+		name: {
+			label: "Nom",
+			placeholder: "Le sujet de cette conversation",
+		},
+		search: {
+			label: "Bots",
+			placeholder: "Rechercher un bot",
+		},
+		picked: {
+			lead: "Meneur",
+			dismiss: "Retirer {{name}}",
+		},
+		empty: "Aucun bot ne correspond à cette recherche.",
+		create: "Créer la conversation",
+	},
 } as const
 
 export { chat }

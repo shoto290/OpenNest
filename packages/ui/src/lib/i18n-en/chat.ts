@@ -233,6 +233,25 @@ const chat = {
 			unwritable: "The files could not be written down: {{detail}}",
 		},
 	},
+	newConversation: {
+		title: "New conversation",
+		description:
+			"Name it, then pick who takes part. The first bot you pick leads the conversation.",
+		name: {
+			label: "Name",
+			placeholder: "What this conversation is about",
+		},
+		search: {
+			label: "Bots",
+			placeholder: "Search bots",
+		},
+		picked: {
+			lead: "Lead",
+			dismiss: "Remove {{name}}",
+		},
+		empty: "No bot matches that search.",
+		create: "Create conversation",
+	},
 } as const
 
 export { chat }
