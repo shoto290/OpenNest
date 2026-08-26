@@ -40,6 +40,7 @@ const place = (node: HTMLElement | null, at: Point, from: Point) => {
 	if (!node) return
 	node.style.setProperty("--lift-x", `${at.x}px`)
 	node.style.setProperty("--lift-y", `${at.y}px`)
+	node.style.setProperty("--lift-dx", `${at.x - from.x}px`)
 	node.style.setProperty("--lift-dy", `${at.y - from.y}px`)
 }
 

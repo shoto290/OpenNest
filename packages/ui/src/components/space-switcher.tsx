@@ -24,6 +24,11 @@ import {
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
 import type { Space } from "@workspace/ui/components/space"
+import {
+	dropArea,
+	dropAreaAt,
+	useRosterLift,
+} from "@workspace/ui/hooks/use-roster-lift"
 import { SPACE_RANK_LIMIT } from "@workspace/ui/hooks/use-space-shortcut"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -46,7 +51,17 @@ const DOTS =
 	"flex flex-wrap items-center justify-center group-data-[state=collapsed]/sidebar:hidden"
 
 const DOT_BUTTON =
-	"grid size-5 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+	"relative grid size-5 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+
+const DOT_LIFTED =
+	"pointer-events-none z-10 scale-125 drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)]"
+
+const INSERTION_LINE =
+	"pointer-events-none absolute inset-y-1 z-20 w-0.5 rounded-full bg-sidebar-primary"
+
+const INSERTION_BEFORE = "start-0"
+
+const INSERTION_AFTER = "end-0"
 
 const DOT_MOTION =
 	"transition-transform duration-150 ease-out motion-reduce:transition-none"
@@ -59,6 +74,14 @@ const BADGE_RANK: BotBadge[] = ["attention", "failed", "done"]
 
 const strongestBadge = (badges: (BotBadge | undefined)[]) =>
 	BADGE_RANK.find((badge) => badges.includes(badge))
+
+const placedOrder = (spaces: Space[], id: string, at: number) => {
+	const order = spaces
+		.filter((space) => space.id !== id)
+		.map((space) => space.id)
+	order.splice(at, 0, id)
+	return order.every((held, rank) => held === spaces[rank]?.id) ? null : order
+}
 
 type SpaceDotProps = {
 	colour: BotAvatarBlot
@@ -93,6 +116,7 @@ type SpaceSelection = {
 	selectedSpaceId?: string
 	badgesBySpaceId?: Record<string, BotBadge>
 	onSelectSpace?: (id: string) => void
+	onReorderSpaces?: (ids: string[]) => void
 }
 
 type SpaceSwitcherProps = SpaceSelection & {
@@ -105,6 +129,7 @@ const SpaceSwitcher = ({
 	selectedSpaceId,
 	badgesBySpaceId,
 	onSelectSpace,
+	onReorderSpaces,
 	onCreateSpace,
 	onOpenSpaceSettings,
 }: SpaceSwitcherProps) => {
@@ -113,6 +138,13 @@ const SpaceSwitcher = ({
 		spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
 
 	if (!selected) return null
+
+	const rank = spaces.indexOf(selected)
+
+	const moveSelected = (by: number) => {
+		const order = placedOrder(spaces, selected.id, rank + by)
+		if (order) onReorderSpaces?.(order)
+	}
 
 	const elsewhere = strongestBadge(
 		spaces
@@ -169,6 +201,24 @@ const SpaceSwitcher = ({
 					))}
 				</ContextMenuRadioGroup>
 				<ContextMenuSeparator />
+				{spaces.length > 1 ? (
+					<>
+						<ContextMenuItem
+							disabled={rank === 0}
+							onSelect={() => moveSelected(-1)}
+						>
+							<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
+							{t("spaces.moveUp")}
+						</ContextMenuItem>
+						<ContextMenuItem
+							disabled={rank === spaces.length - 1}
+							onSelect={() => moveSelected(1)}
+						>
+							<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
+							{t("spaces.moveDown")}
+						</ContextMenuItem>
+					</>
+				) : null}
 				<ContextMenuItem onSelect={onCreateSpace}>
 					<Icons.Add aria-hidden="true" className="size-3.5" />
 					{t("spaces.create")}
@@ -187,30 +237,77 @@ const SpaceDots = ({
 	selectedSpaceId,
 	badgesBySpaceId,
 	onSelectSpace,
+	onReorderSpaces,
 }: SpaceSelection) => {
 	const { t } = useTranslation("bots")
 
+	const placeSpace = (id: string, at: number) => {
+		const order = placedOrder(spaces, id, at)
+		if (order) onReorderSpaces?.(order)
+	}
+
+	const insertionAt = (x: number, y: number) => {
+		const over = dropAreaAt(x, y)
+		const rank = spaces.findIndex((space) => space.id === over)
+		return rank < 0 ? null : rank
+	}
+
+	const lift = useRosterLift({
+		isEnabled: spaces.length > 1,
+		landingAt: insertionAt,
+		onLand: placeSpace,
+	})
+
 	if (spaces.length < 2) return null
+
+	const liftedId = lift.lift?.id
+	const insertion = lift.lift?.landing ?? null
+	const placed = spaces.filter((space) => space.id !== liftedId)
+	const insertsBefore = insertion === null ? null : placed[insertion]?.id
+	const insertsAfter =
+		insertion !== null && insertion >= placed.length
+			? placed[placed.length - 1]?.id
+			: null
 
 	return (
 		<span
 			aria-label={t("spaces.label")}
 			className={DOTS}
 			data-slot="space-dots"
+			data-tauri-drag-region="false"
 			role="group"
 		>
 			{spaces.map((space) => {
 				const isSelected = space.id === selectedSpaceId
+				const isLifted = space.id === liftedId
+				const edge =
+					insertsBefore === space.id
+						? INSERTION_BEFORE
+						: insertsAfter === space.id
+							? INSERTION_AFTER
+							: null
 				return (
 					<button
+						{...dropArea(space.id)}
+						{...lift.handlersFor(space.id)}
 						aria-current={isSelected}
 						aria-label={t("spaces.open", { name: space.name })}
-						className={DOT_BUTTON}
+						className={cn(DOT_BUTTON, isLifted && DOT_LIFTED)}
 						data-slot="space-dot-button"
 						key={space.id}
-						onClick={() => onSelectSpace?.(space.id)}
+						onClick={() => {
+							if (lift.hasJustDropped()) return
+							onSelectSpace?.(space.id)
+						}}
+						ref={isLifted ? lift.followRef : undefined}
 						type="button"
 					>
+						{edge ? (
+							<span
+								className={cn(INSERTION_LINE, edge)}
+								data-slot="space-insertion"
+							/>
+						) : null}
 						<SpaceDot
 							badge={badgesBySpaceId?.[space.id]}
 							colour={space.colour}
