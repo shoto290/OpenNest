@@ -1001,14 +1001,15 @@ const SpaceCarousel = ({
 	const restsOn = Math.min(restingOn, spaces.length - 1)
 	const firstDrawn = Math.max(restsOn - NEIGHBOURING, 0)
 	const nearby = spaces.slice(firstDrawn, restsOn + NEIGHBOURING + 1)
-	const restingSlot = restsOn - firstDrawn
 	const chosenSlot = chosen - firstDrawn
 	const isBeside = chosenSlot >= 0 && chosenSlot < nearby.length
 
 	useLayoutEffect(() => {
 		const node = viewport.current
-		if (node) node.scrollLeft = restingSlot * node.clientWidth
-	}, [restingSlot])
+		if (!node) return
+		const restingSlot = restsOn - firstDrawn
+		node.scrollLeft = restingSlot * node.clientWidth
+	}, [restsOn, firstDrawn])
 
 	useEffect(() => {
 		const node = viewport.current

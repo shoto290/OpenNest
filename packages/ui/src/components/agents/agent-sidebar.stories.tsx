@@ -1450,8 +1450,11 @@ const SETTLE = 250
 const slotShown = (carousel: HTMLElement) =>
 	Math.round(carousel.scrollLeft / carousel.clientWidth)
 
+const slotReported = (carousel: HTMLElement) =>
+	panelsIn(carousel).indexOf(panelInView(carousel))
+
 const swipeBeside = async (carousel: HTMLElement, step: number) => {
-	carousel.scrollLeft = (slotShown(carousel) + step) * carousel.clientWidth
+	carousel.scrollLeft = (slotReported(carousel) + step) * carousel.clientWidth
 	await new Promise((resolve) => setTimeout(resolve, SETTLE))
 }
 
@@ -1978,6 +1981,46 @@ export const SpaceScrolling = meta.story({
 		await swipeBeside(carousel, -1)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
 		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("vocca")
+	},
+})
+
+export const SpaceLanding = meta.story({
+	render: (args) => <LiveSpaces {...args} />,
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "perso",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every space walked one at a time, first to last and back, against a host that follows. The row draws the space in view and the one waiting off each edge, so the drawn window slides by one panel on every landing and the space in view keeps the same slot in it — which is exactly how a landing can be reported and then quietly slid off, leaving the reader on the space one further along the way they swiped, or slid back with a second animated switch replaying under them. Check it the only way that catches either: each step is taken from the panel the host reports rather than from the slot the row happens to sit on, and each landing is measured absolutely — the reported panel flush with the left edge of the row. That flush edge is also what leaves the row still, since a row already on the space the host has open has nowhere left to slide to. Check too that the walk names every space once and in order, none skipped and none doubled. Pick `LiveSpaceSelection` for a landing reported once and a chord slid to, `SpaceScrolling` for the snapping underneath.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const carousel = carouselIn(canvasElement)
+		const walked = FIVE_SPACES.map((space) => space.id)
+
+		const walk = async (step: number, expected: string[]) => {
+			for (const id of expected) {
+				await swipeBeside(carousel, step)
+				await expect(args.onSelectSpace).toHaveBeenLastCalledWith(id)
+				await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
+					leftOf(carousel),
+					0,
+				)
+			}
+		}
+
+		await walk(1, walked.slice(1))
+		await walk(-1, walked.slice(0, -1).reverse())
+
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(
+			(walked.length - 1) * 2,
+		)
 	},
 })
 
