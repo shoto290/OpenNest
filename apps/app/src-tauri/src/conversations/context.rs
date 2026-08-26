@@ -22,6 +22,7 @@ const ELIDED: &str = "…";
 
 const UNKNOWN_SESSION: &str = "unknown";
 
+const INSTRUCTIONS_LABEL: &str = "The instructions of this conversation:";
 const SUMMARY_LABEL: &str = "The conversation so far:";
 const REPLY_LABEL: &str = "The message this one replies to:";
 const RECENT_LABEL: &str = "The most recent messages:";
@@ -56,8 +57,10 @@ pub async fn bounded_context(
 		.await?;
 	let replied_to = replied_to_target(database, &conversation_id, &prompt).await?;
 	let room = room_around(database, &participant).await?;
+	let instructions = database.conversations().instructions(conversation_id).await?;
 
 	Ok(compose(Parts {
+		instructions: &instructions,
 		summary: checkpoint.as_ref().map(|checkpoint| checkpoint.summary.as_str()),
 		replied_to: replied_to.as_ref(),
 		recent: &recent,
@@ -263,6 +266,7 @@ fn spelled(room: Option<&Room>, text: &str) -> String {
 }
 
 struct Parts<'a> {
+	instructions: &'a str,
 	summary: Option<&'a str>,
 	replied_to: Option<&'a RepliedTo>,
 	recent: &'a [StoredMessage],
@@ -272,6 +276,7 @@ struct Parts<'a> {
 
 fn compose(parts: Parts<'_>) -> String {
 	let mut sections: Vec<String> = Vec::new();
+	push_section(&mut sections, INSTRUCTIONS_LABEL, parts.instructions);
 	if let Some(room) = parts.room {
 		push_section(&mut sections, ROOM_LABEL, &room.roster());
 	}
@@ -415,7 +420,7 @@ mod tests {
 	}
 
 	fn only(prompt: &str) -> Parts<'_> {
-		Parts { summary: None, replied_to: None, recent: &[], prompt, room: None }
+		Parts { instructions: "", summary: None, replied_to: None, recent: &[], prompt, room: None }
 	}
 
 	#[test]
@@ -441,8 +446,7 @@ mod tests {
 			summary: Some("user: we are building a house"),
 			replied_to: Some(&target),
 			recent: &recent,
-			prompt: "and now?",
-			room: None,
+			..only("and now?")
 		});
 
 		assert_eq!(
@@ -455,6 +459,29 @@ mod tests {
 			The new message:\nand now?"
 		);
 		assert_eq!(context.matches("and now?").count(), 1, "the prompt was printed twice");
+	}
+
+	#[test]
+	fn the_instructions_of_a_conversation_open_the_context() {
+		let room = a_room();
+		let context = compose(Parts {
+			instructions: "Speak in French.",
+			summary: Some("Ada: we are building a house"),
+			room: Some(&room),
+			..only("and now?")
+		});
+
+		assert!(
+			context.starts_with(INSTRUCTIONS_LABEL),
+			"the instructions did not come first: {context}"
+		);
+		assert_eq!(section(&context, INSTRUCTIONS_LABEL), Some("Speak in French."));
+	}
+
+	#[test]
+	fn a_conversation_with_no_instructions_reads_as_it_did() {
+		let blank = compose(Parts { instructions: "   ", ..only("hello") });
+		assert_eq!(blank, "hello", "an empty rule was announced");
 	}
 
 	#[test]
@@ -689,6 +716,20 @@ mod tests {
 			.expect("the second bot joins");
 	}
 
+	async fn ruled(database: &Database, conversation_id: &str, instructions: &'static str) {
+		let conversation_id = conversation_id.to_owned();
+		database
+			.call(move |connection| {
+				connection.execute(
+					"UPDATE conversations SET instructions = ?2 WHERE id = ?1",
+					rusqlite::params![conversation_id, instructions],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the conversation is given its rules");
+	}
+
 	async fn told(database: &Database, bot_id: &'static str, instructions: &'static str) {
 		database
 			.call(move |connection| {
@@ -882,6 +923,56 @@ mod tests {
 			"the prompt was not the last thing the run is told: {context}"
 		);
 		assert_eq!(occurrences(&context, &asked("p1")), 1, "the prompt was carried twice");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn the_instructions_of_a_conversation_reach_the_bot_and_follow_their_edits() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		let participant = participant_of(&conversation, "default");
+		ruled(&database, &conversation, "Speak in French.").await;
+		spoken_so_far(&database, &conversation, SPOKEN).await;
+		let checkpoint = capture_checkpoint(&database, participant.clone(), None, 7)
+			.await
+			.expect("the checkpoint is taken")
+			.expect("something to fold");
+		prompt(&database, &conversation, "p1", None).await;
+
+		let first = bounded_context(&database, participant.clone(), "p1".to_owned())
+			.await
+			.expect("the context is rebuilt");
+
+		assert!(
+			first.starts_with(INSTRUCTIONS_LABEL),
+			"the instructions did not open the context: {first}"
+		);
+		assert_eq!(section(&first, INSTRUCTIONS_LABEL), Some("Speak in French."));
+		assert!(
+			!checkpoint.summary.contains("Speak in French."),
+			"the instructions were folded into the summary"
+		);
+
+		ruled(&database, &conversation, "Speak in Dutch.").await;
+		prompt(&database, &conversation, "p2", None).await;
+		let second = bounded_context(&database, participant.clone(), "p2".to_owned())
+			.await
+			.expect("the context is rebuilt");
+
+		assert_eq!(section(&second, INSTRUCTIONS_LABEL), Some("Speak in Dutch."));
+		assert_eq!(
+			database
+				.runtime_context()
+				.latest_checkpoint(participant)
+				.await
+				.expect("the latest checkpoint")
+				.map(|found| found.summary),
+			Some(checkpoint.summary),
+			"an edit to the instructions rewrote what was already folded"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

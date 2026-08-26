@@ -464,6 +464,17 @@ impl ConversationsRepository {
 		self.call(move |connection| Ok(seats_of(connection, &conversation_id))).await?
 	}
 
+	pub async fn instructions(&self, conversation_id: String) -> Result<String, DatabaseError> {
+		self.call(move |connection| {
+			let stored: Option<String> = connection
+				.prepare_cached("SELECT instructions FROM conversations WHERE id = ?1")?
+				.query_row([conversation_id], |row| row.get(0))
+				.optional()?;
+			Ok(stored.unwrap_or_default())
+		})
+		.await
+	}
+
 	pub async fn set_lead(
 		&self,
 		conversation_id: String,
