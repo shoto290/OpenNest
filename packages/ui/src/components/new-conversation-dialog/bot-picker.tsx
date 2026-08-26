@@ -64,7 +64,7 @@ const BotPicker = ({
 					{t("newConversation.empty")}
 				</p>
 			) : (
-				<ul className="-mx-2 flex max-h-56 flex-col overflow-y-auto px-2">
+				<ul className="-mx-2 flex max-h-56 flex-col gap-1 overflow-y-auto px-2">
 					{matches.map((bot) => {
 						const isPicked = pickedIds.includes(bot.id)
 
