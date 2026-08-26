@@ -73,6 +73,8 @@ export type LastWord = {
 	at: number
 }
 
+export type ConversationPreviews = Record<string, LastWord | undefined>
+
 export const lastWordIn = (
 	messages: TranscriptMessage[],
 ): LastWord | undefined => {

@@ -32,17 +32,25 @@ const conversation = (fields: Partial<Conversation> = {}): Conversation => ({
 	...fields,
 })
 
+const NOW = Date.UTC(2025, 0, 2, 12, 0, 0)
+
+const A_MINUTE_AGO = NOW - 60 * 1000
+
 describe("toRosterConversations", () => {
 	it("draws a row carrying the title, the section and the participants in join order", () => {
-		const rows = toRosterConversations([
-			conversation({
-				sectionId: "n-1",
-				participants: [
-					participant({ botId: "b-1", role: "lead", name: "Chef" }),
-					participant({ botId: "b-2", name: "Sous-chef" }),
-				],
-			}),
-		])
+		const rows = toRosterConversations(
+			[
+				conversation({
+					sectionId: "n-1",
+					participants: [
+						participant({ botId: "b-1", role: "lead", name: "Chef" }),
+						participant({ botId: "b-2", name: "Sous-chef" }),
+					],
+				}),
+			],
+			{},
+			NOW,
+		)
 
 		expect(rows).toEqual([
 			{
@@ -65,21 +73,75 @@ describe("toRosterConversations", () => {
 						image: undefined,
 					},
 				],
+				lastMessage: undefined,
+				timestamp: undefined,
 			},
 		])
 	})
 
 	it("leaves out a participant that has left the room", () => {
-		const rows = toRosterConversations([
-			conversation({
-				participants: [
-					participant({ botId: "b-1" }),
-					participant({ botId: "b-2", leftAt: 4 }),
-				],
-			}),
-		])
+		const rows = toRosterConversations(
+			[
+				conversation({
+					participants: [
+						participant({ botId: "b-1" }),
+						participant({ botId: "b-2", leftAt: 4 }),
+					],
+				}),
+			],
+			{},
+			NOW,
+		)
 
 		expect(rows[0].participants.map((held) => held.id)).toEqual(["b-1"])
+	})
+
+	it("previews the last word of the room and how long ago it was said", () => {
+		const [row] = toRosterConversations(
+			[conversation()],
+			{ "c-1": { text: "Menu is set.", at: A_MINUTE_AGO } },
+			NOW,
+		)
+
+		expect(row.lastMessage).toBe("Menu is set.")
+		expect(row.timestamp).toBe("1m")
+	})
+
+	it("leaves the preview and the time of a room nothing was said in blank", () => {
+		const [row] = toRosterConversations([conversation()], {}, NOW)
+
+		expect(row.lastMessage).toBeUndefined()
+		expect(row.timestamp).toBeUndefined()
+	})
+
+	it("draws the room of the most recent word first", () => {
+		const rows = toRosterConversations(
+			[
+				conversation({ id: "c-1" }),
+				conversation({ id: "c-2" }),
+				conversation({ id: "c-3" }),
+			],
+			{
+				"c-1": { text: "Older.", at: A_MINUTE_AGO - 1000 },
+				"c-3": { text: "Newer.", at: A_MINUTE_AGO },
+			},
+			NOW,
+		)
+
+		expect(rows.map((row) => row.id)).toEqual(["c-3", "c-1", "c-2"])
+	})
+
+	it("dates a room nothing was said in by the day it was opened", () => {
+		const rows = toRosterConversations(
+			[
+				conversation({ id: "c-1", createdAt: A_MINUTE_AGO }),
+				conversation({ id: "c-2", createdAt: NOW }),
+			],
+			{},
+			NOW,
+		)
+
+		expect(rows.map((row) => row.id)).toEqual(["c-2", "c-1"])
 	})
 })
 

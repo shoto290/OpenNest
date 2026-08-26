@@ -320,9 +320,11 @@ export function App() {
 
 	const conversationRosters = roster.state.conversationRosters
 
+	const conversationPreviews = roster.state.conversationPreviews
+
 	const rosterConversations = useMemo(
-		() => toRosterConversations(conversations),
-		[conversations],
+		() => toRosterConversations(conversations, conversationPreviews, now),
+		[conversations, conversationPreviews, now],
 	)
 
 	const seatedBots = useMemo(
@@ -344,10 +346,10 @@ export function App() {
 			Object.fromEntries(
 				Object.entries(conversationRosters).map(([spaceId, spaceRooms]) => [
 					spaceId,
-					toRosterConversations(spaceRooms),
+					toRosterConversations(spaceRooms, conversationPreviews, now),
 				]),
 			),
-		[conversationRosters],
+		[conversationRosters, conversationPreviews, now],
 	)
 
 	const isOverlayOpen =

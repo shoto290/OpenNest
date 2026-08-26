@@ -7,8 +7,10 @@ import type { ConversationSettingsValue } from "@workspace/ui/components/convers
 import type { MessageAuthor } from "@workspace/ui/components/message"
 
 import type { Bot, Conversation, Participant } from "./store-contract"
+import type { ConversationPreviews } from "./transcript-state"
 
 import { avatarSrc } from "../host"
+import { rosterTimestamp } from "../bots/roster-timestamp"
 
 type BotFace = Pick<
 	Bot,
@@ -75,12 +77,32 @@ export const toConversationSettingsValue = (
 	instructions: conversation.instructions,
 })
 
+const lastSpokeAt = (
+	conversation: Conversation,
+	previews: ConversationPreviews,
+): number => previews[conversation.id]?.at ?? conversation.createdAt
+
+const mostRecentFirst = (
+	conversations: Conversation[],
+	previews: ConversationPreviews,
+): Conversation[] =>
+	conversations.toSorted(
+		(one, other) => lastSpokeAt(other, previews) - lastSpokeAt(one, previews),
+	)
+
 export const toRosterConversations = (
 	conversations: Conversation[],
+	previews: ConversationPreviews,
+	now: number,
 ): AgentSidebarConversation[] =>
-	conversations.map((conversation) => ({
-		id: conversation.id,
-		name: conversation.title,
-		sectionId: conversation.sectionId,
-		participants: toConversationBots(presentParticipants(conversation)),
-	}))
+	mostRecentFirst(conversations, previews).map((conversation) => {
+		const preview = previews[conversation.id]
+		return {
+			id: conversation.id,
+			name: conversation.title,
+			sectionId: conversation.sectionId,
+			participants: toConversationBots(presentParticipants(conversation)),
+			lastMessage: preview?.text,
+			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
+		}
+	})
