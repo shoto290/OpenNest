@@ -24,7 +24,7 @@ const bots = {
 		},
 		section: {
 			actions: "Actions pour la section {{name}}",
-			moveTo: "Déplacer vers",
+			moveTo: "Déplacer vers une section",
 			none: "Aucune section",
 			create: "Nouvelle section",
 			createField: "Nom de la nouvelle section",

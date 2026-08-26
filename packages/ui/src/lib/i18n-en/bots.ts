@@ -32,7 +32,7 @@ const bots = {
 		},
 		section: {
 			actions: "Actions for the {{name}} section",
-			moveTo: "Move to",
+			moveTo: "Move to section",
 			none: "No section",
 			create: "New section",
 			createField: "New section name",
