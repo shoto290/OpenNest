@@ -64,6 +64,9 @@ export const conversationStore: TranscriptStore = {
 	moveBotToSection: (botId: string, sectionId: string | null) =>
 		invoke<void>("bot_move_to_section", { botId, sectionId }),
 
+	moveBotToSpace: (botId: string, spaceId: string) =>
+		invoke<void>("bot_move_to_space", { botId, spaceId }),
+
 	bots: (spaceId?: string | null) =>
 		invoke<Bot[]>("conversation_bots", { spaceId: spaceId ?? null }),
 

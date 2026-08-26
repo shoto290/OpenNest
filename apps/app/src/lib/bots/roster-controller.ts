@@ -48,6 +48,7 @@ export type RosterController = {
 	uploadAvatar: (id: string, file: File) => Promise<void>
 	remember: (id: string, memory: string) => Promise<void>
 	moveToSection: (botId: string, sectionId: string | null) => void
+	moveToSpace: (botId: string, spaceId: string) => Promise<Bot | null>
 	clearSection: (sectionId: string) => void
 	askToDelete: (id: string) => void
 	remove: (id: string) => Promise<void>
@@ -92,6 +93,11 @@ export const createRosterController = (
 		spaceId === null ? state.rosters : { ...state.rosters, [spaceId]: bots }
 
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)
+
+	const spaceHolding = (botId: string) =>
+		Object.keys(state.rosters).find((spaceId) =>
+			rosterIn(state.rosters, spaceId).some((bot) => bot.id === botId),
+		)
 
 	const landOn = (bots: Bot[], lastBotId: string | null) => {
 		const stillHeld = bots.find((bot) => bot.id === state.selectedBotId)?.id
@@ -271,6 +277,37 @@ export const createRosterController = (
 			enqueue(async () => {
 				apply(await store.setBotMemory(id, memory))
 			}).catch(reload),
+
+		moveToSpace: (botId: string, spaceId: string) =>
+			enqueue(async () => {
+				const home = spaceHolding(botId)
+				const moved = home
+					? rosterIn(state.rosters, home).find((bot) => bot.id === botId)
+					: undefined
+				if (!home || !moved || home === spaceId) {
+					return null
+				}
+				await store.moveBotToSpace(botId, spaceId)
+				set({
+					rosters: {
+						...state.rosters,
+						[home]: rosterIn(state.rosters, home).filter(
+							(bot) => bot.id !== botId,
+						),
+						[spaceId]: [
+							...rosterIn(state.rosters, spaceId),
+							{ ...moved, sectionId: null },
+						],
+					},
+					spaceId,
+					selectedBotId: botId,
+					isShowingDanger: false,
+				})
+				return moved
+			}).catch(async () => {
+				await reload()
+				return null
+			}),
 
 		moveToSection: (botId: string, sectionId: string | null) => {
 			const bot = held(botId)

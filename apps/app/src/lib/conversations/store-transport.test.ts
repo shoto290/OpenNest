@@ -141,6 +141,11 @@ const WRITES: WriteCase[] = [
 		call: ["bot_move_to_section", { botId: "b-1", sectionId: null }],
 	},
 	{
+		member: "moveBotToSpace",
+		write: () => conversationStore.moveBotToSpace("b-1", "s-2"),
+		call: ["bot_move_to_space", { botId: "b-1", spaceId: "s-2" }],
+	},
+	{
 		member: "bots",
 		write: () => conversationStore.bots("s-1"),
 		call: ["conversation_bots", { spaceId: "s-1" }],
