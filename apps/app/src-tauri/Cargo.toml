@@ -1,6 +1,6 @@
 [package]
 name = "opennest-app"
-version = "0.6.2"
+version = "0.7.0"
 description = "OpenNest desktop app"
 edition = "2021"
 license = "MIT"
