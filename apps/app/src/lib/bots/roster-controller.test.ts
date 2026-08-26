@@ -560,6 +560,58 @@ describe("createRosterController on a space", () => {
 		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
 	})
 
+	it("hands the bot over to the space it is moved to and opens that space on it", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const section = await store.createSection("personal", "Writers")
+		await store.moveBotToSection("default", section.id)
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		const moved = await controller.moveToSpace("default", elsewhere.id)
+
+		const state = controller.getState()
+		expect(moved?.id).toBe("default")
+		expect(state.spaceId).toBe(elsewhere.id)
+		expect(state.selectedBotId).toBe("default")
+		expect(state.rosters.personal).toEqual([])
+		expect(state.rosters[elsewhere.id].map((bot) => bot.id)).toEqual([
+			"default",
+		])
+		expect(state.rosters[elsewhere.id][0].sectionId).toBeNull()
+		expect((await store.bots(elsewhere.id)).map((bot) => bot.id)).toEqual([
+			"default",
+		])
+	})
+
+	it("reads the rosters again when the move to another space is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		vi.spyOn(store, "moveBotToSpace").mockRejectedValue(new Error("no room"))
+
+		const moved = await controller.moveToSpace("default", elsewhere.id)
+
+		const state = controller.getState()
+		expect(moved).toBeNull()
+		expect(state.spaceId).toBe("personal")
+		expect(state.rosters.personal.map((bot) => bot.id)).toEqual(["default"])
+		expect(state.rosters[elsewhere.id]).toEqual([])
+	})
+
+	it("writes nothing when the bot is already in the space it is moved to", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = createRosterController(store)
+		await controller.load(opening())
+		const write = vi.spyOn(store, "moveBotToSpace")
+
+		const moved = await controller.moveToSpace("default", "personal")
+
+		expect(moved).toBeNull()
+		expect(write).not.toHaveBeenCalled()
+	})
+
 	it("leaves the roster of the other spaces untouched when a bot is deleted", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")

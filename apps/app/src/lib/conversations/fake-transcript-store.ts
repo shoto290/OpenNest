@@ -575,6 +575,21 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve()
 		},
 
+		moveBotToSpace: (botId: string, spaceId: string) => {
+			const bot = bots.get(botId)
+			if (!bot) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			if (!spaces.has(spaceId)) {
+				return refuse({ kind: "unknownSpace", id: spaceId })
+			}
+			if (spaceOf.get(botId) !== spaceId) {
+				bots.set(botId, { ...bot, sectionId: null })
+				spaceOf.set(botId, spaceId)
+			}
+			return Promise.resolve()
+		},
+
 		bots: (spaceId?: string | null) =>
 			Promise.resolve(
 				[...bots.values()].filter(

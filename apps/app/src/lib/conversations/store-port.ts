@@ -34,6 +34,7 @@ export type TranscriptStore = TranscriptPort & {
 	reorderSections: (spaceId: string, ids: string[]) => Promise<void>
 	deleteSection: (id: string) => Promise<void>
 	moveBotToSection: (botId: string, sectionId: string | null) => Promise<void>
+	moveBotToSpace: (botId: string, spaceId: string) => Promise<void>
 	bots: (spaceId?: string | null) => Promise<Bot[]>
 	createBot: (identity: BotIdentity, spaceId?: string | null) => Promise<Bot>
 	duplicateBot: (botId: string, spaceId?: string | null) => Promise<Bot>

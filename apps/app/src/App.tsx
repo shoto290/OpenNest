@@ -19,6 +19,7 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
+import { moveBotToSpace } from "@/lib/bots/bot-space-move"
 import { toSkillDraft, toSkillItem } from "@/lib/bots/skill-draft"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
@@ -187,6 +188,15 @@ export function App() {
 		}
 	}
 
+	const moveToSpace = (botId: string, spaceId: string) =>
+		moveBotToSpace({
+			botId,
+			spaceId,
+			roster: roster.controller,
+			chat: chat.controller,
+			spaces: spaces.controller,
+		})
+
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
 		attachments.forget(id)
@@ -343,6 +353,9 @@ export function App() {
 						onReorderSections={reorderSections}
 						onDeleteSection={(id) => {
 							void sections.controller.remove(id)
+						}}
+						onMoveBotToSpace={(botId, spaceId) => {
+							void moveToSpace(botId, spaceId)
 						}}
 						onMoveBotToSection={(botId, sectionId) => {
 							void sections.controller.moveBot(botId, sectionId)
