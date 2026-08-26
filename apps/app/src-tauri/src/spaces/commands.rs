@@ -60,6 +60,15 @@ pub async fn space_delete<R: Runtime>(
 	Ok(())
 }
 
+#[tauri::command]
+pub async fn bot_move_to_space(
+	state: State<'_, db::DatabaseState>,
+	bot_id: String,
+	space_id: String,
+) -> Result<(), SpaceError> {
+	Ok(ready(&state)?.spaces().move_bot(bot_id, space_id).await?)
+}
+
 fn plugin_path<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,

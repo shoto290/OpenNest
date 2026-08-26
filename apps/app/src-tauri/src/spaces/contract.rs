@@ -41,6 +41,10 @@ pub enum SpaceError {
 	UnknownSpace {
 		id: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	UnknownBot {
+		id: String,
+	},
 	IncompleteOrder,
 	LastSpace,
 }
@@ -55,6 +59,7 @@ impl From<spaces::SpaceError> for SpaceError {
 	fn from(error: spaces::SpaceError) -> Self {
 		match error {
 			spaces::SpaceError::UnknownSpace { id } => SpaceError::UnknownSpace { id },
+			spaces::SpaceError::UnknownBot { id } => SpaceError::UnknownBot { id },
 			spaces::SpaceError::IncompleteOrder => SpaceError::IncompleteOrder,
 			spaces::SpaceError::LastSpace => SpaceError::LastSpace,
 			spaces::SpaceError::Database(failure) => {

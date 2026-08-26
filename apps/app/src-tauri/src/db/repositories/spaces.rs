@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, Row, Transaction, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
 use uuid::Uuid;
 
 use super::conversations::AvatarBlot;
@@ -24,10 +24,13 @@ const SELECT_SPACE: &str =
 const SELECT_SPACES: &str = "SELECT id, name, colour, position, created_at FROM spaces
 	ORDER BY position ASC, id ASC";
 
+const SPACE_OF_BOT: &str = "SELECT space_id FROM bots WHERE id = ?1";
+
 #[derive(Debug)]
 pub enum SpaceError {
 	Database(DatabaseError),
 	UnknownSpace { id: String },
+	UnknownBot { id: String },
 	IncompleteOrder,
 	LastSpace,
 }
@@ -91,6 +94,12 @@ impl SpacesRepository {
 
 	pub async fn delete(&self, id: String) -> Result<(), SpaceError> {
 		self.access.call_mut(move |connection| Ok(deleted(connection, &id))).await?
+	}
+
+	pub async fn move_bot(&self, bot_id: String, space_id: String) -> Result<(), SpaceError> {
+		self.access
+			.call_mut(move |connection| Ok(moved_bot(connection, &bot_id, &space_id)))
+			.await?
 	}
 }
 
@@ -159,6 +168,27 @@ fn deleted(connection: &mut Connection, id: &str) -> Result<(), SpaceError> {
 	transaction.execute("DELETE FROM spaces WHERE id = ?1", [id])?;
 	transaction.commit()?;
 	Ok(())
+}
+
+fn moved_bot(connection: &mut Connection, bot_id: &str, space_id: &str) -> Result<(), SpaceError> {
+	let transaction = write_transaction(connection)?;
+	let home = space_of_bot(&transaction, bot_id)?
+		.ok_or_else(|| SpaceError::UnknownBot { id: bot_id.to_owned() })?;
+	if !held(&transaction, space_id)? {
+		return Err(SpaceError::UnknownSpace { id: space_id.to_owned() });
+	}
+	if home != space_id {
+		transaction.execute(
+			"UPDATE bots SET space_id = ?2, section_id = NULL WHERE id = ?1",
+			params![bot_id, space_id],
+		)?;
+	}
+	transaction.commit()?;
+	Ok(())
+}
+
+fn space_of_bot(connection: &Connection, bot_id: &str) -> Result<Option<String>, SpaceError> {
+	Ok(connection.query_row(SPACE_OF_BOT, [bot_id], |row| row.get(0)).optional()?)
 }
 
 fn held(connection: &Connection, id: &str) -> Result<bool, SpaceError> {
@@ -397,6 +427,127 @@ mod tests {
 			count_of(&database, "conversations").await,
 			1,
 			"the chats of the bots that went are still on the record"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_moved_bot_leaves_its_section_behind_and_keeps_everything_else() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let spaces = database.spaces();
+		let home = spaces.list().await.expect("the spaces")[0].id.clone();
+		let elsewhere = spaces.create("Vocca".to_owned()).await.expect("the space");
+		let held = database
+			.sections()
+			.create(home.clone(), "Writers".to_owned())
+			.await
+			.expect("the section");
+		let bot = database
+			.conversations()
+			.create_bot(an_identity("Nyx"), Some(home.clone()), Some(held.id))
+			.await
+			.expect("the bot");
+
+		spaces.move_bot(bot.id.clone(), elsewhere.id.clone()).await.expect("the bot moves");
+
+		let moved = database
+			.conversations()
+			.bot(bot.id.clone())
+			.await
+			.expect("the bot")
+			.expect("the bot is on the record");
+		assert_eq!(moved.space_id, elsewhere.id);
+		assert_eq!(moved.section_id, None, "a moved bot carried a section of the space it left");
+		assert_eq!(moved.name, bot.name, "a moved bot was renamed");
+		assert!(
+			database.conversations().bots(Some(home)).await.expect("the bots").is_empty(),
+			"the space it left still lists it"
+		);
+		assert_eq!(
+			database
+				.conversations()
+				.bots(Some(elsewhere.id))
+				.await
+				.expect("the bots")
+				.into_iter()
+				.map(|listed| listed.id)
+				.collect::<Vec<_>>(),
+			vec![bot.id],
+			"the space it joined does not list it"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_bot_moved_to_the_space_it_holds_stands_where_it_is() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let spaces = database.spaces();
+		let home = spaces.list().await.expect("the spaces")[0].id.clone();
+		let held = database
+			.sections()
+			.create(home.clone(), "Writers".to_owned())
+			.await
+			.expect("the section");
+		let bot = database
+			.conversations()
+			.create_bot(an_identity("Nyx"), Some(home.clone()), Some(held.id.clone()))
+			.await
+			.expect("the bot");
+
+		spaces.move_bot(bot.id.clone(), home).await.expect("the bot stays");
+
+		assert_eq!(
+			database
+				.conversations()
+				.bot(bot.id)
+				.await
+				.expect("the bot")
+				.expect("the bot is on the record")
+				.section_id,
+			Some(held.id),
+			"a bot moved to its own space lost its section"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_move_naming_no_bot_and_no_space_moves_nothing() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let spaces = database.spaces();
+		let home = spaces.list().await.expect("the spaces")[0].id.clone();
+		let bot = database
+			.conversations()
+			.create_bot(an_identity("Nyx"), Some(home.clone()), None)
+			.await
+			.expect("the bot");
+
+		assert!(matches!(
+			spaces.move_bot("nobody".to_owned(), home.clone()).await,
+			Err(SpaceError::UnknownBot { .. })
+		));
+		assert!(matches!(
+			spaces.move_bot(bot.id.clone(), "nowhere".to_owned()).await,
+			Err(SpaceError::UnknownSpace { .. })
+		));
+		assert_eq!(
+			database
+				.conversations()
+				.bot(bot.id)
+				.await
+				.expect("the bot")
+				.expect("the bot is on the record")
+				.space_id,
+			home,
+			"a refused move took the bot with it"
 		);
 
 		drop(database);
