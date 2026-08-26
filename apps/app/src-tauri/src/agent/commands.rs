@@ -16,8 +16,11 @@ use super::store;
 use crate::bundles;
 use crate::db;
 use crate::db::repositories::conversations::Bot as StoredBot;
+use crate::private_files;
 
 pub const EVENT_CHANNEL: &str = "agent://event";
+
+const RUNS_DIR: &str = "runs";
 
 fn announce<R: Runtime>(app: &AppHandle<R>, scope: Option<RuntimeScope>, event: AgentEvent) {
 	let _ = app.emit(EVENT_CHANNEL, ScopedEvent { scope, event });
@@ -342,6 +345,21 @@ fn laid_down_bundle(
 	})
 }
 
+fn its_own_directory<R: Runtime>(app: &AppHandle<R>, bot_id: &str) -> PathBuf {
+	app.path()
+		.app_data_dir()
+		.map_or_else(|_| std::env::temp_dir(), |app_data| reserved_directory(app_data, bot_id))
+}
+
+fn reserved_directory(app_data: PathBuf, bot_id: &str) -> PathBuf {
+	let mine = app_data.join(RUNS_DIR).join(bot_id);
+	if private_files::create_dir(&mine).is_ok() {
+		mine
+	} else {
+		app_data
+	}
+}
+
 fn where_it_runs(stored: Option<String>, anywhere: PathBuf) -> (PathBuf, Option<String>) {
 	let Some(stored) = stored.filter(|path| !path.trim().is_empty()) else {
 		return (anywhere, None);
@@ -371,10 +389,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	let sidecar = state.sidecar().await?;
 	let identity = runtime_identity(&app, &database, &scope.bot_id).await;
-	let anywhere = cwd
-		.map(PathBuf::from)
-		.or_else(|| app.path().home_dir().ok())
-		.unwrap_or_else(|| PathBuf::from("."));
+	let anywhere = cwd.map(PathBuf::from).unwrap_or_else(|| its_own_directory(&app, &scope.bot_id));
 	let (working_dir, refused_dir) = where_it_runs(identity.working_dir, anywhere);
 
 	let sink: Arc<dyn EventSink> =
@@ -546,6 +561,47 @@ mod tests {
 
 	fn stored_id(path: &Path) -> Option<String> {
 		store::load(path).session_id
+	}
+
+	fn a_fresh_app_data(name: &str) -> PathBuf {
+		let app_data = std::env::temp_dir().join(format!("opennest-app-data-{name}"));
+		let _ = std::fs::remove_dir_all(&app_data);
+		std::fs::create_dir_all(&app_data).expect("the app data directory is there");
+		app_data
+	}
+
+	#[test]
+	fn a_bot_with_no_directory_runs_in_one_reserved_for_it_inside_the_app_data() {
+		let app_data = a_fresh_app_data("reserved");
+
+		let running_in = reserved_directory(app_data.clone(), "bot-a");
+
+		assert_eq!(running_in, app_data.join(RUNS_DIR).join("bot-a"));
+		assert!(running_in.is_dir(), "the reserved directory was not created");
+		std::fs::remove_dir_all(&app_data).expect("cleanup");
+	}
+
+	#[test]
+	fn two_bots_with_no_directory_never_share_one() {
+		let app_data = a_fresh_app_data("distinct");
+
+		let first = reserved_directory(app_data.clone(), "bot-a");
+		let second = reserved_directory(app_data.clone(), "bot-b");
+
+		assert_ne!(first, second);
+		assert!(first.is_dir() && second.is_dir());
+		std::fs::remove_dir_all(&app_data).expect("cleanup");
+	}
+
+	#[test]
+	fn a_reserved_directory_that_cannot_be_created_falls_back_to_the_app_data() {
+		let app_data = a_fresh_app_data("blocked");
+		std::fs::write(app_data.join(RUNS_DIR), b"i am a file").expect("the file is written");
+
+		let running_in = reserved_directory(app_data.clone(), "bot-a");
+
+		assert_eq!(running_in, app_data);
+		std::fs::remove_dir_all(&app_data).expect("cleanup");
 	}
 
 	#[test]
