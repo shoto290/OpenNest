@@ -1244,6 +1244,77 @@ describe("createChatController", () => {
 		harness.detach()
 	})
 
+	it("changes the session once when a move closes and two callers reopen", async () => {
+		const harness = await bootedHarness()
+		const startSpy = vi.spyOn(harness.driver, "startOrResumeSession")
+		const shutdownSpy = vi.spyOn(harness.driver, "shutdown")
+
+		let endShutdown = () => {}
+		shutdownSpy.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					endShutdown = resolve
+				}),
+		)
+
+		const closing = harness.controller.close(BOT)
+		const followed = harness.controller.open(BOT)
+		const moved = harness.controller.open(BOT)
+		await vi.advanceTimersByTimeAsync(STEP_MS)
+		expect(startSpy).not.toHaveBeenCalled()
+
+		endShutdown()
+		await Promise.all([closing, followed, moved])
+		await vi.runAllTimersAsync()
+
+		expect(shutdownSpy).toHaveBeenCalledTimes(1)
+		expect(startSpy).toHaveBeenCalledTimes(1)
+		expect(harness.controller.getState().errors).toEqual([])
+		expect(isSessionReady(harness.controller.getState())).toBe(true)
+		harness.detach()
+	})
+
+	it("keeps the bot the reader picked while a queued session change lands", async () => {
+		const store = createFakeTranscriptStore()
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		let endShutdown = () => {}
+		vi.spyOn(harness.driver, "shutdown").mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					endShutdown = resolve
+				}),
+		)
+
+		const closing = harness.controller.close(BOT)
+		const queued = harness.controller.open(BOT)
+		const picked = harness.controller.open(other.id)
+		expect(harness.controller.getState().runtime).toBeNull()
+
+		await vi.advanceTimersByTimeAsync(STEP_MS)
+		endShutdown()
+		await vi.runAllTimersAsync()
+		await Promise.all([closing, queued, picked])
+
+		expect(harness.controller.getState().runtime?.botId).toBe(other.id)
+		expect(harness.controller.stateFor(BOT).sessionOpen).toBe(true)
+		harness.detach()
+	})
+
+	it("shuts a bot down only once the session it was opening is up", async () => {
+		const harness = createHarness()
+		const shutdownSpy = vi.spyOn(harness.driver, "shutdown")
+
+		const opening = harness.controller.open(BOT)
+		const closing = harness.controller.close(BOT)
+		await Promise.all([opening, closing])
+		await vi.runAllTimersAsync()
+
+		expect(shutdownSpy).toHaveBeenCalledTimes(1)
+		expect(harness.controller.stateFor(BOT).runtime).toBeNull()
+		harness.detach()
+	})
+
 	it("ends the runtime of a bot that is deleted while it streams", async () => {
 		const harness = await bootedHarness()
 		const shutdownSpy = vi.spyOn(harness.driver, "shutdown")
