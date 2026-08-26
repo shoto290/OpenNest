@@ -4,16 +4,18 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::context;
 use super::contract::{
-	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, McpServer, MessageReference,
-	NewAssistantMessage, NewTurn, NewUserMessage, PinnedBubble, RuntimeSession, Skill, SkillDraft,
-	TerminalCompletion, TranscriptPage, TranscriptStoreError,
+	Bot, BotHistoryEntry, BotIdentity, Chat, ContextCheckpoint, Conversation, McpServer,
+	MessageReference, NewAssistantMessage, NewTurn, NewUserMessage, PinnedBubble, RuntimeSession,
+	Skill, SkillDraft, TerminalCompletion, TranscriptPage, TranscriptStoreError,
 };
 use crate::agent::contract::AgentCommand;
 use crate::attachments;
 use crate::avatars;
 use crate::bundles;
 use crate::db;
-use crate::db::repositories::conversations::Bot as StoredBot;
+use crate::db::repositories::conversations::{
+	Bot as StoredBot, Conversation as StoredConversation, ConversationDraft, ConversationEdit,
+};
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::db::repositories::runtime_context::ParticipantKey;
 
@@ -519,6 +521,90 @@ pub async fn conversation_main_chat(
 	bot_id: String,
 ) -> Result<Chat, TranscriptStoreError> {
 	Ok(ready(&state)?.conversations().ensure_chat(bot_id).await?.into())
+}
+
+#[tauri::command]
+pub async fn conversation_create<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	section_id: Option<String>,
+	title: String,
+	bot_ids: Vec<String>,
+) -> Result<Conversation, TranscriptStoreError> {
+	let draft = ConversationDraft { space_id, section_id, title, bot_ids };
+	let created = ready(&state)?.conversations().create_conversation(draft).await?;
+	Ok(drawn(&app, created))
+}
+
+#[tauri::command]
+pub async fn conversation_list<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<Conversation>, TranscriptStoreError> {
+	let dir = avatars::dir(&app);
+	let stored = ready(&state)?.conversations().conversations(space_id).await?;
+	Ok(stored.into_iter().map(|room| Conversation::of(room, dir.as_deref())).collect())
+}
+
+#[tauri::command]
+pub async fn conversation_update<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	title: String,
+	instructions: String,
+	section_id: Option<String>,
+) -> Result<Conversation, TranscriptStoreError> {
+	let edit = ConversationEdit { title, instructions, section_id };
+	let updated = ready(&state)?.conversations().update_conversation(conversation_id, edit).await?;
+	Ok(drawn(&app, updated))
+}
+
+#[tauri::command]
+pub async fn conversation_delete(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+) -> Result<(), TranscriptStoreError> {
+	Ok(ready(&state)?.conversations().delete_conversation(conversation_id).await?)
+}
+
+#[tauri::command]
+pub async fn conversation_add_participant<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+) -> Result<Conversation, TranscriptStoreError> {
+	let joined = ready(&state)?.conversations().add_participant(conversation_id, bot_id).await?;
+	Ok(drawn(&app, joined))
+}
+
+#[tauri::command]
+pub async fn conversation_remove_participant<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+) -> Result<Conversation, TranscriptStoreError> {
+	let left = ready(&state)?.conversations().remove_participant(conversation_id, bot_id).await?;
+	Ok(drawn(&app, left))
+}
+
+#[tauri::command]
+pub async fn conversation_set_lead<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+	bot_id: String,
+) -> Result<Conversation, TranscriptStoreError> {
+	let led = ready(&state)?.conversations().set_lead(conversation_id, bot_id).await?;
+	Ok(drawn(&app, led))
+}
+
+fn drawn<R: Runtime>(app: &AppHandle<R>, room: StoredConversation) -> Conversation {
+	Conversation::of(room, avatars::dir(app).as_deref())
 }
 
 #[tauri::command]

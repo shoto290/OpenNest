@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
@@ -13,8 +14,10 @@ pub const DEFAULT_BOT_ID: &str = "default";
 const DEFAULT_BOT_NAME: &str = "Claude";
 const DEFAULT_BOT_MODEL: &str = "sonnet";
 const PARTICIPANT_ROLE: &str = "assistant";
+const LEAD_ROLE: &str = "lead";
 const CHAT_TITLE: &str = "Chat";
 const CHAT_KIND: &str = "main";
+const TOPIC_KIND: &str = "topic";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AvatarAnimal {
@@ -110,9 +113,10 @@ const DEFAULT_BOT_ANIMAL: AvatarAnimal = AvatarAnimal::Cat;
 #[derive(Debug)]
 pub enum ConversationError {
 	Database(DatabaseError),
-	UnknownBot {
-		id: String,
-	},
+	UnknownBot { id: String },
+	UnknownConversation { id: String },
+	ForeignBot { id: String },
+	UnknownParticipant { conversation_id: String, bot_id: String },
 }
 
 impl From<DatabaseError> for ConversationError {
@@ -139,6 +143,46 @@ pub struct Participant {
 	pub conversation_id: String,
 	pub bot_id: String,
 	pub joined_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conversation {
+	pub id: String,
+	pub space_id: Option<String>,
+	pub section_id: Option<String>,
+	pub title: String,
+	pub instructions: String,
+	pub created_at: i64,
+	pub updated_at: i64,
+	pub seats: Vec<Seat>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Seat {
+	pub bot_id: String,
+	pub role: String,
+	pub joined_at: i64,
+	pub left_at: Option<i64>,
+	pub name: String,
+	pub avatar_animal: AvatarAnimal,
+	pub avatar_blot: Option<AvatarBlot>,
+	pub avatar_image_path: Option<String>,
+	pub is_deleted: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConversationDraft {
+	pub space_id: String,
+	pub section_id: Option<String>,
+	pub title: String,
+	pub bot_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConversationEdit {
+	pub title: String,
+	pub instructions: String,
+	pub section_id: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -361,6 +405,62 @@ impl ConversationsRepository {
 		})
 		.await
 	}
+
+	pub async fn create_conversation(
+		&self,
+		draft: ConversationDraft,
+	) -> Result<Conversation, ConversationError> {
+		self.call_mut(move |connection| Ok(created_conversation(connection, &draft))).await?
+	}
+
+	pub async fn conversations(
+		&self,
+		space_id: String,
+	) -> Result<Vec<Conversation>, ConversationError> {
+		self.call(move |connection| Ok(conversations_of_space(connection, &space_id))).await?
+	}
+
+	pub async fn update_conversation(
+		&self,
+		id: String,
+		edit: ConversationEdit,
+	) -> Result<Conversation, ConversationError> {
+		self.call_mut(move |connection| Ok(updated_conversation(connection, &id, &edit))).await?
+	}
+
+	pub async fn delete_conversation(&self, id: String) -> Result<(), ConversationError> {
+		self.call_mut(move |connection| Ok(deleted_conversation(connection, &id))).await?
+	}
+
+	pub async fn add_participant(
+		&self,
+		conversation_id: String,
+		bot_id: String,
+	) -> Result<Conversation, ConversationError> {
+		self.call_mut(move |connection| {
+			Ok(added_participant(connection, &conversation_id, &bot_id))
+		})
+		.await?
+	}
+
+	pub async fn remove_participant(
+		&self,
+		conversation_id: String,
+		bot_id: String,
+	) -> Result<Conversation, ConversationError> {
+		self.call_mut(move |connection| {
+			Ok(removed_participant(connection, &conversation_id, &bot_id))
+		})
+		.await?
+	}
+
+	pub async fn set_lead(
+		&self,
+		conversation_id: String,
+		bot_id: String,
+	) -> Result<Conversation, ConversationError> {
+		self.call_mut(move |connection| Ok(led_by(connection, &conversation_id, &bot_id))).await?
+	}
 }
 
 const SELECT_BOT: &str = "SELECT id, space_id, section_id, name, title, model,
@@ -371,8 +471,20 @@ const SELECT_BOT: &str = "SELECT id, space_id, section_id, name, title, model,
 const SELECT_BOTS: &str = "SELECT id, space_id, section_id, name, title, model,
 		avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
-	FROM bots WHERE ?1 IS NULL OR space_id = ?1
+	FROM bots WHERE deleted_at IS NULL AND (?1 IS NULL OR space_id = ?1)
 	ORDER BY created_at ASC, id ASC";
+
+const SPACE_OF_LIVE_BOT: &str = "SELECT space_id FROM bots WHERE id = ?1 AND deleted_at IS NULL";
+
+const CONVERSATION_COLUMNS: &str = "SELECT id, space_id, section_id, title, instructions,
+		created_at, updated_at
+	FROM conversations";
+
+const SEAT_COLUMNS: &str = "SELECT seat.conversation_id, seat.bot_id, seat.role, seat.joined_at,
+		seat.left_at, bots.name, bots.avatar_animal, bots.avatar_color, bots.avatar_image_path,
+		bots.deleted_at
+	FROM conversation_participants AS seat
+	JOIN bots ON bots.id = seat.bot_id";
 
 const SELECT_FIRST_SPACE: &str = "SELECT id FROM spaces ORDER BY position ASC, id ASC LIMIT 1";
 
@@ -380,7 +492,7 @@ const SELECT_CHAT_OF_BOT: &str = "SELECT conversations.id,
 		conversations.created_at, conversations.updated_at
 	FROM conversations
 	JOIN conversation_participants ON conversation_participants.conversation_id = conversations.id
-	WHERE conversation_participants.bot_id = ?1
+	WHERE conversation_participants.bot_id = ?1 AND conversations.kind = 'main'
 	ORDER BY conversations.created_at ASC, conversations.id ASC
 	LIMIT 1";
 
@@ -440,8 +552,8 @@ fn insert_chat(transaction: &Transaction<'_>, bot_id: &str) -> Result<Chat, Conv
 		chat,
 	)?;
 	transaction.execute(
-		"INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-			VALUES (?1, ?2, ?3, ?4)",
+		"INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES (?1, ?2, ?3, ?4, 0)",
 		params![created.id, bot_id, PARTICIPANT_ROLE, at],
 	)?;
 	Ok(created)
@@ -516,14 +628,254 @@ fn deleted_bot(connection: &mut Connection, id: &str) -> Result<(), Conversation
 	let transaction = write_transaction(connection)?;
 	transaction.pragma_update(None, "defer_foreign_keys", true)?;
 	transaction.execute(
-		"DELETE FROM conversations WHERE id IN
+		"DELETE FROM conversations WHERE kind = ?2 AND id IN
 			(SELECT conversation_id FROM conversation_participants WHERE bot_id = ?1)",
-		[id],
+		params![id, CHAT_KIND],
 	)?;
-	let deleted = transaction.execute("DELETE FROM bots WHERE id = ?1", [id])?;
-	refuse_if_untouched(deleted, id)?;
+	let written = match still_seated(&transaction, id)? {
+		true => transaction.execute(
+			"UPDATE bots SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+			params![id, now()],
+		)?,
+		false => transaction.execute("DELETE FROM bots WHERE id = ?1", [id])?,
+	};
+	refuse_if_untouched(written, id)?;
 	transaction.commit()?;
 	Ok(())
+}
+
+fn still_seated(transaction: &Transaction<'_>, bot_id: &str) -> Result<bool, ConversationError> {
+	let seats: i64 = transaction.query_row(
+		"SELECT count(*) FROM conversation_participants WHERE bot_id = ?1",
+		[bot_id],
+		|row| row.get(0),
+	)?;
+	Ok(seats > 0)
+}
+
+fn created_conversation(
+	connection: &mut Connection,
+	draft: &ConversationDraft,
+) -> Result<Conversation, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let id = Uuid::new_v4().to_string();
+	let at = now();
+	transaction.execute(
+		"INSERT INTO conversations
+			(id, kind, space_id, section_id, title, created_at, updated_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+		params![id, TOPIC_KIND, draft.space_id, draft.section_id, draft.title, at],
+	)?;
+	for (rank, bot_id) in draft.bot_ids.iter().enumerate() {
+		let role = match rank {
+			0 => LEAD_ROLE,
+			_ => PARTICIPANT_ROLE,
+		};
+		seat(&transaction, &id, bot_id, Some(&draft.space_id), role)?;
+	}
+	let created = conversation_at(&transaction, &id)?;
+	transaction.commit()?;
+	Ok(created)
+}
+
+fn seat(
+	transaction: &Transaction<'_>,
+	conversation_id: &str,
+	bot_id: &str,
+	space_id: Option<&str>,
+	role: &str,
+) -> Result<(), ConversationError> {
+	let home: String = transaction
+		.query_row(SPACE_OF_LIVE_BOT, [bot_id], |row| row.get(0))
+		.optional()?
+		.ok_or_else(|| ConversationError::UnknownBot { id: bot_id.to_owned() })?;
+	if Some(home.as_str()) != space_id {
+		return Err(ConversationError::ForeignBot { id: bot_id.to_owned() });
+	}
+	transaction.execute(
+		"INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES (?1, ?2, ?3, ?4, ?5)
+			ON CONFLICT (conversation_id, bot_id)
+			DO UPDATE SET left_at = NULL, role = excluded.role",
+		params![conversation_id, bot_id, role, now(), next_join_seq(transaction, conversation_id)?],
+	)?;
+	Ok(())
+}
+
+fn conversations_of_space(
+	connection: &Connection,
+	space_id: &str,
+) -> Result<Vec<Conversation>, ConversationError> {
+	let mut statement = connection.prepare_cached(&format!(
+		"{CONVERSATION_COLUMNS} WHERE kind = ?1 AND space_id = ?2 ORDER BY created_at ASC, id ASC"
+	))?;
+	let rows = statement.query_map(params![TOPIC_KIND, space_id], conversation)?;
+	let mut rooms = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+	let mut seats = seats_of_space(connection, space_id)?;
+	for room in &mut rooms {
+		room.seats = seats.remove(&room.id).unwrap_or_default();
+	}
+	Ok(rooms)
+}
+
+fn seats_of_space(
+	connection: &Connection,
+	space_id: &str,
+) -> Result<HashMap<String, Vec<Seat>>, ConversationError> {
+	let mut statement = connection.prepare_cached(&format!(
+		"{SEAT_COLUMNS} WHERE seat.conversation_id IN
+			(SELECT id FROM conversations WHERE kind = ?1 AND space_id = ?2)
+		ORDER BY seat.conversation_id ASC, seat.join_seq ASC"
+	))?;
+	let rows = statement.query_map(params![TOPIC_KIND, space_id], |row| {
+		Ok((row.get::<_, String>("conversation_id")?, seated(row)?))
+	})?;
+	let mut held: HashMap<String, Vec<Seat>> = HashMap::new();
+	for row in rows {
+		let (conversation_id, seat) = row?;
+		held.entry(conversation_id).or_default().push(seat);
+	}
+	Ok(held)
+}
+
+fn conversation_at(connection: &Connection, id: &str) -> Result<Conversation, ConversationError> {
+	let mut room: Conversation = connection
+		.prepare_cached(&format!("{CONVERSATION_COLUMNS} WHERE id = ?1 AND kind = ?2"))?
+		.query_row(params![id, TOPIC_KIND], conversation)
+		.optional()?
+		.ok_or_else(|| ConversationError::UnknownConversation { id: id.to_owned() })?;
+	let mut statement = connection.prepare_cached(&format!(
+		"{SEAT_COLUMNS} WHERE seat.conversation_id = ?1 ORDER BY seat.join_seq ASC"
+	))?;
+	let rows = statement.query_map([id], seated)?;
+	room.seats = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+	Ok(room)
+}
+
+fn updated_conversation(
+	connection: &mut Connection,
+	id: &str,
+	edit: &ConversationEdit,
+) -> Result<Conversation, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let written = transaction.execute(
+		"UPDATE conversations SET title = ?2, instructions = ?3, section_id = ?4, updated_at = ?5
+			WHERE id = ?1 AND kind = ?6",
+		params![id, edit.title, edit.instructions, edit.section_id, now(), TOPIC_KIND],
+	)?;
+	refuse_unknown_conversation(written, id)?;
+	let updated = conversation_at(&transaction, id)?;
+	transaction.commit()?;
+	Ok(updated)
+}
+
+fn deleted_conversation(connection: &mut Connection, id: &str) -> Result<(), ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let dropped = transaction.execute(
+		"DELETE FROM conversations WHERE id = ?1 AND kind = ?2",
+		params![id, TOPIC_KIND],
+	)?;
+	refuse_unknown_conversation(dropped, id)?;
+	transaction.commit()?;
+	Ok(())
+}
+
+fn added_participant(
+	connection: &mut Connection,
+	conversation_id: &str,
+	bot_id: &str,
+) -> Result<Conversation, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let room = conversation_at(&transaction, conversation_id)?;
+	let role = match room.seats.iter().any(|seat| seat.role == LEAD_ROLE) {
+		true => PARTICIPANT_ROLE,
+		false => LEAD_ROLE,
+	};
+	seat(&transaction, conversation_id, bot_id, room.space_id.as_deref(), role)?;
+	let joined = conversation_at(&transaction, conversation_id)?;
+	transaction.commit()?;
+	Ok(joined)
+}
+
+fn next_join_seq(
+	transaction: &Transaction<'_>,
+	conversation_id: &str,
+) -> Result<i64, ConversationError> {
+	Ok(transaction.query_row(
+		"SELECT COALESCE(MAX(join_seq) + 1, 0) FROM conversation_participants
+			WHERE conversation_id = ?1",
+		[conversation_id],
+		|row| row.get(0),
+	)?)
+}
+
+fn removed_participant(
+	connection: &mut Connection,
+	conversation_id: &str,
+	bot_id: &str,
+) -> Result<Conversation, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let departed = transaction.execute(
+		"UPDATE conversation_participants SET left_at = ?3, role = ?4
+			WHERE conversation_id = ?1 AND bot_id = ?2 AND left_at IS NULL",
+		params![conversation_id, bot_id, now(), PARTICIPANT_ROLE],
+	)?;
+	refuse_unknown_participant(departed, conversation_id, bot_id)?;
+	transaction.execute(
+		"UPDATE conversation_participants SET role = ?2
+			WHERE conversation_id = ?1 AND left_at IS NULL
+				AND NOT EXISTS (SELECT 1 FROM conversation_participants AS held
+					WHERE held.conversation_id = ?1 AND held.role = ?2)
+				AND join_seq = (SELECT MIN(join_seq) FROM conversation_participants AS present
+					WHERE present.conversation_id = ?1 AND present.left_at IS NULL)",
+		params![conversation_id, LEAD_ROLE],
+	)?;
+	let left = conversation_at(&transaction, conversation_id)?;
+	transaction.commit()?;
+	Ok(left)
+}
+
+fn led_by(
+	connection: &mut Connection,
+	conversation_id: &str,
+	bot_id: &str,
+) -> Result<Conversation, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	transaction.execute(
+		"UPDATE conversation_participants SET role = ?2 WHERE conversation_id = ?1 AND role = ?3",
+		params![conversation_id, PARTICIPANT_ROLE, LEAD_ROLE],
+	)?;
+	let crowned = transaction.execute(
+		"UPDATE conversation_participants SET role = ?3
+			WHERE conversation_id = ?1 AND bot_id = ?2 AND left_at IS NULL",
+		params![conversation_id, bot_id, LEAD_ROLE],
+	)?;
+	refuse_unknown_participant(crowned, conversation_id, bot_id)?;
+	let led = conversation_at(&transaction, conversation_id)?;
+	transaction.commit()?;
+	Ok(led)
+}
+
+fn refuse_unknown_conversation(rows: usize, id: &str) -> Result<(), ConversationError> {
+	match rows {
+		0 => Err(ConversationError::UnknownConversation { id: id.to_owned() }),
+		_ => Ok(()),
+	}
+}
+
+fn refuse_unknown_participant(
+	rows: usize,
+	conversation_id: &str,
+	bot_id: &str,
+) -> Result<(), ConversationError> {
+	match rows {
+		0 => Err(ConversationError::UnknownParticipant {
+			conversation_id: conversation_id.to_owned(),
+			bot_id: bot_id.to_owned(),
+		}),
+		_ => Ok(()),
+	}
 }
 
 fn set_avatar_image_path(
@@ -593,6 +945,33 @@ fn chat(row: &Row<'_>) -> rusqlite::Result<Chat> {
 
 fn participant(row: &Row<'_>) -> rusqlite::Result<Participant> {
 	Ok(Participant { conversation_id: row.get(0)?, bot_id: row.get(1)?, joined_at: row.get(2)? })
+}
+
+fn conversation(row: &Row<'_>) -> rusqlite::Result<Conversation> {
+	Ok(Conversation {
+		id: row.get("id")?,
+		space_id: row.get("space_id")?,
+		section_id: row.get("section_id")?,
+		title: row.get("title")?,
+		instructions: row.get("instructions")?,
+		created_at: row.get("created_at")?,
+		updated_at: row.get("updated_at")?,
+		seats: Vec::new(),
+	})
+}
+
+fn seated(row: &Row<'_>) -> rusqlite::Result<Seat> {
+	Ok(Seat {
+		bot_id: row.get("bot_id")?,
+		role: row.get("role")?,
+		joined_at: row.get("joined_at")?,
+		left_at: row.get("left_at")?,
+		name: row.get("name")?,
+		avatar_animal: row.get("avatar_animal")?,
+		avatar_blot: row.get("avatar_color")?,
+		avatar_image_path: row.get("avatar_image_path")?,
+		is_deleted: row.get::<_, Option<i64>>("deleted_at")?.is_some(),
+	})
 }
 
 fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
@@ -1150,6 +1529,366 @@ mod tests {
 		assert_eq!(count_of(&database, "bots").await, 2);
 		assert_eq!(count_of(&database, "conversations").await, 2, "two bots share one chat");
 		assert_eq!(count_of(&database, "conversation_participants").await, 2);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn a_draft(space_id: &str, bots: &[&Bot]) -> ConversationDraft {
+		ConversationDraft {
+			space_id: space_id.to_owned(),
+			section_id: None,
+			title: "Launch".to_owned(),
+			bot_ids: bots.iter().map(|bot| bot.id.clone()).collect(),
+		}
+	}
+
+	fn roster(room: &Conversation) -> Vec<(String, String, bool)> {
+		room.seats
+			.iter()
+			.map(|seat| (seat.name.clone(), seat.role.clone(), seat.left_at.is_some()))
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn the_bots_a_room_is_opened_with_take_their_seats_in_the_order_they_were_named() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let first = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let second = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+
+		let room = repository
+			.create_conversation(a_draft(&first.space_id, &[&first, &second]))
+			.await
+			.expect("the room is opened");
+		let listed = repository.conversations(first.space_id.clone()).await.expect("the rooms");
+
+		assert_eq!(
+			roster(&room),
+			vec![
+				("Nyx".to_owned(), LEAD_ROLE.to_owned(), false),
+				("Ada".to_owned(), PARTICIPANT_ROLE.to_owned(), false)
+			],
+			"the room seated its bots in an order nobody asked for"
+		);
+		assert_eq!(room.space_id.as_deref(), Some(first.space_id.as_str()));
+		assert_eq!(listed, vec![room], "the room the space holds is not the one that was opened");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_room_naming_a_bot_of_another_space_is_refused_and_seats_no_one() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let elsewhere = database.spaces().create("Writers".to_owned()).await.expect("the space");
+		let home = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let stranger = repository
+			.create_bot(an_identity("Ada"), Some(elsewhere.id.clone()), None)
+			.await
+			.expect("the bot");
+
+		let refused =
+			repository.create_conversation(a_draft(&home.space_id, &[&home, &stranger])).await;
+
+		assert!(
+			format!("{refused:?}").contains("ForeignBot"),
+			"a bot of another space was let in: {refused:?}"
+		);
+		assert!(
+			repository.conversations(home.space_id).await.expect("the rooms").is_empty(),
+			"a refused room was written"
+		);
+		assert_eq!(
+			count_of(&database, "conversation_participants").await,
+			2,
+			"a refused room seated a bot"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_bot_that_leaves_a_room_keeps_its_seat_on_the_record_and_hands_the_lead_on() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let first = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let second = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let room = repository
+			.create_conversation(a_draft(&first.space_id, &[&first, &second]))
+			.await
+			.expect("the room is opened");
+		a_transcript_for(&database, &room.id, &first.id).await;
+
+		let left = repository
+			.remove_participant(room.id.clone(), first.id.clone())
+			.await
+			.expect("the bot leaves");
+		let back = repository
+			.add_participant(room.id.clone(), first.id.clone())
+			.await
+			.expect("the bot comes back");
+
+		assert_eq!(
+			roster(&back),
+			vec![
+				("Nyx".to_owned(), PARTICIPANT_ROLE.to_owned(), false),
+				("Ada".to_owned(), LEAD_ROLE.to_owned(), false)
+			],
+			"a bot that came back is still on the record as gone"
+		);
+		assert_eq!(
+			roster(&left),
+			vec![
+				("Nyx".to_owned(), PARTICIPANT_ROLE.to_owned(), true),
+				("Ada".to_owned(), LEAD_ROLE.to_owned(), false)
+			],
+			"the room came out of the departure without a lead"
+		);
+		assert_eq!(count_of(&database, "messages").await, 2, "a message left with its author");
+		assert_eq!(count_of(&database, "runtime_sessions").await, 1, "a run left with its bot");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_bot_coming_back_to_a_room_nobody_leads_takes_the_lead() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let first = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let second = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let room = repository
+			.create_conversation(a_draft(&first.space_id, &[&first, &second]))
+			.await
+			.expect("the room is opened");
+		for leaving in [&first, &second] {
+			repository
+				.remove_participant(room.id.clone(), leaving.id.clone())
+				.await
+				.expect("the bot leaves");
+		}
+
+		let back = repository.add_participant(room.id, first.id).await.expect("the bot comes back");
+
+		assert_eq!(
+			roster(&back),
+			vec![
+				("Nyx".to_owned(), LEAD_ROLE.to_owned(), false),
+				("Ada".to_owned(), PARTICIPANT_ROLE.to_owned(), true)
+			],
+			"the bot came back to a room that is still led by nobody"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_room_holds_one_lead_whoever_is_handed_it() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let first = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let second = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let room = repository
+			.create_conversation(a_draft(&first.space_id, &[&first, &second]))
+			.await
+			.expect("the room is opened");
+
+		let led = repository
+			.set_lead(room.id.clone(), second.id.clone())
+			.await
+			.expect("the lead is handed on");
+		let refused = repository.set_lead(room.id, "missing".to_owned()).await;
+
+		assert_eq!(
+			roster(&led),
+			vec![
+				("Nyx".to_owned(), PARTICIPANT_ROLE.to_owned(), false),
+				("Ada".to_owned(), LEAD_ROLE.to_owned(), false)
+			]
+		);
+		assert!(
+			format!("{refused:?}").contains("UnknownParticipant"),
+			"the lead was handed to a bot that is not in the room: {refused:?}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_bot_added_to_a_room_of_another_space_is_refused_and_one_of_its_own_sits_down() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let elsewhere = database.spaces().create("Writers".to_owned()).await.expect("the space");
+		let host = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let mate = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let stranger = repository
+			.create_bot(an_identity("Rex"), Some(elsewhere.id), None)
+			.await
+			.expect("the bot");
+		let room = repository
+			.create_conversation(a_draft(&host.space_id, &[&host]))
+			.await
+			.expect("the room is opened");
+
+		let refused = repository.add_participant(room.id.clone(), stranger.id).await;
+		let joined =
+			repository.add_participant(room.id, mate.id).await.expect("the bot joins the room");
+
+		assert!(
+			format!("{refused:?}").contains("ForeignBot"),
+			"a bot of another space joined the room: {refused:?}"
+		);
+		assert_eq!(
+			roster(&joined),
+			vec![
+				("Nyx".to_owned(), LEAD_ROLE.to_owned(), false),
+				("Ada".to_owned(), PARTICIPANT_ROLE.to_owned(), false)
+			]
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_room_that_is_retitled_comes_back_retitled_and_later_than_it_was_opened() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let bot = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let section = database
+			.sections()
+			.create(bot.space_id.clone(), "Writers".to_owned())
+			.await
+			.expect("the section");
+		let room = repository
+			.create_conversation(a_draft(&bot.space_id, &[&bot]))
+			.await
+			.expect("the room is opened");
+		tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+
+		let edited = repository
+			.update_conversation(
+				room.id.clone(),
+				ConversationEdit {
+					title: "Shipping".to_owned(),
+					instructions: "stay on the release".to_owned(),
+					section_id: Some(section.id.clone()),
+				},
+			)
+			.await
+			.expect("the room is edited");
+		let refused = repository
+			.update_conversation(
+				"missing".to_owned(),
+				ConversationEdit {
+					title: "Shipping".to_owned(),
+					instructions: String::new(),
+					section_id: None,
+				},
+			)
+			.await;
+
+		assert_eq!(edited.title, "Shipping");
+		assert_eq!(edited.instructions, "stay on the release");
+		assert_eq!(edited.section_id, Some(section.id));
+		assert!(edited.updated_at > room.updated_at, "an edited room kept its update time");
+		assert!(
+			format!("{refused:?}").contains("UnknownConversation"),
+			"an edit on a room the file does not hold was accepted: {refused:?}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn deleting_a_bot_takes_its_own_chat_and_leaves_the_rooms_it_spoke_in() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let deleted = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let kept = repository.create_bot(an_identity("Ada"), None, None).await.expect("the bot");
+		let room = repository
+			.create_conversation(a_draft(&deleted.space_id, &[&deleted, &kept]))
+			.await
+			.expect("the room is opened");
+		a_transcript_for(&database, &room.id, &deleted.id).await;
+
+		repository.delete_bot(deleted.id.clone()).await.expect("the bot is deleted");
+
+		let rooms = repository.conversations(deleted.space_id.clone()).await.expect("the rooms");
+		assert_eq!(rooms.len(), 1, "the room went with the bot that spoke in it");
+		assert_eq!(
+			roster(&rooms[0]),
+			vec![
+				("Nyx".to_owned(), LEAD_ROLE.to_owned(), false),
+				("Ada".to_owned(), PARTICIPANT_ROLE.to_owned(), false)
+			],
+			"the deleted bot cannot be drawn in the room it spoke in"
+		);
+		assert_eq!(
+			rooms[0].seats.iter().map(|seat| seat.is_deleted).collect::<Vec<_>>(),
+			vec![true, false],
+			"the room does not say which of its bots is gone"
+		);
+		assert_eq!(count_of(&database, "messages").await, 2, "a message went with its author");
+		assert_eq!(
+			count_of(&database, "conversations").await,
+			2,
+			"the chat of the deleted bot outlived it"
+		);
+		assert_eq!(
+			repository
+				.bots(Some(deleted.space_id))
+				.await
+				.expect("the bots")
+				.into_iter()
+				.map(|bot| bot.name)
+				.collect::<Vec<_>>(),
+			vec!["Ada".to_owned()],
+			"a deleted bot is still offered by its space"
+		);
+		assert_eq!(room.id, rooms[0].id);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn the_main_chat_of_a_bot_is_never_a_room_it_was_recruited_into() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let bot = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let chat = repository.ensure_chat(bot.id.clone()).await.expect("the chat");
+		let room = repository
+			.create_conversation(a_draft(&bot.space_id, &[&bot]))
+			.await
+			.expect("the room is opened");
+
+		let again = repository.ensure_chat(bot.id).await.expect("the chat");
+		repository.delete_conversation(room.id.clone()).await.expect("the room is deleted");
+		let refused = repository.delete_conversation(chat.id.clone()).await;
+
+		assert_eq!(again, chat, "the room was handed back as the chat of the bot");
+		assert_ne!(again.id, room.id);
+		assert!(
+			format!("{refused:?}").contains("UnknownConversation"),
+			"the chat of a bot was deleted as a room: {refused:?}"
+		);
+		assert_eq!(count_of(&database, "conversations").await, 1, "the room outlived its delete");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

@@ -461,8 +461,9 @@ mod tests {
 				('b2', 'personal', 'Second', 'sonnet', 1);
 		INSERT INTO conversations (id, kind, title, created_at, updated_at)
 			VALUES ('c1', 'main', 'First', 1, 1);
-		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-			VALUES ('c1', 'b1', 'assistant', 1), ('c1', 'b2', 'assistant', 1);
+		INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c1', 'b1', 'assistant', 1, 0), ('c1', 'b2', 'assistant', 1, 1);
 	";
 
 	fn participant(bot_id: &str) -> ParticipantKey {

@@ -1016,8 +1016,9 @@ mod tests {
 			VALUES ('b1', 'personal', 'First', 'sonnet', 1);
 		INSERT INTO conversations (id, kind, title, created_at, updated_at)
 			VALUES ('c1', 'main', 'First', 1, 1), ('c2', 'topic', 'Second', 1, 1);
-		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-			VALUES ('c1', 'b1', 'assistant', 1), ('c2', 'b1', 'assistant', 1);
+		INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c1', 'b1', 'assistant', 1, 0), ('c2', 'b1', 'assistant', 1, 0);
 	";
 
 	const LONG_CONVERSATION: usize = 205;

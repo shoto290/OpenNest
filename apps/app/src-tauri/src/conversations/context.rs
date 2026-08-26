@@ -419,8 +419,9 @@ mod tests {
 					rusqlite::params![id],
 				)?;
 				connection.execute(
-					"INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-						VALUES (?1, ?2, 'assistant', 1)",
+					"INSERT INTO conversation_participants
+						(conversation_id, bot_id, role, joined_at, join_seq)
+						VALUES (?1, ?2, 'assistant', 1, 1)",
 					rusqlite::params![conversation_id, id],
 				)?;
 				Ok(())
