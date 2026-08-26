@@ -249,6 +249,21 @@ export const conversationStore: TranscriptStore = {
 	deleteConversation: (conversationId: string) =>
 		invoke<void>("conversation_delete", { conversationId }),
 
+	addConversationParticipant: (conversationId: string, botId: string) =>
+		invoke<Conversation>("conversation_add_participant", {
+			conversationId,
+			botId,
+		}),
+
+	removeConversationParticipant: (conversationId: string, botId: string) =>
+		invoke<Conversation>("conversation_remove_participant", {
+			conversationId,
+			botId,
+		}),
+
+	setConversationLead: (conversationId: string, botId: string) =>
+		invoke<Conversation>("conversation_set_lead", { conversationId, botId }),
+
 	openRuntimeSession: (
 		conversationId: string,
 		botId: string,

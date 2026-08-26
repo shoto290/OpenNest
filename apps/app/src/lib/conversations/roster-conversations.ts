@@ -3,19 +3,28 @@ import type {
 	AgentSidebarConversation,
 } from "@workspace/ui/components/agents/agent-sidebar"
 import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
+import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 
-import type { Conversation, Participant } from "./store-contract"
+import type { Bot, Conversation, Participant } from "./store-contract"
 
 import { avatarSrc } from "../host"
 
-const toParticipantRow = (participant: Participant): AgentSidebarBot => ({
-	id: participant.botId,
-	name: participant.name,
-	animal: participant.avatarAnimal,
-	blot: participant.avatarBlot ?? undefined,
-	image: avatarSrc(participant.avatarImagePath),
+type BotFace = Pick<
+	Bot,
+	"name" | "avatarAnimal" | "avatarBlot" | "avatarImagePath"
+>
+
+const toBotRow = (id: string, face: BotFace): AgentSidebarBot => ({
+	id,
+	name: face.name,
+	animal: face.avatarAnimal,
+	blot: face.avatarBlot ?? undefined,
+	image: avatarSrc(face.avatarImagePath),
 })
+
+const toParticipantRow = (participant: Participant): AgentSidebarBot =>
+	toBotRow(participant.botId, participant)
 
 const toAuthor = (participant: Participant): MessageAuthor => ({
 	...toParticipantRow(participant),
@@ -46,6 +55,25 @@ export const presentParticipants = (
 	conversation: Conversation,
 ): Participant[] =>
 	conversation.participants.filter((participant) => participant.leftAt === null)
+
+export const unseatedBots = (
+	bots: Bot[],
+	conversation: Conversation,
+): ConversationBot[] => {
+	const seated = new Set(
+		presentParticipants(conversation).map((participant) => participant.botId),
+	)
+	return bots
+		.filter((bot) => !seated.has(bot.id))
+		.map((bot) => toBotRow(bot.id, bot))
+}
+
+export const toConversationSettingsValue = (
+	conversation: Conversation,
+): ConversationSettingsValue => ({
+	name: conversation.title,
+	instructions: conversation.instructions,
+})
 
 export const toRosterConversations = (
 	conversations: Conversation[],

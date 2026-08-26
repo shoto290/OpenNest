@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
+import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
 import { NewConversationDialog } from "@workspace/ui/components/new-conversation-dialog"
 import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
@@ -32,7 +33,14 @@ import { toSpaceBadges, withBadges } from "@/lib/chat/sidebar-badges"
 import { useBotBadges } from "@/lib/chat/use-bot-badges"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
-import { toRosterConversations } from "@/lib/conversations/roster-conversations"
+import {
+	leadOf,
+	presentParticipants,
+	toConversationBots,
+	toConversationSettingsValue,
+	toRosterConversations,
+	unseatedBots,
+} from "@/lib/conversations/roster-conversations"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
@@ -106,6 +114,7 @@ export function App() {
 		selectedConversationId,
 		isEditing,
 		isShowingDanger,
+		isEditingConversation,
 		hasLoaded,
 	} = roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
@@ -316,6 +325,20 @@ export function App() {
 		[conversations],
 	)
 
+	const seatedBots = useMemo(
+		() =>
+			selectedConversation
+				? toConversationBots(presentParticipants(selectedConversation))
+				: [],
+		[selectedConversation],
+	)
+
+	const recruitableBots = useMemo(
+		() =>
+			selectedConversation ? unseatedBots(bots, selectedConversation) : [],
+		[bots, selectedConversation],
+	)
+
 	const rosterConversationsBySpace = useMemo(
 		() =>
 			Object.fromEntries(
@@ -329,6 +352,7 @@ export function App() {
 
 	const isOverlayOpen =
 		isEditing ||
+		isEditingConversation ||
 		user.state.isSettingsOpen ||
 		isSpaceEditing ||
 		isCreatingConversation
@@ -397,6 +421,7 @@ export function App() {
 						onMoveConversationToSection={(id, sectionId) => {
 							void roster.controller.moveConversationToSection(id, sectionId)
 						}}
+						onOpenConversationSettings={roster.controller.editConversation}
 						onSelectConversation={roster.controller.selectConversation}
 						onDeleteBot={roster.controller.askToDelete}
 						onDuplicateBot={(id) => {
@@ -455,8 +480,10 @@ export function App() {
 					conversation={selectedConversation}
 					driver={driver}
 					hasLoaded={hasLoaded}
+					isConversationSettingsOpen={isEditingConversation}
 					isOverlayOpen={isOverlayOpen}
 					isSettingsOpen={isEditing}
+					onOpenConversationSettings={roster.controller.editConversation}
 					onToggleSettings={toggleSettings}
 					readerName={preferences.displayName}
 					store={store}
@@ -533,6 +560,43 @@ export function App() {
 					value={toSettingsValue(selected)}
 					working={activity?.isWorking ?? false}
 					workingKind={activity?.kind}
+				/>
+			) : null}
+			{selectedConversation ? (
+				<ConversationSettingsDialog
+					bots={recruitableBots}
+					leadId={leadOf(selectedConversation) ?? ""}
+					onClose={() => roster.controller.setConversationEditing(false)}
+					onDelete={() => {
+						void roster.controller.removeConversation(selectedConversation.id)
+					}}
+					onDismiss={(botId) => {
+						void roster.controller.dismissFromConversation(
+							selectedConversation.id,
+							botId,
+						)
+					}}
+					onLeadChange={(botId) => {
+						void roster.controller.setConversationLead(
+							selectedConversation.id,
+							botId,
+						)
+					}}
+					onRecruit={(botId) => {
+						void roster.controller.recruitToConversation(
+							selectedConversation.id,
+							botId,
+						)
+					}}
+					onValueChange={(value) =>
+						roster.controller.describeConversation(
+							selectedConversation.id,
+							value,
+						)
+					}
+					open={isEditingConversation}
+					participants={seatedBots}
+					value={toConversationSettingsValue(selectedConversation)}
 				/>
 			) : null}
 			{selectedSpace ? (

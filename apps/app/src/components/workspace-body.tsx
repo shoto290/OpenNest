@@ -22,6 +22,8 @@ type WorkspaceBodyProps = {
 	isSettingsOpen: boolean
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
+	isConversationSettingsOpen: boolean
+	onOpenConversationSettings: (conversationId: string) => void
 }
 
 export function WorkspaceBody({
@@ -36,6 +38,8 @@ export function WorkspaceBody({
 	isSettingsOpen,
 	isOverlayOpen,
 	onToggleSettings,
+	isConversationSettingsOpen,
+	onOpenConversationSettings,
 }: WorkspaceBodyProps) {
 	if (!hasLoaded) {
 		return <AppBootScreen data-tauri-drag-region="deep" />
@@ -46,6 +50,8 @@ export function WorkspaceBody({
 			<ConversationScreen
 				conversation={conversation}
 				driver={driver}
+				isSettingsOpen={isConversationSettingsOpen}
+				onOpenSettings={onOpenConversationSettings}
 				store={store}
 			/>
 		)

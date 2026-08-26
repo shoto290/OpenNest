@@ -112,7 +112,12 @@ const spoken = (message: TranscriptMessage) =>
 
 type StoredConversation = Omit<Conversation, "participants">
 
-type Seat = { botId: string; role: ParticipantRole; joinedAt: number }
+type Seat = {
+	botId: string
+	role: ParticipantRole
+	joinedAt: number
+	leftAt: number | null
+}
 
 const refuse = (error: TranscriptStoreError | SpaceError | SectionError) =>
 	Promise.reject(error)
@@ -190,6 +195,7 @@ export const createFakeTranscriptStore = (
 	const conversations = new Map<string, StoredConversation>()
 	const seats = new Map<string, Seat[]>()
 	let mintedConversations = 0
+	let mintedSeats = 0
 	let minted = 0
 	let mintedSpaces = 0
 	let mintedSections = 0
@@ -394,7 +400,7 @@ export const createFakeTranscriptStore = (
 							botId: bot.id,
 							role: seat.role,
 							joinedAt: seat.joinedAt,
-							leftAt: null,
+							leftAt: seat.leftAt,
 							name: bot.name,
 							avatarAnimal: bot.avatarAnimal,
 							avatarBlot: bot.avatarBlot,
@@ -404,6 +410,18 @@ export const createFakeTranscriptStore = (
 					]
 				: []
 		})
+
+	const isSeated = (seat: Seat) => seat.leftAt === null
+
+	const crowned = (held: Seat[]): Seat[] => {
+		if (held.some((seat) => isSeated(seat) && seat.role === "lead")) {
+			return held
+		}
+		const heir = held.find(isSeated)
+		return heir
+			? held.map((seat) => (seat === heir ? { ...seat, role: "lead" } : seat))
+			: held
+	}
 
 	const forgetSpace = (spaceId: string) => {
 		for (const [botId, held] of spaceOf) {
@@ -936,6 +954,7 @@ export const createFakeTranscriptStore = (
 					botId,
 					role: rank === 0 ? "lead" : "assistant",
 					joinedAt: mintedConversations,
+					leftAt: null,
 				})),
 			)
 			return Promise.resolve(drawnConversation(stored))
@@ -966,6 +985,73 @@ export const createFakeTranscriptStore = (
 			}
 			seats.delete(conversationId)
 			return Promise.resolve()
+		},
+
+		addConversationParticipant: (conversationId: string, botId: string) => {
+			const stored = conversations.get(conversationId)
+			if (!stored) {
+				return refuse({ kind: "unknownConversation", id: conversationId })
+			}
+			if (spaceOf.get(botId) !== stored.spaceId) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			const held = seats.get(conversationId) ?? []
+			mintedSeats += 1
+			const taken: Seat = {
+				botId,
+				role: held.some((seat) => isSeated(seat) && seat.role === "lead")
+					? "assistant"
+					: "lead",
+				joinedAt: mintedSeats,
+				leftAt: null,
+			}
+			seats.set(conversationId, [
+				...held.filter((seat) => seat.botId !== botId),
+				taken,
+			])
+			return Promise.resolve(drawnConversation(stored))
+		},
+
+		removeConversationParticipant: (conversationId: string, botId: string) => {
+			const stored = conversations.get(conversationId)
+			if (!stored) {
+				return refuse({ kind: "unknownConversation", id: conversationId })
+			}
+			const held = seats.get(conversationId) ?? []
+			if (!held.some((seat) => seat.botId === botId && isSeated(seat))) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			mintedSeats += 1
+			seats.set(
+				conversationId,
+				crowned(
+					held.map((seat) =>
+						seat.botId === botId
+							? { ...seat, role: "assistant", leftAt: mintedSeats }
+							: seat,
+					),
+				),
+			)
+			return Promise.resolve(drawnConversation(stored))
+		},
+
+		setConversationLead: (conversationId: string, botId: string) => {
+			const stored = conversations.get(conversationId)
+			if (!stored) {
+				return refuse({ kind: "unknownConversation", id: conversationId })
+			}
+			const held = seats.get(conversationId) ?? []
+			if (!held.some((seat) => seat.botId === botId && isSeated(seat))) {
+				return refuse({ kind: "unknownBot", id: botId })
+			}
+			seats.set(
+				conversationId,
+				held.map((seat) => ({
+					...seat,
+					role: seat.botId === botId ? "lead" : "assistant",
+				})),
+			)
+			return Promise.resolve(drawnConversation(stored))
 		},
 
 		openRuntimeSession: (

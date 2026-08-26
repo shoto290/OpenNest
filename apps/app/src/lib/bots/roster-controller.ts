@@ -2,6 +2,7 @@ import type {
 	BotOutputStyle,
 	BotSettingsValue,
 } from "@workspace/ui/components/bot-settings"
+import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 
 import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 
@@ -26,6 +27,7 @@ export type RosterState = {
 	selectedConversationId: string | null
 	isEditing: boolean
 	isShowingDanger: boolean
+	isEditingConversation: boolean
 	hasLoaded: boolean
 }
 
@@ -67,6 +69,18 @@ export type RosterController = {
 		conversationId: string,
 		sectionId: string | null,
 	) => Promise<void>
+	editConversation: (id: string) => void
+	setConversationEditing: (isEditing: boolean) => void
+	describeConversation: (id: string, value: ConversationSettingsValue) => void
+	setConversationLead: (conversationId: string, botId: string) => Promise<void>
+	recruitToConversation: (
+		conversationId: string,
+		botId: string,
+	) => Promise<void>
+	dismissFromConversation: (
+		conversationId: string,
+		botId: string,
+	) => Promise<void>
 	removeConversation: (id: string) => Promise<void>
 }
 
@@ -81,6 +95,7 @@ export const initialRosterState: RosterState = {
 	selectedConversationId: null,
 	isEditing: false,
 	isShowingDanger: false,
+	isEditingConversation: false,
 	hasLoaded: false,
 }
 
@@ -157,6 +172,9 @@ export const createRosterController = (
 
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)
 
+	const heldConversation = (id: string) =>
+		state.conversations.find((conversation) => conversation.id === id)
+
 	const spaceOfBot = (botId: string) =>
 		Object.keys(state.rosters).find((spaceId) =>
 			rosterIn(state.rosters, spaceId).some((bot) => bot.id === botId),
@@ -170,6 +188,8 @@ export const createRosterController = (
 		const selectedRowId = state.selectedBotId ?? state.selectedConversationId
 		const stillHeld = landingOn(bots, conversations, selectedRowId)
 		const holdsBot = stillHeld !== null && stillHeld.selectedBotId !== null
+		const holdsConversation =
+			stillHeld !== null && stillHeld.selectedConversationId !== null
 		return {
 			...(stillHeld ??
 				landingOn(bots, conversations, lastRowId) ??
@@ -177,6 +197,7 @@ export const createRosterController = (
 				NOTHING_SELECTED),
 			isEditing: state.isEditing && holdsBot,
 			isShowingDanger: state.isShowingDanger && holdsBot,
+			isEditingConversation: state.isEditingConversation && holdsConversation,
 		}
 	}
 
@@ -190,6 +211,7 @@ export const createRosterController = (
 			selectedBotId: written.id,
 			selectedConversationId: null,
 			isShowingDanger: false,
+			isEditingConversation: false,
 		})
 	}
 
@@ -204,6 +226,7 @@ export const createRosterController = (
 			selectedConversationId: written.id,
 			isEditing: false,
 			isShowingDanger: false,
+			isEditingConversation: false,
 		})
 	}
 
@@ -306,6 +329,32 @@ export const createRosterController = (
 		onRefused: reload,
 	})
 
+	const seatMove =
+		(move: (conversationId: string, botId: string) => Promise<Conversation>) =>
+		(conversationId: string, botId: string) =>
+			enqueue(async () => {
+				applyConversation(await move(conversationId, botId))
+			}).catch(reload)
+
+	const conversationWrites = createWriteLoop<
+		ConversationSettingsValue,
+		Conversation
+	>({
+		enqueue,
+		write: (id, value) => {
+			const conversation = heldConversation(id)
+			return conversation
+				? store.updateConversation(id, {
+						title: value.name,
+						instructions: value.instructions,
+						sectionId: conversation.sectionId,
+					})
+				: Promise.resolve(null)
+		},
+		apply: (_id, written) => applyConversation(written),
+		onRefused: reload,
+	})
+
 	return {
 		getState: () => state,
 
@@ -342,6 +391,7 @@ export const createRosterController = (
 					selectedBotId: id,
 					selectedConversationId: null,
 					isShowingDanger: false,
+					isEditingConversation: false,
 				})
 			}
 		},
@@ -353,6 +403,7 @@ export const createRosterController = (
 					selectedConversationId: id,
 					isEditing: false,
 					isShowingDanger: false,
+					isEditingConversation: false,
 				})
 			}
 		},
@@ -401,6 +452,7 @@ export const createRosterController = (
 				selectedConversationId: null,
 				isEditing: true,
 				isShowingDanger: false,
+				isEditingConversation: false,
 			}),
 
 		setEditing: (isEditing: boolean) =>
@@ -490,6 +542,7 @@ export const createRosterController = (
 				selectedConversationId: null,
 				isEditing: true,
 				isShowingDanger: true,
+				isEditingConversation: false,
 			}),
 
 		remove: (id: string) =>
@@ -526,9 +579,41 @@ export const createRosterController = (
 				})
 			}).catch(reload),
 
+		editConversation: (id: string) =>
+			set({
+				selectedBotId: null,
+				selectedConversationId: id,
+				isEditing: false,
+				isShowingDanger: false,
+				isEditingConversation: true,
+			}),
+
+		setConversationEditing: (isEditingConversation: boolean) =>
+			set({ isEditingConversation }),
+
+		describeConversation: (id: string, value: ConversationSettingsValue) => {
+			const conversation = heldConversation(id)
+			if (!conversation) {
+				return
+			}
+			applyConversation({
+				...conversation,
+				title: value.name,
+				instructions: value.instructions,
+			})
+			conversationWrites.push(id, value)
+		},
+
+		setConversationLead: seatMove(store.setConversationLead),
+
+		recruitToConversation: seatMove(store.addConversationParticipant),
+
+		dismissFromConversation: seatMove(store.removeConversationParticipant),
+
 		removeConversation: (id: string) =>
 			enqueue(async () => {
 				await store.deleteConversation(id)
+				conversationWrites.drop(id)
 				const conversations = state.conversations.filter(
 					(conversation) => conversation.id !== id,
 				)
