@@ -28,6 +28,8 @@ import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createChatDriver } from "@/lib/chat/create-driver"
+import { toSpaceBadges, withBadges } from "@/lib/chat/sidebar-badges"
+import { useBotBadges } from "@/lib/chat/use-bot-badges"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
@@ -88,6 +90,11 @@ export function App() {
 		chat: chat.controller,
 		roster: roster.controller,
 		user: user.controller,
+	})
+
+	const badges = useBotBadges({
+		chat: chat.controller,
+		roster: roster.controller,
 	})
 
 	const { bots, selectedBotId, isEditing, isShowingDanger, hasLoaded } =
@@ -225,8 +232,8 @@ export function App() {
 
 	const now = useRosterClock()
 	const rosterBots = useMemo(
-		() => toRosterBots(bots, { working, previews }, now),
-		[bots, working, previews, now],
+		() => withBadges(toRosterBots(bots, { working, previews }, now), badges),
+		[bots, working, previews, now, badges],
 	)
 
 	const listedRosters = Object.keys(rosters).join(" ")
@@ -248,10 +255,18 @@ export function App() {
 			Object.fromEntries(
 				Object.entries(rosters).map(([spaceId, spaceBots]) => [
 					spaceId,
-					toRosterBots(spaceBots, { working, previews }, now),
+					withBadges(
+						toRosterBots(spaceBots, { working, previews }, now),
+						badges,
+					),
 				]),
 			),
-		[rosters, working, previews, now],
+		[rosters, working, previews, now, badges],
+	)
+
+	const badgesBySpaceId = useMemo(
+		() => toSpaceBadges(rosterBotsBySpace),
+		[rosterBotsBySpace],
 	)
 
 	const isOverlayOpen = isEditing || user.state.isSettingsOpen || isSpaceEditing
@@ -304,6 +319,7 @@ export function App() {
 						insetWindowControls={hasOverlayWindowControls()}
 						bots={rosterBots}
 						botsBySpaceId={rosterBotsBySpace}
+						badgesBySpaceId={badgesBySpaceId}
 						sectionsBySpaceId={sections.state.sections}
 						footer={updateBadge}
 						isSpaceSwitchingEnabled={!isOverlayOpen}
