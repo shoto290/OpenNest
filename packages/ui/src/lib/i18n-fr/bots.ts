@@ -40,6 +40,8 @@ const bots = {
 		label: "Espaces",
 		switch: "Changer d'espace, {{name}} ouvert",
 		open: "Ouvrir {{name}}",
+		moveUp: "Monter",
+		moveDown: "Descendre",
 		create: "Nouvel espace",
 		settings: "Réglages des espaces",
 		shortcut: "⌘{{rank}}",

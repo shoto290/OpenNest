@@ -1046,6 +1046,7 @@ interface AgentSidebarProps
 	selectedSpaceId?: string
 	isSpaceSwitchingEnabled?: boolean
 	onSelectSpace?: (id: string) => void
+	onReorderSpaces?: (ids: string[]) => void
 	onCreateSpace?: () => void
 	onOpenSpaceSettings?: () => void
 	footer?: ReactNode
@@ -1076,6 +1077,7 @@ const AgentSidebarBase = ({
 	selectedSpaceId,
 	isSpaceSwitchingEnabled = true,
 	onSelectSpace,
+	onReorderSpaces,
 	onCreateSpace,
 	onOpenSpaceSettings,
 	footer,
@@ -1143,6 +1145,7 @@ const AgentSidebarBase = ({
 						badgesBySpaceId={badgesBySpaceId}
 						onCreateSpace={onCreateSpace}
 						onOpenSpaceSettings={onOpenSpaceSettings}
+						onReorderSpaces={onReorderSpaces}
 						onSelectSpace={onSelectSpace}
 						selectedSpaceId={selectedSpaceId}
 						spaces={spaces}
@@ -1191,6 +1194,7 @@ const AgentSidebarBase = ({
 					<AnimatedSidebarFooter className={FOOTER_INSET}>
 						<SpaceDots
 							badgesBySpaceId={badgesBySpaceId}
+							onReorderSpaces={onReorderSpaces}
 							onSelectSpace={onSelectSpace}
 							selectedSpaceId={selectedSpaceId}
 							spaces={spaces}
