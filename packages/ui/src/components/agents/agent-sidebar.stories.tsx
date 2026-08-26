@@ -2222,6 +2222,8 @@ const sectionField = (canvasElement: HTMLElement) => {
 
 const MOVE_TO = "Move to"
 
+const NEW_SECTION = "New section"
+
 type Gestures = {
 	click: (node: Element) => Promise<void>
 	hover: (node: Element) => Promise<void>
@@ -2510,28 +2512,41 @@ export const NewSectionForABot = meta.story({
 		docs: {
 			description: {
 				story:
-					"Making a section from the bot that needs it. The last entry under `Move to` opens a field at the foot of the roster instead of a dialogue, so the reader stays in the panel and names the thing they are about to fill. Enter reports the name together with the bot it was made for, and the host is the one that creates the section and files the bot — nothing is drawn here until it comes back through the props. Escape and an empty name both close the field and report nothing.",
+					"Making a section from the bot that needs it. The last entry under `Move to` opens a field at the foot of the roster instead of a dialogue, so the reader stays in the panel and names the thing they are about to fill. The section is drawn whole the moment it opens — the bot already filed under it, the field carrying `New section` with the name selected — so the reader sees what they are naming rather than a blank line. The first keystroke replaces the name, and Enter on an untouched field still makes something. Enter reports the name together with the bot it was made for, and the host is the one that creates the section and files the bot — nothing is drawn here until it comes back through the props. Escape and an empty name both close the field and report nothing.",
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		const branch = await openMoveToBranch(canvasElement, "Atlas", userEvent)
-		await userEvent.click(branch.getByRole("menuitem", { name: "New section" }))
+		const openNewSection = async () => {
+			const branch = await openMoveToBranch(canvasElement, "Atlas", userEvent)
+			await userEvent.click(branch.getByRole("menuitem", { name: NEW_SECTION }))
+		}
+
+		await openNewSection()
 
 		const field = sectionField(canvasElement)
 		await expect(field).toHaveFocus()
 		await expect(field).toHaveAccessibleName("New section name")
-		await expect(field).toHaveValue("")
+		await expect(field).toHaveValue(NEW_SECTION)
+		await expect(field.selectionStart).toBe(0)
+		await expect(field.selectionEnd).toBe(NEW_SECTION.length)
+		await expect(rowNames(canvasElement)).toEqual([
+			...GROUPED_ORDER.filter((name) => name !== "Atlas"),
+			"Atlas",
+		])
 
 		await userEvent.keyboard("Reading{Escape}")
 		await expect(args.onCreateSection).not.toHaveBeenCalled()
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
 
-		await userEvent.click(
-			(await openMoveToBranch(canvasElement, "Atlas", userEvent)).getByRole(
-				"menuitem",
-				{ name: "New section" },
-			),
+		await openNewSection()
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onCreateSection).toHaveBeenCalledWith(
+			NEW_SECTION,
+			"atlas",
 		)
+
+		await openNewSection()
 		await userEvent.keyboard("Reading{Enter}")
 		await expect(args.onCreateSection).toHaveBeenCalledWith("Reading", "atlas")
 	},
