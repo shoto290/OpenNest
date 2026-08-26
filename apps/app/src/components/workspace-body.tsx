@@ -4,6 +4,7 @@ import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatScreen } from "@/components/chat-screen"
 import { ConversationScreen } from "@/components/conversation-screen"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
+import type { ChatDriver } from "@/lib/chat/driver"
 import type { Chat } from "@/lib/chat/use-chat"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
@@ -13,6 +14,7 @@ type WorkspaceBodyProps = {
 	hasLoaded: boolean
 	bot?: Bot
 	conversation?: Conversation
+	driver: ChatDriver
 	store: TranscriptStore
 	chat: Chat
 	attachments: AttachmentsController
@@ -26,6 +28,7 @@ export function WorkspaceBody({
 	hasLoaded,
 	bot,
 	conversation,
+	driver,
 	store,
 	chat,
 	attachments,
@@ -39,7 +42,13 @@ export function WorkspaceBody({
 	}
 
 	if (conversation) {
-		return <ConversationScreen conversation={conversation} store={store} />
+		return (
+			<ConversationScreen
+				conversation={conversation}
+				driver={driver}
+				store={store}
+			/>
+		)
 	}
 
 	if (bot) {

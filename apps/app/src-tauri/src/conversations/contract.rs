@@ -507,6 +507,7 @@ pub struct TranscriptMessage {
 	pub content: String,
 	pub completion: TranscriptCompletion,
 	pub created_at: i64,
+	pub author_bot_id: Option<String>,
 	pub replied_to_message_id: Option<String>,
 	pub runtime_session_id: Option<String>,
 }
@@ -519,6 +520,7 @@ impl TranscriptMessage {
 			turn_id: stored.turn_id,
 			seq: stored.seq,
 			role: stored.role.into(),
+			author_bot_id: stored.author_bot_id,
 			content: stored.content,
 			completion: stored.state.into(),
 			created_at: stored.created_at,
@@ -856,6 +858,7 @@ mod tests {
 			content: "hi there".into(),
 			completion: TranscriptCompletion::Complete,
 			created_at: 2,
+			author_bot_id: Some("default".into()),
 			replied_to_message_id: Some("m0".into()),
 			runtime_session_id: Some("run-1".into()),
 		}
@@ -871,6 +874,7 @@ mod tests {
 			"content": "hi there",
 			"completion": "complete",
 			"createdAt": 2,
+			"authorBotId": "default",
 			"repliedToMessageId": "m0",
 			"runtimeSessionId": "run-1"
 		})

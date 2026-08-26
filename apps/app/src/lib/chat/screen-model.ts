@@ -20,6 +20,7 @@ export type TranscriptRow = {
 	messageId: string
 	blockIndex: number
 	quotedMessageId: string | null
+	authorBotId: string | null
 	role: TranscriptRole
 	text: string
 	timestamp: number
@@ -84,6 +85,7 @@ function toRow(
 		blockIndex,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
+		authorBotId: message.authorBotId,
 		role: message.role,
 		timestamp: message.createdAt,
 		...rest,
@@ -144,6 +146,7 @@ export function toRuns(rows: TranscriptRow[]): TranscriptRow[][] {
 			current &&
 			previous &&
 			previous.role === row.role &&
+			previous.authorBotId === row.authorBotId &&
 			row.timestamp - previous.timestamp <= RUN_GAP_MS
 		) {
 			current.push(row)

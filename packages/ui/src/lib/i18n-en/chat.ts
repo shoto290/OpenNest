@@ -198,6 +198,12 @@ const chat = {
 		},
 		attachmentsRefused: "Files not attached",
 		restart: "Restart session",
+		handover: {
+			title: "{{first}} and {{second}} keep handing the turn to each other",
+			description:
+				"They have passed it back and forth three times. The turn carries on until you stop it.",
+			stop: "Stop the turn",
+		},
 		notice: {
 			crashed: "Claude Code stopped",
 			resumeFailed: "Previous conversation could not be resumed",

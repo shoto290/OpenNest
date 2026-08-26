@@ -453,6 +453,7 @@ export function App() {
 					bot={selected}
 					chat={chat}
 					conversation={selectedConversation}
+					driver={driver}
 					hasLoaded={hasLoaded}
 					isOverlayOpen={isOverlayOpen}
 					isSettingsOpen={isEditing}

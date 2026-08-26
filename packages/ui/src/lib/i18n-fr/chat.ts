@@ -203,6 +203,12 @@ const chat = {
 		},
 		attachmentsRefused: "Fichiers non joints",
 		restart: "Redémarrer la session",
+		handover: {
+			title: "{{first}} et {{second}} n'arrêtent pas de se passer le tour",
+			description:
+				"Ils se le sont renvoyé trois fois. Le tour continue tant que vous ne l'arrêtez pas.",
+			stop: "Arrêter le tour",
+		},
 		notice: {
 			crashed: "Claude Code s'est arrêté",
 			resumeFailed: "La conversation précédente n'a pas pu être reprise",

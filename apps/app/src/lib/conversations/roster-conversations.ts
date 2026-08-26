@@ -2,6 +2,8 @@ import type {
 	AgentSidebarBot,
 	AgentSidebarConversation,
 } from "@workspace/ui/components/agents/agent-sidebar"
+import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
+import type { MessageAuthor } from "@workspace/ui/components/message"
 
 import type { Conversation, Participant } from "./store-contract"
 
@@ -15,6 +17,31 @@ const toParticipantRow = (participant: Participant): AgentSidebarBot => ({
 	image: avatarSrc(participant.avatarImagePath),
 })
 
+const toAuthor = (participant: Participant): MessageAuthor => ({
+	...toParticipantRow(participant),
+	isLead: participant.role === "lead",
+	isDeleted: participant.isDeleted,
+})
+
+export const toConversationBots = (
+	participants: Participant[],
+): ConversationBot[] => participants.map(toParticipantRow)
+
+export const authorsOf = (
+	conversation: Conversation,
+): Map<string, MessageAuthor> =>
+	new Map(
+		conversation.participants.map((participant) => [
+			participant.botId,
+			toAuthor(participant),
+		]),
+	)
+
+export const leadOf = (conversation: Conversation): string | undefined =>
+	conversation.participants.find(
+		(participant) => participant.role === "lead" && participant.leftAt === null,
+	)?.botId
+
 export const presentParticipants = (
 	conversation: Conversation,
 ): Participant[] =>
@@ -27,5 +54,5 @@ export const toRosterConversations = (
 		id: conversation.id,
 		name: conversation.title,
 		sectionId: conversation.sectionId,
-		participants: presentParticipants(conversation).map(toParticipantRow),
+		participants: toConversationBots(presentParticipants(conversation)),
 	}))

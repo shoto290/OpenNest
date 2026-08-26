@@ -20,6 +20,7 @@ export const message = (
 	content: "",
 	completion: "complete",
 	createdAt: 0,
+	authorBotId: null,
 	repliedToMessageId: null,
 	runtimeSessionId: null,
 	...overrides,
