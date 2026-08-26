@@ -437,7 +437,12 @@ export const createFakeTranscriptStore = (
 				pageSize,
 			}).loadPage(conversationId, cursor),
 
-		spaces: () => Promise.resolve([...spaces.values()]),
+		spaces: () =>
+			Promise.resolve(
+				[...spaces.values()].sort(
+					(one, other) => one.position - other.position,
+				),
+			),
 
 		createSpace: (name: string) => {
 			mintedSpaces += 1
@@ -460,6 +465,20 @@ export const createFakeTranscriptStore = (
 			const written: Space = { ...stored, name, colour }
 			spaces.set(id, written)
 			return Promise.resolve(written)
+		},
+
+		reorderSpaces: (ids: string[]) => {
+			const missing = ids.find((id) => !spaces.has(id))
+			if (missing) {
+				return refuse({ kind: "unknownSpace", id: missing })
+			}
+			ids.forEach((id, position) => {
+				const stored = spaces.get(id)
+				if (stored) {
+					spaces.set(id, { ...stored, position })
+				}
+			})
+			return Promise.resolve()
 		},
 
 		deleteSpace: (id: string) => {

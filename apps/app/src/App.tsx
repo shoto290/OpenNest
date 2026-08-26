@@ -360,6 +360,9 @@ export function App() {
 								void spacePlugin.controller.open(selectedSpaceId)
 							}
 						}}
+						onReorderSpaces={(ids) => {
+							void spaces.controller.reorder(ids)
+						}}
 						onSelectBot={roster.controller.select}
 						onSelectSpace={spaces.controller.select}
 						selectedBotId={selectedBotId ?? undefined}
