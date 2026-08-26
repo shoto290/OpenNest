@@ -674,7 +674,7 @@ const BotRoster = ({
 					<SectionLabel>
 						<SectionNameField
 							ariaLabel={t("roster.section.createField")}
-							initialName=""
+							initialName={t("roster.section.createDefault")}
 							onCancel={() => setNamingFor(null)}
 							onCommit={(name) => {
 								setNamingFor(null)

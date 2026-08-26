@@ -35,6 +35,7 @@ const bots = {
 			none: "No section",
 			create: "New section",
 			createField: "New section name",
+			createDefault: "New section",
 			rename: "Rename",
 			renameField: "Rename {{name}}",
 			moveUp: "Move up",
