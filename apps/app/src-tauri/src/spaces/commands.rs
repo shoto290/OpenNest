@@ -42,6 +42,14 @@ pub async fn space_update(
 }
 
 #[tauri::command]
+pub async fn space_reorder(
+	state: State<'_, db::DatabaseState>,
+	ids: Vec<String>,
+) -> Result<(), SpaceError> {
+	Ok(ready(&state)?.spaces().reorder(ids).await?)
+}
+
+#[tauri::command]
 pub async fn space_delete<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,

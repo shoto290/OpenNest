@@ -63,6 +63,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		spaces::commands::space_list,
 		spaces::commands::space_create,
 		spaces::commands::space_update,
+		spaces::commands::space_reorder,
 		spaces::commands::space_delete,
 		spaces::commands::space_plugin_skills,
 		spaces::commands::space_plugin_create_skill,

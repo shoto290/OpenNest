@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection, Row, Transaction, TransactionBehavior};
@@ -27,6 +28,7 @@ const SELECT_SPACES: &str = "SELECT id, name, colour, position, created_at FROM 
 pub enum SpaceError {
 	Database(DatabaseError),
 	UnknownSpace { id: String },
+	IncompleteOrder,
 	LastSpace,
 }
 
@@ -83,6 +85,10 @@ impl SpacesRepository {
 		self.access.call_mut(move |connection| Ok(updated(connection, &id, &name, colour))).await?
 	}
 
+	pub async fn reorder(&self, ids: Vec<String>) -> Result<(), SpaceError> {
+		self.access.call_mut(move |connection| Ok(reordered(connection, &ids))).await?
+	}
+
 	pub async fn delete(&self, id: String) -> Result<(), SpaceError> {
 		self.access.call_mut(move |connection| Ok(deleted(connection, &id))).await?
 	}
@@ -117,6 +123,22 @@ fn updated(
 	let stored = transaction.query_row(SELECT_SPACE, [id], space)?;
 	transaction.commit()?;
 	Ok(stored)
+}
+
+fn reordered(connection: &mut Connection, ids: &[String]) -> Result<(), SpaceError> {
+	let transaction = write_transaction(connection)?;
+	for (position, id) in ids.iter().enumerate() {
+		let written = transaction.execute(
+			"UPDATE spaces SET position = ?2 WHERE id = ?1",
+			params![id, position as i64],
+		)?;
+		refuse_if_untouched(written, id)?;
+	}
+	if ids.iter().collect::<HashSet<_>>().len() < counted(&transaction)? as usize {
+		return Err(SpaceError::IncompleteOrder);
+	}
+	transaction.commit()?;
+	Ok(())
 }
 
 fn deleted(connection: &mut Connection, id: &str) -> Result<(), SpaceError> {
@@ -256,6 +278,82 @@ mod tests {
 			repository.update("nobody".to_owned(), "Work".to_owned(), AvatarBlot::Cyan).await,
 			Err(SpaceError::UnknownSpace { .. })
 		));
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn names_of(repository: &SpacesRepository) -> Vec<String> {
+		repository.list().await.expect("the spaces").into_iter().map(|space| space.name).collect()
+	}
+
+	#[tokio::test]
+	async fn a_written_order_ranks_the_spaces_and_leaves_the_next_one_last() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.spaces();
+		let first = repository.list().await.expect("the spaces")[0].id.clone();
+		let second = repository.create("Vocca".to_owned()).await.expect("the space");
+		let third = repository.create("Vacances".to_owned()).await.expect("the space");
+
+		repository
+			.reorder(vec![third.id.clone(), first.clone(), second.id.clone()])
+			.await
+			.expect("the order is written");
+
+		assert_eq!(
+			repository
+				.list()
+				.await
+				.expect("the spaces")
+				.into_iter()
+				.map(|space| (space.name, space.position))
+				.collect::<Vec<_>>(),
+			vec![("Vacances".to_owned(), 0), ("Personal".to_owned(), 1), ("Vocca".to_owned(), 2)]
+		);
+
+		let latest = repository.create("Perso".to_owned()).await.expect("the space");
+
+		assert_eq!(latest.position, 3);
+
+		repository.delete(first).await.expect("the space is deleted");
+
+		assert_eq!(
+			names_of(&repository).await,
+			vec!["Vacances".to_owned(), "Vocca".to_owned(), "Perso".to_owned()],
+			"deleting a space shuffled the ones that remain"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_order_naming_a_stranger_or_leaving_a_space_out_writes_nothing() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.spaces();
+		let first = repository.list().await.expect("the spaces")[0].id.clone();
+		let second = repository.create("Vocca".to_owned()).await.expect("the space");
+
+		assert!(matches!(
+			repository.reorder(vec![second.id.clone(), "nobody".to_owned()]).await,
+			Err(SpaceError::UnknownSpace { .. })
+		));
+		assert!(matches!(
+			repository.reorder(vec![second.id.clone()]).await,
+			Err(SpaceError::IncompleteOrder)
+		));
+		assert!(matches!(
+			repository.reorder(vec![second.id.clone(), second.id.clone()]).await,
+			Err(SpaceError::IncompleteOrder)
+		));
+		assert_eq!(
+			names_of(&repository).await,
+			vec!["Personal".to_owned(), "Vocca".to_owned()],
+			"a refused order moved the spaces"
+		);
+		assert_eq!(first, repository.list().await.expect("the spaces")[0].id);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
