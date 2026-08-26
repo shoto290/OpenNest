@@ -8,6 +8,9 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	Conversation,
+	ConversationDraft,
+	ConversationEdit,
 	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
@@ -104,6 +107,13 @@ export type TranscriptStore = TranscriptPort & {
 	recordBotCommands: (botId: string, commands: AgentCommand[]) => Promise<void>
 	botCommands: (botId: string) => Promise<AgentCommand[]>
 	mainChat: (botId: string) => Promise<Chat>
+	conversations: (spaceId: string) => Promise<Conversation[]>
+	createConversation: (draft: ConversationDraft) => Promise<Conversation>
+	updateConversation: (
+		conversationId: string,
+		edit: ConversationEdit,
+	) => Promise<Conversation>
+	deleteConversation: (conversationId: string) => Promise<void>
 	openRuntimeSession: (
 		conversationId: string,
 		botId: string,

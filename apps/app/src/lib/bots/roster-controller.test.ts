@@ -21,13 +21,13 @@ const anEmptyStore = async (): Promise<TranscriptStore> => {
 }
 
 const opening = (
-	lastBotId: string | null = null,
+	lastRowId: string | null = null,
 	spaceId = "personal",
 	spaceIds: string[] = [spaceId],
 ) => ({
 	spaceIds,
 	spaceId,
-	lastBotId,
+	lastRowId,
 })
 
 const loaded = async (store: TranscriptStore) => {
@@ -469,7 +469,7 @@ describe("createRosterController on a space", () => {
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		const read = vi.spyOn(store, "bots")
 
-		controller.enter({ spaceId: elsewhere.id, lastBotId: null })
+		controller.enter({ spaceId: elsewhere.id, lastRowId: null })
 
 		const state = controller.getState()
 		expect(state.bots.map((bot) => bot.id)).toEqual([away.id])
@@ -483,7 +483,7 @@ describe("createRosterController on a space", () => {
 		const controller = createRosterController(store)
 		await controller.load(opening(null, "personal", ["personal", empty.id]))
 
-		controller.enter({ spaceId: empty.id, lastBotId: null })
+		controller.enter({ spaceId: empty.id, lastRowId: null })
 
 		expect(controller.getState().bots).toEqual([])
 		expect(controller.getState().selectedBotId).toBeNull()
@@ -494,7 +494,7 @@ describe("createRosterController on a space", () => {
 		const controller = createRosterController(store)
 		await controller.load(opening())
 
-		controller.enter({ spaceId: "vacances", lastBotId: null })
+		controller.enter({ spaceId: "vacances", lastRowId: null })
 
 		expect(controller.getState().rosters.vacances).toEqual([])
 	})
@@ -755,5 +755,171 @@ describe("createRosterController previews", () => {
 
 		expect(held(controller, first.id).sectionId).toBeNull()
 		expect(held(controller, second.id).sectionId).toBe("n-2")
+	})
+})
+
+describe("createRosterController on conversations", () => {
+	it("hands the conversations of the space it opens, participants and all", async () => {
+		const store = createFakeTranscriptStore()
+		const talker = await store.createBot(newBotIdentity([]), "personal")
+		const room = await store.createConversation({
+			spaceId: "personal",
+			sectionId: null,
+			title: "Launch",
+			botIds: ["default", talker.id],
+		})
+		const controller = createRosterController(store)
+
+		await controller.load(opening())
+
+		const { conversations } = controller.getState()
+		expect(conversations.map((held) => held.id)).toEqual([room.id])
+		expect(conversations[0].participants.map((held) => held.botId)).toEqual([
+			"default",
+			talker.id,
+		])
+	})
+
+	it("holds the conversations of every space apart", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
+		const room = await store.createConversation({
+			spaceId: elsewhere.id,
+			sectionId: null,
+			title: "Launch",
+			botIds: [away.id],
+		})
+		const controller = createRosterController(store)
+
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		const { conversationRosters, conversations } = controller.getState()
+		expect(conversations).toEqual([])
+		expect(conversationRosters[elsewhere.id].map((held) => held.id)).toEqual([
+			room.id,
+		])
+	})
+
+	it("shows a created conversation in the roster and selects it", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		const state = controller.getState()
+		expect(created?.title).toBe("Launch")
+		expect(state.conversations.map((held) => held.id)).toEqual([created?.id])
+		expect(state.selectedConversationId).toBe(created?.id)
+		expect(state.selectedBotId).toBeNull()
+	})
+
+	it("keeps a created conversation after a reload", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		const state = await reloaded(store)
+
+		expect(state.conversations.map((held) => held.title)).toEqual(["Launch"])
+	})
+
+	it("leaves no bot selected while a conversation is selected", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		controller.select("default")
+		expect(controller.getState().selectedConversationId).toBeNull()
+
+		controller.selectConversation(created?.id ?? "")
+		expect(controller.getState().selectedBotId).toBeNull()
+	})
+
+	it("carries the section a conversation is moved into", async () => {
+		const store = createFakeTranscriptStore()
+		const section = await store.createSection("personal", "Rooms")
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		await controller.moveConversationToSection(created?.id ?? "", section.id)
+
+		expect(controller.getState().conversations[0].sectionId).toBe(section.id)
+		expect((await store.conversations("personal"))[0].sectionId).toBe(
+			section.id,
+		)
+	})
+
+	it("carries no section for every conversation a dropped section held", async () => {
+		const store = createFakeTranscriptStore()
+		const section = await store.createSection("personal", "Rooms")
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+		await controller.moveConversationToSection(created?.id ?? "", section.id)
+
+		controller.clearSection(section.id)
+
+		expect(controller.getState().conversations[0].sectionId).toBeNull()
+	})
+
+	it("drops a deleted conversation and lands on the first row of the roster", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		await controller.removeConversation(created?.id ?? "")
+
+		const state = controller.getState()
+		expect(state.conversations).toEqual([])
+		expect(state.selectedConversationId).toBeNull()
+		expect(state.selectedBotId).toBe("default")
+		expect(await store.conversations("personal")).toEqual([])
+	})
+
+	it("selects the first row of the roster when the remembered conversation is gone", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = createRosterController(store)
+
+		await controller.load(opening("conversation-404"))
+
+		expect(controller.getState().selectedBotId).toBe("default")
+		expect(controller.getState().selectedConversationId).toBeNull()
+	})
+
+	it("selects again the conversation a space was left on", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
+		const room = await store.createConversation({
+			spaceId: elsewhere.id,
+			sectionId: null,
+			title: "Launch",
+			botIds: [away.id],
+		})
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		controller.enter({ spaceId: elsewhere.id, lastRowId: room.id })
+
+		expect(controller.getState().selectedConversationId).toBe(room.id)
+		expect(controller.getState().selectedBotId).toBeNull()
 	})
 })
