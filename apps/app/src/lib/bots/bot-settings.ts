@@ -207,6 +207,7 @@ export const toRosterBots = (
 		return {
 			id: bot.id,
 			name: bot.name,
+			sectionId: bot.sectionId,
 			title: bot.title || undefined,
 			animal: bot.avatarAnimal,
 			blot: bot.avatarBlot ?? undefined,
