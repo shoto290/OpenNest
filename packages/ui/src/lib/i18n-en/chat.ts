@@ -31,6 +31,13 @@ const chat = {
 		typing: "Responding",
 		showMore: "Show more",
 		showLess: "Show less",
+		author: {
+			lead: "Lead",
+			deleted: "Deleted bot",
+		},
+		mention: {
+			unknown: "Unknown bot",
+		},
 	},
 	turn: {
 		copy: "Copy",

@@ -2,6 +2,7 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
+import { ConversationBotsProvider } from "@workspace/ui/components/conversation-bots"
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown } from "@workspace/ui/components/markdown"
 
@@ -458,5 +459,57 @@ describe("markdown resilience", () => {
 
 	it("renders an empty string without content", () => {
 		expect(render("")).toMatch(/^<div [^>]*><\/div>$/)
+	})
+})
+
+describe("bot mentions", () => {
+	const ATLAS = { id: "bot-atlas", name: "Atlas" }
+
+	const renderInConversation = (source: string) =>
+		renderToStaticMarkup(
+			createElement(
+				I18nProvider,
+				null,
+				createElement(
+					ConversationBotsProvider,
+					{ bots: [ATLAS] },
+					createElement(Markdown, null, source),
+				),
+			),
+		)
+
+	it("draws a mention of a known bot as a chip", () => {
+		const html = renderInConversation("ask <@bot-atlas> for the notes")
+
+		expect(html).toContain('data-slot="bot-mention"')
+		expect(html).toContain("Atlas")
+		expect(html).not.toContain("&lt;@bot-atlas&gt;")
+	})
+
+	it("draws a mention of an unknown bot as an unknown chip", () => {
+		const html = renderInConversation("ask <@bot-ghost> instead")
+
+		expect(html).toContain('data-unknown="true"')
+		expect(html).toContain("Unknown bot")
+	})
+
+	it("keeps a mention written in code literal", () => {
+		const html = renderInConversation("write `<@bot-atlas>` to name it")
+
+		expect(html).not.toContain('data-slot="bot-mention"')
+		expect(html).toContain("&lt;@bot-atlas&gt;")
+	})
+
+	it("keeps the words around a mention", () => {
+		const html = renderInConversation("**ask** <@bot-atlas> now")
+
+		expect(html).toContain("<strong>ask</strong>")
+		expect(html).toContain(" now</p>")
+	})
+
+	it("leaves text without a mention untouched", () => {
+		expect(renderInConversation("nothing here <@ or @bot")).not.toContain(
+			'data-slot="bot-mention"',
+		)
 	})
 })

@@ -4,6 +4,7 @@ import rehypeSanitize from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 
+import { remarkBotMentions } from "@workspace/ui/components/markdown/bot-mentions"
 import { MARKDOWN_COMPONENTS } from "@workspace/ui/components/markdown/components"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -38,7 +39,12 @@ export const Markdown = ({ children, className }: MarkdownProps) => {
 					[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 					[rehypeScopeIds, { scope }],
 				]}
-				remarkPlugins={[remarkGfm, remarkMath, remarkLiteralHtml]}
+				remarkPlugins={[
+					remarkGfm,
+					remarkMath,
+					remarkLiteralHtml,
+					remarkBotMentions,
+				]}
 			>
 				{children}
 			</ReactMarkdown>

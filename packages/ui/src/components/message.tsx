@@ -8,6 +8,8 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
+import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
+import { Icons } from "@workspace/ui/components/icons"
 import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -34,6 +36,15 @@ export interface MessageGroupProps extends ComponentPropsWithRef<"div"> {
 
 export interface MessageAvatarProps extends ComponentPropsWithRef<"div"> {
 	placeholder?: boolean
+}
+
+export type MessageAuthor = ConversationBot & {
+	isLead?: boolean
+	isDeleted?: boolean
+}
+
+export interface MessageAuthorProps extends ComponentPropsWithRef<"div"> {
+	author: MessageAuthor
 }
 
 export type MessageContentProps = ComponentPropsWithRef<"div">
@@ -146,6 +157,51 @@ export function MessageHeader({ className, ...props }: MessageHeaderProps) {
 			)}
 			{...props}
 		/>
+	)
+}
+
+export function MessageAuthor({
+	author,
+	className,
+	...props
+}: MessageAuthorProps) {
+	const { t } = useTranslation("chat")
+
+	return (
+		<MessageHeader
+			data-slot="message-author"
+			className={cn("gap-1", className)}
+			{...props}
+		>
+			<span
+				className={cn(
+					"max-w-48 truncate font-medium",
+					author.isDeleted ? "text-muted-foreground" : "text-foreground/80",
+				)}
+			>
+				{author.name}
+			</span>
+			{author.isLead ? (
+				<>
+					<Icons.Crown
+						aria-hidden="true"
+						className="size-3 shrink-0 text-bot-badge-attention"
+						data-slot="message-author-lead"
+					/>
+					<span className="sr-only">{t("transcript.author.lead")}</span>
+				</>
+			) : null}
+			{author.isDeleted ? (
+				<span
+					data-slot="message-author-deleted"
+					title={t("transcript.author.deleted")}
+					className="inline-flex items-center"
+				>
+					<Icons.Delete aria-hidden="true" className="size-3 shrink-0" />
+					<span className="sr-only">{t("transcript.author.deleted")}</span>
+				</span>
+			) : null}
+		</MessageHeader>
 	)
 }
 

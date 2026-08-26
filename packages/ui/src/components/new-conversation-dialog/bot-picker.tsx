@@ -2,9 +2,8 @@
 
 import { useTranslation } from "react-i18next"
 
-import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import type { BotAvatarBlot } from "@workspace/ui/components/bot-settings"
+import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 
@@ -12,14 +11,6 @@ const ROW_AVATAR_SIZE = 28
 
 const ROW_CLASS =
 	"flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left text-foreground text-sm outline-none transition-colors duration-100 ease-out hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 aria-pressed:bg-muted motion-reduce:transition-none"
-
-type ConversationBot = {
-	id: string
-	name: string
-	animal?: BotAvatarAnimal
-	blot?: BotAvatarBlot
-	image?: string
-}
 
 type BotPickerProps = {
 	bots: ConversationBot[]
@@ -104,4 +95,4 @@ const BotPicker = ({
 	)
 }
 
-export { BotPicker, type BotPickerProps, type ConversationBot }
+export { BotPicker, type BotPickerProps }

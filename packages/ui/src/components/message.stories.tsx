@@ -3,8 +3,10 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { listExhaustively } from "@workspace/storybook/story-utils"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import {
 	Message,
+	MessageAuthor,
 	MessageAvatar,
 	MessageContent,
 	MessageFooter,
@@ -34,6 +36,22 @@ const SHORT_MESSAGES: Record<MessageFrom, string> = {
 	assistant: "Synced. Your three devices are up to date, the queue is empty.",
 	user: "Can you sync the Da Lat nest before the standup?",
 }
+
+const AUTHORED: { author: MessageAuthor; message: string }[] = [
+	{
+		author: { id: "bot-atlas", name: "Atlas", animal: "owl", isLead: true },
+		message:
+			"I own this thread. Basile takes the migration, I keep the release notes.",
+	},
+	{
+		author: { id: "bot-basile", name: "Basile", animal: "cat" },
+		message: "Migration is green on a fresh database. Notes are yours.",
+	},
+	{
+		author: { id: "bot-elia", name: "Elia", animal: "mouse", isDeleted: true },
+		message: "The fixture I left behind still reads the old column names.",
+	},
+]
 
 const SENT_AT = new Date("2026-03-04T09:30:00Z")
 
@@ -280,5 +298,51 @@ export const InConversation = meta.story({
 
 		await expect(log).toBeInTheDocument()
 		await expect(canvas.getAllByRole("article")).toHaveLength(4)
+	},
+})
+
+export const Authors = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation with more than one bot in it, where a row must say who is speaking. `MessageAuthor` draws that line above the text: the name, then a mark for the two things a name alone cannot say — a crown for the bot that leads, a bin for an author deleted since it wrote. Both are icons, and both carry the word behind them where only a reader who hovers or listens finds it, so the line stays short while nothing is left to colour or shape alone. Check that the crown sits on exactly one row, and that the deleted author is dimmed while its message stays as readable as any other.",
+			},
+		},
+	},
+	render: () => (
+		<Transcript>
+			<MessageGroup spacing="default">
+				{AUTHORED.map(({ author, message }) => (
+					<Message key={author.id} from="assistant">
+						<MessageAvatar>
+							<BotIdentityAvatar
+								animal={author.animal}
+								name={author.name}
+								seed={author.id}
+								size={28}
+							/>
+						</MessageAvatar>
+						<MessageContent>
+							<MessageAuthor author={author} />
+							<p className="max-w-md">{message}</p>
+						</MessageContent>
+					</Message>
+				))}
+			</MessageGroup>
+		</Transcript>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvasElement.querySelectorAll('[data-slot="message-author-lead"]'),
+		).toHaveLength(1)
+		await expect(canvas.getByText("Lead")).toBeInTheDocument()
+
+		const deleted = canvasElement.querySelector(
+			'[data-slot="message-author-deleted"]',
+		)
+
+		await expect(deleted).toHaveAttribute("title", "Deleted bot")
+		await expect(deleted).toHaveTextContent("Deleted bot")
 	},
 })
