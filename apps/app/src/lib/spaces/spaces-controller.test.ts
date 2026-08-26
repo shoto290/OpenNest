@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { createSpacesController } from "./spaces-controller"
+import {
+	createSpacesController,
+	type SpacesController,
+} from "./spaces-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
@@ -16,6 +19,9 @@ const loaded = async (
 
 const names = async (store: TranscriptStore) =>
 	(await store.spaces()).map((space) => space.name)
+
+const held = (controller: SpacesController) =>
+	controller.getState().spaces.map((space) => space.name)
 
 describe("createSpacesController", () => {
 	it("opens on the space the record remembers", async () => {
@@ -105,6 +111,58 @@ describe("createSpacesController", () => {
 
 		expect(controller.getState().selectedSpaceId).toBe("personal")
 		expect(await names(store)).toEqual(["Personal"])
+	})
+
+	it("holds the new order before the record has taken it", async () => {
+		const store = createFakeTranscriptStore()
+		const vocca = await store.createSpace("Vocca")
+		const controller = await loaded(store)
+		const record = Promise.withResolvers<void>()
+		vi.spyOn(store, "reorderSpaces").mockReturnValue(record.promise)
+
+		const written = controller.reorder([vocca.id, "personal"])
+
+		expect(held(controller)).toEqual(["Vocca", "Personal"])
+		record.resolve()
+		await written
+	})
+
+	it("stays on the space it is in when its rank changes", async () => {
+		const store = createFakeTranscriptStore()
+		const vocca = await store.createSpace("Vocca")
+		const controller = await loaded(store, vocca.id)
+
+		await controller.reorder([vocca.id, "personal"])
+
+		expect(controller.getState().selectedSpaceId).toBe(vocca.id)
+		expect(await names(store)).toEqual(["Vocca", "Personal"])
+	})
+
+	it("restores the order it held when a reorder is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const vocca = await store.createSpace("Vocca")
+		const controller = await loaded(store)
+		vi.spyOn(store, "reorderSpaces").mockRejectedValue({
+			kind: "unknownSpace",
+			id: vocca.id,
+		})
+
+		await controller.reorder([vocca.id, "personal"])
+
+		await vi.waitFor(() =>
+			expect(held(controller)).toEqual(["Personal", "Vocca"]),
+		)
+	})
+
+	it("leaves the record alone when the order it is given is the one it holds", async () => {
+		const store = createFakeTranscriptStore()
+		const vocca = await store.createSpace("Vocca")
+		const controller = await loaded(store)
+		const reorder = vi.spyOn(store, "reorderSpaces")
+
+		await controller.reorder(["personal", vocca.id])
+
+		expect(reorder).not.toHaveBeenCalled()
 	})
 
 	it("stays on the space it is in when a create is refused", async () => {

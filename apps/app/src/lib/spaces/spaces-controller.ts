@@ -21,8 +21,19 @@ export type SpacesController = {
 	create: () => Promise<void>
 	setSettingsOpen: (isSettingsOpen: boolean) => void
 	describe: (id: string, value: SpaceSettingsValue) => void
+	reorder: (ids: string[]) => Promise<void>
 	remove: (id: string) => Promise<void>
 }
+
+const repositioned = (spaces: Space[], ids: string[]) =>
+	ids.flatMap((id, position) => {
+		const held = spaces.find((space) => space.id === id)
+		return held ? [{ ...held, position }] : []
+	})
+
+const isSameOrder = (spaces: Space[], ids: string[]) =>
+	spaces.length === ids.length &&
+	spaces.every((space, position) => space.id === ids[position])
 
 export const initialSpacesState: SpacesState = {
 	spaces: [],
@@ -112,6 +123,14 @@ export const createSpacesController = (
 			}
 			apply({ ...held, name: value.name, colour: value.colour })
 			writes.push(id, value)
+		},
+
+		reorder: (ids: string[]) => {
+			if (isSameOrder(state.spaces, ids)) {
+				return Promise.resolve()
+			}
+			set({ spaces: repositioned(state.spaces, ids) })
+			return enqueue(() => store.reorderSpaces(ids)).catch(reload)
 		},
 
 		remove: (id: string) =>

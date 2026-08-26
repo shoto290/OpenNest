@@ -96,6 +96,11 @@ const WRITES: WriteCase[] = [
 		call: ["space_update", { id: "s-1", name: "Work", colour: "cyan" }],
 	},
 	{
+		member: "reorderSpaces",
+		write: () => conversationStore.reorderSpaces(["s-2", "s-1"]),
+		call: ["space_reorder", { ids: ["s-2", "s-1"] }],
+	},
+	{
 		member: "deleteSpace",
 		write: () => conversationStore.deleteSpace("s-1"),
 		call: ["space_delete", { id: "s-1" }],
