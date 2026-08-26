@@ -1,5 +1,6 @@
 "use client"
 
+import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
 	type BotAvatarBlot,
@@ -25,32 +26,7 @@ const avatarShape = (image?: string) => (image ? UPLOADED_IMAGE_SHAPE : "")
 
 const IMAGE_CLASS = `size-full border border-border object-cover ${UPLOADED_IMAGE_SHAPE}`
 
-const BOT_BADGES = ["attention", "done", "failed"] as const
-
-type BotBadge = (typeof BOT_BADGES)[number]
-
-const DOT_CLASS =
-	"absolute right-[6%] bottom-[6%] block rounded-full ring-2 ring-sidebar"
-
-const BOT_BADGE_FILL: Record<BotBadge, string> = {
-	attention: "bg-bot-badge-attention motion-safe:animate-pulse",
-	done: "bg-bot-badge-done",
-	failed: "bg-bot-badge-failed",
-}
-
-const BOT_BADGE_RING: Record<BotBadge, string> = {
-	attention: "ring-bot-badge-attention motion-safe:animate-pulse",
-	done: "ring-bot-badge-done",
-	failed: "ring-bot-badge-failed",
-}
-
 const DEFAULT_SIZE = 40
-
-const DOT_RATIO = 0.34
-const DOT_MAX = 16
-
-const dotSize = (size: number) =>
-	Math.round(Math.min(size * DOT_RATIO, DOT_MAX))
 
 type BotIdentityAvatarProps = {
 	name?: string
@@ -97,12 +73,10 @@ function BotIdentityAvatar({
 				/>
 			)}
 			{badge ? (
-				<span
-					aria-hidden="true"
-					className={cn(DOT_CLASS, BOT_BADGE_FILL[badge])}
-					data-badge={badge}
+				<BotBadgeDot
+					badge={badge}
 					data-slot="bot-activity-dot"
-					style={{ width: dotSize(size), height: dotSize(size) }}
+					placement="avatar"
 				/>
 			) : null}
 		</span>
@@ -111,10 +85,6 @@ function BotIdentityAvatar({
 
 export {
 	avatarShape,
-	BOT_BADGE_FILL,
-	BOT_BADGE_RING,
-	BOT_BADGES,
-	type BotBadge,
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
 	type BotWorkingKind,

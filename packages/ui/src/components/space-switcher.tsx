@@ -3,14 +3,14 @@
 import { useTranslation } from "react-i18next"
 
 import {
+	type BotBadge,
+	BotBadgeDot,
+	botBadgeRingVariants,
+} from "@workspace/ui/components/badge"
+import {
 	type BotAvatarBlot,
 	blotTint,
 } from "@workspace/ui/components/bot-avatar"
-import {
-	BOT_BADGE_FILL,
-	BOT_BADGE_RING,
-	type BotBadge,
-} from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -40,11 +40,6 @@ const SWITCHER_NAME =
 
 const SWITCHER_DOT = "hidden group-data-[state=collapsed]/sidebar:block"
 
-const SWITCHER_BADGE =
-	"pointer-events-none absolute top-1 right-1 size-2 rounded-full ring-2 ring-sidebar"
-
-const SWITCHER_BADGE_INSET = "pr-4"
-
 const DOT = "size-2.5 shrink-0 rounded-full"
 
 const DOTS =
@@ -67,8 +62,6 @@ const DOT_MOTION =
 	"transition-transform duration-150 ease-out motion-reduce:transition-none"
 
 const DOT_RESTING = "scale-75 bg-sidebar-foreground/30"
-
-const DOT_BADGE = "ring-2"
 
 const BADGE_RANK: BotBadge[] = ["attention", "failed", "done"]
 
@@ -102,7 +95,7 @@ const SpaceDot = ({
 			DOT,
 			DOT_MOTION,
 			!isFilled && DOT_RESTING,
-			badge && cn(DOT_BADGE, BOT_BADGE_RING[badge]),
+			badge && botBadgeRingVariants({ badge }),
 			className,
 		)}
 		data-badge={badge}
@@ -157,7 +150,7 @@ const SpaceSwitcher = ({
 			<ContextMenuTrigger opensOnPress>
 				<Button
 					aria-label={t("spaces.switch", { name: selected.name })}
-					className={cn(SWITCHER, elsewhere && SWITCHER_BADGE_INSET)}
+					className={SWITCHER}
 					data-slot="space-switcher"
 					size="sm"
 					variant="ghost"
@@ -167,11 +160,10 @@ const SpaceSwitcher = ({
 						{selected.name}
 					</span>
 					{elsewhere ? (
-						<span
-							aria-hidden="true"
-							className={cn(SWITCHER_BADGE, BOT_BADGE_FILL[elsewhere])}
-							data-badge={elsewhere}
+						<BotBadgeDot
+							badge={elsewhere}
 							data-slot="space-switcher-badge"
+							placement="switcher"
 						/>
 					) : null}
 				</Button>

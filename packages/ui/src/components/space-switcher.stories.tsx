@@ -3,7 +3,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { settled, slotsIn } from "@workspace/storybook/story-utils"
-import type { BotBadge } from "@workspace/ui/components/bot-identity-avatar"
+import type { BotBadge } from "@workspace/ui/components/badge"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceDots,
@@ -162,6 +162,11 @@ const LiveSwitcher = ({
 
 const badgeOn = (root: HTMLElement) =>
 	slotsIn(root, "space-switcher-badge")[0]?.dataset.badge
+
+const middleOf = (element: HTMLElement) => {
+	const box = element.getBoundingClientRect()
+	return box.top + box.height / 2
+}
 
 const dotBadges = (root: HTMLElement) =>
 	slotsIn(root, "space-dot-button").map(
@@ -362,7 +367,7 @@ export const Badges = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three of the five spaces carrying a badge while the reader sits in a fourth, which is how a bot working out of sight reaches them. Check every badged dot keeps its space's tint at its centre and wears the badge as a ring around it — the mark says something happened there, the tint still says which space it is — that the dots of the spaces with nothing stay exactly as they are drawn without badges, and that the button takes one mark of its own for the strongest badge waiting elsewhere, attention over failed over done. The marks are drawn and never spoken: the button's accessible name is still the open space, since a reader who moves there meets the rows that carry the news. Pick `BadgeRanking` for the order under a quieter set, `BadgeHere` for the badge that belongs to the space already open.",
+					"Three of the five spaces carrying a badge while the reader sits in a fourth, which is how a bot working out of sight reaches them. Check every badged dot keeps its space's tint at its centre and wears the badge as a ring around it — the mark says something happened there, the tint still says which space it is — that the dots of the spaces with nothing stay exactly as they are drawn without badges, and that the button takes one mark of its own for the strongest badge waiting elsewhere, attention over failed over done, drawn on the name's line and level with the middle of the letters so the name and the mark read as one pair. The marks are drawn and never spoken: the button's accessible name is still the open space, since a reader who moves there meets the rows that carry the news. Pick `BadgeRanking` for the order under a quieter set, `BadgeHere` for the badge that belongs to the space already open.",
 			},
 		},
 	},
@@ -372,6 +377,11 @@ export const Badges = meta.story({
 		})
 
 		await expect(badgeOn(trigger)).toBe("attention")
+
+		const name = slotsIn(canvasElement, "space-switcher-name")[0]
+		const badge = slotsIn(canvasElement, "space-switcher-badge")[0]
+		await expect(middleOf(badge)).toBeCloseTo(middleOf(name), 0)
+
 		await expect(dotBadges(canvasElement)).toEqual([
 			"done",
 			undefined,
@@ -435,7 +445,7 @@ export const BadgeAndLongName = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space named as a sentence while another one is asking for the reader — the pair that puts the mark and the truncation on the same edge. Check the name gives way to the badge instead of running under it: the clipped end and its ellipsis stop before the mark, so the reader never reads a name through a coloured dot, and the button still holds the width it had. Pick `LongContent` for the same name with nothing waiting, `Badges` for the mark on names that fit.",
+					"A space named as a sentence while another one is asking for the reader — the pair that puts the mark and the truncation on the same edge. Check the name gives way to the badge instead of running under it: the clipped end and its ellipsis stop before the mark on the same line, the mark keeps its full size rather than being squeezed, and the button still holds the width it had. Pick `LongContent` for the same name with nothing waiting, `Badges` for the mark on names that fit.",
 			},
 		},
 	},
@@ -444,10 +454,13 @@ export const BadgeAndLongName = meta.story({
 		const name = slotsIn(canvasElement, "space-switcher-name")[0]
 		const badge = slotsIn(canvasElement, "space-switcher-badge")[0]
 
+		const badgeBox = badge.getBoundingClientRect()
+
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
-			badge.getBoundingClientRect().left,
+			badgeBox.left,
 		)
+		await expect(badgeBox.width).toBeCloseTo(8, 0)
 		await expect(trigger.getBoundingClientRect().width).toBeLessThan(256)
 	},
 })
@@ -459,7 +472,7 @@ export const BadgeOnRail = meta.story({
 		docs: {
 			description: {
 				story:
-					"The mark once the sidebar is on its icon rail, where the name is gone and the open space's tint is all that is left. Check the badge is still drawn, still in the same corner, and that the button keeps the rail's square rather than growing to make room for it — the room the name needed is not needed here. Pick `Collapsed` for the rail with nothing waiting.",
+					"The mark once the sidebar is on its icon rail, where the name is gone and the open space's tint is all that is left. Check the badge is still drawn, moved from the name's line to the button's top corner now that there is no line to sit on, and that the button keeps the rail's square rather than growing to make room for it — the room the name needed is not needed here. Pick `Collapsed` for the rail with nothing waiting.",
 			},
 		},
 	},

@@ -16,6 +16,7 @@ import {
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
+import type { BotBadge } from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
 	type BotAvatarBlot,
@@ -23,7 +24,6 @@ import {
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
 import {
-	type BotBadge,
 	BotIdentityAvatar,
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
