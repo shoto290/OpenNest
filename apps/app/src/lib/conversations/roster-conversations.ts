@@ -10,13 +10,21 @@ import type { Bot, Conversation, Participant } from "./store-contract"
 
 import { avatarSrc } from "../host"
 
-const toParticipantRow = (participant: Participant): AgentSidebarBot => ({
-	id: participant.botId,
-	name: participant.name,
-	animal: participant.avatarAnimal,
-	blot: participant.avatarBlot ?? undefined,
-	image: avatarSrc(participant.avatarImagePath),
+type BotFace = Pick<
+	Bot,
+	"name" | "avatarAnimal" | "avatarBlot" | "avatarImagePath"
+>
+
+const toBotRow = (id: string, face: BotFace): AgentSidebarBot => ({
+	id,
+	name: face.name,
+	animal: face.avatarAnimal,
+	blot: face.avatarBlot ?? undefined,
+	image: avatarSrc(face.avatarImagePath),
 })
+
+const toParticipantRow = (participant: Participant): AgentSidebarBot =>
+	toBotRow(participant.botId, participant)
 
 const toAuthor = (participant: Participant): MessageAuthor => ({
 	...toParticipantRow(participant),
@@ -57,13 +65,7 @@ export const unseatedBots = (
 	)
 	return bots
 		.filter((bot) => !seated.has(bot.id))
-		.map((bot) => ({
-			id: bot.id,
-			name: bot.name,
-			animal: bot.avatarAnimal,
-			blot: bot.avatarBlot ?? undefined,
-			image: avatarSrc(bot.avatarImagePath),
-		}))
+		.map((bot) => toBotRow(bot.id, bot))
 }
 
 export const toConversationSettingsValue = (

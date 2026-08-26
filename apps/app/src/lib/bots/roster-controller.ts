@@ -329,6 +329,13 @@ export const createRosterController = (
 		onRefused: reload,
 	})
 
+	const seatMove =
+		(move: (conversationId: string, botId: string) => Promise<Conversation>) =>
+		(conversationId: string, botId: string) =>
+			enqueue(async () => {
+				applyConversation(await move(conversationId, botId))
+			}).catch(reload)
+
 	const conversationWrites = createWriteLoop<
 		ConversationSettingsValue,
 		Conversation
@@ -597,26 +604,11 @@ export const createRosterController = (
 			conversationWrites.push(id, value)
 		},
 
-		setConversationLead: (conversationId: string, botId: string) =>
-			enqueue(async () => {
-				applyConversation(
-					await store.setConversationLead(conversationId, botId),
-				)
-			}).catch(reload),
+		setConversationLead: seatMove(store.setConversationLead),
 
-		recruitToConversation: (conversationId: string, botId: string) =>
-			enqueue(async () => {
-				applyConversation(
-					await store.addConversationParticipant(conversationId, botId),
-				)
-			}).catch(reload),
+		recruitToConversation: seatMove(store.addConversationParticipant),
 
-		dismissFromConversation: (conversationId: string, botId: string) =>
-			enqueue(async () => {
-				applyConversation(
-					await store.removeConversationParticipant(conversationId, botId),
-				)
-			}).catch(reload),
+		dismissFromConversation: seatMove(store.removeConversationParticipant),
 
 		removeConversation: (id: string) =>
 			enqueue(async () => {

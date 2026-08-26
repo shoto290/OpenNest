@@ -23,7 +23,7 @@ type WorkspaceBodyProps = {
 	isOverlayOpen: boolean
 	onToggleSettings: () => void
 	isConversationSettingsOpen: boolean
-	onOpenConversationSettings: () => void
+	onOpenConversationSettings: (conversationId: string) => void
 }
 
 export function WorkspaceBody({

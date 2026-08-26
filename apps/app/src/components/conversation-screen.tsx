@@ -47,7 +47,7 @@ type ConversationScreenProps = {
 	driver: ChatDriver
 	store: TranscriptStore
 	isSettingsOpen: boolean
-	onOpenSettings: () => void
+	onOpenSettings: (conversationId: string) => void
 }
 
 type SpeakingBotsProps = {
@@ -240,7 +240,7 @@ export function ConversationScreen({
 						leading={
 							<Button
 								aria-expanded={isSettingsOpen}
-								onClick={onOpenSettings}
+								onClick={() => onOpenSettings(conversation.id)}
 								size="lg"
 								variant="ghost"
 							>

@@ -325,6 +325,20 @@ export function App() {
 		[conversations],
 	)
 
+	const seatedBots = useMemo(
+		() =>
+			selectedConversation
+				? toConversationBots(presentParticipants(selectedConversation))
+				: [],
+		[selectedConversation],
+	)
+
+	const recruitableBots = useMemo(
+		() =>
+			selectedConversation ? unseatedBots(bots, selectedConversation) : [],
+		[bots, selectedConversation],
+	)
+
 	const rosterConversationsBySpace = useMemo(
 		() =>
 			Object.fromEntries(
@@ -347,12 +361,6 @@ export function App() {
 		() => roster.controller.setEditing(!isEditing),
 		[roster.controller, isEditing],
 	)
-
-	const openConversationSettings = useCallback(() => {
-		if (selectedConversationId) {
-			roster.controller.editConversation(selectedConversationId)
-		}
-	}, [roster.controller, selectedConversationId])
 
 	const userSettings = useMemo(
 		() => toUserSettingsValue(preferences),
@@ -475,7 +483,7 @@ export function App() {
 					isConversationSettingsOpen={isEditingConversation}
 					isOverlayOpen={isOverlayOpen}
 					isSettingsOpen={isEditing}
-					onOpenConversationSettings={openConversationSettings}
+					onOpenConversationSettings={roster.controller.editConversation}
 					onToggleSettings={toggleSettings}
 					readerName={preferences.displayName}
 					store={store}
@@ -556,7 +564,7 @@ export function App() {
 			) : null}
 			{selectedConversation ? (
 				<ConversationSettingsDialog
-					bots={unseatedBots(bots, selectedConversation)}
+					bots={recruitableBots}
 					leadId={leadOf(selectedConversation) ?? ""}
 					onClose={() => roster.controller.setConversationEditing(false)}
 					onDelete={() => {
@@ -587,9 +595,7 @@ export function App() {
 						)
 					}
 					open={isEditingConversation}
-					participants={toConversationBots(
-						presentParticipants(selectedConversation),
-					)}
+					participants={seatedBots}
 					value={toConversationSettingsValue(selectedConversation)}
 				/>
 			) : null}

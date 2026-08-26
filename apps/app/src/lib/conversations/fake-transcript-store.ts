@@ -1005,12 +1005,10 @@ export const createFakeTranscriptStore = (
 				joinedAt: mintedSeats,
 				leftAt: null,
 			}
-			seats.set(
-				conversationId,
-				held.some((seat) => seat.botId === botId)
-					? held.map((seat) => (seat.botId === botId ? taken : seat))
-					: [...held, taken],
-			)
+			seats.set(conversationId, [
+				...held.filter((seat) => seat.botId !== botId),
+				taken,
+			])
 			return Promise.resolve(drawnConversation(stored))
 		},
 
