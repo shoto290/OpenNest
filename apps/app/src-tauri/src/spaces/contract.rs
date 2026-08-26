@@ -41,6 +41,7 @@ pub enum SpaceError {
 	UnknownSpace {
 		id: String,
 	},
+	IncompleteOrder,
 	LastSpace,
 }
 
@@ -54,6 +55,7 @@ impl From<spaces::SpaceError> for SpaceError {
 	fn from(error: spaces::SpaceError) -> Self {
 		match error {
 			spaces::SpaceError::UnknownSpace { id } => SpaceError::UnknownSpace { id },
+			spaces::SpaceError::IncompleteOrder => SpaceError::IncompleteOrder,
 			spaces::SpaceError::LastSpace => SpaceError::LastSpace,
 			spaces::SpaceError::Database(failure) => {
 				SpaceError::Storage { failure: (&failure).into() }
@@ -99,6 +101,10 @@ mod tests {
 			to_value(SpaceError::from(spaces::SpaceError::UnknownSpace { id: "s1".to_owned() }))
 				.expect("the error"),
 			json!({ "kind": "unknownSpace", "id": "s1" })
+		);
+		assert_eq!(
+			to_value(SpaceError::from(spaces::SpaceError::IncompleteOrder)).expect("the error"),
+			json!({ "kind": "incompleteOrder" })
 		);
 	}
 }
