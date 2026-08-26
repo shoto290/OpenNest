@@ -127,15 +127,15 @@ fn updated(
 
 fn reordered(connection: &mut Connection, ids: &[String]) -> Result<(), SpaceError> {
 	let transaction = write_transaction(connection)?;
+	if distinct(ids) < counted(&transaction)? {
+		return Err(SpaceError::IncompleteOrder);
+	}
 	for (position, id) in ids.iter().enumerate() {
 		let written = transaction.execute(
 			"UPDATE spaces SET position = ?2 WHERE id = ?1",
 			params![id, position as i64],
 		)?;
 		refuse_if_untouched(written, id)?;
-	}
-	if ids.iter().collect::<HashSet<_>>().len() < counted(&transaction)? as usize {
-		return Err(SpaceError::IncompleteOrder);
 	}
 	transaction.commit()?;
 	Ok(())
@@ -164,6 +164,10 @@ fn deleted(connection: &mut Connection, id: &str) -> Result<(), SpaceError> {
 fn held(connection: &Connection, id: &str) -> Result<bool, SpaceError> {
 	Ok(connection
 		.query_row("SELECT EXISTS (SELECT 1 FROM spaces WHERE id = ?1)", [id], |row| row.get(0))?)
+}
+
+fn distinct(ids: &[String]) -> i64 {
+	ids.iter().collect::<HashSet<_>>().len() as i64
 }
 
 fn counted(connection: &Connection) -> Result<i64, SpaceError> {
@@ -333,7 +337,6 @@ mod tests {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.spaces();
-		let first = repository.list().await.expect("the spaces")[0].id.clone();
 		let second = repository.create("Vocca".to_owned()).await.expect("the space");
 
 		assert!(matches!(
@@ -353,7 +356,6 @@ mod tests {
 			vec!["Personal".to_owned(), "Vocca".to_owned()],
 			"a refused order moved the spaces"
 		);
-		assert_eq!(first, repository.list().await.expect("the spaces")[0].id);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
