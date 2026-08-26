@@ -21,7 +21,6 @@ const DEFAULTS: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	lastBotId: null,
 	lastSpaceId: null,
 	lastBotIdBySpace: {},
 }
@@ -227,8 +226,7 @@ describe("the reader's own record", () => {
 	})
 
 	it("reads a field the record leaves out as none, and writes nothing for it", async () => {
-		const { sidebarWidth, lastBotId, lastSpaceId, lastBotIdBySpace, ...older } =
-			DEFAULTS
+		const { sidebarWidth, lastSpaceId, lastBotIdBySpace, ...older } = DEFAULTS
 		const host = aHost(older as UserPreferences)
 		const controller = await loaded()
 
@@ -436,17 +434,14 @@ describe("the conversation the reader opens", () => {
 
 		await controller.setLastBot({ spaceId: "vocca", botId: "nyx" })
 
-		expect(controller.getState().preferences.lastBotId).toBe("nyx")
 		expect(controller.getState().preferences.lastBotIdBySpace).toEqual({
 			vocca: "nyx",
 		})
-		expect(localStorage.getItem("lastBotId")).toBe("nyx")
 		expect(localStorage.getItem("lastBotIdBySpace")).toBe(
 			JSON.stringify({ vocca: "nyx" }),
 		)
 		expect(host()).toEqual({
 			...DEFAULTS,
-			lastBotId: "nyx",
 			lastBotIdBySpace: { vocca: "nyx" },
 		})
 	})
@@ -463,19 +458,19 @@ describe("the conversation the reader opens", () => {
 		})
 	})
 
-	it("names no space while none is shown", async () => {
-		const host = aHost()
+	it("is written nowhere while no space is shown", async () => {
+		aHost()
 		const controller = await loaded()
+		hostInvoke.mockClear()
 
 		await controller.setLastBot({ spaceId: null, botId: "nyx" })
 
-		expect(host()).toEqual({ ...DEFAULTS, lastBotId: "nyx" })
+		expect(hostInvoke).not.toHaveBeenCalled()
 	})
 
 	it("is written once when it is the bot the record already names", async () => {
 		aHost({
 			...DEFAULTS,
-			lastBotId: "nyx",
 			lastBotIdBySpace: { vocca: "nyx" },
 		})
 		const controller = await loaded()

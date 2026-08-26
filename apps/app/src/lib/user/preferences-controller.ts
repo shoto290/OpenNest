@@ -211,10 +211,7 @@ export const createUserController = (): UserController => {
 		setSidebarWidth: (sidebarWidth: number) => changeMirrored({ sidebarWidth }),
 
 		setLastBot: (opened: LastBotOpened) =>
-			changeMirrored({
-				lastBotId: opened.botId,
-				lastBotIdBySpace: botIdBySpaceWith(opened),
-			}),
+			changeMirrored({ lastBotIdBySpace: botIdBySpaceWith(opened) }),
 
 		setLastSpace: (lastSpaceId: string) => changeMirrored({ lastSpaceId }),
 

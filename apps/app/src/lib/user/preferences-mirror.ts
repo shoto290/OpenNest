@@ -20,9 +20,9 @@ const COLOR_SCHEME_KEY = "theme"
 const PALETTE_KEY = "palette"
 const LANGUAGE_KEY = "language"
 const SIDEBAR_WIDTH_KEY = "sidebarWidth"
-const LAST_BOT_KEY = "lastBotId"
 const LAST_SPACE_KEY = "lastSpaceId"
 const LAST_BOT_BY_SPACE_KEY = "lastBotIdBySpace"
+const DROPPED_LAST_BOT_KEY = "lastBotId"
 
 const COLOR_SCHEMES: ColorScheme[] = ["system", "light", "dark"]
 
@@ -33,7 +33,6 @@ export type MirroredPreferences = {
 	palette: Palette
 	language: Language | null
 	sidebarWidth: number | null
-	lastBotId: string | null
 	lastSpaceId: string | null
 	lastBotIdBySpace: BotIdBySpace
 }
@@ -91,7 +90,6 @@ export const mirrorOf = (record: UserPreferences): MirroredPreferences => ({
 	palette: paletteOf(record.palette),
 	language: languageOf(record.language),
 	sidebarWidth: record.sidebarWidth ?? null,
-	lastBotId: record.lastBotId ?? null,
 	lastSpaceId: record.lastSpaceId ?? null,
 	lastBotIdBySpace: botIdBySpaceOf(record.lastBotIdBySpace),
 })
@@ -104,7 +102,6 @@ export const sameMirror = (
 	one.palette === other.palette &&
 	one.language === other.language &&
 	one.sidebarWidth === other.sidebarWidth &&
-	one.lastBotId === other.lastBotId &&
 	one.lastSpaceId === other.lastSpaceId &&
 	sameBotIdBySpace(one.lastBotIdBySpace, other.lastBotIdBySpace)
 
@@ -113,7 +110,6 @@ export const readMirror = (): MirroredPreferences => ({
 	palette: paletteOf(localStorage.getItem(PALETTE_KEY)),
 	language: languageOf(localStorage.getItem(LANGUAGE_KEY)),
 	sidebarWidth: widthOf(localStorage.getItem(SIDEBAR_WIDTH_KEY)),
-	lastBotId: localStorage.getItem(LAST_BOT_KEY),
 	lastSpaceId: localStorage.getItem(LAST_SPACE_KEY),
 	lastBotIdBySpace: parseBotIdBySpace(
 		localStorage.getItem(LAST_BOT_BY_SPACE_KEY),
@@ -134,9 +130,9 @@ export const writeMirror = (mirrored: MirroredPreferences) => {
 	localStorage.setItem(PALETTE_KEY, mirrored.palette)
 	keep(LANGUAGE_KEY, mirrored.language)
 	keep(SIDEBAR_WIDTH_KEY, mirrored.sidebarWidth)
-	keep(LAST_BOT_KEY, mirrored.lastBotId)
 	keep(LAST_SPACE_KEY, mirrored.lastSpaceId)
 	keep(LAST_BOT_BY_SPACE_KEY, JSON.stringify(mirrored.lastBotIdBySpace))
+	localStorage.removeItem(DROPPED_LAST_BOT_KEY)
 }
 
 const MIRROR_KEYS = [
@@ -144,7 +140,6 @@ const MIRROR_KEYS = [
 	PALETTE_KEY,
 	LANGUAGE_KEY,
 	SIDEBAR_WIDTH_KEY,
-	LAST_BOT_KEY,
 	LAST_SPACE_KEY,
 	LAST_BOT_BY_SPACE_KEY,
 ]

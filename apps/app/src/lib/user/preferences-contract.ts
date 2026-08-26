@@ -22,7 +22,6 @@ export type UserPreferences = {
 	notifyOnFinishedTurn: boolean
 	notifyWithSound: boolean
 	sidebarWidth: number | null
-	lastBotId: string | null
 	lastSpaceId: string | null
 	lastBotIdBySpace: BotIdBySpace
 }

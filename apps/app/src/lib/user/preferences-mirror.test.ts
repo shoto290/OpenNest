@@ -25,7 +25,6 @@ const RECORD: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	lastBotId: null,
 	lastSpaceId: null,
 	lastBotIdBySpace: {},
 }
@@ -35,7 +34,6 @@ const MIRRORED: MirroredPreferences = {
 	palette: "water",
 	language: null,
 	sidebarWidth: null,
-	lastBotId: null,
 	lastSpaceId: null,
 	lastBotIdBySpace: {},
 }
@@ -88,7 +86,6 @@ describe("the mirror", () => {
 			palette: "amber",
 			language: null,
 			sidebarWidth: null,
-			lastBotId: null,
 			lastSpaceId: null,
 			lastBotIdBySpace: {},
 		})
@@ -156,11 +153,12 @@ describe("the mirror", () => {
 		expect(readMirror().sidebarWidth).toBeNull()
 	})
 
-	it("holds the bot whose conversation was left open", () => {
-		writeMirror({ ...MIRRORED, lastBotId: "nyx" })
+	it("drops the single bot an older build left behind", () => {
+		localStorage.setItem("lastBotId", "nyx")
 
-		expect(localStorage.getItem("lastBotId")).toBe("nyx")
-		expect(readMirror().lastBotId).toBe("nyx")
+		writeMirror(MIRRORED)
+
+		expect(localStorage.getItem("lastBotId")).toBeNull()
 	})
 
 	it("holds the space the reader was left in", () => {
@@ -183,7 +181,6 @@ describe("the record the host holds", () => {
 			mirrorOf({
 				...RECORD,
 				sidebarWidth: 320,
-				lastBotId: "nyx",
 				lastSpaceId: "vocca",
 				lastBotIdBySpace: {},
 			}),
@@ -192,7 +189,6 @@ describe("the record the host holds", () => {
 			palette: "moss",
 			language: "fr",
 			sidebarWidth: 320,
-			lastBotId: "nyx",
 			lastSpaceId: "vocca",
 			lastBotIdBySpace: {},
 		})
@@ -212,7 +208,6 @@ describe("the record the host holds", () => {
 			palette: "amber",
 			language: null,
 			sidebarWidth: null,
-			lastBotId: null,
 			lastSpaceId: null,
 			lastBotIdBySpace: {},
 		})
@@ -253,7 +248,6 @@ describe("isMirrorKey", () => {
 		expect(isMirrorKey("palette")).toBe(true)
 		expect(isMirrorKey("language")).toBe(true)
 		expect(isMirrorKey("sidebarWidth")).toBe(true)
-		expect(isMirrorKey("lastBotId")).toBe(true)
 		expect(isMirrorKey("lastSpaceId")).toBe(true)
 		expect(isMirrorKey("conversations")).toBe(false)
 		expect(isMirrorKey(null)).toBe(false)
@@ -267,7 +261,6 @@ describe("sameMirror", () => {
 			palette: "moss",
 			language: "fr",
 			sidebarWidth: 320,
-			lastBotId: "nyx",
 			lastSpaceId: "vocca",
 			lastBotIdBySpace: {},
 		} as const
@@ -279,7 +272,6 @@ describe("sameMirror", () => {
 		)
 		expect(sameMirror(mirrored, { ...mirrored, language: null })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, sidebarWidth: 256 })).toBe(false)
-		expect(sameMirror(mirrored, { ...mirrored, lastBotId: null })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, lastSpaceId: null })).toBe(false)
 		expect(
 			sameMirror(mirrored, { ...mirrored, lastBotIdBySpace: { vocca: "nyx" } }),
