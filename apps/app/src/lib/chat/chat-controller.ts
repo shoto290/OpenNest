@@ -127,6 +127,13 @@ type BotChat = {
 	draining: Promise<void> | null
 }
 
+type TransitionKind = "open" | "close"
+
+type BotTransition = {
+	kind: TransitionKind
+	settled: Promise<unknown>
+}
+
 function toTransportError(reason: unknown): TransportError {
 	if (typeof reason === "object" && reason !== null && "kind" in reason) {
 		return reason as TransportError
@@ -156,7 +163,8 @@ export function createChatController(
 	const transcript = createTranscriptController(store)
 
 	const bots = new Map<string, BotChat>()
-	let selected: BotChat | null = null
+	const transitions = new Map<string, BotTransition>()
+	let chosenBotId: string | null = null
 	let detach: Promise<() => void> | null = null
 	const listeners = new Set<() => void>()
 
@@ -190,6 +198,9 @@ export function createChatController(
 		bots.set(id, bot)
 		return bot
 	}
+
+	const chosenBot = () =>
+		chosenBotId === null ? null : (bots.get(chosenBotId) ?? null)
 
 	const dispatch = (bot: BotChat, action: ChatAction) => {
 		const next = chatReducer(bot.state, action)
@@ -650,31 +661,66 @@ export function createChatController(
 	const openedFor = (bot: BotChat) =>
 		isAnswerable(bot) ? Promise.resolve(null) : preflightFor(bot)
 
-	const open = async (nextBotId: string) => {
+	const runOpen = async (nextBotId: string) => {
 		const bot = botFor(nextBotId)
-		selected = bot
-		publish()
 		await openConversation(bot)
 		const handle = await openedFor(bot)
 		pump(bot)
 		return handle
 	}
 
-	const close = async (botId: string) => {
+	const runClose = async (botId: string) => {
 		const bot = bots.get(botId)
 		if (!bot) {
 			return
 		}
 		bots.delete(botId)
-		if (selected === bot) {
-			selected = null
-		}
 		publish()
 		const runtime = bot.state.runtime
 		if (!runtime) {
 			return
 		}
 		await driver.shutdown(runtime).catch(() => undefined)
+	}
+
+	const forget = (botId: string, transition: BotTransition) => {
+		if (transitions.get(botId) === transition) {
+			transitions.delete(botId)
+		}
+	}
+
+	const transitionFor = <T>(
+		botId: string,
+		kind: TransitionKind,
+		run: () => Promise<T>,
+	) => {
+		const inFlight = transitions.get(botId)
+		if (inFlight?.kind === kind) {
+			return inFlight.settled as Promise<T>
+		}
+		const settled = (inFlight?.settled ?? Promise.resolve()).then(run, run)
+		const transition: BotTransition = { kind, settled }
+		transitions.set(botId, transition)
+		const drop = () => forget(botId, transition)
+		settled.then(drop, drop)
+		return settled
+	}
+
+	const choose = (botId: string | null) => {
+		chosenBotId = botId
+		publish()
+	}
+
+	const open = (botId: string) => {
+		choose(botId)
+		return transitionFor(botId, "open", () => runOpen(botId))
+	}
+
+	const close = (botId: string) => {
+		if (chosenBotId === botId) {
+			choose(null)
+		}
+		return transitionFor(botId, "close", () => runClose(botId))
 	}
 
 	const capture = async (bot: BotChat) => {
@@ -1116,16 +1162,20 @@ export function createChatController(
 	const onSelected = <T>(
 		ask: (bot: BotChat) => Promise<T>,
 		nothing: T,
-	): Promise<T> => (selected ? ask(selected) : Promise.resolve(nothing))
+	): Promise<T> => {
+		const bot = chosenBot()
+		return bot ? ask(bot) : Promise.resolve(nothing)
+	}
 
 	const forSelected = (act: (bot: BotChat) => void) => {
-		if (selected) {
-			act(selected)
+		const bot = chosenBot()
+		if (bot) {
+			act(bot)
 		}
 	}
 
 	return {
-		getState: () => selected?.state ?? initialChatState,
+		getState: () => chosenBot()?.state ?? initialChatState,
 		stateFor: (botId) => bots.get(botId)?.state ?? initialChatState,
 		subscribe: (listener) => {
 			listeners.add(listener)
