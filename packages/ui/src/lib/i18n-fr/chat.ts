@@ -265,6 +265,41 @@ const chat = {
 		empty: "Aucun bot ne correspond à cette recherche.",
 		create: "Créer la conversation",
 	},
+	conversationSettings: {
+		breadcrumb: "Paramètres",
+		untitled: "Conversation sans nom",
+		tab: {
+			general: "Général",
+			participants: "Participants",
+			instructions: "Instructions",
+			danger: "Zone de danger",
+		},
+		name: {
+			label: "Nom",
+			placeholder: "Le sujet de cette conversation",
+		},
+		instructions: {
+			label: "Instructions",
+			placeholder:
+				"Ce que chaque bot de cette conversation doit garder en tête",
+		},
+		participants: {
+			label: "Dans cette conversation",
+			lead: "Meneur",
+			promote: "Confier la conduite à {{name}}",
+			dismiss: "Retirer {{name}}",
+			last: "Le dernier bot reste dans la conversation.",
+			all: "Tous les bots de l'espace sont déjà dans cette conversation.",
+		},
+		danger: {
+			delete: "Supprimer la conversation",
+			description:
+				"La conversation et tout ce qui s'y est dit disparaissent. Les bots restent dans l'espace.",
+			confirm: {
+				title: "Supprimer {{name}} ?",
+			},
+		},
+	},
 } as const
 
 export { chat }

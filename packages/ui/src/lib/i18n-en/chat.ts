@@ -260,6 +260,40 @@ const chat = {
 		empty: "No bot matches that search.",
 		create: "Create conversation",
 	},
+	conversationSettings: {
+		breadcrumb: "Settings",
+		untitled: "Untitled conversation",
+		tab: {
+			general: "General",
+			participants: "Participants",
+			instructions: "Instructions",
+			danger: "Danger zone",
+		},
+		name: {
+			label: "Name",
+			placeholder: "What this conversation is about",
+		},
+		instructions: {
+			label: "Instructions",
+			placeholder: "What every bot in this conversation should keep in mind",
+		},
+		participants: {
+			label: "In this conversation",
+			lead: "Lead",
+			promote: "Give the lead to {{name}}",
+			dismiss: "Dismiss {{name}}",
+			last: "The last bot seated stays in the conversation.",
+			all: "Every bot of the space is already in this conversation.",
+		},
+		danger: {
+			delete: "Delete conversation",
+			description:
+				"The conversation and everything said in it go with it. The bots stay in the space.",
+			confirm: {
+				title: "Delete {{name}}?",
+			},
+		},
+	},
 } as const
 
 export { chat }
