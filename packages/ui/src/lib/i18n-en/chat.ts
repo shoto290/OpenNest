@@ -88,6 +88,7 @@ const chat = {
 		placeholder: "Ask the agent to do something…",
 		send: "Send prompt",
 		commands: "Commands",
+		mentions: "Bots",
 	},
 	toolApproval: {
 		title: "Allow this tool to run?",

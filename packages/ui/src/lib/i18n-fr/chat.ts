@@ -89,6 +89,7 @@ const chat = {
 		placeholder: "Demandez à l'agent de faire quelque chose…",
 		send: "Envoyer l'invite",
 		commands: "Commandes",
+		mentions: "Bots",
 	},
 	toolApproval: {
 		title: "Autoriser cet outil à s'exécuter ?",
