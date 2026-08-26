@@ -235,8 +235,8 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::db::repositories::conversations::{AvatarAnimal, BotIdentity};
-	use crate::db::{count_of, open};
+	use crate::db::repositories::conversations::{AvatarAnimal, Bot, BotIdentity};
+	use crate::db::{count_of, open, Database};
 
 	fn an_identity(name: &str) -> BotIdentity {
 		BotIdentity {
@@ -250,6 +250,15 @@ mod tests {
 			instructions: String::new(),
 			denied_tools: Vec::new(),
 		}
+	}
+
+	async fn stored_bot(database: &Database, id: &str) -> Bot {
+		database
+			.conversations()
+			.bot(id.to_owned())
+			.await
+			.expect("the bot")
+			.expect("the bot is on the record")
 	}
 
 	#[tokio::test]
@@ -453,12 +462,7 @@ mod tests {
 
 		spaces.move_bot(bot.id.clone(), elsewhere.id.clone()).await.expect("the bot moves");
 
-		let moved = database
-			.conversations()
-			.bot(bot.id.clone())
-			.await
-			.expect("the bot")
-			.expect("the bot is on the record");
+		let moved = stored_bot(&database, &bot.id).await;
 		assert_eq!(moved.space_id, elsewhere.id);
 		assert_eq!(moved.section_id, None, "a moved bot carried a section of the space it left");
 		assert_eq!(moved.name, bot.name, "a moved bot was renamed");
@@ -503,13 +507,7 @@ mod tests {
 		spaces.move_bot(bot.id.clone(), home).await.expect("the bot stays");
 
 		assert_eq!(
-			database
-				.conversations()
-				.bot(bot.id)
-				.await
-				.expect("the bot")
-				.expect("the bot is on the record")
-				.section_id,
+			stored_bot(&database, &bot.id).await.section_id,
 			Some(held.id),
 			"a bot moved to its own space lost its section"
 		);
@@ -539,13 +537,7 @@ mod tests {
 			Err(SpaceError::UnknownSpace { .. })
 		));
 		assert_eq!(
-			database
-				.conversations()
-				.bot(bot.id)
-				.await
-				.expect("the bot")
-				.expect("the bot is on the record")
-				.space_id,
+			stored_bot(&database, &bot.id).await.space_id,
 			home,
 			"a refused move took the bot with it"
 		);

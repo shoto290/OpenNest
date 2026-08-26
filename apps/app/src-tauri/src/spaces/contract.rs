@@ -108,6 +108,11 @@ mod tests {
 			json!({ "kind": "unknownSpace", "id": "s1" })
 		);
 		assert_eq!(
+			to_value(SpaceError::from(spaces::SpaceError::UnknownBot { id: "b1".to_owned() }))
+				.expect("the error"),
+			json!({ "kind": "unknownBot", "id": "b1" })
+		);
+		assert_eq!(
 			to_value(SpaceError::from(spaces::SpaceError::IncompleteOrder)).expect("the error"),
 			json!({ "kind": "incompleteOrder" })
 		);
