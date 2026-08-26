@@ -133,12 +133,7 @@ impl Bot {
 			.map(|written| written.instructions)
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
 			.unwrap_or_else(|| bot.instructions.clone());
-		let avatar_image_path = bot
-			.avatar_image_path
-			.as_deref()
-			.zip(avatars)
-			.and_then(|(recorded, dir)| avatars::readable(dir, recorded))
-			.map(|path| path.to_string_lossy().into_owned());
+		let avatar_image_path = drawable_avatar(bot.avatar_image_path.as_deref(), avatars);
 		Self {
 			id: bot.id,
 			section_id: bot.section_id,
@@ -305,6 +300,91 @@ pub struct Chat {
 impl From<conversations::Chat> for Chat {
 	fn from(chat: conversations::Chat) -> Self {
 		Self { id: chat.id, created_at: chat.created_at, updated_at: chat.updated_at }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Conversation {
+	pub id: String,
+	pub space_id: Option<String>,
+	pub section_id: Option<String>,
+	pub title: String,
+	pub instructions: String,
+	pub created_at: i64,
+	pub updated_at: i64,
+	pub participants: Vec<Participant>,
+}
+
+impl Conversation {
+	pub fn of(room: conversations::Conversation, avatars: Option<&Path>) -> Self {
+		Self {
+			id: room.id,
+			space_id: room.space_id,
+			section_id: room.section_id,
+			title: room.title,
+			instructions: room.instructions,
+			created_at: room.created_at,
+			updated_at: room.updated_at,
+			participants: room
+				.seats
+				.into_iter()
+				.map(|seat| Participant::of(seat, avatars))
+				.collect(),
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Participant {
+	pub bot_id: String,
+	pub role: ParticipantRole,
+	pub joined_at: i64,
+	pub left_at: Option<i64>,
+	pub name: String,
+	pub avatar_animal: AvatarAnimal,
+	pub avatar_blot: Option<AvatarBlot>,
+	pub avatar_image_path: Option<String>,
+	pub is_deleted: bool,
+}
+
+impl Participant {
+	fn of(seat: conversations::Seat, avatars: Option<&Path>) -> Self {
+		Self {
+			bot_id: seat.bot_id,
+			role: ParticipantRole::of(&seat.role),
+			joined_at: seat.joined_at,
+			left_at: seat.left_at,
+			name: seat.name,
+			avatar_animal: seat.avatar_animal.into(),
+			avatar_blot: seat.avatar_blot.map(Into::into),
+			avatar_image_path: drawable_avatar(seat.avatar_image_path.as_deref(), avatars),
+			is_deleted: seat.is_deleted,
+		}
+	}
+}
+
+fn drawable_avatar(recorded: Option<&str>, avatars: Option<&Path>) -> Option<String> {
+	recorded
+		.zip(avatars)
+		.and_then(|(recorded, dir)| avatars::readable(dir, recorded))
+		.map(|path| path.to_string_lossy().into_owned())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParticipantRole {
+	Lead,
+	Assistant,
+}
+
+impl ParticipantRole {
+	fn of(role: &str) -> Self {
+		match role {
+			"lead" => ParticipantRole::Lead,
+			_ => ParticipantRole::Assistant,
+		}
 	}
 }
 
@@ -644,6 +724,12 @@ pub enum TranscriptStoreError {
 	#[serde(rename_all = "camelCase")]
 	UnknownBot { id: String },
 	#[serde(rename_all = "camelCase")]
+	UnknownConversation { id: String },
+	#[serde(rename_all = "camelCase")]
+	ForeignBot { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownParticipant { conversation_id: String, bot_id: String },
+	#[serde(rename_all = "camelCase")]
 	UnknownMessage { id: String },
 	#[serde(rename_all = "camelCase")]
 	RejectedAvatarImage { reason: AvatarRejection },
@@ -720,6 +806,15 @@ impl From<conversations::ConversationError> for TranscriptStoreError {
 		match error {
 			conversations::ConversationError::UnknownBot { id } => {
 				TranscriptStoreError::UnknownBot { id }
+			}
+			conversations::ConversationError::UnknownConversation { id } => {
+				TranscriptStoreError::UnknownConversation { id }
+			}
+			conversations::ConversationError::ForeignBot { id } => {
+				TranscriptStoreError::ForeignBot { id }
+			}
+			conversations::ConversationError::UnknownParticipant { conversation_id, bot_id } => {
+				TranscriptStoreError::UnknownParticipant { conversation_id, bot_id }
 			}
 			conversations::ConversationError::Database(failure) => {
 				TranscriptStoreError::Storage { failure: (&failure).into() }
@@ -1175,6 +1270,81 @@ mod tests {
 				TranscriptStoreError::RejectedAvatarImage { reason }
 			);
 		}
+	}
+
+	#[test]
+	fn a_room_crosses_with_the_seats_it_holds_in_the_order_they_were_taken() {
+		assert_crosses_as(
+			Conversation::of(
+				conversations::Conversation {
+					id: "c1".into(),
+					space_id: Some("personal".into()),
+					section_id: None,
+					title: "Launch".into(),
+					instructions: String::new(),
+					created_at: 1,
+					updated_at: 2,
+					seats: vec![
+						conversations::Seat {
+							bot_id: "b1".into(),
+							role: "lead".into(),
+							joined_at: 1,
+							left_at: None,
+							name: "Nyx".into(),
+							avatar_animal: conversations::AvatarAnimal::Owl,
+							avatar_blot: None,
+							avatar_image_path: None,
+							is_deleted: false,
+						},
+						conversations::Seat {
+							bot_id: "b2".into(),
+							role: "assistant".into(),
+							joined_at: 2,
+							left_at: Some(3),
+							name: "Ada".into(),
+							avatar_animal: conversations::AvatarAnimal::Cat,
+							avatar_blot: Some(conversations::AvatarBlot::Blue),
+							avatar_image_path: None,
+							is_deleted: true,
+						},
+					],
+				},
+				None,
+			),
+			json!({
+				"id": "c1",
+				"spaceId": "personal",
+				"sectionId": null,
+				"title": "Launch",
+				"instructions": "",
+				"createdAt": 1,
+				"updatedAt": 2,
+				"participants": [
+					{
+						"botId": "b1",
+						"role": "lead",
+						"joinedAt": 1,
+						"leftAt": null,
+						"name": "Nyx",
+						"avatarAnimal": "owl",
+						"avatarBlot": null,
+						"avatarImagePath": null,
+						"isDeleted": false
+					},
+					{
+						"botId": "b2",
+						"role": "assistant",
+						"joinedAt": 2,
+						"leftAt": 3,
+						"name": "Ada",
+						"avatarAnimal": "cat",
+						"avatarBlot": "blue",
+						"avatarImagePath": null,
+						"isDeleted": true
+					}
+				]
+			}),
+		);
 	}
 
 	fn a_stored_bot(model: &str) -> conversations::Bot {

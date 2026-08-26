@@ -21,6 +21,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 11, statements: BUBBLE_PIN },
 	Migration { version: 12, statements: BOT_SPACE },
 	Migration { version: 13, statements: BOT_SECTION },
+	Migration { version: 14, statements: CONVERSATION_ROOM },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -296,6 +297,41 @@ ALTER TABLE bots ADD COLUMN section_id TEXT
 	REFERENCES sections(id) ON DELETE SET NULL;
 ";
 
+const CONVERSATION_ROOM: &str = "
+ALTER TABLE conversations ADD COLUMN space_id TEXT REFERENCES spaces(id) ON DELETE CASCADE;
+ALTER TABLE conversations ADD COLUMN section_id TEXT REFERENCES sections(id) ON DELETE SET NULL;
+ALTER TABLE conversations ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
+
+UPDATE conversations SET space_id = (
+	SELECT bots.space_id FROM conversation_participants
+		JOIN bots ON bots.id = conversation_participants.bot_id
+		WHERE conversation_participants.conversation_id = conversations.id
+		ORDER BY conversation_participants.joined_at ASC, conversation_participants.bot_id ASC
+		LIMIT 1
+);
+
+CREATE INDEX conversations_of_space ON conversations (space_id) WHERE kind = 'topic';
+
+ALTER TABLE conversation_participants ADD COLUMN join_seq INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE conversation_participants ADD COLUMN left_at INTEGER;
+
+UPDATE conversation_participants SET join_seq = (
+	SELECT COUNT(*) FROM conversation_participants AS earlier
+		WHERE earlier.conversation_id = conversation_participants.conversation_id
+			AND (earlier.joined_at < conversation_participants.joined_at
+				OR (earlier.joined_at = conversation_participants.joined_at
+					AND earlier.bot_id < conversation_participants.bot_id))
+);
+
+CREATE UNIQUE INDEX conversation_participants_in_join_order
+	ON conversation_participants (conversation_id, join_seq);
+
+CREATE UNIQUE INDEX conversation_participants_one_lead
+	ON conversation_participants (conversation_id) WHERE role = 'lead';
+
+ALTER TABLE bots ADD COLUMN deleted_at INTEGER;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -347,9 +383,10 @@ mod tests {
 				('b2', 'personal', 'Second', 'sonnet', 1);
 		INSERT INTO conversations (id, kind, title, created_at, updated_at)
 			VALUES ('c1', 'main', 'First', 1, 1), ('c2', 'topic', 'Second', 1, 1);
-		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-			VALUES ('c1', 'b1', 'assistant', 1), ('c1', 'b2', 'assistant', 1),
-				('c2', 'b1', 'assistant', 1);
+		INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c1', 'b1', 'assistant', 1, 0), ('c1', 'b2', 'assistant', 1, 1),
+				('c2', 'b1', 'assistant', 1, 0);
 		INSERT INTO turns (id, conversation_id, seq, started_at)
 			VALUES ('t1', 'c1', 1, 1), ('t2', 'c2', 1, 1);
 		INSERT INTO messages
@@ -571,6 +608,60 @@ mod tests {
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_chats_a_file_already_held_come_out_of_the_step_in_the_space_of_their_bot() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..13]).expect("the shipped schema installs");
+		connection
+			.execute_batch(
+				"INSERT INTO spaces (id, name, colour, position, created_at)
+					VALUES ('writers', 'Writers', 'blue', 1, 1);
+				INSERT INTO bots (id, space_id, name, model, created_at)
+					VALUES ('b1', 'writers', 'First', 'sonnet', 1),
+						('b2', 'writers', 'Second', 'sonnet', 1);
+				INSERT INTO conversations (id, kind, title, created_at, updated_at)
+					VALUES ('c1', 'topic', 'Launch', 1, 1);
+				INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
+					VALUES ('c1', 'b2', 'assistant', 1), ('c1', 'b1', 'assistant', 2);",
+			)
+			.expect("the install this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			connection
+				.query_row("SELECT space_id FROM conversations WHERE id = 'c1'", [], |row| row
+					.get::<_, Option<String>>(0))
+				.expect("query"),
+			Some("writers".to_owned()),
+			"a conversation from the older build came out of the step without a space"
+		);
+		assert_eq!(
+			join_order_of(&connection, "c1"),
+			vec![("b2".to_owned(), 0), ("b1".to_owned(), 1)],
+			"the seats came out of the step in an order nobody sat down in"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn join_order_of(connection: &Connection, conversation_id: &str) -> Vec<(String, i64)> {
+		let mut statement = connection
+			.prepare(
+				"SELECT bot_id, join_seq FROM conversation_participants
+					WHERE conversation_id = ?1 ORDER BY join_seq",
+			)
+			.expect("prepare");
+		statement
+			.query_map([conversation_id], |row| Ok((row.get(0)?, row.get(1)?)))
+			.expect("query")
+			.collect::<rusqlite::Result<Vec<_>>>()
+			.expect("rows")
 	}
 
 	fn spaces_of(connection: &Connection) -> Vec<(String, String, String, i64)> {
@@ -1180,8 +1271,9 @@ mod tests {
 		);
 		write(
 			&connection,
-			"INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at)
-				VALUES ('c2', 'b2', 'assistant', 2)",
+			"INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('c2', 'b2', 'assistant', 2, 1)",
 		)
 		.expect("the bot joins the conversation");
 		let participant = write(
