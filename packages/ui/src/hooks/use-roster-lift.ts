@@ -15,7 +15,7 @@ export const dropArea = (landing: string) => ({
 	[DROP_AREA_ATTRIBUTE]: landing,
 })
 
-const landingAt = (x: number, y: number) =>
+export const dropAreaAt = (x: number, y: number) =>
 	document
 		.elementFromPoint(x, y)
 		?.closest(`[${DROP_AREA_ATTRIBUTE}]`)
@@ -31,9 +31,9 @@ interface Press extends Point {
 	isLifted: boolean
 }
 
-interface Lift {
+export interface Lift<Landing> {
 	id: string
-	landing: string | null
+	landing: Landing | null
 }
 
 const place = (node: HTMLElement | null, at: Point, from: Point) => {
@@ -50,23 +50,28 @@ export interface RosterLiftHandlers {
 	onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void
 }
 
-export interface RosterLift {
-	followRef: (node: HTMLElement | null) => void
+export interface Lifter {
 	handlersFor: (id: string) => RosterLiftHandlers
 	hasJustDropped: () => boolean
-	lift: Lift | null
 }
 
-interface UseRosterLiftOptions {
+export interface RosterLift<Landing> extends Lifter {
+	followRef: (node: HTMLElement | null) => void
+	lift: Lift<Landing> | null
+}
+
+interface UseRosterLiftOptions<Landing> {
 	isEnabled: boolean
-	onLand: (id: string, landing: string) => void
+	landingAt: (x: number, y: number, id: string) => Landing | null
+	onLand: (id: string, landing: Landing) => void
 }
 
-export const useRosterLift = ({
+export const useRosterLift = <Landing>({
 	isEnabled,
+	landingAt,
 	onLand,
-}: UseRosterLiftOptions): RosterLift => {
-	const [lift, setLift] = useState<Lift | null>(null)
+}: UseRosterLiftOptions<Landing>): RosterLift<Landing> => {
+	const [lift, setLift] = useState<Lift<Landing> | null>(null)
 	const press = useRef<Press | null>(null)
 	const at = useRef<Point>({ x: 0, y: 0 })
 	const followed = useRef<HTMLElement | null>(null)
@@ -106,7 +111,7 @@ export const useRosterLift = ({
 				capturePointer(event.currentTarget, event.pointerId)
 			}
 			place(followed.current, at.current, pressed)
-			const landing = landingAt(event.clientX, event.clientY)
+			const landing = landingAt(event.clientX, event.clientY, pressed.id)
 			setLift((held) =>
 				held?.id === pressed.id && held.landing === landing
 					? held
@@ -120,8 +125,8 @@ export const useRosterLift = ({
 			releasePointer(event.currentTarget, event.pointerId)
 			hasDropped.current = true
 			setLift(null)
-			const landing = landingAt(event.clientX, event.clientY)
-			if (landing) onLand(pressed.id, landing)
+			const landing = landingAt(event.clientX, event.clientY, pressed.id)
+			if (landing !== null) onLand(pressed.id, landing)
 		},
 	})
 

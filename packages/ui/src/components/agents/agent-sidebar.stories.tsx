@@ -2597,6 +2597,15 @@ const moveOver = (handle: HTMLElement, onto: Element) => {
 	fireEvent.pointerMove(handle, { ...POINTER, ...centreOf(onto) })
 }
 
+const under = (node: Element) => ({
+	clientX: centreOf(node).clientX,
+	clientY: Math.round(node.getBoundingClientRect().bottom) - 2,
+})
+
+const moveUnder = (handle: HTMLElement, onto: Element) => {
+	fireEvent.pointerMove(handle, { ...POINTER, ...under(onto) })
+}
+
 const dropOver = (handle: HTMLElement, onto: Element) => {
 	fireEvent.pointerUp(handle, { ...POINTER, ...centreOf(onto) })
 	fireEvent.click(handle)
@@ -2746,7 +2755,7 @@ export const DragSectionToPlace = meta.story({
 		docs: {
 			description: {
 				story:
-					"Placing a section by hand. The header is the handle: a press that moves lifts the whole group, bots and all, and it follows the pointer as one block rather than leaving its rows behind. It comes off the panel as a card — a shade smaller, with a shadow under it — so what it passes over stays readable around its edges, and the section it would take the place of lightens under it, so the landing reads before the release. Letting go reports the full new order of section ids — the same call the menu's `Move up` and `Move down` make, which stay exactly where they were for keyboard readers and for a reader who would rather not drag at all. Dropping a section where it already stood reports nothing, and a press that never moves is still the plain click that folds the group. The bots holding no section are pinned above every section: releasing a section over them puts it first rather than sending it under the loose rows.",
+					"Placing a section by hand. A section is not filed into anything — it takes a place in an order — so this gesture is not the one that files a bot: there is no zone to land in and nothing lightens. The header is the handle, a press that moves lifts the whole group, bots and all, and it comes off the panel as a card — a shade smaller, with a shadow under it — so what it passes over stays readable. A line is drawn at the boundary the section would take, above whichever section its middle has not yet passed, or under the last one when it has passed them all. Letting go reports the full new order of section ids — the same call the menu's `Move up` and `Move down` make, which stay exactly where they were for keyboard readers and for a reader who would rather not drag at all. A section released where it already stood reports nothing, an interrupted pointer reports nothing, and a press that never moves is still the plain click that folds the group. The bots holding no section are never a target: they stay pinned above every section, so the first boundary a section can take is under them.",
 			},
 		},
 	},
@@ -2767,7 +2776,10 @@ export const DragSectionToPlace = meta.story({
 		await expect(dune.getBoundingClientRect().top).toBeGreaterThan(restsAt)
 
 		moveOver(handle, research)
-		await expect(isLightened(research)).toBe(true)
+		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
+			research,
+		)
+		await expect(isLightened(research)).toBe(false)
 
 		dropOver(handle, research)
 		await expect(args.onReorderSections).toHaveBeenCalledWith([
@@ -2782,9 +2794,22 @@ export const DragSectionToPlace = meta.story({
 		dropOver(handle, handle)
 		await expect(args.onReorderSections).toHaveBeenCalledTimes(1)
 
+		const archive = dropAreaFor(canvasElement, "archive")
+		lift(handle)
+		moveUnder(handle, archive)
+		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
+			archive,
+		)
+		fireEvent.pointerUp(handle, { ...POINTER, ...under(archive) })
+		await expect(args.onReorderSections).toHaveBeenLastCalledWith([
+			"research",
+			"archive",
+			"shipping",
+		])
+
 		lift(handle)
 		fireEvent.pointerCancel(handle, POINTER)
-		await expect(args.onReorderSections).toHaveBeenCalledTimes(1)
+		await expect(args.onReorderSections).toHaveBeenCalledTimes(2)
 		await expect(handle).toHaveAttribute("aria-expanded", "true")
 	},
 })

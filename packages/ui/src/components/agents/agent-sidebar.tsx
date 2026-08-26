@@ -68,7 +68,8 @@ import {
 } from "@workspace/ui/components/user-chip"
 import {
 	dropArea,
-	type RosterLift,
+	dropAreaAt,
+	type Lifter,
 	useRosterLift,
 } from "@workspace/ui/hooks/use-roster-lift"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
@@ -107,7 +108,9 @@ const FOOTER_SLOT = "shrink-0 empty:hidden"
 const EMPTY_COPY =
 	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
 
-const SECTION_GROUP = "px-0 py-0 pt-2"
+const SECTION_GROUP = "px-0 py-0"
+
+const SECTION_SLOT = "mt-2"
 
 const SECTION_LABEL =
 	"px-0 font-normal text-xs normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
@@ -131,12 +134,19 @@ const SECTION_DROP =
 const SECTION_DROP_AVATAR = "block opacity-40"
 
 const DROP_AREA =
-	"rounded-xl transition-colors duration-150 ease-out motion-reduce:transition-none"
+	"relative rounded-xl transition-colors duration-150 ease-out motion-reduce:transition-none"
 
 const DROP_AREA_LANDING = "bg-sidebar-accent/60"
 
 const DROP_AREA_LIFTED =
-	"pointer-events-none relative z-10 origin-top scale-90 bg-sidebar shadow-lg translate-y-[var(--lift-dy,0px)]"
+	"pointer-events-none z-10 origin-top scale-90 bg-sidebar shadow-lg translate-y-[var(--lift-dy,0px)]"
+
+const INSERTION_LINE =
+	"pointer-events-none absolute inset-x-2 z-20 h-0.5 rounded-full bg-sidebar-primary"
+
+const INSERTION_ABOVE = "-top-1"
+
+const INSERTION_BELOW = "-bottom-1"
 
 const LIFTED_BOT =
 	"pointer-events-none fixed top-0 left-0 z-[100] drop-shadow-lg translate-x-[calc(var(--lift-x,0px)-50%)] translate-y-[calc(var(--lift-y,0px)-50%)]"
@@ -301,7 +311,7 @@ interface BotRosterRowProps {
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
-	lift: RosterLift
+	lift: Lifter
 }
 
 const BotRosterRow = ({
@@ -457,10 +467,14 @@ const SectionDropZone = ({ name }: SectionDropZoneProps) => {
 	)
 }
 
+type InsertionEdge = "above" | "below"
+
 interface RosterDropAreaProps {
 	landing: string
 	isLanding: boolean
 	isLifted?: boolean
+	insertion?: InsertionEdge
+	className?: string
 	ref?: (node: HTMLElement | null) => void
 	children: ReactNode
 }
@@ -469,6 +483,8 @@ const RosterDropArea = ({
 	landing,
 	isLanding,
 	isLifted = false,
+	insertion,
+	className,
 	ref,
 	children,
 }: RosterDropAreaProps) => (
@@ -478,11 +494,21 @@ const RosterDropArea = ({
 			DROP_AREA,
 			isLanding && DROP_AREA_LANDING,
 			isLifted && DROP_AREA_LIFTED,
+			className,
 		)}
 		data-slot="roster-drop-area"
 		data-tauri-drag-region="false"
 		ref={ref}
 	>
+		{insertion ? (
+			<span
+				className={cn(
+					INSERTION_LINE,
+					insertion === "above" ? INSERTION_ABOVE : INSERTION_BELOW,
+				)}
+				data-slot="roster-insertion"
+			/>
+		) : null}
 		{children}
 	</div>
 )
@@ -569,7 +595,7 @@ interface RosterSectionProps {
 	onRename?: (id: string, name: string) => void
 	onMove?: (id: string, by: number) => void
 	onDelete?: (id: string) => void
-	lift: RosterLift
+	lift: Lifter
 	children: ReactNode
 }
 
@@ -705,20 +731,21 @@ const BotRoster = ({
 			(bot) => bot.id !== namingFor && sectionOf(bot, known) === sectionId,
 		)
 
-	const rankOf = (id: string) =>
-		sections.findIndex((section) => section.id === id)
+	const withoutSection = (id: string) =>
+		sections.filter((section) => section.id !== id)
 
 	const placeSection = (id: string, at: number) => {
-		const order = sections.map((section) => section.id)
-		const from = order.indexOf(id)
-		if (at < 0 || at === from) return
-		order.splice(from, 1)
+		const order = withoutSection(id).map((section) => section.id)
 		order.splice(at, 0, id)
+		if (order.every((held, rank) => held === sections[rank]?.id)) return
 		onReorderSections?.(order)
 	}
 
-	const moveSection = (id: string, by: number) =>
-		placeSection(id, rankOf(id) + by)
+	const moveSection = (id: string, by: number) => {
+		const at = sections.findIndex((section) => section.id === id) + by
+		if (at < 0 || at >= sections.length) return
+		placeSection(id, at)
+	}
 
 	const fileBot = (botId: string, landing: string) => {
 		const bot = bots.find((held) => held.id === botId)
@@ -728,17 +755,32 @@ const BotRoster = ({
 		onMoveBotToSection?.(botId, sectionId)
 	}
 
+	const slots = useRef(new Map<string, HTMLElement>()).current
+
+	const middleOf = (id: string) => {
+		const box = slots.get(id)?.getBoundingClientRect()
+		return box ? box.top + box.height / 2 : Number.POSITIVE_INFINITY
+	}
+
+	const insertionAt = (x: number, y: number, id: string) => {
+		const column = slots.get(id)?.parentElement?.getBoundingClientRect()
+		if (!column || x < column.left || x > column.right) return null
+		return withoutSection(id).filter((section) => middleOf(section.id) < y)
+			.length
+	}
+
 	const isLiftEnabled = isMobile || state === "expanded"
 
 	const botLift = useRosterLift({
 		isEnabled: isLiftEnabled,
+		landingAt: dropAreaAt,
 		onLand: fileBot,
 	})
 
 	const sectionLift = useRosterLift({
 		isEnabled: isLiftEnabled,
-		onLand: (id, landing) =>
-			placeSection(id, landing === NO_SECTION ? 0 : rankOf(landing)),
+		landingAt: insertionAt,
+		onLand: placeSection,
 	})
 
 	const liftedBotId = botLift.lift?.id
@@ -746,7 +788,14 @@ const BotRoster = ({
 		? bots.find((bot) => bot.id === liftedBotId)
 		: undefined
 	const liftedSectionId = sectionLift.lift?.id
-	const landing = botLift.lift?.landing ?? sectionLift.lift?.landing ?? null
+	const landing = botLift.lift?.landing ?? null
+	const insertion = sectionLift.lift?.landing ?? null
+	const placed = liftedSectionId ? withoutSection(liftedSectionId) : sections
+	const insertsBefore = insertion === null ? null : placed[insertion]?.id
+	const insertsAfter =
+		insertion !== null && insertion >= placed.length
+			? placed[placed.length - 1]?.id
+			: null
 
 	const rowsFor = (held: AgentSidebarBot[]) => (
 		<AnimatedSidebarMenu>
@@ -774,11 +823,10 @@ const BotRoster = ({
 		return <p className={EMPTY_COPY}>{t("roster.empty")}</p>
 
 	const loose = botsUnder(null)
-	const isLifting = Boolean(liftedBot || liftedSectionId)
 
 	return (
 		<>
-			{loose.length > 0 || isLifting ? (
+			{loose.length > 0 || liftedBot ? (
 				<RosterDropArea isLanding={landing === NO_SECTION} landing={NO_SECTION}>
 					{loose.length > 0 ? (
 						rowsFor(loose)
@@ -792,11 +840,23 @@ const BotRoster = ({
 				const isLifted = section.id === liftedSectionId
 				return (
 					<RosterDropArea
-						isLanding={landing === section.id && !isLifted}
+						className={SECTION_SLOT}
+						insertion={
+							insertsBefore === section.id
+								? "above"
+								: insertsAfter === section.id
+									? "below"
+									: undefined
+						}
+						isLanding={landing === section.id}
 						isLifted={isLifted}
 						key={section.id}
 						landing={section.id}
-						ref={isLifted ? sectionLift.followRef : undefined}
+						ref={(node) => {
+							if (node) slots.set(section.id, node)
+							else slots.delete(section.id)
+							if (isLifted) sectionLift.followRef(node)
+						}}
 					>
 						<RosterSection
 							isFirst={rank === 0}
@@ -817,7 +877,7 @@ const BotRoster = ({
 				)
 			})}
 			{naming ? (
-				<AnimatedSidebarGroup className={SECTION_GROUP}>
+				<AnimatedSidebarGroup className={cn(SECTION_GROUP, SECTION_SLOT)}>
 					<SectionLabel>
 						<SectionNameField
 							ariaLabel={t("roster.section.createField")}
