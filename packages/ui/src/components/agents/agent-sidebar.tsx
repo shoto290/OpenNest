@@ -29,7 +29,7 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BOT_IDENTITY_ANIMALS } from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
-import { Icons } from "@workspace/ui/components/icons"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	AnimatedSidebar,
 	AnimatedSidebarContent,
@@ -225,6 +225,7 @@ interface BotRosterActions {
 	onEditBot?: (id: string) => void
 	onDuplicateBot?: (id: string) => void
 	onDuplicateBotToSpace?: (id: string, spaceId: string) => void
+	onMoveBotToSpace?: (botId: string, spaceId: string) => void
 	onDeleteBot?: (id: string) => void
 }
 
@@ -299,6 +300,43 @@ const BotSectionBranch = ({
 	)
 }
 
+interface SpaceDestinationBranchProps {
+	icon: Icon
+	label: string
+	destinations: Space[]
+	onPick: (spaceId: string) => void
+}
+
+const SpaceDestinationBranch = ({
+	icon: Glyph,
+	label,
+	destinations,
+	onPick,
+}: SpaceDestinationBranchProps) => {
+	if (destinations.length === 0) return null
+
+	return (
+		<ContextMenuSub>
+			<ContextMenuSubTrigger>
+				<Glyph aria-hidden="true" className="size-3.5" />
+				{label}
+			</ContextMenuSubTrigger>
+			<ContextMenuSubContent>
+				{destinations.map((space) => (
+					<ContextMenuItem
+						key={space.id}
+						onSelect={() => onPick(space.id)}
+						textValue={space.name}
+					>
+						<SpaceDot colour={space.colour} />
+						<span className={DESTINATION_NAME}>{space.name}</span>
+					</ContextMenuItem>
+				))}
+			</ContextMenuSubContent>
+		</ContextMenuSub>
+	)
+}
+
 interface BotRosterRowProps {
 	bot: AgentSidebarBot
 	isSelected: boolean
@@ -308,6 +346,7 @@ interface BotRosterRowProps {
 	onEdit?: (id: string) => void
 	onDuplicate?: (id: string) => void
 	onDuplicateToSpace?: (id: string, spaceId: string) => void
+	onMoveToSpace?: (id: string, spaceId: string) => void
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
@@ -324,6 +363,7 @@ const BotRosterRow = ({
 	onEdit,
 	onDuplicate,
 	onDuplicateToSpace,
+	onMoveToSpace,
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
@@ -395,25 +435,19 @@ const BotRosterRow = ({
 						<Icons.Copy aria-hidden="true" className="size-3.5" />
 						{t("roster.duplicate")}
 					</ContextMenuItem>
-					{destinations.length > 0 ? (
-						<ContextMenuSub>
-							<ContextMenuSubTrigger>
-								<Icons.Copy aria-hidden="true" className="size-3.5" />
-								{t("roster.duplicateTo")}
-							</ContextMenuSubTrigger>
-							<ContextMenuSubContent>
-								{destinations.map((space) => (
-									<ContextMenuItem
-										key={space.id}
-										onSelect={() => onDuplicateToSpace?.(bot.id, space.id)}
-										textValue={space.name}
-									>
-										<SpaceDot colour={space.colour} />
-										<span className={DESTINATION_NAME}>{space.name}</span>
-									</ContextMenuItem>
-								))}
-							</ContextMenuSubContent>
-						</ContextMenuSub>
+					<SpaceDestinationBranch
+						destinations={destinations}
+						icon={Icons.Copy}
+						label={t("roster.duplicateTo")}
+						onPick={(spaceId) => onDuplicateToSpace?.(bot.id, spaceId)}
+					/>
+					{onMoveToSpace ? (
+						<SpaceDestinationBranch
+							destinations={destinations}
+							icon={Icons.ArrowRight}
+							label={t("roster.moveToSpace")}
+							onPick={(spaceId) => onMoveToSpace(bot.id, spaceId)}
+						/>
 					) : null}
 					<BotSectionBranch
 						bot={bot}
@@ -711,6 +745,7 @@ const BotRoster = ({
 	onEditBot,
 	onDuplicateBot,
 	onDuplicateBotToSpace,
+	onMoveBotToSpace,
 	onDeleteBot,
 	onCreateSection,
 	onRenameSection,
@@ -811,6 +846,7 @@ const BotRoster = ({
 					onDuplicate={onDuplicateBot}
 					onDuplicateToSpace={onDuplicateBotToSpace}
 					onEdit={onEditBot}
+					onMoveToSpace={onMoveBotToSpace}
 					onMoveToSection={onMoveBotToSection}
 					onSelect={onSelectBot}
 					sections={sections}
@@ -1066,6 +1102,7 @@ const AgentSidebarBase = ({
 	onEditBot,
 	onDuplicateBot,
 	onDuplicateBotToSpace,
+	onMoveBotToSpace,
 	onDeleteBot,
 	onCreateSection,
 	onRenameSection,
@@ -1094,6 +1131,7 @@ const AgentSidebarBase = ({
 		onDuplicateBotToSpace,
 		onEditBot,
 		onMoveBotToSection,
+		onMoveBotToSpace,
 		onRenameSection,
 		onReorderSections,
 		onSelectBot,

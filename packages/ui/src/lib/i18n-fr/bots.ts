@@ -7,6 +7,7 @@ const bots = {
 		settings: "Réglages",
 		duplicate: "Dupliquer",
 		duplicateTo: "Dupliquer vers",
+		moveToSpace: "Déplacer vers un espace",
 		delete: "Supprimer",
 		working: "{{pose}}…",
 		pose: {

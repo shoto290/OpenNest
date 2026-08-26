@@ -380,6 +380,7 @@ const meta = preview.meta({
 		onEditBot: fn(),
 		onDuplicateBot: fn(),
 		onDuplicateBotToSpace: fn(),
+		onMoveBotToSpace: fn(),
 		onDeleteBot: fn(),
 		onOpenUserSettings: fn(),
 		onSelectSpace: fn(),
@@ -1617,7 +1618,7 @@ export const RowDuplicateToSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The branch under a row that sends a copy of the bot somewhere else. It sits directly under the plain duplicate, which still copies into the space the bot already lives in and leaves the reader where they are. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations keep the order and the tint the space switcher gives them, and that choosing one reports the bot and the space it was sent to. Pick `RowContextMenu` for the actions above it, `OneSpaceRowMenu` for the account that has nowhere to send a copy.",
+					"The branch under a row that sends a copy of the bot somewhere else. It sits directly under the plain duplicate, which still copies into the space the bot already lives in and leaves the reader where they are. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations keep the order and the tint the space switcher gives them, and that choosing one reports the bot and the space it was sent to. Pick `RowContextMenu` for the actions above it, `RowMoveToSpace` for the branch under it that hands the bot over instead of copying it, `OneSpaceRowMenu` for the account that has nowhere to send a copy.",
 			},
 		},
 	},
@@ -1653,6 +1654,58 @@ export const RowDuplicateToSpace = meta.story({
 	},
 })
 
+const MOVE_TO_SPACE = "Move to space"
+
+export const RowMoveToSpace = meta.story({
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The branch under a row that hands the bot over to another space, sitting directly under the one that copies it there. The two are told apart with both menus shut: the copy reads `Duplicate to` under the copy glyph, the move reads `Move to space` under an arrow, so a reader never has to open one to learn which is which — and the section branch keeps its own bare `Move to`, since filing a bot under a section is not travel. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations carry the same order and the same tint the copy branch gives them, and that choosing one reports the bot and the space it is owed to and copies nothing. Pick `RowDuplicateToSpace` for the branch above it, `OneSpaceRowMenu` for the account with nowhere to send the bot.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openRowMenu(canvasElement, "Beacon")
+
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["Settings", "Duplicate", DUPLICATE_TO, MOVE_TO_SPACE, "Delete"])
+
+		const branch = menu.getByRole("menuitem", { name: MOVE_TO_SPACE })
+		await expect(branch).toHaveAttribute("aria-haspopup", "menu")
+
+		await userEvent.hover(branch)
+		const panel = await settled(
+			await screen.findByRole("menu", { name: MOVE_TO_SPACE }),
+		)
+		const destinations = within(panel).getAllByRole("menuitem")
+		const offered = FIVE_SPACES.filter((space) => space.id !== "vocca")
+		await expect(destinations.map((item) => item.textContent)).toEqual(
+			offered.map((space) => space.name),
+		)
+		await expect(slotsIn(panel, "space-dot").map(tintOf)).toEqual(
+			offered.map((space) =>
+				tokenColor(canvasElement, `--bot-blot-${space.colour}`),
+			),
+		)
+
+		await userEvent.click(destinations[2])
+		await waitFor(async () => {
+			await expect(screen.queryByRole("menu")).toBeNull()
+		}, FRAME_POLL)
+		await expect(args.onMoveBotToSpace).toHaveBeenCalledWith("beacon", "veille")
+		await expect(args.onDuplicateBotToSpace).not.toHaveBeenCalled()
+	},
+})
+
 export const OneSpaceRowMenu = meta.story({
 	args: {
 		spaces: [SPACES[0]],
@@ -1665,7 +1718,7 @@ export const OneSpaceRowMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same row menu in the account that has only one space. There is nowhere to send a copy, so the branch is not drawn at all rather than drawn empty or drawn offering the space the bot is already in — a submenu that opens onto nothing is worse than no submenu. Check the menu is the three plain actions and that the plain duplicate is still there, since copying a bot beside itself has nothing to do with spaces. The two rules that fence settings and delete off from the middle stay put whatever the middle holds: a menu never opens on a rule with nothing on one side of it.",
+					"The same row menu in the account that has only one space. There is nowhere to send a copy and nowhere to move the bot, so neither space branch is drawn at all rather than drawn empty or drawn offering the space the bot is already in — a submenu that opens onto nothing is worse than no submenu. Check the menu is the three plain actions and that the plain duplicate is still there, since copying a bot beside itself has nothing to do with spaces. The two rules that fence settings and delete off from the middle stay put whatever the middle holds: a menu never opens on a rule with nothing on one side of it.",
 			},
 		},
 	},
@@ -1677,6 +1730,9 @@ export const OneSpaceRowMenu = meta.story({
 		).toEqual(["Settings", "Duplicate", "Delete"])
 		await expect(
 			menu.queryByRole("menuitem", { name: DUPLICATE_TO }),
+		).toBeNull()
+		await expect(
+			menu.queryByRole("menuitem", { name: MOVE_TO_SPACE }),
 		).toBeNull()
 		await expect(menu.getAllByRole("separator")).toHaveLength(2)
 	},

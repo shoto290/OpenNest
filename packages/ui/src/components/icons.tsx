@@ -1,5 +1,6 @@
 import {
 	ArrowDownIcon,
+	ArrowRightIcon,
 	ArrowUpIcon,
 	BanIcon,
 	BellIcon,
@@ -89,6 +90,7 @@ const Icons = {
 	Add: PlusIcon,
 	Alert: TriangleAlertIcon,
 	ArrowDown: ArrowDownIcon,
+	ArrowRight: ArrowRightIcon,
 	ArrowUp: ArrowUpIcon,
 	Bell: BellIcon,
 	Blocked: BanIcon,

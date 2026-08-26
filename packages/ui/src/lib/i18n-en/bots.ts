@@ -15,6 +15,7 @@ const bots = {
 		settings: "Settings",
 		duplicate: "Duplicate",
 		duplicateTo: "Duplicate to",
+		moveToSpace: "Move to space",
 		delete: "Delete",
 		working: "{{pose}}…",
 		pose: {
