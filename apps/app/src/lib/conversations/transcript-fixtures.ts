@@ -1,6 +1,7 @@
 import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
 
 import type { BotIdentity } from "./store-contract"
+import type { TranscriptStore } from "./store-port"
 import type { TranscriptMessage } from "./transcript-contract"
 
 import type { AgentCommand } from "@/lib/agent/contract"
@@ -44,3 +45,15 @@ export const botIdentity = (
 
 export const named = (...names: string[]): AgentCommand[] =>
 	names.map((name) => ({ name }))
+
+export const seatBots = async (
+	store: TranscriptStore,
+	spaceId: string,
+	names: string[],
+) => {
+	const bots = []
+	for (const name of names) {
+		bots.push(await store.createBot(botIdentity({ name }), spaceId))
+	}
+	return bots
+}

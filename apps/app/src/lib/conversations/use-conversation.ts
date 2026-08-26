@@ -1,14 +1,11 @@
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { useEffect, useMemo, useSyncExternalStore } from "react"
 
-import {
-	type ConversationController,
-	type ConversationState,
-	createConversationController,
+import type {
+	ConversationController,
+	ConversationState,
 } from "./conversation-controller"
+import type { ConversationRuntimes } from "./conversation-runtimes"
 import type { Conversation } from "./store-contract"
-import type { TranscriptStore } from "./store-port"
-
-import type { ChatDriver } from "../chat/driver"
 
 export type ConversationChat = {
 	state: ConversationState
@@ -16,16 +13,14 @@ export type ConversationChat = {
 }
 
 export const useConversation = (
-	driver: ChatDriver,
-	store: TranscriptStore,
+	runtimes: ConversationRuntimes,
 	conversation: Conversation,
 ): ConversationChat => {
-	const [controller] = useState(() =>
-		createConversationController(driver, store),
+	const controller = useMemo(
+		() => runtimes.runtimeFor(conversation.id),
+		[runtimes, conversation.id],
 	)
 	const state = useSyncExternalStore(controller.subscribe, controller.getState)
-
-	useEffect(() => controller.attach(), [controller])
 
 	useEffect(() => {
 		void controller.open(conversation)

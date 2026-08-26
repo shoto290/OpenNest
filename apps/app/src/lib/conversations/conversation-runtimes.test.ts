@@ -1,0 +1,241 @@
+import { describe, expect, it, vi } from "vitest"
+
+import {
+	type ConversationRuntimes,
+	createConversationRuntimes,
+} from "./conversation-runtimes"
+import { createFakeTranscriptStore } from "./fake-transcript-store"
+import { leadOf } from "./roster-conversations"
+import { createScriptedDriver, type ScriptedDriver } from "./scripted-driver"
+import type { Conversation } from "./store-contract"
+import { seatBots } from "./transcript-fixtures"
+
+import type { AgentEvent } from "../agent/contract"
+
+const SPACE = "personal"
+
+const messageIdOf = (botId: string) => `msg-${botId}`
+
+const started = (botId: string): AgentEvent => ({
+	type: "messageStarted",
+	message: {
+		id: messageIdOf(botId),
+		role: "assistant",
+		text: "",
+		completion: "streaming",
+		timestamp: 1,
+	},
+})
+
+const wrote = (botId: string, text: string, seq = 1): AgentEvent => ({
+	type: "messageDelta",
+	id: messageIdOf(botId),
+	seq,
+	text,
+})
+
+const ENDED: AgentEvent = {
+	type: "turnEnded",
+	ended: { sessionId: null, outcome: "completed" },
+}
+
+const FAILED: AgentEvent = { type: "failed", error: { kind: "notStarted" } }
+
+const leadIn = (conversation: Conversation) => {
+	const lead = leadOf(conversation)
+	if (!lead) {
+		throw new Error(`no lead in ${conversation.title}`)
+	}
+	return lead
+}
+
+type Screen = {
+	send: (text: string) => Promise<void>
+	leave: () => void
+}
+
+type Reader = {
+	driver: ScriptedDriver
+	runtimes: ConversationRuntimes
+	openRoom: (title: string, names: string[]) => Promise<Conversation>
+	enter: (conversation: Conversation) => Promise<Screen>
+	answer: (botId: string, events: AgentEvent[]) => Promise<void>
+	transcriptOf: (conversation: Conversation) => [string | null, string][]
+	completionsIn: (conversation: Conversation) => Promise<string[][]>
+}
+
+const createReader = (): Reader => {
+	const driver = createScriptedDriver()
+	const store = createFakeTranscriptStore()
+	const runtimes = createConversationRuntimes(driver, store)
+
+	const settled = async () => {
+		for (let round = 0; round < 20; round += 1) {
+			await Promise.resolve()
+		}
+	}
+
+	const openRoom = async (title: string, names: string[]) => {
+		const bots = await seatBots(store, SPACE, names)
+		return store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title,
+			botIds: bots.map((bot) => bot.id),
+		})
+	}
+
+	const enter = async (conversation: Conversation) => {
+		const runtime = runtimes.runtimeFor(conversation.id)
+		const leave = runtime.subscribe(() => undefined)
+		await runtime.open(conversation)
+		await settled()
+		return {
+			leave,
+			send: async (text: string) => {
+				await runtime.send(text)
+				await settled()
+			},
+		}
+	}
+
+	const answer = async (botId: string, events: AgentEvent[]) => {
+		driver.pushTo(botId, events)
+		await settled()
+	}
+
+	const transcriptOf = (conversation: Conversation) =>
+		runtimes
+			.runtimeFor(conversation.id)
+			.getState()
+			.messages.map((message): [string | null, string] => [
+				message.authorBotId,
+				message.content,
+			])
+
+	const completionsIn = async (conversation: Conversation) => {
+		const page = await store.loadPage(conversation.id, null)
+		return page.messages.map((message) => [message.role, message.completion])
+	}
+
+	return {
+		driver,
+		runtimes,
+		openRoom,
+		enter,
+		answer,
+		transcriptOf,
+		completionsIn,
+	}
+}
+
+describe("createConversationRuntimes", () => {
+	it("keeps writing an answer the reader walked away from", async () => {
+		const reader = createReader()
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const screen = await reader.enter(room)
+
+		await screen.send("and now?")
+		screen.leave()
+
+		await reader.answer(ada, [started(ada), wrote(ada, "walls up"), ENDED])
+
+		expect(await reader.completionsIn(room)).toEqual([
+			["user", "complete"],
+			["assistant", "complete"],
+		])
+	})
+
+	it("shows the answer as it stands when the reader comes back", async () => {
+		const reader = createReader()
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const screen = await reader.enter(room)
+
+		await screen.send("and now?")
+		screen.leave()
+
+		await reader.answer(ada, [started(ada), wrote(ada, "walls ")])
+		await reader.enter(room)
+
+		expect(reader.transcriptOf(room)).toEqual([
+			[null, "and now?"],
+			[ada, "walls "],
+		])
+
+		await reader.answer(ada, [wrote(ada, "up", 2), ENDED])
+
+		expect(reader.transcriptOf(room)).toEqual([
+			[null, "and now?"],
+			[ada, "walls up"],
+		])
+	})
+
+	it("closes an answer that fails while its room is off screen", async () => {
+		const reader = createReader()
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const screen = await reader.enter(room)
+
+		await screen.send("and now?")
+		screen.leave()
+
+		await reader.answer(ada, [started(ada), wrote(ada, "walls "), FAILED])
+
+		expect(await reader.completionsIn(room)).toEqual([
+			["user", "complete"],
+			["assistant", "failed"],
+		])
+	})
+
+	it("keeps both answers running when a second room is opened", async () => {
+		const reader = createReader()
+		const walls = await reader.openRoom("Walls", ["Ada"])
+		const gates = await reader.openRoom("Gates", ["Nyx"])
+		const ada = leadIn(walls)
+		const nyx = leadIn(gates)
+
+		const first = await reader.enter(walls)
+		await first.send("and now?")
+		first.leave()
+
+		const second = await reader.enter(gates)
+		await second.send("and now?")
+
+		await reader.answer(ada, [started(ada), wrote(ada, "walls up"), ENDED])
+		await reader.answer(nyx, [started(nyx), wrote(nyx, "gates shut"), ENDED])
+
+		expect(reader.transcriptOf(walls)).toEqual([
+			[null, "and now?"],
+			[ada, "walls up"],
+		])
+		expect(reader.transcriptOf(gates)).toEqual([
+			[null, "and now?"],
+			[nyx, "gates shut"],
+		])
+	})
+
+	it("shuts every room it opened down when the app goes away", async () => {
+		const reader = createReader()
+		const shutdown = vi.spyOn(reader.driver, "shutdown")
+		const walls = await reader.openRoom("Walls", ["Ada"])
+		const gates = await reader.openRoom("Gates", ["Nyx"])
+		const ada = leadIn(walls)
+		const nyx = leadIn(gates)
+
+		const first = await reader.enter(walls)
+		await first.send("and now?")
+		first.leave()
+
+		const second = await reader.enter(gates)
+		await second.send("and now?")
+
+		await reader.runtimes.shutdown()
+
+		expect(shutdown.mock.calls.map(([scope]) => scope.botId)).toEqual([
+			ada,
+			nyx,
+		])
+	})
+})

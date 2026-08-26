@@ -4,18 +4,16 @@ import { AppHeader } from "@workspace/ui/components/app-header"
 import { ChatScreen } from "@/components/chat-screen"
 import { ConversationScreen } from "@/components/conversation-screen"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
-import type { ChatDriver } from "@/lib/chat/driver"
 import type { Chat } from "@/lib/chat/use-chat"
+import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
-import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { hasOverlayWindowControls } from "@/lib/host"
 
 type WorkspaceBodyProps = {
 	hasLoaded: boolean
 	bot?: Bot
 	conversation?: Conversation
-	driver: ChatDriver
-	store: TranscriptStore
+	conversationRuntimes: ConversationRuntimes
 	chat: Chat
 	attachments: AttachmentsController
 	readerName: string
@@ -30,8 +28,7 @@ export function WorkspaceBody({
 	hasLoaded,
 	bot,
 	conversation,
-	driver,
-	store,
+	conversationRuntimes,
 	chat,
 	attachments,
 	readerName,
@@ -49,10 +46,9 @@ export function WorkspaceBody({
 		return (
 			<ConversationScreen
 				conversation={conversation}
-				driver={driver}
 				isSettingsOpen={isConversationSettingsOpen}
 				onOpenSettings={onOpenConversationSettings}
-				store={store}
+				runtimes={conversationRuntimes}
 			/>
 		)
 	}

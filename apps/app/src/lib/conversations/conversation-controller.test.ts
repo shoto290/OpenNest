@@ -5,100 +5,18 @@ import {
 	createConversationController,
 } from "./conversation-controller"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
+import {
+	createScriptedDriver,
+	type ScriptedDriver,
+	spoke,
+} from "./scripted-driver"
 import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
-import { botIdentity } from "./transcript-fixtures"
+import { seatBots } from "./transcript-fixtures"
 
-import type { AgentEvent, RuntimeScope } from "../agent/contract"
-import type { ChatDriver } from "../chat/driver"
+import type { AgentEvent } from "../agent/contract"
 
 const SPACE = "personal"
-
-type Submission = {
-	scope: RuntimeScope
-	prompt: string
-}
-
-type ScriptedDriver = ChatDriver & {
-	submissions: Submission[]
-	pushTo: (botId: string, events: AgentEvent[]) => void
-	cancelled: string[]
-}
-
-const createScriptedDriver = (): ScriptedDriver => {
-	const listeners = new Set<
-		(scoped: { scope: RuntimeScope; event: AgentEvent }) => void
-	>()
-	const submissions: Submission[] = []
-	const cancelled: string[] = []
-
-	const scopeOf = (botId: string) => {
-		const last = submissions.findLast(
-			(submission) => submission.scope.botId === botId,
-		)
-		if (!last) {
-			throw new Error(`no run was opened for ${botId}`)
-		}
-		return last.scope
-	}
-
-	return {
-		submissions,
-		cancelled,
-		pushTo: (botId, events) => {
-			const scope = scopeOf(botId)
-			for (const event of events) {
-				for (const listener of listeners) {
-					listener({ scope, event })
-				}
-			}
-		},
-		check: () =>
-			Promise.resolve({
-				connection: "ready",
-				binaryVersion: "1",
-				authenticated: true,
-				error: null,
-			}),
-		startOrResumeSession: () => Promise.resolve({ resumed: false }),
-		submitPrompt: (scope, prompt) => {
-			submissions.push({ scope, prompt })
-			return Promise.resolve()
-		},
-		storeAttachments: () => Promise.resolve([]),
-		cancelTurn: (scope) => {
-			cancelled.push(scope.botId)
-			return Promise.resolve()
-		},
-		respondToPermission: () => Promise.resolve(),
-		answerQuestion: () => Promise.resolve(),
-		shutdown: () => Promise.resolve(),
-		subscribe: (onEvent) => {
-			listeners.add(onEvent)
-			return Promise.resolve(() => listeners.delete(onEvent))
-		},
-	}
-}
-
-const spoke = (botId: string, text: string): AgentEvent[] => [
-	{
-		type: "messageStarted",
-		message: {
-			id: `msg-${botId}-${text.length}`,
-			role: "assistant",
-			text: "",
-			completion: "streaming",
-			timestamp: 1,
-		},
-	},
-	{
-		type: "messageDelta",
-		id: `msg-${botId}-${text.length}`,
-		seq: 1,
-		text,
-	},
-	{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
-]
 
 const SAID_NOTHING: AgentEvent[] = [
 	{
@@ -124,14 +42,6 @@ type Harness = {
 	settled: () => Promise<void>
 }
 
-const seatBots = async (store: TranscriptStore, names: string[]) => {
-	const bots = []
-	for (const name of names) {
-		bots.push(await store.createBot(botIdentity({ name }), SPACE))
-	}
-	return bots
-}
-
 const createHarness = async (names: string[]): Promise<Harness> => {
 	const driver = createScriptedDriver()
 	const contexts: [string, string][] = []
@@ -143,7 +53,7 @@ const createHarness = async (names: string[]): Promise<Harness> => {
 			return base.boundedContext(conversationId, botId, promptMessageId)
 		},
 	}
-	const bots = await seatBots(store, names)
+	const bots = await seatBots(store, SPACE, names)
 	const conversation = await store.createConversation({
 		spaceId: SPACE,
 		sectionId: null,

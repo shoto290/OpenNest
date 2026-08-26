@@ -32,6 +32,7 @@ import { createChatDriver } from "@/lib/chat/create-driver"
 import { toSpaceBadges, withBadges } from "@/lib/chat/sidebar-badges"
 import { useBotBadges } from "@/lib/chat/use-bot-badges"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
+import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
 import {
 	leadOf,
@@ -68,6 +69,17 @@ export function App() {
 	const driver = useMemo(createChatDriver, [])
 	const store = useMemo(createTranscriptStore, [])
 	const chat = useChat(driver, store)
+	const conversationRuntimes = useMemo(
+		() => createConversationRuntimes(driver, store),
+		[driver, store],
+	)
+
+	useEffect(
+		() => () => {
+			void conversationRuntimes.shutdown()
+		},
+		[conversationRuntimes],
+	)
 
 	const attachments = useMemo(
 		() =>
@@ -480,7 +492,7 @@ export function App() {
 					bot={selected}
 					chat={chat}
 					conversation={selectedConversation}
-					driver={driver}
+					conversationRuntimes={conversationRuntimes}
 					hasLoaded={hasLoaded}
 					isConversationSettingsOpen={isEditingConversation}
 					isOverlayOpen={isOverlayOpen}
@@ -488,7 +500,6 @@ export function App() {
 					onOpenConversationSettings={roster.controller.editConversation}
 					onToggleSettings={toggleSettings}
 					readerName={preferences.displayName}
-					store={store}
 				/>
 			</WorkspaceShell>
 			<NewConversationDialog
