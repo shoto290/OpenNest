@@ -1,5 +1,6 @@
 import { type ChangeEvent, useId } from "react"
 
+import type { Icon } from "@workspace/ui/components/icons"
 import {
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
@@ -15,6 +16,7 @@ type SettingsFieldProps = {
 	placeholder?: string
 	hint?: string
 	error?: string
+	icon?: Icon
 	rows?: number
 	fill?: boolean
 	readOnly?: boolean
@@ -27,6 +29,7 @@ const SettingsField = ({
 	placeholder,
 	hint,
 	error,
+	icon: Glyph,
 	rows,
 	fill = false,
 	readOnly = false,
@@ -62,21 +65,30 @@ const SettingsField = ({
 					value={value}
 				/>
 			) : (
-				<input
-					aria-describedby={describedBy}
-					aria-invalid={error ? true : undefined}
-					className={cn(
-						FIELD_CONTROL_CLASS,
-						error && FIELD_CONTROL_INVALID_CLASS,
-						readOnly && FIELD_CONTROL_READONLY_CLASS,
-					)}
-					id={id}
-					onChange={emit}
-					placeholder={placeholder}
-					readOnly={readOnly}
-					type="text"
-					value={value}
-				/>
+				<div className="relative">
+					{Glyph ? (
+						<Glyph
+							aria-hidden="true"
+							className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 size-4 text-muted-foreground"
+						/>
+					) : null}
+					<input
+						aria-describedby={describedBy}
+						aria-invalid={error ? true : undefined}
+						className={cn(
+							FIELD_CONTROL_CLASS,
+							error && FIELD_CONTROL_INVALID_CLASS,
+							readOnly && FIELD_CONTROL_READONLY_CLASS,
+							Glyph && "pl-9",
+						)}
+						id={id}
+						onChange={emit}
+						placeholder={placeholder}
+						readOnly={readOnly}
+						type="text"
+						value={value}
+					/>
+				</div>
 			)}
 			{hint ? (
 				<p className="text-muted-foreground text-xs" id={hintId}>
