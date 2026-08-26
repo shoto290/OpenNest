@@ -2407,7 +2407,7 @@ export const SectionReorder = meta.story({
 		docs: {
 			description: {
 				story:
-					"Moving a section up or down the panel. The header reports the whole new order of section ids rather than the one step it took, so a host writes the order it was given and never replays a move. The first section cannot go up and the last cannot go down — those entries are drawn disabled rather than dropped, so the menu keeps the same shape wherever it is opened. Check the two edges and one move in each direction. Dragging a bot into a section is not here; that lands with the drop targets.",
+					"Moving a section up or down the panel. The header reports the whole new order of section ids rather than the one step it took, so a host writes the order it was given and never replays a move. The first section cannot go up and the last cannot go down — those entries are drawn disabled rather than dropped, so the menu keeps the same shape wherever it is opened. Check the two edges and one move in each direction. `DragSectionToPlace` is the same order reported from a drag on the header, and `DragBotToSection` the one that files a bot.",
 			},
 		},
 	},
@@ -2552,6 +2552,268 @@ export const NewSectionForABot = meta.story({
 	},
 })
 
+const NO_SECTION_LANDING = "__none__"
+
+const dropAreaFor = (canvasElement: HTMLElement, landing: string) => {
+	const area = canvasElement.querySelector<HTMLElement>(
+		`[data-roster-drop="${landing}"]`,
+	)
+	if (!area) throw new Error(`No drop area for ${landing}`)
+	return area
+}
+
+const isLightened = (node: HTMLElement) =>
+	getComputedStyle(node).backgroundColor !== "rgba(0, 0, 0, 0)"
+
+const POINTER = {
+	button: 0,
+	isPrimary: true,
+	pointerId: 1,
+	pointerType: "mouse",
+}
+
+const centreOf = (node: Element) => {
+	const box = node.getBoundingClientRect()
+	return {
+		clientX: Math.round(box.left + box.width / 2),
+		clientY: Math.round(box.top + box.height / 2),
+	}
+}
+
+const liftedBot = () =>
+	document.querySelector<HTMLElement>('[data-slot="roster-lifted-bot"]')
+
+const lift = (handle: HTMLElement) => {
+	const from = centreOf(handle)
+	fireEvent.pointerDown(handle, { ...POINTER, ...from })
+	fireEvent.pointerMove(handle, {
+		...POINTER,
+		clientX: from.clientX,
+		clientY: from.clientY + 12,
+	})
+}
+
+const moveOver = (handle: HTMLElement, onto: Element) => {
+	fireEvent.pointerMove(handle, { ...POINTER, ...centreOf(onto) })
+}
+
+const under = (node: Element) => ({
+	clientX: centreOf(node).clientX,
+	clientY: Math.round(node.getBoundingClientRect().bottom) - 2,
+})
+
+const moveUnder = (handle: HTMLElement, onto: Element) => {
+	fireEvent.pointerMove(handle, { ...POINTER, ...under(onto) })
+}
+
+const dropOver = (handle: HTMLElement, onto: Element) => {
+	fireEvent.pointerUp(handle, { ...POINTER, ...centreOf(onto) })
+	fireEvent.click(handle)
+}
+
+const dragOnto = (handle: HTMLElement, onto: Element) => {
+	lift(handle)
+	moveOver(handle, onto)
+	dropOver(handle, onto)
+}
+
+export const DragBotToSection = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					'Filing a bot by hand. A press on a row that then moves lifts the bot: it is reduced to its avatar alone, which follows the pointer, while the row itself stays exactly where it stood — the roster is the host\'s to redraw, so nothing is torn out of the list on the strength of a gesture that has not landed yet. The area the bot would land in lightens under it, header and rows together, so the target is a whole section rather than a slot between two rows: a section is always ordered by last message, so a drop changes which group a bot belongs to and nothing else. Releasing reports the bot and the section, the same call the `Move to` branch makes, and the click that a release would otherwise fire is swallowed so a drag never doubles as a selection. The row and every drop area carry `data-tauri-drag-region="false"`, which is what keeps the gesture on the bot instead of on the frameless window the panel is mounted in. Keyboard readers are not asked to drag: `MoveBotToSection` is the same move from the menu.',
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const handle = rowButton(rowFor(canvasElement, "Atlas"))
+		const shipping = dropAreaFor(canvasElement, "shipping")
+
+		lift(handle)
+		await expect(liftedBot()).not.toBeNull()
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+
+		moveOver(handle, shipping)
+		const ghost = liftedBot()
+		if (!ghost) throw new Error("Nothing is lifted")
+		await expect(
+			Math.abs(centreOf(ghost).clientY - centreOf(shipping).clientY),
+		).toBeLessThanOrEqual(1)
+		await expect(isLightened(shipping)).toBe(true)
+		await expect(isLightened(dropAreaFor(canvasElement, "research"))).toBe(
+			false,
+		)
+
+		dropOver(handle, shipping)
+		await expect(args.onMoveBotToSection).toHaveBeenCalledWith(
+			"atlas",
+			"shipping",
+		)
+		await expect(args.onSelectBot).not.toHaveBeenCalled()
+		await expect(liftedBot()).toBeNull()
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+	},
+})
+
+export const DragBotOutOfSection = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Taking a bot back out. The bots holding no section are a drop area like any other, so the gesture that files a bot is the gesture that unfiles it, and the release reports `null` rather than an empty string — a host never has to guess what no section means. When every bot has been filed there is nothing left to aim at, so the empty band draws the same dashed invitation an empty section draws, but only while something is lifted: at rest the roster is exactly what it was before any of this existed. Dropping a bot back on the section it already holds reports nothing at all, and so does a release over the panel's chrome — a gesture that lands nowhere is not a change.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const handle = rowButton(rowFor(canvasElement, "Beacon"))
+		const loose = dropAreaFor(canvasElement, NO_SECTION_LANDING)
+
+		lift(handle)
+		moveOver(handle, loose)
+		await expect(isLightened(loose)).toBe(true)
+		dropOver(handle, loose)
+		await expect(args.onMoveBotToSection).toHaveBeenCalledWith("beacon", null)
+
+		const research = dropAreaFor(canvasElement, "research")
+		dragOnto(handle, research)
+		await expect(args.onMoveBotToSection).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const DragBotIntoEmptySection = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The first bot into a section nothing has been filed into yet. The dashed zone is not a separate mechanism — the whole section, header and zone together, is the target, so a hand that lands anywhere near it lands. Check that Archive lightens under the lifted bot and that the release reports the bot and `archive`; the zone stays drawn until the host answers, since this panel never files a bot on its own.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const handle = rowButton(rowFor(canvasElement, "Cinder"))
+		const archive = dropAreaFor(canvasElement, "archive")
+
+		lift(handle)
+		moveOver(handle, archive)
+		await expect(isLightened(archive)).toBe(true)
+
+		dropOver(handle, archive)
+		await expect(args.onMoveBotToSection).toHaveBeenCalledWith(
+			"cinder",
+			"archive",
+		)
+		await expect(slotIn(canvasElement, "roster-section-drop")).toBeVisible()
+	},
+})
+
+export const DragBotNowhere = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every way a lift ends in nothing. A press that never moves is still a plain click and selects the bot, so the gesture costs the reader nothing to start. A release outside any drop area reports nothing and leaves the roster as it stands. An interrupted pointer — a stream the browser takes back, a touch turned into a scroll — puts the bot down where it was and reports nothing, rather than filing it wherever the last move happened to be. Check all three, and that no lift starts at all from a press that carries a right button.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const handle = rowButton(rowFor(canvasElement, "Ember"))
+
+		await userEvent.click(handle)
+		await expect(args.onSelectBot).toHaveBeenCalledWith("ember")
+		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+
+		lift(handle)
+		await expect(liftedBot()).not.toBeNull()
+		fireEvent.pointerCancel(handle, POINTER)
+		await expect(liftedBot()).toBeNull()
+		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+
+		lift(handle)
+		fireEvent.pointerMove(handle, { ...POINTER, clientX: 4, clientY: 4 })
+		fireEvent.pointerUp(handle, { ...POINTER, clientX: 4, clientY: 4 })
+		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+
+		fireEvent.pointerDown(handle, {
+			...POINTER,
+			...centreOf(handle),
+			button: 2,
+		})
+		moveOver(handle, dropAreaFor(canvasElement, "shipping"))
+		await expect(liftedBot()).toBeNull()
+	},
+})
+
+export const DragSectionToPlace = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Placing a section by hand. A section is not filed into anything — it takes a place in an order — so this gesture is not the one that files a bot: there is no zone to land in and nothing lightens. The header is the handle, a press that moves lifts the whole group, bots and all, and it comes off the panel as a card — a shade smaller, with a shadow under it — so what it passes over stays readable. A line is drawn at the boundary the section would take, above whichever section its middle has not yet passed, or under the last one when it has passed them all. Letting go reports the full new order of section ids — the same call the menu's `Move up` and `Move down` make, which stay exactly where they were for keyboard readers and for a reader who would rather not drag at all. A section released where it already stood reports nothing, an interrupted pointer reports nothing, and a press that never moves is still the plain click that folds the group. The bots holding no section are never a target: they stay pinned above every section, so the first boundary a section can take is under them.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const handle = sectionHeader(canvasElement, "Shipping")
+		const research = dropAreaFor(canvasElement, "research")
+
+		const dune = rowFor(canvasElement, "Dune")
+		const restsAt = dune.getBoundingClientRect().top
+		const lifted = dropAreaFor(canvasElement, "shipping")
+		const liftedAt = lifted.getBoundingClientRect().top
+
+		lift(handle)
+		await expect(lifted.getBoundingClientRect().top - liftedAt).toBeCloseTo(
+			12,
+			0,
+		)
+		await expect(dune.getBoundingClientRect().top).toBeGreaterThan(restsAt)
+
+		moveOver(handle, research)
+		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
+			research,
+		)
+		await expect(isLightened(research)).toBe(false)
+
+		dropOver(handle, research)
+		await expect(args.onReorderSections).toHaveBeenCalledWith([
+			"shipping",
+			"research",
+			"archive",
+		])
+		await expect(handle).toHaveAttribute("aria-expanded", "true")
+		await expect(dune.getBoundingClientRect().top).toBeCloseTo(restsAt, 0)
+
+		lift(handle)
+		dropOver(handle, handle)
+		await expect(args.onReorderSections).toHaveBeenCalledTimes(1)
+
+		const archive = dropAreaFor(canvasElement, "archive")
+		lift(handle)
+		moveUnder(handle, archive)
+		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
+			archive,
+		)
+		fireEvent.pointerUp(handle, { ...POINTER, ...under(archive) })
+		await expect(args.onReorderSections).toHaveBeenLastCalledWith([
+			"research",
+			"archive",
+			"shipping",
+		])
+
+		lift(handle)
+		fireEvent.pointerCancel(handle, POINTER)
+		await expect(args.onReorderSections).toHaveBeenCalledTimes(2)
+		await expect(handle).toHaveAttribute("aria-expanded", "true")
+	},
+})
+
 export const CollapsedSections = meta.story({
 	args: sectionArgs(),
 	render: renderShell(false),
@@ -2559,7 +2821,7 @@ export const CollapsedSections = meta.story({
 		docs: {
 			description: {
 				story:
-					"The sectioned roster on the icon rail. There is no room for a header a reader could read, so the headers go from the picture and from the accessibility tree entirely rather than shrinking into an unreadable stub, and the invitation under an empty section goes with them. The bots stay in exactly the order the sections gave them, so collapsing never reshuffles the rail. Check the rail holds the same six avatars in the same order as `Sections`, that no header is reachable by Tab, and that the create button is still the first stop.",
+					"The sectioned roster on the icon rail. There is no room for a header a reader could read, so the headers go from the picture and from the accessibility tree entirely rather than shrinking into an unreadable stub, and the invitation under an empty section goes with them. The bots stay in exactly the order the sections gave them, so collapsing never reshuffles the rail. Nothing lifts here either: with no header to read and no zone to aim at there is nowhere to drop a bot, so a press that moves on the rail is a press that moves nothing. Check the rail holds the same six avatars in the same order as `Sections`, that no header is reachable by Tab, and that the create button is still the first stop.",
 			},
 		},
 	},
@@ -2583,6 +2845,9 @@ export const CollapsedSections = meta.story({
 		await expect(canvas.getByRole("button", { name: "New bot" })).toHaveFocus()
 		await userEvent.tab()
 		await expect(rowButton(rowsIn(canvasElement)[0])).toHaveFocus()
+
+		lift(rowButton(rowsIn(canvasElement)[0]))
+		await expect(liftedBot()).toBeNull()
 	},
 })
 

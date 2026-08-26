@@ -13,6 +13,7 @@ import {
 	useRef,
 	useState,
 } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -41,6 +42,7 @@ import {
 	AnimatedSidebarMenuButton,
 	AnimatedSidebarMenuItem,
 	type AnimatedSidebarProps,
+	useAnimatedSidebar,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import {
 	ContextMenu,
@@ -64,6 +66,12 @@ import {
 	UserChip,
 	type UserChipIdentity,
 } from "@workspace/ui/components/user-chip"
+import {
+	dropArea,
+	dropAreaAt,
+	type Lifter,
+	useRosterLift,
+} from "@workspace/ui/hooks/use-roster-lift"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 import { toPlainText } from "@workspace/ui/lib/plain-text"
 import { cn } from "@workspace/ui/lib/utils"
@@ -100,7 +108,9 @@ const FOOTER_SLOT = "shrink-0 empty:hidden"
 const EMPTY_COPY =
 	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
 
-const SECTION_GROUP = "px-0 py-0 pt-2"
+const SECTION_GROUP = "px-0 py-0"
+
+const SECTION_SLOT = "mt-2"
 
 const SECTION_LABEL =
 	"px-0 font-normal text-xs normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
@@ -122,6 +132,24 @@ const SECTION_DROP =
 	"flex items-center justify-center gap-2 rounded-lg border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs group-data-[state=collapsed]/sidebar:hidden"
 
 const SECTION_DROP_AVATAR = "block opacity-40"
+
+const DROP_AREA =
+	"relative rounded-xl transition-colors duration-150 ease-out motion-reduce:transition-none"
+
+const DROP_AREA_LANDING = "bg-sidebar-accent/60"
+
+const DROP_AREA_LIFTED =
+	"pointer-events-none z-10 origin-top scale-90 bg-sidebar shadow-lg translate-y-[var(--lift-dy,0px)]"
+
+const INSERTION_LINE =
+	"pointer-events-none absolute inset-x-2 z-20 h-0.5 rounded-full bg-sidebar-primary"
+
+const INSERTION_ABOVE = "-top-1"
+
+const INSERTION_BELOW = "-bottom-1"
+
+const LIFTED_BOT =
+	"pointer-events-none fixed top-0 left-0 z-[100] drop-shadow-lg translate-x-[calc(var(--lift-x,0px)-50%)] translate-y-[calc(var(--lift-y,0px)-50%)]"
 
 const DROP_AVATAR_SIZE = 28
 
@@ -283,6 +311,7 @@ interface BotRosterRowProps {
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	lift: Lifter
 }
 
 const BotRosterRow = ({
@@ -290,6 +319,7 @@ const BotRosterRow = ({
 	isSelected,
 	destinations,
 	sections,
+	lift,
 	onSelect,
 	onEdit,
 	onDuplicate,
@@ -303,10 +333,11 @@ const BotRosterRow = ({
 	const working = isBusy(bot)
 
 	return (
-		<AnimatedSidebarMenuItem>
+		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
 			<ContextMenu>
 				<ContextMenuTrigger>
 					<AnimatedSidebarMenuButton
+						{...lift.handlersFor(bot.id)}
 						className={ROW}
 						icon={
 							<BotIdentityAvatar
@@ -324,7 +355,10 @@ const BotRosterRow = ({
 						isActive={isSelected}
 						isIconDecorative={false}
 						label={bot.name}
-						onSelect={() => onSelect?.(bot.id)}
+						onSelect={() => {
+							if (lift.hasJustDropped()) return
+							onSelect?.(bot.id)
+						}}
 					>
 						<span className="flex min-w-0 flex-col">
 							<span className={NAME_LINE}>
@@ -433,6 +467,77 @@ const SectionDropZone = ({ name }: SectionDropZoneProps) => {
 	)
 }
 
+type InsertionEdge = "above" | "below"
+
+interface RosterDropAreaProps {
+	landing: string
+	isLanding: boolean
+	isLifted?: boolean
+	insertion?: InsertionEdge
+	className?: string
+	ref?: (node: HTMLElement | null) => void
+	children: ReactNode
+}
+
+const RosterDropArea = ({
+	landing,
+	isLanding,
+	isLifted = false,
+	insertion,
+	className,
+	ref,
+	children,
+}: RosterDropAreaProps) => (
+	<div
+		{...dropArea(landing)}
+		className={cn(
+			DROP_AREA,
+			isLanding && DROP_AREA_LANDING,
+			isLifted && DROP_AREA_LIFTED,
+			className,
+		)}
+		data-slot="roster-drop-area"
+		data-tauri-drag-region="false"
+		ref={ref}
+	>
+		{insertion ? (
+			<span
+				className={cn(
+					INSERTION_LINE,
+					insertion === "above" ? INSERTION_ABOVE : INSERTION_BELOW,
+				)}
+				data-slot="roster-insertion"
+			/>
+		) : null}
+		{children}
+	</div>
+)
+
+interface LiftedBotProps {
+	bot: AgentSidebarBot
+	ref: (node: HTMLElement | null) => void
+}
+
+const LiftedBot = ({ bot, ref }: LiftedBotProps) => (
+	<span
+		aria-hidden="true"
+		className={LIFTED_BOT}
+		data-slot="roster-lifted-bot"
+		ref={ref}
+	>
+		<BotIdentityAvatar
+			animal={bot.animal}
+			blot={bot.blot}
+			image={bot.image}
+			kind={poseOf(bot)}
+			name={bot.name}
+			seed={bot.id}
+			size={ROW_AVATAR_SIZE}
+			working={isBusy(bot)}
+		/>
+	</span>
+)
+
 interface SectionNameFieldProps {
 	ariaLabel: string
 	initialName: string
@@ -490,6 +595,7 @@ interface RosterSectionProps {
 	onRename?: (id: string, name: string) => void
 	onMove?: (id: string, by: number) => void
 	onDelete?: (id: string) => void
+	lift: Lifter
 	children: ReactNode
 }
 
@@ -497,6 +603,7 @@ const RosterSection = ({
 	section,
 	isFirst,
 	isLast,
+	lift,
 	onRename,
 	onMove,
 	onDelete,
@@ -524,10 +631,14 @@ const RosterSection = ({
 					<ContextMenu>
 						<ContextMenuTrigger announcesPopup={false}>
 							<button
+								{...lift.handlersFor(section.id)}
 								aria-controls={bodyId}
 								aria-expanded={isOpen}
 								className={SECTION_TRIGGER}
-								onClick={() => setIsOpen((open) => !open)}
+								onClick={() => {
+									if (lift.hasJustDropped()) return
+									setIsOpen((open) => !open)
+								}}
 								type="button"
 							>
 								<span className={SECTION_NAME} data-slot="roster-section-name">
@@ -608,6 +719,7 @@ const BotRoster = ({
 	onMoveBotToSection,
 }: BotRosterProps) => {
 	const { t } = useTranslation("bots")
+	const { isMobile, state } = useAnimatedSidebar()
 	const [namingFor, setNamingFor] = useState<string | null>(null)
 
 	const known = new Set(sections.map((section) => section.id))
@@ -619,13 +731,71 @@ const BotRoster = ({
 			(bot) => bot.id !== namingFor && sectionOf(bot, known) === sectionId,
 		)
 
-	const moveSection = (id: string, by: number) => {
-		const order = sections.map((section) => section.id)
-		const at = order.indexOf(id)
-		order.splice(at, 1)
-		order.splice(at + by, 0, id)
+	const withoutSection = (id: string) =>
+		sections.filter((section) => section.id !== id)
+
+	const placeSection = (id: string, at: number) => {
+		const order = withoutSection(id).map((section) => section.id)
+		order.splice(at, 0, id)
+		if (order.every((held, rank) => held === sections[rank]?.id)) return
 		onReorderSections?.(order)
 	}
+
+	const moveSection = (id: string, by: number) => {
+		const at = sections.findIndex((section) => section.id === id) + by
+		if (at < 0 || at >= sections.length) return
+		placeSection(id, at)
+	}
+
+	const fileBot = (botId: string, landing: string) => {
+		const bot = bots.find((held) => held.id === botId)
+		const sectionId = landing === NO_SECTION ? null : landing
+		if (!bot || sectionOf(bot, known) === sectionId) return
+		if (sectionId && !known.has(sectionId)) return
+		onMoveBotToSection?.(botId, sectionId)
+	}
+
+	const slots = useRef(new Map<string, HTMLElement>()).current
+
+	const middleOf = (id: string) => {
+		const box = slots.get(id)?.getBoundingClientRect()
+		return box ? box.top + box.height / 2 : Number.POSITIVE_INFINITY
+	}
+
+	const insertionAt = (x: number, y: number, id: string) => {
+		const column = slots.get(id)?.parentElement?.getBoundingClientRect()
+		if (!column || x < column.left || x > column.right) return null
+		return withoutSection(id).filter((section) => middleOf(section.id) < y)
+			.length
+	}
+
+	const isLiftEnabled = isMobile || state === "expanded"
+
+	const botLift = useRosterLift({
+		isEnabled: isLiftEnabled,
+		landingAt: dropAreaAt,
+		onLand: fileBot,
+	})
+
+	const sectionLift = useRosterLift({
+		isEnabled: isLiftEnabled,
+		landingAt: insertionAt,
+		onLand: placeSection,
+	})
+
+	const liftedBotId = botLift.lift?.id
+	const liftedBot = liftedBotId
+		? bots.find((bot) => bot.id === liftedBotId)
+		: undefined
+	const liftedSectionId = sectionLift.lift?.id
+	const landing = botLift.lift?.landing ?? null
+	const insertion = sectionLift.lift?.landing ?? null
+	const placed = liftedSectionId ? withoutSection(liftedSectionId) : sections
+	const insertsBefore = insertion === null ? null : placed[insertion]?.id
+	const insertsAfter =
+		insertion !== null && insertion >= placed.length
+			? placed[placed.length - 1]?.id
+			: null
 
 	const rowsFor = (held: AgentSidebarBot[]) => (
 		<AnimatedSidebarMenu>
@@ -635,6 +805,7 @@ const BotRoster = ({
 					destinations={destinations}
 					isSelected={bot.id === selectedBotId}
 					key={bot.id}
+					lift={botLift}
 					onCreateSectionFor={onCreateSection ? setNamingFor : undefined}
 					onDelete={onDeleteBot}
 					onDuplicate={onDuplicateBot}
@@ -655,29 +826,58 @@ const BotRoster = ({
 
 	return (
 		<>
-			{loose.length > 0 ? rowsFor(loose) : null}
+			{loose.length > 0 || liftedBot ? (
+				<RosterDropArea isLanding={landing === NO_SECTION} landing={NO_SECTION}>
+					{loose.length > 0 ? (
+						rowsFor(loose)
+					) : (
+						<SectionDropZone name={t("roster.label")} />
+					)}
+				</RosterDropArea>
+			) : null}
 			{sections.map((section, rank) => {
 				const held = botsUnder(section.id)
+				const isLifted = section.id === liftedSectionId
 				return (
-					<RosterSection
-						isFirst={rank === 0}
-						isLast={rank === sections.length - 1}
+					<RosterDropArea
+						className={SECTION_SLOT}
+						insertion={
+							insertsBefore === section.id
+								? "above"
+								: insertsAfter === section.id
+									? "below"
+									: undefined
+						}
+						isLanding={landing === section.id}
+						isLifted={isLifted}
 						key={section.id}
-						onDelete={onDeleteSection}
-						onMove={moveSection}
-						onRename={onRenameSection}
-						section={section}
+						landing={section.id}
+						ref={(node) => {
+							if (node) slots.set(section.id, node)
+							else slots.delete(section.id)
+							if (isLifted) sectionLift.followRef(node)
+						}}
 					>
-						{held.length > 0 ? (
-							rowsFor(held)
-						) : (
-							<SectionDropZone name={section.name} />
-						)}
-					</RosterSection>
+						<RosterSection
+							isFirst={rank === 0}
+							isLast={rank === sections.length - 1}
+							lift={sectionLift}
+							onDelete={onDeleteSection}
+							onMove={moveSection}
+							onRename={onRenameSection}
+							section={section}
+						>
+							{held.length > 0 ? (
+								rowsFor(held)
+							) : (
+								<SectionDropZone name={section.name} />
+							)}
+						</RosterSection>
+					</RosterDropArea>
 				)
 			})}
 			{naming ? (
-				<AnimatedSidebarGroup className={SECTION_GROUP}>
+				<AnimatedSidebarGroup className={cn(SECTION_GROUP, SECTION_SLOT)}>
 					<SectionLabel>
 						<SectionNameField
 							ariaLabel={t("roster.section.createField")}
@@ -694,6 +894,12 @@ const BotRoster = ({
 					</AnimatedSidebarGroupContent>
 				</AnimatedSidebarGroup>
 			) : null}
+			{liftedBot
+				? createPortal(
+						<LiftedBot bot={liftedBot} ref={botLift.followRef} />,
+						document.body,
+					)
+				: null}
 		</>
 	)
 }
