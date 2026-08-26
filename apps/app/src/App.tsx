@@ -188,6 +188,15 @@ export function App() {
 		}
 	}
 
+	const moveToSpace = (botId: string, spaceId: string) =>
+		moveBotToSpace({
+			botId,
+			spaceId,
+			roster: roster.controller,
+			chat: chat.controller,
+			spaces: spaces.controller,
+		})
+
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
 		attachments.forget(id)
@@ -346,13 +355,7 @@ export function App() {
 							void sections.controller.remove(id)
 						}}
 						onMoveBotToSpace={(botId, spaceId) => {
-							void moveBotToSpace({
-								botId,
-								spaceId,
-								roster: roster.controller,
-								chat: chat.controller,
-								spaces: spaces.controller,
-							})
+							void moveToSpace(botId, spaceId)
 						}}
 						onMoveBotToSection={(botId, sectionId) => {
 							void sections.controller.moveBot(botId, sectionId)

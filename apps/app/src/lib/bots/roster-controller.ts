@@ -94,7 +94,7 @@ export const createRosterController = (
 
 	const held = (id: string) => state.bots.find((bot) => bot.id === id)
 
-	const spaceHolding = (botId: string) =>
+	const spaceOfBot = (botId: string) =>
 		Object.keys(state.rosters).find((spaceId) =>
 			rosterIn(state.rosters, spaceId).some((bot) => bot.id === botId),
 		)
@@ -280,7 +280,7 @@ export const createRosterController = (
 
 		moveToSpace: (botId: string, spaceId: string) =>
 			enqueue(async () => {
-				const home = spaceHolding(botId)
+				const home = spaceOfBot(botId)
 				const moved = home
 					? rosterIn(state.rosters, home).find((bot) => bot.id === botId)
 					: undefined
@@ -289,20 +289,12 @@ export const createRosterController = (
 				}
 				await store.moveBotToSpace(botId, spaceId)
 				set({
-					rosters: {
-						...state.rosters,
-						[home]: rosterIn(state.rosters, home).filter(
-							(bot) => bot.id !== botId,
-						),
-						[spaceId]: [
-							...rosterIn(state.rosters, spaceId),
-							{ ...moved, sectionId: null },
-						],
-					},
-					spaceId,
-					selectedBotId: botId,
-					isShowingDanger: false,
+					rosters: withRoster(
+						home,
+						rosterIn(state.rosters, home).filter((bot) => bot.id !== botId),
+					),
 				})
+				admit({ ...moved, sectionId: null }, spaceId)
 				return moved
 			}).catch(async () => {
 				await reload()
