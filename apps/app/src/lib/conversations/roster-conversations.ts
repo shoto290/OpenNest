@@ -3,9 +3,10 @@ import type {
 	AgentSidebarConversation,
 } from "@workspace/ui/components/agents/agent-sidebar"
 import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
+import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 
-import type { Conversation, Participant } from "./store-contract"
+import type { Bot, Conversation, Participant } from "./store-contract"
 
 import { avatarSrc } from "../host"
 
@@ -46,6 +47,31 @@ export const presentParticipants = (
 	conversation: Conversation,
 ): Participant[] =>
 	conversation.participants.filter((participant) => participant.leftAt === null)
+
+export const unseatedBots = (
+	bots: Bot[],
+	conversation: Conversation,
+): ConversationBot[] => {
+	const seated = new Set(
+		presentParticipants(conversation).map((participant) => participant.botId),
+	)
+	return bots
+		.filter((bot) => !seated.has(bot.id))
+		.map((bot) => ({
+			id: bot.id,
+			name: bot.name,
+			animal: bot.avatarAnimal,
+			blot: bot.avatarBlot ?? undefined,
+			image: avatarSrc(bot.avatarImagePath),
+		}))
+}
+
+export const toConversationSettingsValue = (
+	conversation: Conversation,
+): ConversationSettingsValue => ({
+	name: conversation.title,
+	instructions: conversation.instructions,
+})
 
 export const toRosterConversations = (
 	conversations: Conversation[],

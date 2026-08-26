@@ -3,6 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotWorking } from "@workspace/ui/components/bot-working"
+import { Button } from "@workspace/ui/components/button"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import { ChatNotice } from "@workspace/ui/components/chat-notice"
 import {
@@ -45,6 +46,8 @@ type ConversationScreenProps = {
 	conversation: Conversation
 	driver: ChatDriver
 	store: TranscriptStore
+	isSettingsOpen: boolean
+	onOpenSettings: () => void
 }
 
 type SpeakingBotsProps = {
@@ -188,6 +191,8 @@ export function ConversationScreen({
 	conversation,
 	driver,
 	store,
+	isSettingsOpen,
+	onOpenSettings,
 }: ConversationScreenProps) {
 	const t = useChatCopy()
 	const { state, controller } = useConversation(driver, store, conversation)
@@ -233,7 +238,12 @@ export function ConversationScreen({
 						data-tauri-drag-region="deep"
 						insetWindowControls={hasOverlayWindowControls()}
 						leading={
-							<>
+							<Button
+								aria-expanded={isSettingsOpen}
+								onClick={onOpenSettings}
+								size="lg"
+								variant="ghost"
+							>
 								{present.map((bot) => (
 									<BotIdentityAvatar
 										animal={bot.animal}
@@ -246,7 +256,7 @@ export function ConversationScreen({
 									/>
 								))}
 								{conversation.title}
-							</>
+							</Button>
 						}
 					/>
 				}

@@ -114,6 +114,18 @@ export type TranscriptStore = TranscriptPort & {
 		edit: ConversationEdit,
 	) => Promise<Conversation>
 	deleteConversation: (conversationId: string) => Promise<void>
+	addConversationParticipant: (
+		conversationId: string,
+		botId: string,
+	) => Promise<Conversation>
+	removeConversationParticipant: (
+		conversationId: string,
+		botId: string,
+	) => Promise<Conversation>
+	setConversationLead: (
+		conversationId: string,
+		botId: string,
+	) => Promise<Conversation>
 	openRuntimeSession: (
 		conversationId: string,
 		botId: string,

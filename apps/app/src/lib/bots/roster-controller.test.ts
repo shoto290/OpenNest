@@ -11,7 +11,12 @@ import {
 import { createRosterController } from "./roster-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
-import type { Bot } from "../conversations/store-contract"
+import {
+	leadOf,
+	presentParticipants,
+	unseatedBots,
+} from "../conversations/roster-conversations"
+import type { Bot, Conversation } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
 const anEmptyStore = async (): Promise<TranscriptStore> => {
@@ -53,6 +58,11 @@ const held = (controller: { getState: () => { bots: Bot[] } }, id: string) => {
 
 const reloaded = async (store: TranscriptStore) =>
 	(await loaded(store)).getState()
+
+const leadIn = (conversation: Conversation) => leadOf(conversation)
+
+const seatedIn = (conversation: Conversation) =>
+	presentParticipants(conversation).map((seat) => seat.botId)
 
 let spoken = 0
 
@@ -875,6 +885,130 @@ describe("createRosterController on conversations", () => {
 		controller.clearSection(section.id)
 
 		expect(controller.getState().conversations[0].sectionId).toBeNull()
+	})
+
+	it("opens the settings of the conversation it is asked about", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		controller.editConversation(created?.id ?? "")
+
+		const state = controller.getState()
+		expect(state.isEditingConversation).toBe(true)
+		expect(state.selectedConversationId).toBe(created?.id)
+		expect(state.isEditing).toBe(false)
+	})
+
+	it("stores the name and the instructions that are written", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		controller.describeConversation(created?.id ?? "", {
+			name: "Menu",
+			instructions: "Stay short.",
+		})
+		expect(controller.getState().conversations[0].title).toBe("Menu")
+
+		const state = await reloaded(store)
+		expect(state.conversations[0].title).toBe("Menu")
+		expect(state.conversations[0].instructions).toBe("Stay short.")
+	})
+
+	it("moves the crown onto the participant it is given to", async () => {
+		const store = createFakeTranscriptStore()
+		const second = await store.createBot(newBotIdentity([]), "personal")
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default", second.id],
+		})
+
+		await controller.setConversationLead(created?.id ?? "", second.id)
+
+		expect(leadIn(controller.getState().conversations[0])).toBe(second.id)
+		expect(leadIn((await store.conversations("personal"))[0])).toBe(second.id)
+	})
+
+	it("seats a recruited bot last and offers it no more", async () => {
+		const store = createFakeTranscriptStore()
+		const second = await store.createBot(newBotIdentity([]), "personal")
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		await controller.recruitToConversation(created?.id ?? "", second.id)
+
+		const room = controller.getState().conversations[0]
+		expect(seatedIn(room)).toEqual(["default", second.id])
+		expect(unseatedBots(controller.getState().bots, room)).toEqual([])
+	})
+
+	it("keeps a dismissed participant readable and out of the seats", async () => {
+		const store = createFakeTranscriptStore()
+		const second = await store.createBot(newBotIdentity([]), "personal")
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default", second.id],
+		})
+
+		await controller.dismissFromConversation(created?.id ?? "", second.id)
+
+		const room = controller.getState().conversations[0]
+		expect(seatedIn(room)).toEqual(["default"])
+		expect(room.participants.map((seat) => seat.botId)).toContain(second.id)
+	})
+
+	it("crowns the first bot still seated when the lead is dismissed", async () => {
+		const store = createFakeTranscriptStore()
+		const second = await store.createBot(newBotIdentity([]), "personal")
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default", second.id],
+		})
+
+		await controller.dismissFromConversation(created?.id ?? "", "default")
+
+		expect(leadIn(controller.getState().conversations[0])).toBe(second.id)
+	})
+
+	it("shows what is stored when a settings command is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		await controller.setConversationLead(created?.id ?? "", "stranger")
+
+		expect(controller.getState().conversations[0].title).toBe("Launch")
+		expect(leadIn(controller.getState().conversations[0])).toBe("default")
+	})
+
+	it("closes the settings when the conversation it showed is gone", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+		controller.editConversation(created?.id ?? "")
+
+		await controller.removeConversation(created?.id ?? "")
+
+		expect(controller.getState().isEditingConversation).toBe(false)
 	})
 
 	it("drops a deleted conversation and lands on the first row of the roster", async () => {

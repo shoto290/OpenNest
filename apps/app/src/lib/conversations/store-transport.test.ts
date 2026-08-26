@@ -153,6 +153,27 @@ const WRITES: WriteCase[] = [
 		call: ["conversation_delete", { conversationId: "c-1" }],
 	},
 	{
+		member: "addConversationParticipant",
+		write: () => conversationStore.addConversationParticipant("c-1", "b-1"),
+		call: [
+			"conversation_add_participant",
+			{ conversationId: "c-1", botId: "b-1" },
+		],
+	},
+	{
+		member: "removeConversationParticipant",
+		write: () => conversationStore.removeConversationParticipant("c-1", "b-1"),
+		call: [
+			"conversation_remove_participant",
+			{ conversationId: "c-1", botId: "b-1" },
+		],
+	},
+	{
+		member: "setConversationLead",
+		write: () => conversationStore.setConversationLead("c-1", "b-1"),
+		call: ["conversation_set_lead", { conversationId: "c-1", botId: "b-1" }],
+	},
+	{
 		member: "sections",
 		write: () => conversationStore.sections("s-1"),
 		call: ["section_list", { spaceId: "s-1" }],
