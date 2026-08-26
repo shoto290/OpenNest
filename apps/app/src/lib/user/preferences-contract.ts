@@ -9,6 +9,8 @@ export type Palette = string
 
 export type Language = string | null
 
+export type BotIdBySpace = Record<string, string>
+
 export type UserPreferences = {
 	displayName: string
 	profilePicturePath: string | null
@@ -22,6 +24,7 @@ export type UserPreferences = {
 	sidebarWidth: number | null
 	lastBotId: string | null
 	lastSpaceId: string | null
+	lastBotIdBySpace: BotIdBySpace
 }
 
 export type UserPreferencesError =

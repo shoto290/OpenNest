@@ -27,6 +27,7 @@ const RECORD: UserPreferences = {
 	sidebarWidth: null,
 	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const MIRRORED: MirroredPreferences = {
@@ -36,6 +37,7 @@ const MIRRORED: MirroredPreferences = {
 	sidebarWidth: null,
 	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const createStorage = () => {
@@ -88,7 +90,35 @@ describe("the mirror", () => {
 			sidebarWidth: null,
 			lastBotId: null,
 			lastSpaceId: null,
+			lastBotIdBySpace: {},
 		})
+	})
+
+	it("holds the bot last opened in each space", () => {
+		writeMirror({
+			...MIRRORED,
+			lastBotIdBySpace: { vocca: "nyx", atlas: "iris" },
+		})
+
+		expect(localStorage.getItem("lastBotIdBySpace")).toBe(
+			JSON.stringify({ vocca: "nyx", atlas: "iris" }),
+		)
+		expect(readMirror().lastBotIdBySpace).toEqual({
+			vocca: "nyx",
+			atlas: "iris",
+		})
+	})
+
+	it("reads no bot per space when the mirror holds nothing readable", () => {
+		localStorage.setItem("lastBotIdBySpace", "{not json")
+
+		expect(readMirror().lastBotIdBySpace).toEqual({})
+	})
+
+	it("reads no bot per space when the mirror holds a shape it cannot serve", () => {
+		localStorage.setItem("lastBotIdBySpace", JSON.stringify(["nyx"]))
+
+		expect(readMirror().lastBotIdBySpace).toEqual({})
 	})
 
 	it("reads the default palette for a palette this build does not ship", () => {
@@ -155,6 +185,7 @@ describe("the record the host holds", () => {
 				sidebarWidth: 320,
 				lastBotId: "nyx",
 				lastSpaceId: "vocca",
+				lastBotIdBySpace: {},
 			}),
 		).toEqual({
 			colorScheme: "dark",
@@ -163,7 +194,14 @@ describe("the record the host holds", () => {
 			sidebarWidth: 320,
 			lastBotId: "nyx",
 			lastSpaceId: "vocca",
+			lastBotIdBySpace: {},
 		})
+	})
+
+	it("is read with no bot per space when the record leaves the map out", () => {
+		const { lastBotIdBySpace, ...older } = RECORD
+
+		expect(mirrorOf(older as UserPreferences).lastBotIdBySpace).toEqual({})
 	})
 
 	it("is read on its defaults for the values this build does not ship", () => {
@@ -176,6 +214,7 @@ describe("the record the host holds", () => {
 			sidebarWidth: null,
 			lastBotId: null,
 			lastSpaceId: null,
+			lastBotIdBySpace: {},
 		})
 	})
 })
@@ -230,6 +269,7 @@ describe("sameMirror", () => {
 			sidebarWidth: 320,
 			lastBotId: "nyx",
 			lastSpaceId: "vocca",
+			lastBotIdBySpace: {},
 		} as const
 
 		expect(sameMirror(mirrored, { ...mirrored })).toBe(true)
@@ -241,5 +281,8 @@ describe("sameMirror", () => {
 		expect(sameMirror(mirrored, { ...mirrored, sidebarWidth: 256 })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, lastBotId: null })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, lastSpaceId: null })).toBe(false)
+		expect(
+			sameMirror(mirrored, { ...mirrored, lastBotIdBySpace: { vocca: "nyx" } }),
+		).toBe(false)
 	})
 })

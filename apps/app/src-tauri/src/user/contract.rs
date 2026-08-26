@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,8 @@ pub struct UserPreferences {
 	pub sidebar_width: Option<u32>,
 	pub last_bot_id: Option<String>,
 	pub last_space_id: Option<String>,
+	#[serde(default)]
+	pub last_bot_id_by_space: BTreeMap<String, String>,
 }
 
 impl UserPreferences {
@@ -73,6 +76,7 @@ impl UserPreferences {
 			sidebar_width: preferences.sidebar_width,
 			last_bot_id: preferences.last_bot_id,
 			last_space_id: preferences.last_space_id,
+			last_bot_id_by_space: preferences.last_bot_id_by_space,
 		}
 	}
 }
@@ -92,6 +96,7 @@ impl From<UserPreferences> for user::Preferences {
 			sidebar_width: preferences.sidebar_width,
 			last_bot_id: preferences.last_bot_id,
 			last_space_id: preferences.last_space_id,
+			last_bot_id_by_space: preferences.last_bot_id_by_space,
 		}
 	}
 }

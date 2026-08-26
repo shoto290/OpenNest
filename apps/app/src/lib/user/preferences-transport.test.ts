@@ -24,6 +24,7 @@ const RECORD: UserPreferences = {
 	sidebarWidth: null,
 	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const DEFAULTS: UserPreferences = {
@@ -39,6 +40,7 @@ const DEFAULTS: UserPreferences = {
 	sidebarWidth: null,
 	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const FAILURES: UserPreferencesError[] = [

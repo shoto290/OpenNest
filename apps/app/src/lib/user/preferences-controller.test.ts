@@ -23,6 +23,7 @@ const DEFAULTS: UserPreferences = {
 	sidebarWidth: null,
 	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const WORN = "/data/avatars/worn.png"
@@ -226,7 +227,8 @@ describe("the reader's own record", () => {
 	})
 
 	it("reads a field the record leaves out as none, and writes nothing for it", async () => {
-		const { sidebarWidth, lastBotId, lastSpaceId, ...older } = DEFAULTS
+		const { sidebarWidth, lastBotId, lastSpaceId, lastBotIdBySpace, ...older } =
+			DEFAULTS
 		const host = aHost(older as UserPreferences)
 		const controller = await loaded()
 
@@ -428,23 +430,58 @@ describe("the sidebar edge the reader drags", () => {
 })
 
 describe("the conversation the reader opens", () => {
-	it("is written to the record and to the mirror", async () => {
+	it("is written to the record and to the mirror against its space", async () => {
 		const host = aHost()
 		const controller = await loaded()
 
-		await controller.setLastBot("nyx")
+		await controller.setLastBot({ spaceId: "vocca", botId: "nyx" })
 
 		expect(controller.getState().preferences.lastBotId).toBe("nyx")
+		expect(controller.getState().preferences.lastBotIdBySpace).toEqual({
+			vocca: "nyx",
+		})
 		expect(localStorage.getItem("lastBotId")).toBe("nyx")
+		expect(localStorage.getItem("lastBotIdBySpace")).toBe(
+			JSON.stringify({ vocca: "nyx" }),
+		)
+		expect(host()).toEqual({
+			...DEFAULTS,
+			lastBotId: "nyx",
+			lastBotIdBySpace: { vocca: "nyx" },
+		})
+	})
+
+	it("leaves the bot of every other space where it was", async () => {
+		aHost({ ...DEFAULTS, lastBotIdBySpace: { atlas: "iris" } })
+		const controller = await loaded()
+
+		await controller.setLastBot({ spaceId: "vocca", botId: "nyx" })
+
+		expect(controller.getState().preferences.lastBotIdBySpace).toEqual({
+			atlas: "iris",
+			vocca: "nyx",
+		})
+	})
+
+	it("names no space while none is shown", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		await controller.setLastBot({ spaceId: null, botId: "nyx" })
+
 		expect(host()).toEqual({ ...DEFAULTS, lastBotId: "nyx" })
 	})
 
 	it("is written once when it is the bot the record already names", async () => {
-		aHost({ ...DEFAULTS, lastBotId: "nyx" })
+		aHost({
+			...DEFAULTS,
+			lastBotId: "nyx",
+			lastBotIdBySpace: { vocca: "nyx" },
+		})
 		const controller = await loaded()
 		hostInvoke.mockClear()
 
-		await controller.setLastBot("nyx")
+		await controller.setLastBot({ spaceId: "vocca", botId: "nyx" })
 
 		expect(hostInvoke).not.toHaveBeenCalled()
 	})

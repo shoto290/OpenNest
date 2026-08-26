@@ -16,6 +16,7 @@ const RECORD: ReaderPreferences = {
 	sidebarWidth: null,
 	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const shown = (record: ReaderPreferences = RECORD) =>
