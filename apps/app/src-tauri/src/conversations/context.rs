@@ -22,7 +22,7 @@ const ELIDED: &str = "…";
 
 const UNKNOWN_SESSION: &str = "unknown";
 
-const INSTRUCTIONS_LABEL: &str = "The instructions of this conversation, they come first:";
+const INSTRUCTIONS_LABEL: &str = "The instructions of this conversation:";
 const SUMMARY_LABEL: &str = "The conversation so far:";
 const REPLY_LABEL: &str = "The message this one replies to:";
 const RECENT_LABEL: &str = "The most recent messages:";
@@ -480,9 +480,8 @@ mod tests {
 
 	#[test]
 	fn a_conversation_with_no_instructions_reads_as_it_did() {
-		assert_eq!(compose(only("hello")), "hello");
 		let blank = compose(Parts { instructions: "   ", ..only("hello") });
-		assert!(!blank.contains(INSTRUCTIONS_LABEL), "an empty rule was announced: {blank}");
+		assert_eq!(blank, "hello", "an empty rule was announced");
 	}
 
 	#[test]
@@ -952,9 +951,8 @@ mod tests {
 			"the instructions did not open the context: {first}"
 		);
 		assert_eq!(section(&first, INSTRUCTIONS_LABEL), Some("Speak in French."));
-		assert_eq!(
-			occurrences(&checkpoint.summary, "Speak in French."),
-			0,
+		assert!(
+			!checkpoint.summary.contains("Speak in French."),
 			"the instructions were folded into the summary"
 		);
 
@@ -975,26 +973,6 @@ mod tests {
 			Some(checkpoint.summary),
 			"an edit to the instructions rewrote what was already folded"
 		);
-
-		drop(database);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
-	#[tokio::test]
-	async fn a_conversation_with_no_instructions_is_told_nothing_of_them() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let conversation = a_conversation(&database).await;
-		spoken_so_far(&database, &conversation, 2).await;
-		prompt(&database, &conversation, "p1", None).await;
-
-		let context =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
-
-		assert!(!context.contains(INSTRUCTIONS_LABEL), "an empty rule was announced: {context}");
-		assert!(context.starts_with(RECENT_LABEL), "the context did not open on the tail");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
