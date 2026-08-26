@@ -2115,6 +2115,8 @@ const sectionField = (canvasElement: HTMLElement) => {
 
 const MOVE_TO = "Move to"
 
+const NEW_SECTION = "New section"
+
 type Gestures = {
 	click: (node: Element) => Promise<void>
 	hover: (node: Element) => Promise<void>
@@ -2408,21 +2410,21 @@ export const NewSectionForABot = meta.story({
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
-		const branch = await openMoveToBranch(canvasElement, "Atlas", userEvent)
-		await userEvent.click(branch.getByRole("menuitem", { name: "New section" }))
+		const openNewSection = async () => {
+			const branch = await openMoveToBranch(canvasElement, "Atlas", userEvent)
+			await userEvent.click(branch.getByRole("menuitem", { name: NEW_SECTION }))
+		}
+
+		await openNewSection()
 
 		const field = sectionField(canvasElement)
 		await expect(field).toHaveFocus()
 		await expect(field).toHaveAccessibleName("New section name")
-		await expect(field).toHaveValue("New section")
+		await expect(field).toHaveValue(NEW_SECTION)
 		await expect(field.selectionStart).toBe(0)
-		await expect(field.selectionEnd).toBe("New section".length)
+		await expect(field.selectionEnd).toBe(NEW_SECTION.length)
 		await expect(rowNames(canvasElement)).toEqual([
-			"Cinder",
-			"Beacon",
-			"Ember",
-			"Dune",
-			"Flint",
+			...GROUPED_ORDER.filter((name) => name !== "Atlas"),
 			"Atlas",
 		])
 
@@ -2430,24 +2432,14 @@ export const NewSectionForABot = meta.story({
 		await expect(args.onCreateSection).not.toHaveBeenCalled()
 		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
 
-		await userEvent.click(
-			(await openMoveToBranch(canvasElement, "Atlas", userEvent)).getByRole(
-				"menuitem",
-				{ name: "New section" },
-			),
-		)
+		await openNewSection()
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onCreateSection).toHaveBeenCalledWith(
-			"New section",
+			NEW_SECTION,
 			"atlas",
 		)
 
-		await userEvent.click(
-			(await openMoveToBranch(canvasElement, "Atlas", userEvent)).getByRole(
-				"menuitem",
-				{ name: "New section" },
-			),
-		)
+		await openNewSection()
 		await userEvent.keyboard("Reading{Enter}")
 		await expect(args.onCreateSection).toHaveBeenCalledWith("Reading", "atlas")
 	},
