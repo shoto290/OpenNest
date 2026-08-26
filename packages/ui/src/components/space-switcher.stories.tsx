@@ -62,6 +62,8 @@ const dotsIn = (root: HTMLElement) => slotsIn(root, "space-dot-button")
 const dotNames = (root: HTMLElement) =>
 	dotsIn(root).map((dot) => dot.getAttribute("aria-label"))
 
+const RESTING_NAMES = SPACES.map((space) => `Open ${space.name}`)
+
 const centreOf = (node: Element) => {
 	const box = node.getBoundingClientRect()
 	return {
@@ -510,13 +512,7 @@ export const DragDotToPlace = meta.story({
 
 		await expect(getComputedStyle(handle).pointerEvents).toBe("none")
 		await expect(centreOf(handle).clientX - from.clientX).toBeCloseTo(12, 0)
-		await expect(dotNames(canvasElement)).toEqual([
-			"Open Perso",
-			"Open Vocca",
-			"Open Atelier",
-			"Open Veille",
-			"Open Archives",
-		])
+		await expect(dotNames(canvasElement)).toEqual(RESTING_NAMES)
 
 		moveOver(handle, dotsIn(canvasElement)[3])
 		await expect(insertionOn(canvasElement)).toBe(dotsIn(canvasElement)[4])
@@ -594,13 +590,7 @@ export const DragDotNowhere = meta.story({
 		fireEvent.pointerDown(handle, { ...POINTER, ...from, button: 2 })
 		moveOver(handle, dotsIn(canvasElement)[0])
 		await expect(getComputedStyle(handle).pointerEvents).not.toBe("none")
-		await expect(dotNames(canvasElement)).toEqual([
-			"Open Perso",
-			"Open Vocca",
-			"Open Atelier",
-			"Open Veille",
-			"Open Archives",
-		])
+		await expect(dotNames(canvasElement)).toEqual(RESTING_NAMES)
 	},
 })
 

@@ -280,7 +280,7 @@ const SpaceDots = ({
 			{spaces.map((space) => {
 				const isSelected = space.id === selectedSpaceId
 				const isLifted = space.id === liftedId
-				const insertion =
+				const edge =
 					insertsBefore === space.id
 						? INSERTION_BEFORE
 						: insertsAfter === space.id
@@ -302,9 +302,9 @@ const SpaceDots = ({
 						ref={isLifted ? lift.followRef : undefined}
 						type="button"
 					>
-						{insertion ? (
+						{edge ? (
 							<span
-								className={cn(INSERTION_LINE, insertion)}
+								className={cn(INSERTION_LINE, edge)}
 								data-slot="space-insertion"
 							/>
 						) : null}
