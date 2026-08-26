@@ -6,6 +6,7 @@ const bots = {
 		conversation: {
 			create: "Nouvelle conversation",
 			others: "+{{count}}",
+			preview: "{{name}} : {{text}}",
 		},
 		empty: "Aucun bot pour l'instant",
 		actions: "Actions pour {{name}}",

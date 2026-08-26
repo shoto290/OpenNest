@@ -7,7 +7,7 @@ import type { ConversationSettingsValue } from "@workspace/ui/components/convers
 import type { MessageAuthor } from "@workspace/ui/components/message"
 
 import type { Bot, Conversation, Participant } from "./store-contract"
-import type { ConversationPreviews } from "./transcript-state"
+import type { ConversationPreviews, LastWord } from "./transcript-state"
 
 import { avatarSrc } from "../host"
 import { rosterTimestamp } from "../bots/roster-timestamp"
@@ -90,6 +90,15 @@ const mostRecentFirst = (
 		(one, other) => lastSpokeAt(other, previews) - lastSpokeAt(one, previews),
 	)
 
+const speakerNameAmong = (
+	seated: Participant[],
+	preview: LastWord | undefined,
+): string | undefined =>
+	seated.find(
+		(participant) =>
+			participant.botId === preview?.authorBotId && !participant.isDeleted,
+	)?.name
+
 export const toRosterConversations = (
 	conversations: Conversation[],
 	previews: ConversationPreviews,
@@ -97,12 +106,14 @@ export const toRosterConversations = (
 ): AgentSidebarConversation[] =>
 	mostRecentFirst(conversations, previews).map((conversation) => {
 		const preview = previews[conversation.id]
+		const seated = presentParticipants(conversation)
 		return {
 			id: conversation.id,
 			name: conversation.title,
 			sectionId: conversation.sectionId,
-			participants: toConversationBots(presentParticipants(conversation)),
+			participants: toConversationBots(seated),
 			lastMessage: preview?.text,
+			lastSpeaker: speakerNameAmong(seated, preview),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
 		}
 	})
