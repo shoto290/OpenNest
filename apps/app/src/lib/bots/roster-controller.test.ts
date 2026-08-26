@@ -66,30 +66,32 @@ const seatedIn = (conversation: Conversation) =>
 
 let spoken = 0
 
-const saidTo = async (
+const saidIn = async (
 	store: TranscriptStore,
-	botId: string,
+	conversationId: string,
 	content: string,
 ) => {
 	spoken += 1
-	const chat = await store.mainChat(botId)
 	const turn = `turn-${spoken}`
 	await store.startTurn({
 		id: turn,
-		conversationId: chat.id,
+		conversationId,
 		startedAt: spoken,
 	})
 	await store.appendUserMessage({
 		id: `said-${spoken}`,
-		conversationId: chat.id,
+		conversationId,
 		turnId: turn,
 		authorBotId: null,
 		repliedToMessageId: null,
 		content,
 		createdAt: spoken,
 	})
-	return { chatId: chat.id, turnId: turn, createdAt: spoken }
+	return { chatId: conversationId, turnId: turn, createdAt: spoken }
 }
+
+const saidTo = async (store: TranscriptStore, botId: string, content: string) =>
+	saidIn(store, (await store.mainChat(botId)).id, content)
 
 const answering = async (store: TranscriptStore, botId: string) => {
 	const { chatId, turnId } = await saidTo(store, botId, "And?")
@@ -765,6 +767,76 @@ describe("createRosterController previews", () => {
 
 		expect(held(controller, first.id).sectionId).toBeNull()
 		expect(held(controller, second.id).sectionId).toBe("n-2")
+	})
+})
+
+describe("createRosterController conversation previews", () => {
+	const opened = async (store: TranscriptStore, title = "Launch") =>
+		store.createConversation({
+			spaceId: "personal",
+			sectionId: null,
+			title,
+			botIds: ["default"],
+		})
+
+	it("reads the last word of every conversation it opens on", async () => {
+		const store = createFakeTranscriptStore()
+		const room = await opened(store)
+		const quiet = await opened(store, "Idle")
+		await saidIn(store, room.id, "Menu is set.")
+
+		const state = (await loaded(store)).getState()
+
+		expect(state.conversationPreviews[room.id]).toMatchObject({
+			text: "Menu is set.",
+		})
+		expect(state.conversationPreviews[quiet.id]).toBeUndefined()
+	})
+
+	it("reads when the last word of a conversation was said", async () => {
+		const store = createFakeTranscriptStore()
+		const room = await opened(store)
+		const said = await saidIn(store, room.id, "Menu is set.")
+
+		const state = (await loaded(store)).getState()
+
+		expect(state.conversationPreviews[room.id]?.at).toBe(said.createdAt)
+	})
+
+	it("reads the conversation again once the reader leaves it", async () => {
+		const store = createFakeTranscriptStore()
+		const room = await opened(store)
+		const controller = await loaded(store)
+		controller.selectConversation(room.id)
+		await saidIn(store, room.id, "Menu is set.")
+
+		controller.select("default")
+
+		await vi.waitFor(() => {
+			expect(controller.getState().conversationPreviews[room.id]).toMatchObject(
+				{
+					text: "Menu is set.",
+				},
+			)
+		})
+	})
+
+	it("leaves the row of a conversation it cannot read blank", async () => {
+		const store = createFakeTranscriptStore()
+		const room = await opened(store)
+		await saidIn(store, room.id, "Menu is set.")
+		const refusing: TranscriptStore = {
+			...store,
+			loadPage: (conversationId, cursor) =>
+				conversationId === room.id
+					? Promise.reject({ kind: "storage" })
+					: store.loadPage(conversationId, cursor),
+		}
+
+		const state = (await loaded(refusing)).getState()
+
+		expect(state.conversationPreviews[room.id]).toBeUndefined()
+		expect(state.conversations).toHaveLength(1)
 	})
 })
 

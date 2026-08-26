@@ -14,7 +14,11 @@ import type {
 	ConversationDraft,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import { type LastWord, lastWordIn } from "../conversations/transcript-state"
+import {
+	type ConversationPreviews,
+	type LastWord,
+	lastWordIn,
+} from "../conversations/transcript-state"
 
 export type RosterState = {
 	rosters: Record<string, Bot[]>
@@ -23,6 +27,7 @@ export type RosterState = {
 	conversations: Conversation[]
 	spaceId: string | null
 	previews: Record<string, LastWord | undefined>
+	conversationPreviews: ConversationPreviews
 	selectedBotId: string | null
 	selectedConversationId: string | null
 	isEditing: boolean
@@ -91,6 +96,7 @@ export const initialRosterState: RosterState = {
 	conversations: [],
 	spaceId: null,
 	previews: {},
+	conversationPreviews: {},
 	selectedBotId: null,
 	selectedConversationId: null,
 	isEditing: false,
@@ -297,11 +303,21 @@ export const createRosterController = (
 		})
 	}
 
+	const readPreviewIn = async (
+		conversationId: string,
+	): Promise<LastWord | undefined> => {
+		try {
+			const page = await store.loadPage(conversationId, null)
+			return lastWordIn(page.messages)
+		} catch {
+			return undefined
+		}
+	}
+
 	const readPreview = async (botId: string): Promise<LastWord | undefined> => {
 		try {
 			const chat = await store.mainChat(botId)
-			const page = await store.loadPage(chat.id, null)
-			return lastWordIn(page.messages)
+			return await readPreviewIn(chat.id)
 		} catch {
 			return undefined
 		}
@@ -315,6 +331,25 @@ export const createRosterController = (
 			}),
 		)
 		set({ previews: { ...state.previews, ...read } })
+	}
+
+	const readConversationPreviews = async (conversationIds: string[]) => {
+		const read: ConversationPreviews = {}
+		await Promise.all(
+			conversationIds.map(async (id) => {
+				read[id] = await readPreviewIn(id)
+			}),
+		)
+		set({
+			conversationPreviews: { ...state.conversationPreviews, ...read },
+		})
+	}
+
+	const catchUpOnLeftConversation = () => {
+		const left = state.selectedConversationId
+		if (left !== null) {
+			void readConversationPreviews([left])
+		}
 	}
 
 	const writes = createWriteLoop<BotSettingsValue, Bot>({
@@ -368,7 +403,14 @@ export const createRosterController = (
 		load: async (opening: RosterOpening) => {
 			await readFrom(opening)
 			set({ hasLoaded: true })
-			await readPreviews(Object.values(state.rosters).flat())
+			await Promise.all([
+				readPreviews(Object.values(state.rosters).flat()),
+				readConversationPreviews(
+					Object.values(state.conversationRosters)
+						.flat()
+						.map((conversation) => conversation.id),
+				),
+			])
 		},
 
 		enter: ({ spaceId, lastRowId }: RosterEntry) => {
@@ -387,6 +429,7 @@ export const createRosterController = (
 
 		select: (id: string) => {
 			if (id !== state.selectedBotId) {
+				catchUpOnLeftConversation()
 				set({
 					selectedBotId: id,
 					selectedConversationId: null,
@@ -398,6 +441,7 @@ export const createRosterController = (
 
 		selectConversation: (id: string) => {
 			if (id !== state.selectedConversationId) {
+				catchUpOnLeftConversation()
 				set({
 					selectedBotId: null,
 					selectedConversationId: id,
