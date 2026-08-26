@@ -24,6 +24,11 @@ export type NotificationChange = {
 	isEnabled: boolean
 }
 
+export type LastBotOpened = {
+	spaceId: string | null
+	botId: string
+}
+
 export type ReaderPreferences = UserPreferences & MirroredPreferences
 
 export type UserState = {
@@ -43,7 +48,7 @@ export type UserController = {
 	setPalette: (palette: Palette) => Promise<void>
 	setLanguage: (language: Language | null) => Promise<void>
 	setSidebarWidth: (sidebarWidth: number) => Promise<void>
-	setLastBot: (lastBotId: string) => Promise<void>
+	setLastBot: (opened: LastBotOpened) => Promise<void>
 	setLastSpace: (lastSpaceId: string) => Promise<void>
 	uploadPicture: (file: File) => Promise<void>
 	removePicture: () => Promise<void>
@@ -126,6 +131,11 @@ export const createUserController = (): UserController => {
 		return flush()
 	}
 
+	const botIdBySpaceWith = ({ spaceId, botId }: LastBotOpened) =>
+		spaceId === null
+			? state.preferences.lastBotIdBySpace
+			: { ...state.preferences.lastBotIdBySpace, [spaceId]: botId }
+
 	const changeMirrored = (fields: Partial<MirroredPreferences>) => {
 		const preferences = { ...state.preferences, ...fields }
 		if (sameMirror(preferences, state.preferences)) {
@@ -200,7 +210,8 @@ export const createUserController = (): UserController => {
 
 		setSidebarWidth: (sidebarWidth: number) => changeMirrored({ sidebarWidth }),
 
-		setLastBot: (lastBotId: string) => changeMirrored({ lastBotId }),
+		setLastBot: (opened: LastBotOpened) =>
+			changeMirrored({ lastBotIdBySpace: botIdBySpaceWith(opened) }),
 
 		setLastSpace: (lastSpaceId: string) => changeMirrored({ lastSpaceId }),
 

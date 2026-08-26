@@ -46,6 +46,7 @@ import { useTheme } from "@/lib/theme/use-theme"
 import { toUpdateBadgeProps } from "@/lib/updater/badge-model"
 import { useUpdater } from "@/lib/updater/use-updater"
 import type { ColorScheme } from "@/lib/user/preferences-contract"
+import { lastBotIn } from "@/lib/user/preferences-mirror"
 import { useUser } from "@/lib/user/use-user"
 import { useUserPlugin } from "@/lib/user/use-user-plugin"
 import {
@@ -123,10 +124,11 @@ export function App() {
 		if (spaceIds.length === 0) {
 			return
 		}
+		const spaceId = spaces.controller.getState().selectedSpaceId
 		void roster.controller.load({
 			spaceIds,
-			spaceId: spaces.controller.getState().selectedSpaceId,
-			lastBotId: user.controller.getState().preferences.lastBotId,
+			spaceId,
+			lastBotId: lastBotIn(user.controller.getState().preferences, spaceId),
 		})
 	}, [roster.controller, spaces.controller, user.controller, spaceIds])
 
@@ -137,7 +139,10 @@ export function App() {
 		void user.controller.setLastSpace(selectedSpaceId)
 		roster.controller.enter({
 			spaceId: selectedSpaceId,
-			lastBotId: user.controller.getState().preferences.lastBotId,
+			lastBotId: lastBotIn(
+				user.controller.getState().preferences,
+				selectedSpaceId,
+			),
 		})
 	}, [roster.controller, user.controller, selectedSpaceId])
 
@@ -160,11 +165,15 @@ export function App() {
 	])
 
 	useEffect(() => {
-		if (selectedBotId) {
-			void chat.controller.open(selectedBotId)
-			void user.controller.setLastBot(selectedBotId)
+		if (!selectedBotId) {
+			return
 		}
-	}, [chat.controller, user.controller, selectedBotId])
+		void chat.controller.open(selectedBotId)
+		void user.controller.setLastBot({
+			spaceId: roster.controller.getState().spaceId,
+			botId: selectedBotId,
+		})
+	}, [chat.controller, roster.controller, user.controller, selectedBotId])
 
 	const rosters = roster.state.rosters
 

@@ -22,8 +22,8 @@ const RECORD: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const DEFAULTS: UserPreferences = {
@@ -37,8 +37,8 @@ const DEFAULTS: UserPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const FAILURES: UserPreferencesError[] = [

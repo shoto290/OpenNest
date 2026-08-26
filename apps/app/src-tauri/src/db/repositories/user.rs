@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
 use crate::db::{Access, DatabaseError};
@@ -12,8 +14,9 @@ const NOTIFY_ON_PERMISSION_KEY: &str = "user.notify_on_permission";
 const NOTIFY_ON_FINISHED_TURN_KEY: &str = "user.notify_on_finished_turn";
 const NOTIFY_WITH_SOUND_KEY: &str = "user.notify_with_sound";
 const SIDEBAR_WIDTH_KEY: &str = "user.sidebar_width";
-const LAST_BOT_ID_KEY: &str = "user.last_bot_id";
 const LAST_SPACE_ID_KEY: &str = "user.last_space_id";
+const LAST_BOT_ID_BY_SPACE_KEY: &str = "user.last_bot_id_by_space";
+const DROPPED_LAST_BOT_ID_KEY: &str = "user.last_bot_id";
 
 const SWITCH_ON: &str = "on";
 const SWITCH_OFF: &str = "off";
@@ -71,8 +74,8 @@ pub struct Preferences {
 	pub notify_on_finished_turn: bool,
 	pub notify_with_sound: bool,
 	pub sidebar_width: Option<u32>,
-	pub last_bot_id: Option<String>,
 	pub last_space_id: Option<String>,
+	pub last_bot_id_by_space: BTreeMap<String, String>,
 }
 
 impl Default for Preferences {
@@ -88,8 +91,8 @@ impl Default for Preferences {
 			notify_on_finished_turn: true,
 			notify_with_sound: true,
 			sidebar_width: None,
-			last_bot_id: None,
 			last_space_id: None,
+			last_bot_id_by_space: BTreeMap::new(),
 		}
 	}
 }
@@ -168,8 +171,10 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		notify_with_sound: switch_in(connection, NOTIFY_WITH_SOUND_KEY)?,
 		sidebar_width: setting_in(connection, SIDEBAR_WIDTH_KEY)?
 			.and_then(|stored| stored.parse().ok()),
-		last_bot_id: setting_in(connection, LAST_BOT_ID_KEY)?,
 		last_space_id: setting_in(connection, LAST_SPACE_ID_KEY)?,
+		last_bot_id_by_space: setting_in(connection, LAST_BOT_ID_BY_SPACE_KEY)?
+			.and_then(|stored| serde_json::from_str(&stored).ok())
+			.unwrap_or_default(),
 	})
 }
 
@@ -193,9 +198,18 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	write_switch_in(transaction, NOTIFY_WITH_SOUND_KEY, preferences.notify_with_sound)?;
 	let width = preferences.sidebar_width.map(|width| width.to_string());
 	write_optional_in(transaction, SIDEBAR_WIDTH_KEY, width.as_deref())?;
-	write_optional_in(transaction, LAST_BOT_ID_KEY, preferences.last_bot_id.as_deref())?;
 	write_optional_in(transaction, LAST_SPACE_ID_KEY, preferences.last_space_id.as_deref())?;
+	let bots_by_space = bots_by_space_as_stored(&preferences.last_bot_id_by_space);
+	write_optional_in(transaction, LAST_BOT_ID_BY_SPACE_KEY, bots_by_space.as_deref())?;
+	transaction.execute(CLEAR_SETTING, [DROPPED_LAST_BOT_ID_KEY])?;
 	write_picture_in(transaction, preferences.avatar_image_path.as_deref())
+}
+
+fn bots_by_space_as_stored(entries: &BTreeMap<String, String>) -> Option<String> {
+	if entries.is_empty() {
+		return None;
+	}
+	serde_json::to_string(entries).ok()
 }
 
 fn write_switch_in(
@@ -248,8 +262,11 @@ mod tests {
 			notify_on_finished_turn: false,
 			notify_with_sound: false,
 			sidebar_width: Some(320),
-			last_bot_id: Some("bot-one".to_owned()),
 			last_space_id: Some("space-one".to_owned()),
+			last_bot_id_by_space: BTreeMap::from([
+				("space-one".to_owned(), "bot-one".to_owned()),
+				("space-two".to_owned(), "bot-two".to_owned()),
+			]),
 		}
 	}
 
@@ -277,8 +294,8 @@ mod tests {
 				notify_on_finished_turn: true,
 				notify_with_sound: true,
 				sidebar_width: None,
-				last_bot_id: None,
 				last_space_id: None,
+				last_bot_id_by_space: BTreeMap::new(),
 			}
 		);
 	}
@@ -323,10 +340,49 @@ mod tests {
 			"a sidebar width taken off the record was left in the file"
 		);
 		assert_eq!(
-			setting(&database, LAST_BOT_ID_KEY).await,
+			setting(&database, LAST_BOT_ID_BY_SPACE_KEY).await,
 			None,
-			"a last bot taken off the record was left in the file"
+			"a bot per space taken off the record was left in the file"
 		);
+	}
+
+	#[tokio::test]
+	async fn a_write_sweeps_the_single_last_bot_an_older_build_left_behind() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				transaction.execute(WRITE_SETTING, params![DROPPED_LAST_BOT_ID_KEY, "bot-one"])?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the older build's row");
+
+		database.user().set_preferences(a_record()).await.expect("the write");
+
+		assert_eq!(setting(&database, DROPPED_LAST_BOT_ID_KEY).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_bot_per_space_that_cannot_be_read_reads_as_no_space_naming_a_bot() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				transaction
+					.execute(WRITE_SETTING, params![LAST_BOT_ID_BY_SPACE_KEY, "{not json"])?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the planted value");
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.last_bot_id_by_space, BTreeMap::new());
 	}
 
 	#[tokio::test]
@@ -419,7 +475,6 @@ mod tests {
 
 		assert_eq!(read.language, None);
 		assert_eq!(read.sidebar_width, None);
-		assert_eq!(read.last_bot_id, None);
 		assert_eq!(read.last_space_id, None);
 		assert_eq!(read.display_name, "Nyx");
 		assert_eq!(read.palette, "moss");

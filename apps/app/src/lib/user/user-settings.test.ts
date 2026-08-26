@@ -14,8 +14,8 @@ const RECORD: ReaderPreferences = {
 	notifyOnFinishedTurn: true,
 	notifyWithSound: true,
 	sidebarWidth: null,
-	lastBotId: null,
 	lastSpaceId: null,
+	lastBotIdBySpace: {},
 }
 
 const shown = (record: ReaderPreferences = RECORD) =>

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -48,8 +49,9 @@ pub struct UserPreferences {
 	pub notify_on_finished_turn: bool,
 	pub notify_with_sound: bool,
 	pub sidebar_width: Option<u32>,
-	pub last_bot_id: Option<String>,
 	pub last_space_id: Option<String>,
+	#[serde(default)]
+	pub last_bot_id_by_space: BTreeMap<String, String>,
 }
 
 impl UserPreferences {
@@ -71,8 +73,8 @@ impl UserPreferences {
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
-			last_bot_id: preferences.last_bot_id,
 			last_space_id: preferences.last_space_id,
+			last_bot_id_by_space: preferences.last_bot_id_by_space,
 		}
 	}
 }
@@ -90,8 +92,8 @@ impl From<UserPreferences> for user::Preferences {
 			notify_on_finished_turn: preferences.notify_on_finished_turn,
 			notify_with_sound: preferences.notify_with_sound,
 			sidebar_width: preferences.sidebar_width,
-			last_bot_id: preferences.last_bot_id,
 			last_space_id: preferences.last_space_id,
+			last_bot_id_by_space: preferences.last_bot_id_by_space,
 		}
 	}
 }
