@@ -944,6 +944,14 @@ const BotRoster = ({
 
 const NEIGHBOURING = 1
 
+const isFlushWithPanel = (row: HTMLDivElement) => {
+	const under = row.children[Math.round(row.scrollLeft / row.clientWidth)]
+	if (!under) return false
+	const drift =
+		under.getBoundingClientRect().left - row.getBoundingClientRect().left
+	return Math.abs(drift) <= 1
+}
+
 interface SpacePanelProps {
 	spaceId: string
 	isInView: boolean
@@ -1035,8 +1043,10 @@ const SpaceCarousel = ({
 	}
 
 	const land = (event: UIEvent<HTMLDivElement>) => {
+		const node = event.currentTarget
+		if (!isFlushWithPanel(node)) return
 		isMoving.current = false
-		const landedOn = spaceUnder(event.currentTarget)
+		const landedOn = spaceUnder(node)
 		if (spaces[landedOn]) setRestingOn(landedOn)
 	}
 

@@ -1458,6 +1458,18 @@ const swipeBeside = async (carousel: HTMLElement, step: number) => {
 	await new Promise((resolve) => setTimeout(resolve, SETTLE))
 }
 
+const carryTo = async (carousel: HTMLElement, panels: number) => {
+	carousel.style.scrollSnapType = "none"
+	carousel.scrollLeft = panels * carousel.clientWidth
+	await new Promise((resolve) => setTimeout(resolve, SETTLE))
+}
+
+const settleFlush = async (carousel: HTMLElement) => {
+	carousel.style.scrollSnapType = ""
+	carousel.scrollLeft = slotShown(carousel) * carousel.clientWidth
+	await new Promise((resolve) => setTimeout(resolve, SETTLE))
+}
+
 const rostersAcross = (spaces: Space[]): Record<string, AgentSidebarBot[]> =>
 	Object.fromEntries(
 		spaces.map((space, rank) => [
@@ -2021,6 +2033,57 @@ export const SpaceLanding = meta.story({
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(
 			(walked.length - 1) * 2,
 		)
+	},
+})
+
+export const SpaceFlickMomentum = meta.story({
+	render: (args) => <LiveSpaces {...args} />,
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "perso",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A trackpad flick, which a browser reports as two scrolls rather than one: the fingers leave the glass and the scroll ends there, then the momentum they left carries the row on and ends a second time. The row is only ever at rest on the second one, so the first is not a landing however much it looks like one — take it and the drawn window slides and the row is repositioned under a gesture that is still running, and the momentum left over carries the reader a space past the one they aimed at. Check the row is left alone at every offset that is not flush with a panel edge: stopped short of half a panel it reports nothing and stays where it stopped, and stopped past half it reports the space it crossed — that moment is the fingers', not the row's — while still staying where it stopped, same drawn window, same offset. Check the flush stop is the landing: the reader is held on the panel the row came to rest on, one space along and no further, and a rank chord still slides the row from there. Pick `SpaceScrolling` for the snapping the flick rides on, `SpaceLanding` for the walk from flush stop to flush stop.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const carousel = carouselIn(canvasElement)
+		const panel = carousel.clientWidth
+
+		await carryTo(carousel, 0.4)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+		await expect(carousel.scrollLeft).toBeCloseTo(0.4 * panel, 0)
+		await expect(panelsIn(canvasElement)).toHaveLength(2)
+
+		await carryTo(carousel, 0.6)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("vocca")
+		await expect(carousel.scrollLeft).toBeCloseTo(0.6 * panel, 0)
+		await expect(panelsIn(canvasElement)).toHaveLength(2)
+
+		await settleFlush(carousel)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(panelsIn(canvasElement)).toHaveLength(3)
+		await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
+			leftOf(carousel),
+			0,
+		)
+
+		await userEvent.keyboard("{Meta>}3{/Meta}")
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(2)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("atelier")
+		await waitFor(async () => {
+			await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
+				leftOf(carousel),
+				0,
+			)
+		}, FRAME_POLL)
 	},
 })
 
