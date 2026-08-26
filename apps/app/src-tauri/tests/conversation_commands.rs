@@ -2214,3 +2214,303 @@ fn the_page_carries_the_reply_and_the_run_of_every_message_it_holds() {
 	assert_eq!(of(&reply)["repliedToMessageId"], Value::Null);
 	assert_eq!(of(&reply)["runtimeSessionId"], run["id"]);
 }
+
+fn a_bot_in(window: &WebviewWindow<MockRuntime>, space_id: &str, name: &str) -> String {
+	call(
+		window,
+		"conversation_create_bot",
+		json!({ "identity": an_identity(name, "sonnet", "owl", Value::Null), "spaceId": space_id }),
+	)
+	.expect("the bot is created")["id"]
+		.as_str()
+		.expect("the bot holds an id")
+		.to_owned()
+}
+
+fn a_room(
+	window: &WebviewWindow<MockRuntime>,
+	space_id: &str,
+	title: &str,
+	bot_ids: Vec<String>,
+) -> Value {
+	call(
+		window,
+		"conversation_create",
+		json!({ "spaceId": space_id, "sectionId": null, "title": title, "botIds": bot_ids }),
+	)
+	.expect("the room is created")
+}
+
+fn id_of(room: &Value) -> String {
+	room["id"].as_str().expect("the room holds an id").to_owned()
+}
+
+fn rooms_of(window: &WebviewWindow<MockRuntime>, space_id: &str) -> Vec<Value> {
+	call(window, "conversation_list", json!({ "spaceId": space_id }))
+		.expect("the rooms")
+		.as_array()
+		.expect("the rooms come back as a list")
+		.clone()
+}
+
+fn room_ids_of(window: &WebviewWindow<MockRuntime>, space_id: &str) -> Vec<String> {
+	rooms_of(window, space_id).iter().map(id_of).collect()
+}
+
+fn room_of(window: &WebviewWindow<MockRuntime>, space_id: &str, id: &str) -> Value {
+	rooms_of(window, space_id)
+		.into_iter()
+		.find(|room| room["id"] == json!(id))
+		.expect("the space lists the room it was asked for")
+}
+
+fn seats_of(room: &Value) -> &Vec<Value> {
+	room["participants"].as_array().expect("the room holds its participants")
+}
+
+fn seat_of<'a>(room: &'a Value, bot_id: &str) -> &'a Value {
+	seats_of(room)
+		.iter()
+		.find(|seat| seat["botId"] == json!(bot_id))
+		.expect("the room seats the bot it was asked for")
+}
+
+fn seated(room: &Value, keep: impl Fn(&Value) -> bool) -> Vec<String> {
+	seats_of(room)
+		.iter()
+		.filter(|seat| keep(seat))
+		.map(|seat| seat["botId"].as_str().expect("a seat holds a bot").to_owned())
+		.collect()
+}
+
+fn present(room: &Value) -> Vec<String> {
+	seated(room, |seat| seat["leftAt"] == Value::Null)
+}
+
+fn leads(room: &Value) -> Vec<String> {
+	seated(room, |seat| seat["leftAt"] == Value::Null && seat["role"] == json!("lead"))
+}
+
+#[test]
+fn a_room_created_over_ipc_is_listed_in_its_space_with_its_participants_and_its_lead() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let space = a_space(&window, "Nest");
+	let first = a_bot_in(&window, &space, "Nyx");
+	let second = a_bot_in(&window, &space, "Ada");
+	let latecomer = a_bot_in(&window, &space, "Iris");
+
+	let created = a_room(&window, &space, "Standup", vec![first.clone(), second.clone()]);
+	let id = id_of(&created);
+
+	assert_eq!(created["title"], json!("Standup"));
+	assert_eq!(created["spaceId"], json!(space));
+	assert_eq!(created["instructions"], json!(""));
+	assert!(created["createdAt"].is_i64(), "a room crossed without a camelCase moment: {created}");
+
+	let listed = room_of(&window, &space, &id);
+	assert_eq!(
+		present(&listed),
+		vec![first.clone(), second.clone()],
+		"the list lost the bots the room was opened with"
+	);
+	assert_eq!(leads(&listed), vec![first.clone()], "the first bot seated is not the one leading");
+	assert_eq!(seat_of(&listed, &second)["role"], json!("assistant"));
+	assert_eq!(seat_of(&listed, &first)["name"], json!("Nyx"), "a seat crossed without its bot");
+
+	let joined = call(
+		&window,
+		"conversation_add_participant",
+		json!({ "conversationId": id, "botId": latecomer }),
+	)
+	.expect("the bot joins");
+	assert_eq!(present(&joined), vec![first.clone(), second, latecomer.clone()]);
+	assert_eq!(seat_of(&joined, &latecomer)["role"], json!("assistant"));
+	assert_eq!(leads(&joined), vec![first], "a bot joining a led room took the lead");
+
+	assert_eq!(
+		present(&room_of(&window, &space, &id)),
+		present(&joined),
+		"the seat taken over ipc was not kept"
+	);
+}
+
+#[test]
+fn a_name_and_instructions_written_over_ipc_are_read_back_on_the_next_list() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let space = a_space(&window, "Nest");
+	let bot = a_bot_in(&window, &space, "Nyx");
+	let created = a_room(&window, &space, "Standup", vec![bot]);
+	let id = id_of(&created);
+
+	let updated = call(
+		&window,
+		"conversation_update",
+		json!({
+			"conversationId": id,
+			"title": "Retro",
+			"instructions": "Answer with the file you would touch.",
+			"sectionId": null
+		}),
+	)
+	.expect("the room is updated");
+
+	assert_eq!(updated["title"], json!("Retro"));
+	assert_eq!(updated["instructions"], json!("Answer with the file you would touch."));
+	assert_eq!(updated["createdAt"], created["createdAt"], "an update moved the moment");
+
+	let listed = room_of(&window, &space, &id);
+	assert_eq!(listed["title"], json!("Retro"), "the name written over ipc was not kept");
+	assert_eq!(
+		listed["instructions"],
+		json!("Answer with the file you would touch."),
+		"the instructions written over ipc were not kept"
+	);
+}
+
+#[test]
+fn a_participant_removed_over_ipc_keeps_the_messages_it_wrote_readable() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let space = a_space(&window, "Nest");
+	let lead = a_bot_in(&window, &space, "Nyx");
+	let leaving = a_bot_in(&window, &space, "Ada");
+	let created = a_room(&window, &space, "Standup", vec![lead, leaving.clone()]);
+	let id = id_of(&created);
+
+	call(&window, "conversation_start_turn", a_turn(&id)).expect("the turn starts");
+	call(
+		&window,
+		"conversation_open_assistant_message",
+		json!({ "message": {
+			"id": "m1",
+			"conversationId": id,
+			"turnId": TURN,
+			"authorBotId": leaving,
+			"repliedToMessageId": null,
+			"createdAt": 1
+		}}),
+	)
+	.expect("the reply is opened");
+	call(
+		&window,
+		"conversation_append_text",
+		json!({ "id": "m1", "delta": "said before leaving" }),
+	)
+	.expect("the reply streams");
+	call(&window, "conversation_finalize_message", json!({ "id": "m1", "completion": "complete" }))
+		.expect("the reply ends");
+
+	let left = call(
+		&window,
+		"conversation_remove_participant",
+		json!({ "conversationId": id, "botId": leaving }),
+	)
+	.expect("the bot leaves");
+
+	assert!(!present(&left).contains(&leaving), "a bot that left is still seated");
+	assert!(
+		seat_of(&left, &leaving)["leftAt"].is_i64(),
+		"the seat of a bot that left does not say when: {left}"
+	);
+
+	let page =
+		call(&window, "conversation_message_page", a_page(&id, None, 20)).expect("the transcript");
+	let held = page["messages"].as_array().expect("the page holds messages");
+
+	assert_eq!(held.len(), 1, "the transcript lost the message of a bot that left: {page}");
+	assert_eq!(held[0]["content"], json!("said before leaving"));
+	assert_eq!(
+		held[0]["authorBotId"],
+		json!(leaving),
+		"a message lost the bot that wrote it when the bot left"
+	);
+}
+
+#[test]
+fn setting_a_lead_over_ipc_leaves_exactly_one_lead_seated_in_the_room() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let space = a_space(&window, "Nest");
+	let first = a_bot_in(&window, &space, "Nyx");
+	let second = a_bot_in(&window, &space, "Ada");
+	let third = a_bot_in(&window, &space, "Iris");
+	let created =
+		a_room(&window, &space, "Standup", vec![first.clone(), second.clone(), third.clone()]);
+	let id = id_of(&created);
+
+	assert_eq!(leads(&created), vec![first.clone()]);
+
+	let led =
+		call(&window, "conversation_set_lead", json!({ "conversationId": id, "botId": second }))
+			.expect("the lead moves");
+
+	assert_eq!(leads(&led), vec![second.clone()], "the room does not seat exactly one lead");
+	assert_eq!(seat_of(&led, &first)["role"], json!("assistant"), "the former lead kept the seat");
+	assert_eq!(
+		present(&led),
+		vec![first, second.clone(), third],
+		"moving the lead moved the bots around"
+	);
+
+	assert_eq!(
+		leads(&room_of(&window, &space, &id)),
+		vec![second],
+		"the lead set over ipc was not kept"
+	);
+}
+
+#[test]
+fn a_room_deleted_over_ipc_is_absent_from_the_list_of_its_space() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let space = a_space(&window, "Nest");
+	let bot = a_bot_in(&window, &space, "Nyx");
+	let kept = a_room(&window, &space, "Standup", vec![bot.clone()]);
+	let doomed = a_room(&window, &space, "Retro", vec![bot]);
+	let doomed_id = id_of(&doomed);
+
+	assert_eq!(
+		call(&window, "conversation_delete", json!({ "conversationId": doomed_id })),
+		Ok(Value::Null)
+	);
+
+	assert_eq!(
+		room_ids_of(&window, &space),
+		vec![id_of(&kept)],
+		"a deleted room is still listed in its space"
+	);
+}
+
+#[test]
+fn listing_the_rooms_of_a_space_answers_with_that_space_alone() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+
+	let nest = a_space(&window, "Nest");
+	let elsewhere = a_space(&window, "Elsewhere");
+	let resident = a_bot_in(&window, &nest, "Nyx");
+	let stranger = a_bot_in(&window, &elsewhere, "Ada");
+
+	let here = a_room(&window, &nest, "Standup", vec![resident]);
+	let there = a_room(&window, &elsewhere, "Retro", vec![stranger]);
+
+	assert_eq!(
+		room_ids_of(&window, &nest),
+		vec![id_of(&here)],
+		"the list of a space carried a room of another one"
+	);
+	assert_eq!(room_ids_of(&window, &elsewhere), vec![id_of(&there)]);
+}
