@@ -380,6 +380,7 @@ const meta = preview.meta({
 		onEditBot: fn(),
 		onDuplicateBot: fn(),
 		onDuplicateBotToSpace: fn(),
+		onMoveBotToSpace: fn(),
 		onDeleteBot: fn(),
 		onOpenUserSettings: fn(),
 		onSelectSpace: fn(),
@@ -1601,7 +1602,7 @@ const openRowMenu = async (canvasElement: HTMLElement, name: string) => {
 	)
 }
 
-const DUPLICATE_TO = "Duplicate to"
+const DUPLICATE_TO = "Duplicate to space"
 
 const tintOf = (node: HTMLElement) => getComputedStyle(node).backgroundColor
 
@@ -1617,7 +1618,7 @@ export const RowDuplicateToSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The branch under a row that sends a copy of the bot somewhere else. It sits directly under the plain duplicate, which still copies into the space the bot already lives in and leaves the reader where they are. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations keep the order and the tint the space switcher gives them, and that choosing one reports the bot and the space it was sent to. Pick `RowContextMenu` for the actions above it, `OneSpaceRowMenu` for the account that has nowhere to send a copy.",
+					"The branch under a row that sends a copy of the bot somewhere else. It sits under the entries that keep the bot where it is — the plain duplicate, which still copies into the space the bot already lives in and leaves the reader where they are, and the section branch when the account has sections. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations keep the order and the tint the space switcher gives them, and that choosing one reports the bot and the space it was sent to. Pick `RowContextMenu` for the actions above it, `RowMoveToSpace` for the branch under it that hands the bot over instead of copying it, `OneSpaceRowMenu` for the account that has nowhere to send a copy.",
 			},
 		},
 	},
@@ -1653,6 +1654,58 @@ export const RowDuplicateToSpace = meta.story({
 	},
 })
 
+const MOVE_TO_SPACE = "Move to space"
+
+export const RowMoveToSpace = meta.story({
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The branch under a row that hands the bot over to another space, sitting directly under the one that copies it there. The two are told apart with both menus shut: the copy reads `Duplicate to space` under the copy glyph, the move reads `Move to space` under an arrow, so the pair says the same destination and differs only on the verb and the glyph — and the section branch names its own landing too, `Move to section` under a folder, since filing a bot under a section is not travel. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations carry the same order and the same tint the copy branch gives them, and that choosing one reports the bot and the space it is owed to and copies nothing. Pick `RowDuplicateToSpace` for the branch above it, `OneSpaceRowMenu` for the account with nowhere to send the bot.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openRowMenu(canvasElement, "Beacon")
+
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["Settings", "Duplicate", DUPLICATE_TO, MOVE_TO_SPACE, "Delete"])
+
+		const branch = menu.getByRole("menuitem", { name: MOVE_TO_SPACE })
+		await expect(branch).toHaveAttribute("aria-haspopup", "menu")
+
+		await userEvent.hover(branch)
+		const panel = await settled(
+			await screen.findByRole("menu", { name: MOVE_TO_SPACE }),
+		)
+		const destinations = within(panel).getAllByRole("menuitem")
+		const offered = FIVE_SPACES.filter((space) => space.id !== "vocca")
+		await expect(destinations.map((item) => item.textContent)).toEqual(
+			offered.map((space) => space.name),
+		)
+		await expect(slotsIn(panel, "space-dot").map(tintOf)).toEqual(
+			offered.map((space) =>
+				tokenColor(canvasElement, `--bot-blot-${space.colour}`),
+			),
+		)
+
+		await userEvent.click(destinations[2])
+		await waitFor(async () => {
+			await expect(screen.queryByRole("menu")).toBeNull()
+		}, FRAME_POLL)
+		await expect(args.onMoveBotToSpace).toHaveBeenCalledWith("beacon", "veille")
+		await expect(args.onDuplicateBotToSpace).not.toHaveBeenCalled()
+	},
+})
+
 export const OneSpaceRowMenu = meta.story({
 	args: {
 		spaces: [SPACES[0]],
@@ -1665,7 +1718,7 @@ export const OneSpaceRowMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same row menu in the account that has only one space. There is nowhere to send a copy, so the branch is not drawn at all rather than drawn empty or drawn offering the space the bot is already in — a submenu that opens onto nothing is worse than no submenu. Check the menu is the three plain actions and that the plain duplicate is still there, since copying a bot beside itself has nothing to do with spaces. The two rules that fence settings and delete off from the middle stay put whatever the middle holds: a menu never opens on a rule with nothing on one side of it.",
+					"The same row menu in the account that has only one space. There is nowhere to send a copy and nowhere to move the bot, so neither space branch is drawn at all rather than drawn empty or drawn offering the space the bot is already in — a submenu that opens onto nothing is worse than no submenu. Check the menu is the three plain actions and that the plain duplicate is still there, since copying a bot beside itself has nothing to do with spaces. The two rules that fence settings and delete off from the middle stay put whatever the middle holds: a menu never opens on a rule with nothing on one side of it.",
 			},
 		},
 	},
@@ -1677,6 +1730,9 @@ export const OneSpaceRowMenu = meta.story({
 		).toEqual(["Settings", "Duplicate", "Delete"])
 		await expect(
 			menu.queryByRole("menuitem", { name: DUPLICATE_TO }),
+		).toBeNull()
+		await expect(
+			menu.queryByRole("menuitem", { name: MOVE_TO_SPACE }),
 		).toBeNull()
 		await expect(menu.getAllByRole("separator")).toHaveLength(2)
 	},
@@ -2220,7 +2276,7 @@ const sectionField = (canvasElement: HTMLElement) => {
 	return field
 }
 
-const MOVE_TO = "Move to"
+const MOVE_TO = "Move to section"
 
 const NEW_SECTION = "New section"
 
@@ -2459,6 +2515,40 @@ export const SectionDelete = meta.story({
 	},
 })
 
+export const FullRowMenu = meta.story({
+	args: {
+		...sectionArgs(),
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Every branch a row can carry, open at once — the account that has sections to file under and spaces to travel to, which is the only place the four middle entries are read side by side. They are ordered by how far they reach: the plain duplicate and the section branch keep the bot in the space it is in, the two space branches take it out of it, so the band widens downward and the entry with the longest reach sits nearest delete. The two that name a space are adjacent and differ on the verb and the glyph alone — `Duplicate to space` under the copy, `Move to space` under the arrow — while the section branch reads `Move to section` under its folder, so every branch names what it lands in and none of them is read as a truncation of the one above. The middle stays one band: the rules are spent under settings and over delete and nowhere else, so a hand aimed anywhere in the middle can never land on delete. Pick `RowDuplicateToSpace` and `RowMoveToSpace` for each space branch opened, `MoveBotToSection` for the section one.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const menu = await openRowMenu(canvasElement, "Beacon")
+
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual([
+			"Settings",
+			"Duplicate",
+			MOVE_TO,
+			DUPLICATE_TO,
+			MOVE_TO_SPACE,
+			"Delete",
+		])
+		await expect(menu.getAllByRole("separator")).toHaveLength(2)
+	},
+})
+
 export const MoveBotToSection = meta.story({
 	args: sectionArgs(),
 	parameters: {
@@ -2466,7 +2556,7 @@ export const MoveBotToSection = meta.story({
 		docs: {
 			description: {
 				story:
-					"The branch under a row that files the bot. It sits directly under the copying entries, in the same band as them — copying a bot and filing a bot are both a reader arranging their roster, so nothing is drawn between them; the rules are spent where they matter, one under settings and one over delete, so a hand aimed at anything in the middle can never land on delete. It offers every section plus the entry that files it under none, and it marks the one the bot holds now, so the branch reads as where the bot is before it reads as where it could go — Beacon sits in Research here. Choosing one reports the bot and the section, and the entry that clears it reports `null` rather than an empty string, so a host never has to guess what no section means. The branch is only drawn to a host that listens for it: `RowContextMenu` and `OneSpaceRowMenu` pass no section handlers and keep the three plain actions they always had.",
+					"The branch under a row that files the bot. It sits directly under the plain duplicate, in the same band as it — copying a bot and filing a bot both keep the bot in the space it is in, so nothing is drawn between them and the branches that carry it to another space come after; the rules are spent where they matter, one under settings and one over delete, so a hand aimed at anything in the middle can never land on delete. It offers every section plus the entry that files it under none, and it marks the one the bot holds now, so the branch reads as where the bot is before it reads as where it could go — Beacon sits in Research here. Choosing one reports the bot and the section, and the entry that clears it reports `null` rather than an empty string, so a host never has to guess what no section means. The branch is only drawn to a host that listens for it: `RowContextMenu` and `OneSpaceRowMenu` pass no section handlers and keep the three plain actions they always had.",
 			},
 		},
 	},
@@ -2512,7 +2602,7 @@ export const NewSectionForABot = meta.story({
 		docs: {
 			description: {
 				story:
-					"Making a section from the bot that needs it. The last entry under `Move to` opens a field at the foot of the roster instead of a dialogue, so the reader stays in the panel and names the thing they are about to fill. The section is drawn whole the moment it opens — the bot already filed under it, the field carrying `New section` with the name selected — so the reader sees what they are naming rather than a blank line. The first keystroke replaces the name, and Enter on an untouched field still makes something. Enter reports the name together with the bot it was made for, and the host is the one that creates the section and files the bot — nothing is drawn here until it comes back through the props. Escape and an empty name both close the field and report nothing.",
+					"Making a section from the bot that needs it. The last entry under `Move to section` opens a field at the foot of the roster instead of a dialogue, so the reader stays in the panel and names the thing they are about to fill. The section is drawn whole the moment it opens — the bot already filed under it, the field carrying `New section` with the name selected — so the reader sees what they are naming rather than a blank line. The first keystroke replaces the name, and Enter on an untouched field still makes something. Enter reports the name together with the bot it was made for, and the host is the one that creates the section and files the bot — nothing is drawn here until it comes back through the props. Escape and an empty name both close the field and report nothing.",
 			},
 		},
 	},
@@ -2623,7 +2713,7 @@ export const DragBotToSection = meta.story({
 		docs: {
 			description: {
 				story:
-					'Filing a bot by hand. A press on a row that then moves lifts the bot: it is reduced to its avatar alone, which follows the pointer, while the row itself stays exactly where it stood — the roster is the host\'s to redraw, so nothing is torn out of the list on the strength of a gesture that has not landed yet. The area the bot would land in lightens under it, header and rows together, so the target is a whole section rather than a slot between two rows: a section is always ordered by last message, so a drop changes which group a bot belongs to and nothing else. Releasing reports the bot and the section, the same call the `Move to` branch makes, and the click that a release would otherwise fire is swallowed so a drag never doubles as a selection. The row and every drop area carry `data-tauri-drag-region="false"`, which is what keeps the gesture on the bot instead of on the frameless window the panel is mounted in. Keyboard readers are not asked to drag: `MoveBotToSection` is the same move from the menu.',
+					'Filing a bot by hand. A press on a row that then moves lifts the bot: it is reduced to its avatar alone, which follows the pointer, while the row itself stays exactly where it stood — the roster is the host\'s to redraw, so nothing is torn out of the list on the strength of a gesture that has not landed yet. The area the bot would land in lightens under it, header and rows together, so the target is a whole section rather than a slot between two rows: a section is always ordered by last message, so a drop changes which group a bot belongs to and nothing else. Releasing reports the bot and the section, the same call the `Move to section` branch makes, and the click that a release would otherwise fire is swallowed so a drag never doubles as a selection. The row and every drop area carry `data-tauri-drag-region="false"`, which is what keeps the gesture on the bot instead of on the frameless window the panel is mounted in. Keyboard readers are not asked to drag: `MoveBotToSection` is the same move from the menu.',
 			},
 		},
 	},

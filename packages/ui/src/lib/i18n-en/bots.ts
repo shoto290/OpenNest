@@ -14,7 +14,8 @@ const bots = {
 		actions: "Actions for {{name}}",
 		settings: "Settings",
 		duplicate: "Duplicate",
-		duplicateTo: "Duplicate to",
+		duplicateTo: "Duplicate to space",
+		moveToSpace: "Move to space",
 		delete: "Delete",
 		working: "{{pose}}…",
 		pose: {
@@ -31,7 +32,7 @@ const bots = {
 		},
 		section: {
 			actions: "Actions for the {{name}} section",
-			moveTo: "Move to",
+			moveTo: "Move to section",
 			none: "No section",
 			create: "New section",
 			createField: "New section name",
