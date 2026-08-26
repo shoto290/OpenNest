@@ -17,6 +17,7 @@ export type TranscriptMessage = {
 	content: string
 	completion: TranscriptCompletion
 	createdAt: number
+	authorBotId: string | null
 	repliedToMessageId: string | null
 	runtimeSessionId: string | null
 }

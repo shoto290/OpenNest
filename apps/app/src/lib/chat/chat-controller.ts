@@ -11,6 +11,7 @@ import {
 	isTurnBusy,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
+import { ENDING_FOR, ENDING_FOR_OUTCOME, isWorthKeeping } from "./reply-endings"
 import {
 	ASKED_FOR,
 	EVOLVED,
@@ -30,14 +31,12 @@ import type {
 	AgentEvent,
 	ChatMessage,
 	CheckReport,
-	MessageCompletion,
 	PermissionDecision,
 	QuestionAnswers,
 	QuestionRequest,
 	RuntimeScope,
 	SessionHandle,
 	TransportError,
-	TurnOutcome,
 } from "../agent/contract"
 import type {
 	MessagePin,
@@ -97,20 +96,7 @@ const INTERRUPTED: TerminalCompletion = "interrupted"
 
 const NO_PINS: MessagePin[] = []
 
-const ENDING_FOR: Record<MessageCompletion, TerminalCompletion | null> = {
-	streaming: null,
-	complete: "complete",
-	cancelled: "cancelled",
-	failed: "failed",
-}
-
 type PromptOutcome = "submitted" | "unwritten" | "refused"
-
-const ENDING_FOR_OUTCOME: Record<TurnOutcome, TerminalCompletion> = {
-	completed: "complete",
-	cancelled: "cancelled",
-	failed: "failed",
-}
 
 type BotChat = {
 	id: string
@@ -319,6 +305,7 @@ export function createChatController(
 					content: "",
 					completion: "streaming",
 					createdAt: message.timestamp,
+					authorBotId: bot.id,
 					repliedToMessageId: turn.promptId,
 					runtimeSessionId: null,
 				}),
@@ -353,11 +340,6 @@ export function createChatController(
 		openReply(bot, message, conversationId)
 		settleReply(bot, message.id, completion, conversationId)
 	}
-
-	const isWorthKeeping = (
-		message: ChatMessage,
-		completion: TerminalCompletion,
-	) => message.text.length > 0 || completion !== "complete"
 
 	const settleHeldReply = (
 		bot: BotChat,
@@ -909,6 +891,7 @@ export function createChatController(
 			content: said.content,
 			completion: "complete",
 			createdAt: said.createdAt,
+			authorBotId: null,
 			repliedToMessageId: said.repliedToMessageId,
 			runtimeSessionId: null,
 		})
@@ -1128,6 +1111,7 @@ export function createChatController(
 					content,
 					completion: "complete",
 					createdAt,
+					authorBotId: null,
 					repliedToMessageId: null,
 					runtimeSessionId: null,
 				}),
