@@ -301,19 +301,21 @@ const BotSectionBranch = ({
 }
 
 interface SpaceDestinationBranchProps {
+	botId: string
 	icon: Icon
 	label: string
 	destinations: Space[]
-	onPick: (spaceId: string) => void
+	onPick?: (botId: string, spaceId: string) => void
 }
 
 const SpaceDestinationBranch = ({
+	botId,
 	icon: Glyph,
 	label,
 	destinations,
 	onPick,
 }: SpaceDestinationBranchProps) => {
-	if (destinations.length === 0) return null
+	if (!onPick || destinations.length === 0) return null
 
 	return (
 		<ContextMenuSub>
@@ -325,7 +327,7 @@ const SpaceDestinationBranch = ({
 				{destinations.map((space) => (
 					<ContextMenuItem
 						key={space.id}
-						onSelect={() => onPick(space.id)}
+						onSelect={() => onPick(botId, space.id)}
 						textValue={space.name}
 					>
 						<SpaceDot colour={space.colour} />
@@ -436,19 +438,19 @@ const BotRosterRow = ({
 						{t("roster.duplicate")}
 					</ContextMenuItem>
 					<SpaceDestinationBranch
+						botId={bot.id}
 						destinations={destinations}
 						icon={Icons.Copy}
 						label={t("roster.duplicateTo")}
-						onPick={(spaceId) => onDuplicateToSpace?.(bot.id, spaceId)}
+						onPick={onDuplicateToSpace}
 					/>
-					{onMoveToSpace ? (
-						<SpaceDestinationBranch
-							destinations={destinations}
-							icon={Icons.ArrowRight}
-							label={t("roster.moveToSpace")}
-							onPick={(spaceId) => onMoveToSpace(bot.id, spaceId)}
-						/>
-					) : null}
+					<SpaceDestinationBranch
+						botId={bot.id}
+						destinations={destinations}
+						icon={Icons.ArrowRight}
+						label={t("roster.moveToSpace")}
+						onPick={onMoveToSpace}
+					/>
 					<BotSectionBranch
 						bot={bot}
 						onCreateSectionFor={onCreateSectionFor}
