@@ -323,7 +323,7 @@ export const BadgeHere = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, userEvent }) => {
 		const trigger = canvas.getByRole("button", {
 			name: "Change space, Vocca open",
 		})
@@ -333,6 +333,9 @@ export const BadgeHere = meta.story({
 		const menu = await openMenu(trigger)
 		const open = within(menu).getAllByRole("menuitemradio")[1]
 		await expect(slotsIn(open, "space-dot")[0]?.dataset.badge).toBe("attention")
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	},
 })
 
