@@ -1602,7 +1602,7 @@ const openRowMenu = async (canvasElement: HTMLElement, name: string) => {
 	)
 }
 
-const DUPLICATE_TO = "Duplicate to"
+const DUPLICATE_TO = "Duplicate to space"
 
 const tintOf = (node: HTMLElement) => getComputedStyle(node).backgroundColor
 
@@ -1668,7 +1668,7 @@ export const RowMoveToSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The branch under a row that hands the bot over to another space, sitting directly under the one that copies it there. The two are told apart with both menus shut: the copy reads `Duplicate to` under the copy glyph, the move reads `Move to space` under an arrow, so a reader never has to open one to learn which is which — and the section branch keeps its own bare `Move to`, since filing a bot under a section is not travel. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations carry the same order and the same tint the copy branch gives them, and that choosing one reports the bot and the space it is owed to and copies nothing. Pick `RowDuplicateToSpace` for the branch above it, `OneSpaceRowMenu` for the account with nowhere to send the bot.",
+					"The branch under a row that hands the bot over to another space, sitting directly under the one that copies it there. The two are told apart with both menus shut: the copy reads `Duplicate to space` under the copy glyph, the move reads `Move to space` under an arrow, so the pair says the same destination and differs only on the verb and the glyph — and the section branch keeps its own bare `Move to`, since filing a bot under a section is not travel. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations carry the same order and the same tint the copy branch gives them, and that choosing one reports the bot and the space it is owed to and copies nothing. Pick `RowDuplicateToSpace` for the branch above it, `OneSpaceRowMenu` for the account with nowhere to send the bot.",
 			},
 		},
 	},

@@ -14,7 +14,7 @@ const bots = {
 		actions: "Actions for {{name}}",
 		settings: "Settings",
 		duplicate: "Duplicate",
-		duplicateTo: "Duplicate to",
+		duplicateTo: "Duplicate to space",
 		moveToSpace: "Move to space",
 		delete: "Delete",
 		working: "{{pose}}…",
