@@ -364,6 +364,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"content": "hello",
 					"completion": "complete",
 					"createdAt": 2,
+					"authorBotId": null,
 					"repliedToMessageId": null,
 					"runtimeSessionId": null,
 				},
@@ -376,6 +377,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"content": "hi there",
 					"completion": "complete",
 					"createdAt": 3,
+					"authorBotId": BOT,
 					"repliedToMessageId": "m1",
 					"runtimeSessionId": null,
 				}
@@ -718,6 +720,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 			"content": format!("message {HISTORY}"),
 			"completion": "interrupted",
 			"createdAt": HISTORY,
+			"authorBotId": BOT,
 			"repliedToMessageId": null,
 			"runtimeSessionId": null,
 		}),
