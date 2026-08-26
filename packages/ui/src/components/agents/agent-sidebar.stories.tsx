@@ -11,6 +11,7 @@ import {
 import {
 	AgentSidebar,
 	type AgentSidebarBot,
+	type AgentSidebarConversation,
 	type AgentSidebarProps,
 	type AgentSidebarSection,
 	type BotAvatarBlot,
@@ -3123,5 +3124,350 @@ export const SectionsPerSpace = meta.story({
 			await expect(sectionNames(panel)).toEqual([])
 			await expect(rowsIn(panel).length).toBeGreaterThan(0)
 		}
+	},
+})
+
+const atRest = (bot: AgentSidebarBot): AgentSidebarBot => ({
+	...bot,
+	status: undefined,
+	pose: undefined,
+	badge: undefined,
+})
+
+const participantsOf = (...ids: string[]) =>
+	ids.map((id) => {
+		const bot = ROSTER.find((held) => held.id === id)
+		if (!bot) throw new Error(`No bot called ${id}`)
+		return atRest(bot)
+	})
+
+const PAIR = participantsOf("atlas", "beacon")
+
+const CROWD = participantsOf("atlas", "beacon", "cinder", "dune", "ember")
+
+const CONVERSATIONS: AgentSidebarConversation[] = [
+	{
+		id: "launch",
+		name: "Launch review",
+		participants: PAIR,
+		lastMessage: "Atlas pulled the papers, Beacon is drafting the summary.",
+		timestamp: "09:31",
+	},
+	{
+		id: "migration",
+		name: "Transport migration",
+		participants: CROWD,
+		lastMessage: LAST_MESSAGE,
+		timestamp: "09:05",
+	},
+]
+
+const conversationArgs = () => ({
+	bots: ROSTER.slice(0, 4),
+	conversations: CONVERSATIONS,
+	selectedBotId: "beacon",
+	onCreateConversation: fn(),
+	onSelectConversation: fn(),
+	onOpenConversationSettings: fn(),
+	onDeleteConversation: fn(),
+	onMoveConversationToSection: fn(),
+})
+
+const stackIn = (row: HTMLElement) =>
+	Array.from(
+		slotIn(row, "roster-row-participants").querySelectorAll(
+			'[data-slot="bot-identity-avatar"]',
+		),
+	)
+
+const CREATE = "Create"
+
+export const Conversations = meta.story({
+	args: conversationArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation is a room holding several bots of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a bot row — a 40px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one bot it carries the bots in the room, drawn small in a fixed square so the column never widens. A room of two draws two, a room of five draws three and says how many it left out on the name line, in the place a bot row keeps for its title. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+		await expect(rows).toHaveLength(6)
+		await expect(rowNames(canvasElement)).toEqual([
+			"Launch review",
+			"Transport migration",
+			"Atlas",
+			"Beacon",
+			"Cinder",
+			"Dune",
+		])
+
+		await expectAlignedRows(rows)
+
+		const muted = tokenColor(canvasElement, "--muted-foreground")
+		await expectMutedSecondaryText(
+			rowFor(canvasElement, "Launch review"),
+			muted,
+		)
+	},
+})
+
+export const ConversationParticipants = meta.story({
+	args: conversationArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"How many faces a room shows. Two bots draw two avatars, and the slot stays the same square a bot row gives one avatar — the tiles shrink, the column does not move. Past three the stack stops drawing and starts counting: three avatars and `+2` for the two it left out, so the slot never turns into a grid of specks nobody can tell apart. The count is written on the name line rather than inside the square, which keeps it legible at this size and, more to the point, keeps it readable — the stack itself is decorative and hidden from a screen reader, since three avatar labels in front of the room name would bury the name.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const pair = rowFor(canvasElement, "Launch review")
+		const crowd = rowFor(canvasElement, "Transport migration")
+
+		await expect(stackIn(pair)).toHaveLength(2)
+		await expect(stackIn(crowd)).toHaveLength(3)
+
+		await expect(
+			pair.querySelector('[data-slot="roster-row-badge"]'),
+		).toBeNull()
+		await expect(slotIn(crowd, "roster-row-badge")).toHaveTextContent("+2")
+
+		await expect(slotIn(crowd, "roster-row-participants")).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		)
+
+		const square = slotIn(
+			crowd,
+			"roster-row-participants",
+		).getBoundingClientRect()
+		await expect(Math.round(square.width)).toBe(Math.round(square.height))
+		await expect(Math.round(square.width)).toBe(
+			Math.round(
+				slotIn(
+					rowFor(canvasElement, "Atlas"),
+					"bot-identity-avatar",
+				).getBoundingClientRect().width,
+			),
+		)
+
+		const tiles = stackIn(crowd).map((tile) => tile.getBoundingClientRect())
+		for (const tile of tiles) {
+			await expect(Math.round(tile.width)).toBe(Math.round(tile.height))
+			await expect(tile.left).toBeGreaterThanOrEqual(square.left)
+			await expect(tile.right).toBeLessThanOrEqual(square.right)
+			await expect(tile.top).toBeGreaterThanOrEqual(square.top)
+			await expect(tile.bottom).toBeLessThanOrEqual(square.bottom)
+		}
+		await expect(tiles[0].right).toBeLessThanOrEqual(tiles[1].left)
+		await expect(tiles[0].bottom).toBeLessThanOrEqual(tiles[2].top)
+	},
+})
+
+export const ConversationWorking = meta.story({
+	args: {
+		...conversationArgs(),
+		conversations: [
+			{
+				...CONVERSATIONS[0],
+				status: "working" as const,
+				participants: [
+					PAIR[0],
+					{
+						...PAIR[1],
+						status: "working" as const,
+						badge: "attention" as const,
+					},
+				],
+			},
+			CONVERSATIONS[1],
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room where one bot is running. The bot animates inside the stack the way it would on its own row, and its badge is carried up onto the room: a reader scanning the roster sees the dot on the room rather than having to open it to find which of its bots wants them. Only one dot is drawn whatever the room holds — the badge slot is the same one a bot row uses, in the same corner of the same square, so a mixed list has one dot per row and never a cluster. The quiet room beside it wears none.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const busy = rowFor(canvasElement, "Launch review")
+		const quiet = rowFor(canvasElement, "Transport migration")
+
+		await expect(badgeIn(busy)).toBe("attention")
+		await expect(
+			busy.querySelectorAll('[data-slot="bot-activity-dot"]'),
+		).toHaveLength(1)
+		await expect(badgeIn(quiet)).toBeUndefined()
+	},
+})
+
+export const ConversationSelected = meta.story({
+	args: { ...conversationArgs(), selectedConversationId: "migration" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The room a reader is in. It wears the same pill and the same `aria-current` a selected bot row wears, because a reader is in one place at a time and the panel must not suggest otherwise: while a room is selected no bot row is active, even though `selectedBotId` still names the last bot the reader was with and the host is free to keep it. Check that exactly one row in the panel is current and that it is the room, and that the live region names the room rather than falling back to the bot underneath it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const room = rowFor(canvasElement, "Transport migration")
+		const bot = rowFor(canvasElement, "Beacon")
+
+		await expect(rowButton(room)).toHaveAttribute("aria-current", "page")
+		await expect(rowButton(bot)).not.toHaveAttribute("aria-current")
+		await expect(
+			canvasElement.querySelectorAll('[aria-current="page"]'),
+		).toHaveLength(1)
+		await expect(canvas.getByRole("status")).toHaveTextContent(
+			"Transport migration selected, idle",
+		)
+
+		await userEvent.click(rowButton(rowFor(canvasElement, "Launch review")))
+		await expect(args.onSelectConversation).toHaveBeenCalledWith("launch")
+		await expect(args.onSelectBot).not.toHaveBeenCalled()
+	},
+})
+
+export const ConversationRowMenu = meta.story({
+	args: {
+		...conversationArgs(),
+		bots: SECTIONED_ROSTER,
+		sections: SECTIONS,
+		conversations: [{ ...CONVERSATIONS[0], sectionId: "research" }],
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The actions behind a room, reached the same way a bot's are: a right-click on the row, no button on hover. A room offers less than a bot, and deliberately — settings, the branch that files it, and delete. There is nothing to duplicate, because a room is the bots in it and copying it would fork a history rather than a template. The branch is the one a bot row uses, so it marks the section the room sits in now and reports `null` for the entry that clears it; a rule sits over delete and nowhere else, so a hand aimed at moving can never land on removing.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openRowMenu(canvasElement, "Launch review")
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["Settings", MOVE_TO, "Delete"])
+		await expect(menu.queryByRole("menuitem", { name: "Duplicate" })).toBeNull()
+		await expect(menu.getAllByRole("separator")).toHaveLength(1)
+
+		await userEvent.hover(menu.getByRole("menuitem", { name: MOVE_TO }))
+		const branch = within(
+			await settled(await screen.findByRole("menu", { name: MOVE_TO })),
+		)
+		const targets = branch.getAllByRole("menuitemradio")
+		await expect(targets.map((item) => item.textContent)).toEqual([
+			"No section",
+			"Research",
+			"Shipping",
+			"Archive",
+		])
+		await expect(targets[1]).toHaveAttribute("aria-checked", "true")
+
+		await userEvent.click(targets[2])
+		await expect(args.onMoveConversationToSection).toHaveBeenCalledWith(
+			"launch",
+			"shipping",
+		)
+
+		await userEvent.click(
+			(await openRowMenu(canvasElement, "Launch review")).getByRole(
+				"menuitem",
+				{ name: "Settings" },
+			),
+		)
+		await expect(args.onOpenConversationSettings).toHaveBeenCalledWith("launch")
+
+		await userEvent.click(
+			(await openRowMenu(canvasElement, "Launch review")).getByRole(
+				"menuitem",
+				{ name: "Delete" },
+			),
+		)
+		await expect(args.onDeleteConversation).toHaveBeenCalledWith("launch")
+	},
+})
+
+export const CreateMenu = meta.story({
+	args: conversationArgs(),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The plus in the header now makes two things, so it stops acting and starts asking. A press opens a menu under it — the same menu the space switcher beside it opens, on press rather than on right-click — with one entry per thing the panel can make: a bot on its own, or a room to put several in. The button still says what it does before it is pressed and still reports that it carries a menu, so a keyboard reader is not surprised by a popup. A host that does not do rooms passes no `onCreateConversation` and keeps the plain button it always had, which is what every other story here shows — the menu is not the price of mounting this panel.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const create = canvas.getByRole("button", { name: CREATE })
+		await expect(create).toHaveAttribute("aria-haspopup", "menu")
+
+		await userEvent.tab()
+		await expect(create).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+
+		const menu = within(await screen.findByRole("menu", { name: CREATE }))
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["New bot", "New conversation"])
+		await expect(args.onCreateBot).not.toHaveBeenCalled()
+
+		await userEvent.click(menu.getByRole("menuitem", { name: "New bot" }))
+		await expect(args.onCreateBot).toHaveBeenCalled()
+
+		await userEvent.click(create)
+		await userEvent.click(
+			within(await screen.findByRole("menu", { name: CREATE })).getByRole(
+				"menuitem",
+				{ name: "New conversation" },
+			),
+		)
+		await expect(args.onCreateConversation).toHaveBeenCalled()
+	},
+})
+
+export const DragConversationToSection = meta.story({
+	args: {
+		...conversationArgs(),
+		bots: SECTIONED_ROSTER,
+		sections: SECTIONS,
+		onMoveBotToSection: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Filing a room by hand, which is the gesture a bot row already answers to. A press that then moves lifts the room: it is reduced to the stack of its bots, which follows the pointer while the row stays where it stood, and the section it would land in lightens under it. Releasing reports the room and the section through `onMoveConversationToSection` — the same call the menu branch makes, and never the bot handler, so a host that files the two into different stores is not asked to tell them apart. The click a release would fire is swallowed, so a drag never doubles as opening the room.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const handle = rowButton(rowFor(canvasElement, "Transport migration"))
+		const shipping = dropAreaFor(canvasElement, "shipping")
+
+		lift(handle)
+		await expect(liftedBot()).not.toBeNull()
+
+		moveOver(handle, shipping)
+		await expect(isLightened(shipping)).toBe(true)
+
+		dropOver(handle, shipping)
+		await expect(args.onMoveConversationToSection).toHaveBeenCalledWith(
+			"migration",
+			"shipping",
+		)
+		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+		await expect(args.onSelectConversation).not.toHaveBeenCalled()
+		await expect(liftedBot()).toBeNull()
 	},
 })

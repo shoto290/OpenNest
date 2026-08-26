@@ -2,6 +2,11 @@ const bots = {
 	roster: {
 		label: "Conversations",
 		create: "Nouveau bot",
+		createMenu: "Créer",
+		conversation: {
+			create: "Nouvelle conversation",
+			others: "+{{count}}",
+		},
 		empty: "Aucun bot pour l'instant",
 		actions: "Actions pour {{name}}",
 		settings: "Réglages",
