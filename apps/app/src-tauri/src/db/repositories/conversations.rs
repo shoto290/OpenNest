@@ -170,6 +170,12 @@ pub struct Seat {
 	pub is_deleted: bool,
 }
 
+impl Seat {
+	pub fn is_lead(&self) -> bool {
+		self.role == LEAD_ROLE
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct ConversationDraft {
 	pub space_id: String,
@@ -452,6 +458,10 @@ impl ConversationsRepository {
 			Ok(removed_participant(connection, &conversation_id, &bot_id))
 		})
 		.await?
+	}
+
+	pub async fn seats(&self, conversation_id: String) -> Result<Vec<Seat>, ConversationError> {
+		self.call(move |connection| Ok(seats_of(connection, &conversation_id))).await?
 	}
 
 	pub async fn set_lead(
@@ -745,12 +755,19 @@ fn conversation_at(connection: &Connection, id: &str) -> Result<Conversation, Co
 		.query_row(params![id, TOPIC_KIND], conversation)
 		.optional()?
 		.ok_or_else(|| ConversationError::UnknownConversation { id: id.to_owned() })?;
+	room.seats = seats_of(connection, id)?;
+	Ok(room)
+}
+
+fn seats_of(
+	connection: &Connection,
+	conversation_id: &str,
+) -> Result<Vec<Seat>, ConversationError> {
 	let mut statement = connection.prepare_cached(&format!(
 		"{SEAT_COLUMNS} WHERE seat.conversation_id = ?1 ORDER BY seat.join_seq ASC"
 	))?;
-	let rows = statement.query_map([id], seated)?;
-	room.seats = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-	Ok(room)
+	let rows = statement.query_map([conversation_id], seated)?;
+	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn updated_conversation(

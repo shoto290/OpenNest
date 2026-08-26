@@ -1,4 +1,5 @@
 
+use crate::db::repositories::conversations::Seat;
 use crate::db::repositories::messages::{
 	MessageRole, MessageWindowQuery, StoredMessage, TranscriptError,
 };
@@ -25,6 +26,12 @@ const SUMMARY_LABEL: &str = "The conversation so far:";
 const REPLY_LABEL: &str = "The message this one replies to:";
 const RECENT_LABEL: &str = "The most recent messages:";
 const PROMPT_LABEL: &str = "The new message:";
+const ROOM_LABEL: &str = "The bots in this conversation, and the token that reaches each of them:";
+const ADDRESSED_NOTE: &str = "This message names you: it is yours to answer.";
+const LEAD_NOTE: &str = "This message names nobody, and you hold the lead: it is yours to answer.";
+
+const MENTION_OPEN: &str = "<@";
+const MENTION_CLOSE: &str = ">";
 
 pub async fn bounded_context(
 	database: &Database,
@@ -48,13 +55,26 @@ pub async fn bounded_context(
 		})
 		.await?;
 	let replied_to = replied_to_target(database, &conversation_id, &prompt).await?;
+	let room = room_around(database, &participant).await?;
 
 	Ok(compose(Parts {
 		summary: checkpoint.as_ref().map(|checkpoint| checkpoint.summary.as_str()),
 		replied_to: replied_to.as_ref(),
 		recent: &recent,
 		prompt: &prompt.content,
+		room: room.as_ref(),
 	}))
+}
+
+async fn room_around(
+	database: &Database,
+	participant: &ParticipantKey,
+) -> Result<Option<Room>, TranscriptStoreError> {
+	let seats = database.conversations().seats(participant.conversation_id.clone()).await?;
+	Ok(match seats.len() > 1 {
+		true => Some(Room { reader: participant.bot_id.clone(), seats }),
+		false => None,
+	})
 }
 
 async fn replied_to_target(
@@ -75,6 +95,7 @@ async fn replied_to_target(
 	Ok(Some(RepliedTo {
 		uri: message_uri(conversation_id, &target.id),
 		role: target.role,
+		author_bot_id: target.author_bot_id,
 		provider_session_id: run.provider_session_id,
 		content: target.content,
 	}))
@@ -124,10 +145,12 @@ pub async fn capture_checkpoint(
 		})
 		.await?;
 	let elided = cutoff - baseline > folded.len() as i64;
+	let room = room_around(database, &participant).await?;
 	let summary = folded_summary(
 		previous.as_ref().map(|checkpoint| checkpoint.summary.as_str()),
 		&folded,
 		elided,
+		room.as_ref(),
 	);
 
 	Ok(Some(
@@ -152,8 +175,91 @@ fn no_such_message() -> TranscriptError {
 struct RepliedTo {
 	uri: String,
 	role: MessageRole,
+	author_bot_id: Option<String>,
 	provider_session_id: Option<String>,
 	content: String,
+}
+
+struct Room {
+	reader: String,
+	seats: Vec<Seat>,
+}
+
+impl Room {
+	fn seat(&self, bot_id: &str) -> Option<&Seat> {
+		self.seats.iter().find(|seat| seat.bot_id == bot_id)
+	}
+
+	fn named(&self, bot_id: &str) -> Option<String> {
+		let seat = self.seat(bot_id)?;
+		Some(match (seat.bot_id == self.reader, seat.is_deleted) {
+			(true, _) => format!("{} (you)", seat.name),
+			(_, true) => format!("{} (gone)", seat.name),
+			_ => seat.name.clone(),
+		})
+	}
+
+	fn present(&self) -> impl Iterator<Item = &Seat> {
+		self.seats.iter().filter(|seat| seat.left_at.is_none() && !seat.is_deleted)
+	}
+
+	fn roster(&self) -> String {
+		self.present().map(|seat| self.seated_line(seat)).collect::<Vec<_>>().join("\n")
+	}
+
+	fn seated_line(&self, seat: &Seat) -> String {
+		let mut line = format!("- {} — {}", seat.name, mention_of(&seat.bot_id));
+		if seat.bot_id == self.reader {
+			line.push_str(" — this is you");
+		}
+		if seat.is_lead() {
+			line.push_str(" — holds the lead");
+		}
+		line
+	}
+
+	fn leads(&self) -> bool {
+		self.present().any(|seat| seat.bot_id == self.reader && seat.is_lead())
+	}
+
+	fn note_about(&self, prompt: &str) -> Option<&'static str> {
+		if prompt.contains(&mention_of(&self.reader)) {
+			return Some(ADDRESSED_NOTE);
+		}
+		match mention_at(prompt).is_none() && self.leads() {
+			true => Some(LEAD_NOTE),
+			false => None,
+		}
+	}
+}
+
+fn mention_of(bot_id: &str) -> String {
+	format!("{MENTION_OPEN}{bot_id}{MENTION_CLOSE}")
+}
+
+fn mention_at(text: &str) -> Option<(&str, &str, &str)> {
+	let opened = text.find(MENTION_OPEN)?;
+	let body = &text[opened + MENTION_OPEN.len()..];
+	let closed = body.find(MENTION_CLOSE)?;
+	Some((&text[..opened], &body[..closed], &body[closed + MENTION_CLOSE.len()..]))
+}
+
+fn spelled(room: Option<&Room>, text: &str) -> String {
+	let Some(room) = room else {
+		return text.to_owned();
+	};
+	let mut spelled = String::with_capacity(text.len());
+	let mut rest = text;
+	while let Some((before, bot_id, after)) = mention_at(rest) {
+		spelled.push_str(before);
+		match room.seat(bot_id) {
+			Some(seat) => spelled.push_str(&format!("@{}", seat.name)),
+			None => spelled.push_str(&mention_of(bot_id)),
+		}
+		rest = after;
+	}
+	spelled.push_str(rest);
+	spelled
 }
 
 struct Parts<'a> {
@@ -161,24 +267,32 @@ struct Parts<'a> {
 	replied_to: Option<&'a RepliedTo>,
 	recent: &'a [StoredMessage],
 	prompt: &'a str,
+	room: Option<&'a Room>,
 }
 
 fn compose(parts: Parts<'_>) -> String {
 	let mut sections: Vec<String> = Vec::new();
+	if let Some(room) = parts.room {
+		push_section(&mut sections, ROOM_LABEL, &room.roster());
+	}
 	if let Some(summary) = parts.summary {
-		push_section(&mut sections, SUMMARY_LABEL, summary);
+		push_section(&mut sections, SUMMARY_LABEL, &spelled(parts.room, summary));
 	}
 	if let Some(replied_to) = parts.replied_to {
-		push_section(&mut sections, REPLY_LABEL, &quoted(replied_to));
+		push_section(&mut sections, REPLY_LABEL, &quoted(replied_to, parts.room));
 	}
 	if !parts.recent.is_empty() {
-		let spoken: Vec<String> = parts.recent.iter().map(spoken).collect();
+		let spoken: Vec<String> =
+			parts.recent.iter().map(|message| spoken(message, parts.room)).collect();
 		push_section(&mut sections, RECENT_LABEL, &spoken.join("\n"));
 	}
 	if sections.is_empty() {
 		return parts.prompt.to_owned();
 	}
-	push_section(&mut sections, PROMPT_LABEL, parts.prompt);
+	push_section(&mut sections, PROMPT_LABEL, &spelled(parts.room, parts.prompt));
+	if let Some(note) = parts.room.and_then(|room| room.note_about(parts.prompt)) {
+		sections.push(note.to_owned());
+	}
 	sections.join("\n\n")
 }
 
@@ -189,13 +303,14 @@ fn push_section(sections: &mut Vec<String>, label: &str, body: &str) {
 	sections.push(format!("{label}\n{body}"));
 }
 
-fn quoted(replied_to: &RepliedTo) -> String {
+fn quoted(replied_to: &RepliedTo, room: Option<&Room>) -> String {
 	let session = replied_to.provider_session_id.as_deref().unwrap_or(UNKNOWN_SESSION);
+	let from = authored(replied_to.author_bot_id.as_deref(), room)
+		.unwrap_or_else(|| quoted_speaker(replied_to.role).to_owned());
 	format!(
-		"uri: {}\nfrom: {}\nclaude session: {session}\n{}",
+		"uri: {}\nfrom: {from}\nclaude session: {session}\n{}",
 		replied_to.uri,
-		quoted_speaker(replied_to.role),
-		replied_to.content
+		spelled(room, &replied_to.content)
 	)
 }
 
@@ -206,8 +321,17 @@ fn quoted_speaker(role: MessageRole) -> &'static str {
 	}
 }
 
-fn spoken(message: &StoredMessage) -> String {
-	format!("{}: {}", speaker(message.role), message.content)
+fn spoken(message: &StoredMessage, room: Option<&Room>) -> String {
+	format!("{}: {}", author_of(message, room), spelled(room, &message.content))
+}
+
+fn author_of(message: &StoredMessage, room: Option<&Room>) -> String {
+	authored(message.author_bot_id.as_deref(), room)
+		.unwrap_or_else(|| speaker(message.role).to_owned())
+}
+
+fn authored(author_bot_id: Option<&str>, room: Option<&Room>) -> Option<String> {
+	room?.named(author_bot_id?)
 }
 
 fn speaker(role: MessageRole) -> &'static str {
@@ -217,7 +341,12 @@ fn speaker(role: MessageRole) -> &'static str {
 	}
 }
 
-fn folded_summary(previous: Option<&str>, folded: &[StoredMessage], elided: bool) -> String {
+fn folded_summary(
+	previous: Option<&str>,
+	folded: &[StoredMessage],
+	elided: bool,
+	room: Option<&Room>,
+) -> String {
 	let mut lines: Vec<String> = Vec::new();
 	if let Some(previous) = previous {
 		lines.push(previous.to_owned());
@@ -225,7 +354,7 @@ fn folded_summary(previous: Option<&str>, folded: &[StoredMessage], elided: bool
 	if elided {
 		lines.push(ELIDED.to_owned());
 	}
-	lines.extend(folded.iter().map(summary_line));
+	lines.extend(folded.iter().map(|message| summary_line(message, room)));
 	let summary = lines.join("\n");
 	let kept = last_chars(&summary, SUMMARY_LIMIT);
 	if kept.len() == summary.len() {
@@ -234,9 +363,9 @@ fn folded_summary(previous: Option<&str>, folded: &[StoredMessage], elided: bool
 	format!("{ELIDED}\n{kept}")
 }
 
-fn summary_line(message: &StoredMessage) -> String {
+fn summary_line(message: &StoredMessage, room: Option<&Room>) -> String {
 	let flattened = message.content.split_whitespace().collect::<Vec<_>>().join(" ");
-	format!("{}: {}", speaker(message.role), clipped(&flattened, SUMMARY_LINE_LIMIT))
+	format!("{}: {}", author_of(message, room), clipped(&flattened, SUMMARY_LINE_LIMIT))
 }
 
 fn clipped(text: &str, limit: usize) -> String {
@@ -265,6 +394,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::open;
+	use crate::db::repositories::conversations::AvatarAnimal;
 	use crate::db::repositories::messages::{
 		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState,
 	};
@@ -285,7 +415,7 @@ mod tests {
 	}
 
 	fn only(prompt: &str) -> Parts<'_> {
-		Parts { summary: None, replied_to: None, recent: &[], prompt }
+		Parts { summary: None, replied_to: None, recent: &[], prompt, room: None }
 	}
 
 	#[test]
@@ -298,6 +428,7 @@ mod tests {
 		let target = RepliedTo {
 			uri: "opennest://c/c1/m/m2".to_owned(),
 			role: MessageRole::User,
+			author_bot_id: None,
 			provider_session_id: Some("claude-9f3c".to_owned()),
 			content: "what about the roof?".to_owned(),
 		};
@@ -311,6 +442,7 @@ mod tests {
 			replied_to: Some(&target),
 			recent: &recent,
 			prompt: "and now?",
+			room: None,
 		});
 
 		assert_eq!(
@@ -344,7 +476,7 @@ mod tests {
 			a_message(4, MessageRole::Assistant, "tiled"),
 		];
 
-		let summary = folded_summary(Some("user: we are building a house"), &folded, false);
+		let summary = folded_summary(Some("user: we are building a house"), &folded, false, None);
 
 		assert_eq!(summary, "user: we are building a house\nuser: and the roof?\nassistant: tiled");
 	}
@@ -352,7 +484,7 @@ mod tests {
 	#[test]
 	fn a_summary_stays_within_its_bound_however_long_the_conversation_is() {
 		let long = a_message(1, MessageRole::Assistant, &"word ".repeat(400));
-		let line = summary_line(&long);
+		let line = summary_line(&long, None);
 		assert!(
 			line.chars().count()
 				<= SUMMARY_LINE_LIMIT + "assistant: ".len() + ELIDED.chars().count(),
@@ -363,7 +495,7 @@ mod tests {
 
 		let previous = "user: said long ago\n".repeat(500);
 		let summary =
-			folded_summary(Some(&previous), &[a_message(2, MessageRole::User, "now")], false);
+			folded_summary(Some(&previous), &[a_message(2, MessageRole::User, "now")], false, None);
 
 		assert!(
 			summary.chars().count() <= SUMMARY_LIMIT + ELIDED.chars().count() + 1,
@@ -376,7 +508,8 @@ mod tests {
 
 	#[test]
 	fn a_fold_that_left_messages_out_says_so_in_the_summary() {
-		let summary = folded_summary(None, &[a_message(9, MessageRole::User, "the rest")], true);
+		let summary =
+			folded_summary(None, &[a_message(9, MessageRole::User, "the rest")], true, None);
 
 		assert_eq!(summary, "…\nuser: the rest");
 	}
@@ -385,6 +518,132 @@ mod tests {
 	fn the_stored_token_count_is_an_estimate_of_the_summary_it_stands_for() {
 		assert_eq!(estimated_tokens(""), 0);
 		assert_eq!(estimated_tokens(&"a".repeat(400)), 100);
+	}
+
+	fn a_seat(bot_id: &str, name: &str, role: &str) -> Seat {
+		Seat {
+			bot_id: bot_id.to_owned(),
+			role: role.to_owned(),
+			joined_at: 1,
+			left_at: None,
+			name: name.to_owned(),
+			avatar_animal: AvatarAnimal::Cat,
+			avatar_blot: None,
+			avatar_image_path: None,
+			is_deleted: false,
+		}
+	}
+
+	fn a_room() -> Room {
+		Room {
+			reader: "nyx".to_owned(),
+			seats: vec![a_seat("ada", "Ada", "lead"), a_seat("nyx", "Nyx", "assistant")],
+		}
+	}
+
+	fn a_message_from(seq: i64, bot_id: &str, content: &str) -> StoredMessage {
+		StoredMessage {
+			author_bot_id: Some(bot_id.to_owned()),
+			..a_message(seq, MessageRole::Assistant, content)
+		}
+	}
+
+	#[test]
+	fn a_room_of_several_bots_names_every_speaker_and_the_reader_itself() {
+		let room = a_room();
+		let recent =
+			[a_message_from(1, "ada", "the roof is up"), a_message_from(2, "nyx", "the walls too")];
+
+		let context = compose(Parts { recent: &recent, room: Some(&room), ..only("and now?") });
+
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("Ada: the roof is up\nNyx (you): the walls too"),
+			"a shared window did not name who spoke: {context}"
+		);
+	}
+
+	#[test]
+	fn the_room_names_who_sits_in_it_the_token_reaching_them_and_the_lead() {
+		let room = a_room();
+
+		let context = compose(Parts { room: Some(&room), ..only("and now?") });
+
+		assert_eq!(
+			section(&context, ROOM_LABEL),
+			Some("- Ada — <@ada> — holds the lead\n- Nyx — <@nyx> — this is you"),
+			"the room was not described to the bot reading it: {context}"
+		);
+	}
+
+	#[test]
+	fn every_mention_of_the_window_reads_as_the_name_of_the_bot_it_points_at() {
+		let room = a_room();
+		let recent = [a_message_from(1, "ada", "<@nyx> can you take the walls?")];
+
+		let context = compose(Parts {
+			summary: Some("Ada: <@nyx> is on the roof"),
+			recent: &recent,
+			room: Some(&room),
+			..only("<@ada> and now?")
+		});
+
+		assert_eq!(section(&context, RECENT_LABEL), Some("Ada: @Nyx can you take the walls?"));
+		assert_eq!(section(&context, SUMMARY_LABEL), Some("Ada: @Nyx is on the roof"));
+		assert_eq!(section(&context, PROMPT_LABEL), Some("@Ada and now?"));
+	}
+
+	#[test]
+	fn a_message_naming_the_reader_tells_it_the_turn_is_its_own() {
+		let room = a_room();
+
+		let context = compose(Parts { room: Some(&room), ..only("<@nyx> your turn") });
+
+		assert!(context.ends_with(ADDRESSED_NOTE), "the bot addressed was not told: {context}");
+	}
+
+	#[test]
+	fn a_message_naming_nobody_tells_the_lead_and_only_the_lead_that_it_is_expected() {
+		let seats = a_room().seats;
+		let lead = Room { reader: "ada".to_owned(), seats };
+
+		let expected = compose(Parts { room: Some(&lead), ..only("and now?") });
+		let quiet = compose(Parts { room: Some(&a_room()), ..only("and now?") });
+		let addressed = compose(Parts { room: Some(&lead), ..only("<@nyx> and now?") });
+
+		assert!(expected.ends_with(LEAD_NOTE), "the lead was not told it is expected: {expected}");
+		assert!(!quiet.contains(LEAD_NOTE), "a bot without the lead was told to answer: {quiet}");
+		assert!(
+			!addressed.contains(LEAD_NOTE),
+			"the lead was told to answer a message naming someone else: {addressed}"
+		);
+	}
+
+	#[test]
+	fn a_bot_that_left_or_is_gone_stays_out_of_the_room_and_keeps_its_name_on_what_it_wrote() {
+		let mut left = a_seat("old", "Old", "assistant");
+		left.left_at = Some(9);
+		let mut gone = a_seat("ghost", "Ghost", "assistant");
+		gone.is_deleted = true;
+		let mut room = a_room();
+		room.seats.extend([left, gone]);
+		let recent = [
+			a_message_from(1, "old", "I laid the floor"),
+			a_message_from(2, "ghost", "and I left"),
+		];
+
+		let context = compose(Parts { recent: &recent, room: Some(&room), ..only("and now?") });
+
+		assert_eq!(
+			section(&context, ROOM_LABEL),
+			Some("- Ada — <@ada> — holds the lead\n- Nyx — <@nyx> — this is you"),
+			"a bot that is no longer there was seated in the room: {context}"
+		);
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("Old: I laid the floor\nGhost (gone): and I left"),
+			"what a departed bot wrote lost its author: {context}"
+		);
 	}
 
 	const TURN: &str = "t1";
@@ -869,6 +1128,89 @@ mod tests {
 				.expect("the second bot's checkpoint"),
 			None,
 			"a checkpoint reached across participants"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn said_by(database: &Database, conversation_id: &str, bot_id: &str, content: &str) {
+		let id = "s1".to_owned();
+		database
+			.messages()
+			.open_assistant_message(NewAssistantMessage {
+				id: id.clone(),
+				conversation_id: conversation_id.to_owned(),
+				turn_id: TURN.to_owned(),
+				author_bot_id: Some(bot_id.to_owned()),
+				replied_to_message_id: None,
+				created_at: 50,
+			})
+			.await
+			.expect("the reply is opened");
+		database
+			.messages()
+			.append_text(id.clone(), content.to_owned())
+			.await
+			.expect("the reply streams");
+		database
+			.messages()
+			.finalize_message(id, TerminalState::Complete)
+			.await
+			.expect("the reply ends");
+	}
+
+	#[tokio::test]
+	async fn a_bot_sharing_a_conversation_is_told_the_room_and_reads_names_in_place_of_tokens() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		another_bot(&database, &conversation, "second").await;
+		said_by(&database, &conversation, "second", "<@default> what about the roof?").await;
+		prompt(&database, &conversation, "p1", Some("s1")).await;
+
+		let context =
+			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
+				.await
+				.expect("the context is rebuilt");
+
+		assert_eq!(
+			section(&context, ROOM_LABEL),
+			Some("- Claude — <@default> — this is you\n- Second — <@second>"),
+			"the room went undescribed: {context}"
+		);
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("Second: @Claude what about the roof?"),
+			"the shared window lost its author or its mention: {context}"
+		);
+		assert!(
+			section(&context, REPLY_LABEL).is_some_and(|quoted| quoted.contains("from: Second")),
+			"the quoted message was not named after the bot that wrote it: {context}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_conversation_of_a_single_bot_is_left_reading_as_it_did() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		spoken_so_far(&database, &conversation, 2).await;
+		prompt(&database, &conversation, "p1", None).await;
+
+		let context =
+			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
+				.await
+				.expect("the context is rebuilt");
+
+		assert!(!context.contains(ROOM_LABEL), "a chat of one bot was given a room: {context}");
+		assert_eq!(
+			section(&context, RECENT_LABEL),
+			Some("user: message 1\nassistant: message 2"),
+			"a chat of one bot stopped reading as it did: {context}"
 		);
 
 		drop(database);
