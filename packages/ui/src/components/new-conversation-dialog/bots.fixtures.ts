@@ -1,4 +1,4 @@
-import type { ConversationBot } from "@workspace/ui/components/new-conversation-dialog/bot-picker"
+import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 
 const CONVERSATION_BOTS: ConversationBot[] = [
 	{ id: "bot-atlas", name: "Atlas", animal: "owl", blot: "blue" },

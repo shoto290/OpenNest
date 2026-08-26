@@ -14,7 +14,12 @@ import {
 	type ChatTurnState,
 	UserTurn,
 } from "@workspace/ui/components/chat-turn"
+import {
+	type ConversationBot,
+	ConversationBotsProvider,
+} from "@workspace/ui/components/conversation-bots"
 import { Markdown } from "@workspace/ui/components/markdown"
+import type { MessageAuthor } from "@workspace/ui/components/message"
 
 const ANSWER =
 	"The workspace has two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell. Nothing crosses that line in the other direction."
@@ -75,6 +80,41 @@ const TABLE = `| § | Subject |
 | 1–2 | The right mental model |
 | 3 | Context as a scarce resource |
 | 4–5 | Framing a request, writing a ticket |`
+
+const LEAD: MessageAuthor = {
+	id: "bot-atlas",
+	name: "Atlas",
+	animal: "owl",
+	blot: "blue",
+	isLead: true,
+}
+
+const SECOND: MessageAuthor = {
+	id: "bot-basile",
+	name: "Basile",
+	animal: "cat",
+	blot: "purple",
+}
+
+const GONE: MessageAuthor = {
+	id: "bot-elia",
+	name: "Elia",
+	animal: "mouse",
+	isDeleted: true,
+}
+
+const ROOM: ConversationBot[] = [LEAD, SECOND]
+
+const LEAD_RUN = [
+	"I have the release notes. The migration is not mine.",
+	"<@bot-basile> owns that script, and <@bot-elia> wrote the fixture it reads.",
+]
+
+const SECOND_REPLY =
+	"Taken. The migration is green on a fresh database, so <@bot-atlas> can publish."
+
+const GONE_REPLY =
+	"The fixture still names the old columns. Somebody will have to rewrite it."
 
 const TURN_STATES: ChatTurnState[] = [
 	"streaming",
@@ -616,5 +656,72 @@ export const Quoted = meta.story({
 
 		await userEvent.click(quotes[0])
 		await expect(jumpToQuoted).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const Authored = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation held by several bots, where every row has to say who wrote it. Hand `AssistantTurn` an `author` and it names the bot above the bubble and draws that bot's avatar in the gutter — the row keeps the gutter it always had, so nothing is passed twice. The bot that leads wears a crown beside its name. In a run the name is written once, on the row that opens it, while the avatar stays on the row that closes it: the block reads as one bot speaking, not as the same name repeated. `<@bot-id>` in the text is drawn as a chip by `Markdown`, resolved against `ConversationBotsProvider`, and an id the conversation does not know still draws as an unknown bot rather than leaking the raw text. Check that Atlas is named once over its two rows, that the crown is on Atlas alone, and that a message from a conversation with a single bot — every other story here — is untouched by all of this.",
+			},
+		},
+	},
+	render: () => (
+		<ConversationBotsProvider bots={ROOM}>
+			<div className="mx-auto flex max-w-2xl flex-col gap-6">
+				<UserTurn>Who is taking the migration?</UserTurn>
+				<ChatTurnGroup>
+					{LEAD_RUN.map((paragraph) => (
+						<AssistantTurn key={paragraph} author={LEAD} copyText={paragraph}>
+							<Markdown>{paragraph}</Markdown>
+						</AssistantTurn>
+					))}
+				</ChatTurnGroup>
+				<AssistantTurn author={SECOND} copyText={SECOND_REPLY}>
+					<Markdown>{SECOND_REPLY}</Markdown>
+				</AssistantTurn>
+			</div>
+		</ConversationBotsProvider>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const named = [
+			...canvasElement.querySelectorAll('[data-slot="message-author"]'),
+		].map((header) => header.textContent)
+
+		await expect(named).toHaveLength(2)
+		await expect(named[0]).toContain("Atlas")
+		await expect(named[1]).toContain("Basile")
+		await expect(
+			canvasElement.querySelectorAll('[data-slot="message-author-lead"]'),
+		).toHaveLength(1)
+		await expect(canvas.getByText("Unknown bot")).toBeVisible()
+	},
+})
+
+export const DeletedAuthor = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The bot that wrote this was deleted since. Its message is history and stays legible: the bubble is the ordinary one, only the name is dimmed and marked with a bin so a reader knows nobody is behind it any more. The mark is an icon in the line and *Deleted bot* under it — on hover, and to a screen reader — so the row keeps its length and still says what it means. Check that the icon reads as a state rather than an action nobody can take, and that the row copies and quotes like any other.",
+			},
+		},
+	},
+	render: () => (
+		<ConversationBotsProvider bots={ROOM}>
+			<div className="mx-auto flex max-w-2xl flex-col gap-6">
+				<AssistantTurn author={GONE} copyText={GONE_REPLY}>
+					{GONE_REPLY}
+				</AssistantTurn>
+			</div>
+		</ConversationBotsProvider>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvasElement.querySelector('[data-slot="message-author-deleted"]'),
+		).toHaveAttribute("title", "Deleted bot")
+		await expect(canvas.getByText(GONE_REPLY)).toBeVisible()
 	},
 })

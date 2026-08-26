@@ -10,10 +10,12 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	Message,
+	MessageAuthor,
 	MessageContent,
 	MessageFooter,
 } from "@workspace/ui/components/message"
@@ -82,6 +84,7 @@ interface AssistantTurnProps {
 	onPin?: () => void
 	pinned?: boolean
 	bare?: boolean
+	author?: MessageAuthor
 	avatar?: ReactNode
 	carriesMark?: boolean
 	className?: string
@@ -112,6 +115,10 @@ const RUN_RADIUS = {
 		last: "rounded-tl-md",
 	},
 } satisfies Record<"user" | "assistant", Record<ChatTurnRun, string>>
+
+const opensRun = (run: ChatTurnRun) => run === "single" || run === "first"
+
+const closesRun = (run: ChatTurnRun) => run === "single" || run === "last"
 
 function runPositionFor(index: number, length: number): ChatTurnRun {
 	if (length === 1) return "single"
@@ -350,6 +357,7 @@ function AssistantTurn({
 	onPin,
 	pinned = false,
 	bare = false,
+	author,
 	avatar,
 	carriesMark = false,
 	className,
@@ -361,6 +369,18 @@ function AssistantTurn({
 	const footer = footerKey ? t(footerKey) : undefined
 	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
+	const mark =
+		avatar ??
+		(author && closesRun(run) ? (
+			<BotIdentityAvatar
+				animal={author.animal}
+				blot={author.blot}
+				image={author.image}
+				name={author.name}
+				seed={author.id}
+				size={CHAT_AVATAR_SIZE}
+			/>
+		) : null)
 
 	return (
 		<Message
@@ -372,16 +392,22 @@ function AssistantTurn({
 				className="grid gap-x-2"
 				style={{ gridTemplateColumns: `${CHAT_AVATAR_SIZE}px 1fr` }}
 			>
+				{author && opensRun(run) ? (
+					<MessageAuthor
+						author={author}
+						className="col-start-2 row-start-1 pb-1"
+					/>
+				) : null}
 				<span
 					data-slot="message-gutter"
 					aria-hidden="true"
-					className="col-start-1 row-start-1 self-end"
+					className="col-start-1 row-start-2 self-end"
 				>
-					{avatar ? <SharedMark markId={markId}>{avatar}</SharedMark> : null}
+					{mark ? <SharedMark markId={markId}>{mark}</SharedMark> : null}
 				</span>
 				<MessageBubble
 					variant={bare ? "bare" : "soft"}
-					className="col-start-2 row-start-1 min-w-0"
+					className="col-start-2 row-start-2 min-w-0"
 				>
 					<MessageActions
 						actions={<TurnActionButtons actions={actions} />}
@@ -396,7 +422,7 @@ function AssistantTurn({
 					</MessageActions>
 				</MessageBubble>
 				{footer ? (
-					<MessageFooter className="col-start-2 row-start-2">
+					<MessageFooter className="col-start-2 row-start-3">
 						{footer}
 					</MessageFooter>
 				) : null}

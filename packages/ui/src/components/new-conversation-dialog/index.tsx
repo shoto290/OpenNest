@@ -4,16 +4,14 @@ import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
+import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import {
 	Content,
 	Description,
 	Root,
 	Title,
 } from "@workspace/ui/components/dialog"
-import {
-	BotPicker,
-	type ConversationBot,
-} from "@workspace/ui/components/new-conversation-dialog/bot-picker"
+import { BotPicker } from "@workspace/ui/components/new-conversation-dialog/bot-picker"
 import { PickedBots } from "@workspace/ui/components/new-conversation-dialog/picked-bots"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 
