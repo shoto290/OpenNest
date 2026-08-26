@@ -32,10 +32,16 @@ type BotBadge = (typeof BOT_BADGES)[number]
 const DOT_CLASS =
 	"absolute right-[6%] bottom-[6%] block rounded-full ring-2 ring-sidebar"
 
-const DOT_TONE: Record<BotBadge, string> = {
+const BOT_BADGE_FILL: Record<BotBadge, string> = {
 	attention: "bg-bot-badge-attention motion-safe:animate-pulse",
 	done: "bg-bot-badge-done",
 	failed: "bg-bot-badge-failed",
+}
+
+const BOT_BADGE_RING: Record<BotBadge, string> = {
+	attention: "ring-bot-badge-attention motion-safe:animate-pulse",
+	done: "ring-bot-badge-done",
+	failed: "ring-bot-badge-failed",
 }
 
 const DEFAULT_SIZE = 40
@@ -93,7 +99,7 @@ function BotIdentityAvatar({
 			{badge ? (
 				<span
 					aria-hidden="true"
-					className={cn(DOT_CLASS, DOT_TONE[badge])}
+					className={cn(DOT_CLASS, BOT_BADGE_FILL[badge])}
 					data-badge={badge}
 					data-slot="bot-activity-dot"
 					style={{ width: dotSize(size), height: dotSize(size) }}
@@ -105,6 +111,8 @@ function BotIdentityAvatar({
 
 export {
 	avatarShape,
+	BOT_BADGE_FILL,
+	BOT_BADGE_RING,
 	BOT_BADGES,
 	type BotBadge,
 	BotIdentityAvatar,

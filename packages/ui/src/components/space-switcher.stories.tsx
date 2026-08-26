@@ -3,6 +3,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { settled, slotsIn } from "@workspace/storybook/story-utils"
+import type { BotBadge } from "@workspace/ui/components/bot-identity-avatar"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	SpaceDots,
@@ -17,6 +18,12 @@ const SPACES: Space[] = [
 	{ id: "veille", name: "Veille", colour: "yellow" },
 	{ id: "archives", name: "Archives", colour: "purple" },
 ]
+
+const BADGES: Record<string, BotBadge> = {
+	perso: "done",
+	atelier: "failed",
+	veille: "attention",
+}
 
 const LONG_SPACES: Space[] = [
 	{
@@ -55,17 +62,24 @@ const SwitcherRail = (props: SpaceSwitcherProps) => (
 	</div>
 )
 
-const LiveSwitcher = ({ spaces }: { spaces: Space[] }) => {
+type LiveSwitcherProps = {
+	spaces: Space[]
+	badgesBySpaceId?: Record<string, BotBadge>
+}
+
+const LiveSwitcher = ({ spaces, badgesBySpaceId }: LiveSwitcherProps) => {
 	const [selectedSpaceId, setSelectedSpaceId] = useState(spaces[0].id)
 
 	return (
 		<div className="flex w-64 flex-col gap-4">
 			<SwitcherLine
+				badgesBySpaceId={badgesBySpaceId}
 				onSelectSpace={setSelectedSpaceId}
 				selectedSpaceId={selectedSpaceId}
 				spaces={spaces}
 			/>
 			<SpaceDots
+				badgesBySpaceId={badgesBySpaceId}
 				onSelectSpace={setSelectedSpaceId}
 				selectedSpaceId={selectedSpaceId}
 				spaces={spaces}
@@ -73,6 +87,14 @@ const LiveSwitcher = ({ spaces }: { spaces: Space[] }) => {
 		</div>
 	)
 }
+
+const badgeOn = (root: HTMLElement) =>
+	slotsIn(root, "space-switcher-badge")[0]?.dataset.badge
+
+const dotBadges = (root: HTMLElement) =>
+	slotsIn(root, "space-dot-button").map(
+		(button) => slotsIn(button, "space-dot")[0]?.dataset.badge,
+	)
 
 const meta = preview.meta({
 	title: "Navigation/SpaceSwitcher",
@@ -242,6 +264,125 @@ export const WithDots = meta.story({
 			"aria-current",
 			"true",
 		)
+	},
+})
+
+export const Badges = meta.story({
+	args: { badgesBySpaceId: BADGES },
+	render: (args) => (
+		<LiveSwitcher badgesBySpaceId={args.badgesBySpaceId} spaces={args.spaces} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three of the five spaces carrying a badge while the reader sits in a fourth, which is how a bot working out of sight reaches them. Check every badged dot keeps its space's tint at its centre and wears the badge as a ring around it — the mark says something happened there, the tint still says which space it is — that the dots of the spaces with nothing stay exactly as they are drawn without badges, and that the button takes one mark of its own for the strongest badge waiting elsewhere, attention over failed over done. The marks are drawn and never spoken: the button's accessible name is still the open space, since a reader who moves there meets the rows that carry the news. Pick `BadgeRanking` for the order under a quieter set, `BadgeHere` for the badge that belongs to the space already open.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const trigger = canvas.getByRole("button", {
+			name: "Change space, Perso open",
+		})
+
+		await expect(badgeOn(trigger)).toBe("attention")
+		await expect(dotBadges(canvasElement)).toEqual([
+			"done",
+			undefined,
+			"failed",
+			"attention",
+			undefined,
+		])
+	},
+})
+
+export const BadgeRanking = meta.story({
+	args: { badgesBySpaceId: { perso: "done", atelier: "failed" } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two spaces waiting, one done and one failed, with neither one open. Check the button wears the failed mark rather than the done one: a run that broke asks for the reader before a run that finished, and the button has room for one mark only. Pick `Badges` for the full order with attention in it.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			badgeOn(canvas.getByRole("button", { name: "Change space, Vocca open" })),
+		).toBe("failed")
+	},
+})
+
+export const BadgeHere = meta.story({
+	args: { badgesBySpaceId: { vocca: "attention" } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The only badge in the account belongs to the space the reader already has open. Check the button is left unmarked — the roster under it is already showing the bot that raised it, and a mark here would send the reader looking for a space that does not exist — while the space's own row in the menu still carries the ring, so the badge is not lost. Pick `Badges` for the mark the button takes when the news is elsewhere.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const trigger = canvas.getByRole("button", {
+			name: "Change space, Vocca open",
+		})
+
+		await expect(badgeOn(trigger)).toBeUndefined()
+
+		const menu = await openMenu(trigger)
+		const open = within(menu).getAllByRole("menuitemradio")[1]
+		await expect(slotsIn(open, "space-dot")[0]?.dataset.badge).toBe("attention")
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+	},
+})
+
+export const BadgeAndLongName = meta.story({
+	args: {
+		spaces: LONG_SPACES,
+		selectedSpaceId: "perso",
+		badgesBySpaceId: { vocca: "attention" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space named as a sentence while another one is asking for the reader — the pair that puts the mark and the truncation on the same edge. Check the name gives way to the badge instead of running under it: the clipped end and its ellipsis stop before the mark, so the reader never reads a name through a coloured dot, and the button still holds the width it had. Pick `LongContent` for the same name with nothing waiting, `Badges` for the mark on names that fit.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const trigger = canvas.getByRole("button", { name: /^Change space/ })
+		const name = slotsIn(canvasElement, "space-switcher-name")[0]
+		const badge = slotsIn(canvasElement, "space-switcher-badge")[0]
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
+			badge.getBoundingClientRect().left,
+		)
+		await expect(trigger.getBoundingClientRect().width).toBeLessThan(256)
+	},
+})
+
+export const BadgeOnRail = meta.story({
+	args: { badgesBySpaceId: BADGES },
+	render: (args) => <SwitcherRail {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The mark once the sidebar is on its icon rail, where the name is gone and the open space's tint is all that is left. Check the badge is still drawn, still in the same corner, and that the button keeps the rail's square rather than growing to make room for it — the room the name needed is not needed here. Pick `Collapsed` for the rail with nothing waiting.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const trigger = canvas.getByRole("button", { name: /^Change space/ })
+
+		await expect(badgeOn(canvasElement)).toBe("attention")
+		await expect(tintVisibleIn(trigger)).toBe(true)
+		await expect(trigger.getBoundingClientRect().width).toBeCloseTo(28, 0)
 	},
 })
 

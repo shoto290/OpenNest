@@ -6,6 +6,11 @@ import {
 	type BotAvatarBlot,
 	blotTint,
 } from "@workspace/ui/components/bot-avatar"
+import {
+	BOT_BADGE_FILL,
+	BOT_BADGE_RING,
+	type BotBadge,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -23,12 +28,17 @@ import { SPACE_RANK_LIMIT } from "@workspace/ui/hooks/use-space-shortcut"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER =
-	"mr-auto min-w-0 max-w-[62%] px-2 group-data-[state=collapsed]/sidebar:mr-0 group-data-[state=collapsed]/sidebar:size-7 group-data-[state=collapsed]/sidebar:px-0"
+	"relative mr-auto min-w-0 max-w-[62%] px-2 group-data-[state=collapsed]/sidebar:mr-0 group-data-[state=collapsed]/sidebar:size-7 group-data-[state=collapsed]/sidebar:px-0"
 
 const SWITCHER_NAME =
 	"min-w-0 truncate group-data-[state=collapsed]/sidebar:hidden"
 
 const SWITCHER_DOT = "hidden group-data-[state=collapsed]/sidebar:block"
+
+const SWITCHER_BADGE =
+	"pointer-events-none absolute top-1 right-1 size-2 rounded-full ring-2 ring-sidebar"
+
+const SWITCHER_BADGE_INSET = "pr-4"
 
 const DOT = "size-2.5 shrink-0 rounded-full"
 
@@ -43,16 +53,36 @@ const DOT_MOTION =
 
 const DOT_RESTING = "scale-75 bg-sidebar-foreground/30"
 
+const DOT_BADGE = "ring-2"
+
+const BADGE_RANK: BotBadge[] = ["attention", "failed", "done"]
+
+const strongestBadge = (badges: (BotBadge | undefined)[]) =>
+	BADGE_RANK.find((badge) => badges.includes(badge))
+
 type SpaceDotProps = {
 	colour: BotAvatarBlot
+	badge?: BotBadge
 	isFilled?: boolean
 	className?: string
 }
 
-const SpaceDot = ({ colour, isFilled = true, className }: SpaceDotProps) => (
+const SpaceDot = ({
+	colour,
+	badge,
+	isFilled = true,
+	className,
+}: SpaceDotProps) => (
 	<span
 		aria-hidden="true"
-		className={cn(DOT, DOT_MOTION, !isFilled && DOT_RESTING, className)}
+		className={cn(
+			DOT,
+			DOT_MOTION,
+			!isFilled && DOT_RESTING,
+			badge && cn(DOT_BADGE, BOT_BADGE_RING[badge]),
+			className,
+		)}
+		data-badge={badge}
 		data-slot="space-dot"
 		style={isFilled ? { backgroundColor: blotTint(colour) } : undefined}
 	/>
@@ -61,6 +91,7 @@ const SpaceDot = ({ colour, isFilled = true, className }: SpaceDotProps) => (
 type SpaceSelection = {
 	spaces: Space[]
 	selectedSpaceId?: string
+	badgesBySpaceId?: Record<string, BotBadge>
 	onSelectSpace?: (id: string) => void
 }
 
@@ -72,6 +103,7 @@ type SpaceSwitcherProps = SpaceSelection & {
 const SpaceSwitcher = ({
 	spaces,
 	selectedSpaceId,
+	badgesBySpaceId,
 	onSelectSpace,
 	onCreateSpace,
 	onOpenSpaceSettings,
@@ -82,12 +114,18 @@ const SpaceSwitcher = ({
 
 	if (!selected) return null
 
+	const elsewhere = strongestBadge(
+		spaces
+			.filter((space) => space.id !== selected.id)
+			.map((space) => badgesBySpaceId?.[space.id]),
+	)
+
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger opensOnPress>
 				<Button
 					aria-label={t("spaces.switch", { name: selected.name })}
-					className={SWITCHER}
+					className={cn(SWITCHER, elsewhere && SWITCHER_BADGE_INSET)}
 					data-slot="space-switcher"
 					size="sm"
 					variant="ghost"
@@ -96,6 +134,14 @@ const SpaceSwitcher = ({
 					<span className={SWITCHER_NAME} data-slot="space-switcher-name">
 						{selected.name}
 					</span>
+					{elsewhere ? (
+						<span
+							aria-hidden="true"
+							className={cn(SWITCHER_BADGE, BOT_BADGE_FILL[elsewhere])}
+							data-badge={elsewhere}
+							data-slot="space-switcher-badge"
+						/>
+					) : null}
 				</Button>
 			</ContextMenuTrigger>
 			<ContextMenuContent ariaLabel={t("spaces.label")}>
@@ -109,7 +155,10 @@ const SpaceSwitcher = ({
 							textValue={space.name}
 							value={space.id}
 						>
-							<SpaceDot colour={space.colour} />
+							<SpaceDot
+								badge={badgesBySpaceId?.[space.id]}
+								colour={space.colour}
+							/>
 							<span className="min-w-0 truncate">{space.name}</span>
 							{index < SPACE_RANK_LIMIT ? (
 								<ContextMenuShortcut>
@@ -136,6 +185,7 @@ const SpaceSwitcher = ({
 const SpaceDots = ({
 	spaces,
 	selectedSpaceId,
+	badgesBySpaceId,
 	onSelectSpace,
 }: SpaceSelection) => {
 	const { t } = useTranslation("bots")
@@ -161,7 +211,11 @@ const SpaceDots = ({
 						onClick={() => onSelectSpace?.(space.id)}
 						type="button"
 					>
-						<SpaceDot colour={space.colour} isFilled={isSelected} />
+						<SpaceDot
+							badge={badgesBySpaceId?.[space.id]}
+							colour={space.colour}
+							isFilled={isSelected}
+						/>
 					</button>
 				)
 			})}
