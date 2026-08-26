@@ -38,6 +38,12 @@ const BOT_BADGE_FILL: Record<BotBadge, string> = {
 	failed: "bg-bot-badge-failed",
 }
 
+const BOT_BADGE_RING: Record<BotBadge, string> = {
+	attention: "ring-bot-badge-attention motion-safe:animate-pulse",
+	done: "ring-bot-badge-done",
+	failed: "ring-bot-badge-failed",
+}
+
 const DEFAULT_SIZE = 40
 
 const DOT_RATIO = 0.34
@@ -106,6 +112,7 @@ function BotIdentityAvatar({
 export {
 	avatarShape,
 	BOT_BADGE_FILL,
+	BOT_BADGE_RING,
 	BOT_BADGES,
 	type BotBadge,
 	BotIdentityAvatar,

@@ -8,6 +8,7 @@ import {
 } from "@workspace/ui/components/bot-avatar"
 import {
 	BOT_BADGE_FILL,
+	BOT_BADGE_RING,
 	type BotBadge,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
@@ -54,12 +55,6 @@ const DOT_RESTING = "scale-75 bg-sidebar-foreground/30"
 
 const DOT_BADGE = "ring-2"
 
-const BADGE_RING: Record<BotBadge, string> = {
-	attention: "ring-bot-badge-attention motion-safe:animate-pulse",
-	done: "ring-bot-badge-done",
-	failed: "ring-bot-badge-failed",
-}
-
 const BADGE_RANK: BotBadge[] = ["attention", "failed", "done"]
 
 const strongestBadge = (badges: (BotBadge | undefined)[]) =>
@@ -84,7 +79,7 @@ const SpaceDot = ({
 			DOT,
 			DOT_MOTION,
 			!isFilled && DOT_RESTING,
-			badge && cn(DOT_BADGE, BADGE_RING[badge]),
+			badge && cn(DOT_BADGE, BOT_BADGE_RING[badge]),
 			className,
 		)}
 		data-badge={badge}
