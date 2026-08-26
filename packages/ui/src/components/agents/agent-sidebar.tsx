@@ -437,6 +437,12 @@ const BotRosterRow = ({
 						<Icons.Copy aria-hidden="true" className="size-3.5" />
 						{t("roster.duplicate")}
 					</ContextMenuItem>
+					<BotSectionBranch
+						bot={bot}
+						onCreateSectionFor={onCreateSectionFor}
+						onMoveToSection={onMoveToSection}
+						sections={sections}
+					/>
 					<SpaceDestinationBranch
 						botId={bot.id}
 						destinations={destinations}
@@ -450,12 +456,6 @@ const BotRosterRow = ({
 						icon={Icons.ArrowRight}
 						label={t("roster.moveToSpace")}
 						onPick={onMoveToSpace}
-					/>
-					<BotSectionBranch
-						bot={bot}
-						onCreateSectionFor={onCreateSectionFor}
-						onMoveToSection={onMoveToSection}
-						sections={sections}
 					/>
 					<ContextMenuSeparator />
 					<ContextMenuItem

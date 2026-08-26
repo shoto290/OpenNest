@@ -1618,7 +1618,7 @@ export const RowDuplicateToSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The branch under a row that sends a copy of the bot somewhere else. It sits directly under the plain duplicate, which still copies into the space the bot already lives in and leaves the reader where they are. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations keep the order and the tint the space switcher gives them, and that choosing one reports the bot and the space it was sent to. Pick `RowContextMenu` for the actions above it, `RowMoveToSpace` for the branch under it that hands the bot over instead of copying it, `OneSpaceRowMenu` for the account that has nowhere to send a copy.",
+					"The branch under a row that sends a copy of the bot somewhere else. It sits under the entries that keep the bot where it is — the plain duplicate, which still copies into the space the bot already lives in and leaves the reader where they are, and the section branch when the account has sections. Check the branch offers every other space and never the one holding the bot — Vocca is open here, so Vocca is not on the list — that the destinations keep the order and the tint the space switcher gives them, and that choosing one reports the bot and the space it was sent to. Pick `RowContextMenu` for the actions above it, `RowMoveToSpace` for the branch under it that hands the bot over instead of copying it, `OneSpaceRowMenu` for the account that has nowhere to send a copy.",
 			},
 		},
 	},
@@ -2515,6 +2515,40 @@ export const SectionDelete = meta.story({
 	},
 })
 
+export const FullRowMenu = meta.story({
+	args: {
+		...sectionArgs(),
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "vocca",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Every branch a row can carry, open at once — the account that has sections to file under and spaces to travel to, which is the only place the four middle entries are read side by side. They are ordered by how far they reach: the plain duplicate and the section branch keep the bot in the space it is in, the two space branches take it out of it, so the band widens downward and the entry with the longest reach sits nearest delete. The two that name a space are adjacent and differ on the verb and the glyph alone — `Duplicate to space` under the copy, `Move to space` under the arrow — while the section branch keeps its bare `Move to` and its folder, no longer stacked under a sentence it reads as a truncation of. The middle stays one band: the rules are spent under settings and over delete and nowhere else, so a hand aimed anywhere in the middle can never land on delete. Pick `RowDuplicateToSpace` and `RowMoveToSpace` for each space branch opened, `MoveBotToSection` for the section one.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const menu = await openRowMenu(canvasElement, "Beacon")
+
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual([
+			"Settings",
+			"Duplicate",
+			MOVE_TO,
+			DUPLICATE_TO,
+			MOVE_TO_SPACE,
+			"Delete",
+		])
+		await expect(menu.getAllByRole("separator")).toHaveLength(2)
+	},
+})
+
 export const MoveBotToSection = meta.story({
 	args: sectionArgs(),
 	parameters: {
@@ -2522,7 +2556,7 @@ export const MoveBotToSection = meta.story({
 		docs: {
 			description: {
 				story:
-					"The branch under a row that files the bot. It sits directly under the copying entries, in the same band as them — copying a bot and filing a bot are both a reader arranging their roster, so nothing is drawn between them; the rules are spent where they matter, one under settings and one over delete, so a hand aimed at anything in the middle can never land on delete. It offers every section plus the entry that files it under none, and it marks the one the bot holds now, so the branch reads as where the bot is before it reads as where it could go — Beacon sits in Research here. Choosing one reports the bot and the section, and the entry that clears it reports `null` rather than an empty string, so a host never has to guess what no section means. The branch is only drawn to a host that listens for it: `RowContextMenu` and `OneSpaceRowMenu` pass no section handlers and keep the three plain actions they always had.",
+					"The branch under a row that files the bot. It sits directly under the plain duplicate, in the same band as it — copying a bot and filing a bot both keep the bot in the space it is in, so nothing is drawn between them and the branches that carry it to another space come after; the rules are spent where they matter, one under settings and one over delete, so a hand aimed at anything in the middle can never land on delete. It offers every section plus the entry that files it under none, and it marks the one the bot holds now, so the branch reads as where the bot is before it reads as where it could go — Beacon sits in Research here. Choosing one reports the bot and the section, and the entry that clears it reports `null` rather than an empty string, so a host never has to guess what no section means. The branch is only drawn to a host that listens for it: `RowContextMenu` and `OneSpaceRowMenu` pass no section handlers and keep the three plain actions they always had.",
 			},
 		},
 	},
