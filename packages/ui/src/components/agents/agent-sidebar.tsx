@@ -609,8 +609,12 @@ const BotRoster = ({
 
 	const known = new Set(sections.map((section) => section.id))
 
+	const naming = bots.find((bot) => bot.id === namingFor)
+
 	const botsUnder = (sectionId: string | null) =>
-		bots.filter((bot) => sectionOf(bot, known) === sectionId)
+		bots.filter(
+			(bot) => bot.id !== namingFor && sectionOf(bot, known) === sectionId,
+		)
 
 	const moveSection = (id: string, by: number) => {
 		const order = sections.map((section) => section.id)
@@ -669,7 +673,7 @@ const BotRoster = ({
 					</RosterSection>
 				)
 			})}
-			{namingFor ? (
+			{naming ? (
 				<AnimatedSidebarGroup className={SECTION_GROUP}>
 					<SectionLabel>
 						<SectionNameField
@@ -678,10 +682,13 @@ const BotRoster = ({
 							onCancel={() => setNamingFor(null)}
 							onCommit={(name) => {
 								setNamingFor(null)
-								onCreateSection?.(name, namingFor)
+								onCreateSection?.(name, naming.id)
 							}}
 						/>
 					</SectionLabel>
+					<AnimatedSidebarGroupContent>
+						{rowsFor([naming])}
+					</AnimatedSidebarGroupContent>
 				</AnimatedSidebarGroup>
 			) : null}
 		</>
