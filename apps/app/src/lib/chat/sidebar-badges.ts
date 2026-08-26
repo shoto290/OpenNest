@@ -1,5 +1,5 @@
 import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
-import type { BotBadge as ShownBadge } from "@workspace/ui/components/bot-identity-avatar"
+import type { BotBadge as ShownBadge } from "@workspace/ui/components/badge"
 
 import type { BotBadge } from "./bot-badge"
 
