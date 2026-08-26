@@ -10,6 +10,9 @@ import type {
 	BotSkillDraft,
 	Chat,
 	ContextCheckpoint,
+	Conversation,
+	ConversationDraft,
+	ConversationEdit,
 	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
@@ -215,6 +218,36 @@ export const conversationStore: TranscriptStore = {
 
 	mainChat: (botId: string) =>
 		invoke<Chat>("conversation_main_chat", { botId }),
+
+	conversations: (spaceId: string) =>
+		invoke<Conversation[]>("conversation_list", { spaceId }),
+
+	createConversation: ({
+		spaceId,
+		sectionId,
+		title,
+		botIds,
+	}: ConversationDraft) =>
+		invoke<Conversation>("conversation_create", {
+			spaceId,
+			sectionId,
+			title,
+			botIds,
+		}),
+
+	updateConversation: (
+		conversationId: string,
+		{ title, instructions, sectionId }: ConversationEdit,
+	) =>
+		invoke<Conversation>("conversation_update", {
+			conversationId,
+			title,
+			instructions,
+			sectionId,
+		}),
+
+	deleteConversation: (conversationId: string) =>
+		invoke<void>("conversation_delete", { conversationId }),
 
 	openRuntimeSession: (
 		conversationId: string,

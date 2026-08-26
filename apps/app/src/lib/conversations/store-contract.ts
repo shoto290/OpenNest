@@ -120,6 +120,44 @@ export type BotHistoryEntry = {
 
 export type Chat = { id: string; createdAt: number; updatedAt: number }
 
+export type ParticipantRole = "lead" | "assistant"
+
+export type Participant = {
+	botId: string
+	role: ParticipantRole
+	joinedAt: number
+	leftAt: number | null
+	name: string
+	avatarAnimal: AvatarAnimal
+	avatarBlot: AvatarBlot | null
+	avatarImagePath: string | null
+	isDeleted: boolean
+}
+
+export type Conversation = {
+	id: string
+	spaceId: string | null
+	sectionId: string | null
+	title: string
+	instructions: string
+	createdAt: number
+	updatedAt: number
+	participants: Participant[]
+}
+
+export type ConversationDraft = {
+	spaceId: string
+	sectionId: string | null
+	title: string
+	botIds: string[]
+}
+
+export type ConversationEdit = {
+	title: string
+	instructions: string
+	sectionId: string | null
+}
+
 export type RuntimeSession = {
 	id: string
 	conversationId: string
@@ -197,6 +235,7 @@ export type TranscriptStoreError =
 	| { kind: "conflict"; id: string; field: string }
 	| { kind: "invalidTransition"; id: string; from: string; to: string }
 	| { kind: "unknownBot"; id: string }
+	| { kind: "unknownConversation"; id: string }
 	| { kind: "rejectedAvatarImage"; reason: AvatarRejection }
 	| { kind: "unwritableBundle"; detail: string }
 	| { kind: "systemSkill"; id: string }

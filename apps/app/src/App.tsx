@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
-import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
-import { AppHeader } from "@workspace/ui/components/app-header"
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
+import { NewConversationDialog } from "@workspace/ui/components/new-conversation-dialog"
 import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
 
-import { ChatScreen } from "@/components/chat-screen"
+import { WorkspaceBody } from "@/components/workspace-body"
 import {
 	changesRuntime,
 	modelOptionsFor,
@@ -33,6 +32,7 @@ import { toSpaceBadges, withBadges } from "@/lib/chat/sidebar-badges"
 import { useBotBadges } from "@/lib/chat/use-bot-badges"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
 import { createTranscriptStore } from "@/lib/conversations/create-store"
+import { toRosterConversations } from "@/lib/conversations/roster-conversations"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
@@ -99,9 +99,20 @@ export function App() {
 		roster: roster.controller,
 	})
 
-	const { bots, selectedBotId, isEditing, isShowingDanger, hasLoaded } =
-		roster.state
+	const {
+		bots,
+		conversations,
+		selectedBotId,
+		selectedConversationId,
+		isEditing,
+		isShowingDanger,
+		hasLoaded,
+	} = roster.state
 	const selected = bots.find((bot) => bot.id === selectedBotId)
+	const selectedConversation = conversations.find(
+		(conversation) => conversation.id === selectedConversationId,
+	)
+	const [isCreatingConversation, setIsCreatingConversation] = useState(false)
 
 	const { selectedSpaceId, isSettingsOpen: isSpaceEditing } = spaces.state
 	const selectedSpace = spaces.state.spaces.find(
@@ -128,7 +139,7 @@ export function App() {
 		void roster.controller.load({
 			spaceIds,
 			spaceId,
-			lastBotId: lastBotIn(user.controller.getState().preferences, spaceId),
+			lastRowId: lastBotIn(user.controller.getState().preferences, spaceId),
 		})
 	}, [roster.controller, spaces.controller, user.controller, spaceIds])
 
@@ -139,7 +150,7 @@ export function App() {
 		void user.controller.setLastSpace(selectedSpaceId)
 		roster.controller.enter({
 			spaceId: selectedSpaceId,
-			lastBotId: lastBotIn(
+			lastRowId: lastBotIn(
 				user.controller.getState().preferences,
 				selectedSpaceId,
 			),
@@ -174,6 +185,16 @@ export function App() {
 			botId: selectedBotId,
 		})
 	}, [chat.controller, roster.controller, user.controller, selectedBotId])
+
+	useEffect(() => {
+		if (!selectedConversationId) {
+			return
+		}
+		void user.controller.setLastBot({
+			spaceId: roster.controller.getState().spaceId,
+			botId: selectedConversationId,
+		})
+	}, [roster.controller, user.controller, selectedConversationId])
 
 	const rosters = roster.state.rosters
 
@@ -288,7 +309,29 @@ export function App() {
 		[rosterBotsBySpace],
 	)
 
-	const isOverlayOpen = isEditing || user.state.isSettingsOpen || isSpaceEditing
+	const conversationRosters = roster.state.conversationRosters
+
+	const rosterConversations = useMemo(
+		() => toRosterConversations(conversations),
+		[conversations],
+	)
+
+	const rosterConversationsBySpace = useMemo(
+		() =>
+			Object.fromEntries(
+				Object.entries(conversationRosters).map(([spaceId, spaceRooms]) => [
+					spaceId,
+					toRosterConversations(spaceRooms),
+				]),
+			),
+		[conversationRosters],
+	)
+
+	const isOverlayOpen =
+		isEditing ||
+		user.state.isSettingsOpen ||
+		isSpaceEditing ||
+		isCreatingConversation
 
 	const toggleSettings = useCallback(
 		() => roster.controller.setEditing(!isEditing),
@@ -338,6 +381,8 @@ export function App() {
 						insetWindowControls={hasOverlayWindowControls()}
 						bots={rosterBots}
 						botsBySpaceId={rosterBotsBySpace}
+						conversations={rosterConversations}
+						conversationsBySpaceId={rosterConversationsBySpace}
 						badgesBySpaceId={badgesBySpaceId}
 						sectionsBySpaceId={sections.state.sections}
 						footer={updateBadge}
@@ -345,6 +390,14 @@ export function App() {
 						onCreateBot={() => {
 							void roster.controller.create()
 						}}
+						onCreateConversation={() => setIsCreatingConversation(true)}
+						onDeleteConversation={(id) => {
+							void roster.controller.removeConversation(id)
+						}}
+						onMoveConversationToSection={(id, sectionId) => {
+							void roster.controller.moveConversationToSection(id, sectionId)
+						}}
+						onSelectConversation={roster.controller.selectConversation}
 						onDeleteBot={roster.controller.askToDelete}
 						onDuplicateBot={(id) => {
 							void roster.controller.duplicate(id)
@@ -388,31 +441,35 @@ export function App() {
 						onSelectBot={roster.controller.select}
 						onSelectSpace={spaces.controller.select}
 						selectedBotId={selectedBotId ?? undefined}
+						selectedConversationId={selectedConversationId ?? undefined}
 						selectedSpaceId={selectedSpaceId ?? undefined}
 						spaces={spaces.state.spaces}
 						user={userSettings}
 					/>
 				}
 			>
-				{!hasLoaded ? (
-					<AppBootScreen data-tauri-drag-region="deep" />
-				) : selected ? (
-					<ChatScreen
-						bot={selected}
-						chat={chat}
-						attachments={attachments}
-						readerName={preferences.displayName}
-						isSettingsOpen={isEditing}
-						isOverlayOpen={isOverlayOpen}
-						onToggleSettings={toggleSettings}
-					/>
-				) : (
-					<AppHeader
-						insetWindowControls={hasOverlayWindowControls()}
-						data-tauri-drag-region="deep"
-					/>
-				)}
+				<WorkspaceBody
+					attachments={attachments}
+					bot={selected}
+					chat={chat}
+					conversation={selectedConversation}
+					hasLoaded={hasLoaded}
+					isOverlayOpen={isOverlayOpen}
+					isSettingsOpen={isEditing}
+					onToggleSettings={toggleSettings}
+					readerName={preferences.displayName}
+					store={store}
+				/>
 			</WorkspaceShell>
+			<NewConversationDialog
+				bots={rosterBots}
+				onClose={() => setIsCreatingConversation(false)}
+				onCreate={({ name, botIds }) => {
+					setIsCreatingConversation(false)
+					void roster.controller.createConversation({ title: name, botIds })
+				}}
+				open={isCreatingConversation}
+			/>
 			{selected ? (
 				<BotSettingsDialog
 					history={{

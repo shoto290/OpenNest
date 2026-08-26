@@ -106,6 +106,53 @@ const WRITES: WriteCase[] = [
 		call: ["space_delete", { id: "s-1" }],
 	},
 	{
+		member: "conversations",
+		write: () => conversationStore.conversations("s-1"),
+		call: ["conversation_list", { spaceId: "s-1" }],
+	},
+	{
+		member: "createConversation",
+		write: () =>
+			conversationStore.createConversation({
+				spaceId: "s-1",
+				sectionId: "n-1",
+				title: "Launch",
+				botIds: ["b-1", "b-2"],
+			}),
+		call: [
+			"conversation_create",
+			{
+				spaceId: "s-1",
+				sectionId: "n-1",
+				title: "Launch",
+				botIds: ["b-1", "b-2"],
+			},
+		],
+	},
+	{
+		member: "updateConversation",
+		write: () =>
+			conversationStore.updateConversation("c-1", {
+				title: "Launch",
+				instructions: "Stay short.",
+				sectionId: null,
+			}),
+		call: [
+			"conversation_update",
+			{
+				conversationId: "c-1",
+				title: "Launch",
+				instructions: "Stay short.",
+				sectionId: null,
+			},
+		],
+	},
+	{
+		member: "deleteConversation",
+		write: () => conversationStore.deleteConversation("c-1"),
+		call: ["conversation_delete", { conversationId: "c-1" }],
+	},
+	{
 		member: "sections",
 		write: () => conversationStore.sections("s-1"),
 		call: ["section_list", { spaceId: "s-1" }],

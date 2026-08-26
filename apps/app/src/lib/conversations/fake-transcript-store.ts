@@ -12,11 +12,16 @@ import type {
 	BotSkillFront,
 	Chat,
 	ContextCheckpoint,
+	Conversation,
+	ConversationDraft,
+	ConversationEdit,
 	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
+	Participant,
+	ParticipantRole,
 	RuntimeSession,
 	Section,
 	SectionError,
@@ -105,6 +110,10 @@ const PROMPT_LABEL = "The new message:"
 const spoken = (message: TranscriptMessage) =>
 	`${message.role}: ${message.content}`
 
+type StoredConversation = Omit<Conversation, "participants">
+
+type Seat = { botId: string; role: ParticipantRole; joinedAt: number }
+
 const refuse = (error: TranscriptStoreError | SpaceError | SectionError) =>
 	Promise.reject(error)
 
@@ -178,6 +187,9 @@ export const createFakeTranscriptStore = (
 	const spaces = new Map<string, Space>([[DEFAULT_SPACE.id, DEFAULT_SPACE]])
 	const spaceOf = new Map<string, string>([[DEFAULT_BOT.id, DEFAULT_SPACE.id]])
 	const sections = new Map<string, Section>()
+	const conversations = new Map<string, StoredConversation>()
+	const seats = new Map<string, Seat[]>()
+	let mintedConversations = 0
 	let minted = 0
 	let mintedSpaces = 0
 	let mintedSections = 0
@@ -373,6 +385,51 @@ export const createFakeTranscriptStore = (
 
 	const firstSpace = () => [...spaces.keys()][0]
 
+	const participantsOf = (conversationId: string): Participant[] =>
+		(seats.get(conversationId) ?? []).flatMap((seat) => {
+			const bot = bots.get(seat.botId)
+			return bot
+				? [
+						{
+							botId: bot.id,
+							role: seat.role,
+							joinedAt: seat.joinedAt,
+							leftAt: null,
+							name: bot.name,
+							avatarAnimal: bot.avatarAnimal,
+							avatarBlot: bot.avatarBlot,
+							avatarImagePath: bot.avatarImagePath,
+							isDeleted: false,
+						},
+					]
+				: []
+		})
+
+	const forgetSpace = (spaceId: string) => {
+		for (const [botId, held] of spaceOf) {
+			if (held === spaceId) {
+				bots.delete(botId)
+				spaceOf.delete(botId)
+			}
+		}
+		for (const [sectionId, section] of sections) {
+			if (section.spaceId === spaceId) {
+				sections.delete(sectionId)
+			}
+		}
+		for (const [conversationId, stored] of conversations) {
+			if (stored.spaceId === spaceId) {
+				conversations.delete(conversationId)
+				seats.delete(conversationId)
+			}
+		}
+	}
+
+	const drawnConversation = (stored: StoredConversation): Conversation => ({
+		...stored,
+		participants: participantsOf(stored.id),
+	})
+
 	const sectionsOf = (spaceId: string) =>
 		[...sections.values()]
 			.filter((section) => section.spaceId === spaceId)
@@ -489,17 +546,7 @@ export const createFakeTranscriptStore = (
 				return refuse({ kind: "lastSpace" })
 			}
 			spaces.delete(id)
-			for (const [botId, held] of spaceOf) {
-				if (held === id) {
-					bots.delete(botId)
-					spaceOf.delete(botId)
-				}
-			}
-			for (const [sectionId, section] of sections) {
-				if (section.spaceId === id) {
-					sections.delete(sectionId)
-				}
-			}
+			forgetSpace(id)
 			return Promise.resolve()
 		},
 
@@ -552,6 +599,11 @@ export const createFakeTranscriptStore = (
 			for (const [botId, bot] of bots) {
 				if (bot.sectionId === id) {
 					bots.set(botId, { ...bot, sectionId: null })
+				}
+			}
+			for (const [conversationId, stored] of conversations) {
+				if (stored.sectionId === id) {
+					conversations.set(conversationId, { ...stored, sectionId: null })
 				}
 			}
 			return Promise.resolve()
@@ -849,6 +901,72 @@ export const createFakeTranscriptStore = (
 				createdAt: 0,
 				updatedAt: 0,
 			}),
+
+		conversations: (spaceId: string) =>
+			Promise.resolve(
+				[...conversations.values()]
+					.filter((stored) => stored.spaceId === spaceId)
+					.map(drawnConversation),
+			),
+
+		createConversation: (draft: ConversationDraft) => {
+			if (!spaces.has(draft.spaceId)) {
+				return refuse({ kind: "unknownSpace", id: draft.spaceId })
+			}
+			const stranger = draft.botIds.find(
+				(botId) => spaceOf.get(botId) !== draft.spaceId,
+			)
+			if (stranger) {
+				return refuse({ kind: "unknownBot", id: stranger })
+			}
+			mintedConversations += 1
+			const stored: StoredConversation = {
+				id: `conversation-${mintedConversations}`,
+				spaceId: draft.spaceId,
+				sectionId: draft.sectionId,
+				title: draft.title,
+				instructions: "",
+				createdAt: mintedConversations,
+				updatedAt: mintedConversations,
+			}
+			conversations.set(stored.id, stored)
+			seats.set(
+				stored.id,
+				draft.botIds.map((botId, rank) => ({
+					botId,
+					role: rank === 0 ? "lead" : "assistant",
+					joinedAt: mintedConversations,
+				})),
+			)
+			return Promise.resolve(drawnConversation(stored))
+		},
+
+		updateConversation: (conversationId: string, edit: ConversationEdit) => {
+			const stored = conversations.get(conversationId)
+			if (!stored) {
+				return refuse({ kind: "unknownConversation", id: conversationId })
+			}
+			if (edit.sectionId !== null) {
+				const section = sections.get(edit.sectionId)
+				if (!section) {
+					return refuse({ kind: "unknownSection", id: edit.sectionId })
+				}
+				if (section.spaceId !== stored.spaceId) {
+					return refuse({ kind: "foreignSection", id: edit.sectionId })
+				}
+			}
+			const written: StoredConversation = { ...stored, ...edit }
+			conversations.set(conversationId, written)
+			return Promise.resolve(drawnConversation(written))
+		},
+
+		deleteConversation: (conversationId: string) => {
+			if (!conversations.delete(conversationId)) {
+				return refuse({ kind: "unknownConversation", id: conversationId })
+			}
+			seats.delete(conversationId)
+			return Promise.resolve()
+		},
 
 		openRuntimeSession: (
 			conversationId: string,
