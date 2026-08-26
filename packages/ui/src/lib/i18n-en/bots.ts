@@ -10,6 +10,11 @@ const bots = {
 	roster: {
 		label: "Conversations",
 		create: "New bot",
+		createMenu: "Create",
+		conversation: {
+			create: "New conversation",
+			others: "+{{count}}",
+		},
 		empty: "No bots yet",
 		actions: "Actions for {{name}}",
 		settings: "Settings",

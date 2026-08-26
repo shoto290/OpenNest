@@ -16,7 +16,7 @@ import {
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
-import type { BotBadge } from "@workspace/ui/components/badge"
+import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
 	type BotAvatarBlot,
@@ -85,6 +85,11 @@ const WINDOW_CONTROLS_INSET =
 const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
 
 const ROW_AVATAR_SIZE = 40
+
+const STACK_LIMIT = 3
+const STACK_GAP = 2
+const STACK = "relative grid shrink-0 grid-cols-2 place-content-center gap-0.5"
+
 const TIMESTAMP_SLOT =
 	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-muted-foreground leading-5 tabular-nums"
 
@@ -184,6 +189,8 @@ type AgentSidebarStatus = "idle" | "working"
 
 const NO_BOTS: AgentSidebarBot[] = []
 
+const NO_CONVERSATIONS: AgentSidebarConversation[] = []
+
 const NO_SECTIONS: AgentSidebarSection[] = []
 
 const NO_SECTION = "__none__"
@@ -208,11 +215,37 @@ interface AgentSidebarBot {
 	badge?: BotBadge
 }
 
+interface AgentSidebarConversation {
+	id: string
+	name: string
+	sectionId?: string | null
+	participants: AgentSidebarBot[]
+	lastMessage?: string
+	timestamp?: string
+	status?: AgentSidebarStatus
+	badge?: BotBadge
+}
+
 const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
 
-const isBusy = (bot: AgentSidebarBot) => bot.status === "working"
+const isBusy = (held: { status?: AgentSidebarStatus }) =>
+	held.status === "working"
 
-const announcementFor = (t: TFunction<"bots">, bot?: AgentSidebarBot) => {
+const badgeOf = (conversation: AgentSidebarConversation) =>
+	conversation.participants.find(
+		(participant) => isBusy(participant) && participant.badge,
+	)?.badge ?? conversation.badge
+
+const announcementFor = (
+	t: TFunction<"bots">,
+	bot?: AgentSidebarBot,
+	conversation?: AgentSidebarConversation,
+) => {
+	if (conversation)
+		return t("roster.announcement.selected", {
+			name: conversation.name,
+			state: isBusy(conversation) ? t("roster.pose.working") : t("roster.idle"),
+		})
 	if (!bot) return t("roster.announcement.none")
 	return t("roster.announcement.selected", {
 		name: bot.name,
@@ -237,19 +270,21 @@ interface SectionActions {
 	onMoveBotToSection?: (botId: string, sectionId: string | null) => void
 }
 
-interface BotSectionBranchProps {
-	bot: AgentSidebarBot
+interface SectionBranchProps {
+	id: string
+	sectionId?: string | null
 	sections: AgentSidebarSection[]
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
 }
 
-const BotSectionBranch = ({
-	bot,
+const SectionBranch = ({
+	id,
+	sectionId,
 	sections,
 	onMoveToSection,
 	onCreateSectionFor,
-}: BotSectionBranchProps) => {
+}: SectionBranchProps) => {
 	const { t } = useTranslation("bots")
 
 	if (!onMoveToSection && !onCreateSectionFor) return null
@@ -263,9 +298,9 @@ const BotSectionBranch = ({
 			<ContextMenuSubContent>
 				<ContextMenuRadioGroup
 					onValueChange={(value) =>
-						onMoveToSection?.(bot.id, value === NO_SECTION ? null : value)
+						onMoveToSection?.(id, value === NO_SECTION ? null : value)
 					}
-					value={bot.sectionId ?? NO_SECTION}
+					value={sectionId ?? NO_SECTION}
 				>
 					<ContextMenuRadioItem
 						textValue={t("roster.section.none")}
@@ -287,7 +322,7 @@ const BotSectionBranch = ({
 					<>
 						<ContextMenuSeparator />
 						<ContextMenuItem
-							onSelect={() => onCreateSectionFor(bot.id)}
+							onSelect={() => onCreateSectionFor(id)}
 							textValue={t("roster.section.create")}
 						>
 							<Icons.Add aria-hidden="true" className="size-3.5" />
@@ -339,6 +374,25 @@ const SpaceDestinationBranch = ({
 	)
 }
 
+interface BotRowAvatarProps {
+	bot: AgentSidebarBot
+	badge?: BotBadge
+}
+
+const BotRowAvatar = ({ bot, badge }: BotRowAvatarProps) => (
+	<BotIdentityAvatar
+		animal={bot.animal}
+		badge={badge}
+		blot={bot.blot}
+		image={bot.image}
+		kind={poseOf(bot)}
+		name={bot.name}
+		seed={bot.id}
+		size={ROW_AVATAR_SIZE}
+		working={isBusy(bot)}
+	/>
+)
+
 interface BotRosterRowProps {
 	bot: AgentSidebarBot
 	isSelected: boolean
@@ -381,19 +435,7 @@ const BotRosterRow = ({
 					<AnimatedSidebarMenuButton
 						{...lift.handlersFor(bot.id)}
 						className={ROW}
-						icon={
-							<BotIdentityAvatar
-								animal={bot.animal}
-								badge={bot.badge}
-								blot={bot.blot}
-								image={bot.image}
-								kind={pose}
-								name={bot.name}
-								seed={bot.id}
-								size={ROW_AVATAR_SIZE}
-								working={working}
-							/>
-						}
+						icon={<BotRowAvatar badge={bot.badge} bot={bot} />}
 						isActive={isSelected}
 						isIconDecorative={false}
 						label={bot.name}
@@ -437,10 +479,11 @@ const BotRosterRow = ({
 						<Icons.Copy aria-hidden="true" className="size-3.5" />
 						{t("roster.duplicate")}
 					</ContextMenuItem>
-					<BotSectionBranch
-						bot={bot}
+					<SectionBranch
+						id={bot.id}
 						onCreateSectionFor={onCreateSectionFor}
 						onMoveToSection={onMoveToSection}
+						sectionId={bot.sectionId}
 						sections={sections}
 					/>
 					<SpaceDestinationBranch
@@ -460,6 +503,154 @@ const BotRosterRow = ({
 					<ContextMenuSeparator />
 					<ContextMenuItem
 						onSelect={() => onDelete?.(bot.id)}
+						tone="destructive"
+					>
+						<Icons.Delete aria-hidden="true" className="size-3.5" />
+						{t("roster.delete")}
+					</ContextMenuItem>
+				</ContextMenuContent>
+			</ContextMenu>
+		</AnimatedSidebarMenuItem>
+	)
+}
+
+interface ParticipantStackProps {
+	conversation: AgentSidebarConversation
+	size: number
+	badge?: BotBadge
+}
+
+const ParticipantStack = ({
+	conversation,
+	size,
+	badge,
+}: ParticipantStackProps) => {
+	const shown = conversation.participants.slice(0, STACK_LIMIT)
+	const tile = shown.length > 1 ? (size - STACK_GAP) / 2 : size
+
+	return (
+		<span
+			aria-hidden="true"
+			className={STACK}
+			data-slot="roster-row-participants"
+			style={{ width: size, height: size }}
+		>
+			{shown.map((participant) => (
+				<BotIdentityAvatar
+					animal={participant.animal}
+					blot={participant.blot}
+					image={participant.image}
+					key={participant.id}
+					kind={poseOf(participant)}
+					name={participant.name}
+					seed={participant.id}
+					size={tile}
+					working={isBusy(participant)}
+				/>
+			))}
+			{badge ? (
+				<BotBadgeDot
+					badge={badge}
+					data-slot="bot-activity-dot"
+					placement="avatar"
+				/>
+			) : null}
+		</span>
+	)
+}
+
+interface ConversationRosterActions {
+	onSelectConversation?: (id: string) => void
+	onOpenConversationSettings?: (id: string) => void
+	onDeleteConversation?: (id: string) => void
+	onMoveConversationToSection?: (id: string, sectionId: string | null) => void
+}
+
+interface ConversationRosterRowProps {
+	conversation: AgentSidebarConversation
+	isSelected: boolean
+	sections: AgentSidebarSection[]
+	onSelect?: (id: string) => void
+	onOpenSettings?: (id: string) => void
+	onDelete?: (id: string) => void
+	onMoveToSection?: (id: string, sectionId: string | null) => void
+	lift: Lifter
+}
+
+const ConversationRosterRow = ({
+	conversation,
+	isSelected,
+	sections,
+	lift,
+	onSelect,
+	onOpenSettings,
+	onDelete,
+	onMoveToSection,
+}: ConversationRosterRowProps) => {
+	const { t } = useTranslation("bots")
+	const hidden = conversation.participants.length - STACK_LIMIT
+
+	return (
+		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
+			<ContextMenu>
+				<ContextMenuTrigger>
+					<AnimatedSidebarMenuButton
+						{...lift.handlersFor(conversation.id)}
+						className={ROW}
+						icon={
+							<ParticipantStack
+								badge={badgeOf(conversation)}
+								conversation={conversation}
+								size={ROW_AVATAR_SIZE}
+							/>
+						}
+						isActive={isSelected}
+						label={conversation.name}
+						onSelect={() => {
+							if (lift.hasJustDropped()) return
+							onSelect?.(conversation.id)
+						}}
+					>
+						<span className="flex min-w-0 flex-col">
+							<span className={NAME_LINE}>
+								<span className="truncate" data-slot="roster-row-name">
+									{conversation.name}
+								</span>
+								{hidden > 0 ? (
+									<span className={TITLE_BADGE} data-slot="roster-row-badge">
+										{t("roster.conversation.others", { count: hidden })}
+									</span>
+								) : null}
+								<span
+									className={TIMESTAMP_SLOT}
+									data-slot="roster-row-timestamp"
+								>
+									{conversation.timestamp}
+								</span>
+							</span>
+							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
+								{conversation.lastMessage &&
+									toPlainText(conversation.lastMessage)}
+							</span>
+						</span>
+					</AnimatedSidebarMenuButton>
+				</ContextMenuTrigger>
+				<ContextMenuContent
+					ariaLabel={t("roster.actions", { name: conversation.name })}
+				>
+					<ContextMenuItem onSelect={() => onOpenSettings?.(conversation.id)}>
+						<Icons.Settings aria-hidden="true" className="size-3.5" />
+						{t("roster.settings")}
+					</ContextMenuItem>
+					<SectionBranch
+						id={conversation.id}
+						onMoveToSection={onMoveToSection}
+						sectionId={conversation.sectionId}
+						sections={sections}
+					/>
+					<ContextMenuSeparator />
+					<ContextMenuItem
+						onSelect={() => onDelete?.(conversation.id)}
 						tone="destructive"
 					>
 						<Icons.Delete aria-hidden="true" className="size-3.5" />
@@ -549,28 +740,23 @@ const RosterDropArea = ({
 	</div>
 )
 
-interface LiftedBotProps {
-	bot: AgentSidebarBot
+interface LiftedRowProps {
+	bot?: AgentSidebarBot
+	conversation?: AgentSidebarConversation
 	ref: (node: HTMLElement | null) => void
 }
 
-const LiftedBot = ({ bot, ref }: LiftedBotProps) => (
+const LiftedRow = ({ bot, conversation, ref }: LiftedRowProps) => (
 	<span
 		aria-hidden="true"
 		className={LIFTED_BOT}
 		data-slot="roster-lifted-bot"
 		ref={ref}
 	>
-		<BotIdentityAvatar
-			animal={bot.animal}
-			blot={bot.blot}
-			image={bot.image}
-			kind={poseOf(bot)}
-			name={bot.name}
-			seed={bot.id}
-			size={ROW_AVATAR_SIZE}
-			working={isBusy(bot)}
-		/>
+		{conversation ? (
+			<ParticipantStack conversation={conversation} size={ROW_AVATAR_SIZE} />
+		) : null}
+		{bot ? <BotRowAvatar bot={bot} /> : null}
 	</span>
 )
 
@@ -728,21 +914,32 @@ const RosterSection = ({
 	)
 }
 
-const sectionOf = (bot: AgentSidebarBot, known: Set<string>) =>
-	bot.sectionId && known.has(bot.sectionId) ? bot.sectionId : null
+const sectionOf = (held: { sectionId?: string | null }, known: Set<string>) =>
+	held.sectionId && known.has(held.sectionId) ? held.sectionId : null
 
-interface BotRosterProps extends BotRosterActions, SectionActions {
+interface BotRosterProps
+	extends BotRosterActions,
+		ConversationRosterActions,
+		SectionActions {
 	bots: AgentSidebarBot[]
+	conversations: AgentSidebarConversation[]
 	selectedBotId?: string
+	selectedConversationId?: string
 	destinations: Space[]
 	sections: AgentSidebarSection[]
 }
 
 const BotRoster = ({
 	bots,
+	conversations,
 	selectedBotId,
+	selectedConversationId,
 	destinations,
 	sections,
+	onSelectConversation,
+	onOpenConversationSettings,
+	onDeleteConversation,
+	onMoveConversationToSection,
 	onSelectBot,
 	onEditBot,
 	onDuplicateBot,
@@ -761,11 +958,18 @@ const BotRoster = ({
 
 	const known = new Set(sections.map((section) => section.id))
 
+	const activeBotId = selectedConversationId ? undefined : selectedBotId
+
 	const naming = bots.find((bot) => bot.id === namingFor)
 
 	const botsUnder = (sectionId: string | null) =>
 		bots.filter(
 			(bot) => bot.id !== namingFor && sectionOf(bot, known) === sectionId,
+		)
+
+	const conversationsUnder = (sectionId: string | null) =>
+		conversations.filter(
+			(conversation) => sectionOf(conversation, known) === sectionId,
 		)
 
 	const withoutSection = (id: string) =>
@@ -784,12 +988,18 @@ const BotRoster = ({
 		placeSection(id, at)
 	}
 
-	const fileBot = (botId: string, landing: string) => {
-		const bot = bots.find((held) => held.id === botId)
+	const fileRow = (id: string, landing: string) => {
 		const sectionId = landing === NO_SECTION ? null : landing
-		if (!bot || sectionOf(bot, known) === sectionId) return
 		if (sectionId && !known.has(sectionId)) return
-		onMoveBotToSection?.(botId, sectionId)
+		const conversation = conversations.find((held) => held.id === id)
+		if (conversation) {
+			if (sectionOf(conversation, known) === sectionId) return
+			onMoveConversationToSection?.(id, sectionId)
+			return
+		}
+		const bot = bots.find((held) => held.id === id)
+		if (!bot || sectionOf(bot, known) === sectionId) return
+		onMoveBotToSection?.(id, sectionId)
 	}
 
 	const slots = useRef(new Map<string, HTMLElement>()).current
@@ -811,7 +1021,7 @@ const BotRoster = ({
 	const botLift = useRosterLift({
 		isEnabled: isLiftEnabled,
 		landingAt: dropAreaAt,
-		onLand: fileBot,
+		onLand: fileRow,
 	})
 
 	const sectionLift = useRosterLift({
@@ -820,9 +1030,12 @@ const BotRoster = ({
 		onLand: placeSection,
 	})
 
-	const liftedBotId = botLift.lift?.id
-	const liftedBot = liftedBotId
-		? bots.find((bot) => bot.id === liftedBotId)
+	const liftedRowId = botLift.lift?.id
+	const liftedBot = liftedRowId
+		? bots.find((bot) => bot.id === liftedRowId)
+		: undefined
+	const liftedConversation = liftedRowId
+		? conversations.find((held) => held.id === liftedRowId)
 		: undefined
 	const liftedSectionId = sectionLift.lift?.id
 	const landing = botLift.lift?.landing ?? null
@@ -834,13 +1047,29 @@ const BotRoster = ({
 			? placed[placed.length - 1]?.id
 			: null
 
-	const rowsFor = (held: AgentSidebarBot[]) => (
+	const rowsFor = (
+		heldConversations: AgentSidebarConversation[],
+		held: AgentSidebarBot[],
+	) => (
 		<AnimatedSidebarMenu>
+			{heldConversations.map((conversation) => (
+				<ConversationRosterRow
+					conversation={conversation}
+					isSelected={conversation.id === selectedConversationId}
+					key={conversation.id}
+					lift={botLift}
+					onDelete={onDeleteConversation}
+					onMoveToSection={onMoveConversationToSection}
+					onOpenSettings={onOpenConversationSettings}
+					onSelect={onSelectConversation}
+					sections={sections}
+				/>
+			))}
 			{held.map((bot) => (
 				<BotRosterRow
 					bot={bot}
 					destinations={destinations}
-					isSelected={bot.id === selectedBotId}
+					isSelected={bot.id === activeBotId}
 					key={bot.id}
 					lift={botLift}
 					onCreateSectionFor={onCreateSection ? setNamingFor : undefined}
@@ -857,17 +1086,20 @@ const BotRoster = ({
 		</AnimatedSidebarMenu>
 	)
 
-	if (bots.length === 0 && sections.length === 0)
+	if (bots.length === 0 && conversations.length === 0 && sections.length === 0)
 		return <p className={EMPTY_COPY}>{t("roster.empty")}</p>
 
 	const loose = botsUnder(null)
+	const looseConversations = conversationsUnder(null)
+	const hasLooseRows = loose.length + looseConversations.length > 0
+	const isLifting = Boolean(liftedBot || liftedConversation)
 
 	return (
 		<>
-			{loose.length > 0 || liftedBot ? (
+			{hasLooseRows || isLifting ? (
 				<RosterDropArea isLanding={landing === NO_SECTION} landing={NO_SECTION}>
-					{loose.length > 0 ? (
-						rowsFor(loose)
+					{hasLooseRows ? (
+						rowsFor(looseConversations, loose)
 					) : (
 						<SectionDropZone name={t("roster.label")} />
 					)}
@@ -875,6 +1107,8 @@ const BotRoster = ({
 			) : null}
 			{sections.map((section, rank) => {
 				const held = botsUnder(section.id)
+				const heldConversations = conversationsUnder(section.id)
+				const hasRows = held.length + heldConversations.length > 0
 				const isLifted = section.id === liftedSectionId
 				return (
 					<RosterDropArea
@@ -905,8 +1139,8 @@ const BotRoster = ({
 							onRename={onRenameSection}
 							section={section}
 						>
-							{held.length > 0 ? (
-								rowsFor(held)
+							{hasRows ? (
+								rowsFor(heldConversations, held)
 							) : (
 								<SectionDropZone name={section.name} />
 							)}
@@ -928,13 +1162,17 @@ const BotRoster = ({
 						/>
 					</SectionLabel>
 					<AnimatedSidebarGroupContent>
-						{rowsFor([naming])}
+						{rowsFor([], [naming])}
 					</AnimatedSidebarGroupContent>
 				</AnimatedSidebarGroup>
 			) : null}
-			{liftedBot
+			{isLifting
 				? createPortal(
-						<LiftedBot bot={liftedBot} ref={botLift.followRef} />,
+						<LiftedRow
+							bot={liftedBot}
+							conversation={liftedConversation}
+							ref={botLift.followRef}
+						/>,
 						document.body,
 					)
 				: null}
@@ -1073,6 +1311,42 @@ const SpaceCarousel = ({
 	)
 }
 
+interface CreateMenuProps {
+	onCreateBot?: () => void
+	onCreateConversation: () => void
+}
+
+const CreateMenu = ({ onCreateBot, onCreateConversation }: CreateMenuProps) => {
+	const { t } = useTranslation("bots")
+	const label = t("roster.createMenu")
+
+	return (
+		<ContextMenu>
+			<ContextMenuTrigger opensOnPress>
+				<Button
+					aria-label={label}
+					size="icon-sm"
+					tooltip={label}
+					tooltipSide="bottom"
+					variant="ghost"
+				>
+					<Icons.Add aria-hidden="true" />
+				</Button>
+			</ContextMenuTrigger>
+			<ContextMenuContent ariaLabel={label}>
+				<ContextMenuItem onSelect={onCreateBot}>
+					<Icons.User aria-hidden="true" className="size-3.5" />
+					{t("roster.create")}
+				</ContextMenuItem>
+				<ContextMenuItem onSelect={onCreateConversation}>
+					<Icons.Message aria-hidden="true" className="size-3.5" />
+					{t("roster.conversation.create")}
+				</ContextMenuItem>
+			</ContextMenuContent>
+		</ContextMenu>
+	)
+}
+
 type AgentSidebarPanelProps = Omit<
 	AnimatedSidebarProps,
 	"ariaLabel" | "children" | "collapsible"
@@ -1081,14 +1355,19 @@ type AgentSidebarPanelProps = Omit<
 interface AgentSidebarProps
 	extends AgentSidebarPanelProps,
 		BotRosterActions,
+		ConversationRosterActions,
 		SectionActions {
 	bots: AgentSidebarBot[]
 	botsBySpaceId?: Record<string, AgentSidebarBot[]>
+	conversations?: AgentSidebarConversation[]
+	conversationsBySpaceId?: Record<string, AgentSidebarConversation[]>
 	badgesBySpaceId?: Record<string, BotBadge>
 	sections?: AgentSidebarSection[]
 	sectionsBySpaceId?: Record<string, AgentSidebarSection[]>
 	selectedBotId?: string
+	selectedConversationId?: string
 	onCreateBot?: () => void
+	onCreateConversation?: () => void
 	spaces?: Space[]
 	selectedSpaceId?: string
 	isSpaceSwitchingEnabled?: boolean
@@ -1105,10 +1384,18 @@ interface AgentSidebarProps
 const AgentSidebarBase = ({
 	bots: roster,
 	botsBySpaceId,
+	conversations: rooms = NO_CONVERSATIONS,
+	conversationsBySpaceId,
 	badgesBySpaceId,
 	sections = NO_SECTIONS,
 	sectionsBySpaceId,
 	selectedBotId: selectedId,
+	selectedConversationId,
+	onSelectConversation,
+	onCreateConversation,
+	onOpenConversationSettings,
+	onDeleteConversation,
+	onMoveConversationToSection,
 	onSelectBot,
 	onCreateBot,
 	onEditBot,
@@ -1136,21 +1423,31 @@ const AgentSidebarBase = ({
 }: AgentSidebarProps) => {
 	const { t } = useTranslation("bots")
 	const createLabel = t("roster.create")
-	const actions: BotRosterActions & SectionActions = {
-		onCreateSection,
-		onDeleteBot,
-		onDeleteSection,
-		onDuplicateBot,
-		onDuplicateBotToSpace,
-		onEditBot,
-		onMoveBotToSection,
-		onMoveBotToSpace,
-		onRenameSection,
-		onReorderSections,
-		onSelectBot,
-	}
+	const actions: BotRosterActions & ConversationRosterActions & SectionActions =
+		{
+			onCreateSection,
+			onDeleteBot,
+			onDeleteConversation,
+			onDeleteSection,
+			onDuplicateBot,
+			onDuplicateBotToSpace,
+			onEditBot,
+			onMoveBotToSection,
+			onMoveBotToSpace,
+			onMoveConversationToSection,
+			onOpenConversationSettings,
+			onRenameSection,
+			onReorderSections,
+			onSelectBot,
+			onSelectConversation,
+		}
 
 	const rosterOf = (spaceId: string) => botsBySpaceId?.[spaceId] ?? NO_BOTS
+
+	const roomsOf = (spaceId: string) =>
+		conversationsBySpaceId
+			? (conversationsBySpaceId[spaceId] ?? NO_CONVERSATIONS)
+			: rooms
 
 	const sectionsOf = (spaceId: string) =>
 		sectionsBySpaceId ? (sectionsBySpaceId[spaceId] ?? NO_SECTIONS) : sections
@@ -1161,7 +1458,12 @@ const AgentSidebarBase = ({
 	const hasRosterPerSpace = Boolean(botsBySpaceId) && spaces.length > 0
 	const shown =
 		hasRosterPerSpace && selectedSpaceId ? rosterOf(selectedSpaceId) : roster
+	const shownRooms =
+		hasRosterPerSpace && selectedSpaceId ? roomsOf(selectedSpaceId) : rooms
 	const selectedBot = shown.find((bot) => bot.id === selectedId)
+	const selectedConversation = shownRooms.find(
+		(room) => room.id === selectedConversationId,
+	)
 
 	const selectRank = (rank: number) => {
 		const space = spaceAtRank(spaces, rank)
@@ -1178,7 +1480,7 @@ const AgentSidebarBase = ({
 		<>
 			<AnimatedSidebar
 				{...panel}
-				aria-busy={shown.some(isBusy)}
+				aria-busy={shown.some(isBusy) || shownRooms.some(isBusy)}
 				ariaLabel={t("roster.label")}
 				collapsible="icon"
 			>
@@ -1199,16 +1501,23 @@ const AgentSidebarBase = ({
 						selectedSpaceId={selectedSpaceId}
 						spaces={spaces}
 					/>
-					<Button
-						aria-label={createLabel}
-						onClick={onCreateBot}
-						size="icon-sm"
-						tooltip={createLabel}
-						tooltipSide="bottom"
-						variant="ghost"
-					>
-						<Icons.Add aria-hidden="true" />
-					</Button>
+					{onCreateConversation ? (
+						<CreateMenu
+							onCreateBot={onCreateBot}
+							onCreateConversation={onCreateConversation}
+						/>
+					) : (
+						<Button
+							aria-label={createLabel}
+							onClick={onCreateBot}
+							size="icon-sm"
+							tooltip={createLabel}
+							tooltipSide="bottom"
+							variant="ghost"
+						>
+							<Icons.Add aria-hidden="true" />
+						</Button>
+					)}
 				</AnimatedSidebarHeader>
 				<AnimatedSidebarContent
 					className={hasRosterPerSpace ? CAROUSEL_CONTENT : CONTENT_INSET}
@@ -1221,9 +1530,11 @@ const AgentSidebarBase = ({
 								<BotRoster
 									{...actions}
 									bots={rosterOf(space.id)}
+									conversations={roomsOf(space.id)}
 									destinations={destinationsFrom(space.id)}
 									sections={sectionsOf(space.id)}
 									selectedBotId={selectedId}
+									selectedConversationId={selectedConversationId}
 								/>
 							)}
 							selectedSpaceId={selectedSpaceId}
@@ -1233,9 +1544,11 @@ const AgentSidebarBase = ({
 						<BotRoster
 							{...actions}
 							bots={roster}
+							conversations={rooms}
 							destinations={destinationsFrom(selectedSpaceId)}
 							sections={sections}
 							selectedBotId={selectedId}
+							selectedConversationId={selectedConversationId}
 						/>
 					)}
 				</AnimatedSidebarContent>
@@ -1264,7 +1577,7 @@ const AgentSidebarBase = ({
 				) : null}
 			</AnimatedSidebar>
 			<span className="sr-only" role="status">
-				{announcementFor(t, selectedBot)}
+				{announcementFor(t, selectedBot, selectedConversation)}
 			</span>
 		</>
 	)
@@ -1275,6 +1588,7 @@ const AgentSidebar = memo(AgentSidebarBase)
 export {
 	AgentSidebar,
 	type AgentSidebarBot,
+	type AgentSidebarConversation,
 	type AgentSidebarProps,
 	type AgentSidebarSection,
 	type BotAvatarBlot,
