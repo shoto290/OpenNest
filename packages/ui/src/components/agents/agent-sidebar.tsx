@@ -1003,7 +1003,6 @@ const SpaceCarousel = ({
 		0,
 	)
 	const [restingOn, setRestingOn] = useState(chosen)
-	const told = useRef(selectedSpaceId)
 	const isMoving = useRef(false)
 
 	const restsOn = Math.min(restingOn, spaces.length - 1)
@@ -1034,12 +1033,8 @@ const SpaceCarousel = ({
 	const spaceUnder = (node: HTMLDivElement) =>
 		firstDrawn + Math.round(node.scrollLeft / node.clientWidth)
 
-	const follow = (event: UIEvent<HTMLDivElement>) => {
+	const lift = () => {
 		isMoving.current = true
-		const crossed = spaces[spaceUnder(event.currentTarget)]
-		if (!crossed || crossed.id === told.current) return
-		told.current = crossed.id
-		if (crossed.id !== selectedSpaceId) onSelectSpace?.(crossed.id)
 	}
 
 	const land = (event: UIEvent<HTMLDivElement>) => {
@@ -1047,7 +1042,10 @@ const SpaceCarousel = ({
 		if (!isFlushWithPanel(node)) return
 		isMoving.current = false
 		const landedOn = spaceUnder(node)
-		if (spaces[landedOn]) setRestingOn(landedOn)
+		const landed = spaces[landedOn]
+		if (!landed) return
+		setRestingOn(landedOn)
+		if (landed.id !== selectedSpaceId) onSelectSpace?.(landed.id)
 	}
 
 	return (
@@ -1057,7 +1055,7 @@ const SpaceCarousel = ({
 				isSwipeEnabled ? CAROUSEL_SWIPEABLE : CAROUSEL_HELD,
 			)}
 			data-slot="space-carousel"
-			onScroll={follow}
+			onScroll={lift}
 			onScrollEnd={land}
 			ref={viewport}
 		>

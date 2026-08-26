@@ -1949,7 +1949,7 @@ export const SpaceScrolling = meta.story({
 		docs: {
 			description: {
 				story:
-					"The row itself, which is one scrolling box a panel wide with a roster in each panel — the swipe is the reader scrolling it sideways, so the trackpad tracks their fingers, coasts, rubber-bands at the ends and magnetises on release the way it does in every native window, none of it ours to write. Check the contract that gets that for free: the box snaps on the x axis and snaps hard, every panel is exactly the width of the box, and the box holds the space in view and the one waiting off each edge and no more. That last one is what holds a flick to one space, and it holds it the only way a browser cannot argue with — there is nowhere further to scroll. `scroll-snap-stop: always` says the same thing and no engine honours it for a swipe, so the row is three panels wide and the reach of a gesture is the width of the row. Check too that a panel is its own scrolling box, so a reader coming back to a space finds it where they left it — and that it holds only its own axis: a panel that keeps a sideways gesture to itself is a panel the row can never be swiped out of, since the innermost box a gesture lands in is the one that answers it. Check that a space is reported as the row passes half a panel, under the fingers and a beat before the row itself comes to rest, since waiting for the scroll to settle left the name and the dots a second behind the reader. Check it is reported once, and that a host which does not follow gets its row back: the space in view is the host's to say, so a row left on a space the host never opened walks back to the one it did. Pick `LiveSpaceSelection` for the row against a host that moves its selection, `SpaceScrollMemory` for a space walked past and come back to.",
+					"The row itself, which is one scrolling box a panel wide with a roster in each panel — the swipe is the reader scrolling it sideways, so the trackpad tracks their fingers, coasts, rubber-bands at the ends and magnetises on release the way it does in every native window, none of it ours to write. Check the contract that gets that for free: the box snaps on the x axis and snaps hard, every panel is exactly the width of the box, and the box holds the space in view and the one waiting off each edge and no more. That last one is what holds a flick to one space, and it holds it the only way a browser cannot argue with — there is nowhere further to scroll. `scroll-snap-stop: always` says the same thing and no engine honours it for a swipe, so the row is three panels wide and the reach of a gesture is the width of the row. Check too that a panel is its own scrolling box, so a reader coming back to a space finds it where they left it — and that it holds only its own axis: a panel that keeps a sideways gesture to itself is a panel the row can never be swiped out of, since the innermost box a gesture lands in is the one that answers it. Check that a space is reported once the row has come to rest flush on it and not before, so the host is never sent into a space under a live gesture. Check it is reported once, and that a host which does not follow gets its row back: the space in view is the host's to say, so a row left on a space the host never opened walks back to the one it did. Pick `LiveSpaceSelection` for the row against a host that moves its selection, `SpaceScrollMemory` for a space walked past and come back to.",
 			},
 		},
 	},
@@ -2048,7 +2048,7 @@ export const SpaceFlickMomentum = meta.story({
 		docs: {
 			description: {
 				story:
-					"A trackpad flick, which a browser reports as two scrolls rather than one: the fingers leave the glass and the scroll ends there, then the momentum they left carries the row on and ends a second time. The row is only ever at rest on the second one, so the first is not a landing however much it looks like one — take it and the drawn window slides and the row is repositioned under a gesture that is still running, and the momentum left over carries the reader a space past the one they aimed at. Check the row is left alone at every offset that is not flush with a panel edge: stopped short of half a panel it reports nothing and stays where it stopped, and stopped past half it reports the space it crossed — that moment is the fingers', not the row's — while still staying where it stopped, same drawn window, same offset. Check the flush stop is the landing: the reader is held on the panel the row came to rest on, one space along and no further, and a rank chord still slides the row from there. Pick `SpaceScrolling` for the snapping the flick rides on, `SpaceLanding` for the walk from flush stop to flush stop.",
+					"A trackpad flick, which a browser reports as two scrolls rather than one: the fingers leave the glass and the scroll ends there, then the momentum they left carries the row on and ends a second time. The row is only ever at rest on the second one, so the first is not a landing however much it looks like one — take it and the host is sent into a space, and a bot opened, while the fingers are still on the glass, which is a round trip and a full re-render under a live gesture. Check nothing at all is reported while the row is moving: stopped short of half a panel it reports nothing and stays where it stopped, and stopped past half — the moment the row used to call a crossing — it still reports nothing and still stays where it stopped, same drawn window, same offset. Check the flush stop is the landing and the only one: the space is reported there, once, the reader is held on the panel the row came to rest on, one space along and no further, and a rank chord still slides the row from there. Pick `SpaceScrolling` for the snapping the flick rides on, `SpaceLanding` for the walk from flush stop to flush stop, `SpaceSwipeTakenBack` for a flick that never lands anywhere new.",
 			},
 		},
 	},
@@ -2062,13 +2062,13 @@ export const SpaceFlickMomentum = meta.story({
 		await expect(panelsIn(canvasElement)).toHaveLength(2)
 
 		await carryTo(carousel, 0.6)
-		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
-		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("vocca")
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
 		await expect(carousel.scrollLeft).toBeCloseTo(0.6 * panel, 0)
 		await expect(panelsIn(canvasElement)).toHaveLength(2)
 
 		await settleFlush(carousel)
 		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("vocca")
 		await expect(panelsIn(canvasElement)).toHaveLength(3)
 		await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
 			leftOf(carousel),
@@ -2084,6 +2084,45 @@ export const SpaceFlickMomentum = meta.story({
 				0,
 			)
 		}, FRAME_POLL)
+	},
+})
+
+export const SpaceSwipeTakenBack = meta.story({
+	render: (args) => <LiveSpaces {...args} />,
+	args: {
+		spaces: FIVE_SPACES,
+		selectedSpaceId: "perso",
+		botsBySpaceId: FIVE_ROSTERS,
+		user: READER,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A swipe the reader thinks better of: the row is dragged past half a panel, far enough that the next space is more of the screen than the one they are in, and then let go so it snaps back where it started. Nothing was ever a landing, so nothing was ever theirs to be moved by. Check the reader is left exactly where they began — no space reported on the way out, none on the way back, and the space in view still the one the host had open — and that the row is honest again straight after: swiped on and let go flush, it reports the new space once. Pick `SpaceFlickMomentum` for the flick that does land, `SpaceLanding` for the walk across every space.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement }) => {
+		const carousel = carouselIn(canvasElement)
+
+		await carryTo(carousel, 0.6)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+
+		await carryTo(carousel, 0.2)
+		await settleFlush(carousel)
+		await expect(args.onSelectSpace).not.toHaveBeenCalled()
+		await expect(
+			canvas.getByRole("button", { name: "Change space, Perso open" }),
+		).toBeVisible()
+		await expect(leftOf(panelInView(canvasElement))).toBeCloseTo(
+			leftOf(carousel),
+			0,
+		)
+
+		await swipeBeside(carousel, 1)
+		await expect(args.onSelectSpace).toHaveBeenCalledTimes(1)
+		await expect(args.onSelectSpace).toHaveBeenLastCalledWith("vocca")
 	},
 })
 
