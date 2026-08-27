@@ -51,7 +51,7 @@ import { useConversationBadges } from "@/lib/conversations/use-conversation-badg
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
-import { spaceForNewSection } from "@/lib/sections/section-space"
+import { newSectionFor } from "@/lib/sections/section-space"
 import { spaceOfSection } from "@/lib/sections/sections-controller"
 import { useSections } from "@/lib/sections/use-sections"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
@@ -239,16 +239,26 @@ export function App() {
 
 	const rosters = roster.state.rosters
 
-	const createSection = (name: string, botId?: string) => {
-		const spaceId = spaceForNewSection({
+	const createSection = (name: string, rowId?: string) => {
+		const born = newSectionFor({
 			rosters,
+			conversationRosters: roster.state.conversationRosters,
 			shownSpaceId: selectedSpaceId,
-			botId,
+			rowId,
 		})
-		if (!spaceId) {
+		if (!born) {
 			return
 		}
-		void sections.controller.create(spaceId, name, botId ?? null)
+		void sections.controller
+			.create(born.spaceId, name, born.botId)
+			.then((created) => {
+				if (created && born.conversationId) {
+					void roster.controller.moveConversationToSection(
+						born.conversationId,
+						created.id,
+					)
+				}
+			})
 	}
 
 	const reorderSections = (ids: string[]) => {

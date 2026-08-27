@@ -116,6 +116,8 @@ const FOOTER_SLOT = "shrink-0 empty:hidden"
 const EMPTY_COPY =
 	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
 
+const ROSTER_SURFACE = "min-h-10 flex-1"
+
 const SECTION_GROUP = "px-0 py-0"
 
 const SECTION_SLOT = "mt-2"
@@ -292,8 +294,17 @@ interface BotRosterActions {
 	onDeleteBot?: (id: string) => void
 }
 
+interface SectionNaming {
+	rowId: string | null
+}
+
+interface RosterCreateActions {
+	onCreateBot?: () => void
+	onCreateSpace?: () => void
+}
+
 interface SectionActions {
-	onCreateSection?: (name: string, botId?: string) => void
+	onCreateSection?: (name: string, rowId?: string) => void
 	onRenameSection?: (id: string, name: string) => void
 	onReorderSections?: (ids: string[]) => void
 	onDeleteSection?: (id: string) => void
@@ -568,6 +579,7 @@ interface ConversationRosterRowProps {
 	onOpenSettings?: (id: string) => void
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
+	onCreateSectionFor?: (id: string) => void
 	lift: Lifter
 }
 
@@ -580,6 +592,7 @@ const ConversationRosterRow = ({
 	onOpenSettings,
 	onDelete,
 	onMoveToSection,
+	onCreateSectionFor,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
 
@@ -632,6 +645,7 @@ const ConversationRosterRow = ({
 					</ContextMenuItem>
 					<SectionBranch
 						id={conversation.id}
+						onCreateSectionFor={onCreateSectionFor}
 						onMoveToSection={onMoveToSection}
 						sectionId={conversation.sectionId}
 						sections={sections}
@@ -647,6 +661,84 @@ const ConversationRosterRow = ({
 				</ContextMenuContent>
 			</ContextMenu>
 		</AnimatedSidebarMenuItem>
+	)
+}
+
+interface CreateItemsProps {
+	onCreateBot?: () => void
+	onCreateConversation?: () => void
+	onCreateSection?: () => void
+	onCreateSpace?: () => void
+}
+
+const CreateItems = ({
+	onCreateBot,
+	onCreateConversation,
+	onCreateSection,
+	onCreateSpace,
+}: CreateItemsProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<>
+			{onCreateBot ? (
+				<ContextMenuItem onSelect={onCreateBot}>
+					<Icons.User aria-hidden="true" className="size-3.5" />
+					{t("roster.create")}
+				</ContextMenuItem>
+			) : null}
+			{onCreateConversation ? (
+				<ContextMenuItem onSelect={onCreateConversation}>
+					<Icons.Message aria-hidden="true" className="size-3.5" />
+					{t("roster.conversation.create")}
+				</ContextMenuItem>
+			) : null}
+			{onCreateSection ? (
+				<ContextMenuItem onSelect={onCreateSection}>
+					<Icons.Folder aria-hidden="true" className="size-3.5" />
+					{t("roster.section.create")}
+				</ContextMenuItem>
+			) : null}
+			{onCreateSpace ? (
+				<ContextMenuItem onSelect={onCreateSpace}>
+					<Icons.Add aria-hidden="true" className="size-3.5" />
+					{t("spaces.create")}
+				</ContextMenuItem>
+			) : null}
+		</>
+	)
+}
+
+interface RosterSurfaceProps extends RosterCreateActions {
+	onCreateSection?: () => void
+	children?: ReactNode
+}
+
+const RosterSurface = ({
+	onCreateBot,
+	onCreateSection,
+	onCreateSpace,
+	children,
+}: RosterSurfaceProps) => {
+	const { t } = useTranslation("bots")
+
+	if (!onCreateBot && !onCreateSection && !onCreateSpace) return <>{children}</>
+
+	return (
+		<ContextMenu>
+			<ContextMenuTrigger announcesPopup={false}>
+				<div className={ROSTER_SURFACE} data-slot="roster-surface">
+					{children}
+				</div>
+			</ContextMenuTrigger>
+			<ContextMenuContent ariaLabel={t("roster.createMenu")}>
+				<CreateItems
+					onCreateBot={onCreateBot}
+					onCreateSection={onCreateSection}
+					onCreateSpace={onCreateSpace}
+				/>
+			</ContextMenuContent>
+		</ContextMenu>
 	)
 }
 
@@ -911,13 +1003,16 @@ const sectionOf = (held: { sectionId?: string | null }, known: Set<string>) =>
 interface BotRosterProps
 	extends BotRosterActions,
 		ConversationRosterActions,
-		SectionActions {
+		SectionActions,
+		RosterCreateActions {
 	bots: AgentSidebarBot[]
 	conversations: AgentSidebarConversation[]
 	selectedBotId?: string
 	selectedConversationId?: string
 	destinations: Space[]
 	sections: AgentSidebarSection[]
+	naming?: SectionNaming | null
+	onNaming?: (naming: SectionNaming | null) => void
 }
 
 const BotRoster = ({
@@ -927,6 +1022,10 @@ const BotRoster = ({
 	selectedConversationId,
 	destinations,
 	sections,
+	naming = null,
+	onNaming,
+	onCreateBot,
+	onCreateSpace,
 	onSelectConversation,
 	onOpenConversationSettings,
 	onDeleteConversation,
@@ -945,22 +1044,29 @@ const BotRoster = ({
 }: BotRosterProps) => {
 	const { t } = useTranslation("bots")
 	const { isMobile, state } = useAnimatedSidebar()
-	const [namingFor, setNamingFor] = useState<string | null>(null)
 
 	const known = new Set(sections.map((section) => section.id))
 
 	const activeBotId = selectedConversationId ? undefined : selectedBotId
 
-	const naming = bots.find((bot) => bot.id === namingFor)
+	const isNamed = (id: string) => id === naming?.rowId
+
+	const nameSectionFor = (rowId: string) => onNaming?.({ rowId })
+
+	const nameLooseSection = () => onNaming?.({ rowId: null })
+
+	const stopNaming = () => onNaming?.(null)
 
 	const botsUnder = (sectionId: string | null) =>
 		bots.filter(
-			(bot) => bot.id !== namingFor && sectionOf(bot, known) === sectionId,
+			(bot) => !isNamed(bot.id) && sectionOf(bot, known) === sectionId,
 		)
 
 	const conversationsUnder = (sectionId: string | null) =>
 		conversations.filter(
-			(conversation) => sectionOf(conversation, known) === sectionId,
+			(conversation) =>
+				!isNamed(conversation.id) &&
+				sectionOf(conversation, known) === sectionId,
 		)
 
 	const withoutSection = (id: string) =>
@@ -1049,6 +1155,7 @@ const BotRoster = ({
 					isSelected={conversation.id === selectedConversationId}
 					key={conversation.id}
 					lift={botLift}
+					onCreateSectionFor={onCreateSection ? nameSectionFor : undefined}
 					onDelete={onDeleteConversation}
 					onMoveToSection={onMoveConversationToSection}
 					onOpenSettings={onOpenConversationSettings}
@@ -1063,7 +1170,7 @@ const BotRoster = ({
 					isSelected={bot.id === activeBotId}
 					key={bot.id}
 					lift={botLift}
-					onCreateSectionFor={onCreateSection ? setNamingFor : undefined}
+					onCreateSectionFor={onCreateSection ? nameSectionFor : undefined}
 					onDelete={onDeleteBot}
 					onDuplicate={onDuplicateBot}
 					onDuplicateToSpace={onDuplicateBotToSpace}
@@ -1077,9 +1184,29 @@ const BotRoster = ({
 		</AnimatedSidebarMenu>
 	)
 
-	if (bots.length === 0 && conversations.length === 0 && sections.length === 0)
-		return <p className={EMPTY_COPY}>{t("roster.empty")}</p>
+	const surface: RosterSurfaceProps = {
+		onCreateBot,
+		onCreateSection: onCreateSection ? nameLooseSection : undefined,
+		onCreateSpace,
+	}
 
+	if (
+		!naming &&
+		bots.length === 0 &&
+		conversations.length === 0 &&
+		sections.length === 0
+	)
+		return (
+			<RosterSurface {...surface}>
+				<p className={EMPTY_COPY}>{t("roster.empty")}</p>
+			</RosterSurface>
+		)
+
+	const namedBots = bots.filter((bot) => isNamed(bot.id))
+	const namedConversations = conversations.filter((conversation) =>
+		isNamed(conversation.id),
+	)
+	const hasNamedRow = namedBots.length + namedConversations.length > 0
 	const loose = botsUnder(null)
 	const looseConversations = conversationsUnder(null)
 	const hasLooseRows = loose.length + looseConversations.length > 0
@@ -1145,18 +1272,21 @@ const BotRoster = ({
 						<SectionNameField
 							ariaLabel={t("roster.section.createField")}
 							initialName={t("roster.section.createDefault")}
-							onCancel={() => setNamingFor(null)}
+							onCancel={stopNaming}
 							onCommit={(name) => {
-								setNamingFor(null)
-								onCreateSection?.(name, naming.id)
+								stopNaming()
+								onCreateSection?.(name, naming.rowId ?? undefined)
 							}}
 						/>
 					</SectionLabel>
-					<AnimatedSidebarGroupContent>
-						{rowsFor([], [naming])}
-					</AnimatedSidebarGroupContent>
+					{hasNamedRow ? (
+						<AnimatedSidebarGroupContent>
+							{rowsFor(namedConversations, namedBots)}
+						</AnimatedSidebarGroupContent>
+					) : null}
 				</AnimatedSidebarGroup>
 			) : null}
+			<RosterSurface {...surface} />
 			{isLifting
 				? createPortal(
 						<LiftedRow
@@ -1302,12 +1432,7 @@ const SpaceCarousel = ({
 	)
 }
 
-interface CreateMenuProps {
-	onCreateBot?: () => void
-	onCreateConversation: () => void
-}
-
-const CreateMenu = ({ onCreateBot, onCreateConversation }: CreateMenuProps) => {
+const CreateMenu = (items: CreateItemsProps) => {
 	const { t } = useTranslation("bots")
 	const label = t("roster.createMenu")
 
@@ -1325,14 +1450,7 @@ const CreateMenu = ({ onCreateBot, onCreateConversation }: CreateMenuProps) => {
 				</Button>
 			</ContextMenuTrigger>
 			<ContextMenuContent ariaLabel={label}>
-				<ContextMenuItem onSelect={onCreateBot}>
-					<Icons.User aria-hidden="true" className="size-3.5" />
-					{t("roster.create")}
-				</ContextMenuItem>
-				<ContextMenuItem onSelect={onCreateConversation}>
-					<Icons.Message aria-hidden="true" className="size-3.5" />
-					{t("roster.conversation.create")}
-				</ContextMenuItem>
+				<CreateItems {...items} />
 			</ContextMenuContent>
 		</ContextMenu>
 	)
@@ -1414,24 +1532,30 @@ const AgentSidebarBase = ({
 }: AgentSidebarProps) => {
 	const { t } = useTranslation("bots")
 	const createLabel = t("roster.create")
-	const actions: BotRosterActions & ConversationRosterActions & SectionActions =
-		{
-			onCreateSection,
-			onDeleteBot,
-			onDeleteConversation,
-			onDeleteSection,
-			onDuplicateBot,
-			onDuplicateBotToSpace,
-			onEditBot,
-			onMoveBotToSection,
-			onMoveBotToSpace,
-			onMoveConversationToSection,
-			onOpenConversationSettings,
-			onRenameSection,
-			onReorderSections,
-			onSelectBot,
-			onSelectConversation,
-		}
+	const [naming, setNaming] = useState<SectionNaming | null>(null)
+	const nameLooseSection = () => setNaming({ rowId: null })
+	const actions: BotRosterActions &
+		ConversationRosterActions &
+		SectionActions &
+		RosterCreateActions = {
+		onCreateBot,
+		onCreateSpace,
+		onCreateSection,
+		onDeleteBot,
+		onDeleteConversation,
+		onDeleteSection,
+		onDuplicateBot,
+		onDuplicateBotToSpace,
+		onEditBot,
+		onMoveBotToSection,
+		onMoveBotToSpace,
+		onMoveConversationToSection,
+		onOpenConversationSettings,
+		onRenameSection,
+		onReorderSections,
+		onSelectBot,
+		onSelectConversation,
+	}
 
 	const rosterOf = (spaceId: string) => botsBySpaceId?.[spaceId] ?? NO_BOTS
 
@@ -1496,6 +1620,7 @@ const AgentSidebarBase = ({
 						<CreateMenu
 							onCreateBot={onCreateBot}
 							onCreateConversation={onCreateConversation}
+							onCreateSection={onCreateSection ? nameLooseSection : undefined}
 						/>
 					) : (
 						<Button
@@ -1523,6 +1648,8 @@ const AgentSidebarBase = ({
 									bots={rosterOf(space.id)}
 									conversations={roomsOf(space.id)}
 									destinations={destinationsFrom(space.id)}
+									naming={space.id === selectedSpaceId ? naming : null}
+									onNaming={setNaming}
 									sections={sectionsOf(space.id)}
 									selectedBotId={selectedId}
 									selectedConversationId={selectedConversationId}
@@ -1537,6 +1664,8 @@ const AgentSidebarBase = ({
 							bots={roster}
 							conversations={rooms}
 							destinations={destinationsFrom(selectedSpaceId)}
+							naming={naming}
+							onNaming={setNaming}
 							sections={sections}
 							selectedBotId={selectedId}
 							selectedConversationId={selectedConversationId}
