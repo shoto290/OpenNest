@@ -237,10 +237,23 @@ const badgeOf = (conversation: AgentSidebarConversation) =>
 		(participant) => isBusy(participant) && participant.badge,
 	)?.badge ?? conversation.badge
 
+const workingBotOf = ({
+	participants,
+	lastSpeaker,
+}: AgentSidebarConversation) =>
+	participants.find((bot) => isBusy(bot) && bot.name === lastSpeaker) ??
+	participants.find(isBusy)
+
 const previewOf = (
 	t: TFunction<"bots">,
 	conversation: AgentSidebarConversation,
 ) => {
+	const working = workingBotOf(conversation)
+	if (working)
+		return t("roster.conversation.preview", {
+			name: working.name,
+			text: t("roster.working", { pose: t(`roster.pose.${poseOf(working)}`) }),
+		})
 	if (!conversation.lastMessage) return null
 	const text = toPlainText(conversation.lastMessage)
 	if (!conversation.lastSpeaker) return text
