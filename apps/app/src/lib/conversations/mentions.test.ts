@@ -5,6 +5,7 @@ import {
 	type MentionBot,
 	mentionQueryIn,
 	promptWithMention,
+	toMentionNames,
 	toMentionTokens,
 } from "./mentions"
 
@@ -39,6 +40,28 @@ describe("toMentionTokens", () => {
 
 	it("leaves a token already written alone", () => {
 		expect(toMentionTokens("<@ada> again", BOTS)).toBe("<@ada> again")
+	})
+})
+
+describe("toMentionNames", () => {
+	it("reads a token as an arobase and the name of the bot it reaches", () => {
+		expect(toMentionNames("<@ada> take the walls", BOTS)).toBe(
+			"@Ada take the walls",
+		)
+	})
+
+	it("reads every token written", () => {
+		expect(toMentionNames("<@adam> and <@nyx>", BOTS)).toBe(
+			"@Adam Smith and @Nyx",
+		)
+	})
+
+	it("reads a bot that no longer sits as a name", () => {
+		expect(toMentionNames("<@ghost> again", BOTS)).toBe("@Unknown bot again")
+	})
+
+	it("leaves a text holding no token alone", () => {
+		expect(toMentionNames("and now?", BOTS)).toBe("and now?")
 	})
 })
 

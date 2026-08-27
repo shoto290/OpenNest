@@ -60,7 +60,12 @@ import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
 import type { WorkingState } from "@/lib/chat/working-kind"
 import type { RefusedMessage } from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
-import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
+import {
+	type MentionBot,
+	mentionQueryIn,
+	promptWithMention,
+	toMentionNames,
+} from "@/lib/conversations/mentions"
 import {
 	authorsOf,
 	leadOf,
@@ -88,6 +93,7 @@ const toPinnedRow = (
 	{ id, bubble }: PinnedBubble,
 	author: MessageAuthor | undefined,
 	reader: string,
+	bots: MentionBot[],
 ): PinnedMessage => {
 	const isBotAuthor = bubble.role === "assistant" && author !== undefined
 
@@ -107,7 +113,10 @@ const toPinnedRow = (
 			<UserAvatar name={reader} size={PINNED_AVATAR_SIZE} />
 		),
 		timestamp: pinTimestamp(bubble.timestamp),
-		excerpt: messageWithAttachments(bubble.text).text.trim(),
+		excerpt: toMentionNames(
+			messageWithAttachments(bubble.text).text.trim(),
+			bots,
+		),
 	}
 }
 
@@ -425,9 +434,10 @@ export function ConversationScreen({
 						? authors.get(shown.bubble.authorBotId)
 						: undefined,
 					reader,
+					bots,
 				),
 			),
-		[pins.bubbles, authors, reader],
+		[pins.bubbles, authors, reader, bots],
 	)
 
 	const reachMessage = useCallback(
@@ -478,11 +488,11 @@ export function ConversationScreen({
 				target.role === "user"
 					? reader
 					: (botNameIn(authors, target.authorBotId) ?? t("working.name")),
-			excerpt: target.excerpt,
+			excerpt: toMentionNames(target.excerpt, bots),
 			from: target.role,
 			onJump: () => jumpToMessage(target.messageId),
 		}),
-		[authors, reader, t, jumpToMessage],
+		[authors, bots, reader, t, jumpToMessage],
 	)
 
 	const quoteOf = useCallback(

@@ -8,6 +8,7 @@ import type { ConversationSettingsValue } from "@workspace/ui/components/convers
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { type MentionBot, toMentionNames } from "./mentions"
 import type { Bot, Conversation, Participant } from "./store-contract"
 import type { ConversationPreviews, LastWord } from "./transcript-state"
 
@@ -122,6 +123,15 @@ const speakerNameAmong = (
 ): string | undefined =>
 	seated.find((participant) => participant.botId === preview?.authorBotId)?.name
 
+const mentionBotsOf = (conversation: Conversation): MentionBot[] =>
+	conversation.participants.map(({ botId, name }) => ({ id: botId, name }))
+
+const previewText = (
+	conversation: Conversation,
+	preview: LastWord | undefined,
+): string | undefined =>
+	preview?.text && toMentionNames(preview.text, mentionBotsOf(conversation))
+
 const toSeatedRows = (
 	seated: Participant[],
 	workers: ConversationWorker[],
@@ -149,7 +159,7 @@ export const toRosterConversations = (
 			name: conversationName(conversation),
 			sectionId: conversation.sectionId,
 			participants: toSeatedRows(seated, workers),
-			lastMessage: preview?.text,
+			lastMessage: previewText(conversation, preview),
 			lastSpeaker: speakerNameAmong(seated, preview),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
 			status: workers.length > 0 ? "working" : "idle",
