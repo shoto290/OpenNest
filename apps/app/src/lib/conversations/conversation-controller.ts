@@ -1,6 +1,6 @@
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { leadOf, presentParticipants } from "./roster-conversations"
-import type { Conversation } from "./store-contract"
+import type { Conversation, MessagePin } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type {
 	TerminalCompletion,
@@ -46,6 +46,9 @@ export type ConversationController = {
 	open: (conversation: Conversation) => Promise<void>
 	loadOlder: () => Promise<void>
 	send: (text: string) => Promise<void>
+	pin: (messageId: string, blockIndex: number) => Promise<void>
+	unpin: (messageId: string, blockIndex: number) => Promise<void>
+	pins: () => Promise<MessagePin[]>
 	stop: () => Promise<void>
 	shutdown: () => Promise<void>
 }
@@ -72,6 +75,8 @@ type Speaker = {
 }
 
 const NO_MESSAGES: TranscriptMessage[] = []
+
+const NO_PINS: MessagePin[] = []
 
 const isSamePair = (
 	left: [string, string] | null,
@@ -552,6 +557,29 @@ export const createConversationController = (
 		}
 	}
 
+	const pin = (messageId: string, blockIndex: number) => {
+		const conversationId = conversation?.id
+		return conversationId
+			? enqueue(() =>
+					store.pinMessage(conversationId, messageId, blockIndex, now()),
+				)
+			: Promise.resolve()
+	}
+
+	const unpin = (messageId: string, blockIndex: number) => {
+		const conversationId = conversation?.id
+		return conversationId
+			? enqueue(() => store.unpinMessage(conversationId, messageId, blockIndex))
+			: Promise.resolve()
+	}
+
+	const pins = () => {
+		const conversationId = conversation?.id
+		return conversationId
+			? enqueue(() => store.pinnedMessages(conversationId))
+			: Promise.resolve(NO_PINS)
+	}
+
 	const shutdown = async () => {
 		const held = speaker
 		if (held) {
@@ -572,6 +600,9 @@ export const createConversationController = (
 		open,
 		loadOlder,
 		send,
+		pin,
+		unpin,
+		pins,
 		stop,
 		shutdown,
 	}
