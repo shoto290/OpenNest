@@ -187,7 +187,12 @@ const TranscriptTurn = memo(function TranscriptTurn({
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = <TurnBody attachments={attachments} text={text} />
 	const reply = () => {
-		onReply({ messageId: row.messageId, role: row.role, excerpt: text })
+		onReply({
+			messageId: row.messageId,
+			role: row.role,
+			excerpt: text,
+			authorBotId: row.authorBotId,
+		})
 	}
 	const pin = () => {
 		onPin(row.messageId, row.blockIndex)
