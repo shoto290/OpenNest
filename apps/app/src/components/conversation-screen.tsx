@@ -16,7 +16,6 @@ import {
 	ConversationBotsProvider,
 } from "@workspace/ui/components/conversation-bots"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
-import { Markdown } from "@workspace/ui/components/markdown"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
@@ -25,11 +24,24 @@ import {
 	type PinnedMessage,
 	PinnedMessages,
 } from "@workspace/ui/components/pinned-messages"
+import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
+import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptMentionMenu } from "@workspace/ui/components/prompt-mention-menu"
 import { UserAvatar } from "@workspace/ui/components/user-avatar"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import { TurnBody } from "@/components/turn-body"
+import {
+	describeAttachmentError,
+	type StagedAttachment,
+} from "@/lib/chat/attachments"
+import type {
+	AttachmentStoreError,
+	AttachmentsOwner,
+} from "@/lib/chat/attachments-contract"
+import type { AttachmentsController } from "@/lib/chat/attachments-controller"
+import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import { pinTimestamp } from "@/lib/chat/pin-timestamp"
 import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
 import { holdsDismissal } from "@/lib/chat/prompt-commands"
@@ -42,6 +54,7 @@ import {
 	toRuns,
 	toTranscriptRows,
 } from "@/lib/chat/screen-model"
+import { useAttachments } from "@/lib/chat/use-attachments"
 import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
 import type { RefusedMessage } from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
@@ -57,6 +70,7 @@ import { useConversation } from "@/lib/conversations/use-conversation"
 import { hasOverlayWindowControls } from "@/lib/host"
 
 type ConversationScreenProps = {
+	attachments: AttachmentsController
 	conversation: Conversation
 	runtimes: ConversationRuntimes
 	readerName: string
@@ -92,7 +106,7 @@ const toPinnedRow = (
 			<UserAvatar name={reader} size={PINNED_AVATAR_SIZE} />
 		),
 		timestamp: pinTimestamp(bubble.timestamp),
-		excerpt: bubble.text.trim(),
+		excerpt: messageWithAttachments(bubble.text).text.trim(),
 	}
 }
 
@@ -152,6 +166,38 @@ const HandoverNotice = ({ pair, onStop }: HandoverNoticeProps) => {
 	)
 }
 
+type ConversationNoticeProps = {
+	refusal: AttachmentStoreError | null
+	looping: (ConversationBot | undefined)[]
+	onDismissRefusal: () => void
+	onStop: () => void
+}
+
+const ConversationNotice = ({
+	refusal,
+	looping,
+	onDismissRefusal,
+	onStop,
+}: ConversationNoticeProps) => {
+	const t = useChatCopy()
+
+	if (refusal) {
+		return (
+			<ChatNotice
+				description={describeAttachmentError(t, refusal)}
+				onDismiss={onDismissRefusal}
+				title={t("screen.attachmentsRefused")}
+				tone="warning"
+			/>
+		)
+	}
+
+	const [first, second] = looping
+	return first && second ? (
+		<HandoverNotice onStop={onStop} pair={[first, second]} />
+	) : null
+}
+
 type ConversationTurnProps = {
 	row: TranscriptRow
 	author?: MessageAuthor
@@ -169,7 +215,8 @@ const ConversationTurn = ({
 	onPin,
 	onReply,
 }: ConversationTurnProps) => {
-	const content = <Markdown>{row.text}</Markdown>
+	const { text, attachments } = messageWithAttachments(row.text)
+	const content = <TurnBody attachments={attachments} text={text} />
 	const anchor = bubbleIdOf(row.messageId, row.blockIndex)
 	const pin = () => {
 		onPin(row.messageId, row.blockIndex)
@@ -178,7 +225,7 @@ const ConversationTurn = ({
 		onReply({
 			messageId: row.messageId,
 			role: row.role,
-			excerpt: row.text.trim(),
+			excerpt: text.trim(),
 			authorBotId: row.authorBotId,
 		})
 	}
@@ -225,7 +272,7 @@ const RefusedTurn = ({ message, repliedTo, onSendAgain }: RefusedTurnProps) => (
 			repliedTo={repliedTo}
 			state="failed"
 		>
-			<Markdown>{message.text}</Markdown>
+			<TurnBody {...messageWithAttachments(message.text)} />
 		</UserTurn>
 	</ChatTurnGroup>
 )
@@ -234,13 +281,23 @@ type ConversationComposerProps = {
 	bots: ConversationBot[]
 	leadId?: string
 	textareaRef: RefObject<HTMLTextAreaElement | null>
-	onSubmit: (text: string) => void
+	canAttach: boolean
+	attachments: StagedAttachment[]
+	isDropTarget: boolean
+	onAttach: (files: File[]) => void
+	onRemoveAttachment: (id: string) => void
+	onSubmit: (text: string) => Promise<boolean>
 }
 
 const ConversationComposer = ({
 	bots,
 	leadId,
 	textareaRef,
+	canAttach,
+	attachments,
+	isDropTarget,
+	onAttach,
+	onRemoveAttachment,
 	onSubmit,
 }: ConversationComposerProps) => {
 	const t = useChatCopy()
@@ -265,9 +322,10 @@ const ConversationComposer = ({
 	)
 
 	const submit = useCallback(
-		(value: string) => {
-			onSubmit(value)
-			setPrompt("")
+		async (value: string) => {
+			if (await onSubmit(value)) {
+				setPrompt("")
+			}
 		},
 		[onSubmit],
 	)
@@ -282,6 +340,17 @@ const ConversationComposer = ({
 			query={query ?? ""}
 		>
 			<PromptInput
+				attachments={
+					<PromptAttachments
+						items={attachments}
+						onRemove={onRemoveAttachment}
+					/>
+				}
+				dropTarget={isDropTarget}
+				leading={
+					<PromptAttachButton disabled={!canAttach} onAttach={onAttach} />
+				}
+				onAttach={canAttach ? onAttach : undefined}
 				onSubmit={submit}
 				onValueChange={setPrompt}
 				placeholder={t("composer.placeholder")}
@@ -293,6 +362,7 @@ const ConversationComposer = ({
 }
 
 export function ConversationScreen({
+	attachments,
 	conversation,
 	runtimes,
 	readerName,
@@ -303,6 +373,7 @@ export function ConversationScreen({
 	const { state, controller } = useConversation(runtimes, conversation)
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
 	const composerRef = useRef<HTMLTextAreaElement>(null)
+	const conversationRef = useRef<HTMLDivElement>(null)
 	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
 	const bots = useMemo(
 		() => toConversationBots(conversation.participants),
@@ -313,6 +384,12 @@ export function ConversationScreen({
 		() => toConversationBots(presentParticipants(conversation)),
 		[conversation],
 	)
+	const owner = useMemo<AttachmentsOwner>(
+		() => ({ kind: "conversation", id: conversation.id }),
+		[conversation.id],
+	)
+	const canAttach = present.length > 0
+	const staged = useAttachments(attachments, owner, canAttach, conversationRef)
 	const runs = toRuns(toTranscriptRows(state.messages))
 	const botOf = useCallback(
 		(botId: string) => bots.find((bot) => bot.id === botId),
@@ -416,11 +493,14 @@ export function ConversationScreen({
 	}, [focusComposer])
 
 	const send = useCallback(
-		(text: string) => {
-			void controller.send(text, replyTarget?.messageId)
-			setReplyTarget(null)
+		async (text: string) => {
+			const sent = await staged.submit(text, replyTarget?.messageId)
+			if (sent) {
+				setReplyTarget(null)
+			}
+			return sent
 		},
-		[controller, replyTarget],
+		[staged.submit, replyTarget],
 	)
 
 	const stop = useCallback(() => {
@@ -432,8 +512,13 @@ export function ConversationScreen({
 			<ChatLayout
 				composer={
 					<ConversationComposer
+						attachments={staged.items}
 						bots={present}
+						canAttach={canAttach}
+						isDropTarget={staged.isDropTarget}
 						leadId={leadOf(conversation)}
+						onAttach={staged.stage}
+						onRemoveAttachment={staged.remove}
 						onSubmit={send}
 						textareaRef={composerRef}
 					/>
@@ -474,9 +559,12 @@ export function ConversationScreen({
 				}
 				label={t("screen.label")}
 				notice={
-					looping[0] && looping[1] ? (
-						<HandoverNotice onStop={stop} pair={[looping[0], looping[1]]} />
-					) : undefined
+					<ConversationNotice
+						looping={looping}
+						onDismissRefusal={staged.dismissRefusal}
+						onStop={stop}
+						refusal={staged.refusal}
+					/>
 				}
 				older={
 					state.messages.length > 0
@@ -491,6 +579,7 @@ export function ConversationScreen({
 							}
 						: undefined
 				}
+				rootRef={conversationRef}
 				scrollerRef={scrollerRef}
 				transcriptKey={conversation.id}
 			>

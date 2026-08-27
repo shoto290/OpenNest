@@ -1,18 +1,24 @@
 import type { AttachmentsPort } from "./attachments-controller"
 import type { ChatController } from "./chat-controller"
+import type { ChatDriver } from "./driver"
 
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 
 export type AttachmentsHosts = {
 	chat: Pick<ChatController, "storeAttachments" | "sendTo">
+	driver: Pick<ChatDriver, "storeAttachments">
 	runtimes: Pick<ConversationRuntimes, "heldFor">
 }
 
 export const createAttachmentsPort = ({
 	chat,
+	driver,
 	runtimes,
 }: AttachmentsHosts): AttachmentsPort => ({
-	store: (owner, attachments) => chat.storeAttachments(owner.id, attachments),
+	store: (owner, attachments) =>
+		owner.kind === "bot"
+			? chat.storeAttachments(owner.id, attachments)
+			: driver.storeAttachments(owner.id, attachments),
 
 	send: (owner, text, repliedToMessageId) => {
 		if (owner.kind === "bot") {
