@@ -259,6 +259,7 @@ export function App() {
 
 	const deleteConversation = async (id: string) => {
 		await conversationRuntimes.release(id)
+		attachments.forget({ kind: "conversation", id })
 		await roster.controller.removeConversation(id)
 	}
 
