@@ -62,7 +62,7 @@ export interface MessageBubbleCollapsibleProps
 	children?: ReactNode
 }
 
-function isCapped(variant: MessageBubbleVariant) {
+function hasSurface(variant: MessageBubbleVariant) {
 	return variant !== "ghost" && variant !== "bare"
 }
 
@@ -84,7 +84,7 @@ export function MessageBubble({
 				data-variant={variant}
 				className={cn(
 					"group/bubble flex w-full flex-col",
-					isCapped(variant) && "max-w-[75%]",
+					hasSurface(variant) && "max-w-[75%]",
 					resolvedAlign === "end" ? "items-end" : "items-start",
 					className,
 				)}
@@ -98,6 +98,9 @@ export function MessageBubble({
 
 export const MESSAGE_BUBBLE_INLINE_PADDING = "px-3.5"
 
+const MENTION_OPENING_PADDING =
+	'has-[p:first-child>[data-slot="bot-mention"]:first-child]:py-3.5'
+
 function bubbleContentClass(
 	variant: MessageBubbleVariant,
 	interactive: boolean,
@@ -105,6 +108,7 @@ function bubbleContentClass(
 	return cn(
 		"relative z-0 min-w-9 max-w-full break-words rounded-2xl py-2.5 text-sm leading-6 text-foreground",
 		MESSAGE_BUBBLE_INLINE_PADDING,
+		hasSurface(variant) && MENTION_OPENING_PADDING,
 		MARKDOWN_PROSE_CLASS,
 		variant === "solid" && "text-primary-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
@@ -135,7 +139,7 @@ export function MessageBubbleContent({
 }: MessageBubbleContentProps) {
 	const variant = useContext(MessageBubbleVariantContext)
 	const interactive = render?.type === "button" || render?.type === "a"
-	const filled = variant !== "ghost" && variant !== "bare"
+	const filled = hasSurface(variant)
 	const classes = cn(bubbleContentClass(variant, interactive), className)
 	const composedChildren = (
 		<>
