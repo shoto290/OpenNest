@@ -5,7 +5,7 @@ import { join } from "node:path"
 
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
-import { buildOptions } from "./session"
+import { buildOptions, CLASSIFY_ASK_USER_QUESTION } from "./session"
 import {
 	bundleLine,
 	layerFor,
@@ -63,6 +63,14 @@ describe("buildOptions", () => {
 	it("opens every session in auto mode, bundled or not", () => {
 		for (const spawned of spawns) {
 			expect(buildOptions(spawned, undefined).permissionMode).toBe("auto")
+		}
+	})
+
+	it("turns off auto mode's classifier, so a question reaches the host", () => {
+		for (const spawned of spawns) {
+			expect(
+				buildOptions(spawned, undefined).env?.[CLASSIFY_ASK_USER_QUESTION],
+			).toBe("0")
 		}
 	})
 

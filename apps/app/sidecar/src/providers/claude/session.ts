@@ -22,6 +22,8 @@ import { describeError } from "../../describe-error"
 const ABANDONED = "The session ended before this was answered."
 const ENDED = "the agent ended"
 const DISABLE_AUTO_MEMORY = "CLAUDE_CODE_DISABLE_AUTO_MEMORY"
+export const CLASSIFY_ASK_USER_QUESTION =
+	"CLAUDE_CODE_AUTO_MODE_CLASSIFY_ASK_USER_QUESTION"
 
 const described = (commands: SlashCommand[]): AgentCommand[] =>
 	commands.map(({ name, description }) => ({
@@ -71,7 +73,11 @@ export const buildOptions = (
 	...(request.outputStyle
 		? { settings: { outputStyle: request.outputStyle } }
 		: {}),
-	env: { ...process.env, [DISABLE_AUTO_MEMORY]: "1" },
+	env: {
+		...process.env,
+		[DISABLE_AUTO_MEMORY]: "1",
+		[CLASSIFY_ASK_USER_QUESTION]: "0",
+	},
 	settingSources: [],
 	strictMcpConfig: true,
 	pathToClaudeCodeExecutable: resolveExecutable(),
