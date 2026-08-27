@@ -64,6 +64,16 @@ const leadIn = (conversation: Conversation) => leadOf(conversation)
 const seatedIn = (conversation: Conversation) =>
 	presentParticipants(conversation).map((seat) => seat.botId)
 
+const faceIn = (conversation: Conversation, botId: string) => {
+	const seat = conversation.participants.find(
+		(participant) => participant.botId === botId,
+	)
+	if (!seat) {
+		throw new Error(`no seat is held by ${botId}`)
+	}
+	return seat
+}
+
 let spoken = 0
 
 const saidIn = async (
@@ -1073,6 +1083,59 @@ describe("createRosterController on conversations", () => {
 
 		expect(leadIn(controller.getState().conversations[0])).toBe(second.id)
 		expect(leadIn((await store.conversations("personal"))[0])).toBe(second.id)
+	})
+
+	it("carries a written name and avatar onto every seat the bot holds", async () => {
+		const store = createFakeTranscriptStore()
+		const second = await store.createBot(newBotIdentity([]), "personal")
+		const controller = await loaded(store)
+		await controller.createConversation({
+			title: "Launch",
+			botIds: ["default", second.id],
+		})
+		const value = toSettingsValue(held(controller, "default"))
+
+		controller.describe(
+			"default",
+			edited(value, { name: "Nyx", identity: { animal: "owl", blot: "blue" } }),
+		)
+
+		expect(
+			faceIn(controller.getState().conversations[0], "default"),
+		).toMatchObject({ name: "Nyx", avatarAnimal: "owl", avatarBlot: "blue" })
+		expect(faceIn(controller.getState().conversations[0], second.id).name).toBe(
+			second.name,
+		)
+		await vi.waitFor(async () =>
+			expect(
+				faceIn((await store.conversations("personal"))[0], "default").name,
+			).toBe("Nyx"),
+		)
+	})
+
+	it("puts back on every seat the face the store holds when a write is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded({
+			...store,
+			updateBot: () =>
+				Promise.reject({ kind: "storage", failure: { kind: "staleWrite" } }),
+		})
+		await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+		const value = toSettingsValue(held(controller, "default"))
+
+		controller.describe("default", edited(value, { name: "Nyx" }))
+		expect(faceIn(controller.getState().conversations[0], "default").name).toBe(
+			"Nyx",
+		)
+
+		await vi.waitFor(() =>
+			expect(
+				faceIn(controller.getState().conversations[0], "default").name,
+			).toBe("Claude"),
+		)
 	})
 
 	it("seats a recruited bot last and offers it no more", async () => {
