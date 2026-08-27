@@ -86,6 +86,26 @@ fn styled_bundle(bot: &Bot, output_style: &str) -> Bundle {
 	handed_over(&root, bot)
 }
 
+fn changing_rules() -> String {
+	bundles::CHANGING_TOOLS.map(|tool| format!("\"{tool}\"")).join(",")
+}
+
+fn under_default(rules: &str) -> String {
+	format!(r#"{{"permissions":{{"defaultMode":"default","allow":[{rules}]}}}}"#)
+}
+
+fn denying(rules: &str) -> String {
+	format!(r#"{{"permissions":{{"deny":[{rules}]}}}}"#)
+}
+
+fn ruled(bot: &Bot, settings: &str) -> Bundle {
+	let root = bundles_root();
+	bundles::write(&root, bot).expect("the bundle is written");
+	std::fs::write(bundles::dir(&root, &bot.id).join("settings.json"), settings)
+		.expect("the settings file is written");
+	handed_over(&root, bot)
+}
+
 fn written(bot: &Bot) -> Bundle {
 	let root = bundles_root();
 	bundles::write(&root, bot).expect("the bundle is written");
@@ -101,6 +121,7 @@ fn handed_over(root: &Path, bot: &Bot) -> Bundle {
 		agent: bundles::slug(&bot.name),
 		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),
+		settings_path: bundles::settings_file(root, &bot.id).map(|path| path.display().to_string()),
 	}
 }
 
@@ -224,6 +245,16 @@ const PROBE_WORD: &str = "OPENNEST";
 
 fn asked_permission(events: &[AgentEvent]) -> bool {
 	events.iter().any(|event| matches!(event, AgentEvent::PermissionRequested { .. }))
+}
+
+fn asked_for(events: &[AgentEvent]) -> Vec<String> {
+	events
+		.iter()
+		.filter_map(|event| match event {
+			AgentEvent::PermissionRequested { request } => Some(request.tool_name.clone()),
+			_ => None,
+		})
+		.collect()
 }
 
 fn tools_used(events: &[AgentEvent]) -> Vec<String> {
@@ -535,6 +566,49 @@ async fn a_bot_denied_the_changing_tools_still_changes_nothing_under_auto() {
 
 	assert!(!file.exists(), "a bot denied every changing tool still wrote {}", seen_as(&file));
 	assert!(!asked_permission(&events), "a held-back bot reached the reader's dialog");
+}
+
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_allowed_the_write_by_its_settings_asks_the_reader_nothing() {
+	let workshop = a_directory("settings-allowed");
+	let file = a_clean_file(&workshop);
+
+	let bot = probe_bot("live-bot-allowed", BANANA, SONNET);
+	let allowed = ruled(&bot, &under_default(&changing_rules()));
+	let mut live = started_with(None, Some(allowed), workshop).await;
+	let events = live.run_turn(WRITE_A_FILE).await;
+	live.sidecar.shutdown().await;
+
+	assert!(
+		!asked_permission(&events),
+		"an allowed write still reached the reader's dialog: {:?} tools {:?}",
+		asked_for(&events),
+		tools_used(&events)
+	);
+	let written = std::fs::read_to_string(&file).expect("the bot wrote the file it was asked for");
+	assert!(written.contains(PROBE_WORD), "the file holds {written:?}");
+}
+
+#[tokio::test]
+#[ignore = "needs a signed-in subscription and the network"]
+async fn a_bot_denied_the_write_by_its_settings_writes_nothing_and_asks_nothing() {
+	let workshop = a_directory("settings-denied");
+	let file = a_clean_file(&workshop);
+
+	let bot = probe_bot("live-bot-refused", BANANA, SONNET);
+	let refused = ruled(&bot, &denying(&changing_rules()));
+	let mut live = started_with(None, Some(refused), workshop).await;
+	let events = live.run_turn(WRITE_A_FILE).await;
+	live.sidecar.shutdown().await;
+
+	assert!(
+		!file.exists(),
+		"a bot denied the write still wrote {} with {:?}",
+		seen_as(&file),
+		tools_used(&events)
+	);
+	assert!(!asked_permission(&events), "a denied write reached the reader's dialog");
 }
 
 #[tokio::test]

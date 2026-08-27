@@ -356,6 +356,8 @@ fn laid_down_bundle(
 		agent: bundles::agent_ref(root, bot),
 		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),
+		settings_path: bundles::settings_file(root, &bot.id)
+			.map(|path| path.to_string_lossy().into_owned()),
 	})
 }
 

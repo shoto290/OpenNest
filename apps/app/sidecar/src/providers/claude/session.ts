@@ -4,6 +4,7 @@ import {
 	type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
 
+import { readBotSettings, type SettingsOptions } from "./bot-settings"
 import { sessionServers } from "./bundle-servers"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
@@ -44,12 +45,13 @@ const localPlugins = (
 export const buildOptions = (
 	request: SessionRequest,
 	canUseTool: Options["canUseTool"],
+	settings: SettingsOptions = readBotSettings(request).options,
 ): Options => ({
 	cwd: request.cwd,
 	resume: request.resume,
 	includePartialMessages: request.partialMessages,
-	permissionMode: "auto",
 	canUseTool,
+	...settings,
 	...(request.pluginPath && request.agent
 		? {
 				plugins: localPlugins(
@@ -70,9 +72,6 @@ export const buildOptions = (
 		preset: "claude_code",
 		append: layerFor(request),
 	},
-	...(request.outputStyle
-		? { settings: { outputStyle: request.outputStyle } }
-		: {}),
 	env: {
 		...process.env,
 		[DISABLE_AUTO_MEMORY]: "1",
@@ -90,9 +89,13 @@ export const openClaudeSession = async (
 ): Promise<AgentSession> => {
 	const prompts = createPromptStream()
 	const permissions = createPermissionGate(emit, request.pluginPath)
+	const botSettings = readBotSettings(request)
+	if (botSettings.rejection) {
+		emit({ type: "settings_rejected", detail: botSettings.rejection })
+	}
 	const run = query({
 		prompt: prompts.stream,
-		options: buildOptions(request, permissions.canUseTool),
+		options: buildOptions(request, permissions.canUseTool, botSettings.options),
 	})
 
 	let closing = false

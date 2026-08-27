@@ -162,6 +162,10 @@ pub enum TransportError {
 	InvalidFrame {
 		detail: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	SettingsRejected {
+		detail: String,
+	},
 	NotStarted,
 	TurnAlreadyRunning,
 	TransitionInProgress,
@@ -211,6 +215,9 @@ impl std::fmt::Display for TransportError {
 				write!(f, "the working directory {path} is not there")
 			}
 			TransportError::InvalidFrame { detail } => write!(f, "invalid frame: {detail}"),
+			TransportError::SettingsRejected { detail } => {
+				write!(f, "the bot's settings were rejected: {detail}")
+			}
 			TransportError::NotStarted => write!(f, "session not started"),
 			TransportError::TurnAlreadyRunning => write!(f, "a turn is already running"),
 			TransportError::TransitionInProgress => {

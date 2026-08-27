@@ -69,7 +69,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `partialMessages`, `env?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -113,6 +113,19 @@ Every other command names its session.
   it under (`Concise`…). Named, it is passed as `settings: { outputStyle }` — an
   inline settings object, since `settingSources: []` closes every settings file on the
   machine. Left out, no `settings` key is passed at all.
+- `settingsPath` is the `settings.json` lying at the root of the bot's own bundle, sent
+  only when the file is there — see `bundles.rs::settings_file`. The sidecar reads it and
+  keeps `permissions.allow`, `permissions.ask`, `permissions.deny`,
+  `permissions.defaultMode`, `permissions.additionalDirectories` and `outputStyle`; every
+  other key is dropped, `disableBypassPermissionsMode` is forced to `disable`, and a
+  `defaultMode` of `bypassPermissions` is refused. What is kept becomes the inline
+  `settings` object, `permissionMode` becomes the declared `defaultMode` or `auto`, and the
+  absolute directories become `additionalDirectories`. A file the bot's own settings name
+  wins over `outputStyle` on the request. Unreadable or not a JSON object, the session opens
+  without it. Anything refused — the file itself, a `bypassPermissions` mode, or a key outside
+  the allowlist, named — rides a `settings_rejected` frame to the reader's notice.
+  `disableBypassPermissionsMode` is forced to `disable` even for a bot carrying no file at all,
+  and `settingSources: []` stays set either way: this is the only settings file a session reads.
 - `env` is the SDK's `env`: variables for the agent this session runs, not for
   the sidecar.
 
@@ -124,7 +137,7 @@ Every line is an envelope:
 {"session":"<key>","frame":{…}}
 ```
 
-The frame is an `SDKMessage` verbatim, plus the three the sidecar adds itself.
+The frame is an `SDKMessage` verbatim, plus the four the sidecar adds itself.
 
 | `frame.type` | Source | Mapped to |
 | --- | --- | --- |
@@ -138,6 +151,7 @@ The frame is an `SDKMessage` verbatim, plus the three the sidecar adds itself.
 | `result` | `SDKResultMessage` — `subtype`, `session_id`, `is_error` | `turnEnded` |
 | `control_request` / `can_use_tool` | the sidecar, from `canUseTool` | `permissionRequested` |
 | `control_request` / `can_use_tool`, tool `AskUserQuestion` | the sidecar, from `canUseTool` | `questionRequested` |
+| `settings_rejected` | the sidecar, when the bot's `settings.json` is refused in part or in whole | `failed` — `settingsRejected`, the frame's `detail` as its reason |
 
 Every other `SDKMessage` type is dropped: `translate.rs` reads what the contract
 needs and nothing else, so a new SDK message is inert until it is asked for.

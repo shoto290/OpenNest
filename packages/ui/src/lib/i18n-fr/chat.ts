@@ -171,6 +171,7 @@ const chat = {
 			crashed: "Claude Code s'est arrêté",
 			resumeFailed: "La conversation précédente n'a pas pu être reprise",
 			workingDirectoryRefused: "Le dossier du bot est introuvable",
+			settingsRejected: "Les réglages du bot n'ont pas été appliqués",
 			unavailable: "Claude Code est indisponible",
 			failed: "Cette demande n'est pas passée",
 		},
@@ -188,6 +189,8 @@ const chat = {
 			workingDirectoryRefused:
 				"{{path}} n'existe plus. Ce bot répond depuis l'emplacement habituel à la place.",
 			invalidFrame: "Une trame illisible a été ignorée : {{detail}}",
+			settingsRejected:
+				"Le settings.json de ce bot n'a pas été appliqué : {{detail}}",
 			notStarted: "Aucune session n'est en cours.",
 			turnAlreadyRunning: "Un tour est déjà en cours.",
 			transitionInProgress: "Un changement de session est déjà en cours.",

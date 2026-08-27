@@ -92,6 +92,7 @@ export type TransportError =
 	| { kind: "resumeFailed"; forgotSessionId: boolean }
 	| { kind: "workingDirectoryRefused"; path: string }
 	| { kind: "invalidFrame"; detail: string }
+	| { kind: "settingsRejected"; detail: string }
 	| { kind: "notStarted" }
 	| { kind: "turnAlreadyRunning" }
 	| { kind: "transitionInProgress" }

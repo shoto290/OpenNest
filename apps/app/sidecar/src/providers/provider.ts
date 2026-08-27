@@ -15,6 +15,7 @@ export type SessionRequest = {
 	spacePluginPath?: string
 	identity?: string
 	outputStyle?: string
+	settingsPath?: string
 	partialMessages: boolean
 }
 

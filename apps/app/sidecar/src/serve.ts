@@ -20,6 +20,7 @@ type Command = {
 	agent?: string
 	identity?: string
 	outputStyle?: string
+	settingsPath?: string
 	partialMessages?: boolean
 	text?: string
 	requestId?: string
@@ -50,6 +51,7 @@ export const serve = async (requestedId?: string) => {
 					agent: command.agent,
 					identity: command.identity,
 					outputStyle: command.outputStyle,
+					settingsPath: command.settingsPath,
 					partialMessages: command.partialMessages ?? false,
 				},
 				emit,

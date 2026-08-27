@@ -66,6 +66,32 @@ describe("buildOptions", () => {
 		}
 	})
 
+	it("opens on the settings file the host names, mode and rules at once", () => {
+		const bundle = mkdtempSync(join(tmpdir(), "opennest-settings-"))
+		const settingsPath = join(bundle, "settings.json")
+		writeFileSync(
+			settingsPath,
+			JSON.stringify({
+				permissions: { allow: ["Read(**)"], defaultMode: "acceptEdits" },
+				outputStyle: "default",
+			}),
+		)
+
+		const options = buildOptions({ ...request, settingsPath }, undefined)
+
+		expect(options.permissionMode).toBe("acceptEdits")
+		expect(options.settings).toEqual({
+			permissions: {
+				allow: ["Read(**)"],
+				disableBypassPermissionsMode: "disable",
+			},
+			outputStyle: "default",
+		})
+		expect(options.settingSources).toEqual([])
+
+		rmSync(bundle, { recursive: true, force: true })
+	})
+
 	it("turns off auto mode's classifier, so a question reaches the host", () => {
 		for (const spawned of spawns) {
 			expect(
@@ -94,11 +120,16 @@ describe("buildOptions", () => {
 		expect(OPENNEST_LAYER).toContain("never claim a capability you do not have")
 	})
 
-	it("passes the output style the host names, and no settings without one", () => {
+	it("passes the output style the host names, and locks bypass out either way", () => {
 		expect(
 			buildOptions({ ...request, outputStyle: "Concise" }, undefined).settings,
-		).toEqual({ outputStyle: "Concise" })
-		expect(buildOptions(request, undefined).settings).toBeUndefined()
+		).toEqual({
+			permissions: { disableBypassPermissionsMode: "disable" },
+			outputStyle: "Concise",
+		})
+		expect(buildOptions(request, undefined).settings).toEqual({
+			permissions: { disableBypassPermissionsMode: "disable" },
+		})
 	})
 
 	it("carries the bundle again on a resume, since neither option is sticky", () => {
