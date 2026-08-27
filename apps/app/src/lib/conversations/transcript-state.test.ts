@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import type {
-	TerminalCompletion,
-	TranscriptCompletion,
-	TranscriptMessage,
-	TranscriptPage,
+import {
+	type TerminalCompletion,
+	TRANSCRIPT_WINDOW_SIZE,
+	type TranscriptCompletion,
+	type TranscriptDraft,
+	type TranscriptMessage,
+	type TranscriptPage,
 } from "./transcript-contract"
 import {
 	CONVERSATION,
@@ -33,6 +35,13 @@ const load = (
 	loaded: TranscriptPage,
 ): TranscriptState =>
 	transcriptReducer(state, { type: "pageLoaded", page: loaded })
+
+const append = (
+	state: TranscriptState,
+	draft: TranscriptDraft,
+	isAtLiveEdge = true,
+): TranscriptState =>
+	transcriptReducer(state, { type: "messageAppended", draft, isAtLiveEdge })
 
 const idsOf = (
 	state: TranscriptState,
@@ -139,22 +148,19 @@ describe("transcriptReducer", () => {
 	})
 
 	it("reconciles an optimistic message with the durable row of the same id", () => {
-		const appended = transcriptReducer(
+		const appended = append(
 			load(initialTranscriptState, page([message({ id: "m-1", seq: 1 })])),
 			{
-				type: "messageAppended",
-				draft: {
-					id: "local-1",
-					conversationId: CONVERSATION,
-					turnId: "t-2",
-					role: "user",
-					content: "hello",
-					completion: "pending",
-					createdAt: 0,
-					authorBotId: null,
-					repliedToMessageId: null,
-					runtimeSessionId: null,
-				},
+				id: "local-1",
+				conversationId: CONVERSATION,
+				turnId: "t-2",
+				role: "user",
+				content: "hello",
+				completion: "pending",
+				createdAt: 0,
+				authorBotId: null,
+				repliedToMessageId: null,
+				runtimeSessionId: null,
 			},
 		)
 		expect(selectMessages(appended, CONVERSATION)[1]).toMatchObject({
@@ -199,21 +205,13 @@ describe("transcriptReducer", () => {
 			repliedToMessageId: null,
 			runtimeSessionId: null,
 		}
-		const appended = transcriptReducer(initialTranscriptState, {
-			type: "messageAppended",
-			draft,
-		})
+		const appended = append(initialTranscriptState, draft)
 
-		expect(
-			transcriptReducer(appended, { type: "messageAppended", draft }),
-		).toBe(appended)
+		expect(append(appended, draft)).toBe(appended)
 	})
 
 	it("accumulates deltas while a message streams", () => {
-		const streaming = transcriptReducer(initialTranscriptState, {
-			type: "messageAppended",
-			draft: streamingDraft("m-1"),
-		})
+		const streaming = append(initialTranscriptState, streamingDraft("m-1"))
 		const streamed = ["Hello", " world"].reduce(
 			(state, text) =>
 				transcriptReducer(state, {
@@ -422,10 +420,7 @@ describe("transcriptReducer", () => {
 	})
 
 	it("ignores a settlement to a state that is not an ending", () => {
-		const streaming = transcriptReducer(SEEDED, {
-			type: "messageAppended",
-			draft: streamingDraft("m-1"),
-		})
+		const streaming = append(SEEDED, streamingDraft("m-1"))
 		const settled = transcriptReducer(streaming, {
 			type: "messageSettled",
 			settlement: {
@@ -443,10 +438,7 @@ describe("transcriptReducer", () => {
 	})
 
 	it("keeps a live stream ahead of the durable row a page brings back late", () => {
-		const streaming = transcriptReducer(SEEDED, {
-			type: "messageAppended",
-			draft: streamingDraft("a-1"),
-		})
+		const streaming = append(SEEDED, streamingDraft("a-1"))
 		const streamed = transcriptReducer(streaming, {
 			type: "messageStreamed",
 			delta: { conversationId: CONVERSATION, id: "a-1", text: "Hello" },
@@ -522,10 +514,7 @@ describe("transcriptReducer", () => {
 			SEEDED,
 			page([message({ id: "m-1", seq: 1 }), message({ id: "m-2", seq: 2 })]),
 		)
-		const streamed = transcriptReducer(both, {
-			type: "messageAppended",
-			draft: streamingDraft("m-3"),
-		})
+		const streamed = append(both, streamingDraft("m-3"))
 
 		expect(idsOf(streamed)).toEqual(["m-1", "m-2", "m-3"])
 		expect(idsOf(streamed, OTHER_CONVERSATION)).toEqual(["o-1"])
@@ -622,5 +611,69 @@ describe("lastWordIn", () => {
 				settled({ content: "  ", completion: "failed", createdAt: 40 }),
 			]),
 		).toEqual({ text: undefined, at: 40 })
+	})
+})
+
+describe("the transcript window", () => {
+	const landing = (overrides: Partial<TranscriptDraft> = {}) => ({
+		...streamingDraft("live"),
+		turnId: "t-live",
+		...overrides,
+	})
+
+	const full = load(
+		initialTranscriptState,
+		page(
+			Array.from({ length: TRANSCRIPT_WINDOW_SIZE }, (_, index) =>
+				message({ id: `m-${index + 1}`, seq: index + 1 }),
+			),
+		),
+	)
+
+	const sayEach = (state: TranscriptState, drafts: TranscriptDraft[]) =>
+		drafts.reduce((held, draft) => append(held, draft), state)
+
+	it("drops the oldest messages down to the window when one lands at the live edge", () => {
+		const held = append(full, landing())
+
+		expect(selectMessages(held, CONVERSATION)).toHaveLength(
+			TRANSCRIPT_WINDOW_SIZE,
+		)
+		expect(idsOf(held)).toContain("live")
+		expect(idsOf(held)).not.toContain("m-1")
+		expect(selectHasMore(held, CONVERSATION)).toBe(true)
+	})
+
+	it("drops nothing while the reader sits away from the live edge", () => {
+		const held = append(full, landing(), false)
+
+		expect(selectMessages(held, CONVERSATION)).toHaveLength(
+			TRANSCRIPT_WINDOW_SIZE + 1,
+		)
+		expect(idsOf(held)).toContain("m-1")
+		expect(selectHasMore(held, CONVERSATION)).toBe(false)
+	})
+
+	it("keeps the message still being streamed", () => {
+		const held = sayEach(
+			append(full, landing()),
+			Array.from({ length: TRANSCRIPT_WINDOW_SIZE }, (_, index) =>
+				landing({ id: `later-${index}`, turnId: `t-${index}` }),
+			),
+		)
+
+		expect(idsOf(held)).toContain("live")
+	})
+
+	it("keeps the messages of the turn that is running", () => {
+		const held = sayEach(
+			full,
+			Array.from({ length: TRANSCRIPT_WINDOW_SIZE }, (_, index) =>
+				landing({ id: `live-${index}`, completion: "complete" }),
+			),
+		)
+
+		expect(idsOf(held)).toContain("live-0")
+		expect(idsOf(held)).not.toContain("m-1")
 	})
 })

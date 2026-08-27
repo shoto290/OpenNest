@@ -30,6 +30,8 @@ export type TranscriptCursor = {
 
 export const TRANSCRIPT_PAGE_SIZE = 20
 
+export const TRANSCRIPT_WINDOW_SIZE = 60
+
 export type TranscriptPage = {
 	conversationId: string
 	messages: TranscriptMessage[]

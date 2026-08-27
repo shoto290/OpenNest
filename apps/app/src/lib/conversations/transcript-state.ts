@@ -1,9 +1,10 @@
-import type {
-	TerminalCompletion,
-	TranscriptCompletion,
-	TranscriptDraft,
-	TranscriptMessage,
-	TranscriptPage,
+import {
+	type TerminalCompletion,
+	TRANSCRIPT_WINDOW_SIZE,
+	type TranscriptCompletion,
+	type TranscriptDraft,
+	type TranscriptMessage,
+	type TranscriptPage,
 } from "./transcript-contract"
 
 export type TranscriptDelta = {
@@ -29,7 +30,11 @@ export type TranscriptState = {
 
 export type TranscriptAction =
 	| { type: "pageLoaded"; page: TranscriptPage }
-	| { type: "messageAppended"; draft: TranscriptDraft }
+	| {
+			type: "messageAppended"
+			draft: TranscriptDraft
+			isAtLiveEdge: boolean
+	  }
 	| { type: "messageStreamed"; delta: TranscriptDelta }
 	| { type: "messageSettled"; settlement: TranscriptSettlement }
 
@@ -214,9 +219,26 @@ const applyPageLoaded = (
 	})
 }
 
+const droppedCount = (
+	messages: TranscriptMessage[],
+	runningTurnId: string,
+): number => {
+	const overflow = messages.length - TRANSCRIPT_WINDOW_SIZE
+	if (overflow <= 0) {
+		return 0
+	}
+	const held = messages.findIndex(
+		(message) =>
+			message.turnId === runningTurnId ||
+			!isTerminalCompletion(message.completion),
+	)
+	return Math.min(overflow, held)
+}
+
 const applyMessageAppended = (
 	state: TranscriptState,
 	draft: TranscriptDraft,
+	isAtLiveEdge: boolean,
 ): TranscriptState => {
 	const current =
 		state.conversations[draft.conversationId] ?? EMPTY_CONVERSATION
@@ -224,9 +246,11 @@ const applyMessageAppended = (
 		return state
 	}
 	const seq = (current.messages.at(-1)?.seq ?? 0) + 1
+	const grown = [...current.messages, { ...draft, seq }]
+	const dropped = isAtLiveEdge ? droppedCount(grown, draft.turnId) : 0
 	return withConversation(state, draft.conversationId, {
-		...current,
-		messages: [...current.messages, { ...draft, seq }],
+		messages: grown.slice(dropped),
+		hasMore: current.hasMore || dropped > 0,
 	})
 }
 
@@ -293,7 +317,7 @@ export const transcriptReducer = (
 		case "pageLoaded":
 			return applyPageLoaded(state, action.page)
 		case "messageAppended":
-			return applyMessageAppended(state, action.draft)
+			return applyMessageAppended(state, action.draft, action.isAtLiveEdge)
 		case "messageStreamed":
 			return applyMessageStreamed(state, action.delta)
 		case "messageSettled":

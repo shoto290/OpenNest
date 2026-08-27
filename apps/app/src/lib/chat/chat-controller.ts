@@ -64,6 +64,7 @@ export type ChatController = {
 	restart: () => Promise<SessionHandle | null>
 	rotate: () => Promise<SessionHandle | null>
 	loadOlder: () => Promise<void>
+	follow: (isAtLiveEdge: boolean) => void
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
 	sendTo: (
 		botId: string,
@@ -743,6 +744,13 @@ export function createChatController(
 		}
 	}
 
+	const follow = (bot: BotChat, isAtLiveEdge: boolean) => {
+		const conversationId = bot.state.conversationId
+		if (conversationId) {
+			transcript.follow(conversationId, isAtLiveEdge)
+		}
+	}
+
 	const loadOlder = async (bot: BotChat) => {
 		const conversationId = bot.state.conversationId
 		if (!conversationId || !bot.state.hasOlder || bot.state.loadingOlder) {
@@ -1181,6 +1189,7 @@ export function createChatController(
 			),
 		rotate: () => onSelected((bot) => rotateFor(bot, ASKED_FOR), null),
 		loadOlder: () => onSelected(loadOlder, undefined),
+		follow: (isAtLiveEdge) => forSelected((bot) => follow(bot, isAtLiveEdge)),
 		send: (text, repliedToMessageId) =>
 			onSelected((bot) => send(bot, text, repliedToMessageId), undefined),
 		sendTo: async (botId, text, repliedToMessageId) => {

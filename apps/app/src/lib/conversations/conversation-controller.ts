@@ -52,6 +52,7 @@ export type ConversationController = {
 	attach: () => () => void
 	open: (conversation: Conversation) => Promise<void>
 	loadOlder: () => Promise<void>
+	follow: (isAtLiveEdge: boolean) => void
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
 	sendAgain: (messageId: string) => Promise<void>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
@@ -591,6 +592,12 @@ export const createConversationController = (
 		sync()
 	}
 
+	const follow = (isAtLiveEdge: boolean) => {
+		if (conversation) {
+			transcript.follow(conversation.id, isAtLiveEdge)
+		}
+	}
+
 	const loadOlder = async () => {
 		if (!conversation || !state.hasOlder || state.isLoadingOlder) {
 			return
@@ -648,6 +655,7 @@ export const createConversationController = (
 		attach,
 		open,
 		loadOlder,
+		follow,
 		send,
 		sendAgain,
 		pin,
