@@ -40,18 +40,30 @@ type Harness = {
 	conversation: Conversation
 	detach: () => void
 	settled: () => Promise<void>
+	refuseNextWrite: () => void
 }
 
 const createHarness = async (names: string[]): Promise<Harness> => {
 	const driver = createScriptedDriver()
 	const contexts: [string, string][] = []
 	const base = createFakeTranscriptStore()
+	let isRefusingNextWrite = false
 	const store: TranscriptStore = {
 		...base,
+		appendUserMessage: (message) => {
+			if (!isRefusingNextWrite) {
+				return base.appendUserMessage(message)
+			}
+			isRefusingNextWrite = false
+			return Promise.reject(new Error("refused"))
+		},
 		boundedContext: (conversationId, botId, promptMessageId) => {
 			contexts.push([botId, promptMessageId])
 			return base.boundedContext(conversationId, botId, promptMessageId)
 		},
+	}
+	const refuseNextWrite = () => {
+		isRefusingNextWrite = true
 	}
 	const bots = await seatBots(store, SPACE, names)
 	const conversation = await store.createConversation({
@@ -76,7 +88,16 @@ const createHarness = async (names: string[]): Promise<Harness> => {
 		}
 	}
 	await settled()
-	return { driver, contexts, store, controller, conversation, detach, settled }
+	return {
+		driver,
+		contexts,
+		store,
+		controller,
+		conversation,
+		detach,
+		settled,
+		refuseNextWrite,
+	}
 }
 
 const idOf = (conversation: Conversation, name: string) => {
@@ -378,6 +399,89 @@ describe("createConversationController", () => {
 		await expect(controller.pin("msg-1", 0)).resolves.toBeUndefined()
 
 		expect(await controller.pins()).toEqual([])
+	})
+
+	it("keeps the message the store refused, with the message it answers", async () => {
+		const said = await saidIn(harness)
+		harness.refuseNextWrite()
+
+		await harness.controller.send("and this?", said.id)
+		await harness.settled()
+
+		expect(harness.controller.getState().refusedMessage).toMatchObject({
+			text: "and this?",
+			repliedToMessageId: said.id,
+		})
+	})
+
+	it("stores the message sent again and lets the seated bots answer it", async () => {
+		harness.refuseNextWrite()
+		await harness.controller.send("@Nyx take the walls")
+		await harness.settled()
+		const held = harness.controller.getState().refusedMessage
+
+		await harness.controller.sendAgain(held?.id ?? "")
+		await harness.settled()
+
+		const nyx = idOf(harness.conversation, "Nyx")
+		expect(spokenIn(harness.controller)).toContainEqual([
+			null,
+			`<@${nyx}> take the walls`,
+		])
+		expect(harness.driver.submissions[0].scope.botId).toBe(nyx)
+	})
+
+	it("keeps no refused message once a message the reader sends is stored", async () => {
+		harness.refuseNextWrite()
+		await harness.controller.send("and now?")
+		await harness.settled()
+
+		await harness.controller.send("and this?")
+		await harness.settled()
+
+		expect(harness.controller.getState().refusedMessage).toBeNull()
+	})
+
+	it("keeps only the last message the store refused", async () => {
+		harness.refuseNextWrite()
+		await harness.controller.send("and now?")
+		harness.refuseNextWrite()
+
+		await harness.controller.send("and this?")
+		await harness.settled()
+
+		expect(harness.controller.getState().refusedMessage).toMatchObject({
+			text: "and this?",
+		})
+	})
+
+	it("keeps no refused message when the reader opens another conversation", async () => {
+		harness.refuseNextWrite()
+		await harness.controller.send("and now?")
+		await harness.settled()
+		const elsewhere = await harness.store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Roofs",
+			botIds: harness.conversation.participants.map(({ botId }) => botId),
+		})
+
+		await harness.controller.open(elsewhere)
+		await harness.settled()
+
+		expect(harness.controller.getState().refusedMessage).toBeNull()
+	})
+
+	it("stores nothing when the message to send again is not the one refused", async () => {
+		harness.refuseNextWrite()
+		await harness.controller.send("and now?")
+		await harness.settled()
+
+		await harness.controller.sendAgain("id-unknown")
+		await harness.settled()
+
+		expect(spokenIn(harness.controller)).toEqual([])
+		expect(harness.driver.submissions).toHaveLength(0)
 	})
 
 	it("leaves the conversation as it stands when the store refuses a pin", async () => {

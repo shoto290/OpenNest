@@ -29,6 +29,12 @@ import {
 	isWorthKeeping,
 } from "../chat/reply-endings"
 
+export type RefusedMessage = {
+	id: string
+	text: string
+	repliedToMessageId: string | null
+}
+
 export type ConversationState = {
 	conversationId: string | null
 	messages: TranscriptMessage[]
@@ -37,6 +43,7 @@ export type ConversationState = {
 	speakingBotId: string | null
 	waitingBotIds: string[]
 	loopingPair: [string, string] | null
+	refusedMessage: RefusedMessage | null
 }
 
 export type ConversationController = {
@@ -46,6 +53,7 @@ export type ConversationController = {
 	open: (conversation: Conversation) => Promise<void>
 	loadOlder: () => Promise<void>
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
+	sendAgain: (messageId: string) => Promise<void>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
@@ -98,7 +106,8 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.isLoadingOlder === right.isLoadingOlder &&
 	left.speakingBotId === right.speakingBotId &&
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
-	isSamePair(left.loopingPair, right.loopingPair)
+	isSamePair(left.loopingPair, right.loopingPair) &&
+	left.refusedMessage === right.refusedMessage
 
 const initialState: ConversationState = {
 	conversationId: null,
@@ -108,6 +117,7 @@ const initialState: ConversationState = {
 	speakingBotId: null,
 	waitingBotIds: [],
 	loopingPair: null,
+	refusedMessage: null,
 }
 
 export const createConversationController = (
@@ -126,6 +136,7 @@ export const createConversationController = (
 	let queue: TurnQueue = emptyQueue
 	let activeTurn: OpenTurn | null = null
 	let speaker: Speaker | null = null
+	let refused: RefusedMessage | null = null
 	let detach: Promise<() => void> | null = null
 	let driving: Promise<void> | null = null
 
@@ -163,6 +174,7 @@ export const createConversationController = (
 			speakingBotId: queue.speaking?.botId ?? null,
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
 			loopingPair: loopingPairIn(queue.handovers),
+			refusedMessage: refused,
 		})
 	}
 
@@ -508,9 +520,16 @@ export const createConversationController = (
 		try {
 			await enqueue(() => storePrompt(turn, said))
 		} catch {
+			refused = {
+				id: said.id,
+				text: trimmed,
+				repliedToMessageId: said.repliedToMessageId,
+			}
+			sync()
 			return
 		}
 
+		refused = null
 		transcript.append(said)
 		if (speaker) {
 			speaker.isDropped = true
@@ -521,6 +540,13 @@ export const createConversationController = (
 		activeTurn = turn
 		sync()
 		drive()
+	}
+
+	const sendAgain = (messageId: string) => {
+		const held = refused
+		return held?.id === messageId
+			? send(held.text, held.repliedToMessageId ?? undefined)
+			: Promise.resolve()
 	}
 
 	const stop = async () => {
@@ -540,12 +566,14 @@ export const createConversationController = (
 	const open = async (next: Conversation) => {
 		const isSameConversation = conversation?.id === next.id
 		conversation = next
-		sync()
 		if (isSameConversation) {
+			sync()
 			return
 		}
 		queue = emptyQueue
 		activeTurn = null
+		refused = null
+		sync()
 		await enqueue(() => transcript.load(next.id)).catch(() => undefined)
 		sync()
 	}
@@ -608,6 +636,7 @@ export const createConversationController = (
 		open,
 		loadOlder,
 		send,
+		sendAgain,
 		pin,
 		unpin,
 		pins,
