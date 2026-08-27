@@ -79,6 +79,13 @@ describe("buildOptions", () => {
 		expect(OPENNEST_LAYER).toContain("your History")
 	})
 
+	it("has the bot look for a path before it declines, without agreeing to please", () => {
+		expect(OPENNEST_LAYER).toContain("closest workable path")
+		expect(OPENNEST_LAYER).toContain("what you can do instead")
+		expect(OPENNEST_LAYER).toContain("never agree just to please")
+		expect(OPENNEST_LAYER).toContain("never claim a capability you do not have")
+	})
+
 	it("passes the output style the host names, and no settings without one", () => {
 		expect(
 			buildOptions({ ...request, outputStyle: "Concise" }, undefined).settings,
