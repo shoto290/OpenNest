@@ -43,6 +43,10 @@ import {
 	toRosterConversations,
 	unseatedBots,
 } from "@/lib/conversations/roster-conversations"
+import {
+	useConversationPreviews,
+	useConversationWorkers,
+} from "@/lib/conversations/use-conversation"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
@@ -348,11 +352,33 @@ export function App() {
 
 	const conversationRosters = roster.state.conversationRosters
 
-	const conversationPreviews = roster.state.conversationPreviews
+	const conversationIds = useMemo(
+		() =>
+			Object.values(conversationRosters)
+				.flat()
+				.map((conversation) => conversation.id),
+		[conversationRosters],
+	)
+
+	const conversationWorkers = useConversationWorkers(
+		conversationRuntimes,
+		conversationIds,
+	)
+
+	const conversationPreviews = useConversationPreviews(
+		conversationRuntimes,
+		conversationIds,
+		roster.state.conversationPreviews,
+	)
 
 	const rosterConversations = useMemo(
-		() => toRosterConversations(conversations, conversationPreviews, now),
-		[conversations, conversationPreviews, now],
+		() =>
+			toRosterConversations(
+				conversations,
+				{ working: conversationWorkers, previews: conversationPreviews },
+				now,
+			),
+		[conversations, conversationWorkers, conversationPreviews, now],
 	)
 
 	const seatedBots = useMemo(
@@ -374,10 +400,14 @@ export function App() {
 			Object.fromEntries(
 				Object.entries(conversationRosters).map(([spaceId, spaceRooms]) => [
 					spaceId,
-					toRosterConversations(spaceRooms, conversationPreviews, now),
+					toRosterConversations(
+						spaceRooms,
+						{ working: conversationWorkers, previews: conversationPreviews },
+						now,
+					),
 				]),
 			),
-		[conversationRosters, conversationPreviews, now],
+		[conversationRosters, conversationWorkers, conversationPreviews, now],
 	)
 
 	const isOverlayOpen =

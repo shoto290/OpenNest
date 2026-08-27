@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import type { ConversationRosterActivity } from "./roster-conversations"
 import {
 	conversationName,
 	toConversationSettingsValue,
@@ -37,6 +38,10 @@ const NOW = Date.UTC(2025, 0, 2, 12, 0, 0)
 
 const A_MINUTE_AGO = NOW - 60 * 1000
 
+const atRest = (
+	previews: ConversationRosterActivity["previews"] = {},
+): ConversationRosterActivity => ({ working: {}, previews })
+
 describe("toRosterConversations", () => {
 	it("draws a row carrying the title, the section and the participants in join order", () => {
 		const rows = toRosterConversations(
@@ -49,7 +54,7 @@ describe("toRosterConversations", () => {
 					],
 				}),
 			],
-			{},
+			atRest(),
 			NOW,
 		)
 
@@ -65,6 +70,7 @@ describe("toRosterConversations", () => {
 						animal: "cat",
 						blot: "cyan",
 						image: undefined,
+						status: "idle",
 					},
 					{
 						id: "b-2",
@@ -72,11 +78,13 @@ describe("toRosterConversations", () => {
 						animal: "cat",
 						blot: "cyan",
 						image: undefined,
+						status: "idle",
 					},
 				],
 				lastMessage: undefined,
 				lastSpeaker: undefined,
 				timestamp: undefined,
+				status: "idle",
 			},
 		])
 	})
@@ -91,7 +99,7 @@ describe("toRosterConversations", () => {
 					],
 				}),
 			],
-			{},
+			atRest(),
 			NOW,
 		)
 
@@ -101,7 +109,7 @@ describe("toRosterConversations", () => {
 	it("previews the last word of the room and how long ago it was said", () => {
 		const [row] = toRosterConversations(
 			[conversation()],
-			{ "c-1": { text: "Menu is set.", at: A_MINUTE_AGO } },
+			atRest({ "c-1": { text: "Menu is set.", at: A_MINUTE_AGO } }),
 			NOW,
 		)
 
@@ -115,7 +123,9 @@ describe("toRosterConversations", () => {
 	): string | undefined =>
 		toRosterConversations(
 			[conversation({ participants })],
-			{ "c-1": { text: "Menu is set.", at: A_MINUTE_AGO, authorBotId } },
+			atRest({
+				"c-1": { text: "Menu is set.", at: A_MINUTE_AGO, authorBotId },
+			}),
 			NOW,
 		)[0].lastSpeaker
 
@@ -147,7 +157,9 @@ describe("toRosterConversations", () => {
 					],
 				}),
 			],
-			{ "c-1": { text: "Menu is set.", at: A_MINUTE_AGO, authorBotId: "b-1" } },
+			atRest({
+				"c-1": { text: "Menu is set.", at: A_MINUTE_AGO, authorBotId: "b-1" },
+			}),
 			NOW,
 		)
 
@@ -157,7 +169,7 @@ describe("toRosterConversations", () => {
 	})
 
 	it("leaves the preview and the time of a room nothing was said in blank", () => {
-		const [row] = toRosterConversations([conversation()], {}, NOW)
+		const [row] = toRosterConversations([conversation()], atRest(), NOW)
 
 		expect(row.lastMessage).toBeUndefined()
 		expect(row.timestamp).toBeUndefined()
@@ -170,14 +182,56 @@ describe("toRosterConversations", () => {
 				conversation({ id: "c-2" }),
 				conversation({ id: "c-3" }),
 			],
-			{
+			atRest({
 				"c-1": { text: "Older.", at: A_MINUTE_AGO - 1000 },
 				"c-3": { text: "Newer.", at: A_MINUTE_AGO },
-			},
+			}),
 			NOW,
 		)
 
 		expect(rows.map((row) => row.id)).toEqual(["c-3", "c-1", "c-2"])
+	})
+
+	it("draws the room and the bot answering in it as working", () => {
+		const [row] = toRosterConversations(
+			[
+				conversation({
+					participants: [
+						participant({ botId: "b-1" }),
+						participant({ botId: "b-2", name: "Sous-chef" }),
+					],
+				}),
+			],
+			{ working: { "c-1": ["b-2"] }, previews: {} },
+			NOW,
+		)
+
+		expect(row.status).toBe("working")
+		expect(row.participants.map((seat) => seat.status)).toEqual([
+			"idle",
+			"working",
+		])
+	})
+
+	it("draws the room of a bot waiting its turn as working", () => {
+		const [row] = toRosterConversations(
+			[conversation()],
+			{ working: { "c-1": ["b-1"] }, previews: {} },
+			NOW,
+		)
+
+		expect(row.status).toBe("working")
+	})
+
+	it("draws a room nobody is answering in at rest", () => {
+		const [row] = toRosterConversations(
+			[conversation()],
+			{ working: { "c-1": [] }, previews: {} },
+			NOW,
+		)
+
+		expect(row.status).toBe("idle")
+		expect(row.participants.map((seat) => seat.status)).toEqual(["idle"])
 	})
 
 	it("dates a room nothing was said in by the day it was opened", () => {
@@ -186,7 +240,7 @@ describe("toRosterConversations", () => {
 				conversation({ id: "c-1", createdAt: A_MINUTE_AGO }),
 				conversation({ id: "c-2", createdAt: NOW }),
 			],
-			{},
+			atRest(),
 			NOW,
 		)
 
