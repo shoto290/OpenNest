@@ -8,6 +8,7 @@ import type {
 	BotSkillDraft,
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
+import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
@@ -27,7 +28,6 @@ import {
 } from "@workspace/ui/components/settings-rail"
 import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
-import { SpaceDangerZone } from "@workspace/ui/components/space-settings-dialog/space-danger-zone"
 import { SpaceFields } from "@workspace/ui/components/space-settings-dialog/space-fields"
 import { SpaceTint } from "@workspace/ui/components/space-tint"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
@@ -173,10 +173,16 @@ const SpaceSettingsDialog = ({
 							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value={DANGER_TAB}
 						>
-							<SpaceDangerZone
-								isDeletable={isDeletable}
+							<DangerZone
+								confirmTitle={t("space.danger.confirm.title", {
+									name: spaceName,
+								})}
+								deleteLabel={t("space.danger.delete")}
+								description={t("space.danger.description")}
+								disabledReason={
+									isDeletable ? undefined : t("space.danger.last")
+								}
 								onDelete={onDelete}
-								spaceName={spaceName}
 							/>
 						</Tabs.Panel>
 					</Tabs.Root>

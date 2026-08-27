@@ -4,8 +4,8 @@ import { Tabs } from "@base-ui/react/tabs"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
 import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
-import { ConversationDangerZone } from "@workspace/ui/components/conversation-settings-dialog/conversation-danger-zone"
 import { ParticipantsPanel } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
@@ -170,8 +170,12 @@ const ConversationSettingsDialog = ({
 						className={SETTINGS_SCROLLING_PANEL_CLASS}
 						value={DANGER_TAB}
 					>
-						<ConversationDangerZone
-							conversationName={conversationName}
+						<DangerZone
+							confirmTitle={t("conversationSettings.danger.confirm.title", {
+								name: conversationName,
+							})}
+							deleteLabel={t("conversationSettings.danger.delete")}
+							description={t("conversationSettings.danger.description")}
 							onDelete={onDelete}
 						/>
 					</Tabs.Panel>

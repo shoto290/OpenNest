@@ -37,7 +37,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a space is called and the tint it is recognised by, the two fields that make up the space's own entry in its settings. The tint row offers the eight tints a bot's blot takes, as swatches rather than names, with the chosen one carrying a tick so the choice survives a reader who cannot tell the pastels apart. Both fields are fully controlled and report the whole value on every keystroke and every pick — there is no draft here and nothing to save. Deleting the space is not here: it lives in its own danger zone, `SpaceDangerZone`.",
+					"What a space is called and the tint it is recognised by, the two fields that make up the space's own entry in its settings. The tint row offers the eight tints a bot's blot takes, as swatches rather than names, with the chosen one carrying a tick so the choice survives a reader who cannot tell the pastels apart. Both fields are fully controlled and report the whole value on every keystroke and every pick — there is no draft here and nothing to save. Deleting the space is not here: it lives in its own danger zone, `DangerZone`.",
 			},
 		},
 	},
