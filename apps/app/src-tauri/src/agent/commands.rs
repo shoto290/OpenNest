@@ -7,15 +7,15 @@ use tokio::sync::Mutex;
 
 use super::contract::{
 	AgentEvent, CheckReport, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
-	SessionHandle, SessionSnapshot, TransportError,
+	SessionHandle, TransportError,
 };
 use super::redact;
 use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
-use super::store;
 use crate::bundles;
 use crate::db;
 use crate::db::repositories::conversations::Bot as StoredBot;
+use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::private_files;
 
 pub const EVENT_CHANNEL: &str = "agent://event";
@@ -30,6 +30,10 @@ type Participant = (String, String);
 
 fn participant(scope: &RuntimeScope) -> Participant {
 	(scope.conversation_id.clone(), scope.bot_id.clone())
+}
+
+fn participant_key(scope: &RuntimeScope) -> ParticipantKey {
+	ParticipantKey { conversation_id: scope.conversation_id.clone(), bot_id: scope.bot_id.clone() }
 }
 
 struct Live<S = Arc<Session>> {
@@ -406,6 +410,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
 	let options = SessionOptions::new(working_dir).bundled(identity.bundle);
 
+	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
 		Ok(started) => started,
 		Err(error) => {
@@ -421,7 +426,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	if let Some(refusal) = &started.resume_refusal {
 		let forgot_session_id =
-			forget_the_id_a_refusal_blames(store::file(&app).as_deref(), refusal);
+			forget_the_id_a_refusal_blames(&database, &scope, refused_id, refusal).await;
 		sink.emit(AgentEvent::Failed { error: TransportError::ResumeFailed { forgot_session_id } });
 	}
 
@@ -435,13 +440,22 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	Ok(handle)
 }
 
-fn forget_the_id_a_refusal_blames(path: Option<&Path>, refusal: &TransportError) -> bool {
+async fn forget_the_id_a_refusal_blames(
+	state: &db::DatabaseState,
+	scope: &RuntimeScope,
+	refused_id: Option<String>,
+	refusal: &TransportError,
+) -> bool {
 	if !matches!(refusal, TransportError::Crashed { .. }) {
 		return false;
 	}
-	if let Some(path) = path {
-		store::forget_session_id(path);
-	}
+	let (Ok(database), Some(refused_id)) = (state.as_ref(), refused_id) else {
+		return true;
+	};
+	let _ = database
+		.runtime_context()
+		.forget_provider_session(participant_key(scope), refused_id)
+		.await;
 	true
 }
 
@@ -553,25 +567,9 @@ pub async fn agent_shutdown<R: Runtime>(
 	Ok(())
 }
 
-#[tauri::command]
-pub async fn agent_load_session<R: Runtime>(app: AppHandle<R>) -> SessionSnapshot {
-	store::file(&app).map(|path| store::load(&path)).unwrap_or_default()
-}
-
-#[tauri::command]
-pub async fn agent_save_session<R: Runtime>(app: AppHandle<R>, snapshot: SessionSnapshot) {
-	if let Some(path) = store::file(&app) {
-		store::save(&path, &snapshot);
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	fn stored_id(path: &Path) -> Option<String> {
-		store::load(path).session_id
-	}
 
 	fn a_fresh_app_data(name: &str) -> PathBuf {
 		let app_data = std::env::temp_dir().join(format!("opennest-app-data-{name}"));
@@ -892,28 +890,77 @@ mod tests {
 		}
 	}
 
-	#[test]
-	fn a_timed_out_resume_keeps_the_stored_id_and_a_crashed_one_spends_it() {
-		let dir = std::env::temp_dir().join(format!("opennest-refusal-{}", uuid::Uuid::new_v4()));
-		let path = dir.join(store::FILE_NAME);
-		let snapshot =
-			SessionSnapshot { session_id: Some("session-1".into()), ..SessionSnapshot::default() };
-		store::save(&path, &snapshot);
+	const A_CONVERSATION: &str = "
+		INSERT INTO bots (id, space_id, name, model, created_at)
+			VALUES ('b1', 'personal', 'First', 'sonnet', 1);
+		INSERT INTO conversations (id, kind, title, created_at, updated_at)
+			VALUES ('c1', 'main', 'First', 1, 1);
+		INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c1', 'b1', 'assistant', 1, 0);
+	";
+
+	async fn a_database_resuming(provider_session_id: &str) -> db::DatabaseState {
+		let database = crate::db::open(&crate::db::connection::temp_dir());
+		database
+			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
+			.await
+			.expect("the conversation is there");
+		let participant = participant_key(&a_scope());
+		let session = database
+			.runtime_context()
+			.open(participant.clone(), 1, None)
+			.await
+			.expect("the runtime session opens");
+		database
+			.runtime_context()
+			.record_provider_session(participant, session.id, provider_session_id.to_owned())
+			.await
+			.expect("the provider session is recorded");
+		Ok(database)
+	}
+
+	async fn stored_id(state: &db::DatabaseState) -> Option<String> {
+		state
+			.as_ref()
+			.expect("the database opens")
+			.runtime_context()
+			.active_session(participant_key(&a_scope()))
+			.await
+			.expect("the live session")
+			.and_then(|session| session.provider_session_id)
+	}
+
+	#[tokio::test]
+	async fn a_timed_out_resume_keeps_the_stored_id_and_a_crashed_one_spends_it() {
+		let state = a_database_resuming("session-1").await;
 
 		let spent = forget_the_id_a_refusal_blames(
-			Some(&path),
+			&state,
+			&a_scope(),
+			Some("session-1".into()),
 			&TransportError::StartupTimeout { timeout_ms: 30_000 },
-		);
+		)
+		.await;
 		assert!(!spent, "a slow resume was reported to the frontend as a spent id");
-		assert_eq!(stored_id(&path).as_deref(), Some("session-1"), "a slow resume cost the id");
+		assert_eq!(
+			stored_id(&state).await.as_deref(),
+			Some("session-1"),
+			"a slow resume cost the id"
+		);
 
 		let spent = forget_the_id_a_refusal_blames(
-			Some(&path),
+			&state,
+			&a_scope(),
+			Some("session-1".into()),
 			&TransportError::Crashed { code: Some(4), detail: None },
-		);
+		)
+		.await;
 		assert!(spent, "the frontend was left holding an id the host gave up on");
-		assert_eq!(stored_id(&path), None, "a refused id outlived the crash that proved it dead");
-
-		std::fs::remove_dir_all(&dir).expect("cleanup");
+		assert_eq!(
+			stored_id(&state).await,
+			None,
+			"a refused id outlived the crash that proved it dead"
+		);
 	}
 }

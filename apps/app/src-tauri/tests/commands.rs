@@ -165,36 +165,6 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 }
 
 #[test]
-fn a_snapshot_saved_through_the_ipc_boundary_comes_back_intact() {
-	let mut context = mock_context(noop_assets());
-	context.config_mut().identifier = "com.opennest.store-test".into();
-	let app = build(context);
-	let window =
-		WebviewWindowBuilder::new(&app, "main", Default::default()).build().expect("window builds");
-
-	let snapshot = json!({
-		"sessionId": "session-1",
-		"messages": [{
-			"id": "m1",
-			"role": "user",
-			"text": "salut",
-			"completion": "complete",
-			"timestamp": 17
-		}],
-		"activities": [{ "id": "a1", "title": "Read", "kind": "tool", "status": "succeeded" }]
-	});
-
-	assert_eq!(
-		call(&window, "agent_save_session", json!({ "snapshot": snapshot })),
-		Ok(Value::Null)
-	);
-	assert_eq!(call(&window, "agent_load_session", json!({})), Ok(snapshot));
-
-	let dir = app.path().app_data_dir().expect("data dir");
-	std::fs::remove_dir_all(&dir).expect("cleanup");
-}
-
-#[test]
 fn bootstrapping_leaves_a_migrated_file_in_the_app_data_directory() {
 	let mut context = mock_context(noop_assets());
 	context.config_mut().identifier = "com.opennest.db-test".into();
