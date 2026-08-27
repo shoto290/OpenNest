@@ -18,6 +18,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const AVATAR_SIZE = 24
 
+const HEADER_IDENTITY_CLASS = "h-9 min-w-0 shrink gap-2 pr-2.5 pl-1.5"
+
 type HeaderIdentityButtonProps = {
 	name: string
 	animal?: BotAvatarAnimal
@@ -53,7 +55,7 @@ const HeaderIdentityButton = ({
 		<Button
 			aria-expanded={isSettingsOpen}
 			aria-label={t("screen.identity", { name })}
-			className={cn("h-9 min-w-0 shrink gap-2 pr-2.5 pl-1.5", className)}
+			className={cn(HEADER_IDENTITY_CLASS, className)}
 			data-slot="header-identity-button"
 			onClick={onOpenSettings}
 			variant="ghost"
@@ -79,4 +81,8 @@ const HeaderIdentityButton = ({
 	)
 }
 
-export { HeaderIdentityButton, type HeaderIdentityButtonProps }
+export {
+	HEADER_IDENTITY_CLASS,
+	HeaderIdentityButton,
+	type HeaderIdentityButtonProps,
+}
