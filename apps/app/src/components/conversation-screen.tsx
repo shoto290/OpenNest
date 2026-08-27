@@ -18,11 +18,19 @@ import {
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MessageAuthor } from "@workspace/ui/components/message"
-import { PINNED_AVATAR_SIZE } from "@workspace/ui/components/pinned-messages"
+import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
+import {
+	PINNED_AVATAR_SIZE,
+	type PinnedMessage,
+	PinnedMessages,
+} from "@workspace/ui/components/pinned-messages"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptMentionMenu } from "@workspace/ui/components/prompt-mention-menu"
+import { UserAvatar } from "@workspace/ui/components/user-avatar"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import { pinTimestamp } from "@/lib/chat/pin-timestamp"
+import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
 import { holdsDismissal } from "@/lib/chat/prompt-commands"
 import {
 	bubbleIdOf,
@@ -30,6 +38,7 @@ import {
 	toRuns,
 	toTranscriptRows,
 } from "@/lib/chat/screen-model"
+import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
 import {
@@ -45,8 +54,41 @@ import { hasOverlayWindowControls } from "@/lib/host"
 type ConversationScreenProps = {
 	conversation: Conversation
 	runtimes: ConversationRuntimes
+	readerName: string
 	isSettingsOpen: boolean
 	onOpenSettings: (conversationId: string) => void
+}
+
+const nextFrame = () =>
+	new Promise<void>((resolve) => {
+		requestAnimationFrame(() => resolve())
+	})
+
+const toPinnedRow = (
+	{ id, bubble }: PinnedBubble,
+	author: MessageAuthor | undefined,
+	reader: string,
+): PinnedMessage => {
+	const isBotAuthor = bubble.role === "assistant" && author !== undefined
+
+	return {
+		id,
+		author: isBotAuthor ? author.name : reader,
+		avatar: isBotAuthor ? (
+			<BotIdentityAvatar
+				animal={author.animal}
+				blot={author.blot}
+				image={author.image}
+				name={author.name}
+				seed={author.id}
+				size={PINNED_AVATAR_SIZE}
+			/>
+		) : (
+			<UserAvatar name={reader} size={PINNED_AVATAR_SIZE} />
+		),
+		timestamp: pinTimestamp(bubble.timestamp),
+		excerpt: bubble.text.trim(),
+	}
 }
 
 type SpeakingBotsProps = {
@@ -103,14 +145,30 @@ const HandoverNotice = ({ pair, onStop }: HandoverNoticeProps) => {
 type ConversationTurnProps = {
 	row: TranscriptRow
 	author?: MessageAuthor
+	pinned: boolean
+	onPin: (messageId: string, blockIndex: number) => void
 }
 
-const ConversationTurn = ({ row, author }: ConversationTurnProps) => {
+const ConversationTurn = ({
+	row,
+	author,
+	pinned,
+	onPin,
+}: ConversationTurnProps) => {
 	const content = <Markdown>{row.text}</Markdown>
 	const anchor = bubbleIdOf(row.messageId, row.blockIndex)
+	const pin = () => {
+		onPin(row.messageId, row.blockIndex)
+	}
 
 	return row.role === "user" ? (
-		<UserTurn copyText={row.text} messageId={anchor} state={row.completion}>
+		<UserTurn
+			copyText={row.text}
+			messageId={anchor}
+			onPin={pin}
+			pinned={pinned}
+			state={row.completion}
+		>
 			{content}
 		</UserTurn>
 	) : (
@@ -118,6 +176,8 @@ const ConversationTurn = ({ row, author }: ConversationTurnProps) => {
 			author={author}
 			copyText={row.text}
 			messageId={anchor}
+			onPin={pin}
+			pinned={pinned}
 			state={row.completion}
 		>
 			{content}
@@ -189,11 +249,13 @@ const ConversationComposer = ({
 export function ConversationScreen({
 	conversation,
 	runtimes,
+	readerName,
 	isSettingsOpen,
 	onOpenSettings,
 }: ConversationScreenProps) {
 	const t = useChatCopy()
 	const { state, controller } = useConversation(runtimes, conversation)
+	const scrollerRef = useRef<MessageScrollerHandle>(null)
 	const bots = useMemo(
 		() => toConversationBots(conversation.participants),
 		[conversation],
@@ -209,6 +271,45 @@ export function ConversationScreen({
 		[bots],
 	)
 	const looping = state.loopingPair?.map(botOf) ?? []
+	const reader = readerName || t("working.name")
+	const pins = usePinnedMessages(controller, state.conversationId)
+	const pinnedRows = useMemo(
+		() =>
+			pins.bubbles.map((shown) =>
+				toPinnedRow(
+					shown,
+					shown.bubble.authorBotId
+						? authors.get(shown.bubble.authorBotId)
+						: undefined,
+					reader,
+				),
+			),
+		[pins.bubbles, authors, reader],
+	)
+
+	const reachMessage = useCallback(
+		async (messageId: string) => {
+			while (scrollerRef.current?.scrollToMessage(messageId) === false) {
+				const shown = controller.getState()
+				if (!shown.hasOlder) {
+					return
+				}
+				await controller.loadOlder()
+				await nextFrame()
+				if (controller.getState().messages.length === shown.messages.length) {
+					return
+				}
+			}
+		},
+		[controller],
+	)
+
+	const jumpToPin = useCallback(
+		(bubbleId: string) => {
+			void reachMessage(pins.anchorOf(bubbleId))
+		},
+		[reachMessage, pins.anchorOf],
+	)
 
 	const send = useCallback(
 		(text: string) => {
@@ -256,6 +357,13 @@ export function ConversationScreen({
 								{conversation.title}
 							</Button>
 						}
+						trailing={
+							<PinnedMessages
+								messages={pinnedRows}
+								onJump={jumpToPin}
+								onUnpin={pins.unpin}
+							/>
+						}
 					/>
 				}
 				label={t("screen.label")}
@@ -269,6 +377,7 @@ export function ConversationScreen({
 						? { has: state.hasOlder, onLoad: controller.loadOlder }
 						: undefined
 				}
+				scrollerRef={scrollerRef}
 				transcriptKey={conversation.id}
 			>
 				{state.messages.length === 0 ? (
@@ -283,6 +392,10 @@ export function ConversationScreen({
 									row.authorBotId ? authors.get(row.authorBotId) : undefined
 								}
 								key={bubbleIdOf(row.messageId, row.blockIndex)}
+								onPin={pins.toggle}
+								pinned={pins.isPinned(
+									bubbleIdOf(row.messageId, row.blockIndex),
+								)}
 								row={row}
 							/>
 						))}
