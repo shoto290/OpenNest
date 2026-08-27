@@ -13,6 +13,13 @@ const chat = {
 		hint: "Type your first prompt in the composer below",
 		setup: "Try again",
 	},
+	conversationEmptyState: {
+		description_one:
+			"{{count}} bot is seated here and waiting on your first message.",
+		description_other:
+			"{{count}} bots are seated here and waiting on your first message.",
+		hint: "Type your first message in the composer below",
+	},
 	connection: {
 		checking: "Checking Claude Code…",
 		ready: "Claude Code ready",

@@ -13,6 +13,15 @@ const chat = {
 		hint: "Saisissez votre première invite dans le champ ci-dessous",
 		setup: "Réessayer",
 	},
+	conversationEmptyState: {
+		description_one:
+			"{{count}} bot est présent ici et attend votre premier message.",
+		description_many:
+			"{{count}} bots sont présents ici et attendent votre premier message.",
+		description_other:
+			"{{count}} bots sont présents ici et attendent votre premier message.",
+		hint: "Saisissez votre premier message dans le champ ci-dessous",
+	},
 	connection: {
 		checking: "Vérification de Claude Code…",
 		ready: "Claude Code est prêt",
