@@ -16,7 +16,7 @@ import {
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
-import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/badge"
+import type { BotBadge } from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
 	type BotAvatarBlot,
@@ -29,6 +29,11 @@ import {
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BOT_IDENTITY_ANIMALS } from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
+import {
+	CONVERSATION_AVATAR_LIMIT,
+	ConversationAvatar,
+	type ConversationParticipant,
+} from "@workspace/ui/components/conversation-avatar"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	AnimatedSidebar,
@@ -85,10 +90,6 @@ const WINDOW_CONTROLS_INSET =
 const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
 
 const ROW_AVATAR_SIZE = 40
-
-const STACK_LIMIT = 3
-const STACK_GAP = 2
-const STACK = "relative grid shrink-0 grid-cols-2 place-content-center gap-0.5"
 
 const TIMESTAMP_SLOT =
 	"ml-auto h-5 w-11 shrink-0 truncate text-right text-[11px] text-muted-foreground leading-5 tabular-nums"
@@ -528,50 +529,14 @@ const BotRosterRow = ({
 	)
 }
 
-interface ParticipantStackProps {
-	conversation: AgentSidebarConversation
-	size: number
-	badge?: BotBadge
-}
-
-const ParticipantStack = ({
-	conversation,
-	size,
-	badge,
-}: ParticipantStackProps) => {
-	const shown = conversation.participants.slice(0, STACK_LIMIT)
-	const tile = shown.length > 1 ? (size - STACK_GAP) / 2 : size
-
-	return (
-		<span
-			aria-hidden="true"
-			className={STACK}
-			data-slot="roster-row-participants"
-			style={{ width: size, height: size }}
-		>
-			{shown.map((participant) => (
-				<BotIdentityAvatar
-					animal={participant.animal}
-					blot={participant.blot}
-					image={participant.image}
-					key={participant.id}
-					kind={poseOf(participant)}
-					name={participant.name}
-					seed={participant.id}
-					size={tile}
-					working={isBusy(participant)}
-				/>
-			))}
-			{badge ? (
-				<BotBadgeDot
-					badge={badge}
-					data-slot="bot-activity-dot"
-					placement="avatar"
-				/>
-			) : null}
-		</span>
-	)
-}
+const heldBotsOf = (
+	conversation: AgentSidebarConversation,
+): ConversationParticipant[] =>
+	conversation.participants.map((participant) => ({
+		...participant,
+		kind: poseOf(participant),
+		working: isBusy(participant),
+	}))
 
 interface ConversationRosterActions {
 	onSelectConversation?: (id: string) => void
@@ -602,7 +567,7 @@ const ConversationRosterRow = ({
 	onMoveToSection,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
-	const hidden = conversation.participants.length - STACK_LIMIT
+	const hidden = conversation.participants.length - CONVERSATION_AVATAR_LIMIT
 
 	return (
 		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
@@ -612,9 +577,9 @@ const ConversationRosterRow = ({
 						{...lift.handlersFor(conversation.id)}
 						className={ROW}
 						icon={
-							<ParticipantStack
+							<ConversationAvatar
 								badge={badgeOf(conversation)}
-								conversation={conversation}
+								participants={heldBotsOf(conversation)}
 								size={ROW_AVATAR_SIZE}
 							/>
 						}
@@ -767,7 +732,10 @@ const LiftedRow = ({ bot, conversation, ref }: LiftedRowProps) => (
 		ref={ref}
 	>
 		{conversation ? (
-			<ParticipantStack conversation={conversation} size={ROW_AVATAR_SIZE} />
+			<ConversationAvatar
+				participants={heldBotsOf(conversation)}
+				size={ROW_AVATAR_SIZE}
+			/>
 		) : null}
 		{bot ? <BotRowAvatar bot={bot} /> : null}
 	</span>

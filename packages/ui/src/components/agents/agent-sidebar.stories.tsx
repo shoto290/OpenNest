@@ -3176,7 +3176,7 @@ const conversationArgs = () => ({
 
 const stackIn = (row: HTMLElement) =>
 	Array.from(
-		slotIn(row, "roster-row-participants").querySelectorAll(
+		slotIn(row, "conversation-avatar").querySelectorAll(
 			'[data-slot="bot-identity-avatar"]',
 		),
 	)
@@ -3237,15 +3237,12 @@ export const ConversationParticipants = meta.story({
 		).toBeNull()
 		await expect(slotIn(crowd, "roster-row-badge")).toHaveTextContent("+2")
 
-		await expect(slotIn(crowd, "roster-row-participants")).toHaveAttribute(
+		await expect(slotIn(crowd, "conversation-avatar")).toHaveAttribute(
 			"aria-hidden",
 			"true",
 		)
 
-		const square = slotIn(
-			crowd,
-			"roster-row-participants",
-		).getBoundingClientRect()
+		const square = slotIn(crowd, "conversation-avatar").getBoundingClientRect()
 		await expect(Math.round(square.width)).toBe(Math.round(square.height))
 		await expect(Math.round(square.width)).toBe(
 			Math.round(
@@ -3266,6 +3263,52 @@ export const ConversationParticipants = meta.story({
 		}
 		await expect(tiles[0].right).toBeLessThanOrEqual(tiles[1].left)
 		await expect(tiles[0].bottom).toBeLessThanOrEqual(tiles[2].top)
+	},
+})
+
+export const ConversationOfOneBot = meta.story({
+	args: {
+		...conversationArgs(),
+		conversations: [
+			{
+				id: "solo",
+				name: "Atlas one to one",
+				participants: participantsOf("atlas"),
+				lastMessage: "Pulled the papers, reading them now.",
+				lastSpeaker: "Atlas",
+				timestamp: "09:40",
+			},
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room holding one bot, sitting right above that same bot's own row. Nothing on the two lines of text says which is which — same name column, same preview, same time — so the kind is carried by the shape of the icon alone: a bot floats free at the full 40px of the slot, a room is drawn inside a frame with its bots held smaller within it. The footprint is identical, so the column never moves; only what fills it changes. A room of one is still a room, which is why it gets the frame rather than being flattened into the bot it holds.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const room = rowFor(canvasElement, "Atlas one to one")
+		const bot = rowFor(canvasElement, "Atlas")
+
+		const frame = slotIn(room, "conversation-avatar")
+		const loose = slotIn(bot, "bot-identity-avatar")
+		await expect(
+			bot.querySelector('[data-slot="conversation-avatar"]'),
+		).toBeNull()
+
+		await expect(Math.round(frame.getBoundingClientRect().width)).toBe(
+			Math.round(loose.getBoundingClientRect().width),
+		)
+		await expect(
+			Number.parseFloat(getComputedStyle(frame).borderTopWidth),
+		).toBeGreaterThan(0)
+
+		const [held] = stackIn(room)
+		await expect(held.getBoundingClientRect().width).toBeLessThan(
+			loose.getBoundingClientRect().width,
+		)
 	},
 })
 
