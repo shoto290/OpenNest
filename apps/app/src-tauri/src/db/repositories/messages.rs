@@ -310,7 +310,8 @@ const INSERT_MESSAGE: &str = "INSERT INTO messages
 const APPEND_TEXT: &str =
 	"UPDATE messages SET content = content || ?2, completion_state = 'streaming'
 	WHERE id = ?1 AND completion_state IN ('pending', 'streaming')";
-const FINALIZE_MESSAGE: &str = "UPDATE messages SET completion_state = ?2
+const FINALIZE_MESSAGE: &str =
+	"UPDATE messages SET completion_state = ?2, content = COALESCE(?3, content)
 	WHERE id = ?1 AND completion_state IN ('pending', 'streaming')";
 const MESSAGE_PAGE: &str = "SELECT id, turn_id, author_bot_id, replied_to_message_id, seq, role,
 		content, completion_state, created_at, runtime_session_id
@@ -431,8 +432,12 @@ impl MessagesRepository {
 		&self,
 		id: String,
 		state: TerminalState,
+		settled_text: Option<String>,
 	) -> Result<(), TranscriptError> {
-		self.call_mut(move |connection| Ok(close_message(connection, &id, state))).await?
+		self.call_mut(move |connection| {
+			Ok(close_message(connection, &id, state, settled_text.as_deref()))
+		})
+		.await?
 	}
 
 	pub async fn page_messages(
@@ -827,6 +832,7 @@ fn close_message(
 	connection: &mut Connection,
 	id: &str,
 	state: TerminalState,
+	settled_text: Option<&str>,
 ) -> Result<(), TranscriptError> {
 	let target = MessageState::from(state);
 	let transaction = write_transaction(connection)?;
@@ -839,7 +845,7 @@ fn close_message(
 					to: target.as_sql(),
 				});
 			}
-			transaction.execute(FINALIZE_MESSAGE, params![id, target])?;
+			transaction.execute(FINALIZE_MESSAGE, params![id, target, settled_text])?;
 		}
 	}
 	transaction.commit()?;
@@ -1811,6 +1817,38 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn a_settled_message_holds_the_text_it_was_finalized_with() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		database
+			.messages()
+			.open_assistant_message(a_reply("m1", None))
+			.await
+			.expect("the reply is appended");
+		database.messages().append_text("m1".into(), "over to @Nyx".into()).await.expect("a delta");
+
+		database
+			.messages()
+			.finalize_message("m1".into(), TerminalState::Complete, Some("over to <@nyx>".into()))
+			.await
+			.expect("the message is finalized");
+		database
+			.messages()
+			.finalize_message("m1".into(), TerminalState::Complete, Some("too late".into()))
+			.await
+			.expect("a replayed ending was refused");
+
+		let transcript = whole_transcript(&database, PAGE).await;
+		assert_eq!(
+			transcript.first().map(|message| message.content.as_str()),
+			Some("over to <@nyx>"),
+			"the settled text did not land on the message"
+		);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
 	async fn a_transcript_reads_back_identically_after_the_file_is_closed_and_reopened() {
 		let dir = temp_dir();
 		let (written, activities) = {
@@ -1829,7 +1867,7 @@ mod tests {
 			database.messages().append_text("m2".into(), "hi there".into()).await.expect("a delta");
 			database
 				.messages()
-				.finalize_message("m2".into(), TerminalState::Complete)
+				.finalize_message("m2".into(), TerminalState::Complete, None)
 				.await
 				.expect("the message is finalized");
 			database
@@ -1903,7 +1941,7 @@ mod tests {
 		for ending in [TerminalState::Complete, TerminalState::Complete] {
 			database
 				.messages()
-				.finalize_message("m2".into(), ending)
+				.finalize_message("m2".into(), ending, None)
 				.await
 				.expect("a repeated ending was refused");
 		}
@@ -1959,7 +1997,7 @@ mod tests {
 				}
 				database
 					.messages()
-					.finalize_message(id.clone(), ending)
+					.finalize_message(id.clone(), ending, None)
 					.await
 					.expect("an open message refused an ending");
 				ended.push((id, ending));
@@ -1970,11 +2008,11 @@ mod tests {
 		for (id, ending) in &ended {
 			database
 				.messages()
-				.finalize_message(id.clone(), *ending)
+				.finalize_message(id.clone(), *ending, None)
 				.await
 				.expect("the same ending reported twice was refused");
 			for other in ENDINGS.into_iter().filter(|other| other != ending) {
-				let refused = database.messages().finalize_message(id.clone(), other).await;
+				let refused = database.messages().finalize_message(id.clone(), other, None).await;
 				assert_rejected(
 					&refused,
 					MessageState::from(*ending).as_sql(),
@@ -2226,7 +2264,7 @@ mod tests {
 		database.messages().append_text("m2".into(), "hi there".into()).await.expect("a delta");
 		database
 			.messages()
-			.finalize_message("m2".into(), TerminalState::Complete)
+			.finalize_message("m2".into(), TerminalState::Complete, None)
 			.await
 			.expect("the message is finalized");
 		let walked = database

@@ -1274,7 +1274,11 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve()
 		},
 
-		finalizeMessage: (id: string, completion: TerminalCompletion) => {
+		finalizeMessage: (
+			id: string,
+			completion: TerminalCompletion,
+			settledText?: string,
+		) => {
 			const stored = rows.get(id)
 			if (!stored || stored.completion === completion) {
 				return Promise.resolve()
@@ -1287,7 +1291,11 @@ export const createFakeTranscriptStore = (
 					to: completion,
 				})
 			}
-			rows.set(id, { ...stored, completion })
+			rows.set(id, {
+				...stored,
+				completion,
+				content: settledText ?? stored.content,
+			})
 			return Promise.resolve()
 		},
 	}

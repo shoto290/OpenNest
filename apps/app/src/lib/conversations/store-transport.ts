@@ -364,6 +364,14 @@ export const conversationStore: TranscriptStore = {
 	appendText: (id: string, delta: string) =>
 		invoke<void>("conversation_append_text", { id, delta }),
 
-	finalizeMessage: (id: string, completion: TerminalCompletion) =>
-		invoke<void>("conversation_finalize_message", { id, completion }),
+	finalizeMessage: (
+		id: string,
+		completion: TerminalCompletion,
+		settledText?: string,
+	) =>
+		invoke<void>("conversation_finalize_message", {
+			id,
+			completion,
+			settledText,
+		}),
 }

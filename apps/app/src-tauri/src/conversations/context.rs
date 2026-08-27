@@ -776,7 +776,7 @@ mod tests {
 		database.messages().append_text(id.clone(), content).await.expect("the reply streams");
 		database
 			.messages()
-			.finalize_message(id, TerminalState::Complete)
+			.finalize_message(id, TerminalState::Complete, None)
 			.await
 			.expect("the reply ends");
 		seq
@@ -1246,7 +1246,7 @@ mod tests {
 			.expect("the reply streams");
 		database
 			.messages()
-			.finalize_message(id, TerminalState::Complete)
+			.finalize_message(id, TerminalState::Complete, None)
 			.await
 			.expect("the reply ends");
 	}
