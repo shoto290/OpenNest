@@ -1,4 +1,3 @@
-pub mod bootstrap;
 pub mod connection;
 pub mod migrations;
 pub mod repositories;
@@ -9,7 +8,6 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rusqlite::Connection;
 use tauri::{AppHandle, Runtime};
 
-use bootstrap::LegacyImport;
 pub use connection::DatabaseError;
 use repositories::{
 	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository,
@@ -71,14 +69,12 @@ pub struct Database {
 	sections: SectionsRepository,
 	spaces: SpacesRepository,
 	user: UserRepository,
-	legacy_import: LegacyImport,
 }
 
 impl Database {
-	fn open(path: &Path, legacy: Option<&Path>) -> DatabaseState {
+	fn open(path: &Path) -> DatabaseState {
 		let mut connection = connection::open(path)?;
 		migrations::apply(&mut connection)?;
-		let legacy_import = bootstrap::import(&mut connection, legacy);
 		messages::sweep_unfinished(&mut connection)?;
 		let access = Access::new(connection);
 		Ok(Self {
@@ -88,7 +84,6 @@ impl Database {
 			sections: SectionsRepository::new(access.clone()),
 			spaces: SpacesRepository::new(access.clone()),
 			user: UserRepository::new(access.clone()),
-			legacy_import,
 			access,
 		})
 	}
@@ -138,24 +133,15 @@ impl Database {
 		referenced.extend(self.user.avatar_image_path().await?);
 		Ok(referenced)
 	}
-
-	pub fn legacy_import(&self) -> &LegacyImport {
-		&self.legacy_import
-	}
 }
 
 pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) -> DatabaseState {
-	Database::open(&connection::file(app)?, crate::agent::store::file(app).as_deref())
+	Database::open(&connection::file(app)?)
 }
 
 #[cfg(test)]
 pub(crate) fn open(dir: &Path) -> Database {
-	Database::open(&dir.join(connection::FILE_NAME), None).expect("the database opens")
-}
-
-#[cfg(test)]
-pub(in crate::db) fn open_with_legacy(dir: &Path, legacy: &Path) -> Database {
-	Database::open(&dir.join(connection::FILE_NAME), Some(legacy)).expect("the database opens")
+	Database::open(&dir.join(connection::FILE_NAME)).expect("the database opens")
 }
 
 #[cfg(test)]

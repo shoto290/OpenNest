@@ -7,7 +7,6 @@ use uuid::Uuid;
 
 use super::messages::stored_as_text;
 use crate::agent::contract::AgentCommand;
-use crate::db::bootstrap::unserializable;
 use crate::db::{Access, DatabaseError};
 
 pub const DEFAULT_BOT_ID: &str = "default";
@@ -129,6 +128,10 @@ impl From<rusqlite::Error> for ConversationError {
 	fn from(error: rusqlite::Error) -> Self {
 		Self::Database(DatabaseError::Sqlite(error))
 	}
+}
+
+fn unserializable(error: serde_json::Error) -> ConversationError {
+	ConversationError::from(rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
 
 #[derive(Debug, PartialEq, Eq)]

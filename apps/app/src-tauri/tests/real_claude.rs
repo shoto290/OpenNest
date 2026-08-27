@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use opennest_app::agent::commands::check;
 use opennest_app::agent::contract::{
-	ActivityKind, AgentEvent, ConnectionState, PermissionDecision, SessionSnapshot, TurnOutcome,
+	ActivityKind, AgentEvent, ConnectionState, PermissionDecision, TurnOutcome,
 };
 use opennest_app::agent::session::{Bundle, EventSink, Session, SessionOptions};
 use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions};
-use opennest_app::agent::{redact, store};
+use opennest_app::agent::redact;
 use opennest_app::bundles;
 use opennest_app::db::repositories::conversations::{AvatarAnimal, Bot};
 use tokio::sync::mpsc;
@@ -622,23 +622,18 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 
 #[tokio::test]
 #[ignore = "needs a signed-in subscription and the network"]
-async fn an_id_stored_on_disk_resumes_the_conversation() {
+async fn a_captured_id_resumes_the_conversation() {
 	let mut first = live(None).await;
 	let opening = first.run_turn("Remember the number 4271. Reply with exactly: OK").await;
 	let id = session_id(&opening).expect("session id captured from the live stream");
 	first.sidecar.shutdown().await;
 
-	let path = std::env::temp_dir().join(format!("opennest-live-{id}.json"));
-	store::save(&path, &SessionSnapshot { session_id: Some(id), ..SessionSnapshot::default() });
-	let restored = store::load(&path).session_id.expect("the stored id survives the round trip");
-
-	let mut second = live(Some(restored)).await;
+	let mut second = live(Some(id)).await;
 	let recall =
 		second.run_turn("What number did I ask you to remember? Reply with only the digits.").await;
-	assert!(text(&recall).contains("4271"), "the stored id did not resume: {:?}", text(&recall));
+	assert!(text(&recall).contains("4271"), "the captured id did not resume: {:?}", text(&recall));
 
 	second.sidecar.shutdown().await;
-	std::fs::remove_file(&path).expect("cleanup");
 }
 
 #[cfg(unix)]

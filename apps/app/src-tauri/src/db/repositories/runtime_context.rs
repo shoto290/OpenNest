@@ -102,6 +102,9 @@ const RECORD_PROVIDER_SESSION: &str = "UPDATE runtime_sessions SET provider_sess
 	WHERE id = ?1 AND conversation_id = ?2 AND bot_id = ?3
 		AND status = 'active' AND provider_session_id IS NULL";
 
+const FORGET_PROVIDER_SESSION: &str = "UPDATE runtime_sessions SET provider_session_id = NULL
+	WHERE conversation_id = ?1 AND bot_id = ?2 AND provider_session_id = ?3";
+
 const END_LIVE_SESSION: &str = "UPDATE runtime_sessions
 	SET status = ?2, ended_at = ?3, rotation_reason = ?4
 	WHERE id = ?1 AND status = 'active'";
@@ -234,6 +237,22 @@ impl RuntimeContextRepository {
 					return Ok(());
 				}
 				Err(DatabaseError::Conflict)
+			})
+			.await
+	}
+
+	pub async fn forget_provider_session(
+		&self,
+		participant: ParticipantKey,
+		provider_session_id: String,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call(move |connection| {
+				connection.execute(
+					FORGET_PROVIDER_SESSION,
+					params![participant.conversation_id, participant.bot_id, provider_session_id],
+				)?;
+				Ok(())
 			})
 			.await
 	}
@@ -471,7 +490,7 @@ mod tests {
 	}
 
 	fn opened(dir: &Path) -> Database {
-		Database::open(&dir.join(FILE_NAME), None).expect("the database opens")
+		Database::open(&dir.join(FILE_NAME)).expect("the database opens")
 	}
 
 	async fn seeded(dir: &Path) -> Database {

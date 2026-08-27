@@ -167,9 +167,11 @@ fn message_started(seen: &[AgentEvent]) -> Option<()> {
 	})
 }
 
-fn resume_failure(seen: &[AgentEvent]) -> Option<()> {
+fn resume_failure(seen: &[AgentEvent]) -> Option<bool> {
 	seen.iter().find_map(|event| match event {
-		AgentEvent::Failed { error: TransportError::ResumeFailed { .. } } => Some(()),
+		AgentEvent::Failed { error: TransportError::ResumeFailed { forgot_session_id } } => {
+			Some(*forgot_session_id)
+		}
 		_ => None,
 	})
 }
@@ -274,20 +276,6 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 		first.scoped_events()
 	);
 
-	let snapshot = json!({
-		"sessionId": session_id,
-		"messages": [{
-			"id": "m1",
-			"role": "user",
-			"text": "bonjour",
-			"completion": "complete",
-			"timestamp": 17
-		}],
-		"activities": []
-	});
-	assert_eq!(first.call("agent_save_session", json!({ "snapshot": snapshot })), Ok(Value::Null));
-	assert_eq!(first.call("agent_load_session", json!({})), Ok(snapshot.clone()));
-
 	scenario("permission");
 	assert_eq!(first.start(None), Ok(json!({ "resumed": false })));
 	first.forget_events();
@@ -324,25 +312,20 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 
 	scenario("normal");
 	let second = launch();
-	let restored = second.call("agent_load_session", json!({})).expect("snapshot loads");
-	assert_eq!(restored, snapshot);
-
-	let stored_id = restored["sessionId"].as_str().expect("a stored session id").to_owned();
-	assert_eq!(second.start(Some(&stored_id)), Ok(json!({ "resumed": true })));
+	assert_eq!(second.start(Some(&session_id)), Ok(json!({ "resumed": true })));
 	second.forget_events();
 	second.prompt("et avant ?").expect("prompt accepted");
 	assert_eq!(second.wait_for("the resumed turn to end", turn_outcome), TurnOutcome::Completed);
-	assert_eq!(deltas(&second.events()), format!("resumed {stored_id} :: et avant ?"));
+	assert_eq!(deltas(&second.events()), format!("resumed {session_id} :: et avant ?"));
 
 	scenario("resume_crash");
 	second.forget_events();
-	assert_eq!(second.start(Some(&stored_id)), Ok(json!({ "resumed": false })));
-	second.wait_for("the refused resume to be reported", resume_failure);
-
-	let dropped = second.call("agent_load_session", json!({})).expect("snapshot loads");
-	assert_eq!(dropped["sessionId"], Value::Null);
-	assert_eq!(dropped["messages"], snapshot["messages"]);
+	assert_eq!(second.start(Some(&session_id)), Ok(json!({ "resumed": false })));
+	assert!(
+		second.wait_for("the refused resume to be reported", resume_failure),
+		"the frontend was left holding an id the host gave up on"
+	);
 
 	assert_eq!(second.call("agent_shutdown", json!({ "scope": second.scope() })), Ok(Value::Null));
-	std::fs::remove_dir_all(&data_dir).expect("cleanup");
+	let _ = std::fs::remove_dir_all(&data_dir);
 }

@@ -362,7 +362,7 @@ mod tests {
 		repository.delete(first).await.expect("the space is deleted");
 
 		assert_eq!(
-			names_of(&repository).await,
+			names_of(repository).await,
 			vec!["Vacances".to_owned(), "Vocca".to_owned(), "Perso".to_owned()],
 			"deleting a space shuffled the ones that remain"
 		);
@@ -391,7 +391,7 @@ mod tests {
 			Err(SpaceError::IncompleteOrder)
 		));
 		assert_eq!(
-			names_of(&repository).await,
+			names_of(repository).await,
 			vec!["Personal".to_owned(), "Vocca".to_owned()],
 			"a refused order moved the spaces"
 		);
