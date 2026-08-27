@@ -22,8 +22,6 @@ import {
 	UserTurn,
 } from "@workspace/ui/components/chat-turn"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
-import { Markdown } from "@workspace/ui/components/markdown"
-import { MessageAttachments } from "@workspace/ui/components/message-attachments"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
 import {
@@ -46,6 +44,7 @@ import {
 import { UserAvatar } from "@workspace/ui/components/user-avatar"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import { TurnBody } from "@/components/turn-body"
 import type {
 	AgentCommand,
 	AskedQuestion,
@@ -66,7 +65,6 @@ import type { ChatController } from "@/lib/chat/chat-controller"
 import type { ChatError, OutboxEntry } from "@/lib/chat/chat-state"
 import { canStopTurn, isSessionReady, isTurnBusy } from "@/lib/chat/chat-state"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
-import type { MessageContent } from "@/lib/chat/message-attachments"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import { pinTimestamp } from "@/lib/chat/pin-timestamp"
 import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
@@ -98,7 +96,6 @@ import type {
 	Bot,
 } from "@/lib/conversations/store-contract"
 import { avatarSrc } from "@/lib/host"
-import { openAttachment } from "@/lib/links/open-attachment"
 
 type BotFace = {
 	name: string
@@ -147,13 +144,6 @@ const toPinnedRow = (
 	timestamp: pinTimestamp(bubble.timestamp),
 	excerpt: messageWithAttachments(bubble.text).text.trim(),
 })
-
-const TurnBody = ({ attachments, text }: MessageContent) => (
-	<>
-		<MessageAttachments items={attachments} onOpen={openAttachment} />
-		{text ? <Markdown>{text}</Markdown> : null}
-	</>
-)
 
 const TranscriptTurn = memo(function TranscriptTurn({
 	row,

@@ -10,6 +10,8 @@ import type { ConversationController } from "../conversations/conversation-contr
 const heldHosts = () => {
 	const sentToBots: { botId: string; text: string }[] = []
 	const sentToRooms: { text: string; repliedToMessageId?: string }[] = []
+	const storedByChat: string[] = []
+	const storedByDriver: string[] = []
 	const runtimes = new Map<string, ConversationController>()
 
 	const runtime = {
@@ -21,10 +23,19 @@ const heldHosts = () => {
 
 	const hosts: AttachmentsHosts = {
 		chat: {
-			storeAttachments: () => Promise.resolve([]),
+			storeAttachments: (botId) => {
+				storedByChat.push(botId)
+				return Promise.resolve([])
+			},
 			sendTo: (botId, text) => {
 				sentToBots.push({ botId, text })
 				return Promise.resolve()
+			},
+		},
+		driver: {
+			storeAttachments: (conversationId) => {
+				storedByDriver.push(conversationId)
+				return Promise.resolve([])
 			},
 		},
 		runtimes: { heldFor: (id) => runtimes.get(id) ?? null },
@@ -34,6 +45,8 @@ const heldHosts = () => {
 		hosts,
 		sentToBots,
 		sentToRooms,
+		storedByChat,
+		storedByDriver,
 		open: (conversationId: string) => runtimes.set(conversationId, runtime),
 	}
 }
@@ -45,6 +58,16 @@ describe("a draft owned by a bot", () => {
 
 		expect(port.send({ kind: "bot", id: "a" }, "look")).toBe(true)
 		expect(host.sentToBots).toEqual([{ botId: "a", text: "look" }])
+	})
+
+	it("is stored through the bot chat", async () => {
+		const host = heldHosts()
+		const port = createAttachmentsPort(host.hosts)
+
+		await port.store({ kind: "bot", id: "a" }, [])
+
+		expect(host.storedByChat).toEqual(["a"])
+		expect(host.storedByDriver).toEqual([])
 	})
 })
 
@@ -60,6 +83,16 @@ describe("a draft owned by a conversation", () => {
 		expect(host.sentToRooms).toEqual([
 			{ text: "look", repliedToMessageId: "m1" },
 		])
+	})
+
+	it("is stored against that conversation", async () => {
+		const host = heldHosts()
+		const port = createAttachmentsPort(host.hosts)
+
+		await port.store({ kind: "conversation", id: "room" }, [])
+
+		expect(host.storedByDriver).toEqual(["room"])
+		expect(host.storedByChat).toEqual([])
 	})
 
 	it("goes nowhere when that conversation has no runtime", () => {

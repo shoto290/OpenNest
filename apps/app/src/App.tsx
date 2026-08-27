@@ -87,10 +87,11 @@ export function App() {
 			createAttachmentsController(
 				createAttachmentsPort({
 					chat: chat.controller,
+					driver,
 					runtimes: conversationRuntimes,
 				}),
 			),
-		[chat.controller, conversationRuntimes],
+		[chat.controller, driver, conversationRuntimes],
 	)
 	const roster = useRoster(store)
 	const sections = useSections(store, {

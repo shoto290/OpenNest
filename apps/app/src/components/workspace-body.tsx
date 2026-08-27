@@ -45,6 +45,7 @@ export function WorkspaceBody({
 	if (conversation) {
 		return (
 			<ConversationScreen
+				attachments={attachments}
 				conversation={conversation}
 				isSettingsOpen={isConversationSettingsOpen}
 				onOpenSettings={onOpenConversationSettings}
