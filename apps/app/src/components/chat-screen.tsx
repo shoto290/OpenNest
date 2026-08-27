@@ -215,6 +215,7 @@ const TranscriptTurn = memo(function TranscriptTurn({
 
 	return (
 		<AssistantTurn
+			botId={seed}
 			state={row.completion}
 			run={run}
 			copyText={text}
@@ -816,6 +817,7 @@ export function ChatScreen({
 			{working ? (
 				<BotWorking
 					animal={bot.avatarAnimal}
+					botId={bot.id}
 					blot={bot.avatarBlot ?? undefined}
 					image={face}
 					name={bot.name}

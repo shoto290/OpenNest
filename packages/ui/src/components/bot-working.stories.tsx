@@ -20,9 +20,37 @@ import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
 import {
 	AssistantTurn,
 	CHAT_AVATAR_SIZE,
+	UserTurn,
 } from "@workspace/ui/components/chat-turn"
 
 const BUSY_BOT = { animal: "owl", blot: "blue", seed: "bot-7" } as const
+
+const ROOM_BOTS = [
+	{ botId: "bot-lyra", name: "Lyra", animal: "owl", blot: "blue" },
+	{ botId: "bot-orion", name: "Orion", animal: "cat", blot: "orange" },
+	{ botId: "bot-vega", name: "Vega", animal: "rabbit", blot: "purple" },
+] as const
+
+const [SPEAKING_BOT, ...WAITING_BOTS] = ROOM_BOTS
+
+const MARKED_BOT_ID = SPEAKING_BOT.botId
+
+const ROOMS = [
+	{
+		id: "room-standup",
+		bot: ROOM_BOTS[0],
+		prompts: ["Where did we land on the mark?"],
+	},
+	{
+		id: "room-release",
+		bot: ROOM_BOTS[1],
+		prompts: [
+			"What is left before the release?",
+			"And who is holding the changelog?",
+			"Anything blocked on the host?",
+		],
+	},
+] as const
 
 const BOT_WORKING_KINDS: BotWorkingKind[] = [
 	"thinking",
@@ -56,6 +84,7 @@ const MarkHandoff = () => {
 					{delivered ? "Rewind to working" : "Land the turn"}
 				</Button>
 				<AssistantTurn
+					botId={MARKED_BOT_ID}
 					carriesMark
 					state={delivered ? "complete" : "streaming"}
 					copyText={delivered ? ANSWER : undefined}
@@ -71,11 +100,53 @@ const MarkHandoff = () => {
 					items={ACTIVITY}
 					status={delivered ? "complete" : "working"}
 					renderWorkingStatus={() => (
-						<BotWorking kind="working" label="Bash · rg packages" />
+						<BotWorking
+							botId={MARKED_BOT_ID}
+							kind="working"
+							label="Bash · rg packages"
+						/>
 					)}
 				/>
 			</div>
 		</ChatMarkProvider>
+	)
+}
+
+const RoomWorkers = () => (
+	<ChatMarkProvider transcriptKey={ROOMS[0].id}>
+		<div className="flex flex-col gap-4">
+			<BotWorking {...SPEAKING_BOT} kind="working" seed={SPEAKING_BOT.botId} />
+			{WAITING_BOTS.map((bot) => (
+				<BotWorking {...bot} key={bot.botId} kind="waiting" seed={bot.botId} />
+			))}
+			<BotWorking kind="waiting" name="Unknown" />
+		</div>
+	</ChatMarkProvider>
+)
+
+const ConversationSwap = () => {
+	const [isSecond, setIsSecond] = useState(false)
+	const room = isSecond ? ROOMS[1] : ROOMS[0]
+
+	return (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<Button
+				size="sm"
+				variant="outline"
+				className="self-start"
+				onClick={() => setIsSecond(!isSecond)}
+			>
+				Open the other conversation
+			</Button>
+			<ChatMarkProvider transcriptKey={room.id}>
+				<div className="flex flex-col gap-4">
+					{room.prompts.map((prompt) => (
+						<UserTurn key={prompt}>{prompt}</UserTurn>
+					))}
+					<BotWorking {...room.bot} kind="thinking" seed={room.bot.botId} />
+				</div>
+			</ChatMarkProvider>
+		</div>
 	)
 }
 
@@ -87,13 +158,14 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What the transcript shows while the bot is busy: its avatar, alone, in the pose that matches the work. The avatar is also the stop control — given `onStop`, pointing at it or reaching it by keyboard covers the animal with a stop glyph, so the composer below stays free for the next prompt. The words only appear while the reader points at the avatar — timed kinds add a clock to them, untimed ones only shimmer. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is understood to be the same mark the `AssistantTurn` gutter shows once the turn lands, so it travels there rather than being replaced — see `Mark`.",
+					"What the transcript shows while the bot is busy: its avatar, alone, in the pose that matches the work. The avatar is also the stop control — given `onStop`, pointing at it or reaching it by keyboard covers the animal with a stop glyph, so the composer below stays free for the next prompt. The words only appear while the reader points at the avatar — timed kinds add a clock to them, untimed ones only shimmer. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is understood to be the same mark the `AssistantTurn` gutter shows once the turn lands, so it travels there rather than being replaced — give both rows the same `botId` and it does, within that one conversation. See `Mark`, `MarkPerBot` for a room where several bots are busy at once, and `ConversationChange` for what a swapped conversation does to them.",
 			},
 		},
 	},
 	args: { kind: "thinking", name: "No name" },
 	argTypes: {
 		kind: { control: "select", options: BOT_WORKING_KINDS },
+		botId: { control: "text" },
 		animal: { control: "select", options: Object.keys(ANIMALS) },
 		blot: { control: "select", options: [undefined, ...BLOT_TINTS] },
 		seed: { control: "text" },
@@ -198,6 +270,54 @@ export const Mark = meta.story({
 		)
 
 		await expect(marks()).toHaveLength(1)
+	},
+})
+
+export const MarkPerBot = meta.story({
+	render: () => <RoomWorkers />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A room where several bots are busy at once: one is speaking and the others are waiting their turn. Each row is told which bot it draws, so each holds a mark of its own and lands in its own gutter when its answer arrives — one mark shared between them would put every waiting bot on the speaking bot's row. The last row names no bot, which is what a transcript that cannot name the worker gets: a plain slot that never travels. Check that every named row carries a different mark and that the unnamed one carries none.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const marks = slotsIn(canvasElement, "shared-mark")
+		const named = marks.slice(0, -1).map((mark) => mark.dataset.mark)
+
+		await expect(new Set(named).size).toBe(ROOM_BOTS.length)
+		await expect(marks.at(-1)).toHaveAttribute("data-state", "plain")
+	},
+})
+
+export const ConversationChange = meta.story({
+	render: () => <ConversationSwap />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the host swaps the conversation under a chat it keeps mounted, which is what a workspace does when the reader opens another room. A mark is named by its bot and its transcript together, so the swap draws a different mark rather than moving the one left behind: check that the working row of the second conversation appears where it belongs, with no avatar gliding across the window from where the first one stood.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const mark = () => slotsIn(canvasElement, "shared-mark")[0]
+		const left = mark()
+		const leftName = left.getAttribute("data-mark")
+		const leftTop = left.getBoundingClientRect().top
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Open the other conversation" }),
+		)
+
+		const opened = mark()
+
+		await expect(opened).not.toBe(left)
+		await expect(opened.getAttribute("data-mark")).not.toBe(leftName)
+		await expect(getComputedStyle(opened).transform).toBe("none")
+		await expect(opened.getBoundingClientRect().top).not.toBe(leftTop)
 	},
 })
 

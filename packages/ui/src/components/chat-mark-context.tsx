@@ -19,6 +19,10 @@ function ChatMarkProvider({ transcriptKey, children }: ChatMarkProviderProps) {
 	)
 }
 
-const useChatMarkId = () => useContext(ChatMarkContext)
+const useChatMarkId = (botId?: string) => {
+	const transcriptKey = useContext(ChatMarkContext)
+
+	return transcriptKey && botId ? `${transcriptKey}-${botId}` : undefined
+}
 
 export { ChatMarkProvider, type ChatMarkProviderProps, useChatMarkId }

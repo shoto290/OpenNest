@@ -20,6 +20,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 interface BotWorkingProps {
 	kind?: BotWorkingKind
+	botId?: string
 	name?: string
 	label?: string
 	animal?: BotAvatarAnimal
@@ -39,6 +40,7 @@ const isTimed = (kind: BotWorkingKind) =>
 
 function BotWorking({
 	kind = "thinking",
+	botId,
 	name,
 	label,
 	animal,
@@ -50,7 +52,7 @@ function BotWorking({
 	className,
 }: BotWorkingProps) {
 	const { t } = useTranslation("chat")
-	const markId = useChatMarkId()
+	const markId = useChatMarkId(botId)
 	const [pointed, setPointed] = useState(false)
 	const [armed, setArmed] = useState(false)
 	const named = name ?? t("working.name")

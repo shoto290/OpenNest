@@ -133,6 +133,8 @@ const TURN_STATES: ChatTurnState[] = [
 
 const Avatar = () => <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />
 
+const MARKED_BOT_ID = "bot-lyra"
+
 const bubbleStyleOf = (node: Element) => {
 	const bubble = node.closest<HTMLElement>(
 		'[data-slot="message-bubble-content"]',
@@ -157,11 +159,16 @@ const MarkHandoff = () => {
 				</Button>
 				<UserTurn>How is this workspace laid out?</UserTurn>
 				{delivered ? (
-					<AssistantTurn carriesMark copyText={ANSWER} avatar={<Avatar />}>
+					<AssistantTurn
+						avatar={<Avatar />}
+						botId={MARKED_BOT_ID}
+						carriesMark
+						copyText={ANSWER}
+					>
 						{ANSWER}
 					</AssistantTurn>
 				) : (
-					<BotWorking kind="thinking" />
+					<BotWorking botId={MARKED_BOT_ID} kind="thinking" />
 				)}
 			</div>
 		</ChatMarkProvider>
@@ -187,17 +194,25 @@ const MarkedHistory = () => {
 				</Button>
 				<UserTurn>How is this workspace laid out?</UserTurn>
 				<ChatTurnGroup>
-					<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
+					<AssistantTurn
+						avatar={<Avatar />}
+						botId={MARKED_BOT_ID}
+						copyText={ANSWER}
+					>
 						{ANSWER}
 					</AssistantTurn>
 				</ChatTurnGroup>
 				<UserTurn>And where do the tests live?</UserTurn>
 				<ChatTurnGroup carriesMark>
-					<AssistantTurn copyText={TESTS} avatar={working ? null : <Avatar />}>
+					<AssistantTurn
+						avatar={working ? null : <Avatar />}
+						botId={MARKED_BOT_ID}
+						copyText={TESTS}
+					>
 						{TESTS}
 					</AssistantTurn>
 				</ChatTurnGroup>
-				{working ? <BotWorking kind="thinking" /> : null}
+				{working ? <BotWorking botId={MARKED_BOT_ID} kind="thinking" /> : null}
 			</div>
 		</ChatMarkProvider>
 	)
@@ -287,7 +302,7 @@ export const Mark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to watch the bot's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Neither is told an id: the transcript names its own mark — `ChatLayout` does this for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble simply appears beside it while the row itself holds still, and that with reduced motion the mark simply arrives. Pick `Feedback/BotWorking → Mark` for a mark leaving an activity header instead.",
+					"Reach for this to watch the bot's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Both name the same bot: the mark is that bot's, inside this transcript — `ChatLayout` names the transcript for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble simply appears beside it while the row itself holds still, and that with reduced motion the mark simply arrives. Pick `Feedback/BotWorking → Mark` for a mark leaving an activity header instead.",
 			},
 		},
 	},
