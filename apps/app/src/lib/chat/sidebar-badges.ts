@@ -3,16 +3,24 @@ import type { BotBadge as ShownBadge } from "@workspace/ui/components/badge"
 
 import type { BotBadge } from "./bot-badge"
 
+type BadgedRow = {
+	id: string
+}
+
+type Badged<Row> = Row & {
+	badge?: ShownBadge
+}
+
 const STRONGEST_FIRST: ShownBadge[] = ["attention", "failed", "done"]
 
 const shownBadge = (badge: BotBadge | undefined): ShownBadge | undefined =>
 	badge === undefined || badge === "none" ? undefined : badge
 
-export const withBadges = (
-	bots: AgentSidebarBot[],
+export const withBadges = <Row extends BadgedRow>(
+	rows: Row[],
 	badges: Record<string, BotBadge>,
-): AgentSidebarBot[] =>
-	bots.map((bot) => ({ ...bot, badge: shownBadge(badges[bot.id]) }))
+): Badged<Row>[] =>
+	rows.map((row) => ({ ...row, badge: shownBadge(badges[row.id]) }))
 
 const strongestBadge = (bots: AgentSidebarBot[]): ShownBadge | undefined =>
 	STRONGEST_FIRST.find((badge) => bots.some((bot) => bot.badge === badge))
