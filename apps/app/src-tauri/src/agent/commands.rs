@@ -225,6 +225,11 @@ impl AgentState {
 		*cached = Some(offered.clone());
 		offered
 	}
+
+	async fn title(&self, text: &str) -> Option<String> {
+		let sidecar = self.sidecar().await.ok()?;
+		sidecar.title(text).await.ok().flatten()
+	}
 }
 
 struct Claim<'a> {
@@ -250,6 +255,11 @@ pub async fn agent_models<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
 #[tauri::command]
 pub async fn agent_tools<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
 	app.state::<AgentState>().tools().await
+}
+
+#[tauri::command]
+pub async fn agent_title<R: Runtime>(app: AppHandle<R>, text: String) -> Option<String> {
+	app.state::<AgentState>().title(&text).await
 }
 
 #[tauri::command]

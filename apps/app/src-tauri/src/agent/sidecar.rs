@@ -12,7 +12,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
 use super::contract::TransportError;
-use super::protocol::{self, Catalogue, Checked, Ready, ToolCatalogue};
+use super::protocol::{self, Catalogue, Checked, Ready, Titled, ToolCatalogue};
 
 pub const SIDECAR_OVERRIDE_ENV: &str = "OPENNEST_AGENT_SIDECAR";
 
@@ -25,6 +25,8 @@ pub const READY_TIMEOUT: Duration = Duration::from_secs(20);
 const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 
 const CATALOGUE_TIMEOUT: Duration = Duration::from_secs(60);
+
+const TITLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
 const TERMINATE_GRACE: Duration = Duration::from_millis(500);
@@ -226,10 +228,27 @@ impl Sidecar {
 		Ok(catalogue.tools)
 	}
 
+	pub async fn title(&self, text: &str) -> Result<Option<String>, TransportError> {
+		let answer =
+			self.ask_with(protocol::TITLE, protocol::title_command(text), TITLE_TIMEOUT).await?;
+		let titled: Titled = serde_json::from_value(answer)
+			.map_err(|error| TransportError::InvalidFrame { detail: error.to_string() })?;
+		Ok(titled.title)
+	}
+
 	async fn ask(&self, kind: &str, timeout: Duration) -> Result<Value, TransportError> {
+		self.ask_with(kind, protocol::ask_command(kind), timeout).await
+	}
+
+	async fn ask_with(
+		&self,
+		kind: &str,
+		command: Value,
+		timeout: Duration,
+	) -> Result<Value, TransportError> {
 		let (tx, rx) = oneshot::channel();
 		self.answers.lock().expect("answers").entry(kind.to_owned()).or_default().push(tx);
-		self.send(protocol::ask_command(kind))?;
+		self.send(command)?;
 
 		match tokio::time::timeout(timeout, rx).await {
 			Ok(Ok(value)) => Ok(value),
