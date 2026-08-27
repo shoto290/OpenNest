@@ -1,5 +1,5 @@
 import { addresseesIn, toMentionTokens } from "./mentions"
-import { leadOf, presentParticipants } from "./roster-conversations"
+import { isNameless, leadOf, presentParticipants } from "./roster-conversations"
 import type { Conversation, MessagePin } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type {
@@ -64,6 +64,7 @@ export type ConversationController = {
 export type ConversationControllerOptions = {
 	newId?: () => string
 	now?: () => number
+	onNamed?: (conversationId: string, title: string) => void
 }
 
 type OpenTurn = {
@@ -495,12 +496,21 @@ export const createConversationController = (
 		return answering.map((botId) => ({ botId, promptId }))
 	}
 
+	const nameFrom = async (conversationId: string, text: string) => {
+		const title = await driver.titleFor(text).catch(() => null)
+		if (title) {
+			options.onNamed?.(conversationId, title)
+		}
+	}
+
 	const send = async (text: string, repliedToMessageId?: string) => {
 		const trimmed = text.trim()
 		if (!conversation || trimmed.length === 0) {
 			return
 		}
 		const conversationId = conversation.id
+		const isNamingItself =
+			isNameless(conversation) && state.messages.length === 0
 		const content = toMentionTokens(trimmed, mentionBots())
 		const turn: OpenTurn = { id: newId(), promptId: newId() }
 		const said: TranscriptMessage = {
@@ -530,6 +540,9 @@ export const createConversationController = (
 		}
 
 		refused = null
+		if (isNamingItself) {
+			void nameFrom(conversationId, trimmed)
+		}
 		transcript.append(said)
 		if (speaker) {
 			speaker.isDropped = true

@@ -38,13 +38,25 @@ type Harness = {
 	store: TranscriptStore
 	controller: ConversationController
 	conversation: Conversation
+	named: [string, string][]
 	detach: () => void
 	settled: () => Promise<void>
 	refuseNextWrite: () => void
 }
 
-const createHarness = async (names: string[]): Promise<Harness> => {
-	const driver = createScriptedDriver()
+type Naming = {
+	title: string
+	titleFor: () => Promise<string | null>
+}
+
+const createHarness = async (
+	names: string[],
+	naming?: Partial<Naming>,
+): Promise<Harness> => {
+	const scripted = createScriptedDriver()
+	const driver: ScriptedDriver = naming?.titleFor
+		? { ...scripted, titleFor: naming.titleFor }
+		: scripted
 	const contexts: [string, string][] = []
 	const base = createFakeTranscriptStore()
 	let isRefusingNextWrite = false
@@ -69,9 +81,10 @@ const createHarness = async (names: string[]): Promise<Harness> => {
 	const conversation = await store.createConversation({
 		spaceId: SPACE,
 		sectionId: null,
-		title: "Walls",
+		title: naming?.title ?? "Walls",
 		botIds: bots.map((bot) => bot.id),
 	})
+	const named: [string, string][] = []
 	let minted = 0
 	const controller = createConversationController(driver, store, {
 		newId: () => {
@@ -79,6 +92,7 @@ const createHarness = async (names: string[]): Promise<Harness> => {
 			return `id-${minted}`
 		},
 		now: () => minted,
+		onNamed: (conversationId, title) => named.push([conversationId, title]),
 	})
 	const detach = controller.attach()
 	await controller.open(conversation)
@@ -94,6 +108,7 @@ const createHarness = async (names: string[]): Promise<Harness> => {
 		store,
 		controller,
 		conversation,
+		named,
 		detach,
 		settled,
 		refuseNextWrite,
@@ -503,5 +518,58 @@ describe("createConversationController", () => {
 		await expect(controller.pin("msg-1", 0)).rejects.toThrow("refused")
 
 		expect(controller.getState()).toBe(standing)
+	})
+})
+
+describe("naming a conversation from its first message", () => {
+	const namelessWith = (titleFor: () => Promise<string | null>) =>
+		createHarness(["Ada"], { title: "", titleFor })
+
+	it("keeps the title the runtime reads in the first message", async () => {
+		const harness = await namelessWith(() =>
+			Promise.resolve("Holding the walls"),
+		)
+
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+
+		expect(harness.named).toEqual([
+			[harness.conversation.id, "Holding the walls"],
+		])
+	})
+
+	it("asks the runtime for a title once, on the first message alone", async () => {
+		let asked = 0
+		const harness = await namelessWith(() => {
+			asked += 1
+			return Promise.resolve("Holding the walls")
+		})
+
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+		await harness.controller.send("and the gates?")
+		await harness.settled()
+
+		expect(asked).toBe(1)
+	})
+
+	it("leaves the conversation without a name when the runtime returns none", async () => {
+		const harness = await namelessWith(() => Promise.resolve(null))
+
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+
+		expect(harness.named).toEqual([])
+	})
+
+	it("leaves alone the name of a conversation that has one", async () => {
+		const harness = await createHarness(["Ada"], {
+			titleFor: () => Promise.resolve("Holding the walls"),
+		})
+
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+
+		expect(harness.named).toEqual([])
 	})
 })

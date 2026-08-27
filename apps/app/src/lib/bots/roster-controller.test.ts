@@ -1032,6 +1032,34 @@ describe("createRosterController on conversations", () => {
 		expect(state.conversations[0].instructions).toBe("Stay short.")
 	})
 
+	it("stores the name a nameless conversation is given", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "",
+			botIds: ["default"],
+		})
+
+		controller.nameConversation(created?.id ?? "", "Menu")
+		expect(controller.getState().conversations[0].title).toBe("Menu")
+
+		const state = await reloaded(store)
+		expect(state.conversations[0].title).toBe("Menu")
+	})
+
+	it("leaves alone the name of a conversation that has one", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+
+		controller.nameConversation(created?.id ?? "", "Menu")
+
+		expect(controller.getState().conversations[0].title).toBe("Launch")
+	})
+
 	it("moves the crown onto the participant it is given to", async () => {
 		const store = createFakeTranscriptStore()
 		const second = await store.createBot(newBotIdentity([]), "personal")

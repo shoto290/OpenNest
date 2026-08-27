@@ -70,9 +70,15 @@ export function App() {
 	const driver = useMemo(createChatDriver, [])
 	const store = useMemo(createTranscriptStore, [])
 	const chat = useChat(driver, store)
+	const roster = useRoster(store)
 	const conversationRuntimes = useMemo(
-		() => createConversationRuntimes(driver, store),
-		[driver, store],
+		() =>
+			createConversationRuntimes(
+				driver,
+				store,
+				roster.controller.nameConversation,
+			),
+		[driver, store, roster.controller],
 	)
 
 	useEffect(
@@ -93,7 +99,6 @@ export function App() {
 			),
 		[chat.controller, driver, conversationRuntimes],
 	)
-	const roster = useRoster(store)
 	const sections = useSections(store, {
 		move: roster.controller.moveToSection,
 		clear: roster.controller.clearSection,

@@ -39,7 +39,7 @@ const NewConversationForm = ({
 	const pickedBots = pickedIds.flatMap(
 		(id) => bots.find((bot) => bot.id === id) ?? [],
 	)
-	const isCreatable = name.trim().length > 0 && pickedIds.length > 0
+	const isCreatable = pickedIds.length > 0
 
 	const dismiss = (id: string) =>
 		setPickedIds((picked) => picked.filter((each) => each !== id))

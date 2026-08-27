@@ -255,13 +255,16 @@ const chat = {
 			unwritable: "The files could not be written down: {{detail}}",
 		},
 	},
+	namelessConversation: {
+		separator: ", ",
+	},
 	newConversation: {
 		title: "New conversation",
 		description:
-			"Name it, then pick who takes part. The first bot you pick leads the conversation.",
+			"Pick who takes part. The first bot you pick leads the conversation. Name it now, or let your first message name it.",
 		name: {
 			label: "Name",
-			placeholder: "What this conversation is about",
+			placeholder: "Left empty, your first message names it",
 		},
 		search: {
 			label: "Bots",
