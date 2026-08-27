@@ -17,6 +17,7 @@ export type TranscriptSettlement = {
 	conversationId: string
 	id: string
 	completion: TerminalCompletion
+	settledText?: string
 }
 
 export type TranscriptConversation = {
@@ -305,6 +306,7 @@ const applyMessageSettled = (
 		messages: current.messages.with(index, {
 			...target,
 			completion: settlement.completion,
+			content: settlement.settledText ?? target.content,
 		}),
 	})
 }

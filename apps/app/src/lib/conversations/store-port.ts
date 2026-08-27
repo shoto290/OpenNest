@@ -170,5 +170,9 @@ export type TranscriptStore = TranscriptPort & {
 	appendUserMessage: (message: NewUserMessage) => Promise<number>
 	openAssistantMessage: (message: NewAssistantMessage) => Promise<number>
 	appendText: (id: string, delta: string) => Promise<void>
-	finalizeMessage: (id: string, completion: TerminalCompletion) => Promise<void>
+	finalizeMessage: (
+		id: string,
+		completion: TerminalCompletion,
+		settledText?: string,
+	) => Promise<void>
 }

@@ -260,6 +260,16 @@ export const createConversationController = (
 		)
 	}
 
+	const settleMentions = (held: Speaker, id: string) => {
+		const written = held.written.get(id) ?? ""
+		const settled = toMentionTokens(written, mentionBots())
+		if (settled === written) {
+			return undefined
+		}
+		held.written.set(id, settled)
+		return settled
+	}
+
 	const settleReply = (
 		held: Speaker,
 		id: string,
@@ -271,9 +281,10 @@ export const createConversationController = (
 		const conversationId = conversation.id
 		held.openMessages.delete(id)
 		held.settledMessages.add(id)
+		const settledText = settleMentions(held, id)
 		write(
-			() => store.finalizeMessage(id, completion),
-			() => transcript.settle({ conversationId, id, completion }),
+			() => store.finalizeMessage(id, completion, settledText),
+			() => transcript.settle({ conversationId, id, completion, settledText }),
 		)
 	}
 

@@ -766,8 +766,9 @@ pub async fn conversation_finalize_message(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 	completion: TerminalCompletion,
+	settled_text: Option<String>,
 ) -> Result<(), TranscriptStoreError> {
-	Ok(ready(&state)?.messages().finalize_message(id, completion.into()).await?)
+	Ok(ready(&state)?.messages().finalize_message(id, completion.into(), settled_text).await?)
 }
 
 #[cfg(test)]

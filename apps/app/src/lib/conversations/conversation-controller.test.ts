@@ -256,6 +256,57 @@ describe("createConversationController", () => {
 		])
 	})
 
+	it("puts the bot a speaker names in plain words at the end of the same turn", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		await harness.controller.send("and now?")
+		await harness.settled()
+
+		harness.driver.pushTo(ada, spoke(ada, "over to @Nyx"))
+		await harness.settled()
+
+		expect(harness.driver.submissions.map(({ scope }) => scope.botId)).toEqual([
+			ada,
+			nyx,
+		])
+	})
+
+	it("stores a settled reply with the name it wrote in token form", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		await harness.controller.send("and now?")
+		await harness.settled()
+
+		harness.driver.pushTo(ada, spoke(ada, "over to @Nyx"))
+		await harness.settled()
+
+		expect(spokenIn(harness.controller)).toContainEqual([
+			ada,
+			`over to <@${nyx}>`,
+		])
+		const page = await harness.store.loadPage(harness.conversation.id, null)
+		expect(page.messages.map((message) => message.content)).toContain(
+			`over to <@${nyx}>`,
+		)
+	})
+
+	it("leaves an arobase naming no seated bot as plain text", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		await harness.controller.send("and now?")
+		await harness.settled()
+
+		harness.driver.pushTo(ada, spoke(ada, "write to @nobody"))
+		await harness.settled()
+
+		expect(spokenIn(harness.controller)).toContainEqual([
+			ada,
+			"write to @nobody",
+		])
+		expect(harness.driver.submissions.map(({ scope }) => scope.botId)).toEqual([
+			ada,
+		])
+	})
+
 	it("points a bot pulled in by another at the message that named it", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
