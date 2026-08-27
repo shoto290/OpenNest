@@ -1230,6 +1230,7 @@ const SpaceCarousel = ({
 	)
 	const [restingOn, setRestingOn] = useState(chosen)
 	const isMoving = useRef(false)
+	const reported = useRef<string>(undefined)
 
 	const restsOn = Math.min(restingOn, spaces.length - 1)
 	const firstDrawn = Math.max(restsOn - NEIGHBOURING, 0)
@@ -1259,19 +1260,26 @@ const SpaceCarousel = ({
 	const spaceUnder = (node: HTMLDivElement) =>
 		firstDrawn + Math.round(node.scrollLeft / node.clientWidth)
 
-	const lift = () => {
+	const report = (id: string) => {
+		if (id === selectedSpaceId || id === reported.current) return
+		reported.current = id
+		onSelectSpace?.(id)
+	}
+
+	const follow = (event: UIEvent<HTMLDivElement>) => {
 		isMoving.current = true
+		const node = event.currentTarget
+		if (!isFlushWithPanel(node)) return
+		const flush = spaces[spaceUnder(node)]
+		if (flush) report(flush.id)
 	}
 
 	const land = (event: UIEvent<HTMLDivElement>) => {
 		const node = event.currentTarget
 		if (!isFlushWithPanel(node)) return
 		isMoving.current = false
-		const landedOn = spaceUnder(node)
-		const landed = spaces[landedOn]
-		if (!landed) return
-		setRestingOn(landedOn)
-		if (landed.id !== selectedSpaceId) onSelectSpace?.(landed.id)
+		reported.current = undefined
+		setRestingOn(spaceUnder(node))
 	}
 
 	return (
@@ -1281,7 +1289,7 @@ const SpaceCarousel = ({
 				isSwipeEnabled ? CAROUSEL_SWIPEABLE : CAROUSEL_HELD,
 			)}
 			data-slot="space-carousel"
-			onScroll={lift}
+			onScroll={follow}
 			onScrollEnd={land}
 			ref={viewport}
 		>
