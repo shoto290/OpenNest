@@ -1,0 +1,103 @@
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
+
+import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
+
+import { claimsComposerFocus, type ReplyTarget } from "./screen-model"
+
+type ThreadReplyInput = {
+	composerRef: RefObject<HTMLTextAreaElement | null>
+	scrollerRef: RefObject<MessageScrollerHandle | null>
+	send: (text: string, repliedToMessageId?: string) => Promise<boolean>
+}
+
+export type ThreadReply = {
+	replyTarget: ReplyTarget | null
+	focusComposer: () => void
+	holdReply: (target: ReplyTarget) => void
+	releaseReply: () => void
+	submitPrompt: (text: string) => Promise<boolean>
+}
+
+export function useThreadReply({
+	composerRef,
+	scrollerRef,
+	send,
+}: ThreadReplyInput): ThreadReply {
+	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+
+	const focusComposer = useCallback(() => {
+		const composer = composerRef.current
+		if (!composer || composer.disabled) {
+			return
+		}
+		const caret = composer.value.length
+		composer.focus({ preventScroll: true })
+		composer.setSelectionRange(caret, caret)
+	}, [composerRef])
+
+	const submitPrompt = useCallback(
+		async (text: string) => {
+			scrollerRef.current?.scrollToEnd("auto")
+			const sent = await send(text, replyTarget?.messageId)
+			if (sent) {
+				setReplyTarget(null)
+			}
+			focusComposer()
+			return sent
+		},
+		[send, replyTarget, scrollerRef, focusComposer],
+	)
+
+	return {
+		replyTarget,
+		focusComposer,
+		submitPrompt,
+		holdReply: useCallback(
+			(target: ReplyTarget) => {
+				setReplyTarget(target)
+				focusComposer()
+			},
+			[focusComposer],
+		),
+		releaseReply: useCallback(() => {
+			setReplyTarget(null)
+			focusComposer()
+		}, [focusComposer]),
+	}
+}
+
+type ComposerFocusInput = {
+	botId: string | null
+	isPromptPending: boolean
+	isSettingsOpen: boolean
+	isOverlayOpen: boolean
+	focusComposer: () => void
+}
+
+export function useComposerFocus({
+	botId,
+	isPromptPending,
+	isSettingsOpen,
+	isOverlayOpen,
+	focusComposer,
+}: ComposerFocusInput): void {
+	const focusedBotId = useRef<string | null>(null)
+
+	useEffect(() => {
+		if (!botId) {
+			return
+		}
+		const claimed = claimsComposerFocus({
+			botId,
+			focusedBotId: focusedBotId.current,
+			isPromptPending,
+			isSettingsOpen,
+			isOverlayOpen,
+		})
+		if (!claimed) {
+			return
+		}
+		focusedBotId.current = botId
+		focusComposer()
+	}, [botId, isPromptPending, isSettingsOpen, isOverlayOpen, focusComposer])
+}

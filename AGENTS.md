@@ -73,7 +73,7 @@ Only **technical composition** — it places things, it does not draw them:
 - Needs a wrapper, a grid, a stack, a gap? That is a `packages/ui` layout component (`ChatLayout`, `AppHeader`…), not a `div` in the app.
 - Needs a one-off tweak? Add a variant or a prop to the UI component — never a Tailwind class in the app.
 - A component in the app that is not pure composition of UI components is a bug: move it to `packages/ui`.
-- Reference: `apps/app/src/components/chat-screen.tsx` — composition only, zero markup.
+- Reference: `apps/app/src/components/thread-screen.tsx` — composition only, zero markup.
 
 ## House Rules
 

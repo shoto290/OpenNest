@@ -1,9 +1,9 @@
 import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { AppHeader } from "@workspace/ui/components/app-header"
 
-import { ChatScreen } from "@/components/chat-screen"
-import { ConversationScreen } from "@/components/conversation-screen"
+import { ThreadScreen } from "@/components/thread-screen"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
+import type { Thread } from "@/lib/chat/thread-contract"
 import type { Chat } from "@/lib/chat/use-chat"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
@@ -24,55 +24,60 @@ type WorkspaceBodyProps = {
 	onOpenConversationSettings: (conversationId: string) => void
 }
 
-export function WorkspaceBody({
-	hasLoaded,
+const threadOf = ({
 	bot,
 	conversation,
 	conversationRuntimes,
 	chat,
-	attachments,
-	readerName,
 	isSettingsOpen,
 	isOverlayOpen,
 	onToggleSettings,
 	isConversationSettingsOpen,
 	onOpenConversationSettings,
-}: WorkspaceBodyProps) {
-	if (!hasLoaded) {
+}: WorkspaceBodyProps): Thread | null => {
+	if (conversation) {
+		return {
+			kind: "conversation",
+			conversation,
+			runtimes: conversationRuntimes,
+			isSettingsOpen: isConversationSettingsOpen,
+			onOpenSettings: onOpenConversationSettings,
+		}
+	}
+	if (bot) {
+		return {
+			kind: "bot",
+			bot,
+			chat,
+			isSettingsOpen,
+			isOverlayOpen,
+			onToggleSettings,
+		}
+	}
+	return null
+}
+
+export function WorkspaceBody(props: WorkspaceBodyProps) {
+	if (!props.hasLoaded) {
 		return <AppBootScreen data-tauri-drag-region="deep" />
 	}
 
-	if (conversation) {
-		return (
-			<ConversationScreen
-				attachments={attachments}
-				conversation={conversation}
-				isSettingsOpen={isConversationSettingsOpen}
-				onOpenSettings={onOpenConversationSettings}
-				readerName={readerName}
-				runtimes={conversationRuntimes}
-			/>
-		)
-	}
+	const thread = threadOf(props)
 
-	if (bot) {
+	if (!thread) {
 		return (
-			<ChatScreen
-				attachments={attachments}
-				bot={bot}
-				chat={chat}
-				isOverlayOpen={isOverlayOpen}
-				isSettingsOpen={isSettingsOpen}
-				onToggleSettings={onToggleSettings}
-				readerName={readerName}
+			<AppHeader
+				data-tauri-drag-region="deep"
+				insetWindowControls={hasOverlayWindowControls()}
 			/>
 		)
 	}
 
 	return (
-		<AppHeader
-			data-tauri-drag-region="deep"
-			insetWindowControls={hasOverlayWindowControls()}
+		<ThreadScreen
+			attachments={props.attachments}
+			readerName={props.readerName}
+			thread={thread}
 		/>
 	)
 }
