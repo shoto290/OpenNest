@@ -8,6 +8,7 @@ import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 
 import { createQueue } from "../queue"
 import { createWriteLoop } from "../write-loop"
+import { presentParticipants } from "../conversations/roster-conversations"
 import type {
 	Bot,
 	Conversation,
@@ -126,6 +127,24 @@ const landingOn = (
 	}
 	return null
 }
+
+const withDeletedBot = (
+	conversations: Conversation[],
+	botId: string,
+): Conversation[] =>
+	conversations.map((conversation) => ({
+		...conversation,
+		participants: conversation.participants.map((participant) =>
+			participant.botId === botId
+				? { ...participant, isDeleted: true }
+				: participant,
+		),
+	}))
+
+const seats = (conversation: Conversation, botId: string) =>
+	presentParticipants(conversation).some(
+		(participant) => participant.botId === botId,
+	)
 
 const firstRowId = (bots: Bot[], conversations: Conversation[]) =>
 	bots[0]?.id ?? conversations[0]?.id ?? null
@@ -345,6 +364,18 @@ export const createRosterController = (
 		})
 	}
 
+	const emptySeatsIn = async (spaceId: string, botId: string) => {
+		const held = rosterIn(state.conversationRosters, spaceId)
+		const emptied = await Promise.all(
+			held.map((conversation) =>
+				seats(conversation, botId)
+					? store.removeConversationParticipant(conversation.id, botId)
+					: Promise.resolve(conversation),
+			),
+		)
+		set({ conversationRosters: withConversations(spaceId, emptied) })
+	}
+
 	const catchUpOnLeftConversation = () => {
 		const left = state.selectedConversationId
 		if (left !== null) {
@@ -540,6 +571,7 @@ export const createRosterController = (
 				if (!home || !moved || home === spaceId) {
 					return null
 				}
+				await emptySeatsIn(home, botId)
 				await store.moveBotToSpace(botId, spaceId)
 				set({
 					rosters: withRoster(
@@ -594,11 +626,13 @@ export const createRosterController = (
 				await store.deleteBot(id)
 				writes.drop(id)
 				const bots = state.bots.filter((bot) => bot.id !== id)
+				const conversations = withDeletedBot(state.conversations, id)
 				const { [id]: _deleted, ...previews } = state.previews
 				set({
 					rosters: withRoster(state.spaceId, bots),
+					conversationRosters: withConversations(state.spaceId, conversations),
 					previews,
-					...landOn(bots, state.conversations, null),
+					...landOn(bots, conversations, null),
 					isEditing: false,
 					isShowingDanger: false,
 				})
@@ -661,8 +695,11 @@ export const createRosterController = (
 				const conversations = state.conversations.filter(
 					(conversation) => conversation.id !== id,
 				)
+				const { [id]: _forgotten, ...conversationPreviews } =
+					state.conversationPreviews
 				set({
 					conversationRosters: withConversations(state.spaceId, conversations),
+					conversationPreviews,
 					...landOn(state.bots, conversations, null),
 				})
 			}).catch(reload),

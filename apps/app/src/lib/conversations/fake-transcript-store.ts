@@ -190,6 +190,7 @@ export const createFakeTranscriptStore = (
 	const pageSize = options.pageSize ?? TRANSCRIPT_PAGE_SIZE
 	const bots = new Map<string, Bot>([[DEFAULT_BOT.id, DEFAULT_BOT]])
 	const spaces = new Map<string, Space>([[DEFAULT_SPACE.id, DEFAULT_SPACE]])
+	const departed = new Map<string, Bot>()
 	const spaceOf = new Map<string, string>([[DEFAULT_BOT.id, DEFAULT_SPACE.id]])
 	const sections = new Map<string, Section>()
 	const conversations = new Map<string, StoredConversation>()
@@ -393,7 +394,7 @@ export const createFakeTranscriptStore = (
 
 	const participantsOf = (conversationId: string): Participant[] =>
 		(seats.get(conversationId) ?? []).flatMap((seat) => {
-			const bot = bots.get(seat.botId)
+			const bot = bots.get(seat.botId) ?? departed.get(seat.botId)
 			return bot
 				? [
 						{
@@ -405,7 +406,7 @@ export const createFakeTranscriptStore = (
 							avatarAnimal: bot.avatarAnimal,
 							avatarBlot: bot.avatarBlot,
 							avatarImagePath: bot.avatarImagePath,
-							isDeleted: false,
+							isDeleted: !bots.has(seat.botId),
 						},
 					]
 				: []
@@ -710,9 +711,12 @@ export const createFakeTranscriptStore = (
 		},
 
 		deleteBot: (id: string) => {
-			if (!bots.delete(id)) {
+			const bot = bots.get(id)
+			if (!bot) {
 				return refuse({ kind: "unknownBot", id })
 			}
+			bots.delete(id)
+			departed.set(id, bot)
 			spaceOf.delete(id)
 			commands.delete(id)
 			skills.delete(id)
