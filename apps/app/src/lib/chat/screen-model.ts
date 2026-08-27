@@ -286,3 +286,19 @@ export function claimsComposerFocus(claim: ComposerFocusClaim): boolean {
 		!claim.isOverlayOpen
 	)
 }
+
+export function markedRunsOf(
+	runs: TranscriptRow[][],
+	workingBotIds: (string | null)[],
+): Set<number> {
+	const closingRunOfBot = new Map<string, number>()
+
+	runs.forEach((run, index) => {
+		const botId = run[0].authorBotId
+		if (botId && !workingBotIds.includes(botId)) {
+			closingRunOfBot.set(botId, index)
+		}
+	})
+
+	return new Set(closingRunOfBot.values())
+}

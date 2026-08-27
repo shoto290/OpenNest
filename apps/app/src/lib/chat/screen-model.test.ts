@@ -10,6 +10,7 @@ import {
 	bubbleOf,
 	claimsComposerFocus,
 	emptyStateStatusFor,
+	markedRunsOf,
 	needsFreshSession,
 	noticeTitleFor,
 	quotedMessageIdsIn,
@@ -594,5 +595,30 @@ describe("claimsComposerFocus", () => {
 
 	it("yields to an open overlay", () => {
 		expect(claimsComposerFocus({ ...claim, isOverlayOpen: true })).toBe(false)
+	})
+})
+
+describe("markedRunsOf", () => {
+	const spoken = (id: string, authorBotId: string) =>
+		message({ id, authorBotId, content: "Said.", completion: "complete" })
+
+	it("marks the last run of every bot that stopped working", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				spoken("a", "bot-1"),
+				spoken("b", "bot-2"),
+				spoken("c", "bot-1"),
+			]),
+		)
+
+		expect([...markedRunsOf(runs, [null])].toSorted()).toEqual([1, 2])
+	})
+
+	it("leaves a bot unmarked while it is still working", () => {
+		const runs = toRuns(
+			toTranscriptRows([spoken("a", "bot-1"), spoken("b", "bot-2")]),
+		)
+
+		expect([...markedRunsOf(runs, ["bot-2"])]).toEqual([0])
 	})
 })
