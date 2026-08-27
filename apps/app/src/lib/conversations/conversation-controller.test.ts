@@ -89,6 +89,17 @@ const idOf = (conversation: Conversation, name: string) => {
 	return seat.botId
 }
 
+const refusingStore = (): TranscriptStore => ({
+	...createFakeTranscriptStore(),
+	pinMessage: () => Promise.reject(new Error("refused")),
+})
+
+const saidIn = async (harness: Harness) => {
+	await harness.controller.send("and now?")
+	await harness.settled()
+	return harness.controller.getState().messages[0]
+}
+
 const spokenIn = (controller: ConversationController) =>
 	controller
 		.getState()
@@ -286,5 +297,67 @@ describe("createConversationController", () => {
 			[null, "and now?"],
 			[ada, "walls up"],
 		])
+	})
+	it("records against the open conversation the pin the reader lays", async () => {
+		const said = await saidIn(harness)
+
+		await harness.controller.pin(said.id, 0)
+
+		const pinned = await harness.store.pinnedMessages(harness.conversation.id)
+		expect(pinned.map((pin) => [pin.message.id, pin.blockIndex])).toEqual([
+			[said.id, 0],
+		])
+	})
+
+	it("drops from the store the pin the reader takes back", async () => {
+		const said = await saidIn(harness)
+		await harness.controller.pin(said.id, 0)
+
+		await harness.controller.unpin(said.id, 0)
+
+		expect(await harness.controller.pins()).toEqual([])
+	})
+
+	it("hands back the pins the store holds for the open conversation", async () => {
+		const said = await saidIn(harness)
+		await harness.controller.pin(said.id, 1)
+
+		const pinned = await harness.controller.pins()
+
+		expect(pinned.map((pin) => [pin.message.id, pin.blockIndex])).toEqual([
+			[said.id, 1],
+		])
+	})
+
+	it("pins nothing and holds no pin while no conversation is open", async () => {
+		const controller = createConversationController(
+			createScriptedDriver(),
+			refusingStore(),
+		)
+
+		await expect(controller.pin("msg-1", 0)).resolves.toBeUndefined()
+
+		expect(await controller.pins()).toEqual([])
+	})
+
+	it("leaves the conversation as it stands when the store refuses a pin", async () => {
+		const store = refusingStore()
+		const bots = await seatBots(store, SPACE, ["Ada"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		const controller = createConversationController(
+			createScriptedDriver(),
+			store,
+		)
+		await controller.open(conversation)
+		const standing = controller.getState()
+
+		await expect(controller.pin("msg-1", 0)).rejects.toThrow("refused")
+
+		expect(controller.getState()).toBe(standing)
 	})
 })
