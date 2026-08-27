@@ -48,6 +48,7 @@ export function WorkspaceBody({
 				conversation={conversation}
 				isSettingsOpen={isConversationSettingsOpen}
 				onOpenSettings={onOpenConversationSettings}
+				readerName={readerName}
 				runtimes={conversationRuntimes}
 			/>
 		)

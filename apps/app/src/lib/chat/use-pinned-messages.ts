@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
-import type { ChatController } from "./chat-controller"
 import { type PinnedBubble, pinnedBubblesOf } from "./pinned-bubbles"
 import { bubbleIdOf } from "./screen-model"
 
 import type { MessagePin } from "../conversations/store-contract"
 
 const NO_PINS: MessagePin[] = []
+
+export type PinnedMessagesController = {
+	pin: (messageId: string, blockIndex: number) => Promise<void>
+	unpin: (messageId: string, blockIndex: number) => Promise<void>
+	pins: () => Promise<MessagePin[]>
+}
 
 export type PinnedBubbles = {
 	bubbles: PinnedBubble[]
@@ -17,7 +22,7 @@ export type PinnedBubbles = {
 }
 
 export function usePinnedMessages(
-	controller: ChatController,
+	controller: PinnedMessagesController,
 	conversationId: string | null,
 ): PinnedBubbles {
 	const [pins, setPins] = useState<MessagePin[]>(NO_PINS)
