@@ -21,7 +21,7 @@ export type SectionsController = {
 		spaceId: string,
 		name: string,
 		botId?: string | null,
-	) => Promise<void>
+	) => Promise<Section | undefined>
 	rename: (id: string, name: string) => void
 	reorder: (spaceId: string, ids: string[]) => Promise<void>
 	remove: (id: string) => Promise<void>
@@ -133,7 +133,11 @@ export const createSectionsController = (
 					await store.moveBotToSection(botId, created.id)
 					bots.move(botId, created.id)
 				}
-			}).catch(() => reload(spaceId)),
+				return created
+			}).catch(() => {
+				reload(spaceId)
+				return undefined
+			}),
 
 		rename: (id: string, name: string) => {
 			const stored = held(id)

@@ -2788,6 +2788,85 @@ export const NewSectionForABot = meta.story({
 	},
 })
 
+const openSurfaceMenu = async (canvasElement: HTMLElement) => {
+	const surface = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="roster-surface"]',
+	)
+	if (!surface) throw new Error("Nothing here draws a roster surface")
+	fireEvent.contextMenu(surface)
+	return within(await screen.findByRole("menu", { name: CREATE }))
+}
+
+export const RosterSurfaceMenu = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The panel itself answers a right-click. Everything the sidebar can make used to need a row to start from — a bot to hang a section on, a switcher to open for a space — so the empty ground under the roster was the one place a reader could aim and get nothing. It now carries the three things this panel makes on its own: a bot, a section, a space. The ground is the leftover column under the last row, so it is only ever reached when the aim missed every row, every section header and the header above them: those keep their own menus and take the click first. Check the menu names the three, in the order the panel builds them, and that a right-click on a row still opens that row's actions and not this.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openSurfaceMenu(canvasElement)
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["New bot", NEW_SECTION, "New space"])
+
+		await userEvent.click(menu.getByRole("menuitem", { name: "New bot" }))
+		await expect(args.onCreateBot).toHaveBeenCalled()
+
+		await userEvent.click(
+			(await openSurfaceMenu(canvasElement)).getByRole("menuitem", {
+				name: "New space",
+			}),
+		)
+		await expect(args.onCreateSpace).toHaveBeenCalled()
+
+		const row = await openRowMenu(canvasElement, "Beacon")
+		await expect(row.getByRole("menuitem", { name: "Settings" })).toBeVisible()
+	},
+})
+
+export const NewSectionFromNothing = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A section born from nothing. Picked from the panel's own menu, the naming field opens at the foot of the roster exactly as it does when a bot starts it — same field, same `New section` already selected — but with no row under it, because there is nothing to show yet. The roster above it is left untouched: no row moves, nothing is borrowed to fill the new group. Enter reports the name alone, and the host makes an empty section in the space on screen. Escape leaves the roster exactly as it was.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const openNewSection = async () => {
+			const menu = await openSurfaceMenu(canvasElement)
+			await userEvent.click(menu.getByRole("menuitem", { name: NEW_SECTION }))
+		}
+
+		await openNewSection()
+
+		const field = sectionField(canvasElement)
+		await expect(field).toHaveFocus()
+		await expect(field).toHaveAccessibleName("New section name")
+		await expect(field).toHaveValue(NEW_SECTION)
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+
+		await userEvent.keyboard("Reading{Escape}")
+		await expect(args.onCreateSection).not.toHaveBeenCalled()
+		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
+
+		await openNewSection()
+		await userEvent.keyboard("Reading{Enter}")
+		await expect(args.onCreateSection).toHaveBeenCalledWith(
+			"Reading",
+			undefined,
+		)
+	},
+})
+
 const NO_SECTION_LANDING = "__none__"
 
 const dropAreaFor = (canvasElement: HTMLElement, landing: string) => {
@@ -3526,17 +3605,17 @@ export const ConversationRowMenu = meta.story({
 })
 
 export const CreateMenu = meta.story({
-	args: conversationArgs(),
+	args: { ...conversationArgs(), onCreateSection: fn() },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The plus in the header now makes two things, so it stops acting and starts asking. A press opens a menu under it — the same menu the space switcher beside it opens, on press rather than on right-click — with one entry per thing the panel can make: a bot on its own, or a room to put several in. The button still says what it does before it is pressed and still reports that it carries a menu, so a keyboard reader is not surprised by a popup. A host that does not do rooms passes no `onCreateConversation` and keeps the plain button it always had, which is what every other story here shows — the menu is not the price of mounting this panel.",
+					"The plus in the header makes more than one thing, so it stops acting and starts asking. A press opens a menu under it — the same menu the space switcher beside it opens, on press rather than on right-click — with one entry per thing the panel can make: a bot on its own, a room to put several in, and the section that files them. The entries read in the order the panel builds them, so a section comes after the two things it holds. The button still says what it does before it is pressed and still reports that it carries a menu, so a keyboard reader is not surprised by a popup. A host that does not do rooms passes no `onCreateConversation` and keeps the plain button it always had, which is what every other story here shows — the menu is not the price of mounting this panel.",
 			},
 		},
 	},
-	play: async ({ args, canvas, userEvent }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const create = canvas.getByRole("button", { name: CREATE })
 		await expect(create).toHaveAttribute("aria-haspopup", "menu")
 
@@ -3547,20 +3626,65 @@ export const CreateMenu = meta.story({
 		const menu = within(await screen.findByRole("menu", { name: CREATE }))
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["New bot", "New conversation"])
+		).toEqual(["New bot", "New conversation", NEW_SECTION])
 		await expect(args.onCreateBot).not.toHaveBeenCalled()
+
+		const pick = async (name: string) => {
+			await userEvent.click(create)
+			await userEvent.click(
+				within(await screen.findByRole("menu", { name: CREATE })).getByRole(
+					"menuitem",
+					{ name },
+				),
+			)
+		}
 
 		await userEvent.click(menu.getByRole("menuitem", { name: "New bot" }))
 		await expect(args.onCreateBot).toHaveBeenCalled()
 
-		await userEvent.click(create)
-		await userEvent.click(
-			within(await screen.findByRole("menu", { name: CREATE })).getByRole(
-				"menuitem",
-				{ name: "New conversation" },
-			),
-		)
+		await pick("New conversation")
 		await expect(args.onCreateConversation).toHaveBeenCalled()
+
+		await pick(NEW_SECTION)
+		await expect(sectionField(canvasElement)).toHaveFocus()
+	},
+})
+
+export const NewSectionForAConversation = meta.story({
+	args: {
+		...conversationArgs(),
+		bots: SECTIONED_ROSTER,
+		sections: SECTIONS,
+		onCreateSection: fn(),
+	},
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"A room makes a section the same way a bot does. `Move to section` carries the same last entry, under the same label and behind the same rule, so a reader who learned the gesture on a bot row does not have to learn it twice. Picking it draws the section whole at the foot of the roster with the room already filed under it, and Enter reports the name together with the room it was made for — the host creates the section and files the room, and nothing is drawn here until it comes back through the props.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const branch = await openMoveToBranch(
+			canvasElement,
+			"Launch review",
+			userEvent,
+		)
+		await expect(
+			branch.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual([NEW_SECTION])
+
+		await userEvent.click(branch.getByRole("menuitem", { name: NEW_SECTION }))
+
+		const field = sectionField(canvasElement)
+		await expect(field).toHaveFocus()
+		await expect(field).toHaveValue(NEW_SECTION)
+		await expect(rowNames(canvasElement).at(-1)).toBe("Launch review")
+
+		await userEvent.keyboard("Reading{Enter}")
+		await expect(args.onCreateSection).toHaveBeenCalledWith("Reading", "launch")
 	},
 })
 

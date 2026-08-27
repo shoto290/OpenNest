@@ -1,21 +1,43 @@
-type RosteredBot = { id: string }
+type RosteredRow = { id: string }
 
-export type NewSectionSpace = {
-	rosters: Record<string, RosteredBot[]>
+type Rosters = Record<string, RosteredRow[]>
+
+export type NewSectionSource = {
+	rosters: Rosters
+	conversationRosters?: Rosters
 	shownSpaceId: string | null
-	botId?: string
+	rowId?: string
 }
 
-export const spaceForNewSection = ({
+export type NewSection = {
+	spaceId: string
+	botId: string | null
+	conversationId: string | null
+}
+
+const spaceHolding = (rosters: Rosters, rowId: string) =>
+	Object.entries(rosters).find(([, rows]) =>
+		rows.some((row) => row.id === rowId),
+	)?.[0]
+
+export const newSectionFor = ({
 	rosters,
+	conversationRosters = {},
 	shownSpaceId,
-	botId,
-}: NewSectionSpace): string | undefined => {
-	if (!botId) {
-		return shownSpaceId ?? undefined
+	rowId,
+}: NewSectionSource): NewSection | undefined => {
+	if (!rowId) {
+		return shownSpaceId
+			? { spaceId: shownSpaceId, botId: null, conversationId: null }
+			: undefined
 	}
-	const holding = Object.entries(rosters).find(([, bots]) =>
-		bots.some((bot) => bot.id === botId),
-	)
-	return holding?.[0]
+	const botSpace = spaceHolding(rosters, rowId)
+	if (botSpace) {
+		return { spaceId: botSpace, botId: rowId, conversationId: null }
+	}
+	const conversationSpace = spaceHolding(conversationRosters, rowId)
+	if (conversationSpace) {
+		return { spaceId: conversationSpace, botId: null, conversationId: rowId }
+	}
+	return undefined
 }
