@@ -3380,34 +3380,58 @@ export const ConversationWorking = meta.story({
 				...CONVERSATIONS[0],
 				status: "working" as const,
 				participants: [
-					PAIR[0],
+					{
+						...PAIR[0],
+						status: "working" as const,
+						pose: "searching" as const,
+					},
 					{
 						...PAIR[1],
 						status: "working" as const,
+						pose: "writing" as const,
 						badge: "attention" as const,
 					},
 				],
 			},
 			CONVERSATIONS[1],
+			{
+				id: "handover",
+				name: "Handover",
+				participants: [{ ...PAIR[0], status: "working" as const }],
+				lastMessage: "Rebuilt the bundle, both green.",
+				lastSpeaker: "Atlas",
+				timestamp: "08:12",
+			},
 		],
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"A room where one bot is running. The bot animates inside the stack the way it would on its own row, and its badge is carried up onto the room: a reader scanning the roster sees the dot on the room rather than having to open it to find which of its bots wants them. Only one dot is drawn whatever the room holds — the badge slot is the same one a bot row uses, in the same corner of the same square, so a mixed list has one dot per row and never a cluster. The quiet room beside it wears none.",
+					"A room where bots are running. The bot animates inside the stack the way it would on its own row, and its badge is carried up onto the room: a reader scanning the roster sees the dot on the room rather than having to open it to find which of its bots wants them. Only one dot is drawn whatever the room holds — the badge slot is the same one a bot row uses, in the same corner of the same square, so a mixed list has one dot per row and never a cluster. The preview line drops the last message for the work in progress, the way a bot row does, except a room names who is at it: the first room has two bots running and speaks of the one that spoke last, so the line never jumps between them mid-run. The third room holds a bot running without a pose and falls back to the same word a bot row falls back to. The quiet room in the middle keeps its message and wears no dot.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const busy = rowFor(canvasElement, "Launch review")
 		const quiet = rowFor(canvasElement, "Transport migration")
+		const poseless = rowFor(canvasElement, "Handover")
 
 		await expect(badgeIn(busy)).toBe("attention")
 		await expect(
 			busy.querySelectorAll('[data-slot="bot-activity-dot"]'),
 		).toHaveLength(1)
 		await expect(badgeIn(quiet)).toBeUndefined()
+
+		await expect(slotIn(busy, "roster-row-preview")).toHaveTextContent(
+			"Beacon: writing…",
+		)
+		await expect(slotIn(quiet, "roster-row-preview")).toHaveTextContent(
+			LAST_MESSAGE,
+		)
+		await expect(slotIn(poseless, "roster-row-preview")).toHaveTextContent(
+			"Atlas: thinking…",
+		)
 	},
 })
 
