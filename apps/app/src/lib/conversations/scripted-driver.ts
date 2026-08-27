@@ -1,4 +1,9 @@
-import type { AgentEvent, RuntimeScope } from "../agent/contract"
+import type {
+	AgentEvent,
+	PermissionDecision,
+	QuestionAnswers,
+	RuntimeScope,
+} from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
 
 export type Submission = {
@@ -6,10 +11,24 @@ export type Submission = {
 	prompt: string
 }
 
+export type Answered = {
+	botId: string
+	id: string
+	answers: QuestionAnswers
+}
+
+export type Decided = {
+	botId: string
+	id: string
+	decision: PermissionDecision
+}
+
 export type ScriptedDriver = ChatDriver & {
 	submissions: Submission[]
 	pushTo: (botId: string, events: AgentEvent[]) => void
 	cancelled: string[]
+	answered: Answered[]
+	decided: Decided[]
 }
 
 export const createScriptedDriver = (): ScriptedDriver => {
@@ -18,6 +37,8 @@ export const createScriptedDriver = (): ScriptedDriver => {
 	>()
 	const submissions: Submission[] = []
 	const cancelled: string[] = []
+	const answered: Answered[] = []
+	const decided: Decided[] = []
 
 	const scopeOf = (botId: string) => {
 		const last = submissions.findLast(
@@ -32,6 +53,8 @@ export const createScriptedDriver = (): ScriptedDriver => {
 	return {
 		submissions,
 		cancelled,
+		answered,
+		decided,
 		pushTo: (botId, events) => {
 			const scope = scopeOf(botId)
 			for (const event of events) {
@@ -58,8 +81,14 @@ export const createScriptedDriver = (): ScriptedDriver => {
 			cancelled.push(scope.botId)
 			return Promise.resolve()
 		},
-		respondToPermission: () => Promise.resolve(),
-		answerQuestion: () => Promise.resolve(),
+		respondToPermission: (scope, id, decision) => {
+			decided.push({ botId: scope.botId, id, decision })
+			return Promise.resolve()
+		},
+		answerQuestion: (scope, id, answers) => {
+			answered.push({ botId: scope.botId, id, answers })
+			return Promise.resolve()
+		},
 		shutdown: () => Promise.resolve(),
 		subscribe: (onEvent) => {
 			listeners.add(onEvent)

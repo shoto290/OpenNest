@@ -412,6 +412,145 @@ describe("createConversationController", () => {
 		expect(harness.controller.getState().waitingBotIds).toEqual([])
 	})
 
+	describe("a bot asking the reader", () => {
+		const askedIn = async (harness: Harness) => {
+			const nyx = idOf(harness.conversation, "Nyx")
+			await harness.controller.send("@Nyx hold the walls")
+			await harness.settled()
+			harness.driver.pushTo(nyx, [
+				{
+					type: "questionRequested",
+					request: {
+						id: "ask-1",
+						questions: [
+							{
+								header: "Walls",
+								question: "Which wall?",
+								options: [],
+								multiSelect: false,
+							},
+						],
+					},
+				},
+			])
+			await harness.settled()
+			return nyx
+		}
+
+		const permittedIn = async (harness: Harness) => {
+			const nyx = idOf(harness.conversation, "Nyx")
+			await harness.controller.send("@Nyx hold the walls")
+			await harness.settled()
+			harness.driver.pushTo(nyx, [
+				{
+					type: "permissionRequested",
+					request: {
+						id: "let-1",
+						toolName: "Bash",
+						title: "Run the mason",
+						detail: "mason --build",
+					},
+				},
+			])
+			await harness.settled()
+			return nyx
+		}
+
+		it("holds a question with the bot that asked it", async () => {
+			const nyx = await askedIn(harness)
+
+			expect(harness.controller.getState().pendingPrompt).toEqual({
+				kind: "question",
+				botId: nyx,
+				request: {
+					id: "ask-1",
+					questions: [
+						{
+							header: "Walls",
+							question: "Which wall?",
+							options: [],
+							multiSelect: false,
+						},
+					],
+				},
+			})
+		})
+
+		it("holds a permission with the bot that asked it", async () => {
+			const nyx = await permittedIn(harness)
+
+			expect(harness.controller.getState().pendingPrompt).toMatchObject({
+				kind: "permission",
+				botId: nyx,
+				request: { id: "let-1" },
+			})
+		})
+
+		it("answers on the runtime of the bot that asked, then releases the ask", async () => {
+			const nyx = await askedIn(harness)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			expect(harness.driver.answered).toEqual([
+				{
+					botId: nyx,
+					id: "ask-1",
+					answers: { "Which wall?": "the north" },
+				},
+			])
+			expect(harness.controller.getState().pendingPrompt).toBeNull()
+		})
+
+		it("writes the answers into the transcript as a message of the reader", async () => {
+			await askedIn(harness)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			expect(spokenIn(harness.controller)).toContainEqual([
+				null,
+				"Which wall?\n\nthe north",
+			])
+		})
+
+		it("decides on the runtime of the bot that asked, then releases the ask", async () => {
+			const nyx = await permittedIn(harness)
+
+			await harness.controller.respond("let-1", "allowOnce")
+			await harness.settled()
+
+			expect(harness.driver.decided).toEqual([
+				{ botId: nyx, id: "let-1", decision: "allowOnce" },
+			])
+			expect(harness.controller.getState().pendingPrompt).toBeNull()
+		})
+
+		it("releases the ask when the turn of the bot ends", async () => {
+			const nyx = await askedIn(harness)
+
+			harness.driver.pushTo(nyx, [
+				{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+			])
+			await harness.settled()
+
+			expect(harness.controller.getState().pendingPrompt).toBeNull()
+		})
+
+		it("denies the ask before cancelling the turn it is held in", async () => {
+			const nyx = await askedIn(harness)
+
+			await harness.controller.stop()
+			await harness.settled()
+
+			expect(harness.driver.decided).toEqual([
+				{ botId: nyx, id: "ask-1", decision: "deny" },
+			])
+			expect(harness.controller.getState().pendingPrompt).toBeNull()
+			expect(harness.driver.cancelled).toEqual([nyx])
+		})
+	})
+
 	it("writes every message with the bot that wrote it", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		await harness.controller.send("and now?")

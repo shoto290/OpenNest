@@ -29,10 +29,19 @@ import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-butto
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptMentionMenu } from "@workspace/ui/components/prompt-mention-menu"
+import {
+	ToolApproval,
+	ToolApprovalCode,
+} from "@workspace/ui/components/tool-approval"
+import {
+	ToolQuestion,
+	type ToolQuestionItem,
+} from "@workspace/ui/components/tool-question"
 import { UserAvatar } from "@workspace/ui/components/user-avatar"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { TurnBody } from "@/components/turn-body"
+import type { AskedQuestion, PermissionRequest } from "@/lib/agent/contract"
 import {
 	describeAttachmentError,
 	type StagedAttachment,
@@ -58,7 +67,11 @@ import {
 import { useAttachments } from "@/lib/chat/use-attachments"
 import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
 import type { WorkingState } from "@/lib/chat/working-kind"
-import type { RefusedMessage } from "@/lib/conversations/conversation-controller"
+import type {
+	ConversationController,
+	PendingPrompt,
+	RefusedMessage,
+} from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import {
 	type MentionBot,
@@ -319,6 +332,95 @@ const RefusedTurn = ({ message, repliedTo, onSendAgain }: RefusedTurnProps) => (
 		</UserTurn>
 	</ChatTurnGroup>
 )
+
+const toQuestionItem = (asked: AskedQuestion): ToolQuestionItem => ({
+	question: asked.question,
+	header: asked.header,
+	multiSelect: asked.multiSelect,
+	options: asked.options.map((option) => ({
+		label: option.label,
+		description: option.description ?? "",
+		preview: option.preview ?? undefined,
+	})),
+})
+
+type PendingPermissionProps = {
+	request: PermissionRequest
+	onAllowOnce: () => void
+	onDeny: () => void
+}
+
+const PendingPermission = ({
+	request,
+	onAllowOnce,
+	onDeny,
+}: PendingPermissionProps) => {
+	const t = useChatCopy()
+	const isShell = request.toolName === "Bash"
+	const parameters =
+		request.detail && !isShell
+			? [
+					{
+						id: "path",
+						label: t("screen.permission.path"),
+						value: request.detail,
+					},
+				]
+			: []
+
+	return (
+		<ToolApproval
+			description={t("screen.permission.description")}
+			onAllowOnce={onAllowOnce}
+			onDeny={onDeny}
+			parameters={parameters}
+			title={request.title}
+			tool={request.toolName}
+		>
+			{request.detail && isShell ? (
+				<ToolApprovalCode code={request.detail} />
+			) : null}
+		</ToolApproval>
+	)
+}
+
+type PendingPromptTurnProps = {
+	prompt: PendingPrompt
+	author?: MessageAuthor
+	controller: ConversationController
+}
+
+const PendingPromptTurn = ({
+	prompt,
+	author,
+	controller,
+}: PendingPromptTurnProps) => {
+	const deny = () => {
+		void controller.respond(prompt.request.id, "deny")
+	}
+
+	return (
+		<AssistantTurn author={author} bare>
+			{prompt.kind === "question" ? (
+				<ToolQuestion
+					onAnswer={(answers) => {
+						void controller.answer(prompt.request.id, answers)
+					}}
+					onDeny={deny}
+					questions={prompt.request.questions.map(toQuestionItem)}
+				/>
+			) : (
+				<PendingPermission
+					onAllowOnce={() => {
+						void controller.respond(prompt.request.id, "allowOnce")
+					}}
+					onDeny={deny}
+					request={prompt.request}
+				/>
+			)}
+		</AssistantTurn>
+	)
+}
 
 type ConversationComposerProps = {
 	bots: ConversationBot[]
@@ -607,6 +709,15 @@ export function ConversationScreen({
 						: undefined
 				}
 				onFollowChange={controller.follow}
+				pending={
+					state.pendingPrompt ? (
+						<PendingPromptTurn
+							author={authors.get(state.pendingPrompt.botId)}
+							controller={controller}
+							prompt={state.pendingPrompt}
+						/>
+					) : null
+				}
 				reply={
 					replyTarget
 						? {
