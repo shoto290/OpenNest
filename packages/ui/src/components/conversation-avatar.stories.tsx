@@ -45,12 +45,29 @@ const DUNE: ConversationParticipant = {
 	blot: "green",
 }
 
-const CROWD = [ATLAS, BEACON, CINDER, DUNE]
+const EMBER: ConversationParticipant = {
+	id: "ember",
+	name: "Ember",
+	animal: "mouse",
+	blot: "purple",
+}
+
+const CROWD = [ATLAS, BEACON, CINDER, DUNE, EMBER]
 
 const frameOf = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "conversation-avatar")[0]
 
 const heldIn = (frame: HTMLElement) => slotsIn(frame, "bot-identity-avatar")
+
+const countIn = (frame: HTMLElement) =>
+	slotsIn(frame, "conversation-avatar-overflow")[0]
+
+const cornerRatioOf = (node: HTMLElement) => {
+	const radius = getComputedStyle(node).borderTopLeftRadius
+	return radius.endsWith("%")
+		? Number.parseFloat(radius) / 100
+		: Number.parseFloat(radius) / node.getBoundingClientRect().width
+}
 
 const expectCentred = async (frame: HTMLElement, held: HTMLElement[]) => {
 	const box = frame.getBoundingClientRect()
@@ -94,7 +111,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The face of a room: the bots it holds, drawn inside one frame. It exists because a bot and a conversation live in the same lists — the roster, the header of the column beside it — and a room of one bot would otherwise be pixel for pixel that bot's own row. So the kind is carried by shape and never by a word: a bot floats free, a room is held in a container. The frame takes the same square a bot avatar takes, so nothing in the column moves between the two kinds; only what fills the square changes. Up to three bots are drawn, the rest are the caller's to count — `CONVERSATION_AVATAR_LIMIT` is exported for exactly that. It draws and nothing else: no name, no count, no layout, and it is hidden from a screen reader, because three avatar labels in front of a room name bury the name.",
+					"The face of a room: the bots it holds, drawn inside one frame. It exists because a bot and a conversation live in the same lists — the roster, the header of the column beside it — and a room of one bot would otherwise be pixel for pixel that bot's own row. So the kind is carried by shape and never by a word: a bot floats free, a room is held in a container. The frame takes the same square a bot avatar takes, so nothing in the column moves between the two kinds; only what fills the square changes. Up to three bots are drawn; past three the fourth cell of the grid, free by construction, holds how many were left out. It draws and nothing else — no name, no layout — and a room within its three faces is hidden from a screen reader, because three avatar labels in front of a room name bury the name. A room that overflows is the one exception: it announces its count as the label of the square, since nothing else in the row says it.",
 			},
 		},
 	},
@@ -122,6 +139,7 @@ export const Default = meta.story({
 		const held = heldIn(frame)
 
 		await expect(held).toHaveLength(2)
+		await expect(frame).toHaveAttribute("aria-hidden", "true")
 		await expect(
 			Number.parseFloat(getComputedStyle(frame).borderTopWidth),
 		).toBeGreaterThan(0)
@@ -163,21 +181,29 @@ export const Crowded = meta.story({
 		docs: {
 			description: {
 				story:
-					"Past three the frame stops drawing and leaves the counting to whoever mounts it. Three bots are held, the fourth is dropped, and the square never widens — a row of specks nobody can tell apart says less than three faces and a number on the name line. The caller reads `CONVERSATION_AVATAR_LIMIT` to know how many it left out, so the count and the drawing can never disagree.",
+					"A room of five. Three bots are held and the two left out are counted in the fourth cell, bottom right — the one the odd number of faces leaves free — drawn as a rounded square on the tile the avatars sit on, so nothing about the frame widens or shifts. The count and the drawing cannot disagree, since the same slice decides both. It is the only thing here a screen reader hears: the square carries `+2` as its label, and the faces stay silent.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const frame = frameOf(canvasElement)
 		const held = heldIn(frame)
+		const count = countIn(frame)
 
 		await expect(held).toHaveLength(3)
-		await expect(held[0].getBoundingClientRect().right).toBeLessThanOrEqual(
-			held[1].getBoundingClientRect().left,
-		)
-		await expect(held[0].getBoundingClientRect().bottom).toBeLessThanOrEqual(
-			held[2].getBoundingClientRect().top,
-		)
+		await expect(count).toHaveTextContent("+2")
+		await expect(frame).toHaveAccessibleName("+2")
+
+		const tiles = held.map((bot) => bot.getBoundingClientRect())
+		const box = count.getBoundingClientRect()
+
+		await expect(tiles[0].right).toBeLessThanOrEqual(tiles[1].left)
+		await expect(tiles[0].bottom).toBeLessThanOrEqual(tiles[2].top)
+		await expect(box.left).toBeGreaterThanOrEqual(tiles[2].right)
+		await expect(box.top).toBeGreaterThanOrEqual(tiles[1].bottom)
+		await expect(Math.round(box.width)).toBe(Math.round(tiles[0].width))
+		await expect(Math.round(box.height)).toBe(Math.round(box.width))
+		await expect(cornerRatioOf(count)).toBeCloseTo(cornerRatioOf(frame), 2)
 		await expectCentred(frame, held)
 	},
 })

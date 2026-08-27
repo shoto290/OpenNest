@@ -3189,7 +3189,7 @@ export const Conversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation is a room holding several bots of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a bot row — a 40px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one bot it carries the bots in the room, drawn small in a fixed square so the column never widens. A room of two draws two, a room of five draws three and says how many it left out on the name line, in the place a bot row keeps for its title. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
+					"A conversation is a room holding several bots of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a bot row — a 40px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one bot it carries the bots in the room, drawn small in a fixed square so the column never widens. A room of two draws two, a room of five draws three and writes how many it left out in the fourth corner of the square. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
 			},
 		},
 	},
@@ -3221,7 +3221,7 @@ export const ConversationParticipants = meta.story({
 		docs: {
 			description: {
 				story:
-					"How many faces a room shows. Two bots draw two avatars, and the slot stays the same square a bot row gives one avatar — the tiles shrink, the column does not move. Past three the stack stops drawing and starts counting: three avatars and `+2` for the two it left out, so the slot never turns into a grid of specks nobody can tell apart. The count is written on the name line rather than inside the square, which keeps it legible at this size and, more to the point, keeps it readable — the stack itself is decorative and hidden from a screen reader, since three avatar labels in front of the room name would bury the name.",
+					"How many faces a room shows. Two bots draw two avatars, and the slot stays the same square a bot row gives one avatar — the tiles shrink, the column does not move. Past three the stack stops drawing and starts counting: three avatars and `+2` for the two it left out, so the slot never turns into a grid of specks nobody can tell apart. The count sits in the fourth cell of the square, the one the three faces leave free, rather than on the name line — the name reads as the name and nothing else. The square is the only thing that carries the count, so the row hands it to a screen reader as the label of that square; a room within its three faces stays decorative and hidden, since three avatar labels in front of the room name would bury the name.",
 			},
 		},
 	},
@@ -3233,13 +3233,18 @@ export const ConversationParticipants = meta.story({
 		await expect(stackIn(crowd)).toHaveLength(3)
 
 		await expect(
-			pair.querySelector('[data-slot="roster-row-badge"]'),
+			crowd.querySelector('[data-slot="roster-row-badge"]'),
 		).toBeNull()
-		await expect(slotIn(crowd, "roster-row-badge")).toHaveTextContent("+2")
+		await expect(
+			slotIn(crowd, "conversation-avatar-overflow"),
+		).toHaveTextContent("+2")
 
-		await expect(slotIn(crowd, "conversation-avatar")).toHaveAttribute(
+		await expect(slotIn(pair, "conversation-avatar")).toHaveAttribute(
 			"aria-hidden",
 			"true",
+		)
+		await expect(slotIn(crowd, "conversation-avatar")).toHaveAccessibleName(
+			"+2",
 		)
 
 		const square = slotIn(crowd, "conversation-avatar").getBoundingClientRect()
@@ -3263,6 +3268,14 @@ export const ConversationParticipants = meta.story({
 		}
 		await expect(tiles[0].right).toBeLessThanOrEqual(tiles[1].left)
 		await expect(tiles[0].bottom).toBeLessThanOrEqual(tiles[2].top)
+
+		const count = slotIn(
+			crowd,
+			"conversation-avatar-overflow",
+		).getBoundingClientRect()
+		await expect(count.left).toBeGreaterThanOrEqual(tiles[2].right)
+		await expect(count.top).toBeGreaterThanOrEqual(tiles[1].bottom)
+		await expect(Math.round(count.width)).toBe(Math.round(tiles[0].width))
 	},
 })
 
