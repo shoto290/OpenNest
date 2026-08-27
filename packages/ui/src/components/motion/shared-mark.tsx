@@ -36,8 +36,10 @@ export function SharedMark({ markId, className, ...props }: SharedMarkProps) {
 
 	return (
 		<motion.span
+			key={markId}
 			data-slot="shared-mark"
 			data-state="marked"
+			data-mark={markId}
 			layoutId={markId}
 			transition={reduce ? TRANSITION_NONE : SPRING_LAYOUT}
 			className={classes}

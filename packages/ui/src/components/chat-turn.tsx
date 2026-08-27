@@ -85,6 +85,7 @@ interface AssistantTurnProps {
 	onPin?: () => void
 	pinned?: boolean
 	bare?: boolean
+	botId?: string
 	author?: MessageAuthor
 	avatar?: ReactNode
 	carriesMark?: boolean
@@ -358,14 +359,15 @@ function AssistantTurn({
 	onPin,
 	pinned = false,
 	bare = false,
+	botId,
 	author,
 	avatar,
 	carriesMark = false,
 	className,
 }: AssistantTurnProps) {
 	const { t } = useTranslation("chat")
-	const transcriptMarkId = useChatMarkId()
-	const markId = carriesMark ? transcriptMarkId : undefined
+	const markedBotId = carriesMark ? (botId ?? author?.id) : undefined
+	const markId = useChatMarkId(markedBotId)
 	const footerKey = TURN_FOOTER_KEY[state]
 	const footer = footerKey ? t(footerKey) : undefined
 	const anchor = useMessageAnchor(messageId)

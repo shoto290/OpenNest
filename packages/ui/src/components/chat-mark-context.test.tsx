@@ -6,18 +6,30 @@ import {
 	useChatMarkId,
 } from "@workspace/ui/components/chat-mark-context"
 
-const MarkReader = () => <i>{useChatMarkId()}</i>
+const MarkReader = ({ botId }: { botId?: string }) => {
+	const markId = useChatMarkId(botId) ?? "plain"
 
-const readMarkIds = (transcriptKeys: (string | undefined)[]) => {
+	return (
+		<>
+			<i>{markId}</i>
+			<i>{markId}</i>
+		</>
+	)
+}
+
+type MarkRequest = { transcriptKey?: string; botIds: (string | undefined)[] }
+
+const readMarkIds = (requests: MarkRequest[]) => {
 	const markup = renderToStaticMarkup(
 		<div>
-			{transcriptKeys.map((transcriptKey) => (
+			{requests.map(({ transcriptKey, botIds }) => (
 				<ChatMarkProvider
 					key={transcriptKey ?? "minted"}
 					transcriptKey={transcriptKey}
 				>
-					<MarkReader />
-					<MarkReader />
+					{botIds.map((botId) => (
+						<MarkReader botId={botId} key={botId ?? "unnamed"} />
+					))}
 				</ChatMarkProvider>
 			))}
 		</div>,
@@ -26,27 +38,52 @@ const readMarkIds = (transcriptKeys: (string | undefined)[]) => {
 	return [...markup.matchAll(/<i>(.*?)<\/i>/g)].map(([, markId]) => markId)
 }
 
-describe("ChatMarkProvider", () => {
-	it("hands out a different id to every transcript key", () => {
-		const [lyraMark, , orionMark] = readMarkIds(["bot-lyra", "bot-orion"])
+const inTranscript = (transcriptKey: string, ...botIds: string[]) => ({
+	transcriptKey,
+	botIds,
+})
+
+describe("useChatMarkId", () => {
+	it("hands out a different id to every bot of one conversation", () => {
+		const [lyraMark, , orionMark] = readMarkIds([
+			inTranscript("room-1", "bot-lyra", "bot-orion"),
+		])
 
 		expect(lyraMark).not.toBe(orionMark)
 	})
 
-	it("hands out the same id on every render of one transcript key", () => {
-		expect(readMarkIds(["bot-lyra"])).toEqual(readMarkIds(["bot-lyra"]))
+	it("hands out a different id to one bot across two conversations", () => {
+		const [inFirst, , inSecond] = readMarkIds([
+			inTranscript("room-1", "bot-lyra"),
+			inTranscript("room-2", "bot-lyra"),
+		])
+
+		expect(inFirst).not.toBe(inSecond)
 	})
 
-	it("shares one id between the readers of one provider", () => {
-		const [first, second] = readMarkIds(["bot-lyra"])
+	it("hands out the same id on every render of one bot in one conversation", () => {
+		const requests = [inTranscript("room-1", "bot-lyra")]
+
+		expect(readMarkIds(requests)).toEqual(readMarkIds(requests))
+	})
+
+	it("shares one id between the readers of one bot", () => {
+		const [first, second] = readMarkIds([inTranscript("room-1", "bot-lyra")])
 
 		expect(first).toBe(second)
 	})
 
-	it("mints an id shared by its readers when no transcript key is given", () => {
-		const [first, second] = readMarkIds([undefined])
+	it("names no mark for a bot the transcript cannot name", () => {
+		const [unnamed] = readMarkIds([
+			{ transcriptKey: "room-1", botIds: [undefined] },
+		])
 
-		expect(first).toBeTruthy()
-		expect(first).toBe(second)
+		expect(unnamed).toBe("plain")
+	})
+
+	it("names a mark under a provider that mints its own key", () => {
+		const [minted] = readMarkIds([{ botIds: ["bot-lyra"] }])
+
+		expect(minted).not.toBe("plain")
 	})
 })

@@ -120,6 +120,22 @@ const toPinnedRow = (
 	}
 }
 
+const markedRunsOf = (
+	runs: TranscriptRow[][],
+	workingBotIds: (string | null)[],
+) => {
+	const closingRunOfBot = new Map<string, number>()
+
+	runs.forEach((run, index) => {
+		const botId = run[0].authorBotId
+		if (botId && !workingBotIds.includes(botId)) {
+			closingRunOfBot.set(botId, index)
+		}
+	})
+
+	return new Set(closingRunOfBot.values())
+}
+
 const botNameIn = (
 	authors: Map<string, MessageAuthor>,
 	botId: string | null,
@@ -142,6 +158,7 @@ const SpeakingBots = ({
 		{speaking ? (
 			<BotWorking
 				animal={speaking.animal}
+				botId={speaking.id}
 				blot={speaking.blot}
 				image={speaking.image}
 				kind={work?.kind}
@@ -155,6 +172,7 @@ const SpeakingBots = ({
 			<BotWorking
 				animal={bot.animal}
 				blot={bot.blot}
+				botId={bot.id}
 				image={bot.image}
 				key={bot.id}
 				kind="waiting"
@@ -416,8 +434,10 @@ export function ConversationScreen({
 	const canAttach = present.length > 0
 	const staged = useAttachments(attachments, owner, canAttach, conversationRef)
 	const runs = toRuns(toTranscriptRows(state.messages))
-	const isAnyBotWorking =
-		state.speakingBotId !== null || state.waitingBotIds.length > 0
+	const markedRuns = markedRunsOf(runs, [
+		state.speakingBotId,
+		...state.waitingBotIds,
+	])
 	const botOf = useCallback(
 		(botId: string) => bots.find((bot) => bot.id === botId),
 		[bots],
@@ -605,7 +625,7 @@ export function ConversationScreen({
 
 				{runs.map((run, runIndex) => (
 					<ChatTurnGroup
-						carriesMark={runIndex === runs.length - 1 && !isAnyBotWorking}
+						carriesMark={markedRuns.has(runIndex)}
 						key={bubbleIdOf(run[0].messageId, run[0].blockIndex)}
 					>
 						{run.map((row) => (
