@@ -47,7 +47,7 @@ const previewAvatar = (canvasElement: HTMLElement) => {
 }
 
 const pictureField = (canvasElement: HTMLElement) => {
-	const [field] = slotsIn(canvasElement, "bot-picture-field")
+	const [field] = slotsIn(canvasElement, "profile-picture-field")
 	if (!field) throw new Error("The block is missing its picture field")
 	return field
 }
