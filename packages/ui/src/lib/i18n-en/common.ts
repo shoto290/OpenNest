@@ -8,10 +8,6 @@ const common = {
 	confirm: {
 		cancel: "Cancel",
 	},
-	dropzone: {
-		drop: "Drag, drop or paste an image",
-		browse: "or click to choose a file",
-	},
 	sidebar: {
 		label: "Sidebar",
 		toggle: "Toggle sidebar",
@@ -20,11 +16,6 @@ const common = {
 	},
 	contextMenu: {
 		label: "Context menu",
-	},
-	statefulButton: {
-		loading: "Loading",
-		success: "Done",
-		error: "Try again",
 	},
 	notification: {
 		question: "Asked you a question",

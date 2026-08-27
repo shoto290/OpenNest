@@ -1,5 +1,4 @@
 import type { ReactNode } from "react"
-import { useState } from "react"
 import { expect, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -12,7 +11,6 @@ import {
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	AnimatedSidebar,
-	AnimatedSidebarClose,
 	AnimatedSidebarContent,
 	AnimatedSidebarFooter,
 	AnimatedSidebarGroup,
@@ -23,12 +21,8 @@ import {
 	AnimatedSidebarMenu,
 	AnimatedSidebarMenuButton,
 	AnimatedSidebarMenuItem,
-	AnimatedSidebarMenuSub,
-	AnimatedSidebarMenuSubButton,
-	AnimatedSidebarMenuSubItem,
 	type AnimatedSidebarProps,
 	AnimatedSidebarProvider,
-	AnimatedSidebarRail,
 	AnimatedSidebarTrigger,
 	type AnimatedSidebarVariant,
 } from "@workspace/ui/components/motion/animated-sidebar"
@@ -206,7 +200,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The application shell's navigation panel: a provider owns the open state, the panel animates its width between the full and icon rails, and the inset takes the room that is left. Below the `md` breakpoint the same composition becomes a focus-trapped drawer. Every part is a slot — header, content, footer, groups, menus, submenus — so a product supplies its own routes without restyling the chrome.",
+					"The application shell's navigation panel: a provider owns the open state, the panel animates its width between the full and icon rails, and the inset takes the room that is left. Below the `md` breakpoint the same composition becomes a focus-trapped drawer. Every part is a slot — header, content, footer, groups, menus — so a product supplies its own routes without restyling the chrome.",
 			},
 		},
 	},
@@ -416,95 +410,13 @@ export const LongContent = meta.story({
 	render: (args) => <NavShell {...args} items={LONG_NAV_ITEMS} />,
 })
 
-const SubmenuShell = () => {
-	const [openId, setOpenId] = useState<string | null>("documents")
-
-	const groups = [
-		{ id: "documents", label: "Documents", icon: Icons.FileCode },
-		{ id: "schedule", label: "Schedule", icon: Icons.Calendar },
-	]
-
-	return (
-		<AnimatedSidebarProvider defaultOpen className="h-96 min-h-0 w-fit">
-			<AnimatedSidebar
-				ariaLabel="Sidebar with submenus"
-				panelClassName="h-full"
-			>
-				<AnimatedSidebarContent>
-					<AnimatedSidebarGroup>
-						<AnimatedSidebarGroupLabel>Workspace</AnimatedSidebarGroupLabel>
-						<AnimatedSidebarGroupContent>
-							<AnimatedSidebarMenu>
-								{groups.map((group) => (
-									<AnimatedSidebarMenuItem key={group.id}>
-										<AnimatedSidebarMenuButton
-											ariaExpanded={openId === group.id}
-											icon={<group.icon className="size-4" />}
-											onSelect={() =>
-												setOpenId(openId === group.id ? null : group.id)
-											}
-										>
-											{group.label}
-										</AnimatedSidebarMenuButton>
-										<AnimatedSidebarMenuSub open={openId === group.id}>
-											<AnimatedSidebarMenuSubItem>
-												<AnimatedSidebarMenuSubButton isActive>
-													{`${group.label} — recent`}
-												</AnimatedSidebarMenuSubButton>
-											</AnimatedSidebarMenuSubItem>
-											<AnimatedSidebarMenuSubItem>
-												<AnimatedSidebarMenuSubButton>
-													{`${group.label} — archived`}
-												</AnimatedSidebarMenuSubButton>
-											</AnimatedSidebarMenuSubItem>
-										</AnimatedSidebarMenuSub>
-									</AnimatedSidebarMenuItem>
-								))}
-							</AnimatedSidebarMenu>
-						</AnimatedSidebarGroupContent>
-					</AnimatedSidebarGroup>
-				</AnimatedSidebarContent>
-			</AnimatedSidebar>
-		</AnimatedSidebarProvider>
-	)
-}
-
-export const WithSubmenu = meta.story({
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"One disclosure open and one closed at the same time, so both halves of the transition are visible at rest. Check that the parent row reports `aria-expanded`, that the chevron rotation follows it, and that the closed submenu is removed from the tree rather than merely hidden. Pick `Default` for a flat menu with no nesting.",
-			},
-		},
-	},
-	render: () => <SubmenuShell />,
-	play: async ({ canvas, userEvent }) => {
-		const closed = canvas.getByRole("button", { name: "Schedule" })
-		await expect(closed).toHaveAttribute("aria-expanded", "false")
-		await expect(
-			canvas.queryByRole("button", { name: "Schedule — recent" }),
-		).toBeNull()
-
-		await userEvent.click(closed)
-		await expect(closed).toHaveAttribute("aria-expanded", "true")
-		await expect(
-			await canvas.findByRole("button", { name: "Schedule — recent" }),
-		).toHaveAttribute("aria-current", "page")
-
-		await expect(
-			canvas.getByRole("button", { name: "Documents" }),
-		).toHaveAttribute("aria-expanded", "false")
-	},
-})
-
 export const InLayout = meta.story({
 	parameters: {
 		layout: "fullscreen",
 		docs: {
 			description: {
 				story:
-					"The panel in its host: a rail on the seam, a close control beside the trigger, and `AnimatedSidebarInset` holding the page. Check that collapsing the panel widens the page instead of overlapping it, that the rail stays out of the tab order while the trigger carries the keyboard path, and that focus lands visibly on the first row. Pick `Default` to judge the panel on its own.",
+					"The panel in its host: a trigger in the header and `AnimatedSidebarInset` holding the page. Check that collapsing the panel widens the page instead of overlapping it, that the trigger carries the keyboard path, and that focus lands visibly on the first row. Pick `Default` to judge the panel on its own.",
 			},
 		},
 	},
@@ -512,14 +424,9 @@ export const InLayout = meta.story({
 		<AnimatedSidebarProvider defaultOpen className="h-96 min-h-0">
 			<AnimatedSidebar ariaLabel="Primary" panelClassName="h-full">
 				<AnimatedSidebarHeader>
-					<div className="flex items-center gap-2">
-						<AnimatedSidebarTrigger aria-label="Toggle navigation">
-							<Icons.More className="size-4" />
-						</AnimatedSidebarTrigger>
-						<AnimatedSidebarClose>
-							<Icons.Close className="size-4" />
-						</AnimatedSidebarClose>
-					</div>
+					<AnimatedSidebarTrigger aria-label="Toggle navigation">
+						<Icons.More className="size-4" />
+					</AnimatedSidebarTrigger>
 				</AnimatedSidebarHeader>
 				<AnimatedSidebarContent>
 					<AnimatedSidebarGroup>
@@ -541,7 +448,6 @@ export const InLayout = meta.story({
 						</AnimatedSidebarGroupContent>
 					</AnimatedSidebarGroup>
 				</AnimatedSidebarContent>
-				<AnimatedSidebarRail />
 			</AnimatedSidebar>
 			<AnimatedSidebarInset>
 				<div className="flex flex-col gap-3 p-6">
@@ -560,11 +466,6 @@ export const InLayout = meta.story({
 
 		await userEvent.tab()
 		await expect(trigger).toHaveFocus()
-
-		await userEvent.tab()
-		await expect(
-			canvas.getByRole("button", { name: "Close sidebar" }),
-		).toHaveFocus()
 
 		await userEvent.tab()
 		const firstLink = canvas.getByRole("link", { name: "Overview" })

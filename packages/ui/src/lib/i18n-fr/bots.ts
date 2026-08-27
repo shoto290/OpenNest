@@ -53,29 +53,6 @@ const bots = {
 		settings: "Réglages des espaces",
 		shortcut: "⌘{{rank}}",
 	},
-	resources: {
-		label: "Ressources",
-		actions: "Actions pour {{name}}",
-		rename: "Renommer {{name}}",
-		item: "élément",
-		itemLead: "Élément",
-		menu: {
-			rename: "Renommer",
-		},
-		position: {
-			before: "avant",
-			inside: "dans",
-			after: "après",
-		},
-		move: {
-			toTopLevel: "Déplacer au niveau supérieur",
-			busy: "Attendez la fin du déplacement en cours.",
-			done: "{{name}} déplacé {{position}} {{target}}.",
-			doneAtTopLevel: "{{name}} déplacé au niveau supérieur.",
-			failed: "Déplacement échoué. {{name}} a été rétabli.",
-		},
-		renameFailed: "Renommage échoué. {{name}} a été rétabli.",
-	},
 	dialog: {
 		untitled: "Bot sans titre",
 		breadcrumb: "Réglages",

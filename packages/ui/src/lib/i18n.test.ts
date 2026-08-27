@@ -54,10 +54,14 @@ describe("the runtime", () => {
 	it("counts in the plural forms French takes", () => {
 		activateLanguage("fr")
 
-		expect(i18n.t("activity.summary.messages", { count: 1 })).toBe("1 message")
-		expect(i18n.t("activity.summary.messages", { count: 4 })).toBe("4 messages")
-		expect(i18n.t("activity.summary.messages", { count: 1_000_000 })).toBe(
-			"1000000 messages",
+		expect(i18n.t("pinned.counted", { count: 1 })).toBe(
+			"Messages épinglés, 1 épinglé",
+		)
+		expect(i18n.t("pinned.counted", { count: 4 })).toBe(
+			"Messages épinglés, 4 épinglés",
+		)
+		expect(i18n.t("pinned.counted", { count: 1_000_000 })).toBe(
+			"Messages épinglés, 1000000 épinglés",
 		)
 	})
 })

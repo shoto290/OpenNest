@@ -7,9 +7,7 @@ import {
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
-import type { AgentActivityItem } from "@workspace/ui/components/agent-activity"
-import { AgentActivity } from "@workspace/ui/components/agent-activity"
-import { BLOT_TINTS, BotAvatar } from "@workspace/ui/components/bot-avatar"
+import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
 import { ANIMALS } from "@workspace/ui/components/bot-avatar-animals"
 import {
 	BotWorking,
@@ -17,11 +15,7 @@ import {
 } from "@workspace/ui/components/bot-working"
 import { Button } from "@workspace/ui/components/button"
 import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
-import {
-	AssistantTurn,
-	CHAT_AVATAR_SIZE,
-	UserTurn,
-} from "@workspace/ui/components/chat-turn"
+import { UserTurn } from "@workspace/ui/components/chat-turn"
 
 const BUSY_BOT = { animal: "owl", blot: "blue", seed: "bot-7" } as const
 
@@ -32,8 +26,6 @@ const ROOM_BOTS = [
 ] as const
 
 const [SPEAKING_BOT, ...WAITING_BOTS] = ROOM_BOTS
-
-const MARKED_BOT_ID = SPEAKING_BOT.botId
 
 const ROOMS = [
 	{
@@ -59,58 +51,6 @@ const BOT_WORKING_KINDS: BotWorkingKind[] = [
 	"writing",
 	"waiting",
 ]
-
-const ANSWER =
-	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell. Nothing crosses that line the other way."
-
-const ACTIVITY: AgentActivityItem[] = [
-	{ id: "read", type: "tool", action: "read", target: "AGENTS.md" },
-	{ id: "grep", type: "tool", action: "run", target: "rg packages" },
-	{ id: "sum", type: "trace", kind: "thinking", label: "Two workspaces" },
-]
-
-const MarkHandoff = () => {
-	const [delivered, setDelivered] = useState(false)
-
-	return (
-		<ChatMarkProvider>
-			<div className="mx-auto flex max-w-2xl flex-col gap-6">
-				<Button
-					size="sm"
-					variant="outline"
-					className="self-start"
-					onClick={() => setDelivered(!delivered)}
-				>
-					{delivered ? "Rewind to working" : "Land the turn"}
-				</Button>
-				<AssistantTurn
-					botId={MARKED_BOT_ID}
-					carriesMark
-					state={delivered ? "complete" : "streaming"}
-					copyText={delivered ? ANSWER : undefined}
-					avatar={
-						delivered ? (
-							<BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />
-						) : null
-					}
-				>
-					{ANSWER}
-				</AssistantTurn>
-				<AgentActivity
-					items={ACTIVITY}
-					status={delivered ? "complete" : "working"}
-					renderWorkingStatus={() => (
-						<BotWorking
-							botId={MARKED_BOT_ID}
-							kind="working"
-							label="Bash · rg packages"
-						/>
-					)}
-				/>
-			</div>
-		</ChatMarkProvider>
-	)
-}
 
 const RoomWorkers = () => (
 	<ChatMarkProvider transcriptKey={ROOMS[0].id}>
@@ -243,33 +183,6 @@ export const WithTool = meta.story({
 					"Reach for this when a tool is running: on hover the label names the step itself rather than a verb, and the clock says how long it has been going. Check that the elapsed time keeps counting behind the fade and that a long tool title does not push the row past the column.",
 			},
 		},
-	},
-})
-
-export const Mark = meta.story({
-	render: () => <MarkHandoff />,
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The second place a mark can leave from: an `AgentActivity` header, when the row that receives it is already on screen. Only the mark moves — the header settles into its summary and the bubble stays put. Pick `AI/ChatTurn → Mark` for the handoff itself and what the receiving row does.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const marks = () =>
-			canvasElement.querySelectorAll('[data-slot="shared-mark"]')
-
-		await expect(marks()).toHaveLength(1)
-
-		await userEvent.click(canvas.getByRole("button", { name: "Land the turn" }))
-		await waitFor(() =>
-			expect(
-				canvas.getByRole("button", { name: /Completed 3 steps/ }),
-			).toBeVisible(),
-		)
-
-		await expect(marks()).toHaveLength(1)
 	},
 })
 

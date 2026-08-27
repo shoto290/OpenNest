@@ -1,10 +1,12 @@
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { UPLOADED_AVATAR_IMAGE } from "@workspace/storybook/story-utils"
+import {
+	PICKED_PICTURE_FILE,
+	UPLOADED_AVATAR_IMAGE,
+} from "@workspace/storybook/story-utils"
 import { BotPictureField } from "@workspace/ui/components/bot-picture-field"
 import type { BotIdentity } from "@workspace/ui/components/bot-settings"
-import { PICKED_PICTURE_FILE } from "@workspace/ui/components/picture-dropzone.fixtures"
 
 const IDENTITY: BotIdentity = { animal: "owl", blot: "blue" }
 
