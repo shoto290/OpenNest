@@ -1170,6 +1170,10 @@ const BotRoster = ({
 
 const NEIGHBOURING = 1
 
+const CROSSING = 0.55
+
+const SETTLING = 150
+
 const isFlushWithPanel = (row: HTMLDivElement) => {
 	const under = row.children[Math.round(row.scrollLeft / row.clientWidth)]
 	if (!under) return false
@@ -1229,8 +1233,8 @@ const SpaceCarousel = ({
 		0,
 	)
 	const [restingOn, setRestingOn] = useState(chosen)
-	const isMoving = useRef(false)
-	const reported = useRef<string>(undefined)
+	const covering = useRef(chosen)
+	const settling = useRef<ReturnType<typeof setTimeout>>(undefined)
 
 	const restsOn = Math.min(restingOn, spaces.length - 1)
 	const firstDrawn = Math.max(restsOn - NEIGHBOURING, 0)
@@ -1247,39 +1251,35 @@ const SpaceCarousel = ({
 
 	useEffect(() => {
 		const node = viewport.current
-		if (!node || isMoving.current) return
+		if (!node || chosen === covering.current) return
 		if (!isBeside || isCut) {
 			setRestingOn(chosen)
 			return
 		}
-		const landing = chosenSlot * node.clientWidth
-		if (Math.abs(node.scrollLeft - landing) > 1)
-			node.scrollTo({ behavior: "smooth", left: landing })
+		node.scrollTo({ behavior: "smooth", left: chosenSlot * node.clientWidth })
 	}, [chosen, chosenSlot, isBeside, isCut])
 
-	const spaceUnder = (node: HTMLDivElement) =>
-		firstDrawn + Math.round(node.scrollLeft / node.clientWidth)
+	const spaceCrossed = (node: HTMLDivElement) => {
+		const drifted =
+			firstDrawn + node.scrollLeft / node.clientWidth - covering.current
+		if (Math.abs(drifted) < CROSSING) return covering.current
+		return covering.current + Math.round(drifted)
+	}
 
-	const report = (id: string) => {
-		if (id === selectedSpaceId || id === reported.current) return
-		reported.current = id
-		onSelectSpace?.(id)
+	const settle = () => {
+		const node = viewport.current
+		if (!node || !isFlushWithPanel(node)) return
+		setRestingOn(covering.current)
 	}
 
 	const follow = (event: UIEvent<HTMLDivElement>) => {
-		isMoving.current = true
-		const node = event.currentTarget
-		if (!isFlushWithPanel(node)) return
-		const flush = spaces[spaceUnder(node)]
-		if (flush) report(flush.id)
-	}
-
-	const land = (event: UIEvent<HTMLDivElement>) => {
-		const node = event.currentTarget
-		if (!isFlushWithPanel(node)) return
-		isMoving.current = false
-		reported.current = undefined
-		setRestingOn(spaceUnder(node))
+		clearTimeout(settling.current)
+		settling.current = setTimeout(settle, SETTLING)
+		const crossed = spaceCrossed(event.currentTarget)
+		if (crossed === covering.current) return
+		covering.current = crossed
+		const space = spaces[crossed]
+		if (space && space.id !== selectedSpaceId) onSelectSpace?.(space.id)
 	}
 
 	return (
@@ -1290,7 +1290,6 @@ const SpaceCarousel = ({
 			)}
 			data-slot="space-carousel"
 			onScroll={follow}
-			onScrollEnd={land}
 			ref={viewport}
 		>
 			{nearby.map((space) => (
