@@ -429,6 +429,8 @@ type ConversationComposerProps = {
 	canAttach: boolean
 	attachments: StagedAttachment[]
 	isDropTarget: boolean
+	readDraft: () => string
+	onPromptChange: (draft: string) => void
 	onAttach: (files: File[]) => void
 	onRemoveAttachment: (id: string) => void
 	onSubmit: (text: string) => Promise<boolean>
@@ -441,13 +443,23 @@ const ConversationComposer = ({
 	canAttach,
 	attachments,
 	isDropTarget,
+	readDraft,
+	onPromptChange,
 	onAttach,
 	onRemoveAttachment,
 	onSubmit,
 }: ConversationComposerProps) => {
 	const t = useChatCopy()
-	const [prompt, setPrompt] = useState("")
+	const [prompt, setPrompt] = useState(readDraft)
 	const [wasDismissed, setWasDismissed] = useState(false)
+
+	const changePrompt = useCallback(
+		(next: string) => {
+			setPrompt(next)
+			onPromptChange(next)
+		},
+		[onPromptChange],
+	)
 
 	const query = mentionQueryIn(prompt)
 	const isDismissed = holdsDismissal(wasDismissed, query)
@@ -459,20 +471,20 @@ const ConversationComposer = ({
 		(botId: string) => {
 			const taken = bots.find((bot) => bot.id === botId)
 			if (taken) {
-				setPrompt((held) => promptWithMention(held, taken.name))
+				changePrompt(promptWithMention(prompt, taken.name))
 			}
 			textareaRef.current?.focus({ preventScroll: true })
 		},
-		[bots, textareaRef],
+		[bots, changePrompt, prompt, textareaRef],
 	)
 
 	const submit = useCallback(
 		async (value: string) => {
 			if (await onSubmit(value)) {
-				setPrompt("")
+				changePrompt("")
 			}
 		},
-		[onSubmit],
+		[changePrompt, onSubmit],
 	)
 
 	return (
@@ -497,7 +509,7 @@ const ConversationComposer = ({
 				}
 				onAttach={canAttach ? onAttach : undefined}
 				onSubmit={submit}
-				onValueChange={setPrompt}
+				onValueChange={changePrompt}
 				placeholder={t("composer.placeholder")}
 				textareaRef={textareaRef}
 				value={prompt}
@@ -519,6 +531,7 @@ export function ConversationScreen({
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const conversationRef = useRef<HTMLDivElement>(null)
+	const drafts = useRef<Record<string, string>>({})
 	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
 	const bots = useMemo(
 		() => toConversationBots(conversation.participants),
@@ -626,7 +639,13 @@ export function ConversationScreen({
 	)
 
 	const focusComposer = useCallback(() => {
-		composerRef.current?.focus({ preventScroll: true })
+		const composer = composerRef.current
+		if (!composer) {
+			return
+		}
+		const caret = composer.value.length
+		composer.focus({ preventScroll: true })
+		composer.setSelectionRange(caret, caret)
 	}, [])
 
 	const holdReply = useCallback(
@@ -641,6 +660,18 @@ export function ConversationScreen({
 		setReplyTarget(null)
 		focusComposer()
 	}, [focusComposer])
+
+	const readDraft = useCallback(
+		() => drafts.current[conversation.id] ?? "",
+		[conversation.id],
+	)
+
+	const rememberDraft = useCallback(
+		(draft: string) => {
+			drafts.current[conversation.id] = draft
+		},
+		[conversation.id],
+	)
 
 	const send = useCallback(
 		async (text: string) => {
@@ -667,10 +698,13 @@ export function ConversationScreen({
 						bots={present}
 						canAttach={canAttach}
 						isDropTarget={staged.isDropTarget}
+						key={conversation.id}
 						leadId={leadOf(conversation)}
 						onAttach={staged.stage}
+						onPromptChange={rememberDraft}
 						onRemoveAttachment={staged.remove}
 						onSubmit={send}
+						readDraft={readDraft}
 						textareaRef={composerRef}
 					/>
 				}
