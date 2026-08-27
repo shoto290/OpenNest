@@ -10,7 +10,7 @@ import { cn } from "@workspace/ui/lib/utils"
 const MENTION_AVATAR_SIZE = 16
 
 const MENTION_CLASS =
-	"-my-0.5 inline-flex max-w-full items-center gap-1 rounded-full bg-current/10 py-0.5 pr-2 pl-1 align-middle font-medium"
+	"inline-flex max-w-full items-center gap-1 rounded-full bg-current/10 pr-2 pl-1 align-top font-medium"
 
 const UNKNOWN_CLASS = "pl-2 text-current/70"
 

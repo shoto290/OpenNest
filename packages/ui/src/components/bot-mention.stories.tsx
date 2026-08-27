@@ -12,6 +12,22 @@ import {
 
 const ROOM = [...CONVERSATION_BOTS.slice(0, 3), ...LONG_NAMED_BOTS]
 
+const spaceAroundAvatar = (canvasElement: HTMLElement) => {
+	const chip = canvasElement.querySelector('[data-slot="bot-mention"]')
+	const avatar = chip?.querySelector('[data-slot="bot-identity-avatar"]')
+
+	if (!avatar || !chip) throw new Error("The sentence drew no avatar")
+
+	const around = chip.getBoundingClientRect()
+	const drawn = avatar.getBoundingClientRect()
+
+	return {
+		left: drawn.left - around.left,
+		above: drawn.top - around.top,
+		below: around.bottom - drawn.bottom,
+	}
+}
+
 const Conversation = ({ children }: { children: ReactNode }) => (
 	<ConversationBotsProvider bots={ROOM}>
 		<p className="max-w-md text-sm leading-6">{children}</p>
@@ -52,12 +68,17 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A mention of a bot the conversation holds. Check that the chip sits on the baseline of the sentence without pushing the line height, that the avatar is the same drawing the roster gives that bot, and that the words either side keep their spacing. Pick `Unknown` for an id the conversation cannot resolve.",
+					"A mention of a bot the conversation holds. The chip is exactly as tall as the line it sits on, so it never pushes the line height, and the avatar keeps the same space on its left, above it and below it. Check that the avatar is the same drawing the roster gives that bot and that the words either side keep their spacing. Pick `Unknown` for an id the conversation cannot resolve.",
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByText("Atlas")).toBeVisible()
+
+		const { left, above, below } = spaceAroundAvatar(canvasElement)
+
+		await expect(above).toBeCloseTo(left, 0)
+		await expect(below).toBeCloseTo(left, 0)
 	},
 })
 

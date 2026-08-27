@@ -117,6 +117,10 @@ const LEAD_RUN = [
 const SECOND_REPLY =
 	"Taken. The migration is green on a fresh database, so <@bot-atlas> can publish."
 
+const MENTION_OPENING = "<@bot-basile> has the fixture."
+
+const WORD_OPENING = "Basile has the fixture."
+
 const GONE_REPLY =
 	"The fixture still names the old columns. Somebody will have to rewrite it."
 
@@ -129,12 +133,12 @@ const TURN_STATES: ChatTurnState[] = [
 
 const Avatar = () => <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />
 
-const bubblePaddingOf = (node: Element) => {
+const bubbleStyleOf = (node: Element) => {
 	const bubble = node.closest<HTMLElement>(
 		'[data-slot="message-bubble-content"]',
 	)
 	if (!bubble) throw new globalThis.Error("This node sits in no bubble")
-	return getComputedStyle(bubble).paddingLeft
+	return getComputedStyle(bubble)
 }
 
 const MarkHandoff = () => {
@@ -406,8 +410,10 @@ export const Table = meta.story({
 		const table = canvas.getByRole("group", { name: "Table" })
 
 		await expect(table).toBeVisible()
-		await expect(bubblePaddingOf(canvas.getByText(TABLE_INTRO))).not.toBe("0px")
-		await expect(bubblePaddingOf(table)).toBe("0px")
+		await expect(
+			bubbleStyleOf(canvas.getByText(TABLE_INTRO)).paddingLeft,
+		).not.toBe("0px")
+		await expect(bubbleStyleOf(table).paddingLeft).toBe("0px")
 	},
 })
 
@@ -712,6 +718,51 @@ export const Authored = meta.story({
 			firstCharacterLeft(bubble),
 			0,
 		)
+	},
+})
+
+export const OpenedByMention = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bubble whose first word is a bot. A mention is taller than the words around it, so a bubble that opens with one is padded evenly on the four sides instead of pressing the chip against its top edge — the space above the mention, below it and to its left is the same. A bubble that opens with words keeps the padding it always had, which is what the second row here is for. Check that the two bubbles read as the same bubble, one holding a chip and the other holding a sentence.",
+			},
+		},
+	},
+	render: () => (
+		<ConversationBotsProvider bots={ROOM}>
+			<div className="mx-auto flex max-w-2xl flex-col gap-6">
+				<AssistantTurn copyText={MENTION_OPENING} avatar={<Avatar />}>
+					<Markdown>{MENTION_OPENING}</Markdown>
+				</AssistantTurn>
+				<AssistantTurn copyText={WORD_OPENING} avatar={<Avatar />}>
+					<Markdown>{WORD_OPENING}</Markdown>
+				</AssistantTurn>
+			</div>
+		</ConversationBotsProvider>
+	),
+	play: async ({ canvas, canvasElement }) => {
+		const chip = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="bot-mention"]',
+		)
+		const bubble = chip?.closest<HTMLElement>(
+			'[data-slot="message-bubble-content"]',
+		)
+
+		if (!chip || !bubble) throw new globalThis.Error("The bubble drew no chip")
+
+		const around = bubble.getBoundingClientRect()
+		const mention = chip.getBoundingClientRect()
+		const left = mention.left - around.left
+
+		await expect(mention.top - around.top).toBeCloseTo(left, 0)
+		await expect(around.bottom - mention.bottom).toBeCloseTo(left, 0)
+
+		const words = bubbleStyleOf(canvas.getByText(WORD_OPENING))
+
+		await expect(words.paddingLeft).toBe(`${Math.round(left)}px`)
+		await expect(words.paddingTop).toBe("10px")
 	},
 })
 
