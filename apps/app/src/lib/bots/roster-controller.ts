@@ -16,6 +16,7 @@ import type {
 	Bot,
 	Conversation,
 	ConversationDraft,
+	Participant,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import {
@@ -132,18 +133,24 @@ const landingOn = (
 	return null
 }
 
-const withDeletedBot = (
+const withSeatsOf = (
 	conversations: Conversation[],
 	botId: string,
+	worn: Partial<Participant>,
 ): Conversation[] =>
 	conversations.map((conversation) => ({
 		...conversation,
 		participants: conversation.participants.map((participant) =>
-			participant.botId === botId
-				? { ...participant, isDeleted: true }
-				: participant,
+			participant.botId === botId ? { ...participant, ...worn } : participant,
 		),
 	}))
+
+const faceOf = (bot: Bot): Partial<Participant> => ({
+	name: bot.name,
+	avatarAnimal: bot.avatarAnimal,
+	avatarBlot: bot.avatarBlot,
+	avatarImagePath: bot.avatarImagePath,
+})
 
 const seats = (conversation: Conversation, botId: string) =>
 	presentParticipants(conversation).some(
@@ -275,6 +282,10 @@ export const createRosterController = (
 			rosters: withRoster(
 				state.spaceId,
 				state.bots.map((bot) => (bot.id === written.id ? written : bot)),
+			),
+			conversationRosters: withConversations(
+				state.spaceId,
+				withSeatsOf(state.conversations, written.id, faceOf(written)),
 			),
 		})
 	}
@@ -630,7 +641,9 @@ export const createRosterController = (
 				await store.deleteBot(id)
 				writes.drop(id)
 				const bots = state.bots.filter((bot) => bot.id !== id)
-				const conversations = withDeletedBot(state.conversations, id)
+				const conversations = withSeatsOf(state.conversations, id, {
+					isDeleted: true,
+				})
 				const { [id]: _deleted, ...previews } = state.previews
 				set({
 					rosters: withRoster(state.spaceId, bots),
