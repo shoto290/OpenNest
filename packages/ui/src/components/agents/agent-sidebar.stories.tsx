@@ -289,11 +289,16 @@ const expectFooterAtColumnBottom = async (canvasElement: HTMLElement) => {
 const offsetsFrom =
 	(edge: (rowBox: DOMRect, box: DOMRect) => number) =>
 	(rows: HTMLElement[], slot: string) =>
-		rows.map((row) => {
-			const rowBox = row.getBoundingClientRect()
-			const box = slotIn(row, slot).getBoundingClientRect()
-			return `${Math.round(edge(rowBox, box))}/${Math.round(box.top - rowBox.top)}`
-		})
+		rows.map((row) =>
+			Math.round(
+				edge(
+					row.getBoundingClientRect(),
+					slotIn(row, slot).getBoundingClientRect(),
+				),
+			),
+		)
+
+const topOffsets = offsetsFrom((rowBox, box) => box.top - rowBox.top)
 
 const startOffsets = offsetsFrom((rowBox, box) => box.left - rowBox.left)
 
@@ -313,11 +318,25 @@ const previewShortfalls = (rows: HTMLElement[]) =>
 		return Math.round(column.right - preview.right)
 	})
 
+const rowsWithPreview = (rows: HTMLElement[]) =>
+	rows.filter((row) => slotIn(row, "roster-row-preview").textContent !== "")
+
+const expectNameOnAvatarCentre = async (row: HTMLElement, avatarSlot: string) =>
+	expect(
+		verticalCentreOf(slotIn(row, "roster-row-name").getBoundingClientRect()),
+	).toBeCloseTo(
+		verticalCentreOf(slotIn(row, avatarSlot).getBoundingClientRect()),
+		0,
+	)
+
 const expectAlignedRows = async (rows: HTMLElement[]) => {
 	await expect(uniqueCount(startOffsets(rows, "roster-row-name"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-preview"))).toBe(1)
 	await expect(uniqueCount(startOffsets(rows, "roster-row-timestamp"))).toBe(1)
 	await expect(uniqueCount(endOffsets(rows, "roster-row-timestamp"))).toBe(1)
+	await expect(
+		uniqueCount(topOffsets(rowsWithPreview(rows), "roster-row-name")),
+	).toBe(1)
 	await expect(previewShortfalls(rows)).toEqual(rows.map(() => 0))
 	await expect(uniqueCount(rowHeights(rows))).toBe(1)
 }
@@ -570,7 +589,7 @@ export const NoHistory = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two bots nobody has talked to yet, between two that carry a message and a time. Check that a row with neither draws two empty lines rather than one — it keeps the height of a full row and holds its name exactly where its neighbours hold theirs, since the lines own their height and not the text inside them — and that the timestamp slot stays reserved at the end of the name line, so a time arriving later lands on the column the rest of the list already stands on instead of shifting it. Pick `Roster` for rows that all carry both, `LongContent` for the name that has to give way to a time on the same line.",
+					"Two bots nobody has talked to yet, between two that carry a message and a time. Check that a row with neither keeps the height of a full row and centres its name on its avatar, since the empty preview line gives up its height rather than pushing the name above the middle, and that the timestamp slot stays reserved at the end of the name line, so a time arriving later lands on the column the rest of the list already stands on instead of shifting it. Pick `BareRows` for the same centring on a room, `Roster` for rows that all carry both, `LongContent` for the name that has to give way to a time on the same line.",
 			},
 		},
 	},
@@ -580,6 +599,7 @@ export const NoHistory = meta.story({
 
 		await expect(slotIn(bare, "roster-row-timestamp")).toBeEmptyDOMElement()
 		await expect(slotIn(bare, "roster-row-preview")).toBeEmptyDOMElement()
+		await expectNameOnAvatarCentre(bare, "bot-identity-avatar")
 		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
 			"09:24",
 		)
@@ -3369,6 +3389,38 @@ export const ConversationPreview = meta.story({
 		await expect(long.getBoundingClientRect().height).toBeLessThanOrEqual(
 			SINGLE_LINE_HEIGHT,
 		)
+	},
+})
+
+export const BareRows = meta.story({
+	args: {
+		...conversationArgs(),
+		bots: [ROSTER[0], withoutHistory(ROSTER[1])],
+		conversations: [
+			CONVERSATIONS[0],
+			{ id: "kickoff", name: "Kickoff", participants: PAIR },
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bot nobody has written to and a room nobody has spoken in, each above one that carries a line. Check that a row with nothing to preview centres its name on the avatar instead of leaving it riding above the middle: the preview line owns its height only while it holds words, and the pair of lines keeps the height of a full row either way, so the list stays on one rhythm and no row grows or shrinks as the first message lands. Pick `NoHistory` for the bare bot among four, `ConversationPreview` for the room that has something to say.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const rows = rowsIn(canvasElement)
+		const bareBot = rowFor(canvasElement, "Beacon")
+		const bareRoom = rowFor(canvasElement, "Kickoff")
+
+		await expect(slotIn(bareBot, "roster-row-preview")).toBeEmptyDOMElement()
+		await expect(slotIn(bareRoom, "roster-row-preview")).toBeEmptyDOMElement()
+
+		await expectNameOnAvatarCentre(bareBot, "bot-identity-avatar")
+		await expectNameOnAvatarCentre(bareRoom, "conversation-avatar")
+
+		await expectAlignedRows(rows)
 	},
 })
 
