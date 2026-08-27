@@ -339,4 +339,50 @@ describe("createConversationRuntimes", () => {
 			nyx,
 		])
 	})
+
+	it("tells a watcher of every room it holds", async () => {
+		const reader = createReader()
+		const walls = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(walls)
+		const screen = await reader.enter(walls)
+		await screen.send("and now?")
+		screen.leave()
+
+		const watching = vi.fn()
+		reader.runtimes.subscribe(watching)
+		await reader.answer(ada, [started(ada), wrote(ada, "walls up"), ENDED])
+
+		expect(watching).toHaveBeenCalled()
+	})
+
+	it("stops telling a watcher about a room it has let go", async () => {
+		const reader = createReader()
+		const walls = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(walls)
+		const screen = await reader.enter(walls)
+		await screen.send("and now?")
+
+		const watching = vi.fn()
+		reader.runtimes.subscribe(watching)
+		await reader.runtimes.release(walls.id)
+		watching.mockClear()
+		await reader.answer(ada, [started(ada), wrote(ada, "walls up"), ENDED])
+
+		expect(watching).not.toHaveBeenCalled()
+	})
+
+	it("stops telling a watcher that walked away", async () => {
+		const reader = createReader()
+		const walls = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(walls)
+		const screen = await reader.enter(walls)
+		await screen.send("and now?")
+
+		const watching = vi.fn()
+		const stop = reader.runtimes.subscribe(watching)
+		stop()
+		await reader.answer(ada, [started(ada), wrote(ada, "walls up"), ENDED])
+
+		expect(watching).not.toHaveBeenCalled()
+	})
 })

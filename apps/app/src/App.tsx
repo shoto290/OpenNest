@@ -119,6 +119,7 @@ export function App() {
 
 	useNotifications({
 		chat: chat.controller,
+		runtimes: conversationRuntimes,
 		roster: roster.controller,
 		user: user.controller,
 	})

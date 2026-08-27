@@ -10,14 +10,14 @@ const BODY_KEY = {
 } as const satisfies Record<NotifiedEvent, string>
 
 export type NotificationWordsInput = {
-	botName: string
+	name: string
 	event: NotifiedEvent
 }
 
 export const notificationWordsFor = ({
-	botName,
+	name,
 	event,
 }: NotificationWordsInput): Pick<NotificationRequest, "title" | "body"> => ({
-	title: botName,
+	title: name,
 	body: i18n.t(BODY_KEY[event]),
 })

@@ -7,16 +7,19 @@ import { startNotificationSource } from "./notification-source"
 import { revealWindow, watchWindowFocus } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
+import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { UserController } from "../user/preferences-controller"
 
 export type NotificationsMount = {
 	chat: ChatController
+	runtimes: ConversationRuntimes
 	roster: RosterController
 	user: UserController
 }
 
 export const useNotifications = ({
 	chat,
+	runtimes,
 	roster,
 	user,
 }: NotificationsMount) => {
@@ -24,6 +27,7 @@ export const useNotifications = ({
 		() =>
 			startNotificationSource({
 				chat,
+				runtimes,
 				roster,
 				notifications: createNotifications(),
 				switches: () => user.getState().preferences,
@@ -32,6 +36,6 @@ export const useNotifications = ({
 				raiseWindow: () => revealWindow({ withFocus: true }),
 				playChime: createChime(),
 			}),
-		[chat, roster, user],
+		[chat, runtimes, roster, user],
 	)
 }
