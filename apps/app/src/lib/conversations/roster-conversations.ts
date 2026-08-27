@@ -56,7 +56,9 @@ export const leadOf = (conversation: Conversation): string | undefined =>
 export const presentParticipants = (
 	conversation: Conversation,
 ): Participant[] =>
-	conversation.participants.filter((participant) => participant.leftAt === null)
+	conversation.participants.filter(
+		(participant) => participant.leftAt === null && !participant.isDeleted,
+	)
 
 export const unseatedBots = (
 	bots: Bot[],
@@ -94,10 +96,7 @@ const speakerNameAmong = (
 	seated: Participant[],
 	preview: LastWord | undefined,
 ): string | undefined =>
-	seated.find(
-		(participant) =>
-			participant.botId === preview?.authorBotId && !participant.isDeleted,
-	)?.name
+	seated.find((participant) => participant.botId === preview?.authorBotId)?.name
 
 export const toRosterConversations = (
 	conversations: Conversation[],

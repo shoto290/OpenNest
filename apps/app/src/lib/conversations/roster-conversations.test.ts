@@ -136,6 +136,25 @@ describe("toRosterConversations", () => {
 		).toBeUndefined()
 	})
 
+	it("keeps the last word of a deleted bot and drops it from the seats", () => {
+		const [row] = toRosterConversations(
+			[
+				conversation({
+					participants: [
+						participant({ botId: "b-1", isDeleted: true }),
+						participant({ botId: "b-2", name: "Sous-chef" }),
+					],
+				}),
+			],
+			{ "c-1": { text: "Menu is set.", at: A_MINUTE_AGO, authorBotId: "b-1" } },
+			NOW,
+		)
+
+		expect(row.participants.map((seat) => seat.id)).toEqual(["b-2"])
+		expect(row.lastMessage).toBe("Menu is set.")
+		expect(row.lastSpeaker).toBeUndefined()
+	})
+
 	it("leaves the preview and the time of a room nothing was said in blank", () => {
 		const [row] = toRosterConversations([conversation()], {}, NOW)
 

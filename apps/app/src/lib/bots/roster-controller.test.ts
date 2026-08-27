@@ -624,6 +624,27 @@ describe("createRosterController on a space", () => {
 		expect(write).not.toHaveBeenCalled()
 	})
 
+	it("empties the seats a moved bot held in the space it leaves", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		const room = await store.createConversation({
+			spaceId: "personal",
+			sectionId: null,
+			title: "Launch",
+			botIds: ["default"],
+		})
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+
+		await controller.moveToSpace("default", elsewhere.id)
+
+		const left = controller.getState().conversationRosters.personal[0]
+		expect(seatedIn(left)).toEqual([])
+		expect(left.participants.map((seat) => seat.botId)).toContain("default")
+		expect(seatedIn((await store.conversations("personal"))[0])).toEqual([])
+		expect(room.id).toBe(left.id)
+	})
+
 	it("leaves the roster of the other spaces untouched when a bot is deleted", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
@@ -818,6 +839,23 @@ describe("createRosterController conversation previews", () => {
 					text: "Menu is set.",
 				},
 			)
+		})
+	})
+
+	it("forgets the last word of the conversation it deletes", async () => {
+		const store = createFakeTranscriptStore()
+		const room = await opened(store)
+		const other = await opened(store, "Dinner")
+		await saidIn(store, room.id, "Menu is set.")
+		await saidIn(store, other.id, "Table is booked.")
+		const controller = await loaded(store)
+
+		await controller.removeConversation(room.id)
+
+		const { conversationPreviews } = controller.getState()
+		expect(conversationPreviews).not.toHaveProperty(room.id)
+		expect(conversationPreviews[other.id]).toMatchObject({
+			text: "Table is booked.",
 		})
 	})
 
@@ -1039,6 +1077,25 @@ describe("createRosterController on conversations", () => {
 		const room = controller.getState().conversations[0]
 		expect(seatedIn(room)).toEqual(["default"])
 		expect(room.participants.map((seat) => seat.botId)).toContain(second.id)
+	})
+
+	it("empties the seats a deleted bot held and keeps it readable", async () => {
+		const store = createFakeTranscriptStore()
+		const second = await store.createBot(newBotIdentity([]), "personal")
+		const controller = await loaded(store)
+		await controller.createConversation({
+			title: "Launch",
+			botIds: ["default", second.id],
+		})
+
+		await controller.remove(second.id)
+
+		const room = controller.getState().conversations[0]
+		expect(seatedIn(room)).toEqual(["default"])
+		expect(room.participants.map((seat) => seat.botId)).toContain(second.id)
+		expect(seatedIn((await store.conversations("personal"))[0])).toEqual([
+			"default",
+		])
 	})
 
 	it("crowns the first bot still seated when the lead is dismissed", async () => {
