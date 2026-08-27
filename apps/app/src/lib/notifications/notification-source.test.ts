@@ -4,6 +4,7 @@ import {
 	createFakeNotificationPort,
 	type FakeNotificationPort,
 } from "./fake-notification-port"
+import type { ConversationRound } from "./notification-policy"
 import {
 	type NotificationSourceOptions,
 	type NotificationSourceSwitches,
@@ -12,6 +13,13 @@ import {
 
 import type { PermissionRequest, QuestionRequest } from "../agent/contract"
 import { type ChatState, initialChatState } from "../chat/chat-state"
+import type { Conversation } from "../conversations/store-contract"
+
+const BOT = { kind: "bot", id: "bot-one" } as const
+
+const OTHER_BOT = { kind: "bot", id: "bot-two" } as const
+
+const ROOM = { kind: "conversation", id: "room-one" } as const
 
 const ALL_ON: NotificationSourceSwitches = {
 	notifyOnQuestion: true,
@@ -61,14 +69,67 @@ const createFakeChat = () => {
 	}
 }
 
-const createFakeRoster = (bots: { id: string; name: string }[]) => {
-	const state = { bots }
+const conversation = (id: string, title: string): Conversation => ({
+	id,
+	spaceId: "space-one",
+	sectionId: null,
+	title,
+	instructions: "",
+	createdAt: 0,
+	updatedAt: 0,
+	participants: [],
+})
+
+const createFakeRuntimes = () => {
+	const rounds = new Map<string, ConversationRound>()
+	const listeners = new Set<() => void>()
+
+	return {
+		heldFor: (conversationId: string) => {
+			const round = rounds.get(conversationId)
+			return round ? { getState: () => round } : null
+		},
+		subscribe: (listener: () => void) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+		listenerCount: () => listeners.size,
+		release: (conversationId: string) => {
+			rounds.delete(conversationId)
+		},
+		publish: (
+			conversationId: string,
+			round: Partial<ConversationRound> = {},
+		) => {
+			rounds.set(conversationId, {
+				speakingBotId: null,
+				waitingBotIds: [],
+				...round,
+			})
+			for (const listener of [...listeners]) {
+				listener()
+			}
+		},
+	}
+}
+
+const createFakeRoster = (
+	bots: { id: string; name: string }[],
+	conversations: Conversation[] = [],
+) => {
+	const state = { bots, conversations }
 
 	return {
 		getState: () => state,
 		select: vi.fn(),
+		selectConversation: vi.fn(),
 		hold: (held: { id: string; name: string }[]) => {
 			state.bots = held
+		},
+		holdConversations: (held: Conversation[]) => {
+			state.conversations = held
 		},
 	}
 }
@@ -90,6 +151,7 @@ const createFakeWindowFocus = () => {
 
 type Harness = {
 	chat: ReturnType<typeof createFakeChat>
+	runtimes: ReturnType<typeof createFakeRuntimes>
 	roster: ReturnType<typeof createFakeRoster>
 	notifications: FakeNotificationPort
 	windowFocus: ReturnType<typeof createFakeWindowFocus>
@@ -100,15 +162,18 @@ type Harness = {
 const start = async (
 	options: Partial<NotificationSourceOptions> = {},
 	bots = [{ id: "bot-one", name: "Nyx" }],
+	conversations = [conversation("room-one", "Release")],
 ): Promise<Harness> => {
 	const chat = createFakeChat()
-	const roster = createFakeRoster(bots)
+	const runtimes = createFakeRuntimes()
+	const roster = createFakeRoster(bots, conversations)
 	const notifications = createFakeNotificationPort()
 	const windowFocus = createFakeWindowFocus()
 	const playChime = vi.fn()
 
 	const stop = startNotificationSource({
 		chat,
+		runtimes,
 		roster,
 		notifications,
 		switches: () => ALL_ON,
@@ -120,11 +185,20 @@ const start = async (
 	})
 	await Promise.resolve()
 
-	return { chat, roster, notifications, windowFocus, playChime, stop }
+	return { chat, runtimes, roster, notifications, windowFocus, playChime, stop }
 }
 
 const seed = (harness: Harness, botId: string) => {
 	harness.chat.publish(botId)
+	harness.notifications.sent.length = 0
+}
+
+const seedRound = (
+	harness: Harness,
+	conversationId: string,
+	round: Partial<ConversationRound> = {},
+) => {
+	harness.runtimes.publish(conversationId, round)
 	harness.notifications.sent.length = 0
 }
 
@@ -140,7 +214,7 @@ describe("startNotificationSource", () => {
 		harness.chat.publish("bot-one", { question: question("q-1") })
 
 		expect(harness.notifications.sent).toEqual([
-			{ botId: "bot-one", title: "Nyx", body: "Asked you a question" },
+			{ target: BOT, title: "Nyx", body: "Asked you a question" },
 		])
 	})
 
@@ -154,7 +228,7 @@ describe("startNotificationSource", () => {
 		harness.chat.publish("bot-two", { permission: permission("p-1") })
 
 		expect(harness.notifications.sent).toEqual([
-			{ botId: "bot-two", title: "Ora", body: "Wants your permission" },
+			{ target: OTHER_BOT, title: "Ora", body: "Wants your permission" },
 		])
 	})
 
@@ -192,7 +266,7 @@ describe("startNotificationSource", () => {
 		harness.chat.publish("bot-one", { question: question("q-1") })
 
 		expect(harness.notifications.sent).toEqual([
-			{ botId: "bot-one", title: "Nyx", body: "Asked you a question" },
+			{ target: BOT, title: "Nyx", body: "Asked you a question" },
 		])
 	})
 
@@ -206,7 +280,7 @@ describe("startNotificationSource", () => {
 		harness.chat.publish("bot-one", { question: question("q-2") })
 
 		expect(harness.notifications.sent).toEqual([
-			{ botId: "bot-one", title: "Nyx", body: "Asked you a question" },
+			{ target: BOT, title: "Nyx", body: "Asked you a question" },
 		])
 	})
 
@@ -229,7 +303,7 @@ describe("startNotificationSource", () => {
 		harness.chat.publish("bot-one", { question: question("q-2") })
 
 		expect(harness.notifications.sent).toEqual([
-			{ botId: "bot-one", title: "Nyx", body: "Asked you a question" },
+			{ target: BOT, title: "Nyx", body: "Asked you a question" },
 		])
 	})
 
@@ -272,7 +346,7 @@ describe("startNotificationSource", () => {
 		const raiseWindow = vi.fn()
 		const harness = await start({ raiseWindow })
 
-		harness.notifications.activate("bot-one")
+		harness.notifications.activate(BOT)
 
 		expect(raiseWindow).toHaveBeenCalled()
 		expect(harness.roster.select).toHaveBeenCalledWith("bot-one")
@@ -283,7 +357,7 @@ describe("startNotificationSource", () => {
 		const harness = await start({ raiseWindow })
 		harness.roster.hold([])
 
-		harness.notifications.activate("bot-one")
+		harness.notifications.activate(BOT)
 
 		expect(raiseWindow).toHaveBeenCalled()
 		expect(harness.roster.select).not.toHaveBeenCalled()
@@ -308,11 +382,129 @@ describe("startNotificationSource", () => {
 		harness.stop()
 		await Promise.resolve()
 		harness.chat.publish("bot-one", { question: question("q-1") })
-		harness.notifications.activate("bot-one")
+		harness.notifications.activate(BOT)
 
 		expect(harness.chat.listenerCount()).toBe(0)
+		expect(harness.runtimes.listenerCount()).toBe(0)
 		expect(harness.windowFocus.isWatched()).toBe(false)
 		expect(harness.notifications.sent).toEqual([])
 		expect(harness.roster.select).not.toHaveBeenCalled()
+	})
+})
+
+describe("startNotificationSource on a conversation", () => {
+	it("names the conversation whose round has finished", async () => {
+		const harness = await start()
+		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: ROOM, title: "Release", body: "Finished its turn" },
+		])
+	})
+
+	it("sends nothing while a bot of the conversation is still speaking", async () => {
+		const harness = await start()
+		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+
+		harness.runtimes.publish("room-one", { speakingBotId: "bot-two" })
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("sends one notification for a round several bots answered in turn", async () => {
+		const harness = await start()
+		seedRound(harness, "room-one", {
+			speakingBotId: "bot-one",
+			waitingBotIds: ["bot-two"],
+		})
+
+		harness.runtimes.publish("room-one", { waitingBotIds: ["bot-two"] })
+		harness.runtimes.publish("room-one", { speakingBotId: "bot-two" })
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([
+			{ target: ROOM, title: "Release", body: "Finished its turn" },
+		])
+	})
+
+	it("sends nothing for a conversation holding no runtime", async () => {
+		const harness = await start()
+
+		harness.chat.publish("bot-one")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("sends nothing on the first sight of a conversation", async () => {
+		const harness = await start()
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("sends nothing while the window holds the focus", async () => {
+		const harness = await start()
+		harness.windowFocus.tell(true)
+		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("sends nothing while the finished turn switch is off", async () => {
+		const harness = await start({
+			switches: () => ({ ...ALL_ON, notifyOnFinishedTurn: false }),
+		})
+		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("plays the chime the sound switch asks for", async () => {
+		const harness = await start()
+		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+
+		harness.runtimes.publish("room-one")
+
+		expect(harness.playChime).toHaveBeenCalledTimes(1)
+	})
+
+	it("shows the window and opens the conversation the click carries", async () => {
+		const raiseWindow = vi.fn()
+		const harness = await start({ raiseWindow })
+
+		harness.notifications.activate(ROOM)
+
+		expect(raiseWindow).toHaveBeenCalled()
+		expect(harness.roster.selectConversation).toHaveBeenCalledWith("room-one")
+		expect(harness.roster.select).not.toHaveBeenCalled()
+	})
+
+	it("shows the window and leaves the selection alone for a conversation that is gone", async () => {
+		const raiseWindow = vi.fn()
+		const harness = await start({ raiseWindow })
+		harness.roster.holdConversations([])
+
+		harness.notifications.activate(ROOM)
+
+		expect(raiseWindow).toHaveBeenCalled()
+		expect(harness.roster.selectConversation).not.toHaveBeenCalled()
+	})
+
+	it("forgets the round of a conversation whose runtime was let go", async () => {
+		const harness = await start()
+		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+
+		harness.runtimes.release("room-one")
+		harness.runtimes.publish("room-two")
+		harness.runtimes.publish("room-one")
+
+		expect(harness.notifications.sent).toEqual([])
 	})
 })

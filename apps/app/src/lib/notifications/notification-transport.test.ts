@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { type EventCallback, listen } from "@tauri-apps/api/event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { NotificationTarget } from "./notification-port"
 import { notificationTransport } from "./notification-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
@@ -11,11 +12,18 @@ const hostInvoke = vi.mocked(invoke)
 const hostListen = vi.mocked(listen)
 const reportedError = vi.spyOn(console, "error").mockImplementation(() => {})
 
-const sendOne = () =>
-	notificationTransport.send({ botId: "bot-one", title: "a", body: "b" })
+const BOT: NotificationTarget = { kind: "bot", id: "bot-one" }
 
-const clickWith = (botId: string) =>
-	({ event: "notification://activated", id: 1, payload: botId }) as never
+const CONVERSATION: NotificationTarget = {
+	kind: "conversation",
+	id: "room-one",
+}
+
+const sendOne = () =>
+	notificationTransport.send({ target: BOT, title: "a", body: "b" })
+
+const clickWith = (target: NotificationTarget) =>
+	({ event: "notification://activated", id: 1, payload: target }) as never
 
 beforeEach(() => {
 	hostInvoke.mockReset()
@@ -26,16 +34,30 @@ beforeEach(() => {
 })
 
 describe("notificationTransport", () => {
-	it("hands the host the bot the notification stands for", async () => {
+	it("hands the host the target the notification stands for", async () => {
 		await notificationTransport.send({
-			botId: "bot-one",
+			target: BOT,
 			title: "Nyx",
 			body: "answered",
 		})
 
 		expect(hostInvoke).toHaveBeenCalledWith("notification_show", {
-			botId: "bot-one",
+			target: BOT,
 			title: "Nyx",
+			body: "answered",
+		})
+	})
+
+	it("hands the host a conversation under its own kind", async () => {
+		await notificationTransport.send({
+			target: CONVERSATION,
+			title: "Release",
+			body: "answered",
+		})
+
+		expect(hostInvoke).toHaveBeenCalledWith("notification_show", {
+			target: CONVERSATION,
+			title: "Release",
 			body: "answered",
 		})
 	})
@@ -64,15 +86,17 @@ describe("notificationTransport", () => {
 		expect(reportedError).not.toHaveBeenCalled()
 	})
 
-	it("tells the listener which bot was clicked", async () => {
+	it("tells the listener which target was clicked", async () => {
 		await notificationTransport.onActivate(vi.fn())
 		const clicked = vi.fn()
 		await notificationTransport.onActivate(clicked)
 
-		const received = hostListen.mock.calls.at(-1)?.[1] as EventCallback<string>
-		received(clickWith("bot-two"))
+		const received = hostListen.mock.calls.at(
+			-1,
+		)?.[1] as EventCallback<NotificationTarget>
+		received(clickWith(CONVERSATION))
 
-		expect(clicked).toHaveBeenCalledWith("bot-two")
+		expect(clicked).toHaveBeenCalledWith(CONVERSATION)
 	})
 
 	it("answers with the unsubscribe the host handed back", async () => {

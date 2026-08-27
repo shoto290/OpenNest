@@ -2,11 +2,12 @@ import type {
 	NotificationActivation,
 	NotificationPort,
 	NotificationRequest,
+	NotificationTarget,
 } from "./notification-port"
 
 export type FakeNotificationPort = NotificationPort & {
 	sent: NotificationRequest[]
-	activate: (botId: string) => void
+	activate: (target: NotificationTarget) => void
 }
 
 export const createFakeNotificationPort = (): FakeNotificationPort => {
@@ -27,9 +28,9 @@ export const createFakeNotificationPort = (): FakeNotificationPort => {
 			}
 		},
 
-		activate: (botId) => {
+		activate: (target) => {
 			for (const listener of [...listeners]) {
-				listener(botId)
+				listener(target)
 			}
 		},
 	}

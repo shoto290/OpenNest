@@ -1,10 +1,15 @@
+export type NotificationTarget = {
+	kind: "bot" | "conversation"
+	id: string
+}
+
 export type NotificationRequest = {
-	botId: string
+	target: NotificationTarget
 	title: string
 	body: string
 }
 
-export type NotificationActivation = (botId: string) => void
+export type NotificationActivation = (target: NotificationTarget) => void
 
 export type NotificationUnsubscribe = () => void
 

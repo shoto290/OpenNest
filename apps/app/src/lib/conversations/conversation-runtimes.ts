@@ -9,8 +9,14 @@ import type { ChatDriver } from "../chat/driver"
 export type ConversationRuntimes = {
 	runtimeFor: (conversationId: string) => ConversationController
 	heldFor: (conversationId: string) => ConversationController | null
+	subscribe: (listener: () => void) => () => void
 	release: (conversationId: string) => Promise<void>
 	shutdown: () => Promise<void>
+}
+
+type HeldRuntime = {
+	controller: ConversationController
+	stop: () => void
 }
 
 export const createConversationRuntimes = (
@@ -18,21 +24,38 @@ export const createConversationRuntimes = (
 	store: TranscriptStore,
 	onNamed?: (conversationId: string, title: string) => void,
 ): ConversationRuntimes => {
-	const runtimes = new Map<string, ConversationController>()
+	const runtimes = new Map<string, HeldRuntime>()
+	const listeners = new Set<() => void>()
+
+	const publish = () => {
+		for (const listener of [...listeners]) {
+			listener()
+		}
+	}
 
 	const runtimeFor = (conversationId: string) => {
 		const held = runtimes.get(conversationId)
 		if (held) {
-			return held
+			return held.controller
 		}
 		const opened = createConversationController(driver, store, { onNamed })
 		opened.attach()
-		runtimes.set(conversationId, opened)
+		runtimes.set(conversationId, {
+			controller: opened,
+			stop: opened.subscribe(publish),
+		})
 		return opened
 	}
 
 	const heldFor = (conversationId: string) =>
-		runtimes.get(conversationId) ?? null
+		runtimes.get(conversationId)?.controller ?? null
+
+	const subscribe = (listener: () => void) => {
+		listeners.add(listener)
+		return () => {
+			listeners.delete(listener)
+		}
+	}
 
 	const release = async (conversationId: string) => {
 		const held = runtimes.get(conversationId)
@@ -40,14 +63,19 @@ export const createConversationRuntimes = (
 			return
 		}
 		runtimes.delete(conversationId)
-		await held.shutdown().catch(() => undefined)
+		held.stop()
+		publish()
+		await held.controller.shutdown().catch(() => undefined)
 	}
 
 	const shutdown = async () => {
 		const open = [...runtimes.values()]
 		runtimes.clear()
-		await Promise.all(open.map((runtime) => runtime.shutdown()))
+		for (const held of open) {
+			held.stop()
+		}
+		await Promise.all(open.map((held) => held.controller.shutdown()))
 	}
 
-	return { runtimeFor, heldFor, release, shutdown }
+	return { runtimeFor, heldFor, subscribe, release, shutdown }
 }

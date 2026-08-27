@@ -1,4 +1,5 @@
 import { type ChatState, isTurnBusy } from "../chat/chat-state"
+import type { ConversationState } from "../conversations/conversation-controller"
 import type { UserPreferences } from "../user/preferences-contract"
 
 export type NotifiedEvent = "question" | "permission" | "finishedTurn"
@@ -11,6 +12,11 @@ export type NotifiedChange = {
 export type NotificationSwitches = Pick<
 	UserPreferences,
 	"notifyOnQuestion" | "notifyOnPermission" | "notifyOnFinishedTurn"
+>
+
+export type ConversationRound = Pick<
+	ConversationState,
+	"speakingBotId" | "waitingBotIds"
 >
 
 export type NotificationPolicyInput = {
@@ -66,3 +72,24 @@ export const notificationsFor = ({
 		.filter((event) => switches[SWITCH_OF[event]])
 		.map((event) => ({ botId, event }))
 }
+
+export type ConversationPolicyInput = {
+	before: ConversationRound
+	after: ConversationRound
+	switches: NotificationSwitches
+	hasFocus: boolean
+}
+
+const isRoundBusy = ({ speakingBotId, waitingBotIds }: ConversationRound) =>
+	speakingBotId !== null || waitingBotIds.length > 0
+
+export const notifiesFinishedRound = ({
+	before,
+	after,
+	switches,
+	hasFocus,
+}: ConversationPolicyInput): boolean =>
+	!hasFocus &&
+	switches.notifyOnFinishedTurn &&
+	isRoundBusy(before) &&
+	!isRoundBusy(after)

@@ -1,11 +1,19 @@
 import {
+	type ConversationRound,
 	type NotificationSwitches,
 	notificationsFor,
+	notifiesFinishedRound,
 } from "./notification-policy"
-import type { NotificationPort } from "./notification-port"
+import type {
+	NotificationPort,
+	NotificationRequest,
+	NotificationTarget,
+} from "./notification-port"
 import { notificationWordsFor } from "./notification-words"
 
 import type { ChatState } from "../chat/chat-state"
+import { conversationName } from "../conversations/roster-conversations"
+import type { Conversation } from "../conversations/store-contract"
 import type { UserPreferences } from "../user/preferences-contract"
 
 type NotifiedBot = {
@@ -18,9 +26,17 @@ type ChatSource = {
 	subscribe: (listener: () => void) => () => void
 }
 
+type RuntimeSource = {
+	heldFor: (
+		conversationId: string,
+	) => { getState: () => ConversationRound } | null
+	subscribe: (listener: () => void) => () => void
+}
+
 type RosterSource = {
-	getState: () => { bots: NotifiedBot[] }
+	getState: () => { bots: NotifiedBot[]; conversations: Conversation[] }
 	select: (botId: string) => void
+	selectConversation: (conversationId: string) => void
 }
 
 export type NotificationSourceSwitches = NotificationSwitches &
@@ -28,6 +44,7 @@ export type NotificationSourceSwitches = NotificationSwitches &
 
 export type NotificationSourceOptions = {
 	chat: ChatSource
+	runtimes: RuntimeSource
 	roster: RosterSource
 	notifications: NotificationPort
 	switches: () => NotificationSourceSwitches
@@ -37,8 +54,25 @@ export type NotificationSourceOptions = {
 	playChime: () => void
 }
 
+type Reading = {
+	switches: NotificationSourceSwitches
+	hasFocus: boolean
+}
+
+const forgetBeyond = <Held>(seen: Map<string, Held>, ids: string[]) => {
+	if (seen.size <= ids.length) {
+		return
+	}
+	for (const id of seen.keys()) {
+		if (!ids.includes(id)) {
+			seen.delete(id)
+		}
+	}
+}
+
 export const startNotificationSource = ({
 	chat,
+	runtimes,
 	roster,
 	notifications,
 	switches,
@@ -48,22 +82,16 @@ export const startNotificationSource = ({
 	playChime,
 }: NotificationSourceOptions): (() => void) => {
 	const seen = new Map<string, ChatState>()
+	const seenRounds = new Map<string, ConversationRound>()
 
 	let windowFocus: boolean | undefined
 
-	const forget = (bots: NotifiedBot[]) => {
-		for (const botId of seen.keys()) {
-			if (!bots.some((bot) => bot.id === botId)) {
-				seen.delete(botId)
-			}
-		}
-	}
-
-	const compare = () => {
+	const botNotifications = ({
+		switches,
+		hasFocus,
+	}: Reading): NotificationRequest[] => {
 		const { bots } = roster.getState()
-		const currentSwitches = switches()
-		const isFocused = windowFocus ?? hasFocus()
-		let hasNotified = false
+		const requests: NotificationRequest[] = []
 
 		for (const bot of bots) {
 			const after = chat.stateFor(bot.id)
@@ -78,37 +106,103 @@ export const startNotificationSource = ({
 				botId: bot.id,
 				before,
 				after,
-				switches: currentSwitches,
-				hasFocus: isFocused,
+				switches,
+				hasFocus,
 			})
 
 			for (const change of changes) {
-				hasNotified = true
-				void notifications.send({
-					botId: bot.id,
-					...notificationWordsFor({ botName: bot.name, event: change.event }),
+				requests.push({
+					target: { kind: "bot", id: bot.id },
+					...notificationWordsFor({ name: bot.name, event: change.event }),
 				})
 			}
 		}
 
-		if (hasNotified && currentSwitches.notifyWithSound) {
-			playChime()
+		forgetBeyond(
+			seen,
+			bots.map((bot) => bot.id),
+		)
+		return requests
+	}
+
+	const conversationNotifications = ({
+		switches,
+		hasFocus,
+	}: Reading): NotificationRequest[] => {
+		const { conversations } = roster.getState()
+		const requests: NotificationRequest[] = []
+
+		for (const conversation of conversations) {
+			const held = runtimes.heldFor(conversation.id)
+
+			if (!held) {
+				seenRounds.delete(conversation.id)
+				continue
+			}
+
+			const after = held.getState()
+			const before = seenRounds.get(conversation.id)
+			seenRounds.set(conversation.id, after)
+
+			if (
+				before &&
+				notifiesFinishedRound({ before, after, switches, hasFocus })
+			) {
+				requests.push({
+					target: { kind: "conversation", id: conversation.id },
+					...notificationWordsFor({
+						name: conversationName(conversation),
+						event: "finishedTurn",
+					}),
+				})
+			}
 		}
 
-		if (seen.size > bots.length) {
-			forget(bots)
+		forgetBeyond(
+			seenRounds,
+			conversations.map((conversation) => conversation.id),
+		)
+		return requests
+	}
+
+	const compare = () => {
+		const reading: Reading = {
+			switches: switches(),
+			hasFocus: windowFocus ?? hasFocus(),
+		}
+		const requests = [
+			...botNotifications(reading),
+			...conversationNotifications(reading),
+		]
+
+		for (const request of requests) {
+			void notifications.send(request)
+		}
+
+		if (requests.length > 0 && reading.switches.notifyWithSound) {
+			playChime()
 		}
 	}
 
-	const activate = (botId: string) => {
+	const activate = ({ kind, id }: NotificationTarget) => {
 		raiseWindow()
 
-		if (roster.getState().bots.some((bot) => bot.id === botId)) {
-			roster.select(botId)
+		const { bots, conversations } = roster.getState()
+
+		if (kind === "bot" && bots.some((bot) => bot.id === id)) {
+			roster.select(id)
+		}
+
+		if (
+			kind === "conversation" &&
+			conversations.some((conversation) => conversation.id === id)
+		) {
+			roster.selectConversation(id)
 		}
 	}
 
 	const stopChat = chat.subscribe(compare)
+	const stopRuntimes = runtimes.subscribe(compare)
 	const focus = watchFocus((isFocused) => {
 		windowFocus = isFocused
 	}).catch(() => undefined)
@@ -116,6 +210,7 @@ export const startNotificationSource = ({
 
 	return () => {
 		stopChat()
+		stopRuntimes()
 		void focus.then((stop) => stop?.())
 		void activation.then((stop) => stop?.())
 	}

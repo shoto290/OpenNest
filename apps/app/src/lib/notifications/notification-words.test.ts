@@ -9,35 +9,35 @@ afterEach(() => {
 })
 
 describe("notificationWordsFor", () => {
-	it("titles the notification with the bot's name", () => {
-		expect(
-			notificationWordsFor({ botName: "Nyx", event: "question" }).title,
-		).toBe("Nyx")
+	it("titles the notification with the name it was given", () => {
+		expect(notificationWordsFor({ name: "Nyx", event: "question" }).title).toBe(
+			"Nyx",
+		)
 	})
 
 	it("reads each event from the en catalogue", () => {
+		expect(notificationWordsFor({ name: "Nyx", event: "question" }).body).toBe(
+			"Asked you a question",
+		)
 		expect(
-			notificationWordsFor({ botName: "Nyx", event: "question" }).body,
-		).toBe("Asked you a question")
-		expect(
-			notificationWordsFor({ botName: "Nyx", event: "permission" }).body,
+			notificationWordsFor({ name: "Nyx", event: "permission" }).body,
 		).toBe("Wants your permission")
 		expect(
-			notificationWordsFor({ botName: "Nyx", event: "finishedTurn" }).body,
+			notificationWordsFor({ name: "Nyx", event: "finishedTurn" }).body,
 		).toBe("Finished its turn")
 	})
 
 	it("reads each event from the fr catalogue", () => {
 		activateLanguage("fr")
 
+		expect(notificationWordsFor({ name: "Nyx", event: "question" }).body).toBe(
+			"Vous a posé une question",
+		)
 		expect(
-			notificationWordsFor({ botName: "Nyx", event: "question" }).body,
-		).toBe("Vous a posé une question")
-		expect(
-			notificationWordsFor({ botName: "Nyx", event: "permission" }).body,
+			notificationWordsFor({ name: "Nyx", event: "permission" }).body,
 		).toBe("Demande votre permission")
 		expect(
-			notificationWordsFor({ botName: "Nyx", event: "finishedTurn" }).body,
+			notificationWordsFor({ name: "Nyx", event: "finishedTurn" }).body,
 		).toBe("A terminé son tour")
 	})
 })

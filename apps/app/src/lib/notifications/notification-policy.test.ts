@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	type ConversationPolicyInput,
+	type ConversationRound,
 	type NotificationPolicyInput,
 	type NotificationSwitches,
 	notificationsFor,
+	notifiesFinishedRound,
 } from "./notification-policy"
 
 import type { PermissionRequest, QuestionRequest } from "../agent/contract"
@@ -164,5 +167,85 @@ describe("notificationsFor", () => {
 
 	it("reports nothing when nothing moved", () => {
 		expect(decide({})).toEqual([])
+	})
+})
+
+const round = (
+	overrides: Partial<ConversationRound> = {},
+): ConversationRound => ({
+	speakingBotId: null,
+	waitingBotIds: [],
+	...overrides,
+})
+
+const decideRound = (input: Partial<ConversationPolicyInput>) =>
+	notifiesFinishedRound({
+		before: round(),
+		after: round(),
+		switches: ALL_ON,
+		hasFocus: false,
+		...input,
+	})
+
+describe("notifiesFinishedRound", () => {
+	it("reports the last bot of the room falling silent", () => {
+		expect(decideRound({ before: round({ speakingBotId: "bot-1" }) })).toBe(
+			true,
+		)
+	})
+
+	it("reports nothing while a bot is still speaking", () => {
+		expect(
+			decideRound({
+				before: round({ speakingBotId: "bot-1" }),
+				after: round({ speakingBotId: "bot-2" }),
+			}),
+		).toBe(false)
+	})
+
+	it("reports nothing while a bot is still waiting its turn", () => {
+		expect(
+			decideRound({
+				before: round({ speakingBotId: "bot-1", waitingBotIds: ["bot-2"] }),
+				after: round({ waitingBotIds: ["bot-2"] }),
+			}),
+		).toBe(false)
+	})
+
+	it("reports the room falling silent once the last waiting bot has spoken", () => {
+		expect(
+			decideRound({
+				before: round({ speakingBotId: "bot-2" }),
+				after: round(),
+			}),
+		).toBe(true)
+	})
+
+	it("reports nothing for a room that was silent already", () => {
+		expect(decideRound({})).toBe(false)
+	})
+
+	it("reports nothing for a round that starts", () => {
+		expect(decideRound({ after: round({ speakingBotId: "bot-1" }) })).toBe(
+			false,
+		)
+	})
+
+	it("reports nothing while the window holds the focus", () => {
+		expect(
+			decideRound({
+				before: round({ speakingBotId: "bot-1" }),
+				hasFocus: true,
+			}),
+		).toBe(false)
+	})
+
+	it("reports nothing while the finished turn switch is off", () => {
+		expect(
+			decideRound({
+				before: round({ speakingBotId: "bot-1" }),
+				switches: { ...ALL_ON, notifyOnFinishedTurn: false },
+			}),
+		).toBe(false)
 	})
 })
