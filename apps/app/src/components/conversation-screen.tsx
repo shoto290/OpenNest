@@ -3,7 +3,6 @@ import { type RefObject, useCallback, useMemo, useRef, useState } from "react"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { BotWorking } from "@workspace/ui/components/bot-working"
-import { Button } from "@workspace/ui/components/button"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import { ChatNotice } from "@workspace/ui/components/chat-notice"
 import {
@@ -17,6 +16,7 @@ import {
 	ConversationBotsProvider,
 } from "@workspace/ui/components/conversation-bots"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
+import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
@@ -68,7 +68,6 @@ import {
 } from "@/lib/conversations/roster-conversations"
 import type { Conversation } from "@/lib/conversations/store-contract"
 import { useConversation } from "@/lib/conversations/use-conversation"
-import { hasOverlayWindowControls } from "@/lib/host"
 
 type ConversationScreenProps = {
 	attachments: AttachmentsController
@@ -536,27 +535,13 @@ export function ConversationScreen({
 				header={
 					<AppHeader
 						data-tauri-drag-region="deep"
-						insetWindowControls={hasOverlayWindowControls()}
 						leading={
-							<Button
-								aria-expanded={isSettingsOpen}
-								onClick={() => onOpenSettings(conversation.id)}
-								size="lg"
-								variant="ghost"
-							>
-								{present.map((bot) => (
-									<BotIdentityAvatar
-										animal={bot.animal}
-										blot={bot.blot}
-										image={bot.image}
-										key={bot.id}
-										name={bot.name}
-										seed={bot.id}
-										size={PINNED_AVATAR_SIZE}
-									/>
-								))}
-								{conversation.title}
-							</Button>
+							<HeaderConversationButton
+								bots={present}
+								isSettingsOpen={isSettingsOpen}
+								name={conversation.title}
+								onOpenSettings={() => onOpenSettings(conversation.id)}
+							/>
 						}
 						trailing={
 							<PinnedMessages

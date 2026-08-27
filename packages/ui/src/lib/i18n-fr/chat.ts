@@ -205,6 +205,7 @@ const chat = {
 	screen: {
 		label: "Conversation Claude Code",
 		identity: "{{name}} — réglages du bot",
+		conversationIdentity: "{{name}} — réglages de la conversation",
 		placeholder: "Demandez à {{name}} de faire quelque chose…",
 		permission: {
 			description: "Claude Code attend votre accord avant de lancer cet outil.",
