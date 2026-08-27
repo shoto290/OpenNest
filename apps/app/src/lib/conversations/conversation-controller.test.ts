@@ -133,6 +133,46 @@ describe("createConversationController", () => {
 		])
 	})
 
+	it("stores on the message sent the identifier of the message it answers", async () => {
+		const said = await saidIn(harness)
+
+		await harness.controller.send("and this?", said.id)
+		await harness.settled()
+
+		const answering = harness.controller.getState().messages.at(-1)
+		expect(answering?.repliedToMessageId).toBe(said.id)
+
+		const page = await harness.store.loadPage(harness.conversation.id, null)
+		expect(
+			page.messages.find((message) => message.id === answering?.id)
+				?.repliedToMessageId,
+		).toBe(said.id)
+	})
+
+	it("stores no identifier when the message sent answers nothing", async () => {
+		const said = await saidIn(harness)
+
+		expect(said.repliedToMessageId).toBeNull()
+	})
+
+	it("stores no identifier when the message answered sits in another conversation", async () => {
+		const said = await saidIn(harness)
+		const elsewhere = await harness.store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Roofs",
+			botIds: harness.conversation.participants.map(({ botId }) => botId),
+		})
+		await harness.controller.open(elsewhere)
+		await harness.settled()
+
+		await harness.controller.send("and this?", said.id)
+		await harness.settled()
+
+		const answering = harness.controller.getState().messages.at(-1)
+		expect(answering?.repliedToMessageId).toBeNull()
+	})
+
 	it("runs the bots named one at a time, in the order they are named", async () => {
 		const nyx = idOf(harness.conversation, "Nyx")
 		const iris = idOf(harness.conversation, "Iris")
