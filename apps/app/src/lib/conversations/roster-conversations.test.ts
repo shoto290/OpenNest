@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import type { ConversationRosterActivity } from "./roster-conversations"
+import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
+
+import type {
+	ConversationRosterActivity,
+	ConversationWorker,
+} from "./roster-conversations"
 import {
 	conversationName,
 	toConversationSettingsValue,
@@ -37,6 +42,11 @@ const conversation = (fields: Partial<Conversation> = {}): Conversation => ({
 const NOW = Date.UTC(2025, 0, 2, 12, 0, 0)
 
 const A_MINUTE_AGO = NOW - 60 * 1000
+
+const working = (botId: string, kind: BotWorkingKind): ConversationWorker => ({
+	botId,
+	kind,
+})
 
 const atRest = (
 	previews: ConversationRosterActivity["previews"] = {},
@@ -202,7 +212,7 @@ describe("toRosterConversations", () => {
 					],
 				}),
 			],
-			{ working: { "c-1": ["b-2"] }, previews: {} },
+			{ working: { "c-1": [working("b-2", "searching")] }, previews: {} },
 			NOW,
 		)
 
@@ -211,12 +221,16 @@ describe("toRosterConversations", () => {
 			"idle",
 			"working",
 		])
+		expect(row.participants.map((seat) => seat.pose)).toEqual([
+			undefined,
+			"searching",
+		])
 	})
 
 	it("draws the room of a bot waiting its turn as working", () => {
 		const [row] = toRosterConversations(
 			[conversation()],
-			{ working: { "c-1": ["b-1"] }, previews: {} },
+			{ working: { "c-1": [working("b-1", "waiting")] }, previews: {} },
 			NOW,
 		)
 

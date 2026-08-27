@@ -57,6 +57,7 @@ import {
 } from "@/lib/chat/screen-model"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
+import type { WorkingState } from "@/lib/chat/working-kind"
 import type { RefusedMessage } from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
@@ -117,17 +118,25 @@ const botNameIn = (
 
 type SpeakingBotsProps = {
 	speaking?: ConversationBot
+	work: WorkingState | null
 	waiting: ConversationBot[]
 	onStop: () => void
 }
 
-const SpeakingBots = ({ speaking, waiting, onStop }: SpeakingBotsProps) => (
+const SpeakingBots = ({
+	speaking,
+	work,
+	waiting,
+	onStop,
+}: SpeakingBotsProps) => (
 	<>
 		{speaking ? (
 			<BotWorking
 				animal={speaking.animal}
 				blot={speaking.blot}
 				image={speaking.image}
+				kind={work?.kind}
+				label={work?.label}
 				name={speaking.name}
 				onStop={onStop}
 				seed={speaking.id}
@@ -620,6 +629,7 @@ export function ConversationScreen({
 						state.speakingBotId ? botOf(state.speakingBotId) : undefined
 					}
 					waiting={state.waitingBotIds.flatMap((botId) => botOf(botId) ?? [])}
+					work={state.speakingWork}
 				/>
 			</ChatLayout>
 		</ConversationBotsProvider>

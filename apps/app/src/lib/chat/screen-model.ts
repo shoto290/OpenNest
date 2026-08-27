@@ -6,6 +6,7 @@ import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 import { type ChatState, isTurnBusy } from "./chat-state"
 import { toPublishedBlocks } from "./markdown-blocks"
 import { messageWithAttachments } from "./message-attachments"
+import { type WorkingState, workingFor } from "./working-kind"
 
 import type { ConnectionState, TransportError } from "../agent/contract"
 import type { MessageReference } from "../conversations/store-contract"
@@ -36,11 +37,6 @@ const TURN_STATE: Record<TranscriptCompletion, ChatTurnState> = {
 	interrupted: "cancelled",
 }
 
-export type WorkingState = {
-	kind: BotWorkingKind
-	label?: string
-}
-
 const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	binaryNotFound: true,
 	notAuthenticated: true,
@@ -61,17 +57,6 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 }
 
 const RUN_GAP_MS = 5 * 60_000
-
-const SEARCH_TOOLS = new Set([
-	"glob",
-	"grep",
-	"ls",
-	"read",
-	"webfetch",
-	"websearch",
-])
-
-const WRITE_TOOLS = new Set(["edit", "multiedit", "notebookedit", "write"])
 
 function toRow(
 	message: TranscriptMessage,
@@ -227,13 +212,6 @@ export function bubbleOf(
 	return bubbles[blockIndex] ?? bubbles[0]
 }
 
-function kindForTool(title: string): BotWorkingKind {
-	const tool = title.split(/[\s·:(]/, 1)[0].toLowerCase()
-	if (SEARCH_TOOLS.has(tool)) return "searching"
-	if (WRITE_TOOLS.has(tool)) return "writing"
-	return "working"
-}
-
 export function workingStateFor(state: ChatState): WorkingState | null {
 	if (!isTurnBusy(state.turn)) {
 		return null
@@ -245,17 +223,9 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 		return { kind: "waiting", label: state.permission.title }
 	}
 
-	const active = state.activities.findLast(
-		(activity) =>
-			activity.status === "running" || activity.status === "pending",
-	)
-	if (active) {
-		return { kind: kindForTool(active.title), label: active.title || undefined }
-	}
-
 	const latest = state.messages.at(-1)
 	const isWriting = latest?.role === "assistant" && latest.content.length > 0
-	return { kind: isWriting ? "writing" : "thinking" }
+	return workingFor(state.activities, isWriting)
 }
 
 export type SidebarActivity = {

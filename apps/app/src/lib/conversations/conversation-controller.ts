@@ -20,7 +20,12 @@ import {
 } from "./turn-queue"
 
 import { createQueue } from "../queue"
-import type { AgentEvent, ChatMessage, RuntimeScope } from "../agent/contract"
+import type {
+	ActivityEvent,
+	AgentEvent,
+	ChatMessage,
+	RuntimeScope,
+} from "../agent/contract"
 import { isSameRuntimeScope } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
 import {
@@ -28,6 +33,11 @@ import {
 	ENDING_FOR_OUTCOME,
 	isWorthKeeping,
 } from "../chat/reply-endings"
+import {
+	type WorkingState,
+	withActivity,
+	workingFor,
+} from "../chat/working-kind"
 
 export type RefusedMessage = {
 	id: string
@@ -41,6 +51,7 @@ export type ConversationState = {
 	hasOlder: boolean
 	isLoadingOlder: boolean
 	speakingBotId: string | null
+	speakingWork: WorkingState | null
 	waitingBotIds: string[]
 	loopingPair: [string, string] | null
 	refusedMessage: RefusedMessage | null
@@ -81,6 +92,7 @@ type Speaker = {
 	settledMessages: Set<string>
 	heldReply: ChatMessage | null
 	written: Map<string, string>
+	activities: ActivityEvent[]
 	isDropped: boolean
 }
 
@@ -98,6 +110,9 @@ const isSamePair = (
 		left[0] === right[0] &&
 		left[1] === right[1])
 
+const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
+	left?.kind === right?.kind && left?.label === right?.label
+
 const isSameOrder = (left: string[], right: string[]) =>
 	left.length === right.length && left.every((id, rank) => id === right[rank])
 
@@ -107,6 +122,7 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.hasOlder === right.hasOlder &&
 	left.isLoadingOlder === right.isLoadingOlder &&
 	left.speakingBotId === right.speakingBotId &&
+	isSameWork(left.speakingWork, right.speakingWork) &&
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
 	isSamePair(left.loopingPair, right.loopingPair) &&
 	left.refusedMessage === right.refusedMessage
@@ -117,6 +133,7 @@ const initialState: ConversationState = {
 	hasOlder: false,
 	isLoadingOlder: false,
 	speakingBotId: null,
+	speakingWork: null,
 	waitingBotIds: [],
 	loopingPair: null,
 	refusedMessage: null,
@@ -168,12 +185,23 @@ export const createConversationController = (
 		}
 	}
 
+	const speakingWork = (): WorkingState | null => {
+		if (!queue.speaking) {
+			return null
+		}
+		if (!speaker) {
+			return { kind: "thinking" }
+		}
+		return workingFor(speaker.activities, speaker.written.size > 0)
+	}
+
 	const sync = () => {
 		settle({
 			...state,
 			...readTranscript(),
 			conversationId: conversation?.id ?? null,
 			speakingBotId: queue.speaking?.botId ?? null,
+			speakingWork: speakingWork(),
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
 			loopingPair: loopingPairIn(queue.handovers),
 			refusedMessage: refused,
@@ -353,6 +381,11 @@ export const createConversationController = (
 		drive()
 	}
 
+	const noteActivity = (held: Speaker, activity: ActivityEvent) => {
+		held.activities = withActivity(held.activities, activity)
+		sync()
+	}
+
 	const apply = (held: Speaker, event: AgentEvent) => {
 		switch (event.type) {
 			case "messageStarted":
@@ -362,6 +395,8 @@ export const createConversationController = (
 				return
 			case "messageDelta":
 				return streamReply(held, event.id, event.seq, event.text)
+			case "activity":
+				return noteActivity(held, event.activity)
 			case "messageCompleted":
 				return settleCompleted(held, event.message)
 			case "turnEnded":
@@ -429,6 +464,7 @@ export const createConversationController = (
 			settledMessages: new Set(),
 			heldReply: null,
 			written: new Map(),
+			activities: [],
 			isDropped: false,
 		}
 		if (detach) {

@@ -14,7 +14,7 @@ import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import { seatBots } from "./transcript-fixtures"
 
-import type { AgentEvent } from "../agent/contract"
+import type { ActivityStatus, AgentEvent } from "../agent/contract"
 
 const SPACE = "personal"
 
@@ -569,6 +569,76 @@ describe("createConversationController", () => {
 		await expect(controller.pin("msg-1", 0)).rejects.toThrow("refused")
 
 		expect(controller.getState()).toBe(standing)
+	})
+})
+
+describe("what a speaking bot is doing", () => {
+	const ran = (
+		id: string,
+		title: string,
+		status: ActivityStatus,
+	): AgentEvent => ({
+		type: "activity",
+		activity: { id, title, kind: "tool", status },
+	})
+
+	let harness: Harness
+	let ada: string
+
+	beforeEach(async () => {
+		harness = await createHarness(["Ada"])
+		ada = idOf(harness.conversation, "Ada")
+		await harness.controller.send("and now?")
+		await harness.settled()
+	})
+
+	it("says a bot that has neither run a tool nor written is thinking", () => {
+		expect(harness.controller.getState().speakingWork).toEqual({
+			kind: "thinking",
+		})
+	})
+
+	it("names the work of the tool a bot runs", async () => {
+		harness.driver.pushTo(ada, [ran("a-1", "Grep · walls", "running")])
+		await harness.settled()
+
+		expect(harness.controller.getState().speakingWork).toEqual({
+			kind: "searching",
+			label: "Grep · walls",
+		})
+	})
+
+	it("says a bot is writing once its words have started to arrive", async () => {
+		harness.driver.pushTo(ada, [
+			ran("a-1", "Grep · walls", "running"),
+			ran("a-1", "Grep · walls", "succeeded"),
+			{
+				type: "messageStarted",
+				message: {
+					id: "msg-ada",
+					role: "assistant",
+					text: "",
+					completion: "streaming",
+					timestamp: 1,
+				},
+			},
+			{ type: "messageDelta", id: "msg-ada", seq: 1, text: "walls up" },
+		])
+		await harness.settled()
+
+		expect(harness.controller.getState().speakingWork).toEqual({
+			kind: "writing",
+		})
+	})
+
+	it("drops what a bot was doing when it stops answering", async () => {
+		harness.driver.pushTo(ada, [
+			ran("a-1", "Grep · walls", "running"),
+			...spoke(ada, "walls up"),
+		])
+		await harness.settled()
+
+		expect(harness.controller.getState().speakingWork).toBeNull()
 	})
 })
 
