@@ -47,6 +47,7 @@ import {
 	useConversationPreviews,
 	useConversationWorkers,
 } from "@/lib/conversations/use-conversation"
+import { useConversationBadges } from "@/lib/conversations/use-conversation-badges"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
@@ -130,6 +131,11 @@ export function App() {
 
 	const badges = useBotBadges({
 		chat: chat.controller,
+		roster: roster.controller,
+	})
+
+	const conversationBadges = useConversationBadges({
+		runtimes: conversationRuntimes,
 		roster: roster.controller,
 	})
 
@@ -373,12 +379,21 @@ export function App() {
 
 	const rosterConversations = useMemo(
 		() =>
-			toRosterConversations(
-				conversations,
-				{ working: conversationWorkers, previews: conversationPreviews },
-				now,
+			withBadges(
+				toRosterConversations(
+					conversations,
+					{ working: conversationWorkers, previews: conversationPreviews },
+					now,
+				),
+				conversationBadges,
 			),
-		[conversations, conversationWorkers, conversationPreviews, now],
+		[
+			conversations,
+			conversationWorkers,
+			conversationPreviews,
+			now,
+			conversationBadges,
+		],
 	)
 
 	const seatedBots = useMemo(
@@ -400,14 +415,23 @@ export function App() {
 			Object.fromEntries(
 				Object.entries(conversationRosters).map(([spaceId, spaceRooms]) => [
 					spaceId,
-					toRosterConversations(
-						spaceRooms,
-						{ working: conversationWorkers, previews: conversationPreviews },
-						now,
+					withBadges(
+						toRosterConversations(
+							spaceRooms,
+							{ working: conversationWorkers, previews: conversationPreviews },
+							now,
+						),
+						conversationBadges,
 					),
 				]),
 			),
-		[conversationRosters, conversationWorkers, conversationPreviews, now],
+		[
+			conversationRosters,
+			conversationWorkers,
+			conversationPreviews,
+			now,
+			conversationBadges,
+		],
 	)
 
 	const isOverlayOpen =
