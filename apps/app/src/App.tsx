@@ -248,6 +248,11 @@ export function App() {
 			spaces: spaces.controller,
 		})
 
+	const deleteConversation = async (id: string) => {
+		await conversationRuntimes.release(id)
+		await roster.controller.removeConversation(id)
+	}
+
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
 		attachments.forget(id)
@@ -430,7 +435,7 @@ export function App() {
 						}}
 						onCreateConversation={() => setIsCreatingConversation(true)}
 						onDeleteConversation={(id) => {
-							void roster.controller.removeConversation(id)
+							void deleteConversation(id)
 						}}
 						onMoveConversationToSection={(id, sectionId) => {
 							void roster.controller.moveConversationToSection(id, sectionId)
@@ -581,7 +586,7 @@ export function App() {
 					leadId={leadOf(selectedConversation) ?? ""}
 					onClose={() => roster.controller.setConversationEditing(false)}
 					onDelete={() => {
-						void roster.controller.removeConversation(selectedConversation.id)
+						void deleteConversation(selectedConversation.id)
 					}}
 					onDismiss={(botId) => {
 						void roster.controller.dismissFromConversation(

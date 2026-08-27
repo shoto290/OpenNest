@@ -6,7 +6,11 @@ import {
 } from "./conversation-runtimes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { leadOf } from "./roster-conversations"
-import { createScriptedDriver, type ScriptedDriver } from "./scripted-driver"
+import {
+	createScriptedDriver,
+	type ScriptedDriver,
+	spoke,
+} from "./scripted-driver"
 import type { Conversation } from "./store-contract"
 import { seatBots } from "./transcript-fixtures"
 
@@ -213,6 +217,103 @@ describe("createConversationRuntimes", () => {
 		expect(reader.transcriptOf(gates)).toEqual([
 			[null, "and now?"],
 			[nyx, "gates shut"],
+		])
+	})
+
+	it("shuts the runtime of a room down when that room is deleted", async () => {
+		const reader = createReader()
+		const shutdown = vi.spyOn(reader.driver, "shutdown")
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const screen = await reader.enter(room)
+
+		await screen.send("and now?")
+		await reader.answer(ada, [started(ada), wrote(ada, "walls ")])
+
+		await reader.runtimes.release(room.id)
+
+		expect(shutdown.mock.calls.map(([scope]) => scope.botId)).toEqual([ada])
+	})
+
+	it("stops an answer that is still writing when its room is deleted", async () => {
+		const reader = createReader()
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const screen = await reader.enter(room)
+
+		await screen.send("and now?")
+		await reader.answer(ada, [started(ada), wrote(ada, "walls ")])
+
+		await reader.runtimes.release(room.id)
+		await reader.answer(ada, [wrote(ada, "up", 2), ENDED])
+		await reader.enter(room)
+
+		expect(reader.transcriptOf(room)).toEqual([
+			[null, "and now?"],
+			[ada, "walls "],
+		])
+	})
+
+	it("builds a fresh runtime when a released room is opened again", async () => {
+		const reader = createReader()
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const screen = await reader.enter(room)
+
+		await screen.send("and now?")
+		await reader.answer(ada, spoke(ada, "walls up"))
+		await reader.runtimes.release(room.id)
+
+		const reopened = await reader.enter(room)
+		await reopened.send("and after?")
+		await reader.answer(ada, spoke(ada, "gates shut"))
+
+		expect(reader.transcriptOf(room)).toEqual([
+			[null, "and now?"],
+			[ada, "walls up"],
+			[null, "and after?"],
+			[ada, "gates shut"],
+		])
+	})
+
+	it("leaves the other rooms running when one is released", async () => {
+		const reader = createReader()
+		const walls = await reader.openRoom("Walls", ["Ada"])
+		const gates = await reader.openRoom("Gates", ["Nyx"])
+		const nyx = leadIn(gates)
+
+		await reader.enter(walls)
+		const second = await reader.enter(gates)
+		await second.send("and now?")
+
+		await reader.runtimes.release(walls.id)
+		await reader.answer(nyx, [started(nyx), wrote(nyx, "gates shut"), ENDED])
+
+		expect(reader.transcriptOf(gates)).toEqual([
+			[null, "and now?"],
+			[nyx, "gates shut"],
+		])
+	})
+
+	it("forgets a room whose runtime refused to shut down", async () => {
+		const reader = createReader()
+		const room = await reader.openRoom("Walls", ["Ada"])
+		const ada = leadIn(room)
+		const runtime = reader.runtimes.runtimeFor(room.id)
+		vi.spyOn(runtime, "shutdown").mockRejectedValue(new Error("stuck"))
+
+		const screen = await reader.enter(room)
+		await screen.send("and now?")
+		await reader.runtimes.release(room.id)
+
+		const reopened = await reader.enter(room)
+		await reopened.send("and after?")
+		await reader.answer(ada, [started(ada), wrote(ada, "gates shut"), ENDED])
+
+		expect(reader.transcriptOf(room)).toEqual([
+			[null, "and now?"],
+			[null, "and after?"],
+			[ada, "gates shut"],
 		])
 	})
 

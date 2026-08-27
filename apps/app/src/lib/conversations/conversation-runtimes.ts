@@ -8,6 +8,7 @@ import type { ChatDriver } from "../chat/driver"
 
 export type ConversationRuntimes = {
 	runtimeFor: (conversationId: string) => ConversationController
+	release: (conversationId: string) => Promise<void>
 	shutdown: () => Promise<void>
 }
 
@@ -28,11 +29,20 @@ export const createConversationRuntimes = (
 		return opened
 	}
 
+	const release = async (conversationId: string) => {
+		const held = runtimes.get(conversationId)
+		if (!held) {
+			return
+		}
+		runtimes.delete(conversationId)
+		await held.shutdown().catch(() => undefined)
+	}
+
 	const shutdown = async () => {
 		const open = [...runtimes.values()]
 		runtimes.clear()
 		await Promise.all(open.map((runtime) => runtime.shutdown()))
 	}
 
-	return { runtimeFor, shutdown }
+	return { runtimeFor, release, shutdown }
 }
