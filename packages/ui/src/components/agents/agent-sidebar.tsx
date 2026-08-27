@@ -30,7 +30,6 @@ import {
 import { BOT_IDENTITY_ANIMALS } from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
 import {
-	CONVERSATION_AVATAR_LIMIT,
 	ConversationAvatar,
 	type ConversationParticipant,
 } from "@workspace/ui/components/conversation-avatar"
@@ -567,7 +566,6 @@ const ConversationRosterRow = ({
 	onMoveToSection,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
-	const hidden = conversation.participants.length - CONVERSATION_AVATAR_LIMIT
 
 	return (
 		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
@@ -584,6 +582,7 @@ const ConversationRosterRow = ({
 							/>
 						}
 						isActive={isSelected}
+						isIconDecorative={false}
 						label={conversation.name}
 						onSelect={() => {
 							if (lift.hasJustDropped()) return
@@ -595,11 +594,6 @@ const ConversationRosterRow = ({
 								<span className="truncate" data-slot="roster-row-name">
 									{conversation.name}
 								</span>
-								{hidden > 0 ? (
-									<span className={TITLE_BADGE} data-slot="roster-row-badge">
-										{t("roster.conversation.others", { count: hidden })}
-									</span>
-								) : null}
 								<span
 									className={TIMESTAMP_SLOT}
 									data-slot="roster-row-timestamp"
