@@ -18,6 +18,8 @@ type BotFace = Pick<
 	"name" | "avatarAnimal" | "avatarBlot" | "avatarImagePath"
 >
 
+const NO_WORKERS: string[] = []
+
 const toBotRow = (id: string, face: BotFace): AgentSidebarBot => ({
 	id,
 	name: face.name,
@@ -90,17 +92,22 @@ export const toConversationSettingsValue = (
 	instructions: conversation.instructions,
 })
 
+export type ConversationRosterActivity = {
+	working: Record<string, string[]>
+	previews: ConversationPreviews
+}
+
 const lastSpokeAt = (
 	conversation: Conversation,
-	previews: ConversationPreviews,
-): number => previews[conversation.id]?.at ?? conversation.createdAt
+	activity: ConversationRosterActivity,
+): number => activity.previews[conversation.id]?.at ?? conversation.createdAt
 
 const mostRecentFirst = (
 	conversations: Conversation[],
-	previews: ConversationPreviews,
+	activity: ConversationRosterActivity,
 ): Conversation[] =>
 	conversations.toSorted(
-		(one, other) => lastSpokeAt(other, previews) - lastSpokeAt(one, previews),
+		(one, other) => lastSpokeAt(other, activity) - lastSpokeAt(one, activity),
 	)
 
 const speakerNameAmong = (
@@ -109,21 +116,32 @@ const speakerNameAmong = (
 ): string | undefined =>
 	seated.find((participant) => participant.botId === preview?.authorBotId)?.name
 
+const toSeatedRows = (
+	seated: Participant[],
+	workingBotIds: string[],
+): AgentSidebarBot[] =>
+	seated.map((participant) => ({
+		...toParticipantRow(participant),
+		status: workingBotIds.includes(participant.botId) ? "working" : "idle",
+	}))
+
 export const toRosterConversations = (
 	conversations: Conversation[],
-	previews: ConversationPreviews,
+	activity: ConversationRosterActivity,
 	now: number,
 ): AgentSidebarConversation[] =>
-	mostRecentFirst(conversations, previews).map((conversation) => {
-		const preview = previews[conversation.id]
+	mostRecentFirst(conversations, activity).map((conversation) => {
+		const preview = activity.previews[conversation.id]
+		const workingBotIds = activity.working[conversation.id] ?? NO_WORKERS
 		const seated = presentParticipants(conversation)
 		return {
 			id: conversation.id,
 			name: conversationName(conversation),
 			sectionId: conversation.sectionId,
-			participants: toConversationBots(seated),
+			participants: toSeatedRows(seated, workingBotIds),
 			lastMessage: preview?.text,
 			lastSpeaker: speakerNameAmong(seated, preview),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
+			status: workingBotIds.length > 0 ? "working" : "idle",
 		}
 	})
