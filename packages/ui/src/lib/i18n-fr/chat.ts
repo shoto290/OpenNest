@@ -261,13 +261,16 @@ const chat = {
 			unwritable: "Les fichiers n'ont pas pu être enregistrés : {{detail}}",
 		},
 	},
+	namelessConversation: {
+		separator: ", ",
+	},
 	newConversation: {
 		title: "Nouvelle conversation",
 		description:
-			"Nommez-la, puis choisissez les participants. Le premier bot choisi mène la conversation.",
+			"Choisissez les participants. Le premier bot choisi mène la conversation. Nommez-la maintenant, ou laissez votre premier message la nommer.",
 		name: {
 			label: "Nom",
-			placeholder: "Le sujet de cette conversation",
+			placeholder: "Laissé vide, votre premier message la nomme",
 		},
 		search: {
 			label: "Bots",

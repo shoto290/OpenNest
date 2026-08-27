@@ -61,7 +61,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The overlay that brings a conversation into being: a name, then the bots that take part, picked one at a time from a searchable roster. The order of the picks is the whole product decision here — the first bot picked leads, and the dialog shows that before the conversation exists rather than settling it afterwards, by drawing a chip per pick, in pick order, with a crown on the first. Removing a chip removes exactly that bot and promotes the next one only if the lead itself was removed. Nothing is created until the name has something in it and at least one bot is in, which is why the create action stays unavailable until both are true. The dialog keeps its own draft and throws it away on close: it opens blank every time, so a half-filled attempt never leaks into the next one.",
+					"The overlay that brings a conversation into being: an optional name, then the bots that take part, picked one at a time from a searchable roster. The order of the picks is the whole product decision here — the first bot picked leads, and the dialog shows that before the conversation exists rather than settling it afterwards, by drawing a chip per pick, in pick order, with a crown on the first. Removing a chip removes exactly that bot and promotes the next one only if the lead itself was removed. Only the bots are required: a conversation created with the name left empty is reported with an empty name, and it takes its name from its first message instead, which is why the create action waits on the picks alone. The dialog keeps its own draft and throws it away on close: it opens blank every time, so a half-filled attempt never leaks into the next one.",
 			},
 		},
 	},
@@ -79,7 +79,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog as it opens, blank. Check that create is unavailable, that naming it alone does not turn it on, and that picking two bots draws two chips in pick order with the crown on the first. Pick `Reopened` for the draft being thrown away, `Empty` for a search matching nothing.",
+					"The dialog as it opens, blank. Check that create is unavailable while nothing is picked, that picking two bots draws two chips in pick order with the crown on the first and turns create on with the name still empty, and that the conversation is then reported nameless. Pick `LeadHandover` for a named one, `Reopened` for the draft being thrown away, `Empty` for a search matching nothing.",
 			},
 		},
 	},
@@ -87,9 +87,6 @@ export const Default = meta.story({
 		const dialog = await dialogIn()
 		const inside = within(dialog)
 		const create = inside.getByRole("button", { name: "Create conversation" })
-		await expect(create).toBeDisabled()
-
-		await userEvent.type(inside.getByLabelText("Name"), "Release desk")
 		await expect(create).toBeDisabled()
 
 		await userEvent.click(inside.getByRole("button", { name: "Atlas" }))
@@ -101,10 +98,11 @@ export const Default = meta.story({
 		await expect(chips[0]).toHaveTextContent("Lead")
 		await expect(chips[1]).not.toHaveTextContent("Lead")
 
+		await expect(inside.getByLabelText("Name")).toHaveValue("")
 		await expect(create).toBeEnabled()
 		await userEvent.click(create)
 		await expect(args.onCreate).toHaveBeenCalledWith({
-			name: "Release desk",
+			name: "",
 			botIds: ["bot-atlas", "bot-elia"],
 		})
 	},

@@ -16,6 +16,7 @@ export type ConversationRuntimes = {
 export const createConversationRuntimes = (
 	driver: ChatDriver,
 	store: TranscriptStore,
+	onNamed?: (conversationId: string, title: string) => void,
 ): ConversationRuntimes => {
 	const runtimes = new Map<string, ConversationController>()
 
@@ -24,7 +25,7 @@ export const createConversationRuntimes = (
 		if (held) {
 			return held
 		}
-		const opened = createConversationController(driver, store)
+		const opened = createConversationController(driver, store, { onNamed })
 		opened.attach()
 		runtimes.set(conversationId, opened)
 		return opened

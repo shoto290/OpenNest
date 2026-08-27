@@ -8,7 +8,10 @@ import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 
 import { createQueue } from "../queue"
 import { createWriteLoop } from "../write-loop"
-import { presentParticipants } from "../conversations/roster-conversations"
+import {
+	isNameless,
+	presentParticipants,
+} from "../conversations/roster-conversations"
 import type {
 	Bot,
 	Conversation,
@@ -78,6 +81,7 @@ export type RosterController = {
 	editConversation: (id: string) => void
 	setConversationEditing: (isEditing: boolean) => void
 	describeConversation: (id: string, value: ConversationSettingsValue) => void
+	nameConversation: (id: string, title: string) => void
 	setConversationLead: (conversationId: string, botId: string) => Promise<void>
 	recruitToConversation: (
 		conversationId: string,
@@ -680,6 +684,18 @@ export const createRosterController = (
 				instructions: value.instructions,
 			})
 			conversationWrites.push(id, value)
+		},
+
+		nameConversation: (id: string, title: string) => {
+			const conversation = heldConversation(id)
+			if (!conversation || !isNameless(conversation)) {
+				return
+			}
+			applyConversation({ ...conversation, title })
+			conversationWrites.push(id, {
+				name: title,
+				instructions: conversation.instructions,
+			})
 		},
 
 		setConversationLead: seatMove(store.setConversationLead),

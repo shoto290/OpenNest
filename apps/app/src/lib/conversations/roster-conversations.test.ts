@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	conversationName,
 	toConversationSettingsValue,
 	toRosterConversations,
 	unseatedBots,
@@ -249,5 +250,45 @@ describe("toConversationSettingsValue", () => {
 				conversation({ title: "Launch", instructions: "Stay short." }),
 			),
 		).toEqual({ name: "Launch", instructions: "Stay short." })
+	})
+})
+
+describe("conversationName", () => {
+	it("calls a nameless conversation by the names of the bots seated in it", () => {
+		expect(
+			conversationName(
+				conversation({
+					title: "",
+					participants: [
+						participant({ botId: "b-1", name: "Chef" }),
+						participant({ botId: "b-2", name: "Sous-chef" }),
+					],
+				}),
+			),
+		).toBe("Chef, Sous-chef")
+	})
+
+	it("leaves out of the name a bot that has left the conversation", () => {
+		expect(
+			conversationName(
+				conversation({
+					title: "",
+					participants: [
+						participant({ botId: "b-1", name: "Chef" }),
+						participant({ botId: "b-2", name: "Sous-chef", leftAt: 4 }),
+					],
+				}),
+			),
+		).toBe("Chef")
+	})
+
+	it("falls back on the untitled copy when no bot is seated", () => {
+		expect(
+			conversationName(conversation({ title: "", participants: [] })),
+		).toBe("Untitled conversation")
+	})
+
+	it("keeps the name a conversation carries", () => {
+		expect(conversationName(conversation())).toBe("Launch")
 	})
 })

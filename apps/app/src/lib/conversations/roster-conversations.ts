@@ -5,6 +5,7 @@ import type {
 import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import type { MessageAuthor } from "@workspace/ui/components/message"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { Bot, Conversation, Participant } from "./store-contract"
 import type { ConversationPreviews, LastWord } from "./transcript-state"
@@ -72,6 +73,16 @@ export const unseatedBots = (
 		.map((bot) => toBotRow(bot.id, bot))
 }
 
+export const isNameless = (conversation: Conversation): boolean =>
+	conversation.title.trim().length === 0
+
+export const conversationName = (conversation: Conversation): string =>
+	conversation.title.trim() ||
+	presentParticipants(conversation)
+		.map((participant) => participant.name)
+		.join(i18n.t("chat:namelessConversation.separator")) ||
+	i18n.t("chat:conversationSettings.untitled")
+
 export const toConversationSettingsValue = (
 	conversation: Conversation,
 ): ConversationSettingsValue => ({
@@ -108,7 +119,7 @@ export const toRosterConversations = (
 		const seated = presentParticipants(conversation)
 		return {
 			id: conversation.id,
-			name: conversation.title,
+			name: conversationName(conversation),
 			sectionId: conversation.sectionId,
 			participants: toConversationBots(seated),
 			lastMessage: preview?.text,
