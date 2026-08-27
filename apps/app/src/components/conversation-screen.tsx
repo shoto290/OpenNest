@@ -15,6 +15,7 @@ import {
 	type ConversationBot,
 	ConversationBotsProvider,
 } from "@workspace/ui/components/conversation-bots"
+import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import { PINNED_AVATAR_SIZE } from "@workspace/ui/components/pinned-messages"
@@ -270,6 +271,10 @@ export function ConversationScreen({
 				}
 				transcriptKey={conversation.id}
 			>
+				{state.messages.length === 0 ? (
+					<ConversationEmptyState bots={present} title={conversation.title} />
+				) : null}
+
 				{runs.map((run) => (
 					<ChatTurnGroup key={bubbleIdOf(run[0].messageId, run[0].blockIndex)}>
 						{run.map((row) => (
