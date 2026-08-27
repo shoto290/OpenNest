@@ -140,6 +140,14 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.refusedMessage === right.refusedMessage &&
 	left.pendingPrompt === right.pendingPrompt
 
+const promptWork = (pending: PendingPrompt): WorkingState => ({
+	kind: "waiting",
+	label:
+		pending.kind === "question"
+			? pending.request.questions[0]?.header
+			: pending.request.title,
+})
+
 const initialState: ConversationState = {
 	conversationId: null,
 	messages: NO_MESSAGES,
@@ -205,6 +213,9 @@ export const createConversationController = (
 		}
 		if (!speaker) {
 			return { kind: "thinking" }
+		}
+		if (speaker.pending) {
+			return promptWork(speaker.pending)
 		}
 		return workingFor(speaker.activities, speaker.written.size > 0)
 	}
