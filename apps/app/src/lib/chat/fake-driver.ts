@@ -37,6 +37,8 @@ const FAKE_COMMANDS = [
 	},
 ]
 
+const TITLE_LIMIT = 60
+
 const FAIL_DIRECTIVE = "/fail"
 
 const PERMISSION_DIRECTIVE = "/permission"
@@ -312,6 +314,11 @@ export function createFakeChatDriver(
 				authenticated: true,
 				error: null,
 			}),
+
+		titleFor: (text: string) =>
+			Promise.resolve(
+				text.trim().split("\n")[0]?.slice(0, TITLE_LIMIT) || null,
+			),
 
 		startOrResumeSession: (scope: RuntimeScope, resume?: string) => {
 			const replaced = heldFor(scope)

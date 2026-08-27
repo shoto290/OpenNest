@@ -81,7 +81,7 @@ export const serve = async (requestedId?: string) => {
 		opening.delete(session)
 	}
 
-	const answerHost = async ({ type }: Command) => {
+	const answerHost = async ({ type, text }: Command) => {
 		switch (type) {
 			case "check":
 				return write({ type, ...(await provider.authenticate()) })
@@ -89,6 +89,11 @@ export const serve = async (requestedId?: string) => {
 				return write({ type, models: await provider.models().catch(() => []) })
 			case "tools":
 				return write({ type, tools: await provider.tools().catch(() => []) })
+			case "title":
+				return write({
+					type,
+					title: await provider.title(text ?? "").catch(() => null),
+				})
 		}
 	}
 

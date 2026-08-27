@@ -13,6 +13,7 @@ export type ChatDriverUnsubscribe = () => void
 
 export type ChatDriver = {
 	check: (scope: RuntimeScope | null) => Promise<CheckReport>
+	titleFor: (text: string) => Promise<string | null>
 	startOrResumeSession: (
 		scope: RuntimeScope,
 		resume?: string,

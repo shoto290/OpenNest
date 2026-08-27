@@ -527,6 +527,10 @@ fn answer_the_host(command: &Value) {
 		Some("check") => emit_raw(&checked().to_string()),
 		Some("models") => emit_raw(&json!({ "type": "models", "models": models() }).to_string()),
 		Some("tools") => emit_raw(&json!({ "type": "tools", "tools": tools() }).to_string()),
+		Some("title") => {
+			let asked = command["text"].as_str().unwrap_or("");
+			emit_raw(&json!({ "type": "title", "title": title(asked) }).to_string())
+		}
 		_ => {}
 	}
 }
@@ -547,6 +551,13 @@ fn models() -> Vec<String> {
 
 fn tools() -> Vec<String> {
 	named_list("FAKE_AGENT_TOOLS")
+}
+
+fn title(asked: &str) -> Option<String> {
+	match asked.trim() {
+		"" => None,
+		trimmed => Some(trimmed.to_owned()),
+	}
 }
 
 fn named_list(variable: &str) -> Vec<String> {

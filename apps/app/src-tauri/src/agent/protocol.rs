@@ -269,9 +269,14 @@ pub fn deny_command(session: &str, request_id: &str, message: &str) -> Value {
 pub const CHECK: &str = "check";
 pub const MODELS: &str = "models";
 pub const TOOLS: &str = "tools";
+pub const TITLE: &str = "title";
 
 pub fn ask_command(kind: &str) -> Value {
 	serde_json::json!({ "type": kind })
+}
+
+pub fn title_command(text: &str) -> Value {
+	serde_json::json!({ "type": TITLE, "text": text })
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -295,4 +300,11 @@ pub struct Catalogue {
 pub struct ToolCatalogue {
 	#[serde(default, deserialize_with = "null_as_default")]
 	pub tools: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Titled {
+	#[serde(default)]
+	pub title: Option<String>,
 }

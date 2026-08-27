@@ -52,6 +52,7 @@ export type AgentProvider = {
 	authenticate: () => Promise<ProviderAuth>
 	models: () => Promise<string[]>
 	tools: () => Promise<string[]>
+	title: (text: string) => Promise<string | null>
 	open: (request: SessionRequest, emit: EmitFrame) => Promise<AgentSession>
 }
 

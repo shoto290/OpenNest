@@ -19,6 +19,8 @@ export const agentTransport: ChatDriver = {
 	check: (scope: RuntimeScope | null) =>
 		invoke<CheckReport>("agent_check", { scope }),
 
+	titleFor: (text: string) => invoke<string | null>("agent_title", { text }),
+
 	startOrResumeSession: (scope: RuntimeScope, resume?: string, cwd?: string) =>
 		invoke<SessionHandle>("agent_start_or_resume_session", {
 			scope,
