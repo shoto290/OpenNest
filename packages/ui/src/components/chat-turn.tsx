@@ -24,6 +24,7 @@ import {
 	MessageActions,
 } from "@workspace/ui/components/message-actions"
 import {
+	MESSAGE_BUBBLE_INLINE_PADDING,
 	MessageBubble,
 	MessageBubbleContent,
 	MessageBubbleGroup,
@@ -395,7 +396,10 @@ function AssistantTurn({
 				{author && opensRun(run) ? (
 					<MessageAuthor
 						author={author}
-						className="col-start-2 row-start-1 pb-1"
+						className={cn(
+							"col-start-2 row-start-1 pb-1",
+							bare ? undefined : MESSAGE_BUBBLE_INLINE_PADDING,
+						)}
 					/>
 				) : null}
 				<span

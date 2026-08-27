@@ -96,12 +96,15 @@ export function MessageBubble({
 	)
 }
 
+export const MESSAGE_BUBBLE_INLINE_PADDING = "px-3.5"
+
 function bubbleContentClass(
 	variant: MessageBubbleVariant,
 	interactive: boolean,
 ) {
 	return cn(
-		"relative z-0 min-w-9 max-w-full break-words rounded-2xl px-3.5 py-2.5 text-sm leading-6 text-foreground",
+		"relative z-0 min-w-9 max-w-full break-words rounded-2xl py-2.5 text-sm leading-6 text-foreground",
+		MESSAGE_BUBBLE_INLINE_PADDING,
 		MARKDOWN_PROSE_CLASS,
 		variant === "solid" && "text-primary-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
