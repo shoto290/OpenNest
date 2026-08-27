@@ -71,6 +71,7 @@ export const selectHasMore = (
 export type LastWord = {
 	text?: string
 	at: number
+	authorBotId?: string
 }
 
 export type ConversationPreviews = Record<string, LastWord | undefined>
@@ -84,7 +85,11 @@ export const lastWordIn = (
 	if (!settled) {
 		return undefined
 	}
-	return { text: settled.content.trim() || undefined, at: settled.createdAt }
+	return {
+		text: settled.content.trim() || undefined,
+		at: settled.createdAt,
+		authorBotId: settled.authorBotId ?? undefined,
+	}
 }
 
 const oldestSeq = (messages: TranscriptMessage[]): number | null =>

@@ -221,6 +221,7 @@ interface AgentSidebarConversation {
 	sectionId?: string | null
 	participants: AgentSidebarBot[]
 	lastMessage?: string
+	lastSpeaker?: string
 	timestamp?: string
 	status?: AgentSidebarStatus
 	badge?: BotBadge
@@ -235,6 +236,19 @@ const badgeOf = (conversation: AgentSidebarConversation) =>
 	conversation.participants.find(
 		(participant) => isBusy(participant) && participant.badge,
 	)?.badge ?? conversation.badge
+
+const previewOf = (
+	t: TFunction<"bots">,
+	conversation: AgentSidebarConversation,
+) => {
+	if (!conversation.lastMessage) return null
+	const text = toPlainText(conversation.lastMessage)
+	if (!conversation.lastSpeaker) return text
+	return t("roster.conversation.preview", {
+		name: conversation.lastSpeaker,
+		text,
+	})
+}
 
 const announcementFor = (
 	t: TFunction<"bots">,
@@ -629,8 +643,7 @@ const ConversationRosterRow = ({
 								</span>
 							</span>
 							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
-								{conversation.lastMessage &&
-									toPlainText(conversation.lastMessage)}
+								{previewOf(t, conversation)}
 							</span>
 						</span>
 					</AnimatedSidebarMenuButton>

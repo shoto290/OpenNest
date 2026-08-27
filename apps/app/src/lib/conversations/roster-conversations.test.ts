@@ -74,6 +74,7 @@ describe("toRosterConversations", () => {
 					},
 				],
 				lastMessage: undefined,
+				lastSpeaker: undefined,
 				timestamp: undefined,
 			},
 		])
@@ -105,6 +106,34 @@ describe("toRosterConversations", () => {
 
 		expect(row.lastMessage).toBe("Menu is set.")
 		expect(row.timestamp).toBe("1m")
+	})
+
+	const speakerAfter = (
+		participants: Participant[],
+		authorBotId?: string,
+	): string | undefined =>
+		toRosterConversations(
+			[conversation({ participants })],
+			{ "c-1": { text: "Menu is set.", at: A_MINUTE_AGO, authorBotId } },
+			NOW,
+		)[0].lastSpeaker
+
+	it("names the bot still seated that said the last word", () => {
+		expect(speakerAfter([participant({ botId: "b-1" })], "b-1")).toBe("Chef")
+	})
+
+	it("names nobody when the reader said the last word", () => {
+		expect(speakerAfter([participant()])).toBeUndefined()
+	})
+
+	it("names nobody when the bot that spoke has left the room", () => {
+		expect(speakerAfter([participant({ leftAt: 4 })], "b-1")).toBeUndefined()
+	})
+
+	it("names nobody when the bot that spoke no longer exists", () => {
+		expect(
+			speakerAfter([participant({ isDeleted: true })], "b-1"),
+		).toBeUndefined()
 	})
 
 	it("leaves the preview and the time of a room nothing was said in blank", () => {

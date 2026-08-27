@@ -569,6 +569,17 @@ describe("lastWordIn", () => {
 		).toEqual({ text: "And?", at: 20 })
 	})
 
+	it("carries the bot that said the last word, and nobody for the reader", () => {
+		expect(
+			lastWordIn([
+				settled({ content: "Done", createdAt: 10, authorBotId: "b-1" }),
+			]),
+		).toEqual({ text: "Done", at: 10, authorBotId: "b-1" })
+		expect(
+			lastWordIn([settled({ role: "user", content: "And?", createdAt: 20 })]),
+		).toEqual({ text: "And?", at: 20, authorBotId: undefined })
+	})
+
 	it("keeps the newest message, not the one before it", () => {
 		expect(
 			lastWordIn([

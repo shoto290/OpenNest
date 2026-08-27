@@ -14,6 +14,7 @@ const bots = {
 		conversation: {
 			create: "New conversation",
 			others: "+{{count}}",
+			preview: "{{name}}: {{text}}",
 		},
 		empty: "No bots yet",
 		actions: "Actions for {{name}}",

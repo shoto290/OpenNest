@@ -3151,6 +3151,7 @@ const CONVERSATIONS: AgentSidebarConversation[] = [
 		name: "Launch review",
 		participants: PAIR,
 		lastMessage: "Atlas pulled the papers, Beacon is drafting the summary.",
+		lastSpeaker: "Beacon",
 		timestamp: "09:31",
 	},
 	{
@@ -3265,6 +3266,53 @@ export const ConversationParticipants = meta.story({
 		}
 		await expect(tiles[0].right).toBeLessThanOrEqual(tiles[1].left)
 		await expect(tiles[0].bottom).toBeLessThanOrEqual(tiles[2].top)
+	},
+})
+
+export const ConversationPreview = meta.story({
+	args: {
+		...conversationArgs(),
+		conversations: [
+			CONVERSATIONS[0],
+			{ ...CONVERSATIONS[1], lastMessage: "Rebuilt the bundle, both green." },
+			{
+				id: "handover",
+				name: "Handover",
+				participants: PAIR,
+				lastMessage: LAST_MESSAGE,
+				lastSpeaker: "Bartholomew Featherstonehaugh the Third",
+				timestamp: "08:12",
+			},
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Who said the last word. A bot row needs no name — the row is the bot — but a room holds several, so the preview carries the name of whoever spoke, ahead of the word and separated from it. The second room shows the two cases that carry no name: the reader's own word, and a bot that has left the room or no longer exists, both of which would name somebody the reader cannot see in the stack. The third room checks that name and word are one string and not two columns: they clip together at the row width with a single ellipsis, and the line never wraps whatever the name is worth.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const named = slotIn(
+			rowFor(canvasElement, "Launch review"),
+			"roster-row-preview",
+		)
+		const unnamed = slotIn(
+			rowFor(canvasElement, "Transport migration"),
+			"roster-row-preview",
+		)
+		const long = slotIn(rowFor(canvasElement, "Handover"), "roster-row-preview")
+
+		await expect(named).toHaveTextContent(
+			"Beacon: Atlas pulled the papers, Beacon is drafting the summary.",
+		)
+		await expect(unnamed).toHaveTextContent("Rebuilt the bundle, both green.")
+
+		await expect(isClipped(long)).toBe(true)
+		await expect(long.getBoundingClientRect().height).toBeLessThanOrEqual(
+			SINGLE_LINE_HEIGHT,
+		)
 	},
 })
 
