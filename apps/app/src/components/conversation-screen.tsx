@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { type RefObject, useCallback, useMemo, useRef, useState } from "react"
 
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
@@ -18,6 +18,7 @@ import {
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MessageAuthor } from "@workspace/ui/components/message"
+import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
 import {
 	PINNED_AVATAR_SIZE,
@@ -34,6 +35,9 @@ import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
 import { holdsDismissal } from "@/lib/chat/prompt-commands"
 import {
 	bubbleIdOf,
+	quotedMessageIdsIn,
+	quotedTargetsIn,
+	type ReplyTarget,
 	type TranscriptRow,
 	toRuns,
 	toTranscriptRows,
@@ -91,6 +95,11 @@ const toPinnedRow = (
 	}
 }
 
+const botNameIn = (
+	authors: Map<string, MessageAuthor>,
+	botId: string | null,
+): string | undefined => (botId ? authors.get(botId)?.name : undefined)
+
 type SpeakingBotsProps = {
 	speaking?: ConversationBot
 	waiting: ConversationBot[]
@@ -145,20 +154,32 @@ const HandoverNotice = ({ pair, onStop }: HandoverNoticeProps) => {
 type ConversationTurnProps = {
 	row: TranscriptRow
 	author?: MessageAuthor
+	repliedTo?: QuotedMessage
 	pinned: boolean
 	onPin: (messageId: string, blockIndex: number) => void
+	onReply: (target: ReplyTarget) => void
 }
 
 const ConversationTurn = ({
 	row,
 	author,
+	repliedTo,
 	pinned,
 	onPin,
+	onReply,
 }: ConversationTurnProps) => {
 	const content = <Markdown>{row.text}</Markdown>
 	const anchor = bubbleIdOf(row.messageId, row.blockIndex)
 	const pin = () => {
 		onPin(row.messageId, row.blockIndex)
+	}
+	const reply = () => {
+		onReply({
+			messageId: row.messageId,
+			role: row.role,
+			excerpt: row.text.trim(),
+			authorBotId: row.authorBotId,
+		})
 	}
 
 	return row.role === "user" ? (
@@ -166,7 +187,9 @@ const ConversationTurn = ({
 			copyText={row.text}
 			messageId={anchor}
 			onPin={pin}
+			onReply={reply}
 			pinned={pinned}
+			repliedTo={repliedTo}
 			state={row.completion}
 		>
 			{content}
@@ -177,7 +200,9 @@ const ConversationTurn = ({
 			copyText={row.text}
 			messageId={anchor}
 			onPin={pin}
+			onReply={reply}
 			pinned={pinned}
+			repliedTo={repliedTo}
 			state={row.completion}
 		>
 			{content}
@@ -188,16 +213,17 @@ const ConversationTurn = ({
 type ConversationComposerProps = {
 	bots: ConversationBot[]
 	leadId?: string
+	textareaRef: RefObject<HTMLTextAreaElement | null>
 	onSubmit: (text: string) => void
 }
 
 const ConversationComposer = ({
 	bots,
 	leadId,
+	textareaRef,
 	onSubmit,
 }: ConversationComposerProps) => {
 	const t = useChatCopy()
-	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const [prompt, setPrompt] = useState("")
 	const [wasDismissed, setWasDismissed] = useState(false)
 
@@ -213,9 +239,9 @@ const ConversationComposer = ({
 			if (taken) {
 				setPrompt((held) => promptWithMention(held, taken.name))
 			}
-			composerRef.current?.focus({ preventScroll: true })
+			textareaRef.current?.focus({ preventScroll: true })
 		},
-		[bots],
+		[bots, textareaRef],
 	)
 
 	const submit = useCallback(
@@ -239,7 +265,7 @@ const ConversationComposer = ({
 				onSubmit={submit}
 				onValueChange={setPrompt}
 				placeholder={t("composer.placeholder")}
-				textareaRef={composerRef}
+				textareaRef={textareaRef}
 				value={prompt}
 			/>
 		</PromptMentionMenu>
@@ -256,6 +282,8 @@ export function ConversationScreen({
 	const t = useChatCopy()
 	const { state, controller } = useConversation(runtimes, conversation)
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
+	const composerRef = useRef<HTMLTextAreaElement>(null)
+	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
 	const bots = useMemo(
 		() => toConversationBots(conversation.participants),
 		[conversation],
@@ -304,18 +332,71 @@ export function ConversationScreen({
 		[controller],
 	)
 
+	const jumpToMessage = useCallback(
+		(messageId: string) => {
+			void reachMessage(messageId)
+		},
+		[reachMessage],
+	)
+
 	const jumpToPin = useCallback(
 		(bubbleId: string) => {
-			void reachMessage(pins.anchorOf(bubbleId))
+			jumpToMessage(pins.anchorOf(bubbleId))
 		},
-		[reachMessage, pins.anchorOf],
+		[jumpToMessage, pins.anchorOf],
 	)
+
+	const quotes = useMemo(
+		() => quotedTargetsIn(state.messages, quotedMessageIdsIn(state.messages)),
+		[state.messages],
+	)
+
+	const quoteFor = useCallback(
+		(target: ReplyTarget): QuotedMessage => ({
+			author:
+				target.role === "user"
+					? reader
+					: (botNameIn(authors, target.authorBotId) ?? t("working.name")),
+			excerpt: target.excerpt,
+			from: target.role,
+			onJump: () => jumpToMessage(target.messageId),
+		}),
+		[authors, reader, t, jumpToMessage],
+	)
+
+	const quoteOf = useCallback(
+		(row: TranscriptRow) => {
+			const target = row.quotedMessageId
+				? quotes.get(row.quotedMessageId)
+				: undefined
+			return target ? quoteFor(target) : undefined
+		},
+		[quotes, quoteFor],
+	)
+
+	const focusComposer = useCallback(() => {
+		composerRef.current?.focus({ preventScroll: true })
+	}, [])
+
+	const holdReply = useCallback(
+		(target: ReplyTarget) => {
+			setReplyTarget(target)
+			focusComposer()
+		},
+		[focusComposer],
+	)
+
+	const releaseReply = useCallback(() => {
+		setReplyTarget(null)
+		focusComposer()
+	}, [focusComposer])
 
 	const send = useCallback(
 		(text: string) => {
-			void controller.send(text)
+			void controller.send(text, replyTarget?.messageId)
+			setReplyTarget(null)
 		},
-		[controller],
+		[controller, replyTarget],
 	)
 
 	const stop = useCallback(() => {
@@ -330,6 +411,7 @@ export function ConversationScreen({
 						bots={present}
 						leadId={leadOf(conversation)}
 						onSubmit={send}
+						textareaRef={composerRef}
 					/>
 				}
 				header={
@@ -377,6 +459,14 @@ export function ConversationScreen({
 						? { has: state.hasOlder, onLoad: controller.loadOlder }
 						: undefined
 				}
+				reply={
+					replyTarget
+						? {
+								...quoteFor(replyTarget),
+								onDismiss: releaseReply,
+							}
+						: undefined
+				}
 				scrollerRef={scrollerRef}
 				transcriptKey={conversation.id}
 			>
@@ -393,9 +483,11 @@ export function ConversationScreen({
 								}
 								key={bubbleIdOf(row.messageId, row.blockIndex)}
 								onPin={pins.toggle}
+								onReply={holdReply}
 								pinned={pins.isPinned(
 									bubbleIdOf(row.messageId, row.blockIndex),
 								)}
+								repliedTo={quoteOf(row)}
 								row={row}
 							/>
 						))}

@@ -485,6 +485,7 @@ describe("quoted messages", () => {
 			messageId: "m-9",
 			role: "assistant",
 			excerpt: "Look at this",
+			authorBotId: null,
 		})
 	})
 
@@ -505,7 +506,12 @@ describe("quoted messages", () => {
 				runtimeSessionId: null,
 				providerSessionId: null,
 			}),
-		).toEqual({ messageId: "m-9", role: "user", excerpt: "Look at this" })
+		).toEqual({
+			messageId: "m-9",
+			role: "user",
+			excerpt: "Look at this",
+			authorBotId: null,
+		})
 	})
 })
 

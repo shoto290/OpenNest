@@ -161,6 +161,7 @@ export type ReplyTarget = {
 	messageId: string
 	role: TranscriptRole
 	excerpt: string
+	authorBotId: string | null
 }
 
 const targetsByMessage = new WeakMap<TranscriptMessage, ReplyTarget>()
@@ -174,6 +175,7 @@ export function replyTargetOf(message: TranscriptMessage): ReplyTarget {
 		messageId: message.id,
 		role: message.role,
 		excerpt: messageWithAttachments(message.content).text.trim(),
+		authorBotId: message.authorBotId,
 	}
 	targetsByMessage.set(message, target)
 	return target
@@ -186,6 +188,7 @@ export function replyTargetOfReference(
 		messageId: reference.messageId,
 		role: reference.role,
 		excerpt: reference.excerpt,
+		authorBotId: null,
 	}
 }
 
