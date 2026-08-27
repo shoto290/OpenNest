@@ -97,7 +97,10 @@ const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
 const TITLE_BADGE =
 	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
 
-const PREVIEW_LINE = "h-4 truncate text-muted-foreground text-xs leading-4"
+const ROW_STACK = "flex h-9 min-w-0 flex-col justify-center"
+
+const PREVIEW_LINE =
+	"h-4 truncate text-muted-foreground text-xs leading-4 empty:h-0"
 
 const DESTINATION_NAME = "min-w-0 truncate"
 
@@ -471,7 +474,7 @@ const BotRosterRow = ({
 							onSelect?.(bot.id)
 						}}
 					>
-						<span className="flex min-w-0 flex-col">
+						<span className={ROW_STACK}>
 							<span className={NAME_LINE}>
 								<span className="truncate" data-slot="roster-row-name">
 									{bot.name}
@@ -602,7 +605,7 @@ const ConversationRosterRow = ({
 							onSelect?.(conversation.id)
 						}}
 					>
-						<span className="flex min-w-0 flex-col">
+						<span className={ROW_STACK}>
 							<span className={NAME_LINE}>
 								<span className="truncate" data-slot="roster-row-name">
 									{conversation.name}
