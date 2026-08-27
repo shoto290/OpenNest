@@ -9,6 +9,7 @@ import { ChatNotice } from "@workspace/ui/components/chat-notice"
 import {
 	AssistantTurn,
 	ChatTurnGroup,
+	type ChatTurnRun,
 	UserTurn,
 } from "@workspace/ui/components/chat-turn"
 import {
@@ -203,6 +204,8 @@ type ConversationTurnProps = {
 	author?: MessageAuthor
 	repliedTo?: QuotedMessage
 	pinned: boolean
+	run?: ChatTurnRun
+	carriesMark?: boolean
 	onPin: (messageId: string, blockIndex: number) => void
 	onReply: (target: ReplyTarget) => void
 }
@@ -212,6 +215,8 @@ const ConversationTurn = ({
 	author,
 	repliedTo,
 	pinned,
+	run,
+	carriesMark,
 	onPin,
 	onReply,
 }: ConversationTurnProps) => {
@@ -238,6 +243,7 @@ const ConversationTurn = ({
 			onReply={reply}
 			pinned={pinned}
 			repliedTo={repliedTo}
+			run={run}
 			state={row.completion}
 		>
 			{content}
@@ -245,12 +251,14 @@ const ConversationTurn = ({
 	) : (
 		<AssistantTurn
 			author={author}
+			carriesMark={carriesMark}
 			copyText={row.text}
 			messageId={anchor}
 			onPin={pin}
 			onReply={reply}
 			pinned={pinned}
 			repliedTo={repliedTo}
+			run={run}
 			state={row.completion}
 		>
 			{content}
@@ -391,6 +399,8 @@ export function ConversationScreen({
 	const canAttach = present.length > 0
 	const staged = useAttachments(attachments, owner, canAttach, conversationRef)
 	const runs = toRuns(toTranscriptRows(state.messages))
+	const isAnyBotWorking =
+		state.speakingBotId !== null || state.waitingBotIds.length > 0
 	const botOf = useCallback(
 		(botId: string) => bots.find((bot) => bot.id === botId),
 		[bots],
@@ -587,8 +597,11 @@ export function ConversationScreen({
 					<ConversationEmptyState bots={present} title={conversation.title} />
 				) : null}
 
-				{runs.map((run) => (
-					<ChatTurnGroup key={bubbleIdOf(run[0].messageId, run[0].blockIndex)}>
+				{runs.map((run, runIndex) => (
+					<ChatTurnGroup
+						carriesMark={runIndex === runs.length - 1 && !isAnyBotWorking}
+						key={bubbleIdOf(run[0].messageId, run[0].blockIndex)}
+					>
 						{run.map((row) => (
 							<ConversationTurn
 								author={
