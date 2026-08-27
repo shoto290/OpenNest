@@ -45,7 +45,7 @@ export type ConversationController = {
 	attach: () => () => void
 	open: (conversation: Conversation) => Promise<void>
 	loadOlder: () => Promise<void>
-	send: (text: string) => Promise<void>
+	send: (text: string, repliedToMessageId?: string) => Promise<void>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
@@ -462,10 +462,18 @@ export const createConversationController = (
 			conversationId: said.conversationId,
 			turnId: turn.id,
 			authorBotId: null,
-			repliedToMessageId: null,
+			repliedToMessageId: said.repliedToMessageId,
 			content: said.content,
 			createdAt: said.createdAt,
 		})
+	}
+
+	const answeredIn = (conversationId: string, messageId?: string) => {
+		if (!messageId) {
+			return null
+		}
+		const shown = selectMessages(transcript.getState(), conversationId)
+		return shown.some((message) => message.id === messageId) ? messageId : null
 	}
 
 	const summonedBy = (content: string, promptId: string): Summons[] => {
@@ -475,7 +483,7 @@ export const createConversationController = (
 		return answering.map((botId) => ({ botId, promptId }))
 	}
 
-	const send = async (text: string) => {
+	const send = async (text: string, repliedToMessageId?: string) => {
 		const trimmed = text.trim()
 		if (!conversation || trimmed.length === 0) {
 			return
@@ -493,7 +501,7 @@ export const createConversationController = (
 			completion: "complete",
 			createdAt: now(),
 			authorBotId: null,
-			repliedToMessageId: null,
+			repliedToMessageId: answeredIn(conversationId, repliedToMessageId),
 			runtimeSessionId: null,
 		}
 
