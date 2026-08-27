@@ -24,6 +24,10 @@ import type {
 	ActivityEvent,
 	AgentEvent,
 	ChatMessage,
+	PermissionDecision,
+	PermissionRequest,
+	QuestionAnswers,
+	QuestionRequest,
 	RuntimeScope,
 } from "../agent/contract"
 import { isSameRuntimeScope } from "../chat/chat-state"
@@ -45,6 +49,10 @@ export type RefusedMessage = {
 	repliedToMessageId: string | null
 }
 
+export type PendingPrompt =
+	| { kind: "question"; botId: string; request: QuestionRequest }
+	| { kind: "permission"; botId: string; request: PermissionRequest }
+
 export type ConversationState = {
 	conversationId: string | null
 	messages: TranscriptMessage[]
@@ -55,6 +63,7 @@ export type ConversationState = {
 	waitingBotIds: string[]
 	loopingPair: [string, string] | null
 	refusedMessage: RefusedMessage | null
+	pendingPrompt: PendingPrompt | null
 }
 
 export type ConversationController = {
@@ -69,6 +78,8 @@ export type ConversationController = {
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
+	answer: (id: string, answers: QuestionAnswers) => Promise<void>
+	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	stop: () => Promise<void>
 	shutdown: () => Promise<void>
 }
@@ -93,6 +104,7 @@ type Speaker = {
 	heldReply: ChatMessage | null
 	written: Map<string, string>
 	activities: ActivityEvent[]
+	pending: PendingPrompt | null
 	isDropped: boolean
 }
 
@@ -125,7 +137,8 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	isSameWork(left.speakingWork, right.speakingWork) &&
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
 	isSamePair(left.loopingPair, right.loopingPair) &&
-	left.refusedMessage === right.refusedMessage
+	left.refusedMessage === right.refusedMessage &&
+	left.pendingPrompt === right.pendingPrompt
 
 const initialState: ConversationState = {
 	conversationId: null,
@@ -137,6 +150,7 @@ const initialState: ConversationState = {
 	waitingBotIds: [],
 	loopingPair: null,
 	refusedMessage: null,
+	pendingPrompt: null,
 }
 
 export const createConversationController = (
@@ -205,6 +219,7 @@ export const createConversationController = (
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
 			loopingPair: loopingPairIn(queue.handovers),
 			refusedMessage: refused,
+			pendingPrompt: speaker?.pending ?? null,
 		})
 	}
 
@@ -386,6 +401,19 @@ export const createConversationController = (
 		sync()
 	}
 
+	const holdPrompt = (held: Speaker, pending: PendingPrompt) => {
+		held.pending = pending
+		sync()
+	}
+
+	const releasePrompt = (held: Speaker, id: string) => {
+		if (held.pending?.request.id !== id) {
+			return
+		}
+		held.pending = null
+		sync()
+	}
+
 	const apply = (held: Speaker, event: AgentEvent) => {
 		switch (event.type) {
 			case "messageStarted":
@@ -399,6 +427,20 @@ export const createConversationController = (
 				return noteActivity(held, event.activity)
 			case "messageCompleted":
 				return settleCompleted(held, event.message)
+			case "questionRequested":
+				return holdPrompt(held, {
+					kind: "question",
+					botId: held.botId,
+					request: event.request,
+				})
+			case "permissionRequested":
+				return holdPrompt(held, {
+					kind: "permission",
+					botId: held.botId,
+					request: event.request,
+				})
+			case "permissionResolved":
+				return releasePrompt(held, event.id)
 			case "turnEnded":
 				return closeSpeaker(ENDING_FOR_OUTCOME[event.ended.outcome])
 			case "failed":
@@ -465,6 +507,7 @@ export const createConversationController = (
 			heldReply: null,
 			written: new Map(),
 			activities: [],
+			pending: null,
 			isDropped: false,
 		}
 		if (detach) {
@@ -610,8 +653,75 @@ export const createConversationController = (
 			: Promise.resolve()
 	}
 
+	const recordAnswers = (
+		held: Speaker,
+		request: QuestionRequest,
+		answers: QuestionAnswers,
+	) => {
+		const conversationId = conversation?.id
+		const content = request.questions
+			.filter(({ question }) => answers[question])
+			.map(({ question }) => `${question}\n\n${answers[question]}`)
+			.join("\n\n")
+		if (!conversationId || content.length === 0) {
+			return
+		}
+		const id = newId()
+		const createdAt = now()
+		write(
+			() =>
+				store.appendUserMessage({
+					id,
+					conversationId,
+					turnId: held.turn.id,
+					authorBotId: null,
+					repliedToMessageId: null,
+					content,
+					createdAt,
+				}),
+			() =>
+				transcript.append({
+					id,
+					conversationId,
+					turnId: held.turn.id,
+					role: "user",
+					content,
+					completion: "complete",
+					createdAt,
+					authorBotId: null,
+					repliedToMessageId: null,
+					runtimeSessionId: null,
+				}),
+		)
+	}
+
+	const answer = async (id: string, answers: QuestionAnswers) => {
+		const held = speaker
+		const pending = held?.pending
+		if (!held || pending?.kind !== "question" || pending.request.id !== id) {
+			return
+		}
+		await driver.answerQuestion(held.scope, id, answers).catch(() => undefined)
+		recordAnswers(held, pending.request, answers)
+		releasePrompt(held, id)
+	}
+
+	const respond = async (id: string, decision: PermissionDecision) => {
+		const held = speaker
+		if (held?.pending?.request.id !== id) {
+			return
+		}
+		await driver
+			.respondToPermission(held.scope, id, decision)
+			.catch(() => undefined)
+		releasePrompt(held, id)
+	}
+
 	const stop = async () => {
 		const held = speaker
+		if (held?.pending) {
+			await respond(held.pending.request.id, "deny")
+		}
 		queue = reopenedFor(queue, [])
 		if (held) {
 			held.isDropped = true
@@ -708,6 +818,8 @@ export const createConversationController = (
 		pin,
 		unpin,
 		pins,
+		answer,
+		respond,
 		stop,
 		shutdown,
 	}
