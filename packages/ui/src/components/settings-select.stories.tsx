@@ -1,7 +1,8 @@
 import { useState } from "react"
-import { expect, fn, screen } from "storybook/test"
+import { expect, fn, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { FRAME_POLL } from "@workspace/storybook/story-utils"
 import {
 	SettingsSelect,
 	type SettingsSelectProps,
@@ -67,9 +68,14 @@ export const Default = meta.story({
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await userEvent.click(canvas.getByRole("combobox"))
+		await screen.findByRole("listbox", { name: "Model" })
 		await userEvent.click(
 			await screen.findByRole("option", { name: "Claude Opus" }),
 		)
+
+		await waitFor(async () => {
+			await expect(screen.queryByRole("listbox")).toBeNull()
+		}, FRAME_POLL)
 
 		await expect(args.onValueChange).toHaveBeenLastCalledWith("claude-opus")
 	},
