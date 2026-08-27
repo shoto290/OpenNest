@@ -71,7 +71,7 @@ const SettingsSelect = ({
 								"max-h-(--available-height) min-w-(--anchor-width) origin-(--transform-origin) overflow-y-auto rounded-xl p-1",
 							)}
 						>
-							<Select.List>
+							<Select.List aria-label={label}>
 								{options.map((option) => (
 									<Select.Item
 										className="grid cursor-pointer grid-cols-[1rem_1fr] items-center gap-2 rounded-lg px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-muted"
