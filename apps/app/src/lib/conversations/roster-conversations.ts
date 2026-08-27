@@ -2,6 +2,7 @@ import type {
 	AgentSidebarBot,
 	AgentSidebarConversation,
 } from "@workspace/ui/components/agents/agent-sidebar"
+import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
 import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import type { MessageAuthor } from "@workspace/ui/components/message"
@@ -18,7 +19,12 @@ type BotFace = Pick<
 	"name" | "avatarAnimal" | "avatarBlot" | "avatarImagePath"
 >
 
-const NO_WORKERS: string[] = []
+export type ConversationWorker = {
+	botId: string
+	kind: BotWorkingKind
+}
+
+const NO_WORKERS: ConversationWorker[] = []
 
 const toBotRow = (id: string, face: BotFace): AgentSidebarBot => ({
 	id,
@@ -93,7 +99,7 @@ export const toConversationSettingsValue = (
 })
 
 export type ConversationRosterActivity = {
-	working: Record<string, string[]>
+	working: Record<string, ConversationWorker[]>
 	previews: ConversationPreviews
 }
 
@@ -118,12 +124,16 @@ const speakerNameAmong = (
 
 const toSeatedRows = (
 	seated: Participant[],
-	workingBotIds: string[],
+	workers: ConversationWorker[],
 ): AgentSidebarBot[] =>
-	seated.map((participant) => ({
-		...toParticipantRow(participant),
-		status: workingBotIds.includes(participant.botId) ? "working" : "idle",
-	}))
+	seated.map((participant) => {
+		const worker = workers.find(({ botId }) => botId === participant.botId)
+		return {
+			...toParticipantRow(participant),
+			status: worker ? "working" : "idle",
+			pose: worker?.kind,
+		}
+	})
 
 export const toRosterConversations = (
 	conversations: Conversation[],
@@ -132,16 +142,16 @@ export const toRosterConversations = (
 ): AgentSidebarConversation[] =>
 	mostRecentFirst(conversations, activity).map((conversation) => {
 		const preview = activity.previews[conversation.id]
-		const workingBotIds = activity.working[conversation.id] ?? NO_WORKERS
+		const workers = activity.working[conversation.id] ?? NO_WORKERS
 		const seated = presentParticipants(conversation)
 		return {
 			id: conversation.id,
 			name: conversationName(conversation),
 			sectionId: conversation.sectionId,
-			participants: toSeatedRows(seated, workingBotIds),
+			participants: toSeatedRows(seated, workers),
 			lastMessage: preview?.text,
 			lastSpeaker: speakerNameAmong(seated, preview),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
-			status: workingBotIds.length > 0 ? "working" : "idle",
+			status: workers.length > 0 ? "working" : "idle",
 		}
 	})

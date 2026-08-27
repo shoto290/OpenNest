@@ -1,6 +1,7 @@
+import { withActivity } from "./working-kind"
+
 import type {
 	ActivityEvent,
-	ActivityStatus,
 	AgentCommand,
 	AgentEvent,
 	ConnectionState,
@@ -101,13 +102,6 @@ const TURN_TRANSITIONS: Record<TurnState, TurnState[]> = {
 	failed: ["submitting", "idle"],
 }
 
-const ACTIVITY_RANK: Record<ActivityStatus, number> = {
-	pending: 0,
-	running: 1,
-	succeeded: 2,
-	failed: 2,
-}
-
 export function isTurnBusy(turn: TurnState): boolean {
 	return turn === "submitting" || turn === "running" || turn === "stopping"
 }
@@ -184,17 +178,8 @@ function pushError(state: ChatState, error: TransportError): ChatState {
 }
 
 function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
-	const index = state.activities.findIndex((entry) => entry.id === activity.id)
-	if (index === -1) {
-		return { ...state, activities: [...state.activities, activity] }
-	}
-	if (
-		ACTIVITY_RANK[activity.status] <
-		ACTIVITY_RANK[state.activities[index].status]
-	) {
-		return state
-	}
-	return { ...state, activities: state.activities.with(index, activity) }
+	const activities = withActivity(state.activities, activity)
+	return activities === state.activities ? state : { ...state, activities }
 }
 
 function takesRequest(

@@ -5,6 +5,7 @@ import type {
 	ConversationState,
 } from "./conversation-controller"
 import type { ConversationRuntimes } from "./conversation-runtimes"
+import type { ConversationWorker } from "./roster-conversations"
 import type { Conversation } from "./store-contract"
 import {
 	type ConversationPreviews,
@@ -34,9 +35,9 @@ export const useConversation = (
 	return { state, controller }
 }
 
-export type ConversationWorkers = Record<string, string[]>
+export type ConversationWorkers = Record<string, ConversationWorker[]>
 
-const NO_WORKERS: string[] = []
+const NO_WORKERS: ConversationWorker[] = []
 
 const useHeldRecord = <Value>(
 	runtimes: ConversationRuntimes,
@@ -61,12 +62,21 @@ const useHeldRecord = <Value>(
 	})
 }
 
-const workersIn = (controller: ConversationController | null): string[] => {
+const workersIn = (
+	controller: ConversationController | null,
+): ConversationWorker[] => {
 	if (!controller) {
 		return NO_WORKERS
 	}
-	const { speakingBotId, waitingBotIds } = controller.getState()
-	return speakingBotId ? [speakingBotId, ...waitingBotIds] : waitingBotIds
+	const { speakingBotId, speakingWork, waitingBotIds } = controller.getState()
+	const waiting = waitingBotIds.map(
+		(botId): ConversationWorker => ({ botId, kind: "waiting" }),
+	)
+	if (!speakingBotId) {
+		return waiting
+	}
+	const kind = speakingWork?.kind ?? "thinking"
+	return [{ botId: speakingBotId, kind }, ...waiting]
 }
 
 export const useConversationWorkers = (
@@ -77,7 +87,7 @@ export const useConversationWorkers = (
 		runtimes,
 		conversationIds,
 		(id) => workersIn(runtimes.heldFor(id)),
-		(botIds) => botIds.join(","),
+		(workers) => workers.map(({ botId, kind }) => `${botId}:${kind}`).join(","),
 	)
 
 const heldWordIn = (
