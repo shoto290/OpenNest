@@ -43,6 +43,7 @@ import {
 	toTranscriptRows,
 } from "@/lib/chat/screen-model"
 import { usePinnedMessages } from "@/lib/chat/use-pinned-messages"
+import type { RefusedMessage } from "@/lib/conversations/conversation-controller"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
 import {
@@ -210,6 +211,25 @@ const ConversationTurn = ({
 	)
 }
 
+type RefusedTurnProps = {
+	message: RefusedMessage
+	repliedTo?: QuotedMessage
+	onSendAgain: (messageId: string) => void
+}
+
+const RefusedTurn = ({ message, repliedTo, onSendAgain }: RefusedTurnProps) => (
+	<ChatTurnGroup>
+		<UserTurn
+			copyText={message.text}
+			onRetry={() => onSendAgain(message.id)}
+			repliedTo={repliedTo}
+			state="failed"
+		>
+			<Markdown>{message.text}</Markdown>
+		</UserTurn>
+	</ChatTurnGroup>
+)
+
 type ConversationComposerProps = {
 	bots: ConversationBot[]
 	leadId?: string
@@ -346,10 +366,16 @@ export function ConversationScreen({
 		[jumpToMessage, pins.anchorOf],
 	)
 
-	const quotes = useMemo(
-		() => quotedTargetsIn(state.messages, quotedMessageIdsIn(state.messages)),
-		[state.messages],
-	)
+	const refused = state.refusedMessage
+	const quotes = useMemo(() => {
+		const answered = quotedMessageIdsIn(state.messages)
+		return quotedTargetsIn(
+			state.messages,
+			refused?.repliedToMessageId
+				? [...answered, refused.repliedToMessageId]
+				: answered,
+		)
+	}, [state.messages, refused])
 
 	const quoteFor = useCallback(
 		(target: ReplyTarget): QuotedMessage => ({
@@ -365,10 +391,8 @@ export function ConversationScreen({
 	)
 
 	const quoteOf = useCallback(
-		(row: TranscriptRow) => {
-			const target = row.quotedMessageId
-				? quotes.get(row.quotedMessageId)
-				: undefined
+		(quotedMessageId: string | null) => {
+			const target = quotedMessageId ? quotes.get(quotedMessageId) : undefined
 			return target ? quoteFor(target) : undefined
 		},
 		[quotes, quoteFor],
@@ -470,7 +494,7 @@ export function ConversationScreen({
 				scrollerRef={scrollerRef}
 				transcriptKey={conversation.id}
 			>
-				{state.messages.length === 0 ? (
+				{state.messages.length === 0 && !refused ? (
 					<ConversationEmptyState bots={present} title={conversation.title} />
 				) : null}
 
@@ -487,12 +511,20 @@ export function ConversationScreen({
 								pinned={pins.isPinned(
 									bubbleIdOf(row.messageId, row.blockIndex),
 								)}
-								repliedTo={quoteOf(row)}
+								repliedTo={quoteOf(row.quotedMessageId)}
 								row={row}
 							/>
 						))}
 					</ChatTurnGroup>
 				))}
+
+				{refused ? (
+					<RefusedTurn
+						message={refused}
+						onSendAgain={controller.sendAgain}
+						repliedTo={quoteOf(refused.repliedToMessageId)}
+					/>
+				) : null}
 
 				<SpeakingBots
 					onStop={stop}
