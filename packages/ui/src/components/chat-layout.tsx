@@ -54,7 +54,7 @@ function ChatLayout({
 			ref={rootRef}
 			data-slot="chat-layout"
 			className={cn(
-				"flex h-svh flex-col bg-background text-foreground",
+				"flex h-svh max-h-full flex-col bg-background text-foreground",
 				className,
 			)}
 		>
