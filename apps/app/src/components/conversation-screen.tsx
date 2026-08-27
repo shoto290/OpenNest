@@ -22,7 +22,6 @@ import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptMentionMenu } from "@workspace/ui/components/prompt-mention-menu"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import type { ChatDriver } from "@/lib/chat/driver"
 import { holdsDismissal } from "@/lib/chat/prompt-commands"
 import {
 	bubbleIdOf,
@@ -30,6 +29,7 @@ import {
 	toRuns,
 	toTranscriptRows,
 } from "@/lib/chat/screen-model"
+import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
 import {
 	authorsOf,
@@ -38,14 +38,12 @@ import {
 	toConversationBots,
 } from "@/lib/conversations/roster-conversations"
 import type { Conversation } from "@/lib/conversations/store-contract"
-import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { useConversation } from "@/lib/conversations/use-conversation"
 import { hasOverlayWindowControls } from "@/lib/host"
 
 type ConversationScreenProps = {
 	conversation: Conversation
-	driver: ChatDriver
-	store: TranscriptStore
+	runtimes: ConversationRuntimes
 	isSettingsOpen: boolean
 	onOpenSettings: (conversationId: string) => void
 }
@@ -189,13 +187,12 @@ const ConversationComposer = ({
 
 export function ConversationScreen({
 	conversation,
-	driver,
-	store,
+	runtimes,
 	isSettingsOpen,
 	onOpenSettings,
 }: ConversationScreenProps) {
 	const t = useChatCopy()
-	const { state, controller } = useConversation(driver, store, conversation)
+	const { state, controller } = useConversation(runtimes, conversation)
 	const bots = useMemo(
 		() => toConversationBots(conversation.participants),
 		[conversation],
