@@ -13,3 +13,7 @@ export type AttachmentStoreError =
 	| { kind: "tooLarge"; name: string; bytes: number; limit: number }
 	| { kind: "tooLargeTogether"; bytes: number; limit: number }
 	| { kind: "unwritable"; detail: string }
+
+export type AttachmentsOwner =
+	| { kind: "bot"; id: string }
+	| { kind: "conversation"; id: string }

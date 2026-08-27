@@ -28,6 +28,7 @@ import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
+import { createAttachmentsPort } from "@/lib/chat/attachments-port"
 import { createChatDriver } from "@/lib/chat/create-driver"
 import { toSpaceBadges, withBadges } from "@/lib/chat/sidebar-badges"
 import { useBotBadges } from "@/lib/chat/use-bot-badges"
@@ -83,11 +84,13 @@ export function App() {
 
 	const attachments = useMemo(
 		() =>
-			createAttachmentsController({
-				store: chat.controller.storeAttachments,
-				send: chat.controller.sendTo,
-			}),
-		[chat.controller],
+			createAttachmentsController(
+				createAttachmentsPort({
+					chat: chat.controller,
+					runtimes: conversationRuntimes,
+				}),
+			),
+		[chat.controller, conversationRuntimes],
 	)
 	const roster = useRoster(store)
 	const sections = useSections(store, {
@@ -255,7 +258,7 @@ export function App() {
 
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
-		attachments.forget(id)
+		attachments.forget({ kind: "bot", id })
 		await roster.controller.remove(id)
 	}
 
