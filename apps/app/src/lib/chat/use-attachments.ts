@@ -7,8 +7,11 @@ import {
 } from "react"
 
 import { NO_ATTACHMENTS, type StagedAttachment } from "./attachments"
-import type { AttachmentStoreError } from "./attachments-contract"
-import type { AttachmentsController } from "./attachments-controller"
+import type {
+	AttachmentStoreError,
+	AttachmentsOwner,
+} from "./attachments-contract"
+import { type AttachmentsController, ownerKey } from "./attachments-controller"
 import { watchConversationDrags } from "./conversation-drags"
 
 export type StagedFiles = {
@@ -23,22 +26,23 @@ export type StagedFiles = {
 
 export function useAttachments(
 	controller: AttachmentsController,
-	botId: string,
+	owner: AttachmentsOwner,
 	canAttach: boolean,
 	conversation: RefObject<HTMLElement | null>,
 ): StagedFiles {
 	const state = useSyncExternalStore(controller.subscribe, controller.getState)
 	const [isDropTarget, setIsDropTarget] = useState(false)
+	const key = ownerKey(owner)
 
 	const bound = useMemo(
 		() => ({
-			stage: (files: File[]) => controller.stage(botId, files),
-			remove: (id: string) => controller.remove(botId, id),
+			stage: (files: File[]) => controller.stage(owner, files),
+			remove: (id: string) => controller.remove(owner, id),
 			submit: (text: string, repliedToMessageId?: string) =>
-				controller.submit(botId, text, repliedToMessageId),
-			dismissRefusal: () => controller.dismissRefusal(botId),
+				controller.submit(owner, text, repliedToMessageId),
+			dismissRefusal: () => controller.dismissRefusal(owner),
 		}),
-		[controller, botId],
+		[controller, owner],
 	)
 
 	useEffect(() => controller.release, [controller])
@@ -58,8 +62,8 @@ export function useAttachments(
 	)
 
 	return {
-		items: state.staged[botId] ?? NO_ATTACHMENTS,
-		refusal: state.refusals[botId] ?? null,
+		items: state.staged[key] ?? NO_ATTACHMENTS,
+		refusal: state.refusals[key] ?? null,
 		isDropTarget,
 		...bound,
 	}

@@ -57,7 +57,10 @@ import {
 	describeAttachmentError,
 	type StagedAttachment,
 } from "@/lib/chat/attachments"
-import type { AttachmentStoreError } from "@/lib/chat/attachments-contract"
+import type {
+	AttachmentStoreError,
+	AttachmentsOwner,
+} from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { ChatController } from "@/lib/chat/chat-controller"
 import type { ChatError, OutboxEntry } from "@/lib/chat/chat-state"
@@ -531,7 +534,11 @@ export function ChatScreen({
 
 	const face = avatarSrc(bot.avatarImagePath)
 	const canAttach = isSessionReady(state)
-	const staged = useAttachments(attachments, bot.id, canAttach, conversationRef)
+	const owner = useMemo<AttachmentsOwner>(
+		() => ({ kind: "bot", id: bot.id }),
+		[bot.id],
+	)
+	const staged = useAttachments(attachments, owner, canAttach, conversationRef)
 	const focusComposer = useCallback(() => {
 		const composer = composerRef.current
 		if (!composer || composer.disabled) {

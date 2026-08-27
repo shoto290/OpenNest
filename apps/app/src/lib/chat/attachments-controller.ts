@@ -10,6 +10,7 @@ import {
 } from "./attachments"
 import type {
 	AttachmentStoreError,
+	AttachmentsOwner,
 	SubmittedAttachment,
 } from "./attachments-contract"
 
@@ -20,30 +21,32 @@ export type AttachmentsState = {
 
 export type AttachmentsPort = {
 	store: (
-		botId: string,
+		owner: AttachmentsOwner,
 		attachments: SubmittedAttachment[],
 	) => Promise<string[]>
 	send: (
-		botId: string,
+		owner: AttachmentsOwner,
 		text: string,
 		repliedToMessageId?: string,
-	) => Promise<void>
+	) => boolean
 }
 
 export type AttachmentsController = {
 	getState: () => AttachmentsState
 	subscribe: (listener: () => void) => () => void
-	stage: (botId: string, files: File[]) => void
-	remove: (botId: string, id: string) => void
-	dismissRefusal: (botId: string) => void
+	stage: (owner: AttachmentsOwner, files: File[]) => void
+	remove: (owner: AttachmentsOwner, id: string) => void
+	dismissRefusal: (owner: AttachmentsOwner) => void
 	submit: (
-		botId: string,
+		owner: AttachmentsOwner,
 		text: string,
 		repliedToMessageId?: string,
 	) => Promise<boolean>
-	forget: (botId: string) => void
+	forget: (owner: AttachmentsOwner) => void
 	release: () => void
 }
+
+export const ownerKey = (owner: AttachmentsOwner) => `${owner.kind}:${owner.id}`
 
 export function createAttachmentsController(
 	port: AttachmentsPort,
@@ -60,60 +63,66 @@ export function createAttachmentsController(
 		}
 	}
 
-	const stagedFor = (botId: string) => state.staged[botId] ?? NO_ATTACHMENTS
+	const stagedFor = (owner: AttachmentsOwner) =>
+		state.staged[ownerKey(owner)] ?? NO_ATTACHMENTS
 
-	const hold = (botId: string, items: StagedAttachment[]) =>
-		publish({ ...state, staged: { ...state.staged, [botId]: items } })
+	const hold = (owner: AttachmentsOwner, items: StagedAttachment[]) =>
+		publish({ ...state, staged: { ...state.staged, [ownerKey(owner)]: items } })
 
-	const holdRefusal = (botId: string, refusal: AttachmentStoreError | null) => {
-		if ((state.refusals[botId] ?? null) === refusal) {
+	const holdRefusal = (
+		owner: AttachmentsOwner,
+		refusal: AttachmentStoreError | null,
+	) => {
+		const key = ownerKey(owner)
+		if ((state.refusals[key] ?? null) === refusal) {
 			return
 		}
-		publish({ ...state, refusals: { ...state.refusals, [botId]: refusal } })
+		publish({ ...state, refusals: { ...state.refusals, [key]: refusal } })
 	}
 
-	const dropSent = (botId: string, sent: StagedAttachment[]) => {
+	const dropSent = (owner: AttachmentsOwner, sent: StagedAttachment[]) => {
 		const ids = new Set(sent.map((item) => item.id))
 		hold(
-			botId,
-			stagedFor(botId).filter((item) => !ids.has(item.id)),
+			owner,
+			stagedFor(owner).filter((item) => !ids.has(item.id)),
 		)
 	}
 
 	const submit = async (
-		botId: string,
+		owner: AttachmentsOwner,
 		text: string,
 		repliedToMessageId?: string,
 	) => {
-		if (sending.has(botId)) {
+		const key = ownerKey(owner)
+		if (sending.has(key)) {
 			return false
 		}
-		const items = stagedFor(botId)
+		const items = stagedFor(owner)
 		if (items.length === 0) {
-			holdRefusal(botId, null)
-			void port.send(botId, text, repliedToMessageId)
-			return true
+			holdRefusal(owner, null)
+			return port.send(owner, text, repliedToMessageId)
 		}
 
-		sending.add(botId)
+		sending.add(key)
 		let paths: string[]
 		try {
-			paths = await port.store(botId, await submittedFrom(items))
+			paths = await port.store(owner, await submittedFrom(items))
 		} catch (reason) {
-			holdRefusal(botId, toAttachmentStoreError(reason))
+			holdRefusal(owner, toAttachmentStoreError(reason))
 			return false
 		} finally {
-			sending.delete(botId)
+			sending.delete(key)
+		}
+
+		if (
+			!port.send(owner, promptWithAttachments(text, paths), repliedToMessageId)
+		) {
+			return false
 		}
 
 		releasePreviews(items)
-		dropSent(botId, items)
-		holdRefusal(botId, null)
-		void port.send(
-			botId,
-			promptWithAttachments(text, paths),
-			repliedToMessageId,
-		)
+		dropSent(owner, items)
+		holdRefusal(owner, null)
 		return true
 	}
 
@@ -126,24 +135,25 @@ export function createAttachmentsController(
 			}
 		},
 
-		stage: (botId, files) => {
+		stage: (owner, files) => {
 			if (files.length === 0) {
 				return
 			}
-			hold(botId, [...stagedFor(botId), ...stagedFrom(files)])
+			hold(owner, [...stagedFor(owner), ...stagedFrom(files)])
 		},
 
-		remove: (botId, id) => hold(botId, withoutStaged(stagedFor(botId), id)),
+		remove: (owner, id) => hold(owner, withoutStaged(stagedFor(owner), id)),
 
-		dismissRefusal: (botId) => holdRefusal(botId, null),
+		dismissRefusal: (owner) => holdRefusal(owner, null),
 
 		submit,
 
-		forget: (botId) => {
-			releasePreviews(stagedFor(botId))
+		forget: (owner) => {
+			const key = ownerKey(owner)
+			releasePreviews(stagedFor(owner))
 			publish({
-				staged: { ...state.staged, [botId]: NO_ATTACHMENTS },
-				refusals: { ...state.refusals, [botId]: null },
+				staged: { ...state.staged, [key]: NO_ATTACHMENTS },
+				refusals: { ...state.refusals, [key]: null },
 			})
 		},
 
