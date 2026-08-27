@@ -5,7 +5,6 @@ import {
 	AnimatedSidebarProvider,
 	type AnimatedSidebarProviderProps,
 } from "@workspace/ui/components/motion/animated-sidebar"
-import { cn } from "@workspace/ui/lib/utils"
 
 interface WorkspaceShellProps
 	extends Pick<
@@ -22,8 +21,6 @@ interface WorkspaceShellProps
 	sidebar?: ReactNode
 	children: ReactNode
 }
-
-const SHELL_ROW = "h-svh"
 
 const WorkspaceShell = ({
 	sidebar,
@@ -46,7 +43,7 @@ const WorkspaceShell = ({
 		defaultWidth={defaultWidth}
 		onWidthChange={onWidthChange}
 		isResizable={isResizable}
-		className={cn(SHELL_ROW, className)}
+		className={className}
 	>
 		{sidebar}
 		<AnimatedSidebarInset>{children}</AnimatedSidebarInset>

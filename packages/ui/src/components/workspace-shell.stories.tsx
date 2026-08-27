@@ -105,6 +105,8 @@ const CHAT = chat()
 
 const CHAT_WITH_TRIGGER = chat(<SidebarToggle />)
 
+const OVERFLOWING_CHILD = <div className="h-[300svh] w-full bg-muted" />
+
 const meta = preview.meta({
 	title: "Layout/WorkspaceShell",
 	component: WorkspaceShell,
@@ -488,5 +490,32 @@ export const NotResizable = meta.story({
 		await userEvent.click(trigger)
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(args.onWidthChange).not.toHaveBeenCalled()
+	},
+})
+
+export const TallContent = meta.story({
+	args: {
+		sidebar: SIDEBAR,
+		children: OVERFLOWING_CHILD,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The shell handed a child three times taller than the window. Check that the window itself never scrolls — the document stays exactly as tall as the viewport, and no band of background appears under the shell — and that the overflow is clipped inside the main column rather than pushing the sidebar up with it. Whatever a screen puts in that column keeps its own scroll boundary; the shell never lends it the page. Pick `Default` for a conversation that fits.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const page = document.scrollingElement as HTMLElement
+		await expect(page.scrollHeight).toBe(page.clientHeight)
+
+		const main = canvas.getByRole("main")
+		await expect(main.getBoundingClientRect().height).toBeLessThanOrEqual(
+			window.innerHeight,
+		)
+
+		const sidebar = canvas.getByRole("complementary", { name: "Workspace" })
+		await expect(sidebar.getBoundingClientRect().top).toBe(0)
 	},
 })

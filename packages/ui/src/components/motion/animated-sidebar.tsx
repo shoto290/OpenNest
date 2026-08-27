@@ -316,7 +316,7 @@ export function AnimatedSidebarProvider({
 				data-resizing={resizing}
 				style={widthStyle}
 				className={cn(
-					"group/sidebar-wrapper flex min-h-svh w-full min-w-0",
+					"group/sidebar-wrapper flex h-svh w-full min-w-0 overflow-hidden",
 					"data-[resizing=true]:cursor-col-resize data-[resizing=true]:select-none",
 					className,
 				)}
@@ -813,7 +813,7 @@ export const AnimatedSidebarInset = forwardRef<
 			ref={forwardedRef}
 			data-slot="sidebar-inset"
 			className={cn(
-				"relative flex min-h-svh min-w-0 flex-1 flex-col bg-background",
+				"relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background",
 				"md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-2xl md:peer-data-[variant=inset]:shadow-sm",
 				className,
 			)}
