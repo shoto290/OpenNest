@@ -105,6 +105,10 @@ const GONE: MessageAuthor = {
 
 const ROOM: ConversationBot[] = [LEAD, SECOND]
 
+const firstCharacterLeft = (element: HTMLElement) =>
+	element.getBoundingClientRect().left +
+	Number.parseFloat(getComputedStyle(element).paddingInlineStart)
+
 const LEAD_RUN = [
 	"I have the release notes. The migration is not mine.",
 	"<@bot-basile> owns that script, and <@bot-elia> wrote the fixture it reads.",
@@ -697,6 +701,17 @@ export const Authored = meta.story({
 			canvasElement.querySelectorAll('[data-slot="message-author-lead"]'),
 		).toHaveLength(1)
 		await expect(canvas.getByText("Unknown bot")).toBeVisible()
+
+		const [name] = canvasElement.querySelectorAll<HTMLElement>(
+			'[data-slot="message-author"]',
+		)
+		const [bubble] = canvasElement.querySelectorAll<HTMLElement>(
+			'[data-slot="message-content"]:has([data-slot="message-author"]) [data-slot="message-bubble-content"]',
+		)
+		await expect(firstCharacterLeft(name)).toBeCloseTo(
+			firstCharacterLeft(bubble),
+			0,
+		)
 	},
 })
 
