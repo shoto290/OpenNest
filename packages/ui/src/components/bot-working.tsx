@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
-import { ThinkingShimmer } from "@workspace/ui/components/agents/loading-states/thinking-shimmer"
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import {
@@ -16,6 +15,7 @@ import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { CHAT_AVATAR_SIZE } from "@workspace/ui/components/chat-turn"
 import { Icons } from "@workspace/ui/components/icons"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
+import { TextShimmer } from "@workspace/ui/components/motion/text-shimmer"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface BotWorkingProps {
@@ -31,6 +31,8 @@ interface BotWorkingProps {
 	size?: number
 	className?: string
 }
+
+const SHIMMER_DURATION = 1.8
 
 const STOP_OVERLAY =
 	"pointer-events-none absolute inset-0 flex items-center justify-center bg-background/75 text-foreground"
@@ -125,7 +127,9 @@ function BotWorking({
 				{isTimed(kind) ? (
 					<AgentProgress indicator={null} label={text} running={pointed} />
 				) : (
-					<ThinkingShimmer>{text}</ThinkingShimmer>
+					<TextShimmer className="font-medium" duration={SHIMMER_DURATION}>
+						{text}
+					</TextShimmer>
 				)}
 			</span>
 		</div>
