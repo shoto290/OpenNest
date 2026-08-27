@@ -61,29 +61,6 @@ const bots = {
 		settings: "Space settings",
 		shortcut: "⌘{{rank}}",
 	},
-	resources: {
-		label: "Resources",
-		actions: "Actions for {{name}}",
-		rename: "Rename {{name}}",
-		item: "item",
-		itemLead: "Item",
-		menu: {
-			rename: "Rename",
-		},
-		position: {
-			before: "before",
-			inside: "inside",
-			after: "after",
-		},
-		move: {
-			toTopLevel: "Move to top level",
-			busy: "Wait for the current move to finish.",
-			done: "Moved {{name}} {{position}} {{target}}.",
-			doneAtTopLevel: "Moved {{name}} to the top level.",
-			failed: "Move failed. {{name}} was restored.",
-		},
-		renameFailed: "Rename failed. {{name}} was restored.",
-	},
 	dialog: {
 		untitled: "Untitled bot",
 		breadcrumb: "Settings",

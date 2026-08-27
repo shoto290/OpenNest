@@ -1,8 +1,10 @@
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { UPLOADED_AVATAR_IMAGE } from "@workspace/storybook/story-utils"
-import { PICKED_PICTURE_FILE } from "@workspace/ui/components/picture-dropzone.fixtures"
+import {
+	PICKED_PICTURE_FILE,
+	UPLOADED_AVATAR_IMAGE,
+} from "@workspace/storybook/story-utils"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 
 const meta = preview.meta({

@@ -1,12 +1,6 @@
 "use client"
 
-import {
-	AnimatePresence,
-	type HTMLMotionProps,
-	motion,
-	useReducedMotion,
-	type Variants,
-} from "motion/react"
+import { type HTMLMotionProps, motion, useReducedMotion } from "motion/react"
 import {
 	type AriaAttributes,
 	type ButtonHTMLAttributes,
@@ -34,7 +28,6 @@ import { Icons } from "@workspace/ui/components/icons"
 import { useMediaQuery } from "@workspace/ui/hooks/use-media-query"
 import {
 	EASE_DRAWER,
-	EASE_OUT,
 	SPRING_LAYOUT,
 	TRANSITION_NONE,
 	TWEEN_REDUCED,
@@ -65,37 +58,6 @@ const SIDEBAR_MORPH_TRANSITION = {
 	damping: 35,
 	mass: 0.75,
 } as const
-
-const SUBMENU_VARIANTS: Variants = {
-	closed: {
-		clipPath: "inset(0 0 100% 0 round 8px)",
-		transition: {
-			duration: 0.14,
-			ease: EASE_OUT,
-			staggerChildren: 0.025,
-			staggerDirection: -1,
-		},
-	},
-	open: {
-		clipPath: "inset(0 0 0% 0 round 8px)",
-		transition: {
-			duration: 0.2,
-			delayChildren: 0.035,
-			ease: EASE_OUT,
-			staggerChildren: 0.045,
-		},
-	},
-}
-
-const SUBMENU_ITEM_VARIANTS: Variants = {
-	closed: {
-		y: -6,
-	},
-	open: {
-		y: 0,
-		transition: { duration: 0.18, ease: EASE_OUT },
-	},
-}
 
 const FOCUSABLE_SELECTOR = [
 	"a[href]",
@@ -730,77 +692,6 @@ export const AnimatedSidebarTrigger = forwardRef<
 	)
 })
 
-export type AnimatedSidebarCloseProps = ButtonHTMLAttributes<HTMLButtonElement>
-
-export const AnimatedSidebarClose = forwardRef<
-	HTMLButtonElement,
-	AnimatedSidebarCloseProps
->(function AnimatedSidebarClose(
-	{ className, onClick, type = "button", ...props },
-	forwardedRef,
-) {
-	const { t } = useTranslation("common")
-	const context = useAnimatedSidebar()
-
-	return (
-		<button
-			{...props}
-			ref={forwardedRef}
-			type={type}
-			aria-label={props["aria-label"] ?? t("sidebar.close")}
-			data-slot="sidebar-close"
-			onClick={(event) => {
-				onClick?.(event)
-				if (event.defaultPrevented) return
-				if (context.isMobile) context.setOpenMobile(false)
-				else context.setOpen(false)
-			}}
-			className={cn(
-				"inline-flex size-10 shrink-0 items-center justify-center rounded-xl outline-none",
-				"focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-				className,
-			)}
-		/>
-	)
-})
-
-export type AnimatedSidebarRailProps = ButtonHTMLAttributes<HTMLButtonElement>
-
-export const AnimatedSidebarRail = forwardRef<
-	HTMLButtonElement,
-	AnimatedSidebarRailProps
->(function AnimatedSidebarRail(
-	{ className, onClick, type = "button", ...props },
-	forwardedRef,
-) {
-	const { t } = useTranslation("common")
-	const context = useAnimatedSidebar()
-	const panel = useAnimatedSidebarPanel()
-
-	return (
-		<button
-			{...props}
-			ref={forwardedRef}
-			type={type}
-			data-slot="sidebar-rail"
-			data-side={panel.side}
-			aria-label={props["aria-label"] ?? t("sidebar.toggle")}
-			title={t("sidebar.toggle")}
-			tabIndex={-1}
-			onClick={(event) => {
-				onClick?.(event)
-				if (!event.defaultPrevented) context.toggleSidebar()
-			}}
-			className={cn(
-				"absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 outline-none md:block",
-				"after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent hover:after:bg-sidebar-border",
-				"data-[side=right]:right-0 data-[side=right]:translate-x-1/2 data-[side=left]:left-full",
-				className,
-			)}
-		/>
-	)
-})
-
 export type AnimatedSidebarInsetProps = HTMLMotionProps<"main">
 
 export const AnimatedSidebarInset = forwardRef<
@@ -963,148 +854,6 @@ export const AnimatedSidebarMenuItem = forwardRef<
 		/>
 	)
 })
-
-export interface AnimatedSidebarMenuSubProps
-	extends Omit<HTMLMotionProps<"ul">, "children"> {
-	open: boolean
-	children?: ReactNode
-}
-
-export const AnimatedSidebarMenuSub = forwardRef<
-	HTMLUListElement,
-	AnimatedSidebarMenuSubProps
->(function AnimatedSidebarMenuSub(
-	{ open, children, className, ...props },
-	forwardedRef,
-) {
-	const context = useAnimatedSidebar()
-	const panel = useAnimatedSidebarPanel()
-
-	return (
-		<AnimatePresence initial={false}>
-			{open && !panel.collapsed ? (
-				<motion.ul
-					{...props}
-					ref={forwardedRef}
-					key="sidebar-submenu"
-					variants={context.reduce ? undefined : SUBMENU_VARIANTS}
-					initial="closed"
-					animate="open"
-					exit="closed"
-					data-slot="sidebar-menu-sub"
-					className={cn(
-						"relative mt-1 ml-5 flex min-w-0 flex-col gap-0.5 border-sidebar-border border-l pl-3",
-						className,
-					)}
-				>
-					{children}
-				</motion.ul>
-			) : null}
-		</AnimatePresence>
-	)
-})
-
-export const AnimatedSidebarMenuSubItem = forwardRef<
-	HTMLLIElement,
-	HTMLMotionProps<"li">
->(function AnimatedSidebarMenuSubItem({ className, ...props }, forwardedRef) {
-	return (
-		<motion.li
-			{...props}
-			ref={forwardedRef}
-			variants={SUBMENU_ITEM_VARIANTS}
-			data-slot="sidebar-menu-sub-item"
-			className={cn("relative min-w-0", className)}
-		/>
-	)
-})
-
-export interface AnimatedSidebarMenuSubButtonProps {
-	children: ReactNode
-	icon?: ReactNode
-	href?: string
-	isActive?: boolean
-	disabled?: boolean
-	closeOnSelect?: boolean
-	target?: "_blank" | "_self" | "_parent" | "_top"
-	rel?: string
-	onSelect?: () => void
-	className?: string
-}
-
-export function AnimatedSidebarMenuSubButton({
-	children,
-	icon,
-	href,
-	isActive = false,
-	disabled = false,
-	closeOnSelect = true,
-	target,
-	rel,
-	onSelect,
-	className,
-}: AnimatedSidebarMenuSubButtonProps) {
-	const context = useAnimatedSidebar()
-
-	const select = (event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
-		if (disabled) {
-			event.preventDefault()
-			return
-		}
-		onSelect?.()
-		if (context.isMobile && closeOnSelect) context.setOpenMobile(false)
-	}
-
-	const content = (
-		<>
-			<span
-				aria-hidden="true"
-				className="grid size-4 shrink-0 place-items-center"
-			>
-				{icon ?? <span className="size-1 rounded-full bg-current" />}
-			</span>
-			<span className="min-w-0 flex-1 truncate">{children}</span>
-		</>
-	)
-
-	const interactiveClassName = cn(
-		"flex min-h-8 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left text-xs outline-none",
-		"text-sidebar-foreground/70",
-		!disabled &&
-			"hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-		"focus-visible:bg-sidebar-accent/70 focus-visible:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-		isActive && "bg-sidebar-accent/70 text-sidebar-accent-foreground",
-		disabled && "cursor-not-allowed opacity-40",
-		className,
-	)
-
-	return href ? (
-		<a
-			href={href}
-			target={target}
-			rel={rel ?? (target === "_blank" ? "noreferrer noopener" : undefined)}
-			aria-current={isActive ? "page" : undefined}
-			aria-disabled={disabled || undefined}
-			tabIndex={disabled ? -1 : undefined}
-			data-slot="sidebar-menu-sub-button"
-			onClick={select}
-			className={interactiveClassName}
-		>
-			{content}
-		</a>
-	) : (
-		<button
-			type="button"
-			disabled={disabled}
-			aria-current={isActive ? "page" : undefined}
-			data-slot="sidebar-menu-sub-button"
-			onClick={select}
-			className={interactiveClassName}
-		>
-			{content}
-		</button>
-	)
-}
 
 type MenuButtonElementProps = AriaAttributes &
 	Pick<

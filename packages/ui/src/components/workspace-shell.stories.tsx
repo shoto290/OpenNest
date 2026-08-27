@@ -7,10 +7,6 @@ import {
 	AgentSidebar,
 	type AgentSidebarBot,
 } from "@workspace/ui/components/agents/agent-sidebar"
-import {
-	AISidebar,
-	type SidebarResource,
-} from "@workspace/ui/components/agents/ai-sidebar"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ChatLayout } from "@workspace/ui/components/chat-layout"
@@ -28,7 +24,9 @@ import {
 	AnimatedSidebarGroupContent,
 	AnimatedSidebarGroupLabel,
 	AnimatedSidebarHeader,
-	AnimatedSidebarRail,
+	AnimatedSidebarMenu,
+	AnimatedSidebarMenuButton,
+	AnimatedSidebarMenuItem,
 	AnimatedSidebarTrigger,
 	SIDEBAR_DEFAULT_WIDTH,
 	SIDEBAR_MAX_WIDTH,
@@ -36,7 +34,6 @@ import {
 	SIDEBAR_WIDTH_STEP,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
-import { SidebarToggle } from "@workspace/ui/components/sidebar-toggle"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const ANSWER =
@@ -53,15 +50,6 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 ]
 
-const SESSIONS: SidebarResource[] = [
-	{
-		id: "workspace",
-		label: "Workspace",
-		kind: "folder",
-		children: [{ id: "workspace-brief", label: "Brief", kind: "file" }],
-	},
-]
-
 const SIDEBAR = (
 	<AnimatedSidebar ariaLabel="Workspace">
 		<AnimatedSidebarHeader>
@@ -73,11 +61,14 @@ const SIDEBAR = (
 			<AnimatedSidebarGroup>
 				<AnimatedSidebarGroupLabel>Sessions</AnimatedSidebarGroupLabel>
 				<AnimatedSidebarGroupContent>
-					<AISidebar ariaLabel="Sessions" defaultItems={SESSIONS} isReadOnly />
+					<AnimatedSidebarMenu>
+						<AnimatedSidebarMenuItem>
+							<AnimatedSidebarMenuButton>Brief</AnimatedSidebarMenuButton>
+						</AnimatedSidebarMenuItem>
+					</AnimatedSidebarMenu>
 				</AnimatedSidebarGroupContent>
 			</AnimatedSidebarGroup>
 		</AnimatedSidebarContent>
-		<AnimatedSidebarRail />
 	</AnimatedSidebar>
 )
 
@@ -103,7 +94,11 @@ const chat = (leading?: ReactNode) => (
 
 const CHAT = chat()
 
-const CHAT_WITH_TRIGGER = chat(<SidebarToggle />)
+const CHAT_WITH_TRIGGER = chat(
+	<AnimatedSidebarTrigger>
+		<Icons.Sidebar className="size-4" />
+	</AnimatedSidebarTrigger>,
+)
 
 const OVERFLOWING_CHILD = <div className="h-[300svh] w-full bg-muted" />
 
@@ -132,7 +127,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The nominal workspace: an expanded sidebar holding the session tree, and a live conversation in the main column. Check that the transcript takes the whole room the panel leaves it and starts where the panel ends rather than running under it, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar trigger before the transcript. Pick `Collapsed` for the icon rail, `Empty` for the shell with no sidebar at all.",
+					"The nominal workspace: an expanded sidebar holding the session list, and a live conversation in the main column. Check that the transcript takes the whole room the panel leaves it and starts where the panel ends rather than running under it, that only the transcript scrolls — the sidebar, the bar above it and the composer stay put — and that Tab reaches the sidebar trigger before the transcript. Pick `Collapsed` for the icon rail, `Empty` for the shell with no sidebar at all.",
 			},
 		},
 	},
@@ -162,7 +157,7 @@ export const Collapsed = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same workspace opened with the sidebar already collapsed, which is how a host restores a remembered choice through `defaultOpen`. Check that the main column takes the room the panel gave up rather than leaving a gap beside the rail, that the trigger stays on the rail and reports `aria-expanded=false`, and that expanding it widens the panel while the conversation reflows without reloading. The session tree hides itself on the rail — that is the panel's own collapse behaviour, not the shell's. Check too that the main column keeps its full height across both widths. Pick `Default` for the expanded panel, `OffCanvas` for the drawer a narrow window gets instead.",
+					"The same workspace opened with the sidebar already collapsed, which is how a host restores a remembered choice through `defaultOpen`. Check that the main column takes the room the panel gave up rather than leaving a gap beside the rail, that the trigger stays on the rail and reports `aria-expanded=false`, and that expanding it widens the panel while the conversation reflows without reloading. The session list hides itself on the rail — that is the panel's own collapse behaviour, not the shell's. Check too that the main column keeps its full height across both widths. Pick `Default` for the expanded panel, `OffCanvas` for the drawer a narrow window gets instead.",
 			},
 		},
 	},

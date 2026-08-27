@@ -302,7 +302,7 @@ export const Mark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to watch the bot's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Both name the same bot: the mark is that bot's, inside this transcript — `ChatLayout` names the transcript for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble simply appears beside it while the row itself holds still, and that with reduced motion the mark simply arrives. Pick `Feedback/BotWorking → Mark` for a mark leaving an activity header instead.",
+					"Reach for this to watch the bot's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Both name the same bot: the mark is that bot's, inside this transcript — `ChatLayout` names the transcript for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble simply appears beside it while the row itself holds still, and that with reduced motion the mark simply arrives.",
 			},
 		},
 	},

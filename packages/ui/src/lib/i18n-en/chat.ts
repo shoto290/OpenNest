@@ -124,25 +124,6 @@ const chat = {
 		next: "Next question",
 		dismiss: "Dismiss",
 	},
-	toolResult: {
-		status: {
-			running: "Running",
-			success: "Completed",
-			error: "Failed",
-			cancelled: "Cancelled",
-		},
-		output: "{{status}} output",
-		copy: "Copy result",
-		copied: "Copied",
-		retry: "Run again",
-	},
-	response: {
-		copy: "Copy response",
-		copied: "Copied",
-		retry: "Retry response",
-		helpful: "Helpful",
-		notHelpful: "Not helpful",
-	},
 	code: {
 		snippet: "Code snippet",
 		namedSnippet: "Code snippet, {{name}}",
@@ -165,35 +146,6 @@ const chat = {
 	task: {
 		done: "Done",
 		todo: "To do",
-	},
-	activity: {
-		duration: {
-			seconds: "{{seconds}}s",
-			minutes: "{{minutes}}m",
-			minutesAndSeconds: "{{minutes}}m {{seconds}}s",
-		},
-		active: {
-			search: "Searching the web…",
-			tool: "Running tools…",
-			trace: "Working through the run…",
-			mixed: "Working through it…",
-			thinking: "Thinking…",
-		},
-		summary: {
-			failed: "Failed after <duration>{{value}}</duration>",
-			thought: "Thought for <duration>{{value}}</duration>",
-			search: "Searched the web",
-			tools_one: "Ran {{count}} tool",
-			tools_other: "Ran {{count}} tools",
-			toolCalls_one: "{{count}} tool call",
-			toolCalls_other: "{{count}} tool calls",
-			messages_one: "{{count}} message",
-			messages_other: "{{count}} messages",
-			trace: "{{toolCalls}}, {{messages}}",
-			steps_one: "Completed {{count}} step",
-			steps_other: "Completed {{count}} steps",
-		},
-		moreResults: "+{{count}} more",
 	},
 	screen: {
 		label: "Claude Code conversation",

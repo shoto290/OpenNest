@@ -8,10 +8,6 @@ const common = {
 	confirm: {
 		cancel: "Annuler",
 	},
-	dropzone: {
-		drop: "Glissez, déposez ou collez une image",
-		browse: "ou cliquez pour choisir un fichier",
-	},
 	sidebar: {
 		label: "Barre latérale",
 		toggle: "Afficher ou masquer la barre latérale",
@@ -20,11 +16,6 @@ const common = {
 	},
 	contextMenu: {
 		label: "Menu contextuel",
-	},
-	statefulButton: {
-		loading: "Chargement",
-		success: "Terminé",
-		error: "Réessayer",
 	},
 	notification: {
 		question: "Vous a posé une question",

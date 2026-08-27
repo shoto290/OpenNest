@@ -3,11 +3,11 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	PICKED_PICTURE_FILE,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 	widthInRems,
 } from "@workspace/storybook/story-utils"
-import { PICKED_PICTURE_FILE } from "@workspace/ui/components/picture-dropzone.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import {
 	BOT_SKILLS,
