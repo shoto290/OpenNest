@@ -23,6 +23,7 @@ interface ChatLayoutProps {
 	busy?: boolean
 	label?: string
 	older?: MessageScrollerOlder
+	onFollowChange?: (following: boolean) => void
 	children: ReactNode
 	rootRef?: Ref<HTMLDivElement>
 	scrollerRef?: Ref<MessageScrollerHandle>
@@ -41,6 +42,7 @@ function ChatLayout({
 	busy,
 	label,
 	older,
+	onFollowChange,
 	children,
 	rootRef,
 	scrollerRef,
@@ -64,6 +66,7 @@ function ChatLayout({
 				busy={busy}
 				label={label}
 				older={older}
+				onFollowChange={onFollowChange}
 				highlightedMessageId={highlightedMessageId}
 				scrollerRef={scrollerRef}
 				contentClassName={cn(

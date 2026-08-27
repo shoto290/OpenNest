@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import { createFakeTranscriptPort } from "./fake-transcript-port"
-import type { TranscriptDraft, TranscriptMessage } from "./transcript-contract"
+import {
+	TRANSCRIPT_WINDOW_SIZE,
+	type TranscriptDraft,
+	type TranscriptMessage,
+} from "./transcript-contract"
 import {
 	createTranscriptController,
 	type TranscriptController,
@@ -220,5 +224,33 @@ describe("createTranscriptController", () => {
 
 		expect(notifications).toBe(2)
 		expect(idsOf(controller)).toEqual(["m-1", "m-2", "m-3", "m-4", "local-1"])
+	})
+
+	it("holds the window only while the reader sits at the live edge", () => {
+		const say = (controller: TranscriptController) => {
+			for (let index = 0; index <= TRANSCRIPT_WINDOW_SIZE; index += 1) {
+				controller.append(
+					draft({
+						id: `said-${index}`,
+						turnId: `t-${index}`,
+						completion: "complete",
+					}),
+				)
+			}
+		}
+
+		const followed = createHarness().controller
+		say(followed)
+
+		expect(idsOf(followed)).toHaveLength(TRANSCRIPT_WINDOW_SIZE)
+		expect(idsOf(followed)).not.toContain("said-0")
+		expect(selectHasMore(followed.getState(), CONVERSATION)).toBe(true)
+
+		const read = createHarness().controller
+		read.follow(CONVERSATION, false)
+		say(read)
+
+		expect(idsOf(read)).toHaveLength(TRANSCRIPT_WINDOW_SIZE + 1)
+		expect(selectHasMore(read.getState(), CONVERSATION)).toBe(false)
 	})
 })

@@ -566,6 +566,7 @@ export function ConversationScreen({
 						? { has: state.hasOlder, onLoad: controller.loadOlder }
 						: undefined
 				}
+				onFollowChange={controller.follow}
 				reply={
 					replyTarget
 						? {

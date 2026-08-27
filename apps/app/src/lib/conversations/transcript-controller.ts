@@ -16,6 +16,7 @@ export type TranscriptController = {
 	subscribe: (listener: () => void) => () => void
 	load: (conversationId: string) => Promise<void>
 	loadOlder: (conversationId: string) => Promise<void>
+	follow: (conversationId: string, isAtLiveEdge: boolean) => void
 	append: (draft: TranscriptDraft) => void
 	stream: (delta: TranscriptDelta) => void
 	settle: (settlement: TranscriptSettlement) => void
@@ -26,6 +27,7 @@ export const createTranscriptController = (
 ): TranscriptController => {
 	let state = initialTranscriptState
 	const listeners = new Set<() => void>()
+	const liveEdges = new Map<string, boolean>()
 
 	const dispatch = (action: TranscriptAction) => {
 		const next = transcriptReducer(state, action)
@@ -66,7 +68,15 @@ export const createTranscriptController = (
 		},
 		load,
 		loadOlder,
-		append: (draft) => dispatch({ type: "messageAppended", draft }),
+		follow: (conversationId, isAtLiveEdge) => {
+			liveEdges.set(conversationId, isAtLiveEdge)
+		},
+		append: (draft) =>
+			dispatch({
+				type: "messageAppended",
+				draft,
+				isAtLiveEdge: liveEdges.get(draft.conversationId) ?? true,
+			}),
 		stream: (delta) => dispatch({ type: "messageStreamed", delta }),
 		settle: (settlement) => dispatch({ type: "messageSettled", settlement }),
 	}

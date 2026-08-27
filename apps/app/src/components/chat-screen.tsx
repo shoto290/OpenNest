@@ -681,6 +681,7 @@ export function ChatScreen({
 						}
 					: undefined
 			}
+			onFollowChange={controller.follow}
 			header={
 				<AppHeader
 					data-tauri-drag-region="deep"
