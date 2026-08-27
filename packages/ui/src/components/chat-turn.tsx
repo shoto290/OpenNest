@@ -389,7 +389,7 @@ function AssistantTurn({
 			className={cn(messageId && HIGHLIGHT, className)}
 		>
 			<MessageContent
-				className="grid gap-x-2"
+				className="grid gap-x-2 gap-y-0"
 				style={{ gridTemplateColumns: `${CHAT_AVATAR_SIZE}px 1fr` }}
 			>
 				{author && opensRun(run) ? (
@@ -422,7 +422,7 @@ function AssistantTurn({
 					</MessageActions>
 				</MessageBubble>
 				{footer ? (
-					<MessageFooter className="col-start-2 row-start-3">
+					<MessageFooter className="col-start-2 row-start-3 pt-1.5">
 						{footer}
 					</MessageFooter>
 				) : null}
