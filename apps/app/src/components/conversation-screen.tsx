@@ -503,6 +503,7 @@ export function ConversationScreen({
 
 	const send = useCallback(
 		async (text: string) => {
+			scrollerRef.current?.scrollToEnd("auto")
 			const sent = await staged.submit(text, replyTarget?.messageId)
 			if (sent) {
 				setReplyTarget(null)

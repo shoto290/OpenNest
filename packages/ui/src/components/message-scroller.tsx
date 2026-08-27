@@ -42,6 +42,9 @@ const offsetFromViewportTop = (anchor: HTMLElement, viewportTop: number) =>
 const distanceFromEnd = (viewport: HTMLElement) =>
 	viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
 
+const isOnLastBubble = (viewport: HTMLElement, threshold: number) =>
+	distanceFromEnd(viewport) <= threshold
+
 const hasReachedTarget = (viewport: HTMLElement, targetTop: number) => {
 	const maxTop = viewport.scrollHeight - viewport.clientHeight
 	return Math.abs(viewport.scrollTop - Math.min(targetTop, maxTop)) <= 1
@@ -141,6 +144,7 @@ export function MessageScroller({
 		NOTHING_LANDED,
 	)
 	const pinRef = useRef<PrependPin | null>(null)
+	const lastScrollTopRef = useRef(0)
 	const behavior: ScrollBehavior = reduce || !smooth ? "auto" : "smooth"
 	const {
 		onScroll: onViewportScroll,
@@ -172,10 +176,16 @@ export function MessageScroller({
 		[onFollowChange],
 	)
 
+	const holdLastBubble = useCallback(() => {
+		const viewport = viewportRef.current
+		if (viewport && isOnLastBubble(viewport, followThreshold))
+			setFollowing(true)
+	}, [followThreshold, setFollowing])
+
 	const syncFollowing = useCallback(() => {
 		const viewport = viewportRef.current
 		if (!viewport) return
-		setFollowing(distanceFromEnd(viewport) <= followThreshold)
+		setFollowing(isOnLastBubble(viewport, followThreshold))
 	}, [followThreshold, setFollowing])
 
 	const releaseProgrammaticScroll = useCallback(() => {
@@ -185,8 +195,8 @@ export function MessageScroller({
 
 	const abandonProgrammaticScroll = useCallback(() => {
 		releaseProgrammaticScroll()
-		syncFollowing()
-	}, [releaseProgrammaticScroll, syncFollowing])
+		holdLastBubble()
+	}, [holdLastBubble, releaseProgrammaticScroll])
 
 	const deferSettle = useCallback(() => {
 		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
@@ -267,6 +277,9 @@ export function MessageScroller({
 		const viewport = viewportRef.current
 		if (!viewport) return
 
+		const hasReaderMovedUp = viewport.scrollTop < lastScrollTopRef.current
+		lastScrollTopRef.current = viewport.scrollTop
+
 		if (programmaticScrollRef.current) {
 			if (!hasReachedTarget(viewport, targetTopRef.current)) {
 				deferSettle()
@@ -277,8 +290,15 @@ export function MessageScroller({
 
 		if (pinRef.current) pinTopVisibleRow()
 
-		syncFollowing()
-	}, [deferSettle, pinTopVisibleRow, releaseProgrammaticScroll, syncFollowing])
+		if (hasReaderMovedUp) syncFollowing()
+		else holdLastBubble()
+	}, [
+		deferSettle,
+		holdLastBubble,
+		pinTopVisibleRow,
+		releaseProgrammaticScroll,
+		syncFollowing,
+	])
 
 	const requestOlder = () => {
 		if (!older || older.isLoading) return

@@ -132,6 +132,9 @@ const settleScroll = () =>
 		)
 	})
 
+const waitForLastBubble = (viewport: HTMLElement) =>
+	waitFor(() => expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1))
+
 interface HistoryStartOptions {
 	canvasElement: HTMLElement
 	onFollowChange: MessageScrollerProps["onFollowChange"]
@@ -146,7 +149,7 @@ const scrollToHistoryStart = async ({
 	const anchorOffset = () =>
 		canvas.getByText(ANCHOR_TEXT).getBoundingClientRect().top
 
-	await waitFor(() => expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1))
+	await waitForLastBubble(viewport)
 	viewport.scrollTop = 0
 	await waitFor(() => expect(onFollowChange).toHaveBeenCalledWith(false))
 
@@ -198,6 +201,12 @@ const TranscriptScroller = ({
 		if (pending.length > 0) setIsLoadingOlder(true)
 	}
 
+	const deliverIncoming = () => {
+		if (!nextIncoming) return
+		setVisible((current) => [...current, nextIncoming])
+		setSent((current) => current + 1)
+	}
+
 	const deliverOlder = () => {
 		const page = pending[0]
 		if (!page) return
@@ -230,15 +239,7 @@ const TranscriptScroller = ({
 				))}
 			</MessageScroller>
 			<div className="flex items-center justify-between gap-2 border-border border-t p-2">
-				<Button
-					size="sm"
-					disabled={!nextIncoming}
-					onClick={() => {
-						if (!nextIncoming) return
-						setVisible((current) => [...current, nextIncoming])
-						setSent((current) => current + 1)
-					}}
-				>
+				<Button size="sm" disabled={!nextIncoming} onClick={deliverIncoming}>
 					Send reply
 				</Button>
 				{isLoadingOlder ? (
@@ -259,7 +260,10 @@ const TranscriptScroller = ({
 					<Button
 						size="sm"
 						variant="outline"
-						onClick={() => scrollerRef.current?.scrollToEnd("auto")}
+						onClick={() => {
+							scrollerRef.current?.scrollToEnd("auto")
+							deliverIncoming()
+						}}
 					>
 						Send prompt
 					</Button>
@@ -808,7 +812,7 @@ export const PromptReturnsToLiveEdge = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the host's own way back: a submitted prompt calls `scrollerRef.scrollToEnd()` whatever the reader was reading. Check that the viewport returns to the newest message from up in the history, that follow is re-armed, and that the jump control removes itself — the answer the reader just asked for is what they want in front of them.",
+					"Reach for this for the host's own way back: a submitted prompt calls `scrollerRef.scrollToEnd()` before its own bubble is rendered, so the transcript grows under the landing. Check that the viewport ends on the sent message rather than just above it, that follow is re-armed, and that the jump control removes itself — the answer the reader just asked for is what they want in front of them.",
 			},
 		},
 	},
@@ -831,6 +835,67 @@ export const PromptReturnsToLiveEdge = meta.story({
 				canvas.queryByRole("button", { name: "Jump to latest" }),
 			).toBeNull(),
 		)
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(true)
+	},
+})
+
+export const PromptHoldsWhileAnswerArrives = meta.story({
+	render: (args) => <TranscriptScroller {...args} hasComposer />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the whole span of a send: the reader is up in the history, submits, and the answer lands row after row. Check that every arrival keeps the newest message in front of the reader, that follow is never reported as lost, and that the jump control stays away — the transcript growing under a landing is the system moving, never the reader leaving.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const { viewport } = await scrollToHistoryStart({
+			canvasElement,
+			onFollowChange: args.onFollowChange,
+		})
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitForLastBubble(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await waitForLastBubble(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await waitForLastBubble(viewport)
+
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(true)
+		await expect(
+			canvas.queryByRole("button", { name: "Jump to latest" }),
+		).toBeNull()
+	},
+})
+
+export const ReaderLeavesWhileAnswerArrives = meta.story({
+	render: (args) => <TranscriptScroller {...args} hasComposer />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the other half of the send: holding the last bubble must never become a cage. Check that a reader scrolling up mid-answer is let go, that the jump control comes back, and that the next arriving row is left where it falls instead of dragging the viewport down.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitForLastBubble(viewport)
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await settleScroll()
+		await expect(viewport.scrollTop).toBe(0)
+
+		await userEvent.click(
+			await canvas.findByRole("button", { name: "Jump to latest" }),
+		)
+		await waitForLastBubble(viewport)
 		await expect(args.onFollowChange).toHaveBeenLastCalledWith(true)
 	},
 })
