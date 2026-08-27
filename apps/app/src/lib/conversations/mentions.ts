@@ -1,3 +1,5 @@
+import { i18n } from "@workspace/ui/lib/i18n"
+
 export type MentionBot = {
 	id: string
 	name: string
@@ -28,6 +30,9 @@ const botNamedAt = (text: string, from: number, bots: MentionBot[]) => {
 	return found
 }
 
+const nameOf = (botId: string, bots: MentionBot[]) =>
+	bots.find((bot) => bot.id === botId)?.name
+
 export const toMentionTokens = (text: string, bots: MentionBot[]): string => {
 	let written = ""
 	let read = 0
@@ -45,6 +50,13 @@ export const toMentionTokens = (text: string, bots: MentionBot[]): string => {
 
 	return written + text.slice(read)
 }
+
+export const toMentionNames = (text: string, bots: MentionBot[]): string =>
+	text.replace(
+		MENTION_TOKEN,
+		(_, botId: string) =>
+			`${ARROBASE}${nameOf(botId, bots) ?? i18n.t("chat:transcript.mention.unknown")}`,
+	)
 
 export const addresseesIn = (text: string, present: string[]): string[] => {
 	const named: string[] = []
