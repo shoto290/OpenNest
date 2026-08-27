@@ -486,6 +486,35 @@ describe("createConversationController", () => {
 			})
 		})
 
+		it("draws the bot that asked as waiting on its first question", async () => {
+			await askedIn(harness)
+
+			expect(harness.controller.getState().speakingWork).toEqual({
+				kind: "waiting",
+				label: "Walls",
+			})
+		})
+
+		it("draws the bot that asked as waiting on the permission it wants", async () => {
+			await permittedIn(harness)
+
+			expect(harness.controller.getState().speakingWork).toEqual({
+				kind: "waiting",
+				label: "Run the mason",
+			})
+		})
+
+		it("gives the bot back the work it was doing once the ask is answered", async () => {
+			await askedIn(harness)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			expect(harness.controller.getState().speakingWork).toEqual({
+				kind: "thinking",
+			})
+		})
+
 		it("answers on the runtime of the bot that asked, then releases the ask", async () => {
 			const nyx = await askedIn(harness)
 

@@ -6,7 +6,7 @@ import type { BotBadge } from "../chat/bot-badge"
 
 export type ConversationAnswer = Pick<
 	ConversationState,
-	"speakingBotId" | "waitingBotIds" | "messages"
+	"speakingBotId" | "waitingBotIds" | "messages" | "pendingPrompt"
 >
 
 const isAnswering = ({ speakingBotId, waitingBotIds }: ConversationAnswer) =>
@@ -28,6 +28,9 @@ export const conversationBadgeAfter = ({
 	isSelected,
 	hasFocus,
 }: BadgeRuleInput<ConversationAnswer>): BotBadge => {
+	if (after.pendingPrompt) {
+		return "attention"
+	}
 	if (isSelected && hasFocus) {
 		return "none"
 	}
@@ -37,5 +40,5 @@ export const conversationBadgeAfter = ({
 	if (before && hasStoppedAnswering(before, after)) {
 		return hasFailed(after) ? "failed" : "done"
 	}
-	return held
+	return held === "attention" ? "none" : held
 }
