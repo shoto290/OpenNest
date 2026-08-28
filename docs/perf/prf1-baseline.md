@@ -14,17 +14,22 @@ the harness installs a sink, so no measured behaviour changes.
 Two turn lengths were streamed to separate the cost that scales with chunks from the cost that
 does not.
 
-| Rank | Unit | File / symbol | 11 chunks | 22 chunks | Scales with chunks |
-| --- | --- | --- | --- | --- | --- |
-| 1 | app root | `apps/app/src/App.tsx` → `App` | 19 | 30 | yes, 1 render per chunk |
-| 1 | sidebar body | `packages/ui/src/components/app-sidebar.tsx` → `AppSidebarBase` | 19 | 30 | yes, 1 render per chunk |
-| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBots` | 6 | 6 | no |
-| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBotsBySpace` | 6 | 6 | no |
-| 5 | streaming turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (streamed message) | 3 | 3 | no |
-| 6 | settled turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (earlier message) | 2 | 2 | no |
+PRF2 stabilised every handler `App` passes to `AppSidebar`, so the `after` columns come from the
+same test run against `apps/app/src/lib/sidebar/use-sidebar-actions.ts`.
 
-`AppSidebarBase` renders exactly as many times as `App` — 19/19 and 30/30. The `memo` boundary
-at `app-sidebar.tsx` → `const AppSidebar = memo(AppSidebarBase)` bails out zero times.
+| Rank | Unit | File / symbol | 11 chunks before | 11 chunks after | 22 chunks before | 22 chunks after | Scales with chunks |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | app root | `apps/app/src/App.tsx` → `App` | 19 | 19 | 30 | 30 | yes, 1 render per chunk |
+| 1 | sidebar body | `packages/ui/src/components/app-sidebar.tsx` → `AppSidebarBase` | 19 | 6 | 30 | 6 | before yes, after no |
+| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBots` | 6 | 6 | 6 | 6 | no |
+| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBotsBySpace` | 6 | 6 | 6 | 6 | no |
+| 5 | streaming turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (streamed message) | 3 | 3 | 3 | 3 | no |
+| 6 | settled turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (earlier message) | 2 | 2 | 2 | 2 | no |
+
+Before PRF2, `AppSidebarBase` rendered exactly as many times as `App` — 19/19 and 30/30 — and the
+`memo` boundary at `app-sidebar.tsx` → `const AppSidebar = memo(AppSidebarBase)` bailed out zero
+times. After PRF2 it renders 6 times whatever the turn length, tracking the roster projections
+instead of the chunks: the sidebar left the per-chunk render path.
 
 ## Ranked — SVG attribute writes over 60 animation frames
 
@@ -52,13 +57,19 @@ once because `SpaceCarousel` renders every space's roster.
 
 ## Suspects
 
-### Confirmed — the `AppSidebar` memo boundary is defeated by inline handlers
+### Fixed by PRF2 — the `AppSidebar` memo boundary was defeated by inline handlers
 
 `AppSidebarBase` rendered 19 times for 19 `App` renders, and 30 for 30. Not one bail-out.
-`App.tsx` passes ~20 arrow functions built fresh in the JSX (`onCreateBot`, `onDeleteConversation`,
-`onDuplicateBotToSpace`, `onOpenUserSettings`, …), so `memo`'s shallow compare fails on the first
-one it reaches. The `memo` call is currently pure cost. This is the largest single lead: it puts
-the whole roster subtree, including six `BotIdentityAvatar`s, on the streaming render path.
+`App.tsx` passed ~20 arrow functions built fresh in the JSX (`onCreateBot`, `onDeleteConversation`,
+`onDuplicateBotToSpace`, `onOpenUserSettings`, …), so `memo`'s shallow compare failed on the first
+one it reached, putting the whole roster subtree — including six `BotIdentityAvatar`s — on the
+streaming render path.
+
+`useSidebarActions` (`apps/app/src/lib/sidebar/use-sidebar-actions.ts`) now builds the whole
+handler bundle once from the controllers, which are stable for the life of the app. The three
+handlers that read changing state — `onCreateSection`, `onReorderSections`, `onOpenSpaceSettings`
+— read it from `controller.getState()` at call time instead of closing over a render value, so
+nothing forces them to be rebuilt. `AppSidebarBase` drops to 6 renders per turn at both lengths.
 
 ### Killed — `rosterBots` rebuilt on every chunk because `previews` carries the streamed text
 

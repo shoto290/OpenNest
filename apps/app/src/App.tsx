@@ -20,7 +20,6 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
-import { moveBotToSpace } from "@/lib/bots/bot-space-move"
 import { toSkillDraft, toSkillItem } from "@/lib/bots/skill-draft"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
@@ -52,9 +51,8 @@ import { useConversationBadges } from "@/lib/conversations/use-conversation-badg
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
-import { newSectionFor } from "@/lib/sections/section-space"
-import { spaceOfSection } from "@/lib/sections/sections-controller"
 import { useSections } from "@/lib/sections/use-sections"
+import { useSidebarActions } from "@/lib/sidebar/use-sidebar-actions"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
 import { useSpacePlugin } from "@/lib/spaces/use-space-plugin"
 import { useSpaces } from "@/lib/spaces/use-spaces"
@@ -241,50 +239,22 @@ export function App() {
 
 	const rosters = roster.state.rosters
 
-	const createSection = (name: string, rowId?: string) => {
-		const born = newSectionFor({
-			rosters,
-			conversationRosters: roster.state.conversationRosters,
-			shownSpaceId: selectedSpaceId,
-			rowId,
-		})
-		if (!born) {
-			return
-		}
-		void sections.controller
-			.create(born.spaceId, name, born.botId)
-			.then((created) => {
-				if (created && born.conversationId) {
-					void roster.controller.moveConversationToSection(
-						born.conversationId,
-						created.id,
-					)
-				}
-			})
-	}
+	const startConversation = useCallback(
+		() => setIsCreatingConversation(true),
+		[],
+	)
 
-	const reorderSections = (ids: string[]) => {
-		const spaceId =
-			ids.length > 0 ? spaceOfSection(sections.state, ids[0]) : undefined
-		if (spaceId) {
-			void sections.controller.reorder(spaceId, ids)
-		}
-	}
-
-	const moveToSpace = (botId: string, spaceId: string) =>
-		moveBotToSpace({
-			botId,
-			spaceId,
-			roster: roster.controller,
-			chat: chat.controller,
-			spaces: spaces.controller,
-		})
-
-	const deleteConversation = async (id: string) => {
-		await conversationRuntimes.release(id)
-		attachments.forget({ kind: "conversation", id })
-		await roster.controller.removeConversation(id)
-	}
+	const sidebarActions = useSidebarActions({
+		attachments,
+		chat: chat.controller,
+		roster: roster.controller,
+		runtimes: conversationRuntimes,
+		sections: sections.controller,
+		spacePlugin: spacePlugin.controller,
+		spaces: spaces.controller,
+		user: user.controller,
+		userPlugin: userPlugin.controller,
+	})
 
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
@@ -503,60 +473,8 @@ export function App() {
 						sectionsBySpaceId={sections.state.sections}
 						footer={updateBadge}
 						isSpaceSwitchingEnabled={!isOverlayOpen}
-						onCreateBot={() => {
-							void roster.controller.create()
-						}}
-						onCreateConversation={() => setIsCreatingConversation(true)}
-						onDeleteConversation={(id) => {
-							void deleteConversation(id)
-						}}
-						onMoveConversationToSection={(id, sectionId) => {
-							void roster.controller.moveConversationToSection(id, sectionId)
-						}}
-						onOpenConversationSettings={roster.controller.editConversation}
-						onSelectConversation={roster.controller.selectConversation}
-						onDeleteBot={roster.controller.askToDelete}
-						onDuplicateBot={(id) => {
-							void roster.controller.duplicate(id)
-						}}
-						onDuplicateBotToSpace={(id, spaceId) => {
-							void roster.controller.duplicate(id, spaceId).then((copy) => {
-								if (copy) {
-									spaces.controller.select(spaceId)
-								}
-							})
-						}}
-						onEditBot={roster.controller.edit}
-						onCreateSection={createSection}
-						onRenameSection={sections.controller.rename}
-						onReorderSections={reorderSections}
-						onDeleteSection={(id) => {
-							void sections.controller.remove(id)
-						}}
-						onMoveBotToSpace={(botId, spaceId) => {
-							void moveToSpace(botId, spaceId)
-						}}
-						onMoveBotToSection={(botId, sectionId) => {
-							void sections.controller.moveBot(botId, sectionId)
-						}}
-						onOpenUserSettings={() => {
-							user.controller.setSettingsOpen(true)
-							void userPlugin.controller.open()
-						}}
-						onCreateSpace={() => {
-							void spaces.controller.create()
-						}}
-						onOpenSpaceSettings={() => {
-							spaces.controller.setSettingsOpen(true)
-							if (selectedSpaceId) {
-								void spacePlugin.controller.open(selectedSpaceId)
-							}
-						}}
-						onReorderSpaces={(ids) => {
-							void spaces.controller.reorder(ids)
-						}}
-						onSelectBot={roster.controller.select}
-						onSelectSpace={spaces.controller.select}
+						{...sidebarActions}
+						onCreateConversation={startConversation}
 						selectedBotId={selectedBotId ?? undefined}
 						selectedConversationId={selectedConversationId ?? undefined}
 						selectedSpaceId={selectedSpaceId ?? undefined}
@@ -659,7 +577,7 @@ export function App() {
 					leadId={leadOf(selectedConversation) ?? ""}
 					onClose={() => roster.controller.setConversationEditing(false)}
 					onDelete={() => {
-						void deleteConversation(selectedConversation.id)
+						void sidebarActions.onDeleteConversation(selectedConversation.id)
 					}}
 					onDismiss={(botId) => {
 						void roster.controller.dismissFromConversation(

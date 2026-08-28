@@ -282,7 +282,7 @@ describe("PRF1 render baseline", () => {
 		expect(await measureTurn(SHORT_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 19,
-			  "appSidebar": 19,
+			  "appSidebar": 6,
 			  "chunks": 11,
 			  "quietTurn": 2,
 			  "rosterBots": 6,
@@ -298,7 +298,7 @@ describe("PRF1 render baseline", () => {
 		expect(await measureTurn(LONG_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 30,
-			  "appSidebar": 30,
+			  "appSidebar": 6,
 			  "chunks": 22,
 			  "quietTurn": 2,
 			  "rosterBots": 6,
