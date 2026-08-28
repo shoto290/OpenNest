@@ -7,16 +7,26 @@ import { securityFloor } from "./security-floor"
 
 const APP_DATA = "/app-data/opennest"
 
+const BOT_PATH = join(APP_DATA, "bots/plugins/b1")
+const SYSTEM_PATH = join(APP_DATA, "bots/plugins/system")
+const USER_PATH = join(APP_DATA, "bots/plugins/person")
+const SPACE_PATH = join(APP_DATA, "spaces/s1")
+
+const PLUGIN_PATHS = [BOT_PATH, SYSTEM_PATH, USER_PATH, SPACE_PATH]
+const WRITABLE_PATHS = [BOT_PATH, USER_PATH, SPACE_PATH]
+
 const home = (path: string): string => join(homedir(), path)
 
-const floor = (pluginPaths: string[] = []) =>
-	securityFloor({ appDataDir: APP_DATA, pluginPaths })
+const floor = (pluginPaths: string[] = [], writablePaths: string[] = []) =>
+	securityFloor({ appDataDir: APP_DATA, pluginPaths, writablePaths })
 
 const denyOf = (pluginPaths: string[] = []): string[] =>
 	floor(pluginPaths).permissions?.deny ?? []
 
-const filesystemOf = (pluginPaths: string[] = []) =>
-	floor(pluginPaths).sandbox?.filesystem
+const filesystemOf = (
+	pluginPaths: string[] = [],
+	writablePaths: string[] = [],
+) => floor(pluginPaths, writablePaths).sandbox?.filesystem
 
 describe("securityFloor", () => {
 	it("denies reads of the host's credential paths, expanded from home", () => {
@@ -95,7 +105,8 @@ describe("securityFloor", () => {
 		}
 
 		const denyOver = (pluginPaths: string[]): string[] =>
-			securityFloor({ appDataDir, pluginPaths }).permissions?.deny ?? []
+			securityFloor({ appDataDir, pluginPaths, writablePaths: pluginPaths })
+				.permissions?.deny ?? []
 
 		beforeEach(() => {
 			appDataDir = mkdtempSync(join(tmpdir(), "security-floor-"))
@@ -143,13 +154,29 @@ describe("securityFloor", () => {
 	})
 
 	it("reads back the plugin paths the session was opened on", () => {
-		const paths = [
-			join(APP_DATA, "bots/plugins/b1"),
-			join(APP_DATA, "spaces/s1"),
-		]
-
-		expect(filesystemOf(paths)?.allowRead).toEqual(paths)
+		expect(filesystemOf(PLUGIN_PATHS)?.allowRead).toEqual(PLUGIN_PATHS)
 		expect(filesystemOf()?.allowRead).toBeUndefined()
+	})
+
+	it("writes back only into the bundles the bot owns", () => {
+		const filesystem = filesystemOf(PLUGIN_PATHS, WRITABLE_PATHS)
+
+		expect(filesystem?.allowWrite).toEqual(WRITABLE_PATHS)
+		expect(filesystem?.allowWrite).not.toContain(SYSTEM_PATH)
+		expect(filesystem?.allowRead).toContain(SYSTEM_PATH)
+	})
+
+	it("holds the standing denials while the bundles stay writable", () => {
+		const filesystem = filesystemOf(PLUGIN_PATHS, WRITABLE_PATHS)
+
+		expect(filesystem?.denyWrite).toContain(home(".claude"))
+		expect(filesystem?.denyRead).toContain(join(APP_DATA, "bots"))
+		expect(filesystem?.denyRead).toContain(join(APP_DATA, "spaces"))
+	})
+
+	it("leaves the write allowance out when the session owns no bundle", () => {
+		expect(filesystemOf(PLUGIN_PATHS)?.allowWrite).toBeUndefined()
+		expect(filesystemOf()?.allowWrite).toBeUndefined()
 	})
 
 	it("sandboxes every spawned command, with no domain gate", () => {
@@ -165,7 +192,7 @@ describe("securityFloor", () => {
 	})
 
 	it("holds the rest of the floor when no data directory is named", () => {
-		const bare = securityFloor({ pluginPaths: [] })
+		const bare = securityFloor({ pluginPaths: [], writablePaths: [] })
 
 		expect(bare.permissions?.deny).toContain(`Read(/${home(".ssh")}/**)`)
 		expect(bare.sandbox?.filesystem?.denyRead).toContain(home(".ssh"))

@@ -113,11 +113,13 @@ const deniedWrites = (): Denial => {
 export type FloorScope = {
 	appDataDir?: string
 	pluginPaths: string[]
+	writablePaths: string[]
 }
 
 export const securityFloor = ({
 	appDataDir,
 	pluginPaths,
+	writablePaths,
 }: FloorScope): Settings => {
 	const reads = deniedReads(appDataDir)
 	const writes = deniedWrites()
@@ -135,6 +137,7 @@ export const securityFloor = ({
 				denyRead: [...pathsOf(reads), ...under(appDataDir, BUNDLE_DIRECTORIES)],
 				denyWrite: pathsOf(writes),
 				...(pluginPaths.length > 0 ? { allowRead: pluginPaths } : {}),
+				...(writablePaths.length > 0 ? { allowWrite: writablePaths } : {}),
 			},
 		},
 	}

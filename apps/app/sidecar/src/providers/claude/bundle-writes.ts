@@ -22,6 +22,8 @@ const RESERVED = new Set([
 
 const DOCUMENTS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".toml"])
 
+const AGENT_FILE = join("agents", "agent.md")
+
 const isDocument = (target: string): boolean =>
 	DOCUMENTS.has(extname(target).toLowerCase())
 
@@ -34,12 +36,37 @@ const realOrNearest = (path: string): string => {
 	}
 }
 
+export type BundleScope = {
+	botPath?: string
+	userPath?: string
+	spacePath?: string
+}
+
+const pathInside = (
+	root: string | undefined,
+	real: string,
+): string | undefined => {
+	if (!root) {
+		return undefined
+	}
+	const inside = relative(realOrNearest(root), real)
+	if (!inside || inside.startsWith("..") || isAbsolute(inside)) {
+		return undefined
+	}
+	return inside
+}
+
+const isOpenEntry = (inside: string): boolean => {
+	const [entry = ""] = inside.split(sep)
+	return !RESERVED.has(entry)
+}
+
 export const isBundleWrite = (
-	pluginPath: string | undefined,
+	{ botPath, userPath, spacePath }: BundleScope,
 	toolName: string,
 	input: Record<string, unknown>,
 ): boolean => {
-	if (!pluginPath || !WRITERS.has(toolName)) {
+	if (!WRITERS.has(toolName)) {
 		return false
 	}
 	const target = input.file_path
@@ -49,10 +76,11 @@ export const isBundleWrite = (
 	if (!isDocument(target)) {
 		return false
 	}
-	const inside = relative(realOrNearest(pluginPath), realOrNearest(target))
-	if (!inside || inside.startsWith("..") || isAbsolute(inside)) {
-		return false
+	const real = realOrNearest(target)
+	const own = pathInside(botPath, real)
+	if (own) {
+		return own === AGENT_FILE || isOpenEntry(own)
 	}
-	const [entry = ""] = inside.split(sep)
-	return !RESERVED.has(entry)
+	const shared = pathInside(userPath, real) ?? pathInside(spacePath, real)
+	return shared !== undefined && isOpenEntry(shared)
 }

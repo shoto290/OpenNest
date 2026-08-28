@@ -6,6 +6,7 @@ import {
 
 import { readBotSettings, type SettingsOptions } from "./bot-settings"
 import { sessionServers } from "./bundle-servers"
+import type { BundleScope } from "./bundle-writes"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
@@ -34,13 +35,31 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
 		...(description ? { description } : {}),
 	}))
 
+const definedPaths = (paths: (string | undefined)[]): string[] =>
+	paths.filter((path): path is string => Boolean(path))
+
 const pluginPaths = (request: SessionRequest): string[] =>
-	[
+	definedPaths([
 		request.pluginPath,
 		request.systemPluginPath,
 		request.userPluginPath,
 		request.spacePluginPath,
-	].filter((path): path is string => Boolean(path))
+	])
+
+const writeScope = (request: SessionRequest): BundleScope =>
+	request.pluginPath
+		? {
+				botPath: request.pluginPath,
+				userPath: request.userPluginPath,
+				spacePath: request.spacePluginPath,
+			}
+		: {}
+
+const writablePaths = ({
+	botPath,
+	userPath,
+	spacePath,
+}: BundleScope): string[] => definedPaths([botPath, userPath, spacePath])
 
 const localPlugins = (paths: string[]): NonNullable<Options["plugins"]> =>
 	paths.map((path) => ({ type: "local" as const, path }))
@@ -78,6 +97,7 @@ export const buildOptions = (
 	managedSettings: securityFloor({
 		appDataDir: request.appDataDir,
 		pluginPaths: pluginPaths(request),
+		writablePaths: writablePaths(writeScope(request)),
 	}),
 	settingSources: [],
 	strictMcpConfig: true,
@@ -90,7 +110,7 @@ export const openClaudeSession = async (
 	emit: EmitFrame,
 ): Promise<AgentSession> => {
 	const prompts = createPromptStream()
-	const permissions = createPermissionGate(emit, request.pluginPath)
+	const permissions = createPermissionGate(emit, writeScope(request))
 	const botSettings = readBotSettings(request)
 	if (botSettings.rejection) {
 		emit({ type: "settings_rejected", detail: botSettings.rejection })
