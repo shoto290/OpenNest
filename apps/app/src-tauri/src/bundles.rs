@@ -221,6 +221,14 @@ impl BotPermissions {
 			additional_directories: Vec::new(),
 		}
 	}
+
+	pub fn unruled_like(denied_tools: &[String]) -> Self {
+		Self::unruled(denies_changes(denied_tools))
+	}
+
+	pub fn accepted(self) -> Self {
+		Self { default_mode: accepted_mode(&self.default_mode).to_owned(), ..self }
+	}
 }
 
 pub fn permissions(root: &Path, bot_id: &str) -> Option<BotPermissions> {
@@ -1604,6 +1612,7 @@ mod tests {
 			instructions: instructions.to_owned(),
 			memory: String::new(),
 			denied_tools: Vec::new(),
+			permissions: None,
 			created_at: 1,
 		}
 	}

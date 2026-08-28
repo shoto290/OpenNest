@@ -328,8 +328,16 @@ async fn runtime_identity<R: Runtime>(
 	let system = bundles::system::laid_down(app);
 	let user = bundles::user::laid_down(app);
 	let space = bundles::space::laid_down(app, &bot.space_id);
+	let permissions = settled_permissions(database, root.as_deref(), &bot).await;
 	let bundle = root.as_deref().and_then(|root| {
-		laid_down_bundle(root, &bot, system.as_deref(), user.as_deref(), space.as_deref())
+		laid_down_bundle(
+			root,
+			&bot,
+			&permissions,
+			system.as_deref(),
+			user.as_deref(),
+			space.as_deref(),
+		)
 	});
 	if let Some(found) = root.as_deref().and_then(|root| bundles::adopted(root, &bot)) {
 		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
@@ -340,13 +348,30 @@ async fn runtime_identity<R: Runtime>(
 	RuntimeIdentity { bundle, working_dir: bot.working_dir }
 }
 
+async fn settled_permissions(
+	database: &db::Database,
+	root: Option<&Path>,
+	bot: &StoredBot,
+) -> bundles::BotPermissions {
+	if let Some(stored) = bot.permissions.clone() {
+		return stored;
+	}
+	let carried = root
+		.and_then(|root| bundles::permissions(root, &bot.id))
+		.unwrap_or_else(|| bundles::BotPermissions::unruled_like(&bot.denied_tools));
+	let _ = database.conversations().adopt_permissions(bot.id.clone(), carried.clone()).await;
+	carried
+}
+
 fn laid_down_bundle(
 	root: &Path,
 	bot: &StoredBot,
+	permissions: &bundles::BotPermissions,
 	system: Option<&Path>,
 	user: Option<&Path>,
 	space: Option<&Path>,
 ) -> Option<Bundle> {
+	bundles::set_permissions(root, bot, permissions).ok()?;
 	bundles::ensure(root, bot).ok()?;
 	Some(Bundle {
 		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
@@ -661,6 +686,133 @@ mod tests {
 		assert_eq!(running_in, anywhere);
 		assert_eq!(refused.as_deref(), Some(redact::path(&file).as_str()));
 		std::fs::remove_file(&file).expect("cleanup");
+	}
+
+	fn a_stored_bot() -> StoredBot {
+		StoredBot {
+			id: "b1".to_owned(),
+			space_id: "personal".to_owned(),
+			section_id: None,
+			name: "Bean".to_owned(),
+			title: String::new(),
+			model: "sonnet".to_owned(),
+			avatar_animal: crate::db::repositories::conversations::AvatarAnimal::Owl,
+			avatar_blot: None,
+			avatar_image_path: None,
+			working_dir: None,
+			instructions: "Answer briefly.".to_owned(),
+			memory: String::new(),
+			denied_tools: Vec::new(),
+			permissions: None,
+			created_at: 1,
+		}
+	}
+
+	fn a_fresh_bundle_root(name: &str) -> PathBuf {
+		let root = std::env::temp_dir().join(format!("opennest-session-rules-{name}"));
+		let _ = std::fs::remove_dir_all(&root);
+		root
+	}
+
+	fn a_rule(allow: &str) -> bundles::BotPermissions {
+		bundles::BotPermissions { allow: vec![allow.to_owned()], ..Default::default() }
+	}
+
+	fn a_settings_path(root: &Path, bot: &StoredBot) -> PathBuf {
+		bundles::dir(root, &bot.id).join("settings.json")
+	}
+
+	fn what_the_bot_wrote(root: &Path, bot: &StoredBot, allow: &str) {
+		private_files::replace(
+			&a_settings_path(root, bot),
+			serde_json::json!({
+				"env": { "TZ": "UTC" },
+				"permissions": { "allow": [allow], "defaultMode": "acceptEdits" }
+			})
+			.to_string()
+			.as_bytes(),
+		)
+		.expect("the settings file is written");
+	}
+
+	fn settings_of(root: &Path, bot: &StoredBot) -> serde_json::Value {
+		let read = std::fs::read(a_settings_path(root, bot)).expect("the settings file is read");
+		serde_json::from_slice(&read).expect("the settings file parses")
+	}
+
+	#[test]
+	fn a_session_start_writes_the_stored_rules_over_the_ones_the_bot_gave_itself() {
+		let root = a_fresh_bundle_root("replaced");
+		let bot = a_stored_bot();
+		bundles::write(&root, &bot).expect("the bundle is written");
+		what_the_bot_wrote(&root, &bot, "Bash");
+
+		laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect("the bundle is laid down");
+
+		assert_eq!(bundles::permissions(&root, &bot.id), Some(a_rule("Read")));
+		assert_eq!(
+			settings_of(&root, &bot)["env"]["TZ"],
+			serde_json::json!("UTC"),
+			"a key the app does not own was rewritten"
+		);
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_session_start_that_changes_nothing_leaves_the_history_where_it_was() {
+		let root = a_fresh_bundle_root("quiet");
+		let bot = a_stored_bot();
+		bundles::write(&root, &bot).expect("the bundle is written");
+		what_the_bot_wrote(&root, &bot, "Bash");
+
+		laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect("the bundle is laid down");
+		let after_the_rewrite = bundles::history(&root, &bot.id).expect("the history reads").len();
+
+		laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect("the bundle is laid down");
+
+		assert_eq!(
+			bundles::history(&root, &bot.id).expect("the history reads").len(),
+			after_the_rewrite
+		);
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	#[tokio::test]
+	async fn the_rules_a_bundle_carries_become_the_stored_ones_once() {
+		let root = a_fresh_bundle_root("adopted");
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let bot = database
+			.conversations()
+			.create_bot(a_stored_bot().into(), None, None)
+			.await
+			.expect("the bot");
+		bundles::write(&root, &bot).expect("the bundle is written");
+		what_the_bot_wrote(&root, &bot, "Bash");
+
+		let settled = settled_permissions(&database, Some(&root), &bot).await;
+		assert_eq!(settled.allow, ["Bash"]);
+
+		let held =
+			database.conversations().bot(bot.id.clone()).await.expect("the bot").expect("a row");
+		assert_eq!(held.permissions.as_ref(), Some(&settled));
+
+		what_the_bot_wrote(&root, &bot, "Write");
+
+		assert_eq!(
+			settled_permissions(&database, Some(&root), &held).await.allow,
+			["Bash"],
+			"the file was adopted a second time"
+		);
+
+		drop(database);
+		let _ = std::fs::remove_dir_all(&root);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
 	const REPLACED_SESSION: &str = "the session that was replaced";

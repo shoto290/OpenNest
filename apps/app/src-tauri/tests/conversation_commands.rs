@@ -1025,14 +1025,21 @@ fn the_rules_a_bot_is_given_are_written_to_its_settings_file_and_read_back_from_
 }
 
 #[test]
-fn a_bot_whose_switch_was_thrown_before_the_panel_reads_as_denying_the_four_tools() {
+fn the_rules_the_panel_reads_are_the_stored_ones_and_never_the_file_it_writes() {
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
 	let mut held_back = an_identity("Nyx", "sonnet", "owl", json!("red"));
 	held_back["deniedTools"] = json!(["Bash", "Edit", "NotebookEdit", "Write"]);
+	held_back["permissions"] = json!({
+		"defaultMode": "auto",
+		"allow": [],
+		"ask": [],
+		"deny": ["Bash", "Edit", "Write", "NotebookEdit"],
+		"additionalDirectories": []
+	});
 
-	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back }))
+	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back.clone() }))
 		.expect("the bot is created");
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 
@@ -1044,11 +1051,10 @@ fn a_bot_whose_switch_was_thrown_before_the_panel_reads_as_denying_the_four_tool
 
 	assert_eq!(listed[0]["changesNothing"], json!(true));
 	assert_eq!(
-		listed[0]["permissions"]["deny"],
-		json!(["Bash", "Edit", "Write", "NotebookEdit"]),
-		"a bot that changed nothing lost the denial the switch stood for"
+		listed[0]["permissions"],
+		held_back["permissions"],
+		"a file that is gone took the stored rules with it"
 	);
-	assert_eq!(listed[0]["permissions"]["defaultMode"], json!("auto"));
 }
 
 #[test]

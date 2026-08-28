@@ -72,6 +72,7 @@ fn probe_bot(id: &str, instructions: &str, model: &str) -> Bot {
 		instructions: instructions.to_owned(),
 		memory: String::new(),
 		denied_tools: Vec::new(),
+		permissions: None,
 		created_at: 1,
 	}
 }

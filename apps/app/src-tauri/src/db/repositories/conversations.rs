@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use super::messages::stored_as_text;
 use crate::agent::contract::AgentCommand;
+use crate::bundles::BotPermissions;
 use crate::db::{Access, DatabaseError};
 
 pub const DEFAULT_BOT_ID: &str = "default";
@@ -209,6 +210,7 @@ pub struct Bot {
 	pub instructions: String,
 	pub memory: String,
 	pub denied_tools: Vec<String>,
+	pub permissions: Option<BotPermissions>,
 	pub created_at: i64,
 }
 
@@ -343,6 +345,32 @@ impl ConversationsRepository {
 			Ok(refuse_if_untouched(written, &id))
 		})
 		.await?
+	}
+
+	pub async fn set_permissions(
+		&self,
+		id: String,
+		permissions: BotPermissions,
+	) -> Result<Bot, ConversationError> {
+		let ruled = serde_json::to_string(&permissions).map_err(unserializable)?;
+		self.call_mut(move |connection| Ok(set_permissions(connection, &id, &ruled))).await?
+	}
+
+	pub async fn adopt_permissions(
+		&self,
+		id: String,
+		permissions: BotPermissions,
+	) -> Result<(), ConversationError> {
+		let ruled = serde_json::to_string(&permissions).map_err(unserializable)?;
+		self.call(move |connection| {
+			connection.execute(
+				"UPDATE bots SET permissions = ?2 WHERE id = ?1 AND permissions IS NULL",
+				params![&id, ruled],
+			)?;
+			Ok(())
+		})
+		.await
+		.map_err(Into::into)
 	}
 
 	pub async fn adopt_memory(&self, id: String, memory: String) -> Result<(), ConversationError> {
@@ -489,12 +517,14 @@ impl ConversationsRepository {
 
 const SELECT_BOT: &str = "SELECT id, space_id, section_id, name, title, model,
 		avatar_animal, avatar_color,
-		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
+		avatar_image_path, working_dir, instructions, memory, denied_tools, permissions,
+		created_at
 	FROM bots WHERE id = ?1";
 
 const SELECT_BOTS: &str = "SELECT id, space_id, section_id, name, title, model,
 		avatar_animal, avatar_color,
-		avatar_image_path, working_dir, instructions, memory, denied_tools, created_at
+		avatar_image_path, working_dir, instructions, memory, denied_tools, permissions,
+		created_at
 	FROM bots WHERE deleted_at IS NULL AND (?1 IS NULL OR space_id = ?1)
 	ORDER BY created_at ASC, id ASC";
 
@@ -937,10 +967,21 @@ fn set_memory(
 	Ok(stored)
 }
 
-fn space_of(
-	connection: &Connection,
-	wanted: Option<&str>,
-) -> Result<String, ConversationError> {
+fn set_permissions(
+	connection: &mut Connection,
+	id: &str,
+	ruled: &str,
+) -> Result<Bot, ConversationError> {
+	let transaction = write_transaction(connection)?;
+	let written = transaction
+		.execute("UPDATE bots SET permissions = ?2 WHERE id = ?1", params![id, ruled])?;
+	refuse_if_untouched(written, id)?;
+	let stored = transaction.query_row(SELECT_BOT, [id], bot)?;
+	transaction.commit()?;
+	Ok(stored)
+}
+
+fn space_of(connection: &Connection, wanted: Option<&str>) -> Result<String, ConversationError> {
 	match wanted {
 		Some(id) => Ok(id.to_owned()),
 		None => Ok(connection.query_row(SELECT_FIRST_SPACE, [], |row| row.get(0))?),
@@ -1020,12 +1061,17 @@ fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 		instructions: row.get("instructions")?,
 		memory: row.get("memory")?,
 		denied_tools: listed(row.get("denied_tools")?),
+		permissions: ruled(row.get("permissions")?),
 		created_at: row.get("created_at")?,
 	})
 }
 
 fn denied(identity: &BotIdentity) -> Result<String, ConversationError> {
 	serde_json::to_string(&identity.denied_tools).map_err(unserializable)
+}
+
+fn ruled(stored: Option<String>) -> Option<BotPermissions> {
+	serde_json::from_str(&stored?).ok()
 }
 
 fn listed(stored: String) -> Vec<String> {
@@ -1257,6 +1303,60 @@ mod tests {
 		assert_eq!(listed[0].instructions, described.instructions);
 		assert_eq!(listed[0].denied_tools, described.denied_tools);
 		assert_eq!(listed[0].id, created.id);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn a_rule(allow: &str) -> BotPermissions {
+		BotPermissions { allow: vec![allow.to_owned()], ..BotPermissions::default() }
+	}
+
+	#[tokio::test]
+	async fn a_bot_is_born_with_no_rules_and_keeps_the_ones_the_reader_saves() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+
+		assert_eq!(created.permissions, None);
+
+		let ruled = repository
+			.set_permissions(created.id.clone(), a_rule("Read"))
+			.await
+			.expect("the rules are saved");
+		assert_eq!(ruled.permissions, Some(a_rule("Read")));
+
+		let read_back = repository.bot(created.id.clone()).await.expect("the bot").expect("a row");
+		assert_eq!(read_back.permissions, Some(a_rule("Read")));
+
+		let refused = repository.set_permissions("nobody".to_owned(), a_rule("Read")).await;
+		assert!(matches!(refused, Err(ConversationError::UnknownBot { .. })));
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn rules_are_adopted_once_and_never_over_the_ones_already_held() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let created = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+
+		repository
+			.adopt_permissions(created.id.clone(), a_rule("Read"))
+			.await
+			.expect("the rules are adopted");
+		let adopted = repository.bot(created.id.clone()).await.expect("the bot").expect("a row");
+		assert_eq!(adopted.permissions, Some(a_rule("Read")));
+
+		repository
+			.adopt_permissions(created.id.clone(), a_rule("Bash"))
+			.await
+			.expect("the second adoption is quiet");
+		let held = repository.bot(created.id.clone()).await.expect("the bot").expect("a row");
+		assert_eq!(held.permissions, Some(a_rule("Read")), "the file wrote over the stored rules");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
