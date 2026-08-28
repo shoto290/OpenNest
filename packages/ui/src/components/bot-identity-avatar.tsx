@@ -1,5 +1,9 @@
 "use client"
 
+import {
+	AvatarFrame,
+	UPLOADED_IMAGE_SHAPE,
+} from "@workspace/ui/components/avatar"
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
@@ -8,7 +12,6 @@ import {
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
 import { drawnAnimal } from "@workspace/ui/components/bot-settings"
-import { cn } from "@workspace/ui/lib/utils"
 
 const REST_STATE: BotAvatarState = "idle"
 
@@ -20,11 +23,9 @@ type ActivityIndicatorKind = Extract<
 const busyStateFor = (kind: ActivityIndicatorKind): BotAvatarState =>
 	kind === "waiting" ? "listening" : kind
 
-const UPLOADED_IMAGE_SHAPE = "rounded-full"
-
 const avatarShape = (image?: string) => (image ? UPLOADED_IMAGE_SHAPE : "")
 
-const IMAGE_CLASS = `size-full border border-border object-cover ${UPLOADED_IMAGE_SHAPE}`
+const IMAGE_BORDER_CLASS = "border border-border"
 
 const DEFAULT_SIZE = 40
 
@@ -54,32 +55,32 @@ function BotIdentityAvatar({
 	className,
 }: BotIdentityAvatarProps) {
 	return (
-		<span
-			className={cn("relative block shrink-0", className)}
-			data-slot="bot-identity-avatar"
-			style={{ width: size, height: size }}
+		<AvatarFrame
+			className={className}
+			image={image}
+			imageClassName={IMAGE_BORDER_CLASS}
+			overlay={
+				badge ? (
+					<BotBadgeDot
+						badge={badge}
+						data-slot="bot-activity-dot"
+						placement="avatar"
+					/>
+				) : null
+			}
+			size={size}
+			slot="bot-identity-avatar"
 		>
-			{image ? (
-				<img alt="" aria-hidden="true" className={IMAGE_CLASS} src={image} />
-			) : (
-				<BotAvatar
-					animal={drawnAnimal(name, animal)}
-					animated={working}
-					blot={blot}
-					className="block size-full"
-					seed={seed}
-					size={size}
-					state={working ? busyStateFor(kind) : REST_STATE}
-				/>
-			)}
-			{badge ? (
-				<BotBadgeDot
-					badge={badge}
-					data-slot="bot-activity-dot"
-					placement="avatar"
-				/>
-			) : null}
-		</span>
+			<BotAvatar
+				animal={drawnAnimal(name, animal)}
+				animated={working}
+				blot={blot}
+				className="block size-full"
+				seed={seed}
+				size={size}
+				state={working ? busyStateFor(kind) : REST_STATE}
+			/>
+		</AvatarFrame>
 	)
 }
 
