@@ -1,6 +1,7 @@
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk"
 
 import { type BundleScope, isBundleWrite } from "./bundle-writes"
+import { DELEGATE_TOOL } from "./delegate"
 
 import type { EmitFrame, PermissionDecision } from "../provider"
 
@@ -10,7 +11,7 @@ export const createPermissionGate = (emit: EmitFrame, scope: BundleScope) => {
 	const waiting = new Map<string, Waiting>()
 
 	const canUseTool: CanUseTool = (toolName, input, options) => {
-		if (isBundleWrite(scope, toolName, input)) {
+		if (toolName === DELEGATE_TOOL || isBundleWrite(scope, toolName, input)) {
 			return Promise.resolve({ behavior: "allow", updatedInput: input })
 		}
 		return new Promise<PermissionDecision>((resolve) => {

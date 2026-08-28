@@ -7,6 +7,7 @@ import {
 import { readBotSettings, type SettingsOptions } from "./bot-settings"
 import { sessionServers } from "./bundle-servers"
 import type { BundleScope } from "./bundle-writes"
+import { delegateServer } from "./delegate"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
@@ -68,42 +69,45 @@ export const buildOptions = (
 	request: SessionRequest,
 	canUseTool: Options["canUseTool"],
 	settings: SettingsOptions = readBotSettings(request).options,
-): Options => ({
-	cwd: request.cwd,
-	resume: request.resume,
-	includePartialMessages: request.partialMessages,
-	canUseTool,
-	...settings,
-	...(request.pluginPath && request.agent
-		? {
-				plugins: localPlugins(pluginPaths(request)),
-				agent: request.agent,
-				mcpServers: sessionServers(
-					request.pluginPath,
-					request.systemPluginPath,
-				),
-			}
-		: {}),
-	systemPrompt: {
-		type: "preset",
-		preset: "claude_code",
-		append: layerFor(request),
-	},
-	env: {
-		...inheritedEnv(),
-		[DISABLE_AUTO_MEMORY]: "1",
-		[CLASSIFY_ASK_USER_QUESTION]: "0",
-	},
-	managedSettings: securityFloor({
+): Options => {
+	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
 		pluginPaths: pluginPaths(request),
 		writablePaths: writablePaths(writeScope(request)),
-	}),
-	settingSources: [],
-	strictMcpConfig: true,
-	pathToClaudeCodeExecutable: resolveExecutable(),
-	stderr: () => {},
-})
+	})
+	return {
+		cwd: request.cwd,
+		resume: request.resume,
+		includePartialMessages: request.partialMessages,
+		canUseTool,
+		...settings,
+		...(request.pluginPath && request.agent
+			? {
+					plugins: localPlugins(pluginPaths(request)),
+					agent: request.agent,
+					mcpServers: {
+						...sessionServers(request.pluginPath, request.systemPluginPath),
+						...delegateServer({ cwd: request.cwd, managedSettings }),
+					},
+				}
+			: {}),
+		systemPrompt: {
+			type: "preset",
+			preset: "claude_code",
+			append: layerFor(request),
+		},
+		env: {
+			...inheritedEnv(),
+			[DISABLE_AUTO_MEMORY]: "1",
+			[CLASSIFY_ASK_USER_QUESTION]: "0",
+		},
+		managedSettings,
+		settingSources: [],
+		strictMcpConfig: true,
+		pathToClaudeCodeExecutable: resolveExecutable(),
+		stderr: () => {},
+	}
+}
 
 export const openClaudeSession = async (
 	request: SessionRequest,
