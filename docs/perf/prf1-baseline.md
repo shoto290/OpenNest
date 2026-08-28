@@ -151,14 +151,19 @@ whatever the roster reads do around it.
 Same harness, one bot seeded with 20 messages — 10 user, 10 assistant, each assistant carrying
 one fenced `ts` code block.
 
-| Unit | File / symbol | Count |
-| --- | --- | --- |
-| markdown processors built | `packages/ui/src/components/markdown/index.tsx:36` → one per `Markdown` render | 30 |
-| code highlighter tokenize calls | `packages/ui/src/lib/code-highlight.ts:119` → `highlightCode` | 10 |
-| code highlighter builds | `code-highlight.ts:85` → `createHighlighterCoreSync` | 1 per process, see gap below |
-| React commits before the first painted row | `<Profiler>` around `App` | 5 |
-| React commits before the settled page | same | 11 |
-| rows painted | `[data-slot="chat-turn-group"]` | 20 |
+The `PRF6` column comes from the same test run after
+`packages/ui/src/components/markdown/index.tsx` hoisted its static remark plugin list to a module
+constant; the PRF6 section below explains why the processor count did not move and why that is
+the floor.
+
+| Unit | File / symbol | Count | PRF6 |
+| --- | --- | --- | --- |
+| markdown processors built | `packages/ui/src/components/markdown/index.tsx` → one per `Markdown` render | 30 | 30 |
+| code highlighter tokenize calls | `packages/ui/src/lib/code-highlight.ts:119` → `highlightCode` | 10 | 10 |
+| code highlighter builds | `code-highlight.ts:85` → `createHighlighterCoreSync` | 1 per process, see gap below | 1 per process |
+| React commits before the first painted row | `<Profiler>` around `App` | 5 | 5 |
+| React commits before the settled page | same | 11 | 11 |
+| rows painted | `[data-slot="chat-turn-group"]` | 20 | 20 |
 
 30 processors for 20 messages: one per markdown block, and each assistant message splits into
 prose plus fence.
@@ -204,6 +209,57 @@ page then takes **11** commits to settle, 5 of them before the first row is on s
 - **Commits are counted with `<Profiler>`**, so they are commits in which the app subtree
   rendered, not every commit React performed.
 
+## PRF6 — the markdown processor rebuild
+
+### Killed — plugin array identity was never what rebuilt the processor
+
+The premise was that `react-markdown` memoises its `unified` processor on the identity of
+`remarkPlugins` / `rehypePlugins`. It does not. In `react-markdown@10`, the synchronous
+`Markdown` component calls `createProcessor(options)` in its render body on **every** render,
+with no cache and no dependency check (`react-markdown/lib/index.js:176`). Only `MarkdownHooks`
+keys anything on plugin identity, and that is a `useEffect` dependency list, not a processor
+cache. Stabilising the arrays therefore buys zero rebuilds.
+
+### Killed — the re-render rebuild
+
+Measured directly in `packages/ui/src/components/markdown/processor-reuse.test.tsx`, which mocks
+`react-markdown`'s default export to count one processor per `ReactMarkdown` render: mounting one
+block, re-rendering it with identical props, then re-rendering it again with a **different**
+`className` builds **1** processor in total. PRF3's React Compiler already memoises the
+`<ReactMarkdown>` element on `children` and the `useId` scope, so a mounted block that re-renders
+with the same text rebuilds nothing. The test now holds that as a contract instead of an
+accident, alongside a second case fixing one processor per block for a page of 20 blocks.
+
+### Killed on cost — the build is 1% of the run
+
+Timed over 500 iterations each, against the real plugin list:
+
+| Unit | File / symbol | Per call |
+| --- | --- | --- |
+| build the processor | `unified().use(…)` over the markdown plugin list | 0.0018 ms |
+| run it | `processor.runSync(processor.parse(file), file)` | 0.1652 ms |
+| mount one `Markdown` block | `packages/ui/src/components/markdown/index.tsx` → `Markdown` | ~1.1 ms |
+
+Building the processor is **1.1%** of running it and **0.16%** of mounting a block. The 30 builds
+on a full page cost **0.054 ms** in total. Sharing one frozen processor across blocks would take
+30 down to 1 and save that 0.054 ms — at the price of dropping `react-markdown`'s component and
+re-implementing its `post()` step (`unified`, `remark-parse`, `remark-rehype`, `vfile`,
+`hast-util-to-jsx-runtime`, `unist-util-visit`, `html-url-attributes`, plus its default
+`urlTransform`), none of which resolve from `packages/ui` today. Not worth it against 0.054 ms.
+
+### What changed
+
+`packages/ui/src/components/markdown/index.tsx` hoists the four remark plugins to a module
+constant. It is an allocation the compiler was already memoising, so no count moved. The rehype
+list stays inline: it carries the `rehypeScopeIds` entry holding the per-block `useId`, so it is
+rebuilt every render whatever is done to its other entry.
+
+### Gap — processors are counted through `react-markdown`'s render, not its internals
+
+`createProcessor` is module-private, so both the PRF4 harness and the PRF6 test count renders of
+the component that calls it. The two are equal only because `createProcessor` is unconditional in
+the render body — a `react-markdown` upgrade that adds a cache would silently break the equality.
+
 ## Out of scope, not measured
 
 SQLite write path, the Tauri event bus, and anything needing the packaged app.
@@ -217,3 +273,9 @@ cd apps/app && bun run test:unit
 The three PRF1 cases live in `apps/app/src/lib/perf/render-baseline.test.ts` and the four PRF4
 cases in `apps/app/src/lib/perf/chat-open-baseline.test.ts`. Both hold their counts in inline
 snapshots, so a regression or an improvement shows up as a snapshot diff.
+
+The PRF6 processor counts are held in `packages/ui/src/components/markdown/processor-reuse.test.tsx`:
+
+```
+cd packages/ui && bun run test
+```
