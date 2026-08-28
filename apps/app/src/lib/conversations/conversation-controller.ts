@@ -33,6 +33,11 @@ import type {
 import { isSameRuntimeScope } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
 import {
+	answeredText,
+	questionMessageIdOf,
+	questionMessageText,
+} from "../chat/question-message"
+import {
 	ENDING_FOR,
 	ENDING_FOR_OUTCOME,
 	isWorthKeeping,
@@ -425,6 +430,23 @@ export const createConversationController = (
 		sync()
 	}
 
+	const askQuestion = (held: Speaker, request: QuestionRequest) => {
+		const id = questionMessageIdOf(request.id)
+		writeReply(
+			held,
+			{
+				id,
+				role: "assistant",
+				text: questionMessageText(request),
+				completion: "complete",
+				timestamp: now(),
+			},
+			"complete",
+		)
+		held.written.delete(id)
+		holdPrompt(held, { kind: "question", botId: held.botId, request })
+	}
+
 	const apply = (held: Speaker, event: AgentEvent) => {
 		switch (event.type) {
 			case "messageStarted":
@@ -439,11 +461,7 @@ export const createConversationController = (
 			case "messageCompleted":
 				return settleCompleted(held, event.message)
 			case "questionRequested":
-				return holdPrompt(held, {
-					kind: "question",
-					botId: held.botId,
-					request: event.request,
-				})
+				return askQuestion(held, event.request)
 			case "permissionRequested":
 				return holdPrompt(held, {
 					kind: "permission",
@@ -670,15 +688,13 @@ export const createConversationController = (
 		answers: QuestionAnswers,
 	) => {
 		const conversationId = conversation?.id
-		const content = request.questions
-			.filter(({ question }) => answers[question])
-			.map(({ question }) => `${question}\n\n${answers[question]}`)
-			.join("\n\n")
+		const content = answeredText(request, answers)
 		if (!conversationId || content.length === 0) {
 			return
 		}
 		const id = newId()
 		const createdAt = now()
+		const repliedToMessageId = questionMessageIdOf(request.id)
 		write(
 			() =>
 				store.appendUserMessage({
@@ -686,7 +702,7 @@ export const createConversationController = (
 					conversationId,
 					turnId: held.turn.id,
 					authorBotId: null,
-					repliedToMessageId: null,
+					repliedToMessageId,
 					content,
 					createdAt,
 				}),
@@ -700,7 +716,7 @@ export const createConversationController = (
 					completion: "complete",
 					createdAt,
 					authorBotId: null,
-					repliedToMessageId: null,
+					repliedToMessageId,
 					runtimeSessionId: null,
 				}),
 		)

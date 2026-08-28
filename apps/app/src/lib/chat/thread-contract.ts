@@ -9,9 +9,11 @@ import type { Chat } from "./use-chat"
 import type { WorkingState } from "./working-kind"
 
 import { avatarSrc } from "../host"
+import type { QuestionRequest } from "../agent/contract"
 import type {
 	ConversationController,
 	ConversationState,
+	PendingPrompt,
 	RefusedMessage,
 } from "../conversations/conversation-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
@@ -74,6 +76,7 @@ export type ThreadFacts = {
 	isPromptPending: boolean
 	isOverlayOpen: boolean
 	latestError?: ChatError
+	question: QuestionRequest | null
 	refused: RefusedMessage | null
 	rejectedPromptId: string | null
 	workingBotIds: (string | null)[]
@@ -81,6 +84,9 @@ export type ThreadFacts = {
 }
 
 const NO_WORKING_BOT_IDS: (string | null)[] = []
+
+const questionIn = (prompt: PendingPrompt | null): QuestionRequest | null =>
+	prompt?.kind === "question" ? prompt.request : null
 
 const botFactsOf = (thread: LoadedBotThread): ThreadFacts => ({
 	id: thread.bot.id,
@@ -94,6 +100,7 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => ({
 	isPromptPending: thread.state.permission !== null,
 	isOverlayOpen: thread.isOverlayOpen,
 	latestError: thread.state.errors.at(-1),
+	question: thread.state.question,
 	refused: null,
 	rejectedPromptId: thread.state.rejectedPromptId,
 	workingBotIds: NO_WORKING_BOT_IDS,
@@ -114,6 +121,7 @@ const conversationFactsOf = (
 	isPromptPending: false,
 	isOverlayOpen: false,
 	latestError: undefined,
+	question: questionIn(thread.state.pendingPrompt),
 	refused: thread.state.refusedMessage,
 	rejectedPromptId: null,
 	workingBotIds: [thread.state.speakingBotId, ...thread.state.waitingBotIds],

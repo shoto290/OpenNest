@@ -248,10 +248,37 @@ const ThreadComposerSlot = ({
 		/>
 	)
 
-type ThreadPendingProps = {
+type ThreadApprovalProps = {
 	thread: LoadedThread
 	authors: ThreadAuthors
 	responder: PromptResponder
+}
+
+const ThreadApproval = ({
+	thread,
+	authors,
+	responder,
+}: ThreadApprovalProps) => {
+	if (thread.kind === "bot") {
+		return thread.state.permission ? (
+			<ApprovalPrompt
+				request={thread.state.permission}
+				responder={responder}
+			/>
+		) : null
+	}
+
+	const prompt = thread.state.pendingPrompt
+	return prompt?.kind === "permission" ? (
+		<SpokenPrompt
+			author={authors.get(prompt.botId)}
+			prompt={prompt}
+			responder={responder}
+		/>
+	) : null
+}
+
+type ThreadPendingProps = ThreadApprovalProps & {
 	questionRecall?: QuotedMessage
 }
 
@@ -262,17 +289,6 @@ const ThreadPending = ({
 	questionRecall,
 }: ThreadPendingProps) => {
 	const t = useChatCopy()
-
-	if (thread.kind === "conversation") {
-		const prompt = thread.state.pendingPrompt
-		return prompt ? (
-			<SpokenPrompt
-				author={authors.get(prompt.botId)}
-				prompt={prompt}
-				responder={responder}
-			/>
-		) : null
-	}
 
 	return (
 		<>
@@ -285,12 +301,11 @@ const ThreadPending = ({
 					size="md"
 				/>
 			) : null}
-			{thread.state.permission ? (
-				<ApprovalPrompt
-					request={thread.state.permission}
-					responder={responder}
-				/>
-			) : null}
+			<ThreadApproval
+				authors={authors}
+				responder={responder}
+				thread={thread}
+			/>
 		</>
 	)
 }
@@ -660,7 +675,7 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 	}, [controller])
 
 	const { asked, recall } = useAskedQuestion({
-		question: thread.kind === "bot" ? thread.state.question : null,
+		question: facts.question,
 		messages: state.messages,
 		toQuote,
 	})

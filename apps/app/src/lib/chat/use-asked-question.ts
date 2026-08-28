@@ -1,7 +1,7 @@
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 
 import { questionMessageIdOf } from "./question-message"
-import type { ReplyTarget } from "./screen-model"
+import { bubbleIdOf, bubbleOf, type ReplyTarget } from "./screen-model"
 import { useBubbleVisibility } from "./use-bubble-visibility"
 
 import type { QuestionRequest } from "../agent/contract"
@@ -25,6 +25,11 @@ type AskedQuestionInput = {
 
 const NOTHING_ASKED: AskedQuestion = { asked: null }
 
+const anchorOf = (message: TranscriptMessage): string | null => {
+	const bubble = bubbleOf(message, 0)
+	return bubble ? bubbleIdOf(bubble.messageId, bubble.blockIndex) : null
+}
+
 export function useAskedQuestion({
 	question,
 	messages,
@@ -35,9 +40,10 @@ export function useAskedQuestion({
 				(message) => message.id === questionMessageIdOf(question.id),
 			)
 		: undefined
-	const isInView = useBubbleVisibility(asking?.id ?? null)
+	const anchor = asking ? anchorOf(asking) : null
+	const isInView = useBubbleVisibility(anchor)
 
-	if (!question || !asking) {
+	if (!question || !asking || !anchor) {
 		return NOTHING_ASKED
 	}
 
@@ -46,7 +52,7 @@ export function useAskedQuestion({
 		recall: isInView
 			? undefined
 			: toQuote({
-					messageId: asking.id,
+					messageId: anchor,
 					role: "assistant",
 					excerpt: question.questions[0]?.question ?? "",
 					authorBotId: asking.authorBotId,
