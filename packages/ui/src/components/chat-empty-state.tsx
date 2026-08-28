@@ -5,8 +5,8 @@ import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
+import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import { Icons } from "@workspace/ui/components/icons"
-import { cn } from "@workspace/ui/lib/utils"
 
 type ChatEmptyStateStatus = "ready" | "unavailable"
 
@@ -32,63 +32,48 @@ function ChatEmptyState({
 	blot,
 	seed,
 	image,
-	className,
 	...props
 }: ChatEmptyStateProps) {
 	const { t } = useTranslation("chat")
-	const title = t(`emptyState.${status}.title`)
-	const description = t(`emptyState.${status}.description`)
 	const isReady = status === "ready"
 
+	const settingsAction = onOpenSettings ? (
+		<Button onClick={onOpenSettings} variant="outline">
+			<Icons.Settings aria-hidden="true" />
+			{t("emptyState.settings")}
+		</Button>
+	) : null
+
+	const setupAction = <Button onClick={onSetup}>{t("emptyState.setup")}</Button>
+
+	const botMark = (
+		<BotIdentityAvatar
+			animal={animal}
+			blot={blot}
+			image={image}
+			name={name}
+			seed={seed}
+			size={MARK_SIZE}
+		/>
+	)
+
+	const alertMark = (
+		<span className="flex size-12 items-center justify-center rounded-2xl border border-destructive bg-destructive/10 text-destructive">
+			<Icons.Alert aria-hidden="true" className="size-6" />
+		</span>
+	)
+
 	return (
-		<div
+		<EmptyStateShell
+			action={isReady ? settingsAction : setupAction}
 			data-slot="chat-empty-state"
 			data-status={status}
-			className={cn(
-				"flex w-full flex-col items-center gap-5 px-6 py-12 text-center",
-				className,
-			)}
+			description={t(`emptyState.${status}.description`)}
+			hint={isReady ? t("emptyState.hint") : undefined}
+			mark={isReady ? botMark : alertMark}
+			title={isReady && name ? name : t(`emptyState.${status}.title`)}
 			{...props}
-		>
-			{isReady ? (
-				<BotIdentityAvatar
-					animal={animal}
-					blot={blot}
-					image={image}
-					name={name}
-					seed={seed}
-					size={MARK_SIZE}
-				/>
-			) : (
-				<span className="flex size-12 items-center justify-center rounded-2xl border border-destructive bg-destructive/10 text-destructive">
-					<Icons.Alert aria-hidden="true" className="size-6" />
-				</span>
-			)}
-
-			<div className="flex max-w-md flex-col gap-2">
-				<h2 className="font-heading font-medium text-foreground text-lg">
-					{isReady && name ? name : title}
-				</h2>
-				<p className="text-muted-foreground text-sm">{description}</p>
-			</div>
-
-			{isReady ? (
-				<>
-					{onOpenSettings ? (
-						<Button onClick={onOpenSettings} variant="outline">
-							<Icons.Settings aria-hidden="true" />
-							{t("emptyState.settings")}
-						</Button>
-					) : null}
-					<p className="flex items-center gap-1.5 text-muted-foreground text-xs">
-						{t("emptyState.hint")}
-						<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
-					</p>
-				</>
-			) : (
-				<Button onClick={onSetup}>{t("emptyState.setup")}</Button>
-			)}
-		</div>
+		/>
 	)
 }
 
