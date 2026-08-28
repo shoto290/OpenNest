@@ -78,6 +78,7 @@ import {
 } from "@workspace/ui/hooks/use-roster-lift"
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 import { toPlainText } from "@workspace/ui/lib/plain-text"
+import { probeRender } from "@workspace/ui/lib/render-probe"
 import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER =
@@ -1534,6 +1535,7 @@ const AppSidebarBase = ({
 	insetWindowControls = false,
 	...panel
 }: AppSidebarProps) => {
+	probeRender("AppSidebar")
 	const { t } = useTranslation("bots")
 	const createLabel = t("roster.create")
 	const [naming, setNaming] = useState<SectionNaming | null>(null)

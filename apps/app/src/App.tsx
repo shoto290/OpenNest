@@ -10,6 +10,7 @@ import { UpdateBadge } from "@workspace/ui/components/update-badge"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
+import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { WorkspaceBody } from "@/components/workspace-body"
 import {
@@ -72,6 +73,7 @@ import {
 const browseWorkingDirectory = () => undefined
 
 export function App() {
+	probeRender("App")
 	const driver = useMemo(createChatDriver, [])
 	const store = useMemo(createTranscriptStore, [])
 	const chat = useChat(driver, store)
@@ -328,10 +330,10 @@ export function App() {
 	)
 
 	const now = useRosterClock()
-	const rosterBots = useMemo(
-		() => withBadges(toRosterBots(bots, { working, previews }, now), badges),
-		[bots, working, previews, now, badges],
-	)
+	const rosterBots = useMemo(() => {
+		probeRender("rosterBots")
+		return withBadges(toRosterBots(bots, { working, previews }, now), badges)
+	}, [bots, working, previews, now, badges])
 
 	const listedRosters = Object.keys(rosters).join(" ")
 
@@ -347,19 +349,15 @@ export function App() {
 		}
 	}, [sections.controller, listedRosters])
 
-	const rosterBotsBySpace = useMemo(
-		() =>
-			Object.fromEntries(
-				Object.entries(rosters).map(([spaceId, spaceBots]) => [
-					spaceId,
-					withBadges(
-						toRosterBots(spaceBots, { working, previews }, now),
-						badges,
-					),
-				]),
-			),
-		[rosters, working, previews, now, badges],
-	)
+	const rosterBotsBySpace = useMemo(() => {
+		probeRender("rosterBotsBySpace")
+		return Object.fromEntries(
+			Object.entries(rosters).map(([spaceId, spaceBots]) => [
+				spaceId,
+				withBadges(toRosterBots(spaceBots, { working, previews }, now), badges),
+			]),
+		)
+	}, [rosters, working, previews, now, badges])
 
 	const badgesBySpaceId = useMemo(
 		() => toSpaceBadges(rosterBotsBySpace),

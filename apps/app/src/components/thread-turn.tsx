@@ -10,6 +10,7 @@ import {
 	type TurnState,
 	UserTurn,
 } from "@workspace/ui/components/turn"
+import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { FaceAvatar } from "@/components/face-avatar"
 import { TurnBody } from "@/components/turn-body"
@@ -53,6 +54,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	onReply,
 	onRetry,
 }: ThreadTurnProps) {
+	probeRender("ThreadTurn", anchor)
 	const { text, attachments } = messageWithAttachments(row.text)
 	const content = <TurnBody attachments={attachments} text={text} />
 	const repliedTo = quoted ? toQuote(quoted) : undefined
