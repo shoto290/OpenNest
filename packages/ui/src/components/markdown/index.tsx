@@ -21,6 +21,13 @@ export interface MarkdownProps {
 	className?: string
 }
 
+const MARKDOWN_REMARK_PLUGINS = [
+	remarkGfm,
+	remarkMath,
+	remarkLiteralHtml,
+	remarkBotMentions,
+]
+
 const MARKDOWN_CLASS = cn(
 	MARKDOWN_PROSE_CLASS,
 	MARKDOWN_CODE_SURFACE_CLASS,
@@ -39,12 +46,7 @@ export const Markdown = ({ children, className }: MarkdownProps) => {
 					[rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 					[rehypeScopeIds, { scope }],
 				]}
-				remarkPlugins={[
-					remarkGfm,
-					remarkMath,
-					remarkLiteralHtml,
-					remarkBotMentions,
-				]}
+				remarkPlugins={MARKDOWN_REMARK_PLUGINS}
 			>
 				{children}
 			</ReactMarkdown>
