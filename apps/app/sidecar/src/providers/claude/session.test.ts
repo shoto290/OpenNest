@@ -6,6 +6,7 @@ import { join } from "node:path"
 import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 
 import { claudeSourceExecutable } from "./build"
+import { DELEGATE_SERVER } from "./delegate"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { buildOptions, CLASSIFY_ASK_USER_QUESTION } from "./session"
 import {
@@ -191,7 +192,24 @@ describe("buildOptions", () => {
 	})
 
 	it("hands over the servers the bundle declares", () => {
-		expect(buildOptions(request, undefined).mcpServers).toEqual({})
+		expect(
+			Object.keys(buildOptions(request, undefined).mcpServers ?? {}),
+		).toEqual([DELEGATE_SERVER])
+	})
+
+	it("leaves an unbundled session without a server of any kind", () => {
+		expect(
+			buildOptions({ cwd: "/tmp", partialMessages: false }, undefined)
+				.mcpServers,
+		).toBeUndefined()
+	})
+
+	it("denies the asynchronous agent tools on every spawn", () => {
+		for (const spawned of spawns) {
+			const floor = buildOptions(spawned, undefined).managedSettings
+			expect(floor?.permissions?.deny).toContain("Agent")
+			expect(floor?.permissions?.deny).toContain("Task")
+		}
 	})
 
 	it("loads the app's plugin beside the bot's when the host names one", () => {

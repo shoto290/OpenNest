@@ -56,6 +56,13 @@ describe("securityFloor", () => {
 		expect(deny.some((rule) => rule.includes("~"))).toBe(false)
 	})
 
+	it("denies the asynchronous agent tools outright", () => {
+		const deny = denyOf()
+
+		expect(deny).toContain("Agent")
+		expect(deny).toContain("Task")
+	})
+
 	it("denies writes to the host's shell and agent paths", () => {
 		const deny = denyOf()
 

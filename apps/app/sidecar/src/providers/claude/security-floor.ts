@@ -41,6 +41,8 @@ const BUNDLE_DIRECTORIES = ["bots", "spaces"]
 
 const BUNDLE_ROOTS = ["bots/plugins", "spaces"]
 
+const DENIED_TOOLS = ["Agent", "Task"]
+
 const SANDBOX = {
 	enabled: true,
 	failIfUnavailable: true,
@@ -126,6 +128,7 @@ export const securityFloor = ({
 	return {
 		permissions: {
 			deny: [
+				...DENIED_TOOLS,
 				...rulesFor("Read", reads),
 				...rulesFor("Read", foreignBundles(appDataDir, pluginPaths)),
 				...rulesFor("Edit", writes),

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import { DELEGATE_TOOL } from "./delegate"
 import { createPermissionGate } from "./permissions"
 
 import type { SessionFrame } from "../provider"
@@ -33,6 +34,16 @@ describe("createPermissionGate", () => {
 		const input = { file_path: join(bundle, "skills", "SKILL.md") }
 
 		const decision = await gate.canUseTool("Write", input, options)
+
+		expect(decision).toEqual({ behavior: "allow", updatedInput: input })
+		expect(emitted).toEqual([])
+	})
+
+	it("resolves a delegate call itself, without asking the reader", async () => {
+		const { emitted, gate } = gateWith(bundle)
+		const input = { instructions: "map the callers of openClaudeSession" }
+
+		const decision = await gate.canUseTool(DELEGATE_TOOL, input, options)
 
 		expect(decision).toEqual({ behavior: "allow", updatedInput: input })
 		expect(emitted).toEqual([])
