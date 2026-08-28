@@ -5,8 +5,9 @@ use std::sync::{Mutex, PoisonError};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::{
-	drafted, git, learned, Author, HistoryEntry, Skill, SkillDraft, SkillFront, LEARNED_NAME,
-	MANIFEST_DIR, MANIFEST_NAME, OPENNEST_KEY, PRELOAD_KEY, SKILLS_DIR, SKILL_NAME, VERSION,
+	drafted, git, learned, Author, Evolution, HistoryEntry, Skill, SkillDraft, SkillFront,
+	LEARNED_NAME, MANIFEST_DIR, MANIFEST_NAME, OPENNEST_KEY, PRELOAD_KEY, SKILLS_DIR, SKILL_NAME,
+	VERSION,
 };
 use crate::private_files;
 
@@ -42,18 +43,17 @@ pub fn laid_down<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	path(app).filter(|path| manifest_file(path).is_file())
 }
 
-pub fn evolve(path: &Path) {
+pub fn evolve(path: &Path) -> Option<Evolution> {
 	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	let changed = git::changes(path);
 	if changed.is_empty() {
-		return;
+		return None;
 	}
 	let (title, body) =
 		learned(path).unwrap_or_else(|| (WRITTEN_TITLE.to_owned(), changed.join("\n")));
-	if git::commit(path, Author::Bot, &title, &body).is_err() {
-		return;
-	}
+	let commit_id = git::commit(path, Author::Bot, &title, &body).ok().flatten()?;
 	let _ = fs::remove_file(path.join(LEARNED_NAME));
+	Some(Evolution { commit_id, title })
 }
 
 pub fn skills(path: &Path) -> Vec<Skill> {
@@ -185,7 +185,7 @@ mod tests {
 		let path = a_path("quiet");
 		lay_down(&path).expect("the plugin is laid down");
 
-		evolve(&path);
+		assert_eq!(evolve(&path), None);
 
 		assert_eq!(git::history(&path).expect("the history reads").len(), 1);
 
@@ -203,9 +203,11 @@ mod tests {
 		)
 		.expect("the note lands");
 
-		evolve(&path);
+		let evolution = evolve(&path).expect("the turn is recorded");
 
 		let history = git::history(&path).expect("the history reads");
+		assert_eq!(evolution.commit_id, history[0].id);
+		assert_eq!(evolution.title, history[0].title);
 		assert_eq!(history[0].title, "I noted that they like figs");
 		assert_eq!(history[0].author, Author::Bot);
 		assert!(!path.join(LEARNED_NAME).exists(), "the note is cleared");
@@ -282,7 +284,7 @@ mod tests {
 						name.as_bytes(),
 					)
 					.expect("the write lands");
-					evolve(&path);
+					let _recorded = evolve(&path);
 				})
 			})
 			.collect();
