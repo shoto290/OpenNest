@@ -1,5 +1,13 @@
 import { realpathSync } from "node:fs"
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path"
+import {
+	basename,
+	dirname,
+	extname,
+	isAbsolute,
+	join,
+	relative,
+	sep,
+} from "node:path"
 
 const WRITERS = new Set(["Write", "Edit"])
 
@@ -11,6 +19,11 @@ const RESERVED = new Set([
 	".mcp.json",
 	"settings.json",
 ])
+
+const DOCUMENTS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".toml"])
+
+const isDocument = (target: string): boolean =>
+	DOCUMENTS.has(extname(target).toLowerCase())
 
 const realOrNearest = (path: string): string => {
 	try {
@@ -31,6 +44,9 @@ export const isBundleWrite = (
 	}
 	const target = input.file_path
 	if (typeof target !== "string" || !isAbsolute(target)) {
+		return false
+	}
+	if (!isDocument(target)) {
 		return false
 	}
 	const inside = relative(realOrNearest(pluginPath), realOrNearest(target))
