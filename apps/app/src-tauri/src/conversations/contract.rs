@@ -135,13 +135,10 @@ impl Bot {
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
 			.unwrap_or_else(|| bot.instructions.clone());
 		let avatar_image_path = drawable_avatar(bot.avatar_image_path.as_deref(), avatars);
-		let permissions = bundles
-			.and_then(|root| crate::bundles::permissions(root, &bot.id))
-			.unwrap_or_else(|| {
-				crate::bundles::BotPermissions::unruled(crate::bundles::denies_changes(
-					&denied_tools,
-				))
-			});
+		let permissions = bot
+			.permissions
+			.clone()
+			.unwrap_or_else(|| crate::bundles::BotPermissions::unruled_like(&denied_tools));
 		Self {
 			id: bot.id,
 			section_id: bot.section_id,
@@ -1393,6 +1390,7 @@ mod tests {
 			instructions: String::new(),
 			memory: String::new(),
 			denied_tools: Vec::new(),
+			permissions: None,
 			created_at: 1,
 		}
 	}
@@ -1423,6 +1421,43 @@ mod tests {
 
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, Some(&root)).model, "haiku");
 		assert_eq!(Bot::of(a_stored_bot("sonnet"), None, None).model, "sonnet");
+
+		let _ = std::fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bot_is_reported_on_the_rules_it_holds_and_never_on_the_ones_its_file_declares() {
+		let root = a_bundle_root("rules");
+		let stored = a_stored_bot("sonnet");
+		crate::bundles::write(&root, &stored).expect("the bundle is written");
+		crate::bundles::set_permissions(
+			&root,
+			&stored,
+			&crate::bundles::BotPermissions { allow: vec!["Bash".into()], ..Default::default() },
+		)
+		.expect("the file declares its rules");
+
+		let held =
+			crate::bundles::BotPermissions { allow: vec!["Read".into()], ..Default::default() };
+		let ruled =
+			conversations::Bot { permissions: Some(held.clone()), ..a_stored_bot("sonnet") };
+
+		assert_eq!(Bot::of(ruled, None, Some(&root)).permissions, held);
+		assert_eq!(
+			Bot::of(a_stored_bot("sonnet"), None, Some(&root)).permissions,
+			crate::bundles::BotPermissions::default(),
+			"a bot holding no rules read the ones its file declares"
+		);
+
+		let held_back = conversations::Bot {
+			denied_tools: crate::bundles::CHANGING_TOOLS.map(str::to_owned).to_vec(),
+			..a_stored_bot("sonnet")
+		};
+		assert_eq!(
+			Bot::of(held_back, None, None).permissions,
+			crate::bundles::BotPermissions::unruled(true),
+			"a bot that changed nothing lost the denial the switch stood for"
+		);
 
 		let _ = std::fs::remove_dir_all(&root);
 	}

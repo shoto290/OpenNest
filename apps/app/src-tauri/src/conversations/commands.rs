@@ -31,13 +31,15 @@ async fn write_bundle(
 	bot: &StoredBot,
 	output_style: &str,
 	permissions: &bundles::BotPermissions,
-) -> Result<(), TranscriptStoreError> {
+) -> Result<StoredBot, TranscriptStoreError> {
+	let accepted = permissions.clone().accepted();
+	let ruled = database.conversations().set_permissions(bot.id.clone(), accepted.clone()).await?;
 	if let Some(root) = root {
-		bundles::set_permissions(root, bot, permissions).map_err(unwritable)?;
+		bundles::set_permissions(root, bot, &accepted).map_err(unwritable)?;
 		bundles::write_styled(root, bot, output_style).map_err(unwritable)?;
 	}
 	list_bundles(root, database).await;
-	Ok(())
+	Ok(ruled)
 }
 
 fn remember_bundle(
@@ -136,14 +138,18 @@ pub async fn conversation_create_bot<R: Runtime>(
 	let permissions = identity.permissions.clone();
 	let created = database.conversations().create_bot(identity.into(), space_id, None).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	if let Err(refusal) =
-		write_bundle(bundle_root.as_deref(), database, &created, &output_style, &permissions).await
-	{
-		let _ = database.conversations().delete_bot(created.id).await;
-		avatars::sweep_referenced(database, dir.as_deref()).await;
-		return Err(refusal);
-	}
-	Ok(Bot::of(created, dir.as_deref(), bundle_root.as_deref()))
+	let ruled =
+		match write_bundle(bundle_root.as_deref(), database, &created, &output_style, &permissions)
+			.await
+		{
+			Ok(ruled) => ruled,
+			Err(refusal) => {
+				let _ = database.conversations().delete_bot(created.id).await;
+				avatars::sweep_referenced(database, dir.as_deref()).await;
+				return Err(refusal);
+			}
+		};
+	Ok(Bot::of(ruled, dir.as_deref(), bundle_root.as_deref()))
 }
 
 #[tauri::command]
@@ -177,7 +183,7 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	let created =
 		database.conversations().create_bot(identity.into(), Some(destination), section).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	if let Err(refusal) = duplicated_bundle(
+	let ruled = match duplicated_bundle(
 		bundle_root.as_deref(),
 		database,
 		&bot_id,
@@ -187,12 +193,15 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	)
 	.await
 	{
-		let _ = database.conversations().delete_bot(created.id.clone()).await;
-		forget_bundle(bundle_root.as_deref(), database, &created.id).await;
-		avatars::sweep_referenced(database, dir.as_deref()).await;
-		return Err(refusal);
-	}
-	Ok(Bot::of(created, dir.as_deref(), bundle_root.as_deref()))
+		Ok(ruled) => ruled,
+		Err(refusal) => {
+			let _ = database.conversations().delete_bot(created.id.clone()).await;
+			forget_bundle(bundle_root.as_deref(), database, &created.id).await;
+			avatars::sweep_referenced(database, dir.as_deref()).await;
+			return Err(refusal);
+		}
+	};
+	Ok(Bot::of(ruled, dir.as_deref(), bundle_root.as_deref()))
 }
 
 fn carried_section(source: &StoredBot, destination: &str) -> Option<String> {
@@ -206,7 +215,7 @@ async fn duplicated_bundle(
 	bot: &StoredBot,
 	output_style: &str,
 	permissions: &bundles::BotPermissions,
-) -> Result<(), TranscriptStoreError> {
+) -> Result<StoredBot, TranscriptStoreError> {
 	if let Some(root) = root {
 		bundles::inherit(root, source_id, &bot.id).map_err(|error| {
 			TranscriptStoreError::UnwritableBundle { detail: error.to_string() }
@@ -262,16 +271,20 @@ pub async fn conversation_update_bot<R: Runtime>(
 	let permissions = reconciled.permissions.clone();
 	let updated = database.conversations().update_bot(id.clone(), reconciled.into()).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	if let Err(refusal) =
-		write_bundle(bundle_root.as_deref(), database, &updated, &output_style, &permissions).await
-	{
-		if let Some(previous) = previous {
-			let _ = database.conversations().update_bot(id, previous.into()).await;
-			avatars::sweep_referenced(database, dir.as_deref()).await;
-		}
-		return Err(refusal);
-	}
-	Ok(Bot::of(updated, dir.as_deref(), bundle_root.as_deref()))
+	let ruled =
+		match write_bundle(bundle_root.as_deref(), database, &updated, &output_style, &permissions)
+			.await
+		{
+			Ok(ruled) => ruled,
+			Err(refusal) => {
+				if let Some(previous) = previous {
+					let _ = database.conversations().update_bot(id, previous.into()).await;
+					avatars::sweep_referenced(database, dir.as_deref()).await;
+				}
+				return Err(refusal);
+			}
+		};
+	Ok(Bot::of(ruled, dir.as_deref(), bundle_root.as_deref()))
 }
 
 #[tauri::command]
@@ -805,6 +818,7 @@ mod tests {
 			instructions: "Answer briefly.".to_owned(),
 			memory: String::new(),
 			denied_tools: Vec::new(),
+			permissions: None,
 			created_at: 1,
 		}
 	}

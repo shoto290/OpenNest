@@ -22,6 +22,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 12, statements: BOT_SPACE },
 	Migration { version: 13, statements: BOT_SECTION },
 	Migration { version: 14, statements: CONVERSATION_ROOM },
+	Migration { version: 15, statements: BOT_PERMISSIONS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -295,6 +296,10 @@ CREATE TABLE sections (
 
 ALTER TABLE bots ADD COLUMN section_id TEXT
 	REFERENCES sections(id) ON DELETE SET NULL;
+";
+
+const BOT_PERMISSIONS: &str = "
+ALTER TABLE bots ADD COLUMN permissions TEXT;
 ";
 
 const CONVERSATION_ROOM: &str = "
