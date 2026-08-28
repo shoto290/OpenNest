@@ -531,16 +531,42 @@ describe("createConversationController", () => {
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
 		})
 
+		it("writes the question into the transcript as a message of the bot", async () => {
+			const nyx = await askedIn(harness)
+
+			const asking = harness.controller
+				.getState()
+				.messages.find((message) => message.id === "question-ask-1")
+			expect(asking).toMatchObject({
+				authorBotId: nyx,
+				role: "assistant",
+				content: "### Which wall?",
+			})
+		})
+
 		it("writes the answers into the transcript as a message of the reader", async () => {
 			await askedIn(harness)
 
 			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
 			await harness.settled()
 
-			expect(spokenIn(harness.controller)).toContainEqual([
-				null,
-				"Which wall?\n\nthe north",
-			])
+			expect(spokenIn(harness.controller)).toContainEqual([null, "the north"])
+		})
+
+		it("points the answer at the question it replies to", async () => {
+			await askedIn(harness)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			const answering = harness.controller.getState().messages.at(-1)
+			expect(answering?.repliedToMessageId).toBe("question-ask-1")
+
+			const page = await harness.store.loadPage(harness.conversation.id, null)
+			expect(
+				page.messages.find((message) => message.id === answering?.id)
+					?.repliedToMessageId,
+			).toBe("question-ask-1")
 		})
 
 		it("decides on the runtime of the bot that asked, then releases the ask", async () => {
