@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next"
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import {
+	type ActivityIndicatorKind,
 	BotIdentityAvatar,
-	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -27,7 +27,7 @@ type HeaderIdentityButtonProps = {
 	seed?: string
 	image?: string
 	working?: boolean
-	kind?: BotWorkingKind
+	kind?: ActivityIndicatorKind
 	connection: ConnectionStatusState
 	version?: string | null
 	isSettingsOpen?: boolean

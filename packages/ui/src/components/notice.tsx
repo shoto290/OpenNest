@@ -6,7 +6,7 @@ import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { cn } from "@workspace/ui/lib/utils"
 
-const chatNoticeVariants = cva(
+const noticeVariants = cva(
 	"flex w-full items-start gap-3 rounded-2xl border p-3 text-sm",
 	{
 		variants: {
@@ -21,50 +21,48 @@ const chatNoticeVariants = cva(
 	},
 )
 
-type ChatNoticeTone = NonNullable<
-	VariantProps<typeof chatNoticeVariants>["tone"]
->
+type NoticeTone = NonNullable<VariantProps<typeof noticeVariants>["tone"]>
 
 const TONE_ICON = {
 	warning: Icons.Info,
 	error: Icons.Alert,
-} satisfies Record<ChatNoticeTone, typeof Icons.Info>
+} satisfies Record<NoticeTone, typeof Icons.Info>
 
 const TONE_ICON_CLASS = {
 	warning: "text-amber-600 dark:text-amber-400",
 	error: "text-destructive",
-} satisfies Record<ChatNoticeTone, string>
+} satisfies Record<NoticeTone, string>
 
-interface ChatNoticeRetry {
+interface NoticeRetry {
 	onRetry: () => void
 	label?: ReactNode
 	attempt?: number
 	maxAttempts?: number
 }
 
-interface ChatNoticeAction {
+interface NoticeAction {
 	label: ReactNode
 	onClick: () => void
 }
 
-interface ChatNoticeProps {
-	tone?: ChatNoticeTone
+interface NoticeProps {
+	tone?: NoticeTone
 	title: ReactNode
 	description?: ReactNode
 	detail?: ReactNode
-	retry?: ChatNoticeRetry
-	action?: ChatNoticeAction
+	retry?: NoticeRetry
+	action?: NoticeAction
 	onDismiss?: () => void
 	className?: string
 }
 
-function isRetryAvailable(retry?: ChatNoticeRetry) {
+function isRetryAvailable(retry?: NoticeRetry) {
 	if (!retry) return false
 	if (retry.maxAttempts === undefined) return true
 	return (retry.attempt ?? 0) < retry.maxAttempts
 }
 
-function ChatNotice({
+function Notice({
 	tone = "error",
 	title,
 	description,
@@ -73,7 +71,7 @@ function ChatNotice({
 	action,
 	onDismiss,
 	className,
-}: ChatNoticeProps) {
+}: NoticeProps) {
 	const { t } = useTranslation("chat")
 	const ToneIcon = TONE_ICON[tone]
 	const retryAvailable = retry !== undefined && isRetryAvailable(retry)
@@ -85,7 +83,7 @@ function ChatNotice({
 			data-slot="chat-notice"
 			data-tone={tone}
 			role={tone === "error" ? "alert" : "status"}
-			className={cn(chatNoticeVariants({ tone }), className)}
+			className={cn(noticeVariants({ tone }), className)}
 		>
 			<ToneIcon
 				aria-hidden
@@ -138,11 +136,11 @@ function ChatNotice({
 }
 
 export {
-	ChatNotice,
-	type ChatNoticeAction,
-	type ChatNoticeProps,
-	type ChatNoticeRetry,
-	type ChatNoticeTone,
-	chatNoticeVariants,
 	isRetryAvailable,
+	Notice,
+	type NoticeAction,
+	type NoticeProps,
+	type NoticeRetry,
+	type NoticeTone,
+	noticeVariants,
 }

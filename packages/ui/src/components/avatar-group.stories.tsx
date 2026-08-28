@@ -7,13 +7,13 @@ import {
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
+import {
+	AvatarGroup,
+	type AvatarGroupProps,
+	type ConversationParticipant,
+} from "@workspace/ui/components/avatar-group"
 import { BOT_BADGES } from "@workspace/ui/components/badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import {
-	ConversationAvatar,
-	type ConversationAvatarProps,
-	type ConversationParticipant,
-} from "@workspace/ui/components/conversation-avatar"
 
 const SIZES = [24, 40, 96]
 
@@ -82,17 +82,17 @@ const expectCentred = async (frame: HTMLElement, held: HTMLElement[]) => {
 const poseOf = (held: HTMLElement) =>
 	held.querySelector("svg")?.getAttribute("aria-label")
 
-const EverySize = (props: ConversationAvatarProps) => (
+const EverySize = (props: AvatarGroupProps) => (
 	<Row>
 		{SIZES.map((size) => (
-			<ConversationAvatar {...props} key={size} size={size} />
+			<AvatarGroup {...props} key={size} size={size} />
 		))}
 	</Row>
 )
 
-const BesideItsBot = (props: ConversationAvatarProps) => (
+const BesideItsBot = (props: AvatarGroupProps) => (
 	<Row>
-		<ConversationAvatar {...props} />
+		<AvatarGroup {...props} />
 		<BotIdentityAvatar
 			animal={ATLAS.animal}
 			blot={ATLAS.blot}
@@ -104,8 +104,8 @@ const BesideItsBot = (props: ConversationAvatarProps) => (
 )
 
 const meta = preview.meta({
-	title: "Branding/ConversationAvatar",
-	component: ConversationAvatar,
+	title: "Branding/AvatarGroup",
+	component: AvatarGroup,
 	parameters: {
 		layout: "centered",
 		docs: {

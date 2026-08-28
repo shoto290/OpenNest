@@ -1,6 +1,6 @@
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
+import type { RosterBot } from "@workspace/ui/components/roster"
 
-const CONVERSATION_BOTS: ConversationBot[] = [
+const CONVERSATION_BOTS: RosterBot[] = [
 	{ id: "bot-atlas", name: "Atlas", animal: "owl", blot: "blue" },
 	{ id: "bot-basile", name: "Basile", animal: "cat", blot: "purple" },
 	{ id: "bot-clemence", name: "Clémence", animal: "rabbit", blot: "pink" },
@@ -9,7 +9,7 @@ const CONVERSATION_BOTS: ConversationBot[] = [
 	{ id: "bot-faust", name: "Faust", animal: "dog", blot: "cyan" },
 ]
 
-const LONG_NAMED_BOTS: ConversationBot[] = [
+const LONG_NAMED_BOTS: RosterBot[] = [
 	{
 		id: "bot-release",
 		name: "Release notes editor for the desktop build",

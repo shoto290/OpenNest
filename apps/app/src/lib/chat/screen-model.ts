@@ -1,6 +1,6 @@
-import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
+import type { ActivityIndicatorKind } from "@workspace/ui/components/activity-indicator"
 import type { ChatEmptyStateStatus } from "@workspace/ui/components/chat-empty-state"
-import type { ChatTurnState } from "@workspace/ui/components/chat-turn"
+import type { TurnState } from "@workspace/ui/components/turn"
 import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { type ChatState, isTurnBusy } from "./chat-state"
@@ -25,10 +25,10 @@ export type TranscriptRow = {
 	role: TranscriptRole
 	text: string
 	timestamp: number
-	completion: ChatTurnState
+	completion: TurnState
 }
 
-const TURN_STATE: Record<TranscriptCompletion, ChatTurnState> = {
+const TURN_STATE: Record<TranscriptCompletion, TurnState> = {
 	pending: "streaming",
 	streaming: "streaming",
 	complete: "complete",
@@ -231,7 +231,7 @@ export function workingStateFor(state: ChatState): WorkingState | null {
 
 export type SidebarActivity = {
 	isWorking: boolean
-	kind?: BotWorkingKind
+	kind?: ActivityIndicatorKind
 }
 
 export function sidebarActivityFor(state: ChatState): SidebarActivity {

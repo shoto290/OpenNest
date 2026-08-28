@@ -7,15 +7,15 @@ import {
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
+import {
+	ActivityIndicator,
+	type ActivityIndicatorKind,
+} from "@workspace/ui/components/activity-indicator"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
 import { ANIMALS } from "@workspace/ui/components/bot-avatar-animals"
-import {
-	BotWorking,
-	type BotWorkingKind,
-} from "@workspace/ui/components/bot-working"
 import { Button } from "@workspace/ui/components/button"
-import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
-import { UserTurn } from "@workspace/ui/components/chat-turn"
+import { MarkProvider } from "@workspace/ui/components/mark-context"
+import { UserTurn } from "@workspace/ui/components/turn"
 
 const BUSY_BOT = { animal: "owl", blot: "blue", seed: "bot-7" } as const
 
@@ -44,7 +44,7 @@ const ROOMS = [
 	},
 ] as const
 
-const BOT_WORKING_KINDS: BotWorkingKind[] = [
+const BOT_WORKING_KINDS: ActivityIndicatorKind[] = [
 	"thinking",
 	"searching",
 	"working",
@@ -53,15 +53,24 @@ const BOT_WORKING_KINDS: BotWorkingKind[] = [
 ]
 
 const RoomWorkers = () => (
-	<ChatMarkProvider transcriptKey={ROOMS[0].id}>
+	<MarkProvider transcriptKey={ROOMS[0].id}>
 		<div className="flex flex-col gap-4">
-			<BotWorking {...SPEAKING_BOT} kind="working" seed={SPEAKING_BOT.botId} />
+			<ActivityIndicator
+				{...SPEAKING_BOT}
+				kind="working"
+				seed={SPEAKING_BOT.botId}
+			/>
 			{WAITING_BOTS.map((bot) => (
-				<BotWorking {...bot} key={bot.botId} kind="waiting" seed={bot.botId} />
+				<ActivityIndicator
+					{...bot}
+					key={bot.botId}
+					kind="waiting"
+					seed={bot.botId}
+				/>
 			))}
-			<BotWorking kind="waiting" name="Unknown" />
+			<ActivityIndicator kind="waiting" name="Unknown" />
 		</div>
-	</ChatMarkProvider>
+	</MarkProvider>
 )
 
 const ConversationSwap = () => {
@@ -78,21 +87,25 @@ const ConversationSwap = () => {
 			>
 				Open the other conversation
 			</Button>
-			<ChatMarkProvider transcriptKey={room.id}>
+			<MarkProvider transcriptKey={room.id}>
 				<div className="flex flex-col gap-4">
 					{room.prompts.map((prompt) => (
 						<UserTurn key={prompt}>{prompt}</UserTurn>
 					))}
-					<BotWorking {...room.bot} kind="thinking" seed={room.bot.botId} />
+					<ActivityIndicator
+						{...room.bot}
+						kind="thinking"
+						seed={room.bot.botId}
+					/>
 				</div>
-			</ChatMarkProvider>
+			</MarkProvider>
 		</div>
 	)
 }
 
 const meta = preview.meta({
-	title: "Feedback/BotWorking",
-	component: BotWorking,
+	title: "Feedback/ActivityIndicator",
+	component: ActivityIndicator,
 	parameters: {
 		layout: "padded",
 		docs: {
@@ -128,7 +141,7 @@ export const Variants = meta.story({
 	render: () => (
 		<div className="flex flex-col gap-4">
 			{BOT_WORKING_KINDS.map((kind) => (
-				<BotWorking key={kind} kind={kind} />
+				<ActivityIndicator key={kind} kind={kind} />
 			))}
 		</div>
 	),
@@ -146,9 +159,9 @@ export const Blot = meta.story({
 	args: { animal: "rabbit", blot: "blue" },
 	render: (args) => (
 		<div className="flex flex-col gap-4">
-			<BotWorking {...args} blot={undefined} />
+			<ActivityIndicator {...args} blot={undefined} />
 			{BOT_WORKING_KINDS.map((kind) => (
-				<BotWorking {...args} key={kind} kind={kind} />
+				<ActivityIndicator {...args} key={kind} kind={kind} />
 			))}
 		</div>
 	),
@@ -258,7 +271,7 @@ export const Marked = meta.story({
 	render: (args) => (
 		<div className="flex flex-col gap-4">
 			{BOT_WORKING_KINDS.map((kind) => (
-				<BotWorking {...args} key={kind} kind={kind} />
+				<ActivityIndicator {...args} key={kind} kind={kind} />
 			))}
 		</div>
 	),
@@ -295,9 +308,9 @@ export const Stop = meta.story({
 	},
 	render: (args) => (
 		<div className="flex flex-col gap-4">
-			<BotWorking {...args} />
-			<BotWorking {...args} image={UPLOADED_AVATAR_IMAGE} />
-			<BotWorking {...args} onStop={undefined} />
+			<ActivityIndicator {...args} />
+			<ActivityIndicator {...args} image={UPLOADED_AVATAR_IMAGE} />
+			<ActivityIndicator {...args} onStop={undefined} />
 		</div>
 	),
 	parameters: {

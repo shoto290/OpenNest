@@ -9,15 +9,15 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import {
-	AgentSidebar,
-	type AgentSidebarBot,
-	type AgentSidebarConversation,
-	type AgentSidebarProps,
-	type AgentSidebarSection,
+	AppSidebar,
+	type AppSidebarBot,
+	type AppSidebarConversation,
+	type AppSidebarProps,
+	type AppSidebarSection,
 	type BotAvatarBlot,
 	type Space,
 	type UserChipIdentity,
-} from "@workspace/ui/components/agents/agent-sidebar"
+} from "@workspace/ui/components/app-sidebar"
 import { blotTransform } from "@workspace/ui/components/bot-avatar-blot"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
@@ -39,7 +39,7 @@ const SHORT_VIEWPORT = {
 const UPLOADED_IMAGE =
 	"data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA5NiA5Nic+PHJlY3Qgd2lkdGg9Jzk2JyBoZWlnaHQ9Jzk2JyBmaWxsPScjZThhMzNkJy8+PGNpcmNsZSBjeD0nNDgnIGN5PSczOCcgcj0nMTYnIGZpbGw9JyNmZmY3ZTgnLz48cmVjdCB4PScyMCcgeT0nNjAnIHdpZHRoPSc1NicgaGVpZ2h0PSc0MCcgcng9JzIwJyBmaWxsPScjZmZmN2U4Jy8+PC9zdmc+"
 
-const ROSTER: AgentSidebarBot[] = [
+const ROSTER: AppSidebarBot[] = [
 	{
 		id: "atlas",
 		blot: "blue",
@@ -146,7 +146,7 @@ const ROSTER: AgentSidebarBot[] = [
 	},
 ]
 
-const BADGED_ROSTER: AgentSidebarBot[] = [
+const BADGED_ROSTER: AppSidebarBot[] = [
 	{ ...ROSTER[0], badge: "attention" },
 	{ ...ROSTER[1], badge: "done" },
 	{ ...ROSTER[2], badge: "failed" },
@@ -164,13 +164,11 @@ const IDENTITY_BLOTS: BotAvatarBlot[] = [
 	"orange",
 ]
 
-const IDENTITY_ROSTER: AgentSidebarBot[] = IDENTITY_BLOTS.map(
-	(blot, index) => ({
-		...ROSTER[index],
-		blot,
-		status: "idle",
-	}),
-)
+const IDENTITY_ROSTER: AppSidebarBot[] = IDENTITY_BLOTS.map((blot, index) => ({
+	...ROSTER[index],
+	blot,
+	status: "idle",
+}))
 
 const blotsIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "bot-avatar-blot")
@@ -178,12 +176,12 @@ const blotsIn = (canvasElement: HTMLElement) =>
 const blotFillsIn = (canvasElement: HTMLElement) =>
 	blotsIn(canvasElement).map((path) => path.getAttribute("fill"))
 
-const SHARED_TINT_ROSTER: AgentSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
+const SHARED_TINT_ROSTER: AppSidebarBot[] = IDENTITY_ROSTER.map((bot) => ({
 	...bot,
 	blot: "blue",
 }))
 
-const LONG_ROSTER: AgentSidebarBot[] = [0, 1, 2].flatMap((pass) =>
+const LONG_ROSTER: AppSidebarBot[] = [0, 1, 2].flatMap((pass) =>
 	ROSTER.map((bot) => ({ ...bot, id: `${bot.id}-${pass}` })),
 )
 
@@ -234,12 +232,12 @@ const footerRowWidth = (footer: HTMLElement) => {
 
 const verticalCentreOf = (box: DOMRect) => box.top + box.height / 2
 
-const withoutTitle = (bot: AgentSidebarBot): AgentSidebarBot => ({
+const withoutTitle = (bot: AppSidebarBot): AppSidebarBot => ({
 	...bot,
 	title: undefined,
 })
 
-const withoutHistory = (bot: AgentSidebarBot): AgentSidebarBot => ({
+const withoutHistory = (bot: AppSidebarBot): AppSidebarBot => ({
 	...bot,
 	lastMessage: undefined,
 	timestamp: undefined,
@@ -370,18 +368,15 @@ const railWidth = () => {
 	return width
 }
 
-const renderShell = (defaultOpen: boolean) => (args: AgentSidebarProps) => (
-	<WorkspaceShell
-		defaultOpen={defaultOpen}
-		sidebar={<AgentSidebar {...args} />}
-	>
+const renderShell = (defaultOpen: boolean) => (args: AppSidebarProps) => (
+	<WorkspaceShell defaultOpen={defaultOpen} sidebar={<AppSidebar {...args} />}>
 		{null}
 	</WorkspaceShell>
 )
 
 const meta = preview.meta({
-	title: "Navigation/AgentSidebar",
-	component: AgentSidebar,
+	title: "Navigation/AppSidebar",
+	component: AppSidebar,
 	render: renderShell(true),
 	parameters: {
 		layout: "fullscreen",
@@ -1412,10 +1407,10 @@ export const WithUserOnRail = meta.story({
 
 export const DragRegion = meta.story({
 	args: { user: READER },
-	render: (args: AgentSidebarProps) => (
+	render: (args: AppSidebarProps) => (
 		<WorkspaceShell
 			defaultOpen
-			sidebar={<AgentSidebar {...args} data-tauri-drag-region="deep" />}
+			sidebar={<AppSidebar {...args} data-tauri-drag-region="deep" />}
 		>
 			{null}
 		</WorkspaceShell>
@@ -1491,7 +1486,7 @@ const settleFlush = async (carousel: HTMLElement) => {
 	await new Promise((resolve) => setTimeout(resolve, SETTLE))
 }
 
-const rostersAcross = (spaces: Space[]): Record<string, AgentSidebarBot[]> =>
+const rostersAcross = (spaces: Space[]): Record<string, AppSidebarBot[]> =>
 	Object.fromEntries(
 		spaces.map((space, rank) => [
 			space.id,
@@ -1505,14 +1500,14 @@ const FIVE_SPACES = SPACES.slice(0, 5)
 
 const FIVE_ROSTERS = rostersAcross(FIVE_SPACES)
 
-const LiveSpaces = (args: AgentSidebarProps) => {
+const LiveSpaces = (args: AppSidebarProps) => {
 	const [selectedSpaceId, setSelectedSpaceId] = useState(args.selectedSpaceId)
 
 	return (
 		<WorkspaceShell
 			defaultOpen
 			sidebar={
-				<AgentSidebar
+				<AppSidebar
 					{...args}
 					onSelectSpace={(id) => {
 						args.onSelectSpace?.(id)
@@ -2425,7 +2420,7 @@ export const WindowControlsReservedOnRail = meta.story({
 	},
 })
 
-const SECTIONS: AgentSidebarSection[] = [
+const SECTIONS: AppSidebarSection[] = [
 	{ id: "research", name: "Research" },
 	{ id: "shipping", name: "Shipping" },
 	{ id: "archive", name: "Archive" },
@@ -2440,7 +2435,7 @@ const PLACEMENTS: Record<string, string | null> = {
 	flint: "shipping",
 }
 
-const SECTIONED_ROSTER: AgentSidebarBot[] = ROSTER.slice(0, 6).map((bot) => ({
+const SECTIONED_ROSTER: AppSidebarBot[] = ROSTER.slice(0, 6).map((bot) => ({
 	...bot,
 	sectionId: PLACEMENTS[bot.id] ?? null,
 }))
@@ -3282,7 +3277,7 @@ export const SectionsPerSpace = meta.story({
 	},
 })
 
-const atRest = (bot: AgentSidebarBot): AgentSidebarBot => ({
+const atRest = (bot: AppSidebarBot): AppSidebarBot => ({
 	...bot,
 	status: undefined,
 	pose: undefined,
@@ -3300,7 +3295,7 @@ const PAIR = participantsOf("atlas", "beacon")
 
 const CROWD = participantsOf("atlas", "beacon", "cinder", "dune", "ember")
 
-const CONVERSATIONS: AgentSidebarConversation[] = [
+const CONVERSATIONS: AppSidebarConversation[] = [
 	{
 		id: "launch",
 		name: "Launch review",

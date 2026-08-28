@@ -1,15 +1,15 @@
 import { memo } from "react"
 
-import {
-	AssistantTurn,
-	CHAT_AVATAR_SIZE,
-	ChatTurnGroup,
-	type ChatTurnRun,
-	type ChatTurnState,
-	UserTurn,
-} from "@workspace/ui/components/chat-turn"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
+import {
+	AssistantTurn,
+	TURN_AVATAR_SIZE,
+	TurnGroup,
+	type TurnRun,
+	type TurnState,
+	UserTurn,
+} from "@workspace/ui/components/turn"
 
 import { FaceAvatar } from "@/components/face-avatar"
 import { TurnBody } from "@/components/turn-body"
@@ -23,8 +23,8 @@ import type { RefusedMessage } from "@/lib/conversations/conversation-controller
 type ThreadTurnProps = {
 	row: TranscriptRow
 	anchor: string
-	state: ChatTurnState
-	run?: ChatTurnRun
+	state: TurnState
+	run?: TurnRun
 	bare?: boolean
 	botId?: string
 	author?: MessageAuthor
@@ -91,7 +91,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			author={author}
 			avatar={
 				avatarFace ? (
-					<FaceAvatar face={avatarFace} size={CHAT_AVATAR_SIZE} />
+					<FaceAvatar face={avatarFace} size={TURN_AVATAR_SIZE} />
 				) : undefined
 			}
 			bare={bare}
@@ -113,7 +113,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 type QueuedTurnProps = {
 	entry: OutboxEntry
 	controller: ChatController
-	run?: ChatTurnRun
+	run?: TurnRun
 }
 
 export const QueuedTurn = memo(function QueuedTurn({
@@ -148,7 +148,7 @@ export const RefusedTurn = ({
 	repliedTo,
 	onSendAgain,
 }: RefusedTurnProps) => (
-	<ChatTurnGroup>
+	<TurnGroup>
 		<UserTurn
 			copyText={message.text}
 			onRetry={() => onSendAgain(message.id)}
@@ -157,5 +157,5 @@ export const RefusedTurn = ({
 		>
 			<TurnBody {...messageWithAttachments(message.text)} />
 		</UserTurn>
-	</ChatTurnGroup>
+	</TurnGroup>
 )

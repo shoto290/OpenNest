@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 
-import { ChatNotice } from "@workspace/ui/components/chat-notice"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
+import { Notice } from "@workspace/ui/components/notice"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { describeTransportError } from "@/lib/agent/messages"
@@ -28,7 +28,7 @@ export const ThreadNotice = ({
 	}
 
 	return (
-		<ChatNotice
+		<Notice
 			description={describeAttachmentError(t, refusal)}
 			onDismiss={onDismissRefusal}
 			title={t("screen.attachmentsRefused")}
@@ -52,7 +52,7 @@ export const TransportNotice = ({
 	const stale = needsFreshSession(error.error)
 
 	return (
-		<ChatNotice
+		<Notice
 			description={describeTransportError(t, error.error)}
 			onDismiss={() => onDismiss(error.id)}
 			retry={
@@ -67,7 +67,7 @@ export const TransportNotice = ({
 }
 
 type HandoverNoticeProps = {
-	pair: [ConversationBot, ConversationBot]
+	pair: [RosterBot, RosterBot]
 	onStop: () => void
 }
 
@@ -76,7 +76,7 @@ export const HandoverNotice = ({ pair, onStop }: HandoverNoticeProps) => {
 	const named = { first: pair[0].name, second: pair[1].name }
 
 	return (
-		<ChatNotice
+		<Notice
 			action={{ label: t("screen.handover.stop"), onClick: onStop }}
 			description={t("screen.handover.description")}
 			title={t("screen.handover.title", named)}

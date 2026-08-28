@@ -3,18 +3,12 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { FRAME_POLL, settled } from "@workspace/storybook/story-utils"
-import {
-	AgentSidebar,
-	type AgentSidebarBot,
-} from "@workspace/ui/components/agents/agent-sidebar"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
-import { ChatLayout } from "@workspace/ui/components/chat-layout"
 import {
-	AssistantTurn,
-	CHAT_AVATAR_SIZE,
-	UserTurn,
-} from "@workspace/ui/components/chat-turn"
+	AppSidebar,
+	type AppSidebarBot,
+} from "@workspace/ui/components/app-sidebar"
+import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -34,12 +28,18 @@ import {
 	SIDEBAR_WIDTH_STEP,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import { ThreadLayout } from "@workspace/ui/components/thread-layout"
+import {
+	AssistantTurn,
+	TURN_AVATAR_SIZE,
+	UserTurn,
+} from "@workspace/ui/components/turn"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
 
-const ROSTER: AgentSidebarBot[] = [
+const ROSTER: AppSidebarBot[] = [
 	{
 		id: "atlas",
 		name: "Atlas",
@@ -73,7 +73,7 @@ const SIDEBAR = (
 )
 
 const chat = (leading?: ReactNode) => (
-	<ChatLayout
+	<ThreadLayout
 		header={
 			<AppHeader
 				leading={leading}
@@ -85,11 +85,11 @@ const chat = (leading?: ReactNode) => (
 		<UserTurn>How is this workspace laid out?</UserTurn>
 		<AssistantTurn
 			copyText={ANSWER}
-			avatar={<BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />}
+			avatar={<BotAvatar animated={false} size={TURN_AVATAR_SIZE} />}
 		>
 			{ANSWER}
 		</AssistantTurn>
-	</ChatLayout>
+	</ThreadLayout>
 )
 
 const CHAT = chat()
@@ -110,7 +110,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The application shell: a full-height sidebar column and the main column beside it. It is a thin composition over the sidebar foundation — the provider owns the open state and the Cmd/Ctrl+B shortcut, the sidebar owns its own collapse, and the shell only hands the room that is left to the main slot. Whatever fills that slot keeps its own scroll boundary, so a `ChatLayout` still scrolls its transcript alone while the columns on either side stay put.",
+					"The application shell: a full-height sidebar column and the main column beside it. It is a thin composition over the sidebar foundation — the provider owns the open state and the Cmd/Ctrl+B shortcut, the sidebar owns its own collapse, and the shell only hands the room that is left to the main slot. Whatever fills that slot keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the columns on either side stay put.",
 			},
 		},
 	},
@@ -178,7 +178,7 @@ export const OffCanvas = meta.story({
 	globals: { viewport: { value: "mobile" } },
 	args: {
 		children: CHAT_WITH_TRIGGER,
-		sidebar: <AgentSidebar bots={ROSTER} selectedBotId="atlas" />,
+		sidebar: <AppSidebar bots={ROSTER} selectedBotId="atlas" />,
 	},
 	parameters: {
 		docs: {

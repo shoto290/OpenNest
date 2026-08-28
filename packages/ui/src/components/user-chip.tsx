@@ -1,7 +1,7 @@
 "use client"
 
+import { Avatar, displayNameOf } from "@workspace/ui/components/avatar"
 import { AnimatedSidebarMenuButton } from "@workspace/ui/components/motion/animated-sidebar"
-import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import { cn } from "@workspace/ui/lib/utils"
 
 const CHIP =
@@ -23,7 +23,7 @@ const UserChip = ({ name, image, onOpen, className }: UserChipProps) => {
 	return (
 		<AnimatedSidebarMenuButton
 			className={cn(CHIP, className)}
-			icon={<UserAvatar image={image} name={displayName} />}
+			icon={<Avatar image={image} name={displayName} />}
 			label={displayName}
 			onSelect={onOpen}
 		>

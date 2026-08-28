@@ -3,8 +3,8 @@
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { useConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
+import { useRosterBot } from "@workspace/ui/components/roster"
 import { cn } from "@workspace/ui/lib/utils"
 
 const MENTION_AVATAR_SIZE = 16
@@ -14,14 +14,14 @@ const MENTION_CLASS =
 
 const UNKNOWN_CLASS = "pl-2 text-current/70"
 
-type BotMentionProps = {
+type MentionProps = {
 	botId: string
 	className?: string
 }
 
-const BotMention = ({ botId, className }: BotMentionProps) => {
+const Mention = ({ botId, className }: MentionProps) => {
 	const { t } = useTranslation("chat")
-	const bot = useConversationBot(botId)
+	const bot = useRosterBot(botId)
 
 	return (
 		<span
@@ -50,4 +50,4 @@ const BotMention = ({ botId, className }: BotMentionProps) => {
 	)
 }
 
-export { BotMention, type BotMentionProps }
+export { Mention, type MentionProps }

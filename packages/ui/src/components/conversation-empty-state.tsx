@@ -2,8 +2,8 @@ import type { ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ConversationEmptyStateProps = Omit<
@@ -11,7 +11,7 @@ type ConversationEmptyStateProps = Omit<
 	"children" | "title"
 > & {
 	title: string
-	bots: ConversationBot[]
+	bots: RosterBot[]
 }
 
 const MARK_SIZE = 56

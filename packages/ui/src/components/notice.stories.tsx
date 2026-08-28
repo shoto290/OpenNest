@@ -2,19 +2,16 @@ import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { listExhaustively } from "@workspace/storybook/story-utils"
-import {
-	ChatNotice,
-	type ChatNoticeTone,
-} from "@workspace/ui/components/chat-notice"
+import { Notice, type NoticeTone } from "@workspace/ui/components/notice"
 
-const CHAT_NOTICE_TONES = listExhaustively<ChatNoticeTone>({
+const CHAT_NOTICE_TONES = listExhaustively<NoticeTone>({
 	warning: true,
 	error: true,
 })
 
 const meta = preview.meta({
-	title: "Feedback/ChatNotice",
-	component: ChatNotice,
+	title: "Feedback/Notice",
+	component: Notice,
 	parameters: {
 		layout: "centered",
 		docs: {
@@ -63,7 +60,7 @@ export const Variants = meta.story({
 	render: () => (
 		<div className="flex flex-col gap-3">
 			{CHAT_NOTICE_TONES.map((tone) => (
-				<ChatNotice
+				<Notice
 					key={tone}
 					tone={tone}
 					title={`Tone: ${tone}`}
@@ -176,7 +173,7 @@ export const RetryExhausted = meta.story({
 export const LongContent = meta.story({
 	args: {
 		title:
-			"The last turn failed while writing packages/ui/src/components/chat-notice.tsx",
+			"The last turn failed while writing packages/ui/src/components/notice.tsx",
 		description:
 			"The model stopped responding after the tool call returned, while the edit was still being applied to a long path deep in the workspace. Nothing was written to disk, the transport is still connected, and the same prompt can be sent again once the operator has read the diagnostic below.",
 		detail:

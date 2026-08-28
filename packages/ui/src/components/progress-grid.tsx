@@ -18,7 +18,7 @@ const GRID_CELLS = [
 	{ id: "bottom-right", delay: 1.12 },
 ]
 
-export interface AgentProgressProps {
+export interface ProgressGridProps {
 	label?: string
 	indicator?: ReactNode
 	elapsedSeconds?: number
@@ -34,7 +34,7 @@ function formatElapsed(totalSeconds: number) {
 	return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
 }
 
-function ProgressGrid() {
+function Cells() {
 	const reduce = useReducedMotion() ?? false
 
 	return (
@@ -59,14 +59,14 @@ function ProgressGrid() {
 	)
 }
 
-export function AgentProgress({
+export function ProgressGrid({
 	label = "Churning",
 	indicator,
 	elapsedSeconds,
 	initialSeconds = 0,
 	running = true,
 	className,
-}: AgentProgressProps) {
+}: ProgressGridProps) {
 	const [internalSeconds, setInternalSeconds] = useState(initialSeconds)
 	const startedAt = useRef<number | undefined>(undefined)
 	startedAt.current ??= performance.now() - initialSeconds * 1000
@@ -94,7 +94,7 @@ export function AgentProgress({
 				className,
 			)}
 		>
-			{indicator === undefined ? <ProgressGrid /> : indicator}
+			{indicator === undefined ? <Cells /> : indicator}
 			<span className="font-medium font-sans">{label}</span>
 			<span aria-hidden="true" className="tabular-nums">
 				{formatElapsed(elapsed)}

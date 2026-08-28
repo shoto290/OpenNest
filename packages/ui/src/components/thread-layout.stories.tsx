@@ -5,22 +5,22 @@ import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
-import {
-	ChatLayout,
-	type ChatLayoutProps,
-} from "@workspace/ui/components/chat-layout"
-import { ChatNotice } from "@workspace/ui/components/chat-notice"
-import {
-	AssistantTurn,
-	CHAT_AVATAR_SIZE,
-	UserTurn,
-} from "@workspace/ui/components/chat-turn"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
+import { Notice } from "@workspace/ui/components/notice"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import {
+	ThreadLayout,
+	type ThreadLayoutProps,
+} from "@workspace/ui/components/thread-layout"
 import {
 	ToolApproval,
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
+import {
+	AssistantTurn,
+	TURN_AVATAR_SIZE,
+	UserTurn,
+} from "@workspace/ui/components/turn"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
@@ -45,7 +45,7 @@ const CONVERSATION = (
 		<UserTurn>How is this workspace laid out?</UserTurn>
 		<AssistantTurn
 			copyText={ANSWER}
-			avatar={<BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />}
+			avatar={<BotAvatar animated={false} size={TURN_AVATAR_SIZE} />}
 		>
 			{ANSWER}
 		</AssistantTurn>
@@ -56,17 +56,17 @@ const SCROLLING_TRANSCRIPT = LONG_TRANSCRIPT.map((question) => (
 	<UserTurn key={question}>{question}</UserTurn>
 ))
 
-const RegionProbe = (props: ChatLayoutProps) => {
+const RegionProbe = (props: ThreadLayoutProps) => {
 	const [region, setRegion] = useState<HTMLDivElement | null>(null)
 	const [composer, setComposer] = useState<HTMLTextAreaElement | null>(null)
 	const holdsComposer = region?.contains(composer) ?? false
 
 	return (
-		<ChatLayout
+		<ThreadLayout
 			{...props}
 			rootRef={setRegion}
 			notice={
-				<ChatNotice
+				<Notice
 					tone="warning"
 					title={holdsComposer ? "Composer inside" : "Composer outside"}
 					description="What the handed-back region contains."
@@ -78,8 +78,8 @@ const RegionProbe = (props: ChatLayoutProps) => {
 }
 
 const meta = preview.meta({
-	title: "Layout/ChatLayout",
-	component: ChatLayout,
+	title: "Layout/ThreadLayout",
+	component: ThreadLayout,
 	parameters: {
 		layout: "fullscreen",
 		docs: {
@@ -214,7 +214,7 @@ export const Error = meta.story({
 	args: {
 		header: <AppHeader trailing={<ConnectionStatus state="crashed" />} />,
 		notice: (
-			<ChatNotice
+			<Notice
 				title="Claude Code stopped"
 				description="Claude Code exited (code 1)."
 				retry={{ label: "Restart session", onRetry: fn() }}

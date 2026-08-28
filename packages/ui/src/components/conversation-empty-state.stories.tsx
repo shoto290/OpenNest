@@ -5,22 +5,22 @@ import {
 	botIdentityAvatars,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
+import type { RosterBot } from "@workspace/ui/components/roster"
 
-const KEEPER: ConversationBot = {
+const KEEPER: RosterBot = {
 	id: "bot_4f8c21",
 	name: "Nest Keeper",
 	animal: "rabbit",
 	blot: "blue",
 }
-const SCOUT: ConversationBot = {
+const SCOUT: RosterBot = {
 	id: "bot_9a2b40",
 	name: "Twig Scout",
 	animal: "mouse",
 	blot: "orange",
 }
-const WARDEN: ConversationBot = {
+const WARDEN: RosterBot = {
 	id: "bot_1c7d55",
 	name: "Shell Warden",
 	animal: "koala",

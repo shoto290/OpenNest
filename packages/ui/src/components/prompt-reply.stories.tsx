@@ -84,7 +84,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The frame the composer wears while the next prompt answers one message: it wraps the composer rather than sitting inside it, so the quoted message reads above the pill and the two are one block. It holds the reply glyph, the quoted author with the first line of what they wrote, and the one control that takes the reply back. Its corner is the composer's own plus the padding around it, so the two curves stay concentric whether the composer is a pill or has grown into its expanded shape. It draws only — the host holds which message is being answered, writes the excerpt, moves the transcript when the quote is pressed and drops the frame when the cross is. `AI/MessageQuote` is the frame underneath it, `AI/ChatTurn → Quoted` is the same frame around a bubble.",
+					"The frame the composer wears while the next prompt answers one message: it wraps the composer rather than sitting inside it, so the quoted message reads above the pill and the two are one block. It holds the reply glyph, the quoted author with the first line of what they wrote, and the one control that takes the reply back. Its corner is the composer's own plus the padding around it, so the two curves stay concentric whether the composer is a pill or has grown into its expanded shape. It draws only — the host holds which message is being answered, writes the excerpt, moves the transcript when the quote is pressed and drops the frame when the cross is. `AI/MessageQuote` is the frame underneath it, `AI/Turn → Quoted` is the same frame around a bubble.",
 			},
 		},
 	},

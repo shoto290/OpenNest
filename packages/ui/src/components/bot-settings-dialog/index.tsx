@@ -5,8 +5,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
+	type ActivityIndicatorKind,
 	BotIdentityAvatar,
-	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
 import {
@@ -90,7 +90,7 @@ type BotSettingsDialogProps = {
 	onDelete: () => void
 	showDanger?: boolean
 	working?: boolean
-	workingKind?: BotWorkingKind
+	workingKind?: ActivityIndicatorKind
 	className?: string
 }
 

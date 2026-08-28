@@ -15,9 +15,9 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Icons } from "@workspace/ui/components/icons"
 import { MARKDOWN_PROSE_CLASS } from "@workspace/ui/components/markdown/prose"
+import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import { SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 

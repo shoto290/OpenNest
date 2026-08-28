@@ -1,4 +1,4 @@
-import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
+import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
 	BLOT_TINTS,
 	type BotCommitItem,
@@ -200,7 +200,7 @@ export const toRosterBots = (
 	bots: Bot[],
 	activity: RosterActivity,
 	now: number,
-): AgentSidebarBot[] =>
+): AppSidebarBot[] =>
 	mostRecentFirst(bots, activity).map((bot) => {
 		const working = activity.working[bot.id]
 		const preview = activity.previews[bot.id]

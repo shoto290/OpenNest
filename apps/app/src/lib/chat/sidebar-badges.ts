@@ -1,4 +1,4 @@
-import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
+import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import type { BotBadge as ShownBadge } from "@workspace/ui/components/badge"
 
 import type { BotBadge } from "./bot-badge"
@@ -22,11 +22,11 @@ export const withBadges = <Row extends BadgedRow>(
 ): Badged<Row>[] =>
 	rows.map((row) => ({ ...row, badge: shownBadge(badges[row.id]) }))
 
-const strongestBadge = (bots: AgentSidebarBot[]): ShownBadge | undefined =>
+const strongestBadge = (bots: AppSidebarBot[]): ShownBadge | undefined =>
 	STRONGEST_FIRST.find((badge) => bots.some((bot) => bot.badge === badge))
 
 export const toSpaceBadges = (
-	botsBySpaceId: Record<string, AgentSidebarBot[]>,
+	botsBySpaceId: Record<string, AppSidebarBot[]>,
 ): Record<string, ShownBadge> => {
 	const badges: Record<string, ShownBadge> = {}
 	for (const [spaceId, bots] of Object.entries(botsBySpaceId)) {

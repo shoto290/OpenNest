@@ -1,9 +1,9 @@
-import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
+import type { ActivityIndicatorKind } from "@workspace/ui/components/activity-indicator"
 
 import type { ActivityEvent, ActivityStatus } from "../agent/contract"
 
 export type WorkingState = {
-	kind: BotWorkingKind
+	kind: ActivityIndicatorKind
 	label?: string
 }
 
@@ -49,7 +49,7 @@ const runningActivityIn = (
 			activity.status === "running" || activity.status === "pending",
 	)
 
-const kindForTool = (title: string): BotWorkingKind => {
+const kindForTool = (title: string): ActivityIndicatorKind => {
 	const tool = title.split(/[\s·:(]/, 1)[0].toLowerCase()
 	if (SEARCH_TOOLS.has(tool)) return "searching"
 	if (WRITE_TOOLS.has(tool)) return "writing"

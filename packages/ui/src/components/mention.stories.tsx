@@ -2,13 +2,13 @@ import type { ReactNode } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { BotMention } from "@workspace/ui/components/bot-mention"
-import { ConversationBotsProvider } from "@workspace/ui/components/conversation-bots"
 import { Markdown } from "@workspace/ui/components/markdown"
+import { Mention } from "@workspace/ui/components/mention"
 import {
 	CONVERSATION_BOTS,
 	LONG_NAMED_BOTS,
 } from "@workspace/ui/components/new-conversation-dialog/bots.fixtures"
+import { RosterProvider } from "@workspace/ui/components/roster"
 
 const ROOM = [...CONVERSATION_BOTS.slice(0, 3), ...LONG_NAMED_BOTS]
 
@@ -29,23 +29,23 @@ const spaceAroundAvatar = (canvasElement: HTMLElement) => {
 }
 
 const Conversation = ({ children }: { children: ReactNode }) => (
-	<ConversationBotsProvider bots={ROOM}>
+	<RosterProvider bots={ROOM}>
 		<p className="max-w-md text-sm leading-6">{children}</p>
-	</ConversationBotsProvider>
+	</RosterProvider>
 )
 
 const HANDOVER =
 	"I stopped at the failing migration — <@bot-basile> owns that script, and <@bot-ghost> wrote the fixture it reads."
 
 const meta = preview.meta({
-	title: "AI/BotMention",
-	component: BotMention,
+	title: "AI/Mention",
+	component: Mention,
 	parameters: {
 		layout: "padded",
 		docs: {
 			description: {
 				component:
-					"A bot named inside the words of a message. The transcript carries a mention as `<@bot-id>` in the text and this is what that id becomes: a chip in the flow of the sentence, avatar and name together, tinted from the colour it inherits so it reads the same in a bot's bubble and in the reader's own. The id is resolved against the bots the conversation holds — `ConversationBotsProvider` names them once around the transcript, so nothing threads a roster down to each message. An id the conversation does not know still draws a chip rather than leaking the raw `<@…>` at the reader: a silhouette and *Unknown bot*, which is what a mention of a bot that left looks like. The name truncates instead of pushing the line, and the avatar is hidden from screen readers so the mention is announced as the name alone. `Markdown` does the parsing, so a mention written inside code stays literal.",
+					"A bot named inside the words of a message. The transcript carries a mention as `<@bot-id>` in the text and this is what that id becomes: a chip in the flow of the sentence, avatar and name together, tinted from the colour it inherits so it reads the same in a bot's bubble and in the reader's own. The id is resolved against the bots the conversation holds — `RosterProvider` names them once around the transcript, so nothing threads a roster down to each message. An id the conversation does not know still draws a chip rather than leaking the raw `<@…>` at the reader: a silhouette and *Unknown bot*, which is what a mention of a bot that left looks like. The name truncates instead of pushing the line, and the avatar is hidden from screen readers so the mention is announced as the name alone. `Markdown` does the parsing, so a mention written inside code stays literal.",
 			},
 		},
 	},
@@ -58,7 +58,7 @@ const meta = preview.meta({
 	},
 	render: (args) => (
 		<Conversation>
-			Ask <BotMention {...args} /> to take the next pass.
+			Ask <Mention {...args} /> to take the next pass.
 		</Conversation>
 	),
 })
@@ -128,11 +128,11 @@ export const InText = meta.story({
 		},
 	},
 	render: () => (
-		<ConversationBotsProvider bots={ROOM}>
+		<RosterProvider bots={ROOM}>
 			<div className="max-w-md">
 				<Markdown>{HANDOVER}</Markdown>
 			</div>
-		</ConversationBotsProvider>
+		</RosterProvider>
 	),
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Basile")).toBeVisible()
@@ -150,13 +150,13 @@ export const InCode = meta.story({
 		},
 	},
 	render: () => (
-		<ConversationBotsProvider bots={ROOM}>
+		<RosterProvider bots={ROOM}>
 			<div className="max-w-md">
 				<Markdown>
 					{"Write `<@bot-atlas>` to name Atlas in a message."}
 				</Markdown>
 			</div>
-		</ConversationBotsProvider>
+		</RosterProvider>
 	),
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByText("<@bot-atlas>")).toBeVisible()

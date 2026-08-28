@@ -2,10 +2,6 @@ import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
-import {
-	type MessageSide,
-	MessageSideContext,
-} from "@workspace/ui/components/agents/message-context"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	MessageAction,
@@ -16,6 +12,10 @@ import {
 	type MessageBubbleAlign,
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
+import {
+	type MessageSide,
+	MessageSideContext,
+} from "@workspace/ui/components/message-side-context"
 
 const ANSWER =
 	"Two packages: the design system holds every visual, the shell composes them."

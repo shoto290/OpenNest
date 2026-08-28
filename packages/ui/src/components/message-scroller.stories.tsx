@@ -3,12 +3,12 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Button } from "@workspace/ui/components/button"
-import { AssistantTurn, UserTurn } from "@workspace/ui/components/chat-turn"
 import {
 	MessageScroller,
 	type MessageScrollerHandle,
 	type MessageScrollerProps,
 } from "@workspace/ui/components/message-scroller"
+import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface TranscriptEntry {

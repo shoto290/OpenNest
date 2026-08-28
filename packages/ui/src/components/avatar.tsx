@@ -21,19 +21,19 @@ const initialsOf = (name: string) =>
 		.map((word) => Array.from(word)[0])
 		.join("")
 
-type UserAvatarProps = {
+type AvatarProps = {
 	name?: string
 	image?: string
 	size?: number
 	className?: string
 }
 
-const UserAvatar = ({
+const Avatar = ({
 	name,
 	image,
 	size = DEFAULT_SIZE,
 	className,
-}: UserAvatarProps) => (
+}: AvatarProps) => (
 	<span
 		className={cn(AVATAR_CLASS, className)}
 		data-slot="user-avatar"
@@ -53,4 +53,4 @@ const UserAvatar = ({
 	</span>
 )
 
-export { displayNameOf, UserAvatar, type UserAvatarProps }
+export { Avatar, type AvatarProps, displayNameOf }

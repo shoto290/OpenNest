@@ -1,12 +1,12 @@
 import { expect, fn, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { AssistantTurn, UserTurn } from "@workspace/ui/components/chat-turn"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	MessageBubble,
 	MessageBubbleContent,
 } from "@workspace/ui/components/message-bubble"
+import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 
 const HEADINGS = `# Nest report
 ## Occupants

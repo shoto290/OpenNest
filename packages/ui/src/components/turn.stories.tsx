@@ -3,23 +3,20 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
+import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
-import { BotWorking } from "@workspace/ui/components/bot-working"
 import { Button } from "@workspace/ui/components/button"
-import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
-import {
-	AssistantTurn,
-	CHAT_AVATAR_SIZE,
-	ChatTurnGroup,
-	type ChatTurnState,
-	UserTurn,
-} from "@workspace/ui/components/chat-turn"
-import {
-	type ConversationBot,
-	ConversationBotsProvider,
-} from "@workspace/ui/components/conversation-bots"
+import { MarkProvider } from "@workspace/ui/components/mark-context"
 import { Markdown } from "@workspace/ui/components/markdown"
 import type { MessageAuthor } from "@workspace/ui/components/message"
+import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
+import {
+	AssistantTurn,
+	TURN_AVATAR_SIZE,
+	TurnGroup,
+	type TurnState,
+	UserTurn,
+} from "@workspace/ui/components/turn"
 
 const ANSWER =
 	"The workspace has two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell. Nothing crosses that line in the other direction."
@@ -103,7 +100,7 @@ const GONE: MessageAuthor = {
 	isDeleted: true,
 }
 
-const ROOM: ConversationBot[] = [LEAD, SECOND]
+const ROOM: RosterBot[] = [LEAD, SECOND]
 
 const firstCharacterLeft = (element: HTMLElement) =>
 	element.getBoundingClientRect().left +
@@ -124,14 +121,14 @@ const WORD_OPENING = "Basile has the fixture."
 const GONE_REPLY =
 	"The fixture still names the old columns. Somebody will have to rewrite it."
 
-const TURN_STATES: ChatTurnState[] = [
+const TURN_STATES: TurnState[] = [
 	"streaming",
 	"complete",
 	"cancelled",
 	"failed",
 ]
 
-const Avatar = () => <BotAvatar animated={false} size={CHAT_AVATAR_SIZE} />
+const Avatar = () => <BotAvatar animated={false} size={TURN_AVATAR_SIZE} />
 
 const MARKED_BOT_ID = "bot-lyra"
 
@@ -147,7 +144,7 @@ const MarkHandoff = () => {
 	const [delivered, setDelivered] = useState(false)
 
 	return (
-		<ChatMarkProvider>
+		<MarkProvider>
 			<div className="mx-auto flex max-w-2xl flex-col gap-6">
 				<Button
 					size="sm"
@@ -168,10 +165,10 @@ const MarkHandoff = () => {
 						{ANSWER}
 					</AssistantTurn>
 				) : (
-					<BotWorking botId={MARKED_BOT_ID} kind="thinking" />
+					<ActivityIndicator botId={MARKED_BOT_ID} kind="thinking" />
 				)}
 			</div>
-		</ChatMarkProvider>
+		</MarkProvider>
 	)
 }
 
@@ -182,7 +179,7 @@ const MarkedHistory = () => {
 	const [working, setWorking] = useState(false)
 
 	return (
-		<ChatMarkProvider>
+		<MarkProvider>
 			<div className="mx-auto flex max-w-2xl flex-col gap-6">
 				<Button
 					size="sm"
@@ -193,7 +190,7 @@ const MarkedHistory = () => {
 					{working ? "Land the turn" : "Start a new turn"}
 				</Button>
 				<UserTurn>How is this workspace laid out?</UserTurn>
-				<ChatTurnGroup>
+				<TurnGroup>
 					<AssistantTurn
 						avatar={<Avatar />}
 						botId={MARKED_BOT_ID}
@@ -201,9 +198,9 @@ const MarkedHistory = () => {
 					>
 						{ANSWER}
 					</AssistantTurn>
-				</ChatTurnGroup>
+				</TurnGroup>
 				<UserTurn>And where do the tests live?</UserTurn>
-				<ChatTurnGroup carriesMark>
+				<TurnGroup carriesMark>
 					<AssistantTurn
 						avatar={working ? null : <Avatar />}
 						botId={MARKED_BOT_ID}
@@ -211,22 +208,24 @@ const MarkedHistory = () => {
 					>
 						{TESTS}
 					</AssistantTurn>
-				</ChatTurnGroup>
-				{working ? <BotWorking botId={MARKED_BOT_ID} kind="thinking" /> : null}
+				</TurnGroup>
+				{working ? (
+					<ActivityIndicator botId={MARKED_BOT_ID} kind="thinking" />
+				) : null}
 			</div>
-		</ChatMarkProvider>
+		</MarkProvider>
 	)
 }
 
 const meta = preview.meta({
-	title: "AI/ChatTurn",
+	title: "AI/Turn",
 	component: AssistantTurn,
 	parameters: {
 		layout: "padded",
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `ChatTurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -261,13 +260,13 @@ export const Default = meta.story({
 export const Run = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<ChatTurnGroup>
+			<TurnGroup>
 				<UserTurn copyText="How is this workspace laid out?">
 					How is this workspace laid out?
 				</UserTurn>
 				<UserTurn copyText="Keep it short.">Keep it short.</UserTurn>
-			</ChatTurnGroup>
-			<ChatTurnGroup>
+			</TurnGroup>
+			<TurnGroup>
 				{RUN.map((paragraph, index) => (
 					<AssistantTurn
 						key={paragraph}
@@ -277,7 +276,7 @@ export const Run = meta.story({
 						{paragraph}
 					</AssistantTurn>
 				))}
-			</ChatTurnGroup>
+			</TurnGroup>
 		</div>
 	),
 	parameters: {
@@ -302,7 +301,7 @@ export const Mark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to watch the bot's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Both name the same bot: the mark is that bot's, inside this transcript — `ChatLayout` names the transcript for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble simply appears beside it while the row itself holds still, and that with reduced motion the mark simply arrives.",
+					"Reach for this to watch the bot's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Both name the same bot: the mark is that bot's, inside this transcript — `ThreadLayout` names the transcript for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble simply appears beside it while the row itself holds still, and that with reduced motion the mark simply arrives.",
 			},
 		},
 	},
@@ -405,12 +404,12 @@ export const Table = meta.story({
 			<UserTurn copyText="What does the guide cover?">
 				What does the guide cover?
 			</UserTurn>
-			<ChatTurnGroup>
+			<TurnGroup>
 				<AssistantTurn copyText={TABLE_INTRO}>{TABLE_INTRO}</AssistantTurn>
 				<AssistantTurn bare copyText={TABLE} avatar={<Avatar />}>
 					<Markdown>{TABLE}</Markdown>
 				</AssistantTurn>
-			</ChatTurnGroup>
+			</TurnGroup>
 		</div>
 	),
 	parameters: {
@@ -689,26 +688,26 @@ export const Authored = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation held by several bots, where every row has to say who wrote it. Hand `AssistantTurn` an `author` and it names the bot above the bubble and draws that bot's avatar in the gutter — the row keeps the gutter it always had, so nothing is passed twice. The bot that leads wears a crown beside its name. In a run the name is written once, on the row that opens it, while the avatar stays on the row that closes it: the block reads as one bot speaking, not as the same name repeated. `<@bot-id>` in the text is drawn as a chip by `Markdown`, resolved against `ConversationBotsProvider`, and an id the conversation does not know still draws as an unknown bot rather than leaking the raw text. Check that Atlas is named once over its two rows, that the crown is on Atlas alone, and that a message from a conversation with a single bot — every other story here — is untouched by all of this.",
+					"A conversation held by several bots, where every row has to say who wrote it. Hand `AssistantTurn` an `author` and it names the bot above the bubble and draws that bot's avatar in the gutter — the row keeps the gutter it always had, so nothing is passed twice. The bot that leads wears a crown beside its name. In a run the name is written once, on the row that opens it, while the avatar stays on the row that closes it: the block reads as one bot speaking, not as the same name repeated. `<@bot-id>` in the text is drawn as a chip by `Markdown`, resolved against `RosterProvider`, and an id the conversation does not know still draws as an unknown bot rather than leaking the raw text. Check that Atlas is named once over its two rows, that the crown is on Atlas alone, and that a message from a conversation with a single bot — every other story here — is untouched by all of this.",
 			},
 		},
 	},
 	render: () => (
-		<ConversationBotsProvider bots={ROOM}>
+		<RosterProvider bots={ROOM}>
 			<div className="mx-auto flex max-w-2xl flex-col gap-6">
 				<UserTurn>Who is taking the migration?</UserTurn>
-				<ChatTurnGroup>
+				<TurnGroup>
 					{LEAD_RUN.map((paragraph) => (
 						<AssistantTurn key={paragraph} author={LEAD} copyText={paragraph}>
 							<Markdown>{paragraph}</Markdown>
 						</AssistantTurn>
 					))}
-				</ChatTurnGroup>
+				</TurnGroup>
 				<AssistantTurn author={SECOND} copyText={SECOND_REPLY}>
 					<Markdown>{SECOND_REPLY}</Markdown>
 				</AssistantTurn>
 			</div>
-		</ConversationBotsProvider>
+		</RosterProvider>
 	),
 	play: async ({ canvas, canvasElement }) => {
 		const named = [
@@ -746,7 +745,7 @@ export const OpenedByMention = meta.story({
 		},
 	},
 	render: () => (
-		<ConversationBotsProvider bots={ROOM}>
+		<RosterProvider bots={ROOM}>
 			<div className="mx-auto flex max-w-2xl flex-col gap-6">
 				<AssistantTurn copyText={MENTION_OPENING} avatar={<Avatar />}>
 					<Markdown>{MENTION_OPENING}</Markdown>
@@ -755,7 +754,7 @@ export const OpenedByMention = meta.story({
 					<Markdown>{WORD_OPENING}</Markdown>
 				</AssistantTurn>
 			</div>
-		</ConversationBotsProvider>
+		</RosterProvider>
 	),
 	play: async ({ canvas, canvasElement }) => {
 		const chip = canvasElement.querySelector<HTMLElement>(
@@ -791,13 +790,13 @@ export const DeletedAuthor = meta.story({
 		},
 	},
 	render: () => (
-		<ConversationBotsProvider bots={ROOM}>
+		<RosterProvider bots={ROOM}>
 			<div className="mx-auto flex max-w-2xl flex-col gap-6">
 				<AssistantTurn author={GONE} copyText={GONE_REPLY}>
 					{GONE_REPLY}
 				</AssistantTurn>
 			</div>
-		</ConversationBotsProvider>
+		</RosterProvider>
 	),
 	play: async ({ canvas, canvasElement }) => {
 		await expect(

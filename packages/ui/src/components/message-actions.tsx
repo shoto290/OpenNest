@@ -2,8 +2,8 @@
 
 import { type ReactNode, useContext } from "react"
 
-import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
 import { Button } from "@workspace/ui/components/button"
+import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import {
 	ContextMenu,
 	ContextMenuContent,

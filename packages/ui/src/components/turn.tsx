@@ -11,8 +11,8 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
+import { useMarkId } from "@workspace/ui/components/mark-context"
 import {
 	Message,
 	MessageAuthor,
@@ -42,17 +42,17 @@ import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
-const CHAT_AVATAR_SIZE = 40
+const TURN_AVATAR_SIZE = 40
 
-type ChatTurnState = "streaming" | "complete" | "cancelled" | "failed"
+type TurnState = "streaming" | "complete" | "cancelled" | "failed"
 
-type UserTurnState = ChatTurnState | "queued"
+type UserTurnState = TurnState | "queued"
 
-type ChatTurnRun = "single" | "first" | "middle" | "last"
+type TurnRun = "single" | "first" | "middle" | "last"
 
-type InjectedTurnProps = { run?: ChatTurnRun; carriesMark?: boolean }
+type InjectedTurnProps = { run?: TurnRun; carriesMark?: boolean }
 
-interface ChatTurnGroupProps {
+interface TurnGroupProps {
 	carriesMark?: boolean
 	messageId?: string
 	children: ReactNode
@@ -62,7 +62,7 @@ interface ChatTurnGroupProps {
 interface UserTurnProps {
 	children: ReactNode
 	state?: UserTurnState
-	run?: ChatTurnRun
+	run?: TurnRun
 	copyText?: string
 	messageId?: string
 	repliedTo?: QuotedMessage
@@ -76,8 +76,8 @@ interface UserTurnProps {
 
 interface AssistantTurnProps {
 	children: ReactNode
-	state?: ChatTurnState
-	run?: ChatTurnRun
+	state?: TurnState
+	run?: TurnRun
 	copyText?: string
 	messageId?: string
 	repliedTo?: QuotedMessage
@@ -116,13 +116,13 @@ const RUN_RADIUS = {
 		middle: "rounded-tl-md rounded-bl-md",
 		last: "rounded-tl-md",
 	},
-} satisfies Record<"user" | "assistant", Record<ChatTurnRun, string>>
+} satisfies Record<"user" | "assistant", Record<TurnRun, string>>
 
-const opensRun = (run: ChatTurnRun) => run === "single" || run === "first"
+const opensRun = (run: TurnRun) => run === "single" || run === "first"
 
-const closesRun = (run: ChatTurnRun) => run === "single" || run === "last"
+const closesRun = (run: TurnRun) => run === "single" || run === "last"
 
-function runPositionFor(index: number, length: number): ChatTurnRun {
+function runPositionFor(index: number, length: number): TurnRun {
 	if (length === 1) return "single"
 	if (index === 0) return "first"
 	return index === length - 1 ? "last" : "middle"
@@ -245,12 +245,12 @@ function TurnBody({ repliedTo, className, children }: TurnBodyProps) {
 	return repliedTo ? <MessageQuote {...repliedTo}>{body}</MessageQuote> : body
 }
 
-function ChatTurnGroup({
+function TurnGroup({
 	carriesMark = false,
 	messageId,
 	children,
 	className,
-}: ChatTurnGroupProps) {
+}: TurnGroupProps) {
 	const turns = Children.toArray(children).filter(isValidElement)
 	const anchor = useMessageAnchor(messageId)
 
@@ -367,7 +367,7 @@ function AssistantTurn({
 }: AssistantTurnProps) {
 	const { t } = useTranslation("chat")
 	const markedBotId = carriesMark ? (botId ?? author?.id) : undefined
-	const markId = useChatMarkId(markedBotId)
+	const markId = useMarkId(markedBotId)
 	const footerKey = TURN_FOOTER_KEY[state]
 	const footer = footerKey ? t(footerKey) : undefined
 	const anchor = useMessageAnchor(messageId)
@@ -381,7 +381,7 @@ function AssistantTurn({
 				image={author.image}
 				name={author.name}
 				seed={author.id}
-				size={CHAT_AVATAR_SIZE}
+				size={TURN_AVATAR_SIZE}
 			/>
 		) : null)
 
@@ -393,7 +393,7 @@ function AssistantTurn({
 		>
 			<MessageContent
 				className="grid gap-x-2 gap-y-0"
-				style={{ gridTemplateColumns: `${CHAT_AVATAR_SIZE}px 1fr` }}
+				style={{ gridTemplateColumns: `${TURN_AVATAR_SIZE}px 1fr` }}
 			>
 				{author && opensRun(run) ? (
 					<MessageAuthor
@@ -440,11 +440,11 @@ function AssistantTurn({
 export {
 	AssistantTurn,
 	type AssistantTurnProps,
-	CHAT_AVATAR_SIZE,
-	ChatTurnGroup,
-	type ChatTurnGroupProps,
-	type ChatTurnRun,
-	type ChatTurnState,
+	TURN_AVATAR_SIZE,
+	TurnGroup,
+	type TurnGroupProps,
+	type TurnRun,
+	type TurnState,
 	UserTurn,
 	type UserTurnProps,
 	type UserTurnState,

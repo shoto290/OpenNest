@@ -4,12 +4,12 @@ import { motion, useReducedMotion } from "motion/react"
 import { type ReactNode, useCallback, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-	AgentCode,
-	type AgentCodeLanguage,
-} from "@workspace/ui/components/agents/agent-code"
-import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { Button } from "@workspace/ui/components/button"
+import {
+	CodeSnippet,
+	type CodeSnippetLanguage,
+} from "@workspace/ui/components/code-snippet"
+import { Disclosure } from "@workspace/ui/components/disclosure"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	TOOL_CARD_CLASS,
@@ -31,7 +31,7 @@ export type ToolApprovalParameter = {
 
 export interface ToolApprovalCodeProps {
 	code: string
-	language?: AgentCodeLanguage
+	language?: CodeSnippetLanguage
 	className?: string
 }
 
@@ -68,7 +68,7 @@ export function ToolApprovalCode({
 	className,
 }: ToolApprovalCodeProps) {
 	return (
-		<AgentCode
+		<CodeSnippet
 			code={code}
 			language={language}
 			className={cn(
@@ -166,7 +166,7 @@ export function ToolApproval({
 				) : null}
 			</div>
 
-			<AgentDisclosure id={detailsId} open={currentOpen}>
+			<Disclosure id={detailsId} open={currentOpen}>
 				<dl
 					className={cn(
 						TOOL_CARD_SECTION_CLASS,
@@ -192,7 +192,7 @@ export function ToolApproval({
 						</div>
 					))}
 				</dl>
-			</AgentDisclosure>
+			</Disclosure>
 
 			{status === "pending" ? (
 				<div

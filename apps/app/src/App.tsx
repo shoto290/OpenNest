@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
-import { AgentSidebar } from "@workspace/ui/components/agents/agent-sidebar"
+import { AppSidebar } from "@workspace/ui/components/app-sidebar"
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
@@ -494,7 +494,7 @@ export function App() {
 				onWidthChange={changeSidebarWidth}
 				isResizable={isSidebarResizable()}
 				sidebar={
-					<AgentSidebar
+					<AppSidebar
 						data-tauri-drag-region="deep"
 						insetWindowControls={hasOverlayWindowControls()}
 						bots={rosterBots}

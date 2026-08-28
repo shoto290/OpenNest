@@ -1,17 +1,17 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
+import { ProgressGrid } from "@workspace/ui/components/progress-grid"
 
 const meta = preview.meta({
-	title: "Feedback/AgentProgress",
-	component: AgentProgress,
+	title: "Feedback/ProgressGrid",
+	component: ProgressGrid,
 	parameters: {
 		layout: "padded",
 		docs: {
 			description: {
 				component:
-					"A step the agent is on, with a clock on it. It times itself from mount unless a screen owns the number, and `running` pauses the ticking without moving the origin — a surface that hides the row can stop repainting a time nobody reads. Pass `indicator={null}` when the surface already shows who is working, as `BotWorking` does.",
+					"A step the agent is on, with a clock on it. It times itself from mount unless a screen owns the number, and `running` pauses the ticking without moving the origin — a surface that hides the row can stop repainting a time nobody reads. Pass `indicator={null}` when the surface already shows who is working, as `ActivityIndicator` does.",
 			},
 		},
 	},
