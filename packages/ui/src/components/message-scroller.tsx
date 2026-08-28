@@ -45,6 +45,9 @@ const distanceFromEnd = (viewport: HTMLElement) =>
 const isOnLastBubble = (viewport: HTMLElement, threshold: number) =>
 	distanceFromEnd(viewport) <= threshold
 
+const isTravellingDown = (viewport: HTMLElement, targetTop: number) =>
+	targetTop > viewport.scrollTop
+
 const hasReachedTarget = (viewport: HTMLElement, targetTop: number) => {
 	const maxTop = viewport.scrollHeight - viewport.clientHeight
 	return Math.abs(viewport.scrollTop - Math.min(targetTop, maxTop)) <= 1
@@ -143,6 +146,7 @@ export function MessageScroller({
 	const landedKeyRef = useRef<string | typeof NOTHING_LANDED | undefined>(
 		NOTHING_LANDED,
 	)
+	const landedRowsRef = useRef(0)
 	const pinRef = useRef<PrependPin | null>(null)
 	const lastScrollTopRef = useRef(0)
 	const behavior: ScrollBehavior = reduce || !smooth ? "auto" : "smooth"
@@ -215,6 +219,10 @@ export function MessageScroller({
 		[deferSettle],
 	)
 
+	const rememberPosition = useCallback((viewport: HTMLElement) => {
+		lastScrollTopRef.current = viewport.scrollTop
+	}, [])
+
 	const scrollToEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
 			const viewport = viewportRef.current
@@ -229,14 +237,21 @@ export function MessageScroller({
 			} else {
 				viewport.scrollTop = viewport.scrollHeight
 			}
+			rememberPosition(viewport)
 		},
-		[holdProgrammaticScroll],
+		[holdProgrammaticScroll, rememberPosition],
 	)
 
 	const landOnLiveEdge = useCallback(() => {
 		const rows = contentRef.current?.children.length ?? 0
-		scrollToEnd(landedKeyRef.current === transcriptKey ? behavior : "auto")
-		if (rows > 0) landedKeyRef.current = transcriptKey
+		const isSameTranscript = landedKeyRef.current === transcriptKey
+		const hasNewRow = rows !== landedRowsRef.current
+
+		scrollToEnd(isSameTranscript && hasNewRow ? behavior : "auto")
+		if (rows > 0) {
+			landedKeyRef.current = transcriptKey
+			landedRowsRef.current = rows
+		}
 	}, [behavior, scrollToEnd, transcriptKey])
 
 	const returnToLiveEdge = useCallback(
@@ -256,9 +271,10 @@ export function MessageScroller({
 			setFollowing(false)
 			holdProgrammaticScroll(centeredTop(viewport, anchor))
 			anchor.scrollIntoView({ behavior: nextBehavior, block: "center" })
+			rememberPosition(viewport)
 			return true
 		},
-		[holdProgrammaticScroll, setFollowing],
+		[holdProgrammaticScroll, rememberPosition, setFollowing],
 	)
 
 	const pinTopVisibleRow = useCallback(() => {
@@ -281,7 +297,13 @@ export function MessageScroller({
 		lastScrollTopRef.current = viewport.scrollTop
 
 		if (programmaticScrollRef.current) {
-			if (!hasReachedTarget(viewport, targetTopRef.current)) {
+			const isReaderTakingOver =
+				hasReaderMovedUp && isTravellingDown(viewport, targetTopRef.current)
+
+			if (
+				!isReaderTakingOver &&
+				!hasReachedTarget(viewport, targetTopRef.current)
+			) {
 				deferSettle()
 				return
 			}
@@ -342,6 +364,7 @@ export function MessageScroller({
 		if (drift !== 0) {
 			holdProgrammaticScroll(viewport.scrollTop + drift)
 			viewport.scrollTop += drift
+			rememberPosition(viewport)
 		}
 		if (!older?.isLoading) pinRef.current = null
 	})

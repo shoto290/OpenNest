@@ -135,6 +135,24 @@ const settleScroll = () =>
 const waitForLastBubble = (viewport: HTMLElement) =>
 	waitFor(() => expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1))
 
+const waitForOverflow = (viewport: HTMLElement) =>
+	waitFor(() =>
+		expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+	)
+
+const holdsLastLineWhileStreaming = async (
+	viewport: HTMLElement,
+	isStreaming: () => boolean,
+) => {
+	let samples = 0
+	while (isStreaming()) {
+		await settleScroll()
+		expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1)
+		samples += 1
+	}
+	return samples
+}
+
 interface HistoryStartOptions {
 	canvasElement: HTMLElement
 	onFollowChange: MessageScrollerProps["onFollowChange"]
@@ -149,6 +167,7 @@ const scrollToHistoryStart = async ({
 	const anchorOffset = () =>
 		canvas.getByText(ANCHOR_TEXT).getBoundingClientRect().top
 
+	await waitForOverflow(viewport)
 	await waitForLastBubble(viewport)
 	viewport.scrollTop = 0
 	await waitFor(() => expect(onFollowChange).toHaveBeenCalledWith(false))
@@ -277,6 +296,83 @@ const TranscriptScroller = ({
 					Composer
 				</div>
 			) : null}
+		</div>
+	)
+}
+
+const STREAM_PROMPT: TranscriptEntry = {
+	id: "stream-user",
+	from: "user",
+	text: "Walk me through the rollout, one step at a time.",
+}
+
+const STREAM_WORDS = (
+	"The index build goes first and reports done at around four minutes. " +
+	"The migration starts right after it, inside a single transaction, so the " +
+	"copy into role_id and the drop of the legacy column either both land or " +
+	"neither does. Once the transaction commits, the deploy channel gets the " +
+	"summary and the invites backfill is queued behind it, which takes another " +
+	"two minutes and touches nothing the accounts table depends on."
+).split(" ")
+
+const STREAM_TICK_MS = 16
+const STREAM_TIMEOUT = { timeout: STREAM_TICK_MS * STREAM_WORDS.length * 4 }
+const STREAM_LABEL = { streaming: "Streaming", idle: "Idle" }
+
+const streamedAnswer = (words: number): TranscriptEntry => ({
+	id: "stream-assistant",
+	from: "assistant",
+	text: STREAM_WORDS.slice(0, words).join(" "),
+})
+
+const StreamingTranscript = ({
+	onFollowChange,
+	...scrollerProps
+}: Omit<MessageScrollerProps, "children" | "scrollerRef">) => {
+	const [deliveredWords, setDeliveredWords] = useState(0)
+	const [isStreaming, setIsStreaming] = useState(false)
+	const [hasPrompt, setHasPrompt] = useState(false)
+
+	const sendPrompt = () => {
+		setHasPrompt(true)
+		setDeliveredWords(0)
+		setIsStreaming(true)
+
+		let delivered = 0
+		const timer = window.setInterval(() => {
+			delivered += 1
+			setDeliveredWords(delivered)
+			if (delivered < STREAM_WORDS.length) return
+			window.clearInterval(timer)
+			setIsStreaming(false)
+		}, STREAM_TICK_MS)
+	}
+
+	return (
+		<div className={FRAME_CLASS}>
+			<MessageScroller
+				{...scrollerProps}
+				onFollowChange={onFollowChange}
+				busy={isStreaming}
+				className="flex-1"
+				contentClassName="flex flex-col gap-2 p-3"
+			>
+				{TRANSCRIPT.map((entry) => (
+					<TranscriptRow key={entry.id} entry={entry} />
+				))}
+				{hasPrompt ? <TranscriptRow entry={STREAM_PROMPT} /> : null}
+				{deliveredWords > 0 ? (
+					<TranscriptRow entry={streamedAnswer(deliveredWords)} />
+				) : null}
+			</MessageScroller>
+			<div className="flex items-center gap-2 border-border border-t p-2">
+				<Button size="sm" disabled={isStreaming} onClick={sendPrompt}>
+					Send prompt
+				</Button>
+				<span className="text-muted-foreground text-xs">
+					{isStreaming ? STREAM_LABEL.streaming : STREAM_LABEL.idle}
+				</span>
+			</div>
 		</div>
 	)
 }
@@ -925,6 +1021,72 @@ export const SmoothFollow = meta.story({
 		await expect(
 			canvas.queryByRole("button", { name: "Jump to latest" }),
 		).toBeNull()
+	},
+})
+
+export const StreamHoldsLastLine = meta.story({
+	args: { smooth: true },
+	render: (args) => <StreamingTranscript {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a reply that arrives word by word rather than row by row, with motion left on. One row grows for hundreds of frames, so the travel to the live edge is re-aimed under itself the whole time: check that the last line stays in front of the reader for every frame of the growth, that the transcript rests exactly on the end once the growth stops, and that neither the jump control nor a lost follow ever appears — a row growing is the system moving. `SmoothFollow` covers the same travel for a whole row landing at once.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const isStreaming = () =>
+			canvas.queryByText(STREAM_LABEL.streaming) !== null
+		await waitForLastBubble(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitForLastBubble(viewport)
+
+		const samples = await holdsLastLineWhileStreaming(viewport, isStreaming)
+
+		await expect(samples).toBeGreaterThan(10)
+		await waitForLastBubble(viewport)
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+		await expect(
+			canvas.queryByRole("button", { name: "Jump to latest" }),
+		).toBeNull()
+	},
+})
+
+export const ReaderLeavesMidStream = meta.story({
+	args: { smooth: true },
+	render: (args) => <StreamingTranscript {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the reader who walks out of a growing reply: they scroll up while the transcript is mid-travel, so the system's own scroll and the reader's must be told apart. Check that the reader wins — the travel is dropped, the jump control comes back, and the rest of the answer grows below the fold without moving them — then that the jump control puts them back on the live edge with follow re-armed.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const isStreaming = () =>
+			canvas.queryByText(STREAM_LABEL.streaming) !== null
+		await waitForLastBubble(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitFor(() => expect(viewport.scrollHeight).toBeGreaterThan(0))
+		viewport.scrollTop = 0
+
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+		await canvas.findByRole("button", { name: "Jump to latest" })
+
+		await waitFor(() => expect(isStreaming()).toBe(false), STREAM_TIMEOUT)
+		await expect(viewport.scrollTop).toBe(0)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Jump to latest" }),
+		)
+		await waitForLastBubble(viewport)
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(true)
 	},
 })
 
