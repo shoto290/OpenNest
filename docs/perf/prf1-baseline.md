@@ -14,17 +14,19 @@ the harness installs a sink, so no measured behaviour changes.
 Two turn lengths were streamed to separate the cost that scales with chunks from the cost that
 does not.
 
-PRF2 stabilised every handler `App` passes to `AppSidebar`, so the `after` columns come from the
-same test run against `apps/app/src/lib/sidebar/use-sidebar-actions.ts`.
+PRF2 stabilised every handler `App` passes to `AppSidebar`, so the `PRF2` columns come from the
+same test run against `apps/app/src/lib/sidebar/use-sidebar-actions.ts`. PRF3 turned the React
+Compiler on over both workspaces; the `PRF3` columns come from the same test again, and
+`docs/perf/prf3-react-compiler.md` explains why not one of them moved.
 
-| Rank | Unit | File / symbol | 11 chunks before | 11 chunks after | 22 chunks before | 22 chunks after | Scales with chunks |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | app root | `apps/app/src/App.tsx` → `App` | 19 | 19 | 30 | 30 | yes, 1 render per chunk |
-| 1 | sidebar body | `packages/ui/src/components/app-sidebar.tsx` → `AppSidebarBase` | 19 | 6 | 30 | 6 | before yes, after no |
-| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBots` | 6 | 6 | 6 | 6 | no |
-| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBotsBySpace` | 6 | 6 | 6 | 6 | no |
-| 5 | streaming turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (streamed message) | 3 | 3 | 3 | 3 | no |
-| 6 | settled turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (earlier message) | 2 | 2 | 2 | 2 | no |
+| Rank | Unit | File / symbol | 11 chunks before | 11 chunks PRF2 | 11 chunks PRF3 | 22 chunks before | 22 chunks PRF2 | 22 chunks PRF3 | Scales with chunks |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | app root | `apps/app/src/App.tsx` → `App` | 19 | 19 | 19 | 30 | 30 | 30 | yes, 1 render per chunk |
+| 1 | sidebar body | `packages/ui/src/components/app-sidebar.tsx` → `AppSidebarBase` | 19 | 6 | 6 | 30 | 6 | 6 | before yes, after no |
+| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBots` | 6 | 6 | 6 | 6 | 6 | 6 | no |
+| 3 | roster projection | `apps/app/src/App.tsx` → `rosterBotsBySpace` | 6 | 6 | 6 | 6 | 6 | 6 | no |
+| 5 | streaming turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (streamed message) | 3 | 3 | 3 | 3 | 3 | 3 | no |
+| 6 | settled turn row | `apps/app/src/components/thread-turn.tsx` → `ThreadTurn` (earlier message) | 2 | 2 | 2 | 2 | 2 | 2 | no |
 
 Before PRF2, `AppSidebarBase` rendered exactly as many times as `App` — 19/19 and 30/30 — and the
 `memo` boundary at `app-sidebar.tsx` → `const AppSidebar = memo(AppSidebarBase)` bailed out zero
@@ -35,14 +37,14 @@ instead of the chunks: the sidebar left the per-chunk render path.
 
 Measured rows are the first four; the last two are arithmetic on them.
 
-| Rank | Unit | File / symbol | Roster idle | One bot working |
-| --- | --- | --- | --- | --- |
-| 1 | attribute writes, 60 frames | `packages/ui/src/components/bot-avatar-engine.ts` → `render` | 0 | 1980 |
-| 2 | avatars moving | same | 0 | 3 |
-| 3 | writes that wrote the value already there | same | 0 | 54 |
-| 4 | frames that changed no rendered value | same | 0 | 0 |
-| — | writes per frame (derived) | same | 0 | 33 |
-| — | writes per avatar per frame (derived) | same | 0 | 11 |
+| Rank | Unit | File / symbol | Roster idle | Roster idle PRF3 | One bot working | One bot working PRF3 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | attribute writes, 60 frames | `packages/ui/src/components/bot-avatar-engine.ts` → `render` | 0 | 0 | 1980 | 1980 |
+| 2 | avatars moving | same | 0 | 0 | 3 | 3 |
+| 3 | writes that wrote the value already there | same | 0 | 0 | 54 | 54 |
+| 4 | frames that changed no rendered value | same | 0 | 0 | 0 | 0 |
+| — | writes per frame (derived) | same | 0 | 0 | 33 | 33 |
+| — | writes per avatar per frame (derived) | same | 0 | 0 | 11 | 11 |
 
 ## Document cost for a roster of three spaces
 

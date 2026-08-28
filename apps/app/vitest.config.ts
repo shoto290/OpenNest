@@ -1,9 +1,12 @@
 import { fileURLToPath } from "node:url"
 
+import babel from "@rolldown/plugin-babel"
+import { reactCompilerPreset } from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
 // biome-ignore lint/style/noDefaultExport: Vitest requires a default export
 export default defineConfig({
+	plugins: [babel({ presets: [reactCompilerPreset().preset] })],
 	test: {
 		include: ["src/**/*.test.ts"],
 		environment: "node",

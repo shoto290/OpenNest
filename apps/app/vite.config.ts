@@ -1,13 +1,18 @@
 import { resolve } from "node:path"
 
+import babel from "@rolldown/plugin-babel"
 import tailwindcss from "@tailwindcss/vite"
-import react from "@vitejs/plugin-react"
+import react, { reactCompilerPreset } from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
 // biome-ignore lint/style/noDefaultExport: Vite requires a default export
 export default defineConfig({
 	clearScreen: false,
-	plugins: [react(), tailwindcss()],
+	plugins: [
+		react(),
+		babel({ presets: [reactCompilerPreset()] }),
+		tailwindcss(),
+	],
 	server: {
 		port: 1420,
 		strictPort: true,
