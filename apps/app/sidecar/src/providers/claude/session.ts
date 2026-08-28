@@ -10,6 +10,7 @@ import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
 import { securityFloor } from "./security-floor"
+import { inheritedEnv } from "./session-env"
 import { layerFor } from "./system-layer"
 
 import type {
@@ -70,7 +71,7 @@ export const buildOptions = (
 		append: layerFor(request),
 	},
 	env: {
-		...process.env,
+		...inheritedEnv(),
 		[DISABLE_AUTO_MEMORY]: "1",
 		[CLASSIFY_ASK_USER_QUESTION]: "0",
 	},
