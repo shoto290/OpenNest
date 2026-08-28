@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react"
 
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import { toPlainText } from "@workspace/ui/lib/plain-text"
 
 import type { ReplyTarget } from "./screen-model"
 import {
@@ -91,7 +92,10 @@ export function useThreadNaming({
 	)
 
 	const toExcerpt = useCallback(
-		(text: string) => (isConversation ? toMentionNames(text, bots) : text),
+		(text: string) => {
+			const plain = toPlainText(text)
+			return isConversation ? toMentionNames(plain, bots) : plain
+		},
 		[isConversation, bots],
 	)
 
