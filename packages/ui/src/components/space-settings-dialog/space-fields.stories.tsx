@@ -30,7 +30,7 @@ const FieldsHost = (props: SpaceFieldsProps) => {
 }
 
 const meta = preview.meta({
-	title: "Forms/SpaceFields",
+	title: "Settings/Space/SpaceFields",
 	component: SpaceFields,
 	parameters: {
 		layout: "padded",

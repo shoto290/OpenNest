@@ -17,7 +17,7 @@ const TASKS: Task[] = [
 ]
 
 const meta = preview.meta({
-	title: "AI/MarkdownTaskCheckbox",
+	title: "Conversation/Markdown/MarkdownTaskCheckbox",
 	component: MarkdownTaskCheckbox,
 	parameters: {
 		docs: {

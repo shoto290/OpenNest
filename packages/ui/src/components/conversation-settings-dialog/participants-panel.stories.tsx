@@ -51,7 +51,7 @@ const PanelHost = (props: ParticipantsPanelProps) => {
 }
 
 const meta = preview.meta({
-	title: "Forms/ParticipantsPanel",
+	title: "Settings/Conversation/ParticipantsPanel",
 	component: ParticipantsPanel,
 	parameters: {
 		layout: "padded",

@@ -596,7 +596,7 @@ const globalKeyframeNames = () =>
 		.map((rule) => rule.name)
 
 const meta = preview.meta({
-	title: "Display/Markdown",
+	title: "Conversation/Markdown/Markdown",
 	component: Markdown,
 	parameters: {
 		docs: {

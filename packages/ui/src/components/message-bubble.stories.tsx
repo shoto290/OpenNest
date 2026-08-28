@@ -46,7 +46,7 @@ const AGENT_STREAMED_PREFIX =
 	"Freeze writes on the legacy workspace first, then run the export against the frozen copy and check the row"
 
 const meta = preview.meta({
-	title: "AI/MessageBubble",
+	title: "Conversation/Message/MessageBubble",
 	component: MessageBubble,
 	parameters: {
 		layout: "centered",

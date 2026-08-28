@@ -11,7 +11,7 @@ import { SkillsPanel } from "@workspace/ui/components/plugin-settings/skills-pan
 const [CARRIED] = BOT_SKILLS
 
 const meta = preview.meta({
-	title: "AI/SkillsPanel",
+	title: "Settings/Plugins/SkillsPanel",
 	component: SkillsPanel,
 	parameters: {
 		layout: "fullscreen",

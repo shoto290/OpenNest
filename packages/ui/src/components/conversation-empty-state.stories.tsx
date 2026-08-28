@@ -30,7 +30,7 @@ const WARDEN: RosterBot = {
 const SEATED = [KEEPER, SCOUT, WARDEN]
 
 const meta = preview.meta({
-	title: "AI/ConversationEmptyState",
+	title: "Conversation/Message/ConversationEmptyState",
 	component: ConversationEmptyState,
 	parameters: {
 		layout: "centered",

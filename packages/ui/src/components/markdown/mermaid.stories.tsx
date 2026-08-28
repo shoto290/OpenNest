@@ -27,7 +27,7 @@ const diagramsIn = (canvasElement: HTMLElement) =>
 	].flatMap((frame) => [...(frame.shadowRoot?.querySelectorAll("svg") ?? [])])
 
 const meta = preview.meta({
-	title: "AI/MarkdownMermaid",
+	title: "Conversation/Markdown/MarkdownMermaid",
 	component: MarkdownMermaid,
 	parameters: {
 		docs: {

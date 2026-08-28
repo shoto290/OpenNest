@@ -218,7 +218,7 @@ const MarkedHistory = () => {
 }
 
 const meta = preview.meta({
-	title: "AI/Turn",
+	title: "Conversation/Message/Turn",
 	component: AssistantTurn,
 	parameters: {
 		layout: "padded",

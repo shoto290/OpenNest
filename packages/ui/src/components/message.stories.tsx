@@ -71,7 +71,7 @@ const Transcript = ({ children }: { children: ReactNode }) => (
 )
 
 const meta = preview.meta({
-	title: "AI/Message",
+	title: "Conversation/Message/Message",
 	component: Message,
 	parameters: {
 		layout: "padded",

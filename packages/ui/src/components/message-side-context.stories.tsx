@@ -43,7 +43,7 @@ const Turn = ({ align }: TurnProps) => (
 const SIDES: MessageSide[] = ["start", "end"]
 
 const meta = preview.meta({
-	title: "AI/MessageSideContext",
+	title: "Conversation/Message/MessageSideContext",
 	component: MessageSideContext.Provider,
 	parameters: {
 		layout: "padded",

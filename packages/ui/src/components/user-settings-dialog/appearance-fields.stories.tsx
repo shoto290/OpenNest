@@ -44,7 +44,7 @@ const AppearanceHost = (props: AppearanceFieldsProps) => {
 }
 
 const meta = preview.meta({
-	title: "Forms/AppearanceFields",
+	title: "Settings/User/AppearanceFields",
 	component: AppearanceFields,
 	render: (args) => (
 		<div className="w-[26rem]">

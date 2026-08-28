@@ -126,7 +126,7 @@ const openTab = async (
 }
 
 const meta = preview.meta({
-	title: "Overlays/BotSettingsDialog",
+	title: "Settings/Bot/BotSettingsDialog",
 	component: BotSettingsDialog,
 	parameters: {
 		layout: "fullscreen",

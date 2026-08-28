@@ -1,0 +1,44 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+<Meta title="Settings/Overview" />
+
+# Settings
+
+The dialogs that configure a bot, a user, a space, a conversation or a plugin, plus the panels each of them holds. Every panel is a composition of **Forms** controls bound to one subject, which is what the sub-levels below name.
+
+## Bot
+
+- **BotSettingsDialog** — the dialog shell and its rail.
+- **BotIdentityFields** — name, avatar and description.
+- **DangerZone** — deletion and other irreversible actions.
+- **McpServerEditor** — one MCP server's configuration.
+- **McpServerLaunch** — the launch command and its arguments.
+- **McpServersPanel** — the server list.
+- **MemoryPanel** — persisted memory entries.
+- **RuntimeFields** — model, transport and runtime options.
+
+## User
+
+- **UserSettingsDialog** — the dialog shell and its rail.
+- **AppearanceFields** — theme and density.
+- **LanguageFields** — interface language.
+- **NotificationFields** — notification preferences.
+
+## Space
+
+- **SpaceSettingsDialog** — the dialog shell and its rail.
+- **SpaceFields** — name, tint and description.
+
+## Conversation
+
+- **ConversationSettingsDialog** — the dialog shell and its rail.
+- **NewConversationDialog** — creating a conversation.
+- **BotPicker** — choosing the bots to invite.
+- **PickedBots** — the bots already chosen.
+- **ParticipantsPanel** — the participants of an existing conversation.
+
+## Plugins
+
+- **HistoryPanel** — plugin run history.
+- **SkillEditor** — one skill's definition.
+- **SkillsPanel** — the skill list.

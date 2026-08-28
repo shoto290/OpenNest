@@ -58,7 +58,7 @@ const drawnLabels = (canvasElement: HTMLElement) =>
 	)
 
 const meta = preview.meta({
-	title: "Forms/BotIdentityFields",
+	title: "Settings/Bot/BotIdentityFields",
 	component: BotIdentityFields,
 	parameters: {
 		layout: "centered",

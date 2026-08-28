@@ -10,7 +10,7 @@ import {
 const [LOCAL, REMOTE, UNKNOWN] = BOT_MCP_SERVERS
 
 const meta = preview.meta({
-	title: "AI/McpServerLaunch",
+	title: "Settings/Bot/McpServerLaunch",
 	component: McpServerLaunch,
 	parameters: {
 		layout: "centered",

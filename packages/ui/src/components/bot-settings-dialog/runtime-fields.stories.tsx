@@ -48,7 +48,7 @@ const RuntimeFieldsHost = (props: RuntimeFieldsProps) => {
 }
 
 const meta = preview.meta({
-	title: "AI/RuntimeFields",
+	title: "Settings/Bot/RuntimeFields",
 	component: RuntimeFields,
 	parameters: {
 		layout: "padded",

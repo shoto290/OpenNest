@@ -30,7 +30,7 @@ const LanguageHost = (props: LanguageFieldsProps) => {
 }
 
 const meta = preview.meta({
-	title: "Forms/LanguageFields",
+	title: "Settings/User/LanguageFields",
 	component: LanguageFields,
 	render: (args) => (
 		<div className="w-[26rem]">
