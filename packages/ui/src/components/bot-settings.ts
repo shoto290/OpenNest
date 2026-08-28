@@ -41,6 +41,47 @@ const DEFAULT_BOT_OUTPUT_STYLE: BotOutputStyle = "Concise"
 const readBotOutputStyle = (value: string): BotOutputStyle =>
 	BOT_OUTPUT_STYLES.find((style) => style === value) ?? DEFAULT_BOT_OUTPUT_STYLE
 
+type BotPermissionMode = (typeof BOT_PERMISSION_MODES)[number]
+
+const BOT_PERMISSION_MODES = [
+	"default",
+	"acceptEdits",
+	"plan",
+	"auto",
+	"dontAsk",
+] as const
+
+const DEFAULT_BOT_PERMISSION_MODE: BotPermissionMode = "auto"
+
+const readBotPermissionMode = (value: string): BotPermissionMode =>
+	BOT_PERMISSION_MODES.find((mode) => mode === value) ??
+	DEFAULT_BOT_PERMISSION_MODE
+
+type BotPermissions = {
+	defaultMode: BotPermissionMode
+	allow: string[]
+	ask: string[]
+	deny: string[]
+	additionalDirectories: string[]
+}
+
+const BOT_PERMISSION_RULE_LISTS = ["allow", "ask", "deny"] as const
+
+type BotPermissionRuleList = (typeof BOT_PERMISSION_RULE_LISTS)[number]
+
+const BLANK_BOT_PERMISSIONS: BotPermissions = {
+	defaultMode: DEFAULT_BOT_PERMISSION_MODE,
+	allow: [],
+	ask: [],
+	deny: [],
+	additionalDirectories: [],
+}
+
+const PERMISSION_RULE = /^[A-Za-z_][A-Za-z0-9_-]*(\(.+\))?$/
+
+const isPermissionRule = (rule: string): boolean =>
+	PERMISSION_RULE.test(rule.trim())
+
 type BotSkillEffort = (typeof SKILL_EFFORTS)[number]
 
 const SKILL_EFFORTS = ["low", "medium", "high"] as const
@@ -380,15 +421,18 @@ type BotSettingsValue = {
 	instructions: string
 	model: string
 	workingDirectory: string
-	changesNothing: boolean
+	permissions: BotPermissions
 }
 
 export {
+	BLANK_BOT_PERMISSIONS,
 	BLANK_MCP_SERVER_DRAFT,
 	BLANK_SKILL_DRAFT,
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
 	BOT_OUTPUT_STYLES,
+	BOT_PERMISSION_MODES,
+	BOT_PERMISSION_RULE_LISTS,
 	type BotAvatarBlot,
 	type BotCommitAuthor,
 	type BotCommitItem,
@@ -399,21 +443,27 @@ export {
 	type BotMcpTransport,
 	type BotModelOption,
 	type BotOutputStyle,
+	type BotPermissionMode,
+	type BotPermissionRuleList,
+	type BotPermissions,
 	type BotSettingsValue,
 	type BotSkillContext,
 	type BotSkillDraft,
 	type BotSkillEffort,
 	type BotSkillItem,
 	DEFAULT_BOT_OUTPUT_STYLE,
+	DEFAULT_BOT_PERMISSION_MODE,
 	drawnAnimal,
 	isConfigObject,
 	isMcpServerDraftUnsaved,
+	isPermissionRule,
 	isSameFieldAnswer,
 	isSkillDraftUnsaved,
 	MCP_ENDPOINT_KINDS,
 	MCP_TRANSPORTS,
 	parseMcpServerConfig,
 	readBotOutputStyle,
+	readBotPermissionMode,
 	readConfigList,
 	readConfigPairs,
 	readConfigText,
