@@ -17,6 +17,7 @@ type SurfacePoint = { point: Vec3; normal: Vec3 }
 export const ORIGIN: Vec3 = [0, 0, 0]
 export const AXIS_Z: Vec3 = [0, 0, 1]
 
+export const VIEW_BOX = 240
 export const FOCAL_LENGTH = 420
 const NEAR_PLANE_LIMIT = 0.8
 const AXIS_X: Vec3 = [1, 0, 0]
@@ -30,6 +31,9 @@ export const toRadians = (degrees: number) => (degrees * Math.PI) / 180
 export const toDegrees = (radians: number) => (radians * 180) / Math.PI
 
 export const round2 = (value: number) => Math.round(value * 100) / 100
+
+export const quantize = (value: number, step: number) =>
+	Math.round(value / step) * step
 
 export const clamp = (value: number, min: number, max: number) =>
 	Math.max(min, Math.min(max, value))
