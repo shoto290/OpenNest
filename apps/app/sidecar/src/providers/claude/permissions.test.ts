@@ -21,9 +21,9 @@ const options = {
 	suggestions: undefined,
 }
 
-const gateWith = (pluginPath?: string) => {
+const gateWith = (botPath?: string) => {
 	const emitted: SessionFrame[] = []
-	const gate = createPermissionGate((frame) => emitted.push(frame), pluginPath)
+	const gate = createPermissionGate((frame) => emitted.push(frame), { botPath })
 	return { emitted, gate }
 }
 
