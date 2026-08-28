@@ -198,3 +198,21 @@ reason. Run the gate from inside `packages/ui` as above, or keep the flag behind
 ```bash
 bun run --cwd packages/ui test:storybook
 ```
+
+### Do not delete `vitest.setup.ts`
+
+Every run prints `Info: Found a setup file with "setProjectAnnotations"` and invites
+you to remove the file. Following that advice breaks all 97 browser tests at once.
+
+`storybookTest()` injects five setup files. Four are listed in the addon's own
+`optimizeDeps.include`, so Vite pre-bundles them into the cache dir under
+`packages/ui` and serves them from there. The fifth,
+`@storybook/addon-vitest/internal/setup-file-with-project-annotations`, cannot be
+pre-bundled because it imports a Vite virtual module, so it is served from its real
+path — which under bun's non-hoisted layout is `node_modules/.bun/...`, outside the
+Vite root, reachable only through a `/@fs/`-prefixed URL that does not get emitted.
+
+`.storybook/vitest.setup.ts` is that same module, moved inside the Vite root. The
+addon skips injecting its own copy when `test.setupFiles` names a file whose
+directory is this one and whose source contains `setProjectAnnotations`, so the file
+must stay here, must keep that call, and must stay listed in `vitest.config.ts`.
