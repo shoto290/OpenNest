@@ -91,8 +91,7 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => ({
 	isReady: isSessionReady(thread.state),
 	isBusy: isTurnBusy(thread.state.turn),
 	isLoadingOlder: thread.state.loadingOlder,
-	isPromptPending:
-		thread.state.question !== null || thread.state.permission !== null,
+	isPromptPending: thread.state.permission !== null,
 	isOverlayOpen: thread.isOverlayOpen,
 	latestError: thread.state.errors.at(-1),
 	refused: null,

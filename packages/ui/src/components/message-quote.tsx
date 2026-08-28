@@ -45,6 +45,7 @@ const QUOTE_SIZE = {
 
 export interface MessageQuoteProps extends Partial<QuotedMessage> {
 	size?: MessageQuoteSize
+	label?: string
 	trailing?: ReactNode
 	children?: ReactNode
 	className?: string
@@ -56,6 +57,7 @@ export function MessageQuote({
 	from,
 	onJump,
 	size = "sm",
+	label,
 	trailing,
 	children,
 	className,
@@ -64,7 +66,10 @@ export function MessageQuote({
 	const metrics = QUOTE_SIZE[size]
 	const quoted = author !== undefined && from !== undefined
 	const grouping = quoted
-		? { role: "group" as const, "aria-label": t("reply.label", { author }) }
+		? {
+				role: "group" as const,
+				"aria-label": label ?? t("reply.label", { author }),
+			}
 		: undefined
 
 	return (

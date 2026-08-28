@@ -102,7 +102,11 @@ export const SpokenPrompt = ({
 	author,
 	responder,
 }: SpokenPromptProps) => (
-	<AssistantTurn author={author} bare>
+	<AssistantTurn
+		author={author}
+		bare={prompt.kind !== "question"}
+		fills={prompt.kind === "question"}
+	>
 		{prompt.kind === "question" ? (
 			<QuestionPrompt request={prompt.request} responder={responder} />
 		) : (

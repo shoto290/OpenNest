@@ -1,4 +1,4 @@
-import { memo } from "react"
+import { memo, type ReactNode } from "react"
 
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
@@ -30,6 +30,7 @@ type ThreadTurnProps = {
 	botId?: string
 	author?: MessageAuthor
 	avatarFace?: ThreadFace
+	asking?: ReactNode
 	quoted?: ReplyTarget
 	pinned: boolean
 	toQuote: (target: ReplyTarget) => QuotedMessage
@@ -47,6 +48,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	botId,
 	author,
 	avatarFace,
+	asking,
 	quoted,
 	pinned,
 	toQuote,
@@ -56,7 +58,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 }: ThreadTurnProps) {
 	probeRender("ThreadTurn", anchor)
 	const { text, attachments } = messageWithAttachments(row.text)
-	const content = <TurnBody attachments={attachments} text={text} />
+	const content = asking ?? <TurnBody attachments={attachments} text={text} />
 	const repliedTo = quoted ? toQuote(quoted) : undefined
 	const pin = () => {
 		onPin(row.messageId, row.blockIndex)
@@ -99,6 +101,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			bare={bare}
 			botId={botId}
 			copyText={text}
+			fills={asking !== undefined}
 			messageId={anchor}
 			onPin={pin}
 			onReply={reply}

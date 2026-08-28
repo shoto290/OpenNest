@@ -22,12 +22,11 @@ import {
 	TabsTrigger,
 } from "@workspace/ui/components/motion/tabs"
 import { SettingsField } from "@workspace/ui/components/settings-field"
-import {
-	TOOL_CARD_CLASS,
-	TOOL_CARD_SECTION_CLASS,
-} from "@workspace/ui/components/tool-card-styles"
 import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
 import { cn } from "@workspace/ui/lib/utils"
+
+const QUESTION_FORM_CLASS =
+	"grid w-full gap-3 rounded-2xl text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
 
 export type ToolQuestionOption = {
 	label: string
@@ -149,14 +148,13 @@ const ToolQuestion = ({
 	return (
 		<form
 			aria-labelledby={askedId}
-			className={cn(TOOL_CARD_CLASS, className)}
+			className={cn(QUESTION_FORM_CLASS, className)}
 			onKeyDown={readKey}
 			onSubmit={submitForm}
 			ref={cardRef}
 			tabIndex={-1}
 		>
 			<Tabs
-				className={TOOL_CARD_SECTION_CLASS}
 				isAnimated={false}
 				onValueChange={setAsked}
 				value={item.question}
@@ -174,7 +172,7 @@ const ToolQuestion = ({
 				</TabsList>
 			</Tabs>
 
-			<div className={cn(TOOL_CARD_SECTION_CLASS, "grid gap-2")}>
+			<div className="grid gap-2">
 				<p className="font-medium text-foreground" id={askedId}>
 					{item.question}
 				</p>
@@ -201,12 +199,7 @@ const ToolQuestion = ({
 				/>
 			</div>
 
-			<div
-				className={cn(
-					TOOL_CARD_SECTION_CLASS,
-					"flex flex-wrap items-center gap-2 border-border border-t",
-				)}
-			>
+			<div className="flex flex-wrap items-center gap-2">
 				<Button disabled={!isAnswered} size="sm" type="submit">
 					{waiting ? (
 						<>
@@ -242,19 +235,13 @@ const OptionRow = ({ option, isSelected, render }: OptionRowProps) => {
 	return (
 		<div
 			className={cn(
-				"rounded-xl border border-border has-focus-visible:border-ring/60 has-focus-visible:ring-3 has-focus-visible:ring-ring/30",
+				"grid gap-1 rounded-xl",
 				isSelected
-					? "border-primary/50 bg-muted/50"
-					: "bg-background hover:border-muted-foreground/40 hover:bg-muted/40",
+					? "bg-background"
+					: "bg-background/50 hover:bg-background/75",
 			)}
 		>
-			<label
-				className={cn(
-					TOOL_CARD_SECTION_CLASS,
-					"flex cursor-pointer items-start gap-3",
-				)}
-				htmlFor={id}
-			>
+			<label className="flex cursor-pointer items-start gap-3 p-3" htmlFor={id}>
 				{render(id)}
 				<span className="grid gap-0.5">
 					<span className="font-medium text-foreground leading-5">
@@ -266,7 +253,7 @@ const OptionRow = ({ option, isSelected, render }: OptionRowProps) => {
 				</span>
 			</label>
 			{isSelected && option.preview ? (
-				<div className="mx-3 mb-3 grid gap-1 rounded-lg border border-border bg-muted/40 p-2">
+				<div className="grid gap-1 pb-3 pe-3 ps-11">
 					<span className="text-muted-foreground text-xs">
 						{t("toolQuestion.preview")}
 					</span>

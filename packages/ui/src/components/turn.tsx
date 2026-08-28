@@ -85,6 +85,7 @@ interface AssistantTurnProps {
 	onPin?: () => void
 	pinned?: boolean
 	bare?: boolean
+	fills?: boolean
 	botId?: string
 	author?: MessageAuthor
 	avatar?: ReactNode
@@ -359,6 +360,7 @@ function AssistantTurn({
 	onPin,
 	pinned = false,
 	bare = false,
+	fills = false,
 	botId,
 	author,
 	avatar,
@@ -413,7 +415,10 @@ function AssistantTurn({
 				</span>
 				<MessageBubble
 					variant={bare ? "bare" : "soft"}
-					className="col-start-2 row-start-2 min-w-0"
+					className={cn(
+						"col-start-2 row-start-2 min-w-0",
+						fills && "items-stretch",
+					)}
 				>
 					<MessageActions
 						actions={<TurnActionButtons actions={actions} />}
@@ -421,7 +426,10 @@ function AssistantTurn({
 					>
 						<TurnBody
 							repliedTo={repliedTo}
-							className={bare ? undefined : RUN_RADIUS.assistant[run]}
+							className={cn(
+								bare ? undefined : RUN_RADIUS.assistant[run],
+								fills && "w-full",
+							)}
 						>
 							{children}
 						</TurnBody>
