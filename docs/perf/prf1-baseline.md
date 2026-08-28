@@ -290,3 +290,139 @@ The PRF6 processor counts are held in `packages/ui/src/components/markdown/proce
 ```
 cd packages/ui && bun run test
 ```
+
+## PRF7 — what one transcript page costs on the store path
+
+PRF4 priced a store round trip at a simulated 5 ms. This section replaces that placeholder with
+the real one. Every figure comes from `apps/app/src-tauri/tests/store_open_cost.rs`, run against
+the production `db::bootstrap` — the real `connection::open` (WAL, `busy_timeout` 5 s, no
+`synchronous`), the real migrations, the real `MessagesRepository::page_messages`, the real
+`conversation_message_page` command behind the real `invoke_handler`, the real
+`Arc<Mutex<Connection>>` every command shares. No pragma and no production line was changed.
+
+Scenario: 40 conversations of 500 messages each — 20 000 rows — each row carrying a ~190 character
+body. One first page is `before_seq: None, limit: 20`, the same shape `TRANSCRIPT_PAGE_SIZE` asks
+for. 100 reads per series, 50 commits per series. One `Database`, managed by the app, serves the
+repository reads, the IPC command and the contending writer alike, so the mutex they fight over is
+the same one.
+
+Four paths are timed for the same page:
+
+- **through the repository** — `database.messages().page_messages(…)`, what a command's body costs.
+- **probed** — the same query issued through `Database::call`, with a second clock started once
+  the closure is running. Everything before it — the `spawn_blocking` dispatch and the mutex — is
+  `waiting on the connection`; the rest is `query, inside the lock`. The probe asserts it returns
+  the same twenty ids the repository returned.
+- **over ipc** — `get_ipc_response` on `conversation_message_page`: argument deserialisation,
+  command dispatch, the repository read, `TranscriptPage::of`, and serialisation of the response.
+  It asserts the same twenty ids again.
+
+Machine: M-series macOS, APFS, `cargo test` debug profile (unoptimised). The tables record one
+run. Absolute values move by up to 2x with machine load — a busy run read 0.105 ms through the
+repository and 0.507 ms over IPC — while the ratios between the paths hold. The ratios are the
+finding, not the microseconds.
+
+### One first page read
+
+| Series | median | p95 |
+| --- | --- | --- |
+| first read, untouched page cache | 0.206 ms | — |
+| idle — whole read, through the repository | 0.047 ms | 0.057 ms |
+| idle — whole read, probed | 0.035 ms | 0.048 ms |
+| idle — waiting on the connection | 0.008 ms | 0.016 ms |
+| idle — query, inside the lock | 0.027 ms | 0.035 ms |
+| **idle — whole read, over ipc** | **0.255 ms** | **0.282 ms** |
+| contended — whole read, through the repository | 0.145 ms | 0.191 ms |
+| contended — whole read, probed | 0.128 ms | 0.176 ms |
+| contended — waiting on the connection | 0.097 ms | 0.145 ms |
+| contended — query, inside the lock | 0.029 ms | 0.034 ms |
+| **contended — whole read, over ipc** | **0.297 ms** | **0.347 ms** |
+
+Contended means a second task committing user messages in a loop through the same `Database`;
+it landed 598 commits inside the read window, so every read queued behind several writes.
+
+The query is flat: **0.027 ms idle, 0.029 ms contended**. `messages` carries
+`UNIQUE (conversation_id, seq)`, so `WHERE conversation_id = ?1 AND seq < ?2 ORDER BY seq DESC
+LIMIT 21` walks that index backwards and stops after 21 rows — 500 rows in the conversation or
+20 000 in the file makes no difference to it.
+
+Everything contention adds lands on the wait, which goes from 0.008 ms to 0.097 ms — a **12×**
+rise that takes the repository read from 0.047 ms to 0.145 ms. The 0.097 ms the reader waits is
+the same order as the 0.088 ms one commit takes, which is the mechanism stated plainly: a read
+arriving mid-commit waits out that commit, because both hold the one `Mutex<Connection>`.
+
+### The command layer costs more than the store it wraps
+
+| | idle | contended |
+| --- | --- | --- |
+| through the repository | 0.047 ms | 0.145 ms |
+| over ipc | 0.255 ms | 0.297 ms |
+| **the command layer adds** | **0.208 ms** | **0.152 ms** |
+| serialised response | 9 242 bytes | 9 242 bytes |
+
+The IPC read is **5.4× the repository read when idle**. The gap is not the store: it is argument
+deserialisation, command dispatch, mapping twenty `StoredMessage` into twenty `TranscriptMessage`,
+and serialising 9 242 bytes of JSON — 462 bytes per row, tracking the ~190 character body plus
+eleven fields of envelope. That gap is *flat under contention* while the repository read triples,
+so the two costs are independent: contention is paid on the mutex, serialisation is paid on the
+CPU, and the contended IPC read is barely worse than the idle one because the fixed cost dominates.
+
+This inverts the intuition the section started from. Of a 0.297 ms contended page read, the
+mutex wait is 0.097 ms and the query is 0.029 ms — **the store is 42 % of it, and the command
+envelope is the rest.**
+
+### What is not measured
+
+`get_ipc_response` calls the command handler directly. It does **not** cross the webview
+transport: no `postMessage`, no JSON parse on the JavaScript side, no serde round trip through
+the OS webview's IPC bridge, no scheduling against the renderer's event loop. So the 9 242 bytes
+are measured as produced, not as delivered.
+
+**The unknown is the transport for a ~9 KB payload, twice per opening.** Nothing here bounds it.
+It is the one remaining term between this section's numbers and the real cost PRF4 counted; if a
+future ticket needs the true figure, it has to be taken from a running webview, not from this
+harness.
+
+### `synchronous`, and what leaving it at the default costs
+
+`connection.rs:35` sets `journal_mode = WAL` and never sets `synchronous`, so the effective value
+is SQLite's default: **FULL (2)**.
+
+| One `append_user_message` commit | median | p95 |
+| --- | --- | --- |
+| `synchronous=FULL` (production today) | 0.088 ms | 0.104 ms |
+| `synchronous=NORMAL` | 0.071 ms | 0.106 ms |
+
+The gap is 0.017 ms per commit and it does not survive repeated runs — across seven runs FULL
+landed between 0.088 and 0.230 ms and NORMAL between 0.070 and 0.173 ms, crossing over once.
+On macOS SQLite's `fsync()` is not `F_FULLFSYNC` unless asked, so WAL+FULL is not paying for a
+device barrier here. **Lowering `synchronous` to NORMAL would buy nothing measurable on this
+machine and would trade away durability on a power loss.** It is not the cost.
+
+### Do two serial round trips account for the second a reader waits?
+
+**No. Not within two orders of magnitude — even counting the command layer.**
+
+PRF4 established that a cold opening awaits exactly two serial store calls on its own path —
+`store.mainChat`, then `enqueue(() => transcript.load(chat.id))`. Priced with the real numbers:
+
+| two serial round trips | idle | contended |
+| --- | --- | --- |
+| through the repository | 0.093 ms | 0.290 ms |
+| over ipc | 0.509 ms | 0.593 ms |
+
+0.593 ms is **0.06 %** of one second, and the worst run measured put it at 1.49 ms — still
+**0.15 %**. Measuring the command layer moved the figure by 5x, from 0.09 ms to 0.51 ms, and it
+is still nearly three orders of magnitude short of a second. The verdict
+stands, with its scope now stated: **through the command layer, the store is not the suspect.**
+PRF5 already located the second — 85 ms blocked on the first fence's grammar compilation on the
+paint path.
+
+The one honest caveat is above: the webview transport is not in these numbers. It would have to
+cost 500× the entire measured round trip to become the explanation.
+
+The PRF7 numbers are held in `apps/app/src-tauri/tests/store_open_cost.rs`:
+
+```
+cd apps/app/src-tauri && cargo test --features fake-claude --test store_open_cost -- --nocapture
+```
