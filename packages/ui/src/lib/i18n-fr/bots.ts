@@ -63,6 +63,7 @@ const bots = {
 			skills: "Compétences",
 			mcp: "Serveurs MCP",
 			history: "Historique",
+			permissions: "Permissions",
 			runtime: "Exécution",
 			danger: "Zone sensible",
 		},
@@ -387,10 +388,62 @@ const bots = {
 			placeholder: "Choisissez un dossier",
 			browse: "Changer",
 		},
-		changesNothing: {
-			label: "Ne peut rien modifier lui-même",
-			description:
-				"Ce bot se voit refuser les outils qui modifient des fichiers et exécutent des commandes : il ne peut donc faire ni l'un ni l'autre lui-même. Il peut toujours lire, et tout ce qu'il embarque par ailleurs — un serveur MCP, un autre bot qu'il sollicite — n'est pas retenu par ce réglage.",
+	},
+	permissions: {
+		mode: {
+			label: "Réponse par défaut à une demande",
+			option: {
+				auto: {
+					label: "Décider seul",
+					hint: "Le bot décide seul, dans les limites des règles ci-dessous.",
+				},
+				default: {
+					label: "Demander à chaque fois",
+					hint: "Tout outil que les règles ci-dessous ne tranchent pas vous est soumis.",
+				},
+				acceptEdits: {
+					label: "Accepter les modifications",
+					hint: "Les modifications de fichiers passent sans demander ; le reste vous est soumis.",
+				},
+				plan: {
+					label: "Planifier d'abord",
+					hint: "Le bot lit et planifie, et ne change rien tant que vous ne l'avez pas dit.",
+				},
+				dontAsk: {
+					label: "Ne jamais demander",
+					hint: "Rien ne vous est soumis : seules les règles refusées retiennent le bot.",
+				},
+			},
+		},
+		rule: {
+			add: "Ajouter",
+			placeholder: "Bash(git status:*)",
+			invalid: "Écrivez une règle sous la forme Outil ou Outil(spécificateur).",
+			remove: "Retirer la règle {{rule}}",
+			allow: {
+				label: "Autorisé",
+				hint: "S'exécute sans vous demander.",
+				empty: "Rien n'est autorisé d'emblée.",
+			},
+			ask: {
+				label: "Soumis",
+				hint: "Vous est soumis à chaque fois, quel que soit le mode.",
+				empty: "Rien ne vous est soumis d'office.",
+			},
+			deny: {
+				label: "Refusé",
+				hint: "Refusé d'emblée, quel que soit le mode.",
+				empty: "Rien n'est refusé d'emblée.",
+			},
+		},
+		directories: {
+			label: "Autres dossiers",
+			hint: "Les dossiers que le bot peut atteindre en plus de son dossier de travail.",
+			placeholder: "/Users/vous/notes",
+			add: "Ajouter",
+			empty: "Aucun dossier en plus du dossier de travail.",
+			invalid: "Indiquez le chemin complet du dossier.",
+			remove: "Retirer le dossier {{path}}",
 		},
 	},
 	identity: {

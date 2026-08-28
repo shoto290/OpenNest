@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { ActivityIndicatorKind } from "@workspace/ui/components/activity-indicator"
+import { BLANK_BOT_PERMISSIONS } from "@workspace/ui/components/bot-settings"
 
 import type {
 	ConversationRosterActivity,
@@ -276,6 +277,7 @@ const bot = (fields: Partial<Bot> = {}): Bot => ({
 	workingDir: null,
 	instructions: "",
 	deniedTools: [],
+	permissions: BLANK_BOT_PERMISSIONS,
 	outputStyle: "",
 	createdAt: 1,
 	changesNothing: false,

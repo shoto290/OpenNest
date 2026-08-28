@@ -973,6 +973,85 @@ fn the_tools_a_bot_denies_are_written_to_its_agent_file_and_read_back_from_it() 
 }
 
 #[test]
+fn the_rules_a_bot_is_given_are_written_to_its_settings_file_and_read_back_from_it() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let mut ruled = an_identity("Nyx", "sonnet", "owl", json!("red"));
+	ruled["permissions"] = json!({
+		"defaultMode": "plan",
+		"allow": ["Read"],
+		"ask": [],
+		"deny": ["Bash(rm:*)"],
+		"additionalDirectories": ["/notes"]
+	});
+
+	let created = call(&window, "conversation_create_bot", json!({ "identity": ruled.clone() }))
+		.expect("the bot is created");
+	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
+
+	assert_eq!(created["permissions"], ruled["permissions"]);
+
+	let root = bundles::root(app.handle()).expect("the bundle root");
+	let path = bundles::dir(&root, &id).join("settings.json");
+	std::fs::write(
+		&path,
+		json!({ "hooks": "kept", "permissions": { "deny": ["Bash(rm:*)"], "unknown": 1 } })
+			.to_string(),
+	)
+	.expect("a file the bot wrote itself");
+
+	let mut opened = ruled.clone();
+	opened["permissions"] = json!({
+		"defaultMode": "bypassPermissions",
+		"allow": [],
+		"ask": ["Edit"],
+		"deny": [],
+		"additionalDirectories": []
+	});
+	let updated = call(&window, "conversation_update_bot", json!({ "id": id, "identity": opened }))
+		.expect("the bot is updated");
+
+	assert_eq!(updated["permissions"]["defaultMode"], json!("auto"), "a refused mode was written");
+	assert_eq!(updated["permissions"]["ask"], json!(["Edit"]));
+	assert_eq!(updated["permissions"]["deny"], json!([]));
+
+	let written: Value =
+		serde_json::from_str(&std::fs::read_to_string(&path).expect("the settings file"))
+			.expect("the settings file holds an object");
+
+	assert_eq!(written["hooks"], json!("kept"), "a key the panel does not own was overwritten");
+	assert_eq!(written["permissions"]["unknown"], json!(1));
+}
+
+#[test]
+fn a_bot_whose_switch_was_thrown_before_the_panel_reads_as_denying_the_four_tools() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let mut held_back = an_identity("Nyx", "sonnet", "owl", json!("red"));
+	held_back["deniedTools"] = json!(["Bash", "Edit", "NotebookEdit", "Write"]);
+
+	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back }))
+		.expect("the bot is created");
+	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
+
+	let root = bundles::root(app.handle()).expect("the bundle root");
+	std::fs::remove_file(bundles::dir(&root, &id).join("settings.json"))
+		.expect("the file the panel writes goes away");
+
+	let listed = call(&window, "conversation_bots", json!({})).expect("the bots");
+
+	assert_eq!(listed[0]["changesNothing"], json!(true));
+	assert_eq!(
+		listed[0]["permissions"]["deny"],
+		json!(["Bash", "Edit", "Write", "NotebookEdit"]),
+		"a bot that changed nothing lost the denial the switch stood for"
+	);
+	assert_eq!(listed[0]["permissions"]["defaultMode"], json!("auto"));
+}
+
+#[test]
 fn a_write_naming_a_bot_that_is_gone_crosses_as_an_unknown_bot() {
 	let home = Home::new();
 	let app = home.app();

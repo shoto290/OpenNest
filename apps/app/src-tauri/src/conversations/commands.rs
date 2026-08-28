@@ -30,8 +30,10 @@ async fn write_bundle(
 	database: &db::Database,
 	bot: &StoredBot,
 	output_style: &str,
+	permissions: &bundles::BotPermissions,
 ) -> Result<(), TranscriptStoreError> {
 	if let Some(root) = root {
+		bundles::set_permissions(root, bot, permissions).map_err(unwritable)?;
 		bundles::write_styled(root, bot, output_style).map_err(unwritable)?;
 	}
 	list_bundles(root, database).await;
@@ -131,10 +133,11 @@ pub async fn conversation_create_bot<R: Runtime>(
 	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
 	let output_style = identity.output_style.clone();
+	let permissions = identity.permissions.clone();
 	let created = database.conversations().create_bot(identity.into(), space_id, None).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	if let Err(refusal) =
-		write_bundle(bundle_root.as_deref(), database, &created, &output_style).await
+		write_bundle(bundle_root.as_deref(), database, &created, &output_style, &permissions).await
 	{
 		let _ = database.conversations().delete_bot(created.id).await;
 		avatars::sweep_referenced(database, dir.as_deref()).await;
@@ -170,13 +173,19 @@ pub async fn conversation_duplicate_bot<R: Runtime>(
 	let identity =
 		duplicated_identity(Bot::of(source, dir.as_deref(), bundle_root.as_deref()), &taken);
 	let output_style = identity.output_style.clone();
-	let created = database
-		.conversations()
-		.create_bot(identity.into(), Some(destination), section)
-		.await?;
+	let permissions = identity.permissions.clone();
+	let created =
+		database.conversations().create_bot(identity.into(), Some(destination), section).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
-	if let Err(refusal) =
-		duplicated_bundle(bundle_root.as_deref(), database, &bot_id, &created, &output_style).await
+	if let Err(refusal) = duplicated_bundle(
+		bundle_root.as_deref(),
+		database,
+		&bot_id,
+		&created,
+		&output_style,
+		&permissions,
+	)
+	.await
 	{
 		let _ = database.conversations().delete_bot(created.id.clone()).await;
 		forget_bundle(bundle_root.as_deref(), database, &created.id).await;
@@ -196,13 +205,14 @@ async fn duplicated_bundle(
 	source_id: &str,
 	bot: &StoredBot,
 	output_style: &str,
+	permissions: &bundles::BotPermissions,
 ) -> Result<(), TranscriptStoreError> {
 	if let Some(root) = root {
 		bundles::inherit(root, source_id, &bot.id).map_err(|error| {
 			TranscriptStoreError::UnwritableBundle { detail: error.to_string() }
 		})?;
 	}
-	write_bundle(root, database, bot, output_style).await
+	write_bundle(root, database, bot, output_style, permissions).await
 }
 
 fn duplicated_identity(source: Bot, taken: &[String]) -> BotIdentity {
@@ -216,6 +226,7 @@ fn duplicated_identity(source: Bot, taken: &[String]) -> BotIdentity {
 		working_dir: source.working_dir,
 		instructions: source.instructions,
 		denied_tools: source.denied_tools,
+		permissions: source.permissions,
 		output_style: source.output_style,
 	}
 }
@@ -248,10 +259,11 @@ pub async fn conversation_update_bot<R: Runtime>(
 	let previous = database.conversations().bot(id.clone()).await?;
 	let reconciled = reconciled_identity(bundle_root.as_deref(), previous.as_ref(), identity);
 	let output_style = reconciled.output_style.clone();
+	let permissions = reconciled.permissions.clone();
 	let updated = database.conversations().update_bot(id.clone(), reconciled.into()).await?;
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	if let Err(refusal) =
-		write_bundle(bundle_root.as_deref(), database, &updated, &output_style).await
+		write_bundle(bundle_root.as_deref(), database, &updated, &output_style, &permissions).await
 	{
 		if let Some(previous) = previous {
 			let _ = database.conversations().update_bot(id, previous.into()).await;
@@ -824,6 +836,7 @@ mod tests {
 			memory: "They bake on Sundays.".to_owned(),
 			denied_tools: vec!["Bash".to_owned()],
 			changes_nothing: true,
+			permissions: bundles::BotPermissions::unruled(true),
 			output_style: "terse".to_owned(),
 			created_at: 1,
 		};
@@ -840,6 +853,7 @@ mod tests {
 				working_dir: source.working_dir,
 				instructions: source.instructions,
 				denied_tools: source.denied_tools,
+				permissions: source.permissions,
 				output_style: source.output_style,
 			}
 		);

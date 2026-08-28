@@ -109,6 +109,7 @@ pub struct Bot {
 	pub memory: String,
 	pub denied_tools: Vec<String>,
 	pub changes_nothing: bool,
+	pub permissions: crate::bundles::BotPermissions,
 	pub output_style: String,
 	pub created_at: i64,
 }
@@ -134,6 +135,13 @@ impl Bot {
 			.filter(|found| crate::bundles::edited(found, &bot.instructions))
 			.unwrap_or_else(|| bot.instructions.clone());
 		let avatar_image_path = drawable_avatar(bot.avatar_image_path.as_deref(), avatars);
+		let permissions = bundles
+			.and_then(|root| crate::bundles::permissions(root, &bot.id))
+			.unwrap_or_else(|| {
+				crate::bundles::BotPermissions::unruled(crate::bundles::denies_changes(
+					&denied_tools,
+				))
+			});
 		Self {
 			id: bot.id,
 			section_id: bot.section_id,
@@ -148,6 +156,7 @@ impl Bot {
 			memory,
 			changes_nothing: crate::bundles::denies_changes(&denied_tools),
 			denied_tools,
+			permissions,
 			output_style,
 			created_at: bot.created_at,
 		}
@@ -166,6 +175,8 @@ pub struct BotIdentity {
 	pub working_dir: Option<String>,
 	pub instructions: String,
 	pub denied_tools: Vec<String>,
+	#[serde(default)]
+	pub permissions: crate::bundles::BotPermissions,
 	#[serde(default = "default_output_style")]
 	pub output_style: String,
 }
@@ -902,6 +913,7 @@ mod tests {
 					"Write".into(),
 				],
 				changes_nothing: true,
+				permissions: crate::bundles::BotPermissions::unruled(true),
 				output_style: "Concise".into(),
 				created_at: 1,
 			},
@@ -919,6 +931,13 @@ mod tests {
 				"memory": "They bake on Sundays.",
 				"deniedTools": ["Bash", "Edit", "NotebookEdit", "Write"],
 				"changesNothing": true,
+				"permissions": {
+					"defaultMode": "auto",
+					"allow": [],
+					"ask": [],
+					"deny": ["Bash", "Edit", "Write", "NotebookEdit"],
+					"additionalDirectories": []
+				},
 				"outputStyle": "Concise",
 				"createdAt": 1
 			}),
@@ -942,6 +961,7 @@ mod tests {
 				working_dir: None,
 				instructions: String::new(),
 				denied_tools: Vec::new(),
+				permissions: crate::bundles::BotPermissions::default(),
 				output_style: "Concise".into(),
 			},
 			json!({
@@ -954,6 +974,13 @@ mod tests {
 				"workingDir": null,
 				"instructions": "",
 				"deniedTools": [],
+				"permissions": {
+					"defaultMode": "auto",
+					"allow": [],
+					"ask": [],
+					"deny": [],
+					"additionalDirectories": []
+				},
 				"outputStyle": "Concise"
 			}),
 		);
