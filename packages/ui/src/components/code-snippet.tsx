@@ -3,6 +3,7 @@
 import { Fragment } from "react"
 
 import { CodeLine } from "@workspace/ui/components/code-block"
+import { useCodeHighlightReady } from "@workspace/ui/hooks/use-code-highlight-ready"
 import {
 	type CodeLanguage,
 	highlightCode,
@@ -23,7 +24,11 @@ export function CodeSnippet({
 	language = "bash",
 	className,
 }: CodeSnippetProps) {
-	const lines = toCodeLines(code, highlightCode(code, language))
+	const ready = useCodeHighlightReady(language)
+	const lines = toCodeLines(
+		code,
+		ready ? highlightCode(code, language) : undefined,
+	)
 
 	return (
 		<pre

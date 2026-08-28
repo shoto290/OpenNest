@@ -21,6 +21,7 @@ import {
 	MarkdownMermaid,
 	MERMAID_LANGUAGE,
 } from "@workspace/ui/components/markdown/mermaid"
+import { useCodeHighlightReady } from "@workspace/ui/hooks/use-code-highlight-ready"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { highlightCode, toCodeLines } from "@workspace/ui/lib/code-highlight"
 
@@ -85,11 +86,15 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 		: t("code.snippet")
 	const [firstPaint] = useState(() => (fitsInOneFrame(code) ? code : ""))
 	const painted = useDeferredValue(code, firstPaint)
+	const ready = useCodeHighlightReady(language)
 
 	const lines = useMemo(() => {
-		const tokens = painted === code ? highlightCode(code, language) : undefined
-		return toCodeLines(code, tokens)
-	}, [code, language, painted])
+		const paintable = ready && painted === code
+		return toCodeLines(
+			code,
+			paintable ? highlightCode(code, language) : undefined,
+		)
+	}, [code, language, painted, ready])
 
 	return (
 		<div data-slot="markdown-fence" className="relative my-2">

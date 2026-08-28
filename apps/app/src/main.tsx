@@ -7,6 +7,7 @@ import { App } from "./App"
 
 import { revealWindow } from "@/lib/host"
 import { applyLanguage, readMirror } from "@/lib/user/preferences-mirror"
+import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 
 revealWindow()
 
@@ -19,3 +20,5 @@ createRoot(document.getElementById("root")!).render(
 		</I18nProvider>
 	</StrictMode>,
 )
+
+warmCodeHighlighter()

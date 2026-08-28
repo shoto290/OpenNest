@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest"
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 import { Markdown } from "@workspace/ui/components/markdown"
 import { RosterProvider } from "@workspace/ui/components/roster"
+import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
+
+prepareHighlighter()
 
 const FOOTNOTE_SOURCE = "Claim[^1]\n\n[^1]: the proof\n"
 
