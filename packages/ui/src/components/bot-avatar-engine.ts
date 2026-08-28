@@ -12,6 +12,7 @@ import {
 	projectConic,
 	projectEllipsoid,
 	type Quat,
+	quantize,
 	quatFromAxisAngle,
 	quatFromEuler,
 	quatMultiply,
@@ -19,9 +20,11 @@ import {
 	rotateVec3,
 	round2,
 	type SurfaceAffine,
+	toDegrees,
 	toRadians,
 	type Vec2,
 	type Vec3,
+	VIEW_BOX,
 	visibleRuns,
 	wireframePath,
 } from "@workspace/ui/components/bot-avatar-3d"
@@ -53,7 +56,13 @@ const AMBIENT_INTERVAL = 1000 / 30
 const AMBIENT_DEGREES = 1.1
 const AMBIENT_PERIODS: AxisTriple = { yaw: 2.6, pitch: 3.3, roll: 4.1 }
 const AMBIENT_PHASES: AxisTriple = { yaw: 0, pitch: 11.7, roll: 23.4 }
-const POSE_EPSILON = 0.0004
+const SMALLEST_RENDERED_PIXELS = 28
+const STEPS_PER_RENDERED_PIXEL = 20
+const UNIT_STEP = VIEW_BOX / SMALLEST_RENDERED_PIXELS / STEPS_PER_RENDERED_PIXEL
+const AVATAR_REACH_UNITS = VIEW_BOX / 2
+const RADIAN_STEP = UNIT_STEP / AVATAR_REACH_UNITS
+const DEGREE_STEP = toDegrees(RADIAN_STEP)
+const SCALE_STEP = UNIT_STEP / AVATAR_REACH_UNITS
 const POSE_SPRING_FREQUENCY = 9
 const POSE_SPRING_DAMPING = 0.9
 const EAR_WIGGLE_VELOCITY_LIMIT = 3
@@ -237,7 +246,9 @@ export class BotAvatarEngine {
 	private poseVelocity: EulerAngles = { ...NEUTRAL_POSE }
 	private ambient: EulerAngles = { ...NEUTRAL_POSE }
 	private ambientAt = 0
+	private displayPose: EulerAngles = { ...NEUTRAL_POSE }
 	private renderedPose: EulerAngles = { yaw: 9, pitch: 9, roll: 9 }
+	private written = new WeakMap<Element, Map<string, string>>()
 	private perspective = 0.55
 	private wireframe = false
 	private surface: BotAvatarSilhouette
@@ -328,6 +339,18 @@ export class BotAvatarEngine {
 		this.renderedPose = { yaw: 9, pitch: 9, roll: 9 }
 	}
 
+	private write(el: Element | null | undefined, name: string, value: string) {
+		if (!el) return
+		let attributes = this.written.get(el)
+		if (!attributes) {
+			attributes = new Map()
+			this.written.set(el, attributes)
+		}
+		if (attributes.get(name) === value) return
+		attributes.set(name, value)
+		el.setAttribute(name, value)
+	}
+
 	start() {
 		if (this.release !== null) return
 		this.lastFrame = performance.now()
@@ -383,7 +406,8 @@ export class BotAvatarEngine {
 		if (active && this.boilTimer === null) {
 			this.boilTimer = setInterval(() => {
 				this.boilIndex = (this.boilIndex + 1) % BOIL_SEEDS.length
-				this.parts?.noise?.setAttribute(
+				this.write(
+					this.parts?.noise,
 					"seed",
 					String(BOIL_SEEDS[this.boilIndex]),
 				)
@@ -506,11 +530,17 @@ export class BotAvatarEngine {
 		return this.basePose[axis] ?? this.statePose[axis]
 	}
 
+	private quantizePose() {
+		for (const axis of POSE_AXES) {
+			this.displayPose[axis] = quantize(this.pose[axis], RADIAN_STEP)
+		}
+	}
+
 	private poseMoved() {
 		return (
-			Math.abs(this.pose.yaw - this.renderedPose.yaw) > POSE_EPSILON ||
-			Math.abs(this.pose.pitch - this.renderedPose.pitch) > POSE_EPSILON ||
-			Math.abs(this.pose.roll - this.renderedPose.roll) > POSE_EPSILON
+			this.displayPose.yaw !== this.renderedPose.yaw ||
+			this.displayPose.pitch !== this.renderedPose.pitch ||
+			this.displayPose.roll !== this.renderedPose.roll
 		)
 	}
 
@@ -555,8 +585,8 @@ export class BotAvatarEngine {
 			restPivot: this.surface.center,
 			pivot: this.surface.center,
 		})
-		parts.head.setAttribute("transform", transform)
-		parts.headClip?.setAttribute("transform", transform)
+		this.write(parts.head, "transform", transform)
+		this.write(parts.headClip, "transform", transform)
 	}
 
 	private renderEars(rotation: Quat, welds: Vec2[], now: number) {
@@ -581,13 +611,14 @@ export class BotAvatarEngine {
 				EAR_SWAY_DEGREES
 			const twist = quatFromAxisAngle(
 				AXIS_Z,
-				toRadians(ear.side * phys.rot + wiggle + sway),
+				toRadians(quantize(ear.side * phys.rot + wiggle + sway, DEGREE_STEP)),
 			)
 			const hinged = quatMultiply(rotation, twist)
 			const anchor = rotateVec3(rotation, rest.anchor)
 			const plate: Vec3 = [
 				ear.volume.radii[0],
-				ear.volume.radii[1] * Math.max(EAR_PLATE_SQUASH_FLOOR, phys.sy),
+				ear.volume.radii[1] *
+					quantize(Math.max(EAR_PLATE_SQUASH_FLOOR, phys.sy), SCALE_STEP),
 				ear.volume.radii[2],
 			]
 			const transform = affineTransform({
@@ -604,8 +635,8 @@ export class BotAvatarEngine {
 				restPivot: rest.attachRest,
 				pivot: welds[index],
 			})
-			el.back.setAttribute("transform", transform)
-			el.front.setAttribute("transform", transform)
+			this.write(el.back, "transform", transform)
+			this.write(el.front, "transform", transform)
 			this.writeEarSplit(index, hinged, anchor[2])
 		}
 	}
@@ -613,7 +644,8 @@ export class BotAvatarEngine {
 	private writeEarSplit(index: number, hinged: Quat, depth: number) {
 		const split = this.parts?.ears[index]?.split
 		if (!split) return
-		split.setAttribute(
+		this.write(
+			split,
 			"d",
 			earSplitPath({
 				rotation: hinged,
@@ -694,7 +726,7 @@ export class BotAvatarEngine {
 			}
 			d += "Z"
 		}
-		el.setAttribute("d", d)
+		this.write(el, "d", d)
 		const dot = parts.blushDots[index]
 		if (!dot) return
 		let bottom = Number.NEGATIVE_INFINITY
@@ -705,11 +737,9 @@ export class BotAvatarEngine {
 		}
 		const middleX = sum / runs[0].length
 		const away = Math.sign(middleX - cx) || (index === 0 ? -1 : 1)
-		dot.setAttribute(
-			"cx",
-			String(round2(middleX + away * BLUSH_OUTWARD_OFFSET)),
-		)
-		dot.setAttribute(
+		this.write(dot, "cx", String(round2(middleX + away * BLUSH_OUTWARD_OFFSET)))
+		this.write(
+			dot,
 			"cy",
 			String(
 				round2(
@@ -726,7 +756,7 @@ export class BotAvatarEngine {
 		const wire = this.parts?.wire
 		if (!wire || !this.wireframe) return
 		const [cx, cy] = this.surface.center
-		wire.setAttribute("transform", `translate(${cx} ${cy})`)
+		this.write(wire, "transform", `translate(${cx} ${cy})`)
 		const markers = welds
 			.map((weld) =>
 				ellipseToPath({
@@ -738,7 +768,8 @@ export class BotAvatarEngine {
 				}),
 			)
 			.join("")
-		wire.setAttribute(
+		this.write(
+			wire,
 			"d",
 			ellipseToPath(
 				projectEllipsoid({
@@ -768,7 +799,8 @@ export class BotAvatarEngine {
 			this.morph > 0.999 &&
 			Math.abs(this.velocity) < 0.001 &&
 			this.blinkStart === null
-		const rotation = quatFromEuler(this.pose)
+		this.quantizePose()
+		const rotation = quatFromEuler(this.displayPose)
 		const headAffine = headSurfaceAffine({
 			surface: this.surface,
 			rotation,
@@ -785,20 +817,27 @@ export class BotAvatarEngine {
 			welds[index][1] = weld[1]
 		}
 		if (!settled || this.eyesDirty || this.poseMoved()) {
-			this.renderedPose.yaw = this.pose.yaw
-			this.renderedPose.pitch = this.pose.pitch
-			this.renderedPose.roll = this.pose.roll
+			this.renderedPose.yaw = this.displayPose.yaw
+			this.renderedPose.pitch = this.displayPose.pitch
+			this.renderedPose.roll = this.displayPose.roll
 			this.renderHead(headAffine)
 			this.renderEyes(rotation, now)
 			this.renderWire(rotation, welds)
 			if (settled) this.eyesDirty = false
 		}
 		const breath = Math.sin(now * 0.0016)
-		const stretch = clamp(this.velocity * 0.025, -0.09, 0.13)
-		const rigDx = this.faceDx * animal.scale * 0.5
-		const rigDy = this.faceDy * animal.scale * 0.5 + breath * 1.3
-		const tilt = this.faceDx * 0.12
-		parts.rig.setAttribute(
+		const stretch = quantize(
+			clamp(this.velocity * 0.025, -0.09, 0.13),
+			SCALE_STEP,
+		)
+		const rigDx = quantize(this.faceDx * animal.scale * 0.5, UNIT_STEP)
+		const rigDy = quantize(
+			this.faceDy * animal.scale * 0.5 + breath * 1.3,
+			UNIT_STEP,
+		)
+		const tilt = quantize(this.faceDx * 0.12, DEGREE_STEP)
+		this.write(
+			parts.rig,
 			"transform",
 			`translate(${round2(120 + rigDx)} ${round2(132 + rigDy)}) rotate(${round2(tilt)}) scale(${round2(1 - stretch * 0.5)} ${round2(1 + stretch)}) translate(-120 -132)`,
 		)

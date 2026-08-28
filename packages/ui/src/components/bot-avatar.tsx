@@ -10,7 +10,7 @@ import {
 	useRef,
 } from "react"
 
-import { clamp, round2 } from "@workspace/ui/components/bot-avatar-3d"
+import { clamp, round2, VIEW_BOX } from "@workspace/ui/components/bot-avatar-3d"
 import {
 	ANIMALS,
 	type BotAvatarAnimal,
@@ -79,7 +79,6 @@ type BotAvatarBlot = (typeof BLOT_TINTS)[number]
 
 const blotTint = (blot: BotAvatarBlot) => `var(--bot-blot-${blot})`
 
-const VIEW_BOX = 240
 const BLOT_RATIO = 16 / 15
 const BLOT_SPAN = VIEW_BOX * BLOT_RATIO
 const BLOT_INSET = round2((VIEW_BOX - BLOT_SPAN) / 2)
