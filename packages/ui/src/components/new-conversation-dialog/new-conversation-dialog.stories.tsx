@@ -54,7 +54,7 @@ const dialogIn = async () => {
 }
 
 const meta = preview.meta({
-	title: "Overlays/NewConversationDialog",
+	title: "Settings/Conversation/NewConversationDialog",
 	component: NewConversationDialog,
 	parameters: {
 		layout: "fullscreen",

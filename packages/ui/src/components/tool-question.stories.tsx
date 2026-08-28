@@ -58,7 +58,7 @@ const RELEASE_QUESTION: ToolQuestionItem = {
 }
 
 const meta = preview.meta({
-	title: "AI/ToolQuestion",
+	title: "Conversation/Tools/ToolQuestion",
 	component: ToolQuestion,
 	parameters: {
 		docs: {

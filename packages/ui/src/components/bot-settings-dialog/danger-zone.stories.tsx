@@ -11,7 +11,7 @@ const confirmation = async () => {
 }
 
 const meta = preview.meta({
-	title: "AI/DangerZone",
+	title: "Settings/Bot/DangerZone",
 	component: DangerZone,
 	parameters: {
 		layout: "padded",

@@ -54,7 +54,7 @@ const EditorHost = (props: McpServerEditorProps) => {
 }
 
 const meta = preview.meta({
-	title: "AI/McpServerEditor",
+	title: "Settings/Bot/McpServerEditor",
 	component: McpServerEditor,
 	parameters: {
 		layout: "fullscreen",

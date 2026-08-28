@@ -17,7 +17,7 @@ const hostsIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "markdown-link-host")
 
 const meta = preview.meta({
-	title: "AI/MarkdownLink",
+	title: "Conversation/Markdown/MarkdownLink",
 	component: MarkdownLink,
 	parameters: {
 		docs: {

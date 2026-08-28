@@ -35,7 +35,7 @@ const LONG_LINE =
 	"bun run nest:sync --workspace packages/ui --tint sky --animals owl,cat,fox --out packages/ui/src/components/nest/generated/nest-manifest.ts --verbose"
 
 const meta = preview.meta({
-	title: "AI/CodeSnippet",
+	title: "Conversation/Markdown/CodeSnippet",
 	component: CodeSnippet,
 	parameters: {
 		layout: "padded",

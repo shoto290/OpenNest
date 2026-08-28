@@ -58,7 +58,7 @@ const RetryAction = () => (
 )
 
 const meta = preview.meta({
-	title: "AI/MessageActions",
+	title: "Conversation/Message/MessageActions",
 	component: MessageActions,
 	parameters: {
 		layout: "padded",

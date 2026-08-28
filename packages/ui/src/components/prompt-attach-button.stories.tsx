@@ -8,7 +8,7 @@ import {
 } from "@workspace/ui/components/prompt-attachments.fixtures"
 
 const meta = preview.meta({
-	title: "AI/PromptAttachButton",
+	title: "Conversation/Prompt/PromptAttachButton",
 	component: PromptAttachButton,
 	parameters: {
 		layout: "centered",

@@ -74,7 +74,7 @@ const Toggled = () => {
 }
 
 const meta = preview.meta({
-	title: "AI/Disclosure",
+	title: "Primitives/Disclosure",
 	component: TypedDisclosure,
 	parameters: {
 		layout: "padded",

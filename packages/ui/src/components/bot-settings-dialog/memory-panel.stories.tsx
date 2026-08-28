@@ -5,7 +5,7 @@ import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.
 import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
 
 const meta = preview.meta({
-	title: "AI/MemoryPanel",
+	title: "Settings/Bot/MemoryPanel",
 	component: MemoryPanel,
 	parameters: {
 		layout: "fullscreen",

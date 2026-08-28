@@ -29,7 +29,7 @@ const WRITE_PARAMETERS: ToolApprovalParameter[] = [
 ]
 
 const meta = preview.meta({
-	title: "AI/ToolApproval",
+	title: "Conversation/Tools/ToolApproval",
 	component: ToolApproval,
 	parameters: {
 		docs: {

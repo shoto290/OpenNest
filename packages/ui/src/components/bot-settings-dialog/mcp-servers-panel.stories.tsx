@@ -10,7 +10,7 @@ import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mc
 const [LOCAL] = BOT_MCP_SERVERS
 
 const meta = preview.meta({
-	title: "AI/McpServersPanel",
+	title: "Settings/Bot/McpServersPanel",
 	component: McpServersPanel,
 	parameters: {
 		layout: "fullscreen",

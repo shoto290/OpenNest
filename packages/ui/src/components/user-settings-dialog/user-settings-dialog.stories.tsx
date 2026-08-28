@@ -74,7 +74,7 @@ const dialogIn = async () => {
 }
 
 const meta = preview.meta({
-	title: "Overlays/UserSettingsDialog",
+	title: "Settings/User/UserSettingsDialog",
 	component: UserSettingsDialog,
 	parameters: {
 		layout: "fullscreen",

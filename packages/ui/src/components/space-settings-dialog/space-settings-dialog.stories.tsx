@@ -48,7 +48,7 @@ const dialogIn = async () => {
 }
 
 const meta = preview.meta({
-	title: "Overlays/SpaceSettingsDialog",
+	title: "Settings/Space/SpaceSettingsDialog",
 	component: SpaceSettingsDialog,
 	parameters: {
 		layout: "fullscreen",

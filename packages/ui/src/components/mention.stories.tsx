@@ -38,7 +38,7 @@ const HANDOVER =
 	"I stopped at the failing migration — <@bot-basile> owns that script, and <@bot-ghost> wrote the fixture it reads."
 
 const meta = preview.meta({
-	title: "AI/Mention",
+	title: "Conversation/Message/Mention",
 	component: Mention,
 	parameters: {
 		layout: "padded",

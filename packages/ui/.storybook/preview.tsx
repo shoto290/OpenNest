@@ -73,78 +73,74 @@ export default definePreview({
 		docs: { container: ThemedDocsContainer },
 		options: {
 			storySort: (a, b) => {
-				const SECTIONS = [
+				const FAMILIES = [
 					"Foundations",
 					"Primitives",
 					"Forms",
-					"Overlays",
 					"Feedback",
 					"Navigation",
-					"Data",
-					"Display",
 					"Layout",
-					"Patterns",
+					"Overlays",
 					"Branding",
-					"AI",
+					"Conversation",
+					"Settings",
 				]
-				const FOUNDATIONS = [
-					"Introduction",
-					"Colors",
-					"Typography",
-					"Spacing",
-					"Radius & Shadows",
-					"Scrollbars",
-					"Motion",
-					"Icons",
+				const SUB_LEVELS = [
+					"Foundations/Introduction",
+					"Foundations/Colors",
+					"Foundations/Typography",
+					"Foundations/Spacing",
+					"Foundations/Radius & Shadows",
+					"Foundations/Scrollbars",
+					"Foundations/Motion",
+					"Foundations/Icons",
+					"Primitives/Overview",
+					"Forms/Overview",
+					"Feedback/Overview",
+					"Navigation/Overview",
+					"Layout/Overview",
+					"Overlays/Overview",
+					"Branding/Overview",
+					"Conversation/Overview",
+					"Conversation/Message",
+					"Conversation/Prompt",
+					"Conversation/Markdown",
+					"Conversation/Tools",
+					"Settings/Overview",
+					"Settings/Bot",
+					"Settings/User",
+					"Settings/Space",
+					"Settings/Conversation",
+					"Settings/Plugins",
 				]
+				const UNRANKED = SUB_LEVELS.length
 
-				const [sectionA, ...pathA] = a.title.split("/")
-				const [sectionB, ...pathB] = b.title.split("/")
+				const [familyA, ...pathA] = a.title.split("/")
+				const [familyB, ...pathB] = b.title.split("/")
 
-				const sectionRankA = SECTIONS.indexOf(sectionA)
-				const sectionRankB = SECTIONS.indexOf(sectionB)
-				if (sectionRankA === -1 || sectionRankB === -1) {
-					const unknown = sectionRankA === -1 ? sectionA : sectionB
+				const familyRankA = FAMILIES.indexOf(familyA)
+				const familyRankB = FAMILIES.indexOf(familyB)
+				if (familyRankA === -1 || familyRankB === -1) {
+					const unknown = familyRankA === -1 ? familyA : familyB
 					throw new Error(
-						`Unknown top-level story section "${unknown}". Allowed: ${SECTIONS.join(", ")}.`,
+						`Unknown top-level story family "${unknown}". Allowed: ${FAMILIES.join(", ")}.`,
 					)
 				}
-				if (sectionRankA !== sectionRankB) {
-					return sectionRankA - sectionRankB
-				}
 
-				if (sectionA === "Foundations") {
-					const foundationRankA = FOUNDATIONS.indexOf(pathA[0] ?? "")
-					const foundationRankB = FOUNDATIONS.indexOf(pathB[0] ?? "")
-					if (foundationRankA !== foundationRankB) {
-						const fallback = FOUNDATIONS.length
-						return (
-							(foundationRankA === -1 ? fallback : foundationRankA) -
-							(foundationRankB === -1 ? fallback : foundationRankB)
-						)
-					}
-				}
+				const subRankA = SUB_LEVELS.indexOf(`${familyA}/${pathA[0]}`)
+				const subRankB = SUB_LEVELS.indexOf(`${familyB}/${pathB[0]}`)
 
-				const deprecatedA = a.tags?.includes("deprecated") ? 1 : 0
-				const deprecatedB = b.tags?.includes("deprecated") ? 1 : 0
-				if (deprecatedA !== deprecatedB) {
-					return deprecatedA - deprecatedB
-				}
-
-				const depth = Math.max(pathA.length, pathB.length)
-				for (let level = 0; level < depth; level += 1) {
-					const segmentA = pathA[level] ?? ""
-					const segmentB = pathB[level] ?? ""
-					if (segmentA !== segmentB) {
-						return segmentA.localeCompare(segmentB)
-					}
-				}
-
-				if (a.title !== b.title) {
-					return a.title.localeCompare(b.title)
-				}
-
-				return (a.type === "docs" ? 0 : 1) - (b.type === "docs" ? 0 : 1)
+				return (
+					[
+						familyRankA - familyRankB,
+						(subRankA === -1 ? UNRANKED : subRankA) -
+							(subRankB === -1 ? UNRANKED : subRankB),
+						(a.tags?.includes("deprecated") ? 1 : 0) -
+							(b.tags?.includes("deprecated") ? 1 : 0),
+						pathA.join("/").localeCompare(pathB.join("/")),
+						(a.type === "docs" ? 0 : 1) - (b.type === "docs" ? 0 : 1),
+					].find((comparison) => comparison !== 0) ?? 0
+				)
 			},
 		},
 		viewport: {

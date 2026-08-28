@@ -15,7 +15,7 @@ const BOT = {
 } as const
 
 const meta = preview.meta({
-	title: "AI/ChatEmptyState",
+	title: "Conversation/Message/ChatEmptyState",
 	component: ChatEmptyState,
 	parameters: {
 		layout: "centered",

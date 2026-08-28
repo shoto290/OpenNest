@@ -43,7 +43,7 @@ const paintedTokens = (fence: HTMLElement) =>
 	fence.querySelectorAll("[style*='--code-token-light']").length
 
 const meta = preview.meta({
-	title: "AI/MarkdownCode",
+	title: "Conversation/Markdown/MarkdownCode",
 	component: MarkdownPre,
 	parameters: {
 		docs: {

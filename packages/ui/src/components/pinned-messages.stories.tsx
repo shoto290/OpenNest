@@ -74,7 +74,7 @@ const PinnedHeader = ({ initial }: { initial: PinnedMessage[] }) => {
 }
 
 const meta = preview.meta({
-	title: "AI/PinnedMessages",
+	title: "Conversation/Message/PinnedMessages",
 	component: PinnedMessages,
 	render: (args) => <ChatHeader {...args} />,
 	parameters: {

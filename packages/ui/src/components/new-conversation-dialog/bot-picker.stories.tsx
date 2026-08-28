@@ -38,7 +38,7 @@ const PickerHost = (props: BotPickerProps) => {
 }
 
 const meta = preview.meta({
-	title: "Forms/BotPicker",
+	title: "Settings/Conversation/BotPicker",
 	component: BotPicker,
 	parameters: {
 		layout: "padded",
