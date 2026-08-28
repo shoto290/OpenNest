@@ -41,6 +41,42 @@ describe("isBundleWrite", () => {
 		}
 	})
 
+	it("leaves a file the bot could later run to the reader", () => {
+		for (const name of [
+			"setup.sh",
+			"setup.bash",
+			"setup.zsh",
+			"setup.command",
+			"setup.py",
+			"setup.rb",
+			"setup.pl",
+			"setup.js",
+			"setup.mjs",
+			"setup.cjs",
+			"setup.ts",
+			"setup.applescript",
+			"setup.SH",
+			"setup.Py",
+			"setup",
+		]) {
+			expect(writes(join(bundle, "skills", "brief", name))).toBe(false)
+		}
+	})
+
+	it("owns the files the bot reads as instructions", () => {
+		for (const name of [
+			"brief.md",
+			"brief.txt",
+			"brief.json",
+			"brief.yaml",
+			"brief.yml",
+			"brief.toml",
+			"brief.MD",
+		]) {
+			expect(writes(join(bundle, "skills", "brief", name))).toBe(true)
+		}
+	})
+
 	it("asks for a path that only looks like it is inside", () => {
 		expect(writes(join(bundle, "..", "b2", "skills", "SKILL.md"))).toBe(false)
 		expect(writes(join(bundle, "away", "notes.md"))).toBe(false)
