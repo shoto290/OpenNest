@@ -22,6 +22,7 @@ const MANIFEST_DIR: &str = ".claude-plugin";
 const MANIFEST_NAME: &str = "plugin.json";
 const MARKETPLACE_NAME: &str = "marketplace.json";
 const AGENTS_DIR: &str = "agents";
+const AGENT_NAME: &str = "agent";
 const AGENT_EXTENSION: &str = "md";
 
 const SKILLS_DIR: &str = "skills";
@@ -156,14 +157,8 @@ pub fn slug(name: &str) -> String {
 	}
 }
 
-pub fn agent_ref(root: &Path, bot: &Bot) -> String {
-	format!("{}:{}", bot.id, agent_name(root, bot))
-}
-
-fn agent_name(root: &Path, bot: &Bot) -> String {
-	generated_agent(root, &bot.id)
-		.and_then(|path| Some(path.file_stem()?.to_string_lossy().into_owned()))
-		.unwrap_or_else(|| slug(&bot.name))
+pub fn agent_ref(bot: &Bot) -> String {
+	format!("{}:{AGENT_NAME}", bot.id)
 }
 
 fn generated_agent(root: &Path, bot_id: &str) -> Option<PathBuf> {
@@ -421,13 +416,12 @@ fn write_briefed(
 ) -> std::io::Result<()> {
 	unequip(root, &bot.id);
 	let generated = generated_agent(root, &bot.id);
-	let agent_path = free_agent_path(root, bot, generated.as_deref());
-	let name = agent_path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+	let agent_path = agent_path(root, &bot.id);
 
 	rewrite_manifest(root, bot)?;
 	private_files::replace(
 		&agent_path,
-		agent(root, bot, &name, brief, memory, output_style).as_bytes(),
+		agent(root, bot, AGENT_NAME, brief, memory, output_style).as_bytes(),
 	)?;
 	if let Some(generated) = generated.filter(|path| path != &agent_path) {
 		let _ = fs::remove_file(generated);
@@ -453,13 +447,8 @@ fn generated_hooks(path: &Path) -> bool {
 	fs::read_to_string(path).is_ok_and(|text| text.contains(SESSION_START_NAME))
 }
 
-fn free_agent_path(root: &Path, bot: &Bot, generated: Option<&Path>) -> PathBuf {
-	let agents = dir(root, &bot.id).join(AGENTS_DIR);
-	let preferred = agents.join(format!("{}.{AGENT_EXTENSION}", slug(&bot.name)));
-	if Some(preferred.as_path()) == generated || !preferred.exists() {
-		return preferred;
-	}
-	agents.join(format!("{}-{}.{AGENT_EXTENSION}", slug(&bot.name), bot.id))
+fn agent_path(root: &Path, bot_id: &str) -> PathBuf {
+	dir(root, bot_id).join(AGENTS_DIR).join(format!("{AGENT_NAME}.{AGENT_EXTENSION}"))
 }
 
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
@@ -1669,7 +1658,7 @@ mod tests {
 				.expect("the manifest is there");
 		assert!(manifest.contains("\"name\":\"b1\""), "got {manifest}");
 		assert!(manifest.contains("\"displayName\":\"Bean\""), "got {manifest}");
-		assert_eq!(agent_ref(&root, &bot), "b1:bean");
+		assert_eq!(agent_ref(&bot), "b1:agent");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);
@@ -2166,35 +2155,38 @@ mod tests {
 	}
 
 	#[test]
-	fn a_generated_agent_steps_aside_rather_than_take_a_file_nobody_generated() {
-		let root = a_root("collision");
-		let mut bot = a_bot("Bean", "Answer briefly.");
+	fn an_agent_generated_under_another_name_moves_to_the_one_every_bundle_uses() {
+		let root = a_root("moved");
+		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
-		let handwritten = dir(&root, &bot.id).join(AGENTS_DIR).join("helper.md");
-		private_files::replace(&handwritten, b"a subagent").expect("the reader's agent lands");
 
-		bot.name = "Helper".to_owned();
-		write(&root, &bot).expect("the rename is written");
+		let agent = agent_path(&root, &bot.id);
+		let dropped = agent.with_file_name("bean.md");
+		fs::rename(&agent, &dropped).expect("the agent takes the old name");
 
-		assert_eq!(fs::read_to_string(&handwritten).ok().as_deref(), Some("a subagent"));
-		assert_eq!(agent_ref(&root, &bot), "b1:helper-b1");
+		write(&root, &bot).expect("the bundle is written again");
+
+		assert!(!dropped.exists(), "the old agent is still there");
+		assert_eq!(agent_file(&root, &bot.id).as_ref(), Some(&agent));
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);
 	}
 
 	#[test]
-	fn a_renamed_bot_leaves_no_generated_agent_under_the_name_it_dropped() {
+	fn a_renamed_bot_keeps_the_agent_file_it_already_had() {
 		let root = a_root("renamed");
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
-		let dropped = dir(&root, &bot.id).join(AGENTS_DIR).join("bean.md");
+		let agent = agent_path(&root, &bot.id);
 
 		bot.name = "Fig".to_owned();
 		write(&root, &bot).expect("the bundle is written again");
 
-		assert!(!dropped.exists(), "the old agent is still there");
-		assert_eq!(agent_ref(&root, &bot), "b1:fig");
+		assert_eq!(agent_file(&root, &bot.id).as_ref(), Some(&agent));
+		let written = fs::read_to_string(&agent).expect("the agent is there");
+		assert!(written.contains("name: \"agent\""), "got {written}");
+		assert_eq!(agent_ref(&bot), "b1:agent");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);

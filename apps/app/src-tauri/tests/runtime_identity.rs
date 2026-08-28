@@ -335,7 +335,7 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 
 	harness.describe(&bot, DUTCH, None);
 	let bundle = bundle_of(&harness, &bot);
-	let agent = bundle.join("agents").join(format!("{}.md", bundles::slug(NAME)));
+	let agent = bundle.join("agents").join("agent.md");
 	let written = std::fs::read_to_string(&agent).expect("the agent file is there");
 	assert!(written.contains(DUTCH), "got {written}");
 	assert!(

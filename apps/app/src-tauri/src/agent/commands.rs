@@ -409,7 +409,7 @@ fn laid_down_bundle(
 		system_path: system.map(|path| path.to_string_lossy().into_owned()),
 		user_path: user.map(|path| path.to_string_lossy().into_owned()),
 		space_path: space.map(|path| path.to_string_lossy().into_owned()),
-		agent: bundles::agent_ref(root, bot),
+		agent: bundles::agent_ref(bot),
 		identity: bundles::identity(bot),
 		output_style: bundles::output_style(root, &bot.id),
 		settings_path: bundles::settings_file(root, &bot.id)
