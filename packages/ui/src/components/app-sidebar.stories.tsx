@@ -272,6 +272,11 @@ const badgeIn = (row: HTMLElement) =>
 
 const bottomOf = (node: HTMLElement) => node.getBoundingClientRect().bottom
 
+const centerOf = (node: HTMLElement) => {
+	const box = node.getBoundingClientRect()
+	return box.top + box.height / 2
+}
+
 const expectFooterAtColumnBottom = async (canvasElement: HTMLElement) => {
 	const footer = slotIn(canvasElement, "sidebar-footer")
 	await expect(footer.getBoundingClientRect().top).toBeCloseTo(
@@ -841,7 +846,7 @@ export const Badges = meta.story({
 		docs: {
 			description: {
 				story:
-					"Three rows carrying the badge a host derived from their chat — one asking for the reader, one done, one that failed — over a fourth with nothing to say. Check the badge rides the avatar rather than the text, so it lands in the same slot on every row and a row without one keeps its name, its preview and its timestamp on the columns the rest of the list holds; that the row heights are untouched, since the dot sits over the avatar rather than beside it; and that the three read apart by colour and by the pulse on attention rather than by position alone. The badge is drawn and not spoken here: the row is named by its own text and the news is in the message line under it. Pick `BadgesOnRail` for the same marks once the panel is a rail, `Working` for the running rows that carry no badge of their own.",
+					"Three rows carrying the badge a host derived from their chat — one asking for the reader, one done, one that failed — over a fourth with nothing to say. Check the badge sits at the trailing edge of the row, under the timestamp and level with the preview line, rather than on the avatar it used to crowd: the marks stack into one column the eye can run down, next to the times it is already reading. Check a row without one keeps its name, its preview and its timestamp on exactly the columns the rest of the list holds — the dot is out of the flow, so it moves nothing — that the row heights are untouched, and that the three read apart by colour and by the pulse on attention rather than by position alone. The badge is drawn and not spoken here: the row is named by its own text and the news is in the message line under it. Pick `BadgesOnRail` for the one place the mark still rides the avatar, `Working` for the running rows that carry no badge of their own.",
 			},
 		},
 	},
@@ -856,6 +861,19 @@ export const Badges = meta.story({
 		])
 		await expectAlignedRows(rows)
 		await expect(uniqueCount(rowHeights(rows))).toBe(1)
+
+		for (const row of rows.slice(0, 3)) {
+			const dot = slotIn(row, "bot-activity-dot")
+			const timestamp = slotIn(row, "roster-row-timestamp")
+			const preview = slotIn(row, "roster-row-preview")
+
+			await expect(slotIn(row, "bot-identity-avatar").contains(dot)).toBe(false)
+			await expect(dot.getBoundingClientRect().right).toBeCloseTo(
+				timestamp.getBoundingClientRect().right,
+				0,
+			)
+			await expect(centerOf(dot)).toBeCloseTo(centerOf(preview), 0)
+		}
 	},
 })
 
@@ -866,7 +884,7 @@ export const BadgesOnRail = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same three badges once the panel is down to its icon rail, where the avatar is all that is left of a row. Check every badge is still drawn and still inside the rail rather than clipped against its trailing edge — a reader who collapses the panel is the one who most needs to be told a bot wants them — and that a row with nothing waiting still draws no dot. Pick `Badges` for the open panel, `Collapsed` for the rail without any.",
+					"The same three badges once the panel is down to its icon rail, where the avatar is all that is left of a row. This is the one case where the mark rides the avatar: there is no trailing edge left to hang it on, no timestamp and no preview line, so it falls back onto the corner of the square. Check every badge is still drawn and still inside the rail rather than clipped against its trailing edge — a reader who collapses the panel is the one who most needs to be told a bot wants them — and that a row with nothing waiting still draws no dot. Pick `Badges` for the open panel, where the mark moves out to the row's edge, `Collapsed` for the rail without any.",
 			},
 		},
 	},
@@ -887,9 +905,12 @@ export const BadgesOnRail = meta.story({
 
 		const panelBox = panel.getBoundingClientRect()
 		for (const row of rows.slice(0, 3)) {
-			const dot = slotIn(row, "bot-activity-dot").getBoundingClientRect()
-			await expect(dot.right).toBeLessThanOrEqual(panelBox.right)
-			await expect(dot.left).toBeGreaterThanOrEqual(panelBox.left)
+			const dot = slotIn(row, "bot-activity-dot")
+			await expect(slotIn(row, "bot-identity-avatar").contains(dot)).toBe(true)
+
+			const dotBox = dot.getBoundingClientRect()
+			await expect(dotBox.right).toBeLessThanOrEqual(panelBox.right)
+			await expect(dotBox.left).toBeGreaterThanOrEqual(panelBox.left)
 		}
 	},
 })
@@ -3590,7 +3611,7 @@ export const ConversationWorking = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room where bots are running. The bot animates inside the stack the way it would on its own row, and its badge is carried up onto the room: a reader scanning the roster sees the dot on the room rather than having to open it to find which of its bots wants them. Only one dot is drawn whatever the room holds — the badge slot is the same one a bot row uses, in the same corner of the same square, so a mixed list has one dot per row and never a cluster. The preview line drops the last message for the work in progress, the way a bot row does, except a room names who is at it: the first room has two bots running and speaks of the one that spoke last, so the line never jumps between them mid-run. The third room holds a bot running without a pose and falls back to the same word a bot row falls back to. The quiet room in the middle keeps its message and wears no dot.",
+					"A room where bots are running. The bot animates inside the stack the way it would on its own row, and its badge is carried up onto the room: a reader scanning the roster sees the dot on the room rather than having to open it to find which of its bots wants them. Only one dot is drawn whatever the room holds — the badge slot is the same one a bot row uses, at the trailing edge under the timestamp, so a mixed list has one dot per row, on one column, and never a cluster over a stack of avatars. The preview line drops the last message for the work in progress, the way a bot row does, except a room names who is at it: the first room has two bots running and speaks of the one that spoke last, so the line never jumps between them mid-run. The third room holds a bot running without a pose and falls back to the same word a bot row falls back to. The quiet room in the middle keeps its message and wears no dot.",
 			},
 		},
 	},

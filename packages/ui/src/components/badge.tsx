@@ -66,6 +66,7 @@ const botBadgeVariants = cva("", {
 				"absolute right-[6%] bottom-[6%] size-[34%] max-h-4 max-w-4 ring-2 ring-[var(--badge-ring,var(--color-sidebar))]",
 			switcher:
 				"group-data-[state=collapsed]/sidebar:absolute group-data-[state=collapsed]/sidebar:top-1 group-data-[state=collapsed]/sidebar:right-1 group-data-[state=collapsed]/sidebar:ring-2 group-data-[state=collapsed]/sidebar:ring-[var(--badge-ring,var(--color-sidebar))]",
+			row: "absolute end-0 bottom-1",
 		},
 	},
 })
