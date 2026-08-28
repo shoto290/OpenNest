@@ -135,6 +135,11 @@ const settleScroll = () =>
 const waitForLastBubble = (viewport: HTMLElement) =>
 	waitFor(() => expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1))
 
+const waitForOverflow = (viewport: HTMLElement) =>
+	waitFor(() =>
+		expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight),
+	)
+
 const holdsLastLineWhileStreaming = async (
 	viewport: HTMLElement,
 	isStreaming: () => boolean,
@@ -162,6 +167,7 @@ const scrollToHistoryStart = async ({
 	const anchorOffset = () =>
 		canvas.getByText(ANCHOR_TEXT).getBoundingClientRect().top
 
+	await waitForOverflow(viewport)
 	await waitForLastBubble(viewport)
 	viewport.scrollTop = 0
 	await waitFor(() => expect(onFollowChange).toHaveBeenCalledWith(false))

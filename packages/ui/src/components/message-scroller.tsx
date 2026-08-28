@@ -219,6 +219,10 @@ export function MessageScroller({
 		[deferSettle],
 	)
 
+	const rememberPosition = useCallback((viewport: HTMLElement) => {
+		lastScrollTopRef.current = viewport.scrollTop
+	}, [])
+
 	const scrollToEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
 			const viewport = viewportRef.current
@@ -233,8 +237,9 @@ export function MessageScroller({
 			} else {
 				viewport.scrollTop = viewport.scrollHeight
 			}
+			rememberPosition(viewport)
 		},
-		[holdProgrammaticScroll],
+		[holdProgrammaticScroll, rememberPosition],
 	)
 
 	const landOnLiveEdge = useCallback(() => {
@@ -266,9 +271,10 @@ export function MessageScroller({
 			setFollowing(false)
 			holdProgrammaticScroll(centeredTop(viewport, anchor))
 			anchor.scrollIntoView({ behavior: nextBehavior, block: "center" })
+			rememberPosition(viewport)
 			return true
 		},
-		[holdProgrammaticScroll, setFollowing],
+		[holdProgrammaticScroll, rememberPosition, setFollowing],
 	)
 
 	const pinTopVisibleRow = useCallback(() => {
@@ -358,6 +364,7 @@ export function MessageScroller({
 		if (drift !== 0) {
 			holdProgrammaticScroll(viewport.scrollTop + drift)
 			viewport.scrollTop += drift
+			rememberPosition(viewport)
 		}
 		if (!older?.isLoading) pinRef.current = null
 	})
