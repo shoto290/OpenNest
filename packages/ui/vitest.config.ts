@@ -1,6 +1,8 @@
 import { fileURLToPath } from "node:url"
 
+import babel from "@rolldown/plugin-babel"
 import { storybookTest } from "@storybook/addon-vitest/vitest-plugin"
+import { reactCompilerPreset } from "@vitejs/plugin-react"
 import { playwright } from "@vitest/browser-playwright"
 import { defineConfig } from "vitest/config"
 
@@ -8,6 +10,7 @@ export default defineConfig({
 	test: {
 		projects: [
 			{
+				plugins: [babel({ presets: [reactCompilerPreset().preset] })],
 				resolve: {
 					alias: {
 						"@workspace/ui": fileURLToPath(new URL("./src", import.meta.url)),

@@ -1,4 +1,6 @@
+import babel from "@rolldown/plugin-babel"
 import { defineMain } from "@storybook/react-vite/node"
+import { reactCompilerPreset } from "@vitejs/plugin-react"
 
 export default defineMain({
 	framework: "@storybook/react-vite",
@@ -28,7 +30,10 @@ export default defineMain({
 		const tailwindcss = await import("@tailwindcss/vite")
 
 		return mergeConfig(config, {
-			plugins: [tailwindcss.default()],
+			plugins: [
+				babel({ presets: [reactCompilerPreset()] }),
+				tailwindcss.default(),
+			],
 			resolve: {
 				alias: {
 					"@workspace/storybook": new URL("../.storybook", import.meta.url)
