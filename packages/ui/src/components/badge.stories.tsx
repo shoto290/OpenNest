@@ -36,12 +36,17 @@ const SWITCHER_HOST =
 const RAIL_HOST =
 	"group/sidebar relative flex size-7 items-center justify-center rounded-2xl bg-sidebar"
 
+const ROW_HOST = "relative flex h-9 w-40 flex-col justify-center text-sm"
+
 const CARD_HOST =
 	"relative block size-10 rounded-full bg-card [--badge-ring:var(--color-card)]"
 
 const dotsIn = (root: HTMLElement) => slotsIn(root, "bot-badge-dot")
 
 const boxOf = (element: HTMLElement) => element.getBoundingClientRect()
+
+const centerOf = (element: HTMLElement) =>
+	boxOf(element).top + boxOf(element).height / 2
 
 const meta = preview.meta({
 	title: "Primitives/Badge",
@@ -142,18 +147,23 @@ export const Placements = meta.story({
 				<span className="size-2.5 rounded-full bg-sidebar-foreground/30" />
 				<BotBadgeDot badge="attention" placement="switcher" />
 			</span>
+			<span className={ROW_HOST}>
+				<span className="h-5 leading-5">Atlas</span>
+				<span className="h-4 text-xs leading-4">Pulled the papers</span>
+				<BotBadgeDot badge="done" placement="row" />
+			</span>
 		</Row>
 	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The two placements the component owns, each on the host it was drawn for. `avatar` pins the mark to the bottom corner and scales it with the avatar, capped at 16px, so it lands the same on a 24px reply as on a 96px preview. `switcher` sits in the flow, on the name's line and level with the letters, and only jumps to the button's top corner once the sidebar collapses to its rail and there is no line left to sit on. Check both corner forms keep the ring that lifts them off the surface, and that the inline one does not — it has a gap instead.",
+					"The three placements the component owns, each on the host it was drawn for. `avatar` pins the mark to the bottom corner and scales it with the avatar, capped at 16px, so it lands the same on a 24px reply as on a 96px preview — the roster keeps it for the collapsed rail, where the avatar is the whole row. `switcher` sits in the flow, on the name's line and level with the letters, and only jumps to the button's top corner once the sidebar collapses to its rail and there is no line left to sit on. `row` leaves the flow at the trailing edge of an open roster row, under the timestamp and level with the preview line, so the mark reads on the column the eye already scans instead of hiding on a 40px avatar. Check both corner forms keep the ring that lifts them off the surface, and that the inline one and the row one do not — they sit on the panel itself, with nothing behind them to punch through.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const [small, medium, large, inline, rail] = dotsIn(canvasElement)
+		const [small, medium, large, inline, rail, row] = dotsIn(canvasElement)
 
 		await expect(boxOf(small).width).toBeCloseTo(24 * 0.34, 0)
 		await expect(boxOf(medium).width).toBeCloseTo(40 * 0.34, 0)
@@ -161,16 +171,18 @@ export const Placements = meta.story({
 
 		const line = inline.previousElementSibling as HTMLElement
 		await expect(boxOf(inline).width).toBeCloseTo(8, 0)
-		await expect(boxOf(inline).top + boxOf(inline).height / 2).toBeCloseTo(
-			boxOf(line).top + boxOf(line).height / 2,
-			0,
-		)
+		await expect(centerOf(inline)).toBeCloseTo(centerOf(line), 0)
 
 		const railHost = rail.parentElement as HTMLElement
 		await expect(boxOf(rail).right).toBeLessThan(boxOf(railHost).right)
 		await expect(boxOf(rail).top).toBeLessThan(
 			boxOf(railHost).top + boxOf(railHost).height / 2,
 		)
+
+		const rowHost = row.parentElement as HTMLElement
+		const preview = row.previousElementSibling as HTMLElement
+		await expect(boxOf(row).right).toBeCloseTo(boxOf(rowHost).right, 0)
+		await expect(centerOf(row)).toBeCloseTo(centerOf(preview), 0)
 	},
 })
 

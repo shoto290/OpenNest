@@ -20,7 +20,7 @@ import {
 	AvatarGroup,
 	type ConversationParticipant,
 } from "@workspace/ui/components/avatar-group"
-import type { BotBadge } from "@workspace/ui/components/badge"
+import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
 	type BotAvatarBlot,
@@ -98,10 +98,10 @@ const NAME_LINE = "flex h-5 min-w-0 items-center gap-1.5"
 const TITLE_BADGE =
 	"max-w-16 shrink-0 truncate rounded-full bg-sidebar-foreground/10 px-1.5 py-0.5 font-medium text-[10px] text-sidebar-foreground/80 leading-none"
 
-const ROW_STACK = "flex h-9 min-w-0 flex-col justify-center"
+const ROW_STACK = "relative flex h-9 min-w-0 flex-col justify-center"
 
 const PREVIEW_LINE =
-	"h-4 truncate text-muted-foreground text-xs leading-4 empty:h-0"
+	"h-4 truncate pe-3.5 text-muted-foreground text-xs leading-4 empty:h-0"
 
 const DESTINATION_NAME = "min-w-0 truncate"
 
@@ -413,6 +413,16 @@ const SpaceDestinationBranch = ({
 	)
 }
 
+const useRosterBadgePlacement = (badge?: BotBadge) => {
+	const { state } = useAnimatedSidebar()
+	const isCollapsed = state === "collapsed"
+
+	return {
+		avatarBadge: isCollapsed ? badge : undefined,
+		rowBadge: isCollapsed ? undefined : badge,
+	}
+}
+
 interface BotRowAvatarProps {
 	bot: AppSidebarBot
 	badge?: BotBadge
@@ -466,6 +476,7 @@ const BotRosterRow = ({
 	const { t } = useTranslation("bots")
 	const pose = poseOf(bot)
 	const working = isBusy(bot)
+	const { avatarBadge, rowBadge } = useRosterBadgePlacement(bot.badge)
 
 	return (
 		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
@@ -474,7 +485,7 @@ const BotRosterRow = ({
 					<AnimatedSidebarMenuButton
 						{...lift.handlersFor(bot.id)}
 						className={ROW}
-						icon={<BotRowAvatar badge={bot.badge} bot={bot} />}
+						icon={<BotRowAvatar badge={avatarBadge} bot={bot} />}
 						isActive={isSelected}
 						isIconDecorative={false}
 						label={bot.name}
@@ -505,6 +516,13 @@ const BotRosterRow = ({
 									? t("roster.working", { pose: t(`roster.pose.${pose}`) })
 									: bot.lastMessage && toPlainText(bot.lastMessage)}
 							</span>
+							{rowBadge ? (
+								<BotBadgeDot
+									badge={rowBadge}
+									data-slot="bot-activity-dot"
+									placement="row"
+								/>
+							) : null}
 						</span>
 					</AnimatedSidebarMenuButton>
 				</ContextMenuTrigger>
@@ -593,6 +611,9 @@ const ConversationRosterRow = ({
 	onCreateSectionFor,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
+	const { avatarBadge, rowBadge } = useRosterBadgePlacement(
+		badgeOf(conversation),
+	)
 
 	return (
 		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
@@ -603,7 +624,7 @@ const ConversationRosterRow = ({
 						className={ROW}
 						icon={
 							<AvatarGroup
-								badge={badgeOf(conversation)}
+								badge={avatarBadge}
 								participants={heldBotsOf(conversation)}
 								size={ROW_AVATAR_SIZE}
 							/>
@@ -631,6 +652,13 @@ const ConversationRosterRow = ({
 							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
 								{previewOf(t, conversation)}
 							</span>
+							{rowBadge ? (
+								<BotBadgeDot
+									badge={rowBadge}
+									data-slot="bot-activity-dot"
+									placement="row"
+								/>
+							) : null}
 						</span>
 					</AnimatedSidebarMenuButton>
 				</ContextMenuTrigger>
