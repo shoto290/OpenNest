@@ -5,7 +5,30 @@ import {
 	PICKED_PICTURE_FILE,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
+import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { Icons } from "@workspace/ui/components/icons"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
+import { PICTURE_FIELD_SIZE } from "@workspace/ui/components/settings-styles"
+import { UserAvatar } from "@workspace/ui/components/user-avatar"
+
+const PICTURE = (
+	<UserAvatar image={UPLOADED_AVATAR_IMAGE} size={PICTURE_FIELD_SIZE} />
+)
+
+const GLYPH = (
+	<Icons.User aria-hidden="true" className="size-6 text-muted-foreground" />
+)
+
+const EMPTY = { isPlaceholder: true, onRemove: undefined, preview: GLYPH }
+
+const DRAWN_FACE = (
+	<BotIdentityAvatar
+		animal="owl"
+		blot="blue"
+		seed="bot-7"
+		size={PICTURE_FIELD_SIZE}
+	/>
+)
 
 const meta = preview.meta({
 	title: "Forms/ProfilePictureField",
@@ -15,12 +38,15 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The reader's own picture, as the control that sets it: the face the app shows them by, round and the size the settings dialog heads its Profile group with. Pressing it opens the picker, and a file dropped on it or pasted into it goes the same way — the same drag, paste and browse a bot's dashed zone uses, wearing the shape the picture will actually have. It holds nothing: the picked file and the remove both go straight to the host, which stores the picture and writes the URL back.",
+					"A picture, as the control that sets it: the round target the settings dialogs head their first group with, whether the picture belongs to the reader or to a bot. Pressing it opens the picker, and a file dropped on it or pasted into it goes the same way — the same drag, paste and browse, wearing the shape the picture will actually have. What sits inside the circle is the host's to draw and arrives as `preview`, which is what lets one field serve a reader with no picture but a person glyph, and a bot with no picture but the face its engine draws. It holds nothing and names nothing: every label arrives as a prop, and the picked file and the removal both go straight to the host, which stores the picture and writes the URL back.",
 			},
 		},
 	},
 	args: {
-		image: UPLOADED_AVATAR_IMAGE,
+		preview: PICTURE,
+		fileLabel: "Profile picture file",
+		pickLabel: "Change picture",
+		removeLabel: "Remove picture",
 		onPick: fn(),
 		onRemove: fn(),
 	},
@@ -31,7 +57,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who already wears a picture. Check that the picture fills the circle rather than sitting in a box inside it, that the remove button sits on the bottom trailing corner without covering the face, and that both press targets emit and change nothing on screen — the picture only moves once the host writes back. Pick `Empty` for the reader with no picture, `WithoutRemove` for the surface that cannot take one off.",
+					"A reader who already wears a picture. Check that the picture fills the circle rather than sitting in a box inside it, that the remove button sits on the bottom trailing corner without covering the face, and that both press targets emit and change nothing on screen — the picture only moves once the host writes back. Pick `Empty` for the reader with no picture, `Drawn` for a bot's, `WithoutRemove` for the surface that cannot take one off.",
 			},
 		},
 	},
@@ -53,7 +79,7 @@ export const Default = meta.story({
 })
 
 export const Empty = meta.story({
-	args: { image: undefined },
+	args: { ...EMPTY, pickLabel: "Add picture" },
 	parameters: {
 		docs: {
 			description: {
@@ -78,6 +104,29 @@ export const Empty = meta.story({
 	},
 })
 
+export const Drawn = meta.story({
+	args: {
+		preview: DRAWN_FACE,
+		fileLabel: "Avatar image file",
+		pickLabel: "Add picture",
+		onRemove: undefined,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same field heading a bot's settings. A bot with no picture is never a blank — it has a face the engine draws — so the host hands that face as the preview and leaves the edge solid rather than dashed. Check that the shape, the size and the corner are the reader's own, and that nothing but the circle's contents tells the two hosts apart.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByRole("button", { name: "Add picture" }),
+		).toBeVisible()
+		await expect(canvas.getByLabelText("Avatar image file")).toBeVisible()
+	},
+})
+
 export const WithoutRemove = meta.story({
 	args: { onRemove: undefined },
 	parameters: {
@@ -99,10 +148,10 @@ export const States = meta.story({
 	render: (args) => (
 		<div className="flex items-center gap-8">
 			<div id="picture-empty-hover">
-				<ProfilePictureField {...args} image={undefined} />
+				<ProfilePictureField {...args} {...EMPTY} />
 			</div>
 			<div id="picture-empty-focus">
-				<ProfilePictureField {...args} image={undefined} />
+				<ProfilePictureField {...args} {...EMPTY} />
 			</div>
 			<div id="picture-filled-hover">
 				<ProfilePictureField {...args} />

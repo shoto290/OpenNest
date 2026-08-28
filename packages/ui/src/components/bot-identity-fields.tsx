@@ -8,7 +8,6 @@ import {
 	BotIdentityAvatar,
 	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
-import { BotPictureField } from "@workspace/ui/components/bot-picture-field"
 import {
 	BLOT_TINTS,
 	BOT_IDENTITY_ANIMALS,
@@ -16,8 +15,12 @@ import {
 	type BotIdentity,
 	drawnAnimal,
 } from "@workspace/ui/components/bot-settings"
+import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsGroup } from "@workspace/ui/components/settings-group"
-import { FIELD_OPTION_CLASS } from "@workspace/ui/components/settings-styles"
+import {
+	FIELD_OPTION_CLASS,
+	PICTURE_FIELD_SIZE,
+} from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
 const PREVIEW_SIZE = 96
@@ -54,6 +57,9 @@ const BotIdentityFields = ({
 
 	const blotLabel = (blot?: BotAvatarBlot) =>
 		blot ? t(`identity.blot.option.${blot}`) : t("identity.blot.none")
+
+	const dropPicture = () =>
+		onIdentityChange({ animal: identity.animal, blot: identity.blot })
 
 	const currentLabel = identity.image
 		? t("identity.uploadedImage")
@@ -154,14 +160,24 @@ const BotIdentityFields = ({
 			</SettingsGroup>
 
 			<SettingsGroup grid="grid-cols-1" label={t("identity.picture.label")}>
-				<BotPictureField
-					identity={identity}
-					name={name}
+				<ProfilePictureField
+					fileLabel={t("identity.picture.file")}
 					onPick={onAvatarUpload}
-					onRemove={() =>
-						onIdentityChange({ animal: identity.animal, blot: identity.blot })
+					onRemove={identity.image ? dropPicture : undefined}
+					pickLabel={t(
+						identity.image ? "identity.picture.change" : "identity.picture.add",
+					)}
+					preview={
+						<BotIdentityAvatar
+							animal={identity.animal}
+							blot={identity.blot}
+							image={identity.image}
+							name={name}
+							seed={seed}
+							size={PICTURE_FIELD_SIZE}
+						/>
 					}
-					seed={seed}
+					removeLabel={t("identity.picture.remove")}
 				/>
 			</SettingsGroup>
 		</div>

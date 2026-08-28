@@ -25,7 +25,10 @@ import {
 	SettingsRail,
 	SettingsRailItem,
 } from "@workspace/ui/components/settings-rail"
-import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
+import {
+	PICTURE_FIELD_SIZE,
+	SETTINGS_HEADER_CLASS,
+} from "@workspace/ui/components/settings-styles"
 import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import { AppearanceFields } from "@workspace/ui/components/user-settings-dialog/appearance-fields"
@@ -89,6 +92,12 @@ const UserSettingsDialog = ({
 
 	const patch = (fields: Partial<UserSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
+
+	const picture = value.image ? (
+		<UserAvatar image={value.image} size={PICTURE_FIELD_SIZE} />
+	) : (
+		<Icons.User aria-hidden="true" className="size-6 text-muted-foreground" />
+	)
 
 	const leave = () => {
 		skillSession.discard()
@@ -174,9 +183,17 @@ const UserSettingsDialog = ({
 							value={FIRST_TAB}
 						>
 							<ProfilePictureField
-								image={value.image}
+								fileLabel={t("profile.picture.file")}
+								isPlaceholder={!value.image}
 								onPick={onPictureUpload}
-								onRemove={onPictureRemove}
+								onRemove={value.image ? onPictureRemove : undefined}
+								pickLabel={t(
+									value.image
+										? "profile.picture.change"
+										: "profile.picture.add",
+								)}
+								preview={picture}
+								removeLabel={t("profile.picture.remove")}
 							/>
 							<SettingsField
 								label={t("profile.name.label")}

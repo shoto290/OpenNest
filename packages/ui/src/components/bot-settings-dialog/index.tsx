@@ -401,7 +401,12 @@ const BotSettingsDialog = ({
 							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value={DANGER_TAB}
 						>
-							<DangerZone botName={botName} onDelete={onDelete} />
+							<DangerZone
+								confirmTitle={t("danger.confirm.title", { name: botName })}
+								deleteLabel={t("danger.delete")}
+								description={t("danger.description")}
+								onDelete={onDelete}
+							/>
 						</Tabs.Panel>
 					</Tabs.Root>
 				)}

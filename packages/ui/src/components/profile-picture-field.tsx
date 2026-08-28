@@ -1,43 +1,41 @@
 "use client"
 
-import { useTranslation } from "react-i18next"
+import type { ReactNode } from "react"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
-import { PICTURE_TARGET_CLASS } from "@workspace/ui/components/settings-styles"
-import { UserAvatar } from "@workspace/ui/components/user-avatar"
+import {
+	PICTURE_CONTROL_CLASS,
+	PICTURE_FIELD_SIZE,
+	PICTURE_REMOVE_CLASS,
+	PICTURE_REMOVE_INSET,
+} from "@workspace/ui/components/settings-styles"
 import { usePicturePicker } from "@workspace/ui/hooks/use-picture-picker"
 import { cn } from "@workspace/ui/lib/utils"
 
-const PICTURE_SIZE = 72
-
-const REMOVE_SIZE = 24
-
-const REMOVE_INSET = (PICTURE_SIZE / 2) * (1 - Math.SQRT1_2) - REMOVE_SIZE / 2
-
-const REMOVE_CLASS = "absolute rounded-full ring-2 ring-popover"
-
-const CONTROL_CLASS = cn(
-	PICTURE_TARGET_CLASS,
-	"grid place-items-center overflow-hidden rounded-full",
-)
-
 type ProfilePictureFieldProps = {
-	image?: string
+	preview: ReactNode
+	fileLabel: string
+	pickLabel: string
+	removeLabel: string
+	isPlaceholder?: boolean
 	onPick: (file: File) => void
 	onRemove?: () => void
 	className?: string
 }
 
 const ProfilePictureField = ({
-	image,
+	preview,
+	fileLabel,
+	pickLabel,
+	removeLabel,
+	isPlaceholder,
 	onPick,
 	onRemove,
 	className,
 }: ProfilePictureFieldProps) => {
-	const { t } = useTranslation("settings")
 	const { controlProps, inputProps } = usePicturePicker({
-		label: t("profile.picture.file"),
+		label: fileLabel,
 		onPick,
 	})
 
@@ -48,26 +46,19 @@ const ProfilePictureField = ({
 		>
 			<button
 				{...controlProps}
-				aria-label={t(image ? "profile.picture.change" : "profile.picture.add")}
-				className={cn(CONTROL_CLASS, !image && "border-dashed")}
-				style={{ width: PICTURE_SIZE, height: PICTURE_SIZE }}
+				aria-label={pickLabel}
+				className={cn(PICTURE_CONTROL_CLASS, isPlaceholder && "border-dashed")}
+				style={{ width: PICTURE_FIELD_SIZE, height: PICTURE_FIELD_SIZE }}
 			>
-				{image ? (
-					<UserAvatar image={image} size={PICTURE_SIZE} />
-				) : (
-					<Icons.User
-						aria-hidden="true"
-						className="size-6 text-muted-foreground"
-					/>
-				)}
+				{preview}
 			</button>
-			{image && onRemove ? (
+			{onRemove ? (
 				<Button
-					aria-label={t("profile.picture.remove")}
-					className={REMOVE_CLASS}
+					aria-label={removeLabel}
+					className={PICTURE_REMOVE_CLASS}
 					onClick={onRemove}
 					size="icon-xs"
-					style={{ right: REMOVE_INSET, bottom: REMOVE_INSET }}
+					style={{ right: PICTURE_REMOVE_INSET, bottom: PICTURE_REMOVE_INSET }}
 					variant="secondary"
 				>
 					<Icons.Close aria-hidden="true" />

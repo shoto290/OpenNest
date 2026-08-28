@@ -19,7 +19,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The one action in a bot's settings that cannot be undone, kept behind a question. It states what leaves with the bot before the reader presses anything, then names the bot again in the confirmation — the reader who opened the wrong settings finds out there rather than after. The destructive tone is carried by a hairline border rather than a fill, so the group reads as serious without shouting over the panel above it. The question is its own — the group opens and closes it, and `onDelete` fires only on the second press. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
+					"The one action a settings panel cannot undo, kept behind a question — the same group a bot, a conversation and a space all end on. It states what leaves before the reader presses anything, then names the thing again in the confirmation, so a reader who opened the wrong settings finds out there rather than after. The destructive tone is carried by a hairline border rather than a fill, so the group reads as serious without shouting over the panel above it. It carries no copy of its own: the heading, the sentence and the confirmation title all arrive as props, which is what lets one group serve every panel. The question is its own — the group opens and closes it, and `onDelete` fires only on the second press. The destructive red on its own tint is the token's known contrast gap, flagged for review rather than worked around here.",
 			},
 		},
 	},
@@ -31,7 +31,10 @@ const meta = preview.meta({
 		),
 	],
 	args: {
-		botName: "Nest Keeper",
+		deleteLabel: "Delete bot",
+		description:
+			"Its avatar, instructions and working directory go with it. This cannot be undone.",
+		confirmTitle: "Delete Nest Keeper?",
 		onDelete: fn(),
 	},
 	argTypes: {
@@ -44,7 +47,7 @@ export const Playground = meta.story({
 		docs: {
 			description: {
 				story:
-					"Knob story for the group. Change `botName` and check that it reaches the confirmation title, not only the panel — that is the whole reason the name is passed down. Pick `Confirming` for the group mounted with the question already up: `defaultConfirming` is read once, as the group mounts, so it is not a knob to flip here.",
+					"Knob story for the group. Change `deleteLabel` and check that it reaches the heading, the trigger and the confirmation's own button at once — they are one word by design, so the reader agrees to exactly what they pressed. `confirmTitle` is separate because only the question names the thing. Pick `Confirming` for the group mounted with the question already up: `defaultConfirming` is read once, as the group mounts, so it is not a knob to flip here.",
 			},
 		},
 	},
@@ -61,7 +64,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The resting state: a heading, the sentence naming everything that goes with the bot, and a single destructive button. Nothing here deletes anything — the press only asks. Check that the group takes the full width of the panel but the button does not, so the action never reads as the panel's primary one.",
+					"The resting state: a heading, the sentence naming everything that goes, and a single destructive button. Nothing here deletes anything — the press only asks. Check that the group takes the full width of the panel but the button does not, so the action never reads as the panel's primary one. Pick `Inert` for the panel whose thing refuses to go.",
 			},
 		},
 	},
@@ -73,7 +76,7 @@ export const Confirming = meta.story({
 		docs: {
 			description: {
 				story:
-					"The confirmation, mounted already open. It names the bot in the title, repeats the consequence in full rather than shortening it to `Are you sure?`, and puts Cancel first so the safe way out is the one the hand reaches. The whole screen dims behind it and focus is trapped inside — this is a question, not a notification. Check that Escape and the backdrop both cancel, and that neither reports a deletion.",
+					"The confirmation, mounted already open. It names the thing in the title, repeats the consequence in full rather than shortening it to `Are you sure?`, and puts Cancel first so the safe way out is the one the hand reaches. The whole screen dims behind it and focus is trapped inside — this is a question, not a notification. Check that Escape and the backdrop both cancel, and that neither reports a deletion.",
 			},
 		},
 	},
@@ -93,7 +96,7 @@ export const Cancelled = meta.story({
 		docs: {
 			description: {
 				story:
-					"The path most readers take: they open the question and back out of it. Cancel closes the confirmation and touches nothing else — nothing is reported, because a question nobody answered is not news — so the group returns exactly as it was and the bot is still there. Check that the trigger is still reachable afterwards — a cancelled question must not leave the group inert.",
+					"The path most readers take: they open the question and back out of it. Cancel closes the confirmation and touches nothing else — nothing is reported, because a question nobody answered is not news — so the group returns exactly as it was and the thing is still there. Check that the trigger is still reachable afterwards — a cancelled question must not leave the group inert.",
 			},
 		},
 	},
@@ -130,5 +133,28 @@ export const Deleted = meta.story({
 
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
 		await expect(args.onDelete).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const Inert = meta.story({
+	args: {
+		deleteLabel: "Delete space",
+		confirmTitle: "Delete Release desk?",
+		disabledReason:
+			"The last space cannot be deleted — the app always keeps one.",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The thing that refuses to go — the last space its panel has. The control stays where it was and goes inert rather than disappearing, so the group does not change shape between one space and two, and the host swaps the sentence for the reason in place of the consequence. Check that the button reports nothing to a pointer or to a keyboard, and that it is skipped rather than focused on the way through.",
+			},
+		},
+	},
+	play: async ({ args, canvas }) => {
+		await expect(
+			canvas.getByRole("button", { name: "Delete space" }),
+		).toBeDisabled()
+		await expect(args.onDelete).not.toHaveBeenCalled()
 	},
 })
