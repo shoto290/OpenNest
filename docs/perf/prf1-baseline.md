@@ -111,6 +111,99 @@ run unconditionally, and both are driven by `Math.sin(now * …)` (breath, ear s
 value genuinely changes every frame and no epsilon gate can catch them as written. Only 54 of
 1980 writes (2.7%) re-wrote the value already in the DOM.
 
+## PRF4 — what one chat opening costs
+
+Every figure below comes from `apps/app/src/lib/perf/chat-open-baseline.test.ts`, same harness
+shape as PRF1: `createFakeChatDriver` + `createFakeTranscriptStore`, no desktop host, no source
+module touched. The store is wrapped in a tracing proxy that records the ordered call names and
+can hold every call by a fixed delay; commits come from a `<Profiler>` around the app; the first
+painted transcript row is the first `ThreadTurn` probe carrying the chosen bot's anchor.
+
+Scenario: one space, four bots, each main chat holding two stored messages, one bot chosen at
+mount. An opening is a click on a roster row.
+
+### Store calls awaited between the choice and the first painted row
+
+| Opening | Store calls awaited, in order | Calls | Commits | Writes queued ahead of the read |
+| --- | --- | --- | --- | --- |
+| cold — bot never opened this session | `botSkills`, `botMcpServers`, `botHistory`, `mainChat`, `botCommands`, `loadPage` | 6 | 5 | 0 |
+| warm — bot opened earlier, left, chosen again | *none* | 0 | 1 | 0 |
+| contended — another bot streaming a reply | `botSkills`, `botMcpServers`, `botHistory`, `mainChat`, `botCommands`, `loadPage` | 6 | 5 | 0 |
+
+Only two of the six are on the opening's own path and they are serial: `openConversation`
+(`chat-controller.ts:650`) awaits `store.mainChat`, then awaits `enqueue(() =>
+transcript.load(chat.id))`. `botSkills`, `botMcpServers` and `botHistory` are fired in parallel
+by `App`'s selection effect, `botCommands` in parallel by `recallCommands`.
+
+### Elapsed simulated time with one fixed 5 ms delay on every store call
+
+| Opening | Elapsed to first painted row | Store calls awaited | Commits | Writes queued ahead |
+| --- | --- | --- | --- | --- |
+| cold | 10 ms | 6 | 8 | 0 |
+| warm | 0 ms | 0 | 1 | 0 |
+| contended | 11 ms | 9 (`appendUserMessage` and `captureCheckpoint` land inside the window) | 9 | 1 |
+
+10 ms is exactly two store round-trips: the opening pays store latency twice, never more,
+whatever the roster reads do around it.
+
+### A page of twenty stored messages
+
+Same harness, one bot seeded with 20 messages — 10 user, 10 assistant, each assistant carrying
+one fenced `ts` code block.
+
+| Unit | File / symbol | Count |
+| --- | --- | --- |
+| markdown processors built | `packages/ui/src/components/markdown/index.tsx:36` → one per `Markdown` render | 30 |
+| code highlighter tokenize calls | `packages/ui/src/lib/code-highlight.ts:119` → `highlightCode` | 10 |
+| code highlighter builds | `code-highlight.ts:85` → `createHighlighterCoreSync` | 1 per process, see gap below |
+| React commits before the first painted row | `<Profiler>` around `App` | 5 |
+| React commits before the settled page | same | 11 |
+| rows painted | `[data-slot="chat-turn-group"]` | 20 |
+
+30 processors for 20 messages: one per markdown block, and each assistant message splits into
+prose plus fence.
+
+## PRF4 suspects
+
+### Held, and bounded — the shared write queue
+
+The opening read is genuinely behind the queue: `openConversation` awaits `enqueue(() =>
+transcript.load(chat.id))` on the same `createQueue()` tail every streamed `appendText` uses
+(`chat-controller.ts:164`, `apps/app/src/lib/queue.ts`). Measured, it costs one store round-trip
+per write already queued — **0** writes ahead when the store answers instantly, **1** when every
+call is held 5 ms, for 1 extra ms of the contended opening's 11. The mechanism is real, the
+amount is a multiple of real store latency times the backlog, not a second on its own.
+
+### Killed for the switch-away path — the absent transcript cache
+
+Choosing a bot opened earlier in the same session paints its first row in **1 commit, 0 store
+calls, 0 ms**: `transcriptReducer` still holds the page for that conversation, so the row is on
+screen before `mainChat` is even called and the refetch lands behind it. There is a cache; it is
+just not named one.
+
+### Held — the first paint of a twenty message page
+
+The widest figures of the three: **30** markdown processors built and **10** synchronous
+highlighter calls in the commits that carry the page, plus the one-time shiki build. The build
+alone is **85 ms of blocking main-thread work** in this harness (first `highlightCode` call
+against **0.007 ms** for the next), paid by whichever chat first paints a fenced code block. The
+page then takes **11** commits to settle, 5 of them before the first row is on screen.
+
+### Gaps — figures not taken
+
+- **The shiki build count is inferred, not counted.** `shiki/core` does not resolve from
+  `apps/app`, so it cannot be mocked from the harness, and counting the build from inside
+  `code-highlight.ts` would change a measured module. What is measured instead is the first
+  `highlightCode` call against the next: 85 ms vs 0.007 ms, one memoized build per process.
+- **A real close is not reachable.** `chat.controller.close` is only called by `App` when a bot
+  is deleted, so "opened and closed earlier, then chosen again" is measured as "opened, left,
+  chosen again". A deleted bot cannot be re-opened.
+- **Elapsed time is simulated.** The delay figures are one fixed 5 ms per store call under fake
+  timers. Real SQLite and Tauri IPC latency is out of this harness; the useful reading is the
+  *number* of serial round-trips (2), not the milliseconds.
+- **Commits are counted with `<Profiler>`**, so they are commits in which the app subtree
+  rendered, not every commit React performed.
+
 ## Out of scope, not measured
 
 SQLite write path, the Tauri event bus, and anything needing the packaged app.
@@ -121,5 +214,6 @@ SQLite write path, the Tauri event bus, and anything needing the packaged app.
 cd apps/app && bun run test:unit
 ```
 
-The three cases live in `apps/app/src/lib/perf/render-baseline.test.ts` and hold their counts in
-inline snapshots, so a regression or an improvement shows up as a snapshot diff.
+The three PRF1 cases live in `apps/app/src/lib/perf/render-baseline.test.ts` and the four PRF4
+cases in `apps/app/src/lib/perf/chat-open-baseline.test.ts`. Both hold their counts in inline
+snapshots, so a regression or an improvement shows up as a snapshot diff.
