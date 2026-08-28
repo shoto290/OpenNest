@@ -13,6 +13,7 @@ export default defineConfig({
 			"@workspace/ui": fileURLToPath(
 				new URL("../../packages/ui/src", import.meta.url),
 			),
+			"@": fileURLToPath(new URL("./src", import.meta.url)),
 		},
 	},
 })

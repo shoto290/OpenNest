@@ -24,7 +24,7 @@ const PermissionsHost = (props: PermissionsPanelProps) => {
 }
 
 const meta = preview.meta({
-	title: "AI/PermissionsPanel",
+	title: "Settings/Bot/PermissionsPanel",
 	component: PermissionsPanel,
 	parameters: {
 		layout: "padded",
