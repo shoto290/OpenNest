@@ -50,6 +50,8 @@ const LIGHT_THEME = "github-light-high-contrast"
 const DARK_THEME = "github-dark-high-contrast"
 const TOKEN_CACHE_LIMIT = 256
 
+const WARM_SAMPLE = '# "warm" <b>1</b>\nconst a = { b: "c" } // d\n- e: 2\n'
+
 const LANGUAGE_ALIASES: Record<string, CodeLanguage> = {
 	console: "bash",
 	javascript: "typescript",
@@ -81,9 +83,15 @@ export function resolveCodeLanguage(language?: string): CodeLanguage {
 }
 
 let highlighter: HighlighterCore | null = null
+let highlighterBuilds = 0
+
+const warmedLanguages = new Set<CodeLanguage>()
+
+const readyWatchers = new Set<() => void>()
 
 function getHighlighter() {
 	if (!highlighter) {
+		highlighterBuilds += 1
 		highlighter = createHighlighterCoreSync({
 			engine: createJavaScriptRegexEngine({ forgiving: true }),
 			themes: [lightTheme, darkTheme],
@@ -105,6 +113,50 @@ function getHighlighter() {
 	return highlighter
 }
 
+function tokenize(code: string, language: CodeLanguage): CodeTokenLines {
+	return getHighlighter()
+		.codeToTokensWithThemes(code, {
+			lang: language,
+			themes: { light: LIGHT_THEME, dark: DARK_THEME },
+		})
+		.map((line) =>
+			line.map((token) => ({
+				content: token.content,
+				offset: token.offset,
+				light: token.variants.light?.color,
+				dark: token.variants.dark?.color,
+			})),
+		)
+}
+
+export function warmCodeLanguage(language?: string) {
+	const resolved = resolveCodeLanguage(language)
+	if (warmedLanguages.has(resolved)) return
+
+	tokenize(WARM_SAMPLE, resolved)
+	warmedLanguages.add(resolved)
+	for (const notify of readyWatchers) notify()
+}
+
+export function prepareHighlighter() {
+	for (const language of CODE_LANGUAGES) warmCodeLanguage(language)
+}
+
+export function isCodeLanguageWarm(language?: string) {
+	return warmedLanguages.has(resolveCodeLanguage(language))
+}
+
+export function highlighterBuildCount() {
+	return highlighterBuilds
+}
+
+export function subscribeToCodeHighlighter(watcher: () => void) {
+	readyWatchers.add(watcher)
+	return () => {
+		readyWatchers.delete(watcher)
+	}
+}
+
 const tokenCache = new Map<string, CodeTokenLines>()
 
 function remember(key: string, lines: CodeTokenLines) {
@@ -122,21 +174,7 @@ export function highlightCode(code: string, language?: string): CodeTokenLines {
 	const cached = tokenCache.get(key)
 	if (cached) return cached
 
-	const lines = getHighlighter()
-		.codeToTokensWithThemes(code, {
-			lang: resolved,
-			themes: { light: LIGHT_THEME, dark: DARK_THEME },
-		})
-		.map((line) =>
-			line.map((token) => ({
-				content: token.content,
-				offset: token.offset,
-				light: token.variants.light?.color,
-				dark: token.variants.dark?.color,
-			})),
-		)
-
-	return remember(key, lines)
+	return remember(key, tokenize(code, resolved))
 }
 
 export function toCodeLines(

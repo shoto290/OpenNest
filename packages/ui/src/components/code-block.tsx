@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { useCodeHighlightReady } from "@workspace/ui/hooks/use-code-highlight-ready"
 import {
 	type CodeToken,
 	highlightCode,
@@ -96,9 +97,11 @@ export function CodeBlock({
 	const label = language?.trim() || resolveCodeLanguage(language)
 	const announcementKey = COPY_ANNOUNCEMENT_KEY[copyOutcome]
 
+	const ready = useCodeHighlightReady(language)
+
 	const lines = useMemo(
-		() => toCodeLines(code, highlightCode(code, language)),
-		[code, language],
+		() => toCodeLines(code, ready ? highlightCode(code, language) : undefined),
+		[code, language, ready],
 	)
 
 	const highlighted = useMemo(() => new Set(highlightLines), [highlightLines])

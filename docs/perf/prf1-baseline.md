@@ -151,22 +151,34 @@ whatever the roster reads do around it.
 Same harness, one bot seeded with 20 messages — 10 user, 10 assistant, each assistant carrying
 one fenced `ts` code block.
 
-The `PRF6` column comes from the same test run after
+The `PRF5` column comes from the same test run after the code highlighter moved off the paint
+path. The `PRF6` column comes from the run after
 `packages/ui/src/components/markdown/index.tsx` hoisted its static remark plugin list to a module
 constant; the PRF6 section below explains why the processor count did not move and why that is
 the floor.
 
-| Unit | File / symbol | Count | PRF6 |
-| --- | --- | --- | --- |
-| markdown processors built | `packages/ui/src/components/markdown/index.tsx` → one per `Markdown` render | 30 | 30 |
-| code highlighter tokenize calls | `packages/ui/src/lib/code-highlight.ts:119` → `highlightCode` | 10 | 10 |
-| code highlighter builds | `code-highlight.ts:85` → `createHighlighterCoreSync` | 1 per process, see gap below | 1 per process |
-| React commits before the first painted row | `<Profiler>` around `App` | 5 | 5 |
-| React commits before the settled page | same | 11 | 11 |
-| rows painted | `[data-slot="chat-turn-group"]` | 20 | 20 |
+| Unit | File / symbol | PRF4 | PRF5 | PRF6 |
+| --- | --- | --- | --- | --- |
+| markdown processors built | `packages/ui/src/components/markdown/index.tsx` → one per `Markdown` render | 30 | 30 | 30 |
+| code highlighter tokenize calls | `code-highlight.ts` → `highlightCode` | 10 | 10 | 10 |
+| code highlighter builds | `code-highlight.ts` → `createHighlighterCoreSync` | 1 per process, inferred | 1 per process, counted | 1 per process |
+| code highlighter builds during the opening | `highlighterBuildCount()` around the open | not taken | 0 | not taken |
+| blocked ms on the first painted fence | first `highlightCode` of the page | 85 ms | 0.3 ms | not taken |
+| blocked ms off the paint path | `prepareHighlighter()`, 12 languages | none, the paint paid it | 377 ms | not taken |
+| React commits before the first painted row | `<Profiler>` around `App` | 5 | 5 | 5 |
+| React commits before the settled page | same | 11 | 11 | 11 |
+| rows painted | `[data-slot="chat-turn-group"]` | 20 | 20 | 20 |
 
 30 processors for 20 messages: one per markdown block, and each assistant message splits into
 prose plus fence.
+
+The PRF4 figure attributed the 85 ms to `createHighlighterCoreSync`. Measured apart, the
+construction is 2.7 ms and the rest is the JavaScript regex engine compiling a grammar on its
+first real tokenization — 122 ms for `typescript`, 44 ms for `bash` on this machine. So the
+warm-up tokenizes a sample in every bundled language (`warmCodeLanguage`), the app schedules one
+language per idle callback after the first paint (`apps/app/src/lib/warm-highlighter.ts`), and a
+fence renders as plain text until its own language is warm. Compilation stays lazy per pattern:
+a fence using constructs the sample never exercises still pays around 27 ms once.
 
 ## PRF4 suspects
 
@@ -196,10 +208,9 @@ page then takes **11** commits to settle, 5 of them before the first row is on s
 
 ### Gaps — figures not taken
 
-- **The shiki build count is inferred, not counted.** `shiki/core` does not resolve from
-  `apps/app`, so it cannot be mocked from the harness, and counting the build from inside
-  `code-highlight.ts` would change a measured module. What is measured instead is the first
-  `highlightCode` call against the next: 85 ms vs 0.007 ms, one memoized build per process.
+- **The shiki build count was inferred, not counted** — closed in PRF5. `code-highlight.ts` now
+  counts its own constructions and `highlighterBuildCount()` reads them from the harness: one
+  build per process, none during a chat opening.
 - **A real close is not reachable.** `chat.controller.close` is only called by `App` when a bot
   is deleted, so "opened and closed earlier, then chosen again" is measured as "opened, left,
   chosen again". A deleted bot cannot be re-opened.

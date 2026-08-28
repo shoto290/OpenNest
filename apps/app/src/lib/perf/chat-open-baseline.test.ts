@@ -4,6 +4,11 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement, Profiler, type ProfilerOnRenderCallback } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import {
+	highlightCode,
+	highlighterBuildCount,
+	prepareHighlighter,
+} from "@workspace/ui/lib/code-highlight"
 import { setRenderProbe } from "@workspace/ui/lib/render-probe"
 
 import "@workspace/ui/lib/i18n"
@@ -228,6 +233,7 @@ const mountApp = async ({
 		),
 	)
 	await settle(MOUNT_MS)
+	prepareHighlighter()
 	return {
 		bots: bots.map(({ id, name }) => ({ id, name })),
 		commits,
@@ -327,23 +333,33 @@ const measurePage = async () => {
 	builds.markdownRenders = 0
 	builds.highlightCalls = 0
 	const fromCommit = app.commits.count
+	const fromBuild = highlighterBuildCount()
 	const opened = await openBot(app, page)
 	await settle(STEP_MS * QUIET_STEPS)
 	return {
 		commitsToFirstRow: opened.commits,
 		commitsToSettled: app.commits.count - fromCommit,
 		highlightCalls: builds.highlightCalls,
+		highlighterBuilds: highlighterBuildCount() - fromBuild,
 		markdownProcessors: builds.markdownRenders,
 		paintedRows: document.querySelectorAll('[data-slot="chat-turn-group"]')
 			.length,
 	}
 }
 
-describe("PRF4 chat open baseline", () => {
+describe("PRF5 chat open baseline", () => {
 	afterEach(() => {
 		setRenderProbe(null)
 		cleanup()
 		vi.useRealTimers()
+	})
+
+	it("pays the highlighter build before any code block renders", () => {
+		const offPaintPath = timeOf(prepareHighlighter)
+		const onPaintPath = timeOf(() => highlightCode(HIGHLIGHTED_CODE, "ts"))
+
+		expect(highlighterBuildCount()).toBe(1)
+		expect(onPaintPath).toBeLessThan(offPaintPath / 100)
 	})
 
 	it("lists the store calls an opening waits on", async () => {
@@ -431,15 +447,6 @@ describe("PRF4 chat open baseline", () => {
 		`)
 	})
 
-	it("times the first code highlight against the next", async () => {
-		const { highlightCode } = await import("@workspace/ui/lib/code-highlight")
-
-		const build = timeOf(() => highlightCode(HIGHLIGHTED_CODE, "ts"))
-		const later = timeOf(() => highlightCode(HIGHLIGHTED_CODE, "ts"))
-
-		expect(build).toBeGreaterThan(later)
-	})
-
 	it("counts what a page of twenty stored messages costs", async () => {
 		vi.useFakeTimers()
 
@@ -448,6 +455,7 @@ describe("PRF4 chat open baseline", () => {
 			  "commitsToFirstRow": 5,
 			  "commitsToSettled": 11,
 			  "highlightCalls": 10,
+			  "highlighterBuilds": 0,
 			  "markdownProcessors": 30,
 			  "paintedRows": 20,
 			}

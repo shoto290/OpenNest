@@ -10,8 +10,11 @@ import {
 } from "@storybook/react-vite"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
+import { prepareHighlighter } from "@workspace/ui/lib/code-highlight"
 
 import { THEME_CLASS_NAMES, ThemedDocsContainer } from "./themed-docs-container"
+
+prepareHighlighter()
 
 const SIDE_BY_SIDE_THEMES = Object.keys(THEME_CLASS_NAMES)
 
