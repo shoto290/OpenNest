@@ -190,6 +190,10 @@ pub enum TransportError {
 	WriteFailed {
 		detail: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	SecretsUnavailable {
+		keys: Vec<String>,
+	},
 }
 
 impl TransportError {
@@ -237,6 +241,9 @@ impl std::fmt::Display for TransportError {
 			}
 			TransportError::UnknownPermission { id } => write!(f, "unknown permission {id}"),
 			TransportError::WriteFailed { detail } => write!(f, "write failed: {detail}"),
+			TransportError::SecretsUnavailable { keys } => {
+				write!(f, "these secrets could not be read: {}", keys.join(", "))
+			}
 		}
 	}
 }

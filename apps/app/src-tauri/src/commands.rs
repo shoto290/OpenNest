@@ -1,6 +1,6 @@
 use tauri::Runtime;
 
-use crate::{agent, attachments, conversations, notifications, sections, spaces, user};
+use crate::{agent, attachments, conversations, notifications, sections, secrets, spaces, user};
 
 pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static
 {
@@ -60,6 +60,11 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		conversations::commands::conversation_append_text,
 		conversations::commands::conversation_finalize_message,
 		notifications::commands::notification_show,
+		secrets::commands::secret_set,
+		secrets::commands::secret_keys,
+		secrets::commands::secret_delete,
+		secrets::commands::secret_unlock_vault,
+		secrets::commands::secret_store_ready,
 		sections::commands::section_list,
 		sections::commands::section_create,
 		sections::commands::section_rename,

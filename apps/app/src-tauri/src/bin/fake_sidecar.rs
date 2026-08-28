@@ -506,7 +506,11 @@ fn serve() {
 		};
 
 		match command["type"].as_str() {
-			Some("open") => on_open(&key, &mut runs, &command),
+			Some("secrets") => note_arrival(&format!("secrets:{}", named_secrets(&command))),
+			Some("open") => {
+				note_arrival("open");
+				on_open(&key, &mut runs, &command)
+			}
 			Some("prompt") => on_prompt(&key, &mut runs, command["text"].as_str().unwrap_or("")),
 			Some("interrupt") => on_interrupt(&key, &runs),
 			Some("permission") => on_permission(&key, &mut runs, &command),
@@ -520,6 +524,21 @@ fn serve() {
 	while ignores_eof() {
 		std::thread::park();
 	}
+}
+
+fn named_secrets(command: &Value) -> String {
+	command["secrets"]
+		.as_object()
+		.map(|secrets| secrets.keys().cloned().collect::<Vec<_>>().join(","))
+		.unwrap_or_default()
+}
+
+fn note_arrival(line: &str) {
+	let Ok(path) = std::env::var("FAKE_AGENT_ARRIVALS") else { return };
+	let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+		return;
+	};
+	let _ = writeln!(file, "{line}");
 }
 
 fn answer_the_host(command: &Value) {

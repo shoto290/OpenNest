@@ -7,6 +7,7 @@ pub mod conversations;
 pub mod db;
 pub mod notifications;
 pub mod sections;
+pub mod secrets;
 pub mod spaces;
 pub mod user;
 mod private_files;
@@ -44,6 +45,7 @@ pub fn run() {
 		.manage(AgentState::default())
 		.setup(|app| {
 			app.manage(db::bootstrap(app.handle()));
+			secrets::bootstrap(app.handle());
 			if let Some(window) = app.get_webview_window("main") {
 				window_controls::center_in_header(&window);
 			}

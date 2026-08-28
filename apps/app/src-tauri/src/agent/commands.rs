@@ -17,6 +17,7 @@ use crate::db;
 use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::private_files;
+use crate::secrets::SecretStore;
 
 pub const EVENT_CHANNEL: &str = "agent://event";
 
@@ -466,9 +467,15 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	let sink: Arc<dyn EventSink> =
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
+	let secrets = app
+		.try_state::<SecretStore>()
+		.map(|store| store.resolve(&scope.bot_id))
+		.unwrap_or_default();
+	let unreadable = secrets.unreadable;
 	let options = SessionOptions::new(working_dir)
 		.bundled(identity.bundle)
-		.with_app_data(app.path().app_data_dir().ok());
+		.with_app_data(app.path().app_data_dir().ok())
+		.with_secrets(secrets.values);
 
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
@@ -482,6 +489,12 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	if let Some(path) = refused_dir {
 		sink.emit(AgentEvent::Failed { error: TransportError::WorkingDirectoryRefused { path } });
+	}
+
+	if !unreadable.is_empty() {
+		sink.emit(AgentEvent::Failed {
+			error: TransportError::SecretsUnavailable { keys: unreadable },
+		});
 	}
 
 	if let Some(refusal) = &started.resume_refusal {

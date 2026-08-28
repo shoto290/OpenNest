@@ -1,5 +1,5 @@
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -89,6 +89,7 @@ pub struct SessionOptions {
 	pub app_data_dir: Option<PathBuf>,
 	pub startup_timeout: Duration,
 	pub extra_env: Vec<(String, String)>,
+	pub secrets: BTreeMap<String, String>,
 }
 
 impl SessionOptions {
@@ -100,6 +101,7 @@ impl SessionOptions {
 			app_data_dir: None,
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
+			secrets: BTreeMap::new(),
 		}
 	}
 
@@ -115,6 +117,11 @@ impl SessionOptions {
 
 	pub fn with_app_data(mut self, dir: Option<PathBuf>) -> Self {
 		self.app_data_dir = dir;
+		self
+	}
+
+	pub fn with_secrets(mut self, secrets: BTreeMap<String, String>) -> Self {
+		self.secrets = secrets;
 		self
 	}
 
@@ -187,7 +194,7 @@ impl Session {
 
 		let request = options.open_request(sidecar.supports(PARTIAL_MESSAGES));
 		let session = Self { sidecar, key, shared, sink, resumed };
-		if let Err(error) = session.write(protocol::open_command(&session.key, &request)) {
+		if let Err(error) = session.hand_over_secrets_then_open(&request, &options.secrets) {
 			session.sidecar.detach(&session.key);
 			return Err(error);
 		}
@@ -228,6 +235,17 @@ impl Session {
 
 	fn write(&self, command: Value) -> Result<(), TransportError> {
 		self.sidecar.send(command)
+	}
+
+	fn hand_over_secrets_then_open(
+		&self,
+		request: &OpenRequest,
+		secrets: &BTreeMap<String, String>,
+	) -> Result<(), TransportError> {
+		if !secrets.is_empty() {
+			self.write(protocol::secrets_command(&self.key, secrets))?;
+		}
+		self.write(protocol::open_command(&self.key, request))
 	}
 
 	pub async fn submit_prompt(&self, text: &str) -> Result<(), TransportError> {

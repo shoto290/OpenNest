@@ -50,8 +50,8 @@ const AUTO_MODE: &str = "auto";
 
 pub const PERMISSION_MODES: [&str; 5] = ["default", "acceptEdits", "plan", AUTO_MODE, "dontAsk"];
 
-const MCP_NAME: &str = ".mcp.json";
-const SERVERS_KEY: &str = "mcpServers";
+pub const MCP_NAME: &str = ".mcp.json";
+pub const SERVERS_KEY: &str = "mcpServers";
 const MCP_SOURCE: &str = "./.mcp.json";
 
 const MARKETPLACE: &str = "opennest-bots";
@@ -136,8 +136,12 @@ pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
 }
 
+pub fn plugins_dir(root: &Path) -> PathBuf {
+	root.join(PLUGINS_DIR)
+}
+
 pub fn dir(root: &Path, bot_id: &str) -> PathBuf {
-	root.join(PLUGINS_DIR).join(bot_id)
+	plugins_dir(root).join(bot_id)
 }
 
 pub fn slug(name: &str) -> String {
@@ -929,7 +933,7 @@ fn declared(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 	}
 }
 
-fn object_at(path: &Path) -> serde_json::Map<String, serde_json::Value> {
+pub fn object_at(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 	fs::read_to_string(path)
 		.ok()
 		.and_then(|text| serde_json::from_str(&text).ok())

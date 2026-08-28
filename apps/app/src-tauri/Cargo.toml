@@ -51,6 +51,12 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # Every bundle is its own repository and no machine is asked for a `git` binary:
 # libgit2 is compiled in, and no transport is — nothing here ever leaves the disk.
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+# The OS credential store is the only place a secret value is allowed to rest.
+keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+# Machines with no usable credential store still need somewhere to rest: an
+# AES-GCM file whose key is derived from a passphrase the app never writes down.
+aes-gcm = "0.10"
+argon2 = "0.5"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

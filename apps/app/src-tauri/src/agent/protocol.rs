@@ -243,6 +243,13 @@ pub fn open_command(session: &str, request: &OpenRequest) -> Value {
 	)
 }
 
+pub fn secrets_command(
+	session: &str,
+	secrets: &std::collections::BTreeMap<String, String>,
+) -> Value {
+	command("secrets", session, serde_json::json!({ "secrets": secrets }))
+}
+
 pub fn prompt_command(session: &str, text: &str) -> Value {
 	command("prompt", session, serde_json::json!({ "text": text }))
 }
