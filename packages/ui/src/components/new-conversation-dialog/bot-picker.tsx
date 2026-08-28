@@ -3,8 +3,8 @@
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 
 const ROW_AVATAR_SIZE = 28
@@ -13,14 +13,14 @@ const ROW_CLASS =
 	"flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left text-foreground text-sm outline-none transition-colors duration-100 ease-out hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 aria-pressed:bg-muted motion-reduce:transition-none"
 
 type BotPickerProps = {
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	pickedIds: string[]
 	onPick: (id: string) => void
 	search: string
 	onSearchChange: (search: string) => void
 }
 
-const matching = (bots: ConversationBot[], search: string) => {
+const matching = (bots: RosterBot[], search: string) => {
 	const needle = search.trim().toLowerCase()
 	return needle
 		? bots.filter((bot) => bot.name.toLowerCase().includes(needle))

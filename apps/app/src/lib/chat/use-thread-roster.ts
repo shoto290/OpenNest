@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react"
 
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
+import type { RosterBot } from "@workspace/ui/components/roster"
 
 import type { ReplyTarget } from "./screen-model"
 import {
@@ -18,13 +18,13 @@ import {
 } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
 
-const NO_BOTS: ConversationBot[] = []
+const NO_BOTS: RosterBot[] = []
 
 const NO_AUTHORS: ThreadAuthors = new Map()
 
 export type ThreadRoster = {
-	bots: ConversationBot[]
-	present: ConversationBot[]
+	bots: RosterBot[]
+	present: RosterBot[]
 	authors: ThreadAuthors
 	botFace: ThreadFace | null
 }

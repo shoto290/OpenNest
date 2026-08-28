@@ -5,9 +5,9 @@ import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
 import { BotPicker } from "@workspace/ui/components/new-conversation-dialog/bot-picker"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import {
 	FIELD_LABEL_CLASS,
 	SETTINGS_TAG_CLASS,
@@ -22,7 +22,7 @@ const ROW_CLASS =
 	"flex items-center gap-2.5 rounded-xl px-2 py-1.5 text-foreground text-sm transition-colors duration-100 ease-out hover:bg-muted motion-reduce:transition-none"
 
 type ParticipantRowProps = {
-	bot: ConversationBot
+	bot: RosterBot
 	isLead: boolean
 	isAlone: boolean
 	onLeadChange: (id: string) => void
@@ -92,9 +92,9 @@ const ParticipantRow = ({
 }
 
 type ParticipantsPanelProps = {
-	participants: ConversationBot[]
+	participants: RosterBot[]
 	leadId: string
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	onLeadChange: (id: string) => void
 	onDismiss: (id: string) => void
 	onRecruit: (id: string) => void

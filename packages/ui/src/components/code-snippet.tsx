@@ -10,19 +10,19 @@ import {
 } from "@workspace/ui/lib/code-highlight"
 import { cn } from "@workspace/ui/lib/utils"
 
-export type AgentCodeLanguage = CodeLanguage
+export type CodeSnippetLanguage = CodeLanguage
 
-export interface AgentCodeProps {
+export interface CodeSnippetProps {
 	code: string
-	language?: AgentCodeLanguage
+	language?: CodeSnippetLanguage
 	className?: string
 }
 
-export function AgentCode({
+export function CodeSnippet({
 	code,
 	language = "bash",
 	className,
-}: AgentCodeProps) {
+}: CodeSnippetProps) {
 	const lines = toCodeLines(code, highlightCode(code, language))
 
 	return (

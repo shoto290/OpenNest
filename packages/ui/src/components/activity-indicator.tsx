@@ -3,23 +3,23 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { AgentProgress } from "@workspace/ui/components/agents/loading-states/agent-progress"
 import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import {
+	type ActivityIndicatorKind,
 	avatarShape,
 	BotIdentityAvatar,
-	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
-import { useChatMarkId } from "@workspace/ui/components/chat-mark-context"
-import { CHAT_AVATAR_SIZE } from "@workspace/ui/components/chat-turn"
 import { Icons } from "@workspace/ui/components/icons"
+import { useMarkId } from "@workspace/ui/components/mark-context"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import { TextShimmer } from "@workspace/ui/components/motion/text-shimmer"
+import { ProgressGrid } from "@workspace/ui/components/progress-grid"
+import { TURN_AVATAR_SIZE } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
 
-interface BotWorkingProps {
-	kind?: BotWorkingKind
+interface ActivityIndicatorProps {
+	kind?: ActivityIndicatorKind
 	botId?: string
 	name?: string
 	label?: string
@@ -37,10 +37,10 @@ const SHIMMER_DURATION = 1.8
 const STOP_OVERLAY =
 	"pointer-events-none absolute inset-0 flex items-center justify-center bg-background/75 text-foreground"
 
-const isTimed = (kind: BotWorkingKind) =>
+const isTimed = (kind: ActivityIndicatorKind) =>
 	kind === "searching" || kind === "working"
 
-function BotWorking({
+function ActivityIndicator({
 	kind = "thinking",
 	botId,
 	name,
@@ -50,11 +50,11 @@ function BotWorking({
 	image,
 	seed,
 	onStop,
-	size = CHAT_AVATAR_SIZE,
+	size = TURN_AVATAR_SIZE,
 	className,
-}: BotWorkingProps) {
+}: ActivityIndicatorProps) {
 	const { t } = useTranslation("chat")
-	const markId = useChatMarkId(botId)
+	const markId = useMarkId(botId)
 	const [pointed, setPointed] = useState(false)
 	const [armed, setArmed] = useState(false)
 	const named = name ?? t("working.name")
@@ -125,7 +125,7 @@ function BotWorking({
 				{...pointing}
 			>
 				{isTimed(kind) ? (
-					<AgentProgress indicator={null} label={text} running={pointed} />
+					<ProgressGrid indicator={null} label={text} running={pointed} />
 				) : (
 					<TextShimmer className="font-medium" duration={SHIMMER_DURATION}>
 						{text}
@@ -136,5 +136,5 @@ function BotWorking({
 	)
 }
 
-export type { BotWorkingKind }
-export { BotWorking, type BotWorkingProps }
+export type { ActivityIndicatorKind }
+export { ActivityIndicator, type ActivityIndicatorProps }

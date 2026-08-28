@@ -5,13 +5,13 @@ import {
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
-import { UserAvatar } from "@workspace/ui/components/user-avatar"
+import { Avatar } from "@workspace/ui/components/avatar"
 
 const NAME = "Ada Martin"
 
 const meta = preview.meta({
-	title: "Primitives/UserAvatar",
-	component: UserAvatar,
+	title: "Primitives/Avatar",
+	component: Avatar,
 	parameters: {
 		layout: "centered",
 		docs: {
@@ -75,9 +75,9 @@ export const Empty = meta.story({
 export const Sizes = meta.story({
 	render: () => (
 		<div className="flex items-center gap-4">
-			<UserAvatar name={NAME} size={28} />
-			<UserAvatar name={NAME} size={32} />
-			<UserAvatar image={UPLOADED_AVATAR_IMAGE} name={NAME} size={64} />
+			<Avatar name={NAME} size={28} />
+			<Avatar name={NAME} size={32} />
+			<Avatar image={UPLOADED_AVATAR_IMAGE} name={NAME} size={64} />
 		</div>
 	),
 	parameters: {

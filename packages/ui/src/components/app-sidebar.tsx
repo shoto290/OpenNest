@@ -16,6 +16,10 @@ import {
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
+import {
+	AvatarGroup,
+	type ConversationParticipant,
+} from "@workspace/ui/components/avatar-group"
 import type { BotBadge } from "@workspace/ui/components/badge"
 import {
 	BotAvatar,
@@ -24,15 +28,11 @@ import {
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type { BotAvatarState } from "@workspace/ui/components/bot-avatar-data"
 import {
+	type ActivityIndicatorKind,
 	BotIdentityAvatar,
-	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BOT_IDENTITY_ANIMALS } from "@workspace/ui/components/bot-settings"
 import { Button } from "@workspace/ui/components/button"
-import {
-	ConversationAvatar,
-	type ConversationParticipant,
-} from "@workspace/ui/components/conversation-avatar"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	AnimatedSidebar,
@@ -190,22 +190,22 @@ const CAROUSEL_HELD = "overflow-x-hidden"
 const CAROUSEL_PANEL =
 	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-y-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
 
-type AgentSidebarStatus = "idle" | "working"
+type AppSidebarStatus = "idle" | "working"
 
-const NO_BOTS: AgentSidebarBot[] = []
+const NO_BOTS: AppSidebarBot[] = []
 
-const NO_CONVERSATIONS: AgentSidebarConversation[] = []
+const NO_CONVERSATIONS: AppSidebarConversation[] = []
 
-const NO_SECTIONS: AgentSidebarSection[] = []
+const NO_SECTIONS: AppSidebarSection[] = []
 
 const NO_SECTION = "__none__"
 
-interface AgentSidebarSection {
+interface AppSidebarSection {
 	id: string
 	name: string
 }
 
-interface AgentSidebarBot {
+interface AppSidebarBot {
 	id: string
 	name: string
 	sectionId?: string | null
@@ -215,43 +215,40 @@ interface AgentSidebarBot {
 	animal?: BotAvatarAnimal
 	blot?: BotAvatarBlot
 	image?: string
-	status?: AgentSidebarStatus
-	pose?: BotWorkingKind
+	status?: AppSidebarStatus
+	pose?: ActivityIndicatorKind
 	badge?: BotBadge
 }
 
-interface AgentSidebarConversation {
+interface AppSidebarConversation {
 	id: string
 	name: string
 	sectionId?: string | null
-	participants: AgentSidebarBot[]
+	participants: AppSidebarBot[]
 	lastMessage?: string
 	lastSpeaker?: string
 	timestamp?: string
-	status?: AgentSidebarStatus
+	status?: AppSidebarStatus
 	badge?: BotBadge
 }
 
-const poseOf = (bot: AgentSidebarBot) => bot.pose ?? "thinking"
+const poseOf = (bot: AppSidebarBot) => bot.pose ?? "thinking"
 
-const isBusy = (held: { status?: AgentSidebarStatus }) =>
+const isBusy = (held: { status?: AppSidebarStatus }) =>
 	held.status === "working"
 
-const badgeOf = (conversation: AgentSidebarConversation) =>
+const badgeOf = (conversation: AppSidebarConversation) =>
 	conversation.participants.find(
 		(participant) => isBusy(participant) && participant.badge,
 	)?.badge ?? conversation.badge
 
-const workingBotOf = ({
-	participants,
-	lastSpeaker,
-}: AgentSidebarConversation) =>
+const workingBotOf = ({ participants, lastSpeaker }: AppSidebarConversation) =>
 	participants.find((bot) => isBusy(bot) && bot.name === lastSpeaker) ??
 	participants.find(isBusy)
 
 const previewOf = (
 	t: TFunction<"bots">,
-	conversation: AgentSidebarConversation,
+	conversation: AppSidebarConversation,
 ) => {
 	const working = workingBotOf(conversation)
 	if (working)
@@ -270,8 +267,8 @@ const previewOf = (
 
 const announcementFor = (
 	t: TFunction<"bots">,
-	bot?: AgentSidebarBot,
-	conversation?: AgentSidebarConversation,
+	bot?: AppSidebarBot,
+	conversation?: AppSidebarConversation,
 ) => {
 	if (conversation)
 		return t("roster.announcement.selected", {
@@ -314,7 +311,7 @@ interface SectionActions {
 interface SectionBranchProps {
 	id: string
 	sectionId?: string | null
-	sections: AgentSidebarSection[]
+	sections: AppSidebarSection[]
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
 }
@@ -416,7 +413,7 @@ const SpaceDestinationBranch = ({
 }
 
 interface BotRowAvatarProps {
-	bot: AgentSidebarBot
+	bot: AppSidebarBot
 	badge?: BotBadge
 }
 
@@ -435,10 +432,10 @@ const BotRowAvatar = ({ bot, badge }: BotRowAvatarProps) => (
 )
 
 interface BotRosterRowProps {
-	bot: AgentSidebarBot
+	bot: AppSidebarBot
 	isSelected: boolean
 	destinations: Space[]
-	sections: AgentSidebarSection[]
+	sections: AppSidebarSection[]
 	onSelect?: (id: string) => void
 	onEdit?: (id: string) => void
 	onDuplicate?: (id: string) => void
@@ -556,7 +553,7 @@ const BotRosterRow = ({
 }
 
 const heldBotsOf = (
-	conversation: AgentSidebarConversation,
+	conversation: AppSidebarConversation,
 ): ConversationParticipant[] =>
 	conversation.participants.map((participant) => ({
 		...participant,
@@ -572,9 +569,9 @@ interface ConversationRosterActions {
 }
 
 interface ConversationRosterRowProps {
-	conversation: AgentSidebarConversation
+	conversation: AppSidebarConversation
 	isSelected: boolean
-	sections: AgentSidebarSection[]
+	sections: AppSidebarSection[]
 	onSelect?: (id: string) => void
 	onOpenSettings?: (id: string) => void
 	onDelete?: (id: string) => void
@@ -604,7 +601,7 @@ const ConversationRosterRow = ({
 						{...lift.handlersFor(conversation.id)}
 						className={ROW}
 						icon={
-							<ConversationAvatar
+							<AvatarGroup
 								badge={badgeOf(conversation)}
 								participants={heldBotsOf(conversation)}
 								size={ROW_AVATAR_SIZE}
@@ -821,8 +818,8 @@ const RosterDropArea = ({
 )
 
 interface LiftedRowProps {
-	bot?: AgentSidebarBot
-	conversation?: AgentSidebarConversation
+	bot?: AppSidebarBot
+	conversation?: AppSidebarConversation
 	ref: (node: HTMLElement | null) => void
 }
 
@@ -834,7 +831,7 @@ const LiftedRow = ({ bot, conversation, ref }: LiftedRowProps) => (
 		ref={ref}
 	>
 		{conversation ? (
-			<ConversationAvatar
+			<AvatarGroup
 				participants={heldBotsOf(conversation)}
 				size={ROW_AVATAR_SIZE}
 			/>
@@ -894,7 +891,7 @@ const SectionNameField = ({
 }
 
 interface RosterSectionProps {
-	section: AgentSidebarSection
+	section: AppSidebarSection
 	isFirst: boolean
 	isLast: boolean
 	onRename?: (id: string, name: string) => void
@@ -1005,12 +1002,12 @@ interface BotRosterProps
 		ConversationRosterActions,
 		SectionActions,
 		RosterCreateActions {
-	bots: AgentSidebarBot[]
-	conversations: AgentSidebarConversation[]
+	bots: AppSidebarBot[]
+	conversations: AppSidebarConversation[]
 	selectedBotId?: string
 	selectedConversationId?: string
 	destinations: Space[]
-	sections: AgentSidebarSection[]
+	sections: AppSidebarSection[]
 	naming?: SectionNaming | null
 	onNaming?: (naming: SectionNaming | null) => void
 }
@@ -1145,8 +1142,8 @@ const BotRoster = ({
 			: null
 
 	const rowsFor = (
-		heldConversations: AgentSidebarConversation[],
-		held: AgentSidebarBot[],
+		heldConversations: AppSidebarConversation[],
+		held: AppSidebarBot[],
 	) => (
 		<AnimatedSidebarMenu>
 			{heldConversations.map((conversation) => (
@@ -1463,23 +1460,23 @@ const CreateMenu = (items: CreateItemsProps) => {
 	)
 }
 
-type AgentSidebarPanelProps = Omit<
+type AppSidebarPanelProps = Omit<
 	AnimatedSidebarProps,
 	"ariaLabel" | "children" | "collapsible"
 >
 
-interface AgentSidebarProps
-	extends AgentSidebarPanelProps,
+interface AppSidebarProps
+	extends AppSidebarPanelProps,
 		BotRosterActions,
 		ConversationRosterActions,
 		SectionActions {
-	bots: AgentSidebarBot[]
-	botsBySpaceId?: Record<string, AgentSidebarBot[]>
-	conversations?: AgentSidebarConversation[]
-	conversationsBySpaceId?: Record<string, AgentSidebarConversation[]>
+	bots: AppSidebarBot[]
+	botsBySpaceId?: Record<string, AppSidebarBot[]>
+	conversations?: AppSidebarConversation[]
+	conversationsBySpaceId?: Record<string, AppSidebarConversation[]>
 	badgesBySpaceId?: Record<string, BotBadge>
-	sections?: AgentSidebarSection[]
-	sectionsBySpaceId?: Record<string, AgentSidebarSection[]>
+	sections?: AppSidebarSection[]
+	sectionsBySpaceId?: Record<string, AppSidebarSection[]>
 	selectedBotId?: string
 	selectedConversationId?: string
 	onCreateBot?: () => void
@@ -1497,7 +1494,7 @@ interface AgentSidebarProps
 	insetWindowControls?: boolean
 }
 
-const AgentSidebarBase = ({
+const AppSidebarBase = ({
 	bots: roster,
 	botsBySpaceId,
 	conversations: rooms = NO_CONVERSATIONS,
@@ -1536,7 +1533,7 @@ const AgentSidebarBase = ({
 	onOpenUserSettings,
 	insetWindowControls = false,
 	...panel
-}: AgentSidebarProps) => {
+}: AppSidebarProps) => {
 	const { t } = useTranslation("bots")
 	const createLabel = t("roster.create")
 	const [naming, setNaming] = useState<SectionNaming | null>(null)
@@ -1710,14 +1707,14 @@ const AgentSidebarBase = ({
 	)
 }
 
-const AgentSidebar = memo(AgentSidebarBase)
+const AppSidebar = memo(AppSidebarBase)
 
 export {
-	AgentSidebar,
-	type AgentSidebarBot,
-	type AgentSidebarConversation,
-	type AgentSidebarProps,
-	type AgentSidebarSection,
+	AppSidebar,
+	type AppSidebarBot,
+	type AppSidebarConversation,
+	type AppSidebarProps,
+	type AppSidebarSection,
 	type BotAvatarBlot,
 	type Space,
 	type UserChipIdentity,

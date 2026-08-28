@@ -10,7 +10,7 @@ import {
 
 const DEFAULT_SIZE = 40
 
-const CONVERSATION_AVATAR_LIMIT = 3
+const AVATAR_GROUP_LIMIT = 3
 
 const HELD_GAP = 2
 
@@ -29,19 +29,19 @@ type ConversationParticipant = Pick<
 	"name" | "animal" | "blot" | "image" | "working" | "kind"
 > & { id: string }
 
-type ConversationAvatarProps = {
+type AvatarGroupProps = {
 	participants: ConversationParticipant[]
 	size?: number
 	badge?: BotBadge
 }
 
-function ConversationAvatar({
+function AvatarGroup({
 	participants,
 	size = DEFAULT_SIZE,
 	badge,
-}: ConversationAvatarProps) {
+}: AvatarGroupProps) {
 	const { t } = useTranslation("bots")
-	const held = participants.slice(0, CONVERSATION_AVATAR_LIMIT)
+	const held = participants.slice(0, AVATAR_GROUP_LIMIT)
 	const inner = size - Math.round(size * FRAME_INSET_RATIO) * 2
 	const isStacked = held.length > 1
 	const tile = isStacked ? (inner - HELD_GAP) / 2 : inner
@@ -101,8 +101,8 @@ function ConversationAvatar({
 }
 
 export {
-	CONVERSATION_AVATAR_LIMIT,
-	ConversationAvatar,
-	type ConversationAvatarProps,
+	AVATAR_GROUP_LIMIT,
+	AvatarGroup,
+	type AvatarGroupProps,
 	type ConversationParticipant,
 }

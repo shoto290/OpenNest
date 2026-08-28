@@ -1,17 +1,12 @@
 import { type RefObject, useCallback, useMemo, useRef, useState } from "react"
 
+import {
+	ActivityIndicator,
+	type ActivityIndicatorKind,
+} from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import {
-	BotWorking,
-	type BotWorkingKind,
-} from "@workspace/ui/components/bot-working"
+import { Avatar } from "@workspace/ui/components/avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
-import { ChatLayout } from "@workspace/ui/components/chat-layout"
-import { ChatTurnGroup } from "@workspace/ui/components/chat-turn"
-import {
-	type ConversationBot,
-	ConversationBotsProvider,
-} from "@workspace/ui/components/conversation-bots"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
@@ -22,7 +17,9 @@ import {
 	type PinnedMessage,
 	PinnedMessages,
 } from "@workspace/ui/components/pinned-messages"
-import { UserAvatar } from "@workspace/ui/components/user-avatar"
+import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
+import { ThreadLayout } from "@workspace/ui/components/thread-layout"
+import { TurnGroup } from "@workspace/ui/components/turn"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { FaceAvatar } from "@/components/face-avatar"
@@ -91,13 +88,13 @@ const NO_MARKS: ReadonlySet<number> = new Set()
 
 type WorkingBotProps = {
 	face: ThreadFace
-	kind?: BotWorkingKind
+	kind?: ActivityIndicatorKind
 	label?: string
 	onStop?: () => void
 }
 
 const WorkingBot = ({ face, kind, label, onStop }: WorkingBotProps) => (
-	<BotWorking
+	<ActivityIndicator
 		animal={face.animal}
 		blot={face.blot}
 		botId={face.id}
@@ -124,7 +121,7 @@ const toPinnedRow = (
 		avatar: isBotAuthor ? (
 			<FaceAvatar face={face} size={PINNED_AVATAR_SIZE} />
 		) : (
-			<UserAvatar name={reader} size={PINNED_AVATAR_SIZE} />
+			<Avatar name={reader} size={PINNED_AVATAR_SIZE} />
 		),
 		timestamp: pinTimestamp(bubble.timestamp),
 		excerpt: toExcerpt(messageWithAttachments(bubble.text).text.trim()),
@@ -135,7 +132,7 @@ type ThreadHeaderProps = {
 	thread: LoadedThread
 	botWork: WorkingState | null
 	botImage?: string
-	present: ConversationBot[]
+	present: RosterBot[]
 	pinnedRows: PinnedMessage[]
 	onJumpToPin: (bubbleId: string) => void
 	onUnpin: (bubbleId: string) => void
@@ -191,7 +188,7 @@ type ThreadComposerSlotProps = {
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	staged: StagedFiles
 	canAttach: boolean
-	present: ConversationBot[]
+	present: RosterBot[]
 	readDraft: () => string
 	onPromptChange: (draft: string) => void
 	onSubmitPrompt: (text: string) => Promise<boolean>
@@ -278,7 +275,7 @@ const ThreadPending = ({ thread, authors }: ThreadPendingProps) => {
 type ThreadEmptyStateProps = {
 	thread: LoadedThread
 	botImage?: string
-	present: ConversationBot[]
+	present: RosterBot[]
 	onRestart: () => void
 }
 
@@ -343,7 +340,7 @@ const ThreadRun = ({
 	onReply,
 	onRetry,
 }: ThreadRunProps) => (
-	<ChatTurnGroup carriesMark={carriesMark}>
+	<TurnGroup carriesMark={carriesMark}>
 		{run.map((row, index) => {
 			const bubble = bubbleIdOf(row.messageId, row.blockIndex)
 
@@ -370,7 +367,7 @@ const ThreadRun = ({
 				/>
 			)
 		})}
-	</ChatTurnGroup>
+	</TurnGroup>
 )
 
 type ThreadRunsProps = Omit<
@@ -435,7 +432,7 @@ const BotThreadTail = ({
 			/>
 		) : null}
 		{thread.state.outbox.length > 0 ? (
-			<ChatTurnGroup>
+			<TurnGroup>
 				{thread.state.outbox.map((entry) => (
 					<QueuedTurn
 						controller={thread.controller}
@@ -443,14 +440,14 @@ const BotThreadTail = ({
 						key={entry.id}
 					/>
 				))}
-			</ChatTurnGroup>
+			</TurnGroup>
 		) : null}
 	</>
 )
 
 type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	refusedQuote?: QuotedMessage
 	onStop: () => void
 }
@@ -495,7 +492,7 @@ const ConversationThreadTail = ({
 type ThreadTailProps = {
 	thread: LoadedThread
 	botWork: WorkingState | null
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	refusedQuote?: QuotedMessage
 	onStop: () => void
 }
@@ -642,8 +639,8 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 		: undefined
 
 	return (
-		<ConversationBotsProvider bots={bots}>
-			<ChatLayout
+		<RosterProvider bots={bots}>
+			<ThreadLayout
 				busy={facts.isBusy}
 				composer={
 					<ThreadComposerSlot
@@ -738,8 +735,8 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 					refusedQuote={refusedTarget ? toQuote(refusedTarget) : undefined}
 					thread={thread}
 				/>
-			</ChatLayout>
-		</ConversationBotsProvider>
+			</ThreadLayout>
+		</RosterProvider>
 	)
 }
 

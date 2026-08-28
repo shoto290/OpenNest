@@ -2,17 +2,14 @@ import { expect, fn, userEvent } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
+import type { RosterBot } from "@workspace/ui/components/roster"
 
-const NEST: ConversationBot = { id: "nest", name: "Nest", blot: "blue" }
+const NEST: RosterBot = { id: "nest", name: "Nest", blot: "blue" }
 
-const BOTS: ConversationBot[] = [
-	NEST,
-	{ id: "atlas", name: "Atlas", blot: "green" },
-]
+const BOTS: RosterBot[] = [NEST, { id: "atlas", name: "Atlas", blot: "green" }]
 
-const CROWD: ConversationBot[] = [
+const CROWD: RosterBot[] = [
 	...BOTS,
 	{ id: "pike", name: "Pike", blot: "orange" },
 	{ id: "wren", name: "Wren", blot: "purple" },

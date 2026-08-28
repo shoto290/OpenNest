@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import type { AgentSidebarBot } from "@workspace/ui/components/agents/agent-sidebar"
+import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 
 import { toSpaceBadges, withBadges } from "./sidebar-badges"
 
-type ShownBadge = AgentSidebarBot["badge"]
+type ShownBadge = AppSidebarBot["badge"]
 
 const rosterBot = (id: string) => ({ id, name: id })
 

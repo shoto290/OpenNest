@@ -5,8 +5,8 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { POPUP_CLASS } from "@workspace/ui/components/settings-styles"
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { useDismiss } from "@workspace/ui/lib/hooks/use-dismiss"
@@ -25,7 +25,7 @@ const scrollActiveIntoView = (row: HTMLButtonElement | null) => {
 }
 
 interface PromptMentionMenuProps {
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	leadId?: string
 	open: boolean
 	query: string

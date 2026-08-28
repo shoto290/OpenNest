@@ -1,11 +1,11 @@
+import type { ActivityIndicatorKind } from "@workspace/ui/components/activity-indicator"
 import type {
-	AgentSidebarBot,
-	AgentSidebarConversation,
-} from "@workspace/ui/components/agents/agent-sidebar"
-import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
+	AppSidebarBot,
+	AppSidebarConversation,
+} from "@workspace/ui/components/app-sidebar"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
 import type { MessageAuthor } from "@workspace/ui/components/message"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { type MentionBot, toMentionNames } from "./mentions"
@@ -22,12 +22,12 @@ type BotFace = Pick<
 
 export type ConversationWorker = {
 	botId: string
-	kind: BotWorkingKind
+	kind: ActivityIndicatorKind
 }
 
 const NO_WORKERS: ConversationWorker[] = []
 
-const toBotRow = (id: string, face: BotFace): AgentSidebarBot => ({
+const toBotRow = (id: string, face: BotFace): AppSidebarBot => ({
 	id,
 	name: face.name,
 	animal: face.avatarAnimal,
@@ -35,7 +35,7 @@ const toBotRow = (id: string, face: BotFace): AgentSidebarBot => ({
 	image: avatarSrc(face.avatarImagePath),
 })
 
-const toParticipantRow = (participant: Participant): AgentSidebarBot =>
+const toParticipantRow = (participant: Participant): AppSidebarBot =>
 	toBotRow(participant.botId, participant)
 
 const toAuthor = (participant: Participant): MessageAuthor => ({
@@ -44,9 +44,8 @@ const toAuthor = (participant: Participant): MessageAuthor => ({
 	isDeleted: participant.isDeleted,
 })
 
-export const toConversationBots = (
-	participants: Participant[],
-): ConversationBot[] => participants.map(toParticipantRow)
+export const toConversationBots = (participants: Participant[]): RosterBot[] =>
+	participants.map(toParticipantRow)
 
 export const authorsOf = (
 	conversation: Conversation,
@@ -73,7 +72,7 @@ export const presentParticipants = (
 export const unseatedBots = (
 	bots: Bot[],
 	conversation: Conversation,
-): ConversationBot[] => {
+): RosterBot[] => {
 	const seated = new Set(
 		presentParticipants(conversation).map((participant) => participant.botId),
 	)
@@ -135,7 +134,7 @@ const previewText = (
 const toSeatedRows = (
 	seated: Participant[],
 	workers: ConversationWorker[],
-): AgentSidebarBot[] =>
+): AppSidebarBot[] =>
 	seated.map((participant) => {
 		const worker = workers.find(({ botId }) => botId === participant.botId)
 		return {
@@ -149,7 +148,7 @@ export const toRosterConversations = (
 	conversations: Conversation[],
 	activity: ConversationRosterActivity,
 	now: number,
-): AgentSidebarConversation[] =>
+): AppSidebarConversation[] =>
 	mostRecentFirst(conversations, activity).map((conversation) => {
 		const preview = activity.previews[conversation.id]
 		const workers = activity.working[conversation.id] ?? NO_WORKERS

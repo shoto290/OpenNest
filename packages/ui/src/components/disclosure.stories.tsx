@@ -3,10 +3,10 @@ import { useState } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { AgentDisclosure } from "@workspace/ui/components/agents/agent-disclosure"
 import { Button } from "@workspace/ui/components/button"
+import { Disclosure } from "@workspace/ui/components/disclosure"
 
-type AgentDisclosureArgs = {
+type DisclosureArgs = {
 	id?: string
 	open: boolean
 	openHeight?: string
@@ -14,7 +14,7 @@ type AgentDisclosureArgs = {
 	children?: ReactNode
 }
 
-const Disclosure = AgentDisclosure as ComponentType<AgentDisclosureArgs>
+const TypedDisclosure = Disclosure as ComponentType<DisclosureArgs>
 
 const TRACE = [
 	"Read the nest manifest",
@@ -59,7 +59,7 @@ const Toggled = () => {
 			>
 				{open ? "Hide the trace" : "Show the trace"}
 			</Button>
-			<AgentDisclosure id="reveal" open={open}>
+			<Disclosure id="reveal" open={open}>
 				<Trace>
 					<a
 						className="underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
@@ -68,14 +68,14 @@ const Toggled = () => {
 						Open the full run
 					</a>
 				</Trace>
-			</AgentDisclosure>
+			</Disclosure>
 		</div>
 	)
 }
 
 const meta = preview.meta({
-	title: "AI/AgentDisclosure",
-	component: Disclosure,
+	title: "AI/Disclosure",
+	component: TypedDisclosure,
 	parameters: {
 		layout: "padded",
 		docs: {

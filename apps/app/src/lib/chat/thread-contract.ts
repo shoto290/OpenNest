@@ -1,5 +1,5 @@
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import type { MessageAuthor } from "@workspace/ui/components/message"
+import type { RosterBot } from "@workspace/ui/components/roster"
 
 import type { ChatController } from "./chat-controller"
 import type { ChatError, ChatState } from "./chat-state"
@@ -17,7 +17,7 @@ import type {
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { Bot, Conversation } from "../conversations/store-contract"
 
-export type ThreadFace = ConversationBot
+export type ThreadFace = RosterBot
 
 export type ThreadAuthors = ReadonlyMap<string, MessageAuthor>
 

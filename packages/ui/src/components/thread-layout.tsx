@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from "react"
 
-import { ChatMarkProvider } from "@workspace/ui/components/chat-mark-context"
+import { MarkProvider } from "@workspace/ui/components/mark-context"
 import {
 	MessageScroller,
 	type MessageScrollerHandle,
@@ -12,7 +12,7 @@ import {
 } from "@workspace/ui/components/prompt-reply"
 import { cn } from "@workspace/ui/lib/utils"
 
-interface ChatLayoutProps {
+interface ThreadLayoutProps {
 	header?: ReactNode
 	notice?: ReactNode
 	pending?: ReactNode
@@ -31,7 +31,7 @@ interface ChatLayoutProps {
 	contentClassName?: string
 }
 
-function ChatLayout({
+function ThreadLayout({
 	header,
 	notice,
 	pending,
@@ -48,7 +48,7 @@ function ChatLayout({
 	scrollerRef,
 	className,
 	contentClassName,
-}: ChatLayoutProps) {
+}: ThreadLayoutProps) {
 	return (
 		<div
 			ref={rootRef}
@@ -74,9 +74,7 @@ function ChatLayout({
 					contentClassName,
 				)}
 			>
-				<ChatMarkProvider transcriptKey={transcriptKey}>
-					{children}
-				</ChatMarkProvider>
+				<MarkProvider transcriptKey={transcriptKey}>{children}</MarkProvider>
 			</MessageScroller>
 
 			{notice || pending || composer ? (
@@ -92,4 +90,4 @@ function ChatLayout({
 	)
 }
 
-export { ChatLayout, type ChatLayoutProps }
+export { ThreadLayout, type ThreadLayoutProps }

@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next"
 
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import {
+	type ActivityIndicatorKind,
 	BotIdentityAvatar,
-	type BotWorkingKind,
 } from "@workspace/ui/components/bot-identity-avatar"
 import {
 	BLOT_TINTS,
@@ -36,7 +36,7 @@ type BotIdentityFieldsProps = {
 	name?: string
 	seed?: string
 	working?: boolean
-	workingKind?: BotWorkingKind
+	workingKind?: ActivityIndicatorKind
 	onIdentityChange: (identity: BotIdentity) => void
 	onAvatarUpload: (file: File) => void
 	className?: string

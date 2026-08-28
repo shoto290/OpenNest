@@ -7,9 +7,9 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { MessageSideContext } from "@workspace/ui/components/agents/message-context"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
+import { MessageSideContext } from "@workspace/ui/components/message-side-context"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -38,7 +38,7 @@ export interface MessageAvatarProps extends ComponentPropsWithRef<"div"> {
 	placeholder?: boolean
 }
 
-export type MessageAuthor = ConversationBot & {
+export type MessageAuthor = RosterBot & {
 	isLead?: boolean
 	isDeleted?: boolean
 }

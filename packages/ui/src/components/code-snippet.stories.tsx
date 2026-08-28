@@ -2,15 +2,15 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
-	AgentCode,
-	type AgentCodeLanguage,
-} from "@workspace/ui/components/agents/agent-code"
+	CodeSnippet,
+	type CodeSnippetLanguage,
+} from "@workspace/ui/components/code-snippet"
 import { CODE_LANGUAGES } from "@workspace/ui/lib/code-highlight"
 
 const BASH = `bun run nest:sync --workspace packages/ui
 bun run types`
 
-const SAMPLES: Record<AgentCodeLanguage, string> = {
+const SAMPLES: Record<CodeSnippetLanguage, string> = {
 	bash: BASH,
 	css: `.nest-card {\n  border-radius: var(--radius-lg);\n}`,
 	diff: `- padding: 12px;\n+ padding: var(--spacing-3);`,
@@ -35,8 +35,8 @@ const LONG_LINE =
 	"bun run nest:sync --workspace packages/ui --tint sky --animals owl,cat,fox --out packages/ui/src/components/nest/generated/nest-manifest.ts --verbose"
 
 const meta = preview.meta({
-	title: "AI/AgentCode",
-	component: AgentCode,
+	title: "AI/CodeSnippet",
+	component: CodeSnippet,
 	parameters: {
 		layout: "padded",
 		docs: {
@@ -89,7 +89,7 @@ export const Languages = meta.story({
 					<span className="font-medium text-muted-foreground text-xs">
 						{language}
 					</span>
-					<AgentCode code={SAMPLES[language]} language={language} />
+					<CodeSnippet code={SAMPLES[language]} language={language} />
 				</div>
 			))}
 		</div>

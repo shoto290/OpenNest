@@ -5,10 +5,10 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { ParticipantsPanel } from "@workspace/ui/components/conversation-settings-dialog/participants-panel"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	DANGER_RAIL_ITEM_CLASS,
@@ -37,9 +37,9 @@ type ConversationSettingsDialogProps = {
 	onClose: () => void
 	value: ConversationSettingsValue
 	onValueChange: (value: ConversationSettingsValue) => void
-	participants: ConversationBot[]
+	participants: RosterBot[]
 	leadId: string
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	onLeadChange: (id: string) => void
 	onDismiss: (id: string) => void
 	onRecruit: (id: string) => void
@@ -186,8 +186,8 @@ const ConversationSettingsDialog = ({
 }
 
 export {
-	type ConversationBot,
 	ConversationSettingsDialog,
 	type ConversationSettingsDialogProps,
 	type ConversationSettingsValue,
+	type RosterBot,
 }

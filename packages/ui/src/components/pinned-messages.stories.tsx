@@ -3,6 +3,7 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
+import { Avatar } from "@workspace/ui/components/avatar"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import {
 	PINNED_AVATAR_SIZE,
@@ -10,7 +11,6 @@ import {
 	PinnedMessages,
 	type PinnedMessagesProps,
 } from "@workspace/ui/components/pinned-messages"
-import { UserAvatar } from "@workspace/ui/components/user-avatar"
 
 const TITLE = "Pinned messages"
 
@@ -18,7 +18,7 @@ const TRIGGER = /^Pinned messages/
 
 const BOT = <BotIdentityAvatar name="Skippy" size={PINNED_AVATAR_SIZE} />
 
-const READER = <UserAvatar name="You" size={PINNED_AVATAR_SIZE} />
+const READER = <Avatar name="You" size={PINNED_AVATAR_SIZE} />
 
 const MESSAGES: PinnedMessage[] = [
 	{
@@ -82,7 +82,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The reader's bookmarks over a conversation, reached from a pin button in the chat header. The button wears a dot while anything is pinned and says how many it holds to a screen reader, and pressing it drops a plain panel under it holding one row per pinned message: the author's avatar, their name, when they wrote it, the first three lines of what they said, a jump control and an unpin control. A rule separates one row from the next, and the avatar arrives as a node the host draws — `BotIdentityAvatar` for a bot, `UserAvatar` for the reader — so the face here is the same face the transcript shows. Jumping closes the panel because the reader is leaving for the transcript; unpinning leaves it open because the reader is still tidying. Nothing here animates. It draws only — the host holds the list, moves the transcript on a jump and drops the pin on an unpin. `AI/ChatTurn` carries the pin action that fills this list.",
+					"The reader's bookmarks over a conversation, reached from a pin button in the chat header. The button wears a dot while anything is pinned and says how many it holds to a screen reader, and pressing it drops a plain panel under it holding one row per pinned message: the author's avatar, their name, when they wrote it, the first three lines of what they said, a jump control and an unpin control. A rule separates one row from the next, and the avatar arrives as a node the host draws — `BotIdentityAvatar` for a bot, `Avatar` for the reader — so the face here is the same face the transcript shows. Jumping closes the panel because the reader is leaving for the transcript; unpinning leaves it open because the reader is still tidying. Nothing here animates. It draws only — the host holds the list, moves the transcript on a jump and drops the pin on an unpin. `AI/Turn` carries the pin action that fills this list.",
 			},
 		},
 	},

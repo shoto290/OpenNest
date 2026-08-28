@@ -6,20 +6,20 @@ import type { CSSProperties } from "react"
 import { EASE_OUT } from "@workspace/ui/lib/ease"
 import { cn } from "@workspace/ui/lib/utils"
 
-export interface AgentDisclosureProps
+export interface DisclosureProps
 	extends Omit<HTMLMotionProps<"div">, "animate" | "initial"> {
 	open: boolean
 	openHeight?: CSSProperties["height"]
 }
 
-export function AgentDisclosure({
+export function Disclosure({
 	open,
 	openHeight = "auto",
 	className,
 	style,
 	transition,
 	...props
-}: AgentDisclosureProps) {
+}: DisclosureProps) {
 	const reduce = useReducedMotion() ?? false
 
 	return (

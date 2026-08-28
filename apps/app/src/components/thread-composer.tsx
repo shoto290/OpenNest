@@ -7,12 +7,12 @@ import {
 	useState,
 } from "react"
 
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
 import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
 import { PromptMentionMenu } from "@workspace/ui/components/prompt-mention-menu"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { AgentCommand } from "@/lib/agent/contract"
@@ -129,7 +129,7 @@ export const BotComposer = memo(function BotComposer({
 })
 
 type ConversationComposerProps = StagedFields & {
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	leadId?: string
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	readDraft: () => string

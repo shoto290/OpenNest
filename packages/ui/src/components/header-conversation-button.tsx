@@ -4,16 +4,16 @@ import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { Button } from "@workspace/ui/components/button"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { HEADER_IDENTITY_CLASS } from "@workspace/ui/components/header-identity-button"
 import { Icons } from "@workspace/ui/components/icons"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { cn } from "@workspace/ui/lib/utils"
 
 const AVATAR_SIZE = 24
 
 type HeaderConversationButtonProps = {
 	name: string
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	isSettingsOpen?: boolean
 	onOpenSettings?: () => void
 	className?: string

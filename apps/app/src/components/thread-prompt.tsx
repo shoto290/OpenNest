@@ -1,4 +1,3 @@
-import { AssistantTurn } from "@workspace/ui/components/chat-turn"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import {
 	ToolApproval,
@@ -8,6 +7,7 @@ import {
 	ToolQuestion,
 	type ToolQuestionItem,
 } from "@workspace/ui/components/tool-question"
+import { AssistantTurn } from "@workspace/ui/components/turn"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type {

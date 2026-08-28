@@ -1,13 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
-import {
-	ChatMarkProvider,
-	useChatMarkId,
-} from "@workspace/ui/components/chat-mark-context"
+import { MarkProvider, useMarkId } from "@workspace/ui/components/mark-context"
 
 const MarkReader = ({ botId }: { botId?: string }) => {
-	const markId = useChatMarkId(botId) ?? "plain"
+	const markId = useMarkId(botId) ?? "plain"
 
 	return (
 		<>
@@ -23,14 +20,14 @@ const readMarkIds = (requests: MarkRequest[]) => {
 	const markup = renderToStaticMarkup(
 		<div>
 			{requests.map(({ transcriptKey, botIds }) => (
-				<ChatMarkProvider
+				<MarkProvider
 					key={transcriptKey ?? "minted"}
 					transcriptKey={transcriptKey}
 				>
 					{botIds.map((botId) => (
 						<MarkReader botId={botId} key={botId ?? "unnamed"} />
 					))}
-				</ChatMarkProvider>
+				</MarkProvider>
 			))}
 		</div>,
 	)
@@ -43,7 +40,7 @@ const inTranscript = (transcriptKey: string, ...botIds: string[]) => ({
 	botIds,
 })
 
-describe("useChatMarkId", () => {
+describe("useMarkId", () => {
 	it("hands out a different id to every bot of one conversation", () => {
 		const [lyraMark, , orionMark] = readMarkIds([
 			inTranscript("room-1", "bot-lyra", "bot-orion"),

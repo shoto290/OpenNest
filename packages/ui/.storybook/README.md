@@ -44,7 +44,7 @@ One title shape, enforced by `storySort` in `preview.tsx`: `<Section>/<Component
 | `Branding` | The product's identity marks: `BotAvatar`, `BotIdentityAvatar`. |
 | `AI` | **Reserved for the conversation with an agent** — the transcript, its turns, its composer, the approvals and traces that interrupt it. |
 
-`AI` is the section authors over-reach for. Ask what the component would be in a product with no agent in it: `Markdown` still renders a payload, `AgentProgress` still reports work, `AgentSidebar` still moves between places. Only a component with no answer to that — the transcript and what happens inside it — stays in `AI`.
+`AI` is the section authors over-reach for. Ask what the component would be in a product with no agent in it: `Markdown` still renders a payload, `ProgressGrid` still reports work, `AppSidebar` still moves between places. Only a component with no answer to that — the transcript and what happens inside it — stays in `AI`.
 
 An unknown root **throws** at sort time, so a typo fails the sidebar rather than the review.
 

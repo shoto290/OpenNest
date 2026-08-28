@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { BotWorkingKind } from "@workspace/ui/components/bot-working"
+import type { ActivityIndicatorKind } from "@workspace/ui/components/activity-indicator"
 
 import type {
 	ConversationRosterActivity,
@@ -43,7 +43,10 @@ const NOW = Date.UTC(2025, 0, 2, 12, 0, 0)
 
 const A_MINUTE_AGO = NOW - 60 * 1000
 
-const working = (botId: string, kind: BotWorkingKind): ConversationWorker => ({
+const working = (
+	botId: string,
+	kind: ActivityIndicatorKind,
+): ConversationWorker => ({
 	botId,
 	kind,
 })

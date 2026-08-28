@@ -104,7 +104,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The composer for a prompt: write it and send it, whatever the session is doing. At rest it is a one-line pill — the `leading` slot, the prompt, then the `trailing` slot and the send button, all on the same row. The moment the prompt no longer fits beside them the bar expands: the prompt takes a row of its own and the controls drop below it, `leading` on the leading edge, `trailing` and send on the trailing one. Enter sends and Shift+Enter breaks a line in both layouts. It knows nothing about a running turn: a prompt written mid-run is sent like any other and waits in the transcript as a pending `UserTurn`, and stopping the run belongs to the working bot's avatar in `Feedback/BotWorking`.",
+					"The composer for a prompt: write it and send it, whatever the session is doing. At rest it is a one-line pill — the `leading` slot, the prompt, then the `trailing` slot and the send button, all on the same row. The moment the prompt no longer fits beside them the bar expands: the prompt takes a row of its own and the controls drop below it, `leading` on the leading edge, `trailing` and send on the trailing one. Enter sends and Shift+Enter breaks a line in both layouts. It knows nothing about a running turn: a prompt written mid-run is sent like any other and waits in the transcript as a pending `UserTurn`, and stopping the run belongs to the working bot's avatar in `Feedback/ActivityIndicator`.",
 			},
 		},
 	},

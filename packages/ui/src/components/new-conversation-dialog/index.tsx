@@ -4,7 +4,6 @@ import { type FormEvent, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import {
 	Content,
 	Description,
@@ -13,6 +12,7 @@ import {
 } from "@workspace/ui/components/dialog"
 import { BotPicker } from "@workspace/ui/components/new-conversation-dialog/bot-picker"
 import { PickedBots } from "@workspace/ui/components/new-conversation-dialog/picked-bots"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 
 type NewConversationDraft = {
@@ -21,7 +21,7 @@ type NewConversationDraft = {
 }
 
 type NewConversationFormProps = {
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	onCancel: () => void
 	onCreate: (draft: NewConversationDraft) => void
 }
@@ -90,7 +90,7 @@ const NewConversationForm = ({
 type NewConversationDialogProps = {
 	open: boolean
 	onClose: () => void
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	onCreate: (draft: NewConversationDraft) => void
 }
 
@@ -118,8 +118,8 @@ const NewConversationDialog = ({
 }
 
 export {
-	type ConversationBot,
 	NewConversationDialog,
 	type NewConversationDialogProps,
 	type NewConversationDraft,
+	type RosterBot,
 }

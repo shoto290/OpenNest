@@ -4,6 +4,7 @@ import { Tabs } from "@base-ui/react/tabs"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Avatar, displayNameOf } from "@workspace/ui/components/avatar"
 import type {
 	BotSkillDraft,
 	BotSkillItem,
@@ -29,7 +30,6 @@ import {
 	PICTURE_FIELD_SIZE,
 	SETTINGS_HEADER_CLASS,
 } from "@workspace/ui/components/settings-styles"
-import { displayNameOf, UserAvatar } from "@workspace/ui/components/user-avatar"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import { AppearanceFields } from "@workspace/ui/components/user-settings-dialog/appearance-fields"
 import { LanguageFields } from "@workspace/ui/components/user-settings-dialog/language-fields"
@@ -94,7 +94,7 @@ const UserSettingsDialog = ({
 		onValueChange({ ...value, ...fields })
 
 	const picture = value.image ? (
-		<UserAvatar image={value.image} size={PICTURE_FIELD_SIZE} />
+		<Avatar image={value.image} size={PICTURE_FIELD_SIZE} />
 	) : (
 		<Icons.User aria-hidden="true" className="size-6 text-muted-foreground" />
 	)
@@ -115,7 +115,7 @@ const UserSettingsDialog = ({
 				)}
 			>
 				<header className={SETTINGS_HEADER_CLASS}>
-					<UserAvatar
+					<Avatar
 						image={value.image}
 						name={displayName}
 						size={BREADCRUMB_AVATAR_SIZE}

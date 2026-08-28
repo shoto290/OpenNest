@@ -12,12 +12,12 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const REST_STATE: BotAvatarState = "idle"
 
-type BotWorkingKind = Extract<
+type ActivityIndicatorKind = Extract<
 	BotAvatarState,
 	"thinking" | "searching" | "working" | "writing" | "waiting"
 >
 
-const busyStateFor = (kind: BotWorkingKind): BotAvatarState =>
+const busyStateFor = (kind: ActivityIndicatorKind): BotAvatarState =>
 	kind === "waiting" ? "listening" : kind
 
 const UPLOADED_IMAGE_SHAPE = "rounded-full"
@@ -36,7 +36,7 @@ type BotIdentityAvatarProps = {
 	image?: string
 	badge?: BotBadge
 	working?: boolean
-	kind?: BotWorkingKind
+	kind?: ActivityIndicatorKind
 	size?: number
 	className?: string
 }
@@ -84,8 +84,8 @@ function BotIdentityAvatar({
 }
 
 export {
+	type ActivityIndicatorKind,
 	avatarShape,
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
-	type BotWorkingKind,
 }

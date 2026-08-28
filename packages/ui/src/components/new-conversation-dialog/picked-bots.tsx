@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import type { ConversationBot } from "@workspace/ui/components/conversation-bots"
 import { Icons } from "@workspace/ui/components/icons"
+import type { RosterBot } from "@workspace/ui/components/roster"
 
 const CHIP_AVATAR_SIZE = 20
 
@@ -15,7 +15,7 @@ const DISMISS_CLASS =
 	"grid size-5 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-colors duration-100 ease-out hover:bg-foreground/10 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 motion-reduce:transition-none"
 
 type PickedBotsProps = {
-	bots: ConversationBot[]
+	bots: RosterBot[]
 	onDismiss: (id: string) => void
 }
 
