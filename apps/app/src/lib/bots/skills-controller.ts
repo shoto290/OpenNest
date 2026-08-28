@@ -11,6 +11,7 @@ export type SkillsController = {
 	getState: () => SkillsState
 	subscribe: (listener: () => void) => () => void
 	open: (botId: string) => Promise<void>
+	reload: () => void
 	create: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	save: (skillId: string, draft: BotSkillDraft) => void
 	setPreloaded: (skillId: string, isPreloaded: boolean) => void
@@ -82,6 +83,8 @@ export const createSkillsController = (
 			set({ botId, skills: [] })
 			return enqueue(() => read(botId)).catch(() => undefined)
 		},
+
+		reload,
 
 		create: (draft: BotSkillDraft, isPreloaded: boolean) =>
 			onOpenBot(async (botId) => {

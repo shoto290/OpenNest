@@ -117,6 +117,8 @@ export type AgentCommand = {
 	description?: string
 }
 
+export type EvolvedBundle = "bot" | "user" | "space"
+
 export type AgentEvent =
 	| { type: "connectionChanged"; state: ConnectionState }
 	| { type: "turnChanged"; state: TurnState }
@@ -130,5 +132,10 @@ export type AgentEvent =
 	| { type: "questionRequested"; request: QuestionRequest }
 	| { type: "permissionResolved"; id: string; decision: PermissionDecision }
 	| { type: "turnEnded"; ended: TurnEnded }
-	| { type: "botEvolved"; commitId: string; title: string }
+	| {
+			type: "botEvolved"
+			bundle: EvolvedBundle
+			commitId: string
+			title: string
+	  }
 	| { type: "failed"; error: TransportError }

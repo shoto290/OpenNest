@@ -58,6 +58,8 @@ export type RosterController = {
 	getState: () => RosterState
 	subscribe: (listener: () => void) => () => void
 	load: (opening: RosterOpening) => Promise<void>
+	reload: () => Promise<void>
+	spaceOfBot: (botId: string) => string | undefined
 	enter: (entry: RosterEntry) => void
 	select: (id: string) => void
 	selectConversation: (id: string) => void
@@ -458,6 +460,10 @@ export const createRosterController = (
 				),
 			])
 		},
+
+		reload,
+
+		spaceOfBot,
 
 		enter: ({ spaceId, lastRowId }: RosterEntry) => {
 			const bots = rosterIn(state.rosters, spaceId)

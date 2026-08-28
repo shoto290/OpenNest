@@ -12,6 +12,7 @@ export type UserPluginController = {
 	getState: () => UserPluginState
 	subscribe: (listener: () => void) => () => void
 	open: () => Promise<void>
+	reload: () => void
 	createSkill: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	saveSkill: (skillId: string, draft: BotSkillDraft) => void
 	setSkillPreloaded: (skillId: string, isPreloaded: boolean) => void
@@ -77,6 +78,8 @@ export const createUserPluginController = (
 		},
 
 		open: () => enqueue(read).catch(() => undefined),
+
+		reload,
 
 		createSkill: (draft: BotSkillDraft, isPreloaded: boolean) =>
 			run(async () => {
