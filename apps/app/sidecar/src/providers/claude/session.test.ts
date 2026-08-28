@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import type { Settings } from "@anthropic-ai/claude-agent-sdk"
+
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { buildOptions, CLASSIFY_ASK_USER_QUESTION } from "./session"
@@ -15,6 +17,9 @@ import {
 } from "./system-layer"
 
 import type { SessionRequest } from "../provider"
+
+const settingsOf = (options: ReturnType<typeof buildOptions>): Settings =>
+	options.settings as Settings
 
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 
@@ -80,7 +85,7 @@ describe("buildOptions", () => {
 		const options = buildOptions({ ...request, settingsPath }, undefined)
 
 		expect(options.permissionMode).toBe("acceptEdits")
-		expect(options.settings).toEqual({
+		expect(settingsOf(options)).toEqual({
 			permissions: {
 				allow: ["Read(**)"],
 				disableBypassPermissionsMode: "disable",
@@ -122,14 +127,33 @@ describe("buildOptions", () => {
 
 	it("passes the output style the host names, and locks bypass out either way", () => {
 		expect(
-			buildOptions({ ...request, outputStyle: "Concise" }, undefined).settings,
+			settingsOf(
+				buildOptions({ ...request, outputStyle: "Concise" }, undefined),
+			),
 		).toEqual({
 			permissions: { disableBypassPermissionsMode: "disable" },
 			outputStyle: "Concise",
 		})
-		expect(buildOptions(request, undefined).settings).toEqual({
+		expect(settingsOf(buildOptions(request, undefined))).toEqual({
 			permissions: { disableBypassPermissionsMode: "disable" },
 		})
+	})
+
+	it("pins the floor to the policy tier, above what a bot may declare", () => {
+		const options = buildOptions(
+			{ ...request, appDataDir: "/app-data/opennest" },
+			undefined,
+		)
+		const floor = options.managedSettings
+
+		expect(floor?.permissions?.deny).toContain(
+			"Read(//app-data/opennest/conversations.sqlite3)",
+		)
+		expect(floor?.sandbox?.enabled).toBe(true)
+		expect(floor?.sandbox?.filesystem?.denyRead).toContain(
+			"/app-data/opennest/bots",
+		)
+		expect(floor?.sandbox?.filesystem?.allowRead).toEqual(["/bots/b1"])
 	})
 
 	it("carries the bundle again on a resume, since neither option is sticky", () => {

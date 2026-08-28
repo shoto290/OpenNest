@@ -184,7 +184,22 @@ pub fn agent_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 
 pub fn settings_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 	let path = settings_path(root, bot_id);
-	path.is_file().then_some(path)
+	if !path.is_file() {
+		return None;
+	}
+	forget_directories(&path);
+	Some(path)
+}
+
+fn forget_directories(path: &Path) {
+	let mut kept = object_at(path);
+	let Some(serde_json::Value::Object(declared)) = kept.get_mut(PERMISSIONS_KEY) else {
+		return;
+	};
+	if declared.remove(DIRECTORIES_KEY).is_none() {
+		return;
+	}
+	let _ = private_files::replace(path, serde_json::Value::Object(kept).to_string().as_bytes());
 }
 
 fn settings_path(root: &Path, bot_id: &str) -> PathBuf {
@@ -198,7 +213,6 @@ pub struct BotPermissions {
 	pub allow: Vec<String>,
 	pub ask: Vec<String>,
 	pub deny: Vec<String>,
-	pub additional_directories: Vec<String>,
 }
 
 impl Default for BotPermissions {
@@ -218,7 +232,6 @@ impl BotPermissions {
 			} else {
 				Vec::new()
 			},
-			additional_directories: Vec::new(),
 		}
 	}
 
@@ -238,7 +251,6 @@ pub fn permissions(root: &Path, bot_id: &str) -> Option<BotPermissions> {
 		allow: listed(&declared, ALLOW_KEY),
 		ask: listed(&declared, ASK_KEY),
 		deny: listed(&declared, DENY_KEY),
-		additional_directories: listed(&declared, DIRECTORIES_KEY),
 	})
 }
 
@@ -254,11 +266,11 @@ pub fn set_permissions(
 		_ => serde_json::Map::new(),
 	};
 	declared.insert(DEFAULT_MODE_KEY.to_owned(), accepted_mode(&permissions.default_mode).into());
+	declared.remove(DIRECTORIES_KEY);
 	for (key, items) in [
 		(ALLOW_KEY, &permissions.allow),
 		(ASK_KEY, &permissions.ask),
 		(DENY_KEY, &permissions.deny),
-		(DIRECTORIES_KEY, &permissions.additional_directories),
 	] {
 		written_list(&mut declared, key, items);
 	}
@@ -1971,7 +1983,42 @@ mod tests {
 		assert_eq!(read.allow, vec!["Read".to_owned()], "a rule that is not text was read back");
 		assert!(read.ask.is_empty());
 		assert_eq!(read.deny, vec!["Bash(rm:*)".to_owned()]);
-		assert_eq!(read.additional_directories, vec!["/notes".to_owned()]);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn opening_a_session_forgets_the_directories_a_file_still_names() {
+		let root = a_root("forgotten");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let path = settings_path(&root, &bot.id);
+		private_files::replace(
+			&path,
+			serde_json::json!({
+				"outputStyle": "Concise",
+				"permissions": {
+					"deny": ["Bash"],
+					"additionalDirectories": ["/notes"],
+					"whatever": true
+				}
+			})
+			.to_string()
+			.as_bytes(),
+		)
+		.expect("the settings file is written");
+
+		assert_eq!(settings_file(&root, &bot.id), Some(path.clone()));
+
+		let written = object_at(&path);
+		assert_eq!(
+			written["permissions"]["additionalDirectories"],
+			serde_json::Value::Null,
+			"a directory the bot named itself outlived the session"
+		);
+		assert_eq!(written["outputStyle"], serde_json::json!("Concise"));
+		assert_eq!(written["permissions"]["deny"], serde_json::json!(["Bash"]));
+		assert_eq!(written["permissions"]["whatever"], serde_json::json!(true));
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -1998,7 +2045,6 @@ mod tests {
 			allow: vec!["Read".to_owned()],
 			ask: Vec::new(),
 			deny: Vec::new(),
-			additional_directories: vec!["/notes".to_owned()],
 		};
 		set_permissions(&root, &bot, &wanted).expect("the rules are written");
 

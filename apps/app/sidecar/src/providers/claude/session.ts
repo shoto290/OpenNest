@@ -9,6 +9,7 @@ import { sessionServers } from "./bundle-servers"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
+import { securityFloor } from "./security-floor"
 import { layerFor } from "./system-layer"
 
 import type {
@@ -32,15 +33,16 @@ const described = (commands: SlashCommand[]): AgentCommand[] =>
 		...(description ? { description } : {}),
 	}))
 
-const localPlugins = (
-	pluginPath: string,
-	systemPluginPath?: string,
-	userPluginPath?: string,
-	spacePluginPath?: string,
-): NonNullable<Options["plugins"]> =>
-	[pluginPath, systemPluginPath, userPluginPath, spacePluginPath]
-		.filter((path): path is string => Boolean(path))
-		.map((path) => ({ type: "local" as const, path }))
+const pluginPaths = (request: SessionRequest): string[] =>
+	[
+		request.pluginPath,
+		request.systemPluginPath,
+		request.userPluginPath,
+		request.spacePluginPath,
+	].filter((path): path is string => Boolean(path))
+
+const localPlugins = (paths: string[]): NonNullable<Options["plugins"]> =>
+	paths.map((path) => ({ type: "local" as const, path }))
 
 export const buildOptions = (
 	request: SessionRequest,
@@ -54,12 +56,7 @@ export const buildOptions = (
 	...settings,
 	...(request.pluginPath && request.agent
 		? {
-				plugins: localPlugins(
-					request.pluginPath,
-					request.systemPluginPath,
-					request.userPluginPath,
-					request.spacePluginPath,
-				),
+				plugins: localPlugins(pluginPaths(request)),
 				agent: request.agent,
 				mcpServers: sessionServers(
 					request.pluginPath,
@@ -77,6 +74,10 @@ export const buildOptions = (
 		[DISABLE_AUTO_MEMORY]: "1",
 		[CLASSIFY_ASK_USER_QUESTION]: "0",
 	},
+	managedSettings: securityFloor({
+		appDataDir: request.appDataDir,
+		pluginPaths: pluginPaths(request),
+	}),
 	settingSources: [],
 	strictMcpConfig: true,
 	pathToClaudeCodeExecutable: resolveExecutable(),

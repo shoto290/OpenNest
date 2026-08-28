@@ -982,8 +982,7 @@ fn the_rules_a_bot_is_given_are_written_to_its_settings_file_and_read_back_from_
 		"defaultMode": "plan",
 		"allow": ["Read"],
 		"ask": [],
-		"deny": ["Bash(rm:*)"],
-		"additionalDirectories": ["/notes"]
+		"deny": ["Bash(rm:*)"]
 	});
 
 	let created = call(&window, "conversation_create_bot", json!({ "identity": ruled.clone() }))
@@ -1006,8 +1005,7 @@ fn the_rules_a_bot_is_given_are_written_to_its_settings_file_and_read_back_from_
 		"defaultMode": "bypassPermissions",
 		"allow": [],
 		"ask": ["Edit"],
-		"deny": [],
-		"additionalDirectories": []
+		"deny": []
 	});
 	let updated = call(&window, "conversation_update_bot", json!({ "id": id, "identity": opened }))
 		.expect("the bot is updated");
@@ -1035,8 +1033,7 @@ fn the_rules_the_panel_reads_are_the_stored_ones_and_never_the_file_it_writes() 
 		"defaultMode": "auto",
 		"allow": [],
 		"ask": [],
-		"deny": ["Bash", "Edit", "Write", "NotebookEdit"],
-		"additionalDirectories": []
+		"deny": ["Bash", "Edit", "Write", "NotebookEdit"]
 	});
 
 	let created = call(&window, "conversation_create_bot", json!({ "identity": held_back.clone() }))

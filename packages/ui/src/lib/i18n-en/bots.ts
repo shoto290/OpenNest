@@ -451,15 +451,6 @@ const bots = {
 				empty: "Nothing is refused outright.",
 			},
 		},
-		directories: {
-			label: "Other folders",
-			hint: "Folders the bot may reach besides its working directory.",
-			placeholder: "/Users/you/notes",
-			add: "Add",
-			empty: "No folder besides the working directory.",
-			invalid: "Give the folder's full path.",
-			remove: "Remove the folder {{path}}",
-		},
 	},
 	identity: {
 		avatar: "Avatar",

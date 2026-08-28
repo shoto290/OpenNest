@@ -62,7 +62,6 @@ type BotPermissions = {
 	allow: string[]
 	ask: string[]
 	deny: string[]
-	additionalDirectories: string[]
 }
 
 const BOT_PERMISSION_RULE_LISTS = ["allow", "ask", "deny"] as const
@@ -74,7 +73,6 @@ const BLANK_BOT_PERMISSIONS: BotPermissions = {
 	allow: [],
 	ask: [],
 	deny: [],
-	additionalDirectories: [],
 }
 
 const PERMISSION_RULE = /^[A-Za-z_][A-Za-z0-9_-]*(\(.+\))?$/

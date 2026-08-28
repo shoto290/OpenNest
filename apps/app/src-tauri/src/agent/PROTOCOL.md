@@ -116,16 +116,26 @@ Every other command names its session.
 - `settingsPath` is the `settings.json` lying at the root of the bot's own bundle, sent
   only when the file is there — see `bundles.rs::settings_file`. The sidecar reads it and
   keeps `permissions.allow`, `permissions.ask`, `permissions.deny`,
-  `permissions.defaultMode`, `permissions.additionalDirectories` and `outputStyle`; every
-  other key is dropped, `disableBypassPermissionsMode` is forced to `disable`, and a
-  `defaultMode` of `bypassPermissions` is refused. What is kept becomes the inline
-  `settings` object, `permissionMode` becomes the declared `defaultMode` or `auto`, and the
-  absolute directories become `additionalDirectories`. A file the bot's own settings name
-  wins over `outputStyle` on the request. Unreadable or not a JSON object, the session opens
+  `permissions.defaultMode` and `outputStyle`; every other key is dropped —
+  `permissions.additionalDirectories` among them, since a bot widening its own reach is
+  the thing the floor exists to prevent — `disableBypassPermissionsMode` is forced to
+  `disable`, and a `defaultMode` of `bypassPermissions` is refused. What is kept becomes
+  the inline `settings` object and `permissionMode` becomes the declared `defaultMode` or
+  `auto`. A file the bot's own settings name wins over `outputStyle` on the request. Unreadable or not a JSON object, the session opens
   without it. Anything refused — the file itself, a `bypassPermissions` mode, or a key outside
   the allowlist, named — rides a `settings_rejected` frame to the reader's notice.
   `disableBypassPermissionsMode` is forced to `disable` even for a bot carrying no file at all,
   and `settingSources: []` stays set either way: this is the only settings file a session reads.
+- `appDataDir` is the directory the host keeps its own data in, sent when the host knows
+  it. The sidecar never reads it: it hands it to the security floor, which the session
+  carries as `managedSettings`, the policy tier a bot's own settings cannot loosen. The
+  floor denies reading `conversations.sqlite3` and its `-wal`/`-shm` companions,
+  `opennest.db`, every `session.json*` and the `attachments` directory — at the
+  permission layer and in `sandbox.filesystem.denyRead` both. It keeps `bots` and
+  `spaces` in `sandbox.filesystem.denyRead`, lists the session's own plugin paths in
+  `allowRead`, and denies the `Read` tool on every other bundle it finds under
+  `bots/plugins` and `spaces`. Left out, the rest of the floor still applies: the home
+  credential paths, the environment files and the sandbox itself.
 - `env` is the SDK's `env`: variables for the agent this session runs, not for
   the sidecar.
 
