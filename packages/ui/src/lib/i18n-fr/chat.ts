@@ -159,6 +159,9 @@ const chat = {
 			description: "Claude Code attend votre accord avant de lancer cet outil.",
 			path: "Chemin",
 		},
+		question: {
+			recall: "{{author}} attend votre réponse",
+		},
 		attachmentsRefused: "Fichiers non joints",
 		restart: "Redémarrer la session",
 		handover: {

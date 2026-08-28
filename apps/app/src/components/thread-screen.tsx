@@ -10,7 +10,10 @@ import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
-import type { QuotedMessage } from "@workspace/ui/components/message-quote"
+import {
+	MessageQuote,
+	type QuotedMessage,
+} from "@workspace/ui/components/message-quote"
 import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
 import {
 	PINNED_AVATAR_SIZE,
@@ -31,6 +34,7 @@ import {
 } from "@/components/thread-notice"
 import {
 	ApprovalPrompt,
+	type PromptResponder,
 	QuestionPrompt,
 	SpokenPrompt,
 } from "@/components/thread-prompt"
@@ -63,6 +67,10 @@ import {
 	type ThreadFace,
 	type ThreadQuotes,
 } from "@/lib/chat/thread-contract"
+import {
+	type AskedBubble,
+	useAskedQuestion,
+} from "@/lib/chat/use-asked-question"
 import type { StagedFiles } from "@/lib/chat/use-attachments"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import {
@@ -240,9 +248,16 @@ const ThreadComposerSlot = ({
 type ThreadPendingProps = {
 	thread: LoadedThread
 	authors: ThreadAuthors
+	questionRecall?: QuotedMessage
 }
 
-const ThreadPending = ({ thread, authors }: ThreadPendingProps) => {
+const ThreadPending = ({
+	thread,
+	authors,
+	questionRecall,
+}: ThreadPendingProps) => {
+	const t = useChatCopy()
+
 	if (thread.kind === "conversation") {
 		const prompt = thread.state.pendingPrompt
 		return prompt ? (
@@ -256,10 +271,13 @@ const ThreadPending = ({ thread, authors }: ThreadPendingProps) => {
 
 	return (
 		<>
-			{thread.state.question ? (
-				<QuestionPrompt
-					request={thread.state.question}
-					responder={thread.controller}
+			{questionRecall ? (
+				<MessageQuote
+					{...questionRecall}
+					label={t("screen.question.recall", {
+						author: questionRecall.author,
+					})}
+					size="md"
 				/>
 			) : null}
 			{thread.state.permission ? (
@@ -317,6 +335,8 @@ type ThreadRunProps = {
 	avatarIndex: number
 	rejectedPromptId: string | null
 	isSoloThread: boolean
+	asked: AskedBubble | null
+	responder: PromptResponder
 	botFace: ThreadFace | null
 	authors: ThreadAuthors
 	quotes: ThreadQuotes
@@ -332,6 +352,8 @@ const ThreadRun = ({
 	avatarIndex,
 	rejectedPromptId,
 	isSoloThread,
+	asked,
+	responder,
 	botFace,
 	authors,
 	quotes,
@@ -343,10 +365,16 @@ const ThreadRun = ({
 	<TurnGroup carriesMark={carriesMark}>
 		{run.map((row, index) => {
 			const bubble = bubbleIdOf(row.messageId, row.blockIndex)
+			const asking = asked?.messageId === row.messageId ? asked : null
 
 			return (
 				<ThreadTurn
 					anchor={bubble}
+					asking={
+						asking ? (
+							<QuestionPrompt request={asking.request} responder={responder} />
+						) : undefined
+					}
 					author={row.authorBotId ? authors.get(row.authorBotId) : undefined}
 					avatarFace={
 						index === avatarIndex ? (botFace ?? undefined) : undefined
@@ -625,6 +653,12 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 		void controller.loadOlder()
 	}, [controller])
 
+	const { asked, recall } = useAskedQuestion({
+		question: thread.kind === "bot" ? thread.state.question : null,
+		messages: state.messages,
+		toQuote,
+	})
+
 	const runs = toRuns(toTranscriptRows(state.messages))
 	const markedRuns = isSoloThread
 		? NO_MARKS
@@ -694,7 +728,13 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 						: undefined
 				}
 				onFollowChange={controller.follow}
-				pending={<ThreadPending authors={authors} thread={thread} />}
+				pending={
+					<ThreadPending
+						authors={authors}
+						questionRecall={recall}
+						thread={thread}
+					/>
+				}
 				reply={
 					replyTarget
 						? { ...toQuote(replyTarget), onDismiss: releaseReply }
@@ -715,7 +755,9 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 
 				<ThreadRuns
 					isSoloThread={isSoloThread}
+					asked={asked}
 					authors={authors}
+					responder={controller}
 					botFace={botFace}
 					isWorking={facts.botWork !== null}
 					markedRuns={markedRuns}

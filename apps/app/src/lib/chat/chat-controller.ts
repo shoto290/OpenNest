@@ -11,6 +11,12 @@ import {
 	isTurnBusy,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
+import {
+	answeredText,
+	answersFromText,
+	questionMessageIdOf,
+	questionMessageText,
+} from "./question-message"
 import { ENDING_FOR, ENDING_FOR_OUTCOME, isWorthKeeping } from "./reply-endings"
 import {
 	ASKED_FOR,
@@ -342,6 +348,28 @@ export function createChatController(
 		settleReply(bot, message.id, completion, conversationId)
 	}
 
+	const recordQuestion = (
+		bot: BotChat,
+		request: QuestionRequest,
+		conversationId: string,
+	) => {
+		if (bot.state.question?.id !== request.id) {
+			return
+		}
+		writeReply(
+			bot,
+			{
+				id: questionMessageIdOf(request.id),
+				role: "assistant",
+				text: questionMessageText(request),
+				completion: "complete",
+				timestamp: now(),
+			},
+			"complete",
+			conversationId,
+		)
+	}
+
 	const settleHeldReply = (
 		bot: BotChat,
 		completion: TerminalCompletion,
@@ -451,6 +479,8 @@ export function createChatController(
 				return streamReply(bot, event.id, event.seq, event.text, conversationId)
 			case "messageCompleted":
 				return settleCompleted(bot, event.message, conversationId)
+			case "questionRequested":
+				return recordQuestion(bot, event.request, conversationId)
 			case "turnEnded":
 				return endTurn(
 					bot,
@@ -1001,7 +1031,11 @@ export function createChatController(
 		if (trimmed.length === 0) {
 			return
 		}
-		await denyPendingQuestion(bot)
+		const asked = bot.state.question
+		if (asked) {
+			await answer(bot, asked.id, answersFromText(asked, trimmed))
+			return
+		}
 		const outcome = canSend(bot)
 			? await claim(bot, () => sendPrompt(bot, trimmed, repliedTo))
 			: "unwritten"
@@ -1089,15 +1123,13 @@ export function createChatController(
 	) => {
 		const conversationId = bot.state.conversationId
 		const turn = bot.activeTurn
-		const content = request.questions
-			.filter(({ question }) => answers[question])
-			.map(({ question }) => `${question}\n\n${answers[question]}`)
-			.join("\n\n")
+		const content = answeredText(request, answers)
 		if (!conversationId || !turn || content.length === 0) {
 			return
 		}
 		const id = newId()
 		const createdAt = now()
+		const repliedToMessageId = questionMessageIdOf(request.id)
 		write(
 			bot,
 			() =>
@@ -1106,7 +1138,7 @@ export function createChatController(
 					conversationId,
 					turnId: turn.id,
 					authorBotId: null,
-					repliedToMessageId: null,
+					repliedToMessageId,
 					content,
 					createdAt,
 				}),
@@ -1120,7 +1152,7 @@ export function createChatController(
 					completion: "complete",
 					createdAt,
 					authorBotId: null,
-					repliedToMessageId: null,
+					repliedToMessageId,
 					runtimeSessionId: null,
 				}),
 		)
@@ -1136,11 +1168,6 @@ export function createChatController(
 			.answerQuestion(runtime, id, answers)
 			.then(() => recordAnswers(bot, request, answers))
 			.catch((reason) => report(bot, reason))
-	}
-
-	const denyPendingQuestion = (bot: BotChat) => {
-		const request = bot.state.question
-		return request ? respond(bot, request.id, "deny") : Promise.resolve()
 	}
 
 	const shutdown = async (bot: BotChat) => {

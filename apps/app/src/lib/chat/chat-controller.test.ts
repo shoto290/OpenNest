@@ -4,6 +4,7 @@ import { type ChatController, createChatController } from "./chat-controller"
 import { isSessionReady, isTurnBusy } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import { createFakeChatDriver, type FakeChatDriver } from "./fake-driver"
+import { questionMessageIdOf } from "./question-message"
 import {
 	ASKED_FOR,
 	EVOLVED,
@@ -797,26 +798,42 @@ describe("createChatController", () => {
 		})
 		const state = controller.getState()
 		expect(state.question).toBeNull()
-		const recorded = state.messages.find((entry) =>
-			entry.content.includes("Which framework should it use?"),
+		const asking = state.messages.find(
+			(entry) => entry.id === questionMessageIdOf(asked?.id ?? ""),
 		)
-		expect(recorded?.role).toBe("user")
-		expect(recorded?.content).toContain("React")
+		expect(asking?.role).toBe("assistant")
+		expect(asking?.content).toContain("Which framework should it use?")
+		const answered = state.messages.find(
+			(entry) => entry.repliedToMessageId === asking?.id,
+		)
+		expect(answered?.role).toBe("user")
+		expect(answered?.content).toBe("React")
 		expect(spoken(await reload(store))).toEqual(spoken(state.messages))
 	})
 
-	it("denies a question the reader answered with a prompt instead", async () => {
-		const { controller } = await bootedHarness()
+	it("answers a pending question with what the reader typed in the composer", async () => {
+		const { controller, driver } = await bootedHarness()
+		const answerQuestion = vi.spyOn(driver, "answerQuestion")
 		await controller.send("pick one /question")
 		await vi.runAllTimersAsync()
-		expect(controller.getState().question).not.toBeNull()
+
+		const asked = controller.getState().question
+		expect(asked).not.toBeNull()
 
 		await controller.send("never mind, do it your way")
 		await vi.runAllTimersAsync()
 
+		expect(answerQuestion).toHaveBeenCalledWith(expect.anything(), asked?.id, {
+			"Which framework should it use?": "never mind, do it your way",
+		})
 		const state = controller.getState()
 		expect(state.question).toBeNull()
-		expect(state.messages.at(-1)?.completion).toBe("complete")
+		const answered = state.messages.find(
+			(entry) =>
+				entry.repliedToMessageId === questionMessageIdOf(asked?.id ?? ""),
+		)
+		expect(answered?.role).toBe("user")
+		expect(answered?.content).toBe("never mind, do it your way")
 	})
 
 	it("leaves no permission activity pending after either decision", async () => {

@@ -156,6 +156,9 @@ const chat = {
 			description: "Claude Code is waiting on you before it runs this tool.",
 			path: "Path",
 		},
+		question: {
+			recall: "{{author}} is waiting on your answer",
+		},
 		attachmentsRefused: "Files not attached",
 		restart: "Restart session",
 		handover: {
