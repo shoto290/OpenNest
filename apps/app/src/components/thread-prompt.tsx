@@ -12,17 +12,11 @@ import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type {
 	AskedQuestion,
-	PermissionDecision,
 	PermissionRequest,
-	QuestionAnswers,
 	QuestionRequest,
 } from "@/lib/agent/contract"
+import type { PromptResponder } from "@/lib/chat/use-prompt-responder"
 import type { PendingPrompt } from "@/lib/conversations/conversation-controller"
-
-export type PromptResponder = {
-	answer: (id: string, answers: QuestionAnswers) => Promise<void>
-	respond: (id: string, decision: PermissionDecision) => Promise<void>
-}
 
 type ApprovalPromptProps = {
 	request: PermissionRequest

@@ -34,7 +34,6 @@ import {
 } from "@/components/thread-notice"
 import {
 	ApprovalPrompt,
-	type PromptResponder,
 	QuestionPrompt,
 	SpokenPrompt,
 } from "@/components/thread-prompt"
@@ -77,6 +76,10 @@ import {
 	type PinnedBubbles,
 	usePinnedMessages,
 } from "@/lib/chat/use-pinned-messages"
+import {
+	type PromptResponder,
+	usePromptResponder,
+} from "@/lib/chat/use-prompt-responder"
 import {
 	NO_QUOTED_IDS,
 	useQuotedMessages,
@@ -248,12 +251,14 @@ const ThreadComposerSlot = ({
 type ThreadPendingProps = {
 	thread: LoadedThread
 	authors: ThreadAuthors
+	responder: PromptResponder
 	questionRecall?: QuotedMessage
 }
 
 const ThreadPending = ({
 	thread,
 	authors,
+	responder,
 	questionRecall,
 }: ThreadPendingProps) => {
 	const t = useChatCopy()
@@ -264,7 +269,7 @@ const ThreadPending = ({
 			<SpokenPrompt
 				author={authors.get(prompt.botId)}
 				prompt={prompt}
-				responder={thread.controller}
+				responder={responder}
 			/>
 		) : null
 	}
@@ -283,7 +288,7 @@ const ThreadPending = ({
 			{thread.state.permission ? (
 				<ApprovalPrompt
 					request={thread.state.permission}
-					responder={thread.controller}
+					responder={responder}
 				/>
 			) : null}
 		</>
@@ -561,6 +566,7 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const rootRef = useRef<HTMLDivElement>(null)
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
+	const promptResponder = usePromptResponder(controller, scrollerRef)
 	const drafts = useRef<Record<string, string>>({})
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
@@ -732,6 +738,7 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 					<ThreadPending
 						authors={authors}
 						questionRecall={recall}
+						responder={promptResponder}
 						thread={thread}
 					/>
 				}
@@ -757,7 +764,7 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 					isSoloThread={isSoloThread}
 					asked={asked}
 					authors={authors}
-					responder={controller}
+					responder={promptResponder}
 					botFace={botFace}
 					isWorking={facts.botWork !== null}
 					markedRuns={markedRuns}
