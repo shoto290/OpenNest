@@ -254,7 +254,7 @@ fn every_bundle_the_turn_changed_is_announced_once() {
 	drop_a_skill(&person, "about-them");
 	drop_a_skill(&project, "about-here");
 	drop_a_skill(&bundle, "baking");
-	let agent = bundle.join("agents").join(format!("{}.md", bundles::slug(NAME)));
+	let agent = bundle.join("agents").join("agent.md");
 	rewrite_the_brief(&agent, "Answer only in Spanish.");
 	harness.end_turn(&first);
 	harness.wait_for("one event per changed bundle", all_three);

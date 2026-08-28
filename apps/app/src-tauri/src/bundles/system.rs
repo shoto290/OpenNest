@@ -24,9 +24,9 @@ fn learn_body() -> String {
 
 ## What is yours
 
-Two places under that directory are yours. Your agent file, under `agents/`, holds what
-you always know. The `skills/<name>/SKILL.md` files hold what a task calls for. Nothing
-else there is yours: never edit `.claude-plugin/` or `.mcp.json`.
+Two places under that directory are yours. Your agent file, at `agents/agent.md`, holds
+what you always know. The `skills/<name>/SKILL.md` files hold what a task calls for.
+Nothing else there is yours: never edit `.claude-plugin/` or `.mcp.json`.
 
 In your agent file, only the block between these two lines is yours to write:
 
