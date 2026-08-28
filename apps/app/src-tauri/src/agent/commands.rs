@@ -6,8 +6,8 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
 use super::contract::{
-	AgentEvent, CheckReport, ConnectionState, PermissionDecision, RuntimeScope, ScopedEvent,
-	SessionHandle, TransportError,
+	AgentEvent, CheckReport, ConnectionState, EvolvedBundle, PermissionDecision, RuntimeScope,
+	ScopedEvent, SessionHandle, TransportError,
 };
 use super::redact;
 use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
@@ -130,32 +130,66 @@ impl<R: Runtime> RunSink<R> {
 		let scope = self.scope.clone();
 		let live = self.live.clone();
 		tauri::async_runtime::spawn(async move {
-			let Some(evolution) = evolution(&app, &scope.bot_id).await else {
-				return;
-			};
-			if !live.holds(&scope) {
-				return;
+			for (bundle, evolution) in evolutions(&app, &scope.bot_id).await {
+				if !live.holds(&scope) {
+					return;
+				}
+				announce(
+					&app,
+					Some(scope.clone()),
+					AgentEvent::BotEvolved {
+						bundle,
+						commit_id: evolution.commit_id,
+						title: evolution.title,
+					},
+				);
 			}
-			announce(
-				&app,
-				Some(scope),
-				AgentEvent::BotEvolved { commit_id: evolution.commit_id, title: evolution.title },
-			);
 		});
 	}
 }
 
-async fn evolution<R: Runtime>(app: &AppHandle<R>, bot_id: &str) -> Option<bundles::Evolution> {
-	if let Some(path) = bundles::user::laid_down(app) {
-		bundles::user::evolve(&path);
+async fn evolutions<R: Runtime>(
+	app: &AppHandle<R>,
+	bot_id: &str,
+) -> Vec<(EvolvedBundle, bundles::Evolution)> {
+	let mut announced = Vec::new();
+	if let Some(evolution) =
+		bundles::user::laid_down(app).and_then(|path| bundles::user::evolve(&path))
+	{
+		announced.push((EvolvedBundle::User, evolution));
 	}
-	let state = app.try_state::<db::DatabaseState>()?;
-	let database = state.inner().as_ref().ok()?;
-	let bot = database.conversations().bot(bot_id.to_owned()).await.ok()??;
-	if let Some(path) = bundles::space::laid_down(app, &bot.space_id) {
-		bundles::space::evolve(&path);
+	let Some(database) = bot_database(app) else {
+		return announced;
+	};
+	let Ok(Some(bot)) = database.conversations().bot(bot_id.to_owned()).await else {
+		return announced;
+	};
+	if let Some(evolution) =
+		bundles::space::laid_down(app, &bot.space_id).and_then(|path| bundles::space::evolve(&path))
+	{
+		announced.push((EvolvedBundle::Space, evolution));
 	}
-	bundles::evolve(&bundles::root(app)?, &bot)
+	let Some(root) = bundles::root(app) else {
+		return announced;
+	};
+	if let Some(evolution) = bundles::evolve(&root, &bot) {
+		reconcile_bot(database, &root, &bot).await;
+		announced.push((EvolvedBundle::Bot, evolution));
+	}
+	announced
+}
+
+fn bot_database<R: Runtime>(app: &AppHandle<R>) -> Option<&db::Database> {
+	app.try_state::<db::DatabaseState>()?.inner().as_ref().ok()
+}
+
+async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
+	if let Some(found) = bundles::adopted(root, bot) {
+		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
+	}
+	if let Some(learned) = bundles::adopted_memory(root, bot) {
+		let _ = database.conversations().adopt_memory(bot.id.clone(), learned).await;
+	}
 }
 
 #[derive(Default)]
@@ -339,11 +373,8 @@ async fn runtime_identity<R: Runtime>(
 			space.as_deref(),
 		)
 	});
-	if let Some(found) = root.as_deref().and_then(|root| bundles::adopted(root, &bot)) {
-		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
-	}
-	if let Some(learned) = root.as_deref().and_then(|root| bundles::adopted_memory(root, &bot)) {
-		let _ = database.conversations().adopt_memory(bot.id.clone(), learned).await;
+	if let Some(root) = root.as_deref() {
+		reconcile_bot(database, root, &bot).await;
 	}
 	RuntimeIdentity { bundle, working_dir: bot.working_dir }
 }

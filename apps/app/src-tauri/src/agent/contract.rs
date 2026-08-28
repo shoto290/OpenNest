@@ -110,6 +110,14 @@ pub enum PermissionDecision {
 	Deny,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EvolvedBundle {
+	Bot,
+	User,
+	Space,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnEnded {
@@ -336,7 +344,7 @@ pub enum AgentEvent {
 	#[serde(rename_all = "camelCase")]
 	TurnEnded { ended: TurnEnded },
 	#[serde(rename_all = "camelCase")]
-	BotEvolved { commit_id: String, title: String },
+	BotEvolved { bundle: EvolvedBundle, commit_id: String, title: String },
 	#[serde(rename_all = "camelCase")]
 	Failed { error: TransportError },
 }
