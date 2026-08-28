@@ -37,6 +37,8 @@ const EVOLVED_TITLE: &str = "The bot changed its files";
 
 const LEARN_ID: &str = "learn";
 
+const SETTINGS_NAME: &str = "settings.json";
+
 const MCP_NAME: &str = ".mcp.json";
 const SERVERS_KEY: &str = "mcpServers";
 const MCP_SOURCE: &str = "./.mcp.json";
@@ -168,6 +170,11 @@ pub fn marketplace_file(root: &Path) -> PathBuf {
 
 pub fn agent_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
 	generated_agent(root, bot_id)
+}
+
+pub fn settings_file(root: &Path, bot_id: &str) -> Option<PathBuf> {
+	let path = dir(root, bot_id).join(SETTINGS_NAME);
+	path.is_file().then_some(path)
 }
 
 pub struct Generated {
@@ -1786,6 +1793,22 @@ mod tests {
 		write(&root, &bot).expect("the bundle is written again");
 
 		assert_eq!(output_style(&root, &bot.id), "default");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bot_carries_the_settings_file_lying_at_its_root_and_nothing_when_it_is_missing() {
+		let root = a_root("settings");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		assert_eq!(settings_file(&root, &bot.id), None);
+
+		let path = dir(&root, &bot.id).join(SETTINGS_NAME);
+		fs::write(&path, "{}").expect("the settings file is written");
+
+		assert_eq!(settings_file(&root, &bot.id), Some(path));
 
 		let _ = fs::remove_dir_all(&root);
 	}

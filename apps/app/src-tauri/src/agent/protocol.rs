@@ -49,6 +49,8 @@ pub struct OpenRequest {
 	pub identity: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub output_style: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub settings_path: Option<String>,
 	pub partial_messages: bool,
 	#[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
 	pub env: std::collections::BTreeMap<String, String>,
@@ -67,12 +69,19 @@ pub enum Frame {
 	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
 	ControlResponse(ControlResponseFrame),
+	SettingsRejected(SettingsRejectedFrame),
 	#[serde(other)]
 	Ignored,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClosedFrame {
+	#[serde(default)]
+	pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SettingsRejectedFrame {
 	#[serde(default)]
 	pub detail: Option<String>,
 }

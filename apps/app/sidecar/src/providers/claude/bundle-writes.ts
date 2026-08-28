@@ -9,6 +9,7 @@ const RESERVED = new Set([
 	"hooks",
 	".git",
 	".mcp.json",
+	"settings.json",
 ])
 
 const realOrNearest = (path: string): string => {

@@ -7,11 +7,12 @@ use serde_json::Value;
 
 use super::contract::{
 	ActivityEvent, ActivityKind, ActivityStatus, AgentEvent, AskedQuestion, ChatMessage,
-	MessageCompletion, MessageRole, PermissionRequest, QuestionOption, QuestionRequest, TurnEnded,
-	TurnOutcome,
+	MessageCompletion, MessageRole, PermissionRequest, QuestionOption, QuestionRequest,
+	TransportError, TurnEnded, TurnOutcome,
 };
 use super::protocol::{
-	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, StreamEvent, SystemFrame,
+	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, SettingsRejectedFrame,
+	StreamEvent, SystemFrame,
 };
 use super::redact;
 
@@ -142,6 +143,7 @@ impl Translator {
 				self.on_result(result.subtype.as_deref(), result.is_error)
 			}
 			Frame::Commands(frame) => Self::on_commands(frame),
+			Frame::SettingsRejected(frame) => Self::on_settings_rejected(frame),
 			Frame::ControlRequest(request) => {
 				self.on_control_request(request.request_id, request.request)
 			}
@@ -160,6 +162,13 @@ impl Translator {
 		};
 		self.session_id = Some(session_id.clone());
 		vec![AgentEvent::SessionReady { session_id, resumed: self.resumed }]
+	}
+
+	fn on_settings_rejected(frame: SettingsRejectedFrame) -> Vec<AgentEvent> {
+		let Some(detail) = frame.detail.filter(|detail| !detail.trim().is_empty()) else {
+			return Vec::new();
+		};
+		vec![AgentEvent::Failed { error: TransportError::SettingsRejected { detail } }]
 	}
 
 	fn on_commands(frame: CommandsFrame) -> Vec<AgentEvent> {
@@ -552,6 +561,29 @@ mod tests {
 				vec![AgentEvent::SessionReady { session_id: session_id.to_owned(), resumed }]
 			);
 		}
+	}
+
+	#[test]
+	fn a_rejected_settings_file_reaches_the_reader_with_its_reason() {
+		let mut translator = Translator::new(false);
+
+		let events = ingest(
+			&mut translator,
+			vec![
+				json!({ "type": "settings_rejected", "detail": "keys were dropped: model" }),
+				json!({ "type": "settings_rejected" }),
+				json!({ "type": "settings_rejected", "detail": "  " }),
+			],
+		);
+
+		assert_eq!(
+			events,
+			vec![AgentEvent::Failed {
+				error: TransportError::SettingsRejected {
+					detail: "keys were dropped: model".to_owned()
+				}
+			}]
+		);
 	}
 
 	#[test]

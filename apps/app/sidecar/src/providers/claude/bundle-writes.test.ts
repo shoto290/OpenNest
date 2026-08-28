@@ -34,6 +34,7 @@ describe("isBundleWrite", () => {
 			join(bundle, "hooks", "hooks.json"),
 			join(bundle, ".git", "config"),
 			join(bundle, ".mcp.json"),
+			join(bundle, "settings.json"),
 			bundle,
 		]) {
 			expect(writes(reserved)).toBe(false)

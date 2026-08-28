@@ -78,6 +78,7 @@ pub struct Bundle {
 	pub agent: String,
 	pub identity: String,
 	pub output_style: String,
+	pub settings_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +127,7 @@ impl SessionOptions {
 			agent: self.bundle.as_ref().map(|bundle| bundle.agent.clone()),
 			identity: self.bundle.as_ref().map(|bundle| bundle.identity.clone()),
 			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
+			settings_path: self.bundle.as_ref().and_then(|bundle| bundle.settings_path.clone()),
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
 		}
@@ -453,6 +455,7 @@ mod tests {
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
+			settings_path: None,
 		};
 		let request = options().bundled(Some(bundle)).open_request(true);
 
@@ -472,6 +475,7 @@ mod tests {
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "Concise".to_owned(),
+			settings_path: None,
 		};
 		let request =
 			options().bundled(Some(bundle)).resuming(Some("s1".to_owned())).open_request(true);
@@ -491,10 +495,28 @@ mod tests {
 			agent: "bean".to_owned(),
 			identity: "You are Bean, the baker.".to_owned(),
 			output_style: "default".to_owned(),
+			settings_path: None,
 		};
 		let request = options().bundled(Some(bundle)).open_request(true);
 
 		assert_eq!(request.output_style.as_deref(), Some("default"));
+	}
+
+	#[test]
+	fn a_bot_opens_on_the_settings_file_its_bundle_carries() {
+		let bundle = Bundle {
+			path: "/bots/b1".to_owned(),
+			system_path: None,
+			user_path: None,
+			space_path: None,
+			agent: "bean".to_owned(),
+			identity: "You are Bean, the baker.".to_owned(),
+			output_style: "default".to_owned(),
+			settings_path: Some("/bots/b1/settings.json".to_owned()),
+		};
+		let request = options().bundled(Some(bundle)).open_request(true);
+
+		assert_eq!(request.settings_path.as_deref(), Some("/bots/b1/settings.json"));
 	}
 
 	#[test]
@@ -506,6 +528,7 @@ mod tests {
 		assert_eq!(plain.agent, None);
 		assert_eq!(plain.identity, None);
 		assert_eq!(plain.output_style, None);
+		assert_eq!(plain.settings_path, None);
 	}
 
 	#[test]

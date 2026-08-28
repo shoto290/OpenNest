@@ -48,6 +48,7 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	resumeFailed: false,
 	workingDirectoryRefused: false,
 	invalidFrame: false,
+	settingsRejected: false,
 	turnAlreadyRunning: false,
 	transitionInProgress: false,
 	noActiveTurn: false,
@@ -263,6 +264,9 @@ export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
 	}
 	if (error.kind === "workingDirectoryRefused") {
 		return t("screen.notice.workingDirectoryRefused")
+	}
+	if (error.kind === "settingsRejected") {
+		return t("screen.notice.settingsRejected")
 	}
 	if (needsFreshSession(error)) {
 		return t("screen.notice.unavailable")

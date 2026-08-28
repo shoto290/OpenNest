@@ -31,6 +31,8 @@ export function describeTransportError(
 			})
 		case "invalidFrame":
 			return t("screen.transport.invalidFrame", { detail: error.detail })
+		case "settingsRejected":
+			return t("screen.transport.settingsRejected", { detail: error.detail })
 		case "notStarted":
 			return t("screen.transport.notStarted")
 		case "turnAlreadyRunning":
