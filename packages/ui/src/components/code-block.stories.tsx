@@ -45,7 +45,7 @@ const LANGUAGE_SAMPLES: Record<CodeLanguage, string> = {
 }
 
 const meta = preview.meta({
-	title: "Display/CodeBlock",
+	title: "Conversation/Markdown/CodeBlock",
 	component: CodeBlock,
 	parameters: {
 		docs: {

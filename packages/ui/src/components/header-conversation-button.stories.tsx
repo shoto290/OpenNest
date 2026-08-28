@@ -20,7 +20,7 @@ const LONG_NAME =
 	"Migration of the legacy billing workspace and every archive it still answers for"
 
 const meta = preview.meta({
-	title: "Patterns/HeaderConversationButton",
+	title: "Navigation/HeaderConversationButton",
 	component: HeaderConversationButton,
 	parameters: {
 		layout: "centered",

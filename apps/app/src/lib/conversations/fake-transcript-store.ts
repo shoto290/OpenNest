@@ -1,4 +1,7 @@
-import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
+import {
+	BLANK_BOT_PERMISSIONS,
+	DEFAULT_BOT_OUTPUT_STYLE,
+} from "@workspace/ui/components/bot-settings"
 
 import { createFakeTranscriptPort } from "./fake-transcript-port"
 import type {
@@ -59,6 +62,7 @@ const DEFAULT_BOT: Bot = {
 	workingDir: null,
 	instructions: "",
 	deniedTools: [],
+	permissions: BLANK_BOT_PERMISSIONS,
 	outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 	changesNothing: false,
 	memory: "",

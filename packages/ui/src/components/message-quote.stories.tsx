@@ -36,7 +36,7 @@ const QuotedBubble = ({ variant, text, ...quote }: QuotedBubbleProps) => (
 )
 
 const meta = preview.meta({
-	title: "AI/MessageQuote",
+	title: "Conversation/Message/MessageQuote",
 	component: MessageQuote,
 	parameters: {
 		layout: "centered",

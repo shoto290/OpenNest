@@ -2,6 +2,7 @@ import type { BotAvatarBlot } from "@workspace/ui/components/bot-avatar"
 import type { BotAvatarAnimal } from "@workspace/ui/components/bot-avatar-animals"
 import type {
 	BotOutputStyle,
+	BotPermissionMode,
 	BotSkillContext,
 	BotSkillEffort,
 } from "@workspace/ui/components/bot-settings"
@@ -71,6 +72,7 @@ const bots = {
 			skills: "Skills",
 			mcp: "MCP servers",
 			history: "History",
+			permissions: "Permissions",
 			runtime: "Runtime",
 			danger: "Danger zone",
 		},
@@ -398,10 +400,65 @@ const bots = {
 			placeholder: "Choose a folder",
 			browse: "Change",
 		},
-		changesNothing: {
-			label: "Cannot change anything itself",
-			description:
-				"This bot is refused the tools that edit files and run commands, so it cannot do either itself. It can still read, and anything else it carries — an MCP server, another bot it asks — is not held back by this.",
+	},
+	permissions: {
+		mode: {
+			label: "Default answer to a request",
+			option: {
+				auto: {
+					label: "Decide alone",
+					hint: "The bot decides on its own, within the rules below.",
+				},
+				default: {
+					label: "Ask every time",
+					hint: "Every tool the rules below do not settle is put to you.",
+				},
+				acceptEdits: {
+					label: "Accept edits",
+					hint: "File edits go through without asking; everything else is put to you.",
+				},
+				plan: {
+					label: "Plan first",
+					hint: "The bot reads and plans, and changes nothing until you say so.",
+				},
+				dontAsk: {
+					label: "Never ask",
+					hint: "Nothing is put to you: only the deny rules below hold the bot back.",
+				},
+			} as const satisfies Record<
+				BotPermissionMode,
+				{ label: string; hint: string }
+			>,
+		},
+		rule: {
+			add: "Add",
+			placeholder: "Bash(git status:*)",
+			invalid: "Write a rule as Tool or Tool(specifier).",
+			remove: "Remove the rule {{rule}}",
+			allow: {
+				label: "Allowed",
+				hint: "Runs without asking you.",
+				empty: "Nothing is allowed outright.",
+			},
+			ask: {
+				label: "Asked",
+				hint: "Put to you every time, whatever the mode says.",
+				empty: "Nothing is put to you on its own.",
+			},
+			deny: {
+				label: "Denied",
+				hint: "Refused outright, whatever the mode says.",
+				empty: "Nothing is refused outright.",
+			},
+		},
+		directories: {
+			label: "Other folders",
+			hint: "Folders the bot may reach besides its working directory.",
+			placeholder: "/Users/you/notes",
+			add: "Add",
+			empty: "No folder besides the working directory.",
+			invalid: "Give the folder's full path.",
+			remove: "Remove the folder {{path}}",
 		},
 	},
 	identity: {

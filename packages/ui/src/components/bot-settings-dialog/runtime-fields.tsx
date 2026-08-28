@@ -16,7 +16,6 @@ import {
 	FIELD_CONTROL_CLASS,
 	FIELD_LABEL_CLASS,
 } from "@workspace/ui/components/settings-styles"
-import { SettingsSwitch } from "@workspace/ui/components/settings-switch"
 import { cn } from "@workspace/ui/lib/utils"
 
 type RuntimeFieldsProps = {
@@ -27,8 +26,6 @@ type RuntimeFieldsProps = {
 	onOutputStyleChange?: (outputStyle: BotOutputStyle) => void
 	workingDirectory: string
 	onBrowseWorkingDirectory: () => void
-	changesNothing: boolean
-	onChangesNothingChange: (changesNothing: boolean) => void
 }
 
 const RuntimeFields = ({
@@ -39,8 +36,6 @@ const RuntimeFields = ({
 	onOutputStyleChange,
 	workingDirectory,
 	onBrowseWorkingDirectory,
-	changesNothing,
-	onChangesNothingChange,
 }: RuntimeFieldsProps) => {
 	const { t } = useTranslation("bots")
 	const directoryId = useId()
@@ -102,13 +97,6 @@ const RuntimeFields = ({
 					</span>
 				</button>
 			</div>
-
-			<SettingsSwitch
-				checked={changesNothing}
-				description={t("runtime.changesNothing.description")}
-				label={t("runtime.changesNothing.label")}
-				onCheckedChange={onChangesNothingChange}
-			/>
 		</>
 	)
 }

@@ -1,3 +1,5 @@
+import type { BotPermissions } from "@workspace/ui/components/bot-settings"
+
 import type { TranscriptMessage, TranscriptRole } from "./transcript-contract"
 
 export type BotModel = string
@@ -32,6 +34,7 @@ export type BotIdentity = {
 	workingDir: string | null
 	instructions: string
 	deniedTools: string[]
+	permissions: BotPermissions
 	outputStyle: string
 }
 

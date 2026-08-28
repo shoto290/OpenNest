@@ -35,7 +35,7 @@ const NotificationHost = (props: NotificationFieldsProps) => {
 }
 
 const meta = preview.meta({
-	title: "Forms/NotificationFields",
+	title: "Settings/User/NotificationFields",
 	component: NotificationFields,
 	render: (args) => (
 		<div className="w-[26rem]">

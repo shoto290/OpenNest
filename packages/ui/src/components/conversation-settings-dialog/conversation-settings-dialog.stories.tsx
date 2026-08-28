@@ -81,7 +81,7 @@ const openTab = async (
 }
 
 const meta = preview.meta({
-	title: "Overlays/ConversationSettingsDialog",
+	title: "Settings/Conversation/ConversationSettingsDialog",
 	component: ConversationSettingsDialog,
 	parameters: {
 		layout: "fullscreen",

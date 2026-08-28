@@ -65,7 +65,7 @@ const ComposedMenu = (props: PromptCommandMenuProps) => {
 }
 
 const meta = preview.meta({
-	title: "AI/PromptCommandMenu",
+	title: "Conversation/Prompt/PromptCommandMenu",
 	component: PromptCommandMenu,
 	parameters: {
 		layout: "centered",

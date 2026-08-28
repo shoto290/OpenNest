@@ -28,7 +28,7 @@ const ChipsHost = (props: PickedBotsProps) => {
 }
 
 const meta = preview.meta({
-	title: "Forms/PickedBots",
+	title: "Settings/Conversation/PickedBots",
 	component: PickedBots,
 	parameters: {
 		layout: "padded",

@@ -104,7 +104,7 @@ const renderTable = (fixture: TableFixture) => (
 )
 
 const meta = preview.meta({
-	title: "AI/MarkdownTable",
+	title: "Conversation/Markdown/MarkdownTable",
 	component: MarkdownTable,
 	parameters: {
 		docs: {

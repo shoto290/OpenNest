@@ -59,7 +59,7 @@ const USER_PROMPT = "Here is what the composer looks like on my machine."
 const AGENT_REPLY = "Thanks — I re-rendered it against the current tokens."
 
 const meta = preview.meta({
-	title: "AI/MessageAttachments",
+	title: "Conversation/Message/MessageAttachments",
 	component: MessageAttachments,
 	parameters: {
 		layout: "centered",

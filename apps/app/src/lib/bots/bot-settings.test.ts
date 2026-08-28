@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
+import {
+	BLANK_BOT_PERMISSIONS,
+	BLOT_TINTS,
+} from "@workspace/ui/components/bot-settings"
 
 import {
 	BOT_NAMES,
@@ -52,7 +55,7 @@ describe("toSettingsValue", () => {
 			instructions: "Answer briefly.",
 			model: "haiku",
 			workingDirectory: "/work/opennest",
-			changesNothing: false,
+			permissions: BLANK_BOT_PERMISSIONS,
 		})
 	})
 
@@ -74,7 +77,7 @@ describe("changesRuntime", () => {
 	})
 	const value = toSettingsValue(stored)
 
-	it("says so for the instructions, the directory, the model and the denial", () => {
+	it("says so for the instructions, the directory, the model and the permissions", () => {
 		expect(
 			changesRuntime(stored, { ...value, instructions: "Answer at length." }),
 		).toBe(true)
@@ -82,12 +85,21 @@ describe("changesRuntime", () => {
 			changesRuntime(stored, { ...value, workingDirectory: "/work/other" }),
 		).toBe(true)
 		expect(changesRuntime(stored, { ...value, model: "haiku" })).toBe(true)
-		expect(changesRuntime(stored, { ...value, changesNothing: true })).toBe(
-			true,
-		)
 		expect(
-			changesRuntime(bot({ deniedTools: ["Bash"] }), {
-				...toSettingsValue(bot({ deniedTools: ["Bash"] })),
+			changesRuntime(stored, {
+				...value,
+				permissions: { ...BLANK_BOT_PERMISSIONS, deny: CHANGING_TOOLS },
+			}),
+		).toBe(true)
+		expect(
+			changesRuntime(stored, {
+				...value,
+				permissions: { ...BLANK_BOT_PERMISSIONS, defaultMode: "plan" },
+			}),
+		).toBe(true)
+		expect(
+			changesRuntime(bot({ deniedTools: ["WebFetch"] }), {
+				...toSettingsValue(bot({ deniedTools: ["WebFetch"] })),
 			}),
 		).toBe(false)
 	})
@@ -175,27 +187,24 @@ describe("toIdentity", () => {
 })
 
 describe("toIdentity, on the tools a bot is denied", () => {
-	it("writes the same denials for the switch as for the four tools picked by hand", () => {
-		const picked = bot({ deniedTools: [...CHANGING_TOOLS].reverse() })
-		const thrown = bot({ deniedTools: [] })
+	it("hands the four tools of the retired switch over to the deny list", () => {
+		const thrown = bot({ deniedTools: [...CHANGING_TOOLS, "WebFetch"] })
+		const value = toSettingsValue(thrown)
 
-		expect(
-			toIdentity(
-				{ ...toSettingsValue(thrown), changesNothing: true },
-				thrown,
-			).deniedTools.toSorted(),
-		).toEqual(
-			toIdentity(toSettingsValue(picked), picked).deniedTools.toSorted(),
-		)
+		expect(toIdentity(value, thrown).deniedTools).toEqual(["WebFetch"])
 	})
 
-	it("leaves every other denial standing when the switch goes off", () => {
-		const held = bot({ deniedTools: [...CHANGING_TOOLS, "WebFetch"] })
+	it("writes the rules the panel was left with", () => {
+		const held = bot()
+		const permissions = {
+			...BLANK_BOT_PERMISSIONS,
+			defaultMode: "plan" as const,
+			deny: ["Bash(rm:*)"],
+		}
 
 		expect(
-			toIdentity({ ...toSettingsValue(held), changesNothing: false }, held)
-				.deniedTools,
-		).toEqual(["WebFetch"])
+			toIdentity({ ...toSettingsValue(held), permissions }, held).permissions,
+		).toEqual(permissions)
 	})
 
 	it("carries the bot's own denials through a write that says nothing about them", () => {

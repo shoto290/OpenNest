@@ -13,7 +13,7 @@ const MALFORMED_SOURCE = "\\frac{1}{"
 const TYPESETTER_ARRIVES = { timeout: 10_000 }
 
 const meta = preview.meta({
-	title: "AI/MarkdownMath",
+	title: "Conversation/Markdown/MarkdownMath",
 	component: MarkdownMath,
 	parameters: {
 		docs: {

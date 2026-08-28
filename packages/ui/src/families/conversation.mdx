@@ -1,0 +1,56 @@
+import { Meta } from "@storybook/addon-docs/blocks"
+
+<Meta title="Conversation/Overview" />
+
+# Conversation
+
+The transcript with an agent and everything that happens inside it — turns, the composer, the payloads a turn renders, and the interruptions that need an answer. Nothing here makes sense in a product with no agent in it; a component that does belongs to another family.
+
+## Message
+
+The transcript and its turns.
+
+- **ChatEmptyState** — no conversation open yet.
+- **ConversationEmptyState** — a conversation with no turns yet.
+- **Mention** — an inline bot reference.
+- **Message** — one authored message.
+- **MessageActions** — the per-message action row.
+- **MessageAttachments** — files carried by a message.
+- **MessageBubble** — the message surface itself.
+- **MessageQuote** — a quoted excerpt of another message.
+- **MessageScroller** — the scroll container and its anchoring.
+- **MessageSideContext** — the side rail attached to a message.
+- **PinnedMessages** — the pinned strip above the transcript.
+- **Turn** — a full agent turn with its phases.
+
+## Prompt
+
+The composer.
+
+- **PromptAttachButton** — starts an attachment.
+- **PromptAttachments** — pending attachments in the composer.
+- **PromptCommandMenu** — the slash-command menu.
+- **PromptInput** — the composer field.
+- **PromptMentionMenu** — the mention menu.
+- **PromptReply** — the reply-to banner.
+
+## Markdown
+
+The payloads a turn renders.
+
+- **Markdown** — the full renderer.
+- **CodeBlock** — a highlighted, framed code block.
+- **CodeSnippet** — the inline, chromeless variant.
+- **MarkdownCode** — code inside the renderer.
+- **MarkdownLink** — links inside the renderer.
+- **MarkdownMath** — KaTeX blocks and inline math.
+- **MarkdownMermaid** — diagrams.
+- **MarkdownTable** — tables and their overflow.
+- **MarkdownTaskCheckbox** — task-list checkboxes.
+
+## Tools
+
+The interruptions that need an answer.
+
+- **ToolApproval** — approve or deny a tool call.
+- **ToolQuestion** — the agent asks the reader.

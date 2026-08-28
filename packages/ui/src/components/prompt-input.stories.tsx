@@ -97,7 +97,7 @@ const LONG_DRAFT = [
 ].join("\n")
 
 const meta = preview.meta({
-	title: "AI/PromptInput",
+	title: "Conversation/Prompt/PromptInput",
 	component: PromptInput,
 	parameters: {
 		layout: "centered",

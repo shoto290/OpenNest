@@ -15,7 +15,10 @@ import {
 	UPLOADED_AVATAR_IMAGE,
 	widthInRems,
 } from "@workspace/storybook/story-utils"
-import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
+import {
+	BLANK_BOT_PERMISSIONS,
+	DEFAULT_BOT_OUTPUT_STYLE,
+} from "@workspace/ui/components/bot-settings"
 import {
 	type BotModelOption,
 	BotSettingsDialog,
@@ -48,7 +51,10 @@ const FILLED_BOT: BotSettingsValue = {
 		"You are the Nest Keeper.\n\nEvery visual belongs to packages/ui. The app composes, it never draws.\n\nBefore proposing a component, search the package for one that already does the job. Answer with the file you would touch, then the change.",
 	model: "sonnet-4-5",
 	workingDirectory: "/Users/ada/Projects/opennest",
-	changesNothing: false,
+	permissions: {
+		...BLANK_BOT_PERMISSIONS,
+		deny: ["Bash", "Edit", "Write", "NotebookEdit"],
+	},
 }
 
 const NEW_BOT: BotSettingsValue = {
@@ -58,7 +64,7 @@ const NEW_BOT: BotSettingsValue = {
 	instructions: "",
 	model: "",
 	workingDirectory: "",
-	changesNothing: false,
+	permissions: BLANK_BOT_PERMISSIONS,
 }
 
 const UPLOADED_BOT: BotSettingsValue = {
@@ -126,7 +132,7 @@ const openTab = async (
 }
 
 const meta = preview.meta({
-	title: "Overlays/BotSettingsDialog",
+	title: "Settings/Bot/BotSettingsDialog",
 	component: BotSettingsDialog,
 	parameters: {
 		layout: "fullscreen",
@@ -199,7 +205,7 @@ export const Rail = meta.story({
 		docs: {
 			description: {
 				story:
-					"The six groups and the way between them. Check the order — General, Appearance, Instructions, Skills, MCP servers, Runtime, then a rule and Danger zone alone below it, the only item in destructive tone. One tab stop reaches the rail and the arrow keys walk it, so a keyboard reader crosses the whole dialog in two stops rather than five. Walking is not opening: focus moves with the arrows and the group opens on Enter, so nobody drags a grid of animals or a model list past on their way to the one they wanted. No item carries a tooltip at this width — its name is already on the screen. Pick `IconRail` for the width where the name leaves it. The breadcrumb is unchanged whichever group is open: it names the bot, not the group.",
+					"The groups and the way between them. Check the order — General, Appearance, Instructions, Skills, MCP servers, History, Permissions, Runtime, then a rule and Danger zone alone below it, the only item in destructive tone. One tab stop reaches the rail and the arrow keys walk it, so a keyboard reader crosses the whole dialog in two stops rather than five. Walking is not opening: focus moves with the arrows and the group opens on Enter, so nobody drags a grid of animals or a model list past on their way to the one they wanted. No item carries a tooltip at this width — its name is already on the screen. Pick `IconRail` for the width where the name leaves it. The breadcrumb is unchanged whichever group is open: it names the bot, not the group.",
 			},
 		},
 	},
@@ -216,6 +222,7 @@ export const Rail = meta.story({
 			"Skills",
 			"MCP servers",
 			"History",
+			"Permissions",
 			"Runtime",
 			"Danger zone",
 		])

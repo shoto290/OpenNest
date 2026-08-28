@@ -77,7 +77,7 @@ const NamingComposer = () => {
 }
 
 const meta = preview.meta({
-	title: "AI/PromptReply",
+	title: "Conversation/Prompt/PromptReply",
 	component: PromptReply,
 	parameters: {
 		layout: "centered",

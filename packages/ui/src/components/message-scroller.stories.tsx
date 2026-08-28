@@ -368,7 +368,7 @@ const AnchoredTranscript = () => {
 }
 
 const meta = preview.meta({
-	title: "AI/MessageScroller",
+	title: "Conversation/Message/MessageScroller",
 	component: MessageScroller,
 	parameters: {
 		layout: "centered",

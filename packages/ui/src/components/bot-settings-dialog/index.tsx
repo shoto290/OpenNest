@@ -17,6 +17,7 @@ import {
 	type BotMcpServerItem,
 	type BotModelOption,
 	type BotOutputStyle,
+	type BotPermissions,
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
@@ -27,6 +28,7 @@ import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
+import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
@@ -281,6 +283,12 @@ const BotSettingsDialog = ({
 								/>
 							) : null}
 							<SettingsRailItem
+								icon={Icons.Shield}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.permissions")}
+								value="permissions"
+							/>
+							<SettingsRailItem
 								icon={Icons.Terminal}
 								iconsOnly={iconsOnly}
 								label={t("dialog.tab.runtime")}
@@ -380,16 +388,24 @@ const BotSettingsDialog = ({
 
 						<Tabs.Panel
 							className={SETTINGS_SCROLLING_PANEL_CLASS}
+							value="permissions"
+						>
+							<PermissionsPanel
+								onPermissionsChange={(permissions: BotPermissions) =>
+									patch({ permissions })
+								}
+								permissions={value.permissions}
+							/>
+						</Tabs.Panel>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="runtime"
 						>
 							<RuntimeFields
-								changesNothing={value.changesNothing}
 								model={value.model}
 								models={models}
 								onBrowseWorkingDirectory={onBrowseWorkingDirectory}
-								onChangesNothingChange={(changesNothing) =>
-									patch({ changesNothing })
-								}
 								onModelChange={(model) => patch({ model })}
 								onOutputStyleChange={onOutputStyleChange}
 								outputStyle={outputStyle}
@@ -429,6 +445,7 @@ export {
 	type BotMcpServerItem,
 	type BotModelOption,
 	type BotOutputStyle,
+	type BotPermissions,
 	BotSettingsDialog,
 	type BotSettingsDialogProps,
 	type BotSettingsValue,

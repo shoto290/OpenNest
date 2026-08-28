@@ -34,7 +34,7 @@ const EditorHost = (props: SkillEditorProps) => {
 }
 
 const meta = preview.meta({
-	title: "AI/SkillEditor",
+	title: "Settings/Plugins/SkillEditor",
 	component: SkillEditor,
 	parameters: {
 		layout: "fullscreen",

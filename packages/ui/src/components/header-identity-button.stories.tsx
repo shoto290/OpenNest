@@ -17,7 +17,7 @@ const LONG_NAME =
 	"Migration copilot for the legacy billing workspace and its archives"
 
 const meta = preview.meta({
-	title: "Patterns/HeaderIdentityButton",
+	title: "Navigation/HeaderIdentityButton",
 	component: HeaderIdentityButton,
 	parameters: {
 		layout: "centered",

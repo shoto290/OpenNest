@@ -1,4 +1,7 @@
-import { DEFAULT_BOT_OUTPUT_STYLE } from "@workspace/ui/components/bot-settings"
+import {
+	BLANK_BOT_PERMISSIONS,
+	DEFAULT_BOT_OUTPUT_STYLE,
+} from "@workspace/ui/components/bot-settings"
 
 import type { BotIdentity } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -39,6 +42,7 @@ export const botIdentity = (
 	workingDir: null,
 	instructions: "Answer with the file you would touch.",
 	deniedTools: [],
+	permissions: BLANK_BOT_PERMISSIONS,
 	outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 	...overrides,
 })

@@ -1,8 +1,10 @@
 import type { AppSidebarBot } from "@workspace/ui/components/app-sidebar"
 import {
+	BLANK_BOT_PERMISSIONS,
 	BLOT_TINTS,
 	type BotCommitItem,
 	type BotModelOption,
+	type BotPermissions,
 	type BotSettingsValue,
 	DEFAULT_BOT_OUTPUT_STYLE,
 } from "@workspace/ui/components/bot-settings"
@@ -26,17 +28,8 @@ const NEW_BOT_MODEL = "sonnet"
 
 export const CHANGING_TOOLS = ["Bash", "Edit", "NotebookEdit", "Write"]
 
-const withChangesNothing = (bot: Bot, changesNothing: boolean): string[] => {
-	if (changesNothing === bot.changesNothing) {
-		return bot.deniedTools
-	}
-	return changesNothing
-		? [
-				...bot.deniedTools,
-				...CHANGING_TOOLS.filter((tool) => !bot.deniedTools.includes(tool)),
-			]
-		: bot.deniedTools.filter((tool) => !CHANGING_TOOLS.includes(tool))
-}
+const withoutChangingTools = (denied: string[]): string[] =>
+	denied.filter((tool) => !CHANGING_TOOLS.includes(tool))
 
 export const deniesChanges = (denied: string[]): boolean =>
 	CHANGING_TOOLS.every((tool) => denied.includes(tool))
@@ -132,6 +125,7 @@ export const newBotIdentity = (bots: Bot[]): BotIdentity => ({
 	workingDir: null,
 	instructions: "",
 	deniedTools: [],
+	permissions: BLANK_BOT_PERMISSIONS,
 	outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
 })
 
@@ -146,7 +140,7 @@ export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 	instructions: bot.instructions,
 	model: bot.model,
 	workingDirectory: bot.workingDir ?? "",
-	changesNothing: bot.changesNothing,
+	permissions: bot.permissions,
 })
 
 export const toCommitItem = (commit: BotCommit): BotCommitItem => ({
@@ -167,11 +161,21 @@ export const toIdentity = (value: BotSettingsValue, bot: Bot): BotIdentity => ({
 	avatarImagePath: value.identity.image ? bot.avatarImagePath : null,
 	workingDir: value.workingDirectory.trim() || null,
 	instructions: value.instructions,
-	deniedTools: withChangesNothing(bot, value.changesNothing),
+	deniedTools: withoutChangingTools(bot.deniedTools),
+	permissions: value.permissions,
 	outputStyle: bot.outputStyle,
 })
 
-const denialOf = (denied: string[]): string => [...denied].sort().join(",")
+const listOf = (items: string[]): string => [...items].sort().join(",")
+
+const permissionsOf = (permissions: BotPermissions): string =>
+	[
+		permissions.defaultMode,
+		listOf(permissions.allow),
+		listOf(permissions.ask),
+		listOf(permissions.deny),
+		listOf(permissions.additionalDirectories),
+	].join("|")
 
 export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {
 	const next = toIdentity(value, bot)
@@ -179,7 +183,8 @@ export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {
 		next.instructions !== bot.instructions ||
 		next.workingDir !== bot.workingDir ||
 		next.model !== bot.model ||
-		denialOf(next.deniedTools) !== denialOf(bot.deniedTools)
+		listOf(next.deniedTools) !== listOf(bot.deniedTools) ||
+		permissionsOf(next.permissions) !== permissionsOf(bot.permissions)
 	)
 }
 

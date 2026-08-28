@@ -26,7 +26,7 @@ const readPatch = async (canvasElement: HTMLElement) =>
 	})
 
 const meta = preview.meta({
-	title: "AI/HistoryPanel",
+	title: "Settings/Plugins/HistoryPanel",
 	component: HistoryPanel,
 	parameters: {
 		layout: "fullscreen",

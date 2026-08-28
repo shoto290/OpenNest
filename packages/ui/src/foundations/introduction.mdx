@@ -29,6 +29,6 @@ import { Icons } from "@workspace/ui/components/icons"
 
 ## Story taxonomy
 
-Every story is titled `<Section>/<Name>` — two levels, never deeper. Sections are fixed and ordered: `Foundations`, `Primitives`, `Forms`, `Overlays`, `Feedback`, `Navigation`, `Data`, `Display`, `Layout`, `Patterns`, `Branding`, `AI`. An unknown section makes `storySort` throw, so drift is caught in CI instead of in review.
+Every story is titled `<Family>/<Name>`. Families are fixed and ordered: `Foundations`, `Primitives`, `Forms`, `Feedback`, `Navigation`, `Layout`, `Overlays`, `Branding`, `Conversation`, `Settings`. `Conversation` and `Settings` carry one sub-level — `Message`, `Prompt`, `Markdown`, `Tools` and `Bot`, `User`, `Space`, `Conversation`, `Plugins`. Each family opens on its own `Overview` page. An unknown family makes `storySort` throw, so drift is caught in CI instead of in review.
 
 The section is deliberately decoupled from the file path. `Primitives` means genuinely primitive components — Button, Badge, Separator — not the whole `src/components/` directory. Pick the section by what the component _is_, not by where it lives.

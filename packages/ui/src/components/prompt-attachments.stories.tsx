@@ -29,7 +29,7 @@ const StagedComposer = () => {
 }
 
 const meta = preview.meta({
-	title: "AI/PromptAttachments",
+	title: "Conversation/Prompt/PromptAttachments",
 	component: PromptAttachments,
 	parameters: {
 		layout: "centered",
