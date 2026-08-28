@@ -174,7 +174,6 @@ const permissionsOf = (permissions: BotPermissions): string =>
 		listOf(permissions.allow),
 		listOf(permissions.ask),
 		listOf(permissions.deny),
-		listOf(permissions.additionalDirectories),
 	].join("|")
 
 export const changesRuntime = (bot: Bot, value: BotSettingsValue): boolean => {

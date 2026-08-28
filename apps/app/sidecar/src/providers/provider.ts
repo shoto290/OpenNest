@@ -16,6 +16,7 @@ export type SessionRequest = {
 	identity?: string
 	outputStyle?: string
 	settingsPath?: string
+	appDataDir?: string
 	partialMessages: boolean
 }
 

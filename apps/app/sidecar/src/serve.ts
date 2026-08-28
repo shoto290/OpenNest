@@ -21,6 +21,7 @@ type Command = {
 	identity?: string
 	outputStyle?: string
 	settingsPath?: string
+	appDataDir?: string
 	partialMessages?: boolean
 	text?: string
 	requestId?: string
@@ -52,6 +53,7 @@ export const serve = async (requestedId?: string) => {
 					identity: command.identity,
 					outputStyle: command.outputStyle,
 					settingsPath: command.settingsPath,
+					appDataDir: command.appDataDir,
 					partialMessages: command.partialMessages ?? false,
 				},
 				emit,

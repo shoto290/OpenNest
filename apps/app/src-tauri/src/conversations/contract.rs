@@ -932,8 +932,7 @@ mod tests {
 					"defaultMode": "auto",
 					"allow": [],
 					"ask": [],
-					"deny": ["Bash", "Edit", "Write", "NotebookEdit"],
-					"additionalDirectories": []
+					"deny": ["Bash", "Edit", "Write", "NotebookEdit"]
 				},
 				"outputStyle": "Concise",
 				"createdAt": 1
@@ -975,8 +974,7 @@ mod tests {
 					"defaultMode": "auto",
 					"allow": [],
 					"ask": [],
-					"deny": [],
-					"additionalDirectories": []
+					"deny": []
 				},
 				"outputStyle": "Concise"
 			}),

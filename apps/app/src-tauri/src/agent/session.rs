@@ -86,6 +86,7 @@ pub struct SessionOptions {
 	pub cwd: PathBuf,
 	pub resume: Option<String>,
 	pub bundle: Option<Bundle>,
+	pub app_data_dir: Option<PathBuf>,
 	pub startup_timeout: Duration,
 	pub extra_env: Vec<(String, String)>,
 }
@@ -96,6 +97,7 @@ impl SessionOptions {
 			cwd,
 			resume: None,
 			bundle: None,
+			app_data_dir: None,
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
 		}
@@ -108,6 +110,11 @@ impl SessionOptions {
 
 	pub fn bundled(mut self, bundle: Option<Bundle>) -> Self {
 		self.bundle = bundle;
+		self
+	}
+
+	pub fn with_app_data(mut self, dir: Option<PathBuf>) -> Self {
+		self.app_data_dir = dir;
 		self
 	}
 
@@ -128,6 +135,7 @@ impl SessionOptions {
 			identity: self.bundle.as_ref().map(|bundle| bundle.identity.clone()),
 			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
 			settings_path: self.bundle.as_ref().and_then(|bundle| bundle.settings_path.clone()),
+			app_data_dir: self.app_data_dir.as_ref().map(|dir| dir.to_string_lossy().into_owned()),
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
 		}
@@ -463,6 +471,15 @@ mod tests {
 		assert_eq!(request.space_plugin_path.as_deref(), Some("/spaces/s1"));
 		assert_eq!(request.agent.as_deref(), Some("bean"));
 		assert_eq!(request.identity.as_deref(), Some("You are Bean, the baker."));
+	}
+
+	#[test]
+	fn a_run_carries_the_directory_the_host_keeps_its_own_data_in() {
+		let request =
+			options().with_app_data(Some(PathBuf::from("/app-data/opennest"))).open_request(true);
+
+		assert_eq!(request.app_data_dir.as_deref(), Some("/app-data/opennest"));
+		assert_eq!(options().open_request(true).app_data_dir, None);
 	}
 
 	#[test]

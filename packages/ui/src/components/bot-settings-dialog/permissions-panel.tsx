@@ -63,21 +63,6 @@ const PermissionsPanel = ({
 			/>
 
 			{BOT_PERMISSION_RULE_LISTS.map(ruleList)}
-
-			<SettingsListField
-				addLabel={t("permissions.directories.add")}
-				emptyLabel={t("permissions.directories.empty")}
-				hint={t("permissions.directories.hint")}
-				invalidMessage={t("permissions.directories.invalid")}
-				isItemValid={(path) => path.startsWith("/")}
-				items={permissions.additionalDirectories}
-				label={t("permissions.directories.label")}
-				onItemsChange={(additionalDirectories) =>
-					patch({ additionalDirectories })
-				}
-				placeholder={t("permissions.directories.placeholder")}
-				removeLabel={(path) => t("permissions.directories.remove", { path })}
-			/>
 		</>
 	)
 }

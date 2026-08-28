@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs"
-import { isAbsolute } from "node:path"
 
 import type { PermissionMode, Settings } from "@anthropic-ai/claude-agent-sdk"
 
@@ -20,11 +19,7 @@ const RULE_KEYS = ["allow", "ask", "deny"] as const
 
 const FILE_KEYS = new Set<string>(["permissions", "outputStyle"])
 
-const PERMISSION_KEYS = new Set<string>([
-	...RULE_KEYS,
-	"defaultMode",
-	"additionalDirectories",
-])
+const PERMISSION_KEYS = new Set<string>([...RULE_KEYS, "defaultMode"])
 
 const BYPASS = "bypassPermissions"
 
@@ -38,7 +33,6 @@ const dropped = (keys: string[]) =>
 export type SettingsOptions = {
 	settings?: Settings
 	permissionMode: PermissionMode
-	additionalDirectories?: string[]
 }
 
 type BotSettings = {
@@ -65,13 +59,6 @@ const declaredRules = (permissions: Declared): Settings["permissions"] => {
 	}
 	return rules
 }
-
-const declaredDirectories = (permissions: Declared): string[] =>
-	Array.isArray(permissions.additionalDirectories)
-		? permissions.additionalDirectories.filter(
-				(path): path is string => typeof path === "string" && isAbsolute(path),
-			)
-		: []
 
 const declaredMode = (permissions: Declared): PermissionMode | undefined => {
 	const declared = permissions.defaultMode
@@ -104,17 +91,13 @@ const readDeclared = (path: string): Declared => {
 const accepted = (
 	permissions: Declared,
 	outputStyle?: string,
-): SettingsOptions => {
-	const directories = declaredDirectories(permissions)
-	return {
-		permissionMode: declaredMode(permissions) ?? AUTO,
-		...(directories.length > 0 ? { additionalDirectories: directories } : {}),
-		settings: {
-			permissions: { ...declaredRules(permissions), ...NO_BYPASS },
-			...(outputStyle ? { outputStyle } : {}),
-		},
-	}
-}
+): SettingsOptions => ({
+	permissionMode: declaredMode(permissions) ?? AUTO,
+	settings: {
+		permissions: { ...declaredRules(permissions), ...NO_BYPASS },
+		...(outputStyle ? { outputStyle } : {}),
+	},
+})
 
 const droppedKeys = (declared: Declared, permissions: Declared): string[] => [
 	...Object.keys(declared).filter((key) => !FILE_KEYS.has(key)),

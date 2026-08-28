@@ -90,14 +90,17 @@ describe("readBotSettings", () => {
 		expect(rejection).toContain("bypassPermissions")
 	})
 
-	it("widens the scope to the absolute directories the file names", () => {
-		const { options } = readBotSettings(
+	it("widens the scope to no directory the file names, and says so", () => {
+		const { options, rejection } = readBotSettings(
 			declaring({
-				permissions: { additionalDirectories: ["/shared/notes", "relative"] },
+				permissions: { additionalDirectories: ["/shared/notes"] },
 			}),
 		)
 
-		expect(options.additionalDirectories).toEqual(["/shared/notes"])
+		expect(options.settings?.permissions).toEqual({
+			disableBypassPermissionsMode: "disable",
+		})
+		expect(rejection).toContain("permissions.additionalDirectories")
 	})
 
 	it("carries the style the file names over the one the host names", () => {
@@ -121,7 +124,8 @@ describe("readBotSettings", () => {
 				model: "opus",
 				hooks: { PreToolUse: [] },
 				env: { TOKEN: "secret" },
-				permissions: { allow: ["Read(**)"], sandbox: true },
+				sandbox: { enabled: false },
+				permissions: { allow: ["Read(**)"] },
 			}),
 		)
 
@@ -134,7 +138,7 @@ describe("readBotSettings", () => {
 		expect(rejection).toContain("model")
 		expect(rejection).toContain("hooks")
 		expect(rejection).toContain("env")
-		expect(rejection).toContain("permissions.sandbox")
+		expect(rejection).toContain("sandbox")
 	})
 
 	it("opens without the file when it is unreadable, and says why", () => {
