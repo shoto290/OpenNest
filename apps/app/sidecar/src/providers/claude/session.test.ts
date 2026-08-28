@@ -105,6 +105,17 @@ describe("buildOptions", () => {
 		}
 	})
 
+	it("hands the session an allowlist, not the sidecar's whole environment", () => {
+		process.env.OPENNEST_SECRET_TOKEN = "leaked"
+
+		const env = buildOptions(request, undefined).env ?? {}
+		delete process.env.OPENNEST_SECRET_TOKEN
+
+		expect(env.OPENNEST_SECRET_TOKEN).toBeUndefined()
+		expect(env.PATH).toBe(process.env.PATH)
+		expect(env[EXECUTABLE_OVERRIDE_ENV]).toBe(claudeSourceExecutable())
+	})
+
 	it("names no tool in the layer, so it grants no capability", () => {
 		for (const tool of ["Bash", "Edit", "Grep", "Glob", "Task", "WebFetch"]) {
 			expect(OPENNEST_LAYER).not.toContain(tool)
