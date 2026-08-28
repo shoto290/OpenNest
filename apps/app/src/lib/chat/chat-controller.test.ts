@@ -130,6 +130,7 @@ const spokenAnswer = (text: string): AgentEvent[] => [
 
 const EVOLUTION: AgentEvent = {
 	type: "botEvolved",
+	bundle: "bot",
 	commitId: "c-1",
 	title: "learned to count",
 }

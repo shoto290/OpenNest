@@ -24,6 +24,7 @@ import { toSkillDraft, toSkillItem } from "@/lib/bots/skill-draft"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
+import { useEvolution } from "@/lib/bots/use-evolution"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
@@ -127,6 +128,15 @@ export function App() {
 		runtimes: conversationRuntimes,
 		roster: roster.controller,
 		user: user.controller,
+	})
+
+	useEvolution({
+		driver,
+		roster: roster.controller,
+		skills: skills.controller,
+		history: history.controller,
+		userPlugin: userPlugin.controller,
+		spacePlugin: spacePlugin.controller,
 	})
 
 	const badges = useBotBadges({

@@ -13,6 +13,7 @@ export type HistoryController = {
 	getState: () => HistoryState
 	subscribe: (listener: () => void) => () => void
 	open: (botId: string) => Promise<void>
+	reload: () => void
 	loadDiff: (commitId: string) => void
 	revert: (commitId: string) => void
 }
@@ -75,6 +76,8 @@ export const createHistoryController = (
 			set({ botId, commits: [] })
 			return enqueue(() => read(botId)).catch(() => undefined)
 		},
+
+		reload,
 
 		loadDiff: (commitId: string) => {
 			const known = state.commits.find((commit) => commit.id === commitId)

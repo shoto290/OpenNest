@@ -13,6 +13,7 @@ export type SpacePluginController = {
 	getState: () => SpacePluginState
 	subscribe: (listener: () => void) => () => void
 	open: (spaceId: string) => Promise<void>
+	reload: () => void
 	createSkill: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	saveSkill: (skillId: string, draft: BotSkillDraft) => void
 	setSkillPreloaded: (skillId: string, isPreloaded: boolean) => void
@@ -88,6 +89,8 @@ export const createSpacePluginController = (
 
 		open: (spaceId: string) =>
 			enqueue(() => read(spaceId)).catch(() => undefined),
+
+		reload,
 
 		createSkill: (draft: BotSkillDraft, isPreloaded: boolean) =>
 			run(async (spaceId) => {
