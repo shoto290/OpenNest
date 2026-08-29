@@ -52,6 +52,7 @@ import { useConversationBadges } from "@/lib/conversations/use-conversation-badg
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
+import { useCollapsedSections } from "@/lib/sections/use-collapsed-sections"
 import { useSections } from "@/lib/sections/use-sections"
 import { useSidebarActions } from "@/lib/sidebar/use-sidebar-actions"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
@@ -109,6 +110,7 @@ export function App() {
 		move: roster.controller.moveToSection,
 		clear: roster.controller.clearSection,
 	})
+	const collapsedSections = useCollapsedSections(store)
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
 	const history = useBotHistory(store)
@@ -257,6 +259,7 @@ export function App() {
 	const sidebarActions = useSidebarActions({
 		attachments,
 		chat: chat.controller,
+		collapsedSections: collapsedSections.controller,
 		roster: roster.controller,
 		runtimes: conversationRuntimes,
 		sections: sections.controller,
@@ -321,13 +324,20 @@ export function App() {
 		const rosteredSpaceIds =
 			listedRosters === "" ? [] : listedRosters.split(" ")
 		sections.controller.keep(rosteredSpaceIds)
+		collapsedSections.controller.keep(rosteredSpaceIds)
 		const held = sections.controller.getState().sections
 		for (const spaceId of rosteredSpaceIds) {
 			if (!held[spaceId]) {
 				void sections.controller.enter(spaceId)
+				void collapsedSections.controller.enter(spaceId)
 			}
 		}
-	}, [sections.controller, listedRosters])
+	}, [sections.controller, collapsedSections.controller, listedRosters])
+
+	const collapsedSectionIds = useMemo(
+		() => Object.values(collapsedSections.state.collapsedBySpaceId).flat(),
+		[collapsedSections.state.collapsedBySpaceId],
+	)
 
 	const rosterBotsBySpace = useMemo(() => {
 		probeRender("rosterBotsBySpace")
@@ -480,6 +490,7 @@ export function App() {
 						conversations={rosterConversations}
 						conversationsBySpaceId={rosterConversationsBySpace}
 						badgesBySpaceId={badgesBySpaceId}
+						collapsedSectionIds={collapsedSectionIds}
 						sectionsBySpaceId={sections.state.sections}
 						footer={updateBadge}
 						isSpaceSwitchingEnabled={!isOverlayOpen}

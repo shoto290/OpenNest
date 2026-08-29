@@ -19,6 +19,7 @@ import type {
 	RuntimeSession,
 	Section,
 	Space,
+	SpacePreferences,
 } from "./store-contract"
 import type { TerminalCompletion } from "./transcript-contract"
 import type { TranscriptPort } from "./transcript-port"
@@ -31,6 +32,11 @@ export type TranscriptStore = TranscriptPort & {
 	updateSpace: (id: string, name: string, colour: AvatarBlot) => Promise<Space>
 	reorderSpaces: (ids: string[]) => Promise<void>
 	deleteSpace: (id: string) => Promise<void>
+	spacePreferences: (spaceId: string) => Promise<SpacePreferences>
+	setSpacePreferences: (
+		spaceId: string,
+		preferences: SpacePreferences,
+	) => Promise<SpacePreferences>
 	sections: (spaceId: string) => Promise<Section[]>
 	createSection: (spaceId: string, name: string) => Promise<Section>
 	renameSection: (id: string, name: string) => Promise<Section>

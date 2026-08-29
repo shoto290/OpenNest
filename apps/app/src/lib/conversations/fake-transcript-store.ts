@@ -30,6 +30,7 @@ import type {
 	SectionError,
 	Space,
 	SpaceError,
+	SpacePreferences,
 	TranscriptStoreError,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -197,6 +198,7 @@ export const createFakeTranscriptStore = (
 	const departed = new Map<string, Bot>()
 	const spaceOf = new Map<string, string>([[DEFAULT_BOT.id, DEFAULT_SPACE.id]])
 	const sections = new Map<string, Section>()
+	const preferences = new Map<string, SpacePreferences>()
 	const conversations = new Map<string, StoredConversation>()
 	const seats = new Map<string, Seat[]>()
 	let mintedConversations = 0
@@ -440,6 +442,7 @@ export const createFakeTranscriptStore = (
 				sections.delete(sectionId)
 			}
 		}
+		preferences.delete(spaceId)
 		for (const [conversationId, stored] of conversations) {
 			if (stored.spaceId === spaceId) {
 				conversations.delete(conversationId)
@@ -571,6 +574,28 @@ export const createFakeTranscriptStore = (
 			spaces.delete(id)
 			forgetSpace(id)
 			return Promise.resolve()
+		},
+
+		spacePreferences: (spaceId: string) => {
+			if (!spaces.has(spaceId)) {
+				return refuse({ kind: "unknownSpace", id: spaceId })
+			}
+			return Promise.resolve(
+				preferences.get(spaceId) ?? { collapsedSectionIds: [] },
+			)
+		},
+
+		setSpacePreferences: (spaceId: string, wanted: SpacePreferences) => {
+			if (!spaces.has(spaceId)) {
+				return refuse({ kind: "unknownSpace", id: spaceId })
+			}
+			const stored: SpacePreferences = {
+				collapsedSectionIds: wanted.collapsedSectionIds.filter(
+					(id) => sections.get(id)?.spaceId === spaceId,
+				),
+			}
+			preferences.set(spaceId, stored)
+			return Promise.resolve(stored)
 		},
 
 		sections: (spaceId: string) => Promise.resolve(sectionsOf(spaceId)),

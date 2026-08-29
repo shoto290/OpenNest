@@ -7,6 +7,8 @@ import {
 	AppSidebar,
 	type AppSidebarBot,
 	type AppSidebarConversation,
+	type AppSidebarSection,
+	type Space,
 } from "@workspace/ui/components/app-sidebar"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
@@ -69,5 +71,66 @@ describe("AppSidebar roster badge placement mounted", () => {
 
 		expect(badgesOf(dots)).toEqual([REVIEW.badge, ATLAS.badge])
 		expect(onAvatars(dots)).toEqual([true, true])
+	})
+})
+
+const SPACES: Space[] = [
+	{ id: "personal", name: "Personal", colour: "blue" },
+	{ id: "vocca", name: "Vocca", colour: "green" },
+	{ id: "labs", name: "Labs", colour: "red" },
+]
+
+const RESEARCH: AppSidebarSection = { id: "research", name: "Research" }
+
+const FILED: AppSidebarBot = { ...ATLAS, sectionId: RESEARCH.id }
+
+const researchHeaderIn = (container: HTMLElement) => {
+	const name = container.querySelector<HTMLElement>(
+		'[data-slot="roster-section-name"]',
+	)
+	if (!name?.parentElement) throw new Error("No section header on screen")
+	return name.parentElement
+}
+
+const shellOnSpace = (selectedSpaceId: string) => (
+	<WorkspaceShell
+		defaultOpen
+		sidebar={
+			<AppSidebar
+				bots={[FILED]}
+				botsBySpaceId={{ personal: [FILED], vocca: [], labs: [] }}
+				collapsedSectionIds={[RESEARCH.id]}
+				sectionsBySpaceId={{ personal: [RESEARCH], vocca: [], labs: [] }}
+				selectedSpaceId={selectedSpaceId}
+				spaces={SPACES}
+			/>
+		}
+	>
+		{null}
+	</WorkspaceShell>
+)
+
+describe("AppSidebar section collapse across spaces mounted", () => {
+	afterEach(cleanup)
+
+	it("keeps a section shut once the reader leaves the space and comes back", () => {
+		const { container, rerender } = render(shellOnSpace("personal"))
+
+		expect(researchHeaderIn(container).getAttribute("aria-expanded")).toBe(
+			"false",
+		)
+
+		rerender(shellOnSpace("labs"))
+
+		expect(
+			container.querySelector('[data-slot="roster-section-name"]'),
+		).toBeNull()
+
+		cleanup()
+		const { container: revisited } = render(shellOnSpace("personal"))
+
+		expect(researchHeaderIn(revisited).getAttribute("aria-expanded")).toBe(
+			"false",
+		)
 	})
 })

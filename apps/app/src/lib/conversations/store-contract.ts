@@ -62,6 +62,10 @@ export type Section = {
 	createdAt: number
 }
 
+export type SpacePreferences = {
+	collapsedSectionIds: string[]
+}
+
 export type BotSkill = BotSkillFront & {
 	id: string
 	name: string
