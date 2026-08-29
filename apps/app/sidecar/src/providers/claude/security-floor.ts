@@ -35,9 +35,9 @@ const APP_DATA_FILES = [
 	"session.json*",
 ]
 
-const APP_DATA_DIRECTORIES = ["attachments"]
+const ATTACHMENTS_DIRECTORY = "attachments"
 
-const BUNDLE_DIRECTORIES = ["bots", "spaces"]
+const DENIED_TREES = ["bots", "spaces", ATTACHMENTS_DIRECTORY]
 
 const BUNDLE_ROOTS = ["bots/plugins", "spaces"]
 
@@ -71,10 +71,7 @@ const pathsOf = ({ directories, files }: Denial): string[] => [
 const deniedReads = (appDataDir?: string): Denial => {
 	const home = homedir()
 	return {
-		directories: [
-			...under(home, READ_DIRECTORIES),
-			...under(appDataDir, APP_DATA_DIRECTORIES),
-		],
+		directories: under(home, READ_DIRECTORIES),
 		files: [
 			...under(home, READ_FILES),
 			...ENVIRONMENT_FILES,
@@ -104,6 +101,24 @@ const foreignBundles = (
 	files: [],
 })
 
+const ownedAttachments = (
+	appDataDir: string | undefined,
+	conversationId: string | undefined,
+): string | undefined =>
+	appDataDir && conversationId
+		? join(appDataDir, ATTACHMENTS_DIRECTORY, conversationId)
+		: undefined
+
+const foreignAttachments = (
+	appDataDir: string | undefined,
+	owned: string | undefined,
+): Denial => ({
+	directories: under(appDataDir, [ATTACHMENTS_DIRECTORY]).flatMap((root) =>
+		owned ? entriesOf(root).filter((entry) => entry !== owned) : [root],
+	),
+	files: [],
+})
+
 const deniedWrites = (): Denial => {
 	const home = homedir()
 	return {
@@ -114,32 +129,39 @@ const deniedWrites = (): Denial => {
 
 export type FloorScope = {
 	appDataDir?: string
+	conversationId?: string
 	pluginPaths: string[]
 	writablePaths: string[]
 }
 
 export const securityFloor = ({
 	appDataDir,
+	conversationId,
 	pluginPaths,
 	writablePaths,
 }: FloorScope): Settings => {
 	const reads = deniedReads(appDataDir)
 	const writes = deniedWrites()
+	const attachments = ownedAttachments(appDataDir, conversationId)
+	const readablePaths = attachments
+		? [...pluginPaths, attachments]
+		: pluginPaths
 	return {
 		permissions: {
 			deny: [
 				...DENIED_TOOLS,
 				...rulesFor("Read", reads),
 				...rulesFor("Read", foreignBundles(appDataDir, pluginPaths)),
+				...rulesFor("Read", foreignAttachments(appDataDir, attachments)),
 				...rulesFor("Edit", writes),
 			],
 		},
 		sandbox: {
 			...SANDBOX,
 			filesystem: {
-				denyRead: [...pathsOf(reads), ...under(appDataDir, BUNDLE_DIRECTORIES)],
+				denyRead: [...pathsOf(reads), ...under(appDataDir, DENIED_TREES)],
 				denyWrite: pathsOf(writes),
-				...(pluginPaths.length > 0 ? { allowRead: pluginPaths } : {}),
+				...(readablePaths.length > 0 ? { allowRead: readablePaths } : {}),
 				...(writablePaths.length > 0 ? { allowWrite: writablePaths } : {}),
 			},
 		},

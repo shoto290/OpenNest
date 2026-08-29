@@ -17,6 +17,7 @@ export type SessionRequest = {
 	outputStyle?: string
 	settingsPath?: string
 	appDataDir?: string
+	conversationId?: string
 	partialMessages: boolean
 }
 

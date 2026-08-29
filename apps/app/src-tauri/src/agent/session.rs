@@ -87,6 +87,7 @@ pub struct SessionOptions {
 	pub resume: Option<String>,
 	pub bundle: Option<Bundle>,
 	pub app_data_dir: Option<PathBuf>,
+	pub conversation_id: Option<String>,
 	pub startup_timeout: Duration,
 	pub extra_env: Vec<(String, String)>,
 }
@@ -98,6 +99,7 @@ impl SessionOptions {
 			resume: None,
 			bundle: None,
 			app_data_dir: None,
+			conversation_id: None,
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
 		}
@@ -115,6 +117,11 @@ impl SessionOptions {
 
 	pub fn with_app_data(mut self, dir: Option<PathBuf>) -> Self {
 		self.app_data_dir = dir;
+		self
+	}
+
+	pub fn in_conversation(mut self, conversation_id: impl Into<String>) -> Self {
+		self.conversation_id = Some(conversation_id.into());
 		self
 	}
 
@@ -136,6 +143,7 @@ impl SessionOptions {
 			output_style: self.bundle.as_ref().map(|bundle| bundle.output_style.clone()),
 			settings_path: self.bundle.as_ref().and_then(|bundle| bundle.settings_path.clone()),
 			app_data_dir: self.app_data_dir.as_ref().map(|dir| dir.to_string_lossy().into_owned()),
+			conversation_id: self.conversation_id.clone(),
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
 		}
@@ -480,6 +488,14 @@ mod tests {
 
 		assert_eq!(request.app_data_dir.as_deref(), Some("/app-data/opennest"));
 		assert_eq!(options().open_request(true).app_data_dir, None);
+	}
+
+	#[test]
+	fn a_run_carries_the_conversation_it_answers_in() {
+		let request = options().in_conversation("c1").open_request(true);
+
+		assert_eq!(request.conversation_id.as_deref(), Some("c1"));
+		assert_eq!(options().open_request(true).conversation_id, None);
 	}
 
 	#[test]
