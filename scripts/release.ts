@@ -7,6 +7,7 @@ const FILES = {
 	appPkg: `${ROOT}apps/app/package.json`,
 	cargoToml: `${ROOT}apps/app/src-tauri/Cargo.toml`,
 	cargoLock: `${ROOT}apps/app/src-tauri/Cargo.lock`,
+	systemPlugin: `${ROOT}apps/app/src-tauri/plugins/opennest/.claude-plugin/plugin.json`,
 	bunLock: `${ROOT}bun.lock`,
 }
 
@@ -104,10 +105,11 @@ const run = async () => {
 	await writeFile(FILES.appPkg, (text) => bumpJsonVersion(text, next))
 	await writeFile(FILES.cargoToml, (text) => bumpCargoToml(text, next))
 	await writeFile(FILES.cargoLock, (text) => bumpCargoLock(text, next))
+	await writeFile(FILES.systemPlugin, (text) => bumpJsonVersion(text, next))
 
 	await $`bun install`
 
-	await $`git add ${FILES.tauriConf} ${FILES.appPkg} ${FILES.cargoToml} ${FILES.cargoLock} ${FILES.bunLock}`
+	await $`git add ${FILES.tauriConf} ${FILES.appPkg} ${FILES.cargoToml} ${FILES.cargoLock} ${FILES.systemPlugin} ${FILES.bunLock}`
 	await $`git commit -m ${`chore(app): release ${tag}`}`
 	await $`git tag -a ${tag} --cleanup=verbatim -m ${buildTagMessage(tag, notes)}`
 	await $`git push -u origin ${branch}`

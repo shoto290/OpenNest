@@ -62,7 +62,7 @@ Write them to `/tmp/opennest-release-notes-v<next>.md` — outside the repo, so 
 
 ## 4. Approve
 
-Show the sentences as written, with the target version and bump type, and name what the release will commit: the four version files and `bun.lock`. Ask with `AskUserQuestion`: publish, rewrite, or cancel. Publish nothing until the answer is publish.
+Show the sentences as written, with the target version and bump type, and name what the release will commit: the five version files and `bun.lock`. Ask with `AskUserQuestion`: publish, rewrite, or cancel. Publish nothing until the answer is publish.
 
 Before publishing, confirm [`apps/app/SMOKE.md`](../../../apps/app/SMOKE.md) has been walked — `README.md` makes it the gate for tagging, and CI cannot run it.
 
