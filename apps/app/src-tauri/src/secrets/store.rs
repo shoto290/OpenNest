@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::agent::redact;
 
 use super::contract::{
-	account_for, is_usable_key, server_owner, server_owners_of, space_owner, SecretError,
+	account_for, is_usable_key, server_owner, server_owners_of, space_owner, HeldBy, SecretError,
 	SecretScope, SERVICE,
 };
 use super::index;
@@ -23,6 +23,15 @@ const PROBE_VALUE: &str = "probe";
 pub enum Backend {
 	Keyring,
 	Vault,
+}
+
+impl Backend {
+	fn held_by(self) -> HeldBy {
+		match self {
+			Self::Keyring => HeldBy::Keyring,
+			Self::Vault => HeldBy::Vault,
+		}
+	}
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -140,6 +149,7 @@ impl SecretStore {
 	fn every_server_link(&self, bot_id: &str) -> Vec<Link> {
 		let prefix = server_owners_of(bot_id);
 		index::owners_under(&self.index_path(), &prefix)
+			.unwrap_or_default()
 			.into_iter()
 			.map(|owner| {
 				let server = owner[prefix.len()..].to_owned();
@@ -152,8 +162,7 @@ impl SecretStore {
 		let mut by_key: BTreeMap<String, Vec<KeyOwner>> = BTreeMap::new();
 		for link in chain {
 			for key in self.keys(&link.owner) {
-				let readable =
-					matches!(self.read_value(&account_for(&link.owner, &key)), Ok(Some(_)));
+				let readable = matches!(self.held_value(&link.owner, &key), Ok(Some(_)));
 				by_key.entry(key).or_default().push(KeyOwner {
 					scope: link.scope,
 					server: link.server.clone(),
@@ -177,7 +186,18 @@ impl SecretStore {
 	}
 
 	pub fn keys(&self, owner: &str) -> Vec<String> {
-		index::keys(&self.index_path(), owner)
+		index::keys(&self.index_path(), owner).unwrap_or_default()
+	}
+
+	fn held_value(&self, owner: &str, key: &str) -> Result<Option<String>, SecretError> {
+		let recorded = index::held_by(&self.index_path(), owner, key)?;
+		let account = account_for(owner, key);
+		match recorded {
+			HeldBy::Unknown => self.read_value(&account),
+			HeldBy::Keyring if self.backend() == Backend::Keyring => self.read_value(&account),
+			HeldBy::Vault if self.backend() == Backend::Vault => self.read_value(&account),
+			held => Err(SecretError::BackendUnavailable { detail: format!("{held:?}") }),
+		}
 	}
 
 	pub fn set(&self, owner: &str, key: &str, value: &str) -> Result<(), SecretError> {
@@ -190,11 +210,14 @@ impl SecretStore {
 		}
 		self.write_value(&account_for(owner, key), value)?;
 		redact::remember(value);
-		index::remember(&self.index_path(), owner, key)
+		index::remember(&self.index_path(), owner, key, self.backend().held_by())
 	}
 
 	pub fn delete(&self, owner: &str, key: &str) -> Result<(), SecretError> {
-		self.erase_value(&account_for(owner, key))?;
+		match self.erase_value(&account_for(owner, key)) {
+			Ok(()) | Err(SecretError::NotFound { .. }) => (),
+			Err(error) => return Err(error),
+		}
 		index::forget(&self.index_path(), owner, key)
 	}
 
@@ -238,7 +261,7 @@ impl SecretStore {
 
 	fn gather(&self, owner: &str, scope: SecretScope, resolved: &mut Resolved) {
 		for key in self.keys(owner) {
-			match self.read_value(&account_for(owner, &key)) {
+			match self.held_value(owner, &key) {
 				Ok(Some(value)) => {
 					redact::remember(&value);
 					resolved.origins.insert(key.clone(), scope);
@@ -598,6 +621,27 @@ mod tests {
 	}
 
 	#[test]
+	fn a_secret_is_read_only_from_the_backend_recorded_for_it() {
+		let store = a_store();
+		store.set("bot", "TOKEN", "s3cret").expect("sets");
+		index::remember(&store.index_path(), "bot", "TOKEN", HeldBy::Keyring)
+			.expect("records another backend");
+
+		let resolved = store.resolve("bot", None);
+
+		assert!(resolved.values.is_empty());
+		assert_eq!(resolved.unreadable, vec!["TOKEN".to_owned()]);
+	}
+
+	#[test]
+	fn a_secret_records_the_backend_that_took_it() {
+		let store = a_store();
+		store.set("bot", "TOKEN", "s3cret").expect("sets");
+
+		assert_eq!(index::held_by(&store.index_path(), "bot", "TOKEN"), Ok(HeldBy::Vault));
+	}
+
+	#[test]
 	fn a_stored_value_comes_back_for_its_own_bot_only() {
 		let store = a_store();
 		store.set("first", "TOKEN", "s3cret").expect("sets");
@@ -634,9 +678,13 @@ mod tests {
 	}
 
 	#[test]
-	fn deleting_a_missing_secret_says_so() {
+	fn deleting_a_key_whose_value_is_already_gone_still_clears_the_index() {
 		let store = a_store();
-		assert!(matches!(store.delete("bot", "TOKEN"), Err(SecretError::NotFound { .. })));
+		store.set("bot", "TOKEN", "s3cret").expect("sets");
+		store.vault.lock().expect("vault").remove("bot:TOKEN").expect("removes behind the index");
+
+		assert_eq!(store.delete("bot", "TOKEN"), Ok(()));
+		assert!(store.keys("bot").is_empty());
 	}
 
 	#[test]

@@ -10,12 +10,18 @@ pub enum SecretError {
 	VaultLocked,
 	VaultPassphraseRejected,
 	#[serde(rename_all = "camelCase")]
+	VaultUnreadable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	BackendUnavailable { detail: String },
+	#[serde(rename_all = "camelCase")]
 	NotFound { key: String },
 	#[serde(rename_all = "camelCase")]
 	InvalidKey { key: String },
 	EmptyValue,
 	#[serde(rename_all = "camelCase")]
 	IndexUnwritable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	IndexUnreadable { detail: String },
 	#[serde(rename_all = "camelCase")]
 	NoSpace { bot_id: String },
 	#[serde(rename_all = "camelCase")]
@@ -30,10 +36,17 @@ impl std::fmt::Display for SecretError {
 			Self::StoreUnavailable { detail } => write!(formatter, "secret store unavailable: {detail}"),
 			Self::VaultLocked => write!(formatter, "the vault is locked"),
 			Self::VaultPassphraseRejected => write!(formatter, "the vault passphrase was rejected"),
+			Self::VaultUnreadable { detail } => write!(formatter, "the vault could not be read: {detail}"),
+			Self::BackendUnavailable { detail } => {
+				write!(formatter, "the store holding this secret is unavailable: {detail}")
+			}
 			Self::NotFound { key } => write!(formatter, "no secret named {key}"),
 			Self::InvalidKey { key } => write!(formatter, "{key} is not a usable secret name"),
 			Self::EmptyValue => write!(formatter, "a secret cannot be stored empty"),
 			Self::IndexUnwritable { detail } => write!(formatter, "the secret index could not be written: {detail}"),
+			Self::IndexUnreadable { detail } => {
+				write!(formatter, "the secret index could not be read: {detail}")
+			}
 			Self::NoSpace { bot_id } => write!(formatter, "bot {bot_id} belongs to no space"),
 			Self::NoServer { bot_id } => write!(formatter, "no server named for bot {bot_id}"),
 			Self::InvalidServer { server } => {
@@ -51,6 +64,14 @@ pub fn placeholder_for(key: &str) -> String {
 
 pub fn is_interpolated(value: &str) -> bool {
 	value.contains("${")
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HeldBy {
+	Keyring,
+	Vault,
+	Unknown,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
