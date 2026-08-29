@@ -31,6 +31,25 @@ const FILES = "Files"
 const rowsIn = (element: HTMLElement) =>
 	Math.round(element.scrollHeight / LINE_HEIGHT)
 
+const pixelsIn = (value: string) => Number.parseFloat(value) || 0
+
+const roomBesideControls = (
+	form: HTMLElement,
+	...controls: (HTMLElement | null)[]
+) => {
+	const style = getComputedStyle(form)
+	const gap = pixelsIn(style.columnGap)
+	return controls.reduce(
+		(room, control) =>
+			control && control.offsetWidth > 0
+				? room - control.offsetWidth - gap
+				: room,
+		form.clientWidth -
+			pixelsIn(style.paddingInlineStart) -
+			pixelsIn(style.paddingInlineEnd),
+	)
+}
+
 const filesIn = (transfer: DataTransfer) => Array.from(transfer.files)
 
 const pastedFiles = (transfer: DataTransfer) =>
@@ -78,10 +97,12 @@ export function PromptInput({
 }: PromptInputProps) {
 	const { t } = useTranslation("chat")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
+	const formRef = useRef<HTMLFormElement>(null)
 	const measurementRef = useRef<HTMLDivElement>(null)
 	const singleLineRef = useRef<HTMLDivElement>(null)
 	const promptRef = useRef<HTMLDivElement>(null)
 	const attachmentsRef = useRef<HTMLDivElement>(null)
+	const leadingRef = useRef<HTMLDivElement>(null)
 	const controlsRef = useRef<HTMLDivElement>(null)
 	const setTextareaRef = useMemo(
 		() => mergeRefs(textareaRef, externalTextareaRef),
@@ -101,28 +122,33 @@ export function PromptInput({
 
 	const resizeTextarea = useCallback(() => {
 		const textarea = textareaRef.current
+		const form = formRef.current
 		const measurement = measurementRef.current
 		const singleLine = singleLineRef.current
 		const prompt = promptRef.current
 		const controls = controlsRef.current
-		if (!textarea || !measurement || !singleLine || !prompt || !controls) return
-		if (textarea.value !== currentValue) return
+		const isReady =
+			textarea && form && measurement && singleLine && prompt && controls
+		if (!isReady || textarea.value !== currentValue) return
 
 		const isCarryingFiles =
 			Boolean(attachments) &&
 			(attachmentsRef.current?.childElementCount ?? 0) > 0
 		setHasAttachments(isCarryingFiles)
 
-		prompt.style.flexBasis =
-			isCarryingFiles || rowsIn(singleLine) > 1
-				? "100%"
-				: `${Math.ceil(singleLine.getBoundingClientRect().width)}px`
+		const promptWidth = Math.ceil(singleLine.getBoundingClientRect().width)
+		const isFillingRow =
+			isCarryingFiles ||
+			rowsIn(singleLine) > 1 ||
+			promptWidth > roomBesideControls(form, leadingRef.current, controls)
+
+		prompt.style.flexBasis = isFillingRow ? "100%" : `${promptWidth}px`
 		measurement.style.width = `${textarea.clientWidth}px`
 
 		const rows = Math.min(Math.max(rowsIn(measurement), minRows), maxRows)
 		textarea.style.height = `${rows * LINE_HEIGHT + PADDING_Y}px`
 
-		setIsExpanded(controls.offsetTop >= prompt.offsetTop + prompt.offsetHeight)
+		setIsExpanded(isFillingRow)
 	}, [attachments, currentValue, maxRows, minRows])
 
 	useLayoutEffect(() => {
@@ -196,6 +222,7 @@ export function PromptInput({
 
 	return (
 		<form
+			ref={formRef}
 			onSubmit={submit}
 			data-slot="prompt-input"
 			data-expanded={isExpanded}
@@ -205,8 +232,7 @@ export function PromptInput({
 			onDragEnd={() => setIsDragOver(false)}
 			onDrop={handleDrop}
 			className={cn(
-				"flex w-full flex-wrap items-center gap-1 border border-border bg-background p-2 transition-[border-radius] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 motion-reduce:transition-none",
-				isExpanded ? "rounded-3xl" : "rounded-full",
+				"flex w-full flex-wrap items-center gap-1 rounded-4xl border border-border bg-background p-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30",
 				isDropTarget && "border-primary bg-primary/10",
 				disabled && "opacity-50",
 				className,
@@ -257,6 +283,7 @@ export function PromptInput({
 			</div>
 
 			<div
+				ref={leadingRef}
 				inert={disabled}
 				className={cn(
 					"flex items-center gap-1 empty:hidden",
@@ -269,7 +296,7 @@ export function PromptInput({
 			<div
 				ref={controlsRef}
 				inert={disabled}
-				className="flex grow items-center justify-end gap-1"
+				className="ms-auto flex items-center justify-end gap-1"
 			>
 				{trailing}
 				{hasPayload ? (
