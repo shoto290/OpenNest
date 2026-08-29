@@ -170,6 +170,40 @@ pub async fn space_plugin_delete_skill<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn space_plugin_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	skill_id: String,
+	path: String,
+) -> Result<String, TranscriptStoreError> {
+	let plugin = plugin_path(&app, &space_id)?;
+	bundled(bundles::space::skill_file(&plugin, &skill_id, &path))
+}
+
+#[tauri::command]
+pub async fn space_plugin_write_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	skill_id: String,
+	path: String,
+	text: String,
+) -> Result<(), TranscriptStoreError> {
+	let plugin = plugin_path(&app, &space_id)?;
+	bundled(bundles::space::write_skill_file(&plugin, &skill_id, &path, &text))
+}
+
+#[tauri::command]
+pub async fn space_plugin_delete_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	skill_id: String,
+	path: String,
+) -> Result<(), TranscriptStoreError> {
+	let plugin = plugin_path(&app, &space_id)?;
+	bundled(bundles::space::remove_skill_file(&plugin, &skill_id, &path))
+}
+
+#[tauri::command]
 pub async fn space_plugin_history<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,

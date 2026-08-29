@@ -84,6 +84,25 @@ pub fn remove_skill(path: &Path, skill_id: &str) -> std::io::Result<()> {
 	super::remove_skill_at(path, skill_id)
 }
 
+pub fn skill_file(path: &Path, skill_id: &str, relative: &str) -> std::io::Result<String> {
+	super::skill_file_at(path, skill_id, relative)
+}
+
+pub fn write_skill_file(
+	path: &Path,
+	skill_id: &str,
+	relative: &str,
+	text: &str,
+) -> std::io::Result<()> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::write_skill_file_at(path, skill_id, relative, text)
+}
+
+pub fn remove_skill_file(path: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::remove_skill_file_at(path, skill_id, relative)
+}
+
 pub fn history(path: &Path) -> Result<Vec<HistoryEntry>, git2::Error> {
 	super::history_at(path)
 }

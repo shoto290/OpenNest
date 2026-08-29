@@ -419,6 +419,42 @@ pub async fn conversation_delete_bot_skill<R: Runtime>(
 	bundled(bundles::remove_skill(&root, &bot, &skill_id))
 }
 
+#[tauri::command]
+pub async fn conversation_bot_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+	skill_id: String,
+	path: String,
+) -> Result<String, TranscriptStoreError> {
+	let root = writable_root(&app)?;
+	bundled(bundles::skill_file(&root, &bot_id, &skill_id, &path))
+}
+
+#[tauri::command]
+pub async fn conversation_write_bot_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+	skill_id: String,
+	path: String,
+	text: String,
+) -> Result<(), TranscriptStoreError> {
+	let root = writable_root(&app)?;
+	refuse_system_skill(&root, &bot_id, &skill_id)?;
+	bundled(bundles::write_skill_file(&root, &bot_id, &skill_id, &path, &text))
+}
+
+#[tauri::command]
+pub async fn conversation_delete_bot_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	bot_id: String,
+	skill_id: String,
+	path: String,
+) -> Result<(), TranscriptStoreError> {
+	let root = writable_root(&app)?;
+	refuse_system_skill(&root, &bot_id, &skill_id)?;
+	bundled(bundles::remove_skill_file(&root, &bot_id, &skill_id, &path))
+}
+
 fn refuse_system_skill(
 	root: &Path,
 	bot_id: &str,

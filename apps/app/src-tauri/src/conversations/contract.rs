@@ -207,6 +207,7 @@ pub struct Skill {
 	pub body: String,
 	pub is_preloaded: bool,
 	pub is_system: bool,
+	pub files: Vec<String>,
 	#[serde(flatten)]
 	pub front: bundles::SkillFront,
 }
@@ -220,6 +221,7 @@ impl From<bundles::Skill> for Skill {
 			body: skill.body,
 			is_preloaded: skill.is_preloaded,
 			is_system: skill.is_system,
+			files: skill.files,
 			front: skill.front,
 		}
 	}
