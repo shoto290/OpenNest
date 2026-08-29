@@ -16,6 +16,28 @@ type SecretEntry = {
 
 type SecretsFailure = "save" | "delete"
 
+type SecretTarget = {
+	spaceId: string | null
+	botId: string | null
+	serverName: string | null
+}
+
+type SecretStoreStatus = {
+	isReady: boolean
+	needsPassphrase: boolean
+	hasVault: boolean
+}
+
+type StoredSecretKeys = {
+	entries: SecretEntry[]
+}
+
+const scopeOf = (target: SecretTarget): SecretScope => {
+	if (target.serverName) return "server"
+
+	return target.botId ? "bot" : "space"
+}
+
 type SecretsValue = {
 	scope: SecretScope
 	server: string | null
@@ -132,6 +154,10 @@ export {
 	type SecretRow,
 	type SecretRowState,
 	type SecretScope,
+	type SecretStoreStatus,
 	type SecretsFailure,
 	type SecretsValue,
+	type SecretTarget,
+	type StoredSecretKeys,
+	scopeOf,
 }

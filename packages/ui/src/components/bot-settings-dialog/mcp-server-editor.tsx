@@ -27,11 +27,9 @@ import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
-	BLANK_SECRETS,
-	type SecretScope,
-	type SecretsValue,
-} from "@workspace/ui/components/secrets-settings/secrets"
-import { SecretsPanel } from "@workspace/ui/components/secrets-settings/secrets-panel"
+	type SecretsMount,
+	SecretsPanel,
+} from "@workspace/ui/components/secrets-settings/secrets-panel"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
@@ -85,10 +83,7 @@ type McpServerEditorProps = {
 	onBack: () => void
 	onSave: (config: Record<string, unknown>) => void
 	onDelete?: () => void
-	secrets?: SecretsValue
-	onSecretSave?: (key: string, secret: string) => void
-	onSecretDelete?: (key: string, scope: SecretScope, server?: string) => void
-	onVaultUnlock?: (passphrase: string) => void
+	secrets?: SecretsMount
 	defaultSection?: string
 	defaultConfirming?: boolean
 	defaultLeaving?: boolean
@@ -102,10 +97,7 @@ const McpServerEditor = ({
 	onBack,
 	onSave,
 	onDelete,
-	secrets = BLANK_SECRETS,
-	onSecretSave,
-	onSecretDelete,
-	onVaultUnlock,
+	secrets,
 	defaultSection,
 	defaultConfirming,
 	defaultLeaving,
@@ -366,15 +358,10 @@ const McpServerEditor = ({
 				</Tabs.Panel>
 
 				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="secrets">
-					{isWritten && config ? (
+					{isWritten && config && secrets ? (
 						<SecretsPanel
-							onDelete={(key, scope, server) =>
-								onSecretDelete?.(key, scope, server)
-							}
-							onSave={(key, secret) => onSecretSave?.(key, secret)}
-							onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
+							{...secrets}
 							references={readMcpSecretReferences(config)}
-							value={secrets}
 						/>
 					) : (
 						<EditorNotice

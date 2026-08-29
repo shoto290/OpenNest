@@ -1,11 +1,20 @@
+import type { SecretKeyOwner } from "@workspace/ui/components/secrets-settings/secrets"
+
 import {
-	type SecretKeyOwner,
 	type SecretPort,
 	type SecretScope,
 	type SecretTarget,
 	type StoredSecretKey,
 	scopeOf,
 } from "./secret-port"
+
+export type SecretRefusal =
+	| { kind: "storeUnavailable"; detail: string }
+	| { kind: "vaultLocked" }
+	| { kind: "vaultPassphraseRejected" }
+	| { kind: "notFound"; key: string }
+	| { kind: "invalidKey"; key: string }
+	| { kind: "emptyValue" }
 
 export type FakeSecretPort = SecretPort & {
 	stored: Map<string, string>
@@ -18,7 +27,7 @@ export type FakeSecretPort = SecretPort & {
 	) => void
 	setPassphrase: (passphrase: string) => void
 	setVaultWritten: (hasVault: boolean) => void
-	failNext: (reason: string) => void
+	failNext: (refusal: SecretRefusal) => void
 }
 
 type Link = {
@@ -26,6 +35,8 @@ type Link = {
 	scope: SecretScope
 	server: string | null
 }
+
+const UNUSABLE_IN_KEY = /[:{}$]/
 
 const spaceOwner = (spaceId: string | null) => `space:${spaceId}`
 
@@ -55,14 +66,22 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 	let passphrase: string | null = null
 	let hasVault = false
 	let isUnlocked = true
-	let failure: string | null = null
+	let refusal: SecretRefusal | null = null
+
+	const refuse = (given: SecretRefusal): never => {
+		throw given
+	}
 
 	const refuseOnce = () => {
-		if (!failure) return
+		if (!refusal) return
 
-		const reason = failure
-		failure = null
-		throw new Error(reason)
+		const given = refusal
+		refusal = null
+		refuse(given)
+	}
+
+	const refuseWhenLocked = () => {
+		if (!isUnlocked) refuse({ kind: "vaultLocked" })
 	}
 
 	const ownersUnder = (prefix: string) => [
@@ -150,8 +169,8 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 			hasVault = next
 		},
 
-		failNext: (reason) => {
-			failure = reason
+		failNext: (next) => {
+			refusal = next
 		},
 
 		status: async () => ({
@@ -160,24 +179,44 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 			hasVault,
 		}),
 
-		keys: async (target) => ({ entries: entriesOver(chainOf(target)) }),
+		keys: async (target) => {
+			refuseWhenLocked()
+
+			return { entries: entriesOver(chainOf(target)) }
+		},
 
 		set: async (target, key, value) => {
 			refuseOnce()
+			refuseWhenLocked()
+
+			if (key.length === 0 || UNUSABLE_IN_KEY.test(key)) {
+				refuse({ kind: "invalidKey", key })
+			}
+
+			const trimmed = value.trim()
+
+			if (trimmed.length === 0) refuse({ kind: "emptyValue" })
+
 			const owner = ownerFor(target, scopeOf(target))
 
-			stored.set(held(owner, key), value)
+			stored.set(held(owner, key), trimmed)
 			unreadable.delete(held(owner, key))
 		},
 
 		delete: async (target, key, scope, server) => {
 			refuseOnce()
-			stored.delete(held(ownerFor(target, scope, server), key))
+			refuseWhenLocked()
+
+			const owner = ownerFor(target, scope, server)
+
+			if (!stored.has(held(owner, key))) refuse({ kind: "notFound", key })
+
+			stored.delete(held(owner, key))
 		},
 
 		unlock: async (given) => {
 			if (given !== passphrase) {
-				throw new Error("the passphrase was rejected")
+				refuse({ kind: "vaultPassphraseRejected" })
 			}
 			isUnlocked = true
 			hasVault = true

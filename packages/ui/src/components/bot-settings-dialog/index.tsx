@@ -40,11 +40,9 @@ import {
 } from "@workspace/ui/components/plugin-settings/history-panel"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import {
-	BLANK_SECRETS,
-	type SecretScope,
-	type SecretsValue,
-} from "@workspace/ui/components/secrets-settings/secrets"
-import { SecretsPanel } from "@workspace/ui/components/secrets-settings/secrets-panel"
+	type SecretsMount,
+	SecretsPanel,
+} from "@workspace/ui/components/secrets-settings/secrets-panel"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	DANGER_RAIL_ITEM_CLASS,
@@ -94,10 +92,7 @@ type BotSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
-	secrets?: SecretsValue
-	onSecretSave?: (key: string, secret: string) => void
-	onSecretDelete?: (key: string, scope: SecretScope, server?: string) => void
-	onVaultUnlock?: (passphrase: string) => void
+	secrets?: SecretsMount
 	onSecretsServerChange?: (name: string | null) => void
 	history?: PluginHistory
 	seed?: string
@@ -129,10 +124,7 @@ const BotSettingsDialog = ({
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
-	secrets = BLANK_SECRETS,
-	onSecretSave,
-	onSecretDelete,
-	onVaultUnlock,
+	secrets,
 	onSecretsServerChange,
 	history,
 	seed,
@@ -222,9 +214,6 @@ const BotSettingsDialog = ({
 			onDelete={saved ? () => deleteServer(saved) : undefined}
 			onDraftChange={(next) => setServer({ draft: next, saved })}
 			onSave={(config) => saveServer({ draft, saved }, config)}
-			onSecretDelete={onSecretDelete}
-			onSecretSave={onSecretSave}
-			onVaultUnlock={onVaultUnlock}
 			saved={saved}
 			secrets={secrets}
 		/>
@@ -401,15 +390,9 @@ const BotSettingsDialog = ({
 							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="secrets"
 						>
-							<SecretsPanel
-								onDelete={(key, scope, server) =>
-									onSecretDelete?.(key, scope, server)
-								}
-								onSave={(key, secret) => onSecretSave?.(key, secret)}
-								onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
-								references={botSecretReferences}
-								value={secrets}
-							/>
+							{secrets ? (
+								<SecretsPanel {...secrets} references={botSecretReferences} />
+							) : null}
 						</Tabs.Panel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">

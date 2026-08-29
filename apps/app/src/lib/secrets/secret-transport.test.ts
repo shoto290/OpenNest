@@ -68,50 +68,58 @@ describe("secretTransport", () => {
 			spaceId: "space-one",
 			botId: "bot-one",
 			server: undefined,
+			scope: "bot",
 		})
 	})
 
-	it("reads a space through the command that takes a space", async () => {
+	it("reads a space through the one command, naming the space scope", async () => {
 		hostInvoke.mockResolvedValue({ entries: [] })
 
 		await secretTransport.keys(SPACE)
 
-		expect(hostInvoke).toHaveBeenCalledWith("secret_space_keys", {
+		expect(hostInvoke).toHaveBeenCalledWith("secret_keys", {
 			spaceId: "space-one",
+			botId: undefined,
+			server: undefined,
+			scope: "space",
 		})
 	})
 
-	it("saves a space value through the command that takes a space", async () => {
+	it("saves a space value through the one command", async () => {
 		await secretTransport.set(SPACE, "ANTHROPIC_API_KEY", "sk-ant-atlas")
 
-		expect(hostInvoke).toHaveBeenCalledWith("secret_space_set", {
+		expect(hostInvoke).toHaveBeenCalledWith("secret_set", {
 			spaceId: "space-one",
+			botId: undefined,
+			server: undefined,
+			scope: "space",
 			key: "ANTHROPIC_API_KEY",
 			value: "sk-ant-atlas",
 		})
 	})
 
-	it("deletes a space value through the command that takes a space", async () => {
+	it("deletes a space value through the one command", async () => {
 		await secretTransport.delete(SPACE, "ANTHROPIC_API_KEY", "space")
 
-		expect(hostInvoke).toHaveBeenCalledWith("secret_space_delete", {
+		expect(hostInvoke).toHaveBeenCalledWith("secret_delete", {
 			spaceId: "space-one",
+			botId: undefined,
+			server: undefined,
+			scope: "space",
 			key: "ANTHROPIC_API_KEY",
 		})
 	})
 
-	it("never sends a space target to a command that wants a bot", async () => {
+	it("names one command for every scope it addresses", async () => {
 		hostInvoke.mockResolvedValue({ entries: [] })
 
 		await secretTransport.keys(SPACE)
-		await secretTransport.set(SPACE, "KEY", "value")
-		await secretTransport.delete(SPACE, "KEY", "space")
+		await secretTransport.keys(BOT)
+		await secretTransport.keys(SERVER)
 
-		const named = hostInvoke.mock.calls.map(([command]) => command)
+		const named = new Set(hostInvoke.mock.calls.map(([command]) => command))
 
-		expect(named).not.toContain("secret_keys")
-		expect(named).not.toContain("secret_set")
-		expect(named).not.toContain("secret_delete")
+		expect([...named]).toEqual(["secret_keys"])
 	})
 
 	it("saves at the scope the open panel owns", async () => {

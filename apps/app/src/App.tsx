@@ -115,8 +115,7 @@ export function App() {
 	})
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
-	const botSecrets = useSecrets()
-	const spaceSecrets = useSecrets()
+	const secrets = useSecrets()
 	const secretReferences = [
 		...new Set(
 			mcpServers.state.servers.flatMap((server) =>
@@ -242,29 +241,37 @@ export function App() {
 
 	useEffect(() => {
 		if (isEditing && selectedBotId) {
-			void botSecrets.controller.open({
+			void secrets.controller.open({
 				spaceId: roster.controller.getState().spaceId,
 				botId: selectedBotId,
 				serverName: secretsServer,
 			})
+			return
 		}
-	}, [
-		roster.controller,
-		botSecrets.controller,
-		isEditing,
-		selectedBotId,
-		secretsServer,
-	])
 
-	useEffect(() => {
 		if (isSpaceEditing && selectedSpaceId) {
-			void spaceSecrets.controller.open({
+			void secrets.controller.open({
 				spaceId: selectedSpaceId,
 				botId: null,
 				serverName: null,
 			})
 		}
-	}, [spaceSecrets.controller, isSpaceEditing, selectedSpaceId])
+	}, [
+		roster.controller,
+		secrets.controller,
+		isEditing,
+		isSpaceEditing,
+		selectedBotId,
+		selectedSpaceId,
+		secretsServer,
+	])
+
+	const secretsMount = {
+		value: secrets.state,
+		onSave: secrets.controller.save,
+		onDelete: secrets.controller.remove,
+		onVaultUnlock: secrets.controller.unlock,
+	}
 
 	useEffect(() => {
 		if (!selectedBotId) {
@@ -595,11 +602,8 @@ export function App() {
 							chat.controller.redescribe(selected.id)
 						}
 					}}
-					secrets={botSecrets.state}
-					onSecretDelete={botSecrets.controller.remove}
-					onSecretSave={botSecrets.controller.save}
+					secrets={secretsMount}
 					onSecretsServerChange={setSecretsServer}
-					onVaultUnlock={botSecrets.controller.unlock}
 					onMcpServerChange={mcpServers.controller.rename}
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}
@@ -693,11 +697,8 @@ export function App() {
 						spaces.controller.describe(selectedSpace.id, value)
 					}
 					secretReferences={secretReferences}
-					onSecretDelete={spaceSecrets.controller.remove}
-					onSecretSave={spaceSecrets.controller.save}
-					onVaultUnlock={spaceSecrets.controller.unlock}
 					open={isSpaceEditing}
-					secrets={spaceSecrets.state}
+					secrets={secretsMount}
 					skills={spacePlugin.state.skills.map(toSkillItem)}
 					value={toSpaceSettingsValue(selectedSpace)}
 				/>

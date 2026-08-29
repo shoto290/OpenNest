@@ -18,11 +18,9 @@ import {
 } from "@workspace/ui/components/plugin-settings/history-panel"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import {
-	BLANK_SECRETS,
-	type SecretScope,
-	type SecretsValue,
-} from "@workspace/ui/components/secrets-settings/secrets"
-import { SecretsPanel } from "@workspace/ui/components/secrets-settings/secrets-panel"
+	type SecretsMount,
+	SecretsPanel,
+} from "@workspace/ui/components/secrets-settings/secrets-panel"
 import {
 	DANGER_RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
@@ -54,10 +52,7 @@ type SpaceSettingsDialogProps = {
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
 	history: PluginHistory
-	secrets?: SecretsValue
-	onSecretSave?: (key: string, secret: string) => void
-	onSecretDelete?: (key: string, scope: SecretScope, server?: string) => void
-	onVaultUnlock?: (passphrase: string) => void
+	secrets?: SecretsMount
 	secretReferences?: string[]
 	onDelete: () => void
 	isDeletable?: boolean
@@ -75,10 +70,7 @@ const SpaceSettingsDialog = ({
 	onSkillPreloadedChange,
 	onSkillDelete,
 	history,
-	secrets = BLANK_SECRETS,
-	onSecretSave,
-	onSecretDelete,
-	onVaultUnlock,
+	secrets,
 	secretReferences,
 	onDelete,
 	isDeletable = true,
@@ -183,15 +175,9 @@ const SpaceSettingsDialog = ({
 							className={SETTINGS_SCROLLING_PANEL_CLASS}
 							value="secrets"
 						>
-							<SecretsPanel
-								onDelete={(key, scope, server) =>
-									onSecretDelete?.(key, scope, server)
-								}
-								onSave={(key, secret) => onSecretSave?.(key, secret)}
-								onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
-								references={secretReferences}
-								value={secrets}
-							/>
+							{secrets ? (
+								<SecretsPanel {...secrets} references={secretReferences} />
+							) : null}
 						</Tabs.Panel>
 
 						<Tabs.Panel

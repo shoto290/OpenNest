@@ -154,7 +154,7 @@ describe("createSecretsController", () => {
 		port.hold(BOT, "bot", "OWN")
 		const controller = await opened(BOT)
 
-		port.failNext("the store refused")
+		port.failNext({ kind: "storeUnavailable", detail: "no keyring" })
 		controller.save("OWN", "sk-next")
 		await settled()
 
@@ -167,7 +167,7 @@ describe("createSecretsController", () => {
 		port.hold(BOT, "bot", "OWN")
 		const controller = await opened(BOT)
 
-		port.failNext("the store refused")
+		port.failNext({ kind: "storeUnavailable", detail: "no keyring" })
 		controller.remove("OWN", "bot")
 		await settled()
 
@@ -306,6 +306,36 @@ describe("createSecretsController", () => {
 		expect(controller.getState().failures).toEqual({})
 		expect(controller.getState().loadFailed).toBe(true)
 		expect(port.stored.get("bot:bot-one/SHARED")).toBe("sk-bot")
+	})
+
+	it("refuses a value the store would refuse, without inventing a state", async () => {
+		const controller = await opened(BOT)
+
+		controller.save("SHARED", "   ")
+		await settled()
+
+		expect(controller.getState().failures).toEqual({ SHARED: "save" })
+		expect(controller.getState().saved).toEqual({})
+		expect(port.stored.size).toBe(0)
+	})
+
+	it("refuses a key the store would call unusable", async () => {
+		const controller = await opened(BOT)
+
+		controller.save("TO:KEN", "sk-bot")
+		await settled()
+
+		expect(controller.getState().failures).toEqual({ "TO:KEN": "save" })
+		expect(port.stored.size).toBe(0)
+	})
+
+	it("refuses a delete of a key nothing holds", async () => {
+		const controller = await opened(BOT)
+
+		controller.remove("SHARED", "bot")
+		await settled()
+
+		expect(controller.getState().failures).toEqual({ SHARED: "delete" })
 	})
 
 	it("says the store could not be read instead of looking merely empty", async () => {

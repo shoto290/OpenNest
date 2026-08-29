@@ -1,34 +1,20 @@
-export const SECRET_SCOPES = ["space", "bot", "server"] as const
+import {
+	type SecretEntry,
+	type SecretScope,
+	type SecretStoreStatus,
+	type SecretTarget,
+	type StoredSecretKeys,
+	scopeOf,
+} from "@workspace/ui/components/secrets-settings/secrets"
 
-export type SecretScope = (typeof SECRET_SCOPES)[number]
-
-export type SecretKeyOwner = {
-	scope: SecretScope
-	server?: string
-	readable: boolean
+export type {
+	SecretEntry as StoredSecretKey,
+	SecretScope,
+	SecretStoreStatus,
+	SecretTarget,
+	StoredSecretKeys,
 }
-
-export type StoredSecretKey = {
-	key: string
-	owners: SecretKeyOwner[]
-	servedBy: SecretKeyOwner | null
-}
-
-export type StoredSecretKeys = {
-	entries: StoredSecretKey[]
-}
-
-export type SecretTarget = {
-	spaceId: string | null
-	botId: string | null
-	serverName: string | null
-}
-
-export type SecretStoreStatus = {
-	isReady: boolean
-	needsPassphrase: boolean
-	hasVault: boolean
-}
+export { scopeOf }
 
 export type SecretPort = {
 	status: () => Promise<SecretStoreStatus>
@@ -42,12 +28,3 @@ export type SecretPort = {
 	) => Promise<void>
 	unlock: (passphrase: string) => Promise<void>
 }
-
-export const scopeOf = (target: SecretTarget): SecretScope => {
-	if (target.serverName) return "server"
-
-	return target.botId ? "bot" : "space"
-}
-
-export const isWiderThan = (scope: SecretScope, than: SecretScope) =>
-	SECRET_SCOPES.indexOf(scope) < SECRET_SCOPES.indexOf(than)

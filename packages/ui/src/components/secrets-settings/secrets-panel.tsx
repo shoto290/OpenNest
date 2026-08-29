@@ -14,12 +14,15 @@ import {
 import { VaultPassphrase } from "@workspace/ui/components/secrets-settings/vault-passphrase"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 
-type SecretsPanelProps = {
+type SecretsMount = {
 	value: SecretsValue
-	references?: string[]
 	onSave: (key: string, secret: string) => void
 	onDelete: (key: string, scope: SecretScope, server?: string) => void
 	onVaultUnlock: (passphrase: string) => void
+}
+
+type SecretsPanelProps = SecretsMount & {
+	references?: string[]
 }
 
 const SecretsPanel = ({
@@ -130,4 +133,4 @@ const SecretsPanel = ({
 	)
 }
 
-export { SecretsPanel, type SecretsPanelProps }
+export { type SecretsMount, SecretsPanel, type SecretsPanelProps }
