@@ -4,7 +4,7 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::contract::{Space, SpaceError, SpacePreferences};
 use crate::bundles;
-use crate::conversations::commands::{bundled, recounted};
+use crate::conversations::commands::{bundled, list_bundles, recounted};
 use crate::conversations::contract::{
 	AvatarBlot, BotHistoryEntry, Skill, SkillDraft, TranscriptStoreError,
 };
@@ -56,9 +56,10 @@ pub async fn space_delete<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<(), SpaceError> {
-	let held_bots = ready(&state)?.spaces().delete(id.clone()).await?;
+	let database = ready(&state)?;
+	let held_bots = database.spaces().delete(id.clone()).await?;
 	bundles::space::remove(&app, &id);
-	forget_bundles(bundles::root(&app).as_deref(), &held_bots);
+	forget_bundles(bundles::root(&app).as_deref(), database, &held_bots).await;
 	environment::store::forget_space(&app, &id, &held_bots);
 	Ok(())
 }
@@ -84,13 +85,13 @@ pub async fn space_set_preferences(
 		.map(SpacePreferences::from)?)
 }
 
-fn forget_bundles(root: Option<&Path>, bot_ids: &[String]) {
-	let Some(root) = root else {
-		return;
-	};
-	for bot_id in bot_ids {
-		bundles::remove(root, bot_id);
+async fn forget_bundles(root: Option<&Path>, database: &db::Database, bot_ids: &[String]) {
+	if let Some(root) = root {
+		for bot_id in bot_ids {
+			bundles::remove(root, bot_id);
+		}
 	}
+	list_bundles(root, database).await;
 }
 
 #[tauri::command]
@@ -207,6 +208,7 @@ mod tests {
 	use std::fs;
 
 	use super::*;
+	use crate::db::repositories::conversations::{AvatarAnimal, BotIdentity};
 
 	fn a_root(name: &str) -> PathBuf {
 		let root = std::env::temp_dir().join(format!("opennest-space-bundles-{name}"));
@@ -220,14 +222,40 @@ mod tests {
 		bundle
 	}
 
-	#[test]
-	fn the_bundles_the_deletion_cascaded_leave_the_disk() {
+	fn a_database(root: &Path) -> db::Database {
+		fs::create_dir_all(root).expect("the root stands");
+		db::open(root)
+	}
+
+	async fn a_bot_of(database: &db::Database, space_id: &str, name: &str) -> String {
+		let identity = BotIdentity {
+			name: name.to_owned(),
+			title: String::new(),
+			model: "sonnet".to_owned(),
+			avatar_animal: AvatarAnimal::Owl,
+			avatar_blot: None,
+			avatar_image_path: None,
+			working_dir: None,
+			instructions: "Answer briefly.".to_owned(),
+			denied_tools: Vec::new(),
+		};
+		database
+			.conversations()
+			.create_bot(identity, Some(space_id.to_owned()), None)
+			.await
+			.expect("the bot is created")
+			.id
+	}
+
+	#[tokio::test]
+	async fn the_bundles_the_deletion_cascaded_leave_the_disk() {
 		let root = a_root("cascaded");
+		let database = a_database(&root);
 		let held = a_bundle(&root, "b1");
 		let other = a_bundle(&root, "b2");
 		let kept = a_bundle(&root, "b3");
 
-		forget_bundles(Some(&root), &["b1".to_owned(), "b2".to_owned()]);
+		forget_bundles(Some(&root), &database, &["b1".to_owned(), "b2".to_owned()]).await;
 
 		assert!(!held.exists());
 		assert!(!other.exists());
@@ -236,14 +264,37 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	#[test]
-	fn a_bundle_that_is_already_gone_does_not_hold_back_the_next_one() {
+	#[tokio::test]
+	async fn a_bundle_that_is_already_gone_does_not_hold_back_the_next_one() {
 		let root = a_root("absent");
+		let database = a_database(&root);
 		let held = a_bundle(&root, "b2");
 
-		forget_bundles(Some(&root), &["b1".to_owned(), "b2".to_owned()]);
+		forget_bundles(Some(&root), &database, &["b1".to_owned(), "b2".to_owned()]).await;
 
 		assert!(!held.exists());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[tokio::test]
+	async fn a_deleted_space_leaves_the_marketplace_listing_only_the_bots_that_remain() {
+		let root = a_root("marketplace");
+		let database = a_database(&root);
+		let leaving = database.spaces().create("Leaving".to_owned()).await.expect("a space");
+		let staying = database.spaces().create("Staying".to_owned()).await.expect("a space");
+		let cascaded = a_bot_of(&database, &leaving.id, "Bean").await;
+		let kept = a_bot_of(&database, &staying.id, "Sprout").await;
+
+		let held_bots =
+			database.spaces().delete(leaving.id.clone()).await.expect("the space is deleted");
+		forget_bundles(Some(&root), &database, &held_bots).await;
+
+		let listed =
+			fs::read_to_string(bundles::marketplace_file(&root)).expect("the marketplace is there");
+		assert!(!listed.contains(&cascaded), "got {listed}");
+		assert!(listed.contains(&kept), "got {listed}");
+		assert!(!bundles::dir(&root, &cascaded).exists());
 
 		let _ = fs::remove_dir_all(&root);
 	}
