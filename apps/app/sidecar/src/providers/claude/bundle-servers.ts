@@ -3,6 +3,8 @@ import { join } from "node:path"
 
 import type { Options } from "@anthropic-ai/claude-agent-sdk"
 
+import { substitutedReferences } from "@workspace/ui/lib/secret-reference"
+
 const MCP_NAME = ".mcp.json"
 const SERVERS_KEY = "mcpServers"
 
@@ -23,8 +25,6 @@ export const bundleServers = (pluginPath: string): Servers => {
 		return {}
 	}
 }
-
-const SECRET_REFERENCE = /\$\{secret:([^}]+)\}/g
 
 export type MissingSecret = {
 	server: string
@@ -71,16 +71,16 @@ export const resolveServers = (
 	for (const [server, declaration] of Object.entries(servers)) {
 		const own = held(serverSecrets, server)
 		const absent = new Set<string>()
-		const resolved = substituted(declaration, (text) =>
-			text.replace(SECRET_REFERENCE, (reference, key: string) => {
-				const value = (own && held(own, key)) ?? held(secrets, key)
-				if (value === undefined) {
-					absent.add(key)
-					return reference
-				}
-				return value
-			}),
-		)
+		const resolved = substituted(declaration, (text) => {
+			const answered = substitutedReferences(
+				text,
+				(key) => (own && held(own, key)) ?? held(secrets, key),
+			)
+			for (const key of answered.missing) {
+				absent.add(key)
+			}
+			return answered.text
+		})
 		if (absent.size > 0) {
 			for (const key of absent) {
 				missing.push({ server, key })

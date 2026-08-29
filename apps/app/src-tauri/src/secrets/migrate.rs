@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 use crate::bundles::{object_at, MCP_NAME, SERVERS_KEY};
 use crate::private_files;
 
-use super::contract::{is_interpolated, placeholder_for};
+use super::contract::{looks_interpolated, placeholder_for};
 use super::store::SecretStore;
 
 const STALE_MARKER_NAME: &str = ".mcp-secrets-moved";
@@ -265,7 +265,7 @@ fn take_from_url(server_name: &str, server: &mut Map<String, Value>, moves: &mut
 }
 
 fn is_credential(field: &str, value: &str) -> bool {
-	if value.is_empty() || is_interpolated(value) {
+	if value.is_empty() || looks_interpolated(value) {
 		return false;
 	}
 	if names_a_header(field) {

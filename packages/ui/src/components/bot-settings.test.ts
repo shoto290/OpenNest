@@ -326,14 +326,25 @@ describe("readMcpSecretReferences", () => {
 		).toEqual(["HOST", "KEY"])
 	})
 
-	it("leaves alone what a configuration holds beside a reference", () => {
+	it("reads a reference from every field, as the resolver does", () => {
 		expect(
 			readMcpSecretReferences({
 				command: "npx",
 				args: ["-y", "@atlas/mcp-server"],
 				env: { ATLAS_REGION: "eu" },
 				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
-				transport: "${secret:NOT_ASKED}",
+				transport: "${secret:ATLAS_TRANSPORT}",
+			}),
+		).toEqual(["ATLAS_TRANSPORT"])
+	})
+
+	it("leaves alone a curly form the grammar refuses", () => {
+		expect(
+			readMcpSecretReferences({
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: a form the grammar refuses
+				env: { REGION: "${env:ATLAS_REGION}" },
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: a form the grammar refuses
+				url: "${secret:has space}",
 			}),
 		).toEqual([])
 	})

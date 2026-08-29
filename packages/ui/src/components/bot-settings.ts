@@ -7,6 +7,8 @@ import {
 	type BotAvatarAnimal,
 } from "@workspace/ui/components/bot-avatar-animals"
 
+import { referencesInDeclaration } from "../lib/secret-reference"
+
 const UNPICKABLE_ANIMAL = "skippy"
 
 type BotIdentityAnimal = Exclude<BotAvatarAnimal, typeof UNPICKABLE_ANIMAL>
@@ -267,37 +269,8 @@ const fromPairLines = (text: string) =>
 		}),
 	)
 
-const SECRET_REFERENCE = /\$\{secret:([^}]+)\}/g
-
-const MCP_SECRET_SOURCES = ["command", "args", "url", "env", "headers"]
-
-const gatherSecretKeys = (value: unknown, keys: Set<string>) => {
-	if (typeof value === "string") {
-		for (const found of value.matchAll(SECRET_REFERENCE)) {
-			keys.add(found[1] as string)
-		}
-		return
-	}
-
-	if (Array.isArray(value)) {
-		for (const entry of value) gatherSecretKeys(entry, keys)
-		return
-	}
-
-	if (isConfigObject(value)) {
-		for (const entry of Object.values(value)) gatherSecretKeys(entry, keys)
-	}
-}
-
-const readMcpSecretReferences = (config: Record<string, unknown>): string[] => {
-	const keys = new Set<string>()
-
-	for (const source of MCP_SECRET_SOURCES) {
-		gatherSecretKeys(config[source], keys)
-	}
-
-	return [...keys]
-}
+const readMcpSecretReferences = (config: Record<string, unknown>): string[] =>
+	referencesInDeclaration(config)
 
 type BotMcpServerFields = {
 	command: string

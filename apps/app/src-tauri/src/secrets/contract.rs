@@ -63,12 +63,53 @@ impl std::fmt::Display for SecretError {
 
 impl std::error::Error for SecretError {}
 
-pub fn placeholder_for(key: &str) -> String {
-	format!("${{secret:{key}}}")
+pub const REFERENCE_OPEN: &str = "${secret:";
+pub const REFERENCE_CLOSE: char = '}';
+
+const INTERPOLATION_OPEN: &str = "${";
+
+const UNUSABLE_IN_KEY: [char; 4] = [':', '{', '}', '$'];
+
+pub fn is_usable_key(key: &str) -> bool {
+	!key.is_empty()
+		&& !key.contains(UNUSABLE_IN_KEY)
+		&& !OWNER_PREFIXES.iter().any(|prefix| key.starts_with(prefix))
+		&& key.chars().all(|letter| letter.is_ascii_graphic() || letter == ' ')
 }
 
-pub fn is_interpolated(value: &str) -> bool {
-	value.contains("${")
+fn is_reference_key(key: &str) -> bool {
+	!key.is_empty()
+		&& !key.contains(UNUSABLE_IN_KEY)
+		&& key.chars().all(|letter| !letter.is_whitespace())
+}
+
+pub fn placeholder_for(key: &str) -> String {
+	format!("{REFERENCE_OPEN}{key}{REFERENCE_CLOSE}")
+}
+
+pub fn references_in(value: &str) -> Vec<String> {
+	let mut found = Vec::new();
+	let mut rest = value;
+	while let Some(at) = rest.find(REFERENCE_OPEN) {
+		let after = &rest[at + REFERENCE_OPEN.len()..];
+		let Some(end) = after.find(REFERENCE_CLOSE) else {
+			return found;
+		};
+		let key = &after[..end];
+		if is_reference_key(key) && !found.iter().any(|held| held == key) {
+			found.push(key.to_owned());
+		}
+		rest = &after[end + REFERENCE_CLOSE.len_utf8()..];
+	}
+	found
+}
+
+pub fn holds_a_reference(value: &str) -> bool {
+	!references_in(value).is_empty()
+}
+
+pub fn looks_interpolated(value: &str) -> bool {
+	value.contains(INTERPOLATION_OPEN)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,15 +175,6 @@ pub fn account_for(owner: &str, key: &str) -> String {
 	format!("{owner}:{key}")
 }
 
-const UNUSABLE_IN_KEY: [char; 4] = [':', '{', '}', '$'];
-
-pub fn is_usable_key(key: &str) -> bool {
-	!key.is_empty()
-		&& !key.contains(UNUSABLE_IN_KEY)
-		&& !OWNER_PREFIXES.iter().any(|prefix| key.starts_with(prefix))
-		&& key.chars().all(|letter| letter.is_ascii_graphic() || letter == ' ')
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -167,6 +199,57 @@ mod tests {
 			owner_for(SecretScope::Space, "bot", None, None),
 			Err(SecretError::NoSpace { bot_id: "bot".to_owned() })
 		);
+	}
+
+	const REFERENCE_CASES: [(&str, &[&str]); 18] = [
+		("${secret:github.env.TOKEN}", &["github.env.TOKEN"]),
+		("Bearer ${secret:github.env.TOKEN}", &["github.env.TOKEN"]),
+		("${secret:a.env.ONE} and ${secret:b.env.TWO}", &["a.env.ONE", "b.env.TWO"]),
+		("${secret:a.env.ONE}${secret:a.env.ONE}", &["a.env.ONE"]),
+		("${secret:remote.args.3}", &["remote.args.3"]),
+		("${secret:remote.url.api_key}", &["remote.url.api_key"]),
+		("${secret:Server-One.headers.X-Api-Key}", &["Server-One.headers.X-Api-Key"]),
+		("no reference at all", &[]),
+		("${env:GITHUB_TOKEN}", &[]),
+		("${secret:}", &[]),
+		("${secret:has space}", &[]),
+		("${secret:has\nnewline}", &[]),
+		("${secret:has{brace}", &[]),
+		("${secret:has:colon}", &[]),
+		("${secret:has$dollar}", &[]),
+		("${secret:unclosed", &[]),
+		("$ {secret:spaced}", &[]),
+		("${SECRET:github.env.TOKEN}", &[]),
+	];
+
+	const ROUND_TRIP_KEYS: [&str; 5] = [
+		"github.env.GITHUB_TOKEN",
+		"github.headers.Authorization",
+		"remote.args.0",
+		"remote.url.api_key",
+		"Server-One.env.X_TOKEN",
+	];
+
+	#[test]
+	fn the_grammar_reads_the_same_cases_the_front_reads() {
+		for (text, keys) in REFERENCE_CASES {
+			assert_eq!(references_in(text), keys.to_vec(), "reading {text:?}");
+			assert_eq!(holds_a_reference(text), !keys.is_empty(), "reading {text:?}");
+		}
+	}
+
+	#[test]
+	fn every_key_the_migration_emits_round_trips() {
+		for key in ROUND_TRIP_KEYS {
+			assert_eq!(references_in(&placeholder_for(key)), vec![key.to_owned()]);
+			assert!(is_usable_key(key), "{key}");
+		}
+	}
+
+	#[test]
+	fn a_curly_form_the_grammar_refuses_is_never_a_reference() {
+		assert!(!holds_a_reference("${env:GITHUB_TOKEN}"));
+		assert!(looks_interpolated("${env:GITHUB_TOKEN}"));
 	}
 
 	#[test]
