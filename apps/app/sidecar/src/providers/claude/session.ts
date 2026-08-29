@@ -69,11 +69,19 @@ const writablePaths = ({
 const localPlugins = (paths: string[]): NonNullable<Options["plugins"]> =>
 	paths.map((path) => ({ type: "local" as const, path }))
 
+const everySecretValue = (request: SessionRequest): string[] => [
+	...Object.values(request.secrets ?? {}),
+	...Object.values(request.serverSecrets ?? {}).flatMap((held) =>
+		Object.values(held),
+	),
+]
+
 export const resolvedServers = (request: SessionRequest): ResolvedServers =>
 	request.pluginPath
 		? resolveServers(
 				sessionServers(request.pluginPath, request.systemPluginPath),
 				request.secrets ?? {},
+				request.serverSecrets ?? {},
 			)
 		: { servers: {}, missing: [] }
 
@@ -110,7 +118,7 @@ export const buildOptions = (
 			append: layerFor(request),
 		},
 		env: {
-			...inheritedEnv(process.env, Object.values(request.secrets ?? {})),
+			...inheritedEnv(process.env, everySecretValue(request)),
 			[DISABLE_AUTO_MEMORY]: "1",
 			[CLASSIFY_ASK_USER_QUESTION]: "0",
 		},

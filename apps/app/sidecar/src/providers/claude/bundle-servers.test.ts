@@ -142,6 +142,79 @@ describe("resolveServers", () => {
 		)
 	})
 
+	it("prefers the server's own value over the flat one", () => {
+		const resolved = resolveServers(
+			remote({ env: { TOKEN: reference("SHARED") } }),
+			{ SHARED: "from-the-session" },
+			{ remote: { SHARED: "from-the-server" } },
+		)
+
+		expect(resolved.servers).toEqual(
+			remote({ env: { TOKEN: "from-the-server" } }),
+		)
+	})
+
+	it("falls back to the flat value for a key the server does not hold", () => {
+		const resolved = resolveServers(
+			remote({ env: { OWN: reference("OWN"), SHARED: reference("SHARED") } }),
+			{ SHARED: "from-the-session", OWN: "from-the-session" },
+			{ remote: { OWN: "from-the-server" } },
+		)
+
+		expect(resolved.servers).toEqual(
+			remote({ env: { OWN: "from-the-server", SHARED: "from-the-session" } }),
+		)
+	})
+
+	it("never reads a value out of another server's entry", () => {
+		const resolved = resolveServers(
+			declared({
+				remote: { env: { TOKEN: reference("SHARED") } },
+				other: { env: { TOKEN: reference("SHARED") } },
+			}),
+			{ SHARED: "from-the-session" },
+			{ other: { SHARED: "from-the-other-server" } },
+		)
+
+		expect(resolved.servers).toEqual(
+			declared({
+				remote: { env: { TOKEN: "from-the-session" } },
+				other: { env: { TOKEN: "from-the-other-server" } },
+			}),
+		)
+	})
+
+	it("names a key held by neither map as missing for that server", () => {
+		const resolved = resolveServers(
+			remote({ env: { TOKEN: reference("absent") } }),
+			{ SHARED: "from-the-session" },
+			{ remote: { OWN: "from-the-server" } },
+		)
+
+		expect(resolved.servers).toEqual({})
+		expect(resolved.missing).toEqual([{ server: "remote", key: "absent" }])
+	})
+
+	it("resolves exactly as before when no server map is handed over", () => {
+		const declaration = remote({ env: { TOKEN: reference("SHARED") } })
+
+		expect(resolveServers(declaration, { SHARED: "from-the-session" })).toEqual(
+			resolveServers(declaration, { SHARED: "from-the-session" }, {}),
+		)
+	})
+
+	it("treats an inherited server name as holding nothing of its own", () => {
+		const resolved = resolveServers(
+			remote({ env: { TOKEN: reference("SHARED") } }),
+			{ SHARED: "from-the-session" },
+			{},
+		)
+
+		expect(resolved.servers).toEqual(
+			remote({ env: { TOKEN: "from-the-session" } }),
+		)
+	})
+
 	it("leaves a declaration carrying no reference byte-identical", () => {
 		const declared = remote({
 			command: "python3",

@@ -27,6 +27,12 @@ type Command = {
 	requestId?: string
 	decision?: PermissionDecision
 	secrets?: Record<string, string>
+	serverSecrets?: Record<string, Record<string, string>>
+}
+
+type HeldSecrets = {
+	secrets: Record<string, string>
+	serverSecrets: Record<string, Record<string, string>>
 }
 
 const write = (payload: unknown) => {
@@ -39,7 +45,7 @@ const emitter = (session: string) => (frame: SessionFrame) =>
 export const serve = async (requestedId?: string) => {
 	const provider = requireProvider(requestedId)
 	const opening = new Map<string, Promise<AgentSession | undefined>>()
-	const secrets = new Map<string, Record<string, string>>()
+	const secrets = new Map<string, HeldSecrets>()
 
 	const open = async (command: Command, session: string) => {
 		const emit = emitter(session)
@@ -57,7 +63,8 @@ export const serve = async (requestedId?: string) => {
 					settingsPath: command.settingsPath,
 					appDataDir: command.appDataDir,
 					partialMessages: command.partialMessages ?? false,
-					secrets: secrets.get(session),
+					secrets: secrets.get(session)?.secrets,
+					serverSecrets: secrets.get(session)?.serverSecrets,
 				},
 				emit,
 			)
@@ -113,7 +120,10 @@ export const serve = async (requestedId?: string) => {
 		}
 		switch (command.type) {
 			case "secrets":
-				secrets.set(session, command.secrets ?? {})
+				secrets.set(session, {
+					secrets: command.secrets ?? {},
+					serverSecrets: command.serverSecrets ?? {},
+				})
 				return
 			case "open":
 				opening.set(session, open(command, session))

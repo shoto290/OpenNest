@@ -253,6 +253,49 @@ describe("buildOptions", () => {
 			).not.toContain("remote")
 		})
 
+		it("hands the SDK the server's own value over the session one", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("SHARED") } },
+			})
+
+			const servers = buildOptions(
+				{
+					...spawned,
+					secrets: { SHARED: "from-the-session" },
+					serverSecrets: { remote: { SHARED: "from-the-server" } },
+				},
+				undefined,
+			).mcpServers
+
+			expect(servers?.remote).toEqual({
+				command: "mcp-remote",
+				env: { TOKEN: "from-the-server" },
+			})
+		})
+
+		it("keeps a server's own value out of the environment the agent inherits", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("SHARED") } },
+			})
+			process.env.HTTPS_PROXY = "http://bean:from-the-server@proxy"
+
+			const options = buildOptions(
+				{
+					...spawned,
+					secrets: {},
+					serverSecrets: { remote: { SHARED: "from-the-server" } },
+				},
+				undefined,
+			)
+
+			expect(JSON.stringify(options.env)).not.toContain("from-the-server")
+			expect(options.mcpServers?.remote).toEqual({
+				command: "mcp-remote",
+				env: { TOKEN: "from-the-server" },
+			})
+			delete process.env.HTTPS_PROXY
+		})
+
 		it("keeps a resolved value out of the environment the agent inherits", () => {
 			const spawned = declaring({
 				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },

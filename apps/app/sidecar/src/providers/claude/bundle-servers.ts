@@ -57,22 +57,28 @@ const substituted = (
 	return value
 }
 
+const held = <T>(source: Record<string, T>, key: string): T | undefined =>
+	Object.hasOwn(source, key) ? source[key] : undefined
+
 export const resolveServers = (
 	servers: Servers,
 	secrets: Record<string, string>,
+	serverSecrets: Record<string, Record<string, string>> = {},
 ): ResolvedServers => {
 	const kept: Servers = {}
 	const missing: MissingSecret[] = []
 
 	for (const [server, declaration] of Object.entries(servers)) {
+		const own = held(serverSecrets, server)
 		const absent = new Set<string>()
 		const resolved = substituted(declaration, (text) =>
 			text.replace(SECRET_REFERENCE, (reference, key: string) => {
-				if (!Object.hasOwn(secrets, key)) {
+				const value = (own && held(own, key)) ?? held(secrets, key)
+				if (value === undefined) {
 					absent.add(key)
 					return reference
 				}
-				return secrets[key] as string
+				return value
 			}),
 		)
 		if (absent.size > 0) {
