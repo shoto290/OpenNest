@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Runtime, State};
 
-use super::contract::{Space, SpaceError};
+use super::contract::{Space, SpaceError, SpacePreferences};
 use crate::bundles;
 use crate::conversations::commands::{bundled, recounted};
 use crate::conversations::contract::{
@@ -61,6 +61,27 @@ pub async fn space_delete<R: Runtime>(
 	forget_bundles(bundles::root(&app).as_deref(), &held_bots);
 	environment::store::forget_space(&app, &id, &held_bots);
 	Ok(())
+}
+
+#[tauri::command]
+pub async fn space_preferences(
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<SpacePreferences, SpaceError> {
+	Ok(ready(&state)?.space_settings().preferences(space_id).await.map(SpacePreferences::from)?)
+}
+
+#[tauri::command]
+pub async fn space_set_preferences(
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	preferences: SpacePreferences,
+) -> Result<SpacePreferences, SpaceError> {
+	Ok(ready(&state)?
+		.space_settings()
+		.set_preferences(space_id, preferences.into())
+		.await
+		.map(SpacePreferences::from)?)
 }
 
 fn forget_bundles(root: Option<&Path>, bot_ids: &[String]) {

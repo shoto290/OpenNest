@@ -23,6 +23,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 13, statements: BOT_SECTION },
 	Migration { version: 14, statements: CONVERSATION_ROOM },
 	Migration { version: 15, statements: BOT_PERMISSIONS },
+	Migration { version: 16, statements: SPACE_SETTINGS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -335,6 +336,15 @@ CREATE UNIQUE INDEX conversation_participants_one_lead
 	ON conversation_participants (conversation_id) WHERE role = 'lead';
 
 ALTER TABLE bots ADD COLUMN deleted_at INTEGER;
+";
+
+const SPACE_SETTINGS: &str = "
+CREATE TABLE space_settings (
+	space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+	key TEXT NOT NULL,
+	value TEXT NOT NULL,
+	PRIMARY KEY (space_id, key)
+);
 ";
 
 pub fn latest_version() -> u32 {
