@@ -1025,17 +1025,26 @@ fn collect_skill_files(root: &Path, relative: &Path, held: &mut Vec<String>) {
 	}
 }
 
-fn skill_file_path(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<PathBuf> {
-	let held = Path::new(relative);
-	let stays_inside =
-		!relative.is_empty() && held.components().all(|part| matches!(part, Component::Normal(_)));
+fn skill_file_path(held: &Path, relative: &str) -> std::io::Result<PathBuf> {
+	let found = Path::new(relative);
+	let stays_inside = !relative.is_empty()
+		&& found.components().all(|part| matches!(part, Component::Normal(_)))
+		&& !links_away(held, found);
 	if !stays_inside {
 		return Err(std::io::Error::new(
 			std::io::ErrorKind::InvalidInput,
 			"a skill file path stays inside the skill",
 		));
 	}
-	Ok(skill_dir(bundle, skill_id)?.join(held))
+	Ok(held.join(found))
+}
+
+fn links_away(held: &Path, relative: &Path) -> bool {
+	let mut walked = held.to_path_buf();
+	relative.components().any(|part| {
+		walked.push(part);
+		fs::symlink_metadata(&walked).is_ok_and(|found| found.file_type().is_symlink())
+	})
 }
 
 pub fn skill_file(
@@ -1048,7 +1057,7 @@ pub fn skill_file(
 }
 
 pub fn skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<String> {
-	fs::read_to_string(skill_file_path(bundle, skill_id, relative)?)
+	fs::read_to_string(skill_file_path(&skill_dir(bundle, skill_id)?, relative)?)
 }
 
 pub fn write_skill_file(
@@ -1057,7 +1066,7 @@ pub fn write_skill_file(
 	skill_id: &str,
 	relative: &str,
 	text: &str,
-) -> std::io::Result<()> {
+) -> std::io::Result<Skill> {
 	write_skill_file_at(&dir(root, bot_id), skill_id, relative, text)
 }
 
@@ -1066,11 +1075,13 @@ pub fn write_skill_file_at(
 	skill_id: &str,
 	relative: &str,
 	text: &str,
-) -> std::io::Result<()> {
-	let path = skill_file_path(bundle, skill_id, relative)?;
-	private_files::replace(&path, text.as_bytes())?;
+) -> std::io::Result<Skill> {
+	let held = skill_dir(bundle, skill_id)?;
+	private_files::replace(&skill_file_path(&held, relative)?, text.as_bytes())?;
 	recorded(bundle, SKILL_FILE_SUBJECT, relative, "saved from settings");
-	Ok(())
+	read_skill(&held).ok_or_else(|| {
+		std::io::Error::new(std::io::ErrorKind::NotFound, "the skill file was not written")
+	})
 }
 
 pub fn remove_skill_file(
@@ -1083,8 +1094,7 @@ pub fn remove_skill_file(
 }
 
 pub fn remove_skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
-	let path = skill_file_path(bundle, skill_id, relative)?;
-	fs::remove_file(&path)?;
+	fs::remove_file(skill_file_path(&skill_dir(bundle, skill_id)?, relative)?)?;
 	recorded(bundle, SKILL_FILE_SUBJECT, relative, "removed from settings");
 	Ok(())
 }
@@ -2813,8 +2823,12 @@ mod tests {
 		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
 			.expect("the skill lands");
 
-		write_skill_file(&root, &bot.id, "baking", "reference/crumb.md", "Open crumb.")
-			.expect("the file lands");
+		let written =
+			write_skill_file(&root, &bot.id, "baking", "reference/crumb.md", "Open crumb.")
+				.expect("the file lands");
+		assert_eq!(written.name, "Baking");
+		assert_eq!(written.files, vec!["reference/crumb.md".to_owned()]);
+
 		write_skill_file(&root, &bot.id, "baking", "scripts/proof.sh", "sleep 1")
 			.expect("the file lands");
 
@@ -2854,6 +2868,39 @@ mod tests {
 
 		assert!(skills(&root, &bot.id)[0].files.is_empty());
 		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join("escaped.md").exists());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_path_resolving_through_a_link_is_refused_and_leaves_the_disk_alone() {
+		let root = a_root("skill-files-linked");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill lands");
+		let outside = root.join("outside");
+		private_files::replace(&outside.join("secret.md"), b"Not yours.").expect("the file lands");
+		let held = dir(&root, &bot.id).join(SKILLS_DIR).join("baking");
+		std::os::unix::fs::symlink(&outside, held.join("reference")).expect("the link lands");
+
+		for linked in ["reference", "reference/secret.md"] {
+			assert!(skill_file(&root, &bot.id, "baking", linked).is_err(), "read {linked}");
+			assert!(
+				write_skill_file(&root, &bot.id, "baking", linked, "no").is_err(),
+				"wrote {linked}"
+			);
+			assert!(
+				remove_skill_file(&root, &bot.id, "baking", linked).is_err(),
+				"removed {linked}"
+			);
+		}
+
+		assert_eq!(
+			fs::read_to_string(outside.join("secret.md")).expect("the file reads"),
+			"Not yours."
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}

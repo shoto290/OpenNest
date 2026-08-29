@@ -93,7 +93,7 @@ pub fn write_skill_file(
 	skill_id: &str,
 	relative: &str,
 	text: &str,
-) -> std::io::Result<()> {
+) -> std::io::Result<Skill> {
 	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::write_skill_file_at(path, skill_id, relative, text)
 }

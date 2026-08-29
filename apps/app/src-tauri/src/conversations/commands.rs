@@ -437,10 +437,10 @@ pub async fn conversation_write_bot_skill_file<R: Runtime>(
 	skill_id: String,
 	path: String,
 	text: String,
-) -> Result<(), TranscriptStoreError> {
+) -> Result<Skill, TranscriptStoreError> {
 	let root = writable_root(&app)?;
 	refuse_system_skill(&root, &bot_id, &skill_id)?;
-	bundled(bundles::write_skill_file(&root, &bot_id, &skill_id, &path, &text))
+	bundled(bundles::write_skill_file(&root, &bot_id, &skill_id, &path, &text)).map(Skill::from)
 }
 
 #[tauri::command]

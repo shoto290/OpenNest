@@ -1685,6 +1685,7 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 		}),
 	)
 	.expect("the skill is rewritten");
+	assert_eq!(updated["id"], json!("baking"), "a rename follows the slug of the new name");
 	assert_eq!(updated["name"], json!("Baking"));
 	assert_eq!(updated["body"], json!("Bake at 240 degrees."));
 	assert_eq!(updated["isPreloaded"], json!(true), "an edit dropped the mark");
@@ -1702,15 +1703,11 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	call(
 		&window,
 		"conversation_set_bot_skill_preloaded",
-		json!({ "botId": BOT, "skillId": "baking-bread", "isPreloaded": false }),
+		json!({ "botId": BOT, "skillId": "baking", "isPreloaded": false }),
 	)
 	.expect("the mark goes");
-	call(
-		&window,
-		"conversation_delete_bot_skill",
-		json!({ "botId": BOT, "skillId": "baking-bread" }),
-	)
-	.expect("the skill is taken away");
+	call(&window, "conversation_delete_bot_skill", json!({ "botId": BOT, "skillId": "baking" }))
+		.expect("the skill is taken away");
 
 	assert_eq!(readers_skills(&window, BOT), json!([]));
 	assert_eq!(

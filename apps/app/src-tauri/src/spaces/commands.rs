@@ -187,9 +187,9 @@ pub async fn space_plugin_write_skill_file<R: Runtime>(
 	skill_id: String,
 	path: String,
 	text: String,
-) -> Result<(), TranscriptStoreError> {
+) -> Result<Skill, TranscriptStoreError> {
 	let plugin = plugin_path(&app, &space_id)?;
-	bundled(bundles::space::write_skill_file(&plugin, &skill_id, &path, &text))
+	bundled(bundles::space::write_skill_file(&plugin, &skill_id, &path, &text)).map(Skill::from)
 }
 
 #[tauri::command]
