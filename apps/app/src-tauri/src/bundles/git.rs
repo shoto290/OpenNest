@@ -115,6 +115,9 @@ pub fn revert(bundle: &Path, commit_id: &str) -> Result<String, git2::Error> {
 	if index.has_conflicts() {
 		return Err(git2::Error::from_str("this write cannot be undone on top of the later ones"));
 	}
+	for name in EXCLUDED {
+		let _ = index.remove_path(Path::new(name));
+	}
 	let tree = repository.find_tree(index.write_tree_to(&repository)?)?;
 	let signature = signed(Author::User)?;
 	let id = repository.commit(
@@ -162,10 +165,14 @@ fn staged(repository: &Repository) -> Result<Tree<'_>, git2::Error> {
 	let mut index = repository.index()?;
 	index.clear()?;
 	index.add_all([EVERYTHING], IndexAddOption::DEFAULT, None)?;
+	for name in EXCLUDED {
+		let _ = index.remove_path(Path::new(name));
+	}
 	index.write()?;
 	let id = index.write_tree()?;
 	repository.find_tree(id)
 }
+
 
 fn head(repository: &Repository) -> Option<Commit<'_>> {
 	repository.head().ok()?.peel_to_commit().ok()
@@ -216,7 +223,10 @@ fn entry(commit: &Commit) -> HistoryEntry {
 
 fn printed(diff: &Diff) -> Result<String, git2::Error> {
 	let mut text = String::new();
-	diff.print(DiffFormat::Patch, |_, _, line| {
+	diff.print(DiffFormat::Patch, |delta, _, line| {
+		if touches_an_excluded_file(&delta) {
+			return true;
+		}
 		if matches!(line.origin(), '+' | '-' | ' ') {
 			text.push(line.origin());
 		}
@@ -224,4 +234,12 @@ fn printed(diff: &Diff) -> Result<String, git2::Error> {
 		true
 	})?;
 	Ok(text)
+}
+
+fn touches_an_excluded_file(delta: &git2::DiffDelta<'_>) -> bool {
+	[delta.new_file().path(), delta.old_file().path()].into_iter().flatten().any(|path| {
+		path.file_name()
+			.and_then(|name| name.to_str())
+			.is_some_and(|name| EXCLUDED.contains(&name))
+	})
 }

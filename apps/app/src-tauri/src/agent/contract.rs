@@ -194,6 +194,11 @@ pub enum TransportError {
 	SecretsUnavailable {
 		keys: Vec<String>,
 	},
+	#[serde(rename_all = "camelCase")]
+	SecretUnresolved {
+		server: String,
+		key: String,
+	},
 }
 
 impl TransportError {
@@ -243,6 +248,9 @@ impl std::fmt::Display for TransportError {
 			TransportError::WriteFailed { detail } => write!(f, "write failed: {detail}"),
 			TransportError::SecretsUnavailable { keys } => {
 				write!(f, "these secrets could not be read: {}", keys.join(", "))
+			}
+			TransportError::SecretUnresolved { server, key } => {
+				write!(f, "the server {server} asks for a secret named {key}, which is not stored")
 			}
 		}
 	}

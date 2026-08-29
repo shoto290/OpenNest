@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use std::collections::BTreeMap;
+
 use serde_json::{Map, Value};
 
 use crate::bundles::{object_at, MCP_NAME, SERVERS_KEY};
@@ -44,15 +46,25 @@ struct Move {
 	value: String,
 }
 
-pub fn sweep(store: &SecretStore, plugins_dir: &Path) {
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unmoved {
+	pub bot_id: String,
+	pub key: String,
+	pub detail: String,
+}
+
+pub fn sweep(store: &SecretStore, plugins_dir: &Path) -> Vec<Unmoved> {
 	let _ = std::fs::remove_file(store.dir().join(STALE_MARKER_NAME));
 	if !store.is_ready() {
-		return;
+		return Vec::new();
 	}
 
+	let mut unmoved = Vec::new();
 	for (bot_id, path) in mcp_files(plugins_dir) {
-		sweep_one_file(store, &bot_id, &path);
+		sweep_one_file(store, &bot_id, &path, &mut unmoved);
 	}
+	unmoved
 }
 
 fn mcp_files(plugins_dir: &Path) -> Vec<(String, PathBuf)> {
@@ -69,7 +81,12 @@ fn mcp_files(plugins_dir: &Path) -> Vec<(String, PathBuf)> {
 		.collect()
 }
 
-fn sweep_one_file(store: &SecretStore, bot_id: &str, path: &Path) {
+fn sweep_one_file(
+	store: &SecretStore,
+	bot_id: &str,
+	path: &Path,
+	unmoved: &mut Vec<Unmoved>,
+) {
 	let mut document = object_at(path);
 	let Some(Value::Object(servers)) = document.get_mut(SERVERS_KEY) else {
 		return;
@@ -84,15 +101,63 @@ fn sweep_one_file(store: &SecretStore, bot_id: &str, path: &Path) {
 		take_from_args(server_name, server, &mut moves);
 		take_from_url(server_name, server, &mut moves);
 	}
-
-	if moves.is_empty() || !stored(store, bot_id, &moves) {
+	if moves.is_empty() {
 		return;
 	}
+
+	let refused = refused_by_the_store(store, bot_id, &moves);
+	for moved in &moves {
+		if let Some(detail) = refused.get(&moved.key) {
+			put_back(&mut document, moved);
+			unmoved.push(Unmoved {
+				bot_id: bot_id.to_owned(),
+				key: moved.key.clone(),
+				detail: detail.clone(),
+			});
+		}
+	}
+
 	let _ = private_files::replace(path, Value::Object(document).to_string().as_bytes());
 }
 
-fn stored(store: &SecretStore, bot_id: &str, moves: &[Move]) -> bool {
-	moves.iter().all(|moved| store.set(bot_id, &moved.key, &moved.value).is_ok())
+fn refused_by_the_store(
+	store: &SecretStore,
+	bot_id: &str,
+	moves: &[Move],
+) -> BTreeMap<String, String> {
+	moves
+		.iter()
+		.filter_map(|moved| {
+			store
+				.set(bot_id, &moved.key, &moved.value)
+				.err()
+				.map(|error| (moved.key.clone(), error.to_string()))
+		})
+		.collect()
+}
+
+fn put_back(document: &mut Map<String, Value>, moved: &Move) {
+	let placeholder = placeholder_for(&moved.key);
+	for field in document.values_mut() {
+		swap_text(field, &placeholder, &moved.value);
+	}
+}
+
+fn swap_text(value: &mut Value, placeholder: &str, plain: &str) {
+	match value {
+		Value::String(text) => *text = text.replace(placeholder, plain),
+		Value::Array(items) => {
+			for item in items {
+				swap_text(item, placeholder, plain);
+			}
+		}
+		Value::Object(fields) => {
+			for field in fields.values_mut() {
+				swap_text(field, placeholder, plain);
+			}
+		}
+		_ => {}
+	}
 }
 
 fn take_from_maps(server_name: &str, server: &mut Map<String, Value>, moves: &mut Vec<Move>) {
@@ -107,7 +172,7 @@ fn take_from_maps(server_name: &str, server: &mut Map<String, Value>, moves: &mu
 			if !is_credential(field, plaintext) {
 				continue;
 			}
-			let key = format!("{server_name}.{field}");
+			let key = format!("{server_name}.{holder_name}.{field}");
 			moves.push(Move { key: key.clone(), value: plaintext.to_owned() });
 			*value = Value::String(placeholder_for(&key));
 		}
@@ -264,7 +329,7 @@ mod tests {
 	}
 
 	fn swept(layout: &Layout) {
-		sweep(&layout.store, &layout.plugins);
+		assert!(sweep(&layout.store, &layout.plugins).is_empty());
 	}
 
 	fn stored_value(layout: &Layout, key: &str) -> Option<String> {
@@ -282,9 +347,9 @@ mod tests {
 
 		swept(&layout);
 
-		assert!(read(&path).contains("${secret:github.GITHUB_TOKEN}"));
+		assert!(read(&path).contains("${secret:github.env.GITHUB_TOKEN}"));
 		assert!(!read(&path).contains("ghp_livevalue"));
-		assert_eq!(stored_value(&layout, "github.GITHUB_TOKEN").as_deref(), Some("ghp_livevalue"));
+		assert_eq!(stored_value(&layout, "github.env.GITHUB_TOKEN").as_deref(), Some("ghp_livevalue"));
 	}
 
 	#[test]
@@ -296,16 +361,16 @@ mod tests {
 			r#"{"mcpServers":{"github":{"env":{"GITHUB_TOKEN":"ghp_first"}}}}"#,
 		);
 		swept(&layout);
-		assert!(read(&path).contains("${secret:github.GITHUB_TOKEN}"));
+		assert!(read(&path).contains("${secret:github.env.GITHUB_TOKEN}"));
 
 		std::fs::write(&path, r#"{"mcpServers":{"linear":{"env":{"API_KEY":"lin_second"}}}}"#)
 			.expect("a later plaintext");
 
 		swept(&layout);
 
-		assert!(read(&path).contains("${secret:linear.API_KEY}"));
+		assert!(read(&path).contains("${secret:linear.env.API_KEY}"));
 		assert!(!read(&path).contains("lin_second"));
-		assert_eq!(stored_value(&layout, "linear.API_KEY").as_deref(), Some("lin_second"));
+		assert_eq!(stored_value(&layout, "linear.env.API_KEY").as_deref(), Some("lin_second"));
 	}
 
 	#[test]
@@ -323,7 +388,7 @@ mod tests {
 		swept(&layout);
 
 		assert!(!marker.exists());
-		assert!(read(&path).contains("${secret:github.GITHUB_TOKEN}"));
+		assert!(read(&path).contains("${secret:github.env.GITHUB_TOKEN}"));
 	}
 
 	#[test]
@@ -389,9 +454,9 @@ mod tests {
 
 		swept(&layout);
 
-		assert!(read(&path).contains("${secret:github.SETTING}"));
+		assert!(read(&path).contains("${secret:github.env.SETTING}"));
 		assert!(!read(&path).contains("ghp_livevalue"));
-		assert_eq!(stored_value(&layout, "github.SETTING").as_deref(), Some("ghp_livevalue"));
+		assert_eq!(stored_value(&layout, "github.env.SETTING").as_deref(), Some("ghp_livevalue"));
 	}
 
 	#[test]
@@ -491,7 +556,7 @@ mod tests {
 		write_mcp(
 			&layout,
 			"bot",
-			r#"{"mcpServers":{"github":{"env":{"GITHUB_TOKEN":"${secret:github.GITHUB_TOKEN}"},"args":["--token=Bearer ${secret:github.args.0}"],"url":"https://x/sse?api_key=${secret:github.url.api_key}"}}}"#,
+			r#"{"mcpServers":{"github":{"env":{"GITHUB_TOKEN":"${secret:github.env.GITHUB_TOKEN}"},"args":["--token=Bearer ${secret:github.args.0}"],"url":"https://x/sse?api_key=${secret:github.url.api_key}"}}}"#,
 		);
 
 		swept(&layout);
@@ -510,7 +575,7 @@ mod tests {
 
 		swept(&layout);
 
-		assert!(read(&path).contains("${secret:remote.Authorization}"));
+		assert!(read(&path).contains("${secret:remote.headers.Authorization}"));
 		assert!(!read(&path).contains("Bearer livetoken"));
 	}
 
@@ -529,23 +594,48 @@ mod tests {
 		layout.store.unlock("open sesame").expect("unlocks");
 		swept(&layout);
 
-		assert!(read(&path).contains("${secret:github.GITHUB_TOKEN}"));
+		assert!(read(&path).contains("${secret:github.env.GITHUB_TOKEN}"));
 	}
 
 	#[test]
-	fn one_rejected_write_leaves_the_whole_file_in_plaintext() {
+	fn one_refused_credential_stays_put_while_the_others_move() {
 		let layout = a_layout(true);
 		let path = write_mcp(
 			&layout,
 			"bot",
-			r#"{"mcpServers":{"gi$thub":{"env":{"GITHUB_TOKEN":"ghp_livevalue","API_KEY":"lin_livevalue"}}}}"#,
+			r#"{"mcpServers":{"github":{"env":{"GITHUB_TOKEN":"ghp_livevalue","OTHER_TOKEN":"ghp_refusedvalue"}}}}"#,
+		);
+		layout.store.refuse_for_tests("github.env.OTHER_TOKEN");
+
+		let unmoved = sweep(&layout.store, &layout.plugins);
+
+		let swept_file = read(&path);
+		assert!(swept_file.contains("${secret:github.env.GITHUB_TOKEN}"));
+		assert!(!swept_file.contains("ghp_livevalue"));
+		assert!(swept_file.contains("ghp_refusedvalue"));
+		assert_eq!(
+			unmoved.iter().map(|held| held.key.as_str()).collect::<Vec<_>>(),
+			vec!["github.env.OTHER_TOKEN"]
+		);
+	}
+
+	#[test]
+	fn one_field_name_in_both_env_and_headers_is_stored_under_two_keys() {
+		let layout = a_layout(true);
+		let path = write_mcp(
+			&layout,
+			"bot",
+			r#"{"mcpServers":{"github":{"env":{"TOKEN":"ghp_fromtheenv"},"headers":{"TOKEN":"ghp_fromtheheader"}}}}"#,
 		);
 
 		swept(&layout);
 
-		let kept = read(&path);
-		assert!(kept.contains("ghp_livevalue"));
-		assert!(kept.contains("lin_livevalue"));
-		assert!(!kept.contains("${secret:"));
+		assert!(read(&path).contains("${secret:github.env.TOKEN}"));
+		assert!(read(&path).contains("${secret:github.headers.TOKEN}"));
+		assert_eq!(stored_value(&layout, "github.env.TOKEN").as_deref(), Some("ghp_fromtheenv"));
+		assert_eq!(
+			stored_value(&layout, "github.headers.TOKEN").as_deref(),
+			Some("ghp_fromtheheader")
+		);
 	}
 }

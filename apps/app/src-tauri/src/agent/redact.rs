@@ -9,10 +9,41 @@ const SHORTEST_REDACTABLE: usize = 8;
 static SECRETS: LazyLock<RwLock<BTreeSet<String>>> = LazyLock::new(RwLock::default);
 
 pub fn remember(value: &str) {
-	if value.chars().count() < SHORTEST_REDACTABLE {
-		return;
+	let mut registered = SECRETS.write().expect("secrets");
+	for held in [value].into_iter().chain(embedded_in(value)) {
+		if held.chars().count() >= SHORTEST_REDACTABLE {
+			registered.insert(held.to_owned());
+		}
 	}
-	SECRETS.write().expect("secrets").insert(value.to_owned());
+}
+
+const CREDENTIAL_MARKERS: [&str; 14] = [
+	"ghp_",
+	"gho_",
+	"ghu_",
+	"ghs_",
+	"ghr_",
+	"github_pat_",
+	"sk-",
+	"xoxb-",
+	"xoxp-",
+	"xoxa-",
+	"glpat-",
+	"AKIA",
+	"AIza",
+	"eyJ",
+];
+
+fn embedded_in(value: &str) -> Vec<&str> {
+	CREDENTIAL_MARKERS
+		.iter()
+		.filter_map(|marker| {
+			let at = value.find(marker)?;
+			let rest = &value[at..];
+			let end = rest.find(|letter: char| letter.is_whitespace()).unwrap_or(rest.len());
+			(end < rest.len() || at > 0).then_some(&rest[..end])
+		})
+		.collect()
 }
 
 pub fn forget(value: &str) {
@@ -65,6 +96,17 @@ mod tests {
 		assert_eq!(text("Authorization: sk-live-abcdef123456"), "Authorization: [redacted]");
 		forget("sk-live-abcdef123456");
 		assert_eq!(text("Authorization: sk-live-abcdef123456"), "Authorization: sk-live-abcdef123456");
+	}
+
+	#[test]
+	fn a_credential_carried_inside_a_larger_value_is_masked_on_its_own() {
+		remember("Authorization: Bearer ghp_livevalue123");
+
+		assert_eq!(text("sent Authorization: Bearer ghp_livevalue123"), "sent [redacted]");
+		assert_eq!(text("leaked ghp_livevalue123 alone"), "leaked [redacted] alone");
+
+		forget("Authorization: Bearer ghp_livevalue123");
+		forget("ghp_livevalue123");
 	}
 
 	#[test]

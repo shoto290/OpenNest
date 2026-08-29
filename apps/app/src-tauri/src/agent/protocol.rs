@@ -72,6 +72,7 @@ pub enum Frame {
 	ControlRequest(ControlRequestFrame),
 	ControlResponse(ControlResponseFrame),
 	SettingsRejected(SettingsRejectedFrame),
+	SecretUnresolved(SecretUnresolvedFrame),
 	#[serde(other)]
 	Ignored,
 }
@@ -80,6 +81,15 @@ pub enum Frame {
 pub struct ClosedFrame {
 	#[serde(default)]
 	pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecretUnresolvedFrame {
+	#[serde(default)]
+	pub server: String,
+	#[serde(default)]
+	pub key: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

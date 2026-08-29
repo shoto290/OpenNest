@@ -11,8 +11,8 @@ use super::contract::{
 	TransportError, TurnEnded, TurnOutcome,
 };
 use super::protocol::{
-	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, SettingsRejectedFrame,
-	StreamEvent, SystemFrame,
+	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, SecretUnresolvedFrame,
+	SettingsRejectedFrame, StreamEvent, SystemFrame,
 };
 use super::redact;
 
@@ -144,6 +144,7 @@ impl Translator {
 			}
 			Frame::Commands(frame) => Self::on_commands(frame),
 			Frame::SettingsRejected(frame) => Self::on_settings_rejected(frame),
+			Frame::SecretUnresolved(frame) => Self::on_secret_unresolved(frame),
 			Frame::ControlRequest(request) => {
 				self.on_control_request(request.request_id, request.request)
 			}
@@ -162,6 +163,15 @@ impl Translator {
 		};
 		self.session_id = Some(session_id.clone());
 		vec![AgentEvent::SessionReady { session_id, resumed: self.resumed }]
+	}
+
+	fn on_secret_unresolved(frame: SecretUnresolvedFrame) -> Vec<AgentEvent> {
+		if frame.server.is_empty() || frame.key.is_empty() {
+			return Vec::new();
+		}
+		vec![AgentEvent::Failed {
+			error: TransportError::SecretUnresolved { server: frame.server, key: frame.key },
+		}]
 	}
 
 	fn on_settings_rejected(frame: SettingsRejectedFrame) -> Vec<AgentEvent> {
@@ -200,6 +210,7 @@ impl Translator {
 				message.spoke = true;
 				let id = message.id.clone();
 				self.delta_seq += 1;
+				let text = redact::text(&text);
 				vec![AgentEvent::MessageDelta { id, seq: self.delta_seq, text }]
 			}
 			StreamEvent::ContentBlockStart {
@@ -212,7 +223,7 @@ impl Translator {
 	}
 
 	fn tool_started(&mut self, id: String, name: &str, input: &Value) -> AgentEvent {
-		let title = tool_title(name, input);
+		let title = redact::text(&tool_title(name, input));
 		self.activity_titles.insert(id.clone(), title.clone());
 		AgentEvent::Activity {
 			activity: ActivityEvent {
@@ -251,7 +262,7 @@ impl Translator {
 
 		for block in content {
 			match block {
-				ContentBlock::Text { text: chunk } => text.push_str(&chunk),
+				ContentBlock::Text { text: chunk } => text.push_str(&redact::text(&chunk)),
 				ContentBlock::ToolUse { id, name, input } => {
 					events.push(self.tool_started(id, &name, &input))
 				}

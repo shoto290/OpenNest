@@ -3247,6 +3247,68 @@ mod tests {
 	}
 
 	#[test]
+	fn a_tracked_servers_file_is_untracked_without_its_contents_reaching_a_commit() {
+		let root = a_root("git-mcp-tracked");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let bundle = dir(&root, &bot.id);
+
+		let repository = git2::Repository::open(&bundle).expect("the bundle is a repository");
+		private_files::replace(
+			&bundle.join(MCP_NAME),
+			br#"{"mcpServers":{"github":{"env":{"TOKEN":"ghp_trackedvalue"}}}}"#,
+		)
+		.expect("the servers land");
+		let mut index = repository.index().expect("index");
+		index.add_path(Path::new(MCP_NAME)).expect("tracks the file");
+		index.write().expect("writes");
+		drop(index);
+
+		create_skill(&root, &bot, &a_draft("Kneading", "How to knead.", "Ten minutes."))
+			.expect("the skill is created");
+
+		for entry in history(&root, &bot.id).expect("the history reads") {
+			let shown = diff(&root, &bot.id, &entry.id).expect("the diff reads");
+			assert!(!shown.contains("ghp_trackedvalue"), "got {shown}");
+			assert!(!shown.contains(&format!("diff --git a/{MCP_NAME}")), "got {shown}");
+			assert!(!shown.contains(&format!("+++ b/{MCP_NAME}")), "got {shown}");
+		}
+		assert!(bundle.join(MCP_NAME).is_file(), "the live file is still there");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn undoing_a_write_never_puts_the_servers_file_back() {
+		let root = a_root("git-mcp-revert");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let bundle = dir(&root, &bot.id);
+
+		let repository = git2::Repository::open(&bundle).expect("the bundle is a repository");
+		private_files::replace(
+			&bundle.join(MCP_NAME),
+			br#"{"mcpServers":{"github":{"env":{"TOKEN":"ghp_trackedvalue"}}}}"#,
+		)
+		.expect("the servers land");
+		let mut index = repository.index().expect("index");
+		index.add_path(Path::new(MCP_NAME)).expect("tracks the file");
+		index.write().expect("writes");
+		drop(index);
+
+		create_skill(&root, &bot, &a_draft("Kneading", "How to knead.", "Ten minutes."))
+			.expect("the skill is created");
+		fs::remove_file(bundle.join(MCP_NAME)).expect("the reader clears it");
+
+		let newest = history(&root, &bot.id).expect("the history reads")[0].id.clone();
+		revert(&root, &bot.id, &newest).expect("the write is undone");
+
+		assert!(!bundle.join(MCP_NAME).exists(), "a plaintext servers file came back");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
 	fn what_the_bot_writes_for_itself_is_left_out_of_the_history() {
 		let root = a_root("git-learned");
 		let bot = a_bot("Bean", "Answer briefly.");

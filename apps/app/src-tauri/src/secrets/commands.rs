@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{AppHandle, Runtime, State};
 
 use crate::db;
 
@@ -80,11 +80,14 @@ pub async fn secret_delete(
 }
 
 #[tauri::command]
-pub async fn secret_unlock_vault(
+pub async fn secret_unlock_vault<R: Runtime>(
+	app: AppHandle<R>,
 	store: State<'_, SecretStore>,
 	passphrase: String,
 ) -> Result<(), SecretError> {
-	store.unlock(&passphrase)
+	store.unlock(&passphrase)?;
+	super::sweep_and_announce(&app, &store);
+	Ok(())
 }
 
 #[tauri::command]

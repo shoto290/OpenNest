@@ -14,6 +14,7 @@ use super::index;
 use super::vault::Vault;
 
 const DIR_NAME: &str = "secrets";
+const BUNDLES_DIR: &str = "bots";
 const INDEX_NAME: &str = "index.json";
 const VAULT_NAME: &str = "vault.bin";
 const PROBE_ACCOUNT: &str = "opennest:store-probe";
@@ -79,6 +80,9 @@ pub struct StoreStatus {
 }
 
 pub struct SecretStore {
+	#[cfg(test)]
+	refused: Mutex<std::collections::BTreeSet<String>>,
+	plugins_dir: PathBuf,
 	dir: PathBuf,
 	backend: OnceLock<Backend>,
 	vault: Mutex<Vault>,
@@ -88,7 +92,19 @@ impl SecretStore {
 	pub fn under(app_data: PathBuf) -> Self {
 		let dir = app_data.join(DIR_NAME);
 		let vault = Vault::at(dir.join(VAULT_NAME));
-		Self { dir, backend: OnceLock::new(), vault: Mutex::new(vault) }
+		let plugins_dir = crate::bundles::plugins_dir(&app_data.join(BUNDLES_DIR));
+		Self {
+			#[cfg(test)]
+			refused: Mutex::new(std::collections::BTreeSet::new()),
+			plugins_dir,
+			dir,
+			backend: OnceLock::new(),
+			vault: Mutex::new(vault),
+		}
+	}
+
+	pub fn plugins_dir(&self) -> &PathBuf {
+		&self.plugins_dir
 	}
 
 	pub fn dir(&self) -> &PathBuf {
@@ -208,6 +224,10 @@ impl SecretStore {
 		if value.is_empty() {
 			return Err(SecretError::EmptyValue);
 		}
+		#[cfg(test)]
+		if self.refused.lock().expect("refused").contains(key) {
+			return Err(SecretError::StoreUnavailable { detail: "refused for a test".into() });
+		}
 		self.write_value(&account_for(owner, key), value)?;
 		redact::remember(value);
 		index::remember(&self.index_path(), owner, key, self.backend().held_by())
@@ -270,6 +290,11 @@ impl SecretStore {
 				Ok(None) | Err(_) => resolved.unreadable.push(key),
 			}
 		}
+	}
+
+	#[cfg(test)]
+	pub fn refuse_for_tests(&self, key: &str) {
+		self.refused.lock().expect("refused").insert(key.to_owned());
 	}
 
 	#[cfg(test)]
