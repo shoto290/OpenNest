@@ -2472,7 +2472,34 @@ const sectionArgs = () => ({
 	onReorderSections: fn(),
 	onDeleteSection: fn(),
 	onMoveBotToSection: fn(),
+	onCollapseSection: fn(),
 })
+
+const LiveSections = (args: AppSidebarProps) => {
+	const [collapsedSectionIds, setCollapsedSectionIds] = useState<string[]>([])
+
+	return (
+		<WorkspaceShell
+			defaultOpen
+			sidebar={
+				<AppSidebar
+					{...args}
+					collapsedSectionIds={collapsedSectionIds}
+					onCollapseSection={(id, isCollapsed) => {
+						args.onCollapseSection?.(id, isCollapsed)
+						setCollapsedSectionIds((held) =>
+							isCollapsed
+								? [...held, id]
+								: held.filter((collapsed) => collapsed !== id),
+						)
+					}}
+				/>
+			}
+		>
+			{null}
+		</WorkspaceShell>
+	)
+}
 
 const rowNames = (canvasElement: HTMLElement) =>
 	rowsIn(canvasElement).map(
@@ -2644,11 +2671,12 @@ export const EmptySection = meta.story({
 
 export const SectionCollapse = meta.story({
 	args: sectionArgs(),
+	render: (args) => <LiveSections {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The header as a disclosure. A plain click shuts the group under it and another opens it back, the card shrinking away with the rows it holds as one movement, the chevron turning from right to down to say which way it stands, and `aria-expanded` saying the same thing to a reader — Enter and Space do it too, since the header is a real button. Shutting a section never touches the sections around it and never reports anything to the host: this is the reader tidying their own panel, not a change to the space. The rows of a shut section stay in the markup rather than being torn out, so the rail still lists every bot when the panel itself is collapsed and no header is left to reopen anything. Check both directions, that the bots of the other sections hold their place, and that the chevron turn is dropped under `prefers-reduced-motion`. Pick `SectionRename` for what a right-click on the same header offers.",
+					"The header as a disclosure. A plain click shuts the group under it and another opens it back, the card shrinking away with the rows it holds as one movement, the chevron turning from right to down to say which way it stands, and `aria-expanded` saying the same thing to a reader — Enter and Space do it too, since the header is a real button. Which sections stand shut is the host's to hold: the header reports the section and whether it is now collapsed through `onCollapseSection`, and draws itself from the `collapsedSectionIds` it is given back, so the reader finds their panel as they left it after a space switch or a restart. Shutting a section never touches the sections around it. The rows of a shut section stay in the markup rather than being torn out, so the rail still lists every bot when the panel itself is collapsed and no header is left to reopen anything. Check both directions, that the bots of the other sections hold their place, and that the chevron turn is dropped under `prefers-reduced-motion`. Pick `SectionRename` for what a right-click on the same header offers.",
 			},
 		},
 	},
@@ -2674,6 +2702,16 @@ export const SectionCollapse = meta.story({
 		await expect(header).toHaveAttribute("aria-expanded", "true")
 		await expect(rowFor(canvasElement, "Beacon")).toBeVisible()
 
+		await expect(args.onCollapseSection).toHaveBeenNthCalledWith(
+			1,
+			"research",
+			true,
+		)
+		await expect(args.onCollapseSection).toHaveBeenNthCalledWith(
+			2,
+			"research",
+			false,
+		)
 		await expect(args.onReorderSections).not.toHaveBeenCalled()
 		await expect(args.onDeleteSection).not.toHaveBeenCalled()
 	},
@@ -2681,6 +2719,7 @@ export const SectionCollapse = meta.story({
 
 export const SectionCard = meta.story({
 	args: sectionArgs(),
+	render: (args) => <LiveSections {...args} />,
 	parameters: {
 		docs: {
 			description: {

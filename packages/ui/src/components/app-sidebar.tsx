@@ -215,6 +215,8 @@ const NO_CONVERSATIONS: AppSidebarConversation[] = []
 
 const NO_SECTIONS: AppSidebarSection[] = []
 
+const NO_COLLAPSED_SECTIONS: string[] = []
+
 const NO_SECTION = "__none__"
 
 interface AppSidebarSection {
@@ -323,6 +325,7 @@ interface SectionActions {
 	onReorderSections?: (ids: string[]) => void
 	onDeleteSection?: (id: string) => void
 	onMoveBotToSection?: (botId: string, sectionId: string | null) => void
+	onCollapseSection?: (id: string, isCollapsed: boolean) => void
 }
 
 interface SectionBranchProps {
@@ -940,6 +943,8 @@ interface RosterSectionProps {
 	section: AppSidebarSection
 	isFirst: boolean
 	isLast: boolean
+	isOpen: boolean
+	onOpenChange: (isOpen: boolean) => void
 	onRename?: (id: string, name: string) => void
 	onMove?: (id: string, by: number) => void
 	onDelete?: (id: string) => void
@@ -951,6 +956,8 @@ const RosterSection = ({
 	section,
 	isFirst,
 	isLast,
+	isOpen,
+	onOpenChange,
 	lift,
 	onRename,
 	onMove,
@@ -960,7 +967,6 @@ const RosterSection = ({
 	const { t } = useTranslation("bots")
 	const bodyId = useId()
 	const [isRenaming, setIsRenaming] = useState(false)
-	const [isOpen, setIsOpen] = useState(true)
 
 	return (
 		<AnimatedSidebarGroup
@@ -988,7 +994,7 @@ const RosterSection = ({
 								className={SECTION_TRIGGER}
 								onClick={() => {
 									if (lift.hasJustDropped()) return
-									setIsOpen((open) => !open)
+									onOpenChange(!isOpen)
 								}}
 								type="button"
 							>
@@ -1062,6 +1068,7 @@ interface BotRosterProps
 	selectedConversationId?: string
 	destinations: Space[]
 	sections: AppSidebarSection[]
+	collapsedSectionIds?: string[]
 	naming?: SectionNaming | null
 	onNaming?: (naming: SectionNaming | null) => void
 }
@@ -1073,6 +1080,8 @@ const BotRoster = ({
 	selectedConversationId,
 	destinations,
 	sections,
+	collapsedSectionIds = NO_COLLAPSED_SECTIONS,
+	onCollapseSection,
 	naming = null,
 	onNaming,
 	onCreateBot,
@@ -1301,7 +1310,11 @@ const BotRoster = ({
 						<RosterSection
 							isFirst={rank === 0}
 							isLast={rank === sections.length - 1}
+							isOpen={!collapsedSectionIds.includes(section.id)}
 							lift={sectionLift}
+							onOpenChange={(isOpen) =>
+								onCollapseSection?.(section.id, !isOpen)
+							}
 							onDelete={onDeleteSection}
 							onMove={moveSection}
 							onRename={onRenameSection}
@@ -1534,6 +1547,7 @@ interface AppSidebarProps
 	badgesBySpaceId?: Record<string, BotBadge>
 	sections?: AppSidebarSection[]
 	sectionsBySpaceId?: Record<string, AppSidebarSection[]>
+	collapsedSectionIds?: string[]
 	selectedBotId?: string
 	selectedConversationId?: string
 	onCreateBot?: () => void
@@ -1559,6 +1573,7 @@ const AppSidebarBase = ({
 	badgesBySpaceId,
 	sections = NO_SECTIONS,
 	sectionsBySpaceId,
+	collapsedSectionIds = NO_COLLAPSED_SECTIONS,
 	selectedBotId: selectedId,
 	selectedConversationId,
 	onSelectConversation,
@@ -1578,6 +1593,7 @@ const AppSidebarBase = ({
 	onReorderSections,
 	onDeleteSection,
 	onMoveBotToSection,
+	onCollapseSection,
 	spaces = [],
 	selectedSpaceId,
 	isSpaceSwitchingEnabled = true,
@@ -1600,6 +1616,7 @@ const AppSidebarBase = ({
 		ConversationRosterActions &
 		SectionActions &
 		RosterCreateActions = {
+		onCollapseSection,
 		onCreateBot,
 		onCreateSpace,
 		onCreateSection,
@@ -1709,6 +1726,7 @@ const AppSidebarBase = ({
 								<BotRoster
 									{...actions}
 									bots={rosterOf(space.id)}
+									collapsedSectionIds={collapsedSectionIds}
 									conversations={roomsOf(space.id)}
 									destinations={destinationsFrom(space.id)}
 									naming={space.id === selectedSpaceId ? naming : null}
@@ -1725,6 +1743,7 @@ const AppSidebarBase = ({
 						<BotRoster
 							{...actions}
 							bots={roster}
+							collapsedSectionIds={collapsedSectionIds}
 							conversations={rooms}
 							destinations={destinationsFrom(selectedSpaceId)}
 							naming={naming}

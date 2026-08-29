@@ -21,6 +21,7 @@ import type {
 	RuntimeSession,
 	Section,
 	Space,
+	SpacePreferences,
 } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import {
@@ -50,6 +51,12 @@ export const conversationStore: TranscriptStore = {
 	reorderSpaces: (ids: string[]) => invoke<void>("space_reorder", { ids }),
 
 	deleteSpace: (id: string) => invoke<void>("space_delete", { id }),
+
+	spacePreferences: (spaceId: string) =>
+		invoke<SpacePreferences>("space_preferences", { spaceId }),
+
+	setSpacePreferences: (spaceId: string, preferences: SpacePreferences) =>
+		invoke<SpacePreferences>("space_set_preferences", { spaceId, preferences }),
 
 	sections: (spaceId: string) => invoke<Section[]>("section_list", { spaceId }),
 

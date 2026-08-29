@@ -7,6 +7,7 @@ import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { ChatController } from "../chat/chat-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
+import type { CollapsedSectionsController } from "../sections/collapsed-sections-controller"
 import { newSectionFor } from "../sections/section-space"
 import {
 	type SectionsController,
@@ -20,6 +21,7 @@ import type { UserPluginController } from "../user/user-plugin-controller"
 export type SidebarActions = Required<
 	Pick<
 		AppSidebarProps,
+		| "onCollapseSection"
 		| "onCreateBot"
 		| "onCreateSection"
 		| "onCreateSpace"
@@ -47,6 +49,7 @@ export type SidebarActions = Required<
 export type SidebarActionsSource = {
 	attachments: AttachmentsController
 	chat: ChatController
+	collapsedSections: CollapsedSectionsController
 	roster: RosterController
 	runtimes: ConversationRuntimes
 	sections: SectionsController
@@ -59,6 +62,7 @@ export type SidebarActionsSource = {
 export const useSidebarActions = ({
 	attachments,
 	chat,
+	collapsedSections,
 	roster,
 	runtimes,
 	sections,
@@ -69,6 +73,12 @@ export const useSidebarActions = ({
 }: SidebarActionsSource): SidebarActions =>
 	useMemo(
 		() => ({
+			onCollapseSection: (id, isCollapsed) => {
+				const spaceId = spaceOfSection(sections.getState(), id)
+				if (spaceId) {
+					collapsedSections.collapse(spaceId, id, isCollapsed)
+				}
+			},
 			onCreateBot: () => {
 				void roster.create()
 			},
@@ -154,6 +164,7 @@ export const useSidebarActions = ({
 		[
 			attachments,
 			chat,
+			collapsedSections,
 			roster,
 			runtimes,
 			sections,
