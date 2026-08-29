@@ -23,9 +23,9 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 13, statements: BOT_SECTION },
 	Migration { version: 14, statements: CONVERSATION_ROOM },
 	Migration { version: 15, statements: BOT_PERMISSIONS },
-	Migration { version: 16, statements: SPACE_SETTINGS },
 	Migration { version: 17, statements: ROSTER_PIN },
 	Migration { version: 18, statements: OPTIONAL_SPACE_COLOUR },
+	Migration { version: 19, statements: SPACE_SETTINGS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -363,7 +363,7 @@ ALTER TABLE bots ADD COLUMN deleted_at INTEGER;
 ";
 
 const SPACE_SETTINGS: &str = "
-CREATE TABLE space_settings (
+CREATE TABLE IF NOT EXISTS space_settings (
 	space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
 	key TEXT NOT NULL,
 	value TEXT NOT NULL,
@@ -814,6 +814,69 @@ mod tests {
 		drop(upgraded);
 		fs::remove_dir_all(&fresh_dir).expect("cleanup");
 		fs::remove_dir_all(&upgraded_dir).expect("cleanup");
+	}
+
+	#[test]
+	fn every_step_declares_a_version_no_other_step_uses() {
+		for pair in MIGRATIONS.windows(2) {
+			assert!(
+				pair[0].version < pair[1].version,
+				"version {} is declared out of order or by two steps",
+				pair[1].version
+			);
+		}
+	}
+
+	#[test]
+	fn a_file_that_missed_the_space_settings_step_gains_the_table() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..MIGRATIONS.len() - 1])
+			.expect("the build that shipped without the settings step installs");
+		assert!(!has_table(&connection, "space_settings"), "the file already held the table");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert!(has_table(&connection, "space_settings"), "the file never gained the table");
+		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_that_already_holds_space_settings_keeps_its_rows() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply(&mut connection).expect("the schema installs");
+		write(
+			&connection,
+			"INSERT INTO space_settings (space_id, key, value)
+				VALUES ('personal', 'sidebar', 'open')",
+		)
+		.expect("a setting written by the build that shipped the table first");
+		connection
+			.pragma_update(None, "user_version", latest_version() - 1)
+			.expect("the version the merged build left behind");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(
+			connection
+				.query_row(
+					"SELECT value FROM space_settings WHERE space_id = 'personal'
+						AND key = 'sidebar'",
+					[],
+					|row| row.get::<_, String>(0)
+				)
+				.expect("query"),
+			"open",
+			"the step dropped a setting the older build had written"
+		);
+		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
 	fn schema_of(connection: &Connection) -> Vec<(String, String)> {
