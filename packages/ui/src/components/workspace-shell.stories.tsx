@@ -51,7 +51,7 @@ const ROSTER: AppSidebarBot[] = [
 ]
 
 const SIDEBAR = (
-	<AnimatedSidebar ariaLabel="Workspace">
+	<AnimatedSidebar ariaLabel="Workspace" variant="inset">
 		<AnimatedSidebarHeader>
 			<AnimatedSidebarTrigger aria-label="Toggle workspace">
 				<Icons.More className="size-4" />
@@ -102,6 +102,42 @@ const CHAT_WITH_TRIGGER = chat(
 
 const OVERFLOWING_CHILD = <div className="h-[300svh] w-full bg-muted" />
 
+const shellSurface = (canvas: ReturnType<typeof within>) =>
+	canvas.getByRole("main").parentElement as HTMLElement
+
+const paintOf = (element: HTMLElement) =>
+	getComputedStyle(element).backgroundColor
+
+const paintOfProbe = (paint: (swatch: HTMLElement) => void) => {
+	const swatch = document.createElement("div")
+	paint(swatch)
+	document.body.append(swatch)
+	const painted = paintOf(swatch)
+	swatch.remove()
+	return painted
+}
+
+const shellPaintFor = (tint?: string) =>
+	paintOfProbe((swatch) => {
+		swatch.className = "surface-shell"
+		if (tint) swatch.style.setProperty("--space-tint", tint)
+	})
+
+const paintFor = (value: string) =>
+	paintOfProbe((swatch) => {
+		swatch.style.backgroundColor = value
+	})
+
+const CARD_GUTTER = 4
+
+const expectCardDetached = async (card: HTMLElement, leadingEdge: number) => {
+	const edges = card.getBoundingClientRect()
+	await expect(edges.left - leadingEdge).toBe(CARD_GUTTER)
+	await expect(edges.top).toBe(CARD_GUTTER)
+	await expect(window.innerWidth - edges.right).toBe(CARD_GUTTER)
+	await expect(window.innerHeight - edges.bottom).toBe(CARD_GUTTER)
+}
+
 const meta = preview.meta({
 	title: "Layout/WorkspaceShell",
 	component: WorkspaceShell,
@@ -110,7 +146,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The application shell: a full-height sidebar column and the main column beside it. It is a thin composition over the sidebar foundation — the provider owns the open state and the Cmd/Ctrl+B shortcut, the sidebar owns its own collapse, and the shell only hands the room that is left to the main slot. Whatever fills that slot keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the columns on either side stay put.",
+					"The application shell: the sidebar surface is the window itself, reaching every edge with no seam, and the main column floats on it as a rounded card detached on all four sides. It is a thin composition over the sidebar foundation — the provider owns the open state and the Cmd/Ctrl+B shortcut, the sidebar owns its own collapse, and the shell only hands the room that is left to the card. Whatever fills that card keeps its own scroll boundary, so a `ThreadLayout` still scrolls its transcript alone while the surface around it stays put. `spaceTint` washes that surface with the colour of the space in view, faintly enough that it still reads as the app background.",
 			},
 		},
 	},
@@ -137,6 +173,14 @@ export const Default = meta.story({
 		await expect(canvas.getByRole("main")).toBeVisible()
 		await expect(canvas.getByRole("textbox", { name: "Prompt" })).toBeVisible()
 
+		const surface = shellSurface(canvas)
+		await expect(surface.style.getPropertyValue("--space-tint")).toBe("")
+		await expect(paintOf(surface)).toBe(shellPaintFor())
+		await expectCardDetached(
+			canvas.getByRole("main"),
+			sidebar.getBoundingClientRect().right,
+		)
+
 		const viewport = canvas.getByRole("region", { name: "Conversation" })
 		const column = canvas.getByRole("log")
 		await expect(viewport.getBoundingClientRect().left).toBeGreaterThanOrEqual(
@@ -145,6 +189,33 @@ export const Default = meta.story({
 		await expect(column.clientWidth).toBe(viewport.clientWidth)
 		await expect(viewport.clientHeight).toBeLessThan(window.innerHeight)
 		await expect(getComputedStyle(viewport).overflowY).toBe("auto")
+	},
+})
+
+export const SpaceTinted = meta.story({
+	args: {
+		sidebar: SIDEBAR,
+		spaceTint: "blue",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same shell with a space in view, whose colour washes the window surface. Check that the tint lands on the surface around the card and never on the card itself, that it stays faint enough for the sidebar text to read exactly as it does untinted, and that it is derived from the space colour custom property so a palette or colour-scheme change repaints it on its own. Moving between spaces settles the surface onto the new tint over a beat rather than swapping it, and reduced motion drops that settle. Pick `Default` for the untinted surface.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const surface = shellSurface(canvas)
+
+		await expect(surface.style.getPropertyValue("--space-tint")).toBe(
+			"var(--bot-blot-blue)",
+		)
+		await expect(paintOf(surface)).toBe(shellPaintFor("var(--bot-blot-blue)"))
+		await expect(paintOf(surface)).not.toBe(shellPaintFor())
+		await expect(paintOf(canvas.getByRole("main"))).toBe(
+			paintFor("var(--background)"),
+		)
 	},
 })
 
@@ -167,6 +238,13 @@ export const Collapsed = meta.story({
 		const mainHeight = main.getBoundingClientRect().height
 
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
+
+		await expectCardDetached(
+			main,
+			canvas
+				.getByRole("complementary", { name: "Workspace" })
+				.getBoundingClientRect().right,
+		)
 
 		await userEvent.click(trigger)
 		await expect(trigger).toHaveAttribute("aria-expanded", "true")
@@ -196,6 +274,7 @@ export const OffCanvas = meta.story({
 
 		await expect(trigger).toHaveAttribute("aria-expanded", "false")
 		await expect(canvas.queryByRole("complementary")).toBeNull()
+		await expectCardDetached(main, 0)
 
 		await userEvent.click(trigger)
 		await expect(trigger).toHaveAttribute("aria-expanded", "true")
@@ -228,7 +307,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"Both slots empty: no sidebar, no main content. Check that the main column still fills the viewport on its own background, with no leftover rail, gutter or seam on the leading edge where the sidebar would sit — an omitted sidebar must cost nothing rather than collapse the row. Pick `Default` for the populated shell.",
+					"Both slots empty: no sidebar, no main content. Check that the card still floats on the shell surface with the same gutter on all four edges, with no leftover rail or seam on the leading edge where the sidebar would sit — an omitted sidebar must cost nothing rather than collapse the row. Pick `Default` for the populated shell.",
 			},
 		},
 	},
@@ -236,6 +315,7 @@ export const Empty = meta.story({
 		const main = canvas.getByRole("main")
 		await expect(main).toBeVisible()
 		await expect(canvas.queryByRole("complementary")).toBeNull()
+		await expectCardDetached(main, 0)
 	},
 })
 

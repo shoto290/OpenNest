@@ -1,10 +1,16 @@
 import type { ReactNode } from "react"
 
 import {
+	type BotAvatarBlot,
+	blotTint,
+} from "@workspace/ui/components/bot-avatar"
+import {
 	AnimatedSidebarInset,
 	AnimatedSidebarProvider,
 	type AnimatedSidebarProviderProps,
 } from "@workspace/ui/components/motion/animated-sidebar"
+
+const CONTENT_CARD = "m-1 rounded-xl border border-border"
 
 interface WorkspaceShellProps
 	extends Pick<
@@ -19,11 +25,13 @@ interface WorkspaceShellProps
 		| "className"
 	> {
 	sidebar?: ReactNode
+	spaceTint?: BotAvatarBlot
 	children: ReactNode
 }
 
 const WorkspaceShell = ({
 	sidebar,
+	spaceTint,
 	open,
 	defaultOpen,
 	onOpenChange,
@@ -43,10 +51,13 @@ const WorkspaceShell = ({
 		defaultWidth={defaultWidth}
 		onWidthChange={onWidthChange}
 		isResizable={isResizable}
+		style={spaceTint ? { "--space-tint": blotTint(spaceTint) } : undefined}
 		className={className}
 	>
 		{sidebar}
-		<AnimatedSidebarInset>{children}</AnimatedSidebarInset>
+		<AnimatedSidebarInset className={CONTENT_CARD}>
+			{children}
+		</AnimatedSidebarInset>
 	</AnimatedSidebarProvider>
 )
 
