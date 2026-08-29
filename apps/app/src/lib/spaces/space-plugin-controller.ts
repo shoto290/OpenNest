@@ -1,5 +1,10 @@
 import { createQueue } from "../queue"
 import type { BotCommit } from "../bots/history-controller"
+import {
+	createSkillFilesController,
+	type OpenedSkillFile,
+	type SkillFilesController,
+} from "../bots/skill-files-controller"
 import type { BotSkill, BotSkillDraft } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -7,9 +12,10 @@ export type SpacePluginState = {
 	spaceId: string | null
 	skills: BotSkill[]
 	commits: BotCommit[]
+	file: OpenedSkillFile | null
 }
 
-export type SpacePluginController = {
+export type SpacePluginController = SkillFilesController & {
 	getState: () => SpacePluginState
 	subscribe: (listener: () => void) => () => void
 	open: (spaceId: string) => Promise<void>
@@ -26,6 +32,7 @@ export const initialSpacePluginState: SpacePluginState = {
 	spaceId: null,
 	skills: [],
 	commits: [],
+	file: null,
 }
 
 export const createSpacePluginController = (
@@ -77,7 +84,28 @@ export const createSpacePluginController = (
 	const readHistory = async (spaceId: string) =>
 		set({ commits: await store.spacePluginHistory(spaceId) })
 
+	const openSpace = () => state.spaceId ?? ""
+
+	const files = createSkillFilesController(
+		{
+			read: (skillId, path) =>
+				store.spacePluginSkillFile(openSpace(), skillId, path),
+			write: (skillId, path, text) =>
+				store.writeSpacePluginSkillFile(openSpace(), skillId, path, text),
+			remove: (skillId, path) =>
+				store.deleteSpacePluginSkillFile(openSpace(), skillId, path),
+		},
+		{
+			run: (task) => run(() => task()),
+			getFile: () => state.file,
+			setFile: (file) => set({ file }),
+			getSkills: () => state.skills,
+			applySkill,
+		},
+	)
+
 	return {
+		...files,
 		getState: () => state,
 
 		subscribe: (listener) => {

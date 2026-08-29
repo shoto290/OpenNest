@@ -133,6 +133,7 @@ const bots = {
 			triggering: "Triggering",
 			execution: "Execution",
 			tools: "Tools",
+			files: "Files",
 			advanced: "Advanced",
 		},
 		empty: {
@@ -275,6 +276,35 @@ const bots = {
 				"Its description and its body go with it. This cannot be undone.",
 			confirm: {
 				title: "Delete {{name}}?",
+			},
+		},
+		files: {
+			back: "All files",
+			save: "Save file",
+			loading: "Loading the file…",
+			retry: "Try again",
+			add: {
+				label: "New file",
+				placeholder: "reference/api.md",
+				hint: "A path under the skill's own directory. It is created empty and opened.",
+				action: "Add file",
+			},
+			text: {
+				label: "Contents",
+				placeholder: "What this file holds",
+			},
+			failure: {
+				read: "This file could not be read.",
+				write: "This file could not be saved. What you typed is still here.",
+				delete: "This file could not be deleted.",
+			},
+			delete: {
+				action: "Delete file",
+				description:
+					"The file goes from the skill's directory. This cannot be undone.",
+				confirm: {
+					title: "Delete {{path}}?",
+				},
 			},
 		},
 	},

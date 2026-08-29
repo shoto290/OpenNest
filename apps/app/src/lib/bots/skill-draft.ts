@@ -7,6 +7,12 @@ import {
 	SKILL_EFFORTS,
 	SKILL_FLAG_DEFAULTS,
 } from "@workspace/ui/components/bot-settings"
+import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
+
+import type {
+	OpenedSkillFile,
+	SkillFilesController,
+} from "./skill-files-controller"
 
 import type {
 	BotSkill,
@@ -127,4 +133,18 @@ export const toSkillDraft = (
 	license: edited.license || null,
 	compatibility: toValue(edited.compatibility),
 	metadata: toValue(edited.metadata),
+})
+
+export const toSkillFiles = (
+	skills: BotSkill[],
+	opened: OpenedSkillFile | null,
+	controller: SkillFilesController,
+): PluginSkillFiles => ({
+	paths: Object.fromEntries(skills.map((skill) => [skill.id, skill.files])),
+	opened,
+	onOpen: controller.openFile,
+	onClose: controller.closeFile,
+	onAdd: controller.addFile,
+	onSave: controller.saveFile,
+	onDelete: controller.removeFile,
 })

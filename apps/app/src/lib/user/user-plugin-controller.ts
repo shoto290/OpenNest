@@ -1,14 +1,20 @@
 import { createQueue } from "../queue"
 import type { BotCommit } from "../bots/history-controller"
+import {
+	createSkillFilesController,
+	type OpenedSkillFile,
+	type SkillFilesController,
+} from "../bots/skill-files-controller"
 import type { BotSkill, BotSkillDraft } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
 export type UserPluginState = {
 	skills: BotSkill[]
 	commits: BotCommit[]
+	file: OpenedSkillFile | null
 }
 
-export type UserPluginController = {
+export type UserPluginController = SkillFilesController & {
 	getState: () => UserPluginState
 	subscribe: (listener: () => void) => () => void
 	open: () => Promise<void>
@@ -24,6 +30,7 @@ export type UserPluginController = {
 export const initialUserPluginState: UserPluginState = {
 	skills: [],
 	commits: [],
+	file: null,
 }
 
 export const createUserPluginController = (
@@ -67,7 +74,24 @@ export const createUserPluginController = (
 	const readHistory = async () =>
 		set({ commits: await store.userPluginHistory() })
 
+	const files = createSkillFilesController(
+		{
+			read: (skillId, path) => store.userPluginSkillFile(skillId, path),
+			write: (skillId, path, text) =>
+				store.writeUserPluginSkillFile(skillId, path, text),
+			remove: (skillId, path) => store.deleteUserPluginSkillFile(skillId, path),
+		},
+		{
+			run,
+			getFile: () => state.file,
+			setFile: (file) => set({ file }),
+			getSkills: () => state.skills,
+			applySkill,
+		},
+	)
+
 	return {
+		...files,
 		getState: () => state,
 
 		subscribe: (listener) => {

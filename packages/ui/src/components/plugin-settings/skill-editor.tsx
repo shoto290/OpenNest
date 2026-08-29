@@ -17,6 +17,10 @@ import {
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	SkillFilesPanel,
+	type SkillFilesPanelProps,
+} from "@workspace/ui/components/plugin-settings/skill-files-panel"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
@@ -50,6 +54,7 @@ type SkillEditorProps = {
 	onBack: () => void
 	onSave: () => void
 	onDelete?: () => void
+	files?: SkillFilesPanelProps
 	isSystem?: boolean
 	defaultSection?: string
 	defaultConfirming?: boolean
@@ -64,6 +69,7 @@ const SkillEditor = ({
 	onBack,
 	onSave,
 	onDelete,
+	files,
 	isSystem = false,
 	defaultSection,
 	defaultConfirming,
@@ -189,6 +195,14 @@ const SkillEditor = ({
 					label={t("skills.section.tools")}
 					value="tools"
 				/>
+				{files ? (
+					<SettingsRailItem
+						icon={Icons.Folder}
+						iconsOnly={iconsOnly}
+						label={t("skills.section.files")}
+						value="files"
+					/>
+				) : null}
 				<SettingsRailItem
 					icon={Icons.Settings}
 					iconsOnly={iconsOnly}
@@ -406,6 +420,12 @@ const SkillEditor = ({
 						value={draft.hooks ?? ""}
 					/>
 				</SettingsScrollingPanel>
+
+				{files ? (
+					<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="files">
+						<SkillFilesPanel {...files} />
+					</Tabs.Panel>
+				) : null}
 
 				<SettingsScrollingPanel value="advanced">
 					<SettingsField

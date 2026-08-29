@@ -20,7 +20,7 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
-import { toSkillDraft, toSkillItem } from "@/lib/bots/skill-draft"
+import { toSkillDraft, toSkillFiles, toSkillItem } from "@/lib/bots/skill-draft"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
@@ -585,6 +585,11 @@ export function App() {
 					onSkillPreloadedChange={skills.controller.setPreloaded}
 					open={isEditing}
 					seed={selected.id}
+					skillFiles={toSkillFiles(
+						skills.state.skills,
+						skills.state.file,
+						skills.controller,
+					)}
 					skills={skills.state.skills.map(toSkillItem)}
 					showDanger={isShowingDanger}
 					value={toSettingsValue(selected)}
@@ -659,6 +664,11 @@ export function App() {
 						spaces.controller.describe(selectedSpace.id, value)
 					}
 					open={isSpaceEditing}
+					skillFiles={toSkillFiles(
+						spacePlugin.state.skills,
+						spacePlugin.state.file,
+						spacePlugin.controller,
+					)}
 					skills={spacePlugin.state.skills.map(toSkillItem)}
 					value={toSpaceSettingsValue(selectedSpace)}
 				/>
@@ -707,6 +717,11 @@ export function App() {
 				onSkillDelete={userPlugin.controller.removeSkill}
 				onSkillPreloadedChange={userPlugin.controller.setSkillPreloaded}
 				open={user.state.isSettingsOpen}
+				skillFiles={toSkillFiles(
+					userPlugin.state.skills,
+					userPlugin.state.file,
+					userPlugin.controller,
+				)}
 				skills={userPlugin.state.skills.map(toSkillItem)}
 				value={userSettings}
 			/>

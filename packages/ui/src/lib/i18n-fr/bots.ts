@@ -124,6 +124,7 @@ const bots = {
 			triggering: "Déclenchement",
 			execution: "Exécution",
 			tools: "Outils",
+			files: "Fichiers",
 			advanced: "Avancé",
 		},
 		empty: {
@@ -266,6 +267,36 @@ const bots = {
 				"Sa description et son contenu partent avec elle. C'est irréversible.",
 			confirm: {
 				title: "Supprimer {{name}} ?",
+			},
+		},
+		files: {
+			back: "Tous les fichiers",
+			save: "Enregistrer le fichier",
+			loading: "Chargement du fichier…",
+			retry: "Réessayer",
+			add: {
+				label: "Nouveau fichier",
+				placeholder: "reference/api.md",
+				hint: "Un chemin dans le dossier de la compétence. Il est créé vide puis ouvert.",
+				action: "Ajouter le fichier",
+			},
+			text: {
+				label: "Contenu",
+				placeholder: "Ce que ce fichier contient",
+			},
+			failure: {
+				read: "Ce fichier n'a pas pu être lu.",
+				write:
+					"Ce fichier n'a pas pu être enregistré. Ce que vous avez écrit est toujours là.",
+				delete: "Ce fichier n'a pas pu être supprimé.",
+			},
+			delete: {
+				action: "Supprimer le fichier",
+				description:
+					"Le fichier part du dossier de la compétence. C'est irréversible.",
+				confirm: {
+					title: "Supprimer {{path}} ?",
+				},
 			},
 		},
 	},

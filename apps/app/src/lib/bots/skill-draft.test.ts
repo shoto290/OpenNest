@@ -11,6 +11,7 @@ const A_SKILL: BotSkill = {
 	body: "One line per change.",
 	isPreloaded: true,
 	isSystem: false,
+	files: [],
 	whenToUse: "A release is being cut",
 	argumentHint: "[version]",
 	arguments: ["version", "draft"],
