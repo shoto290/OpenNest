@@ -8,7 +8,11 @@ import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 import { claudeSourceExecutable } from "./build"
 import { DELEGATE_SERVER } from "./delegate"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
-import { buildOptions, CLASSIFY_ASK_USER_QUESTION } from "./session"
+import {
+	buildOptions,
+	CLASSIFY_ASK_USER_QUESTION,
+	resolvedServers,
+} from "./session"
 import {
 	bundleLine,
 	layerFor,
@@ -18,6 +22,8 @@ import {
 } from "./system-layer"
 
 import type { SessionRequest } from "../provider"
+
+const reference = (key: string) => `\${secret:${key}}`
 
 const settingsOf = (options: ReturnType<typeof buildOptions>): Settings =>
 	options.settings as Settings
@@ -195,6 +201,76 @@ describe("buildOptions", () => {
 		expect(
 			Object.keys(buildOptions(request, undefined).mcpServers ?? {}),
 		).toEqual([DELEGATE_SERVER])
+	})
+
+	describe("over a bundle declaring a server behind a placeholder", () => {
+		let bundle: string
+
+		const declaring = (servers: Record<string, unknown>) => {
+			writeFileSync(
+				join(bundle, ".mcp.json"),
+				JSON.stringify({ mcpServers: servers }),
+			)
+			return { ...request, pluginPath: bundle }
+		}
+
+		beforeEach(() => {
+			bundle = mkdtempSync(join(tmpdir(), "opennest-session-servers-"))
+		})
+
+		afterEach(() => {
+			rmSync(bundle, { recursive: true, force: true })
+		})
+
+		it("hands the SDK the resolved server, never the placeholder", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },
+			})
+
+			const servers = buildOptions(
+				{ ...spawned, secrets: { a: "ghp_live" } },
+				undefined,
+			).mcpServers
+
+			expect(servers?.remote).toEqual({
+				command: "mcp-remote",
+				env: { TOKEN: "ghp_live" },
+			})
+		})
+
+		it("leaves out a server whose secret was never handed over", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("absent") } },
+				fine: { command: "local" },
+			})
+
+			const resolved = resolvedServers(spawned)
+
+			expect(Object.keys(resolved.servers)).toEqual(["fine"])
+			expect(resolved.missing).toEqual([{ server: "remote", key: "absent" }])
+			expect(
+				Object.keys(buildOptions(spawned, undefined).mcpServers ?? {}),
+			).not.toContain("remote")
+		})
+
+		it("keeps a resolved value out of the environment the agent inherits", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },
+			})
+			process.env.HTTPS_PROXY = "http://bean:ghp_live@proxy"
+
+			const options = buildOptions(
+				{ ...spawned, secrets: { a: "ghp_live" } },
+				undefined,
+			)
+
+			expect(JSON.stringify(options.env)).not.toContain("ghp_live")
+			expect(options.mcpServers?.remote).toEqual({
+				command: "mcp-remote",
+				env: { TOKEN: "ghp_live" },
+			})
+			delete process.env.HTTPS_PROXY
+		})
 	})
 
 	it("leaves an unbundled session without a server of any kind", () => {

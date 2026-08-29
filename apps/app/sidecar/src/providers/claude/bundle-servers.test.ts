@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { bundleServers, sessionServers } from "./bundle-servers"
+import { bundleServers, resolveServers, sessionServers } from "./bundle-servers"
+
+const reference = (key: string) => `\${secret:${key}}`
 
 const newBundle = (label: string) =>
 	mkdtempSync(join(tmpdir(), `opennest-${label}-`))
@@ -94,5 +96,108 @@ describe("sessionServers", () => {
 		declaringServers(bot, { own: { command: "only-bot" } })
 
 		expect(sessionServers(bot)).toEqual({ own: { command: "only-bot" } })
+	})
+})
+
+describe("resolveServers", () => {
+	type Declared = Parameters<typeof resolveServers>[0]
+
+	const declared = (servers: Record<string, unknown>) =>
+		servers as unknown as Declared
+
+	const remote = (declaration: Record<string, unknown>) =>
+		declared({ remote: declaration })
+
+	it("puts the handed-over value where the reference stood", () => {
+		const resolved = resolveServers(
+			remote({ env: { GITHUB_TOKEN: reference("github.GITHUB_TOKEN") } }),
+			{ "github.GITHUB_TOKEN": "ghp_live" },
+		)
+
+		expect(resolved.servers).toEqual(
+			remote({ env: { GITHUB_TOKEN: "ghp_live" } }),
+		)
+		expect(resolved.missing).toEqual([])
+	})
+
+	it("keeps the text around a reference and fills every one of them", () => {
+		const resolved = resolveServers(
+			remote({
+				headers: { Authorization: `Bearer ${reference("a")}` },
+				args: [
+					"--header",
+					`X-One: ${reference("a")}; X-Two: ${reference("b")}`,
+				],
+				url: `https://x/sse?api_key=${reference("b")}&team=bakers`,
+			}),
+			{ a: "AAA", b: "BBB" },
+		)
+
+		expect(resolved.servers).toEqual(
+			remote({
+				headers: { Authorization: "Bearer AAA" },
+				args: ["--header", "X-One: AAA; X-Two: BBB"],
+				url: "https://x/sse?api_key=BBB&team=bakers",
+			}),
+		)
+	})
+
+	it("leaves a declaration carrying no reference byte-identical", () => {
+		const declared = remote({
+			command: "python3",
+			args: ["server.py", "--verbose"],
+			env: { GITHUB_HOST: "example.com" },
+			url: "https://x/sse?team=bakers",
+		})
+
+		expect(resolveServers(declared, { a: "AAA" }).servers).toEqual(declared)
+	})
+
+	it("drops the server and names what was missing when a key was not handed over", () => {
+		const resolved = resolveServers(
+			declared({
+				remote: { env: { TOKEN: reference("absent") } },
+				fine: { env: { TOKEN: reference("a") } },
+			}),
+			{ a: "AAA" },
+		)
+
+		expect(resolved.servers).toEqual(
+			declared({ fine: { env: { TOKEN: "AAA" } } }),
+		)
+		expect(resolved.missing).toEqual([{ server: "remote", key: "absent" }])
+	})
+
+	it("names a missing key once however often the server asks for it", () => {
+		const resolved = resolveServers(
+			remote({ env: { ONE: reference("absent"), TWO: reference("absent") } }),
+			{},
+		)
+
+		expect(resolved.missing).toEqual([{ server: "remote", key: "absent" }])
+	})
+
+	it("reads a reference out of the handed-over secrets and never out of the environment", () => {
+		process.env.OPENNEST_TEST_SECRET = "from-the-environment"
+
+		const resolved = resolveServers(
+			remote({ env: { TOKEN: reference("OPENNEST_TEST_SECRET") } }),
+			{},
+		)
+
+		expect(resolved.servers).toEqual({})
+		expect(resolved.missing).toEqual([
+			{ server: "remote", key: "OPENNEST_TEST_SECRET" },
+		])
+		delete process.env.OPENNEST_TEST_SECRET
+	})
+
+	it("treats an inherited object key as absent rather than a secret", () => {
+		const resolved = resolveServers(
+			remote({ env: { TOKEN: reference("constructor") } }),
+			{},
+		)
+
+		expect(resolved.missing).toEqual([{ server: "remote", key: "constructor" }])
 	})
 })

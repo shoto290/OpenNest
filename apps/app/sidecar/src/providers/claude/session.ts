@@ -5,7 +5,11 @@ import {
 } from "@anthropic-ai/claude-agent-sdk"
 
 import { readBotSettings, type SettingsOptions } from "./bot-settings"
-import { sessionServers } from "./bundle-servers"
+import {
+	type ResolvedServers,
+	resolveServers,
+	sessionServers,
+} from "./bundle-servers"
 import type { BundleScope } from "./bundle-writes"
 import { delegateServer } from "./delegate"
 import { resolveExecutable } from "./executable"
@@ -65,10 +69,19 @@ const writablePaths = ({
 const localPlugins = (paths: string[]): NonNullable<Options["plugins"]> =>
 	paths.map((path) => ({ type: "local" as const, path }))
 
+export const resolvedServers = (request: SessionRequest): ResolvedServers =>
+	request.pluginPath
+		? resolveServers(
+				sessionServers(request.pluginPath, request.systemPluginPath),
+				request.secrets ?? {},
+			)
+		: { servers: {}, missing: [] }
+
 export const buildOptions = (
 	request: SessionRequest,
 	canUseTool: Options["canUseTool"],
 	settings: SettingsOptions = readBotSettings(request).options,
+	servers: ResolvedServers = resolvedServers(request),
 ): Options => {
 	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
@@ -86,7 +99,7 @@ export const buildOptions = (
 					plugins: localPlugins(pluginPaths(request)),
 					agent: request.agent,
 					mcpServers: {
-						...sessionServers(request.pluginPath, request.systemPluginPath),
+						...servers.servers,
 						...delegateServer({ cwd: request.cwd, managedSettings }),
 					},
 				}
@@ -119,9 +132,18 @@ export const openClaudeSession = async (
 	if (botSettings.rejection) {
 		emit({ type: "settings_rejected", detail: botSettings.rejection })
 	}
+	const servers = resolvedServers(request)
+	for (const { server, key } of servers.missing) {
+		emit({ type: "secret_unresolved", server, key })
+	}
 	const run = query({
 		prompt: prompts.stream,
-		options: buildOptions(request, permissions.canUseTool, botSettings.options),
+		options: buildOptions(
+			request,
+			permissions.canUseTool,
+			botSettings.options,
+			servers,
+		),
 	})
 
 	let closing = false

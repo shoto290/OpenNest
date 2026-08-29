@@ -24,6 +24,69 @@ export const bundleServers = (pluginPath: string): Servers => {
 	}
 }
 
+const SECRET_REFERENCE = /\$\{secret:([^}]+)\}/g
+
+export type MissingSecret = {
+	server: string
+	key: string
+}
+
+export type ResolvedServers = {
+	servers: Servers
+	missing: MissingSecret[]
+}
+
+const substituted = (
+	value: unknown,
+	resolve: (text: string) => string,
+): unknown => {
+	if (typeof value === "string") {
+		return resolve(value)
+	}
+	if (Array.isArray(value)) {
+		return value.map((item) => substituted(item, resolve))
+	}
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value).map(([key, item]) => [
+				key,
+				substituted(item, resolve),
+			]),
+		)
+	}
+	return value
+}
+
+export const resolveServers = (
+	servers: Servers,
+	secrets: Record<string, string>,
+): ResolvedServers => {
+	const kept: Servers = {}
+	const missing: MissingSecret[] = []
+
+	for (const [server, declaration] of Object.entries(servers)) {
+		const absent = new Set<string>()
+		const resolved = substituted(declaration, (text) =>
+			text.replace(SECRET_REFERENCE, (reference, key: string) => {
+				if (!Object.hasOwn(secrets, key)) {
+					absent.add(key)
+					return reference
+				}
+				return secrets[key] as string
+			}),
+		)
+		if (absent.size > 0) {
+			for (const key of absent) {
+				missing.push({ server, key })
+			}
+			continue
+		}
+		kept[server] = resolved as Servers[string]
+	}
+
+	return { servers: kept, missing }
+}
+
 export const sessionServers = (
 	pluginPath: string,
 	systemPluginPath?: string,
