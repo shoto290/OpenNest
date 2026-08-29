@@ -13,6 +13,7 @@ use super::contract::{
 use super::protocol::{self, ClosedFrame, Frame, OpenRequest};
 use super::sidecar::Sidecar;
 use super::translate::Translator;
+use crate::environment::contract::ResolvedEnv;
 
 pub const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -90,6 +91,7 @@ pub struct SessionOptions {
 	pub conversation_id: Option<String>,
 	pub startup_timeout: Duration,
 	pub extra_env: Vec<(String, String)>,
+	pub server_env: ResolvedEnv,
 }
 
 impl SessionOptions {
@@ -102,6 +104,7 @@ impl SessionOptions {
 			conversation_id: None,
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
+			server_env: ResolvedEnv::default(),
 		}
 	}
 
@@ -130,6 +133,11 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn serving(mut self, server_env: ResolvedEnv) -> Self {
+		self.server_env = server_env;
+		self
+	}
+
 	pub fn open_request(&self, partial_messages: bool) -> OpenRequest {
 		OpenRequest {
 			cwd: self.cwd.to_string_lossy().into_owned(),
@@ -146,6 +154,7 @@ impl SessionOptions {
 			conversation_id: self.conversation_id.clone(),
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
+			server_env: self.server_env.clone(),
 		}
 	}
 }
@@ -562,6 +571,47 @@ mod tests {
 		assert_eq!(plain.identity, None);
 		assert_eq!(plain.output_style, None);
 		assert_eq!(plain.settings_path, None);
+	}
+
+	#[test]
+	fn a_run_carries_the_environment_read_when_it_opened() {
+		let resolved = ResolvedEnv {
+			base: [("TOKEN".to_owned(), "held".to_owned())].into(),
+			per_server: [("clock".to_owned(), [("TOKEN".to_owned(), "narrow".to_owned())].into())]
+				.into(),
+			failure: None,
+		};
+		let request = options().serving(resolved.clone()).open_request(true);
+
+		assert_eq!(request.server_env, resolved);
+		assert_eq!(
+			serde_json::to_value(&request).expect("the request serializes")["serverEnv"],
+			serde_json::json!({
+				"base": { "TOKEN": "held" },
+				"perServer": { "clock": { "TOKEN": "narrow" } }
+			})
+		);
+	}
+
+	#[test]
+	fn a_run_opened_with_no_environment_leaves_the_field_out() {
+		let request = options().open_request(true);
+
+		assert!(request.server_env.is_untouched());
+		assert_eq!(
+			serde_json::to_value(&request).expect("the request serializes").get("serverEnv"),
+			None
+		);
+	}
+
+	#[test]
+	fn a_run_whose_environment_could_not_be_read_carries_the_failure() {
+		let request = options().serving(ResolvedEnv::failed("unreadable")).open_request(true);
+
+		assert_eq!(
+			serde_json::to_value(&request).expect("the request serializes")["serverEnv"],
+			serde_json::json!({ "base": {}, "perServer": {}, "failure": "unreadable" })
+		);
 	}
 
 	#[test]

@@ -16,6 +16,8 @@ use crate::bundles;
 use crate::db;
 use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::repositories::runtime_context::ParticipantKey;
+use crate::environment::contract::{EnvOwner, ResolvedEnv};
+use crate::environment::store as environment;
 use crate::private_files;
 
 pub const EVENT_CHANNEL: &str = "agent://event";
@@ -345,6 +347,17 @@ fn reported(binary_version: Option<String>, probe: Result<bool, TransportError>)
 struct RuntimeIdentity {
 	bundle: Option<Bundle>,
 	working_dir: Option<String>,
+	server_env: ResolvedEnv,
+}
+
+const ENV_UNREADABLE: &str = "the environment store could not be read";
+
+fn served_environment<R: Runtime>(app: &AppHandle<R>, bot: &StoredBot) -> ResolvedEnv {
+	let Some(root) = environment::root(app) else {
+		return ResolvedEnv::failed(ENV_UNREADABLE);
+	};
+	let owner = EnvOwner::Bot { id: bot.id.clone(), space_id: bot.space_id.clone() };
+	environment::resolve(&root, &owner).unwrap_or_else(|_| ResolvedEnv::failed(ENV_UNREADABLE))
 }
 
 async fn runtime_identity<R: Runtime>(
@@ -376,7 +389,8 @@ async fn runtime_identity<R: Runtime>(
 	if let Some(root) = root.as_deref() {
 		reconcile_bot(database, root, &bot).await;
 	}
-	RuntimeIdentity { bundle, working_dir: bot.working_dir }
+	let server_env = served_environment(app, &bot);
+	RuntimeIdentity { bundle, working_dir: bot.working_dir, server_env }
 }
 
 async fn settled_permissions(
@@ -468,6 +482,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
 	let options = SessionOptions::new(working_dir)
 		.bundled(identity.bundle)
+		.serving(identity.server_env)
 		.with_app_data(app.path().app_data_dir().ok())
 		.in_conversation(scope.conversation_id.clone());
 

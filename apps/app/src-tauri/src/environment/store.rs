@@ -4,7 +4,7 @@ use std::sync::{Mutex, PoisonError};
 
 use tauri::{AppHandle, Manager, Runtime};
 
-use super::contract::{EnvEntry, EnvError, EnvOwner, EnvScope};
+use super::contract::{EnvEntry, EnvError, EnvOwner, EnvScope, PerServer, ResolvedEnv, Values};
 use crate::private_files;
 
 const DIR_NAME: &str = "env";
@@ -57,6 +57,33 @@ pub fn list(root: &Path, scope: &EnvScope) -> Result<Vec<EnvEntry>, EnvError> {
 	}
 	entries.sort_by(|left, right| left.name.cmp(&right.name));
 	Ok(entries)
+}
+
+pub fn resolve(root: &Path, owner: &EnvOwner) -> Result<ResolvedEnv, EnvError> {
+	let mut base = Values::new();
+	for step in chain(&EnvScope::from(owner)).into_iter().rev() {
+		base.extend(stored(&file(root, &step)?)?);
+	}
+	let mut per_server = PerServer::new();
+	for name in server_names(root, owner)? {
+		let held = EnvScope::Server { name: name.clone(), owner: owner.clone() };
+		let own: Values = stored(&file(root, &held)?)?.into_iter().collect();
+		if !own.is_empty() {
+			per_server.insert(name, own);
+		}
+	}
+	Ok(ResolvedEnv { base, per_server, failure: None })
+}
+
+fn server_names(root: &Path, owner: &EnvOwner) -> Result<Vec<String>, EnvError> {
+	let Ok(listed) = fs::read_dir(servers_dir(root, owner)?) else {
+		return Ok(Vec::new());
+	};
+	Ok(listed
+		.flatten()
+		.filter(|entry| entry.path().is_dir())
+		.filter_map(|entry| entry.file_name().into_string().ok())
+		.collect())
 }
 
 pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str, bot_ids: &[String]) {
@@ -347,6 +374,47 @@ mod tests {
 			names(&seen_by_the_space),
 			vec![("ONLY_SPACE", &a_space(), &a_space()), ("SHARED", &a_space(), &a_space())]
 		);
+	}
+
+	fn an_owner() -> EnvOwner {
+		EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() }
+	}
+
+	fn holding(pairs: &[(&str, &str)]) -> Values {
+		pairs.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect()
+	}
+
+	#[test]
+	fn resolution_carries_the_bot_chain_as_the_base_and_each_server_as_an_overlay() {
+		let root = a_root("resolve");
+		let other = EnvScope::Server { name: "weather".to_owned(), owner: an_owner() };
+		set(&root, &a_space(), "SHARED", "space").expect("the space keeps it");
+		set(&root, &a_space(), "ONLY_SPACE", "space").expect("the space keeps it");
+		set(&root, &a_bot(), "SHARED", "bot").expect("the bot keeps it");
+		set(&root, &a_server(), "SHARED", "server").expect("the server keeps it");
+		set(&root, &other, "TOKEN", "weather").expect("the other server keeps it");
+
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+
+		assert_eq!(resolved.base, holding(&[("ONLY_SPACE", "space"), ("SHARED", "bot")]));
+		assert_eq!(resolved.per_server["clock"], holding(&[("SHARED", "server")]));
+		assert_eq!(resolved.per_server["weather"], holding(&[("TOKEN", "weather")]));
+		assert_eq!(resolved.failure, None);
+	}
+
+	#[test]
+	fn resolution_of_an_empty_store_carries_nothing() {
+		let root = a_root("resolve-empty");
+		assert_eq!(resolve(&root, &an_owner()).expect("the store reads"), ResolvedEnv::default());
+	}
+
+	#[test]
+	fn resolution_fails_when_a_file_of_the_chain_cannot_be_read() {
+		let root = a_root("resolve-unreadable");
+		private_files::write(&file(&root, &a_bot()).expect("the path"), b"KEPT=\"unterminated\n")
+			.expect("the file is planted");
+
+		assert!(matches!(resolve(&root, &an_owner()), Err(EnvError::Unreadable { .. })));
 	}
 
 	#[test]

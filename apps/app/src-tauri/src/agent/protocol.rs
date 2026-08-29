@@ -3,6 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use super::contract::AgentCommand;
+use crate::environment::contract::ResolvedEnv;
 
 fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
@@ -58,6 +59,8 @@ pub struct OpenRequest {
 	pub partial_messages: bool,
 	#[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
 	pub env: std::collections::BTreeMap<String, String>,
+	#[serde(skip_serializing_if = "ResolvedEnv::is_untouched")]
+	pub server_env: ResolvedEnv,
 }
 
 #[derive(Debug, Clone, Deserialize)]
