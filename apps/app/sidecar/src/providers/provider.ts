@@ -5,6 +5,12 @@ export type ProviderCapability =
 	| "modelCatalogue"
 	| "toolCatalogue"
 
+export type ServerEnv = {
+	base?: Record<string, string>
+	perServer?: Record<string, Record<string, string>>
+	failure?: string
+}
+
 export type SessionRequest = {
 	cwd: string
 	resume?: string
@@ -19,6 +25,7 @@ export type SessionRequest = {
 	appDataDir?: string
 	conversationId?: string
 	partialMessages: boolean
+	serverEnv?: ServerEnv
 }
 
 export type PermissionDecision =

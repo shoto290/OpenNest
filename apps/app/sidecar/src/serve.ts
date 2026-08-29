@@ -5,7 +5,9 @@ import { readLines } from "./read-lines"
 import type {
 	AgentSession,
 	PermissionDecision,
+	ServerEnv,
 	SessionFrame,
+	SessionRequest,
 } from "./providers/provider"
 import { requireProvider } from "./providers/registry"
 
@@ -24,10 +26,27 @@ type Command = {
 	appDataDir?: string
 	conversationId?: string
 	partialMessages?: boolean
+	serverEnv?: ServerEnv
 	text?: string
 	requestId?: string
 	decision?: PermissionDecision
 }
+
+export const sessionRequest = (command: Command): SessionRequest => ({
+	cwd: command.cwd ?? process.cwd(),
+	resume: command.resume,
+	pluginPath: command.pluginPath,
+	systemPluginPath: command.systemPluginPath,
+	userPluginPath: command.userPluginPath,
+	agent: command.agent,
+	identity: command.identity,
+	outputStyle: command.outputStyle,
+	settingsPath: command.settingsPath,
+	appDataDir: command.appDataDir,
+	conversationId: command.conversationId,
+	partialMessages: command.partialMessages ?? false,
+	serverEnv: command.serverEnv,
+})
 
 const write = (payload: unknown) => {
 	process.stdout.write(`${JSON.stringify(payload)}\n`)
@@ -43,23 +62,7 @@ export const serve = async (requestedId?: string) => {
 	const open = async (command: Command, session: string) => {
 		const emit = emitter(session)
 		try {
-			const opened = await provider.open(
-				{
-					cwd: command.cwd ?? process.cwd(),
-					resume: command.resume,
-					pluginPath: command.pluginPath,
-					systemPluginPath: command.systemPluginPath,
-					userPluginPath: command.userPluginPath,
-					agent: command.agent,
-					identity: command.identity,
-					outputStyle: command.outputStyle,
-					settingsPath: command.settingsPath,
-					appDataDir: command.appDataDir,
-					conversationId: command.conversationId,
-					partialMessages: command.partialMessages ?? false,
-				},
-				emit,
-			)
+			const opened = await provider.open(sessionRequest(command), emit)
 			emit({ type: "opened" })
 			return opened
 		} catch (error) {

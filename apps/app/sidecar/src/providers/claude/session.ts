@@ -5,13 +5,13 @@ import {
 } from "@anthropic-ai/claude-agent-sdk"
 
 import { readBotSettings, type SettingsOptions } from "./bot-settings"
-import { sessionServers } from "./bundle-servers"
 import type { BundleScope } from "./bundle-writes"
 import { delegateServer } from "./delegate"
 import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
 import { securityFloor } from "./security-floor"
+import { resolvedServers } from "./server-env"
 import { inheritedEnv } from "./session-env"
 import { layerFor } from "./system-layer"
 
@@ -69,6 +69,7 @@ export const buildOptions = (
 	request: SessionRequest,
 	canUseTool: Options["canUseTool"],
 	settings: SettingsOptions = readBotSettings(request).options,
+	servers: Options["mcpServers"] = resolvedServers(request).servers,
 ): Options => {
 	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
@@ -87,7 +88,7 @@ export const buildOptions = (
 					plugins: localPlugins(pluginPaths(request)),
 					agent: request.agent,
 					mcpServers: {
-						...sessionServers(request.pluginPath, request.systemPluginPath),
+						...servers,
 						...delegateServer({ cwd: request.cwd, managedSettings }),
 					},
 				}
@@ -120,9 +121,18 @@ export const openClaudeSession = async (
 	if (botSettings.rejection) {
 		emit({ type: "settings_rejected", detail: botSettings.rejection })
 	}
+	const { servers, rejections } = resolvedServers(request)
+	for (const detail of rejections) {
+		emit({ type: "server_env_rejected", detail })
+	}
 	const run = query({
 		prompt: prompts.stream,
-		options: buildOptions(request, permissions.canUseTool, botSettings.options),
+		options: buildOptions(
+			request,
+			permissions.canUseTool,
+			botSettings.options,
+			servers,
+		),
 	})
 
 	let closing = false

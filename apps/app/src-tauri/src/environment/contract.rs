@@ -1,4 +1,9 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
+
+pub type Values = BTreeMap<String, String>;
+pub type PerServer = BTreeMap<String, Values>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -37,6 +42,25 @@ pub struct EnvEntry {
 	pub name: String,
 	pub defined_in: EnvScope,
 	pub served_from: EnvScope,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedEnv {
+	pub base: Values,
+	pub per_server: PerServer,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub failure: Option<String>,
+}
+
+impl ResolvedEnv {
+	pub fn failed(detail: impl Into<String>) -> Self {
+		Self { failure: Some(detail.into()), ..Self::default() }
+	}
+
+	pub fn is_untouched(&self) -> bool {
+		self.base.is_empty() && self.per_server.is_empty() && self.failure.is_none()
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
