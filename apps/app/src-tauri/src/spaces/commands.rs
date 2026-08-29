@@ -58,8 +58,18 @@ pub async fn space_delete<R: Runtime>(
 ) -> Result<(), SpaceError> {
 	let held_bots = ready(&state)?.spaces().delete(id.clone()).await?;
 	bundles::space::remove(&app, &id);
+	forget_bundles(bundles::root(&app).as_deref(), &held_bots);
 	environment::store::forget_space(&app, &id, &held_bots);
 	Ok(())
+}
+
+fn forget_bundles(root: Option<&Path>, bot_ids: &[String]) {
+	let Some(root) = root else {
+		return;
+	};
+	for bot_id in bot_ids {
+		bundles::remove(root, bot_id);
+	}
 }
 
 #[tauri::command]
@@ -169,4 +179,51 @@ pub async fn space_plugin_revert<R: Runtime>(
 	bundles::space::revert(&path, &commit_id)
 		.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })?;
 	read_history(&path)
+}
+
+#[cfg(test)]
+mod tests {
+	use std::fs;
+
+	use super::*;
+
+	fn a_root(name: &str) -> PathBuf {
+		let root = std::env::temp_dir().join(format!("opennest-space-bundles-{name}"));
+		let _ = fs::remove_dir_all(&root);
+		root
+	}
+
+	fn a_bundle(root: &Path, bot_id: &str) -> PathBuf {
+		let bundle = bundles::dir(root, bot_id);
+		fs::create_dir_all(&bundle).expect("the bundle stands");
+		bundle
+	}
+
+	#[test]
+	fn the_bundles_the_deletion_cascaded_leave_the_disk() {
+		let root = a_root("cascaded");
+		let held = a_bundle(&root, "b1");
+		let other = a_bundle(&root, "b2");
+		let kept = a_bundle(&root, "b3");
+
+		forget_bundles(Some(&root), &["b1".to_owned(), "b2".to_owned()]);
+
+		assert!(!held.exists());
+		assert!(!other.exists());
+		assert!(kept.exists());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bundle_that_is_already_gone_does_not_hold_back_the_next_one() {
+		let root = a_root("absent");
+		let held = a_bundle(&root, "b2");
+
+		forget_bundles(Some(&root), &["b1".to_owned(), "b2".to_owned()]);
+
+		assert!(!held.exists());
+
+		let _ = fs::remove_dir_all(&root);
+	}
 }
