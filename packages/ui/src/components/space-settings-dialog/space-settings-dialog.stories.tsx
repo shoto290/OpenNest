@@ -93,7 +93,7 @@ export const Default = meta.story({
 		const dialog = await dialogIn()
 		await expect(dialog).toHaveAccessibleName("Release desk Settings")
 		await expect(slotsIn(dialog, "space-tint")).toHaveLength(
-			BLOT_TINTS.length + 1,
+			BLOT_TINTS.length + 2,
 		)
 
 		const space = within(dialog).getByRole("tab", { name: "Space" })

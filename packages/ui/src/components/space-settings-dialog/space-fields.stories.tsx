@@ -37,7 +37,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a space is called and the tint it is recognised by, the two fields that make up the space's own entry in its settings. The tint row offers the eight tints a bot's blot takes, as swatches rather than names, with the chosen one carrying a tick so the choice survives a reader who cannot tell the pastels apart. Both fields are fully controlled and report the whole value on every keystroke and every pick — there is no draft here and nothing to save. Deleting the space is not here: it lives in its own danger zone, `DangerZone`.",
+					"What a space is called and the tint it is recognised by, the two fields that make up the space's own entry in its settings. The tint row opens on a colourless choice and then offers the eight tints a bot's blot takes, as swatches rather than names, with the chosen one carrying a tick so the choice survives a reader who cannot tell the pastels apart. Both fields are fully controlled and report the whole value on every keystroke and every pick — there is no draft here and nothing to save. Deleting the space is not here: it lives in its own danger zone, `DangerZone`.",
 			},
 		},
 	},
@@ -64,7 +64,7 @@ export const Default = meta.story({
 			colour: "blue",
 		})
 
-		await expect(slotsIn(canvasElement, "space-tint")).toHaveLength(8)
+		await expect(slotsIn(canvasElement, "space-tint")).toHaveLength(9)
 		await expect(canvas.getByRole("radio", { name: "Blue" })).toBeChecked()
 	},
 })
@@ -74,14 +74,14 @@ export const Recoloured = meta.story({
 		docs: {
 			description: {
 				story:
-					"The swatch row being used. Check that each of the eight tints is reachable by name to a screen reader though it shows no text, that the arrow keys walk the row as one radio group, and that a pick reports the tint with the name untouched — the two fields never overwrite each other. Pick `Default` for the pair at rest.",
+					"The swatch row being used. Check that each of the eight tints is reachable by name to a screen reader though it shows no text, that the arrow keys walk the row as one radio group, and that a pick reports the tint with the name untouched — the two fields never overwrite each other. Pick `Colourless` for the choice the row opens on, `Default` for the pair at rest.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		const swatches = canvas.getAllByRole("radio")
 
-		await expect(swatches).toHaveLength(8)
+		await expect(swatches).toHaveLength(9)
 
 		await userEvent.click(canvas.getByRole("radio", { name: "Green" }))
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
@@ -89,6 +89,31 @@ export const Recoloured = meta.story({
 			colour: "green",
 		})
 		await expect(canvas.getByRole("radio", { name: "Green" })).toBeChecked()
+	},
+})
+
+export const Colourless = meta.story({
+	args: { value: { name: "Release desk" } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space carrying no colour, which is what a space is created as. Check that the choice standing for no colour opens the row and is the checked one while none of the eight tints is, and that picking a tint from there reports it — a space is never stuck colourless. Pick `Recoloured` for the row being walked.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const [first] = canvas.getAllByRole("radio")
+
+		await expect(first).toHaveAccessibleName("No colour")
+		await expect(first).toBeChecked()
+		await expect(canvas.getByRole("radio", { name: "Blue" })).not.toBeChecked()
+
+		await userEvent.click(canvas.getByRole("radio", { name: "Pink" }))
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: "Release desk",
+			colour: "pink",
+		})
 	},
 })
 

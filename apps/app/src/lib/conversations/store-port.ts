@@ -30,7 +30,7 @@ import type { AgentCommand } from "@/lib/agent/contract"
 export type TranscriptStore = TranscriptPort & {
 	spaces: () => Promise<Space[]>
 	createSpace: (name: string) => Promise<Space>
-	updateSpace: (id: string, name: string, colour: AvatarBlot) => Promise<Space>
+	updateSpace: (id: string, name: string, colour?: AvatarBlot) => Promise<Space>
 	reorderSpaces: (ids: string[]) => Promise<void>
 	deleteSpace: (id: string) => Promise<void>
 	spacePreferences: (spaceId: string) => Promise<SpacePreferences>

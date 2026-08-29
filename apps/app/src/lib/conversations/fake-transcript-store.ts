@@ -81,17 +81,6 @@ const DEFAULT_SPACE: Space = {
 	createdAt: 0,
 }
 
-const SPACE_TINTS = [
-	"red",
-	"yellow",
-	"green",
-	"cyan",
-	"blue",
-	"purple",
-	"pink",
-	"orange",
-] as const
-
 const chatIdOf = (botId: string) => `chat-${botId}`
 
 export const FAKE_CHAT_ID = chatIdOf(DEFAULT_BOT.id)
@@ -546,7 +535,7 @@ export const createFakeTranscriptStore = (
 			const space: Space = {
 				id: `space-${mintedSpaces}`,
 				name,
-				colour: SPACE_TINTS[spaces.size % SPACE_TINTS.length],
+				colour: null,
 				position: mintedSpaces,
 				createdAt: mintedSpaces,
 			}
@@ -554,12 +543,12 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve(space)
 		},
 
-		updateSpace: (id: string, name: string, colour: AvatarBlot) => {
+		updateSpace: (id: string, name: string, colour?: AvatarBlot) => {
 			const stored = spaces.get(id)
 			if (!stored) {
 				return refuse({ kind: "unknownSpace", id })
 			}
-			const written: Space = { ...stored, name, colour }
+			const written: Space = { ...stored, name, colour: colour ?? null }
 			spaces.set(id, written)
 			return Promise.resolve(written)
 		},

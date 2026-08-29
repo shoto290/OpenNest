@@ -61,7 +61,9 @@ const INSERTION_AFTER = "end-0"
 const DOT_MOTION =
 	"transition-transform duration-150 ease-out motion-reduce:transition-none"
 
-const DOT_RESTING = "scale-75 bg-sidebar-foreground/30"
+const DOT_RESTING = "scale-75"
+
+const DOT_UNTINTED = "bg-sidebar-foreground/30"
 
 const BADGE_RANK: BotBadge[] = ["attention", "failed", "done"]
 
@@ -77,7 +79,7 @@ const placedOrder = (spaces: Space[], id: string, at: number) => {
 }
 
 type SpaceDotProps = {
-	colour: BotAvatarBlot
+	colour?: BotAvatarBlot | null
 	badge?: BotBadge
 	isFilled?: boolean
 	className?: string
@@ -88,21 +90,26 @@ const SpaceDot = ({
 	badge,
 	isFilled = true,
 	className,
-}: SpaceDotProps) => (
-	<span
-		aria-hidden="true"
-		className={cn(
-			DOT,
-			DOT_MOTION,
-			!isFilled && DOT_RESTING,
-			badge && botBadgeRingVariants({ badge }),
-			className,
-		)}
-		data-badge={badge}
-		data-slot="space-dot"
-		style={isFilled ? { backgroundColor: blotTint(colour) } : undefined}
-	/>
-)
+}: SpaceDotProps) => {
+	const tint = isFilled && colour ? blotTint(colour) : undefined
+
+	return (
+		<span
+			aria-hidden="true"
+			className={cn(
+				DOT,
+				DOT_MOTION,
+				!isFilled && DOT_RESTING,
+				!tint && DOT_UNTINTED,
+				badge && botBadgeRingVariants({ badge }),
+				className,
+			)}
+			data-badge={badge}
+			data-slot="space-dot"
+			style={tint ? { backgroundColor: tint } : undefined}
+		/>
+	)
+}
 
 type SpaceSelection = {
 	spaces: Space[]

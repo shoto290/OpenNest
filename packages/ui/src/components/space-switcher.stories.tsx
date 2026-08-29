@@ -332,6 +332,33 @@ export const SingleSpace = meta.story({
 	},
 })
 
+export const Colourless = meta.story({
+	args: {
+		spaces: [
+			{ id: "perso", name: "Perso" },
+			{ id: "vocca", name: "Vocca" },
+			SPACES[2],
+		],
+		selectedSpaceId: "perso",
+	},
+	render: (args) => <LiveSwitcher spaces={args.spaces} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Spaces carrying no colour, which is what a space is created as. Check that their dots wear the muted neutral the strip already gives a closed space rather than borrowing a tint, that the open one is still told apart by its size, and that a coloured space beside them still shows its tint. Pick `WithDots` for a strip where every space is tinted.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const dots = slotsIn(canvasElement, "space-dot")
+
+		await expect(dots[0]?.style.backgroundColor).toBe("")
+		await expect(dots[1]?.style.backgroundColor).toBe("")
+		await expect(dots[2]?.style.backgroundColor).toBe("")
+	},
+})
+
 export const WithDots = meta.story({
 	render: (args) => <LiveSwitcher spaces={args.spaces} />,
 	parameters: {

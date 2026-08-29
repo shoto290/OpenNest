@@ -46,8 +46,8 @@ export const conversationStore: TranscriptStore = {
 
 	createSpace: (name: string) => invoke<Space>("space_create", { name }),
 
-	updateSpace: (id: string, name: string, colour: AvatarBlot) =>
-		invoke<Space>("space_update", { id, name, colour }),
+	updateSpace: (id: string, name: string, colour?: AvatarBlot) =>
+		invoke<Space>("space_update", { id, name, colour: colour ?? null }),
 
 	reorderSpaces: (ids: string[]) => invoke<void>("space_reorder", { ids }),
 

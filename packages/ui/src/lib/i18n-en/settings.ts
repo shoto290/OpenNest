@@ -76,6 +76,7 @@ const settings = {
 		},
 		colour: {
 			label: "Colour",
+			none: "No colour",
 		},
 		danger: {
 			delete: "Delete space",

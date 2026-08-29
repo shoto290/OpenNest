@@ -25,7 +25,7 @@ interface WorkspaceShellProps
 		| "className"
 	> {
 	sidebar?: ReactNode
-	spaceTint?: BotAvatarBlot
+	spaceTint?: BotAvatarBlot | null
 	children: ReactNode
 }
 

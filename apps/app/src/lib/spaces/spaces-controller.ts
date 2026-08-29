@@ -121,7 +121,7 @@ export const createSpacesController = (
 			if (!held) {
 				return
 			}
-			apply({ ...held, name: value.name, colour: value.colour })
+			apply({ ...held, name: value.name, colour: value.colour ?? null })
 			writes.push(id, value)
 		},
 

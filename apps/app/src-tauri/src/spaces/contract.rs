@@ -9,7 +9,7 @@ use crate::db::DatabaseError;
 pub struct Space {
 	pub id: String,
 	pub name: String,
-	pub colour: AvatarBlot,
+	pub colour: Option<AvatarBlot>,
 	pub position: i64,
 	pub created_at: i64,
 }
@@ -19,7 +19,7 @@ impl From<spaces::Space> for Space {
 		Self {
 			id: space.id,
 			name: space.name,
-			colour: space.colour.into(),
+			colour: space.colour.map(Into::into),
 			position: space.position,
 			created_at: space.created_at,
 		}
@@ -100,7 +100,7 @@ mod tests {
 			to_value(Space {
 				id: "s1".to_owned(),
 				name: "Vocca".to_owned(),
-				colour: AvatarBlot::Cyan,
+				colour: Some(AvatarBlot::Cyan),
 				position: 1,
 				created_at: 3,
 			})
@@ -109,6 +109,27 @@ mod tests {
 				"id": "s1",
 				"name": "Vocca",
 				"colour": "cyan",
+				"position": 1,
+				"createdAt": 3
+			})
+		);
+	}
+
+	#[test]
+	fn a_space_wearing_no_colour_crosses_to_the_front_with_none() {
+		assert_eq!(
+			to_value(Space {
+				id: "s1".to_owned(),
+				name: "Vocca".to_owned(),
+				colour: None,
+				position: 1,
+				created_at: 3,
+			})
+			.expect("the space serializes"),
+			json!({
+				"id": "s1",
+				"name": "Vocca",
+				"colour": null,
 				"position": 1,
 				"createdAt": 3
 			})
