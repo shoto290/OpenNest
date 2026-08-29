@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::agent::redact;
 
-use super::contract::{account_for, is_usable_key, SecretError, SERVICE};
+use super::contract::{account_for, is_usable_key, space_owner, SecretError, SecretScope, SERVICE};
 use super::index;
 use super::vault::Vault;
 
@@ -25,6 +25,7 @@ pub enum Backend {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Resolved {
 	pub values: BTreeMap<String, String>,
+	pub origins: BTreeMap<String, SecretScope>,
 	pub unreadable: Vec<String>,
 }
 
@@ -33,6 +34,8 @@ pub struct Resolved {
 pub struct StoredKeys {
 	pub readable: Vec<String>,
 	pub unreadable: Vec<String>,
+	pub inherited_readable: Vec<String>,
+	pub inherited_unreadable: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -84,26 +87,44 @@ impl SecretStore {
 		}
 	}
 
-	pub fn stored_keys(&self, bot_id: &str) -> StoredKeys {
-		let mut stored = StoredKeys::default();
-		for key in self.keys(bot_id) {
-			match self.read_value(&account_for(bot_id, &key)) {
-				Ok(Some(_)) => stored.readable.push(key),
-				Ok(None) | Err(_) => stored.unreadable.push(key),
+	pub fn stored_keys(&self, bot_id: &str, space_id: Option<&str>) -> StoredKeys {
+		let (readable, unreadable) = self.split_keys(bot_id);
+		let mut stored = StoredKeys { readable, unreadable, ..StoredKeys::default() };
+
+		let Some(space_id) = space_id else {
+			return stored;
+		};
+		let owned: BTreeSet<&String> =
+			stored.readable.iter().chain(stored.unreadable.iter()).collect();
+		let (readable, unreadable) = self.split_keys(&space_owner(space_id));
+		stored.inherited_readable =
+			readable.iter().filter(|key| !owned.contains(key)).cloned().collect();
+		stored.inherited_unreadable =
+			unreadable.iter().filter(|key| !owned.contains(key)).cloned().collect();
+		stored
+	}
+
+	fn split_keys(&self, owner: &str) -> (Vec<String>, Vec<String>) {
+		let mut readable = Vec::new();
+		let mut unreadable = Vec::new();
+		for key in self.keys(owner) {
+			match self.read_value(&account_for(owner, &key)) {
+				Ok(Some(_)) => readable.push(key),
+				Ok(None) | Err(_) => unreadable.push(key),
 			}
 		}
-		stored
+		(readable, unreadable)
 	}
 
 	pub fn unlock(&self, passphrase: &str) -> Result<(), SecretError> {
 		self.vault.lock().expect("vault").unlock(passphrase)
 	}
 
-	pub fn keys(&self, bot_id: &str) -> Vec<String> {
-		index::keys(&self.index_path(), bot_id)
+	pub fn keys(&self, owner: &str) -> Vec<String> {
+		index::keys(&self.index_path(), owner)
 	}
 
-	pub fn set(&self, bot_id: &str, key: &str, value: &str) -> Result<(), SecretError> {
+	pub fn set(&self, owner: &str, key: &str, value: &str) -> Result<(), SecretError> {
 		if !is_usable_key(key) {
 			return Err(SecretError::InvalidKey { key: key.to_owned() });
 		}
@@ -111,28 +132,43 @@ impl SecretStore {
 		if value.is_empty() {
 			return Err(SecretError::EmptyValue);
 		}
-		self.write_value(&account_for(bot_id, key), value)?;
+		self.write_value(&account_for(owner, key), value)?;
 		redact::remember(value);
-		index::remember(&self.index_path(), bot_id, key)
+		index::remember(&self.index_path(), owner, key)
 	}
 
-	pub fn delete(&self, bot_id: &str, key: &str) -> Result<(), SecretError> {
-		self.erase_value(&account_for(bot_id, key))?;
-		index::forget(&self.index_path(), bot_id, key)
+	pub fn delete(&self, owner: &str, key: &str) -> Result<(), SecretError> {
+		self.erase_value(&account_for(owner, key))?;
+		index::forget(&self.index_path(), owner, key)
 	}
 
-	pub fn resolve(&self, bot_id: &str) -> Resolved {
+	pub fn resolve(&self, bot_id: &str, space_id: Option<&str>) -> Resolved {
 		let mut resolved = Resolved::default();
-		for key in self.keys(bot_id) {
-			match self.read_value(&account_for(bot_id, &key)) {
+		if let Some(space_id) = space_id {
+			self.gather(&space_owner(space_id), SecretScope::Space, &mut resolved);
+		}
+		self.gather(bot_id, SecretScope::Bot, &mut resolved);
+
+		let values = &resolved.values;
+		let mut unreadable: Vec<String> =
+			resolved.unreadable.iter().filter(|key| !values.contains_key(*key)).cloned().collect();
+		unreadable.sort();
+		unreadable.dedup();
+		resolved.unreadable = unreadable;
+		resolved
+	}
+
+	fn gather(&self, owner: &str, scope: SecretScope, resolved: &mut Resolved) {
+		for key in self.keys(owner) {
+			match self.read_value(&account_for(owner, &key)) {
 				Ok(Some(value)) => {
 					redact::remember(&value);
+					resolved.origins.insert(key.clone(), scope);
 					resolved.values.insert(key, value);
 				}
 				Ok(None) | Err(_) => resolved.unreadable.push(key),
 			}
 		}
-		resolved
 	}
 
 	#[cfg(test)]
@@ -210,6 +246,117 @@ mod tests {
 		store
 	}
 
+	const SPACE: &str = "space:s1";
+
+	#[test]
+	fn a_bot_falls_back_to_what_its_space_holds() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+
+		let resolved = store.resolve("bot", Some("s1"));
+
+		assert_eq!(resolved.values.get("SHARED").map(String::as_str), Some("from-the-space"));
+		assert_eq!(resolved.origins.get("SHARED"), Some(&SecretScope::Space));
+	}
+
+	#[test]
+	fn a_bots_own_value_wins_over_the_one_its_space_holds() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+
+		let resolved = store.resolve("bot", Some("s1"));
+
+		assert_eq!(resolved.values.get("SHARED").map(String::as_str), Some("from-the-bot"));
+		assert_eq!(resolved.origins.get("SHARED"), Some(&SecretScope::Bot));
+	}
+
+	#[test]
+	fn a_bot_of_no_space_resolves_its_own_alone() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "OWN", "from-the-bot").expect("sets");
+
+		let resolved = store.resolve("bot", None);
+
+		assert_eq!(resolved.values.keys().collect::<Vec<_>>(), vec!["OWN"]);
+	}
+
+	#[test]
+	fn a_space_secret_lives_under_its_own_account_and_index_entry() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+
+		assert_eq!(store.keys(SPACE), vec!["SHARED".to_owned()]);
+		assert!(store.keys("bot").is_empty());
+		assert_eq!(
+			store.vault.lock().expect("vault").get("space:s1:SHARED").expect("reads"),
+			Some("from-the-space".to_owned())
+		);
+	}
+
+	#[test]
+	fn an_inherited_key_is_listed_beside_the_bots_own() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "OWN", "from-the-bot").expect("sets");
+
+		let stored = store.stored_keys("bot", Some("s1"));
+
+		assert_eq!(stored.readable, vec!["OWN".to_owned()]);
+		assert_eq!(stored.inherited_readable, vec!["SHARED".to_owned()]);
+	}
+
+	#[test]
+	fn a_key_held_at_both_scopes_is_listed_once_as_the_bots_own() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+
+		let stored = store.stored_keys("bot", Some("s1"));
+
+		assert_eq!(stored.readable, vec!["SHARED".to_owned()]);
+		assert!(stored.inherited_readable.is_empty());
+	}
+
+	#[test]
+	fn listing_answers_no_value_at_either_scope() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "OWN", "from-the-bot").expect("sets");
+
+		let listed = format!("{:?}", store.stored_keys("bot", Some("s1")));
+
+		assert!(!listed.contains("from-the-space"));
+		assert!(!listed.contains("from-the-bot"));
+	}
+
+	#[test]
+	fn deleting_a_space_secret_leaves_the_bots_own_of_that_name() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+
+		store.delete(SPACE, "SHARED").expect("deletes");
+
+		assert!(store.keys(SPACE).is_empty());
+		let resolved = store.resolve("bot", Some("s1"));
+		assert_eq!(resolved.values.get("SHARED").map(String::as_str), Some("from-the-bot"));
+	}
+
+	#[test]
+	fn a_key_unreadable_at_the_space_but_held_by_the_bot_is_not_called_unreadable() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+		store.vault.lock().expect("vault").remove("space:s1:SHARED").expect("removes");
+
+		let resolved = store.resolve("bot", Some("s1"));
+
+		assert!(resolved.unreadable.is_empty());
+		assert_eq!(resolved.values.get("SHARED").map(String::as_str), Some("from-the-bot"));
+	}
+
 	#[test]
 	fn a_stored_value_comes_back_for_its_own_bot_only() {
 		let store = a_store();
@@ -217,8 +364,8 @@ mod tests {
 
 		assert_eq!(store.keys("first"), vec!["TOKEN".to_owned()]);
 		assert!(store.keys("second").is_empty());
-		assert_eq!(store.resolve("first").values.get("TOKEN").map(String::as_str), Some("s3cret"));
-		assert!(store.resolve("second").values.is_empty());
+		assert_eq!(store.resolve("first", None).values.get("TOKEN").map(String::as_str), Some("s3cret"));
+		assert!(store.resolve("second", None).values.is_empty());
 	}
 
 	#[test]
@@ -243,7 +390,7 @@ mod tests {
 		store.set("bot", "TOKEN", "s3cret").expect("sets");
 		store.delete("bot", "TOKEN").expect("deletes");
 		assert!(store.keys("bot").is_empty());
-		assert!(store.resolve("bot").values.is_empty());
+		assert!(store.resolve("bot", None).values.is_empty());
 	}
 
 	#[test]
@@ -258,7 +405,7 @@ mod tests {
 		store.set("bot", "TOKEN", "s3cret").expect("sets");
 		store.vault.lock().expect("vault").remove("bot:TOKEN").expect("removes behind the index");
 
-		let resolved = store.resolve("bot");
+		let resolved = store.resolve("bot", None);
 		assert!(resolved.values.is_empty());
 		assert_eq!(resolved.unreadable, vec!["TOKEN".to_owned()]);
 	}
@@ -270,7 +417,7 @@ mod tests {
 		store.set("bot", "API_KEY", "k3y").expect("sets");
 		store.vault.lock().expect("vault").remove("bot:TOKEN").expect("removes behind the index");
 
-		let stored = store.stored_keys("bot");
+		let stored = store.stored_keys("bot", None);
 		assert_eq!(stored.readable, vec!["API_KEY".to_owned()]);
 		assert_eq!(stored.unreadable, vec!["TOKEN".to_owned()]);
 	}
@@ -280,7 +427,7 @@ mod tests {
 		let store = a_store();
 		store.set("bot", "TOKEN", "s3cret").expect("sets");
 
-		let stored = store.stored_keys("bot");
+		let stored = store.stored_keys("bot", None);
 		let named = format!("{:?}", stored);
 		assert!(!named.contains("s3cret"));
 	}
@@ -290,7 +437,7 @@ mod tests {
 		let store = a_store();
 		store.set("bot", "TOKEN", "  s3cret\n").expect("sets");
 
-		assert_eq!(store.resolve("bot").values.get("TOKEN").map(String::as_str), Some("s3cret"));
+		assert_eq!(store.resolve("bot", None).values.get("TOKEN").map(String::as_str), Some("s3cret"));
 	}
 
 	#[test]
@@ -299,7 +446,7 @@ mod tests {
 		store.set("bot", "TOKEN", "s3cret").expect("sets");
 
 		assert_eq!(store.set("bot", "TOKEN", " \t\n"), Err(SecretError::EmptyValue));
-		assert_eq!(store.resolve("bot").values.get("TOKEN").map(String::as_str), Some("s3cret"));
+		assert_eq!(store.resolve("bot", None).values.get("TOKEN").map(String::as_str), Some("s3cret"));
 	}
 
 	#[test]

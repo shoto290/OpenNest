@@ -346,6 +346,7 @@ fn reported(binary_version: Option<String>, probe: Result<bool, TransportError>)
 struct RuntimeIdentity {
 	bundle: Option<Bundle>,
 	working_dir: Option<String>,
+	space_id: Option<String>,
 }
 
 async fn runtime_identity<R: Runtime>(
@@ -377,7 +378,8 @@ async fn runtime_identity<R: Runtime>(
 	if let Some(root) = root.as_deref() {
 		reconcile_bot(database, root, &bot).await;
 	}
-	RuntimeIdentity { bundle, working_dir: bot.working_dir }
+	let space_id = (!bot.space_id.is_empty()).then_some(bot.space_id);
+	RuntimeIdentity { bundle, working_dir: bot.working_dir, space_id }
 }
 
 async fn settled_permissions(
@@ -469,7 +471,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
 	let secrets = app
 		.try_state::<SecretStore>()
-		.map(|store| store.resolve(&scope.bot_id))
+		.map(|store| store.resolve(&scope.bot_id, identity.space_id.as_deref()))
 		.unwrap_or_default();
 	let unreadable = secrets.unreadable;
 	let options = SessionOptions::new(working_dir)

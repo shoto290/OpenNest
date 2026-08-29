@@ -268,7 +268,7 @@ mod tests {
 	}
 
 	fn stored_value(layout: &Layout, key: &str) -> Option<String> {
-		layout.store.resolve("bot").values.get(key).cloned()
+		layout.store.resolve("bot", None).values.get(key).cloned()
 	}
 
 	#[test]

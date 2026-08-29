@@ -16,6 +16,8 @@ pub enum SecretError {
 	EmptyValue,
 	#[serde(rename_all = "camelCase")]
 	IndexUnwritable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	NoSpace { bot_id: String },
 }
 
 impl std::fmt::Display for SecretError {
@@ -28,6 +30,7 @@ impl std::fmt::Display for SecretError {
 			Self::InvalidKey { key } => write!(formatter, "{key} is not a usable secret name"),
 			Self::EmptyValue => write!(formatter, "a secret cannot be stored empty"),
 			Self::IndexUnwritable { detail } => write!(formatter, "the secret index could not be written: {detail}"),
+			Self::NoSpace { bot_id } => write!(formatter, "bot {bot_id} belongs to no space"),
 		}
 	}
 }
@@ -42,8 +45,35 @@ pub fn is_interpolated(value: &str) -> bool {
 	value.contains("${")
 }
 
-pub fn account_for(bot_id: &str, key: &str) -> String {
-	format!("{bot_id}:{key}")
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SecretScope {
+	#[default]
+	Bot,
+	Space,
+}
+
+const SPACE_OWNER_PREFIX: &str = "space:";
+
+pub fn space_owner(space_id: &str) -> String {
+	format!("{SPACE_OWNER_PREFIX}{space_id}")
+}
+
+pub fn owner_for(
+	scope: SecretScope,
+	bot_id: &str,
+	space_id: Option<&str>,
+) -> Result<String, SecretError> {
+	match scope {
+		SecretScope::Bot => Ok(bot_id.to_owned()),
+		SecretScope::Space => {
+			space_id.map(space_owner).ok_or(SecretError::NoSpace { bot_id: bot_id.to_owned() })
+		}
+	}
+}
+
+pub fn account_for(owner: &str, key: &str) -> String {
+	format!("{owner}:{key}")
 }
 
 const UNUSABLE_IN_KEY: [char; 4] = [':', '{', '}', '$'];
@@ -52,4 +82,36 @@ pub fn is_usable_key(key: &str) -> bool {
 	!key.is_empty()
 		&& !key.contains(UNUSABLE_IN_KEY)
 		&& key.chars().all(|letter| letter.is_ascii_graphic() || letter == ' ')
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn a_call_naming_no_scope_targets_the_bot() {
+		assert_eq!(owner_for(SecretScope::default(), "bot", Some("s1")), Ok("bot".to_owned()));
+	}
+
+	#[test]
+	fn the_space_scope_is_addressed_under_its_own_prefix() {
+		assert_eq!(
+			owner_for(SecretScope::Space, "bot", Some("s1")),
+			Ok("space:s1".to_owned())
+		);
+		assert_eq!(account_for("space:s1", "SHARED"), "space:s1:SHARED");
+	}
+
+	#[test]
+	fn the_space_scope_is_refused_to_a_bot_that_belongs_to_none() {
+		assert_eq!(
+			owner_for(SecretScope::Space, "bot", None),
+			Err(SecretError::NoSpace { bot_id: "bot".to_owned() })
+		);
+	}
+
+	#[test]
+	fn a_key_can_never_forge_a_scope_of_its_own() {
+		assert!(!is_usable_key("space:s1:SHARED"));
+	}
 }
