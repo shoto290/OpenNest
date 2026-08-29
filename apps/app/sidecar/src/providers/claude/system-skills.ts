@@ -12,6 +12,7 @@ const MARKED = "true"
 
 export type PreloadedSkill = {
 	name: string
+	directory: string
 	body: string
 }
 
@@ -44,7 +45,8 @@ const preloadedIn = (
 	skillsDir: string,
 	id: string,
 ): PreloadedSkill | undefined => {
-	const text = fileText(join(skillsDir, id, SKILL_NAME))
+	const directory = join(skillsDir, id)
+	const text = fileText(join(directory, SKILL_NAME))
 	const matched = FRONTMATTER.exec(text)
 	if (!matched) {
 		return undefined
@@ -57,7 +59,7 @@ const preloadedIn = (
 	if (!body) {
 		return undefined
 	}
-	return { name: frontValue(front, NAME_KEY) || id, body }
+	return { name: frontValue(front, NAME_KEY) || id, directory, body }
 }
 
 export const preloadedSkills = (pluginPath: string): PreloadedSkill[] => {

@@ -18,6 +18,152 @@ const DESCRIPTION: &str = "What every bot in OpenNest knows how to do.";
 const LEARN_DESCRIPTION: &str =
 	"How you remember. Applies when the user corrects you, tells you a preference or a fact you would have needed earlier, or asks you to remember something.";
 
+const REFERENCES_DIR: &str = "references";
+
+const SKILLS_REFERENCE: &str = "skills.md";
+const MCP_REFERENCE: &str = "mcp.md";
+const DETERMINISM_REFERENCE: &str = "determinism.md";
+
+const REFERENCES: [(&str, &str); 3] = [
+	(SKILLS_REFERENCE, SKILLS_TEXT),
+	(MCP_REFERENCE, MCP_TEXT),
+	(DETERMINISM_REFERENCE, DETERMINISM_TEXT),
+];
+
+const SKILLS_TEXT: &str = r#"# Writing a skill
+
+A skill is one directory. `SKILL.md` is the whole skill unless you bundle files beside it.
+
+## The frontmatter
+
+Two fields are required, and nothing else is.
+
+`name` is the identifier: lowercase letters, digits and hyphens only, 64 characters at
+most, and the same string as the directory it sits in.
+
+`description` is 1024 characters at most, written in the third person about the skill and
+not addressed to you. One sentence saying what the skill does, then the words and
+situations that should make a session reach for it. The description is all that is read
+before the skill is opened, so one that names the subject and not the trigger is a skill
+that never fires.
+
+Good: "Opens a pull request from the current branch. Use when the person asks to open a PR,
+raise a pull request, or send a branch for review."
+
+Bad: "Helps with pull requests."
+
+## The body
+
+Keep `SKILL.md` under 500 lines. It is read in full every time the skill fires, so it
+carries what every run needs and nothing more. When a subject only some runs need starts to
+crowd it, move that subject into a file beside the skill and name the file on one line
+saying when to open it.
+
+## What a skill may bundle
+
+`references/` holds files meant to be read: prose, tables, schemas, examples. A file there
+is opened by whoever needs it and stays one level deep, so a reference never sends the
+reader on to another reference.
+
+`scripts/` holds files meant to be executed: a script is run, not read into the answer. Its
+worth is that it does the same thing every time without anyone retyping it.
+
+The difference decides where a file goes. Ask what happens to it. If its content becomes
+part of the reasoning, it is a reference. If only what it does and what it prints matter,
+it is a script. A procedure written as prose in `scripts/` never gets run, and a program
+dropped in `references/` burns the window it is read into.
+"#;
+
+const MCP_TEXT: &str = r#"# Naming a tool in a skill
+
+## Write the whole name
+
+An MCP tool has two parts, the server it comes from and the tool itself. Whenever a skill
+names one, write it in full as `server:tool` — `github:create_pull_request`, never
+`create_pull_request` on its own. The bare name matches nothing, and two servers can carry
+the same tool name.
+
+## Which servers you can reach
+
+A session reaches the servers declared in your own `.mcp.json` and those declared in the
+system plugin. Nothing else is reachable, whatever else is installed on the machine. Before
+a skill names a tool, read those declarations and take the server name from there rather
+than from memory.
+
+## You never edit a `.mcp.json`
+
+That file belongs to the person. Adding a server, changing a command, removing one: none of
+it is yours, not in your own directory and not anywhere else. When a skill needs a server
+that is not declared, say so in your answer and leave the file to the person.
+
+## When the tool is not there
+
+A run can open without the server a skill names, because it was never declared, is turned
+off, or is down. Say what to do then on the step that names the tool: give the fallback
+that reaches the same result, the command or the request that stands in, and where there is
+none, say to stop and name the server that is missing. A skill that names a tool and says
+nothing about its absence fails quietly.
+"#;
+
+const DETERMINISM_TEXT: &str = r#"# How much freedom to leave
+
+## Three degrees
+
+Choose one per step, by what changes between two runs.
+
+A literal command, when the step is the same on every run. Write the command itself:
+`git push --set-upstream origin "$BRANCH"`, never "push the branch upstream". Any step that
+does not vary is written as the command rather than as a description of it, because a
+described command is retyped from memory each run and drifts, while a written one cannot.
+
+A template with named parameters, when the step keeps its shape and a few values change.
+Write the command with those values as named placeholders, and declare every placeholder
+under Inputs.
+
+Open judgment, when the step cannot be written as a command because the right move depends
+on what the run finds. Say what to reach and what to weigh, and leave the how alone. Keep
+it for the steps that need it: reaching for it because writing the command is tedious turns
+a procedure into a suggestion.
+
+## The shape
+
+Write a repeated procedure in three parts.
+
+Inputs lists every value that differs from one run to the next, one line each, with where
+it comes from. A value absent from that list is a constant, and a constant belongs written
+into the Procedure.
+
+Procedure is numbered steps in order, each one a literal command or a template whose
+placeholders are all declared in Inputs.
+
+Verify says how the run knows it worked: the command to run and the output that counts as
+success.
+
+## Opening a pull request
+
+### Inputs
+
+- `BRANCH`, the branch name, from the person or from the change being sent.
+- `MESSAGE`, the commit message, one Conventional Commits line.
+- `BODY`, the pull request body.
+
+### Procedure
+
+1. `git switch -c "$BRANCH"`
+2. `git add -A`
+3. `git commit -m "$MESSAGE"`
+4. `git push --set-upstream origin "$BRANCH"`
+5. `gh pr create --base main --head "$BRANCH" --title "$MESSAGE" --body "$BODY"`
+
+### Verify
+
+`gh pr view --json url,state` prints a state of `OPEN` and the address of the new pull
+request.
+
+Nothing else there varies. The base branch, the remote and the five commands are the same
+on every run, so they are written out instead of described.
+"#;
+
 fn learn_body() -> String {
 	format!(
 		r#"Your own directory is the one your instructions name as the place your skills live.
@@ -82,6 +228,15 @@ read at a glance. For a skill, update the one that covers the subject, merge two
 overlap into one, and create one only when none of them covers it. Keep each skill's
 `description` naming when it applies, so the next session knows when to reach for it.
 
+Three files sit next to this one, and you read the ones that match before you create a
+skill and before you rewrite one that already exists.
+
+- `{REFERENCES_DIR}/{SKILLS_REFERENCE}`, whenever you write a `SKILL.md`: what its
+  frontmatter must carry, how long it may run, and what it may bundle.
+- `{REFERENCES_DIR}/{MCP_REFERENCE}`, when the skill you are writing names an MCP tool.
+- `{REFERENCES_DIR}/{DETERMINISM_REFERENCE}`, when the skill carries steps meant to run the
+  same way every time.
+
 ## What to say afterwards
 
 After any write, overwrite `.learned.md` in the directory you wrote in, with a title line under
@@ -100,10 +255,10 @@ pub fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 }
 
 pub fn write(path: &Path) -> std::io::Result<()> {
-	private_files::replace(
-		&path.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME),
-		learn()?.as_bytes(),
-	)?;
+	private_files::replace(&learn_file(path), learn()?.as_bytes())?;
+	for (name, text) in REFERENCES {
+		private_files::replace(&reference_dir(path).join(name), text.as_bytes())?;
+	}
 	private_files::replace(&manifest_file(path), manifest().as_bytes())
 }
 
@@ -113,6 +268,14 @@ pub fn laid_down<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 
 fn manifest_file(path: &Path) -> PathBuf {
 	path.join(MANIFEST_DIR).join(MANIFEST_NAME)
+}
+
+fn learn_file(path: &Path) -> PathBuf {
+	path.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME)
+}
+
+fn reference_dir(path: &Path) -> PathBuf {
+	path.join(SKILLS_DIR).join(LEARN_ID).join(REFERENCES_DIR)
 }
 
 fn manifest() -> String {
@@ -162,12 +325,28 @@ mod tests {
 		assert_eq!(manifest["name"], PLUGIN_NAME);
 		assert_eq!(manifest["version"], VERSION);
 
-		let skill = path.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME);
-		let text = fs::read_to_string(&skill).expect("the skill reads");
+		let text = fs::read_to_string(learn_file(&path)).expect("the skill reads");
 		assert!(text.contains(&format!("{PRELOAD_KEY}: true")), "got {text}");
 		assert!(text.contains(&format!("{INVOCATION_KEY}: true")), "got {text}");
 		assert!(text.contains("`skills/<name>/SKILL.md`"), "got {text}");
 		assert!(!text.contains("PLUGIN_ROOT"), "got {text}");
+
+		let body = text.split("---\n").last().unwrap_or_default();
+		assert!(body.lines().count() < 120, "got {} lines", body.lines().count());
+
+		for (name, seeded) in REFERENCES {
+			let reference = reference_dir(&path).join(name);
+			assert_eq!(fs::read_to_string(&reference).expect("the reference reads"), seeded);
+			assert_eq!(body.matches(name).count(), 1, "got {body}");
+			for (other, _) in REFERENCES {
+				assert!(other == name || !seeded.contains(other), "got {seeded}");
+			}
+			assert!(
+				seeded.lines().count() <= 100 || seeded.contains("## Contents"),
+				"got {} lines in {name}",
+				seeded.lines().count()
+			);
+		}
 
 		let _ = fs::remove_dir_all(&path);
 	}
@@ -176,20 +355,24 @@ mod tests {
 	fn a_second_write_lays_the_same_plugin_down_over_a_hand_edit() {
 		let path = a_path("rewritten");
 		write(&path).expect("the plugin is written");
-		let first = fs::read_to_string(path.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME))
-			.expect("the skill reads");
+		let first = fs::read_to_string(learn_file(&path)).expect("the skill reads");
 		private_files::replace(&manifest_file(&path), b"{\"name\":\"mine\"}")
+			.expect("the hand edit lands");
+		private_files::replace(&reference_dir(&path).join(MCP_REFERENCE), b"mine")
 			.expect("the hand edit lands");
 
 		write(&path).expect("the plugin is written again");
 
 		let manifest = fs::read_to_string(manifest_file(&path)).expect("it reads");
 		assert!(manifest.contains(PLUGIN_NAME), "got {manifest}");
-		assert_eq!(
-			fs::read_to_string(path.join(SKILLS_DIR).join(LEARN_ID).join(SKILL_NAME))
-				.expect("the skill reads"),
-			first
-		);
+		for (name, seeded) in REFERENCES {
+			assert_eq!(
+				fs::read_to_string(reference_dir(&path).join(name))
+					.expect("the reference reads"),
+				seeded
+			);
+		}
+		assert_eq!(fs::read_to_string(learn_file(&path)).expect("the skill reads"), first);
 
 		let _ = fs::remove_dir_all(&path);
 	}

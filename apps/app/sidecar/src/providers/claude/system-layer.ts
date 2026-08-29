@@ -36,8 +36,11 @@ export const userLine = (userPluginPath: string): string =>
 export const spaceLine = (spacePluginPath: string): string =>
 	`What you learn about the project this space is for lives in ${spacePluginPath}, the directory every bot of this space reads, and that is where you write it.`
 
-const skillSection = ({ name, body }: PreloadedSkill): string =>
-	`# ${name}\n\n${body}`
+export const skillLine = (directory: string): string =>
+	`This skill lives in ${directory}, and every file it names sits under that directory.`
+
+const skillSection = ({ name, directory, body }: PreloadedSkill): string =>
+	`# ${name}\n\n${skillLine(directory)}\n\n${body}`
 
 const pluginSection = (
 	path: string | undefined,
