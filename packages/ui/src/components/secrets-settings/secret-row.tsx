@@ -1,10 +1,11 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import { Icons } from "@workspace/ui/components/icons"
 import type {
 	SecretRow as SecretRowValue,
 	SecretScope,
@@ -13,6 +14,9 @@ import type {
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import { SETTINGS_TAG_CLASS } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
+
+const ROW_CLASS =
+	"flex h-11 items-center gap-2 rounded-xl border border-border px-3"
 
 type SecretRowProps = {
 	row: SecretRowValue
@@ -23,99 +27,135 @@ type SecretRowProps = {
 
 const SecretRow = ({ row, value, onSave, onDelete }: SecretRowProps) => {
 	const { t } = useTranslation("settings")
-	const [typed, setTyped] = useState("")
-	const field = useRef<HTMLDivElement | null>(null)
+	const [typed, setTyped] = useState<string | null>(null)
 
 	const failure = value.failures[row.key]
-	const saved = value.saved[row.key]
-	const tookOver = value.tookOver[row.key]
 	const isSaving = value.saving.includes(row.key)
-	const isSavable = value.isReady && !isSaving && typed.trim().length > 0
-
-	const save = () => {
-		onSave(row.key, typed)
-		setTyped("")
-		field.current?.querySelector("input")?.focus()
-	}
-
+	const isEditing = typed !== null
 	const isInherited = row.servedBy !== null && !row.isOwn
 
+	const status = () => {
+		if (failure) return t(`secrets.failure.${failure}`)
+		if (value.saved[row.key]) return t("secrets.status.saved")
+
+		return t(`secrets.status.${row.state}`)
+	}
+
+	const save = () => {
+		onSave(row.key, typed ?? "")
+		setTyped(null)
+	}
+
+	const name = (
+		<span className="min-w-0 flex-1 truncate font-medium font-mono text-foreground text-xs">
+			{row.key}
+		</span>
+	)
+
+	if (isEditing) {
+		return (
+			<li className={ROW_CLASS}>
+				{name}
+				<form
+					className="flex min-w-0 flex-[2] items-center gap-2"
+					onSubmit={(event) => {
+						event.preventDefault()
+						save()
+					}}
+				>
+					<div className="min-w-0 flex-1">
+						<SettingsField
+							hideLabel
+							label={t("secrets.edit.label", { key: row.key })}
+							masked
+							onValueChange={setTyped}
+							placeholder={t("secrets.value.placeholder")}
+							value={typed}
+						/>
+					</div>
+					<Button
+						disabled={isSaving || typed.trim().length === 0}
+						size="sm"
+						type="submit"
+					>
+						{t("secrets.save")}
+					</Button>
+					<Button
+						onClick={() => setTyped(null)}
+						size="sm"
+						type="button"
+						variant="ghost"
+					>
+						{t("secrets.cancel")}
+					</Button>
+				</form>
+			</li>
+		)
+	}
+
 	return (
-		<li className="flex flex-col gap-2 rounded-xl border border-border p-3">
-			<div ref={field}>
-				<SettingsField
-					error={failure ? t(`secrets.failure.${failure}`) : undefined}
-					label={row.key}
-					masked
-					onValueChange={setTyped}
-					placeholder={t("secrets.value.placeholder")}
-					readOnly={!value.isReady}
-					value={typed}
-				/>
-			</div>
+		<li className={ROW_CLASS}>
+			{name}
+
+			<span className={cn(SETTINGS_TAG_CLASS, "text-foreground")}>
+				{status()}
+			</span>
+
+			{isInherited && row.servedBy ? (
+				<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
+					{t(`secrets.from.${row.servedBy}`)}
+				</span>
+			) : null}
 
 			{row.shadowed ? (
-				<p className="text-muted-foreground text-xs leading-relaxed">
-					{t(`secrets.shadowed.${row.shadowed}`)}
-				</p>
+				<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
+					{t(`secrets.overrides.${row.shadowed}`)}
+				</span>
 			) : null}
 
-			{saved ? (
-				<p className="text-muted-foreground text-xs leading-relaxed">
-					{t(`secrets.saved.${saved}`)}
-				</p>
+			<Button
+				aria-label={t("secrets.edit.action", { key: row.key })}
+				disabled={!value.isReady || isSaving}
+				onClick={() => setTyped("")}
+				size="icon-sm"
+				variant="ghost"
+			>
+				<Icons.Edit aria-hidden="true" />
+			</Button>
+
+			{row.isOwn ? (
+				<Button
+					aria-label={t("secrets.delete.action", { key: row.key })}
+					disabled={isSaving}
+					onClick={() => onDelete(row.key, value.scope)}
+					size="icon-sm"
+					variant="ghost"
+				>
+					<Icons.Delete aria-hidden="true" />
+				</Button>
 			) : null}
 
-			{tookOver ? (
-				<p className="text-muted-foreground text-xs leading-relaxed">
-					{t(`secrets.tookOver.${tookOver}`)}
-				</p>
+			{isInherited && row.servedBy ? (
+				<ConfirmDialog
+					confirmLabel={t(`secrets.delete.wider.${row.servedBy}`)}
+					description={t(`secrets.delete.confirm.${row.servedBy}`)}
+					isTriggerDisabled={isSaving}
+					onConfirm={() => row.servedBy && onDelete(row.key, row.servedBy)}
+					title={t("secrets.delete.title", { key: row.key })}
+					trigger={
+						<>
+							<Icons.Delete aria-hidden="true" />
+							<span className="sr-only">
+								{t(`secrets.delete.wider.${row.servedBy}`)}
+							</span>
+						</>
+					}
+					triggerClassName={buttonVariants({
+						variant: "ghost",
+						size: "icon-sm",
+					})}
+				/>
 			) : null}
-
-			<div className="flex items-center justify-between gap-2">
-				<div className="flex min-w-0 items-center gap-2">
-					<span className={cn(SETTINGS_TAG_CLASS, "text-foreground")}>
-						{t(`secrets.status.${row.state}`)}
-					</span>
-					{isInherited && row.servedBy ? (
-						<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
-							{t(`secrets.from.${row.servedBy}`)}
-						</span>
-					) : null}
-				</div>
-
-				<div className="flex shrink-0 items-center gap-2">
-					{row.isOwn ? (
-						<Button
-							disabled={isSaving}
-							onClick={() => onDelete(row.key, value.scope)}
-							size="sm"
-							variant="outline"
-						>
-							{t("secrets.delete.action")}
-						</Button>
-					) : null}
-
-					{isInherited && row.servedBy ? (
-						<ConfirmDialog
-							confirmLabel={t(`secrets.delete.wider.${row.servedBy}`)}
-							description={t(`secrets.delete.confirm.${row.servedBy}`)}
-							isTriggerDisabled={isSaving}
-							onConfirm={() => row.servedBy && onDelete(row.key, row.servedBy)}
-							title={t("secrets.delete.title", { key: row.key })}
-							trigger={t(`secrets.delete.wider.${row.servedBy}`)}
-							triggerClassName={buttonVariants({
-								variant: "outline",
-								size: "sm",
-							})}
-						/>
-					) : null}
-
-					<Button disabled={!isSavable} onClick={save} size="sm">
-						{row.isOwn ? t("secrets.replace") : t("secrets.save")}
-					</Button>
-				</div>
-			</div>
 		</li>
 	)
 }

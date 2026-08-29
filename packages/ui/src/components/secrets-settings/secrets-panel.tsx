@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@workspace/ui/components/button"
-import { Icons } from "@workspace/ui/components/icons"
 import { SecretRow } from "@workspace/ui/components/secrets-settings/secret-row"
 import {
 	isSecretKeyUsable,
@@ -50,49 +49,45 @@ const SecretsPanel = ({
 
 	return (
 		<>
-			<p className="shrink-0 text-muted-foreground text-xs leading-relaxed">
-				{value.isReady
-					? t(`secrets.notice.${value.scope}`)
-					: t("secrets.unavailable")}
-			</p>
-
 			<form
-				className="flex shrink-0 flex-col gap-2 rounded-xl border border-border p-3"
+				className="flex shrink-0 items-center gap-2"
 				onSubmit={(event) => {
 					event.preventDefault()
 					add()
 				}}
 			>
-				<SettingsField
-					hint={t("secrets.add.hint")}
-					label={t("secrets.add.key.label")}
-					onValueChange={setKey}
-					placeholder={t("secrets.add.key.placeholder")}
-					readOnly={!value.isReady}
-					value={key}
-				/>
-				<SettingsField
-					label={t("secrets.add.value.label")}
-					masked
-					onValueChange={setSecret}
-					placeholder={t("secrets.value.placeholder")}
-					readOnly={!value.isReady}
-					value={secret}
-				/>
-				<div className="flex justify-end">
-					<Button disabled={!isAddable} size="sm" type="submit">
-						<Icons.Add aria-hidden="true" className="size-3.5" />
-						{t("secrets.add.action")}
-					</Button>
+				<div className="min-w-0 flex-1">
+					<SettingsField
+						hideLabel
+						label={t("secrets.add.key.label")}
+						onValueChange={setKey}
+						placeholder={t("secrets.add.key.placeholder")}
+						readOnly={!value.isReady}
+						value={key}
+					/>
 				</div>
+				<div className="min-w-0 flex-1">
+					<SettingsField
+						hideLabel
+						label={t("secrets.add.value.label")}
+						masked
+						onValueChange={setSecret}
+						placeholder={t("secrets.add.value.placeholder")}
+						readOnly={!value.isReady}
+						value={secret}
+					/>
+				</div>
+				<Button disabled={!isAddable} size="sm" type="submit">
+					{t("secrets.add.action")}
+				</Button>
 			</form>
 
 			{rows.length === 0 ? (
-				<p className="shrink-0 text-muted-foreground text-xs leading-relaxed">
+				<p className="shrink-0 text-muted-foreground text-xs">
 					{t("secrets.empty")}
 				</p>
 			) : (
-				<ul className="flex list-none flex-col gap-3 p-0">
+				<ul className="flex list-none flex-col gap-2 p-0">
 					{rows.map((row) => (
 						<SecretRow
 							key={row.key}

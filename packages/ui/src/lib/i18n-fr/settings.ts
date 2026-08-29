@@ -100,63 +100,50 @@ const settings = {
 		},
 	},
 	secrets: {
-		notice: {
-			space:
-				"Les clés enregistrées ici répondent pour tous les bots de cet espace. Un bot, ou l'un de ses serveurs MCP, peut en remplacer une par sa propre valeur.",
-			bot: "Les clés enregistrées ici répondent pour ce bot et pour tous les serveurs MCP qu'il démarre. L'un de ces serveurs peut en remplacer une par sa propre valeur.",
-			server:
-				"Les clés enregistrées ici répondent pour ce seul serveur, avant tout ce que le bot ou l'espace détient sous le même nom.",
-		},
-		unavailable:
-			"Le coffre est injoignable : rien ne peut être enregistré ni supprimé pour l'instant.",
-		empty:
-			"Aucune clé enregistrée ni demandée. Nommez-en une ci-dessus pour lui donner une valeur, ou écrivez une référence de secret dans une configuration MCP et elle sera demandée ici.",
+		empty: "Aucun secret enregistré. Ajoutez-en un ci-dessus.",
 		add: {
-			hint: "Lettres, chiffres et tirets bas. C'est le nom auquel une configuration se réfère, pas la valeur.",
-			action: "Enregistrer la clé",
+			action: "Ajouter",
 			key: {
 				label: "Clé",
-				placeholder: "ATLAS_TOKEN",
+				placeholder: "ANTHROPIC_API_KEY",
 			},
 			value: {
 				label: "Valeur",
+				placeholder: "sk-ant-...",
 			},
 		},
 		value: {
-			placeholder: "Collez la valeur",
+			placeholder: "sk-ant-...",
 		},
+		edit: {
+			action: "Remplacer {{key}}",
+			label: "Nouvelle valeur pour {{key}}",
+		},
+		save: "Enregistrer",
+		cancel: "Annuler",
 		status: {
 			stored: "Enregistrée",
+			saved: "Enregistrée",
 			missing: "Absente",
 			unreadable: "À redonner",
 			unavailable: "Indisponible",
 		},
 		from: {
-			space: "Vient de cet espace",
-			bot: "Vient de ce bot",
-			server: "Vient de ce serveur",
+			space: "De l'espace",
+			bot: "Du bot",
+			server: "Du serveur",
 		},
-		shadowed: {
-			space:
-				"C'est cette valeur qui est utilisée, pas celle que cet espace détient sous le même nom.",
-			bot: "C'est cette valeur qui est utilisée, pas celle que ce bot détient sous le même nom.",
-			server:
-				"C'est cette valeur qui est utilisée, pas celle que ce serveur détient sous le même nom.",
+		overrides: {
+			space: "Prime l'espace",
+			bot: "Prime le bot",
+			server: "Prime le serveur",
 		},
-		saved: {
-			space: "Enregistrée dans cet espace.",
-			bot: "Enregistrée dans ce bot.",
-			server: "Enregistrée dans ce serveur.",
+		failure: {
+			save: "Non enregistrée",
+			delete: "Non supprimée",
 		},
-		tookOver: {
-			space: "C'est la valeur de cet espace qui sert maintenant.",
-			bot: "C'est la valeur de ce bot qui sert maintenant.",
-			server: "C'est la valeur de ce serveur qui sert maintenant.",
-		},
-		save: "Enregistrer",
-		replace: "Remplacer",
 		delete: {
-			action: "Supprimer",
+			action: "Supprimer {{key}}",
 			title: "Supprimer {{key}} ?",
 			wider: {
 				space: "Supprimer de l'espace",
@@ -170,11 +157,6 @@ const settings = {
 				server:
 					"Cette valeur appartient au serveur, et le serveur perd la clé aussitôt. C'est irréversible.",
 			},
-		},
-		failure: {
-			save: "Cette valeur n'a pas pu être enregistrée : la clé reste telle qu'elle était.",
-			delete:
-				"Cette valeur n'a pas pu être supprimée : la clé reste telle qu'elle était.",
 		},
 		vault: {
 			placeholder: "Votre phrase secrète",

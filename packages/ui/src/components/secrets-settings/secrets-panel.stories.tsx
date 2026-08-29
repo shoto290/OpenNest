@@ -29,7 +29,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The one place a reader answers a key, wherever they open it from: a space, a bot, or a single MCP server. The three read the same because the question is the same, and only the owner behind the panel changes: what a space answers serves every bot in it, what a bot answers serves every server it starts, and a server's own value wins over both. Each row says which of those owners is actually serving it, so a reader can tell an inherited value from one they own before replacing it. Keys arrive two ways, named by hand here or asked for by an MCP configuration that references one, and both land in the same list.",
+					"One line a key, the way GitHub and Vercel list theirs, wherever the reader opens it from: a space, a bot, or a single MCP server. Only the owner behind the panel changes, and what a space answers serves every bot in it, what a bot answers serves every server it starts, and a server's own value wins over both. That whole hierarchy is said in tags rather than sentences, because a reader scanning twelve keys for the one that is missing cannot read twelve paragraphs. The value is never rendered: a row shows a key, its state, where it comes from, and the two things that can be done to it.",
 			},
 		},
 	},
@@ -53,19 +53,15 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A bot answering nothing yet. There is no list to show, so the panel says how a key gets here at all: named above, or referenced by a server configuration. Check that naming a key alone is not enough to submit, since a key with no value stores nothing.",
+					"A bot answering nothing yet: one line to add a key, one sentence saying there are none. Check that naming a key alone is not enough to submit, since a key with no value stores nothing.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		await expect(
-			canvas.getByRole("button", { name: "Store the key" }),
-		).toBeDisabled()
+		await expect(canvas.getByRole("button", { name: "Add" })).toBeDisabled()
 
-		await userEvent.type(canvas.getByLabelText("Key"), "ATLAS_TOKEN")
-		await expect(
-			canvas.getByRole("button", { name: "Store the key" }),
-		).toBeDisabled()
+		await userEvent.type(canvas.getByLabelText("Key"), "ANTHROPIC_API_KEY")
+		await expect(canvas.getByRole("button", { name: "Add" })).toBeDisabled()
 	},
 })
 
@@ -74,22 +70,25 @@ export const DeclaredByHand = meta.story({
 		docs: {
 			description: {
 				story:
-					"A key named and answered in one go, with nothing referencing it yet. This is what makes the panel usable before any MCP server exists. Check the value is masked as it is typed and that both fields empty once it is stored.",
+					"A key named and answered on the one line at the top, with nothing referencing it yet. This is what makes the panel usable before any MCP server exists. Check the value is masked as it is typed and that both fields empty once it is stored.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.type(canvas.getByLabelText("Key"), "ATLAS_TOKEN")
-		await userEvent.type(canvas.getByLabelText("Value"), "sk-atlas")
+		await userEvent.type(canvas.getByLabelText("Key"), "ANTHROPIC_API_KEY")
+		await userEvent.type(canvas.getByLabelText("Value"), "sk-ant-atlas")
 
 		await expect(canvas.getByLabelText("Value")).toHaveAttribute(
 			"type",
 			"password",
 		)
 
-		await userEvent.click(canvas.getByRole("button", { name: "Store the key" }))
+		await userEvent.click(canvas.getByRole("button", { name: "Add" }))
 
-		await expect(args.onSave).toHaveBeenCalledWith("ATLAS_TOKEN", "sk-atlas")
+		await expect(args.onSave).toHaveBeenCalledWith(
+			"ANTHROPIC_API_KEY",
+			"sk-ant-atlas",
+		)
 		await expect(canvas.getByLabelText("Key")).toHaveValue("")
 	},
 })
@@ -106,7 +105,7 @@ export const AskedForByAServer = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Not set")).toBeVisible()
-		await expect(canvas.getByLabelText("ATLAS_TOKEN")).toBeVisible()
+		await expect(canvas.getByText("ATLAS_TOKEN")).toBeVisible()
 	},
 })
 
@@ -122,18 +121,16 @@ export const ServedByTheSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"A bot panel over two keys: one the space answers for it, one the bot answers itself over the space's. Reach for this to check a reader can tell the two apart before replacing either, and that only the value this bot owns offers the plain delete.",
+					"A bot panel over two keys: one the space answers for it, one the bot answers itself over the space's. Reach for this to check the two read apart at a glance, from tags rather than sentences, and that only the value this bot owns deletes in one click.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByText("From this space")).toBeVisible()
+		await expect(canvas.getByText("From space")).toBeVisible()
+		await expect(canvas.getByText("Overrides space")).toBeVisible()
 		await expect(
-			canvas.getByText(/instead of the one this space holds/i),
+			canvas.getByRole("button", { name: "Delete OWN" }),
 		).toBeVisible()
-		await expect(
-			canvas.getAllByRole("button", { name: "Delete" }),
-		).toHaveLength(1)
 		await expect(
 			canvas.getByRole("button", { name: "Delete from the space" }),
 		).toBeVisible()
@@ -152,14 +149,12 @@ export const ServerValueWinsOverBoth = meta.story({
 		docs: {
 			description: {
 				story:
-					"The narrowest panel there is, over a key all three owners answer. The server's own value is the one that starts it, and the row says so by naming the bot value it displaces rather than listing all three.",
+					"The narrowest panel there is, over a key all three owners answer. The server's own value is the one that starts it, and one tag says which value it displaces rather than listing all three.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(
-			canvas.getByText(/instead of the one this bot holds/i),
-		).toBeVisible()
+		await expect(canvas.getByText("Overrides bot")).toBeVisible()
 		await expect(canvas.getByText("Stored")).toBeVisible()
 	},
 })
@@ -186,8 +181,9 @@ export const DeletingAWiderValue = meta.story({
 		)
 		await expect(args.onDelete).not.toHaveBeenCalled()
 
-		const question = await screen.findByRole("alertdialog")
-		await expect(within(question).getByText("Delete SHARED?")).toBeVisible()
+		const question = await screen.findByRole("alertdialog", {
+			name: "Delete SHARED?",
+		})
 
 		await userEvent.click(
 			within(question).getByRole("button", { name: "Delete from the space" }),
@@ -211,15 +207,77 @@ export const AfterAWriteAndATakeover = meta.story({
 		docs: {
 			description: {
 				story:
-					"The two things the panel has to say after it acts, since neither shows in the list itself: which owner a value was written to, and which value serves a key now that the reader's own is gone. Without these a write at a shadowed owner would look like nothing happened.",
+					"What the panel says after it acts, without growing a line: the key just written reads Saved, and the key whose own value was deleted falls back to the space and says so where its origin already was.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expect(canvas.getByText("Saved to this bot.")).toBeVisible()
+		await expect(canvas.getByText("Saved")).toBeVisible()
+		await expect(canvas.getByText("From space")).toBeVisible()
+	},
+})
+
+export const ReplacingAValue = meta.story({
+	args: {
+		value: {
+			...BLANK_SECRETS,
+			scope: "bot",
+			entries: [heldBy("ANTHROPIC_API_KEY", ["bot"])],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The only moment a value field belongs on a row. A stored secret cannot be read back, so replacing it is the sole reason to type here, and the field arrives on the row that asked for it rather than sitting under every key. Check the row does not grow, that the typed value is masked, and that the field goes away once the value is handed over.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
 		await expect(
-			canvas.getByText("This space's value is used now."),
-		).toBeVisible()
+			canvas.queryByLabelText("New value for ANTHROPIC_API_KEY"),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Replace ANTHROPIC_API_KEY" }),
+		)
+
+		const field = canvas.getByLabelText("New value for ANTHROPIC_API_KEY")
+		await userEvent.type(field, "sk-ant-next")
+		await expect(field).toHaveAttribute("type", "password")
+
+		await userEvent.click(canvas.getByRole("button", { name: "Save" }))
+
+		await expect(args.onSave).toHaveBeenCalledWith(
+			"ANTHROPIC_API_KEY",
+			"sk-ant-next",
+		)
+		await expect(
+			canvas.queryByLabelText("New value for ANTHROPIC_API_KEY"),
+		).not.toBeInTheDocument()
+	},
+})
+
+export const ARefusedWrite = meta.story({
+	args: {
+		value: {
+			...BLANK_SECRETS,
+			scope: "bot",
+			entries: [heldBy("ANTHROPIC_API_KEY", ["bot"])],
+			failures: { ANTHROPIC_API_KEY: "save" },
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A write the store refused. The refusal takes the place of the state tag on the row it belongs to, so the list stays one line a key and the reader still sees which key failed and that nothing changed.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Not saved")).toBeVisible()
+		await expect(canvas.queryByText("Stored")).not.toBeInTheDocument()
 	},
 })
 
@@ -265,8 +323,6 @@ export const Unavailable = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Unavailable")).toBeVisible()
-		await expect(
-			canvas.getByRole("button", { name: "Store the key" }),
-		).toBeDisabled()
+		await expect(canvas.getByRole("button", { name: "Add" })).toBeDisabled()
 	},
 })

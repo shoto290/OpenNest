@@ -99,63 +99,50 @@ const settings = {
 		},
 	},
 	secrets: {
-		notice: {
-			space:
-				"Keys stored here answer for every bot in this space. A bot, or one of its MCP servers, can override any of them with a value of its own.",
-			bot: "Keys stored here answer for this bot and for every MCP server it starts. One of those servers can override any of them with a value of its own.",
-			server:
-				"Keys stored here answer for this server alone, ahead of anything the bot or the space holds under the same name.",
-		},
-		unavailable:
-			"The secret store cannot be reached, so nothing can be stored or deleted right now.",
-		empty:
-			"No key stored and none asked for. Name one above to store a value for it, or write a secret reference in an MCP configuration and it is asked for here.",
+		empty: "No secret stored yet. Add one above.",
 		add: {
-			hint: "Letters, digits and underscores. It is the name a configuration refers to, not the value.",
-			action: "Store the key",
+			action: "Add",
 			key: {
 				label: "Key",
-				placeholder: "ATLAS_TOKEN",
+				placeholder: "ANTHROPIC_API_KEY",
 			},
 			value: {
 				label: "Value",
+				placeholder: "sk-ant-...",
 			},
 		},
 		value: {
-			placeholder: "Paste the value",
+			placeholder: "sk-ant-...",
 		},
+		edit: {
+			action: "Replace {{key}}",
+			label: "New value for {{key}}",
+		},
+		save: "Save",
+		cancel: "Cancel",
 		status: {
 			stored: "Stored",
+			saved: "Saved",
 			missing: "Not set",
-			unreadable: "Needs a new value",
+			unreadable: "Needs value",
 			unavailable: "Unavailable",
 		},
 		from: {
-			space: "From this space",
-			bot: "From this bot",
-			server: "From this server",
+			space: "From space",
+			bot: "From bot",
+			server: "From server",
 		},
-		shadowed: {
-			space:
-				"This value is used instead of the one this space holds under the same name.",
-			bot: "This value is used instead of the one this bot holds under the same name.",
-			server:
-				"This value is used instead of the one this server holds under the same name.",
+		overrides: {
+			space: "Overrides space",
+			bot: "Overrides bot",
+			server: "Overrides server",
 		},
-		saved: {
-			space: "Saved to this space.",
-			bot: "Saved to this bot.",
-			server: "Saved to this server.",
+		failure: {
+			save: "Not saved",
+			delete: "Not deleted",
 		},
-		tookOver: {
-			space: "This space's value is used now.",
-			bot: "This bot's value is used now.",
-			server: "This server's value is used now.",
-		},
-		save: "Save",
-		replace: "Replace",
 		delete: {
-			action: "Delete",
+			action: "Delete {{key}}",
 			title: "Delete {{key}}?",
 			wider: {
 				space: "Delete from the space",
@@ -169,10 +156,6 @@ const settings = {
 				server:
 					"This value belongs to the server, and the server loses the key at once. This cannot be undone.",
 			},
-		},
-		failure: {
-			save: "This value could not be stored, so the key is left as it was.",
-			delete: "This value could not be deleted, so the key is left as it was.",
 		},
 		vault: {
 			placeholder: "Your passphrase",

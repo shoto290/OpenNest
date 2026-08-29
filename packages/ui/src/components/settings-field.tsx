@@ -23,6 +23,7 @@ type SettingsFieldProps = {
 	fill?: boolean
 	readOnly?: boolean
 	masked?: boolean
+	hideLabel?: boolean
 }
 
 const SettingsField = ({
@@ -37,6 +38,7 @@ const SettingsField = ({
 	fill = false,
 	readOnly = false,
 	masked = false,
+	hideLabel = false,
 }: SettingsFieldProps) => {
 	const { t } = useTranslation("common")
 	const id = useId()
@@ -49,7 +51,7 @@ const SettingsField = ({
 
 	return (
 		<div className={cn("flex flex-col gap-1.5", fill && "min-h-0 flex-1")}>
-			<label className={FIELD_LABEL_CLASS} htmlFor={id}>
+			<label className={hideLabel ? "sr-only" : FIELD_LABEL_CLASS} htmlFor={id}>
 				{label}
 			</label>
 			{rows || fill ? (
