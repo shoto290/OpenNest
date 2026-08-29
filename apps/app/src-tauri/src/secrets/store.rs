@@ -36,6 +36,15 @@ pub struct StoredKeys {
 	pub unreadable: Vec<String>,
 	pub inherited_readable: Vec<String>,
 	pub inherited_unreadable: Vec<String>,
+	pub entries: Vec<StoredKey>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredKey {
+	pub key: String,
+	pub scopes: Vec<SecretScope>,
+	pub served_by: Option<SecretScope>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -89,19 +98,26 @@ impl SecretStore {
 
 	pub fn stored_keys(&self, bot_id: &str, space_id: Option<&str>) -> StoredKeys {
 		let (readable, unreadable) = self.split_keys(bot_id);
-		let mut stored = StoredKeys { readable, unreadable, ..StoredKeys::default() };
-
-		let Some(space_id) = space_id else {
-			return stored;
+		let (space_readable, space_unreadable) = match space_id {
+			Some(space_id) => self.split_keys(&space_owner(space_id)),
+			None => (Vec::new(), Vec::new()),
 		};
-		let owned: BTreeSet<&String> =
-			stored.readable.iter().chain(stored.unreadable.iter()).collect();
-		let (readable, unreadable) = self.split_keys(&space_owner(space_id));
-		stored.inherited_readable =
-			readable.iter().filter(|key| !owned.contains(key)).cloned().collect();
-		stored.inherited_unreadable =
-			unreadable.iter().filter(|key| !owned.contains(key)).cloned().collect();
-		stored
+
+		let owned: BTreeSet<&String> = readable.iter().chain(unreadable.iter()).collect();
+		let inherited_readable: Vec<String> =
+			space_readable.iter().filter(|key| !owned.contains(key)).cloned().collect();
+		let inherited_unreadable: Vec<String> =
+			space_unreadable.iter().filter(|key| !owned.contains(key)).cloned().collect();
+
+		let entries = entries_of(&readable, &unreadable, &space_readable, &space_unreadable);
+
+		StoredKeys {
+			readable,
+			unreadable,
+			inherited_readable,
+			inherited_unreadable,
+			entries,
+		}
 	}
 
 	fn split_keys(&self, owner: &str) -> (Vec<String>, Vec<String>) {
@@ -218,6 +234,44 @@ impl SecretStore {
 	}
 }
 
+fn entries_of(
+	readable: &[String],
+	unreadable: &[String],
+	space_readable: &[String],
+	space_unreadable: &[String],
+) -> Vec<StoredKey> {
+	let held_by_bot: BTreeSet<&String> = readable.iter().chain(unreadable).collect();
+	let held_by_space: BTreeSet<&String> = space_readable.iter().chain(space_unreadable).collect();
+	let read_from_bot: BTreeSet<&String> = readable.iter().collect();
+	let read_from_space: BTreeSet<&String> = space_readable.iter().collect();
+
+	held_by_bot
+		.union(&held_by_space)
+		.map(|key| StoredKey {
+			key: (*key).clone(),
+			scopes: [
+				held_by_bot.contains(key).then_some(SecretScope::Bot),
+				held_by_space.contains(key).then_some(SecretScope::Space),
+			]
+			.into_iter()
+			.flatten()
+			.collect(),
+			served_by: served_from(key, &read_from_bot, &read_from_space),
+		})
+		.collect()
+}
+
+fn served_from(
+	key: &String,
+	read_from_bot: &BTreeSet<&String>,
+	read_from_space: &BTreeSet<&String>,
+) -> Option<SecretScope> {
+	if read_from_bot.contains(key) {
+		return Some(SecretScope::Bot);
+	}
+	read_from_space.contains(key).then_some(SecretScope::Space)
+}
+
 fn entry(account: &str) -> Result<keyring::Entry, SecretError> {
 	keyring::Entry::new(SERVICE, account)
 		.map_err(|error| SecretError::StoreUnavailable { detail: error.to_string() })
@@ -305,6 +359,94 @@ mod tests {
 
 		assert_eq!(stored.readable, vec!["OWN".to_owned()]);
 		assert_eq!(stored.inherited_readable, vec!["SHARED".to_owned()]);
+	}
+
+	fn entry_for<'a>(stored: &'a StoredKeys, key: &str) -> &'a StoredKey {
+		stored.entries.iter().find(|entry| entry.key == key).expect("the key is listed")
+	}
+
+	#[test]
+	fn a_key_held_at_both_scopes_is_reported_as_held_at_both() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+
+		let stored = store.stored_keys("bot", Some("s1"));
+
+		assert_eq!(
+			entry_for(&stored, "SHARED"),
+			&StoredKey {
+				key: "SHARED".to_owned(),
+				scopes: vec![SecretScope::Bot, SecretScope::Space],
+				served_by: Some(SecretScope::Bot),
+			}
+		);
+	}
+
+	#[test]
+	fn a_key_is_reported_on_one_entry_however_many_scopes_hold_it() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+		store.set("bot", "OWN", "from-the-bot").expect("sets");
+
+		let stored = store.stored_keys("bot", Some("s1"));
+
+		let names: Vec<&str> = stored.entries.iter().map(|entry| entry.key.as_str()).collect();
+		assert_eq!(names, vec!["OWN", "SHARED"]);
+	}
+
+	#[test]
+	fn a_key_unreadable_on_the_bot_is_reported_served_from_the_space() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+		store.vault.lock().expect("vault").remove("bot:SHARED").expect("removes");
+
+		let stored = store.stored_keys("bot", Some("s1"));
+
+		let entry = entry_for(&stored, "SHARED");
+		assert_eq!(entry.scopes, vec![SecretScope::Bot, SecretScope::Space]);
+		assert_eq!(entry.served_by, Some(SecretScope::Space));
+		assert_eq!(
+			store.resolve("bot", Some("s1")).origins.get("SHARED"),
+			Some(&SecretScope::Space)
+		);
+	}
+
+	#[test]
+	fn a_key_unreadable_at_every_scope_is_reported_served_by_none() {
+		let store = a_store();
+		store.set("bot", "OWN", "from-the-bot").expect("sets");
+		store.vault.lock().expect("vault").remove("bot:OWN").expect("removes");
+
+		let stored = store.stored_keys("bot", Some("s1"));
+
+		assert_eq!(entry_for(&stored, "OWN").served_by, None);
+	}
+
+	#[test]
+	fn a_bot_of_no_space_reports_no_key_held_at_both_scopes() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+
+		let stored = store.stored_keys("bot", None);
+
+		assert_eq!(entry_for(&stored, "SHARED").scopes, vec![SecretScope::Bot]);
+		assert!(!stored.entries.iter().any(|entry| entry.scopes.len() > 1));
+	}
+
+	#[test]
+	fn the_listing_answers_no_value_on_any_entry() {
+		let store = a_store();
+		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
+		store.set("bot", "SHARED", "from-the-bot").expect("sets");
+
+		let answered = serde_json::to_string(&store.stored_keys("bot", Some("s1"))).expect("json");
+
+		assert!(!answered.contains("from-the-space"));
+		assert!(!answered.contains("from-the-bot"));
 	}
 
 	#[test]
