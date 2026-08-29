@@ -11,6 +11,10 @@ pub fn keys(path: &Path, bot_id: &str) -> Vec<String> {
 	read(path).remove(bot_id).unwrap_or_default()
 }
 
+pub fn owners_under(path: &Path, prefix: &str) -> Vec<String> {
+	read(path).into_keys().filter(|owner| owner.starts_with(prefix)).collect()
+}
+
 pub fn remember(path: &Path, bot_id: &str, key: &str) -> Result<(), SecretError> {
 	let mut names = read(path);
 	let kept = names.entry(bot_id.to_owned()).or_default();

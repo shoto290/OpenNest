@@ -243,11 +243,19 @@ pub fn open_command(session: &str, request: &OpenRequest) -> Value {
 	)
 }
 
+pub type SecretsByServer =
+	std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>;
+
 pub fn secrets_command(
 	session: &str,
 	secrets: &std::collections::BTreeMap<String, String>,
+	by_server: &SecretsByServer,
 ) -> Value {
-	command("secrets", session, serde_json::json!({ "secrets": secrets }))
+	command(
+		"secrets",
+		session,
+		serde_json::json!({ "secrets": secrets, "serverSecrets": by_server }),
+	)
 }
 
 pub fn prompt_command(session: &str, text: &str) -> Value {

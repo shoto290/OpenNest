@@ -9,6 +9,7 @@ use super::contract::{
 	AgentEvent, CheckReport, ConnectionState, EvolvedBundle, PermissionDecision, RuntimeScope,
 	ScopedEvent, SessionHandle, TransportError,
 };
+use super::protocol;
 use super::redact;
 use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
@@ -469,15 +470,23 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	let sink: Arc<dyn EventSink> =
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
-	let secrets = app
-		.try_state::<SecretStore>()
+	let store = app.try_state::<SecretStore>();
+	let secrets = store
+		.as_ref()
 		.map(|store| store.resolve(&scope.bot_id, identity.space_id.as_deref()))
+		.unwrap_or_default();
+	let server_secrets = store
+		.as_ref()
+		.map(|store| {
+			secrets_by_server(store, &scope.bot_id, identity.space_id.as_deref())
+		})
 		.unwrap_or_default();
 	let unreadable = secrets.unreadable;
 	let options = SessionOptions::new(working_dir)
 		.bundled(identity.bundle)
 		.with_app_data(app.path().app_data_dir().ok())
-		.with_secrets(secrets.values);
+		.with_secrets(secrets.values)
+		.with_server_secrets(server_secrets);
 
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
@@ -513,6 +522,21 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	}
 	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Ready });
 	Ok(handle)
+}
+
+fn secrets_by_server(
+	store: &SecretStore,
+	bot_id: &str,
+	space_id: Option<&str>,
+) -> protocol::SecretsByServer {
+	store
+		.servers_holding_a_secret(bot_id)
+		.into_iter()
+		.map(|server| {
+			let resolved = store.resolve_for_server(bot_id, space_id, &server);
+			(server, resolved.values)
+		})
+		.collect()
 }
 
 async fn forget_the_id_a_refusal_blames(

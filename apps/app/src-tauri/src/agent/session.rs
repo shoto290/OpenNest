@@ -90,6 +90,7 @@ pub struct SessionOptions {
 	pub startup_timeout: Duration,
 	pub extra_env: Vec<(String, String)>,
 	pub secrets: BTreeMap<String, String>,
+	pub server_secrets: protocol::SecretsByServer,
 }
 
 impl SessionOptions {
@@ -102,6 +103,7 @@ impl SessionOptions {
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
 			secrets: BTreeMap::new(),
+			server_secrets: protocol::SecretsByServer::new(),
 		}
 	}
 
@@ -122,6 +124,11 @@ impl SessionOptions {
 
 	pub fn with_secrets(mut self, secrets: BTreeMap<String, String>) -> Self {
 		self.secrets = secrets;
+		self
+	}
+
+	pub fn with_server_secrets(mut self, by_server: protocol::SecretsByServer) -> Self {
+		self.server_secrets = by_server;
 		self
 	}
 
@@ -194,7 +201,9 @@ impl Session {
 
 		let request = options.open_request(sidecar.supports(PARTIAL_MESSAGES));
 		let session = Self { sidecar, key, shared, sink, resumed };
-		if let Err(error) = session.hand_over_secrets_then_open(&request, &options.secrets) {
+		if let Err(error) =
+			session.hand_over_secrets_then_open(&request, &options.secrets, &options.server_secrets)
+		{
 			session.sidecar.detach(&session.key);
 			return Err(error);
 		}
@@ -241,9 +250,10 @@ impl Session {
 		&self,
 		request: &OpenRequest,
 		secrets: &BTreeMap<String, String>,
+		by_server: &protocol::SecretsByServer,
 	) -> Result<(), TransportError> {
-		if !secrets.is_empty() {
-			self.write(protocol::secrets_command(&self.key, secrets))?;
+		if !secrets.is_empty() || !by_server.is_empty() {
+			self.write(protocol::secrets_command(&self.key, secrets, by_server))?;
 		}
 		self.write(protocol::open_command(&self.key, request))
 	}
