@@ -8,6 +8,7 @@ import { sessionRequest } from "./serve"
 import { claudeSourceExecutable } from "./providers/claude/build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./providers/claude/executable"
 import { buildOptions } from "./providers/claude/session"
+import { spaceLine } from "./providers/claude/system-layer"
 import { DEFAULT_PROVIDER_ID } from "./providers/registry"
 
 const entrypoint = new URL("./index.ts", import.meta.url).pathname
@@ -17,6 +18,8 @@ const providerExecutable = claudeSourceExecutable()
 process.env[EXECUTABLE_OVERRIDE_ENV] = providerExecutable
 
 const environment = { ...process.env }
+
+const spacePath = "/spaces/s1"
 
 const heldEnvironment = {
 	base: { TOKEN: "wide" },
@@ -161,6 +164,29 @@ describe("serve", () => {
 		} finally {
 			rmSync(bundle, { recursive: true, force: true })
 		}
+	})
+
+	it("leaves the space bundle undefined when the open command holds none", () => {
+		expect(sessionRequest(openCommand()).spacePluginPath).toBeUndefined()
+	})
+
+	it("loads the space bundle and its memory line for a space open command", () => {
+		const request = sessionRequest(
+			openCommand({
+				agent: "bean",
+				pluginPath: "/bots/b1",
+				spacePluginPath: spacePath,
+			}),
+		)
+		const options = buildOptions(request, undefined)
+
+		expect(options.plugins).toContainEqual({
+			type: "local",
+			path: spacePath,
+		})
+		expect(options.systemPrompt).toMatchObject({
+			append: expect.stringContaining(spaceLine(spacePath)),
+		})
 	})
 
 	it(
