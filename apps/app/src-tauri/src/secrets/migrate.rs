@@ -17,7 +17,10 @@ const URL_KEY: &str = "url";
 const CREDENTIAL_WORDS: [&str; 7] =
 	["KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "AUTHORIZATION", "CREDENTIAL"];
 
-const CREDENTIAL_PREFIXES: [&str; 15] = [
+const HEADER_WORD: &str = "HEADER";
+const HEADER_FLAG: &str = "-H";
+
+const CREDENTIAL_MARKERS: [&str; 14] = [
 	"ghp_",
 	"gho_",
 	"ghu_",
@@ -32,8 +35,9 @@ const CREDENTIAL_PREFIXES: [&str; 15] = [
 	"AKIA",
 	"AIza",
 	"Bearer ",
-	"eyJ",
 ];
+
+const CREDENTIAL_OPENINGS: [&str; 1] = ["eyJ"];
 
 struct Move {
 	key: String,
@@ -147,11 +151,10 @@ fn preceding_flag(originals: &[Option<String>], index: usize) -> &str {
 
 fn credential_in_argument(element: &str, flag: &str) -> Option<Taken> {
 	if let Some((name, value)) = element.split_once('=') {
-		if !name.starts_with('-') {
-			return None;
+		if name.starts_with('-') {
+			return is_credential(name, value)
+				.then(|| Taken { kept: format!("{name}="), value: value.to_owned() });
 		}
-		return is_credential(name, value)
-			.then(|| Taken { kept: format!("{name}="), value: value.to_owned() });
 	}
 	if element.starts_with('-') {
 		return None;
@@ -197,9 +200,17 @@ fn take_from_url(server_name: &str, server: &mut Map<String, Value>, moves: &mut
 }
 
 fn is_credential(field: &str, value: &str) -> bool {
-	!value.is_empty()
-		&& !is_interpolated(value)
-		&& (named_like_a_credential(field) || shaped_like_a_credential(value))
+	if value.is_empty() || is_interpolated(value) {
+		return false;
+	}
+	if names_a_header(field) {
+		return named_like_a_credential(value) || shaped_like_a_credential(value);
+	}
+	named_like_a_credential(field) || shaped_like_a_credential(value)
+}
+
+fn names_a_header(field: &str) -> bool {
+	field == HEADER_FLAG || field.to_ascii_uppercase().contains(HEADER_WORD)
 }
 
 fn named_like_a_credential(field: &str) -> bool {
@@ -208,7 +219,14 @@ fn named_like_a_credential(field: &str) -> bool {
 }
 
 fn shaped_like_a_credential(value: &str) -> bool {
-	CREDENTIAL_PREFIXES.iter().any(|prefix| value.starts_with(prefix))
+	CREDENTIAL_OPENINGS.iter().any(|opening| value.starts_with(opening))
+		|| CREDENTIAL_MARKERS.iter().any(|marker| carries(value, marker))
+}
+
+fn carries(value: &str, marker: &str) -> bool {
+	value
+		.match_indices(marker)
+		.any(|(at, _)| at == 0 || !value.as_bytes()[at - 1].is_ascii_alphanumeric())
 }
 
 #[cfg(test)]
@@ -374,6 +392,79 @@ mod tests {
 		assert!(read(&path).contains("${secret:github.SETTING}"));
 		assert!(!read(&path).contains("ghp_livevalue"));
 		assert_eq!(stored_value(&layout, "github.SETTING").as_deref(), Some("ghp_livevalue"));
+	}
+
+	#[test]
+	fn a_token_inside_a_header_argument_moves_with_its_whole_value() {
+		let layout = a_layout(true);
+		let path = write_mcp(
+			&layout,
+			"bot",
+			r#"{"mcpServers":{"remote":{"args":["mcp-remote","https://x/sse","--header","Authorization: Bearer ghp_live"]}}}"#,
+		);
+
+		swept(&layout);
+
+		let rewritten = read(&path);
+		assert!(rewritten.contains(r#""--header","${secret:remote.args.3}""#));
+		assert!(!rewritten.contains("ghp_live"));
+		assert!(!rewritten.contains("Bearer"));
+		assert_eq!(
+			stored_value(&layout, "remote.args.3").as_deref(),
+			Some("Authorization: Bearer ghp_live")
+		);
+	}
+
+	#[test]
+	fn a_token_in_a_header_flag_that_carries_its_value_moves_with_its_whole_value() {
+		let layout = a_layout(true);
+		let path = write_mcp(
+			&layout,
+			"bot",
+			r#"{"mcpServers":{"remote":{"args":["mcp-remote","--header=Authorization: Bearer ghp_live"]}}}"#,
+		);
+
+		swept(&layout);
+
+		let rewritten = read(&path);
+		assert!(rewritten.contains("--header=${secret:remote.args.1}"));
+		assert!(!rewritten.contains("ghp_live"));
+		assert_eq!(
+			stored_value(&layout, "remote.args.1").as_deref(),
+			Some("Authorization: Bearer ghp_live")
+		);
+	}
+
+	#[test]
+	fn a_header_that_carries_no_credential_is_left_alone() {
+		let layout = a_layout(true);
+		let path = write_mcp(
+			&layout,
+			"bot",
+			r#"{"mcpServers":{"remote":{"args":["serve","--header","Content-Type: application/json"]}}}"#,
+		);
+
+		swept(&layout);
+
+		assert!(read(&path).contains("Content-Type: application/json"));
+		assert!(layout.store.keys("bot").is_empty());
+	}
+
+	#[test]
+	fn an_ordinary_word_holding_a_marker_inside_it_is_left_alone() {
+		let layout = a_layout(true);
+		let path = write_mcp(
+			&layout,
+			"bot",
+			r#"{"mcpServers":{"local":{"args":["task-manager","--disk-usage"],"env":{"SETTING":"risk-level"}}}}"#,
+		);
+
+		swept(&layout);
+
+		let kept = read(&path);
+		assert!(kept.contains("task-manager"));
+		assert!(kept.contains("risk-level"));
+		assert!(layout.store.keys("bot").is_empty());
 	}
 
 	#[test]
