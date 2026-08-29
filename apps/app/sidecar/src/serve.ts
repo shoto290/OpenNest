@@ -19,6 +19,7 @@ type Command = {
 	pluginPath?: string
 	systemPluginPath?: string
 	userPluginPath?: string
+	spacePluginPath?: string
 	agent?: string
 	identity?: string
 	outputStyle?: string
@@ -38,6 +39,7 @@ export const sessionRequest = (command: Command): SessionRequest => ({
 	pluginPath: command.pluginPath,
 	systemPluginPath: command.systemPluginPath,
 	userPluginPath: command.userPluginPath,
+	spacePluginPath: command.spacePluginPath,
 	agent: command.agent,
 	identity: command.identity,
 	outputStyle: command.outputStyle,
