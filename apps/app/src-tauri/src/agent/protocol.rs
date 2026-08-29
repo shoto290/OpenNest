@@ -76,7 +76,8 @@ pub enum Frame {
 	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
 	ControlResponse(ControlResponseFrame),
-	SettingsRejected(SettingsRejectedFrame),
+	SettingsRejected(RejectionFrame),
+	ServerEnvRejected(RejectionFrame),
 	#[serde(other)]
 	Ignored,
 }
@@ -88,7 +89,7 @@ pub struct ClosedFrame {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct SettingsRejectedFrame {
+pub struct RejectionFrame {
 	#[serde(default)]
 	pub detail: Option<String>,
 }

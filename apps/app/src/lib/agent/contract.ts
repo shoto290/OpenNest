@@ -93,6 +93,7 @@ export type TransportError =
 	| { kind: "workingDirectoryRefused"; path: string }
 	| { kind: "invalidFrame"; detail: string }
 	| { kind: "settingsRejected"; detail: string }
+	| { kind: "serverEnvRejected"; detail: string }
 	| { kind: "notStarted" }
 	| { kind: "turnAlreadyRunning" }
 	| { kind: "transitionInProgress" }

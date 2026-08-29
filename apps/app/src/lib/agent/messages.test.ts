@@ -40,6 +40,18 @@ describe("describeTransportError", () => {
 		).toBe("The prompt could not be sent: pipe closed & gone")
 	})
 
+	it("names the server left out and the variable it waited for", () => {
+		expect(
+			describeTransportError(t, {
+				kind: "serverEnvRejected",
+				detail:
+					'the server "linear" was left out: LINEAR_KEY is defined by no scope',
+			}),
+		).toBe(
+			'the server "linear" was left out: LINEAR_KEY is defined by no scope. The conversation carries on with the other servers.',
+		)
+	})
+
 	it("names the folder a bot asked for and no longer has", () => {
 		expect(
 			describeTransportError(t, {

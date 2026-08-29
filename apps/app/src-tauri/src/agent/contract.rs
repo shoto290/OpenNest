@@ -174,6 +174,10 @@ pub enum TransportError {
 	SettingsRejected {
 		detail: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	ServerEnvRejected {
+		detail: String,
+	},
 	NotStarted,
 	TurnAlreadyRunning,
 	TransitionInProgress,
@@ -226,6 +230,7 @@ impl std::fmt::Display for TransportError {
 			TransportError::SettingsRejected { detail } => {
 				write!(f, "the bot's settings were rejected: {detail}")
 			}
+			TransportError::ServerEnvRejected { detail } => write!(f, "{detail}"),
 			TransportError::NotStarted => write!(f, "session not started"),
 			TransportError::TurnAlreadyRunning => write!(f, "a turn is already running"),
 			TransportError::TransitionInProgress => {

@@ -11,7 +11,7 @@ use super::contract::{
 	TransportError, TurnEnded, TurnOutcome,
 };
 use super::protocol::{
-	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, SettingsRejectedFrame,
+	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, RejectionFrame,
 	StreamEvent, SystemFrame,
 };
 use super::redact;
@@ -57,6 +57,8 @@ fn permission_detail(name: &str, input: &Value) -> Option<String> {
 }
 
 pub const ASK_USER_QUESTION: &str = "AskUserQuestion";
+
+const SERVER_LEFT_OUT: &str = "a server was left out: a variable is defined by no scope";
 
 fn read_list<T>(value: &Value, key: &str, read: impl Fn(&Value) -> Option<T>) -> Vec<T> {
 	value
@@ -144,6 +146,7 @@ impl Translator {
 			}
 			Frame::Commands(frame) => Self::on_commands(frame),
 			Frame::SettingsRejected(frame) => Self::on_settings_rejected(frame),
+			Frame::ServerEnvRejected(frame) => Self::on_server_env_rejected(frame),
 			Frame::ControlRequest(request) => {
 				self.on_control_request(request.request_id, request.request)
 			}
@@ -164,11 +167,19 @@ impl Translator {
 		vec![AgentEvent::SessionReady { session_id, resumed: self.resumed }]
 	}
 
-	fn on_settings_rejected(frame: SettingsRejectedFrame) -> Vec<AgentEvent> {
+	fn on_settings_rejected(frame: RejectionFrame) -> Vec<AgentEvent> {
 		let Some(detail) = frame.detail.filter(|detail| !detail.trim().is_empty()) else {
 			return Vec::new();
 		};
 		vec![AgentEvent::Failed { error: TransportError::SettingsRejected { detail } }]
+	}
+
+	fn on_server_env_rejected(frame: RejectionFrame) -> Vec<AgentEvent> {
+		let detail = frame
+			.detail
+			.filter(|detail| !detail.trim().is_empty())
+			.unwrap_or_else(|| SERVER_LEFT_OUT.to_owned());
+		vec![AgentEvent::Failed { error: TransportError::ServerEnvRejected { detail } }]
 	}
 
 	fn on_commands(frame: CommandsFrame) -> Vec<AgentEvent> {
@@ -583,6 +594,42 @@ mod tests {
 					detail: "keys were dropped: model".to_owned()
 				}
 			}]
+		);
+	}
+
+	#[test]
+	fn every_left_out_server_reaches_the_reader() {
+		let mut translator = Translator::new(false);
+
+		let events = ingest(
+			&mut translator,
+			vec![
+				json!({
+					"type": "server_env_rejected",
+					"detail": "the server \"linear\" was left out: LINEAR_KEY is defined by no scope",
+				}),
+				json!({ "type": "server_env_rejected", "detail": "  " }),
+				json!({ "type": "server_env_rejected" }),
+			],
+		);
+
+		assert_eq!(
+			events,
+			vec![
+				AgentEvent::Failed {
+					error: TransportError::ServerEnvRejected {
+						detail:
+							"the server \"linear\" was left out: LINEAR_KEY is defined by no scope"
+								.to_owned()
+					}
+				},
+				AgentEvent::Failed {
+					error: TransportError::ServerEnvRejected { detail: SERVER_LEFT_OUT.to_owned() }
+				},
+				AgentEvent::Failed {
+					error: TransportError::ServerEnvRejected { detail: SERVER_LEFT_OUT.to_owned() }
+				},
+			]
 		);
 	}
 
