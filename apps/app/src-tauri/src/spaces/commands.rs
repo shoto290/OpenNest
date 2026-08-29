@@ -37,9 +37,13 @@ pub async fn space_update(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 	name: String,
-	colour: AvatarBlot,
+	colour: Option<AvatarBlot>,
 ) -> Result<Space, SpaceError> {
-	Ok(ready(&state)?.spaces().update(id, name, colour.into()).await.map(Space::from)?)
+	Ok(ready(&state)?
+		.spaces()
+		.update(id, name, colour.map(Into::into))
+		.await
+		.map(Space::from)?)
 }
 
 #[tauri::command]

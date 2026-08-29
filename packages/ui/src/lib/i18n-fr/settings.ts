@@ -76,6 +76,7 @@ const settings = {
 		},
 		colour: {
 			label: "Couleur",
+			none: "Aucune couleur",
 		},
 		danger: {
 			delete: "Supprimer l'espace",

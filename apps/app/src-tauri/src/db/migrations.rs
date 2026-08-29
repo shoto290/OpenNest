@@ -25,6 +25,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 15, statements: BOT_PERMISSIONS },
 	Migration { version: 16, statements: SPACE_SETTINGS },
 	Migration { version: 17, statements: ROSTER_PIN },
+	Migration { version: 18, statements: OPTIONAL_SPACE_COLOUR },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -370,6 +371,26 @@ CREATE TABLE space_settings (
 );
 ";
 
+const OPTIONAL_SPACE_COLOUR: &str = "
+PRAGMA legacy_alter_table = ON;
+ALTER TABLE spaces RENAME TO spaces_always_coloured;
+PRAGMA legacy_alter_table = OFF;
+
+CREATE TABLE spaces (
+	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL,
+	colour TEXT CHECK (colour IN
+		('red', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'orange')),
+	position INTEGER NOT NULL,
+	created_at INTEGER NOT NULL
+);
+
+INSERT INTO spaces (id, name, colour, position, created_at)
+	SELECT id, name, colour, position, created_at FROM spaces_always_coloured;
+
+DROP TABLE spaces_always_coloured;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -604,7 +625,7 @@ mod tests {
 
 		assert_eq!(
 			spaces_of(&connection),
-			vec![("personal".to_owned(), "Personal".to_owned(), "red".to_owned(), 0)],
+			vec![("personal".to_owned(), "Personal".to_owned(), Some("red".to_owned()), 0)],
 			"the step did not lay down the one space every bot belongs to"
 		);
 		assert_eq!(
@@ -634,7 +655,7 @@ mod tests {
 
 		assert_eq!(
 			spaces_of(&connection),
-			vec![("personal".to_owned(), "Personal".to_owned(), "red".to_owned(), 0)]
+			vec![("personal".to_owned(), "Personal".to_owned(), Some("red".to_owned()), 0)]
 		);
 		assert_eq!(
 			connection
@@ -690,6 +711,46 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	#[test]
+	fn the_spaces_a_file_already_held_come_out_of_the_step_wearing_the_colour_they_wore() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..16]).expect("the shipped schema installs");
+		connection
+			.execute_batch(
+				"INSERT INTO spaces (id, name, colour, position, created_at)
+					VALUES ('writers', 'Writers', 'blue', 1, 1);
+				INSERT INTO bots (id, space_id, name, model, created_at)
+					VALUES ('b1', 'writers', 'First', 'sonnet', 1);",
+			)
+			.expect("the install this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(
+			spaces_of(&connection),
+			vec![
+				("personal".to_owned(), "Personal".to_owned(), Some("red".to_owned()), 0),
+				("writers".to_owned(), "Writers".to_owned(), Some("blue".to_owned()), 1)
+			],
+			"a space from the older build came out of the step wearing another colour"
+		);
+		assert_eq!(
+			bot_spaces_of(&connection),
+			vec![("b1".to_owned(), "writers".to_owned())],
+			"rebuilding the table the spaces live in cost a bot its space"
+		);
+		write(
+			&connection,
+			"INSERT INTO spaces (id, name, position, created_at)
+				VALUES ('plain', 'Plain', 2, 1)",
+		)
+		.expect("a space wearing no colour is refused");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
 	fn join_order_of(connection: &Connection, conversation_id: &str) -> Vec<(String, i64)> {
 		let mut statement = connection
 			.prepare(
@@ -704,7 +765,7 @@ mod tests {
 			.expect("rows")
 	}
 
-	fn spaces_of(connection: &Connection) -> Vec<(String, String, String, i64)> {
+	fn spaces_of(connection: &Connection) -> Vec<(String, String, Option<String>, i64)> {
 		let mut statement = connection
 			.prepare("SELECT id, name, colour, position FROM spaces ORDER BY position, id")
 			.expect("prepare");

@@ -50,7 +50,7 @@ export type Bot = BotIdentity & {
 export type Space = {
 	id: string
 	name: string
-	colour: AvatarBlot
+	colour: AvatarBlot | null
 	position: number
 	createdAt: number
 }

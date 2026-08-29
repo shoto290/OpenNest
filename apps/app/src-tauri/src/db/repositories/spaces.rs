@@ -7,17 +7,6 @@ use uuid::Uuid;
 use super::conversations::AvatarBlot;
 use crate::db::{Access, DatabaseError};
 
-const TINTS: [AvatarBlot; 8] = [
-	AvatarBlot::Red,
-	AvatarBlot::Yellow,
-	AvatarBlot::Green,
-	AvatarBlot::Cyan,
-	AvatarBlot::Blue,
-	AvatarBlot::Purple,
-	AvatarBlot::Pink,
-	AvatarBlot::Orange,
-];
-
 const SELECT_SPACE: &str =
 	"SELECT id, name, colour, position, created_at FROM spaces WHERE id = ?1";
 
@@ -53,7 +42,7 @@ impl From<rusqlite::Error> for SpaceError {
 pub struct Space {
 	pub id: String,
 	pub name: String,
-	pub colour: AvatarBlot,
+	pub colour: Option<AvatarBlot>,
 	pub position: i64,
 	pub created_at: i64,
 }
@@ -85,7 +74,7 @@ impl SpacesRepository {
 		&self,
 		id: String,
 		name: String,
-		colour: AvatarBlot,
+		colour: Option<AvatarBlot>,
 	) -> Result<Space, SpaceError> {
 		self.access.call_mut(move |connection| Ok(updated(connection, &id, &name, colour))).await?
 	}
@@ -107,12 +96,11 @@ impl SpacesRepository {
 
 fn created(connection: &mut Connection, name: &str) -> Result<Space, SpaceError> {
 	let transaction = write_transaction(connection)?;
-	let held = counted(&transaction)?;
 	let id = Uuid::new_v4().to_string();
 	transaction.execute(
-		"INSERT INTO spaces (id, name, colour, position, created_at)
-			VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(position) + 1, 0) FROM spaces), ?4)",
-		params![id, name, TINTS[(held as usize) % TINTS.len()], now()],
+		"INSERT INTO spaces (id, name, position, created_at)
+			VALUES (?1, ?2, (SELECT COALESCE(MAX(position) + 1, 0) FROM spaces), ?3)",
+		params![id, name, now()],
 	)?;
 	let created = transaction.query_row(SELECT_SPACE, [&id], space)?;
 	transaction.commit()?;
@@ -123,7 +111,7 @@ fn updated(
 	connection: &mut Connection,
 	id: &str,
 	name: &str,
-	colour: AvatarBlot,
+	colour: Option<AvatarBlot>,
 ) -> Result<Space, SpaceError> {
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
@@ -279,7 +267,7 @@ mod tests {
 
 		assert_eq!(listed.len(), 1);
 		assert_eq!(listed[0].name, "Personal");
-		assert_eq!(listed[0].colour, AvatarBlot::Red);
+		assert_eq!(listed[0].colour, Some(AvatarBlot::Red));
 		assert_eq!(listed[0].position, 0);
 
 		drop(database);
@@ -287,7 +275,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_created_space_lands_after_the_last_one_wearing_the_next_tint() {
+	async fn a_created_space_lands_after_the_last_one_wearing_no_tint() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.spaces();
@@ -295,8 +283,8 @@ mod tests {
 		let second = repository.create("Vocca".to_owned()).await.expect("the space");
 		let third = repository.create("Vacances".to_owned()).await.expect("the space");
 
-		assert_eq!((second.position, second.colour), (1, AvatarBlot::Yellow));
-		assert_eq!((third.position, third.colour), (2, AvatarBlot::Green));
+		assert_eq!((second.position, second.colour), (1, None));
+		assert_eq!((third.position, third.colour), (2, None));
 		assert_eq!(
 			repository
 				.list()
@@ -320,14 +308,23 @@ mod tests {
 		let held = repository.create("Vocca".to_owned()).await.expect("the space");
 
 		let written = repository
-			.update(held.id.clone(), "Work".to_owned(), AvatarBlot::Cyan)
+			.update(held.id.clone(), "Work".to_owned(), Some(AvatarBlot::Cyan))
 			.await
 			.expect("the space is written");
 
-		assert_eq!((written.name.as_str(), written.colour), ("Work", AvatarBlot::Cyan));
+		assert_eq!((written.name.as_str(), written.colour), ("Work", Some(AvatarBlot::Cyan)));
 		assert_eq!(written.position, held.position, "writing a space moved it");
+		assert_eq!(
+			repository
+				.update(held.id.clone(), "Work".to_owned(), None)
+				.await
+				.expect("the space is written")
+				.colour,
+			None,
+			"a space could not be stripped of its colour"
+		);
 		assert!(matches!(
-			repository.update("nobody".to_owned(), "Work".to_owned(), AvatarBlot::Cyan).await,
+			repository.update("nobody".to_owned(), "Work".to_owned(), None).await,
 			Err(SpaceError::UnknownSpace { .. })
 		));
 

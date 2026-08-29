@@ -17,6 +17,8 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const TINT_INK_STYLE = { color: "var(--bot-blot-ink)" } as CSSProperties
 
+const COLOUR_OPTIONS = [undefined, ...BLOT_TINTS] as const
+
 type SpaceFieldsProps = {
 	value: SpaceSettingsValue
 	onValueChange: (value: SpaceSettingsValue) => void
@@ -27,8 +29,10 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 	const { t } = useTranslation("settings")
 	const groupId = useId()
 
-	const tintLabel = (tint: BotAvatarBlot) =>
-		t(`identity.blot.option.${tint}`, { ns: "bots" })
+	const tintLabel = (tint?: BotAvatarBlot) =>
+		tint
+			? t(`identity.blot.option.${tint}`, { ns: "bots" })
+			: t("space.colour.none")
 
 	return (
 		<div
@@ -42,11 +46,11 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 				value={value.name}
 			/>
 
-			<SettingsGroup grid="grid-cols-8 gap-1" label={t("space.colour.label")}>
-				{BLOT_TINTS.map((tint) => (
+			<SettingsGroup grid="grid-cols-9 gap-1" label={t("space.colour.label")}>
+				{COLOUR_OPTIONS.map((tint) => (
 					<label
 						className={FIELD_OPTION_CLASS}
-						key={tint}
+						key={tint ?? "none"}
 						title={tintLabel(tint)}
 					>
 						<input
@@ -55,7 +59,7 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 							name={`${groupId}-colour`}
 							onChange={() => onValueChange({ ...value, colour: tint })}
 							type="radio"
-							value={tint}
+							value={tint ?? ""}
 						/>
 						<span className="relative grid place-items-center">
 							<SpaceTint className="size-6" tint={tint} />
@@ -63,7 +67,7 @@ const SpaceFields = ({ value, onValueChange, className }: SpaceFieldsProps) => {
 								<Icons.Check
 									aria-hidden="true"
 									className="absolute size-3.5"
-									style={TINT_INK_STYLE}
+									style={tint ? TINT_INK_STYLE : undefined}
 								/>
 							) : null}
 						</span>

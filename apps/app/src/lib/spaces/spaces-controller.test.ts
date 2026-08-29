@@ -80,6 +80,24 @@ describe("createSpacesController", () => {
 		)
 	})
 
+	it("writes a space stripped of its colour", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+
+		controller.describe("personal", { name: "Perso" })
+
+		expect(controller.getState().spaces[0]).toMatchObject({
+			name: "Perso",
+			colour: null,
+		})
+		await vi.waitFor(async () =>
+			expect((await store.spaces())[0]).toMatchObject({
+				name: "Perso",
+				colour: null,
+			}),
+		)
+	})
+
 	it("falls back to the first space that remains after a delete", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

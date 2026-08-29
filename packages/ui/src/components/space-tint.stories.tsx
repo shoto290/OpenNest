@@ -18,7 +18,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The mark a space is recognised by: one filled dot, painted in one of the eight tints a bot's blot is painted in — the same eight, so a space and the bots living in it read as one family. It draws nothing but colour, which is why it is decorative to a screen reader: whatever names the space names it in words next to the dot. Reach for it wherever a space has to be told apart at a glance — the breadcrumb of its settings, the row that chooses its tint.",
+					"The mark a space is recognised by: one filled dot, painted in one of the eight tints a bot's blot is painted in — the same eight, so a space and the bots living in it read as one family. A space carrying no colour gets an empty well instead, which is what the dot draws when no tint is given. It draws nothing but colour, which is why it is decorative to a screen reader: whatever names the space names it in words next to the dot. Reach for it wherever a space has to be told apart at a glance — the breadcrumb of its settings, the row that chooses its tint.",
 			},
 		},
 	},
@@ -30,7 +30,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dot at its resting size, in one tint. Check that it stays a circle rather than an ellipse when a flex row squeezes it, and that it is hidden from the accessibility tree — a colour is not a name. Pick `Variants` for all eight at once.",
+					"The dot at its resting size, in one tint. Check that it stays a circle rather than an ellipse when a flex row squeezes it, and that it is hidden from the accessibility tree — a colour is not a name. Pick `Untinted` for a space carrying no colour, `Variants` for all eight at once.",
 			},
 		},
 	},
@@ -41,6 +41,24 @@ export const Default = meta.story({
 		await expect(dot?.getBoundingClientRect().width).toBe(
 			dot?.getBoundingClientRect().height,
 		)
+	},
+})
+
+export const Untinted = meta.story({
+	args: { tint: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A space carrying no colour. Check that the well reads as an empty slot against both schemes — flip `theme_layout` to side-by-side — rather than borrowing a tint, and that it keeps the size and the circle of a tinted dot so a row of spaces stays even. Pick `Default` for a tinted one.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [dot] = slotsIn(canvasElement, "space-tint")
+
+		await expect(dot).not.toHaveAttribute("data-tint")
+		await expect(dot?.style.backgroundColor).toBe("")
 	},
 })
 
