@@ -132,10 +132,13 @@ export const createSpacePluginController = (
 
 		saveSkill: (skillId: string, draft: BotSkillDraft) =>
 			run(async (spaceId) => {
-				applySkill(
+				const saved = await store.updateSpacePluginSkill(
+					spaceId,
 					skillId,
-					await store.updateSpacePluginSkill(spaceId, skillId, draft),
+					draft,
 				)
+				applySkill(skillId, saved)
+				files.carryFile(skillId, saved.id)
 				await readHistory(spaceId)
 			}),
 

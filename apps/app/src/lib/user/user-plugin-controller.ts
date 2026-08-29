@@ -117,7 +117,9 @@ export const createUserPluginController = (
 
 		saveSkill: (skillId: string, draft: BotSkillDraft) =>
 			run(async () => {
-				applySkill(skillId, await store.updateUserPluginSkill(skillId, draft))
+				const saved = await store.updateUserPluginSkill(skillId, draft)
+				applySkill(skillId, saved)
+				files.carryFile(skillId, saved.id)
 				await readHistory()
 			}),
 

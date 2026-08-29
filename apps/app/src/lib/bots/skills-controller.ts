@@ -127,9 +127,11 @@ export const createSkillsController = (
 			}),
 
 		save: (skillId: string, draft: BotSkillDraft) =>
-			onOpenBot(async (botId) =>
-				applySkill(skillId, await store.updateBotSkill(botId, skillId, draft)),
-			),
+			onOpenBot(async (botId) => {
+				const saved = await store.updateBotSkill(botId, skillId, draft)
+				applySkill(skillId, saved)
+				files.carryFile(skillId, saved.id)
+			}),
 
 		setPreloaded: (skillId: string, isPreloaded: boolean) => {
 			applySkill(skillId, { isPreloaded })

@@ -26,6 +26,14 @@ const readers = (skills: BotSkill[]) =>
 const readerSkills = async (store: TranscriptStore) =>
 	readers(await store.botSkills("default"))
 
+const movingSkill = (store: TranscriptStore, id: string): TranscriptStore => ({
+	...store,
+	updateBotSkill: async (botId, skillId, draft) => ({
+		...(await store.updateBotSkill(botId, skillId, draft)),
+		id,
+	}),
+})
+
 describe("skills controller", () => {
 	it("opens on the skills the bundle already holds", async () => {
 		const store = createFakeTranscriptStore()
@@ -271,5 +279,42 @@ describe("skills controller", () => {
 			path: "missing.md",
 			failure: "read",
 		})
+	})
+
+	it("carries an open file to the id a renamed skill comes back under", async () => {
+		const store = createFakeTranscriptStore()
+		const written = await store.createBotSkill("default", A_SKILL)
+		await store.writeBotSkillFile("default", written.id, "notes.md", "One line")
+		const renaming = movingSkill(store, "changelog")
+		const controller = await opened(renaming)
+
+		controller.openFile(written.id, "notes.md")
+		await settled()
+		controller.save(written.id, { ...A_SKILL, name: "changelog" })
+		await settled()
+
+		expect(controller.getState().file).toMatchObject({
+			skillId: "changelog",
+			path: "notes.md",
+		})
+	})
+
+	it("leaves an open file of another skill where it is on a rename", async () => {
+		const store = createFakeTranscriptStore()
+		const kept = await store.createBotSkill("default", A_SKILL)
+		const renamed = await store.createBotSkill("default", {
+			...A_SKILL,
+			name: "Commit style",
+		})
+		await store.writeBotSkillFile("default", kept.id, "notes.md", "One line")
+		const renaming = movingSkill(store, "changelog")
+		const controller = await opened(renaming)
+
+		controller.openFile(kept.id, "notes.md")
+		await settled()
+		controller.save(renamed.id, { ...A_SKILL, name: "changelog" })
+		await settled()
+
+		expect(controller.getState().file).toMatchObject({ skillId: kept.id })
 	})
 })

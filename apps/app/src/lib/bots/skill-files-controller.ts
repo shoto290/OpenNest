@@ -24,6 +24,7 @@ export type SkillFilesHost = {
 }
 
 export type SkillFilesController = {
+	carryFile: (fromSkillId: string, toSkillId: string) => void
 	openFile: (skillId: string, path: string) => void
 	closeFile: () => void
 	addFile: (skillId: string, path: string) => void
@@ -60,6 +61,13 @@ export const createSkillFilesController = (
 		host.getSkills().find((skill) => skill.id === skillId)?.files ?? []
 
 	return {
+		carryFile: (fromSkillId: string, toSkillId: string) => {
+			const open = host.getFile()
+			if (open?.skillId === fromSkillId && fromSkillId !== toSkillId) {
+				host.setFile({ ...open, skillId: toSkillId })
+			}
+		},
+
 		openFile: (skillId: string, path: string) => {
 			host.setFile({ skillId, path })
 			host.run(async () => {

@@ -19,6 +19,14 @@ const opened = async (store: TranscriptStore) => {
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+const movingSkill = (store: TranscriptStore, id: string): TranscriptStore => ({
+	...store,
+	updateUserPluginSkill: async (skillId, draft) => ({
+		...(await store.updateUserPluginSkill(skillId, draft)),
+		id,
+	}),
+})
+
 describe("user plugin controller", () => {
 	it("opens on a plugin nobody has written into yet", async () => {
 		const controller = await opened(createFakeTranscriptStore())
@@ -107,5 +115,22 @@ describe("user plugin controller", () => {
 		await settled()
 
 		expect(controller.getState().skills).toEqual([])
+	})
+
+	it("carries an open file to the id a renamed skill comes back under", async () => {
+		const store = createFakeTranscriptStore()
+		const written = await store.createUserPluginSkill(A_SKILL)
+		await store.writeUserPluginSkillFile(written.id, "notes.md", "One line")
+		const controller = await opened(movingSkill(store, "how-i-answer"))
+
+		controller.openFile(written.id, "notes.md")
+		await settled()
+		controller.saveSkill(written.id, { ...A_SKILL, name: "How I answer" })
+		await settled()
+
+		expect(controller.getState().file).toMatchObject({
+			skillId: "how-i-answer",
+			path: "notes.md",
+		})
 	})
 })
