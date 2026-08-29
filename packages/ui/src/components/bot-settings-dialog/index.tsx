@@ -25,6 +25,11 @@ import {
 	toMcpServerDraft,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import {
+	type EnvironmentEntry,
+	EnvironmentPanel,
+	type EnvironmentWrite,
+} from "@workspace/ui/components/bot-settings-dialog/environment-panel"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
@@ -89,6 +94,9 @@ type BotSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
+	environment: EnvironmentEntry[]
+	onEnvironmentSet: (write: EnvironmentWrite) => void | Promise<void>
+	onEnvironmentDelete: (name: string) => void | Promise<void>
 	history?: PluginHistory
 	seed?: string
 	onDelete: () => void
@@ -120,6 +128,9 @@ const BotSettingsDialog = ({
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
+	environment,
+	onEnvironmentSet,
+	onEnvironmentDelete,
 	history,
 	seed,
 	onDelete,
@@ -278,6 +289,12 @@ const BotSettingsDialog = ({
 								label={t("dialog.tab.mcp")}
 								value="mcp"
 							/>
+							<SettingsRailItem
+								icon={Icons.Json}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.environment")}
+								value="environment"
+							/>
 							{history ? (
 								<SettingsRailItem
 									icon={Icons.History}
@@ -370,6 +387,15 @@ const BotSettingsDialog = ({
 							/>
 						</Tabs.Panel>
 
+						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="environment">
+							<EnvironmentPanel
+								entries={environment}
+								onDelete={onEnvironmentDelete}
+								onSet={onEnvironmentSet}
+								scope="bot"
+							/>
+						</Tabs.Panel>
+
 						{history ? (
 							<SettingsScrollingPanel value="history">
 								<HistoryPanel
@@ -437,5 +463,7 @@ export {
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
+	type EnvironmentEntry,
+	type EnvironmentWrite,
 	type PluginHistory,
 }

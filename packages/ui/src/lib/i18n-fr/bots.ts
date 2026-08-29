@@ -65,6 +65,7 @@ const bots = {
 			instructions: "Instructions",
 			skills: "Compétences",
 			mcp: "Serveurs MCP",
+			environment: "Environnement",
 			history: "Historique",
 			permissions: "Permissions",
 			runtime: "Exécution",

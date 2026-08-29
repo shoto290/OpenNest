@@ -25,6 +25,7 @@ import {
 	type BotSettingsDialogProps,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-dialog"
+import { BOT_ENVIRONMENT } from "@workspace/ui/components/bot-settings-dialog/environment.fixtures"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
@@ -160,6 +161,9 @@ const meta = preview.meta({
 		onMcpServerCreate: fn(),
 		onMcpServerChange: fn(),
 		onMcpServerDelete: fn(),
+		environment: BOT_ENVIRONMENT,
+		onEnvironmentSet: fn(),
+		onEnvironmentDelete: fn(),
 		onSkillCreate: fn(),
 		onSkillChange: fn(),
 		onSkillPreloadedChange: fn(),
@@ -205,7 +209,7 @@ export const Rail = meta.story({
 		docs: {
 			description: {
 				story:
-					"The groups and the way between them. Check the order — General, Appearance, Instructions, Skills, MCP servers, History, Permissions, Runtime, then a rule and Danger zone alone below it, the only item in destructive tone. One tab stop reaches the rail and the arrow keys walk it, so a keyboard reader crosses the whole dialog in two stops rather than five. Walking is not opening: focus moves with the arrows and the group opens on Enter, so nobody drags a grid of animals or a model list past on their way to the one they wanted. No item carries a tooltip at this width — its name is already on the screen. Pick `IconRail` for the width where the name leaves it. The breadcrumb is unchanged whichever group is open: it names the bot, not the group.",
+					"The groups and the way between them. Check the order — General, Appearance, Instructions, Skills, MCP servers, Environment, History, Permissions, Runtime, then a rule and Danger zone alone below it, the only item in destructive tone. One tab stop reaches the rail and the arrow keys walk it, so a keyboard reader crosses the whole dialog in two stops rather than five. Walking is not opening: focus moves with the arrows and the group opens on Enter, so nobody drags a grid of animals or a model list past on their way to the one they wanted. No item carries a tooltip at this width — its name is already on the screen. Pick `IconRail` for the width where the name leaves it. The breadcrumb is unchanged whichever group is open: it names the bot, not the group.",
 			},
 		},
 	},
@@ -221,6 +225,7 @@ export const Rail = meta.story({
 			"Instructions",
 			"Skills",
 			"MCP servers",
+			"Environment",
 			"History",
 			"Permissions",
 			"Runtime",

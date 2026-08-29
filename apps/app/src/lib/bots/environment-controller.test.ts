@@ -1,0 +1,116 @@
+import { describe, expect, it } from "vitest"
+
+import { createEnvironmentController } from "./environment-controller"
+
+import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import type { EnvScope } from "../conversations/store-contract"
+import type { TranscriptStore } from "../conversations/store-port"
+
+const SPACE: EnvScope = { kind: "space", id: "s-1" }
+
+const BOT: EnvScope = { kind: "bot", id: "b-1", spaceId: "s-1" }
+
+const opened = async (store: TranscriptStore, scope: EnvScope = BOT) => {
+	const controller = createEnvironmentController(store)
+	await controller.open(scope)
+	return controller
+}
+
+const refusing = (store: TranscriptStore, member: "envSet" | "envDelete") => ({
+	...store,
+	[member]: () => Promise.reject(new Error("refused")),
+})
+
+describe("environment controller", () => {
+	it("opens on the names the scope already holds", async () => {
+		const store = createFakeTranscriptStore()
+		await store.envSet(BOT, "BOT_SEED", "1")
+
+		const controller = await opened(store)
+
+		expect(controller.getState().entries).toEqual([
+			{ name: "BOT_SEED", definedIn: BOT, servedFrom: BOT },
+		])
+	})
+
+	it("lists what the space defines beside what the bot defines", async () => {
+		const store = createFakeTranscriptStore()
+		await store.envSet(SPACE, "ATLAS_TOKEN", "sk-1")
+		await store.envSet(BOT, "BOT_SEED", "1")
+
+		const controller = await opened(store)
+
+		expect(controller.getState().entries).toEqual([
+			{ name: "ATLAS_TOKEN", definedIn: SPACE, servedFrom: SPACE },
+			{ name: "BOT_SEED", definedIn: BOT, servedFrom: BOT },
+		])
+	})
+
+	it("writes a variable into the scope it was opened on", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await opened(store)
+
+		await controller.set("ATLAS_TOKEN", "sk-1")
+
+		expect(await store.envList(BOT)).toEqual([
+			{ name: "ATLAS_TOKEN", definedIn: BOT, servedFrom: BOT },
+		])
+		expect(controller.getState().entries).toHaveLength(1)
+	})
+
+	it("takes a removed variable out of the list", async () => {
+		const store = createFakeTranscriptStore()
+		await store.envSet(BOT, "ATLAS_TOKEN", "sk-1")
+		await store.envSet(BOT, "BOT_SEED", "1")
+		const controller = await opened(store)
+
+		await controller.remove("ATLAS_TOKEN")
+
+		expect(controller.getState().entries).toEqual([
+			{ name: "BOT_SEED", definedIn: BOT, servedFrom: BOT },
+		])
+	})
+
+	it("never reads a stored value back into what it lists", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await opened(store)
+
+		await controller.set("ATLAS_TOKEN", "sk-1")
+
+		expect(JSON.stringify(controller.getState())).not.toContain("sk-1")
+	})
+
+	it("hands back a refused write and leaves the list where it was", async () => {
+		const store = createFakeTranscriptStore()
+		await store.envSet(BOT, "BOT_SEED", "1")
+		const controller = await opened(refusing(store, "envSet"))
+
+		await expect(controller.set("ATLAS_TOKEN", "sk-1")).rejects.toThrow(
+			"refused",
+		)
+		expect(controller.getState().entries).toEqual([
+			{ name: "BOT_SEED", definedIn: BOT, servedFrom: BOT },
+		])
+	})
+
+	it("hands back a refused removal and leaves the list where it was", async () => {
+		const store = createFakeTranscriptStore()
+		await store.envSet(BOT, "BOT_SEED", "1")
+		const controller = await opened(refusing(store, "envDelete"))
+
+		await expect(controller.remove("BOT_SEED")).rejects.toThrow("refused")
+		expect(controller.getState().entries).toEqual([
+			{ name: "BOT_SEED", definedIn: BOT, servedFrom: BOT },
+		])
+	})
+
+	it("reads nothing while no scope is open", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = createEnvironmentController(store)
+
+		await controller.set("ATLAS_TOKEN", "sk-1")
+
+		expect(controller.getState()).toEqual({ scope: null, entries: [] })
+		expect(await store.envList(BOT)).toEqual([])
+	})
+})
