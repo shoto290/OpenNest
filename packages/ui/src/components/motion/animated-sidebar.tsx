@@ -26,6 +26,7 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { useMediaQuery } from "@workspace/ui/hooks/use-media-query"
+import { useOverlayScroll } from "@workspace/ui/hooks/use-overlay-scroll"
 import {
 	EASE_DRAWER,
 	SPRING_LAYOUT,
@@ -730,10 +731,12 @@ export const AnimatedSidebarContent = forwardRef<
 	HTMLDivElement,
 	HTMLAttributes<HTMLDivElement>
 >(function AnimatedSidebarContent({ className, ...props }, forwardedRef) {
+	const overlayScroll = useOverlayScroll()
+
 	return (
 		<div
 			{...props}
-			ref={forwardedRef}
+			ref={mergeRefs<HTMLDivElement>(overlayScroll, forwardedRef)}
 			data-slot="sidebar-content"
 			className={cn(
 				"flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden overscroll-contain px-2 py-2",

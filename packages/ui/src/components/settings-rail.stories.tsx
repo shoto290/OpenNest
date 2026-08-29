@@ -1,5 +1,5 @@
 import { Tabs } from "@base-ui/react/tabs"
-import { expect, screen } from "storybook/test"
+import { expect, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotsIn } from "@workspace/storybook/story-utils"
@@ -11,6 +11,7 @@ import {
 	SettingsRailItem,
 	type SettingsRailProps,
 	SettingsRailSeparator,
+	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 
 const GROUPS = [
@@ -144,6 +145,97 @@ export const IconsOnly = meta.story({
 		await userEvent.hover(appearance)
 		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
 			"Appearance",
+		)
+	},
+})
+
+const LONG_PANEL = Array.from(
+	{ length: 30 },
+	(_, index) => `Setting ${index + 1}`,
+)
+
+const renderScrollingPanels = (args: SettingsRailProps) => (
+	<Tabs.Root
+		className="flex h-72 w-[36rem] overflow-hidden rounded-2xl border border-border"
+		defaultValue="profile"
+		orientation="vertical"
+	>
+		<SettingsRail {...args}>
+			{GROUPS.map((group) => (
+				<SettingsRailItem
+					icon={group.icon}
+					iconsOnly={args.iconsOnly}
+					key={group.value}
+					label={group.label}
+					value={group.value}
+				/>
+			))}
+		</SettingsRail>
+		<SettingsScrollingPanel value="profile">
+			{LONG_PANEL.map((line) => (
+				<span className="text-muted-foreground text-sm" key={line}>
+					{line}
+				</span>
+			))}
+		</SettingsScrollingPanel>
+		<SettingsScrollingPanel value="appearance">
+			<span className="text-muted-foreground text-sm">One short row</span>
+		</SettingsScrollingPanel>
+		<SettingsScrollingPanel value="runtime">
+			<span className="text-muted-foreground text-sm">One short row</span>
+		</SettingsScrollingPanel>
+	</Tabs.Root>
+)
+
+const scrollbarIn = (panel: HTMLElement) =>
+	panel.querySelector(".os-scrollbar-vertical")
+
+const handleIn = (panel: HTMLElement) => {
+	const handle = scrollbarIn(panel)?.querySelector<HTMLElement>(
+		".os-scrollbar-handle",
+	)
+	if (!handle) throw new Error("no thumb to drag")
+	const { left, top, width, height } = handle.getBoundingClientRect()
+	return { handle, x: left + width / 2, y: top + height / 2 }
+}
+
+export const ScrollingPanel = meta.story({
+	render: renderScrollingPanels,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The panel beside the rail once its group runs past the height of the dialog. The thumb is drawn over the content rather than beside it, so the rows keep their full width whether the group scrolls or not, and nothing reflows when a reader switches from a long group to a short one. Check that the thumb fades in on the way into the panel and out again on the way out, that a group short enough to fit shows none, and that dragging the thumb carries the rows with it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const long = canvas.getByRole("tabpanel")
+
+		await waitFor(() =>
+			expect(scrollbarIn(long)).not.toHaveClass("os-scrollbar-unusable"),
+		)
+		await expect(long.scrollHeight).toBeGreaterThan(long.clientHeight)
+		await expect(long.clientWidth).toBe(long.offsetWidth)
+
+		await userEvent.hover(long)
+		const { handle, x, y } = handleIn(long)
+		await userEvent.pointer([
+			{
+				keys: "[MouseLeft>]",
+				target: handle,
+				coords: { clientX: x, clientY: y },
+			},
+			{ target: handle, coords: { clientX: x, clientY: y + 60 } },
+			{ keys: "[/MouseLeft]" },
+		])
+		await waitFor(() => expect(long.scrollTop).toBeGreaterThan(0))
+
+		await userEvent.click(canvas.getByRole("tab", { name: "Appearance" }))
+		const short = canvas.getByRole("tabpanel")
+
+		await waitFor(() =>
+			expect(scrollbarIn(short)).toHaveClass("os-scrollbar-unusable"),
 		)
 	},
 })

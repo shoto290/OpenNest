@@ -2004,7 +2004,7 @@ export const SpaceScrolling = meta.story({
 			const style = getComputedStyle(panel)
 			await expect(style.scrollSnapAlign).toBe("start")
 			await expect(style.scrollSnapStop).toBe("always")
-			await expect(style.overflowY).toBe("auto")
+			await expect(panel).toHaveAttribute("data-overlayscrollbars-viewport")
 			await expect(style.overscrollBehaviorY).toBe("contain")
 			await expect(style.overscrollBehaviorX).toBe("auto")
 			await expect(panel.clientWidth).toBe(carousel.clientWidth)
@@ -2275,7 +2275,7 @@ export const SpacesWithoutRosters = meta.story({
 		await expect(rowsIn(canvasElement)).toHaveLength(ROSTER.length)
 
 		const content = slotIn(canvasElement, "sidebar-content")
-		await expect(getComputedStyle(content).overflowY).toBe("auto")
+		await expect(content).toHaveAttribute("data-overlayscrollbars-viewport")
 
 		await expect(content.scrollWidth).toBe(content.clientWidth)
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()

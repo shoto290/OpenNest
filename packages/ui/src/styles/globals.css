@@ -3,6 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/roboto";
 @import "@fontsource-variable/roboto-slab";
+@import "overlayscrollbars/overlayscrollbars.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -504,30 +505,24 @@
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
 	}
+}
 
-	::-webkit-scrollbar {
-		width: 1rem;
-		height: 1rem;
-	}
-	::-webkit-scrollbar-track,
-	::-webkit-scrollbar-corner {
-		background: transparent;
-	}
-	::-webkit-scrollbar-thumb {
-		border: 5px solid transparent;
-		border-radius: 9999px;
-		background-color: var(--scrollbar);
-		background-clip: content-box;
-	}
-	::-webkit-scrollbar-thumb:hover {
-		background-color: var(--scrollbar-hover);
-	}
+.os-theme-app {
+	box-sizing: border-box;
+	--os-size: 1rem;
+	--os-padding-perpendicular: 0.3125rem;
+	--os-padding-axis: 0.3125rem;
+	--os-handle-interactive-area-offset: 0.25rem;
+	--os-handle-border-radius: 9999px;
+	--os-handle-bg: var(--scrollbar);
+	--os-handle-bg-hover: var(--scrollbar-hover);
+	--os-handle-bg-active: var(--scrollbar-hover);
+}
 
-	@supports not selector(::-webkit-scrollbar) {
-		:root {
-			scrollbar-width: thin;
-			scrollbar-color: var(--scrollbar) transparent;
-		}
+@media (prefers-reduced-motion: reduce) {
+	.os-scrollbar.os-theme-app,
+	.os-scrollbar.os-theme-app * {
+		transition: none;
 	}
 }
 

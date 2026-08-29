@@ -43,10 +43,10 @@ import {
 	DANGER_RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
-	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailItem,
 	SettingsRailSeparator,
+	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
@@ -304,10 +304,7 @@ const BotSettingsDialog = ({
 							/>
 						</SettingsRail>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value={FIRST_TAB}
-						>
+						<SettingsScrollingPanel value={FIRST_TAB}>
 							<SettingsField
 								label={t("dialog.name.label")}
 								onValueChange={(name) => patch({ name })}
@@ -320,12 +317,9 @@ const BotSettingsDialog = ({
 								placeholder={t("dialog.title.placeholder")}
 								value={value.title}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="appearance"
-						>
+						<SettingsScrollingPanel value="appearance">
 							<BotIdentityFields
 								identity={value.identity}
 								name={botName}
@@ -337,7 +331,7 @@ const BotSettingsDialog = ({
 								working={working}
 								workingKind={workingKind}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
 							<SettingsField
@@ -373,35 +367,26 @@ const BotSettingsDialog = ({
 						</Tabs.Panel>
 
 						{history ? (
-							<Tabs.Panel
-								className={SETTINGS_SCROLLING_PANEL_CLASS}
-								value="history"
-							>
+							<SettingsScrollingPanel value="history">
 								<HistoryPanel
 									authorName={botName}
 									commits={history.commits}
 									onLoadDiff={history.onLoadDiff}
 									onRevert={history.onRevert}
 								/>
-							</Tabs.Panel>
+							</SettingsScrollingPanel>
 						) : null}
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="permissions"
-						>
+						<SettingsScrollingPanel value="permissions">
 							<PermissionsPanel
 								onPermissionsChange={(permissions: BotPermissions) =>
 									patch({ permissions })
 								}
 								permissions={value.permissions}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="runtime"
-						>
+						<SettingsScrollingPanel value="runtime">
 							<RuntimeFields
 								model={value.model}
 								models={models}
@@ -411,19 +396,16 @@ const BotSettingsDialog = ({
 								outputStyle={outputStyle}
 								workingDirectory={value.workingDirectory}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value={DANGER_TAB}
-						>
+						<SettingsScrollingPanel value={DANGER_TAB}>
 							<DangerZone
 								confirmTitle={t("danger.confirm.title", { name: botName })}
 								deleteLabel={t("danger.delete")}
 								description={t("danger.description")}
 								onDelete={onDelete}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 					</Tabs.Root>
 				)}
 

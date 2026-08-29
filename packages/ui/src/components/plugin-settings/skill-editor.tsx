@@ -21,11 +21,11 @@ import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
-	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailBack,
 	SettingsRailItem,
 	SettingsRailSeparator,
+	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 import { SettingsSelect } from "@workspace/ui/components/settings-select"
 import { SETTINGS_TAG_CLASS } from "@workspace/ui/components/settings-styles"
@@ -264,10 +264,7 @@ const SkillEditor = ({
 					/>
 				</Tabs.Panel>
 
-				<Tabs.Panel
-					className={SETTINGS_SCROLLING_PANEL_CLASS}
-					value="triggering"
-				>
+				<SettingsScrollingPanel value="triggering">
 					<SettingsField
 						hint={t("skills.name.hint")}
 						label={t("skills.name.label")}
@@ -333,12 +330,9 @@ const SkillEditor = ({
 						label={t("skills.preloaded.label")}
 						onCheckedChange={(next) => patch({ isPreloaded: next })}
 					/>
-				</Tabs.Panel>
+				</SettingsScrollingPanel>
 
-				<Tabs.Panel
-					className={SETTINGS_SCROLLING_PANEL_CLASS}
-					value="execution"
-				>
+				<SettingsScrollingPanel value="execution">
 					<SettingsField
 						hint={t("skills.model.hint")}
 						label={t("skills.model.label")}
@@ -385,9 +379,9 @@ const SkillEditor = ({
 							/>
 						</>
 					) : null}
-				</Tabs.Panel>
+				</SettingsScrollingPanel>
 
-				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="tools">
+				<SettingsScrollingPanel value="tools">
 					<SettingsField
 						hint={t("skills.allowedTools.hint")}
 						label={t("skills.allowedTools.label")}
@@ -411,9 +405,9 @@ const SkillEditor = ({
 						rows={5}
 						value={draft.hooks ?? ""}
 					/>
-				</Tabs.Panel>
+				</SettingsScrollingPanel>
 
-				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="advanced">
+				<SettingsScrollingPanel value="advanced">
 					<SettingsField
 						label={t("skills.license.label")}
 						onValueChange={(value) => patch({ license: value })}
@@ -435,7 +429,7 @@ const SkillEditor = ({
 						rows={5}
 						value={draft.metadata ?? ""}
 					/>
-				</Tabs.Panel>
+				</SettingsScrollingPanel>
 			</div>
 
 			<ConfirmDialog
