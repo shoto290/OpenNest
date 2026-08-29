@@ -106,7 +106,7 @@ const PREVIEW_LINE =
 
 const DESTINATION_NAME = "min-w-0 truncate"
 
-const ROW = "py-2 aria-expanded:bg-sidebar-accent/70"
+const ROW = "py-1 aria-expanded:bg-sidebar-accent/70"
 
 const FOOTER_INSET = "group-data-[state=collapsed]/sidebar:px-0"
 
@@ -116,11 +116,11 @@ const FOOTER_ROW =
 const FOOTER_SLOT = "shrink-0 empty:hidden"
 
 const EMPTY_COPY =
-	"px-3 py-6 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
+	"px-3 py-4 text-center text-sidebar-foreground/70 text-sm group-data-[state=collapsed]/sidebar:hidden"
 
 const ROSTER_SURFACE = "min-h-10 flex-1"
 
-const ROSTER_ROWS = "gap-1"
+const ROSTER_ROWS = "gap-0.5"
 
 const SECTION_GROUP = "px-0 py-0"
 
@@ -133,10 +133,10 @@ const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
 
 const SECTION_LABEL =
-	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-sm normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
+	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-xs normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
 
 const SECTION_TRIGGER =
-	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-2xl px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
 const SECTION_NAME = "min-w-0 truncate"
 
@@ -153,7 +153,7 @@ const SECTION_BODY_CLOSED = "invisible grid-rows-[0fr]"
 const SECTION_BODY_INNER = "min-h-0 overflow-hidden"
 
 const SECTION_FIELD =
-	"w-full min-w-0 border-none bg-transparent px-3 py-2.5 text-sidebar-foreground outline-none"
+	"w-full min-w-0 border-none bg-transparent px-2.5 py-1.5 text-sidebar-foreground text-xs outline-none"
 
 const SECTION_DROP =
 	"flex items-center justify-center gap-2 rounded-xl border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs group-data-[state=collapsed]/sidebar:hidden"
@@ -171,14 +171,14 @@ const DROP_AREA_LIFTED =
 const INSERTION_LINE =
 	"pointer-events-none absolute inset-x-2 z-20 h-0.5 rounded-full bg-sidebar-primary"
 
-const PINNED_ZONE_STACK = "flex flex-col gap-2"
+const PINNED_ZONE_STACK = "flex flex-col gap-0.5"
 
 const ZONE_SEPARATOR =
 	"mx-3 my-1 block h-px shrink-0 rounded-full bg-sidebar-border group-data-[state=collapsed]/sidebar:hidden"
 
-const INSERTION_ABOVE = "-top-1"
+const INSERTION_ABOVE = "-top-0.5"
 
-const INSERTION_BELOW = "-bottom-1"
+const INSERTION_BELOW = "-bottom-0.5"
 
 const LIFTED_BOT =
 	"pointer-events-none fixed top-0 left-0 z-[100] drop-shadow-lg translate-x-[calc(var(--lift-x,0px)-50%)] translate-y-[calc(var(--lift-y,0px)-50%)]"
@@ -210,7 +210,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-y-contain px-2 pt-0 pb-2 pr-1 group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-0.5 overflow-y-auto overscroll-y-contain px-1.5 pt-0 pb-1.5 group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
