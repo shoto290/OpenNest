@@ -566,6 +566,7 @@ export function App() {
 					mcpSecrets={secrets.state}
 					onMcpSecretClear={secrets.controller.clear}
 					onMcpSecretSave={secrets.controller.save}
+					onMcpVaultUnlock={secrets.controller.unlock}
 					onMcpServerChange={mcpServers.controller.rename}
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}

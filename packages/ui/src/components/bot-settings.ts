@@ -303,25 +303,36 @@ type BotMcpSecretFailure = "save" | "clear"
 
 type BotMcpSecrets = {
 	isReady: boolean
+	needsPassphrase: boolean
+	hasVault: boolean
+	isUnlocking: boolean
+	isPassphraseRejected: boolean
 	filled: string[]
+	unreadable: string[]
 	saving: string[]
 	failures: Record<string, BotMcpSecretFailure>
 }
 
 const BLANK_MCP_SECRETS: BotMcpSecrets = {
 	isReady: true,
+	needsPassphrase: false,
+	hasVault: false,
+	isUnlocking: false,
+	isPassphraseRejected: false,
 	filled: [],
+	unreadable: [],
 	saving: [],
 	failures: {},
 }
 
-type BotMcpSecretState = "filled" | "missing" | "unavailable"
+type BotMcpSecretState = "filled" | "missing" | "unreadable" | "unavailable"
 
 const readMcpSecretState = (
 	secrets: BotMcpSecrets,
 	key: string,
 ): BotMcpSecretState => {
 	if (!secrets.isReady) return "unavailable"
+	if (secrets.unreadable.includes(key)) return "unreadable"
 
 	return secrets.filled.includes(key) ? "filled" : "missing"
 }

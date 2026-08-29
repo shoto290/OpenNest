@@ -90,16 +90,75 @@ describe("createBotSecretsController", () => {
 		expect(controller.getState().filled).toEqual(["ATLAS_TOKEN"])
 	})
 
-	it("refuses every write while the store cannot be reached", async () => {
-		port.setReady(false)
+	it("refuses every write while the vault is still closed", async () => {
+		port.setPassphrase("open sesame")
 		const controller = await opened()
 
 		controller.save("ATLAS_TOKEN", "sk-atlas")
 		await settled()
 
 		expect(controller.getState().isReady).toBe(false)
+		expect(controller.getState().needsPassphrase).toBe(true)
 		expect(controller.getState().filled).toEqual([])
 		expect(port.stored.size).toBe(0)
+	})
+
+	it("says a vault has yet to be written and says so once one has", async () => {
+		port.setPassphrase("open sesame")
+		port.setVaultWritten(true)
+		const controller = await opened()
+
+		expect(controller.getState().hasVault).toBe(true)
+		expect(controller.getState().needsPassphrase).toBe(true)
+	})
+
+	it("reads the bot keys back the moment a passphrase opens the vault", async () => {
+		await port.set("bot-one", "ATLAS_TOKEN", "sk-atlas")
+		port.setPassphrase("open sesame")
+		const controller = await opened()
+
+		controller.unlock("open sesame")
+		await settled()
+
+		expect(controller.getState().isReady).toBe(true)
+		expect(controller.getState().needsPassphrase).toBe(false)
+		expect(controller.getState().filled).toEqual(["ATLAS_TOKEN"])
+	})
+
+	it("keeps asking and says so when a passphrase is refused", async () => {
+		port.setPassphrase("open sesame")
+		const controller = await opened()
+
+		controller.unlock("guess")
+		await settled()
+
+		expect(controller.getState().needsPassphrase).toBe(true)
+		expect(controller.getState().isPassphraseRejected).toBe(true)
+		expect(controller.getState().isUnlocking).toBe(false)
+	})
+
+	it("drops the refusal the next attempt opens with", async () => {
+		port.setPassphrase("open sesame")
+		const controller = await opened()
+
+		controller.unlock("guess")
+		await settled()
+		controller.unlock("open sesame")
+		await settled()
+
+		expect(controller.getState().isPassphraseRejected).toBe(false)
+		expect(controller.getState().isReady).toBe(true)
+	})
+
+	it("names a key the index holds but the store cannot read apart from the stored ones", async () => {
+		await port.set("bot-one", "ATLAS_TOKEN", "sk-atlas")
+		await port.set("bot-one", "ATLAS_REGION", "eu")
+		port.unreadable.add("ATLAS_TOKEN")
+
+		const controller = await opened()
+
+		expect(controller.getState().filled).toEqual(["ATLAS_REGION"])
+		expect(controller.getState().unreadable).toEqual(["ATLAS_TOKEN"])
 	})
 
 	it("drops what one bot answered when another is opened", async () => {

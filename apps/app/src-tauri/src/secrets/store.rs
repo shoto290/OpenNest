@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
+use serde::Serialize;
+
 use crate::agent::redact;
 
 use super::contract::{account_for, is_usable_key, SecretError, SERVICE};
@@ -24,6 +26,21 @@ pub enum Backend {
 pub struct Resolved {
 	pub values: BTreeMap<String, String>,
 	pub unreadable: Vec<String>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredKeys {
+	pub readable: Vec<String>,
+	pub unreadable: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreStatus {
+	pub is_ready: bool,
+	pub needs_passphrase: bool,
+	pub has_vault: bool,
 }
 
 pub struct SecretStore {
@@ -57,6 +74,27 @@ impl SecretStore {
 		self.backend() == Backend::Keyring || self.vault.lock().expect("vault").is_unlocked()
 	}
 
+	pub fn status(&self) -> StoreStatus {
+		let is_ready = self.is_ready();
+
+		StoreStatus {
+			is_ready,
+			needs_passphrase: !is_ready && self.backend() == Backend::Vault,
+			has_vault: self.vault_path().exists(),
+		}
+	}
+
+	pub fn stored_keys(&self, bot_id: &str) -> StoredKeys {
+		let mut stored = StoredKeys::default();
+		for key in self.keys(bot_id) {
+			match self.read_value(&account_for(bot_id, &key)) {
+				Ok(Some(_)) => stored.readable.push(key),
+				Ok(None) | Err(_) => stored.unreadable.push(key),
+			}
+		}
+		stored
+	}
+
 	pub fn unlock(&self, passphrase: &str) -> Result<(), SecretError> {
 		self.vault.lock().expect("vault").unlock(passphrase)
 	}
@@ -68,6 +106,10 @@ impl SecretStore {
 	pub fn set(&self, bot_id: &str, key: &str, value: &str) -> Result<(), SecretError> {
 		if !is_usable_key(key) {
 			return Err(SecretError::InvalidKey { key: key.to_owned() });
+		}
+		let value = value.trim();
+		if value.is_empty() {
+			return Err(SecretError::EmptyValue);
 		}
 		self.write_value(&account_for(bot_id, key), value)?;
 		redact::remember(value);
@@ -100,6 +142,10 @@ impl SecretStore {
 
 	fn index_path(&self) -> PathBuf {
 		self.dir.join(INDEX_NAME)
+	}
+
+	fn vault_path(&self) -> PathBuf {
+		self.dir.join(VAULT_NAME)
 	}
 
 	fn write_value(&self, account: &str, value: &str) -> Result<(), SecretError> {
@@ -215,6 +261,80 @@ mod tests {
 		let resolved = store.resolve("bot");
 		assert!(resolved.values.is_empty());
 		assert_eq!(resolved.unreadable, vec!["TOKEN".to_owned()]);
+	}
+
+	#[test]
+	fn a_key_the_backing_store_lost_is_named_apart_from_the_readable_ones() {
+		let store = a_store();
+		store.set("bot", "TOKEN", "s3cret").expect("sets");
+		store.set("bot", "API_KEY", "k3y").expect("sets");
+		store.vault.lock().expect("vault").remove("bot:TOKEN").expect("removes behind the index");
+
+		let stored = store.stored_keys("bot");
+		assert_eq!(stored.readable, vec!["API_KEY".to_owned()]);
+		assert_eq!(stored.unreadable, vec!["TOKEN".to_owned()]);
+	}
+
+	#[test]
+	fn naming_the_stored_keys_never_answers_a_value() {
+		let store = a_store();
+		store.set("bot", "TOKEN", "s3cret").expect("sets");
+
+		let stored = store.stored_keys("bot");
+		let named = format!("{:?}", stored);
+		assert!(!named.contains("s3cret"));
+	}
+
+	#[test]
+	fn a_value_is_stored_without_the_whitespace_around_it() {
+		let store = a_store();
+		store.set("bot", "TOKEN", "  s3cret\n").expect("sets");
+
+		assert_eq!(store.resolve("bot").values.get("TOKEN").map(String::as_str), Some("s3cret"));
+	}
+
+	#[test]
+	fn a_value_that_is_only_whitespace_is_refused_and_changes_nothing() {
+		let store = a_store();
+		store.set("bot", "TOKEN", "s3cret").expect("sets");
+
+		assert_eq!(store.set("bot", "TOKEN", " \t\n"), Err(SecretError::EmptyValue));
+		assert_eq!(store.resolve("bot").values.get("TOKEN").map(String::as_str), Some("s3cret"));
+	}
+
+	#[test]
+	fn a_locked_vault_asks_for_a_passphrase_and_says_no_vault_is_written_yet() {
+		let dir = std::env::temp_dir().join(format!("opennest-secrets-{}", uuid::Uuid::new_v4()));
+		std::fs::create_dir_all(&dir).expect("temp dir");
+		let store = SecretStore::under(dir);
+		store.force_vault_for_tests();
+
+		let status = store.status();
+		assert!(!status.is_ready);
+		assert!(status.needs_passphrase);
+		assert!(!status.has_vault);
+	}
+
+	#[test]
+	fn a_vault_already_on_disk_is_reported_as_one_to_open() {
+		let dir = std::env::temp_dir().join(format!("opennest-secrets-{}", uuid::Uuid::new_v4()));
+		std::fs::create_dir_all(&dir).expect("temp dir");
+		let store = SecretStore::under(dir.clone());
+		store.force_vault_for_tests();
+		store.unlock("open sesame").expect("unlocks");
+		store.set("bot", "TOKEN", "s3cret").expect("sets");
+
+		let reopened = SecretStore::under(dir);
+		reopened.force_vault_for_tests();
+
+		let status = reopened.status();
+		assert!(status.needs_passphrase);
+		assert!(status.has_vault);
+
+		reopened.unlock("open sesame").expect("unlocks");
+		let opened = reopened.status();
+		assert!(opened.is_ready);
+		assert!(!opened.needs_passphrase);
 	}
 
 	#[test]

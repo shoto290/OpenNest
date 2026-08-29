@@ -377,9 +377,27 @@ const bots = {
 				save: "This value could not be stored, so the key is left as it was.",
 				clear: "This value could not be cleared, so the key is left as it was.",
 			},
+			vault: {
+				placeholder: "Your passphrase",
+				rejected:
+					"That passphrase did not open the vault. Nothing was changed.",
+				open: {
+					label: "Passphrase",
+					notice:
+						"This machine has no keychain this app can use, so the keys live in an encrypted vault beside it. Give the passphrase that vault was created with to open it for this session.",
+					action: "Open the vault",
+				},
+				create: {
+					label: "New passphrase",
+					notice:
+						"This machine has no keychain this app can use, so the keys will live in an encrypted vault beside it. Choose a passphrase now: it is the only thing that opens that vault, and nothing here can recover it for you.",
+					action: "Create the vault",
+				},
+			},
 			status: {
 				filled: "Stored",
 				missing: "Not set",
+				unreadable: "Needs a new value",
 				unavailable: "Unavailable",
 			},
 			save: "Save",

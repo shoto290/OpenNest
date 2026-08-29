@@ -91,6 +91,7 @@ type BotSettingsDialogProps = {
 	mcpSecrets?: BotMcpSecrets
 	onMcpSecretSave?: (key: string, value: string) => void
 	onMcpSecretClear?: (key: string) => void
+	onMcpVaultUnlock?: (passphrase: string) => void
 	history?: PluginHistory
 	seed?: string
 	onDelete: () => void
@@ -124,6 +125,7 @@ const BotSettingsDialog = ({
 	mcpSecrets,
 	onMcpSecretSave,
 	onMcpSecretClear,
+	onMcpVaultUnlock,
 	history,
 	seed,
 	onDelete,
@@ -203,6 +205,7 @@ const BotSettingsDialog = ({
 			onSave={(config) => saveServer({ draft, saved }, config)}
 			onSecretClear={onMcpSecretClear}
 			onSecretSave={onMcpSecretSave}
+			onVaultUnlock={onMcpVaultUnlock}
 			saved={saved}
 			secrets={mcpSecrets}
 		/>

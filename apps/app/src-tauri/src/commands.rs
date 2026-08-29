@@ -64,7 +64,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		secrets::commands::secret_keys,
 		secrets::commands::secret_delete,
 		secrets::commands::secret_unlock_vault,
-		secrets::commands::secret_store_ready,
+		secrets::commands::secret_store_status,
 		sections::commands::section_list,
 		sections::commands::section_create,
 		sections::commands::section_rename,

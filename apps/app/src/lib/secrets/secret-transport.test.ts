@@ -13,21 +13,41 @@ beforeEach(() => {
 })
 
 describe("secretTransport", () => {
-	it("asks the host whether the store can be reached at all", async () => {
-		hostInvoke.mockResolvedValue(true)
+	it("asks the host what the store can do and what it still needs", async () => {
+		hostInvoke.mockResolvedValue({
+			isReady: false,
+			needsPassphrase: true,
+			hasVault: true,
+		})
 
-		await expect(secretTransport.isReady()).resolves.toBe(true)
-		expect(hostInvoke).toHaveBeenCalledWith("secret_store_ready")
+		await expect(secretTransport.status()).resolves.toEqual({
+			isReady: false,
+			needsPassphrase: true,
+			hasVault: true,
+		})
+		expect(hostInvoke).toHaveBeenCalledWith("secret_store_status")
 	})
 
-	it("reads back the keys one bot has answered", async () => {
-		hostInvoke.mockResolvedValue(["ATLAS_TOKEN"])
+	it("reads back the keys one bot answered apart from the ones it cannot read", async () => {
+		hostInvoke.mockResolvedValue({
+			readable: ["ATLAS_TOKEN"],
+			unreadable: ["ATLAS_REGION"],
+		})
 
-		await expect(secretTransport.keys("bot-one")).resolves.toEqual([
-			"ATLAS_TOKEN",
-		])
+		await expect(secretTransport.keys("bot-one")).resolves.toEqual({
+			readable: ["ATLAS_TOKEN"],
+			unreadable: ["ATLAS_REGION"],
+		})
 		expect(hostInvoke).toHaveBeenCalledWith("secret_keys", {
 			botId: "bot-one",
+		})
+	})
+
+	it("hands the passphrase over without naming the bot it was typed under", async () => {
+		await secretTransport.unlock("open sesame")
+
+		expect(hostInvoke).toHaveBeenCalledWith("secret_unlock_vault", {
+			passphrase: "open sesame",
 		})
 	})
 

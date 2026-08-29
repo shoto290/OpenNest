@@ -31,6 +31,7 @@ const meta = preview.meta({
 		secrets: BLANK_MCP_SECRETS,
 		onSecretSave: fn(),
 		onSecretClear: fn(),
+		onVaultUnlock: fn(),
 	},
 })
 
@@ -133,6 +134,108 @@ export const Failed = meta.story({
 			),
 		).toBeVisible()
 		await expect(canvas.getByText("Stored")).toBeVisible()
+	},
+})
+
+export const Unreadable = meta.story({
+	args: {
+		secrets: {
+			...BLANK_MCP_SECRETS,
+			filled: ["ATLAS_REGION"],
+			unreadable: ["ATLAS_TOKEN"],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A key the index still names but whose value the store cannot read back — a vault opened with another passphrase, a keychain entry removed behind the app. Check it asks for a new value instead of claiming to hold one, and that only the key that really holds a value offers a way to clear it.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Needs a new value")).toBeVisible()
+		await expect(canvas.getByText("Stored")).toBeVisible()
+		await expect(canvas.getAllByRole("button", { name: "Clear" })).toHaveLength(
+			1,
+		)
+	},
+})
+
+export const AskingForANewVaultPassphrase = meta.story({
+	args: {
+		secrets: { ...BLANK_MCP_SECRETS, isReady: false, needsPassphrase: true },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"No keychain answered on this machine and no vault has been written yet, so the panel asks for the passphrase that will create one. Check the per-key fields are gone while the vault is closed, and that the wording says a passphrase is being chosen rather than given back.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByLabelText("New passphrase")).toBeVisible()
+		await expect(
+			canvas.getByRole("button", { name: "Create the vault" }),
+		).toBeVisible()
+		await expect(canvas.queryByLabelText("ATLAS_TOKEN")).not.toBeInTheDocument()
+	},
+})
+
+export const AskingToOpenAnExistingVault = meta.story({
+	args: {
+		secrets: {
+			...BLANK_MCP_SECRETS,
+			isReady: false,
+			needsPassphrase: true,
+			hasVault: true,
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same gate over a vault that already exists. Reach for this to check the wording changes with it — the reader is opening something, not choosing a new passphrase — and that Enter submits the field it is typed in.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.type(canvas.getByLabelText("Passphrase"), "open sesame")
+		await userEvent.keyboard("{Enter}")
+
+		await expect(args.onVaultUnlock).toHaveBeenCalledWith("open sesame")
+		await expect(
+			canvas.getByRole("button", { name: "Open the vault" }),
+		).toBeVisible()
+	},
+})
+
+export const VaultPassphraseRejected = meta.story({
+	args: {
+		secrets: {
+			...BLANK_MCP_SECRETS,
+			isReady: false,
+			needsPassphrase: true,
+			hasVault: true,
+			isPassphraseRejected: true,
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A passphrase the vault refused. Check the field stays where it is so the reader can try again, and that the refusal is said rather than left to a silent no-op.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText(
+				"That passphrase did not open the vault. Nothing was changed.",
+			),
+		).toBeVisible()
+		await expect(canvas.getByLabelText("Passphrase")).toBeVisible()
 	},
 })
 

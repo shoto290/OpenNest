@@ -85,6 +85,7 @@ type McpServerEditorProps = {
 	secrets?: BotMcpSecrets
 	onSecretSave?: (key: string, value: string) => void
 	onSecretClear?: (key: string) => void
+	onVaultUnlock?: (passphrase: string) => void
 	defaultSection?: string
 	defaultConfirming?: boolean
 	defaultLeaving?: boolean
@@ -101,6 +102,7 @@ const McpServerEditor = ({
 	secrets = BLANK_MCP_SECRETS,
 	onSecretSave,
 	onSecretClear,
+	onVaultUnlock,
 	defaultSection,
 	defaultConfirming,
 	defaultLeaving,
@@ -365,6 +367,7 @@ const McpServerEditor = ({
 						<McpServerSecrets
 							onSecretClear={(key) => onSecretClear?.(key)}
 							onSecretSave={(key, value) => onSecretSave?.(key, value)}
+							onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
 							references={readMcpSecretReferences(config)}
 							secrets={secrets}
 						/>

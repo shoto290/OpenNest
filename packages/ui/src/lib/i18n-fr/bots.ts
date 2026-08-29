@@ -369,9 +369,27 @@ const bots = {
 				clear:
 					"Cette valeur n'a pas pu être effacée : la clé reste telle qu'elle était.",
 			},
+			vault: {
+				placeholder: "Votre phrase secrète",
+				rejected:
+					"Cette phrase secrète n'a pas ouvert le coffre. Rien n'a été changé.",
+				open: {
+					label: "Phrase secrète",
+					notice:
+						"Cette machine n'a pas de trousseau utilisable par cette app : les clés vivent dans un coffre chiffré à côté. Donnez la phrase secrète avec laquelle ce coffre a été créé pour l'ouvrir le temps de la session.",
+					action: "Ouvrir le coffre",
+				},
+				create: {
+					label: "Nouvelle phrase secrète",
+					notice:
+						"Cette machine n'a pas de trousseau utilisable par cette app : les clés vivront dans un coffre chiffré à côté. Choisissez une phrase secrète maintenant : elle seule ouvre ce coffre, et rien ici ne peut la retrouver pour vous.",
+					action: "Créer le coffre",
+				},
+			},
 			status: {
 				filled: "Enregistrée",
 				missing: "Absente",
+				unreadable: "À redonner",
 				unavailable: "Indisponible",
 			},
 			save: "Enregistrer",

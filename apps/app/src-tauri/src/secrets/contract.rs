@@ -13,6 +13,7 @@ pub enum SecretError {
 	NotFound { key: String },
 	#[serde(rename_all = "camelCase")]
 	InvalidKey { key: String },
+	EmptyValue,
 	#[serde(rename_all = "camelCase")]
 	IndexUnwritable { detail: String },
 }
@@ -25,6 +26,7 @@ impl std::fmt::Display for SecretError {
 			Self::VaultPassphraseRejected => write!(formatter, "the vault passphrase was rejected"),
 			Self::NotFound { key } => write!(formatter, "no secret named {key}"),
 			Self::InvalidKey { key } => write!(formatter, "{key} is not a usable secret name"),
+			Self::EmptyValue => write!(formatter, "a secret cannot be stored empty"),
 			Self::IndexUnwritable { detail } => write!(formatter, "the secret index could not be written: {detail}"),
 		}
 	}

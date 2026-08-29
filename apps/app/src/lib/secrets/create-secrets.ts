@@ -7,8 +7,13 @@ export const createSecrets = (): SecretPort =>
 	isDesktopHost()
 		? secretTransport
 		: {
-				isReady: async () => false,
-				keys: async () => [],
+				status: async () => ({
+					isReady: false,
+					needsPassphrase: false,
+					hasVault: false,
+				}),
+				keys: async () => ({ readable: [], unreadable: [] }),
 				set: async () => undefined,
 				delete: async () => undefined,
+				unlock: async () => undefined,
 			}

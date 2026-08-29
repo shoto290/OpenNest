@@ -20,14 +20,62 @@ import { cn } from "@workspace/ui/lib/utils"
 const STATUS_TAG_CLASS = {
 	filled: "text-foreground",
 	missing: "text-muted-foreground",
+	unreadable: "text-foreground",
 	unavailable: "text-foreground",
 } satisfies Record<BotMcpSecretState, string>
+
+type VaultPassphraseProps = {
+	secrets: BotMcpSecrets
+	onVaultUnlock: (passphrase: string) => void
+}
+
+const VaultPassphrase = ({ secrets, onVaultUnlock }: VaultPassphraseProps) => {
+	const { t } = useTranslation("bots")
+	const [passphrase, setPassphrase] = useState("")
+	const kind = secrets.hasVault ? "open" : "create"
+
+	return (
+		<form
+			className="flex flex-col gap-2 rounded-xl border border-border p-3"
+			onSubmit={(event) => {
+				event.preventDefault()
+				onVaultUnlock(passphrase)
+			}}
+		>
+			<p className="text-muted-foreground text-xs leading-relaxed">
+				{t(`mcp.secrets.vault.${kind}.notice`)}
+			</p>
+			<SettingsField
+				error={
+					secrets.isPassphraseRejected
+						? t("mcp.secrets.vault.rejected")
+						: undefined
+				}
+				label={t(`mcp.secrets.vault.${kind}.label`)}
+				masked
+				onValueChange={setPassphrase}
+				placeholder={t("mcp.secrets.vault.placeholder")}
+				value={passphrase}
+			/>
+			<div className="flex justify-end">
+				<Button
+					disabled={secrets.isUnlocking || passphrase.length === 0}
+					size="sm"
+					type="submit"
+				>
+					{t(`mcp.secrets.vault.${kind}.action`)}
+				</Button>
+			</div>
+		</form>
+	)
+}
 
 type McpServerSecretsProps = {
 	references: string[]
 	secrets: BotMcpSecrets
 	onSecretSave: (key: string, value: string) => void
 	onSecretClear: (key: string) => void
+	onVaultUnlock: (passphrase: string) => void
 }
 
 const McpServerSecrets = ({
@@ -35,6 +83,7 @@ const McpServerSecrets = ({
 	secrets,
 	onSecretSave,
 	onSecretClear,
+	onVaultUnlock,
 }: McpServerSecretsProps) => {
 	const { t } = useTranslation("bots")
 	const [typed, setTyped] = useState<Record<string, string>>({})
@@ -59,6 +108,10 @@ const McpServerSecrets = ({
 		)
 	}
 
+	if (secrets.needsPassphrase) {
+		return <VaultPassphrase onVaultUnlock={onVaultUnlock} secrets={secrets} />
+	}
+
 	const save = (key: string) => {
 		onSecretSave(key, typed[key] ?? "")
 		setTyped({ ...typed, [key]: "" })
@@ -78,7 +131,7 @@ const McpServerSecrets = ({
 					const failure = secrets.failures[key]
 					const isSaving = secrets.saving.includes(key)
 					const isSavable =
-						secrets.isReady && !isSaving && (typed[key] ?? "").length > 0
+						secrets.isReady && !isSaving && (typed[key] ?? "").trim().length > 0
 
 					return (
 						<li
