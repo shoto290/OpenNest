@@ -22,9 +22,9 @@ import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
-	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailItem,
+	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 import {
 	PICTURE_FIELD_SIZE,
@@ -178,10 +178,7 @@ const UserSettingsDialog = ({
 							/>
 						</SettingsRail>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value={FIRST_TAB}
-						>
+						<SettingsScrollingPanel value={FIRST_TAB}>
 							<ProfilePictureField
 								fileLabel={t("profile.picture.file")}
 								isPlaceholder={!value.image}
@@ -201,55 +198,43 @@ const UserSettingsDialog = ({
 								placeholder={t("profile.name.placeholder")}
 								value={value.name}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="appearance"
-						>
+						<SettingsScrollingPanel value="appearance">
 							<AppearanceFields
 								colorScheme={value.colorScheme}
 								onColorSchemeChange={(colorScheme) => patch({ colorScheme })}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="notifications"
-						>
+						<SettingsScrollingPanel value="notifications">
 							<NotificationFields
 								notifications={value.notifications}
 								onNotificationsChange={(notifications) =>
 									patch({ notifications })
 								}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="language"
-						>
+						<SettingsScrollingPanel value="language">
 							<LanguageFields
 								language={language}
 								onLanguageChange={onLanguageChange}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
 							{skillSession.panel}
 						</Tabs.Panel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="history"
-						>
+						<SettingsScrollingPanel value="history">
 							<HistoryPanel
 								authorName={t("plugin.author.bot")}
 								commits={history.commits}
 								onLoadDiff={history.onLoadDiff}
 								onRevert={history.onRevert}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 					</Tabs.Root>
 				)}
 

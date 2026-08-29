@@ -1,10 +1,11 @@
 "use client"
 
 import { Tabs } from "@base-ui/react/tabs"
-import type { ReactElement, ReactNode } from "react"
+import type { ComponentProps, ReactElement, ReactNode } from "react"
 
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { Tooltip } from "@workspace/ui/components/motion/tooltip"
+import { useOverlayScroll } from "@workspace/ui/hooks/use-overlay-scroll"
 import { cn } from "@workspace/ui/lib/utils"
 
 const RAIL_LABELS_MIN_WIDTH = 672
@@ -24,6 +25,23 @@ const SETTINGS_SCROLLING_PANEL_CLASS = cn(
 	SETTINGS_PANEL_CLASS,
 	"overflow-y-auto",
 )
+
+type SettingsScrollingPanelProps = Omit<
+	ComponentProps<typeof Tabs.Panel>,
+	"className"
+>
+
+const SettingsScrollingPanel = (props: SettingsScrollingPanelProps) => {
+	const overlayScroll = useOverlayScroll()
+
+	return (
+		<Tabs.Panel
+			{...props}
+			className={SETTINGS_SCROLLING_PANEL_CLASS}
+			ref={overlayScroll}
+		/>
+	)
+}
 
 const named = (item: ReactElement, label: string, iconsOnly: boolean) =>
 	iconsOnly ? (
@@ -122,7 +140,6 @@ export {
 	RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
-	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailBack,
 	type SettingsRailBackProps,
@@ -130,4 +147,6 @@ export {
 	type SettingsRailItemProps,
 	type SettingsRailProps,
 	SettingsRailSeparator,
+	SettingsScrollingPanel,
+	type SettingsScrollingPanelProps,
 }

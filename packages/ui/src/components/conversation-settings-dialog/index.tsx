@@ -14,10 +14,10 @@ import {
 	DANGER_RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
-	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailItem,
 	SettingsRailSeparator,
+	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import { useIsNarrowerThan } from "@workspace/ui/hooks/use-is-narrower-than"
@@ -130,22 +130,16 @@ const ConversationSettingsDialog = ({
 						/>
 					</SettingsRail>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value={FIRST_TAB}
-					>
+					<SettingsScrollingPanel value={FIRST_TAB}>
 						<SettingsField
 							label={t("conversationSettings.name.label")}
 							onValueChange={(name) => patch({ name })}
 							placeholder={t("conversationSettings.name.placeholder")}
 							value={value.name}
 						/>
-					</Tabs.Panel>
+					</SettingsScrollingPanel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value="participants"
-					>
+					<SettingsScrollingPanel value="participants">
 						<ParticipantsPanel
 							bots={bots}
 							leadId={leadId}
@@ -154,7 +148,7 @@ const ConversationSettingsDialog = ({
 							onRecruit={onRecruit}
 							participants={participants}
 						/>
-					</Tabs.Panel>
+					</SettingsScrollingPanel>
 
 					<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="instructions">
 						<SettingsField
@@ -166,10 +160,7 @@ const ConversationSettingsDialog = ({
 						/>
 					</Tabs.Panel>
 
-					<Tabs.Panel
-						className={SETTINGS_SCROLLING_PANEL_CLASS}
-						value={DANGER_TAB}
-					>
+					<SettingsScrollingPanel value={DANGER_TAB}>
 						<DangerZone
 							confirmTitle={t("conversationSettings.danger.confirm.title", {
 								name: conversationName,
@@ -178,7 +169,7 @@ const ConversationSettingsDialog = ({
 							description={t("conversationSettings.danger.description")}
 							onDelete={onDelete}
 						/>
-					</Tabs.Panel>
+					</SettingsScrollingPanel>
 				</Tabs.Root>
 			</Content>
 		</Root>

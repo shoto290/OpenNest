@@ -188,7 +188,8 @@ export const Default = meta.story({
 		)
 		await expect(column.clientWidth).toBe(viewport.clientWidth)
 		await expect(viewport.clientHeight).toBeLessThan(window.innerHeight)
-		await expect(getComputedStyle(viewport).overflowY).toBe("auto")
+		await expect(viewport).toHaveAttribute("data-overlayscrollbars-viewport")
+		await expect(viewport.clientWidth).toBe(viewport.offsetWidth)
 	},
 })
 

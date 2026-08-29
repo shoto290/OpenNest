@@ -21,10 +21,10 @@ import {
 	DANGER_RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
-	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailItem,
 	SettingsRailSeparator,
+	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 import { SETTINGS_HEADER_CLASS } from "@workspace/ui/components/settings-styles"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
@@ -146,33 +146,24 @@ const SpaceSettingsDialog = ({
 							/>
 						</SettingsRail>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value={FIRST_TAB}
-						>
+						<SettingsScrollingPanel value={FIRST_TAB}>
 							<SpaceFields onValueChange={onValueChange} value={value} />
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
 							{skillSession.panel}
 						</Tabs.Panel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value="history"
-						>
+						<SettingsScrollingPanel value="history">
 							<HistoryPanel
 								authorName={t("plugin.author.bot")}
 								commits={history.commits}
 								onLoadDiff={history.onLoadDiff}
 								onRevert={history.onRevert}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 
-						<Tabs.Panel
-							className={SETTINGS_SCROLLING_PANEL_CLASS}
-							value={DANGER_TAB}
-						>
+						<SettingsScrollingPanel value={DANGER_TAB}>
 							<DangerZone
 								confirmTitle={t("space.danger.confirm.title", {
 									name: spaceName,
@@ -184,7 +175,7 @@ const SpaceSettingsDialog = ({
 								}
 								onDelete={onDelete}
 							/>
-						</Tabs.Panel>
+						</SettingsScrollingPanel>
 					</Tabs.Root>
 				)}
 

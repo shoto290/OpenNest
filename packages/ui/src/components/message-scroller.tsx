@@ -21,8 +21,9 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { MessageHighlightProvider } from "@workspace/ui/components/message-highlight-context"
+import { useOverlayScroll } from "@workspace/ui/hooks/use-overlay-scroll"
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
-import { cn } from "@workspace/ui/lib/utils"
+import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const SETTLE_TIMEOUT = 150
 
@@ -136,6 +137,7 @@ export function MessageScroller({
 	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const viewportRef = useRef<HTMLElement>(null)
+	const overlayScroll = useOverlayScroll()
 	const contentRef = useRef<HTMLDivElement>(null)
 	const followingRef = useRef(followOutput)
 	const [isAtLiveEdge, setIsAtLiveEdge] = useState(followOutput)
@@ -401,7 +403,7 @@ export function MessageScroller({
 		>
 			<motion.section
 				layoutScroll
-				ref={setViewportRef}
+				ref={mergeRefs<HTMLElement>(overlayScroll, setViewportRef)}
 				aria-label={label ?? t("transcript.label")}
 				tabIndex={0}
 				{...restViewportProps}
@@ -424,7 +426,7 @@ export function MessageScroller({
 					onViewportKeyDown?.(event)
 				}}
 				className={cn(
-					"h-full overflow-y-auto overscroll-contain outline-none [overflow-anchor:none] [scrollbar-gutter:stable] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+					"h-full overflow-y-auto overscroll-contain outline-none [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 					viewportClassName,
 				)}
 			>

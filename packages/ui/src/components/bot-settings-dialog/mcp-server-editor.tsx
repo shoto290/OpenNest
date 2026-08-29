@@ -28,11 +28,11 @@ import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
-	SETTINGS_SCROLLING_PANEL_CLASS,
 	SettingsRail,
 	SettingsRailBack,
 	SettingsRailItem,
 	SettingsRailSeparator,
+	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
 import { SettingsSelect } from "@workspace/ui/components/settings-select"
 import { SETTINGS_TAG_CLASS } from "@workspace/ui/components/settings-styles"
@@ -259,10 +259,7 @@ const McpServerEditor = ({
 					</div>
 				</div>
 
-				<Tabs.Panel
-					className={SETTINGS_SCROLLING_PANEL_CLASS}
-					value={FIRST_SECTION}
-				>
+				<SettingsScrollingPanel value={FIRST_SECTION}>
 					<EditorNotice icon={Icons.Alert} text={t("mcp.notice")} />
 					<SettingsField
 						hint={t("mcp.name.hint")}
@@ -324,12 +321,9 @@ const McpServerEditor = ({
 							/>
 						</>
 					) : null}
-				</Tabs.Panel>
+				</SettingsScrollingPanel>
 
-				<Tabs.Panel
-					className={SETTINGS_SCROLLING_PANEL_CLASS}
-					value="environment"
-				>
+				<SettingsScrollingPanel value="environment">
 					{config ? (
 						<SettingsField
 							hint={t("mcp.environment.hint")}
@@ -342,9 +336,9 @@ const McpServerEditor = ({
 					) : (
 						unreadable
 					)}
-				</Tabs.Panel>
+				</SettingsScrollingPanel>
 
-				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="advanced">
+				<SettingsScrollingPanel value="advanced">
 					<SettingsField
 						error={config ? undefined : t("mcp.config.invalid")}
 						hint={t("mcp.config.hint")}
@@ -355,7 +349,7 @@ const McpServerEditor = ({
 						value={draft.config}
 					/>
 					{config ? <McpServerLaunch config={config} /> : null}
-				</Tabs.Panel>
+				</SettingsScrollingPanel>
 			</div>
 
 			<ConfirmDialog
