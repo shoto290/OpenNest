@@ -10,28 +10,43 @@ import {
 export type FakeSecretPort = SecretPort & {
 	stored: Map<string, string>
 	unreadable: Set<string>
-	hold: (target: SecretTarget, scope: SecretScope, key: string) => void
+	hold: (
+		target: SecretTarget,
+		scope: SecretScope,
+		key: string,
+		server?: string,
+	) => void
 	setPassphrase: (passphrase: string) => void
 	setVaultWritten: (hasVault: boolean) => void
 	failNext: (reason: string) => void
 }
 
-const ownerOf = (target: SecretTarget, scope: SecretScope) => {
-	if (scope === "space") return `space:${target.spaceId}`
-
-	return scope === "bot"
-		? `bot:${target.botId}`
-		: `server:${target.botId}:${target.serverName}`
+type Link = {
+	owner: string
+	scope: SecretScope
+	server: string | null
 }
+
+const spaceOwner = (spaceId: string | null) => `space:${spaceId}`
+
+const botOwner = (botId: string | null) => `bot:${botId}`
+
+const serverOwners = (botId: string | null) => `server:${botId}:`
+
+const serverOwner = (botId: string | null, server: string) =>
+	`${serverOwners(botId)}${server}`
 
 const held = (owner: string, key: string) => `${owner}/${key}`
 
-const chainOf = (target: SecretTarget): SecretScope[] => {
-	const scope = scopeOf(target)
+const ownerFor = (
+	target: SecretTarget,
+	scope: SecretScope,
+	server?: string,
+) => {
+	if (scope === "space") return spaceOwner(target.spaceId)
+	if (scope === "bot") return botOwner(target.botId)
 
-	if (scope === "space") return ["space"]
-
-	return scope === "bot" ? ["space", "bot"] : ["space", "bot", "server"]
+	return serverOwner(target.botId, server ?? target.serverName ?? "")
 }
 
 export const createFakeSecretPort = (): FakeSecretPort => {
@@ -50,35 +65,80 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 		throw new Error(reason)
 	}
 
-	const ownersOf = (target: SecretTarget, key: string): SecretKeyOwner[] =>
-		chainOf(target)
-			.filter((scope) => stored.has(held(ownerOf(target, scope), key)))
-			.map((scope) => ({
-				scope,
-				server: scope === "server" ? (target.serverName ?? "") : undefined,
-				readable: !unreadable.has(key),
+	const ownersUnder = (prefix: string) => [
+		...new Set(
+			[...stored.keys()]
+				.filter((entry) => entry.startsWith(prefix))
+				.map((entry) => entry.slice(0, entry.indexOf("/"))),
+		),
+	]
+
+	const everyServerLink = (target: SecretTarget): Link[] =>
+		ownersUnder(serverOwners(target.botId))
+			.sort()
+			.map((owner) => ({
+				owner,
+				scope: "server" as const,
+				server: owner.slice(serverOwners(target.botId).length),
 			}))
 
-	const namesUnder = (target: SecretTarget) => {
-		const prefixes = chainOf(target).map((scope) => ownerOf(target, scope))
+	const chainOf = (target: SecretTarget): Link[] => {
+		if (scopeOf(target) === "space") {
+			return [
+				{ owner: spaceOwner(target.spaceId), scope: "space", server: null },
+			]
+		}
 
-		return [
-			...new Set(
-				[...stored.keys()]
-					.filter((entry) =>
-						prefixes.some((prefix) => entry.startsWith(`${prefix}/`)),
-					)
-					.map((entry) => entry.slice(entry.indexOf("/") + 1)),
-			),
-		].sort()
+		const chain: Link[] = []
+
+		if (target.spaceId) {
+			chain.push({
+				owner: spaceOwner(target.spaceId),
+				scope: "space",
+				server: null,
+			})
+		}
+		chain.push({ owner: botOwner(target.botId), scope: "bot", server: null })
+
+		return [...chain, ...everyServerLink(target)]
+	}
+
+	const keysUnder = (owner: string) =>
+		[...stored.keys()]
+			.filter((entry) => entry.startsWith(`${owner}/`))
+			.map((entry) => entry.slice(owner.length + 1))
+
+	const entriesOver = (chain: Link[]): StoredSecretKey[] => {
+		const byKey = new Map<string, SecretKeyOwner[]>()
+
+		for (const link of chain) {
+			for (const key of keysUnder(link.owner)) {
+				const owners = byKey.get(key) ?? []
+
+				owners.push({
+					scope: link.scope,
+					server: link.server ?? undefined,
+					readable: !unreadable.has(held(link.owner, key)),
+				})
+				byKey.set(key, owners)
+			}
+		}
+
+		return [...byKey.entries()]
+			.sort(([one], [other]) => one.localeCompare(other))
+			.map(([key, owners]) => ({
+				key,
+				owners,
+				servedBy: [...owners].reverse().find((owner) => owner.readable) ?? null,
+			}))
 	}
 
 	return {
 		stored,
 		unreadable,
 
-		hold: (target, scope, key) => {
-			stored.set(held(ownerOf(target, scope), key), `value-of-${key}`)
+		hold: (target, scope, key, server) => {
+			stored.set(held(ownerFor(target, scope, server), key), `value-of-${key}`)
 		},
 
 		setPassphrase: (next) => {
@@ -100,23 +160,19 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 			hasVault,
 		}),
 
-		keys: async (target) => ({
-			entries: namesUnder(target).map((key): StoredSecretKey => {
-				const owners = ownersOf(target, key)
-
-				return { key, owners, servedBy: owners.at(-1) ?? null }
-			}),
-		}),
+		keys: async (target) => ({ entries: entriesOver(chainOf(target)) }),
 
 		set: async (target, key, value) => {
 			refuseOnce()
-			stored.set(held(ownerOf(target, scopeOf(target)), key), value)
-			unreadable.delete(key)
+			const owner = ownerFor(target, scopeOf(target))
+
+			stored.set(held(owner, key), value)
+			unreadable.delete(held(owner, key))
 		},
 
-		delete: async (target, key, scope) => {
+		delete: async (target, key, scope, server) => {
 			refuseOnce()
-			stored.delete(held(ownerOf(target, scope), key))
+			stored.delete(held(ownerFor(target, scope, server), key))
 		},
 
 		unlock: async (given) => {

@@ -22,7 +22,7 @@ type SecretRowProps = {
 	row: SecretRowValue
 	value: SecretsValue
 	onSave: (key: string, secret: string) => void
-	onDelete: (key: string, scope: SecretScope) => void
+	onDelete: (key: string, scope: SecretScope, server?: string) => void
 }
 
 const SecretRow = ({ row, value, onSave, onDelete }: SecretRowProps) => {
@@ -32,7 +32,7 @@ const SecretRow = ({ row, value, onSave, onDelete }: SecretRowProps) => {
 	const failure = value.failures[row.key]
 	const isSaving = value.saving.includes(row.key)
 	const isEditing = typed !== null
-	const isInherited = row.servedBy !== null && !row.isOwn
+	const servedElsewhere = row.servedBy !== null && !row.isServedByOwn
 
 	const status = () => {
 		if (failure) return t(`secrets.failure.${failure}`)
@@ -101,15 +101,17 @@ const SecretRow = ({ row, value, onSave, onDelete }: SecretRowProps) => {
 				{status()}
 			</span>
 
-			{isInherited && row.servedBy ? (
+			{servedElsewhere && row.servedBy ? (
 				<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
-					{t(`secrets.from.${row.servedBy}`)}
+					{row.servedByServer
+						? t("secrets.from.named", { server: row.servedByServer })
+						: t(`secrets.from.${row.servedBy}`)}
 				</span>
 			) : null}
 
-			{row.shadowed ? (
+			{row.displaced ? (
 				<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
-					{t(`secrets.overrides.${row.shadowed}`)}
+					{t(`secrets.overrides.${row.displaced}`)}
 				</span>
 			) : null}
 
@@ -123,11 +125,13 @@ const SecretRow = ({ row, value, onSave, onDelete }: SecretRowProps) => {
 				<Icons.Edit aria-hidden="true" />
 			</Button>
 
-			{row.isOwn ? (
+			{row.isHeldByOwn ? (
 				<Button
 					aria-label={t("secrets.delete.action", { key: row.key })}
 					disabled={isSaving}
-					onClick={() => onDelete(row.key, value.scope)}
+					onClick={() =>
+						onDelete(row.key, value.scope, value.server ?? undefined)
+					}
 					size="icon-sm"
 					variant="ghost"
 				>
@@ -135,12 +139,15 @@ const SecretRow = ({ row, value, onSave, onDelete }: SecretRowProps) => {
 				</Button>
 			) : null}
 
-			{isInherited && row.servedBy ? (
+			{servedElsewhere && row.servedBy ? (
 				<ConfirmDialog
 					confirmLabel={t(`secrets.delete.wider.${row.servedBy}`)}
 					description={t(`secrets.delete.confirm.${row.servedBy}`)}
 					isTriggerDisabled={isSaving}
-					onConfirm={() => row.servedBy && onDelete(row.key, row.servedBy)}
+					onConfirm={() =>
+						row.servedBy &&
+						onDelete(row.key, row.servedBy, row.servedByServer ?? undefined)
+					}
 					title={t("secrets.delete.title", { key: row.key })}
 					trigger={
 						<>

@@ -13,6 +13,7 @@ export type SecretFailure = "save" | "delete"
 export type SecretsState = {
 	target: SecretTarget | null
 	scope: SecretScope
+	server: string | null
 	isReady: boolean
 	needsPassphrase: boolean
 	hasVault: boolean
@@ -32,12 +33,13 @@ export type SecretsController = {
 	open: (target: SecretTarget) => Promise<void>
 	unlock: (passphrase: string) => void
 	save: (key: string, value: string) => void
-	remove: (key: string, scope: SecretScope) => void
+	remove: (key: string, scope: SecretScope, server?: string) => void
 }
 
 export const initialSecretsState: SecretsState = {
 	target: null,
 	scope: "bot",
+	server: null,
 	isReady: false,
 	needsPassphrase: false,
 	hasVault: false,
@@ -153,7 +155,12 @@ export const createSecretsController = (
 		},
 
 		open: (target: SecretTarget) => {
-			set({ ...initialSecretsState, target, scope: scopeOf(target) })
+			set({
+				...initialSecretsState,
+				target,
+				scope: scopeOf(target),
+				server: target.serverName,
+			})
 			return enqueue(() => read(target)).catch(() => undefined)
 		},
 
@@ -183,11 +190,11 @@ export const createSecretsController = (
 				(after) => ({ saved: { ...after.saved, [key]: after.scope } }),
 			),
 
-		remove: (key, scope) =>
+		remove: (key, scope, server) =>
 			write(
 				key,
 				"delete",
-				(target) => port.delete(target, key, scope),
+				(target) => port.delete(target, key, scope, server),
 				(after) => {
 					const serving = servingScope(after, key)
 

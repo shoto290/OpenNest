@@ -129,6 +129,7 @@ const settings = {
 			unavailable: "Unavailable",
 		},
 		from: {
+			named: "From {{server}}",
 			space: "From space",
 			bot: "From bot",
 			server: "From server",

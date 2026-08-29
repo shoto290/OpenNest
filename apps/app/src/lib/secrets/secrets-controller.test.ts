@@ -221,6 +221,71 @@ describe("createSecretsController", () => {
 		expect(controller.getState().needsPassphrase).toBe(true)
 	})
 
+	it("lists one owner a server of the bot, the way the store chains them", async () => {
+		port.hold(BOT, "bot", "SHARED")
+		port.hold(BOT, "server", "SHARED", "atlas")
+		port.hold(BOT, "server", "SHARED", "ledger")
+
+		const controller = await opened(BOT)
+		const entry = controller.getState().entries[0]
+
+		expect(entry?.owners.map((owner) => owner.server ?? owner.scope)).toEqual([
+			"bot",
+			"atlas",
+			"ledger",
+		])
+	})
+
+	it("serves the key from a server of the bot, naming which", async () => {
+		port.hold(BOT, "space", "SHARED")
+		port.hold(BOT, "server", "SHARED", "atlas")
+
+		const controller = await opened(BOT)
+		const entry = controller.getState().entries[0]
+
+		expect(entry?.servedBy?.scope).toBe("server")
+		expect(entry?.servedBy?.server).toBe("atlas")
+	})
+
+	it("serves the widest readable owner when the narrower ones cannot be read", async () => {
+		port.hold(BOT, "space", "SHARED")
+		port.hold(BOT, "bot", "SHARED")
+		port.unreadable.add("bot:bot-one/SHARED")
+
+		const controller = await opened(BOT)
+		const entry = controller.getState().entries[0]
+
+		expect(entry?.servedBy?.scope).toBe("space")
+		expect(entry?.owners.map((owner) => owner.readable)).toEqual([true, false])
+	})
+
+	it("serves nothing when no owner of the key can be read", async () => {
+		port.hold(BOT, "bot", "SHARED")
+		port.unreadable.add("bot:bot-one/SHARED")
+
+		const controller = await opened(BOT)
+
+		expect(controller.getState().entries[0]?.servedBy).toBeNull()
+	})
+
+	it("deletes the value of the server it was told, not the one it opened", async () => {
+		port.hold(SERVER, "server", "SHARED", "atlas")
+		port.hold(SERVER, "server", "SHARED", "ledger")
+
+		const controller = await opened(SERVER)
+
+		controller.remove("SHARED", "server", "ledger")
+		await settled()
+
+		expect(port.stored.has("server:bot-one:atlas/SHARED")).toBe(true)
+		expect(port.stored.has("server:bot-one:ledger/SHARED")).toBe(false)
+	})
+
+	it("carries the opened server name into the state the panel reads", async () => {
+		expect((await opened(SERVER)).getState().server).toBe("atlas")
+		expect((await opened(BOT)).getState().server).toBeNull()
+	})
+
 	it("says the store could not be read instead of looking merely empty", async () => {
 		const failing = {
 			...port,

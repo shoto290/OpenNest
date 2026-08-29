@@ -18,7 +18,7 @@ type SecretsPanelProps = {
 	value: SecretsValue
 	references?: string[]
 	onSave: (key: string, secret: string) => void
-	onDelete: (key: string, scope: SecretScope) => void
+	onDelete: (key: string, scope: SecretScope, server?: string) => void
 	onVaultUnlock: (passphrase: string) => void
 }
 

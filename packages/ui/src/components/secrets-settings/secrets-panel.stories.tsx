@@ -189,7 +189,58 @@ export const DeletingAWiderValue = meta.story({
 			within(question).getByRole("button", { name: "Delete from the space" }),
 		)
 
-		await expect(args.onDelete).toHaveBeenCalledWith("SHARED", "space")
+		await expect(args.onDelete).toHaveBeenCalledWith(
+			"SHARED",
+			"space",
+			undefined,
+		)
+	},
+})
+
+export const ServedByOneOfTheBotsServers = meta.story({
+	args: {
+		value: {
+			...BLANK_SECRETS,
+			scope: "bot",
+			entries: [
+				{
+					key: "ANTHROPIC_API_KEY",
+					owners: [
+						{ scope: "bot", readable: true },
+						{ scope: "server", server: "atlas", readable: true },
+					],
+					servedBy: { scope: "server", server: "atlas", readable: true },
+				},
+			],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bot panel over a key one of its own servers answers for itself. The bot holds a value and it is not the one that runs, so the row names the server that wins rather than claiming the bot's is in use. Check the server is named, not merely called a server, since a bot can start several.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expect(canvas.getByText("From atlas")).toBeVisible()
+		await expect(canvas.getByText("Overrides bot")).toBeVisible()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Delete from the server" }),
+		)
+		const question = await screen.findByRole("alertdialog", {
+			name: "Delete ANTHROPIC_API_KEY?",
+		})
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Delete from the server" }),
+		)
+
+		await expect(args.onDelete).toHaveBeenCalledWith(
+			"ANTHROPIC_API_KEY",
+			"server",
+			"atlas",
+		)
 	},
 })
 

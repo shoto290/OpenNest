@@ -18,6 +18,7 @@ type SecretsFailure = "save" | "delete"
 
 type SecretsValue = {
 	scope: SecretScope
+	server: string | null
 	isReady: boolean
 	needsPassphrase: boolean
 	hasVault: boolean
@@ -33,6 +34,7 @@ type SecretsValue = {
 
 const BLANK_SECRETS: SecretsValue = {
 	scope: "bot",
+	server: null,
 	isReady: true,
 	needsPassphrase: false,
 	hasVault: false,
@@ -52,29 +54,39 @@ type SecretRow = {
 	key: string
 	state: SecretRowState
 	servedBy: SecretScope | null
-	isOwn: boolean
-	shadowed: SecretScope | null
+	servedByServer: string | null
+	isServedByOwn: boolean
+	isHeldByOwn: boolean
+	displaced: SecretScope | null
 }
+
+const isOwnOwner = (value: SecretsValue, owner: SecretKeyOwner) =>
+	owner.scope === value.scope &&
+	(owner.scope !== "server" || (owner.server ?? null) === value.server)
+
+const isSameOwner = (one: SecretKeyOwner, other: SecretKeyOwner) =>
+	one.scope === other.scope && (one.server ?? null) === (other.server ?? null)
 
 const stateOf = (
 	value: SecretsValue,
 	entry: SecretEntry | undefined,
 ): SecretRowState => {
 	if (!value.isReady) return "unavailable"
-	if (!entry?.servedBy) return "missing"
+	if (!entry || entry.owners.length === 0) return "missing"
 
-	return entry.servedBy.readable ? "stored" : "unreadable"
+	return entry.servedBy ? "stored" : "unreadable"
 }
 
-const shadowedBy = (
-	value: SecretsValue,
-	entry: SecretEntry | undefined,
-): SecretScope | null => {
-	if (!entry) return null
+const displacedBy = (entry: SecretEntry | undefined): SecretScope | null => {
+	const servedBy = entry?.servedBy
 
-	const own = entry.owners.findIndex((owner) => owner.scope === value.scope)
+	if (!entry || !servedBy) return null
 
-	return own > 0 ? (entry.owners[own - 1]?.scope ?? null) : null
+	const serving = entry.owners.findIndex((owner) =>
+		isSameOwner(owner, servedBy),
+	)
+
+	return serving > 0 ? (entry.owners[serving - 1]?.scope ?? null) : null
 }
 
 const toSecretRow = (
@@ -85,8 +97,10 @@ const toSecretRow = (
 	key,
 	state: stateOf(value, entry),
 	servedBy: entry?.servedBy?.scope ?? null,
-	isOwn: Boolean(entry?.owners.some((owner) => owner.scope === value.scope)),
-	shadowed: shadowedBy(value, entry),
+	servedByServer: entry?.servedBy?.server ?? null,
+	isServedByOwn: Boolean(entry?.servedBy && isOwnOwner(value, entry.servedBy)),
+	isHeldByOwn: Boolean(entry?.owners.some((owner) => isOwnOwner(value, owner))),
+	displaced: displacedBy(entry),
 })
 
 const readSecretRows = (

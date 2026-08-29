@@ -130,6 +130,7 @@ const settings = {
 			unavailable: "Indisponible",
 		},
 		from: {
+			named: "De {{server}}",
 			space: "De l'espace",
 			bot: "Du bot",
 			server: "Du serveur",

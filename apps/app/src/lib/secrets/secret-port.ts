@@ -38,6 +38,7 @@ export type SecretPort = {
 		target: SecretTarget,
 		key: string,
 		scope: SecretScope,
+		server?: string,
 	) => Promise<void>
 	unlock: (passphrase: string) => Promise<void>
 }

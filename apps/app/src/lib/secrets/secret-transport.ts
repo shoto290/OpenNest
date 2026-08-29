@@ -36,10 +36,15 @@ export const secretTransport: SecretPort = {
 					scope: scopeOf(target),
 				}),
 
-	delete: (target, key, scope) =>
+	delete: (target, key, scope, server) =>
 		isSpaceTarget(target)
 			? invoke("secret_space_delete", { ...spaceIdOf(target), key })
-			: invoke("secret_delete", { ...addressOf(target), key, scope }),
+			: invoke("secret_delete", {
+					...addressOf(target),
+					server: server ?? target.serverName ?? undefined,
+					key,
+					scope,
+				}),
 
 	unlock: (passphrase) => invoke("secret_unlock_vault", { passphrase }),
 }
