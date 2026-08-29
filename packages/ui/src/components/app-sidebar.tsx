@@ -1628,6 +1628,7 @@ const AppSidebarBase = ({
 	return (
 		<>
 			<AnimatedSidebar
+				variant="inset"
 				{...panel}
 				aria-busy={shown.some(isBusy) || shownRooms.some(isBusy)}
 				ariaLabel={t("roster.label")}

@@ -468,6 +468,7 @@ export function App() {
 		<>
 			<WorkspaceShell
 				defaultOpen
+				spaceTint={selectedSpace?.colour}
 				width={preferences.sidebarWidth ?? undefined}
 				onWidthChange={changeSidebarWidth}
 				isResizable={isSidebarResizable()}

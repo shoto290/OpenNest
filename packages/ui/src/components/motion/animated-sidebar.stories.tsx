@@ -378,7 +378,7 @@ export const Variants = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every panel treatment, derived from the `variant` union so a new one fails to compile until it is documented here. Check the seam each treatment owns: `sidebar` shares a border with the page, `floating` detaches into a bordered card, `inset` detaches without a border and hands the rounding to `AnimatedSidebarInset`. Pick `InLayout` to judge `inset` against the page area it is paired with.",
+					"Every panel treatment, derived from the `variant` union so a new one fails to compile until it is documented here. Check the seam each treatment owns: `sidebar` shares a border with the page, `floating` detaches into a bordered card, `inset` drops its own surface and its border so the wrapper surface reaches the window edge behind it, leaving the shell around it to detach the page into a card. Pick `InLayout` to judge `inset` against the page area it is paired with.",
 			},
 		},
 	},

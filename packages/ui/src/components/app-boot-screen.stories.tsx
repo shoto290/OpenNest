@@ -46,14 +46,19 @@ export const InLayout = meta.story({
 		docs: {
 			description: {
 				story:
-					"Where the app actually mounts it — the shell's main column, with the drag region a frameless desktop window needs so the launch is still draggable. Check that it takes the full height of the column instead of collapsing to the mark, and that the background meets the shell with no seam. Pick `Default` to review the surface on its own.",
+					"Where the app actually mounts it — the shell's content card, with the drag region a frameless desktop window needs so the launch is still draggable. Check that it fills the card instead of collapsing to the mark, and that its background meets the card edge with no seam inside it. Pick `Default` to review the surface on its own.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const [screen] = slotsIn(canvasElement, "app-boot-screen")
 
+		const card = screen.closest("main") as HTMLElement
+
 		await expect(screen).toHaveAttribute("data-tauri-drag-region", "deep")
-		await expect(screen.getBoundingClientRect().height).toBe(window.innerHeight)
+		await expect(screen.getBoundingClientRect().height).toBe(card.clientHeight)
+		await expect(card.getBoundingClientRect().height).toBeLessThan(
+			window.innerHeight,
+		)
 	},
 })

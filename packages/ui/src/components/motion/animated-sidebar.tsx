@@ -127,6 +127,7 @@ type SidebarProviderStyle = CSSProperties & {
 	"--sidebar-width"?: string
 	"--sidebar-width-icon"?: string
 	"--sidebar-width-mobile"?: string
+	"--space-tint"?: string
 }
 
 export interface AnimatedSidebarProviderProps
@@ -278,7 +279,7 @@ export function AnimatedSidebarProvider({
 				data-resizing={resizing}
 				style={widthStyle}
 				className={cn(
-					"group/sidebar-wrapper flex h-svh w-full min-w-0 overflow-hidden",
+					"group/sidebar-wrapper surface-shell flex h-svh w-full min-w-0 overflow-hidden",
 					"data-[resizing=true]:cursor-col-resize data-[resizing=true]:select-none",
 					className,
 				)}
@@ -542,9 +543,9 @@ const SidebarResizeHandle = ({ side }: SidebarResizeHandleProps) => {
 			onKeyDown={stepWidth}
 			className={cn(
 				"absolute inset-y-0 z-30 hidden w-2 cursor-col-resize touch-none outline-none md:block",
-				"data-[side=left]:-end-1 data-[side=right]:-start-1",
-				"after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent",
-				"hover:after:bg-sidebar-ring focus-visible:after:w-0.5 focus-visible:after:bg-sidebar-ring",
+				"data-[side=left]:-end-1.5 data-[side=right]:-start-1.5",
+				"after:absolute after:top-1/2 after:left-1/2 after:h-10 after:w-1 after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-full after:bg-transparent after:transition-colors motion-reduce:after:transition-none",
+				"hover:after:bg-sidebar-border focus-visible:after:bg-sidebar-ring",
 			)}
 		/>
 	)
@@ -638,7 +639,7 @@ export const AnimatedSidebar = forwardRef<HTMLElement, AnimatedSidebarProps>(
 								: "border-sidebar-border border-l"),
 						variant === "floating" &&
 							"m-2 h-[calc(100svh-1rem)] rounded-2xl border border-sidebar-border shadow-sm",
-						variant === "inset" && "m-2 h-[calc(100svh-1rem)] rounded-2xl",
+						variant === "inset" && "on-shell bg-transparent",
 						panelClassName,
 					)}
 				>
@@ -705,7 +706,6 @@ export const AnimatedSidebarInset = forwardRef<
 			data-slot="sidebar-inset"
 			className={cn(
 				"relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background",
-				"md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-2xl md:peer-data-[variant=inset]:shadow-sm",
 				className,
 			)}
 		/>
