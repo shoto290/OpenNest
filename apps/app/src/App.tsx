@@ -230,9 +230,12 @@ export function App() {
 
 	useEffect(() => {
 		if (isEditing && selectedBotId) {
-			void secrets.controller.open(selectedBotId)
+			void secrets.controller.open(
+				selectedBotId,
+				Boolean(roster.controller.getState().spaceId),
+			)
 		}
-	}, [secrets.controller, isEditing, selectedBotId])
+	}, [roster.controller, secrets.controller, isEditing, selectedBotId])
 
 	useEffect(() => {
 		if (!selectedBotId) {

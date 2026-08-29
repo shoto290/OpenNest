@@ -11,9 +11,10 @@ export const secretTransport: SecretPort = {
 
 	keys: (botId) => invoke<StoredSecretKeys>("secret_keys", { botId }),
 
-	set: (botId, key, value) => invoke("secret_set", { botId, key, value }),
+	set: (botId, key, value, scope) =>
+		invoke("secret_set", { botId, key, value, scope }),
 
-	delete: (botId, key) => invoke("secret_delete", { botId, key }),
+	delete: (botId, key, scope) => invoke("secret_delete", { botId, key, scope }),
 
 	unlock: (passphrase) => invoke("secret_unlock_vault", { passphrase }),
 }

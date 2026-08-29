@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 
 import {
 	BLANK_MCP_SECRETS,
+	type BotMcpSecretScope,
 	type BotMcpSecrets,
 	type BotMcpServerDraft,
 	type BotMcpServerFields,
@@ -83,8 +84,8 @@ type McpServerEditorProps = {
 	onSave: (config: Record<string, unknown>) => void
 	onDelete?: () => void
 	secrets?: BotMcpSecrets
-	onSecretSave?: (key: string, value: string) => void
-	onSecretClear?: (key: string) => void
+	onSecretSave?: (key: string, value: string, scope: BotMcpSecretScope) => void
+	onSecretClear?: (key: string, scope: BotMcpSecretScope) => void
 	onVaultUnlock?: (passphrase: string) => void
 	defaultSection?: string
 	defaultConfirming?: boolean
@@ -365,8 +366,10 @@ const McpServerEditor = ({
 				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="secrets">
 					{config ? (
 						<McpServerSecrets
-							onSecretClear={(key) => onSecretClear?.(key)}
-							onSecretSave={(key, value) => onSecretSave?.(key, value)}
+							onSecretClear={(key, scope) => onSecretClear?.(key, scope)}
+							onSecretSave={(key, value, scope) =>
+								onSecretSave?.(key, value, scope)
+							}
 							onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
 							references={readMcpSecretReferences(config)}
 							secrets={secrets}

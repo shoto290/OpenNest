@@ -386,6 +386,29 @@ const bots = {
 					action: "Créer le coffre",
 				},
 			},
+			shadowed:
+				"Ce bot et cet espace répondent tous les deux à cette clé. C'est la valeur du bot qui démarre le serveur ; celle de l'espace reste pour les autres bots.",
+			saved: {
+				bot: "Enregistrée dans ce bot.",
+				space: "Enregistrée dans cet espace.",
+			},
+			clearSpace: {
+				action: "Effacer pour l'espace",
+				title: "Effacer {{key}} pour cet espace ?",
+				description:
+					"Cette valeur appartient à l'espace : tous ses bots perdent la clé d'un coup. Un bot qui détient sa propre valeur pour cette clé la garde. C'est irréversible.",
+			},
+			scope: {
+				label: "Enregistrer dans",
+				option: {
+					bot: "Ce bot",
+					space: "Cet espace",
+				},
+			},
+			origin: {
+				bot: "Détenue par ce bot",
+				space: "Vient de cet espace",
+			},
 			status: {
 				filled: "Enregistrée",
 				missing: "Absente",

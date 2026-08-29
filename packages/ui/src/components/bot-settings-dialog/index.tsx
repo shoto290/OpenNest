@@ -13,6 +13,7 @@ import {
 	BLANK_MCP_SERVER_DRAFT,
 	type BotCommitItem,
 	type BotIdentity,
+	type BotMcpSecretScope,
 	type BotMcpSecrets,
 	type BotMcpServerDraft,
 	type BotMcpServerItem,
@@ -89,8 +90,12 @@ type BotSettingsDialogProps = {
 	) => void
 	onMcpServerDelete: (name: string) => void
 	mcpSecrets?: BotMcpSecrets
-	onMcpSecretSave?: (key: string, value: string) => void
-	onMcpSecretClear?: (key: string) => void
+	onMcpSecretSave?: (
+		key: string,
+		value: string,
+		scope: BotMcpSecretScope,
+	) => void
+	onMcpSecretClear?: (key: string, scope: BotMcpSecretScope) => void
 	onMcpVaultUnlock?: (passphrase: string) => void
 	history?: PluginHistory
 	seed?: string

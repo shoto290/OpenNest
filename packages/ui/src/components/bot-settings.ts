@@ -301,14 +301,23 @@ const readMcpSecretReferences = (config: Record<string, unknown>): string[] => {
 
 type BotMcpSecretFailure = "save" | "clear"
 
+const MCP_SECRET_SCOPES = ["bot", "space"] as const
+
+type BotMcpSecretScope = (typeof MCP_SECRET_SCOPES)[number]
+
 type BotMcpSecrets = {
 	isReady: boolean
 	needsPassphrase: boolean
 	hasVault: boolean
 	isUnlocking: boolean
 	isPassphraseRejected: boolean
+	hasSpace: boolean
 	filled: string[]
 	unreadable: string[]
+	inherited: string[]
+	inheritedUnreadable: string[]
+	shadowed: string[]
+	saved: Record<string, BotMcpSecretScope>
 	saving: string[]
 	failures: Record<string, BotMcpSecretFailure>
 }
@@ -319,13 +328,33 @@ const BLANK_MCP_SECRETS: BotMcpSecrets = {
 	hasVault: false,
 	isUnlocking: false,
 	isPassphraseRejected: false,
+	hasSpace: false,
 	filled: [],
 	unreadable: [],
+	inherited: [],
+	inheritedUnreadable: [],
+	shadowed: [],
+	saved: {},
 	saving: [],
 	failures: {},
 }
 
 type BotMcpSecretState = "filled" | "missing" | "unreadable" | "unavailable"
+
+const isHeldByBot = (secrets: BotMcpSecrets, key: string) =>
+	secrets.filled.includes(key) || secrets.unreadable.includes(key)
+
+const isHeldBySpace = (secrets: BotMcpSecrets, key: string) =>
+	secrets.inherited.includes(key) || secrets.inheritedUnreadable.includes(key)
+
+const readMcpSecretOrigin = (
+	secrets: BotMcpSecrets,
+	key: string,
+): BotMcpSecretScope | null => {
+	if (isHeldByBot(secrets, key)) return "bot"
+
+	return isHeldBySpace(secrets, key) ? "space" : null
+}
 
 const readMcpSecretState = (
 	secrets: BotMcpSecrets,
@@ -333,8 +362,10 @@ const readMcpSecretState = (
 ): BotMcpSecretState => {
 	if (!secrets.isReady) return "unavailable"
 	if (secrets.unreadable.includes(key)) return "unreadable"
+	if (secrets.filled.includes(key)) return "filled"
+	if (secrets.inheritedUnreadable.includes(key)) return "unreadable"
 
-	return secrets.filled.includes(key) ? "filled" : "missing"
+	return secrets.inherited.includes(key) ? "filled" : "missing"
 }
 
 type BotMcpServerFields = {
@@ -507,6 +538,7 @@ export {
 	type BotCommitItem,
 	type BotIdentity,
 	type BotMcpSecretFailure,
+	type BotMcpSecretScope,
 	type BotMcpSecretState,
 	type BotMcpSecrets,
 	type BotMcpServerDraft,
@@ -532,6 +564,7 @@ export {
 	isSameFieldAnswer,
 	isSkillDraftUnsaved,
 	MCP_ENDPOINT_KINDS,
+	MCP_SECRET_SCOPES,
 	MCP_TRANSPORTS,
 	parseMcpServerConfig,
 	readBotOutputStyle,
@@ -540,6 +573,7 @@ export {
 	readConfigPairs,
 	readConfigText,
 	readMcpEndpointKind,
+	readMcpSecretOrigin,
 	readMcpSecretReferences,
 	readMcpSecretState,
 	readMcpServerFields,

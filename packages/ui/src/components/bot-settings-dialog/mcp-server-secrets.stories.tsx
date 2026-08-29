@@ -1,4 +1,4 @@
-import { expect, fn } from "storybook/test"
+import { expect, fn, screen, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { BLANK_MCP_SECRETS } from "@workspace/ui/components/bot-settings"
@@ -66,6 +66,7 @@ export const Filled = meta.story({
 	},
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Stored")).toBeVisible()
+		await expect(canvas.getByText("Held by this bot")).toBeVisible()
 		await expect(canvas.getByRole("button", { name: "Clear" })).toBeVisible()
 		await expect(canvas.getByRole("button", { name: "Replace" })).toBeVisible()
 	},
@@ -105,6 +106,7 @@ export const Typed = meta.story({
 		await expect(args.onSecretSave).toHaveBeenCalledWith(
 			"ATLAS_TOKEN",
 			"sk-atlas-2f9c41d8",
+			"bot",
 		)
 		await expect(canvas.getByLabelText("ATLAS_TOKEN")).toHaveValue("")
 		await expect(canvas.getByLabelText("ATLAS_TOKEN")).toHaveFocus()
@@ -236,6 +238,173 @@ export const VaultPassphraseRejected = meta.story({
 			),
 		).toBeVisible()
 		await expect(canvas.getByLabelText("Passphrase")).toBeVisible()
+	},
+})
+
+export const InheritedFromTheSpace = meta.story({
+	args: {
+		secrets: {
+			...BLANK_MCP_SECRETS,
+			hasSpace: true,
+			filled: ["ATLAS_REGION"],
+			inherited: ["ATLAS_TOKEN"],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One key answered by the space every bot in it shares, one answered by this bot alone. Reach for this to check a reader can tell where a value comes from before replacing it, and that clearing an inherited key says so is the space it acts on.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("From this space")).toBeVisible()
+		await expect(canvas.getByText("Held by this bot")).toBeVisible()
+		await expect(canvas.getAllByRole("combobox")[0]).toHaveTextContent(
+			"This space",
+		)
+		await expect(canvas.getAllByRole("combobox")[1]).toHaveTextContent(
+			"This bot",
+		)
+	},
+})
+
+export const ClearingAnInheritedKey = meta.story({
+	args: {
+		secrets: {
+			...BLANK_MCP_SECRETS,
+			hasSpace: true,
+			inherited: ["ATLAS_TOKEN"],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The one destructive act in this panel that reaches past the bot being edited. Clearing an inherited value takes the key from every bot in the space, so the control says which and asks before it acts. Check the label is not the same word used on the bot's own value, and that nothing is cleared until the question is answered.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expect(
+			canvas.queryByRole("button", { name: "Clear" }),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Clear for the space" }),
+		)
+		await expect(args.onSecretClear).not.toHaveBeenCalled()
+
+		const question = await screen.findByRole("alertdialog")
+		await expect(
+			within(question).getByText("Clear ATLAS_TOKEN for this space?"),
+		).toBeVisible()
+
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Clear for the space" }),
+		)
+
+		await expect(args.onSecretClear).toHaveBeenCalledWith(
+			"ATLAS_TOKEN",
+			"space",
+		)
+	},
+})
+
+export const SavedAtTheShadowedScope = meta.story({
+	args: {
+		secrets: {
+			...BLANK_MCP_SECRETS,
+			hasSpace: true,
+			filled: ["ATLAS_TOKEN"],
+			shadowed: ["ATLAS_TOKEN"],
+			saved: { ATLAS_TOKEN: "space" },
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A value just written to the space for a key this bot answers itself. Nothing about the row can change, because the bot's value is still the one that starts the server, so the panel says the write landed and where. Reach for this to check a save at a shadowed scope never looks like a no-op, and that the row states which of the two values wins.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Saved to this space.")).toBeVisible()
+		await expect(canvas.getByText(/the bot's value is the one/i)).toBeVisible()
+		await expect(canvas.getByText("Held by this bot")).toBeVisible()
+	},
+})
+
+export const HeldAtBothScopes = meta.story({
+	args: {
+		secrets: {
+			...BLANK_MCP_SECRETS,
+			hasSpace: true,
+			filled: ["ATLAS_TOKEN"],
+			inherited: ["ATLAS_TOKEN"],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same key answered at both scopes. The bot's value is the one a server starts with, so the key is listed once and marked as this bot's — the space value is not a second row and clearing here clears the bot's alone.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await expect(canvas.getAllByText("ATLAS_TOKEN")).toHaveLength(1)
+		await expect(canvas.getByText("Held by this bot")).toBeVisible()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Clear" }))
+
+		await expect(args.onSecretClear).toHaveBeenCalledWith("ATLAS_TOKEN", "bot")
+		await expect(screen.queryByRole("alertdialog")).toBe(null)
+	},
+})
+
+export const SavedToTheSpace = meta.story({
+	args: {
+		secrets: { ...BLANK_MCP_SECRETS, hasSpace: true },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A value being answered for every bot in the space rather than this one. Check this bot is the target a row opens on, that changing it is what decides where the value lands, and that the choice is per key rather than for the whole panel.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.type(canvas.getByLabelText("ATLAS_TOKEN"), "sk-shared")
+		await userEvent.click(canvas.getAllByRole("combobox")[0])
+		await userEvent.click(
+			await screen.findByRole("option", { name: "This space" }),
+		)
+		await userEvent.click(canvas.getAllByRole("button", { name: "Save" })[0])
+
+		await expect(args.onSecretSave).toHaveBeenCalledWith(
+			"ATLAS_TOKEN",
+			"sk-shared",
+			"space",
+		)
+	},
+})
+
+export const OutsideAnySpace = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A bot that sits in no space. There is one place a value can go, so the panel names no space and offers no choice at all rather than a picker with a single disabled option.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByText(/space/i)).not.toBeInTheDocument()
+		await expect(canvas.queryByRole("combobox")).not.toBeInTheDocument()
 	},
 })
 

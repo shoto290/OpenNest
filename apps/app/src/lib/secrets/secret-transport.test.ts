@@ -32,11 +32,15 @@ describe("secretTransport", () => {
 		hostInvoke.mockResolvedValue({
 			readable: ["ATLAS_TOKEN"],
 			unreadable: ["ATLAS_REGION"],
+			inheritedReadable: ["LEDGER_TOKEN"],
+			inheritedUnreadable: ["LEDGER_REGION"],
 		})
 
 		await expect(secretTransport.keys("bot-one")).resolves.toEqual({
 			readable: ["ATLAS_TOKEN"],
 			unreadable: ["ATLAS_REGION"],
+			inheritedReadable: ["LEDGER_TOKEN"],
+			inheritedUnreadable: ["LEDGER_REGION"],
 		})
 		expect(hostInvoke).toHaveBeenCalledWith("secret_keys", {
 			botId: "bot-one",
@@ -51,22 +55,35 @@ describe("secretTransport", () => {
 		})
 	})
 
-	it("hands a value over under the bot and key it belongs to", async () => {
-		await secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas")
+	it("hands a value over under the bot, key and scope it belongs to", async () => {
+		await secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas", "bot")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_set", {
 			botId: "bot-one",
 			key: "ATLAS_TOKEN",
 			value: "sk-atlas",
+			scope: "bot",
 		})
 	})
 
-	it("names the bot and the key it clears", async () => {
-		await secretTransport.delete("bot-one", "ATLAS_TOKEN")
+	it("names the space as the scope a value is saved at", async () => {
+		await secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas", "space")
+
+		expect(hostInvoke).toHaveBeenCalledWith("secret_set", {
+			botId: "bot-one",
+			key: "ATLAS_TOKEN",
+			value: "sk-atlas",
+			scope: "space",
+		})
+	})
+
+	it("names the bot, the key and the scope it clears", async () => {
+		await secretTransport.delete("bot-one", "ATLAS_TOKEN", "space")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_delete", {
 			botId: "bot-one",
 			key: "ATLAS_TOKEN",
+			scope: "space",
 		})
 	})
 
@@ -74,7 +91,7 @@ describe("secretTransport", () => {
 		hostInvoke.mockRejectedValue({ kind: "storeUnavailable", detail: "no" })
 
 		await expect(
-			secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas"),
+			secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas", "bot"),
 		).rejects.toEqual({ kind: "storeUnavailable", detail: "no" })
 	})
 })

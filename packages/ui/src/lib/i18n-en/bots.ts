@@ -394,6 +394,29 @@ const bots = {
 					action: "Create the vault",
 				},
 			},
+			shadowed:
+				"This bot and this space both answer this key. The bot's value is the one the server starts with; the space's stays for the other bots.",
+			saved: {
+				bot: "Saved to this bot.",
+				space: "Saved to this space.",
+			},
+			clearSpace: {
+				action: "Clear for the space",
+				title: "Clear {{key}} for this space?",
+				description:
+					"This value belongs to the space, so every bot in it loses the key at once. A bot holding its own value for that key keeps it. This cannot be undone.",
+			},
+			scope: {
+				label: "Save to",
+				option: {
+					bot: "This bot",
+					space: "This space",
+				},
+			},
+			origin: {
+				bot: "Held by this bot",
+				space: "From this space",
+			},
 			status: {
 				filled: "Stored",
 				missing: "Not set",

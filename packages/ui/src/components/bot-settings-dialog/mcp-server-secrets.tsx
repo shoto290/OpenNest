@@ -4,13 +4,18 @@ import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
+	type BotMcpSecretScope,
 	type BotMcpSecretState,
 	type BotMcpSecrets,
+	MCP_SECRET_SCOPES,
+	readMcpSecretOrigin,
 	readMcpSecretState,
 } from "@workspace/ui/components/bot-settings"
-import { Button } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
+import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
+import { SettingsSelect } from "@workspace/ui/components/settings-select"
 import {
 	SETTINGS_EMPTY_CLASS,
 	SETTINGS_TAG_CLASS,
@@ -73,8 +78,8 @@ const VaultPassphrase = ({ secrets, onVaultUnlock }: VaultPassphraseProps) => {
 type McpServerSecretsProps = {
 	references: string[]
 	secrets: BotMcpSecrets
-	onSecretSave: (key: string, value: string) => void
-	onSecretClear: (key: string) => void
+	onSecretSave: (key: string, value: string, scope: BotMcpSecretScope) => void
+	onSecretClear: (key: string, scope: BotMcpSecretScope) => void
 	onVaultUnlock: (passphrase: string) => void
 }
 
@@ -87,6 +92,7 @@ const McpServerSecrets = ({
 }: McpServerSecretsProps) => {
 	const { t } = useTranslation("bots")
 	const [typed, setTyped] = useState<Record<string, string>>({})
+	const [targets, setTargets] = useState<Record<string, BotMcpSecretScope>>({})
 	const rows = useRef<Record<string, HTMLLIElement | null>>({})
 
 	if (references.length === 0) {
@@ -112,8 +118,22 @@ const McpServerSecrets = ({
 		return <VaultPassphrase onVaultUnlock={onVaultUnlock} secrets={secrets} />
 	}
 
+	const targetOf = (key: string) =>
+		targets[key] ?? readMcpSecretOrigin(secrets, key) ?? "bot"
+
+	const scopeOptions = MCP_SECRET_SCOPES.map((scope) => ({
+		label: t(`mcp.secrets.scope.option.${scope}`),
+		value: scope,
+	}))
+
+	const pickTarget = (key: string, value: string) =>
+		setTargets({
+			...targets,
+			[key]: MCP_SECRET_SCOPES.find((scope) => scope === value) ?? "bot",
+		})
+
 	const save = (key: string) => {
-		onSecretSave(key, typed[key] ?? "")
+		onSecretSave(key, typed[key] ?? "", targetOf(key))
 		setTyped({ ...typed, [key]: "" })
 		rows.current[key]?.querySelector("input")?.focus()
 	}
@@ -128,7 +148,10 @@ const McpServerSecrets = ({
 			<ul className="flex list-none flex-col gap-3 p-0">
 				{references.map((key) => {
 					const state = readMcpSecretState(secrets, key)
+					const origin = readMcpSecretOrigin(secrets, key)
 					const failure = secrets.failures[key]
+					const saved = secrets.saved[key]
+					const isShadowed = secrets.shadowed.includes(key)
 					const isSaving = secrets.saving.includes(key)
 					const isSavable =
 						secrets.isReady && !isSaving && (typed[key] ?? "").trim().length > 0
@@ -152,17 +175,61 @@ const McpServerSecrets = ({
 								readOnly={!secrets.isReady}
 								value={typed[key] ?? ""}
 							/>
+							{secrets.hasSpace ? (
+								<SettingsSelect
+									label={t("mcp.secrets.scope.label")}
+									onValueChange={(value) => pickTarget(key, value)}
+									options={scopeOptions}
+									value={targetOf(key)}
+								/>
+							) : null}
+							{isShadowed ? (
+								<p className="text-muted-foreground text-xs leading-relaxed">
+									{t("mcp.secrets.shadowed")}
+								</p>
+							) : null}
+							{saved ? (
+								<p className="text-muted-foreground text-xs leading-relaxed">
+									{t(`mcp.secrets.saved.${saved}`)}
+								</p>
+							) : null}
 							<div className="flex items-center justify-between gap-2">
-								<span
-									className={cn(SETTINGS_TAG_CLASS, STATUS_TAG_CLASS[state])}
-								>
-									{t(`mcp.secrets.status.${state}`)}
-								</span>
+								<div className="flex min-w-0 items-center gap-2">
+									<span
+										className={cn(SETTINGS_TAG_CLASS, STATUS_TAG_CLASS[state])}
+									>
+										{t(`mcp.secrets.status.${state}`)}
+									</span>
+									{origin ? (
+										<span
+											className={cn(
+												SETTINGS_TAG_CLASS,
+												"text-muted-foreground",
+											)}
+										>
+											{t(`mcp.secrets.origin.${origin}`)}
+										</span>
+									) : null}
+								</div>
 								<div className="flex shrink-0 items-center gap-2">
-									{state === "filled" ? (
+									{state === "filled" && origin === "space" ? (
+										<ConfirmDialog
+											confirmLabel={t("mcp.secrets.clearSpace.action")}
+											description={t("mcp.secrets.clearSpace.description")}
+											isTriggerDisabled={isSaving}
+											onConfirm={() => onSecretClear(key, "space")}
+											title={t("mcp.secrets.clearSpace.title", { key })}
+											trigger={t("mcp.secrets.clearSpace.action")}
+											triggerClassName={buttonVariants({
+												variant: "outline",
+												size: "sm",
+											})}
+										/>
+									) : null}
+									{state === "filled" && origin === "bot" ? (
 										<Button
 											disabled={isSaving}
-											onClick={() => onSecretClear(key)}
+											onClick={() => onSecretClear(key, "bot")}
 											size="sm"
 											variant="outline"
 										>

@@ -1,4 +1,4 @@
-import type { SecretPort } from "./secret-port"
+import type { SecretPort, SecretScope } from "./secret-port"
 
 export type FakeSecretPort = SecretPort & {
 	stored: Map<string, string>
@@ -8,7 +8,12 @@ export type FakeSecretPort = SecretPort & {
 	failNext: (reason: string) => void
 }
 
-const held = (botId: string, key: string) => `${botId}/${key}`
+const SPACE_HOLDER = "space"
+
+const holderOf = (botId: string, scope: SecretScope) =>
+	scope === "space" ? SPACE_HOLDER : botId
+
+const held = (holder: string, key: string) => `${holder}/${key}`
 
 export const createFakeSecretPort = (): FakeSecretPort => {
 	const stored = new Map<string, string>()
@@ -26,10 +31,10 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 		throw new Error(reason)
 	}
 
-	const namesUnder = (botId: string) =>
+	const namesUnder = (holder: string) =>
 		[...stored.keys()]
-			.filter((entry) => entry.startsWith(`${botId}/`))
-			.map((entry) => entry.slice(botId.length + 1))
+			.filter((entry) => entry.startsWith(`${holder}/`))
+			.map((entry) => entry.slice(holder.length + 1))
 
 	return {
 		stored,
@@ -54,20 +59,29 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 			hasVault,
 		}),
 
-		keys: async (botId) => ({
-			readable: namesUnder(botId).filter((key) => !unreadable.has(key)),
-			unreadable: namesUnder(botId).filter((key) => unreadable.has(key)),
-		}),
+		keys: async (botId) => {
+			const own = namesUnder(botId)
+			const inherited = namesUnder(SPACE_HOLDER).filter(
+				(key) => !own.includes(key),
+			)
 
-		set: async (botId, key, value) => {
+			return {
+				readable: own.filter((key) => !unreadable.has(key)),
+				unreadable: own.filter((key) => unreadable.has(key)),
+				inheritedReadable: inherited.filter((key) => !unreadable.has(key)),
+				inheritedUnreadable: inherited.filter((key) => unreadable.has(key)),
+			}
+		},
+
+		set: async (botId, key, value, scope) => {
 			refuseOnce()
-			stored.set(held(botId, key), value)
+			stored.set(held(holderOf(botId, scope), key), value)
 			unreadable.delete(key)
 		},
 
-		delete: async (botId, key) => {
+		delete: async (botId, key, scope) => {
 			refuseOnce()
-			stored.delete(held(botId, key))
+			stored.delete(held(holderOf(botId, scope), key))
 			unreadable.delete(key)
 		},
 
