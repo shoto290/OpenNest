@@ -20,15 +20,23 @@ export const secretTransport: SecretPort = {
 	status: () => invoke<SecretStoreStatus>("secret_store_status"),
 
 	keys: (target) =>
-		invoke<StoredSecretKeys>("secret_keys", addressOf(target, scopeOf(target))),
+		invoke<StoredSecretKeys>("secret_keys", {
+			target: addressOf(target, scopeOf(target)),
+		}),
 
 	set: (target, key, value) =>
-		invoke("secret_set", { ...addressOf(target, scopeOf(target)), key, value }),
+		invoke("secret_set", {
+			target: addressOf(target, scopeOf(target)),
+			key,
+			value,
+		}),
 
 	delete: (target, key, scope, server) =>
 		invoke("secret_delete", {
-			...addressOf(target, scope),
-			server: server ?? target.serverName ?? undefined,
+			target: {
+				...addressOf(target, scope),
+				server: server ?? target.serverName ?? undefined,
+			},
 			key,
 		}),
 

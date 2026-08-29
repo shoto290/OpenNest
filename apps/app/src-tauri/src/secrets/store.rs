@@ -135,18 +135,75 @@ impl SecretStore {
 		}
 	}
 
-	pub fn stored_keys(&self, bot_id: &str, space_id: Option<&str>) -> StoredKeys {
-		let mut chain = self.chain_for_bot(bot_id, space_id);
-		chain.extend(self.every_server_link(bot_id));
-		self.entries_over(&chain)
+	pub fn keys_for(
+		&self,
+		scope: SecretScope,
+		bot_id: Option<&str>,
+		space_id: Option<&str>,
+		server: Option<&str>,
+	) -> StoredKeys {
+		self.entries_over(&self.chain_to(scope, bot_id, space_id, server))
 	}
 
-	pub fn stored_space_keys(&self, space_id: &str) -> StoredKeys {
-		self.entries_over(&[Link {
-			owner: space_owner(space_id),
-			scope: SecretScope::Space,
-			server: None,
-		}])
+	fn chain_to(
+		&self,
+		scope: SecretScope,
+		bot_id: Option<&str>,
+		space_id: Option<&str>,
+		server: Option<&str>,
+	) -> Vec<Link> {
+		let mut chain = Vec::new();
+		if let Some(space_id) = space_id {
+			chain.push(Link {
+				owner: space_owner(space_id),
+				scope: SecretScope::Space,
+				server: None,
+			});
+		}
+		if scope == SecretScope::Space {
+			return chain;
+		}
+
+		let Some(bot_id) = bot_id else {
+			return chain;
+		};
+		chain.push(Link { owner: bot_id.to_owned(), scope: SecretScope::Bot, server: None });
+
+		if let (SecretScope::Server, Some(server)) = (scope, server) {
+			chain.push(Link {
+				owner: server_owner(bot_id, server),
+				scope: SecretScope::Server,
+				server: Some(server.to_owned()),
+			});
+		}
+		chain
+	}
+
+	pub fn carry_server_secrets(
+		&self,
+		bot_id: &str,
+		from: &str,
+		to: &str,
+	) -> Result<(), SecretError> {
+		if from == to {
+			return Ok(());
+		}
+		let leaving = server_owner(bot_id, from);
+		for key in self.keys(&leaving) {
+			if let Ok(Some(value)) = self.held_value(&leaving, &key) {
+				self.set(&server_owner(bot_id, to), &key, &value)?;
+			}
+			self.delete(&leaving, &key)?;
+		}
+		Ok(())
+	}
+
+	pub fn forget_server_secrets(&self, bot_id: &str, server: &str) -> Result<(), SecretError> {
+		let leaving = server_owner(bot_id, server);
+		for key in self.keys(&leaving) {
+			self.delete(&leaving, &key)?;
+		}
+		Ok(())
 	}
 
 	fn chain_for_bot(&self, bot_id: &str, space_id: Option<&str>) -> Vec<Link> {
@@ -437,7 +494,7 @@ mod tests {
 		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
 		store.set("bot", "OWN", "from-the-bot").expect("sets");
 
-		let stored = store.stored_keys("bot", Some("s1"));
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), Some("s1"), None);
 
 		assert_eq!(entry_for(&stored, "SHARED").served_by, Some(held(SecretScope::Space, None, true)));
 		assert_eq!(entry_for(&stored, "OWN").served_by, Some(held(SecretScope::Bot, None, true)));
@@ -486,7 +543,8 @@ mod tests {
 		store.set("bot", "SHARED", "from-the-bot").expect("sets");
 		store.set(SERVER, "SHARED", "from-the-server").expect("sets");
 
-		let stored = store.stored_keys("bot", Some("s1"));
+		let stored =
+			store.keys_for(SecretScope::Server, Some("bot"), Some("s1"), Some("github"));
 		let entry = entry_for(&stored, "SHARED");
 
 		assert_eq!(
@@ -508,7 +566,7 @@ mod tests {
 		store.set(SERVER, "SHARED", "from-the-server").expect("sets");
 		store.set("bot", "OWN", "from-the-bot").expect("sets");
 
-		let stored = store.stored_keys("bot", Some("s1"));
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), Some("s1"), None);
 
 		let names: Vec<&str> = stored.entries.iter().map(|entry| entry.key.as_str()).collect();
 		assert_eq!(names, vec!["OWN", "SHARED"]);
@@ -522,7 +580,7 @@ mod tests {
 		store.set(SERVER, "SHARED", "from-the-server").expect("sets");
 		store.vault.lock().expect("vault").remove("server:bot:github:SHARED").expect("removes");
 
-		let stored = store.stored_keys("bot", Some("s1"));
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), Some("s1"), None);
 
 		assert_eq!(
 			entry_for(&stored, "SHARED").served_by,
@@ -540,7 +598,7 @@ mod tests {
 		store.set("bot", "OWN", "from-the-bot").expect("sets");
 		store.vault.lock().expect("vault").remove("bot:OWN").expect("removes");
 
-		let stored = store.stored_keys("bot", Some("s1"));
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), Some("s1"), None);
 
 		assert_eq!(entry_for(&stored, "OWN").served_by, None);
 	}
@@ -551,9 +609,78 @@ mod tests {
 		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
 		store.set("bot", "SHARED", "from-the-bot").expect("sets");
 
-		let stored = store.stored_keys("bot", None);
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), None, None);
 
 		assert_eq!(entry_for(&stored, "SHARED").owners, vec![held(SecretScope::Bot, None, true)]);
+	}
+
+	#[test]
+	fn the_server_scope_answers_its_own_chain_and_no_other_server() {
+		let store = a_store();
+		store.set(SPACE, "FROM_SPACE", "space").expect("sets");
+		store.set("bot", "FROM_BOT", "bot").expect("sets");
+		store.set(SERVER, "FROM_SERVER", "server").expect("sets");
+		store.set("server:bot:linear", "FROM_OTHER", "other").expect("sets");
+
+		let stored = store.keys_for(SecretScope::Server, Some("bot"), Some("s1"), Some("github"));
+
+		let named: Vec<&str> = stored.entries.iter().map(|entry| entry.key.as_str()).collect();
+		assert_eq!(named, vec!["FROM_BOT", "FROM_SERVER", "FROM_SPACE"]);
+	}
+
+	#[test]
+	fn the_bot_scope_answers_no_key_a_server_holds() {
+		let store = a_store();
+		store.set(SPACE, "FROM_SPACE", "space").expect("sets");
+		store.set("bot", "FROM_BOT", "bot").expect("sets");
+		store.set(SERVER, "FROM_SERVER", "server").expect("sets");
+
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), Some("s1"), None);
+
+		let named: Vec<&str> = stored.entries.iter().map(|entry| entry.key.as_str()).collect();
+		assert_eq!(named, vec!["FROM_BOT", "FROM_SPACE"]);
+	}
+
+	#[test]
+	fn the_space_scope_answers_what_the_space_holds_and_nothing_else() {
+		let store = a_store();
+		store.set(SPACE, "FROM_SPACE", "space").expect("sets");
+		store.set("bot", "FROM_BOT", "bot").expect("sets");
+		store.set(SERVER, "FROM_SERVER", "server").expect("sets");
+
+		let stored = store.keys_for(SecretScope::Space, Some("bot"), Some("s1"), None);
+
+		let named: Vec<&str> = stored.entries.iter().map(|entry| entry.key.as_str()).collect();
+		assert_eq!(named, vec!["FROM_SPACE"]);
+	}
+
+	#[test]
+	fn a_renamed_server_carries_the_secrets_it_held() {
+		let store = a_store();
+		store.set(SERVER, "TOKEN", "from-the-server").expect("sets");
+
+		store.carry_server_secrets("bot", "github", "forge").expect("carries");
+
+		assert!(store.keys(SERVER).is_empty());
+		assert_eq!(
+			store.resolve_for_server("bot", None, "forge").values.get("TOKEN").map(String::as_str),
+			Some("from-the-server")
+		);
+	}
+
+	#[test]
+	fn a_deleted_server_leaves_no_secret_of_its_own_behind() {
+		let store = a_store();
+		store.set("bot", "TOKEN", "from-the-bot").expect("sets");
+		store.set(SERVER, "TOKEN", "from-the-server").expect("sets");
+
+		store.forget_server_secrets("bot", "github").expect("forgets");
+
+		assert!(store.keys(SERVER).is_empty());
+		assert_eq!(
+			store.resolve_for_server("bot", None, "github").values.get("TOKEN").map(String::as_str),
+			Some("from-the-bot")
+		);
 	}
 
 	#[test]
@@ -562,7 +689,7 @@ mod tests {
 		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
 		store.set("bot", "OWN", "from-the-bot").expect("sets");
 
-		let stored = store.stored_space_keys("s1");
+		let stored = store.keys_for(SecretScope::Space, None, Some("s1"), None);
 
 		let names: Vec<&str> = stored.entries.iter().map(|entry| entry.key.as_str()).collect();
 		assert_eq!(names, vec!["SHARED"]);
@@ -600,7 +727,7 @@ mod tests {
 		store.set("bot", "SHARED", "from-the-bot").expect("sets");
 		store.set(SERVER, "SHARED", "from-the-server").expect("sets");
 
-		let answered = serde_json::to_string(&store.stored_keys("bot", Some("s1"))).expect("json");
+		let answered = serde_json::to_string(&store.keys_for(SecretScope::Bot, Some("bot"), Some("s1"), None)).expect("json");
 
 		for value in ["from-the-space", "from-the-bot", "from-the-server"] {
 			assert!(!answered.contains(value), "{answered}");
@@ -613,7 +740,7 @@ mod tests {
 		store.set(SPACE, "SHARED", "from-the-space").expect("sets");
 		store.set("bot", "OWN", "from-the-bot").expect("sets");
 
-		let listed = format!("{:?}", store.stored_keys("bot", Some("s1")));
+		let listed = format!("{:?}", store.keys_for(SecretScope::Bot, Some("bot"), Some("s1"), None));
 
 		assert!(!listed.contains("from-the-space"));
 		assert!(!listed.contains("from-the-bot"));
@@ -730,7 +857,7 @@ mod tests {
 		store.set("bot", "API_KEY", "k3y").expect("sets");
 		store.vault.lock().expect("vault").remove("bot:TOKEN").expect("removes behind the index");
 
-		let stored = store.stored_keys("bot", None);
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), None, None);
 		assert_eq!(
 			entry_for(&stored, "API_KEY").served_by,
 			Some(held(SecretScope::Bot, None, true))
@@ -743,7 +870,7 @@ mod tests {
 		let store = a_store();
 		store.set("bot", "TOKEN", "s3cret").expect("sets");
 
-		let stored = store.stored_keys("bot", None);
+		let stored = store.keys_for(SecretScope::Bot, Some("bot"), None, None);
 		let named = format!("{:?}", stored);
 		assert!(!named.contains("s3cret"));
 	}

@@ -65,10 +65,12 @@ describe("secretTransport", () => {
 
 		expect(stored.entries[0]?.servedBy?.scope).toBe("bot")
 		expect(hostInvoke).toHaveBeenCalledWith("secret_keys", {
-			spaceId: "space-one",
-			botId: "bot-one",
-			server: undefined,
-			scope: "bot",
+			target: {
+				spaceId: "space-one",
+				botId: "bot-one",
+				server: undefined,
+				scope: "bot",
+			},
 		})
 	})
 
@@ -78,10 +80,12 @@ describe("secretTransport", () => {
 		await secretTransport.keys(SPACE)
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_keys", {
-			spaceId: "space-one",
-			botId: undefined,
-			server: undefined,
-			scope: "space",
+			target: {
+				spaceId: "space-one",
+				botId: undefined,
+				server: undefined,
+				scope: "space",
+			},
 		})
 	})
 
@@ -89,10 +93,12 @@ describe("secretTransport", () => {
 		await secretTransport.set(SPACE, "ANTHROPIC_API_KEY", "sk-ant-atlas")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_set", {
-			spaceId: "space-one",
-			botId: undefined,
-			server: undefined,
-			scope: "space",
+			target: {
+				spaceId: "space-one",
+				botId: undefined,
+				server: undefined,
+				scope: "space",
+			},
 			key: "ANTHROPIC_API_KEY",
 			value: "sk-ant-atlas",
 		})
@@ -102,10 +108,12 @@ describe("secretTransport", () => {
 		await secretTransport.delete(SPACE, "ANTHROPIC_API_KEY", "space")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_delete", {
-			spaceId: "space-one",
-			botId: undefined,
-			server: undefined,
-			scope: "space",
+			target: {
+				spaceId: "space-one",
+				botId: undefined,
+				server: undefined,
+				scope: "space",
+			},
 			key: "ANTHROPIC_API_KEY",
 		})
 	})
@@ -126,12 +134,14 @@ describe("secretTransport", () => {
 		await secretTransport.set(SERVER, "ATLAS_TOKEN", "sk-atlas")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_set", {
-			spaceId: "space-one",
-			botId: "bot-one",
-			server: "atlas",
+			target: {
+				spaceId: "space-one",
+				botId: "bot-one",
+				server: "atlas",
+				scope: "server",
+			},
 			key: "ATLAS_TOKEN",
 			value: "sk-atlas",
-			scope: "server",
 		})
 	})
 
@@ -139,11 +149,13 @@ describe("secretTransport", () => {
 		await secretTransport.delete(BOT, "ATLAS_TOKEN", "space")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_delete", {
-			spaceId: "space-one",
-			botId: "bot-one",
-			server: undefined,
+			target: {
+				spaceId: "space-one",
+				botId: "bot-one",
+				server: undefined,
+				scope: "space",
+			},
 			key: "ATLAS_TOKEN",
-			scope: "space",
 		})
 	})
 

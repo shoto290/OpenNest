@@ -28,6 +28,8 @@ pub enum SecretError {
 	NoServer { bot_id: String },
 	#[serde(rename_all = "camelCase")]
 	InvalidServer { server: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownServer { server: String },
 }
 
 impl std::fmt::Display for SecretError {
@@ -51,6 +53,9 @@ impl std::fmt::Display for SecretError {
 			Self::NoServer { bot_id } => write!(formatter, "no server named for bot {bot_id}"),
 			Self::InvalidServer { server } => {
 				write!(formatter, "{server} is not a usable server name")
+			}
+			Self::UnknownServer { server } => {
+				write!(formatter, "this bot declares no server named {server}")
 			}
 		}
 	}

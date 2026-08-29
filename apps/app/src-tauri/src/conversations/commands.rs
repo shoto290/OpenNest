@@ -445,9 +445,16 @@ pub async fn conversation_set_bot_mcp_server<R: Runtime>(
 	bot_id: String,
 	name: String,
 	config: serde_json::Value,
+	previous_name: Option<String>,
 ) -> Result<McpServer, TranscriptStoreError> {
 	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
+	if let Some(previous) = previous_name.filter(|previous| previous != &name) {
+		bundled(bundles::remove_mcp_server(&root, &bot, &previous))?;
+		if let Some(store) = app.try_state::<crate::secrets::SecretStore>() {
+			let _ = store.carry_server_secrets(&bot_id, &previous, &name);
+		}
+	}
 	bundled(bundles::set_mcp_server(&root, &bot, &name, &config)).map(McpServer::from)
 }
 
@@ -460,7 +467,11 @@ pub async fn conversation_delete_bot_mcp_server<R: Runtime>(
 ) -> Result<(), TranscriptStoreError> {
 	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
-	bundled(bundles::remove_mcp_server(&root, &bot, &name))
+	bundled(bundles::remove_mcp_server(&root, &bot, &name))?;
+	if let Some(store) = app.try_state::<crate::secrets::SecretStore>() {
+		let _ = store.forget_server_secrets(&bot_id, &name);
+	}
+	Ok(())
 }
 
 #[tauri::command]
