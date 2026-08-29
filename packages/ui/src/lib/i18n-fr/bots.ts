@@ -351,6 +351,10 @@ const bots = {
 				"Tout ce qui a été tapé depuis l'ouverture de ce serveur part avec. Le serveur sur le disque reste tel qu'il était.",
 			action: "Partir",
 		},
+		secrets: {
+			unsaved:
+				"Enregistrez ce serveur avant de lui donner ses propres secrets.",
+		},
 		launch: {
 			label: "Ce que cela démarre",
 			environment: "Environnement",

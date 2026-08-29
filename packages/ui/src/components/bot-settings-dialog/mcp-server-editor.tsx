@@ -87,7 +87,7 @@ type McpServerEditorProps = {
 	onDelete?: () => void
 	secrets?: SecretsValue
 	onSecretSave?: (key: string, secret: string) => void
-	onSecretDelete?: (key: string, scope: SecretScope) => void
+	onSecretDelete?: (key: string, scope: SecretScope, server?: string) => void
 	onVaultUnlock?: (passphrase: string) => void
 	defaultSection?: string
 	defaultConfirming?: boolean
@@ -366,16 +366,21 @@ const McpServerEditor = ({
 				</Tabs.Panel>
 
 				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="secrets">
-					{config ? (
+					{isWritten && config ? (
 						<SecretsPanel
-							onDelete={(key, scope) => onSecretDelete?.(key, scope)}
+							onDelete={(key, scope, server) =>
+								onSecretDelete?.(key, scope, server)
+							}
 							onSave={(key, secret) => onSecretSave?.(key, secret)}
 							onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
 							references={readMcpSecretReferences(config)}
 							value={secrets}
 						/>
 					) : (
-						unreadable
+						<EditorNotice
+							icon={Icons.Alert}
+							text={config ? t("mcp.secrets.unsaved") : t("mcp.config.invalid")}
+						/>
 					)}
 				</Tabs.Panel>
 

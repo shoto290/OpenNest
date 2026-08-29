@@ -56,8 +56,9 @@ type SpaceSettingsDialogProps = {
 	history: PluginHistory
 	secrets?: SecretsValue
 	onSecretSave?: (key: string, secret: string) => void
-	onSecretDelete?: (key: string, scope: SecretScope) => void
+	onSecretDelete?: (key: string, scope: SecretScope, server?: string) => void
 	onVaultUnlock?: (passphrase: string) => void
+	secretReferences?: string[]
 	onDelete: () => void
 	isDeletable?: boolean
 	className?: string
@@ -78,6 +79,7 @@ const SpaceSettingsDialog = ({
 	onSecretSave,
 	onSecretDelete,
 	onVaultUnlock,
+	secretReferences,
 	onDelete,
 	isDeletable = true,
 	className,
@@ -182,9 +184,12 @@ const SpaceSettingsDialog = ({
 							value="secrets"
 						>
 							<SecretsPanel
-								onDelete={(key, scope) => onSecretDelete?.(key, scope)}
+								onDelete={(key, scope, server) =>
+									onSecretDelete?.(key, scope, server)
+								}
 								onSave={(key, secret) => onSecretSave?.(key, secret)}
 								onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
+								references={secretReferences}
 								value={secrets}
 							/>
 						</Tabs.Panel>

@@ -145,7 +145,8 @@ const settings = {
 			delete: "Non supprimée",
 		},
 		delete: {
-			action: "Supprimer {{key}}",
+			named: "Supprimer {{key}}",
+			action: "Supprimer",
 			title: "Supprimer {{key}} ?",
 			wider: {
 				space: "Supprimer de l'espace",
@@ -161,6 +162,7 @@ const settings = {
 			},
 		},
 		vault: {
+			mismatch: "Les deux ne correspondent pas.",
 			placeholder: "Votre phrase secrète",
 			rejected:
 				"Cette phrase secrète n'a pas ouvert le coffre. Rien n'a été changé.",
@@ -171,6 +173,7 @@ const settings = {
 				action: "Ouvrir le coffre",
 			},
 			create: {
+				repeat: "Répétez la phrase secrète",
 				label: "Nouvelle phrase secrète",
 				notice:
 					"Cette machine n'a pas de trousseau utilisable par cette app : les clés vivront dans un coffre chiffré à côté. Choisissez une phrase secrète maintenant : elle seule ouvre ce coffre, et rien ici ne peut la retrouver pour vous.",

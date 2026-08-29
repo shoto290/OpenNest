@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { AppSidebar } from "@workspace/ui/components/app-sidebar"
-import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
+import {
+	readBotOutputStyle,
+	readMcpSecretReferences,
+} from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
 import { NewConversationDialog } from "@workspace/ui/components/new-conversation-dialog"
@@ -114,6 +117,13 @@ export function App() {
 	const mcpServers = useBotMcpServers(store)
 	const botSecrets = useSecrets()
 	const spaceSecrets = useSecrets()
+	const secretReferences = [
+		...new Set(
+			mcpServers.state.servers.flatMap((server) =>
+				readMcpSecretReferences(server.config),
+			),
+		),
+	]
 	const [secretsServer, setSecretsServer] = useState<string | null>(null)
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
@@ -682,6 +692,7 @@ export function App() {
 					onValueChange={(value) =>
 						spaces.controller.describe(selectedSpace.id, value)
 					}
+					secretReferences={secretReferences}
 					onSecretDelete={spaceSecrets.controller.remove}
 					onSecretSave={spaceSecrets.controller.save}
 					onVaultUnlock={spaceSecrets.controller.unlock}

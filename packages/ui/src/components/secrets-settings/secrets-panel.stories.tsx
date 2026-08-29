@@ -90,6 +90,36 @@ export const DeclaredByHand = meta.story({
 			"sk-ant-atlas",
 		)
 		await expect(canvas.getByLabelText("Key")).toHaveValue("")
+		await expect(canvas.getByLabelText("Value")).toHaveAttribute(
+			"autocomplete",
+			"off",
+		)
+	},
+})
+
+export const ARefusedAdd = meta.story({
+	args: {
+		value: {
+			...BLANK_SECRETS,
+			failures: { ANTHROPIC_API_KEY: "save" },
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A store that refuses the key being added. The value was typed once and cannot be read back from anywhere, so losing it costs the reader a trip to whoever issued it. Check both fields still hold what was typed and that the refusal is said next to them.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.type(canvas.getByLabelText("Key"), "ANTHROPIC_API_KEY")
+		await userEvent.type(canvas.getByLabelText("Value"), "sk-ant-atlas")
+		await userEvent.click(canvas.getByRole("button", { name: "Add" }))
+
+		await expect(canvas.getByLabelText("Key")).toHaveValue("ANTHROPIC_API_KEY")
+		await expect(canvas.getByLabelText("Value")).toHaveValue("sk-ant-atlas")
+		await expect(canvas.getByText("Not saved")).toBeVisible()
 	},
 })
 
@@ -192,6 +222,43 @@ export const DeletingAWiderValue = meta.story({
 		await expect(args.onDelete).toHaveBeenCalledWith(
 			"SHARED",
 			"space",
+			undefined,
+		)
+	},
+})
+
+export const DeletingAKeyTheTabOwns = meta.story({
+	args: {
+		value: {
+			...BLANK_SECRETS,
+			scope: "bot",
+			entries: [heldBy("ANTHROPIC_API_KEY", ["bot"])],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Deleting the tab's own value. A secret cannot be read back, so a slip here costs the reader the value itself, not a minute of retyping. The question names the key it is about to drop.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Delete ANTHROPIC_API_KEY" }),
+		)
+		await expect(args.onDelete).not.toHaveBeenCalled()
+
+		const question = await screen.findByRole("alertdialog", {
+			name: "Delete ANTHROPIC_API_KEY?",
+		})
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Delete" }),
+		)
+
+		await expect(args.onDelete).toHaveBeenCalledWith(
+			"ANTHROPIC_API_KEY",
+			"bot",
 			undefined,
 		)
 	},
@@ -334,20 +401,68 @@ export const ARefusedWrite = meta.story({
 
 export const AskingForTheVaultPassphrase = meta.story({
 	args: {
-		value: { ...BLANK_SECRETS, isReady: false, needsPassphrase: true },
+		value: {
+			...BLANK_SECRETS,
+			isReady: false,
+			needsPassphrase: true,
+			hasVault: true,
+		},
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"No keychain answered on this machine, so the keys live in a vault that has to be opened first. Whichever of the three panels the reader opened asks the same question, and nothing else is shown until it is answered.",
+					"A vault that already exists, asked to open for this session. Whichever of the three panels the reader opened asks the same question, and nothing else is shown until it is answered. Pick `CreatingTheVault` for the first time, which asks twice.",
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		await expect(canvas.queryByLabelText("Key")).not.toBeInTheDocument()
 
+		await userEvent.type(canvas.getByLabelText("Passphrase"), "open sesame")
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Open the vault" }),
+		)
+
+		await expect(args.onVaultUnlock).toHaveBeenCalledWith("open sesame")
+	},
+})
+
+export const CreatingTheVault = meta.story({
+	args: {
+		value: {
+			...BLANK_SECRETS,
+			isReady: false,
+			needsPassphrase: true,
+			hasVault: false,
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The passphrase that will create the vault, asked twice. Nothing can recover it and nothing else opens the vault, so a typo made once here would lock every secret away for good. Check the second field has to match before anything is submitted.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
 		await userEvent.type(canvas.getByLabelText("New passphrase"), "open sesame")
+		await expect(
+			canvas.getByRole("button", { name: "Create the vault" }),
+		).toBeDisabled()
+
+		await userEvent.type(
+			canvas.getByLabelText("Repeat the passphrase"),
+			"open sesamd",
+		)
+		await expect(canvas.getByText("The two do not match.")).toBeVisible()
+		await expect(args.onVaultUnlock).not.toHaveBeenCalled()
+
+		await userEvent.clear(canvas.getByLabelText("Repeat the passphrase"))
+		await userEvent.type(
+			canvas.getByLabelText("Repeat the passphrase"),
+			"open sesame",
+		)
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Create the vault" }),
 		)

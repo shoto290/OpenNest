@@ -32,19 +32,34 @@ const SecretsPanel = ({
 	const { t } = useTranslation("settings")
 	const [key, setKey] = useState("")
 	const [secret, setSecret] = useState("")
+	const [added, setAdded] = useState<string | null>(null)
 
 	if (value.needsPassphrase) {
 		return <VaultPassphrase onVaultUnlock={onVaultUnlock} value={value} />
 	}
 
 	const rows = readSecretRows(value, references)
+	const addFailure = added ? value.failures[added] : undefined
+	const isAdding = added !== null && value.saving.includes(added)
+	const isAdded = added !== null && !isAdding && !addFailure
+	const typedKey = isAdded ? "" : key
+	const typedSecret = isAdded ? "" : secret
 	const isAddable =
-		value.isReady && isSecretKeyUsable(key) && secret.trim().length > 0
+		value.isReady &&
+		!isAdding &&
+		isSecretKeyUsable(typedKey) &&
+		typedSecret.trim().length > 0
+
+	const answer = (write: (next: string) => void) => (next: string) => {
+		setAdded(null)
+		write(next)
+	}
 
 	const add = () => {
-		onSave(key.trim(), secret)
-		setKey("")
-		setSecret("")
+		const named = key.trim()
+
+		setAdded(named)
+		onSave(named, secret)
 	}
 
 	return (
@@ -66,10 +81,10 @@ const SecretsPanel = ({
 					<SettingsField
 						hideLabel
 						label={t("secrets.add.key.label")}
-						onValueChange={setKey}
+						onValueChange={answer(setKey)}
 						placeholder={t("secrets.add.key.placeholder")}
 						readOnly={!value.isReady}
-						value={key}
+						value={typedKey}
 					/>
 				</div>
 				<div className="min-w-0 flex-1">
@@ -77,16 +92,22 @@ const SecretsPanel = ({
 						hideLabel
 						label={t("secrets.add.value.label")}
 						masked
-						onValueChange={setSecret}
+						onValueChange={answer(setSecret)}
 						placeholder={t("secrets.add.value.placeholder")}
 						readOnly={!value.isReady}
-						value={secret}
+						value={typedSecret}
 					/>
 				</div>
 				<Button disabled={!isAddable} size="sm" type="submit">
 					{t("secrets.add.action")}
 				</Button>
 			</form>
+
+			{addFailure ? (
+				<p className="shrink-0 text-muted-foreground text-xs">
+					{t(`secrets.failure.${addFailure}`)}
+				</p>
+			) : null}
 
 			{rows.length === 0 ? (
 				<p className="shrink-0 text-muted-foreground text-xs">

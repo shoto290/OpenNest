@@ -15,7 +15,15 @@ type VaultPassphraseProps = {
 const VaultPassphrase = ({ value, onVaultUnlock }: VaultPassphraseProps) => {
 	const { t } = useTranslation("settings")
 	const [passphrase, setPassphrase] = useState("")
+	const [repeated, setRepeated] = useState("")
 	const kind = value.hasVault ? "open" : "create"
+	const isCreating = kind === "create"
+	const isMismatched =
+		isCreating && repeated.length > 0 && repeated !== passphrase
+	const isSubmittable =
+		!value.isUnlocking &&
+		passphrase.length > 0 &&
+		(!isCreating || repeated === passphrase)
 
 	return (
 		<form
@@ -38,12 +46,18 @@ const VaultPassphrase = ({ value, onVaultUnlock }: VaultPassphraseProps) => {
 				placeholder={t("secrets.vault.placeholder")}
 				value={passphrase}
 			/>
+			{isCreating ? (
+				<SettingsField
+					error={isMismatched ? t("secrets.vault.mismatch") : undefined}
+					label={t("secrets.vault.create.repeat")}
+					masked
+					onValueChange={setRepeated}
+					placeholder={t("secrets.vault.placeholder")}
+					value={repeated}
+				/>
+			) : null}
 			<div className="flex justify-end">
-				<Button
-					disabled={value.isUnlocking || passphrase.length === 0}
-					size="sm"
-					type="submit"
-				>
+				<Button disabled={!isSubmittable} size="sm" type="submit">
 					{t(`secrets.vault.${kind}.action`)}
 				</Button>
 			</div>

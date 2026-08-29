@@ -96,7 +96,7 @@ type BotSettingsDialogProps = {
 	onMcpServerDelete: (name: string) => void
 	secrets?: SecretsValue
 	onSecretSave?: (key: string, secret: string) => void
-	onSecretDelete?: (key: string, scope: SecretScope) => void
+	onSecretDelete?: (key: string, scope: SecretScope, server?: string) => void
 	onVaultUnlock?: (passphrase: string) => void
 	onSecretsServerChange?: (name: string | null) => void
 	history?: PluginHistory
@@ -402,7 +402,9 @@ const BotSettingsDialog = ({
 							value="secrets"
 						>
 							<SecretsPanel
-								onDelete={(key, scope) => onSecretDelete?.(key, scope)}
+								onDelete={(key, scope, server) =>
+									onSecretDelete?.(key, scope, server)
+								}
 								onSave={(key, secret) => onSecretSave?.(key, secret)}
 								onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
 								references={botSecretReferences}

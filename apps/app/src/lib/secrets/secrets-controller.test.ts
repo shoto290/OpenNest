@@ -286,6 +286,28 @@ describe("createSecretsController", () => {
 		expect((await opened(BOT)).getState().server).toBeNull()
 	})
 
+	it("reports a save that landed even when the refresh behind it fails", async () => {
+		let isReadBroken = false
+		const flaky = {
+			...port,
+			keys: async (target: SecretTarget) => {
+				if (isReadBroken) throw new Error("the store went away")
+				return port.keys(target)
+			},
+		}
+		const controller = createSecretsController(flaky)
+		await controller.open(BOT)
+
+		isReadBroken = true
+		controller.save("SHARED", "sk-bot")
+		await settled()
+
+		expect(controller.getState().saved).toEqual({ SHARED: "bot" })
+		expect(controller.getState().failures).toEqual({})
+		expect(controller.getState().loadFailed).toBe(true)
+		expect(port.stored.get("bot:bot-one/SHARED")).toBe("sk-bot")
+	})
+
 	it("says the store could not be read instead of looking merely empty", async () => {
 		const failing = {
 			...port,

@@ -144,7 +144,8 @@ const settings = {
 			delete: "Not deleted",
 		},
 		delete: {
-			action: "Delete {{key}}",
+			named: "Delete {{key}}",
+			action: "Delete",
 			title: "Delete {{key}}?",
 			wider: {
 				space: "Delete from the space",
@@ -160,6 +161,7 @@ const settings = {
 			},
 		},
 		vault: {
+			mismatch: "The two do not match.",
 			placeholder: "Your passphrase",
 			rejected: "That passphrase did not open the vault. Nothing was changed.",
 			open: {
@@ -169,6 +171,7 @@ const settings = {
 				action: "Open the vault",
 			},
 			create: {
+				repeat: "Repeat the passphrase",
 				label: "New passphrase",
 				notice:
 					"This machine has no keychain this app can use, so the keys will live in an encrypted vault beside it. Choose a passphrase now: it is the only thing that opens that vault, and nothing here can recover it for you.",

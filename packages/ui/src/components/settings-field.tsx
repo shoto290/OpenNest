@@ -83,6 +83,9 @@ const SettingsField = ({
 					<input
 						aria-describedby={describedBy}
 						aria-invalid={error ? true : undefined}
+						autoComplete={masked ? "off" : undefined}
+						data-1p-ignore={masked ? "true" : undefined}
+						data-lpignore={masked ? "true" : undefined}
 						className={cn(
 							FIELD_CONTROL_CLASS,
 							error && FIELD_CONTROL_INVALID_CLASS,

@@ -360,6 +360,9 @@ const bots = {
 				"Everything typed since this server was opened goes with it. The server on the disk is left as it was.",
 			action: "Leave",
 		},
+		secrets: {
+			unsaved: "Save this server before giving it secrets of its own.",
+		},
 		launch: {
 			label: "What this starts",
 			environment: "Environment",

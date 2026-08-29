@@ -126,17 +126,27 @@ const SecretRow = ({ row, value, onSave, onDelete }: SecretRowProps) => {
 			</Button>
 
 			{row.isHeldByOwn ? (
-				<Button
-					aria-label={t("secrets.delete.action", { key: row.key })}
-					disabled={isSaving}
-					onClick={() =>
+				<ConfirmDialog
+					confirmLabel={t("secrets.delete.action")}
+					description={t(`secrets.delete.confirm.${value.scope}`)}
+					isTriggerDisabled={isSaving}
+					onConfirm={() =>
 						onDelete(row.key, value.scope, value.server ?? undefined)
 					}
-					size="icon-sm"
-					variant="ghost"
-				>
-					<Icons.Delete aria-hidden="true" />
-				</Button>
+					title={t("secrets.delete.title", { key: row.key })}
+					trigger={
+						<>
+							<Icons.Delete aria-hidden="true" />
+							<span className="sr-only">
+								{t("secrets.delete.named", { key: row.key })}
+							</span>
+						</>
+					}
+					triggerClassName={buttonVariants({
+						variant: "ghost",
+						size: "icon-sm",
+					})}
+				/>
 			) : null}
 
 			{servedElsewhere && row.servedBy ? (
