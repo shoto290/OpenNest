@@ -13,6 +13,11 @@ import {
 import type { BundleScope } from "./bundle-writes"
 import { delegateServer } from "./delegate"
 import { resolveExecutable } from "./executable"
+import {
+	forgetMcpConfig,
+	splitByProcess,
+	writeMcpConfig,
+} from "./mcp-config-file"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
 import { securityFloor } from "./security-floor"
@@ -69,6 +74,27 @@ const writablePaths = ({
 const localPlugins = (paths: string[]): NonNullable<Options["plugins"]> =>
 	paths.map((path) => ({ type: "local" as const, path }))
 
+type Bundled = {
+	plugins: NonNullable<Options["plugins"]>
+	agent: string
+}
+
+const spawnedApart = (
+	declared: NonNullable<Options["mcpServers"]>,
+	configPath: (servers: Options["mcpServers"]) => string,
+	bundled: Bundled,
+): Partial<Options> => {
+	const { inProcess, spawned } = splitByProcess(declared)
+	if (Object.keys(spawned).length === 0) {
+		return { ...bundled, mcpServers: inProcess }
+	}
+	return {
+		...bundled,
+		mcpServers: inProcess,
+		extraArgs: { "mcp-config": configPath(spawned) },
+	}
+}
+
 const everySecretValue = (request: SessionRequest): string[] => [
 	...Object.values(request.secrets ?? {}),
 	...Object.values(request.serverSecrets ?? {}).flatMap((held) =>
@@ -90,6 +116,8 @@ export const buildOptions = (
 	canUseTool: Options["canUseTool"],
 	settings: SettingsOptions = readBotSettings(request).options,
 	servers: ResolvedServers = resolvedServers(request),
+	configPath: (servers: Options["mcpServers"]) => string = (declared) =>
+		writeMcpConfig(crypto.randomUUID(), declared ?? {}),
 ): Options => {
 	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
@@ -103,14 +131,14 @@ export const buildOptions = (
 		canUseTool,
 		...settings,
 		...(request.pluginPath && request.agent
-			? {
-					plugins: localPlugins(pluginPaths(request)),
-					agent: request.agent,
-					mcpServers: {
+			? spawnedApart(
+					{
 						...servers.servers,
 						...delegateServer({ cwd: request.cwd, managedSettings }),
 					},
-				}
+					configPath,
+					{ plugins: localPlugins(pluginPaths(request)), agent: request.agent },
+				)
 			: {}),
 		systemPrompt: {
 			type: "preset",
@@ -140,6 +168,11 @@ export const openClaudeSession = async (
 	if (botSettings.rejection) {
 		emit({ type: "settings_rejected", detail: botSettings.rejection })
 	}
+	let wroteConfigAt: string | undefined
+	const configPath = (declared: Options["mcpServers"]): string => {
+		wroteConfigAt = writeMcpConfig(crypto.randomUUID(), declared ?? {})
+		return wroteConfigAt
+	}
 	const servers = resolvedServers(request)
 	for (const { server, key } of servers.missing) {
 		emit({ type: "secret_unresolved", server, key })
@@ -151,6 +184,7 @@ export const openClaudeSession = async (
 			permissions.canUseTool,
 			botSettings.options,
 			servers,
+			configPath,
 		),
 	})
 
@@ -197,6 +231,7 @@ export const openClaudeSession = async (
 			prompts.end()
 			run.close()
 			await drained
+			forgetMcpConfig(wroteConfigAt)
 		},
 	}
 }

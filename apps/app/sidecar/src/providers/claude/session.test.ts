@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -8,6 +15,7 @@ import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 import { claudeSourceExecutable } from "./build"
 import { DELEGATE_SERVER } from "./delegate"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
+import { McpConfigUnwritable, splitByProcess } from "./mcp-config-file"
 import {
 	buildOptions,
 	CLASSIFY_ASK_USER_QUESTION,
@@ -27,6 +35,19 @@ const reference = (key: string) => `\${secret:${key}}`
 
 const settingsOf = (options: ReturnType<typeof buildOptions>): Settings =>
 	options.settings as Settings
+
+const spawnedServerIn = (
+	options: ReturnType<typeof buildOptions>,
+	name: string,
+): unknown => {
+	const configPath = options.extraArgs?.["mcp-config"] as string | undefined
+	if (!configPath) {
+		return undefined
+	}
+	const written = JSON.parse(readFileSync(configPath, "utf8"))
+	rmSync(configPath, { force: true })
+	return written.mcpServers[name]
+}
 
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 
@@ -227,12 +248,12 @@ describe("buildOptions", () => {
 				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },
 			})
 
-			const servers = buildOptions(
+			const options = buildOptions(
 				{ ...spawned, secrets: { a: "ghp_live" } },
 				undefined,
-			).mcpServers
+			)
 
-			expect(servers?.remote).toEqual({
+			expect(spawnedServerIn(options, "remote")).toEqual({
 				command: "mcp-remote",
 				env: { TOKEN: "ghp_live" },
 			})
@@ -258,16 +279,16 @@ describe("buildOptions", () => {
 				remote: { command: "mcp-remote", env: { TOKEN: reference("SHARED") } },
 			})
 
-			const servers = buildOptions(
+			const options = buildOptions(
 				{
 					...spawned,
 					secrets: { SHARED: "from-the-session" },
 					serverSecrets: { remote: { SHARED: "from-the-server" } },
 				},
 				undefined,
-			).mcpServers
+			)
 
-			expect(servers?.remote).toEqual({
+			expect(spawnedServerIn(options, "remote")).toEqual({
 				command: "mcp-remote",
 				env: { TOKEN: "from-the-server" },
 			})
@@ -289,11 +310,96 @@ describe("buildOptions", () => {
 			)
 
 			expect(JSON.stringify(options.env)).not.toContain("from-the-server")
-			expect(options.mcpServers?.remote).toEqual({
+			expect(spawnedServerIn(options, "remote")).toEqual({
 				command: "mcp-remote",
 				env: { TOKEN: "from-the-server" },
 			})
 			delete process.env.HTTPS_PROXY
+		})
+
+		it("names a file to the CLI and puts no secret in the arguments", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },
+			})
+
+			const options = buildOptions(
+				{ ...spawned, secrets: { a: "ghp_live" } },
+				undefined,
+			)
+
+			const configPath = options.extraArgs?.["mcp-config"]
+			expect(typeof configPath).toBe("string")
+			expect(configPath).not.toContain("ghp_live")
+
+			const inlined = splitByProcess(options.mcpServers ?? {}).spawned
+			expect(inlined).toEqual({})
+			expect(JSON.stringify(options.env)).not.toContain("ghp_live")
+			rmSync(configPath as string, { force: true })
+		})
+
+		it("writes the server the CLI spawns to a file only its owner can read", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },
+			})
+
+			const options = buildOptions(
+				{ ...spawned, secrets: { a: "ghp_live" } },
+				undefined,
+			)
+			const configPath = options.extraArgs?.["mcp-config"] as string
+
+			const written = JSON.parse(readFileSync(configPath, "utf8"))
+			expect(written.mcpServers.remote).toEqual({
+				command: "mcp-remote",
+				env: { TOKEN: "ghp_live" },
+			})
+			expect(statSync(configPath).mode & 0o777).toBe(0o600)
+			expect(configPath.startsWith(tmpdir())).toBe(true)
+			rmSync(configPath, { force: true })
+		})
+
+		it("keeps the in-process server on the option and out of the file", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },
+			})
+
+			const options = buildOptions(
+				{ ...spawned, secrets: { a: "ghp_live" } },
+				undefined,
+			)
+			const configPath = options.extraArgs?.["mcp-config"] as string
+
+			expect(Object.keys(options.mcpServers ?? {})).toEqual([DELEGATE_SERVER])
+			const written = JSON.parse(readFileSync(configPath, "utf8"))
+			expect(Object.keys(written.mcpServers)).toEqual(["remote"])
+			rmSync(configPath, { force: true })
+		})
+
+		it("names no file when every server runs in process", () => {
+			const spawned = declaring({})
+
+			const options = buildOptions(spawned, undefined)
+
+			expect(options.extraArgs).toBeUndefined()
+			expect(Object.keys(options.mcpServers ?? {})).toEqual([DELEGATE_SERVER])
+		})
+
+		it("fails the start when the file cannot be written", () => {
+			const spawned = declaring({
+				remote: { command: "mcp-remote", env: { TOKEN: reference("a") } },
+			})
+
+			expect(() =>
+				buildOptions(
+					{ ...spawned, secrets: { a: "ghp_live" } },
+					undefined,
+					undefined,
+					undefined,
+					() => {
+						throw new McpConfigUnwritable("no room on the device")
+					},
+				),
+			).toThrow(McpConfigUnwritable)
 		})
 
 		it("keeps a resolved value out of the environment the agent inherits", () => {
@@ -308,7 +414,7 @@ describe("buildOptions", () => {
 			)
 
 			expect(JSON.stringify(options.env)).not.toContain("ghp_live")
-			expect(options.mcpServers?.remote).toEqual({
+			expect(spawnedServerIn(options, "remote")).toEqual({
 				command: "mcp-remote",
 				env: { TOKEN: "ghp_live" },
 			})
