@@ -179,11 +179,15 @@ export function App() {
 		[listedSpaces],
 	)
 
-	useEffect(() => {
+	const loadSpaces = useCallback(() => {
 		void spaces.controller.load(
 			user.controller.getState().preferences.lastSpaceId,
 		)
 	}, [spaces.controller, user.controller])
+
+	useEffect(() => {
+		loadSpaces()
+	}, [loadSpaces])
 
 	useEffect(() => {
 		if (spaceIds.length === 0) {
@@ -512,10 +516,12 @@ export function App() {
 					conversation={selectedConversation}
 					conversationRuntimes={conversationRuntimes}
 					hasLoaded={hasLoaded}
+					haveSpacesFailed={spaces.state.hasFailedToLoad}
 					isConversationSettingsOpen={isEditingConversation}
 					isOverlayOpen={isOverlayOpen}
 					isSettingsOpen={isEditing}
 					onOpenConversationSettings={roster.controller.editConversation}
+					onRetrySpaces={loadSpaces}
 					onToggleSettings={toggleSettings}
 					readerName={preferences.displayName}
 				/>

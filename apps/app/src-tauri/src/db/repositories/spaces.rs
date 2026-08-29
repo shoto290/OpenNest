@@ -216,10 +216,14 @@ fn space(row: &Row<'_>) -> rusqlite::Result<Space> {
 	Ok(Space {
 		id: row.get("id")?,
 		name: row.get("name")?,
-		colour: row.get("colour")?,
+		colour: colour_of(row)?,
 		position: row.get("position")?,
 		created_at: row.get("created_at")?,
 	})
+}
+
+fn colour_of(row: &Row<'_>) -> rusqlite::Result<Option<AvatarBlot>> {
+	Ok(row.get::<_, Option<String>>("colour")?.as_deref().and_then(AvatarBlot::parse))
 }
 
 fn now() -> i64 {
@@ -295,6 +299,30 @@ mod tests {
 				.collect::<Vec<_>>(),
 			vec!["Personal".to_owned(), "Vocca".to_owned(), "Vacances".to_owned()]
 		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_space_wearing_a_colour_outside_the_palette_still_joins_the_listing() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call(|connection| {
+				connection.execute_batch(
+					"PRAGMA ignore_check_constraints = ON;
+					UPDATE spaces SET colour = 'chartreuse' WHERE id = 'personal';",
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("the stained row");
+
+		let listed = database.spaces().list().await.expect("the spaces");
+
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].colour, None);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

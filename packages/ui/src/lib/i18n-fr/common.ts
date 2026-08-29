@@ -2,6 +2,12 @@ const common = {
 	boot: {
 		status: "Démarrage d'OpenNest",
 	},
+	spaces: {
+		unavailable: {
+			title: "Les espaces n'ont pas pu être lus",
+			description: "Vos bots sont intacts. Réessayez pour ouvrir vos espaces.",
+		},
+	},
 	dialog: {
 		close: "Fermer",
 	},

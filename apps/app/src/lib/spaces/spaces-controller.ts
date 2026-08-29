@@ -11,6 +11,7 @@ export type SpacesState = {
 	spaces: Space[]
 	selectedSpaceId: string | null
 	isSettingsOpen: boolean
+	hasFailedToLoad: boolean
 }
 
 export type SpacesController = {
@@ -39,6 +40,7 @@ export const initialSpacesState: SpacesState = {
 	spaces: [],
 	selectedSpaceId: null,
 	isSettingsOpen: false,
+	hasFailedToLoad: false,
 }
 
 export const createSpacesController = (
@@ -72,11 +74,14 @@ export const createSpacesController = (
 		set({
 			spaces,
 			selectedSpaceId: stillHeld ?? remembered ?? spaces[0]?.id ?? null,
+			hasFailedToLoad: false,
 		})
 	}
 
+	const noteFailedLoad = () => set({ hasFailedToLoad: true })
+
 	const reload = () => {
-		void enqueue(() => read(null)).catch(() => undefined)
+		void enqueue(() => read(null)).catch(noteFailedLoad)
 	}
 
 	const writes = createWriteLoop<SpaceSettingsValue, Space>({
@@ -97,7 +102,7 @@ export const createSpacesController = (
 		},
 
 		load: (lastSpaceId: string | null) =>
-			enqueue(() => read(lastSpaceId)).catch(() => undefined),
+			enqueue(() => read(lastSpaceId)).catch(noteFailedLoad),
 
 		select: (id: string) => {
 			if (id !== state.selectedSpaceId) {
