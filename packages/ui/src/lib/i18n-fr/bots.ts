@@ -365,6 +365,60 @@ const bots = {
 			},
 		},
 	},
+	environment: {
+		add: "Ajouter une variable",
+		notice:
+			"Une valeur est écrite une fois et remise à ce qui démarre ici. Rien ne la relit, elle n'est donc jamais réaffichée — ni ici, ni ailleurs.",
+		empty: {
+			title: "Aucune variable",
+			description:
+				"Une variable est un nom et un secret remis à ce qui démarre ici. La valeur est écrite une fois et n'est jamais réaffichée.",
+		},
+		scope: {
+			space: "Espace",
+			bot: "Bot",
+			server: "Serveur MCP",
+		},
+		row: {
+			scopes: "Définie dans {{defined}} · Servie depuis {{served}}",
+			overridden: "Remplacée par {{scope}}",
+			overriding: "Remplace {{scope}}",
+			replace: "Remplacer la valeur de {{name}}",
+			remove: "Retirer {{name}}",
+		},
+		set: {
+			add: {
+				title: "Ajouter une variable",
+				description:
+					"La valeur est remise à ce qui démarre ici et n'est jamais réaffichée.",
+			},
+			replace: {
+				title: "Remplacer une valeur",
+				description:
+					"La valeur stockée sous {{name}} est remplacée par celle saisie ici. Celle d'aujourd'hui n'est pas affichée et rien ici ne la lit.",
+			},
+			name: {
+				label: "Nom",
+				placeholder: "ATLAS_TOKEN",
+				hint: "Majuscules, chiffres et tirets bas. C'est le nom que le programme lit.",
+				invalid:
+					"Un nom prend des majuscules, des chiffres et des tirets bas, et commence par une lettre ou un tiret bas.",
+			},
+			value: {
+				label: "Valeur",
+				hint: "Saisie une fois. Elle quitte ce champ pour le disque et n'est jamais relue.",
+			},
+			submit: "Enregistrer la variable",
+			failed: "L'écriture a échoué. Rien n'a changé — réessayez.",
+		},
+		remove: {
+			title: "Retirer {{name}} ?",
+			description:
+				"Le nom et sa valeur partent avec lui, et ce qui démarre ici cesse de les recevoir. C'est irréversible.",
+			action: "Retirer la variable",
+			failed: "La suppression a échoué. Rien n'a changé — réessayez.",
+		},
+	},
 	runtime: {
 		model: {
 			label: "Modèle",

@@ -374,6 +374,60 @@ const bots = {
 			},
 		},
 	},
+	environment: {
+		add: "Add variable",
+		notice:
+			"A value is written once and handed to what starts here. Nothing reads it back, so it is never shown again — not here, not anywhere.",
+		empty: {
+			title: "No variables yet",
+			description:
+				"A variable is a name and a secret handed to what starts here. The value is written once and never shown again.",
+		},
+		scope: {
+			space: "Space",
+			bot: "Bot",
+			server: "MCP server",
+		},
+		row: {
+			scopes: "Defined in {{defined}} · Served from {{served}}",
+			overridden: "Overridden by {{scope}}",
+			overriding: "Overrides {{scope}}",
+			replace: "Replace the value of {{name}}",
+			remove: "Remove {{name}}",
+		},
+		set: {
+			add: {
+				title: "Add a variable",
+				description:
+					"The value is handed to what starts here and is never shown again.",
+			},
+			replace: {
+				title: "Replace a value",
+				description:
+					"The value stored under {{name}} is replaced by what is typed here. The one held today is not shown, and nothing here reads it.",
+			},
+			name: {
+				label: "Name",
+				placeholder: "ATLAS_TOKEN",
+				hint: "Capital letters, digits and underscores. It is the name the program reads.",
+				invalid:
+					"A name takes capital letters, digits and underscores, and starts with a letter or an underscore.",
+			},
+			value: {
+				label: "Value",
+				hint: "Typed once. It leaves this field for the disk and is never read back.",
+			},
+			submit: "Save variable",
+			failed: "This could not be written. Nothing changed — try again.",
+		},
+		remove: {
+			title: "Remove {{name}}?",
+			description:
+				"The name and its value go with it, and what starts here stops being handed them. This cannot be undone.",
+			action: "Remove variable",
+			failed: "This could not be removed. Nothing changed — try again.",
+		},
+	},
 	runtime: {
 		model: {
 			label: "Model",

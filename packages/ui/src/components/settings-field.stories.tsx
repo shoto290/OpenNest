@@ -221,3 +221,30 @@ export const WithIcon = meta.story({
 		await expect(args.onValueChange).toHaveBeenLastCalledWith("atl")
 	},
 })
+
+export const Masked = meta.story({
+	args: {
+		label: "Value",
+		masked: true,
+		value: "",
+		hint: "Typed once. It leaves this field for the disk and is never read back.",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The form a field takes when what it carries must not be read over a shoulder, nor kept by anything on the way: an environment value, a token, a key. Reach for this over `Default` whenever the surface writes a secret it will never show again — the control masks every character, and it turns off the browser's autofill and the spellchecker, both of which would otherwise send the secret somewhere this field does not control. It is a single-line control only; the value it holds is still reported in clear to the host, which is the one place it is meant to go.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const field = canvas.getByLabelText("Value")
+
+		await expect(field).toHaveAttribute("type", "password")
+		await expect(field).toHaveAttribute("autocomplete", "off")
+		await expect(field).toHaveAttribute("spellcheck", "false")
+
+		await userEvent.type(field, "s3cret")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith("s3cret")
+	},
+})
