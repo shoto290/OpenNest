@@ -5,6 +5,7 @@ pub mod bundles;
 pub mod commands;
 pub mod conversations;
 pub mod db;
+pub mod environment;
 pub mod notifications;
 pub mod sections;
 pub mod spaces;
