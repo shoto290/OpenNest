@@ -172,6 +172,7 @@ const chat = {
 			resumeFailed: "Previous conversation could not be resumed",
 			workingDirectoryRefused: "The bot's folder was not found",
 			settingsRejected: "The bot's settings were not applied",
+			serverEnvRejected: "A server was left out",
 			unavailable: "Claude Code is unavailable",
 			failed: "That request did not go through",
 		},
@@ -190,6 +191,8 @@ const chat = {
 				"{{path}} is not there any more. This bot is answering from the usual place instead.",
 			invalidFrame: "An unreadable frame was skipped: {{detail}}",
 			settingsRejected: "This bot's settings.json was not applied: {{detail}}",
+			serverEnvRejected:
+				"{{detail}}. The conversation carries on with the other servers.",
 			notStarted: "No session is running.",
 			turnAlreadyRunning: "A turn is already running.",
 			transitionInProgress: "A session change is already in progress.",

@@ -437,6 +437,16 @@ describe("notices", () => {
 		)
 	})
 
+	it("keeps a left-out server out of the session-ending errors", () => {
+		const leftOut = {
+			kind: "serverEnvRejected",
+			detail:
+				'the server "linear" was left out: LINEAR_KEY is defined by no scope',
+		} as const
+		expect(needsFreshSession(leftOut)).toBe(false)
+		expect(noticeTitleFor(t, leftOut)).toBe("A server was left out")
+	})
+
 	it("keeps a refused resume out of the session-ending errors", () => {
 		const refused = { kind: "resumeFailed", forgotSessionId: true } as const
 		expect(needsFreshSession(refused)).toBe(false)
