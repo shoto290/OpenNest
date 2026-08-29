@@ -1,5 +1,3 @@
-import type { Palette } from "@workspace/ui/lib/palettes"
-
 const COLOR_SCHEMES = {
 	light: "Light",
 	dark: "Dark",
@@ -31,7 +29,6 @@ type UserSettingsValue = {
 	name: string
 	image?: string
 	colorScheme: ColorScheme
-	palette: Palette
 	notifications?: Notifications
 }
 

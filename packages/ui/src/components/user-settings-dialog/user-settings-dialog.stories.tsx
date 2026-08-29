@@ -22,20 +22,17 @@ import {
 const FILLED_USER: UserSettingsValue = {
 	name: "Ada Martin",
 	colorScheme: "system",
-	palette: "amber",
 }
 
 const NEW_USER: UserSettingsValue = {
 	name: "",
 	colorScheme: "system",
-	palette: "amber",
 }
 
 const PICTURED_USER: UserSettingsValue = {
 	...FILLED_USER,
 	image: UPLOADED_AVATAR_IMAGE,
 	colorScheme: "dark",
-	palette: "lavender",
 }
 
 const DIALOG_WIDTH_REMS = 52
@@ -113,7 +110,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the scheme and the palettes, `Notifications` for what the app tells them about, `LanguageTab` for the language the app is read in, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in, `Skills` and `History` for the person's own plugin.",
+					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the colour scheme, `Notifications` for what the app tells them about, `LanguageTab` for the language the app is read in, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in, `Skills` and `History` for the person's own plugin.",
 			},
 		},
 	},
@@ -188,7 +185,7 @@ export const Appearance = meta.story({
 		docs: {
 			description: {
 				story:
-					"The second group: the three schemes, then the six palettes as tiles three to a row. Check that each tile is painted in the palette it offers rather than in the one the window is wearing, that the chosen one carries a tick as well as an edge, and that choosing a scheme or a palette writes the whole value back through `onValueChange`. Pick `Notifications` for the third group, `IconRail` for the width where the tiles drop to two a row.",
+					"The second group: the three colour schemes, side by side. Check that the chosen one reads as chosen and that choosing another writes the whole value back through `onValueChange`. Pick `Notifications` for the third group, `IconRail` for the width where the rail drops to its icons.",
 			},
 		},
 	},
@@ -201,13 +198,6 @@ export const Appearance = meta.story({
 		const panel = await within(dialog).findByRole("tabpanel", {
 			name: "Appearance",
 		})
-		await expect(slotsIn(panel, "palette-vignette")).toHaveLength(6)
-
-		await userEvent.click(within(panel).getByRole("radio", { name: "Moss" }))
-		await expect(args.onValueChange).toHaveBeenCalledWith(
-			expect.objectContaining({ palette: "moss" }),
-		)
-
 		await userEvent.click(within(panel).getByRole("radio", { name: "Dark" }))
 		await expect(args.onValueChange).toHaveBeenCalledWith(
 			expect.objectContaining({ colorScheme: "dark" }),
@@ -220,7 +210,7 @@ export const Notifications = meta.story({
 		docs: {
 			description: {
 				story:
-					"The third group, on a record that holds no choice: the three moments on and the sound with them, which is what a reader who has never opened this tab is owed — a bot that asked something nobody heard waits forever. Check that flipping one writes the whole value back through `onValueChange` with that one event turned off and the name, the scheme and the palette exactly as they were. Pick `LanguageTab` for the group next door.",
+					"The third group, on a record that holds no choice: the three moments on and the sound with them, which is what a reader who has never opened this tab is owed — a bot that asked something nobody heard waits forever. Check that flipping one writes the whole value back through `onValueChange` with that one event turned off and the name and the scheme exactly as they were. Pick `LanguageTab` for the group next door.",
 			},
 		},
 	},
@@ -290,25 +280,18 @@ export const IconRail = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog on a window too narrow for the rail's names — the state a laptop reaches once the dialog is capped to the viewport. Check that the rail keeps all four groups reachable and named to a screen reader, that hovering one names it in a tooltip, and that the palettes fall to two tiles a row so each still reads as a window rather than a sliver. Pick `Appearance` for the full-width grid.",
+					"The dialog on a window too narrow for the rail's names — the state a laptop reaches once the dialog is capped to the viewport. Check that the rail keeps every group reachable and named to a screen reader, that hovering one names it in a tooltip, and that the panel beside it keeps its full width. Pick `Appearance` for the rail with its names.",
 			},
 		},
 	},
 	play: async ({ userEvent }) => {
-		const dialog = await dialogIn()
-		const appearance = within(dialog).getByRole("tab", { name: "Appearance" })
+		const rail = within(await dialogIn())
 
-		await userEvent.click(appearance)
-		const panel = await within(dialog).findByRole("tabpanel", {
-			name: "Appearance",
-		})
+		await userEvent.click(rail.getByRole("tab", { name: "Notifications" }))
 
-		const rows = new Set(
-			slotsIn(panel, "palette-vignette").map((tile) =>
-				Math.round(tile.getBoundingClientRect().top),
-			),
-		)
-		await expect(rows.size).toBe(3)
+		await expect(
+			await rail.findByRole("tabpanel", { name: "Notifications" }),
+		).toBeVisible()
 	},
 })
 

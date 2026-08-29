@@ -38,7 +38,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One named set of choices inside a settings surface: a legend, then the options on the grid the caller asks for. Every group in every settings dialog is this one — the animals of a bot, the schemes and palettes of a reader — so the label of one set cannot drift from the label of another. It is a fieldset with a legend rather than a heading over a div, which is what makes a screen reader announce the set's name with every option a reader lands on.",
+					"One named set of choices inside a settings surface: a legend, then the options on the grid the caller asks for. Every group in every settings dialog is this one — the animals of a bot, the scheme a reader reads in — so the label of one set cannot drift from the label of another. It is a fieldset with a legend rather than a heading over a div, which is what makes a screen reader announce the set's name with every option a reader lands on.",
 			},
 		},
 	},

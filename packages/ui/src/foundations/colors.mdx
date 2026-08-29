@@ -9,7 +9,6 @@ import {
 	SIDEBAR_TOKENS,
 	SURFACE_TOKENS,
 } from "@workspace/ui/foundations/color-tokens"
-import { PaletteMatrix } from "@workspace/ui/foundations/palette-preview"
 
 <Meta title="Foundations/Colors" />
 
@@ -18,12 +17,6 @@ import { PaletteMatrix } from "@workspace/ui/foundations/palette-preview"
 Every swatch reads its live CSS variable, so this page follows the theme toolbar. Switch to **Theme layout → Side by side** to compare light and dark at once.
 
 Tokens are declared in `src/styles/globals.css`: light values on `:root`, dark overrides on `.dark`. Use the Tailwind utility (`bg-primary`, `text-muted-foreground`) rather than the raw variable.
-
-## Palettes
-
-Palette and colour scheme are two independent axes: `data-theme` on `<html>` picks the palette, the `dark` class picks the scheme. A document without `data-theme` paints amber. The identifiers and their labels come from `@workspace/ui/lib/palettes`.
-
-<PaletteMatrix />
 
 ## Surfaces
 

@@ -209,10 +209,7 @@ const UserSettingsDialog = ({
 						>
 							<AppearanceFields
 								colorScheme={value.colorScheme}
-								compact={iconsOnly}
 								onColorSchemeChange={(colorScheme) => patch({ colorScheme })}
-								onPaletteChange={(palette) => patch({ palette })}
-								palette={value.palette}
 							/>
 						</Tabs.Panel>
 

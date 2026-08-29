@@ -7,7 +7,6 @@ use crate::db::{Access, DatabaseError};
 const DISPLAY_NAME_KEY: &str = "user.display_name";
 const AVATAR_IMAGE_PATH_KEY: &str = "user.avatar_image_path";
 const COLOR_SCHEME_KEY: &str = "user.color_scheme";
-const PALETTE_KEY: &str = "user.palette";
 const LANGUAGE_KEY: &str = "user.language";
 const NOTIFY_ON_QUESTION_KEY: &str = "user.notify_on_question";
 const NOTIFY_ON_PERMISSION_KEY: &str = "user.notify_on_permission";
@@ -20,8 +19,6 @@ const DROPPED_LAST_BOT_ID_KEY: &str = "user.last_bot_id";
 
 const SWITCH_ON: &str = "on";
 const SWITCH_OFF: &str = "off";
-
-const DEFAULT_PALETTE: &str = "amber";
 
 const READ_SETTING: &str = "SELECT value FROM app_settings WHERE key = ?1";
 const WRITE_SETTING: &str = "INSERT INTO app_settings (key, value) VALUES (?1, ?2)
@@ -67,7 +64,6 @@ pub struct Preferences {
 	pub display_name: String,
 	pub avatar_image_path: Option<String>,
 	pub color_scheme: ColorScheme,
-	pub palette: String,
 	pub language: Option<String>,
 	pub notify_on_question: bool,
 	pub notify_on_permission: bool,
@@ -84,7 +80,6 @@ impl Default for Preferences {
 			display_name: String::new(),
 			avatar_image_path: None,
 			color_scheme: ColorScheme::default(),
-			palette: DEFAULT_PALETTE.to_owned(),
 			language: None,
 			notify_on_question: true,
 			notify_on_permission: true,
@@ -163,7 +158,6 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		avatar_image_path: setting_in(connection, AVATAR_IMAGE_PATH_KEY)?,
 		color_scheme: setting_in(connection, COLOR_SCHEME_KEY)?
 			.map_or(defaults.color_scheme, |stored| ColorScheme::of(&stored)),
-		palette: setting_in(connection, PALETTE_KEY)?.unwrap_or(defaults.palette),
 		language: setting_in(connection, LANGUAGE_KEY)?,
 		notify_on_question: switch_in(connection, NOTIFY_ON_QUESTION_KEY)?,
 		notify_on_permission: switch_in(connection, NOTIFY_ON_PERMISSION_KEY)?,
@@ -190,7 +184,6 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	transaction.execute(WRITE_SETTING, params![DISPLAY_NAME_KEY, preferences.display_name])?;
 	transaction
 		.execute(WRITE_SETTING, params![COLOR_SCHEME_KEY, preferences.color_scheme.as_stored()])?;
-	transaction.execute(WRITE_SETTING, params![PALETTE_KEY, preferences.palette])?;
 	write_optional_in(transaction, LANGUAGE_KEY, preferences.language.as_deref())?;
 	write_switch_in(transaction, NOTIFY_ON_QUESTION_KEY, preferences.notify_on_question)?;
 	write_switch_in(transaction, NOTIFY_ON_PERMISSION_KEY, preferences.notify_on_permission)?;
@@ -255,7 +248,6 @@ mod tests {
 			display_name: "Nyx".to_owned(),
 			avatar_image_path: Some("/data/avatars/one.png".to_owned()),
 			color_scheme: ColorScheme::Dark,
-			palette: "moss".to_owned(),
 			language: Some("fr".to_owned()),
 			notify_on_question: false,
 			notify_on_permission: true,
@@ -287,7 +279,6 @@ mod tests {
 				display_name: String::new(),
 				avatar_image_path: None,
 				color_scheme: ColorScheme::System,
-				palette: DEFAULT_PALETTE.to_owned(),
 				language: None,
 				notify_on_question: true,
 				notify_on_permission: true,
@@ -464,7 +455,7 @@ mod tests {
 			.call_mut(|connection| {
 				let transaction = write_transaction(connection)?;
 				transaction.execute(WRITE_SETTING, params![DISPLAY_NAME_KEY, "Nyx"])?;
-				transaction.execute(WRITE_SETTING, params![PALETTE_KEY, "moss"])?;
+				transaction.execute(WRITE_SETTING, params!["user.palette", "moss"])?;
 				transaction.commit()?;
 				Ok(())
 			})
@@ -477,7 +468,6 @@ mod tests {
 		assert_eq!(read.sidebar_width, None);
 		assert_eq!(read.last_space_id, None);
 		assert_eq!(read.display_name, "Nyx");
-		assert_eq!(read.palette, "moss");
 		assert!(read.notify_on_question, "a switch the older build never wrote must read as on");
 		assert!(read.notify_with_sound, "a switch the older build never wrote must read as on");
 	}

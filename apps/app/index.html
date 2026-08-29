@@ -15,7 +15,6 @@
             window.matchMedia("(prefers-color-scheme: dark)").matches)
 
         root.classList.add(isDark ? "dark" : "light")
-        root.dataset.theme = localStorage.getItem("palette") ?? "amber"
       })()
     </script>
   </head>

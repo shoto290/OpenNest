@@ -5,8 +5,6 @@ import type {
 
 export type ColorScheme = "system" | "light" | "dark"
 
-export type Palette = string
-
 export type Language = string | null
 
 export type BotIdBySpace = Record<string, string>
@@ -15,7 +13,6 @@ export type UserPreferences = {
 	displayName: string
 	profilePicturePath: string | null
 	colorScheme: ColorScheme
-	palette: Palette
 	language: Language
 	notifyOnQuestion: boolean
 	notifyOnPermission: boolean

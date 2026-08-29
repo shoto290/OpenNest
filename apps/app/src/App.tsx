@@ -455,7 +455,6 @@ export function App() {
 
 	useTheme({
 		colorScheme: preferences.colorScheme,
-		palette: preferences.palette,
 		onColorSchemeChange: changeColorScheme,
 	})
 
@@ -675,9 +674,6 @@ export function App() {
 					}
 					if (value.colorScheme !== userSettings.colorScheme) {
 						void user.controller.setColorScheme(value.colorScheme)
-					}
-					if (value.palette !== userSettings.palette) {
-						void user.controller.setPalette(value.palette)
 					}
 					const notification = toNotificationChange(value, userSettings)
 					if (notification) {
