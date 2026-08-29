@@ -33,6 +33,28 @@ describe("createSpacesController", () => {
 		expect(controller.getState().selectedSpaceId).toBe(elsewhere.id)
 	})
 
+	it("reports a listing it could not read instead of holding an empty roster", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "spaces").mockRejectedValue(new Error("no record"))
+
+		const controller = await loaded(store)
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
+	it("clears the reported failure once the listing reads again", async () => {
+		const store = createFakeTranscriptStore()
+		const listing = vi
+			.spyOn(store, "spaces")
+			.mockRejectedValueOnce(new Error("no record"))
+		const controller = await loaded(store)
+
+		await controller.load(null)
+
+		expect(listing).toHaveBeenCalledTimes(2)
+		expect(controller.getState().hasFailedToLoad).toBe(false)
+	})
+
 	it("opens on the first space when the record remembers none", async () => {
 		const store = createFakeTranscriptStore()
 		await store.createSpace("Vocca")
