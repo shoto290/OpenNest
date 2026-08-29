@@ -11,7 +11,7 @@ use tauri::{AppHandle, Runtime};
 pub use connection::DatabaseError;
 use repositories::{
 	messages, ConversationsRepository, MessagesRepository, RuntimeContextRepository,
-	SectionsRepository, SpacesRepository, UserRepository,
+	SectionsRepository, SpaceSettingsRepository, SpacesRepository, UserRepository,
 };
 
 #[derive(Clone)]
@@ -67,6 +67,7 @@ pub struct Database {
 	messages: MessagesRepository,
 	runtime_context: RuntimeContextRepository,
 	sections: SectionsRepository,
+	space_settings: SpaceSettingsRepository,
 	spaces: SpacesRepository,
 	user: UserRepository,
 }
@@ -82,6 +83,7 @@ impl Database {
 			messages: MessagesRepository::new(access.clone()),
 			runtime_context: RuntimeContextRepository::new(access.clone()),
 			sections: SectionsRepository::new(access.clone()),
+			space_settings: SpaceSettingsRepository::new(access.clone()),
 			spaces: SpacesRepository::new(access.clone()),
 			user: UserRepository::new(access.clone()),
 			access,
@@ -118,6 +120,10 @@ impl Database {
 
 	pub fn sections(&self) -> &SectionsRepository {
 		&self.sections
+	}
+
+	pub fn space_settings(&self) -> &SpaceSettingsRepository {
+		&self.space_settings
 	}
 
 	pub fn spaces(&self) -> &SpacesRepository {

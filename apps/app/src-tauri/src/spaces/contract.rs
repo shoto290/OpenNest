@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::conversations::contract::{AvatarBlot, StorageFailure};
-use crate::db::repositories::spaces;
+use crate::db::repositories::{space_settings, spaces};
 use crate::db::DatabaseError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +23,25 @@ impl From<spaces::Space> for Space {
 			position: space.position,
 			created_at: space.created_at,
 		}
+	}
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpacePreferences {
+	#[serde(default)]
+	pub collapsed_section_ids: Vec<String>,
+}
+
+impl From<space_settings::Preferences> for SpacePreferences {
+	fn from(preferences: space_settings::Preferences) -> Self {
+		Self { collapsed_section_ids: preferences.collapsed_section_ids }
+	}
+}
+
+impl From<SpacePreferences> for space_settings::Preferences {
+	fn from(preferences: SpacePreferences) -> Self {
+		Self { collapsed_section_ids: preferences.collapsed_section_ids }
 	}
 }
 
@@ -94,6 +113,25 @@ mod tests {
 				"createdAt": 3
 			})
 		);
+	}
+
+	#[test]
+	fn a_space_record_crosses_to_the_front_under_the_name_it_reads() {
+		assert_eq!(
+			to_value(SpacePreferences::from(space_settings::Preferences {
+				collapsed_section_ids: vec!["one".to_owned()],
+			}))
+			.expect("the record serializes"),
+			json!({ "collapsedSectionIds": ["one"] })
+		);
+	}
+
+	#[test]
+	fn a_space_record_without_a_list_reads_as_no_collapsed_section() {
+		let read: SpacePreferences =
+			serde_json::from_value(json!({})).expect("the record deserializes");
+
+		assert_eq!(read, SpacePreferences::default());
 	}
 
 	#[test]

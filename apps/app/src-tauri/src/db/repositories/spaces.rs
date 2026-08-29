@@ -200,7 +200,7 @@ fn space_of_bot(connection: &Connection, bot_id: &str) -> Result<Option<String>,
 	Ok(connection.query_row(SPACE_OF_BOT, [bot_id], |row| row.get(0)).optional()?)
 }
 
-fn held(connection: &Connection, id: &str) -> Result<bool, SpaceError> {
+pub(super) fn held(connection: &Connection, id: &str) -> Result<bool, SpaceError> {
 	Ok(connection
 		.query_row("SELECT EXISTS (SELECT 1 FROM spaces WHERE id = ?1)", [id], |row| row.get(0))?)
 }

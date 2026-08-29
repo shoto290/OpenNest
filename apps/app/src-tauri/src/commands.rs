@@ -77,6 +77,8 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		spaces::commands::space_reorder,
 		spaces::commands::space_delete,
 		spaces::commands::bot_move_to_space,
+		spaces::commands::space_preferences,
+		spaces::commands::space_set_preferences,
 		spaces::commands::space_plugin_skills,
 		spaces::commands::space_plugin_create_skill,
 		spaces::commands::space_plugin_update_skill,
