@@ -29,7 +29,11 @@ describe("preloadedSkills", () => {
 		dropSkill(plugin, "learn", marked("learn", "## How to write\n\nRules."))
 
 		expect(preloadedSkills(plugin)).toEqual([
-			{ name: "learn", body: "## How to write\n\nRules." },
+			{
+				name: "learn",
+				directory: join(plugin, "skills", "learn"),
+				body: "## How to write\n\nRules.",
+			},
 		])
 	})
 
@@ -40,7 +44,13 @@ describe("preloadedSkills", () => {
 			"---\nmetadata:\n  opennest:\n    preload: true\n---\n\nRules.\n",
 		)
 
-		expect(preloadedSkills(plugin)).toEqual([{ name: "learn", body: "Rules." }])
+		expect(preloadedSkills(plugin)).toEqual([
+			{
+				name: "learn",
+				directory: join(plugin, "skills", "learn"),
+				body: "Rules.",
+			},
+		])
 	})
 
 	it("reads the skills in the order the disk names them", () => {

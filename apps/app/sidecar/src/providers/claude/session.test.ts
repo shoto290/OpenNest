@@ -13,6 +13,7 @@ import {
 	bundleLine,
 	layerFor,
 	OPENNEST_LAYER,
+	skillLine,
 	spaceLine,
 	userLine,
 } from "./system-layer"
@@ -296,7 +297,7 @@ describe("layerFor", () => {
 			[
 				OPENNEST_LAYER,
 				bundleLine("/bots/b1"),
-				"# learn\n\n## When to write\n\nRules.",
+				`# learn\n\n${skillLine(join(system, "skills", "learn"))}\n\n## When to write\n\nRules.`,
 			].join("\n\n"),
 		)
 	})
@@ -311,7 +312,7 @@ describe("layerFor", () => {
 			[
 				OPENNEST_LAYER,
 				userLine(system),
-				"# about-me\n\nThey like figs.",
+				`# about-me\n\n${skillLine(join(system, "skills", "about-me"))}\n\nThey like figs.`,
 				bundleLine("/bots/b1"),
 			].join("\n\n"),
 		)
@@ -327,7 +328,7 @@ describe("layerFor", () => {
 			[
 				OPENNEST_LAYER,
 				spaceLine(system),
-				"# about-this-space\n\nThe API lives in apps/api.",
+				`# about-this-space\n\n${skillLine(join(system, "skills", "about-this-space"))}\n\nThe API lives in apps/api.`,
 				bundleLine("/bots/b1"),
 			].join("\n\n"),
 		)
