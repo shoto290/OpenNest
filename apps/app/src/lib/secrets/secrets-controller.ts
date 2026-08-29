@@ -18,6 +18,7 @@ export type SecretsState = {
 	hasVault: boolean
 	isUnlocking: boolean
 	isPassphraseRejected: boolean
+	loadFailed: boolean
 	entries: StoredSecretKey[]
 	saved: Record<string, SecretScope>
 	tookOver: Record<string, SecretScope>
@@ -42,6 +43,7 @@ export const initialSecretsState: SecretsState = {
 	hasVault: false,
 	isUnlocking: false,
 	isPassphraseRejected: false,
+	loadFailed: false,
 	entries: [],
 	saved: {},
 	tookOver: {},
@@ -88,10 +90,19 @@ export const createSecretsController = (
 	}
 
 	const read = async (target: SecretTarget) => {
-		const status = await port.status()
-		const stored = status.isReady ? await port.keys(target) : { entries: [] }
+		try {
+			const status = await port.status()
+			const stored = status.isReady ? await port.keys(target) : { entries: [] }
 
-		applyTo(target, { ...status, entries: stored.entries })
+			applyTo(target, { ...status, entries: stored.entries, loadFailed: false })
+		} catch {
+			applyTo(target, {
+				isReady: false,
+				needsPassphrase: false,
+				loadFailed: true,
+				entries: [],
+			})
+		}
 	}
 
 	const write = (

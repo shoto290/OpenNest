@@ -100,6 +100,7 @@ const settings = {
 		},
 	},
 	secrets: {
+		unavailable: "Coffre à secrets indisponible pour l'instant.",
 		empty: "Aucun secret enregistré. Ajoutez-en un ci-dessus.",
 		add: {
 			action: "Ajouter",

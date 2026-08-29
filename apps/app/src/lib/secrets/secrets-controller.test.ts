@@ -221,6 +221,44 @@ describe("createSecretsController", () => {
 		expect(controller.getState().needsPassphrase).toBe(true)
 	})
 
+	it("says the store could not be read instead of looking merely empty", async () => {
+		const failing = {
+			...port,
+			keys: async () => {
+				throw new Error("bot_id is required")
+			},
+		}
+		const controller = createSecretsController(failing)
+
+		await controller.open(BOT)
+
+		expect(controller.getState().loadFailed).toBe(true)
+		expect(controller.getState().isReady).toBe(false)
+		expect(controller.getState().needsPassphrase).toBe(false)
+		expect(controller.getState().target).toEqual(BOT)
+	})
+
+	it("clears the read failure once the store answers again", async () => {
+		let isBroken = true
+		const flaky = {
+			...port,
+			keys: async (target: SecretTarget) => {
+				if (isBroken) throw new Error("bot_id is required")
+				return port.keys(target)
+			},
+		}
+		const controller = createSecretsController(flaky)
+
+		await controller.open(BOT)
+		expect(controller.getState().loadFailed).toBe(true)
+
+		isBroken = false
+		await controller.open(BOT)
+
+		expect(controller.getState().loadFailed).toBe(false)
+		expect(controller.getState().isReady).toBe(true)
+	})
+
 	it("drops what one target answered when another is opened", async () => {
 		port.hold(BOT, "bot", "OWN")
 		const controller = await opened(BOT)

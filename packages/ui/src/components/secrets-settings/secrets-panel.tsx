@@ -49,6 +49,12 @@ const SecretsPanel = ({
 
 	return (
 		<>
+			{value.isReady ? null : (
+				<p className="shrink-0 text-muted-foreground text-xs">
+					{t("secrets.unavailable")}
+				</p>
+			)}
+
 			<form
 				className="flex shrink-0 items-center gap-2"
 				onSubmit={(event) => {

@@ -310,6 +310,7 @@ export const Unavailable = meta.story({
 		value: {
 			...BLANK_SECRETS,
 			isReady: false,
+			loadFailed: true,
 			entries: [heldBy("SHARED", ["bot"])],
 		},
 	},
@@ -317,12 +318,16 @@ export const Unavailable = meta.story({
 		docs: {
 			description: {
 				story:
-					"The store out of reach with no passphrase to fix it. The panel refuses rather than pretends: every key reads as unavailable and nothing can be submitted.",
+					"The store out of reach with no passphrase to fix it. The panel says so in one line and refuses rather than pretending: the fields are read only and every key reads as unavailable. Reach for this to check the reader is never left with an inert form and no reason for it.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("Secret store unavailable right now."),
+		).toBeVisible()
 		await expect(canvas.getByText("Unavailable")).toBeVisible()
 		await expect(canvas.getByRole("button", { name: "Add" })).toBeDisabled()
+		await expect(canvas.getByLabelText("Key")).toHaveAttribute("readonly")
 	},
 })

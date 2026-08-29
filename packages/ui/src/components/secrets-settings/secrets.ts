@@ -23,6 +23,7 @@ type SecretsValue = {
 	hasVault: boolean
 	isUnlocking: boolean
 	isPassphraseRejected: boolean
+	loadFailed: boolean
 	entries: SecretEntry[]
 	saved: Record<string, SecretScope>
 	tookOver: Record<string, SecretScope>
@@ -37,6 +38,7 @@ const BLANK_SECRETS: SecretsValue = {
 	hasVault: false,
 	isUnlocking: false,
 	isPassphraseRejected: false,
+	loadFailed: false,
 	entries: [],
 	saved: {},
 	tookOver: {},

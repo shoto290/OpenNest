@@ -99,6 +99,7 @@ const settings = {
 		},
 	},
 	secrets: {
+		unavailable: "Secret store unavailable right now.",
 		empty: "No secret stored yet. Add one above.",
 		add: {
 			action: "Add",
