@@ -53,6 +53,8 @@ pub struct OpenRequest {
 	pub settings_path: Option<String>,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub app_data_dir: Option<String>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub conversation_id: Option<String>,
 	pub partial_messages: bool,
 	#[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
 	pub env: std::collections::BTreeMap<String, String>,

@@ -468,7 +468,8 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
 	let options = SessionOptions::new(working_dir)
 		.bundled(identity.bundle)
-		.with_app_data(app.path().app_data_dir().ok());
+		.with_app_data(app.path().app_data_dir().ok())
+		.in_conversation(scope.conversation_id.clone());
 
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {

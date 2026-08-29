@@ -20,6 +20,14 @@ const home = (path: string): string => join(homedir(), path)
 const floor = (pluginPaths: string[] = [], writablePaths: string[] = []) =>
 	securityFloor({ appDataDir: APP_DATA, pluginPaths, writablePaths })
 
+const floorIn = (appDataDir: string, conversationId: string) =>
+	securityFloor({
+		appDataDir,
+		conversationId,
+		pluginPaths: [],
+		writablePaths: [],
+	})
+
 const denyOf = (pluginPaths: string[] = []): string[] =>
 	floor(pluginPaths).permissions?.deny ?? []
 
@@ -95,6 +103,17 @@ describe("securityFloor", () => {
 		expect(filesystemOf()?.denyRead).toContain(join(APP_DATA, "attachments"))
 	})
 
+	it("reads back what the reader dropped into the conversation it answers in", () => {
+		const mine = join(APP_DATA, "attachments/c1")
+		const settings = floorIn(APP_DATA, "c1")
+
+		expect(settings.permissions?.deny).not.toContain(`Read(/${mine}/**)`)
+		expect(settings.sandbox?.filesystem?.allowRead).toContain(mine)
+		expect(settings.sandbox?.filesystem?.denyRead).toContain(
+			join(APP_DATA, "attachments"),
+		)
+	})
+
 	it("keeps a session out of the bundles of every other bot and space", () => {
 		const denyRead = filesystemOf()?.denyRead
 
@@ -146,6 +165,18 @@ describe("securityFloor", () => {
 				expect(deny).not.toContain(`Read(/${join(appDataDir, ancestor)}/**)`)
 			}
 			expect(deny).toContain(`Read(/${join(appDataDir, "spaces/s1")}/**)`)
+		})
+
+		it("denies the Read tool on the attachments of every other conversation", () => {
+			laidDown("attachments/c1", "attachments/c2")
+
+			const deny = floorIn(appDataDir, "c1").permissions?.deny ?? []
+
+			expect(deny).toContain(`Read(/${join(appDataDir, "attachments/c2")}/**)`)
+			expect(deny).not.toContain(
+				`Read(/${join(appDataDir, "attachments/c1")}/**)`,
+			)
+			expect(deny).not.toContain(`Read(/${join(appDataDir, "attachments")}/**)`)
 		})
 
 		it("denies what it could enumerate when the other directory is absent", () => {

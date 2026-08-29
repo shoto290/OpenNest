@@ -72,6 +72,7 @@ export const buildOptions = (
 ): Options => {
 	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
+		conversationId: request.conversationId,
 		pluginPaths: pluginPaths(request),
 		writablePaths: writablePaths(writeScope(request)),
 	})
