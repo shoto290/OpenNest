@@ -18,6 +18,12 @@ import {
 } from "@workspace/ui/components/plugin-settings/history-panel"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import {
+	BLANK_SECRETS,
+	type SecretScope,
+	type SecretsValue,
+} from "@workspace/ui/components/secrets-settings/secrets"
+import { SecretsPanel } from "@workspace/ui/components/secrets-settings/secrets-panel"
+import {
 	DANGER_RAIL_ITEM_CLASS,
 	RAIL_LABELS_MIN_WIDTH,
 	SETTINGS_PANEL_CLASS,
@@ -48,6 +54,10 @@ type SpaceSettingsDialogProps = {
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
 	history: PluginHistory
+	secrets?: SecretsValue
+	onSecretSave?: (key: string, secret: string) => void
+	onSecretDelete?: (key: string, scope: SecretScope) => void
+	onVaultUnlock?: (passphrase: string) => void
 	onDelete: () => void
 	isDeletable?: boolean
 	className?: string
@@ -64,6 +74,10 @@ const SpaceSettingsDialog = ({
 	onSkillPreloadedChange,
 	onSkillDelete,
 	history,
+	secrets = BLANK_SECRETS,
+	onSecretSave,
+	onSecretDelete,
+	onVaultUnlock,
 	onDelete,
 	isDeletable = true,
 	className,
@@ -131,6 +145,12 @@ const SpaceSettingsDialog = ({
 								value="skills"
 							/>
 							<SettingsRailItem
+								icon={Icons.Key}
+								iconsOnly={iconsOnly}
+								label={t("rail.secrets")}
+								value="secrets"
+							/>
+							<SettingsRailItem
 								icon={Icons.History}
 								iconsOnly={iconsOnly}
 								label={t("rail.history")}
@@ -155,6 +175,18 @@ const SpaceSettingsDialog = ({
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
 							{skillSession.panel}
+						</Tabs.Panel>
+
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
+							value="secrets"
+						>
+							<SecretsPanel
+								onDelete={(key, scope) => onSecretDelete?.(key, scope)}
+								onSave={(key, secret) => onSecretSave?.(key, secret)}
+								onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
+								value={secrets}
+							/>
 						</Tabs.Panel>
 
 						<Tabs.Panel

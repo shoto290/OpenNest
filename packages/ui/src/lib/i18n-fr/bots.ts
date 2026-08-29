@@ -62,6 +62,7 @@ const bots = {
 			instructions: "Instructions",
 			skills: "Compétences",
 			mcp: "Serveurs MCP",
+			secrets: "Secrets",
 			history: "Historique",
 			permissions: "Permissions",
 			runtime: "Exécution",
@@ -349,77 +350,6 @@ const bots = {
 			description:
 				"Tout ce qui a été tapé depuis l'ouverture de ce serveur part avec. Le serveur sur le disque reste tel qu'il était.",
 			action: "Partir",
-		},
-		secrets: {
-			notice:
-				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
-				"Chaque ${secret:CLE} écrit dans cette configuration est rempli depuis le coffre de votre machine au démarrage du serveur. Une valeur tapée ici part dans ce coffre, jamais dans la configuration ni dans le fichier que ce bot enregistre.",
-			empty: {
-				title: "Aucun secret demandé",
-				description:
-					// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
-					"Écrivez ${secret:CLE} là où une commande, un argument, une URL, un en-tête ou une valeur d'environnement attend une clé, et elle est demandée ici.",
-			},
-			value: {
-				label: "Nouvelle valeur",
-				placeholder: "Collez la valeur",
-			},
-			failure: {
-				save: "Cette valeur n'a pas pu être enregistrée : la clé reste telle qu'elle était.",
-				clear:
-					"Cette valeur n'a pas pu être effacée : la clé reste telle qu'elle était.",
-			},
-			vault: {
-				placeholder: "Votre phrase secrète",
-				rejected:
-					"Cette phrase secrète n'a pas ouvert le coffre. Rien n'a été changé.",
-				open: {
-					label: "Phrase secrète",
-					notice:
-						"Cette machine n'a pas de trousseau utilisable par cette app : les clés vivent dans un coffre chiffré à côté. Donnez la phrase secrète avec laquelle ce coffre a été créé pour l'ouvrir le temps de la session.",
-					action: "Ouvrir le coffre",
-				},
-				create: {
-					label: "Nouvelle phrase secrète",
-					notice:
-						"Cette machine n'a pas de trousseau utilisable par cette app : les clés vivront dans un coffre chiffré à côté. Choisissez une phrase secrète maintenant : elle seule ouvre ce coffre, et rien ici ne peut la retrouver pour vous.",
-					action: "Créer le coffre",
-				},
-			},
-			shadowed:
-				"Ce bot et cet espace répondent tous les deux à cette clé. C'est la valeur du bot qui démarre le serveur ; celle de l'espace reste pour les autres bots.",
-			saved: {
-				bot: "Enregistrée dans ce bot.",
-				space: "Enregistrée dans cet espace.",
-			},
-			clearSpace: {
-				action: "Effacer pour l'espace",
-				title: "Effacer {{key}} pour cet espace ?",
-				description:
-					"Cette valeur appartient à l'espace : tous ses bots perdent la clé d'un coup. Un bot qui détient sa propre valeur pour cette clé la garde. C'est irréversible.",
-			},
-			scope: {
-				label: "Enregistrer dans",
-				option: {
-					bot: "Ce bot",
-					space: "Cet espace",
-				},
-			},
-			origin: {
-				bot: "Détenue par ce bot",
-				space: "Vient de cet espace",
-			},
-			status: {
-				filled: "Enregistrée",
-				missing: "Absente",
-				unreadable: "À redonner",
-				unavailable: "Indisponible",
-			},
-			save: "Enregistrer",
-			replace: "Remplacer",
-			clear: "Effacer",
-			unavailable:
-				"Le coffre est injoignable : rien ne peut être enregistré ni effacé pour l'instant.",
 		},
 		launch: {
 			label: "Ce que cela démarre",

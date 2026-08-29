@@ -71,6 +71,7 @@ const bots = {
 			instructions: "Instructions",
 			skills: "Skills",
 			mcp: "MCP servers",
+			secrets: "Secrets",
 			history: "History",
 			permissions: "Permissions",
 			runtime: "Runtime",
@@ -358,76 +359,6 @@ const bots = {
 			description:
 				"Everything typed since this server was opened goes with it. The server on the disk is left as it was.",
 			action: "Leave",
-		},
-		secrets: {
-			notice:
-				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
-				"Every ${secret:KEY} written in this configuration is filled from your machine's secret store when the server starts. A value typed here goes to that store, never into the configuration and never into the file this bot saves.",
-			empty: {
-				title: "No secret asked for",
-				description:
-					// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
-					"Write ${secret:KEY} where a command, an argument, a URL, a header or an environment value needs a key, and it is asked for here.",
-			},
-			value: {
-				label: "New value",
-				placeholder: "Paste the value",
-			},
-			failure: {
-				save: "This value could not be stored, so the key is left as it was.",
-				clear: "This value could not be cleared, so the key is left as it was.",
-			},
-			vault: {
-				placeholder: "Your passphrase",
-				rejected:
-					"That passphrase did not open the vault. Nothing was changed.",
-				open: {
-					label: "Passphrase",
-					notice:
-						"This machine has no keychain this app can use, so the keys live in an encrypted vault beside it. Give the passphrase that vault was created with to open it for this session.",
-					action: "Open the vault",
-				},
-				create: {
-					label: "New passphrase",
-					notice:
-						"This machine has no keychain this app can use, so the keys will live in an encrypted vault beside it. Choose a passphrase now: it is the only thing that opens that vault, and nothing here can recover it for you.",
-					action: "Create the vault",
-				},
-			},
-			shadowed:
-				"This bot and this space both answer this key. The bot's value is the one the server starts with; the space's stays for the other bots.",
-			saved: {
-				bot: "Saved to this bot.",
-				space: "Saved to this space.",
-			},
-			clearSpace: {
-				action: "Clear for the space",
-				title: "Clear {{key}} for this space?",
-				description:
-					"This value belongs to the space, so every bot in it loses the key at once. A bot holding its own value for that key keeps it. This cannot be undone.",
-			},
-			scope: {
-				label: "Save to",
-				option: {
-					bot: "This bot",
-					space: "This space",
-				},
-			},
-			origin: {
-				bot: "Held by this bot",
-				space: "From this space",
-			},
-			status: {
-				filled: "Stored",
-				missing: "Not set",
-				unreadable: "Needs a new value",
-				unavailable: "Unavailable",
-			},
-			save: "Save",
-			replace: "Replace",
-			clear: "Clear",
-			unavailable:
-				"The secret store cannot be reached, so nothing can be stored or cleared right now.",
 		},
 		launch: {
 			label: "What this starts",

@@ -221,6 +221,7 @@ export const Rail = meta.story({
 			"Instructions",
 			"Skills",
 			"MCP servers",
+			"Secrets",
 			"History",
 			"Permissions",
 			"Runtime",

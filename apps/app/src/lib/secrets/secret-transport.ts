@@ -1,20 +1,34 @@
 import { invoke } from "@tauri-apps/api/core"
 
-import type {
-	SecretPort,
-	SecretStoreStatus,
-	StoredSecretKeys,
+import {
+	type SecretPort,
+	type SecretStoreStatus,
+	type SecretTarget,
+	type StoredSecretKeys,
+	scopeOf,
 } from "./secret-port"
+
+const addressOf = ({ spaceId, botId, serverName }: SecretTarget) => ({
+	spaceId: spaceId ?? undefined,
+	botId: botId ?? undefined,
+	server: serverName ?? undefined,
+})
 
 export const secretTransport: SecretPort = {
 	status: () => invoke<SecretStoreStatus>("secret_store_status"),
 
-	keys: (botId) => invoke<StoredSecretKeys>("secret_keys", { botId }),
+	keys: (target) => invoke<StoredSecretKeys>("secret_keys", addressOf(target)),
 
-	set: (botId, key, value, scope) =>
-		invoke("secret_set", { botId, key, value, scope }),
+	set: (target, key, value) =>
+		invoke("secret_set", {
+			...addressOf(target),
+			key,
+			value,
+			scope: scopeOf(target),
+		}),
 
-	delete: (botId, key, scope) => invoke("secret_delete", { botId, key, scope }),
+	delete: (target, key, scope) =>
+		invoke("secret_delete", { ...addressOf(target), key, scope }),
 
 	unlock: (passphrase) => invoke("secret_unlock_vault", { passphrase }),
 }

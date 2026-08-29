@@ -13,8 +13,6 @@ import {
 	BLANK_MCP_SERVER_DRAFT,
 	type BotCommitItem,
 	type BotIdentity,
-	type BotMcpSecretScope,
-	type BotMcpSecrets,
 	type BotMcpServerDraft,
 	type BotMcpServerItem,
 	type BotModelOption,
@@ -24,6 +22,7 @@ import {
 	type BotSkillDraft,
 	type BotSkillItem,
 	isMcpServerDraftUnsaved,
+	readMcpSecretReferences,
 	toMcpServerDraft,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
@@ -40,6 +39,12 @@ import {
 	type PluginHistory,
 } from "@workspace/ui/components/plugin-settings/history-panel"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
+import {
+	BLANK_SECRETS,
+	type SecretScope,
+	type SecretsValue,
+} from "@workspace/ui/components/secrets-settings/secrets"
+import { SecretsPanel } from "@workspace/ui/components/secrets-settings/secrets-panel"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	DANGER_RAIL_ITEM_CLASS,
@@ -89,14 +94,11 @@ type BotSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
-	mcpSecrets?: BotMcpSecrets
-	onMcpSecretSave?: (
-		key: string,
-		value: string,
-		scope: BotMcpSecretScope,
-	) => void
-	onMcpSecretClear?: (key: string, scope: BotMcpSecretScope) => void
-	onMcpVaultUnlock?: (passphrase: string) => void
+	secrets?: SecretsValue
+	onSecretSave?: (key: string, secret: string) => void
+	onSecretDelete?: (key: string, scope: SecretScope) => void
+	onVaultUnlock?: (passphrase: string) => void
+	onSecretsServerChange?: (name: string | null) => void
 	history?: PluginHistory
 	seed?: string
 	onDelete: () => void
@@ -127,10 +129,11 @@ const BotSettingsDialog = ({
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
-	mcpSecrets,
-	onMcpSecretSave,
-	onMcpSecretClear,
-	onMcpVaultUnlock,
+	secrets = BLANK_SECRETS,
+	onSecretSave,
+	onSecretDelete,
+	onVaultUnlock,
+	onSecretsServerChange,
 	history,
 	seed,
 	onDelete,
@@ -156,13 +159,24 @@ const BotSettingsDialog = ({
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
+	const botSecretReferences = [
+		...new Set(
+			mcpServers.flatMap((held) => readMcpSecretReferences(held.config)),
+		),
+	]
+
+	const openServer = (session: McpSession | null) => {
+		setServer(session)
+		onSecretsServerChange?.(session?.saved?.name ?? null)
+	}
+
 	const isServerUnsaved = Boolean(
 		server && isMcpServerDraftUnsaved(server.draft, server.saved),
 	)
 
 	const leave = () => {
 		skillSession.discard()
-		setServer(null)
+		openServer(null)
 		onClose()
 	}
 
@@ -193,26 +207,26 @@ const BotSettingsDialog = ({
 			onMcpServerCreate(draft.name, config)
 		}
 
-		setServer(null)
+		openServer(null)
 	}
 
 	const deleteServer = (saved: BotMcpServerDraft) => {
 		onMcpServerDelete(saved.name)
-		setServer(null)
+		openServer(null)
 	}
 
 	const openServerEditor = ({ draft, saved }: McpSession) => (
 		<McpServerEditor
 			draft={draft}
-			onBack={() => setServer(null)}
+			onBack={() => openServer(null)}
 			onDelete={saved ? () => deleteServer(saved) : undefined}
 			onDraftChange={(next) => setServer({ draft: next, saved })}
 			onSave={(config) => saveServer({ draft, saved }, config)}
-			onSecretClear={onMcpSecretClear}
-			onSecretSave={onMcpSecretSave}
-			onVaultUnlock={onMcpVaultUnlock}
+			onSecretDelete={onSecretDelete}
+			onSecretSave={onSecretSave}
+			onVaultUnlock={onVaultUnlock}
 			saved={saved}
-			secrets={mcpSecrets}
+			secrets={secrets}
 		/>
 	)
 
@@ -291,6 +305,12 @@ const BotSettingsDialog = ({
 								iconsOnly={iconsOnly}
 								label={t("dialog.tab.mcp")}
 								value="mcp"
+							/>
+							<SettingsRailItem
+								icon={Icons.Key}
+								iconsOnly={iconsOnly}
+								label={t("dialog.tab.secrets")}
+								value="secrets"
 							/>
 							{history ? (
 								<SettingsRailItem
@@ -377,11 +397,24 @@ const BotSettingsDialog = ({
 							{skillSession.panel}
 						</Tabs.Panel>
 
+						<Tabs.Panel
+							className={SETTINGS_SCROLLING_PANEL_CLASS}
+							value="secrets"
+						>
+							<SecretsPanel
+								onDelete={(key, scope) => onSecretDelete?.(key, scope)}
+								onSave={(key, secret) => onSecretSave?.(key, secret)}
+								onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
+								references={botSecretReferences}
+								value={secrets}
+							/>
+						</Tabs.Panel>
+
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">
 							<McpServersPanel
-								onAdd={() => setServer({ draft: BLANK_MCP_SERVER_DRAFT })}
+								onAdd={() => openServer({ draft: BLANK_MCP_SERVER_DRAFT })}
 								onOpen={(opened) =>
-									setServer({
+									openServer({
 										draft: toMcpServerDraft(opened),
 										saved: toMcpServerDraft(opened),
 									})

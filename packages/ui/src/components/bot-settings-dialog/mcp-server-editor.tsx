@@ -5,9 +5,6 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
-	BLANK_MCP_SECRETS,
-	type BotMcpSecretScope,
-	type BotMcpSecrets,
 	type BotMcpServerDraft,
 	type BotMcpServerFields,
 	isMcpServerDraftUnsaved,
@@ -26,10 +23,15 @@ import {
 	toMcpServerWrittenConfig,
 } from "@workspace/ui/components/bot-settings"
 import { McpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
-import { McpServerSecrets } from "@workspace/ui/components/bot-settings-dialog/mcp-server-secrets"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
+import {
+	BLANK_SECRETS,
+	type SecretScope,
+	type SecretsValue,
+} from "@workspace/ui/components/secrets-settings/secrets"
+import { SecretsPanel } from "@workspace/ui/components/secrets-settings/secrets-panel"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	RAIL_LABELS_MIN_WIDTH,
@@ -83,9 +85,9 @@ type McpServerEditorProps = {
 	onBack: () => void
 	onSave: (config: Record<string, unknown>) => void
 	onDelete?: () => void
-	secrets?: BotMcpSecrets
-	onSecretSave?: (key: string, value: string, scope: BotMcpSecretScope) => void
-	onSecretClear?: (key: string, scope: BotMcpSecretScope) => void
+	secrets?: SecretsValue
+	onSecretSave?: (key: string, secret: string) => void
+	onSecretDelete?: (key: string, scope: SecretScope) => void
 	onVaultUnlock?: (passphrase: string) => void
 	defaultSection?: string
 	defaultConfirming?: boolean
@@ -100,9 +102,9 @@ const McpServerEditor = ({
 	onBack,
 	onSave,
 	onDelete,
-	secrets = BLANK_MCP_SECRETS,
+	secrets = BLANK_SECRETS,
 	onSecretSave,
-	onSecretClear,
+	onSecretDelete,
 	onVaultUnlock,
 	defaultSection,
 	defaultConfirming,
@@ -365,14 +367,12 @@ const McpServerEditor = ({
 
 				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="secrets">
 					{config ? (
-						<McpServerSecrets
-							onSecretClear={(key, scope) => onSecretClear?.(key, scope)}
-							onSecretSave={(key, value, scope) =>
-								onSecretSave?.(key, value, scope)
-							}
+						<SecretsPanel
+							onDelete={(key, scope) => onSecretDelete?.(key, scope)}
+							onSave={(key, secret) => onSecretSave?.(key, secret)}
 							onVaultUnlock={(passphrase) => onVaultUnlock?.(passphrase)}
 							references={readMcpSecretReferences(config)}
-							secrets={secrets}
+							value={secrets}
 						/>
 					) : (
 						unreadable

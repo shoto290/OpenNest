@@ -12,12 +12,7 @@ export const createSecrets = (): SecretPort =>
 					needsPassphrase: false,
 					hasVault: false,
 				}),
-				keys: async () => ({
-					readable: [],
-					unreadable: [],
-					inheritedReadable: [],
-					inheritedUnreadable: [],
-				}),
+				keys: async () => ({ entries: [] }),
 				set: async () => undefined,
 				delete: async () => undefined,
 				unlock: async () => undefined,

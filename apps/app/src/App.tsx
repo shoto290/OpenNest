@@ -52,7 +52,7 @@ import { useConversationBadges } from "@/lib/conversations/use-conversation-badg
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
-import { useBotSecrets } from "@/lib/secrets/use-bot-secrets"
+import { useSecrets } from "@/lib/secrets/use-secrets"
 import { useSections } from "@/lib/sections/use-sections"
 import { useSidebarActions } from "@/lib/sidebar/use-sidebar-actions"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
@@ -112,7 +112,9 @@ export function App() {
 	})
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
-	const secrets = useBotSecrets()
+	const botSecrets = useSecrets()
+	const spaceSecrets = useSecrets()
+	const [secretsServer, setSecretsServer] = useState<string | null>(null)
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -230,12 +232,29 @@ export function App() {
 
 	useEffect(() => {
 		if (isEditing && selectedBotId) {
-			void secrets.controller.open(
-				selectedBotId,
-				Boolean(roster.controller.getState().spaceId),
-			)
+			void botSecrets.controller.open({
+				spaceId: roster.controller.getState().spaceId,
+				botId: selectedBotId,
+				serverName: secretsServer,
+			})
 		}
-	}, [roster.controller, secrets.controller, isEditing, selectedBotId])
+	}, [
+		roster.controller,
+		botSecrets.controller,
+		isEditing,
+		selectedBotId,
+		secretsServer,
+	])
+
+	useEffect(() => {
+		if (isSpaceEditing && selectedSpaceId) {
+			void spaceSecrets.controller.open({
+				spaceId: selectedSpaceId,
+				botId: null,
+				serverName: null,
+			})
+		}
+	}, [spaceSecrets.controller, isSpaceEditing, selectedSpaceId])
 
 	useEffect(() => {
 		if (!selectedBotId) {
@@ -566,10 +585,11 @@ export function App() {
 							chat.controller.redescribe(selected.id)
 						}
 					}}
-					mcpSecrets={secrets.state}
-					onMcpSecretClear={secrets.controller.clear}
-					onMcpSecretSave={secrets.controller.save}
-					onMcpVaultUnlock={secrets.controller.unlock}
+					secrets={botSecrets.state}
+					onSecretDelete={botSecrets.controller.remove}
+					onSecretSave={botSecrets.controller.save}
+					onSecretsServerChange={setSecretsServer}
+					onVaultUnlock={botSecrets.controller.unlock}
 					onMcpServerChange={mcpServers.controller.rename}
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}
@@ -662,7 +682,11 @@ export function App() {
 					onValueChange={(value) =>
 						spaces.controller.describe(selectedSpace.id, value)
 					}
+					onSecretDelete={spaceSecrets.controller.remove}
+					onSecretSave={spaceSecrets.controller.save}
+					onVaultUnlock={spaceSecrets.controller.unlock}
 					open={isSpaceEditing}
+					secrets={spaceSecrets.state}
 					skills={spacePlugin.state.skills.map(toSkillItem)}
 					value={toSpaceSettingsValue(selectedSpace)}
 				/>

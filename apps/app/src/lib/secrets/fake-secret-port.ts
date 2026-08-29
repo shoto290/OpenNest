@@ -1,19 +1,38 @@
-import type { SecretPort, SecretScope } from "./secret-port"
+import {
+	type SecretKeyOwner,
+	type SecretPort,
+	type SecretScope,
+	type SecretTarget,
+	type StoredSecretKey,
+	scopeOf,
+} from "./secret-port"
 
 export type FakeSecretPort = SecretPort & {
 	stored: Map<string, string>
 	unreadable: Set<string>
+	hold: (target: SecretTarget, scope: SecretScope, key: string) => void
 	setPassphrase: (passphrase: string) => void
 	setVaultWritten: (hasVault: boolean) => void
 	failNext: (reason: string) => void
 }
 
-const SPACE_HOLDER = "space"
+const ownerOf = (target: SecretTarget, scope: SecretScope) => {
+	if (scope === "space") return `space:${target.spaceId}`
 
-const holderOf = (botId: string, scope: SecretScope) =>
-	scope === "space" ? SPACE_HOLDER : botId
+	return scope === "bot"
+		? `bot:${target.botId}`
+		: `server:${target.botId}:${target.serverName}`
+}
 
-const held = (holder: string, key: string) => `${holder}/${key}`
+const held = (owner: string, key: string) => `${owner}/${key}`
+
+const chainOf = (target: SecretTarget): SecretScope[] => {
+	const scope = scopeOf(target)
+
+	if (scope === "space") return ["space"]
+
+	return scope === "bot" ? ["space", "bot"] : ["space", "bot", "server"]
+}
 
 export const createFakeSecretPort = (): FakeSecretPort => {
 	const stored = new Map<string, string>()
@@ -31,14 +50,36 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 		throw new Error(reason)
 	}
 
-	const namesUnder = (holder: string) =>
-		[...stored.keys()]
-			.filter((entry) => entry.startsWith(`${holder}/`))
-			.map((entry) => entry.slice(holder.length + 1))
+	const ownersOf = (target: SecretTarget, key: string): SecretKeyOwner[] =>
+		chainOf(target)
+			.filter((scope) => stored.has(held(ownerOf(target, scope), key)))
+			.map((scope) => ({
+				scope,
+				server: scope === "server" ? (target.serverName ?? "") : undefined,
+				readable: !unreadable.has(key),
+			}))
+
+	const namesUnder = (target: SecretTarget) => {
+		const prefixes = chainOf(target).map((scope) => ownerOf(target, scope))
+
+		return [
+			...new Set(
+				[...stored.keys()]
+					.filter((entry) =>
+						prefixes.some((prefix) => entry.startsWith(`${prefix}/`)),
+					)
+					.map((entry) => entry.slice(entry.indexOf("/") + 1)),
+			),
+		].sort()
+	}
 
 	return {
 		stored,
 		unreadable,
+
+		hold: (target, scope, key) => {
+			stored.set(held(ownerOf(target, scope), key), `value-of-${key}`)
+		},
 
 		setPassphrase: (next) => {
 			passphrase = next
@@ -59,30 +100,23 @@ export const createFakeSecretPort = (): FakeSecretPort => {
 			hasVault,
 		}),
 
-		keys: async (botId) => {
-			const own = namesUnder(botId)
-			const inherited = namesUnder(SPACE_HOLDER).filter(
-				(key) => !own.includes(key),
-			)
+		keys: async (target) => ({
+			entries: namesUnder(target).map((key): StoredSecretKey => {
+				const owners = ownersOf(target, key)
 
-			return {
-				readable: own.filter((key) => !unreadable.has(key)),
-				unreadable: own.filter((key) => unreadable.has(key)),
-				inheritedReadable: inherited.filter((key) => !unreadable.has(key)),
-				inheritedUnreadable: inherited.filter((key) => unreadable.has(key)),
-			}
-		},
+				return { key, owners, servedBy: owners.at(-1) ?? null }
+			}),
+		}),
 
-		set: async (botId, key, value, scope) => {
+		set: async (target, key, value) => {
 			refuseOnce()
-			stored.set(held(holderOf(botId, scope), key), value)
+			stored.set(held(ownerOf(target, scopeOf(target)), key), value)
 			unreadable.delete(key)
 		},
 
-		delete: async (botId, key, scope) => {
+		delete: async (target, key, scope) => {
 			refuseOnce()
-			stored.delete(held(holderOf(botId, scope), key))
-			unreadable.delete(key)
+			stored.delete(held(ownerOf(target, scope), key))
 		},
 
 		unlock: async (given) => {

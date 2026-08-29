@@ -1,11 +1,30 @@
 import { invoke } from "@tauri-apps/api/core"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { SecretTarget } from "./secret-port"
 import { secretTransport } from "./secret-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
 const hostInvoke = vi.mocked(invoke)
+
+const SPACE: SecretTarget = {
+	spaceId: "space-one",
+	botId: null,
+	serverName: null,
+}
+
+const BOT: SecretTarget = {
+	spaceId: "space-one",
+	botId: "bot-one",
+	serverName: null,
+}
+
+const SERVER: SecretTarget = {
+	spaceId: "space-one",
+	botId: "bot-one",
+	serverName: "atlas",
+}
 
 beforeEach(() => {
 	hostInvoke.mockReset()
@@ -28,60 +47,62 @@ describe("secretTransport", () => {
 		expect(hostInvoke).toHaveBeenCalledWith("secret_store_status")
 	})
 
-	it("reads back the keys one bot answered apart from the ones it cannot read", async () => {
+	it("reads back one entry a key, naming who serves it and who holds it", async () => {
 		hostInvoke.mockResolvedValue({
-			readable: ["ATLAS_TOKEN"],
-			unreadable: ["ATLAS_REGION"],
-			inheritedReadable: ["LEDGER_TOKEN"],
-			inheritedUnreadable: ["LEDGER_REGION"],
+			entries: [
+				{
+					key: "ATLAS_TOKEN",
+					owners: [
+						{ scope: "space", readable: true },
+						{ scope: "bot", readable: true },
+					],
+					servedBy: { scope: "bot", readable: true },
+				},
+			],
 		})
 
-		await expect(secretTransport.keys("bot-one")).resolves.toEqual({
-			readable: ["ATLAS_TOKEN"],
-			unreadable: ["ATLAS_REGION"],
-			inheritedReadable: ["LEDGER_TOKEN"],
-			inheritedUnreadable: ["LEDGER_REGION"],
-		})
+		const stored = await secretTransport.keys(BOT)
+
+		expect(stored.entries[0]?.servedBy?.scope).toBe("bot")
 		expect(hostInvoke).toHaveBeenCalledWith("secret_keys", {
+			spaceId: "space-one",
 			botId: "bot-one",
+			server: undefined,
 		})
 	})
 
-	it("hands the passphrase over without naming the bot it was typed under", async () => {
-		await secretTransport.unlock("open sesame")
+	it("names the space alone when the panel is opened on one", async () => {
+		hostInvoke.mockResolvedValue({ entries: [] })
 
-		expect(hostInvoke).toHaveBeenCalledWith("secret_unlock_vault", {
-			passphrase: "open sesame",
+		await secretTransport.keys(SPACE)
+
+		expect(hostInvoke).toHaveBeenCalledWith("secret_keys", {
+			spaceId: "space-one",
+			botId: undefined,
+			server: undefined,
 		})
 	})
 
-	it("hands a value over under the bot, key and scope it belongs to", async () => {
-		await secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas", "bot")
+	it("saves at the scope the open panel owns", async () => {
+		await secretTransport.set(SERVER, "ATLAS_TOKEN", "sk-atlas")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_set", {
+			spaceId: "space-one",
 			botId: "bot-one",
+			server: "atlas",
 			key: "ATLAS_TOKEN",
 			value: "sk-atlas",
-			scope: "bot",
+			scope: "server",
 		})
 	})
 
-	it("names the space as the scope a value is saved at", async () => {
-		await secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas", "space")
-
-		expect(hostInvoke).toHaveBeenCalledWith("secret_set", {
-			botId: "bot-one",
-			key: "ATLAS_TOKEN",
-			value: "sk-atlas",
-			scope: "space",
-		})
-	})
-
-	it("names the bot, the key and the scope it clears", async () => {
-		await secretTransport.delete("bot-one", "ATLAS_TOKEN", "space")
+	it("deletes at the scope it is pointed at, not the one it is opened on", async () => {
+		await secretTransport.delete(BOT, "ATLAS_TOKEN", "space")
 
 		expect(hostInvoke).toHaveBeenCalledWith("secret_delete", {
+			spaceId: "space-one",
 			botId: "bot-one",
+			server: undefined,
 			key: "ATLAS_TOKEN",
 			scope: "space",
 		})
@@ -91,7 +112,7 @@ describe("secretTransport", () => {
 		hostInvoke.mockRejectedValue({ kind: "storeUnavailable", detail: "no" })
 
 		await expect(
-			secretTransport.set("bot-one", "ATLAS_TOKEN", "sk-atlas", "bot"),
+			secretTransport.set(BOT, "ATLAS_TOKEN", "sk-atlas"),
 		).rejects.toEqual({ kind: "storeUnavailable", detail: "no" })
 	})
 })
