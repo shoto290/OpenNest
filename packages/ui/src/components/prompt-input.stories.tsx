@@ -14,6 +14,9 @@ import { PromptInput } from "@workspace/ui/components/prompt-input"
 
 const DRAFT = "Summarise the release notes for v0.1"
 
+const FILLING_DRAFT =
+	"Summarise the release notes and flag every public export that moved"
+
 const WRAPPED_DRAFT =
 	"Summarise the release notes for v0.1 and tell me which entries changed a public export"
 
@@ -84,6 +87,12 @@ const isBefore = (element: HTMLElement, next: HTMLElement) =>
 
 const isBelow = (element: HTMLElement, previous: HTMLElement) =>
 	box(element).top >= box(previous).bottom
+
+const rowsOf = (textarea: HTMLElement) =>
+	Math.round(
+		textarea.scrollHeight /
+			Number.parseFloat(getComputedStyle(textarea).lineHeight),
+	)
 
 const LONG_DRAFT = [
 	"Review the release branch and write the changelog for v0.1.",
@@ -216,6 +225,36 @@ export const WithControls = meta.story({
 	},
 })
 
+export const FullWidthLine = meta.story({
+	args: {
+		defaultValue: FILLING_DRAFT,
+		leading: leadingControls,
+		trailing: trailingControls,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The hinge between the two layouts: a single line too wide to share its row with the controls, but short enough to still read as one line once it owns the full width. This is where the composer used to strand `leading` at the trailing end of the text. Check that the prompt keeps a single row across the whole width, that `leading` has dropped to the control row on the leading edge rather than staying beside the prompt, and that `trailing` and send hold the trailing edge of that same row. `WithControls` is the last state that still fits on one row, `LongContent` the first that wraps the prompt itself.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const textarea = canvas.getByRole("textbox", { name: "Prompt" })
+		const addContext = canvas.getByRole("button", { name: "Add context" })
+		const search = canvas.getByRole("button", { name: "Search the web" })
+		const send = canvas.getByRole("button", { name: "Send prompt" })
+
+		await expect(isExpanded(textarea)).toBe(true)
+		await expect(rowsOf(textarea)).toBe(1)
+		await expect(isBelow(addContext, textarea)).toBe(true)
+		await expect(box(addContext).left).toBeLessThanOrEqual(box(textarea).left)
+		await expect(isBefore(addContext, search)).toBe(true)
+		await expect(isBefore(search, send)).toBe(true)
+		await expect(box(send).right).toBeCloseTo(box(textarea).right, 0)
+	},
+})
+
 export const LongContent = meta.story({
 	args: {
 		defaultValue: WRAPPED_DRAFT,
@@ -226,7 +265,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A prompt long enough to stop fitting beside the controls, so the bar has expanded: the textarea owns the top row and the control row sits under it, `leading` on the leading edge, `trailing` and send on the trailing one. Check that the container softens from the pill to the rounded box without the controls jumping, that `leading` holds the same leading edge it had in the pill, that the prompt now uses the full width, and that deleting back to a short prompt folds it into `Default` again. `Overflow` pushes the same layout past `maxRows`.",
+					"A prompt long enough to wrap, so the bar has expanded: the textarea owns the top row and the control row sits under it, `leading` on the leading edge, `trailing` and send on the trailing one. Check that the corner radius is the one the pill already had rather than a second value, that `leading` holds the same leading edge it had in the pill, that the prompt now uses the full width, and that deleting back to a short prompt folds it into `Default` again. `FullWidthLine` is the same layout one line earlier, `Overflow` pushes it past `maxRows`.",
 			},
 		},
 	},
