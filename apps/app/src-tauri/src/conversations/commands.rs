@@ -90,7 +90,7 @@ async fn lay_down_space_plugins<R: Runtime>(app: &AppHandle<R>, database: &db::D
 	}
 }
 
-async fn list_bundles(root: Option<&Path>, database: &db::Database) {
+pub(crate) async fn list_bundles(root: Option<&Path>, database: &db::Database) {
 	let Some(root) = root else {
 		return;
 	};
