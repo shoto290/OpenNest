@@ -5,6 +5,7 @@ import {
 	drawnAnimal,
 	isMcpServerDraftUnsaved,
 	isSkillDraftUnsaved,
+	readMcpSecretReferences,
 	readMcpServerFields,
 	readMcpServerTransport,
 	toMcpServerConfigFor,
@@ -278,5 +279,62 @@ describe("isMcpServerDraftUnsaved", () => {
 		expect(
 			isMcpServerDraftUnsaved({ name: "", transport: "local", config: "{}" }),
 		).toBe(true)
+	})
+})
+
+describe("readMcpSecretReferences", () => {
+	it("names every key the five places a server is started from ask for", () => {
+		expect(
+			readMcpSecretReferences({
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				command: "${secret:LAUNCHER}",
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				args: ["--token", "${secret:ARG_TOKEN}"],
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				url: "https://ledger.internal/${secret:PATH_TOKEN}",
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				env: { ATLAS_TOKEN: "${secret:ENV_TOKEN}" },
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				headers: { Authorization: "Bearer ${secret:HEADER_TOKEN}" },
+			}),
+		).toEqual([
+			"LAUNCHER",
+			"ARG_TOKEN",
+			"PATH_TOKEN",
+			"ENV_TOKEN",
+			"HEADER_TOKEN",
+		])
+	})
+
+	it("asks once for a key two places reference", () => {
+		expect(
+			readMcpSecretReferences({
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				args: ["${secret:ATLAS_TOKEN}"],
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				env: { ATLAS_TOKEN: "${secret:ATLAS_TOKEN}" },
+			}),
+		).toEqual(["ATLAS_TOKEN"])
+	})
+
+	it("names both keys one value carries", () => {
+		expect(
+			readMcpSecretReferences({
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				url: "https://${secret:HOST}/mcp?key=${secret:KEY}",
+			}),
+		).toEqual(["HOST", "KEY"])
+	})
+
+	it("leaves alone what a configuration holds beside a reference", () => {
+		expect(
+			readMcpSecretReferences({
+				command: "npx",
+				args: ["-y", "@atlas/mcp-server"],
+				env: { ATLAS_REGION: "eu" },
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a configuration carries
+				transport: "${secret:NOT_ASKED}",
+			}),
+		).toEqual([])
 	})
 })

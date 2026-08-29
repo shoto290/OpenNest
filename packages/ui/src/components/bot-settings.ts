@@ -267,6 +267,65 @@ const fromPairLines = (text: string) =>
 		}),
 	)
 
+const SECRET_REFERENCE = /\$\{secret:([^}]+)\}/g
+
+const MCP_SECRET_SOURCES = ["command", "args", "url", "env", "headers"]
+
+const gatherSecretKeys = (value: unknown, keys: Set<string>) => {
+	if (typeof value === "string") {
+		for (const found of value.matchAll(SECRET_REFERENCE)) {
+			keys.add(found[1] as string)
+		}
+		return
+	}
+
+	if (Array.isArray(value)) {
+		for (const entry of value) gatherSecretKeys(entry, keys)
+		return
+	}
+
+	if (isConfigObject(value)) {
+		for (const entry of Object.values(value)) gatherSecretKeys(entry, keys)
+	}
+}
+
+const readMcpSecretReferences = (config: Record<string, unknown>): string[] => {
+	const keys = new Set<string>()
+
+	for (const source of MCP_SECRET_SOURCES) {
+		gatherSecretKeys(config[source], keys)
+	}
+
+	return [...keys]
+}
+
+type BotMcpSecretFailure = "save" | "clear"
+
+type BotMcpSecrets = {
+	isReady: boolean
+	filled: string[]
+	saving: string[]
+	failures: Record<string, BotMcpSecretFailure>
+}
+
+const BLANK_MCP_SECRETS: BotMcpSecrets = {
+	isReady: true,
+	filled: [],
+	saving: [],
+	failures: {},
+}
+
+type BotMcpSecretState = "filled" | "missing" | "unavailable"
+
+const readMcpSecretState = (
+	secrets: BotMcpSecrets,
+	key: string,
+): BotMcpSecretState => {
+	if (!secrets.isReady) return "unavailable"
+
+	return secrets.filled.includes(key) ? "filled" : "missing"
+}
+
 type BotMcpServerFields = {
 	command: string
 	args: string
@@ -424,6 +483,7 @@ type BotSettingsValue = {
 
 export {
 	BLANK_BOT_PERMISSIONS,
+	BLANK_MCP_SECRETS,
 	BLANK_MCP_SERVER_DRAFT,
 	BLANK_SKILL_DRAFT,
 	BLOT_TINTS,
@@ -435,6 +495,9 @@ export {
 	type BotCommitAuthor,
 	type BotCommitItem,
 	type BotIdentity,
+	type BotMcpSecretFailure,
+	type BotMcpSecretState,
+	type BotMcpSecrets,
 	type BotMcpServerDraft,
 	type BotMcpServerFields,
 	type BotMcpServerItem,
@@ -466,6 +529,8 @@ export {
 	readConfigPairs,
 	readConfigText,
 	readMcpEndpointKind,
+	readMcpSecretReferences,
+	readMcpSecretState,
 	readMcpServerFields,
 	readMcpServerTransport,
 	SKILL_CONTEXTS,

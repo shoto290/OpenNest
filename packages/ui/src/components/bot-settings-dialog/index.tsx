@@ -13,6 +13,7 @@ import {
 	BLANK_MCP_SERVER_DRAFT,
 	type BotCommitItem,
 	type BotIdentity,
+	type BotMcpSecrets,
 	type BotMcpServerDraft,
 	type BotMcpServerItem,
 	type BotModelOption,
@@ -87,6 +88,9 @@ type BotSettingsDialogProps = {
 		config: Record<string, unknown>,
 	) => void
 	onMcpServerDelete: (name: string) => void
+	mcpSecrets?: BotMcpSecrets
+	onMcpSecretSave?: (key: string, value: string) => void
+	onMcpSecretClear?: (key: string) => void
 	history?: PluginHistory
 	seed?: string
 	onDelete: () => void
@@ -117,6 +121,9 @@ const BotSettingsDialog = ({
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
+	mcpSecrets,
+	onMcpSecretSave,
+	onMcpSecretClear,
 	history,
 	seed,
 	onDelete,
@@ -194,7 +201,10 @@ const BotSettingsDialog = ({
 			onDelete={saved ? () => deleteServer(saved) : undefined}
 			onDraftChange={(next) => setServer({ draft: next, saved })}
 			onSave={(config) => saveServer({ draft, saved }, config)}
+			onSecretClear={onMcpSecretClear}
+			onSecretSave={onMcpSecretSave}
 			saved={saved}
+			secrets={mcpSecrets}
 		/>
 	)
 

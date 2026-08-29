@@ -5,6 +5,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
+	BLANK_MCP_SECRETS,
+	type BotMcpSecrets,
 	type BotMcpServerDraft,
 	type BotMcpServerFields,
 	isMcpServerDraftUnsaved,
@@ -13,6 +15,7 @@ import {
 	MCP_TRANSPORTS,
 	parseMcpServerConfig,
 	readMcpEndpointKind,
+	readMcpSecretReferences,
 	readMcpServerFields,
 	readMcpServerTransport,
 	toBundleName,
@@ -22,6 +25,7 @@ import {
 	toMcpServerWrittenConfig,
 } from "@workspace/ui/components/bot-settings"
 import { McpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
+import { McpServerSecrets } from "@workspace/ui/components/bot-settings-dialog/mcp-server-secrets"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
@@ -78,6 +82,9 @@ type McpServerEditorProps = {
 	onBack: () => void
 	onSave: (config: Record<string, unknown>) => void
 	onDelete?: () => void
+	secrets?: BotMcpSecrets
+	onSecretSave?: (key: string, value: string) => void
+	onSecretClear?: (key: string) => void
 	defaultSection?: string
 	defaultConfirming?: boolean
 	defaultLeaving?: boolean
@@ -91,6 +98,9 @@ const McpServerEditor = ({
 	onBack,
 	onSave,
 	onDelete,
+	secrets = BLANK_MCP_SECRETS,
+	onSecretSave,
+	onSecretClear,
 	defaultSection,
 	defaultConfirming,
 	defaultLeaving,
@@ -203,6 +213,12 @@ const McpServerEditor = ({
 					iconsOnly={iconsOnly}
 					label={t("mcp.section.environment")}
 					value="environment"
+				/>
+				<SettingsRailItem
+					icon={Icons.Key}
+					iconsOnly={iconsOnly}
+					label={t("mcp.section.secrets")}
+					value="secrets"
 				/>
 				<SettingsRailItem
 					icon={Icons.Json}
@@ -338,6 +354,19 @@ const McpServerEditor = ({
 							placeholder={t("mcp.environment.placeholder")}
 							rows={8}
 							value={shown("environment")}
+						/>
+					) : (
+						unreadable
+					)}
+				</Tabs.Panel>
+
+				<Tabs.Panel className={SETTINGS_SCROLLING_PANEL_CLASS} value="secrets">
+					{config ? (
+						<McpServerSecrets
+							onSecretClear={(key) => onSecretClear?.(key)}
+							onSecretSave={(key, value) => onSecretSave?.(key, value)}
+							references={readMcpSecretReferences(config)}
+							secrets={secrets}
 						/>
 					) : (
 						unreadable

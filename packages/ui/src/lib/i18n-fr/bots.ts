@@ -279,6 +279,7 @@ const bots = {
 		section: {
 			connection: "Connexion",
 			environment: "Environnement",
+			secrets: "Secrets",
 			advanced: "Avancé",
 		},
 		notice:
@@ -348,6 +349,36 @@ const bots = {
 			description:
 				"Tout ce qui a été tapé depuis l'ouverture de ce serveur part avec. Le serveur sur le disque reste tel qu'il était.",
 			action: "Partir",
+		},
+		secrets: {
+			notice:
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
+				"Chaque ${secret:CLE} écrit dans cette configuration est rempli depuis le coffre de votre machine au démarrage du serveur. Une valeur tapée ici part dans ce coffre, jamais dans la configuration ni dans le fichier que ce bot enregistre.",
+			empty: {
+				title: "Aucun secret demandé",
+				description:
+					// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
+					"Écrivez ${secret:CLE} là où une commande, un argument, une URL, un en-tête ou une valeur d'environnement attend une clé, et elle est demandée ici.",
+			},
+			value: {
+				label: "Nouvelle valeur",
+				placeholder: "Collez la valeur",
+			},
+			failure: {
+				save: "Cette valeur n'a pas pu être enregistrée : la clé reste telle qu'elle était.",
+				clear:
+					"Cette valeur n'a pas pu être effacée : la clé reste telle qu'elle était.",
+			},
+			status: {
+				filled: "Enregistrée",
+				missing: "Absente",
+				unavailable: "Indisponible",
+			},
+			save: "Enregistrer",
+			replace: "Remplacer",
+			clear: "Effacer",
+			unavailable:
+				"Le coffre est injoignable : rien ne peut être enregistré ni effacé pour l'instant.",
 		},
 		launch: {
 			label: "Ce que cela démarre",

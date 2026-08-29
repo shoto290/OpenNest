@@ -1,6 +1,8 @@
-import { type ChangeEvent, useId } from "react"
+import { type ChangeEvent, useId, useState } from "react"
+import { useTranslation } from "react-i18next"
 
-import type { Icon } from "@workspace/ui/components/icons"
+import { Button } from "@workspace/ui/components/button"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
@@ -20,6 +22,7 @@ type SettingsFieldProps = {
 	rows?: number
 	fill?: boolean
 	readOnly?: boolean
+	masked?: boolean
 }
 
 const SettingsField = ({
@@ -33,8 +36,11 @@ const SettingsField = ({
 	rows,
 	fill = false,
 	readOnly = false,
+	masked = false,
 }: SettingsFieldProps) => {
+	const { t } = useTranslation("common")
 	const id = useId()
+	const [isRevealed, setRevealed] = useState(false)
 	const hintId = hint ? `${id}-hint` : undefined
 	const errorId = error ? `${id}-error` : undefined
 	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined
@@ -80,14 +86,32 @@ const SettingsField = ({
 							error && FIELD_CONTROL_INVALID_CLASS,
 							readOnly && FIELD_CONTROL_READONLY_CLASS,
 							Glyph && "pl-9",
+							masked && "pr-10",
 						)}
 						id={id}
 						onChange={emit}
 						placeholder={placeholder}
 						readOnly={readOnly}
-						type="text"
+						type={masked && !isRevealed ? "password" : "text"}
 						value={value}
 					/>
+					{masked ? (
+						<Button
+							aria-label={t(isRevealed ? "field.conceal" : "field.reveal", {
+								label,
+							})}
+							className="-translate-y-1/2 absolute top-1/2 right-1.5"
+							onClick={() => setRevealed(!isRevealed)}
+							size="icon-xs"
+							variant="ghost"
+						>
+							{isRevealed ? (
+								<Icons.Conceal aria-hidden="true" />
+							) : (
+								<Icons.Reveal aria-hidden="true" />
+							)}
+						</Button>
+					) : null}
 				</div>
 			)}
 			{hint ? (

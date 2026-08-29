@@ -288,6 +288,7 @@ const bots = {
 		section: {
 			connection: "Connection",
 			environment: "Environment",
+			secrets: "Secrets",
 			advanced: "Advanced",
 		},
 		notice:
@@ -357,6 +358,35 @@ const bots = {
 			description:
 				"Everything typed since this server was opened goes with it. The server on the disk is left as it was.",
 			action: "Leave",
+		},
+		secrets: {
+			notice:
+				// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
+				"Every ${secret:KEY} written in this configuration is filled from your machine's secret store when the server starts. A value typed here goes to that store, never into the configuration and never into the file this bot saves.",
+			empty: {
+				title: "No secret asked for",
+				description:
+					// biome-ignore lint/suspicious/noTemplateCurlyInString: the reference syntax a reader must type
+					"Write ${secret:KEY} where a command, an argument, a URL, a header or an environment value needs a key, and it is asked for here.",
+			},
+			value: {
+				label: "New value",
+				placeholder: "Paste the value",
+			},
+			failure: {
+				save: "This value could not be stored, so the key is left as it was.",
+				clear: "This value could not be cleared, so the key is left as it was.",
+			},
+			status: {
+				filled: "Stored",
+				missing: "Not set",
+				unavailable: "Unavailable",
+			},
+			save: "Save",
+			replace: "Replace",
+			clear: "Clear",
+			unavailable:
+				"The secret store cannot be reached, so nothing can be stored or cleared right now.",
 		},
 		launch: {
 			label: "What this starts",

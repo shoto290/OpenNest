@@ -8,6 +8,10 @@ const common = {
 	confirm: {
 		cancel: "Annuler",
 	},
+	field: {
+		reveal: "Afficher {{label}}",
+		conceal: "Masquer {{label}}",
+	},
 	sidebar: {
 		label: "Barre latérale",
 		toggle: "Afficher ou masquer la barre latérale",

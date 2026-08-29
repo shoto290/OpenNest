@@ -8,6 +8,10 @@ const common = {
 	confirm: {
 		cancel: "Cancel",
 	},
+	field: {
+		reveal: "Show {{label}}",
+		conceal: "Hide {{label}}",
+	},
 	sidebar: {
 		label: "Sidebar",
 		toggle: "Toggle sidebar",

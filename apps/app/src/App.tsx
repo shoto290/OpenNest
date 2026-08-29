@@ -52,6 +52,7 @@ import { useConversationBadges } from "@/lib/conversations/use-conversation-badg
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
+import { useBotSecrets } from "@/lib/secrets/use-bot-secrets"
 import { useSections } from "@/lib/sections/use-sections"
 import { useSidebarActions } from "@/lib/sidebar/use-sidebar-actions"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
@@ -111,6 +112,7 @@ export function App() {
 	})
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
+	const secrets = useBotSecrets()
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -225,6 +227,12 @@ export function App() {
 		skills.controller,
 		selectedBotId,
 	])
+
+	useEffect(() => {
+		if (isEditing && selectedBotId) {
+			void secrets.controller.open(selectedBotId)
+		}
+	}, [secrets.controller, isEditing, selectedBotId])
 
 	useEffect(() => {
 		if (!selectedBotId) {
@@ -555,6 +563,9 @@ export function App() {
 							chat.controller.redescribe(selected.id)
 						}
 					}}
+					mcpSecrets={secrets.state}
+					onMcpSecretClear={secrets.controller.clear}
+					onMcpSecretSave={secrets.controller.save}
 					onMcpServerChange={mcpServers.controller.rename}
 					onMcpServerCreate={mcpServers.controller.create}
 					onMcpServerDelete={mcpServers.controller.remove}

@@ -665,7 +665,7 @@ export const WithServerOpen = meta.story({
 		docs: {
 			description: {
 				story:
-					"A server taken out of the list. The dialog gives up its own rail the same way it does for a skill: the server takes the whole surface, and the rail becomes that server's summary — a way back to the list, then Connection, Environment and Advanced. Nothing in it is written as it is typed, so the save is a press and the way back asks before it drops anything. Pick `WithSkillOpen` for the other surface that does this.",
+					"A server taken out of the list. The dialog gives up its own rail the same way it does for a skill: the server takes the whole surface, and the rail becomes that server's summary — a way back to the list, then Connection, Environment, Secrets and Advanced. Nothing in it is written as it is typed, so the save is a press and the way back asks before it drops anything. Pick `WithSkillOpen` for the other surface that does this.",
 			},
 		},
 	},
@@ -680,7 +680,12 @@ export const WithServerOpen = meta.story({
 		const sections = within(railIn(dialog))
 			.getAllByRole("tab")
 			.map((tab) => tab.textContent)
-		await expect(sections).toEqual(["Connection", "Environment", "Advanced"])
+		await expect(sections).toEqual([
+			"Connection",
+			"Environment",
+			"Secrets",
+			"Advanced",
+		])
 		await expect(
 			within(dialog).getByRole("button", { name: "All servers" }),
 		).toBeVisible()
