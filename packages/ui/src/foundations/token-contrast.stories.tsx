@@ -7,7 +7,6 @@ import {
 	SURFACE_TOKENS,
 } from "@workspace/ui/foundations/color-tokens"
 import { contrastRatio, type Rgb } from "@workspace/ui/lib/contrast"
-import { PALETTE_IDS, type Palette } from "@workspace/ui/lib/palettes"
 
 type TokenPair = { background: string; foreground: string }
 type ThemeName = "light" | "dark"
@@ -16,7 +15,6 @@ const AA_TEXT_RATIO = 4.5
 const FOREGROUND_SUFFIX = "-foreground"
 const THEMES: ThemeName[] = ["light", "dark"]
 const TRANSPARENT_COMPUTED_COLOR = "rgba(0, 0, 0, 0)"
-const PALETTE_PROBE_TOKEN = "--primary"
 const CANVAS_BASE: Rgb = [255, 255, 255]
 
 const SEMANTIC_TOKENS = [...SURFACE_TOKENS, ...ACTION_TOKENS, ...SIDEBAR_TOKENS]
@@ -88,31 +86,23 @@ const paintOver = (
 }
 
 type ThemeProbe = {
-	palette: Palette
 	scheme: ThemeName
 	scope: HTMLElement
 	surface: Rgb
-	paletteColor: string
 }
-
-const scopeName = (palette: Palette, scheme: ThemeName) =>
-	`${palette} ${scheme}`
 
 const probeTheme = (
 	pixel: CanvasRenderingContext2D,
 	canvasElement: HTMLElement,
-	palette: Palette,
 	scheme: ThemeName,
 ): ThemeProbe => {
-	const name = scopeName(palette, scheme)
 	const scope = canvasElement.querySelector<HTMLElement>(
-		`[data-theme-scope="${name}"]`,
+		`[data-scheme-scope="${scheme}"]`,
 	)
 	if (!scope) {
-		throw new Error(`Missing theme scope for ${name}.`)
+		throw new Error(`Missing theme scope for ${scheme}.`)
 	}
 	return {
-		palette,
 		scheme,
 		scope,
 		surface: paintOver(
@@ -120,7 +110,6 @@ const probeTheme = (
 			CANVAS_BASE,
 			readComputedColor(scope, ROOT_PAIR.background),
 		),
-		paletteColor: readComputedColor(scope, PALETTE_PROBE_TOKEN),
 	}
 }
 
@@ -142,14 +131,14 @@ const measurePair = (
 	return contrastRatio(background, foreground)
 }
 
-type Measurement = { palette: Palette; key: string; ratio: number }
+type Measurement = { key: string; ratio: number }
 
 const failuresIn = (measurements: Measurement[]) =>
 	measurements
 		.filter(({ key, ratio }) => ratio < requiredRatio(key))
 		.map(
-			({ palette, key, ratio }) =>
-				`${palette} ${key}: measured ${ratio.toFixed(2)}:1, needs ${requiredRatio(key)}:1`,
+			({ key, ratio }) =>
+				`${key}: measured ${ratio.toFixed(2)}:1, needs ${requiredRatio(key)}:1`,
 		)
 
 const settledExceptionsIn = (measurements: Measurement[]) =>
@@ -162,7 +151,7 @@ const settledExceptionsIn = (measurements: Measurement[]) =>
 		)
 		.map(
 			(key) =>
-				`${key}: now clears ${AA_TEXT_RATIO}:1 in every palette, drop it from PAIRS_AWAITING_DESIGN_DECISION`,
+				`${key}: now clears ${AA_TEXT_RATIO}:1, drop it from PAIRS_AWAITING_DESIGN_DECISION`,
 		)
 
 const meta = preview.meta({
@@ -171,16 +160,9 @@ const meta = preview.meta({
 	parameters: { layout: "fullscreen" },
 	render: () => (
 		<>
-			{PALETTE_IDS.flatMap((palette) =>
-				THEMES.map((scheme) => (
-					<div
-						key={scopeName(palette, scheme)}
-						className={scheme}
-						data-theme={palette}
-						data-theme-scope={scopeName(palette, scheme)}
-					/>
-				)),
-			)}
+			{THEMES.map((scheme) => (
+				<div key={scheme} className={scheme} data-scheme-scope={scheme} />
+			))}
 		</>
 	),
 })
@@ -188,28 +170,17 @@ const meta = preview.meta({
 export const SemanticPairsMeetAaText = meta.story({
 	play: async ({ canvasElement }) => {
 		const pixel = createPixel()
-		const probes = PALETTE_IDS.flatMap((palette) =>
-			THEMES.map((scheme) => probeTheme(pixel, canvasElement, palette, scheme)),
+		const [light, dark] = THEMES.map((scheme) =>
+			probeTheme(pixel, canvasElement, scheme),
 		)
-		const probesOf = (scheme: ThemeName) =>
-			probes.filter((probe) => probe.scheme === scheme)
 
 		await expect(
-			probesOf("light").map((probe) => probe.surface),
+			light.surface,
 			"Theme scopes resolve to the same surface, the theme class is not applied.",
-		).not.toEqual(probesOf("dark").map((probe) => probe.surface))
+		).not.toEqual(dark.surface)
 
-		await expect(
-			THEMES.filter(
-				(scheme) =>
-					new Set(probesOf(scheme).map((probe) => probe.paletteColor)).size < 2,
-			),
-			`Every palette resolves one ${PALETTE_PROBE_TOKEN} in these schemes, the palette attribute is not reaching the scopes.`,
-		).toEqual([])
-
-		const measurements = probes.flatMap((probe) =>
+		const measurements = [light, dark].flatMap((probe) =>
 			TOKEN_PAIRS.map((pair) => ({
-				palette: probe.palette,
 				key: pairKey(probe.scheme, pair),
 				ratio: measurePair(pixel, probe, pair),
 			})),

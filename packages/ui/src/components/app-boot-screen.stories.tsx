@@ -13,7 +13,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The surface a desktop window opens on while it reads the record: the background of the palette in force, with the product's animal working on it. It says the app is starting and nothing more — no copy, no progress, no way out — so a host mounts it for exactly as long as its first read is in flight and swaps it for the screen the answer calls for. Reach for it on launch, never for a read a reader triggered: a refresh inside the app belongs to a skeleton where the data will land, not to a screen that takes the window back.",
+					"The surface a desktop window opens on while it reads the record: the background of the scheme in force, with the product's animal working on it. It says the app is starting and nothing more — no copy, no progress, no way out — so a host mounts it for exactly as long as its first read is in flight and swaps it for the screen the answer calls for. Reach for it on launch, never for a read a reader triggered: a refresh inside the app belongs to a skeleton where the data will land, not to a screen that takes the window back.",
 			},
 		},
 	},
@@ -24,7 +24,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The launch moment. Check that the mark sits dead centre of the window rather than of its content, that the background is the palette's own — flip `theme_layout` to side-by-side, a white flash in dark mode is the bug this screen exists to kill — and that the mark is moving. Screen readers hear it once through the live region; nothing is drawn for them to read.",
+					"The launch moment. Check that the mark sits dead centre of the window rather than of its content, that the background is the scheme's own — flip `theme_layout` to side-by-side, a white flash in dark mode is the bug this screen exists to kill — and that the mark is moving. Screen readers hear it once through the live region; nothing is drawn for them to read.",
 			},
 		},
 	},

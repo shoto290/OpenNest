@@ -1,5 +1,4 @@
 import type { Language } from "@workspace/ui/lib/i18n"
-import type { Palette } from "@workspace/ui/lib/palettes"
 
 import type { ColorScheme, UserPreferences } from "./preferences-contract"
 import {
@@ -45,7 +44,6 @@ export type UserController = {
 	rename: (displayName: string) => void
 	setNotification: (change: NotificationChange) => Promise<void>
 	setColorScheme: (colorScheme: ColorScheme) => Promise<void>
-	setPalette: (palette: Palette) => Promise<void>
 	setLanguage: (language: Language | null) => Promise<void>
 	setSidebarWidth: (sidebarWidth: number) => Promise<void>
 	setLastBot: (opened: LastBotOpened) => Promise<void>
@@ -203,8 +201,6 @@ export const createUserController = (): UserController => {
 
 		setColorScheme: (colorScheme: ColorScheme) =>
 			changeMirrored({ colorScheme }),
-
-		setPalette: (palette: Palette) => changeMirrored({ palette }),
 
 		setLanguage: (language: Language | null) => changeMirrored({ language }),
 

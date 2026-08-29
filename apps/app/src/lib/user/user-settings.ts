@@ -37,7 +37,6 @@ export const toUserSettingsValue = (
 	name: record.displayName,
 	image: avatarSrc(record.profilePicturePath),
 	colorScheme: record.colorScheme,
-	palette: record.palette,
 	notifications: toNotifications(record),
 })
 

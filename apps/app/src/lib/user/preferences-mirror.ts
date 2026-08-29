@@ -4,11 +4,6 @@ import {
 	type Language,
 	languageOf,
 } from "@workspace/ui/lib/i18n"
-import {
-	DEFAULT_PALETTE,
-	PALETTE_IDS,
-	type Palette,
-} from "@workspace/ui/lib/palettes"
 
 import type {
 	BotIdBySpace,
@@ -17,7 +12,6 @@ import type {
 } from "./preferences-contract"
 
 const COLOR_SCHEME_KEY = "theme"
-const PALETTE_KEY = "palette"
 const LANGUAGE_KEY = "language"
 const SIDEBAR_WIDTH_KEY = "sidebarWidth"
 const LAST_SPACE_KEY = "lastSpaceId"
@@ -30,7 +24,6 @@ const DEFAULT_COLOR_SCHEME: ColorScheme = "system"
 
 export type MirroredPreferences = {
 	colorScheme: ColorScheme
-	palette: Palette
 	language: Language | null
 	sidebarWidth: number | null
 	lastSpaceId: string | null
@@ -39,9 +32,6 @@ export type MirroredPreferences = {
 
 const colorSchemeOf = (value: string | null): ColorScheme =>
 	COLOR_SCHEMES.find((scheme) => scheme === value) ?? DEFAULT_COLOR_SCHEME
-
-const paletteOf = (value: string | null): Palette =>
-	PALETTE_IDS.find((palette) => palette === value) ?? DEFAULT_PALETTE
 
 const isBotIdBySpace = (value: unknown): value is BotIdBySpace =>
 	typeof value === "object" &&
@@ -87,7 +77,6 @@ export const applyLanguage = (chosen: Language | null) => {
 
 export const mirrorOf = (record: UserPreferences): MirroredPreferences => ({
 	colorScheme: colorSchemeOf(record.colorScheme),
-	palette: paletteOf(record.palette),
 	language: languageOf(record.language),
 	sidebarWidth: record.sidebarWidth ?? null,
 	lastSpaceId: record.lastSpaceId ?? null,
@@ -99,7 +88,6 @@ export const sameMirror = (
 	other: MirroredPreferences,
 ) =>
 	one.colorScheme === other.colorScheme &&
-	one.palette === other.palette &&
 	one.language === other.language &&
 	one.sidebarWidth === other.sidebarWidth &&
 	one.lastSpaceId === other.lastSpaceId &&
@@ -107,7 +95,6 @@ export const sameMirror = (
 
 export const readMirror = (): MirroredPreferences => ({
 	colorScheme: colorSchemeOf(localStorage.getItem(COLOR_SCHEME_KEY)),
-	palette: paletteOf(localStorage.getItem(PALETTE_KEY)),
 	language: languageOf(localStorage.getItem(LANGUAGE_KEY)),
 	sidebarWidth: widthOf(localStorage.getItem(SIDEBAR_WIDTH_KEY)),
 	lastSpaceId: localStorage.getItem(LAST_SPACE_KEY),
@@ -127,7 +114,6 @@ const keep = (key: string, value: string | number | null) => {
 
 export const writeMirror = (mirrored: MirroredPreferences) => {
 	localStorage.setItem(COLOR_SCHEME_KEY, mirrored.colorScheme)
-	localStorage.setItem(PALETTE_KEY, mirrored.palette)
 	keep(LANGUAGE_KEY, mirrored.language)
 	keep(SIDEBAR_WIDTH_KEY, mirrored.sidebarWidth)
 	keep(LAST_SPACE_KEY, mirrored.lastSpaceId)
@@ -137,7 +123,6 @@ export const writeMirror = (mirrored: MirroredPreferences) => {
 
 const MIRROR_KEYS = [
 	COLOR_SCHEME_KEY,
-	PALETTE_KEY,
 	LANGUAGE_KEY,
 	SIDEBAR_WIDTH_KEY,
 	LAST_SPACE_KEY,

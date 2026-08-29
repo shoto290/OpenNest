@@ -14,7 +14,6 @@ const DEFAULTS: UserPreferences = {
 	displayName: "",
 	profilePicturePath: null,
 	colorScheme: "system",
-	palette: "amber",
 	language: null,
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
@@ -119,7 +118,7 @@ describe("the reader's own record", () => {
 	})
 
 	it("shows a name on the keystroke and writes the record whole", async () => {
-		const host = aHost({ ...DEFAULTS, colorScheme: "dark", palette: "moss" })
+		const host = aHost({ ...DEFAULTS, colorScheme: "dark" })
 		const controller = await loaded()
 
 		controller.rename("Ny")
@@ -131,7 +130,6 @@ describe("the reader's own record", () => {
 				...DEFAULTS,
 				displayName: "Nyx",
 				colorScheme: "dark",
-				palette: "moss",
 			}),
 		)
 	})
@@ -175,7 +173,7 @@ describe("the reader's own record", () => {
 	})
 
 	it("shows the switch on the press and writes the record whole", async () => {
-		const host = aHost({ ...DEFAULTS, displayName: "Nyx", palette: "moss" })
+		const host = aHost({ ...DEFAULTS, displayName: "Nyx", colorScheme: "dark" })
 		const controller = await loaded()
 
 		const written = controller.setNotification({
@@ -188,7 +186,7 @@ describe("the reader's own record", () => {
 		expect(host()).toEqual({
 			...DEFAULTS,
 			displayName: "Nyx",
-			palette: "moss",
+			colorScheme: "dark",
 			notifyOnPermission: false,
 		})
 	})
@@ -209,18 +207,18 @@ describe("the reader's own record", () => {
 		expect(controller.getState().preferences.notifyOnQuestion).toBe(true)
 	})
 
-	it("holds a palette chosen between a keystroke's read and its write", async () => {
+	it("holds a scheme chosen between a keystroke's read and its write", async () => {
 		const host = aHost({ ...DEFAULTS, displayName: "Nyx" })
 		const controller = await loaded()
 
 		controller.rename("Nyxie")
-		await controller.setPalette("coral")
+		await controller.setColorScheme("dark")
 
 		await vi.waitFor(() =>
 			expect(host()).toEqual({
 				...DEFAULTS,
 				displayName: "Nyxie",
-				palette: "coral",
+				colorScheme: "dark",
 			}),
 		)
 	})
@@ -232,22 +230,20 @@ describe("the reader's own record", () => {
 
 		expect(controller.getState().preferences).toEqual(DEFAULTS)
 
-		await controller.setPalette("coral")
+		await controller.setColorScheme("dark")
 
-		expect(host()).toEqual({ ...older, palette: "coral" })
+		expect(host()).toEqual({ ...older, colorScheme: "dark" })
 	})
 })
 
 describe("the window before the host has answered", () => {
 	it("opens on the theme and the language the mirror holds", () => {
 		localStorage.setItem("theme", "dark")
-		localStorage.setItem("palette", "moss")
 		localStorage.setItem("language", "fr")
 
 		expect(createUserController().getState().preferences).toEqual({
 			...DEFAULTS,
 			colorScheme: "dark",
-			palette: "moss",
 			language: "fr",
 		})
 	})
@@ -260,25 +256,22 @@ describe("the window before the host has answered", () => {
 describe("the theme and the language the host holds", () => {
 	it("are taken over the mirror and written back into it", async () => {
 		localStorage.setItem("theme", "light")
-		localStorage.setItem("palette", "water")
-		aHost({ ...DEFAULTS, colorScheme: "dark", palette: "moss", language: "fr" })
+		aHost({ ...DEFAULTS, colorScheme: "dark", language: "fr" })
 
 		const controller = await loaded()
 
 		expect(controller.getState().preferences).toEqual({
 			...DEFAULTS,
 			colorScheme: "dark",
-			palette: "moss",
 			language: "fr",
 		})
 		expect(localStorage.getItem("theme")).toBe("dark")
-		expect(localStorage.getItem("palette")).toBe("moss")
 		expect(localStorage.getItem("language")).toBe("fr")
 		expect(i18n.language).toBe("fr")
 	})
 
 	it("are read on their defaults for the values this build does not ship", async () => {
-		aHost({ ...DEFAULTS, palette: "chartreuse", language: "br" })
+		aHost({ ...DEFAULTS, language: "br" })
 
 		const controller = await loaded()
 
@@ -328,17 +321,17 @@ describe("the theme the reader chooses", () => {
 	})
 
 	it("goes back to what the host last answered when its write is refused", async () => {
-		aHost({ ...DEFAULTS, palette: "moss" })
+		aHost({ ...DEFAULTS, colorScheme: "dark" })
 		const controller = await loaded()
 		hostInvoke.mockRejectedValue({
 			kind: "storage",
 			failure: { kind: "sqlite", detail: "disk I/O error" },
 		})
 
-		await controller.setPalette("coral")
+		await controller.setColorScheme("light")
 
-		expect(controller.getState().preferences.palette).toBe("moss")
-		expect(localStorage.getItem("palette")).toBe("moss")
+		expect(controller.getState().preferences.colorScheme).toBe("dark")
+		expect(localStorage.getItem("theme")).toBe("dark")
 	})
 })
 

@@ -67,17 +67,6 @@ const settings = {
 				system: "System",
 			},
 		},
-		palette: {
-			label: "Palette",
-			option: {
-				amber: "Amber",
-				slate: "Slate",
-				water: "Water",
-				moss: "Moss",
-				coral: "Coral",
-				lavender: "Lavender",
-			},
-		},
 	},
 	space: {
 		untitled: "Untitled space",

@@ -20,7 +20,7 @@ The shape comes from one trick: the gutter is `1rem`, but the thumb carries a `5
 
 <ColorTokenGrid tokens={SCROLLBAR_TOKENS} />
 
-The bar is chrome, not content: the two tokens are neutral greys declared once for each scheme and are the same in every palette — like `--bot-avatar-ink` and `--diagram-scheme`, and unlike every other colour token, which each of the six palettes repaints. `packages/ui/src/lib/palettes.test.ts` exempts them from the per-palette check for that reason.
+The bar is chrome, not content: the two tokens are neutral greys declared once for each scheme, like `--bot-avatar-ink` and `--diagram-scheme`.
 
 ## Opting out
 

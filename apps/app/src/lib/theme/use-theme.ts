@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect } from "react"
 
-import type { Palette } from "@workspace/ui/lib/palettes"
-
 import type { ColorScheme } from "@/lib/user/preferences-contract"
 
 type ResolvedScheme = Exclude<ColorScheme, "system">
 
 export type ThemeApplication = {
 	colorScheme: ColorScheme
-	palette: Palette
 	onColorSchemeChange: (colorScheme: ColorScheme) => void
 }
 
@@ -58,7 +55,6 @@ const isEditableTarget = (target: EventTarget | null) => {
 
 export const useTheme = ({
 	colorScheme,
-	palette,
 	onColorSchemeChange,
 }: ThemeApplication) => {
 	const applyTheme = useCallback(() => {
@@ -67,10 +63,9 @@ export const useTheme = ({
 
 		root.classList.remove("light", "dark")
 		root.classList.add(resolvedSchemeOf(colorScheme))
-		root.dataset.theme = palette
 
 		restoreTransitions()
-	}, [colorScheme, palette])
+	}, [colorScheme])
 
 	useLayoutEffect(() => {
 		applyTheme()

@@ -7,7 +7,6 @@ const RECORD: ReaderPreferences = {
 	displayName: "Nyx",
 	profilePicturePath: null,
 	colorScheme: "dark",
-	palette: "moss",
 	language: null,
 	notifyOnQuestion: true,
 	notifyOnPermission: false,
@@ -23,7 +22,7 @@ const shown = (record: ReaderPreferences = RECORD) =>
 
 describe("the theme the dialog draws", () => {
 	it("stands where the record holds it", () => {
-		expect(shown()).toMatchObject({ colorScheme: "dark", palette: "moss" })
+		expect(shown()).toMatchObject({ colorScheme: "dark" })
 	})
 })
 

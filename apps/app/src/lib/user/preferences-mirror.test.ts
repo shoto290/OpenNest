@@ -18,7 +18,6 @@ const RECORD: UserPreferences = {
 	displayName: "Nyx",
 	profilePicturePath: "/data/avatars/one.png",
 	colorScheme: "dark",
-	palette: "moss",
 	language: "fr",
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
@@ -31,7 +30,6 @@ const RECORD: UserPreferences = {
 
 const MIRRORED: MirroredPreferences = {
 	colorScheme: "light",
-	palette: "water",
 	language: null,
 	sidebarWidth: null,
 	lastSpaceId: null,
@@ -62,11 +60,10 @@ beforeEach(() => {
 })
 
 describe("the mirror", () => {
-	it("holds the scheme, the palette and the language that were chosen", () => {
+	it("holds the scheme and the language that were chosen", () => {
 		writeMirror({ ...MIRRORED, language: "fr" })
 
 		expect(localStorage.getItem("theme")).toBe("light")
-		expect(localStorage.getItem("palette")).toBe("water")
 		expect(localStorage.getItem("language")).toBe("fr")
 		expect(readMirror()).toEqual({ ...MIRRORED, language: "fr" })
 	})
@@ -83,7 +80,6 @@ describe("the mirror", () => {
 	it("reads the defaults when nothing has been mirrored", () => {
 		expect(readMirror()).toEqual({
 			colorScheme: "system",
-			palette: "amber",
 			language: null,
 			sidebarWidth: null,
 			lastSpaceId: null,
@@ -116,13 +112,6 @@ describe("the mirror", () => {
 		localStorage.setItem("lastBotIdBySpace", JSON.stringify(["nyx"]))
 
 		expect(readMirror().lastBotIdBySpace).toEqual({})
-	})
-
-	it("reads the default palette for a palette this build does not ship", () => {
-		localStorage.setItem("theme", "dark")
-		localStorage.setItem("palette", "chartreuse")
-
-		expect(readMirror().palette).toBe("amber")
 	})
 
 	it("reads the default scheme for a scheme that is not one of the three", () => {
@@ -186,7 +175,6 @@ describe("the record the host holds", () => {
 			}),
 		).toEqual({
 			colorScheme: "dark",
-			palette: "moss",
 			language: "fr",
 			sidebarWidth: 320,
 			lastSpaceId: "vocca",
@@ -201,11 +189,8 @@ describe("the record the host holds", () => {
 	})
 
 	it("is read on its defaults for the values this build does not ship", () => {
-		expect(
-			mirrorOf({ ...RECORD, palette: "chartreuse", language: "br" }),
-		).toEqual({
+		expect(mirrorOf({ ...RECORD, language: "br" })).toEqual({
 			colorScheme: "dark",
-			palette: "amber",
 			language: null,
 			sidebarWidth: null,
 			lastSpaceId: null,
@@ -245,7 +230,6 @@ describe("the active language", () => {
 describe("isMirrorKey", () => {
 	it("tells the keys the mirror holds from the rest of the storage", () => {
 		expect(isMirrorKey("theme")).toBe(true)
-		expect(isMirrorKey("palette")).toBe(true)
 		expect(isMirrorKey("language")).toBe(true)
 		expect(isMirrorKey("sidebarWidth")).toBe(true)
 		expect(isMirrorKey("lastSpaceId")).toBe(true)
@@ -258,7 +242,6 @@ describe("sameMirror", () => {
 	it("tells a pair apart on any axis", () => {
 		const mirrored = {
 			colorScheme: "dark",
-			palette: "moss",
 			language: "fr",
 			sidebarWidth: 320,
 			lastSpaceId: "vocca",
@@ -266,7 +249,6 @@ describe("sameMirror", () => {
 		} as const
 
 		expect(sameMirror(mirrored, { ...mirrored })).toBe(true)
-		expect(sameMirror(mirrored, { ...mirrored, palette: "coral" })).toBe(false)
 		expect(sameMirror(mirrored, { ...mirrored, colorScheme: "light" })).toBe(
 			false,
 		)

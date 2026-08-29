@@ -67,17 +67,6 @@ const settings = {
 				system: "Système",
 			},
 		},
-		palette: {
-			label: "Palette",
-			option: {
-				amber: "Ambre",
-				slate: "Ardoise",
-				water: "Eau",
-				moss: "Mousse",
-				coral: "Corail",
-				lavender: "Lavande",
-			},
-		},
 	},
 	space: {
 		untitled: "Espace sans nom",
