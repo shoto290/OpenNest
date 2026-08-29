@@ -97,7 +97,7 @@ export const buildOptions = (
 			append: layerFor(request),
 		},
 		env: {
-			...inheritedEnv(),
+			...inheritedEnv(process.env, Object.values(request.secrets ?? {})),
 			[DISABLE_AUTO_MEMORY]: "1",
 			[CLASSIFY_ASK_USER_QUESTION]: "0",
 		},

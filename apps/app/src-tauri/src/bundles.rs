@@ -3222,6 +3222,31 @@ mod tests {
 	}
 
 	#[test]
+	fn the_servers_a_bot_declares_are_left_out_of_the_history() {
+		let root = a_root("git-mcp");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		private_files::replace(
+			&dir(&root, &bot.id).join(MCP_NAME),
+			br#"{"mcpServers":{"github":{"env":{"GITHUB_TOKEN":"ghp_livevalue"}}}}"#,
+		)
+		.expect("the servers land");
+		create_skill(&root, &bot, &a_draft("Kneading", "How to knead.", "Ten minutes."))
+			.expect("the skill is created");
+
+		let excluded = fs::read_to_string(dir(&root, &bot.id).join(".git/info/exclude"))
+			.expect("the exclude file is there");
+		assert!(excluded.lines().any(|line| line == MCP_NAME), "got {excluded}");
+		assert!(excluded.lines().any(|line| line == LEARNED_NAME), "got {excluded}");
+		for entry in history(&root, &bot.id).expect("the history reads") {
+			let shown = diff(&root, &bot.id, &entry.id).expect("the diff reads");
+			assert!(!shown.contains("ghp_livevalue"), "got {shown}");
+		}
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
 	fn what_the_bot_writes_for_itself_is_left_out_of_the_history() {
 		let root = a_root("git-learned");
 		let bot = a_bot("Bean", "Answer briefly.");

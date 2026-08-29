@@ -39,4 +39,20 @@ describe("inheritedEnv", () => {
 	it("omits an allowed key the sidecar does not carry", () => {
 		expect(inheritedEnv({ PATH: "/usr/bin" })).not.toHaveProperty("HOME")
 	})
+
+	it("drops an allowed key whose value carries a stored secret", () => {
+		const env = inheritedEnv(
+			{ PATH: "/usr/bin", HTTPS_PROXY: "http://bean:ghp_livevalue@proxy" },
+			["ghp_livevalue"],
+		)
+
+		expect(env).toEqual({ PATH: "/usr/bin" })
+	})
+
+	it("keeps every key when no secret is stored", () => {
+		const source = { PATH: "/usr/bin", HTTPS_PROXY: "http://proxy" }
+
+		expect(inheritedEnv(source, [])).toEqual(source)
+		expect(inheritedEnv(source, [""])).toEqual(source)
+	})
 })

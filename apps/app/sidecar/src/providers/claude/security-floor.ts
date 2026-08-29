@@ -35,11 +35,19 @@ const APP_DATA_FILES = [
 	"session.json*",
 ]
 
-const APP_DATA_DIRECTORIES = ["attachments"]
+const APP_DATA_DIRECTORIES = ["attachments", "secrets"]
 
 const BUNDLE_DIRECTORIES = ["bots", "spaces"]
 
 const BUNDLE_ROOTS = ["bots/plugins", "spaces"]
+
+const DBUS_FILES = ["/run/user/*/bus"]
+
+const GIT_DIRECTORY = ".git"
+
+const ANY_GIT_DIRECTORIES = ["/**/.git"]
+
+const KEYCHAIN_COMMANDS = ["security", "secret-tool", "keyring", "cmdkey"]
 
 const DENIED_TOOLS = ["Agent", "Task"]
 
@@ -78,6 +86,7 @@ const deniedReads = (appDataDir?: string): Denial => {
 		files: [
 			...under(home, READ_FILES),
 			...ENVIRONMENT_FILES,
+			...DBUS_FILES,
 			...under(appDataDir, APP_DATA_FILES),
 		],
 	}
@@ -104,6 +113,19 @@ const foreignBundles = (
 	files: [],
 })
 
+const bashRules = (commands: string[]): string[] =>
+	commands.map((command) => `Bash(${command}:*)`)
+
+const gitDirectories = (
+	pluginPaths: string[],
+	writablePaths: string[],
+): Denial => ({
+	directories: [...new Set([...pluginPaths, ...writablePaths])].map((path) =>
+		join(path, GIT_DIRECTORY),
+	),
+	files: [],
+})
+
 const deniedWrites = (): Denial => {
 	const home = homedir()
 	return {
@@ -125,6 +147,7 @@ export const securityFloor = ({
 }: FloorScope): Settings => {
 	const reads = deniedReads(appDataDir)
 	const writes = deniedWrites()
+	const repositories = gitDirectories(pluginPaths, writablePaths)
 	return {
 		permissions: {
 			deny: [
@@ -132,13 +155,16 @@ export const securityFloor = ({
 				...rulesFor("Read", reads),
 				...rulesFor("Read", foreignBundles(appDataDir, pluginPaths)),
 				...rulesFor("Edit", writes),
+				...rulesFor("Edit", repositories),
+				...rulesFor("Edit", { directories: ANY_GIT_DIRECTORIES, files: [] }),
+				...bashRules(KEYCHAIN_COMMANDS),
 			],
 		},
 		sandbox: {
 			...SANDBOX,
 			filesystem: {
 				denyRead: [...pathsOf(reads), ...under(appDataDir, BUNDLE_DIRECTORIES)],
-				denyWrite: pathsOf(writes),
+				denyWrite: [...pathsOf(writes), ...pathsOf(repositories)],
 				...(pluginPaths.length > 0 ? { allowRead: pluginPaths } : {}),
 				...(writablePaths.length > 0 ? { allowWrite: writablePaths } : {}),
 			},

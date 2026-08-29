@@ -90,6 +90,42 @@ describe("securityFloor", () => {
 		}
 	})
 
+	it("denies reads of the store the host keeps its secrets in", () => {
+		expect(denyOf()).toContain(`Read(/${join(APP_DATA, "secrets")}/**)`)
+		expect(filesystemOf()?.denyRead).toContain(join(APP_DATA, "secrets"))
+	})
+
+	it("denies reads of the session bus a keyring answers on", () => {
+		expect(denyOf()).toContain("Read(//run/user/*/bus)")
+		expect(filesystemOf()?.denyRead).toContain("/run/user/*/bus")
+	})
+
+	it("denies every command that reads a credential out of the host keychain", () => {
+		const deny = denyOf()
+
+		for (const command of ["security", "secret-tool", "keyring", "cmdkey"]) {
+			expect(deny).toContain(`Bash(${command}:*)`)
+		}
+	})
+
+	it("denies writes to the repository behind every bundle it can reach", () => {
+		const filesystem = filesystemOf(PLUGIN_PATHS, WRITABLE_PATHS)
+		const deny = floor(PLUGIN_PATHS, WRITABLE_PATHS).permissions?.deny ?? []
+
+		for (const path of PLUGIN_PATHS) {
+			expect(deny).toContain(`Edit(/${join(path, ".git")}/**)`)
+			expect(filesystem?.denyWrite).toContain(join(path, ".git"))
+		}
+		expect(deny).toContain("Edit(//**/.git/**)")
+	})
+
+	it("keeps a bundle writable while its repository stays sealed", () => {
+		const filesystem = filesystemOf(PLUGIN_PATHS, WRITABLE_PATHS)
+
+		expect(filesystem?.allowWrite).toContain(BOT_PATH)
+		expect(filesystem?.denyWrite).toContain(join(BOT_PATH, ".git"))
+	})
+
 	it("denies reads of what the reader dropped into any conversation", () => {
 		expect(denyOf()).toContain(`Read(/${join(APP_DATA, "attachments")}/**)`)
 		expect(filesystemOf()?.denyRead).toContain(join(APP_DATA, "attachments"))

@@ -18,6 +18,7 @@ export type SessionRequest = {
 	settingsPath?: string
 	appDataDir?: string
 	partialMessages: boolean
+	secrets?: Record<string, string>
 }
 
 export type PermissionDecision =

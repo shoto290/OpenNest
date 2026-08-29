@@ -7,10 +7,10 @@ use git2::{
 	Commit, Diff, DiffFormat, IndexAddOption, Oid, Repository, Signature, Sort, StatusOptions, Tree,
 };
 
-use super::LEARNED_NAME;
+use super::{LEARNED_NAME, MCP_NAME};
 use crate::private_files;
 
-const EXCLUDED: &str = LEARNED_NAME;
+const EXCLUDED: [&str; 2] = [LEARNED_NAME, MCP_NAME];
 
 const INFO_DIR: &str = "info";
 const EXCLUDE_NAME: &str = "exclude";
@@ -141,14 +141,20 @@ fn opened(bundle: &Path) -> Result<Repository, git2::Error> {
 fn exclude(repository: &Repository) {
 	let path = repository.path().join(INFO_DIR).join(EXCLUDE_NAME);
 	let mut text = fs::read_to_string(&path).unwrap_or_default();
-	if text.lines().any(|line| line.trim() == EXCLUDED) {
+	let missing: Vec<&str> = EXCLUDED
+		.into_iter()
+		.filter(|name| !text.lines().any(|line| line.trim() == *name))
+		.collect();
+	if missing.is_empty() {
 		return;
 	}
 	if !text.is_empty() && !text.ends_with('\n') {
 		text.push('\n');
 	}
-	text.push_str(EXCLUDED);
-	text.push('\n');
+	for name in missing {
+		text.push_str(name);
+		text.push('\n');
+	}
 	let _ = private_files::replace(&path, text.as_bytes());
 }
 

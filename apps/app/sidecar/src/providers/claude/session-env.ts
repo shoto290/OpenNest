@@ -22,12 +22,19 @@ const INHERITED_KEYS = [
 	EXECUTABLE_OVERRIDE_ENV,
 ]
 
+const carriesSecret = (value: string, secrets: string[]): boolean =>
+	secrets.some((secret) => secret.length > 0 && value.includes(secret))
+
 export const inheritedEnv = (
 	source: NodeJS.ProcessEnv = process.env,
+	secrets: string[] = [],
 ): Record<string, string> =>
 	Object.fromEntries(
 		INHERITED_KEYS.flatMap((key) => {
 			const value = source[key]
-			return value === undefined ? [] : [[key, value] as const]
+			if (value === undefined || carriesSecret(value, secrets)) {
+				return []
+			}
+			return [[key, value] as const]
 		}),
 	)
