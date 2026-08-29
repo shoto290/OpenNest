@@ -2479,6 +2479,15 @@ const rowNames = (canvasElement: HTMLElement) =>
 		(row) => slotIn(row, "roster-row-name").textContent ?? "",
 	)
 
+const inACard = (row: HTMLElement) =>
+	Boolean(row.closest('[data-slot="sidebar-group"]'))
+
+const cardRows = (canvasElement: HTMLElement) =>
+	rowsIn(canvasElement).filter(inACard)
+
+const looseRows = (canvasElement: HTMLElement) =>
+	rowsIn(canvasElement).filter((row) => !inACard(row))
+
 const sectionHeadersIn = (canvasElement: HTMLElement) =>
 	Array.from(
 		canvasElement.querySelectorAll<HTMLElement>(
@@ -2504,6 +2513,20 @@ const openSectionMenu = async (canvasElement: HTMLElement, name: string) => {
 			name: `Actions for the ${name} section`,
 		}),
 	)
+}
+
+const sectionCard = (canvasElement: HTMLElement, name: string) => {
+	const card = sectionHeader(canvasElement, name).closest<HTMLElement>(
+		'[data-slot="sidebar-group"]',
+	)
+	if (!card) throw new Error(`No section card around ${name}`)
+	return card
+}
+
+const chevronOf = (canvasElement: HTMLElement, name: string) => {
+	const chevron = sectionHeader(canvasElement, name).querySelector("svg")
+	if (!chevron) throw new Error(`No chevron on the ${name} header`)
+	return chevron
 }
 
 const sectionField = (canvasElement: HTMLElement) => {
@@ -2562,7 +2585,7 @@ export const Sections = meta.story({
 		docs: {
 			description: {
 				story:
-					"The roster carved into sections. The bots holding no section come first, under no header at all and in the order they arrived, so an account that never made a section reads exactly as `Roster` does. Each section follows in the order the host gave, under a header carrying its name — the header is quiet chrome, smaller and dimmer than any row, and it is a disclosure: it opens and shuts the group under it, and a chevron parked on the far right says which way it stands, out of the way of the name so a long name runs to the same edge in every section. The actions that rename, reorder and delete the section live behind a right-click on the header, exactly as a row\u2019s actions do, so the plain click is never spent on a menu. Check the rows keep one column down the whole panel whatever section they sit in — a header must never indent the bots under it — that every row is still one stop and one button, and that the headers are stops of their own between the groups they open. Pick `SectionCollapse` for the disclosure, `EmptySection` for a section nothing has been filed into yet, `MoveBotToSection` for the branch that files a bot.",
+					"The roster carved into sections. The bots holding no section come first, on the bare panel under no header at all and in the order they arrived, so an account that never made a section reads exactly as `Roster` does. Each section follows in the order the host gave, drawn as a rounded card holding its header and its rows together — the card is a translucent wash over the sidebar, never an opaque fill, so the tint the space gives the panel reads straight through it. The header carries the name in semibold, heavier than any bot's, and it is a disclosure: it opens and shuts the group under it, and a chevron sits one gap after the name, travelling with it rather than parked against the far edge. The actions that rename, reorder and delete the section live behind a right-click on the header, exactly as a row\u2019s actions do, so the plain click is never spent on a menu. Check the rows keep one column down the whole panel whatever section they sit in — a header must never indent the bots under it — that every row is still one stop and one button, and that the headers are stops of their own between the groups they open. Pick `SectionCollapse` for the disclosure, `EmptySection` for a section nothing has been filed into yet, `MoveBotToSection` for the branch that files a bot.",
 			},
 		},
 	},
@@ -2574,7 +2597,8 @@ export const Sections = meta.story({
 			"Archive",
 		])
 
-		await expectAlignedRows(rowsIn(canvasElement))
+		await expectAlignedRows(cardRows(canvasElement))
+		await expectAlignedRows(looseRows(canvasElement))
 
 		const research = sectionHeader(canvasElement, "Research")
 		await expect(research).toHaveAttribute("aria-expanded", "true")
@@ -2624,7 +2648,7 @@ export const SectionCollapse = meta.story({
 		docs: {
 			description: {
 				story:
-					"The header as a disclosure. A plain click shuts the group under it and another opens it back, the chevron on the right turns to say which way it stands, and `aria-expanded` says the same thing to a reader — Enter and Space do it too, since the header is a real button. Shutting a section never touches the sections around it and never reports anything to the host: this is the reader tidying their own panel, not a change to the space. The rows of a shut section stay in the markup rather than being torn out, so the rail still lists every bot when the panel itself is collapsed and no header is left to reopen anything. Check both directions, that the bots of the other sections hold their place, and that the chevron turn is dropped under `prefers-reduced-motion`. Pick `SectionRename` for what a right-click on the same header offers.",
+					"The header as a disclosure. A plain click shuts the group under it and another opens it back, the card shrinking away with the rows it holds as one movement, the chevron turning from right to down to say which way it stands, and `aria-expanded` saying the same thing to a reader — Enter and Space do it too, since the header is a real button. Shutting a section never touches the sections around it and never reports anything to the host: this is the reader tidying their own panel, not a change to the space. The rows of a shut section stay in the markup rather than being torn out, so the rail still lists every bot when the panel itself is collapsed and no header is left to reopen anything. Check both directions, that the bots of the other sections hold their place, and that the chevron turn is dropped under `prefers-reduced-motion`. Pick `SectionRename` for what a right-click on the same header offers.",
 			},
 		},
 	},
@@ -2652,6 +2676,50 @@ export const SectionCollapse = meta.story({
 
 		await expect(args.onReorderSections).not.toHaveBeenCalled()
 		await expect(args.onDeleteSection).not.toHaveBeenCalled()
+	},
+})
+
+export const SectionCard = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"What an open section is drawn as. Header and rows are held in one rounded card, so a section reads as a single object the eye can take in rather than a title with a list loose beneath it. The card is a wash laid over the panel and never a colour of its own — a sister branch tints the sidebar with the colour of the space on screen, and that tint has to survive under every card. Its rows are inset by the card's own gutter while the bots filed under no section sit flush on the panel, so the indent is what says a row is held by something. Shut the section and the card goes with the rows it held — a closed section is a bare title line on the panel, with no surface and no border left behind. The name carries the section on weight alone — semibold where a bot's name is medium, at the same size, so the header leads the card without shouting over the rows it holds — and the chevron travels one gap behind it instead of sitting against the far edge. Check the open card is painted and holds its rows, that the loose bots sit on no card at all, and that shutting Research strips the surface. Pick `SectionCollapse` for the movement between the two, `DragBotToSection` for the card under a lifted bot.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const research = sectionCard(canvasElement, "Research")
+		await expect(isLightened(research)).toBe(true)
+
+		const beacon = rowFor(canvasElement, "Beacon").getBoundingClientRect()
+		const card = research.getBoundingClientRect()
+		await expect(card.top).toBeLessThanOrEqual(beacon.top)
+		await expect(card.bottom).toBeGreaterThanOrEqual(beacon.bottom)
+		await expect(
+			rowFor(canvasElement, "Cinder").closest('[data-slot="sidebar-group"]'),
+		).toBeNull()
+
+		const heading = typeOf(sectionHeader(canvasElement, "Research"))
+		const row = typeOf(
+			slotIn(rowFor(canvasElement, "Beacon"), "roster-row-name"),
+		)
+		await expect(Number(heading.fontWeight)).toBeGreaterThan(
+			Number(row.fontWeight),
+		)
+
+		const name = sectionHeadersIn(canvasElement)[0].getBoundingClientRect()
+		const chevron = chevronOf(canvasElement, "Research").getBoundingClientRect()
+		await expect(chevron.left - name.right).toBeLessThanOrEqual(8)
+		await expect(card.right - chevron.right).toBeGreaterThan(16)
+
+		await userEvent.click(sectionHeader(canvasElement, "Research"))
+		await waitFor(() => expect(isLightened(research)).toBe(false), FRAME_POLL)
+		await expect(sectionHeader(canvasElement, "Research")).toHaveAttribute(
+			"aria-expanded",
+			"false",
+		)
 	},
 })
 

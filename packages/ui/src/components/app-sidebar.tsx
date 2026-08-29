@@ -120,33 +120,48 @@ const EMPTY_COPY =
 
 const ROSTER_SURFACE = "min-h-10 flex-1"
 
+const ROSTER_ROWS = "gap-1"
+
 const SECTION_GROUP = "px-0 py-0"
 
-const SECTION_SLOT = "mt-2"
+const SECTION_PAD = "p-1 group-data-[state=collapsed]/sidebar:p-0"
+
+const SECTION_CARD =
+	"rounded-2xl transition-colors duration-200 ease-out motion-reduce:transition-none group-data-[state=collapsed]/sidebar:bg-transparent"
+
+const SECTION_CARD_OPEN =
+	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
 
 const SECTION_LABEL =
-	"px-0 font-normal text-xs normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
+	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-sm normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
 
 const SECTION_TRIGGER =
-	"flex h-7 w-full min-w-0 select-none items-center gap-1 rounded-md px-2 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring aria-expanded:bg-sidebar-accent/60"
+	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-2xl px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
 const SECTION_NAME = "min-w-0 truncate"
 
 const SECTION_CHEVRON =
-	"ml-auto size-3 shrink-0 text-sidebar-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
+	"size-3.5 shrink-0 text-sidebar-foreground/50 transition-transform duration-150 ease-out motion-reduce:transition-none"
 
-const SECTION_CLOSED = "hidden group-data-[state=collapsed]/sidebar:block"
+const SECTION_BODY =
+	"grid transition-[grid-template-rows,visibility] duration-200 ease-out motion-reduce:transition-none group-data-[state=collapsed]/sidebar:visible group-data-[state=collapsed]/sidebar:grid-rows-[1fr]"
+
+const SECTION_BODY_OPEN = "visible grid-rows-[1fr]"
+
+const SECTION_BODY_CLOSED = "invisible grid-rows-[0fr]"
+
+const SECTION_BODY_INNER = "min-h-0 overflow-hidden"
 
 const SECTION_FIELD =
-	"h-7 w-full min-w-0 border-none bg-transparent px-2 text-sidebar-foreground outline-none"
+	"w-full min-w-0 border-none bg-transparent px-3 py-2.5 text-sidebar-foreground outline-none"
 
 const SECTION_DROP =
-	"flex items-center justify-center gap-2 rounded-lg border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs group-data-[state=collapsed]/sidebar:hidden"
+	"flex items-center justify-center gap-2 rounded-xl border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs group-data-[state=collapsed]/sidebar:hidden"
 
 const SECTION_DROP_AVATAR = "block opacity-40"
 
 const DROP_AREA =
-	"relative rounded-xl transition-colors duration-150 ease-out motion-reduce:transition-none"
+	"group/roster-drop relative rounded-2xl transition-colors duration-150 ease-out motion-reduce:transition-none"
 
 const DROP_AREA_LANDING = "bg-sidebar-accent/60"
 
@@ -178,7 +193,7 @@ const drawnFrom = <Item,>(pool: Item[], seed: string) => {
 	return pool[total % pool.length]
 }
 
-const CONTENT_INSET = "pt-0 group-data-[state=collapsed]/sidebar:px-0"
+const CONTENT_INSET = "pr-1 group-data-[state=collapsed]/sidebar:px-0"
 
 const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
 
@@ -190,7 +205,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-y-contain px-2 pb-2 group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 pr-1 group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
@@ -830,6 +845,7 @@ const RosterDropArea = ({
 			isLifted && DROP_AREA_LIFTED,
 			className,
 		)}
+		data-landing={isLanding || undefined}
 		data-slot="roster-drop-area"
 		data-tauri-drag-region="false"
 		ref={ref}
@@ -947,7 +963,10 @@ const RosterSection = ({
 	const [isOpen, setIsOpen] = useState(true)
 
 	return (
-		<AnimatedSidebarGroup className={SECTION_GROUP} data-slot="roster-section">
+		<AnimatedSidebarGroup
+			className={cn(SECTION_GROUP, SECTION_CARD, isOpen && SECTION_CARD_OPEN)}
+			data-slot="roster-section"
+		>
 			<SectionLabel>
 				{isRenaming ? (
 					<SectionNameField
@@ -1015,10 +1034,15 @@ const RosterSection = ({
 				)}
 			</SectionLabel>
 			<AnimatedSidebarGroupContent
-				className={isOpen ? undefined : SECTION_CLOSED}
+				className={cn(
+					SECTION_BODY,
+					isOpen ? SECTION_BODY_OPEN : SECTION_BODY_CLOSED,
+				)}
 				id={bodyId}
 			>
-				{children}
+				<div className={SECTION_BODY_INNER}>
+					<div className={SECTION_PAD}>{children}</div>
+				</div>
 			</AnimatedSidebarGroupContent>
 		</AnimatedSidebarGroup>
 	)
@@ -1175,7 +1199,7 @@ const BotRoster = ({
 		heldConversations: AppSidebarConversation[],
 		held: AppSidebarBot[],
 	) => (
-		<AnimatedSidebarMenu>
+		<AnimatedSidebarMenu className={ROSTER_ROWS}>
 			{heldConversations.map((conversation) => (
 				<ConversationRosterRow
 					conversation={conversation}
@@ -1257,7 +1281,6 @@ const BotRoster = ({
 				const isLifted = section.id === liftedSectionId
 				return (
 					<RosterDropArea
-						className={SECTION_SLOT}
 						insertion={
 							insertsBefore === section.id
 								? "above"
@@ -1294,7 +1317,7 @@ const BotRoster = ({
 				)
 			})}
 			{naming ? (
-				<AnimatedSidebarGroup className={cn(SECTION_GROUP, SECTION_SLOT)}>
+				<AnimatedSidebarGroup className={SECTION_GROUP}>
 					<SectionLabel>
 						<SectionNameField
 							ariaLabel={t("roster.section.createField")}
