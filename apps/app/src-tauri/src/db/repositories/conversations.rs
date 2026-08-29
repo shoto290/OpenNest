@@ -6,6 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, Transact
 use uuid::Uuid;
 
 use super::messages::stored_as_text;
+use super::sections;
 use crate::agent::contract::AgentCommand;
 use crate::bundles::BotPermissions;
 use crate::db::{Access, DatabaseError};
@@ -154,6 +155,7 @@ pub struct Conversation {
 	pub id: String,
 	pub space_id: Option<String>,
 	pub section_id: Option<String>,
+	pub pin_position: Option<i64>,
 	pub title: String,
 	pub instructions: String,
 	pub created_at: i64,
@@ -200,6 +202,7 @@ pub struct Bot {
 	pub id: String,
 	pub space_id: String,
 	pub section_id: Option<String>,
+	pub pin_position: Option<i64>,
 	pub name: String,
 	pub title: String,
 	pub model: String,
@@ -515,13 +518,13 @@ impl ConversationsRepository {
 	}
 }
 
-const SELECT_BOT: &str = "SELECT id, space_id, section_id, name, title, model,
+const SELECT_BOT: &str = "SELECT id, space_id, section_id, pin_position, name, title, model,
 		avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, permissions,
 		created_at
 	FROM bots WHERE id = ?1";
 
-const SELECT_BOTS: &str = "SELECT id, space_id, section_id, name, title, model,
+const SELECT_BOTS: &str = "SELECT id, space_id, section_id, pin_position, name, title, model,
 		avatar_animal, avatar_color,
 		avatar_image_path, working_dir, instructions, memory, denied_tools, permissions,
 		created_at
@@ -530,8 +533,8 @@ const SELECT_BOTS: &str = "SELECT id, space_id, section_id, name, title, model,
 
 const SPACE_OF_LIVE_BOT: &str = "SELECT space_id FROM bots WHERE id = ?1 AND deleted_at IS NULL";
 
-const CONVERSATION_COLUMNS: &str = "SELECT id, space_id, section_id, title, instructions,
-		created_at, updated_at
+const CONVERSATION_COLUMNS: &str = "SELECT id, space_id, section_id, pin_position,
+		title, instructions, created_at, updated_at
 	FROM conversations";
 
 const SEAT_COLUMNS: &str = "SELECT seat.conversation_id, seat.bot_id, seat.role, seat.joined_at,
@@ -714,11 +717,12 @@ fn created_conversation(
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
 	let at = now();
+	let pin = pin_within(&transaction, &draft.space_id, draft.section_id.as_deref())?;
 	transaction.execute(
 		"INSERT INTO conversations
-			(id, kind, space_id, section_id, title, created_at, updated_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-		params![id, TOPIC_KIND, draft.space_id, draft.section_id, draft.title, at],
+			(id, kind, space_id, section_id, title, created_at, updated_at, pin_position)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7)",
+		params![id, TOPIC_KIND, draft.space_id, draft.section_id, draft.title, at, pin],
 	)?;
 	for (rank, bot_id) in draft.bot_ids.iter().enumerate() {
 		let role = match rank {
@@ -814,16 +818,36 @@ fn seats_of(
 	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+fn pin_within(
+	transaction: &Transaction<'_>,
+	space_id: &str,
+	section_id: Option<&str>,
+) -> Result<Option<i64>, ConversationError> {
+	match section_id {
+		Some(_) => Ok(Some(sections::next_pin(transaction, space_id)?)),
+		None => Ok(None),
+	}
+}
+
 fn updated_conversation(
 	connection: &mut Connection,
 	id: &str,
 	edit: &ConversationEdit,
 ) -> Result<Conversation, ConversationError> {
 	let transaction = write_transaction(connection)?;
+	let home: Option<String> = transaction
+		.query_row("SELECT space_id FROM conversations WHERE id = ?1", [id], |row| row.get(0))
+		.optional()?
+		.flatten();
+	let pin = match home {
+		Some(space_id) => pin_within(&transaction, &space_id, edit.section_id.as_deref())?,
+		None => None,
+	};
 	let written = transaction.execute(
-		"UPDATE conversations SET title = ?2, instructions = ?3, section_id = ?4, updated_at = ?5
+		"UPDATE conversations SET title = ?2, instructions = ?3, section_id = ?4, updated_at = ?5,
+			pin_position = ?7
 			WHERE id = ?1 AND kind = ?6",
-		params![id, edit.title, edit.instructions, edit.section_id, now(), TOPIC_KIND],
+		params![id, edit.title, edit.instructions, edit.section_id, now(), TOPIC_KIND, pin],
 	)?;
 	refuse_unknown_conversation(written, id)?;
 	let updated = conversation_at(&transaction, id)?;
@@ -1024,6 +1048,7 @@ fn conversation(row: &Row<'_>) -> rusqlite::Result<Conversation> {
 		id: row.get("id")?,
 		space_id: row.get("space_id")?,
 		section_id: row.get("section_id")?,
+		pin_position: row.get("pin_position")?,
 		title: row.get("title")?,
 		instructions: row.get("instructions")?,
 		created_at: row.get("created_at")?,
@@ -1051,6 +1076,7 @@ fn bot(row: &Row<'_>) -> rusqlite::Result<Bot> {
 		id: row.get("id")?,
 		space_id: row.get("space_id")?,
 		section_id: row.get("section_id")?,
+		pin_position: row.get("pin_position")?,
 		name: row.get("name")?,
 		title: row.get("title")?,
 		model: row.get("model")?,

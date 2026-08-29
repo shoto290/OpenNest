@@ -189,9 +189,13 @@ const WRITES: WriteCase[] = [
 		call: ["section_rename", { id: "n-1", name: "Readers" }],
 	},
 	{
-		member: "reorderSections",
-		write: () => conversationStore.reorderSections("s-1", ["n-2", "n-1"]),
-		call: ["section_reorder", { spaceId: "s-1", ids: ["n-2", "n-1"] }],
+		member: "pinRoster",
+		write: () =>
+			conversationStore.pinRoster("s-1", [{ id: "n-2", sectionId: null }]),
+		call: [
+			"roster_pin",
+			{ spaceId: "s-1", pins: [{ id: "n-2", sectionId: null }] },
+		],
 	},
 	{
 		member: "deleteSection",

@@ -98,6 +98,7 @@ impl From<AvatarBlot> for conversations::AvatarBlot {
 pub struct Bot {
 	pub id: String,
 	pub section_id: Option<String>,
+	pub pin_position: Option<i64>,
 	pub name: String,
 	pub title: String,
 	pub model: String,
@@ -142,6 +143,7 @@ impl Bot {
 		Self {
 			id: bot.id,
 			section_id: bot.section_id,
+			pin_position: bot.pin_position,
 			name: bot.name,
 			title: bot.title,
 			model,
@@ -317,6 +319,7 @@ pub struct Conversation {
 	pub id: String,
 	pub space_id: Option<String>,
 	pub section_id: Option<String>,
+	pub pin_position: Option<i64>,
 	pub title: String,
 	pub instructions: String,
 	pub created_at: i64,
@@ -330,6 +333,7 @@ impl Conversation {
 			id: room.id,
 			space_id: room.space_id,
 			section_id: room.section_id,
+			pin_position: room.pin_position,
 			title: room.title,
 			instructions: room.instructions,
 			created_at: room.created_at,
@@ -756,11 +760,18 @@ pub enum TranscriptStoreError {
 pub enum AvatarRejection {
 	UnknownFormat,
 	#[serde(rename_all = "camelCase")]
-	TooLarge { bytes: u64, limit: u64 },
+	TooLarge {
+		bytes: u64,
+		limit: u64,
+	},
 	#[serde(rename_all = "camelCase")]
-	Undecodable { detail: String },
+	Undecodable {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Unwritable { detail: String },
+	Unwritable {
+		detail: String,
+	},
 }
 
 impl From<avatars::Rejection> for AvatarRejection {
@@ -894,6 +905,7 @@ mod tests {
 			Bot {
 				id: "default".into(),
 				section_id: None,
+				pin_position: None,
 				name: "Claude".into(),
 				title: "Reviewer".into(),
 				model: "opus".into(),
@@ -917,6 +929,7 @@ mod tests {
 			json!({
 				"id": "default",
 				"sectionId": null,
+				"pinPosition": null,
 				"name": "Claude",
 				"title": "Reviewer",
 				"model": "opus",
@@ -1306,6 +1319,7 @@ mod tests {
 					id: "c1".into(),
 					space_id: Some("personal".into()),
 					section_id: None,
+					pin_position: None,
 					title: "Launch".into(),
 					instructions: String::new(),
 					created_at: 1,
@@ -1341,6 +1355,7 @@ mod tests {
 				"id": "c1",
 				"spaceId": "personal",
 				"sectionId": null,
+				"pinPosition": null,
 				"title": "Launch",
 				"instructions": "",
 				"createdAt": 1,
@@ -1378,6 +1393,7 @@ mod tests {
 			id: "b1".into(),
 			space_id: "personal".into(),
 			section_id: None,
+			pin_position: None,
 			name: "Nyx".into(),
 			title: String::new(),
 			model: model.to_owned(),

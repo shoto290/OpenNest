@@ -6,6 +6,19 @@ use crate::db::DatabaseError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RosterPin {
+	pub id: String,
+	pub section_id: Option<String>,
+}
+
+impl From<RosterPin> for sections::RosterPin {
+	fn from(pin: RosterPin) -> Self {
+		Self { id: pin.id, section_id: pin.section_id }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Section {
 	pub id: String,
 	pub space_id: String,

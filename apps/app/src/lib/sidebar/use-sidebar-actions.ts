@@ -31,14 +31,12 @@ export type SidebarActions = Required<
 		| "onDuplicateBot"
 		| "onDuplicateBotToSpace"
 		| "onEditBot"
-		| "onMoveBotToSection"
 		| "onMoveBotToSpace"
-		| "onMoveConversationToSection"
 		| "onOpenConversationSettings"
 		| "onOpenSpaceSettings"
 		| "onOpenUserSettings"
+		| "onPinRoster"
 		| "onRenameSection"
-		| "onReorderSections"
 		| "onReorderSpaces"
 		| "onSelectBot"
 		| "onSelectConversation"
@@ -125,12 +123,8 @@ export const useSidebarActions = ({
 				})
 			},
 			onEditBot: roster.edit,
-			onMoveBotToSection: sections.moveBot,
 			onMoveBotToSpace: (botId, spaceId) => {
 				void moveBotToSpace({ botId, spaceId, roster, chat, spaces })
-			},
-			onMoveConversationToSection: (id, sectionId) => {
-				void roster.moveConversationToSection(id, sectionId)
 			},
 			onOpenConversationSettings: roster.editConversation,
 			onOpenSpaceSettings: () => {
@@ -144,16 +138,10 @@ export const useSidebarActions = ({
 				user.setSettingsOpen(true)
 				void userPlugin.open()
 			},
-			onRenameSection: sections.rename,
-			onReorderSections: (ids) => {
-				const spaceId =
-					ids.length > 0
-						? spaceOfSection(sections.getState(), ids[0])
-						: undefined
-				if (spaceId) {
-					void sections.reorder(spaceId, ids)
-				}
+			onPinRoster: (spaceId, pins) => {
+				void sections.pin(spaceId, pins)
 			},
+			onRenameSection: sections.rename,
 			onReorderSpaces: (ids) => {
 				void spaces.reorder(ids)
 			},

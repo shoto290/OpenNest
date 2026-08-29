@@ -1,6 +1,6 @@
 use tauri::State;
 
-use super::contract::{Section, SectionError};
+use super::contract::{RosterPin, Section, SectionError};
 use crate::db;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, SectionError> {
@@ -35,12 +35,13 @@ pub async fn section_rename(
 }
 
 #[tauri::command]
-pub async fn section_reorder(
+pub async fn roster_pin(
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
-	ids: Vec<String>,
+	pins: Vec<RosterPin>,
 ) -> Result<(), SectionError> {
-	Ok(ready(&state)?.sections().reorder(space_id, ids).await?)
+	let held = pins.into_iter().map(Into::into).collect();
+	Ok(ready(&state)?.sections().pin(space_id, held).await?)
 }
 
 #[tauri::command]

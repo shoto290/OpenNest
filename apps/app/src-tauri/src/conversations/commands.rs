@@ -817,6 +817,7 @@ mod tests {
 			id: "b1".to_owned(),
 			space_id: "personal".to_owned(),
 			section_id: None,
+			pin_position: None,
 			name: "Bean".to_owned(),
 			title: String::new(),
 			model: "sonnet".to_owned(),
@@ -848,6 +849,7 @@ mod tests {
 		let source = Bot {
 			id: "b1".to_owned(),
 			section_id: None,
+			pin_position: None,
 			name: "Bean".to_owned(),
 			title: "Bakes".to_owned(),
 			model: "opus".to_owned(),

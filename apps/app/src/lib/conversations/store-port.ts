@@ -16,6 +16,7 @@ import type {
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
+	RosterPin,
 	RuntimeSession,
 	Section,
 	Space,
@@ -40,7 +41,7 @@ export type TranscriptStore = TranscriptPort & {
 	sections: (spaceId: string) => Promise<Section[]>
 	createSection: (spaceId: string, name: string) => Promise<Section>
 	renameSection: (id: string, name: string) => Promise<Section>
-	reorderSections: (spaceId: string, ids: string[]) => Promise<void>
+	pinRoster: (spaceId: string, pins: RosterPin[]) => Promise<void>
 	deleteSection: (id: string) => Promise<void>
 	moveBotToSection: (botId: string, sectionId: string | null) => Promise<void>
 	moveBotToSpace: (botId: string, spaceId: string) => Promise<void>

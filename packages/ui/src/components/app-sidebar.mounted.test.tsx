@@ -80,9 +80,17 @@ const SPACES: Space[] = [
 	{ id: "labs", name: "Labs", colour: "red" },
 ]
 
-const RESEARCH: AppSidebarSection = { id: "research", name: "Research" }
+const RESEARCH: AppSidebarSection = {
+	id: "research",
+	name: "Research",
+	position: 0,
+}
 
-const FILED: AppSidebarBot = { ...ATLAS, sectionId: RESEARCH.id }
+const FILED: AppSidebarBot = {
+	...ATLAS,
+	sectionId: RESEARCH.id,
+	pinPosition: 1,
+}
 
 const researchHeaderIn = (container: HTMLElement) => {
 	const name = container.querySelector<HTMLElement>(

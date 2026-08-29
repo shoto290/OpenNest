@@ -24,6 +24,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 14, statements: CONVERSATION_ROOM },
 	Migration { version: 15, statements: BOT_PERMISSIONS },
 	Migration { version: 16, statements: SPACE_SETTINGS },
+	Migration { version: 17, statements: ROSTER_PIN },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -301,6 +302,28 @@ ALTER TABLE bots ADD COLUMN section_id TEXT
 
 const BOT_PERMISSIONS: &str = "
 ALTER TABLE bots ADD COLUMN permissions TEXT;
+";
+
+const ROSTER_PIN: &str = "
+ALTER TABLE bots ADD COLUMN pin_position INTEGER;
+ALTER TABLE conversations ADD COLUMN pin_position INTEGER;
+
+UPDATE conversations SET pin_position = (
+	SELECT COUNT(*) FROM conversations AS earlier
+		WHERE earlier.section_id = conversations.section_id
+			AND (earlier.created_at < conversations.created_at
+				OR (earlier.created_at = conversations.created_at
+					AND earlier.id < conversations.id))
+) WHERE section_id IS NOT NULL;
+
+UPDATE bots SET pin_position = (
+	SELECT COUNT(*) FROM conversations WHERE conversations.section_id = bots.section_id
+) + (
+	SELECT COUNT(*) FROM bots AS earlier
+		WHERE earlier.section_id = bots.section_id
+			AND (earlier.created_at < bots.created_at
+				OR (earlier.created_at = bots.created_at AND earlier.id < bots.id))
+) WHERE section_id IS NOT NULL;
 ";
 
 const CONVERSATION_ROOM: &str = "
@@ -650,7 +673,9 @@ mod tests {
 		assert_eq!(
 			connection
 				.query_row("SELECT space_id FROM conversations WHERE id = 'c1'", [], |row| row
-					.get::<_, Option<String>>(0))
+					.get::<_, Option<
+					String,
+				>>(0))
 				.expect("query"),
 			Some("writers".to_owned()),
 			"a conversation from the older build came out of the step without a space"
@@ -981,6 +1006,58 @@ mod tests {
 		connection
 			.query_row("SELECT denied_tools FROM bots WHERE id = ?1", [id], |row| row.get(0))
 			.expect("the denials")
+	}
+
+	#[test]
+	fn the_step_that_adds_the_pin_pins_what_a_section_held_and_leaves_the_rest_loose() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..15])
+			.expect("the install this build upgrades from");
+		connection
+			.execute_batch(
+				"INSERT INTO sections (id, space_id, name, position, created_at)
+					VALUES ('writers', 'personal', 'Writers', 0, 1);
+				INSERT INTO bots (id, space_id, section_id, name, model, created_at)
+					VALUES ('held', 'personal', 'writers', 'Held', 'sonnet', 2),
+						('later', 'personal', 'writers', 'Later', 'sonnet', 3),
+						('loose', 'personal', NULL, 'Loose', 'sonnet', 4);
+				INSERT INTO conversations
+					(id, kind, space_id, section_id, title, created_at, updated_at)
+					VALUES ('room', 'topic', 'personal', 'writers', 'Room', 1, 1);",
+			)
+			.expect("a space a section already holds");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			pin_of(&connection, "bots", "held"),
+			Some(1),
+			"a bot a section held came out of the step loose"
+		);
+		assert_eq!(pin_of(&connection, "bots", "later"), Some(2));
+		assert_eq!(
+			pin_of(&connection, "conversations", "room"),
+			Some(0),
+			"a conversation a section held came out of the step loose"
+		);
+		assert_eq!(
+			pin_of(&connection, "bots", "loose"),
+			None,
+			"the step pinned a bot no section held"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn pin_of(connection: &Connection, table: &str, id: &str) -> Option<i64> {
+		connection
+			.query_row(&format!("SELECT pin_position FROM {table} WHERE id = ?1"), [id], |row| {
+				row.get(0)
+			})
+			.expect("query")
 	}
 
 	#[test]

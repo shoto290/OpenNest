@@ -171,6 +171,11 @@ const DROP_AREA_LIFTED =
 const INSERTION_LINE =
 	"pointer-events-none absolute inset-x-2 z-20 h-0.5 rounded-full bg-sidebar-primary"
 
+const PINNED_ZONE_STACK = "flex flex-col gap-2"
+
+const ZONE_SEPARATOR =
+	"mx-3 my-1 block h-px shrink-0 rounded-full bg-sidebar-border group-data-[state=collapsed]/sidebar:hidden"
+
 const INSERTION_ABOVE = "-top-1"
 
 const INSERTION_BELOW = "-bottom-1"
@@ -205,7 +210,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 pr-1 group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-2 overflow-y-auto overscroll-y-contain px-2 pt-0 pb-2 pr-1 group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
@@ -222,12 +227,14 @@ const NO_SECTION = "__none__"
 interface AppSidebarSection {
 	id: string
 	name: string
+	position: number
 }
 
 interface AppSidebarBot {
 	id: string
 	name: string
 	sectionId?: string | null
+	pinPosition?: number | null
 	title?: string
 	lastMessage?: string
 	timestamp?: string
@@ -243,6 +250,7 @@ interface AppSidebarConversation {
 	id: string
 	name: string
 	sectionId?: string | null
+	pinPosition?: number | null
 	participants: AppSidebarBot[]
 	lastMessage?: string
 	lastSpeaker?: string
@@ -319,13 +327,17 @@ interface RosterCreateActions {
 	onCreateSpace?: () => void
 }
 
+interface RosterPin {
+	id: string
+	sectionId: string | null
+}
+
 interface SectionActions {
 	onCreateSection?: (name: string, rowId?: string) => void
 	onRenameSection?: (id: string, name: string) => void
-	onReorderSections?: (ids: string[]) => void
 	onDeleteSection?: (id: string) => void
-	onMoveBotToSection?: (botId: string, sectionId: string | null) => void
 	onCollapseSection?: (id: string, isCollapsed: boolean) => void
+	onPinRoster?: (spaceId: string, pins: RosterPin[]) => void
 }
 
 interface SectionBranchProps {
@@ -461,7 +473,69 @@ const BotRowAvatar = ({ bot, badge }: BotRowAvatarProps) => (
 	/>
 )
 
-interface BotRosterRowProps {
+type InsertionEdge = "above" | "below"
+
+interface InsertionLineProps {
+	edge?: InsertionEdge
+}
+
+const InsertionLine = ({ edge }: InsertionLineProps) =>
+	edge ? (
+		<span
+			className={cn(
+				INSERTION_LINE,
+				edge === "above" ? INSERTION_ABOVE : INSERTION_BELOW,
+			)}
+			data-slot="roster-insertion"
+		/>
+	) : null
+
+const RosterZoneSeparator = () => (
+	<span
+		aria-hidden="true"
+		className={ZONE_SEPARATOR}
+		data-slot="roster-zone-separator"
+	/>
+)
+
+interface PinItemProps extends RosterPinActions {
+	id: string
+	isPinned: boolean
+}
+
+const PinItem = ({ id, isPinned, onPin, onUnpin }: PinItemProps) => {
+	const { t } = useTranslation("bots")
+
+	if (isPinned) {
+		if (!onUnpin) return null
+		return (
+			<ContextMenuItem onSelect={() => onUnpin(id)}>
+				<Icons.Unpin aria-hidden="true" className="size-3.5" />
+				{t("roster.unpin")}
+			</ContextMenuItem>
+		)
+	}
+	if (!onPin) return null
+	return (
+		<ContextMenuItem onSelect={() => onPin(id)}>
+			<Icons.Pin aria-hidden="true" className="size-3.5" />
+			{t("roster.pin")}
+		</ContextMenuItem>
+	)
+}
+
+interface RosterRowSlot {
+	insertion?: InsertionEdge
+	isPinned: boolean
+	slotRef?: (node: HTMLElement | null) => void
+}
+
+interface RosterPinActions {
+	onPin?: (id: string) => void
+	onUnpin?: (id: string) => void
+}
+
+interface BotRosterRowProps extends RosterRowSlot, RosterPinActions {
 	bot: AppSidebarBot
 	isSelected: boolean
 	destinations: Space[]
@@ -483,6 +557,11 @@ const BotRosterRow = ({
 	destinations,
 	sections,
 	lift,
+	insertion,
+	slotRef,
+	isPinned,
+	onPin,
+	onUnpin,
 	onSelect,
 	onEdit,
 	onDuplicate,
@@ -498,7 +577,12 @@ const BotRosterRow = ({
 	const { avatarBadge, rowBadge } = useRosterBadgePlacement(bot.badge)
 
 	return (
-		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
+		<AnimatedSidebarMenuItem
+			{...(isPinned ? dropArea(bot.id) : undefined)}
+			data-tauri-drag-region="false"
+			ref={slotRef}
+		>
+			<InsertionLine edge={insertion} />
 			<ContextMenu>
 				<ContextMenuTrigger>
 					<AnimatedSidebarMenuButton
@@ -555,6 +639,12 @@ const BotRosterRow = ({
 						<Icons.Copy aria-hidden="true" className="size-3.5" />
 						{t("roster.duplicate")}
 					</ContextMenuItem>
+					<PinItem
+						id={bot.id}
+						isPinned={isPinned}
+						onPin={onPin}
+						onUnpin={onUnpin}
+					/>
 					<SectionBranch
 						id={bot.id}
 						onCreateSectionFor={onCreateSectionFor}
@@ -603,10 +693,9 @@ interface ConversationRosterActions {
 	onSelectConversation?: (id: string) => void
 	onOpenConversationSettings?: (id: string) => void
 	onDeleteConversation?: (id: string) => void
-	onMoveConversationToSection?: (id: string, sectionId: string | null) => void
 }
 
-interface ConversationRosterRowProps {
+interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	conversation: AppSidebarConversation
 	isSelected: boolean
 	sections: AppSidebarSection[]
@@ -623,6 +712,11 @@ const ConversationRosterRow = ({
 	isSelected,
 	sections,
 	lift,
+	insertion,
+	slotRef,
+	isPinned,
+	onPin,
+	onUnpin,
 	onSelect,
 	onOpenSettings,
 	onDelete,
@@ -635,7 +729,12 @@ const ConversationRosterRow = ({
 	)
 
 	return (
-		<AnimatedSidebarMenuItem data-tauri-drag-region="false">
+		<AnimatedSidebarMenuItem
+			{...(isPinned ? dropArea(conversation.id) : undefined)}
+			data-tauri-drag-region="false"
+			ref={slotRef}
+		>
+			<InsertionLine edge={insertion} />
 			<ContextMenu>
 				<ContextMenuTrigger>
 					<AnimatedSidebarMenuButton
@@ -688,6 +787,12 @@ const ConversationRosterRow = ({
 						<Icons.Settings aria-hidden="true" className="size-3.5" />
 						{t("roster.settings")}
 					</ContextMenuItem>
+					<PinItem
+						id={conversation.id}
+						isPinned={isPinned}
+						onPin={onPin}
+						onUnpin={onUnpin}
+					/>
 					<SectionBranch
 						id={conversation.id}
 						onCreateSectionFor={onCreateSectionFor}
@@ -788,20 +893,22 @@ const RosterSurface = ({
 }
 
 interface SectionLabelProps {
+	ref?: (node: HTMLElement | null) => void
 	children: ReactNode
 }
 
-const SectionLabel = ({ children }: SectionLabelProps) => (
-	<AnimatedSidebarGroupLabel className={SECTION_LABEL}>
+const SectionLabel = ({ ref, children }: SectionLabelProps) => (
+	<AnimatedSidebarGroupLabel className={SECTION_LABEL} ref={ref}>
 		{children}
 	</AnimatedSidebarGroupLabel>
 )
 
 interface SectionDropZoneProps {
 	name: string
+	label?: string
 }
 
-const SectionDropZone = ({ name }: SectionDropZoneProps) => {
+const SectionDropZone = ({ name, label }: SectionDropZoneProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
@@ -814,12 +921,10 @@ const SectionDropZone = ({ name }: SectionDropZoneProps) => {
 					state={drawnFrom(DROP_POSES, name)}
 				/>
 			</span>
-			{t("roster.section.empty")}
+			{label ?? t("roster.section.empty")}
 		</div>
 	)
 }
-
-type InsertionEdge = "above" | "below"
 
 interface RosterDropAreaProps {
 	landing: string
@@ -853,15 +958,7 @@ const RosterDropArea = ({
 		data-tauri-drag-region="false"
 		ref={ref}
 	>
-		{insertion ? (
-			<span
-				className={cn(
-					INSERTION_LINE,
-					insertion === "above" ? INSERTION_ABOVE : INSERTION_BELOW,
-				)}
-				data-slot="roster-insertion"
-			/>
-		) : null}
+		<InsertionLine edge={insertion} />
 		{children}
 	</div>
 )
@@ -949,6 +1046,7 @@ interface RosterSectionProps {
 	onMove?: (id: string, by: number) => void
 	onDelete?: (id: string) => void
 	lift: Lifter
+	headRef?: (node: HTMLElement | null) => void
 	children: ReactNode
 }
 
@@ -959,6 +1057,7 @@ const RosterSection = ({
 	isOpen,
 	onOpenChange,
 	lift,
+	headRef,
 	onRename,
 	onMove,
 	onDelete,
@@ -973,7 +1072,7 @@ const RosterSection = ({
 			className={cn(SECTION_GROUP, SECTION_CARD, isOpen && SECTION_CARD_OPEN)}
 			data-slot="roster-section"
 		>
-			<SectionLabel>
+			<SectionLabel ref={headRef}>
 				{isRenaming ? (
 					<SectionNameField
 						ariaLabel={t("roster.section.renameField", { name: section.name })}
@@ -1054,14 +1153,82 @@ const RosterSection = ({
 	)
 }
 
-const sectionOf = (held: { sectionId?: string | null }, known: Set<string>) =>
+interface RosterRow {
+	id: string
+	sectionId?: string | null
+	pinPosition?: number | null
+}
+
+const sectionOf = (held: RosterRow, known: Set<string>) =>
 	held.sectionId && known.has(held.sectionId) ? held.sectionId : null
+
+const pinOf = (held: RosterRow) => held.pinPosition ?? null
+
+const SORTED_ZONE = "__sorted__"
+
+const PINNED_ZONE = "__pinned__"
+
+const SORTED = "sorted"
+
+type Landing = typeof SORTED | { at: number; holder: string | null }
+
+const isSameLanding = (one: Landing | null, other: Landing | null) => {
+	if (one === other) return true
+	if (one === null || other === null || one === SORTED || other === SORTED)
+		return false
+	return one.at === other.at && one.holder === other.holder
+}
+
+interface PinnedEntry {
+	id: string
+	sectionId: string | null
+	rank: number
+	section?: AppSidebarSection
+	bot?: AppSidebarBot
+	conversation?: AppSidebarConversation
+}
+
+const byRank = (one: PinnedEntry, other: PinnedEntry) => one.rank - other.rank
+
+const toPin = ({ id, sectionId }: PinnedEntry): RosterPin => ({ id, sectionId })
+
+const botEntry = (
+	bot: AppSidebarBot,
+	sectionId: string | null = null,
+): PinnedEntry => ({ id: bot.id, sectionId, rank: pinOf(bot) ?? 0, bot })
+
+const conversationEntry = (
+	conversation: AppSidebarConversation,
+	sectionId: string | null = null,
+): PinnedEntry => ({
+	id: conversation.id,
+	sectionId,
+	rank: pinOf(conversation) ?? 0,
+	conversation,
+})
+
+const inRuns = (entries: PinnedEntry[]) =>
+	entries.reduce<PinnedEntry[][]>((runs, entry) => {
+		const last = runs.at(-1)
+		if (last && !entry.section && !last[0].section) last.push(entry)
+		else runs.push([entry])
+		return runs
+	}, [])
+
+const endOfSection = (entries: PinnedEntry[], sectionId: string) => {
+	const head = entries.findIndex((entry) => entry.section?.id === sectionId)
+	if (head < 0) return head
+	let at = head + 1
+	while (entries[at]?.sectionId === sectionId) at += 1
+	return at
+}
 
 interface BotRosterProps
 	extends BotRosterActions,
 		ConversationRosterActions,
 		SectionActions,
 		RosterCreateActions {
+	spaceId?: string
 	bots: AppSidebarBot[]
 	conversations: AppSidebarConversation[]
 	selectedBotId?: string
@@ -1074,6 +1241,7 @@ interface BotRosterProps
 }
 
 const BotRoster = ({
+	spaceId,
 	bots,
 	conversations,
 	selectedBotId,
@@ -1089,7 +1257,6 @@ const BotRoster = ({
 	onSelectConversation,
 	onOpenConversationSettings,
 	onDeleteConversation,
-	onMoveConversationToSection,
 	onSelectBot,
 	onEditBot,
 	onDuplicateBot,
@@ -1098,9 +1265,8 @@ const BotRoster = ({
 	onDeleteBot,
 	onCreateSection,
 	onRenameSection,
-	onReorderSections,
 	onDeleteSection,
-	onMoveBotToSection,
+	onPinRoster,
 }: BotRosterProps) => {
 	const { t } = useTranslation("bots")
 	const { isMobile, state } = useAnimatedSidebar()
@@ -1117,132 +1283,281 @@ const BotRoster = ({
 
 	const stopNaming = () => onNaming?.(null)
 
-	const botsUnder = (sectionId: string | null) =>
-		bots.filter(
-			(bot) => !isNamed(bot.id) && sectionOf(bot, known) === sectionId,
+	const isHeldBy = (held: RosterRow, sectionId: string | null) =>
+		!isNamed(held.id) &&
+		pinOf(held) !== null &&
+		sectionOf(held, known) === sectionId
+
+	const rowsOf = (sectionId: string | null): PinnedEntry[] =>
+		[
+			...conversations
+				.filter((conversation) => isHeldBy(conversation, sectionId))
+				.map((conversation) => conversationEntry(conversation, sectionId)),
+			...bots
+				.filter((bot) => isHeldBy(bot, sectionId))
+				.map((bot) => botEntry(bot, sectionId)),
+		].toSorted(byRank)
+
+	const topLevel = [
+		...sections.map((section) => ({
+			id: section.id,
+			sectionId: null,
+			rank: section.position,
+			section,
+		})),
+		...rowsOf(null),
+	].toSorted(byRank)
+
+	const flatten = (entries: PinnedEntry[]) =>
+		entries.flatMap((entry) =>
+			entry.section ? [entry, ...rowsOf(entry.section.id)] : [entry],
 		)
 
-	const conversationsUnder = (sectionId: string | null) =>
-		conversations.filter(
-			(conversation) =>
-				!isNamed(conversation.id) &&
-				sectionOf(conversation, known) === sectionId,
-		)
+	const pinnedEntries = flatten(topLevel)
 
-	const withoutSection = (id: string) =>
-		sections.filter((section) => section.id !== id)
+	const isSorted = (held: RosterRow) =>
+		!isNamed(held.id) && pinOf(held) === null
 
-	const placeSection = (id: string, at: number) => {
-		const order = withoutSection(id).map((section) => section.id)
-		order.splice(at, 0, id)
-		if (order.every((held, rank) => held === sections[rank]?.id)) return
-		onReorderSections?.(order)
-	}
+	const sortedConversations = conversations.filter(isSorted)
+	const sortedBots = bots.filter(isSorted)
 
-	const moveSection = (id: string, by: number) => {
-		const at = sections.findIndex((section) => section.id === id) + by
-		if (at < 0 || at >= sections.length) return
-		placeSection(id, at)
-	}
-
-	const fileRow = (id: string, landing: string) => {
-		const sectionId = landing === NO_SECTION ? null : landing
-		if (sectionId && !known.has(sectionId)) return
-		const conversation = conversations.find((held) => held.id === id)
-		if (conversation) {
-			if (sectionOf(conversation, known) === sectionId) return
-			onMoveConversationToSection?.(id, sectionId)
-			return
-		}
+	const looseEntry = (id: string): PinnedEntry | undefined => {
 		const bot = bots.find((held) => held.id === id)
-		if (!bot || sectionOf(bot, known) === sectionId) return
-		onMoveBotToSection?.(id, sectionId)
+		if (bot) return botEntry(bot)
+		const conversation = conversations.find((held) => held.id === id)
+		return conversation ? conversationEntry(conversation) : undefined
+	}
+
+	const blockOf = (id: string): PinnedEntry[] => {
+		const held = pinnedEntries.find((entry) => entry.id === id)
+		if (!held) {
+			const loose = looseEntry(id)
+			return loose ? [loose] : []
+		}
+		return held.section ? [held, ...rowsOf(held.section.id)] : [held]
+	}
+
+	const withoutBlock = (id: string) => {
+		const moving = new Set(blockOf(id).map((entry) => entry.id))
+		return pinnedEntries.filter((entry) => !moving.has(entry.id))
+	}
+
+	const standsAlready = (entries: PinnedEntry[]) =>
+		entries.length === pinnedEntries.length &&
+		entries.every(
+			(entry, rank) =>
+				entry.id === pinnedEntries[rank]?.id &&
+				entry.sectionId === pinnedEntries[rank]?.sectionId,
+		)
+
+	const pin = (entries: PinnedEntry[]) => {
+		if (!spaceId || standsAlready(entries)) return
+		onPinRoster?.(spaceId, entries.map(toPin))
 	}
 
 	const slots = useRef(new Map<string, HTMLElement>()).current
 
-	const middleOf = (id: string) => {
-		const box = slots.get(id)?.getBoundingClientRect()
+	const cards = useRef(new Map<string, HTMLElement>()).current
+
+	const keeping =
+		(held: Map<string, HTMLElement>) =>
+		(id: string) =>
+		(node: HTMLElement | null) => {
+			if (node) held.set(id, node)
+			else held.delete(id)
+		}
+
+	const slotFor = keeping(slots)
+
+	const cardFor = keeping(cards)
+
+	const middleIn = (held: Map<string, HTMLElement>, id: string) => {
+		const box = held.get(id)?.getBoundingClientRect()
 		return box ? box.top + box.height / 2 : Number.POSITIVE_INFINITY
 	}
 
-	const insertionAt = (x: number, y: number, id: string) => {
-		const column = slots.get(id)?.parentElement?.getBoundingClientRect()
-		if (!column || x < column.left || x > column.right) return null
-		return withoutSection(id).filter((section) => middleOf(section.id) < y)
-			.length
+	const isSectionLift = (id: string) =>
+		Boolean(topLevel.find((entry) => entry.id === id)?.section)
+
+	const topLevelWithout = (id: string) =>
+		topLevel.filter((entry) => entry.id !== id)
+
+	const holderOf = (area: string) => {
+		if (known.has(area)) return area
+		return pinnedEntries.find((entry) => entry.id === area)?.sectionId ?? null
 	}
 
-	const isLiftEnabled = isMobile || state === "expanded"
+	const landingAt = (x: number, y: number, id: string): Landing | null => {
+		const area = dropAreaAt(x, y)
+		if (area === null) return null
+		if (area === SORTED_ZONE) return SORTED
+		if (isSectionLift(id))
+			return {
+				at: topLevelWithout(id).filter((entry) => middleIn(cards, entry.id) < y)
+					.length,
+				holder: null,
+			}
+		return {
+			at: withoutBlock(id).filter((entry) => middleIn(slots, entry.id) < y)
+				.length,
+			holder: holderOf(area),
+		}
+	}
 
-	const botLift = useRosterLift({
-		isEnabled: isLiftEnabled,
-		landingAt: dropAreaAt,
-		onLand: fileRow,
+	const placeSection = (id: string, at: number) => {
+		const held = topLevel.find((entry) => entry.id === id)
+		if (!held) return
+		const rest = topLevel.filter((entry) => entry.id !== id)
+		pin(flatten([...rest.slice(0, at), held, ...rest.slice(at)]))
+	}
+
+	const land = (id: string, landing: Landing) => {
+		const moving = blockOf(id)
+		const lifted = moving[0]
+		if (!lifted) return
+		if (landing === SORTED) {
+			pin(withoutBlock(id))
+			return
+		}
+		if (lifted.section) {
+			placeSection(id, landing.at)
+			return
+		}
+		const rest = withoutBlock(id)
+		pin([
+			...rest.slice(0, landing.at),
+			{ ...lifted, sectionId: landing.holder },
+			...rest.slice(landing.at),
+		])
+	}
+
+	const pinLast = (id: string) => {
+		const row = looseEntry(id)
+		if (row) pin([...withoutBlock(id), { ...row, sectionId: null }])
+	}
+
+	const unpin = (id: string) => pin(withoutBlock(id))
+
+	const fileRow = (id: string, sectionId: string | null) => {
+		if (sectionId === null) {
+			unpin(id)
+			return
+		}
+		const row = looseEntry(id)
+		const rest = withoutBlock(id)
+		const at = endOfSection(rest, sectionId)
+		if (!row || at < 0) return
+		pin([...rest.slice(0, at), { ...row, sectionId }, ...rest.slice(at)])
+	}
+
+	const moveSection = (id: string, by: number) => {
+		const at = topLevel.findIndex((entry) => entry.id === id) + by
+		if (at < 0 || at >= topLevel.length) return
+		placeSection(id, at)
+	}
+
+	const rosterLift = useRosterLift({
+		isEnabled: isMobile || state === "expanded",
+		isSameLanding,
+		landingAt,
+		onLand: land,
 	})
 
-	const sectionLift = useRosterLift({
-		isEnabled: isLiftEnabled,
-		landingAt: insertionAt,
-		onLand: placeSection,
-	})
+	const liftedId = rosterLift.lift?.id
+	const liftedEntry = liftedId ? blockOf(liftedId)[0] : undefined
+	const liftedSectionId = liftedEntry?.section?.id
+	const held = rosterLift.lift?.landing ?? null
+	const insertion = held === null || held === SORTED ? null : held
+	const placedUnderLift = !liftedId
+		? pinnedEntries
+		: liftedSectionId
+			? topLevelWithout(liftedId)
+			: withoutBlock(liftedId)
 
-	const liftedRowId = botLift.lift?.id
-	const liftedBot = liftedRowId
-		? bots.find((bot) => bot.id === liftedRowId)
-		: undefined
-	const liftedConversation = liftedRowId
-		? conversations.find((held) => held.id === liftedRowId)
-		: undefined
-	const liftedSectionId = sectionLift.lift?.id
-	const landing = botLift.lift?.landing ?? null
-	const insertion = sectionLift.lift?.landing ?? null
-	const placed = liftedSectionId ? withoutSection(liftedSectionId) : sections
-	const insertsBefore = insertion === null ? null : placed[insertion]?.id
-	const insertsAfter =
-		insertion !== null && insertion >= placed.length
-			? placed[placed.length - 1]?.id
-			: null
+	const landingSection = liftedSectionId ? null : (insertion?.holder ?? null)
 
-	const rowsFor = (
-		heldConversations: AppSidebarConversation[],
-		held: AppSidebarBot[],
-	) => (
-		<AnimatedSidebarMenu className={ROSTER_ROWS}>
-			{heldConversations.map((conversation) => (
+	const holds = (entry: PinnedEntry | undefined, holder: string | null) =>
+		entry !== undefined &&
+		(entry.section ? holder === null : entry.sectionId === holder)
+
+	const insertionMark = () => {
+		if (!insertion) return null
+		const { at, holder } = insertion
+		if (holds(placedUnderLift[at], holder))
+			return { id: placedUnderLift[at].id, edge: "above" as const }
+		for (let rank = at - 1; rank >= 0; rank -= 1) {
+			const above = placedUnderLift[rank]
+			if (holds(above, holder)) return { id: above.id, edge: "below" as const }
+		}
+		return null
+	}
+
+	const mark = insertionMark()
+
+	const edgeAt = (id: string): InsertionEdge | undefined =>
+		mark?.id === id ? mark.edge : undefined
+
+	const rowFor = (entry: PinnedEntry, isSlotted: boolean) => {
+		const shared = {
+			insertion: isSlotted ? edgeAt(entry.id) : undefined,
+			isPinned: isSlotted,
+			lift: rosterLift,
+			onCreateSectionFor: onCreateSection ? nameSectionFor : undefined,
+			onMoveToSection: onPinRoster && sections.length > 0 ? fileRow : undefined,
+			onPin: onPinRoster ? pinLast : undefined,
+			onUnpin: onPinRoster ? unpin : undefined,
+			sections,
+			slotRef: isSlotted ? slotFor(entry.id) : undefined,
+		}
+		if (entry.conversation)
+			return (
 				<ConversationRosterRow
-					conversation={conversation}
-					isSelected={conversation.id === selectedConversationId}
-					key={conversation.id}
-					lift={botLift}
-					onCreateSectionFor={onCreateSection ? nameSectionFor : undefined}
+					{...shared}
+					conversation={entry.conversation}
+					isSelected={entry.conversation.id === selectedConversationId}
+					key={entry.id}
 					onDelete={onDeleteConversation}
-					onMoveToSection={onMoveConversationToSection}
 					onOpenSettings={onOpenConversationSettings}
 					onSelect={onSelectConversation}
-					sections={sections}
 				/>
-			))}
-			{held.map((bot) => (
-				<BotRosterRow
-					bot={bot}
-					destinations={destinations}
-					isSelected={bot.id === activeBotId}
-					key={bot.id}
-					lift={botLift}
-					onCreateSectionFor={onCreateSection ? nameSectionFor : undefined}
-					onDelete={onDeleteBot}
-					onDuplicate={onDuplicateBot}
-					onDuplicateToSpace={onDuplicateBotToSpace}
-					onEdit={onEditBot}
-					onMoveToSpace={onMoveBotToSpace}
-					onMoveToSection={onMoveBotToSection}
-					onSelect={onSelectBot}
-					sections={sections}
-				/>
-			))}
+			)
+		if (!entry.bot) return null
+		return (
+			<BotRosterRow
+				{...shared}
+				bot={entry.bot}
+				destinations={destinations}
+				isSelected={entry.bot.id === activeBotId}
+				key={entry.id}
+				onDelete={onDeleteBot}
+				onDuplicate={onDuplicateBot}
+				onDuplicateToSpace={onDuplicateBotToSpace}
+				onEdit={onEditBot}
+				onMoveToSpace={onMoveBotToSpace}
+				onSelect={onSelectBot}
+			/>
+		)
+	}
+
+	const menuOf = (entries: PinnedEntry[], isSlotted: boolean) => (
+		<AnimatedSidebarMenu className={ROSTER_ROWS}>
+			{entries.map((entry) => rowFor(entry, isSlotted))}
 		</AnimatedSidebarMenu>
 	)
+
+	const menuOfRows = (
+		heldConversations: AppSidebarConversation[],
+		held: AppSidebarBot[],
+	) =>
+		menuOf(
+			[
+				...heldConversations.map((conversation) =>
+					conversationEntry(conversation),
+				),
+				...held.map((bot) => botEntry(bot)),
+			],
+			false,
+		)
 
 	const surface: RosterSurfaceProps = {
 		onCreateBot,
@@ -1267,68 +1582,81 @@ const BotRoster = ({
 		isNamed(conversation.id),
 	)
 	const hasNamedRow = namedBots.length + namedConversations.length > 0
-	const loose = botsUnder(null)
-	const looseConversations = conversationsUnder(null)
-	const hasLooseRows = loose.length + looseConversations.length > 0
-	const isLifting = Boolean(liftedBot || liftedConversation)
+	const hasSortedRows = sortedBots.length + sortedConversations.length > 0
+	const isLifting = Boolean(liftedEntry && !liftedEntry.section)
+	const hasPinnedZone = topLevel.length > 0 || isLifting
 
 	return (
 		<>
-			{hasLooseRows || isLifting ? (
-				<RosterDropArea isLanding={landing === NO_SECTION} landing={NO_SECTION}>
-					{hasLooseRows ? (
-						rowsFor(looseConversations, loose)
+			{hasPinnedZone ? (
+				<RosterDropArea
+					className={PINNED_ZONE_STACK}
+					isLanding={topLevel.length === 0 && insertion !== null}
+					landing={PINNED_ZONE}
+				>
+					{topLevel.length > 0 ? (
+						inRuns(topLevel).map((run) => {
+							const [entry] = run
+							if (!entry.section) return menuOf(run, true)
+							const rank = topLevel.indexOf(entry)
+							const heldRows = rowsOf(entry.section.id)
+							const isLifted = entry.section.id === liftedSectionId
+							return (
+								<RosterDropArea
+									insertion={edgeAt(entry.id)}
+									isLanding={landingSection === entry.section.id}
+									isLifted={isLifted}
+									key={entry.id}
+									landing={entry.id}
+									ref={(node) => {
+										cardFor(entry.id)(node)
+										if (isLifted) rosterLift.followRef(node)
+									}}
+								>
+									<RosterSection
+										headRef={slotFor(entry.id)}
+										isFirst={rank === 0}
+										isLast={rank === topLevel.length - 1}
+										isOpen={!collapsedSectionIds.includes(entry.section.id)}
+										lift={rosterLift}
+										onOpenChange={(isOpen) =>
+											onCollapseSection?.(entry.section?.id ?? "", !isOpen)
+										}
+										onDelete={onDeleteSection}
+										onMove={moveSection}
+										onRename={onRenameSection}
+										section={entry.section}
+									>
+										{heldRows.length > 0 ? (
+											menuOf(heldRows, true)
+										) : (
+											<SectionDropZone name={entry.section.name} />
+										)}
+									</RosterSection>
+								</RosterDropArea>
+							)
+						})
+					) : (
+						<SectionDropZone
+							label={t("roster.pinDrop")}
+							name={t("roster.pin")}
+						/>
+					)}
+				</RosterDropArea>
+			) : null}
+			{hasPinnedZone ? <RosterZoneSeparator /> : null}
+			{hasSortedRows || isLifting ? (
+				<RosterDropArea
+					isLanding={rosterLift.lift?.landing === SORTED}
+					landing={SORTED_ZONE}
+				>
+					{hasSortedRows ? (
+						menuOfRows(sortedConversations, sortedBots)
 					) : (
 						<SectionDropZone name={t("roster.label")} />
 					)}
 				</RosterDropArea>
 			) : null}
-			{sections.map((section, rank) => {
-				const held = botsUnder(section.id)
-				const heldConversations = conversationsUnder(section.id)
-				const hasRows = held.length + heldConversations.length > 0
-				const isLifted = section.id === liftedSectionId
-				return (
-					<RosterDropArea
-						insertion={
-							insertsBefore === section.id
-								? "above"
-								: insertsAfter === section.id
-									? "below"
-									: undefined
-						}
-						isLanding={landing === section.id}
-						isLifted={isLifted}
-						key={section.id}
-						landing={section.id}
-						ref={(node) => {
-							if (node) slots.set(section.id, node)
-							else slots.delete(section.id)
-							if (isLifted) sectionLift.followRef(node)
-						}}
-					>
-						<RosterSection
-							isFirst={rank === 0}
-							isLast={rank === sections.length - 1}
-							isOpen={!collapsedSectionIds.includes(section.id)}
-							lift={sectionLift}
-							onOpenChange={(isOpen) =>
-								onCollapseSection?.(section.id, !isOpen)
-							}
-							onDelete={onDeleteSection}
-							onMove={moveSection}
-							onRename={onRenameSection}
-							section={section}
-						>
-							{hasRows ? (
-								rowsFor(heldConversations, held)
-							) : (
-								<SectionDropZone name={section.name} />
-							)}
-						</RosterSection>
-					</RosterDropArea>
-				)
-			})}
 			{naming ? (
 				<AnimatedSidebarGroup className={SECTION_GROUP}>
 					<SectionLabel>
@@ -1344,7 +1672,7 @@ const BotRoster = ({
 					</SectionLabel>
 					{hasNamedRow ? (
 						<AnimatedSidebarGroupContent>
-							{rowsFor(namedConversations, namedBots)}
+							{menuOfRows(namedConversations, namedBots)}
 						</AnimatedSidebarGroupContent>
 					) : null}
 				</AnimatedSidebarGroup>
@@ -1353,9 +1681,9 @@ const BotRoster = ({
 			{isLifting
 				? createPortal(
 						<LiftedRow
-							bot={liftedBot}
-							conversation={liftedConversation}
-							ref={botLift.followRef}
+							bot={liftedEntry?.bot}
+							conversation={liftedEntry?.conversation}
+							ref={rosterLift.followRef}
 						/>,
 						document.body,
 					)
@@ -1580,7 +1908,6 @@ const AppSidebarBase = ({
 	onCreateConversation,
 	onOpenConversationSettings,
 	onDeleteConversation,
-	onMoveConversationToSection,
 	onSelectBot,
 	onCreateBot,
 	onEditBot,
@@ -1590,10 +1917,9 @@ const AppSidebarBase = ({
 	onDeleteBot,
 	onCreateSection,
 	onRenameSection,
-	onReorderSections,
 	onDeleteSection,
-	onMoveBotToSection,
 	onCollapseSection,
+	onPinRoster,
 	spaces = [],
 	selectedSpaceId,
 	isSpaceSwitchingEnabled = true,
@@ -1626,12 +1952,10 @@ const AppSidebarBase = ({
 		onDuplicateBot,
 		onDuplicateBotToSpace,
 		onEditBot,
-		onMoveBotToSection,
 		onMoveBotToSpace,
-		onMoveConversationToSection,
 		onOpenConversationSettings,
+		onPinRoster,
 		onRenameSection,
-		onReorderSections,
 		onSelectBot,
 		onSelectConversation,
 	}
@@ -1734,6 +2058,7 @@ const AppSidebarBase = ({
 									sections={sectionsOf(space.id)}
 									selectedBotId={selectedId}
 									selectedConversationId={selectedConversationId}
+									spaceId={space.id}
 								/>
 							)}
 							selectedSpaceId={selectedSpaceId}
@@ -1751,6 +2076,7 @@ const AppSidebarBase = ({
 							sections={sections}
 							selectedBotId={selectedId}
 							selectedConversationId={selectedConversationId}
+							spaceId={selectedSpaceId}
 						/>
 					)}
 				</AnimatedSidebarContent>
@@ -1794,6 +2120,7 @@ export {
 	type AppSidebarProps,
 	type AppSidebarSection,
 	type BotAvatarBlot,
+	type RosterPin,
 	type Space,
 	type UserChipIdentity,
 }

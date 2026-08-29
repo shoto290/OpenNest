@@ -29,6 +29,7 @@ const bot = (overrides: Partial<Bot> = {}): Bot => {
 		createdAt: 1,
 		memory: "",
 		sectionId: null,
+		pinPosition: null,
 		...overrides,
 	}
 	return { ...described, changesNothing: deniesChanges(described.deniedTools) }
@@ -327,7 +328,13 @@ describe("newBotIdentity", () => {
 
 describe("toRosterBots", () => {
 	const roster = [
-		bot({ id: "b-1", name: "Atlas", title: "Research" }),
+		bot({
+			id: "b-1",
+			name: "Atlas",
+			title: "Research",
+			sectionId: "n-1",
+			pinPosition: 2,
+		}),
 		bot({ id: "b-2", name: "Beacon", title: "" }),
 	]
 
@@ -335,7 +342,7 @@ describe("toRosterBots", () => {
 	const TODAY = new Date(2025, 2, 12, 9, 24).getTime()
 	const YESTERDAY = new Date(2025, 2, 11).getTime()
 
-	it("reads the name, the title and the face off the record", () => {
+	it("reads the name, the title, the face and the pin off the record", () => {
 		const [atlas, beacon] = toRosterBots(
 			roster,
 			{ working: {}, previews: {} },
@@ -348,8 +355,11 @@ describe("toRosterBots", () => {
 			title: "Research",
 			animal: "owl",
 			blot: "green",
+			sectionId: "n-1",
+			pinPosition: 2,
 		})
 		expect(beacon.title).toBeUndefined()
+		expect(beacon.pinPosition).toBeNull()
 	})
 
 	it("gives every bot the working state of its own process", () => {

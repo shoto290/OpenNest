@@ -12,6 +12,17 @@ const SELECT_SECTIONS: &str = "SELECT id, space_id, name, position, created_at F
 	WHERE space_id = ?1
 	ORDER BY position ASC, id ASC";
 
+const NEXT_PIN: &str = "SELECT COALESCE(MAX(rank), -1) + 1 FROM (
+		SELECT position AS rank FROM sections WHERE space_id = ?1
+		UNION ALL SELECT pin_position FROM bots WHERE space_id = ?1
+		UNION ALL SELECT pin_position FROM conversations WHERE space_id = ?1)";
+
+const UNPIN_BOTS: &str =
+	"UPDATE bots SET pin_position = NULL, section_id = NULL WHERE space_id = ?1";
+
+const UNPIN_CONVERSATIONS: &str =
+	"UPDATE conversations SET pin_position = NULL, section_id = NULL WHERE space_id = ?1";
+
 const SPACE_OF_BOT: &str = "SELECT space_id FROM bots WHERE id = ?1";
 
 const SPACE_OF_SECTION: &str = "SELECT space_id FROM sections WHERE id = ?1";
@@ -34,6 +45,12 @@ impl From<rusqlite::Error> for SectionError {
 	fn from(error: rusqlite::Error) -> Self {
 		Self::Database(DatabaseError::Sqlite(error))
 	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RosterPin {
+	pub id: String,
+	pub section_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,8 +89,8 @@ impl SectionsRepository {
 		self.access.call_mut(move |connection| Ok(renamed(connection, &id, &name))).await?
 	}
 
-	pub async fn reorder(&self, space_id: String, ids: Vec<String>) -> Result<(), SectionError> {
-		self.access.call_mut(move |connection| Ok(reordered(connection, &space_id, &ids))).await?
+	pub async fn pin(&self, space_id: String, pins: Vec<RosterPin>) -> Result<(), SectionError> {
+		self.access.call_mut(move |connection| Ok(pinned(connection, &space_id, &pins))).await?
 	}
 
 	pub async fn delete(&self, id: String) -> Result<(), SectionError> {
@@ -119,18 +136,28 @@ fn renamed(connection: &mut Connection, id: &str, name: &str) -> Result<Section,
 	Ok(stored)
 }
 
-fn reordered(
+fn pinned(
 	connection: &mut Connection,
 	space_id: &str,
-	ids: &[String],
+	pins: &[RosterPin],
 ) -> Result<(), SectionError> {
 	let transaction = write_transaction(connection)?;
-	for (position, id) in ids.iter().enumerate() {
-		let written = transaction.execute(
+	transaction.execute(UNPIN_BOTS, [space_id])?;
+	transaction.execute(UNPIN_CONVERSATIONS, [space_id])?;
+	for (position, pin) in pins.iter().enumerate() {
+		let rank = position as i64;
+		let touched = transaction.execute(
 			"UPDATE sections SET position = ?3 WHERE id = ?1 AND space_id = ?2",
-			params![id, space_id, position as i64],
+			params![pin.id, space_id, rank],
+		)? + transaction.execute(
+			"UPDATE bots SET pin_position = ?3, section_id = ?4 WHERE id = ?1 AND space_id = ?2",
+			params![pin.id, space_id, rank, pin.section_id],
+		)? + transaction.execute(
+			"UPDATE conversations SET pin_position = ?3, section_id = ?4
+				WHERE id = ?1 AND space_id = ?2",
+			params![pin.id, space_id, rank, pin.section_id],
 		)?;
-		refuse_if_untouched(written, id)?;
+		refuse_if_untouched(touched, &pin.id)?;
 	}
 	transaction.commit()?;
 	Ok(())
@@ -159,10 +186,20 @@ fn moved_bot(
 			return Err(SectionError::ForeignSection { id: section_id.to_owned() });
 		}
 	}
-	transaction
-		.execute("UPDATE bots SET section_id = ?2 WHERE id = ?1", params![bot_id, section_id])?;
+	let pin = match section_id {
+		Some(_) => Some(next_pin(&transaction, &home)?),
+		None => None,
+	};
+	transaction.execute(
+		"UPDATE bots SET section_id = ?2, pin_position = ?3 WHERE id = ?1",
+		params![bot_id, section_id, pin],
+	)?;
 	transaction.commit()?;
 	Ok(())
+}
+
+pub(in crate::db) fn next_pin(connection: &Connection, space_id: &str) -> rusqlite::Result<i64> {
+	connection.query_row(NEXT_PIN, [space_id], |row| row.get(0))
 }
 
 fn space_of(
@@ -220,6 +257,10 @@ mod tests {
 			instructions: String::new(),
 			denied_tools: Vec::new(),
 		}
+	}
+
+	fn at_top(id: &str) -> RosterPin {
+		RosterPin { id: id.to_owned(), section_id: None }
 	}
 
 	async fn a_bot(database: &Database, name: &str, space_id: &str) -> Bot {
@@ -301,7 +342,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_reorder_stores_the_order_it_was_given() {
+	async fn a_pin_stores_the_order_it_was_given() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let sections = database.sections();
@@ -311,7 +352,7 @@ mod tests {
 		let third = sections.create(home.clone(), "Three".to_owned()).await.expect("the section");
 
 		sections
-			.reorder(home.clone(), vec![third.id.clone(), first.id.clone(), second.id.clone()])
+			.pin(home.clone(), vec![at_top(&third.id), at_top(&first.id), at_top(&second.id)])
 			.await
 			.expect("the order is stored");
 
@@ -331,7 +372,52 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_reorder_naming_a_section_of_another_space_is_refused() {
+	async fn a_pin_holds_the_rows_it_names_and_frees_the_rows_it_leaves_out() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let sections = database.sections();
+		let home = only_space(&database).await;
+		let held = sections.create(home.clone(), "Writers".to_owned()).await.expect("the section");
+		let inside = a_bot(&database, "Nyx", &home).await;
+		let outside = a_bot(&database, "Ovid", &home).await;
+
+		sections
+			.pin(
+				home.clone(),
+				vec![
+					at_top(&held.id),
+					RosterPin { id: inside.id.clone(), section_id: Some(held.id.clone()) },
+				],
+			)
+			.await
+			.expect("the pins are stored");
+
+		let bots = database.conversations().bots(Some(home.clone())).await.expect("the bots");
+		let pinned = bots.iter().find(|bot| bot.id == inside.id).expect("the pinned bot");
+		let loose = bots.iter().find(|bot| bot.id == outside.id).expect("the loose bot");
+		assert_eq!(pinned.pin_position, Some(1));
+		assert_eq!(pinned.section_id, Some(held.id.clone()));
+		assert_eq!(loose.pin_position, None, "a row the pin left out stayed pinned");
+
+		sections.pin(home.clone(), vec![at_top(&held.id)]).await.expect("the pins are stored");
+
+		let unpinned = database
+			.conversations()
+			.bots(Some(home))
+			.await
+			.expect("the bots")
+			.into_iter()
+			.find(|bot| bot.id == inside.id)
+			.expect("the bot");
+		assert_eq!(unpinned.pin_position, None);
+		assert_eq!(unpinned.section_id, None, "an unpinned row stayed in its section");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_pin_naming_a_section_of_another_space_is_refused() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let sections = database.sections();
@@ -340,13 +426,13 @@ mod tests {
 		let held = sections.create(home.clone(), "One".to_owned()).await.expect("the section");
 		let foreign = sections.create(elsewhere.id, "Two".to_owned()).await.expect("the section");
 
-		let refused = sections.reorder(home.clone(), vec![foreign.id, held.id.clone()]).await;
+		let refused = sections.pin(home.clone(), vec![at_top(&foreign.id), at_top(&held.id)]).await;
 
 		assert!(matches!(refused, Err(SectionError::UnknownSection { .. })));
 		assert_eq!(
 			sections.list(home).await.expect("the sections")[0].position,
 			held.position,
-			"a refused reorder moved a section"
+			"a refused pin moved a section"
 		);
 
 		drop(database);

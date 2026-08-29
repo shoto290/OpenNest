@@ -64,12 +64,14 @@ export interface RosterLift<Landing> extends Lifter {
 interface UseRosterLiftOptions<Landing> {
 	isEnabled: boolean
 	landingAt: (x: number, y: number, id: string) => Landing | null
+	isSameLanding?: (one: Landing | null, other: Landing | null) => boolean
 	onLand: (id: string, landing: Landing) => void
 }
 
 export const useRosterLift = <Landing>({
 	isEnabled,
 	landingAt,
+	isSameLanding = Object.is,
 	onLand,
 }: UseRosterLiftOptions<Landing>): RosterLift<Landing> => {
 	const [lift, setLift] = useState<Lift<Landing> | null>(null)
@@ -114,7 +116,7 @@ export const useRosterLift = <Landing>({
 			place(followed.current, at.current, pressed)
 			const landing = landingAt(event.clientX, event.clientY, pressed.id)
 			setLift((held) =>
-				held?.id === pressed.id && held.landing === landing
+				held?.id === pressed.id && isSameLanding(held.landing, landing)
 					? held
 					: { id: pressed.id, landing },
 			)

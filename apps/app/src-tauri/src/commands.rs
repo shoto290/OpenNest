@@ -68,7 +68,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		sections::commands::section_list,
 		sections::commands::section_create,
 		sections::commands::section_rename,
-		sections::commands::section_reorder,
+		sections::commands::roster_pin,
 		sections::commands::section_delete,
 		sections::commands::bot_move_to_section,
 		spaces::commands::space_list,

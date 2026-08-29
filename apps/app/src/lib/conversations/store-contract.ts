@@ -44,6 +44,7 @@ export type Bot = BotIdentity & {
 	changesNothing: boolean
 	memory: string
 	sectionId: string | null
+	pinPosition: number | null
 }
 
 export type Space = {
@@ -52,6 +53,11 @@ export type Space = {
 	colour: AvatarBlot
 	position: number
 	createdAt: number
+}
+
+export type RosterPin = {
+	id: string
+	sectionId: string | null
 }
 
 export type Section = {
@@ -145,6 +151,7 @@ export type Conversation = {
 	id: string
 	spaceId: string | null
 	sectionId: string | null
+	pinPosition: number | null
 	title: string
 	instructions: string
 	createdAt: number

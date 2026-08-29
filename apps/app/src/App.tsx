@@ -109,6 +109,7 @@ export function App() {
 	const sections = useSections(store, {
 		move: roster.controller.moveToSection,
 		clear: roster.controller.clearSection,
+		pin: roster.controller.pin,
 	})
 	const collapsedSections = useCollapsedSections(store)
 	const skills = useBotSkills(store)
