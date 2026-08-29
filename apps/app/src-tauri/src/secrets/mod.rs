@@ -19,6 +19,6 @@ pub fn bootstrap<R: Runtime>(app: &AppHandle<R>) {
 		return;
 	};
 	let store = SecretStore::under(app_data);
-	migrate::run_once(&store, &plugins);
+	migrate::sweep(&store, &plugins);
 	app.manage(store);
 }

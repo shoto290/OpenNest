@@ -37,15 +37,17 @@ pub fn placeholder_for(key: &str) -> String {
 }
 
 pub fn is_interpolated(value: &str) -> bool {
-	value.trim_start().starts_with("${")
+	value.contains("${")
 }
 
 pub fn account_for(bot_id: &str, key: &str) -> String {
 	format!("{bot_id}:{key}")
 }
 
+const UNUSABLE_IN_KEY: [char; 4] = [':', '{', '}', '$'];
+
 pub fn is_usable_key(key: &str) -> bool {
 	!key.is_empty()
-		&& !key.contains(':')
+		&& !key.contains(UNUSABLE_IN_KEY)
 		&& key.chars().all(|letter| letter.is_ascii_graphic() || letter == ' ')
 }
