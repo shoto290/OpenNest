@@ -19,6 +19,42 @@ pub fn replace(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 	replace_owned(path, bytes)
 }
 
+pub fn replace_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+	let dir = path.parent().ok_or_else(|| std::io::Error::other("the file has no directory"))?;
+	create_dir(dir)?;
+	let staged = dir.join(staged_name());
+	let renamed = write_and_sync(&staged, bytes).and_then(|()| fs::rename(&staged, path));
+	if renamed.is_err() {
+		let _ = fs::remove_file(&staged);
+	}
+	renamed
+}
+
+fn staged_name() -> String {
+	use std::sync::atomic::{AtomicU64, Ordering};
+	static NEXT: AtomicU64 = AtomicU64::new(0);
+	format!(".staged-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed))
+}
+
+fn write_and_sync(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+	use std::io::Write;
+
+	let mut file = created_owned_file(path)?;
+	file.write_all(bytes)?;
+	file.sync_all()
+}
+
+#[cfg(unix)]
+fn created_owned_file(path: &Path) -> std::io::Result<fs::File> {
+	use std::os::unix::fs::OpenOptionsExt;
+	fs::OpenOptions::new().write(true).create_new(true).mode(FILE_MODE).open(path)
+}
+
+#[cfg(not(unix))]
+fn created_owned_file(path: &Path) -> std::io::Result<fs::File> {
+	fs::OpenOptions::new().write(true).create_new(true).open(path)
+}
+
 #[cfg(unix)]
 fn replace_owned(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 	use std::io::Write;
@@ -52,10 +88,8 @@ pub fn create_dir(path: &Path) -> std::io::Result<()> {
 #[cfg(unix)]
 fn create_owned(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 	use std::io::Write;
-	use std::os::unix::fs::OpenOptionsExt;
 
-	let mut file =
-		fs::OpenOptions::new().write(true).create_new(true).mode(FILE_MODE).open(path)?;
+	let mut file = created_owned_file(path)?;
 	if interrupted() {
 		file.write_all(&bytes[..bytes.len() / 2])?;
 		return Err(stopped_partway());

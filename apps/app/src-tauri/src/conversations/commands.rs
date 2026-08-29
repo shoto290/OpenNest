@@ -18,6 +18,8 @@ use crate::db::repositories::conversations::{
 };
 use crate::db::repositories::messages::MessagePageQuery;
 use crate::db::repositories::runtime_context::ParticipantKey;
+use crate::environment;
+use crate::environment::contract::EnvOwner;
 
 const DUPLICATE_SUFFIX: &str = " copy";
 
@@ -347,6 +349,7 @@ pub async fn conversation_delete_bot<R: Runtime>(
 	let database = ready(&state)?;
 	database.conversations().delete_bot(id.clone()).await?;
 	forget_bundle(bundle_root.as_deref(), database, &id).await;
+	environment::store::forget_bot(&app, &id);
 	avatars::sweep_referenced(database, dir.as_deref()).await;
 	attachments::sweep_referenced(database, attachment_dir.as_deref()).await;
 	Ok(())
@@ -460,7 +463,13 @@ pub async fn conversation_delete_bot_mcp_server<R: Runtime>(
 ) -> Result<(), TranscriptStoreError> {
 	let root = writable_root(&app)?;
 	let bot = bot_row(ready(&state)?, &bot_id).await?;
-	bundled(bundles::remove_mcp_server(&root, &bot, &name))
+	bundled(bundles::remove_mcp_server(&root, &bot, &name))?;
+	environment::store::forget_server(
+		&app,
+		&EnvOwner::Bot { id: bot.id, space_id: bot.space_id },
+		&name,
+	);
+	Ok(())
 }
 
 #[tauri::command]

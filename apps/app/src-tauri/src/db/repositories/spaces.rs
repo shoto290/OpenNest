@@ -26,6 +26,8 @@ const SELECT_SPACES: &str = "SELECT id, name, colour, position, created_at FROM 
 
 const SPACE_OF_BOT: &str = "SELECT space_id FROM bots WHERE id = ?1";
 
+const BOTS_OF_SPACE: &str = "SELECT id FROM bots WHERE space_id = ?1";
+
 #[derive(Debug)]
 pub enum SpaceError {
 	Database(DatabaseError),
@@ -92,7 +94,7 @@ impl SpacesRepository {
 		self.access.call_mut(move |connection| Ok(reordered(connection, &ids))).await?
 	}
 
-	pub async fn delete(&self, id: String) -> Result<(), SpaceError> {
+	pub async fn delete(&self, id: String) -> Result<Vec<String>, SpaceError> {
 		self.access.call_mut(move |connection| Ok(deleted(connection, &id))).await?
 	}
 
@@ -150,7 +152,7 @@ fn reordered(connection: &mut Connection, ids: &[String]) -> Result<(), SpaceErr
 	Ok(())
 }
 
-fn deleted(connection: &mut Connection, id: &str) -> Result<(), SpaceError> {
+fn deleted(connection: &mut Connection, id: &str) -> Result<Vec<String>, SpaceError> {
 	let transaction = write_transaction(connection)?;
 	if !held(&transaction, id)? {
 		return Err(SpaceError::UnknownSpace { id: id.to_owned() });
@@ -158,6 +160,7 @@ fn deleted(connection: &mut Connection, id: &str) -> Result<(), SpaceError> {
 	if counted(&transaction)? <= 1 {
 		return Err(SpaceError::LastSpace);
 	}
+	let cascaded = bots_of_space(&transaction, id)?;
 	transaction.pragma_update(None, "defer_foreign_keys", true)?;
 	transaction.execute(
 		"DELETE FROM conversations WHERE id IN
@@ -167,7 +170,13 @@ fn deleted(connection: &mut Connection, id: &str) -> Result<(), SpaceError> {
 	)?;
 	transaction.execute("DELETE FROM spaces WHERE id = ?1", [id])?;
 	transaction.commit()?;
-	Ok(())
+	Ok(cascaded)
+}
+
+fn bots_of_space(connection: &Connection, space_id: &str) -> Result<Vec<String>, SpaceError> {
+	let mut statement = connection.prepare(BOTS_OF_SPACE)?;
+	let rows = statement.query_map([space_id], |row| row.get(0))?;
+	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn moved_bot(connection: &mut Connection, bot_id: &str, space_id: &str) -> Result<(), SpaceError> {
@@ -412,13 +421,15 @@ mod tests {
 			.create_bot(an_identity("Nyx"), Some(kept), None)
 			.await
 			.expect("the kept bot");
-		database
+		let held = database
 			.conversations()
 			.create_bot(an_identity("Ada"), Some(dropped.id.clone()), None)
 			.await
 			.expect("the bot of the space that goes");
 
-		spaces.delete(dropped.id).await.expect("the space is deleted");
+		let cascaded = spaces.delete(dropped.id).await.expect("the space is deleted");
+
+		assert_eq!(cascaded, vec![held.id]);
 
 		assert_eq!(
 			database

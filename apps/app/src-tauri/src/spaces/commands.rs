@@ -9,6 +9,7 @@ use crate::conversations::contract::{
 	AvatarBlot, BotHistoryEntry, Skill, SkillDraft, TranscriptStoreError,
 };
 use crate::db;
+use crate::environment;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceError> {
 	state.as_ref().map_err(|failure| SpaceError::Unavailable { failure: failure.into() })
@@ -55,8 +56,9 @@ pub async fn space_delete<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<(), SpaceError> {
-	ready(&state)?.spaces().delete(id.clone()).await?;
+	let held_bots = ready(&state)?.spaces().delete(id.clone()).await?;
 	bundles::space::remove(&app, &id);
+	environment::store::forget_space(&app, &id, &held_bots);
 	Ok(())
 }
 

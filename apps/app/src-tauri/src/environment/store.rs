@@ -1,0 +1,534 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
+
+use tauri::{AppHandle, Manager, Runtime};
+
+use super::contract::{EnvEntry, EnvError, EnvOwner, EnvScope};
+use crate::private_files;
+
+const DIR_NAME: &str = "env";
+const FILE_NAME: &str = ".env";
+const SPACE_DIR: &str = "space";
+const BOT_DIR: &str = "bot";
+const SERVER_DIR: &str = "server";
+
+static WRITES: Mutex<()> = Mutex::new(());
+
+type Assignments = Vec<(String, String)>;
+
+pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
+}
+
+pub fn set(root: &Path, scope: &EnvScope, name: &str, value: &str) -> Result<(), EnvError> {
+	if !is_a_name(name) {
+		return Err(EnvError::InvalidName { name: name.to_owned() });
+	}
+	let path = file(root, scope)?;
+	let _serialised = WRITES.lock().unwrap_or_else(PoisonError::into_inner);
+	let mut kept = stored(&path)?;
+	match kept.iter_mut().find(|(defined, _)| defined == name) {
+		Some((_, held)) => *held = value.to_owned(),
+		None => kept.push((name.to_owned(), value.to_owned())),
+	}
+	written(&path, &kept)
+}
+
+pub fn delete(root: &Path, scope: &EnvScope, name: &str) -> Result<(), EnvError> {
+	let path = file(root, scope)?;
+	let _serialised = WRITES.lock().unwrap_or_else(PoisonError::into_inner);
+	let mut kept = stored(&path)?;
+	let held = kept.len();
+	kept.retain(|(defined, _)| defined != name);
+	if kept.len() == held {
+		return Ok(());
+	}
+	written(&path, &kept)
+}
+
+pub fn list(root: &Path, scope: &EnvScope) -> Result<Vec<EnvEntry>, EnvError> {
+	let mut entries: Vec<EnvEntry> = Vec::new();
+	for step in chain(scope) {
+		for (name, _) in stored(&file(root, &step)?)? {
+			let served_from = serving(&entries, &name).unwrap_or_else(|| step.clone());
+			entries.push(EnvEntry { name, defined_in: step.clone(), served_from });
+		}
+	}
+	entries.sort_by(|left, right| left.name.cmp(&right.name));
+	Ok(entries)
+}
+
+pub fn forget_space<R: Runtime>(app: &AppHandle<R>, space_id: &str, bot_ids: &[String]) {
+	if let Some(root) = root(app) {
+		forget_space_at(&root, space_id, bot_ids);
+	}
+}
+
+pub fn forget_bot<R: Runtime>(app: &AppHandle<R>, bot_id: &str) {
+	if let Some(root) = root(app) {
+		forget_owner_at(&root, BOT_DIR, bot_id);
+	}
+}
+
+pub fn forget_server<R: Runtime>(app: &AppHandle<R>, owner: &EnvOwner, name: &str) {
+	if let Some(root) = root(app) {
+		forget_server_at(&root, owner, name);
+	}
+}
+
+fn forget_space_at(root: &Path, space_id: &str, bot_ids: &[String]) {
+	forget_owner_at(root, SPACE_DIR, space_id);
+	for bot_id in bot_ids {
+		forget_owner_at(root, BOT_DIR, bot_id);
+	}
+}
+
+fn forget_server_at(root: &Path, owner: &EnvOwner, name: &str) {
+	let held = EnvScope::Server { name: name.to_owned(), owner: owner.clone() };
+	if let Ok(dir) = scope_dir(root, &held) {
+		let _ = fs::remove_dir_all(dir);
+	}
+}
+
+fn forget_owner_at(root: &Path, kind: &str, id: &str) {
+	let Ok(id) = segment(id) else {
+		return;
+	};
+	let _ = fs::remove_dir_all(root.join(kind).join(id));
+	let _ = fs::remove_dir_all(root.join(SERVER_DIR).join(kind).join(id));
+}
+
+fn serving(narrower: &[EnvEntry], name: &str) -> Option<EnvScope> {
+	narrower.iter().find(|entry| entry.name == name).map(|entry| entry.served_from.clone())
+}
+
+fn chain(scope: &EnvScope) -> Vec<EnvScope> {
+	let mut steps = vec![scope.clone()];
+	if let Some(wider) = broader(scope) {
+		steps.extend(chain(&wider));
+	}
+	steps
+}
+
+fn broader(scope: &EnvScope) -> Option<EnvScope> {
+	match scope {
+		EnvScope::Space { .. } => None,
+		EnvScope::Bot { space_id, .. } => Some(EnvScope::Space { id: space_id.clone() }),
+		EnvScope::Server { owner, .. } => Some(owner.into()),
+	}
+}
+
+fn file(root: &Path, scope: &EnvScope) -> Result<PathBuf, EnvError> {
+	Ok(scope_dir(root, scope)?.join(FILE_NAME))
+}
+
+fn scope_dir(root: &Path, scope: &EnvScope) -> Result<PathBuf, EnvError> {
+	match scope {
+		EnvScope::Space { id } => Ok(root.join(SPACE_DIR).join(segment(id)?)),
+		EnvScope::Bot { id, .. } => Ok(root.join(BOT_DIR).join(segment(id)?)),
+		EnvScope::Server { name, owner } => Ok(servers_dir(root, owner)?.join(segment(name)?)),
+	}
+}
+
+fn servers_dir(root: &Path, owner: &EnvOwner) -> Result<PathBuf, EnvError> {
+	let (kind, id) = match owner {
+		EnvOwner::Space { id } => (SPACE_DIR, id),
+		EnvOwner::Bot { id, .. } => (BOT_DIR, id),
+	};
+	Ok(root.join(SERVER_DIR).join(kind).join(segment(id)?))
+}
+
+fn segment(value: &str) -> Result<&str, EnvError> {
+	let refused =
+		value.is_empty() || value == "." || value == ".." || value.contains(['/', '\\', '\0']);
+	if refused {
+		return Err(EnvError::InvalidScope {
+			detail: "a scope is named by plain file names".to_owned(),
+		});
+	}
+	Ok(value)
+}
+
+fn stored(path: &Path) -> Result<Assignments, EnvError> {
+	match fs::read_to_string(path) {
+		Ok(text) => parsed(&text),
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Assignments::new()),
+		Err(error) => Err(EnvError::Unreadable { detail: error.to_string() }),
+	}
+}
+
+fn written(path: &Path, assignments: &Assignments) -> Result<(), EnvError> {
+	private_files::replace_atomically(path, rendered(assignments).as_bytes())
+		.map_err(|error| EnvError::Unwritable { detail: error.to_string() })
+}
+
+fn rendered(assignments: &Assignments) -> String {
+	assignments.iter().map(|(name, value)| format!("{name}={}\n", quoted(value))).collect()
+}
+
+fn quoted(value: &str) -> String {
+	let mut written = String::from("\"");
+	for character in value.chars() {
+		match character {
+			'\\' => written.push_str("\\\\"),
+			'"' => written.push_str("\\\""),
+			'\n' => written.push_str("\\n"),
+			'\r' => written.push_str("\\r"),
+			_ => written.push(character),
+		}
+	}
+	written.push('"');
+	written
+}
+
+fn parsed(text: &str) -> Result<Assignments, EnvError> {
+	let mut assignments = Assignments::new();
+	for (index, line) in text.lines().enumerate() {
+		let trimmed = line.trim();
+		if trimmed.is_empty() || trimmed.starts_with('#') {
+			continue;
+		}
+		let at = index + 1;
+		let Some((name, rest)) = trimmed.split_once('=') else {
+			return Err(malformed(at));
+		};
+		let name = name.trim_end();
+		if !is_a_name(name) {
+			return Err(malformed(at));
+		}
+		assignments.push((name.to_owned(), value_of(rest, at)?));
+	}
+	Ok(assignments)
+}
+
+fn value_of(rest: &str, at: usize) -> Result<String, EnvError> {
+	let Some(opened) = rest.strip_prefix('"') else {
+		return Ok(rest.trim_end().to_owned());
+	};
+	let mut value = String::new();
+	let mut characters = opened.chars();
+	while let Some(character) = characters.next() {
+		match character {
+			'"' if characters.as_str().trim().is_empty() => return Ok(value),
+			'"' => return Err(malformed(at)),
+			'\\' => value.push(unescaped(characters.next().ok_or_else(|| malformed(at))?)),
+			_ => value.push(character),
+		}
+	}
+	Err(malformed(at))
+}
+
+fn unescaped(character: char) -> char {
+	match character {
+		'n' => '\n',
+		'r' => '\r',
+		't' => '\t',
+		held => held,
+	}
+}
+
+fn malformed(at: usize) -> EnvError {
+	EnvError::Unreadable { detail: format!("line {at} is not a NAME=VALUE assignment") }
+}
+
+fn is_a_name(name: &str) -> bool {
+	let mut characters = name.chars();
+	let opens = characters.next().is_some_and(|first| first.is_ascii_uppercase() || first == '_');
+	opens && characters.all(is_a_name_character)
+}
+
+fn is_a_name_character(character: char) -> bool {
+	character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_'
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn a_root(name: &str) -> PathBuf {
+		let root = std::env::temp_dir().join(format!("opennest-environment-{name}"));
+		let _ = fs::remove_dir_all(&root);
+		root
+	}
+
+	fn a_space() -> EnvScope {
+		EnvScope::Space { id: "s1".to_owned() }
+	}
+
+	fn a_bot() -> EnvScope {
+		EnvScope::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() }
+	}
+
+	fn a_server() -> EnvScope {
+		EnvScope::Server {
+			name: "clock".to_owned(),
+			owner: EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() },
+		}
+	}
+
+	fn names(entries: &[EnvEntry]) -> Vec<(&str, &EnvScope, &EnvScope)> {
+		entries
+			.iter()
+			.map(|entry| (entry.name.as_str(), &entry.defined_in, &entry.served_from))
+			.collect()
+	}
+
+	#[test]
+	fn a_scope_files_its_variables_under_the_path_reserved_for_it() {
+		let root = a_root("paths");
+		assert_eq!(file(&root, &a_space()).expect("the path"), root.join("space/s1/.env"));
+		assert_eq!(file(&root, &a_bot()).expect("the path"), root.join("bot/b1/.env"));
+		assert_eq!(
+			file(&root, &a_server()).expect("the path"),
+			root.join("server/bot/b1/clock/.env")
+		);
+		assert_eq!(
+			file(
+				&root,
+				&EnvScope::Server {
+					name: "clock".to_owned(),
+					owner: EnvOwner::Space { id: "s1".to_owned() },
+				}
+			)
+			.expect("the path"),
+			root.join("server/space/s1/clock/.env")
+		);
+	}
+
+	#[test]
+	fn a_scope_named_to_climb_out_of_the_store_is_refused() {
+		let root = a_root("traversal");
+		let climbing = EnvScope::Server {
+			name: "..".to_owned(),
+			owner: EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() },
+		};
+		assert!(matches!(file(&root, &climbing), Err(EnvError::InvalidScope { .. })));
+		assert!(matches!(
+			set(&root, &EnvScope::Space { id: "a/b".to_owned() }, "TOKEN", "x"),
+			Err(EnvError::InvalidScope { .. })
+		));
+	}
+
+	#[test]
+	fn the_narrowest_scope_that_defines_a_name_serves_it() {
+		let root = a_root("resolution");
+		set(&root, &a_space(), "SHARED", "space").expect("the space keeps it");
+		set(&root, &a_space(), "ONLY_SPACE", "space").expect("the space keeps it");
+		set(&root, &a_bot(), "SHARED", "bot").expect("the bot keeps it");
+		set(&root, &a_bot(), "ONLY_BOT", "bot").expect("the bot keeps it");
+		set(&root, &a_server(), "SHARED", "server").expect("the server keeps it");
+
+		let entries = list(&root, &a_server()).expect("the chain reads");
+		assert_eq!(
+			names(&entries),
+			vec![
+				("ONLY_BOT", &a_bot(), &a_bot()),
+				("ONLY_SPACE", &a_space(), &a_space()),
+				("SHARED", &a_server(), &a_server()),
+				("SHARED", &a_bot(), &a_server()),
+				("SHARED", &a_space(), &a_server()),
+			]
+		);
+
+		let seen_by_the_bot = list(&root, &a_bot()).expect("the chain reads");
+		assert_eq!(
+			names(&seen_by_the_bot),
+			vec![
+				("ONLY_BOT", &a_bot(), &a_bot()),
+				("ONLY_SPACE", &a_space(), &a_space()),
+				("SHARED", &a_bot(), &a_bot()),
+				("SHARED", &a_space(), &a_bot()),
+			]
+		);
+
+		let seen_by_the_space = list(&root, &a_space()).expect("the chain reads");
+		assert_eq!(
+			names(&seen_by_the_space),
+			vec![("ONLY_SPACE", &a_space(), &a_space()), ("SHARED", &a_space(), &a_space())]
+		);
+	}
+
+	#[test]
+	fn a_name_the_pattern_refuses_leaves_every_file_untouched() {
+		let root = a_root("refused-name");
+		set(&root, &a_bot(), "KEPT", "held").expect("the bot keeps it");
+		let before = fs::read_to_string(file(&root, &a_bot()).expect("the path")).expect("read");
+
+		for refused in ["lower", "1LEADING", "WITH-DASH", "", "WITH SPACE", "WITH_é"] {
+			assert_eq!(
+				set(&root, &a_bot(), refused, "x"),
+				Err(EnvError::InvalidName { name: refused.to_owned() })
+			);
+		}
+
+		assert_eq!(
+			fs::read_to_string(file(&root, &a_bot()).expect("the path")).expect("read"),
+			before
+		);
+	}
+
+	#[test]
+	fn writing_one_name_preserves_every_other_name_of_the_file() {
+		let root = a_root("siblings");
+		set(&root, &a_bot(), "FIRST", "one").expect("the bot keeps it");
+		set(&root, &a_bot(), "SECOND", "two").expect("the bot keeps it");
+		set(&root, &a_bot(), "THIRD", "three").expect("the bot keeps it");
+		set(&root, &a_bot(), "SECOND", "replaced").expect("the bot replaces it");
+
+		let path = file(&root, &a_bot()).expect("the path");
+		assert_eq!(
+			stored(&path).expect("the file reads"),
+			vec![
+				("FIRST".to_owned(), "one".to_owned()),
+				("SECOND".to_owned(), "replaced".to_owned()),
+				("THIRD".to_owned(), "three".to_owned()),
+			]
+		);
+
+		delete(&root, &a_bot(), "SECOND").expect("the bot drops it");
+		assert_eq!(
+			stored(&path).expect("the file reads"),
+			vec![("FIRST".to_owned(), "one".to_owned()), ("THIRD".to_owned(), "three".to_owned())]
+		);
+	}
+
+	#[test]
+	fn a_value_holding_a_newline_a_quote_or_a_backslash_reads_back_as_it_was_given() {
+		let root = a_root("round-trip");
+		let awkward = "line\nnext\r\ttab \"quoted\" back\\slash trailing ";
+		set(&root, &a_bot(), "AWKWARD", awkward).expect("the bot keeps it");
+		set(&root, &a_bot(), "AFTER", "still here").expect("the bot keeps it");
+
+		let path = file(&root, &a_bot()).expect("the path");
+		assert_eq!(
+			stored(&path).expect("the file reads"),
+			vec![
+				("AWKWARD".to_owned(), awkward.to_owned()),
+				("AFTER".to_owned(), "still here".to_owned()),
+			]
+		);
+	}
+
+	#[test]
+	fn a_file_that_cannot_be_parsed_fails_every_command_on_its_scope() {
+		let root = a_root("unreadable");
+		let path = file(&root, &a_bot()).expect("the path");
+		private_files::write(&path, b"KEPT=\"unterminated\n").expect("the file is planted");
+
+		assert!(matches!(list(&root, &a_bot()), Err(EnvError::Unreadable { .. })));
+		assert!(matches!(set(&root, &a_bot(), "TOKEN", "x"), Err(EnvError::Unreadable { .. })));
+		assert!(matches!(delete(&root, &a_bot(), "KEPT"), Err(EnvError::Unreadable { .. })));
+		assert!(matches!(list(&root, &a_server()), Err(EnvError::Unreadable { .. })));
+
+		assert_eq!(
+			fs::read_to_string(&path).expect("read"),
+			"KEPT=\"unterminated\n",
+			"the refused file is left as it was"
+		);
+	}
+
+	#[test]
+	fn a_file_that_is_not_an_assignment_fails_rather_than_reading_as_empty() {
+		let root = a_root("garbage");
+		let path = file(&root, &a_space()).expect("the path");
+		private_files::write(&path, b"# a note\n\nnot an assignment\n").expect("planted");
+		assert!(matches!(list(&root, &a_space()), Err(EnvError::Unreadable { .. })));
+	}
+
+	#[test]
+	fn a_deleted_bot_takes_its_file_and_the_files_of_its_servers_with_it() {
+		let root = a_root("forget-bot");
+		set(&root, &a_space(), "SHARED", "space").expect("the space keeps it");
+		set(&root, &a_bot(), "TOKEN", "bot").expect("the bot keeps it");
+		set(&root, &a_server(), "TOKEN", "server").expect("the server keeps it");
+
+		forget_owner_at(&root, BOT_DIR, "b1");
+
+		assert!(!file(&root, &a_bot()).expect("the path").exists());
+		assert!(!file(&root, &a_server()).expect("the path").exists());
+		assert!(file(&root, &a_space()).expect("the path").exists());
+	}
+
+	#[test]
+	fn a_deleted_space_takes_its_file_and_the_files_of_its_servers_with_it() {
+		let root = a_root("forget-space");
+		let owner = EnvOwner::Space { id: "s1".to_owned() };
+		let server = EnvScope::Server { name: "clock".to_owned(), owner };
+		set(&root, &a_space(), "TOKEN", "space").expect("the space keeps it");
+		set(&root, &server, "TOKEN", "server").expect("the server keeps it");
+
+		forget_space_at(&root, "s1", &[]);
+
+		assert!(!file(&root, &a_space()).expect("the path").exists());
+		assert!(!file(&root, &server).expect("the path").exists());
+	}
+
+	#[test]
+	fn a_deleted_space_takes_the_files_of_the_bots_it_held_and_of_their_servers() {
+		let root = a_root("forget-held-bots");
+		let elsewhere = EnvScope::Bot { id: "b2".to_owned(), space_id: "s2".to_owned() };
+		let elsewhere_server = EnvScope::Server {
+			name: "clock".to_owned(),
+			owner: EnvOwner::Bot { id: "b2".to_owned(), space_id: "s2".to_owned() },
+		};
+		set(&root, &a_space(), "TOKEN", "space").expect("the space keeps it");
+		set(&root, &a_bot(), "TOKEN", "bot").expect("the held bot keeps it");
+		set(&root, &a_server(), "TOKEN", "server").expect("the held server keeps it");
+		set(&root, &elsewhere, "TOKEN", "other").expect("the outside bot keeps it");
+		set(&root, &elsewhere_server, "TOKEN", "other").expect("its server keeps it");
+
+		forget_space_at(&root, "s1", &["b1".to_owned()]);
+
+		assert!(!file(&root, &a_space()).expect("the path").exists());
+		assert!(!file(&root, &a_bot()).expect("the path").exists());
+		assert!(!file(&root, &a_server()).expect("the path").exists());
+		assert!(file(&root, &elsewhere).expect("the path").exists());
+		assert!(file(&root, &elsewhere_server).expect("the path").exists());
+	}
+
+	#[test]
+	fn a_removed_server_takes_only_its_own_file_with_it() {
+		let root = a_root("forget-server");
+		let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
+		let kept = EnvScope::Server { name: "weather".to_owned(), owner: owner.clone() };
+		set(&root, &a_server(), "TOKEN", "server").expect("the server keeps it");
+		set(&root, &kept, "TOKEN", "other").expect("the other server keeps it");
+		set(&root, &a_bot(), "TOKEN", "bot").expect("the bot keeps it");
+
+		forget_server_at(&root, &owner, "clock");
+
+		assert!(!file(&root, &a_server()).expect("the path").exists());
+		assert!(file(&root, &kept).expect("the path").exists());
+		assert!(file(&root, &a_bot()).expect("the path").exists());
+	}
+
+	#[test]
+	fn dropping_a_name_that_was_never_kept_changes_nothing() {
+		let root = a_root("absent");
+		delete(&root, &a_bot(), "NEVER").expect("the bot has nothing to drop");
+		assert!(!file(&root, &a_bot()).expect("the path").exists());
+		assert_eq!(list(&root, &a_bot()).expect("the chain reads"), Vec::new());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn the_file_is_owner_only_and_so_is_every_directory_leading_to_it() {
+		use std::os::unix::fs::PermissionsExt;
+
+		let root = a_root("permissions");
+		set(&root, &a_server(), "TOKEN", "held").expect("the server keeps it");
+
+		let path = file(&root, &a_server()).expect("the path");
+		assert_eq!(fs::metadata(&path).expect("the file").permissions().mode() & 0o777, 0o600);
+		let mut dir = path.parent();
+		while let Some(walked) = dir.filter(|walked| walked.starts_with(&root)) {
+			assert_eq!(
+				fs::metadata(walked).expect("the directory").permissions().mode() & 0o777,
+				0o700,
+				"{walked:?}"
+			);
+			dir = walked.parent();
+		}
+	}
+}
