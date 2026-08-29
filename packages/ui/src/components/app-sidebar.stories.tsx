@@ -2442,37 +2442,53 @@ export const WindowControlsReservedOnRail = meta.story({
 })
 
 const SECTIONS: AppSidebarSection[] = [
-	{ id: "research", name: "Research" },
-	{ id: "shipping", name: "Shipping" },
-	{ id: "archive", name: "Archive" },
+	{ id: "research", name: "Research", position: 0 },
+	{ id: "shipping", name: "Shipping", position: 3 },
+	{ id: "archive", name: "Archive", position: 6 },
 ]
 
-const PLACEMENTS: Record<string, string | null> = {
+const PLACEMENTS: Record<string, [string, number] | null> = {
 	atlas: null,
-	beacon: "research",
+	beacon: ["research", 1],
 	cinder: null,
-	dune: "shipping",
-	ember: "research",
-	flint: "shipping",
+	dune: ["shipping", 4],
+	ember: ["research", 2],
+	flint: ["shipping", 5],
 }
 
 const SECTIONED_ROSTER: AppSidebarBot[] = ROSTER.slice(0, 6).map((bot) => ({
 	...bot,
-	sectionId: PLACEMENTS[bot.id] ?? null,
+	sectionId: PLACEMENTS[bot.id]?.[0] ?? null,
+	pinPosition: PLACEMENTS[bot.id]?.[1] ?? null,
 }))
 
-const GROUPED_ORDER = ["Atlas", "Cinder", "Beacon", "Ember", "Dune", "Flint"]
+const GROUPED_ORDER = ["Beacon", "Ember", "Dune", "Flint", "Atlas", "Cinder"]
+
+const PINNED_NOW: [string, string | null][] = [
+	["research", null],
+	["beacon", "research"],
+	["ember", "research"],
+	["shipping", null],
+	["dune", "shipping"],
+	["flint", "shipping"],
+	["archive", null],
+]
+
+const pinsFor = (order: [string, string | null][]) =>
+	order.map(([id, sectionId]) => ({ id, sectionId }))
+
+const HOME = "personal"
 
 const sectionArgs = () => ({
 	bots: SECTIONED_ROSTER,
 	sections: SECTIONS,
 	selectedBotId: "beacon",
+	selectedSpaceId: HOME,
 	onCreateSection: fn(),
 	onRenameSection: fn(),
-	onReorderSections: fn(),
 	onDeleteSection: fn(),
-	onMoveBotToSection: fn(),
 	onCollapseSection: fn(),
+	onPinRoster: fn(),
 })
 
 const LiveSections = (args: AppSidebarProps) => {
@@ -2632,9 +2648,9 @@ export const Sections = meta.story({
 		await expect(research.getBoundingClientRect().bottom).toBeLessThanOrEqual(
 			rowFor(canvasElement, "Beacon").getBoundingClientRect().top,
 		)
-		await expect(
-			rowFor(canvasElement, "Cinder").getBoundingClientRect().bottom,
-		).toBeLessThanOrEqual(research.getBoundingClientRect().top)
+		await expect(research.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			rowFor(canvasElement, "Cinder").getBoundingClientRect().top,
+		)
 	},
 })
 
@@ -2712,7 +2728,7 @@ export const SectionCollapse = meta.story({
 			"research",
 			false,
 		)
-		await expect(args.onReorderSections).not.toHaveBeenCalled()
+		await expect(args.onPinRoster).not.toHaveBeenCalled()
 		await expect(args.onDeleteSection).not.toHaveBeenCalled()
 	},
 })
@@ -2818,22 +2834,36 @@ export const SectionReorder = meta.story({
 			first.getByRole("menuitem", { name: "Move up" }),
 		).toBeDisabled()
 		await userEvent.click(first.getByRole("menuitem", { name: "Move down" }))
-		await expect(args.onReorderSections).toHaveBeenCalledWith([
-			"shipping",
-			"research",
-			"archive",
-		])
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+				["research", null],
+				["beacon", "research"],
+				["ember", "research"],
+				["archive", null],
+			]),
+		)
 
 		const last = await openSectionMenu(canvasElement, "Archive")
 		await expect(
 			last.getByRole("menuitem", { name: "Move down" }),
 		).toBeDisabled()
 		await userEvent.click(last.getByRole("menuitem", { name: "Move up" }))
-		await expect(args.onReorderSections).toHaveBeenCalledWith([
-			"research",
-			"archive",
-			"shipping",
-		])
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([
+				["research", null],
+				["beacon", "research"],
+				["ember", "research"],
+				["archive", null],
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+			]),
+		)
 	},
 })
 
@@ -2885,6 +2915,7 @@ export const FullRowMenu = meta.story({
 		).toEqual([
 			"Settings",
 			"Duplicate",
+			"Pin",
 			MOVE_TO,
 			DUPLICATE_TO,
 			MOVE_TO_SPACE,
@@ -2929,14 +2960,32 @@ export const MoveBotToSection = meta.story({
 		await waitFor(async () => {
 			await expect(screen.queryByRole("menu")).toBeNull()
 		}, FRAME_POLL)
-		await expect(args.onMoveBotToSection).toHaveBeenCalledWith(
-			"beacon",
-			"shipping",
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([
+				["research", null],
+				["ember", "research"],
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+				["beacon", "shipping"],
+				["archive", null],
+			]),
 		)
 
 		const again = await openMoveToBranch(canvasElement, "Beacon", userEvent)
 		await userEvent.click(again.getAllByRole("menuitemradio")[0])
-		await expect(args.onMoveBotToSection).toHaveBeenCalledWith("beacon", null)
+		await expect(args.onPinRoster).toHaveBeenLastCalledWith(
+			HOME,
+			pinsFor([
+				["research", null],
+				["ember", "research"],
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+				["archive", null],
+			]),
+		)
 	},
 })
 
@@ -3066,7 +3115,9 @@ export const NewSectionFromNothing = meta.story({
 	},
 })
 
-const NO_SECTION_LANDING = "__none__"
+const SORTED_ZONE_LANDING = "__sorted__"
+
+const PINNED_ZONE_LANDING = "__pinned__"
 
 const dropAreaFor = (canvasElement: HTMLElement, landing: string) => {
 	const area = canvasElement.querySelector<HTMLElement>(
@@ -3116,6 +3167,11 @@ const under = (node: Element) => ({
 	clientY: Math.round(node.getBoundingClientRect().bottom) - 2,
 })
 
+const inTheGutterUnder = (node: Element) => ({
+	clientX: centreOf(node).clientX,
+	clientY: Math.round(node.getBoundingClientRect().bottom) + 4,
+})
+
 const moveUnder = (handle: HTMLElement, onto: Element) => {
 	fireEvent.pointerMove(handle, { ...POINTER, ...under(onto) })
 }
@@ -3130,6 +3186,55 @@ const dragOnto = (handle: HTMLElement, onto: Element) => {
 	moveOver(handle, onto)
 	dropOver(handle, onto)
 }
+
+export const DragBotIntoAnEmptyPinnedZone = meta.story({
+	args: {
+		bots: ROSTER.slice(0, 3),
+		selectedSpaceId: HOME,
+		onSelectBot: fn(),
+		onPinRoster: fn(),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The invitation to pin a first row. A space where nothing is pinned draws no zone and no rule at rest — the roster is one plain list, and a band of empty space above it would only ask the reader to wonder what it is for. The moment a row is lifted the zone appears at the top with the rule under it, so the gesture teaches its own target: the reader sees a place to aim at exactly when there is something to aim with, and the panel goes back to one list the instant the row is put down. Releasing over it reports the row as the only pin. Pick `DragBotToSection` for the zone once it holds sections, `DragBotOutOfSection` for the way back down.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const handle = rowButton(rowFor(canvasElement, "Cinder"))
+		await expect(
+			canvasElement.querySelector(
+				`[data-roster-drop="${PINNED_ZONE_LANDING}"]`,
+			),
+		).toBeNull()
+
+		lift(handle)
+		const pinned = await settled(
+			dropAreaFor(canvasElement, PINNED_ZONE_LANDING),
+		)
+		await expect(pinned).toBeVisible()
+		await expect(slotIn(canvasElement, "roster-zone-separator")).toBeVisible()
+
+		moveOver(handle, pinned)
+		await waitFor(async () => {
+			await expect(isLightened(pinned)).toBe(true)
+		}, FRAME_POLL)
+
+		dropOver(handle, pinned)
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([["cinder", null]]),
+		)
+		await expect(args.onSelectBot).not.toHaveBeenCalled()
+		await expect(
+			canvasElement.querySelector(
+				`[data-roster-drop="${PINNED_ZONE_LANDING}"]`,
+			),
+		).toBeNull()
+	},
+})
 
 export const DragBotToSection = meta.story({
 	args: sectionArgs(),
@@ -3161,10 +3266,7 @@ export const DragBotToSection = meta.story({
 		)
 
 		dropOver(handle, shipping)
-		await expect(args.onMoveBotToSection).toHaveBeenCalledWith(
-			"atlas",
-			"shipping",
-		)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectBot).not.toHaveBeenCalled()
 		await expect(liftedBot()).toBeNull()
 		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
@@ -3183,17 +3285,94 @@ export const DragBotOutOfSection = meta.story({
 	},
 	play: async ({ args, canvasElement }) => {
 		const handle = rowButton(rowFor(canvasElement, "Beacon"))
-		const loose = dropAreaFor(canvasElement, NO_SECTION_LANDING)
+		const loose = dropAreaFor(canvasElement, SORTED_ZONE_LANDING)
 
 		lift(handle)
 		moveOver(handle, loose)
 		await expect(isLightened(loose)).toBe(true)
 		dropOver(handle, loose)
-		await expect(args.onMoveBotToSection).toHaveBeenCalledWith("beacon", null)
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([
+				["research", null],
+				["ember", "research"],
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+				["archive", null],
+			]),
+		)
 
 		const research = dropAreaFor(canvasElement, "research")
 		dragOnto(handle, research)
-		await expect(args.onMoveBotToSection).toHaveBeenCalledTimes(1)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const DragBotUnderASection = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The boundary between the inside of a section and the space under it. Where a row lands is read off what the hand is actually over, never off the rows it has passed: over a card the row joins that section, in the gutter between two cards it stays loose at that place. Without that rule a row let go just under the last row of a section is filed into it, since the two land at the same rank — the reader aims at empty panel and the row disappears into a group. Check that a bot released in the gutter under Research comes back loose, sitting between the two sections rather than inside either. `DragBotToSection` is the same gesture aimed one row higher.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement }) => {
+		const handle = rowButton(rowFor(canvasElement, "Atlas"))
+		const research = dropAreaFor(canvasElement, "research")
+
+		lift(handle)
+		const gutter = inTheGutterUnder(research)
+		fireEvent.pointerMove(handle, { ...POINTER, ...gutter })
+		await expect(isLightened(research)).toBe(false)
+
+		fireEvent.pointerUp(handle, { ...POINTER, ...gutter })
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([
+				["research", null],
+				["beacon", "research"],
+				["ember", "research"],
+				["atlas", null],
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+				["archive", null],
+			]),
+		)
+	},
+})
+
+export const DragBotToTheEndOfASection = meta.story({
+	args: sectionArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The line that tells the two ends apart. Landing last inside a section and landing under it are one rank apart and would draw the same mark, so the line is attached to the row it belongs beside rather than to the rank: under Research's last row while the hand is over the card, above the next card once the hand is in the gutter. Without it the reader aims at the bottom of a group and reads a mark drawn outside it. Check both marks from the same two pixels of travel. `DragBotUnderASection` is what each one reports on release.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const handle = rowButton(rowFor(canvasElement, "Atlas"))
+		const research = dropAreaFor(canvasElement, "research")
+		const ember = rowFor(canvasElement, "Ember")
+
+		lift(handle)
+		fireEvent.pointerMove(handle, { ...POINTER, ...under(research) })
+		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
+			ember,
+		)
+
+		fireEvent.pointerMove(handle, {
+			...POINTER,
+			...inTheGutterUnder(research),
+		})
+		await expect(slotIn(canvasElement, "roster-insertion").parentElement).toBe(
+			dropAreaFor(canvasElement, "shipping"),
+		)
 	},
 })
 
@@ -3216,9 +3395,9 @@ export const DragBotIntoEmptySection = meta.story({
 		await expect(isLightened(archive)).toBe(true)
 
 		dropOver(handle, archive)
-		await expect(args.onMoveBotToSection).toHaveBeenCalledWith(
-			"cinder",
-			"archive",
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([...PINNED_NOW, ["cinder", "archive"]]),
 		)
 		await expect(slotIn(canvasElement, "roster-section-drop")).toBeVisible()
 	},
@@ -3239,18 +3418,18 @@ export const DragBotNowhere = meta.story({
 
 		await userEvent.click(handle)
 		await expect(args.onSelectBot).toHaveBeenCalledWith("ember")
-		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+		await expect(args.onPinRoster).not.toHaveBeenCalled()
 
 		lift(handle)
 		await expect(liftedBot()).not.toBeNull()
 		fireEvent.pointerCancel(handle, POINTER)
 		await expect(liftedBot()).toBeNull()
-		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+		await expect(args.onPinRoster).not.toHaveBeenCalled()
 
 		lift(handle)
 		fireEvent.pointerMove(handle, { ...POINTER, clientX: 4, clientY: 4 })
 		fireEvent.pointerUp(handle, { ...POINTER, clientX: 4, clientY: 4 })
-		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+		await expect(args.onPinRoster).not.toHaveBeenCalled()
 		await expect(rowNames(canvasElement)).toEqual(GROUPED_ORDER)
 
 		fireEvent.pointerDown(handle, {
@@ -3296,17 +3475,24 @@ export const DragSectionToPlace = meta.story({
 		await expect(isLightened(research)).toBe(false)
 
 		dropOver(handle, research)
-		await expect(args.onReorderSections).toHaveBeenCalledWith([
-			"shipping",
-			"research",
-			"archive",
-		])
+		await expect(args.onPinRoster).toHaveBeenCalledWith(
+			HOME,
+			pinsFor([
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+				["research", null],
+				["beacon", "research"],
+				["ember", "research"],
+				["archive", null],
+			]),
+		)
 		await expect(handle).toHaveAttribute("aria-expanded", "true")
 		await expect(dune.getBoundingClientRect().top).toBeCloseTo(restsAt, 0)
 
 		lift(handle)
 		dropOver(handle, handle)
-		await expect(args.onReorderSections).toHaveBeenCalledTimes(1)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
 
 		const archive = dropAreaFor(canvasElement, "archive")
 		lift(handle)
@@ -3315,15 +3501,22 @@ export const DragSectionToPlace = meta.story({
 			archive,
 		)
 		fireEvent.pointerUp(handle, { ...POINTER, ...under(archive) })
-		await expect(args.onReorderSections).toHaveBeenLastCalledWith([
-			"research",
-			"archive",
-			"shipping",
-		])
+		await expect(args.onPinRoster).toHaveBeenLastCalledWith(
+			HOME,
+			pinsFor([
+				["research", null],
+				["beacon", "research"],
+				["ember", "research"],
+				["archive", null],
+				["shipping", null],
+				["dune", "shipping"],
+				["flint", "shipping"],
+			]),
+		)
 
 		lift(handle)
 		fireEvent.pointerCancel(handle, POINTER)
-		await expect(args.onReorderSections).toHaveBeenCalledTimes(2)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(2)
 		await expect(handle).toHaveAttribute("aria-expanded", "true")
 	},
 })
@@ -3376,9 +3569,8 @@ export const SectionsPerSpace = meta.story({
 		user: READER,
 		onCreateSection: fn(),
 		onRenameSection: fn(),
-		onReorderSections: fn(),
 		onDeleteSection: fn(),
-		onMoveBotToSection: fn(),
+		onPinRoster: fn(),
 	},
 	parameters: {
 		docs: {
@@ -3449,7 +3641,8 @@ const conversationArgs = () => ({
 	onSelectConversation: fn(),
 	onOpenConversationSettings: fn(),
 	onDeleteConversation: fn(),
-	onMoveConversationToSection: fn(),
+	onPinRoster: fn(),
+	selectedSpaceId: HOME,
 })
 
 const stackIn = (row: HTMLElement) =>
@@ -3794,7 +3987,7 @@ export const ConversationRowMenu = meta.story({
 		const menu = await openRowMenu(canvasElement, "Launch review")
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["Settings", MOVE_TO, "Delete"])
+		).toEqual(["Settings", "Pin", MOVE_TO, "Delete"])
 		await expect(menu.queryByRole("menuitem", { name: "Duplicate" })).toBeNull()
 		await expect(menu.getAllByRole("separator")).toHaveLength(1)
 
@@ -3812,10 +4005,7 @@ export const ConversationRowMenu = meta.story({
 		await expect(targets[1]).toHaveAttribute("aria-checked", "true")
 
 		await userEvent.click(targets[2])
-		await expect(args.onMoveConversationToSection).toHaveBeenCalledWith(
-			"launch",
-			"shipping",
-		)
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
 
 		await userEvent.click(
 			(await openRowMenu(canvasElement, "Launch review")).getByRole(
@@ -3924,13 +4114,12 @@ export const DragConversationToSection = meta.story({
 		...conversationArgs(),
 		bots: SECTIONED_ROSTER,
 		sections: SECTIONS,
-		onMoveBotToSection: fn(),
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Filing a room by hand, which is the gesture a bot row already answers to. A press that then moves lifts the room: it is reduced to the stack of its bots, which follows the pointer while the row stays where it stood, and the section it would land in lightens under it. Releasing reports the room and the section through `onMoveConversationToSection` — the same call the menu branch makes, and never the bot handler, so a host that files the two into different stores is not asked to tell them apart. The click a release would fire is swallowed, so a drag never doubles as opening the room.",
+					"Filing a room by hand, which is the gesture a bot row already answers to. A press that then moves lifts the room: it is reduced to the stack of its bots, which follows the pointer while the row stays where it stood. Releasing reports the whole pinned zone through `onPinRoster` — the same call the menu branch makes for a bot, so a host writes one order rather than telling rooms and bots apart. The click a release would fire is swallowed, so a drag never doubles as opening the room.",
 			},
 		},
 	},
@@ -3945,11 +4134,7 @@ export const DragConversationToSection = meta.story({
 		await expect(isLightened(shipping)).toBe(true)
 
 		dropOver(handle, shipping)
-		await expect(args.onMoveConversationToSection).toHaveBeenCalledWith(
-			"migration",
-			"shipping",
-		)
-		await expect(args.onMoveBotToSection).not.toHaveBeenCalled()
+		await expect(args.onPinRoster).toHaveBeenCalledTimes(1)
 		await expect(args.onSelectConversation).not.toHaveBeenCalled()
 		await expect(liftedBot()).toBeNull()
 	},

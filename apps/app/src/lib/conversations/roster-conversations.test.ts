@@ -32,6 +32,7 @@ const conversation = (fields: Partial<Conversation> = {}): Conversation => ({
 	id: "c-1",
 	spaceId: "personal",
 	sectionId: null,
+	pinPosition: null,
 	title: "Launch",
 	instructions: "",
 	createdAt: 1,
@@ -57,11 +58,12 @@ const atRest = (
 ): ConversationRosterActivity => ({ working: {}, previews })
 
 describe("toRosterConversations", () => {
-	it("draws a row carrying the title, the section and the participants in join order", () => {
+	it("draws a row carrying the title, the pin, the section and the participants in join order", () => {
 		const rows = toRosterConversations(
 			[
 				conversation({
 					sectionId: "n-1",
+					pinPosition: 2,
 					participants: [
 						participant({ botId: "b-1", role: "lead", name: "Chef" }),
 						participant({ botId: "b-2", name: "Sous-chef" }),
@@ -77,6 +79,7 @@ describe("toRosterConversations", () => {
 				id: "c-1",
 				name: "Launch",
 				sectionId: "n-1",
+				pinPosition: 2,
 				participants: [
 					{
 						id: "b-1",
@@ -283,6 +286,7 @@ const bot = (fields: Partial<Bot> = {}): Bot => ({
 	changesNothing: false,
 	memory: "",
 	sectionId: null,
+	pinPosition: null,
 	...fields,
 })
 

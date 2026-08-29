@@ -6,9 +6,9 @@ use opennest_app::agent::commands::check;
 use opennest_app::agent::contract::{
 	ActivityKind, AgentEvent, ConnectionState, PermissionDecision, TurnOutcome,
 };
+use opennest_app::agent::redact;
 use opennest_app::agent::session::{Bundle, EventSink, Session, SessionOptions};
 use opennest_app::agent::sidecar::{self, Sidecar, SidecarOptions};
-use opennest_app::agent::redact;
 use opennest_app::bundles;
 use opennest_app::db::repositories::conversations::{AvatarAnimal, Bot};
 use tokio::sync::mpsc;
@@ -62,6 +62,7 @@ fn probe_bot(id: &str, instructions: &str, model: &str) -> Bot {
 		id: id.to_owned(),
 		space_id: "personal".to_owned(),
 		section_id: None,
+		pin_position: None,
 		name: PROBE_NAME.to_owned(),
 		title: String::new(),
 		model: model.to_owned(),

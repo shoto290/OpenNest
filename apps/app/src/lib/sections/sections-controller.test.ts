@@ -14,7 +14,10 @@ import type { TranscriptStore } from "../conversations/store-port"
 const silentBots: BotSections = {
 	move: () => undefined,
 	clear: () => undefined,
+	pin: () => undefined,
 }
+
+const atTop = (id: string) => ({ id, sectionId: null })
 
 const entered = async (
 	store: TranscriptStore,
@@ -34,7 +37,7 @@ describe("createSectionsController", () => {
 		const store = createFakeTranscriptStore()
 		const writers = await store.createSection("personal", "Writers")
 		const readers = await store.createSection("personal", "Readers")
-		await store.reorderSections("personal", [readers.id, writers.id])
+		await store.pinRoster("personal", [atTop(readers.id), atTop(writers.id)])
 
 		const controller = await entered(store)
 
@@ -155,7 +158,7 @@ describe("createSectionsController", () => {
 		const readers = await store.createSection("personal", "Readers")
 		const controller = await entered(store)
 
-		await controller.reorder("personal", [readers.id, writers.id])
+		await controller.pin("personal", [atTop(readers.id), atTop(writers.id)])
 
 		expect(names(controller)).toEqual(["Readers", "Writers"])
 		expect((await store.sections("personal")).map((one) => one.name)).toEqual([
@@ -222,17 +225,17 @@ describe("createSectionsController", () => {
 		await vi.waitFor(() => expect(names(controller)).toEqual(["Writers"]))
 	})
 
-	it("restores the sections it held when a reorder is refused", async () => {
+	it("restores the sections it held when a pin is refused", async () => {
 		const store = createFakeTranscriptStore()
 		const writers = await store.createSection("personal", "Writers")
 		const readers = await store.createSection("personal", "Readers")
 		const controller = await entered(store)
-		vi.spyOn(store, "reorderSections").mockRejectedValue({
+		vi.spyOn(store, "pinRoster").mockRejectedValue({
 			kind: "foreignSection",
 			id: readers.id,
 		})
 
-		await controller.reorder("personal", [readers.id, writers.id])
+		await controller.pin("personal", [atTop(readers.id), atTop(writers.id)])
 
 		await vi.waitFor(() =>
 			expect(names(controller)).toEqual(["Writers", "Readers"]),

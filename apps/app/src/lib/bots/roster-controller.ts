@@ -17,6 +17,7 @@ import type {
 	Conversation,
 	ConversationDraft,
 	Participant,
+	RosterPin,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import {
@@ -73,6 +74,7 @@ export type RosterController = {
 	uploadAvatar: (id: string, file: File) => Promise<void>
 	remember: (id: string, memory: string) => Promise<void>
 	moveToSection: (botId: string, sectionId: string | null) => void
+	pin: (pins: RosterPin[]) => void
 	moveToSpace: (botId: string, spaceId: string) => Promise<Bot | null>
 	clearSection: (sectionId: string) => void
 	askToDelete: (id: string) => void
@@ -112,6 +114,20 @@ export const initialRosterState: RosterState = {
 	isEditingConversation: false,
 	hasLoaded: false,
 }
+
+const LOOSE = { sectionId: null, pinPosition: null }
+
+type Placement = { sectionId: string | null; pinPosition: number }
+
+const relocated = <Row extends { id: string }>(
+	rows: Row[],
+	placed: Map<string, Placement>,
+) => rows.map((row) => ({ ...row, ...(placed.get(row.id) ?? LOOSE) }))
+
+const LAST_PIN = Number.MAX_SAFE_INTEGER
+
+const pinnedLast = (sectionId: string | null) =>
+	sectionId === null ? null : LAST_PIN
 
 type Landing = {
 	selectedBotId: string | null
@@ -610,8 +626,24 @@ export const createRosterController = (
 		moveToSection: (botId: string, sectionId: string | null) => {
 			const bot = held(botId)
 			if (bot) {
-				apply({ ...bot, sectionId })
+				apply({ ...bot, sectionId, pinPosition: pinnedLast(sectionId) })
 			}
+		},
+
+		pin: (pins: RosterPin[]) => {
+			const placed = new Map(
+				pins.map((pin, pinPosition) => [
+					pin.id,
+					{ sectionId: pin.sectionId, pinPosition },
+				]),
+			)
+			set({
+				rosters: withRoster(state.spaceId, relocated(state.bots, placed)),
+				conversationRosters: withConversations(
+					state.spaceId,
+					relocated(state.conversations, placed),
+				),
+			})
 		},
 
 		clearSection: (sectionId: string) => {
@@ -672,7 +704,11 @@ export const createRosterController = (
 				if (!held) {
 					return
 				}
-				applyConversation({ ...held, sectionId })
+				applyConversation({
+					...held,
+					sectionId,
+					pinPosition: pinnedLast(sectionId),
+				})
 				await store.updateConversation(conversationId, {
 					title: held.title,
 					instructions: held.instructions,

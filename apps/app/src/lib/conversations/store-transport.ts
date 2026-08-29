@@ -18,6 +18,7 @@ import type {
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
+	RosterPin,
 	RuntimeSession,
 	Section,
 	Space,
@@ -66,8 +67,8 @@ export const conversationStore: TranscriptStore = {
 	renameSection: (id: string, name: string) =>
 		invoke<Section>("section_rename", { id, name }),
 
-	reorderSections: (spaceId: string, ids: string[]) =>
-		invoke<void>("section_reorder", { spaceId, ids }),
+	pinRoster: (spaceId: string, pins: RosterPin[]) =>
+		invoke<void>("roster_pin", { spaceId, pins }),
 
 	deleteSection: (id: string) => invoke<void>("section_delete", { id }),
 

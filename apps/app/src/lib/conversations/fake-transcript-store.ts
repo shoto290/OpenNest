@@ -25,6 +25,7 @@ import type {
 	NewUserMessage,
 	Participant,
 	ParticipantRole,
+	RosterPin,
 	RuntimeSession,
 	Section,
 	SectionError,
@@ -69,6 +70,7 @@ const DEFAULT_BOT: Bot = {
 	memory: "",
 	createdAt: 0,
 	sectionId: null,
+	pinPosition: null,
 }
 
 const DEFAULT_SPACE: Space = {
@@ -456,6 +458,18 @@ export const createFakeTranscriptStore = (
 		participants: participantsOf(stored.id),
 	})
 
+	const nextPin = (spaceId: string) =>
+		Math.max(
+			-1,
+			...sectionsOf(spaceId).map((section) => section.position),
+			...[...bots.values()]
+				.filter((bot) => spaceOf.get(bot.id) === spaceId)
+				.map((bot) => bot.pinPosition ?? -1),
+			...[...conversations.values()]
+				.filter((stored) => stored.spaceId === spaceId)
+				.map((stored) => stored.pinPosition ?? -1),
+		) + 1
+
 	const sectionsOf = (spaceId: string) =>
 		[...sections.values()]
 			.filter((section) => section.spaceId === spaceId)
@@ -626,15 +640,44 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve(written)
 		},
 
-		reorderSections: (spaceId: string, ids: string[]) => {
-			const foreign = ids.find((id) => sections.get(id)?.spaceId !== spaceId)
-			if (foreign) {
-				return refuse({ kind: "foreignSection", id: foreign })
+		pinRoster: (spaceId: string, pins: RosterPin[]) => {
+			const stranger = pins.find(
+				({ id }) =>
+					sections.get(id)?.spaceId !== spaceId &&
+					spaceOf.get(id) !== spaceId &&
+					conversations.get(id)?.spaceId !== spaceId,
+			)
+			if (stranger) {
+				return refuse({ kind: "unknownSection", id: stranger.id })
 			}
-			ids.forEach((id, position) => {
-				const stored = sections.get(id)
+			for (const [id, bot] of bots) {
+				if (spaceOf.get(id) === spaceId) {
+					bots.set(id, { ...bot, sectionId: null, pinPosition: null })
+				}
+			}
+			for (const [id, stored] of conversations) {
+				if (stored.spaceId === spaceId) {
+					conversations.set(id, {
+						...stored,
+						sectionId: null,
+						pinPosition: null,
+					})
+				}
+			}
+			pins.forEach(({ id, sectionId }, position) => {
+				const section = sections.get(id)
+				if (section) {
+					sections.set(id, { ...section, position })
+					return
+				}
+				const bot = bots.get(id)
+				if (bot) {
+					bots.set(id, { ...bot, sectionId, pinPosition: position })
+					return
+				}
+				const stored = conversations.get(id)
 				if (stored) {
-					sections.set(id, { ...stored, position })
+					conversations.set(id, { ...stored, sectionId, pinPosition: position })
 				}
 			})
 			return Promise.resolve()
@@ -671,7 +714,12 @@ export const createFakeTranscriptStore = (
 					return refuse({ kind: "foreignSection", id: sectionId })
 				}
 			}
-			bots.set(botId, { ...bot, sectionId })
+			bots.set(botId, {
+				...bot,
+				sectionId,
+				pinPosition:
+					sectionId === null ? null : nextPin(spaceOf.get(botId) ?? ""),
+			})
 			return Promise.resolve()
 		},
 
@@ -704,6 +752,7 @@ export const createFakeTranscriptStore = (
 					changesNothing: deniesChanges(identity.deniedTools),
 					memory: "",
 					sectionId: null,
+					pinPosition: null,
 				},
 				spaceId ?? firstSpace(),
 			),
@@ -720,6 +769,7 @@ export const createFakeTranscriptStore = (
 					name: unsharedName(`${source.name} copy`, destination),
 					sectionId:
 						spaceOf.get(botId) === destination ? source.sectionId : null,
+					pinPosition: null,
 				},
 				destination,
 			)
@@ -975,6 +1025,7 @@ export const createFakeTranscriptStore = (
 				id: `conversation-${mintedConversations}`,
 				spaceId: draft.spaceId,
 				sectionId: draft.sectionId,
+				pinPosition: draft.sectionId === null ? null : nextPin(draft.spaceId),
 				title: draft.title,
 				instructions: "",
 				createdAt: mintedConversations,
@@ -1007,7 +1058,14 @@ export const createFakeTranscriptStore = (
 					return refuse({ kind: "foreignSection", id: edit.sectionId })
 				}
 			}
-			const written: StoredConversation = { ...stored, ...edit }
+			const written: StoredConversation = {
+				...stored,
+				...edit,
+				pinPosition:
+					edit.sectionId === null || !stored.spaceId
+						? null
+						: nextPin(stored.spaceId),
+			}
 			conversations.set(conversationId, written)
 			return Promise.resolve(drawnConversation(written))
 		},

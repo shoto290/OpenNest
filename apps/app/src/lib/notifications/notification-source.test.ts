@@ -73,6 +73,7 @@ const conversation = (id: string, title: string): Conversation => ({
 	id,
 	spaceId: "space-one",
 	sectionId: null,
+	pinPosition: null,
 	title,
 	instructions: "",
 	createdAt: 0,

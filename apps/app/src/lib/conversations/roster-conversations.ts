@@ -157,6 +157,7 @@ export const toRosterConversations = (
 			id: conversation.id,
 			name: conversationName(conversation),
 			sectionId: conversation.sectionId,
+			pinPosition: conversation.pinPosition,
 			participants: toSeatedRows(seated, workers),
 			lastMessage: previewText(conversation, preview),
 			lastSpeaker: speakerNameAmong(seated, preview),
