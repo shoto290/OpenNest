@@ -120,3 +120,34 @@ export const Confirmed = meta.story({
 		await expect(args.onConfirm).toHaveBeenCalledTimes(1)
 	},
 })
+
+export const Rejected = meta.story({
+	args: {
+		defaultOpen: true,
+		failureLabel: "This could not be removed. Nothing changed — try again.",
+		onConfirm: fn(() => Promise.reject(new Error("removal refused"))),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The confirmed press that fails on the other side. Reach for this whenever `onConfirm` reaches a disk or a host that can say no: the question is held up on what it named instead of closing on a press that changed nothing, the destructive action is disabled while the callback is in flight so a slow write cannot be fired twice, and `failureLabel` is announced inside the question. Without a `failureLabel` the dialog still holds, silently — pass one wherever the callback can reject.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await confirmation()
+
+		await userEvent.click(
+			within(popup).getByRole("button", { name: "Delete skill" }),
+		)
+
+		await expect(
+			await within(popup).findByText(
+				"This could not be removed. Nothing changed — try again.",
+			),
+		).toBeVisible()
+		await expect(popup).toBeVisible()
+		await expect(args.onConfirm).toHaveBeenCalledTimes(1)
+	},
+})

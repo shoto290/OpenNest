@@ -20,6 +20,7 @@ type SettingsFieldProps = {
 	rows?: number
 	fill?: boolean
 	readOnly?: boolean
+	masked?: boolean
 }
 
 const SettingsField = ({
@@ -33,6 +34,7 @@ const SettingsField = ({
 	rows,
 	fill = false,
 	readOnly = false,
+	masked = false,
 }: SettingsFieldProps) => {
 	const id = useId()
 	const hintId = hint ? `${id}-hint` : undefined
@@ -75,6 +77,7 @@ const SettingsField = ({
 					<input
 						aria-describedby={describedBy}
 						aria-invalid={error ? true : undefined}
+						autoComplete={masked ? "off" : undefined}
 						className={cn(
 							FIELD_CONTROL_CLASS,
 							error && FIELD_CONTROL_INVALID_CLASS,
@@ -85,7 +88,8 @@ const SettingsField = ({
 						onChange={emit}
 						placeholder={placeholder}
 						readOnly={readOnly}
-						type="text"
+						spellCheck={masked ? false : undefined}
+						type={masked ? "password" : "text"}
 						value={value}
 					/>
 				</div>

@@ -204,7 +204,9 @@ const HistoryPanel = ({
 			<ConfirmDialog
 				confirmLabel={t("history.undo.confirm")}
 				description={t("history.undo.description")}
-				onConfirm={() => reverting && onRevert(reverting.id)}
+				onConfirm={() => {
+					if (reverting) onRevert(reverting.id)
+				}}
 				onOpenChange={(open) => !open && setReverting(null)}
 				open={Boolean(reverting)}
 				title={t("history.undo.title", { title: reverting?.title ?? "" })}

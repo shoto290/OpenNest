@@ -1,10 +1,10 @@
 "use client"
 
 import { AlertDialog } from "@base-ui/react/alert-dialog"
-import type { ReactNode } from "react"
+import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { buttonVariants } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
 import {
 	BACKDROP_CLASS,
 	DIALOG_POPUP_CLASS,
@@ -20,7 +20,8 @@ type ConfirmDialogProps = {
 	title: string
 	description: string
 	confirmLabel: string
-	onConfirm: () => void
+	onConfirm: () => void | Promise<void>
+	failureLabel?: string
 	defaultOpen?: boolean
 }
 
@@ -34,16 +35,36 @@ const ConfirmDialog = ({
 	description,
 	confirmLabel,
 	onConfirm,
+	failureLabel,
 	defaultOpen,
 }: ConfirmDialogProps) => {
 	const { t } = useTranslation("common")
+	const [isOpen, setOpen] = useState(Boolean(defaultOpen))
+	const [isConfirming, setConfirming] = useState(false)
+	const [hasFailed, setFailed] = useState(false)
+
+	const change = (next: boolean) => {
+		setOpen(next)
+		setFailed(false)
+		onOpenChange?.(next)
+	}
+
+	const confirm = async () => {
+		setFailed(false)
+		setConfirming(true)
+
+		try {
+			await onConfirm()
+			change(false)
+		} catch {
+			setFailed(true)
+		} finally {
+			setConfirming(false)
+		}
+	}
 
 	return (
-		<AlertDialog.Root
-			defaultOpen={defaultOpen}
-			onOpenChange={onOpenChange}
-			open={open}
-		>
+		<AlertDialog.Root onOpenChange={change} open={open ?? isOpen}>
 			{trigger ? (
 				<AlertDialog.Trigger
 					className={triggerClassName}
@@ -68,18 +89,26 @@ const ConfirmDialog = ({
 							{description}
 						</AlertDialog.Description>
 					</div>
+					{hasFailed && failureLabel ? (
+						<p className="text-destructive text-xs" role="alert">
+							{failureLabel}
+						</p>
+					) : null}
 					<div className="flex justify-end gap-2">
 						<AlertDialog.Close
 							className={buttonVariants({ variant: "outline", size: "sm" })}
+							disabled={isConfirming}
 						>
 							{t("confirm.cancel")}
 						</AlertDialog.Close>
-						<AlertDialog.Close
-							className={buttonVariants({ variant: "destructive", size: "sm" })}
-							onClick={onConfirm}
+						<Button
+							disabled={isConfirming}
+							onClick={confirm}
+							size="sm"
+							variant="destructive"
 						>
 							{confirmLabel}
-						</AlertDialog.Close>
+						</Button>
 					</div>
 				</AlertDialog.Popup>
 			</AlertDialog.Portal>
