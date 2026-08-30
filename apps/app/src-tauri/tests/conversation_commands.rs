@@ -1961,7 +1961,7 @@ fn a_duplicated_bot_carries_the_bundle_and_none_of_the_transcript() {
 
 	let root = bundles::root(app.handle()).expect("the bundle root");
 	let manifest = json_at(&bundle.join(".claude-plugin").join("plugin.json"));
-	assert_eq!(manifest["name"], json!(duplicate_id));
+	assert_eq!(manifest["name"], json!(bundle.file_name().and_then(|it| it.to_str())));
 	assert_eq!(manifest["mcpServers"], json!("./.mcp.json"));
 	assert!(
 		bundles::agent_file(&root, &duplicate_id).is_some(),

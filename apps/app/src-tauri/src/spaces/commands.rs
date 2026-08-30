@@ -254,6 +254,10 @@ mod tests {
 		root
 	}
 
+	fn bundle_name(slug: &str, bot_id: &str) -> String {
+		format!("{slug}-{}", &bot_id[..8])
+	}
+
 	fn a_bundle(root: &Path, bot_id: &str) -> PathBuf {
 		let bundle = bundles::dir(root, bot_id);
 		fs::create_dir_all(&bundle).expect("the bundle stands");
@@ -330,8 +334,8 @@ mod tests {
 
 		let listed =
 			fs::read_to_string(bundles::marketplace_file(&root)).expect("the marketplace is there");
-		assert!(!listed.contains(&cascaded), "got {listed}");
-		assert!(listed.contains(&kept), "got {listed}");
+		assert!(!listed.contains(&bundle_name("bean", &cascaded)), "got {listed}");
+		assert!(listed.contains(&bundle_name("sprout", &kept)), "got {listed}");
 		assert!(!bundles::dir(&root, &cascaded).exists());
 
 		let _ = fs::remove_dir_all(&root);
