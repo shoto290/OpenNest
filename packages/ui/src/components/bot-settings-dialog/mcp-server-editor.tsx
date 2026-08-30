@@ -24,6 +24,10 @@ import {
 import { McpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import {
+	EnvironmentPanel,
+	type EnvironmentSection,
+} from "@workspace/ui/components/environment-panel"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
@@ -78,6 +82,7 @@ type McpServerEditorProps = {
 	onBack: () => void
 	onSave: (config: Record<string, unknown>) => void
 	onDelete?: () => void
+	environment?: EnvironmentSection
 	defaultSection?: string
 	defaultConfirming?: boolean
 	defaultLeaving?: boolean
@@ -91,6 +96,7 @@ const McpServerEditor = ({
 	onBack,
 	onSave,
 	onDelete,
+	environment,
 	defaultSection,
 	defaultConfirming,
 	defaultLeaving,
@@ -336,6 +342,15 @@ const McpServerEditor = ({
 					) : (
 						unreadable
 					)}
+					{environment ? (
+						<EnvironmentPanel
+							entries={environment.entries}
+							hasFailedToRead={environment.hasFailedToRead}
+							onDelete={environment.onDelete}
+							onSet={environment.onSet}
+							scope="server"
+						/>
+					) : null}
 				</SettingsScrollingPanel>
 
 				<SettingsScrollingPanel value="advanced">

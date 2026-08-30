@@ -20,9 +20,7 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
-import { toEnvironmentRows } from "@/lib/bots/environment-rows"
 import { toSkillDraft, toSkillFiles, toSkillItem } from "@/lib/bots/skill-draft"
-import { useBotEnvironment } from "@/lib/bots/use-bot-environment"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
@@ -51,6 +49,8 @@ import {
 	useConversationWorkers,
 } from "@/lib/conversations/use-conversation"
 import { useConversationBadges } from "@/lib/conversations/use-conversation-badges"
+import { toEnvironmentRows } from "@/lib/environment/environment-rows"
+import { useEnvironment } from "@/lib/environment/use-environment"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
@@ -116,8 +116,9 @@ export function App() {
 	const collapsedSections = useCollapsedSections(store)
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
-	const botEnvironment = useBotEnvironment(store)
-	const spaceEnvironment = useBotEnvironment(store)
+	const botEnvironment = useEnvironment(store)
+	const spaceEnvironment = useEnvironment(store)
+	const serverEnvironment = useEnvironment(store)
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -171,6 +172,7 @@ export function App() {
 		(conversation) => conversation.id === selectedConversationId,
 	)
 	const [isCreatingConversation, setIsCreatingConversation] = useState(false)
+	const [openedMcpServer, setOpenedMcpServer] = useState<string | null>(null)
 
 	const { selectedSpaceId, isSettingsOpen: isSpaceEditing } = spaces.state
 	const selectedSpace = spaces.state.spaces.find(
@@ -255,6 +257,21 @@ export function App() {
 			})
 		}
 	}, [spaceEnvironment.controller, isSpaceEditing, selectedSpaceId])
+
+	useEffect(() => {
+		if (openedMcpServer && selectedBotId && selectedSpaceId) {
+			void serverEnvironment.controller.open({
+				kind: "server",
+				name: openedMcpServer,
+				owner: { kind: "bot", id: selectedBotId, spaceId: selectedSpaceId },
+			})
+		}
+	}, [
+		serverEnvironment.controller,
+		openedMcpServer,
+		selectedBotId,
+		selectedSpaceId,
+	])
 
 	useEffect(() => {
 		if (!selectedBotId) {
@@ -578,6 +595,14 @@ export function App() {
 						botEnvironment.controller.set(name, value)
 					}
 					onEnvironmentDelete={botEnvironment.controller.remove}
+					onMcpServerOpen={setOpenedMcpServer}
+					serverEnvironment={{
+						entries: toEnvironmentRows(serverEnvironment.state.entries),
+						hasFailedToRead: serverEnvironment.state.hasFailedToRead,
+						onSet: ({ name, value }) =>
+							serverEnvironment.controller.set(name, value),
+						onDelete: serverEnvironment.controller.remove,
+					}}
 					models={modelOptionsFor(selected.model, catalogue)}
 					outputStyle={readBotOutputStyle(selected.outputStyle)}
 					memory={selected.memory}

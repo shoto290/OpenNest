@@ -17,6 +17,7 @@ import {
 	BOT_MCP_SERVERS,
 	LONG_MCP_SERVER,
 } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
+import { SERVER_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 
 const [LOCAL, REMOTE] = BOT_MCP_SERVERS
 
@@ -206,6 +207,32 @@ export const Environment = meta.story({
 				args: LOCAL.config.args,
 			}),
 		)
+	},
+})
+
+export const ServerVariables = meta.story({
+	args: {
+		defaultSection: "environment",
+		environment: {
+			entries: SERVER_ENVIRONMENT,
+			onSet: fn(),
+			onDelete: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The two halves of the Environment section, together. The field above declares which names the server receives and carries its variable references; the list below holds the names this server owns, written once and never read back. A name defined here wins over the same name on the bot, which wins over the space, and every row says which scope actually serves it.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByRole("textbox", { name: "Environment" }),
+		).toBeVisible()
+		await expect(canvas.getByText("LEDGER_KEY")).toBeVisible()
+		await expect(canvas.getByText("SERVER_TIMEOUT_MS")).toBeVisible()
 	},
 })
 

@@ -8,12 +8,12 @@ import {
 
 import type { TranscriptStore } from "../conversations/store-port"
 
-export type BotEnvironment = {
+export type Environment = {
 	state: EnvironmentState
 	controller: EnvironmentController
 }
 
-export const useBotEnvironment = (store: TranscriptStore): BotEnvironment => {
+export const useEnvironment = (store: TranscriptStore): Environment => {
 	const [controller] = useState(() => createEnvironmentController(store))
 	const state = useSyncExternalStore(controller.subscribe, controller.getState)
 

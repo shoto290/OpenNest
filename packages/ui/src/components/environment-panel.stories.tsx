@@ -7,11 +7,11 @@ import {
 	LONG_ENVIRONMENT_ENTRY,
 	SERVER_ENVIRONMENT,
 	SPACE_ENVIRONMENT,
-} from "@workspace/ui/components/bot-settings-dialog/environment.fixtures"
-import { EnvironmentPanel } from "@workspace/ui/components/bot-settings-dialog/environment-panel"
+} from "@workspace/ui/components/environment.fixtures"
+import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 
 const meta = preview.meta({
-	title: "Settings/Bot/EnvironmentPanel",
+	title: "Settings/Environment",
 	component: EnvironmentPanel,
 	parameters: {
 		layout: "fullscreen",

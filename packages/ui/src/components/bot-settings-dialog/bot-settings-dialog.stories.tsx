@@ -25,9 +25,9 @@ import {
 	type BotSettingsDialogProps,
 	type BotSettingsValue,
 } from "@workspace/ui/components/bot-settings-dialog"
-import { BOT_ENVIRONMENT } from "@workspace/ui/components/bot-settings-dialog/environment.fixtures"
 import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { BOT_MEMORY } from "@workspace/ui/components/bot-settings-dialog/memory.fixtures"
+import { BOT_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import {
 	BOT_SKILLS,

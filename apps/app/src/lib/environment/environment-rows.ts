@@ -1,4 +1,4 @@
-import type { EnvironmentEntry } from "@workspace/ui/components/bot-settings-dialog"
+import type { EnvironmentEntry } from "@workspace/ui/components/environment-panel"
 
 import type { EnvEntry } from "../conversations/store-contract"
 
