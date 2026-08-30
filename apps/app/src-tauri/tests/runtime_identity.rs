@@ -203,6 +203,14 @@ fn an_identity(instructions: Option<&str>, working_dir: Option<&Path>) -> Value 
 	})
 }
 
+fn bundle_name_of(harness: &Harness, bot: &str) -> String {
+	bundle_of(harness, bot)
+		.file_name()
+		.expect("the bundle directory")
+		.to_string_lossy()
+		.into_owned()
+}
+
 fn bundle_of(harness: &Harness, bot: &str) -> PathBuf {
 	let root = bundles::root(harness.app.handle()).expect("the bundle root");
 	bundles::dir(&root, bot)
@@ -345,7 +353,8 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	assert!(!written.contains("skills:"), "got {written}");
 	assert!(!written.contains("permissionMode"), "got {written}");
 
-	assert_eq!(listed_plugins(&harness), vec![(bot.clone(), format!("./plugins/{bot}"))]);
+	let named = bundle_name_of(&harness, &bot);
+	assert_eq!(listed_plugins(&harness), vec![(named.clone(), format!("./plugins/{named}"))]);
 
 	let skill = bundle.join("skills").join("baking").join("SKILL.md");
 	std::fs::create_dir_all(skill.parent().expect("the skill directory")).expect("made");

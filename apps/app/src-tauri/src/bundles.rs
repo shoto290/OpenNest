@@ -61,6 +61,8 @@ const VERSION: &str = "0.1.0";
 
 const UNNAMED: &str = "bot";
 
+const STAMP_LENGTH: usize = 8;
+
 const BOT_SUBJECT: &str = "Bot";
 const SKILL_SUBJECT: &str = "Skill";
 const SKILL_FILE_SUBJECT: &str = "Skill file";
@@ -138,7 +140,42 @@ pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 }
 
 pub fn dir(root: &Path, bot_id: &str) -> PathBuf {
-	root.join(PLUGINS_DIR).join(bot_id)
+	let plugins = root.join(PLUGINS_DIR);
+	held_dir(&plugins, bot_id).unwrap_or_else(|| plugins.join(bot_id))
+}
+
+fn held_dir(plugins: &Path, bot_id: &str) -> Option<PathBuf> {
+	let by_id = plugins.join(bot_id);
+	if by_id.is_dir() {
+		return Some(by_id);
+	}
+	let suffix = format!("-{}", stamp(bot_id));
+	fs::read_dir(plugins).ok()?.flatten().find_map(|entry| {
+		let path = entry.path();
+		let named = entry.file_name().to_string_lossy().ends_with(&suffix);
+		(named && path.is_dir()).then_some(path)
+	})
+}
+
+pub fn dir_name(bot: &Bot) -> String {
+	format!("{}-{}", slug(&bot.name), stamp(&bot.id))
+}
+
+fn stamp(bot_id: &str) -> String {
+	bot_id.chars().take(STAMP_LENGTH).collect()
+}
+
+fn settled(root: &Path, bot: &Bot) {
+	let held = dir(root, &bot.id);
+	let target = root.join(PLUGINS_DIR).join(dir_name(bot));
+	if held == target || target.exists() {
+		return;
+	}
+	if held.is_dir() {
+		let _ = fs::rename(held, &target);
+		return;
+	}
+	let _ = private_files::create_dir(&target);
 }
 
 pub fn slug(name: &str) -> String {
@@ -159,7 +196,7 @@ pub fn slug(name: &str) -> String {
 }
 
 pub fn agent_ref(bot: &Bot) -> String {
-	format!("{}:{AGENT_NAME}", bot.id)
+	format!("{}:{AGENT_NAME}", dir_name(bot))
 }
 
 fn generated_agent(root: &Path, bot_id: &str) -> Option<PathBuf> {
@@ -360,6 +397,7 @@ pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
 
 pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
 	write_briefed(root, bot, &bot.instructions, &kept_memory(root, bot), output_style)?;
+	settled(root, bot);
 	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "saved from settings");
 	Ok(())
 }
@@ -453,6 +491,7 @@ fn agent_path(root: &Path, bot_id: &str) -> PathBuf {
 }
 
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	settled(root, bot);
 	if agent_file(root, &bot.id).is_some() {
 		rewrite_agent(root, bot)?;
 		recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "added to the history");
@@ -542,9 +581,10 @@ pub fn write_marketplace(root: &Path, bots: &[Bot]) -> std::io::Result<()> {
 	let plugins: Vec<serde_json::Value> = bots
 		.iter()
 		.map(|bot| {
+			let named = dir_name(bot);
 			serde_json::json!({
-				"name": &bot.id,
-				"source": format!("./{PLUGINS_DIR}/{}", bot.id),
+				"name": &named,
+				"source": format!("./{PLUGINS_DIR}/{named}"),
 				"description": describe(bot),
 			})
 		})
@@ -554,7 +594,7 @@ pub fn write_marketplace(root: &Path, bots: &[Bot]) -> std::io::Result<()> {
 		"owner": { "name": OWNER },
 		"plugins": plugins,
 	});
-	private_files::replace(&marketplace_file(root), listed.to_string().as_bytes())
+	private_files::replace(&marketplace_file(root), indented_json(&listed).as_bytes())
 }
 
 fn describe(bot: &Bot) -> &str {
@@ -567,12 +607,16 @@ fn describe(bot: &Bot) -> &str {
 
 fn manifest(path: &Path, bundle: &Path, bot: &Bot) -> String {
 	let mut kept = object_at(path);
-	kept.insert("name".to_owned(), bot.id.clone().into());
+	kept.insert("name".to_owned(), dir_name(bot).into());
 	kept.insert("version".to_owned(), VERSION.into());
 	kept.insert("displayName".to_owned(), bot.name.clone().into());
 	kept.insert("description".to_owned(), describe(bot).into());
 	declare_servers(&mut kept, bundle);
-	serde_json::Value::Object(kept).to_string()
+	indented_json(&serde_json::Value::Object(kept))
+}
+
+fn indented_json(value: &serde_json::Value) -> String {
+	serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
 
 fn rewrite_manifest(root: &Path, bot: &Bot) -> std::io::Result<()> {
@@ -602,7 +646,7 @@ fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 		return Ok(());
 	}
 	kept.remove(SERVERS_KEY);
-	private_files::replace(&path, serde_json::Value::Object(kept).to_string().as_bytes())
+	private_files::replace(&path, indented_json(&serde_json::Value::Object(kept)).as_bytes())
 }
 
 pub fn held_memory(written: Option<&Generated>, stored: &str) -> String {
@@ -1773,9 +1817,10 @@ mod tests {
 		let manifest =
 			fs::read_to_string(dir(&root, &bot.id).join(MANIFEST_DIR).join(MANIFEST_NAME))
 				.expect("the manifest is there");
-		assert!(manifest.contains("\"name\":\"b1\""), "got {manifest}");
-		assert!(manifest.contains("\"displayName\":\"Bean\""), "got {manifest}");
-		assert_eq!(agent_ref(&bot), "b1:agent");
+		assert!(manifest.contains("\"name\": \"bean-b1\""), "got {manifest}");
+		assert!(manifest.contains("\"displayName\": \"Bean\""), "got {manifest}");
+		assert_eq!(dir(&root, &bot.id).file_name().and_then(|it| it.to_str()), Some("bean-b1"));
+		assert_eq!(agent_ref(&bot), "bean-b1:agent");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);
@@ -2222,10 +2267,10 @@ mod tests {
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 
-		let dir = dir(&root, &bot.id);
-		let skill = dir.join("skills").join("baking").join("SKILL.md");
-		let handwritten = dir.join(AGENTS_DIR).join("helper.md");
-		let servers = dir.join(".mcp.json");
+		let held = dir(&root, &bot.id);
+		let skill = held.join("skills").join("baking").join("SKILL.md");
+		let handwritten = held.join(AGENTS_DIR).join("helper.md");
+		let servers = held.join(".mcp.json");
 		for (path, content) in
 			[(&skill, "how to bake"), (&handwritten, "a subagent"), (&servers, "{}")]
 		{
@@ -2236,9 +2281,14 @@ mod tests {
 		bot.title = "Baker".to_owned();
 		write(&root, &bot).expect("the bundle is written again");
 
-		assert_eq!(fs::read_to_string(&skill).ok().as_deref(), Some("how to bake"));
-		assert_eq!(fs::read_to_string(&handwritten).ok().as_deref(), Some("a subagent"));
-		assert_eq!(fs::read_to_string(&servers).ok().as_deref(), Some("{}"));
+		let moved = dir(&root, &bot.id);
+		for (path, content) in [
+			(skill.strip_prefix(&held).expect("under the bundle"), "how to bake"),
+			(handwritten.strip_prefix(&held).expect("under the bundle"), "a subagent"),
+			(servers.strip_prefix(&held).expect("under the bundle"), "{}"),
+		] {
+			assert_eq!(fs::read_to_string(moved.join(path)).ok().as_deref(), Some(content));
+		}
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -2264,7 +2314,7 @@ mod tests {
 			serde_json::from_str(&fs::read_to_string(&path).expect("the manifest is there"))
 				.expect("the manifest is json");
 		assert_eq!(kept["mcpServers"], "./.mcp.json");
-		assert_eq!(kept["name"], "b1");
+		assert_eq!(kept["name"], "bean-b1");
 		assert_eq!(kept["displayName"], "Bean");
 		assert_eq!(kept["description"], "Baker");
 
@@ -2295,15 +2345,17 @@ mod tests {
 		let root = a_root("renamed");
 		let mut bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
-		let agent = agent_path(&root, &bot.id);
+		let taken = agent_path(&root, &bot.id);
 
 		bot.name = "Fig".to_owned();
 		write(&root, &bot).expect("the bundle is written again");
 
+		let agent = agent_path(&root, &bot.id);
+		assert!(!taken.exists(), "the bundle stayed under the old name");
 		assert_eq!(agent_file(&root, &bot.id).as_ref(), Some(&agent));
 		let written = fs::read_to_string(&agent).expect("the agent is there");
 		assert!(written.contains("name: \"agent\""), "got {written}");
-		assert_eq!(agent_ref(&bot), "b1:agent");
+		assert_eq!(agent_ref(&bot), "fig-b1:agent");
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);
@@ -2519,8 +2571,12 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
+	fn dropped_skill(root: &Path, bot_id: &str, skill_id: &str) -> PathBuf {
+		dir(root, bot_id).join(SKILLS_DIR).join(skill_id).join(SKILL_NAME)
+	}
+
 	fn drop_a_skill(root: &Path, bot_id: &str, name: &str, preload: bool, body: &str) -> PathBuf {
-		let path = dir(root, bot_id).join(SKILLS_DIR).join(name).join(SKILL_NAME);
+		let path = dropped_skill(root, bot_id, name);
 		let mark = if preload { "metadata:\n  opennest:\n    preload: true\n" } else { "" };
 		private_files::replace(
 			&path,
@@ -2549,7 +2605,11 @@ mod tests {
 		assert!(written.contains("# baking"), "got {written}");
 		assert!(written.contains("Bake at 220 degrees."), "got {written}");
 		assert!(!written.contains("Knead for ten minutes."), "got {written}");
-		assert!(quiet.is_file(), "the unmarked skill was taken off the disk");
+		assert!(
+			dropped_skill(&root, &bot.id, "kneading").is_file(),
+			"the unmarked skill was taken off the disk, it was at {}",
+			quiet.display()
+		);
 		assert_eq!(instructions(&root, &bot.id).as_deref(), Some("Answer briefly."));
 
 		let _ = fs::remove_dir_all(&root);
@@ -2736,10 +2796,11 @@ mod tests {
 		let root = a_root("dropped");
 		let bot = a_bot("Bean", "Answer briefly.");
 		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
-		let kneading = drop_a_skill(&root, &bot.id, "kneading", true, "Knead for ten minutes.");
+		drop_a_skill(&root, &bot.id, "kneading", true, "Knead for ten minutes.");
 		write(&root, &bot).expect("the bundle is written");
 
 		drop_a_skill(&root, &bot.id, "baking", false, "Bake at 220 degrees.");
+		let kneading = dropped_skill(&root, &bot.id, "kneading");
 		fs::remove_dir_all(kneading.parent().expect("the skill directory")).expect("taken away");
 		write(&root, &bot).expect("the bundle is written again");
 
@@ -2784,8 +2845,7 @@ mod tests {
 	}
 
 	fn written_skill_file(root: &Path, bot_id: &str, skill_id: &str) -> String {
-		fs::read_to_string(dir(root, bot_id).join(SKILLS_DIR).join(skill_id).join(SKILL_NAME))
-			.expect("the skill file reads")
+		fs::read_to_string(dropped_skill(root, bot_id, skill_id)).expect("the skill file reads")
 	}
 
 	#[test]
@@ -3418,12 +3478,101 @@ mod tests {
 		.expect("the marketplace is json");
 
 		assert_eq!(listed["name"], MARKETPLACE);
-		assert_eq!(listed["plugins"][0]["name"], "b1");
-		assert_eq!(listed["plugins"][0]["source"], "./plugins/b1");
-		assert_eq!(listed["plugins"][1]["name"], "b2");
-		assert_eq!(listed["plugins"][1]["source"], "./plugins/b2");
+		assert_eq!(listed["plugins"][0]["name"], "bean-b1");
+		assert_eq!(listed["plugins"][0]["source"], "./plugins/bean-b1");
+		assert_eq!(listed["plugins"][1]["name"], "fig-b2");
+		assert_eq!(listed["plugins"][1]["source"], "./plugins/fig-b2");
 
 		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn both_files_the_marketplace_needs_are_written_a_reader_can_follow() {
+		let root = a_root("indented");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		write_marketplace(&root, std::slice::from_ref(&bot)).expect("the marketplace is written");
+
+		for path in [marketplace_file(&root), manifest_file(&dir(&root, &bot.id))] {
+			let text = fs::read_to_string(&path).expect("the file is there");
+			let held: serde_json::Value = serde_json::from_str(&text).expect("the file is json");
+			assert_eq!(text, indented_json(&held), "got {text}");
+			assert!(text.contains("\n  \""), "got {text}");
+		}
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bundle_still_named_after_the_bot_id_moves_once_and_keeps_its_history() {
+		let root = a_root("migrated");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let legacy = root.join(PLUGINS_DIR).join(&bot.id);
+		write_at_legacy_name(&root, &bot);
+		let untracked = legacy.join(SKILLS_DIR).join("baking").join("notes.md");
+		private_files::replace(&untracked, b"how to bake").expect("the loose file lands");
+
+		ensure(&root, &bot).expect("the bundle is completed");
+
+		let moved = dir(&root, &bot.id);
+		assert_eq!(moved, root.join(PLUGINS_DIR).join("bean-b1"));
+		assert!(!legacy.exists(), "the bundle stayed under the bot id");
+		assert_eq!(
+			fs::read_to_string(moved.join(SKILLS_DIR).join("baking").join("notes.md"))
+				.ok()
+				.as_deref(),
+			Some("how to bake")
+		);
+		assert!(
+			titles(&root, &bot.id).iter().any(|title| title.contains("Bean")),
+			"the history did not travel"
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bundle_whose_name_is_taken_stays_where_it_is() {
+		let root = a_root("taken-name");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let legacy = root.join(PLUGINS_DIR).join(&bot.id);
+		write_at_legacy_name(&root, &bot);
+		let squatter = root.join(PLUGINS_DIR).join("bean-b1");
+		private_files::replace(&squatter.join("README.md"), b"somebody else").expect("it lands");
+
+		ensure(&root, &bot).expect("the bundle is completed");
+
+		assert_eq!(dir(&root, &bot.id), legacy);
+		assert!(agent_file(&root, &bot.id).is_some_and(|path| path.starts_with(&legacy)));
+		assert_eq!(
+			fs::read_to_string(squatter.join("README.md")).ok().as_deref(),
+			Some("somebody else")
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_deleted_bot_takes_its_own_bundle_and_nothing_beside_it() {
+		let root = a_root("deleted");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let mut other = a_bot("Fig", "Answer at length.");
+		other.id = "b2".to_owned();
+		write(&root, &bot).expect("the first bundle is written");
+		write(&root, &other).expect("the second bundle is written");
+
+		remove(&root, &bot.id);
+
+		assert!(!root.join(PLUGINS_DIR).join("bean-b1").exists());
+		assert!(root.join(PLUGINS_DIR).join("fig-b2").is_dir());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	fn write_at_legacy_name(root: &Path, bot: &Bot) {
+		write(root, bot).expect("the bundle is written");
+		fs::rename(dir(root, &bot.id), root.join(PLUGINS_DIR).join(&bot.id))
+			.expect("the bundle takes the old name");
 	}
 
 	fn titles(root: &Path, bot_id: &str) -> Vec<String> {
