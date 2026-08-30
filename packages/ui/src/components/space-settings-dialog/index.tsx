@@ -16,6 +16,7 @@ import {
 	HistoryPanel,
 	type PluginHistory,
 } from "@workspace/ui/components/plugin-settings/history-panel"
+import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import {
 	DANGER_RAIL_ITEM_CLASS,
@@ -47,6 +48,7 @@ type SpaceSettingsDialogProps = {
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
+	skillFiles?: PluginSkillFiles
 	history: PluginHistory
 	onDelete: () => void
 	isDeletable?: boolean
@@ -63,6 +65,7 @@ const SpaceSettingsDialog = ({
 	onSkillChange,
 	onSkillPreloadedChange,
 	onSkillDelete,
+	skillFiles,
 	history,
 	onDelete,
 	isDeletable = true,
@@ -74,6 +77,7 @@ const SpaceSettingsDialog = ({
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const spaceName = value.name.trim() || t("space.untitled")
 	const skillSession = useSkillSession({
+		files: skillFiles,
 		onSkillChange,
 		onSkillCreate,
 		onSkillDelete,

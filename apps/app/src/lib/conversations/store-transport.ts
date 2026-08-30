@@ -131,6 +131,29 @@ export const conversationStore: TranscriptStore = {
 	deleteBotSkill: (botId: string, skillId: string) =>
 		invoke<void>("conversation_delete_bot_skill", { botId, skillId }),
 
+	botSkillFile: (botId: string, skillId: string, path: string) =>
+		invoke<string>("conversation_bot_skill_file", { botId, skillId, path }),
+
+	writeBotSkillFile: (
+		botId: string,
+		skillId: string,
+		path: string,
+		text: string,
+	) =>
+		invoke<BotSkill>("conversation_write_bot_skill_file", {
+			botId,
+			skillId,
+			path,
+			text,
+		}),
+
+	deleteBotSkillFile: (botId: string, skillId: string, path: string) =>
+		invoke<void>("conversation_delete_bot_skill_file", {
+			botId,
+			skillId,
+			path,
+		}),
+
 	botMcpServers: (botId: string) =>
 		invoke<BotMcpServer[]>("conversation_bot_mcp_servers", { botId }),
 
@@ -174,6 +197,15 @@ export const conversationStore: TranscriptStore = {
 	deleteUserPluginSkill: (skillId: string) =>
 		invoke<void>("user_plugin_delete_skill", { skillId }),
 
+	userPluginSkillFile: (skillId: string, path: string) =>
+		invoke<string>("user_plugin_skill_file", { skillId, path }),
+
+	writeUserPluginSkillFile: (skillId: string, path: string, text: string) =>
+		invoke<BotSkill>("user_plugin_write_skill_file", { skillId, path, text }),
+
+	deleteUserPluginSkillFile: (skillId: string, path: string) =>
+		invoke<void>("user_plugin_delete_skill_file", { skillId, path }),
+
 	userPluginHistory: () => invoke<BotHistoryEntry[]>("user_plugin_history"),
 
 	userPluginHistoryDiff: (commitId: string) =>
@@ -208,6 +240,29 @@ export const conversationStore: TranscriptStore = {
 
 	deleteSpacePluginSkill: (spaceId: string, skillId: string) =>
 		invoke<void>("space_plugin_delete_skill", { spaceId, skillId }),
+
+	spacePluginSkillFile: (spaceId: string, skillId: string, path: string) =>
+		invoke<string>("space_plugin_skill_file", { spaceId, skillId, path }),
+
+	writeSpacePluginSkillFile: (
+		spaceId: string,
+		skillId: string,
+		path: string,
+		text: string,
+	) =>
+		invoke<BotSkill>("space_plugin_write_skill_file", {
+			spaceId,
+			skillId,
+			path,
+			text,
+		}),
+
+	deleteSpacePluginSkillFile: (
+		spaceId: string,
+		skillId: string,
+		path: string,
+	) =>
+		invoke<void>("space_plugin_delete_skill_file", { spaceId, skillId, path }),
 
 	spacePluginHistory: (spaceId: string) =>
 		invoke<BotHistoryEntry[]>("space_plugin_history", { spaceId }),

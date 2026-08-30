@@ -65,6 +65,22 @@ export type TranscriptStore = TranscriptPort & {
 		isPreloaded: boolean,
 	) => Promise<BotSkill>
 	deleteBotSkill: (botId: string, skillId: string) => Promise<void>
+	botSkillFile: (
+		botId: string,
+		skillId: string,
+		path: string,
+	) => Promise<string>
+	writeBotSkillFile: (
+		botId: string,
+		skillId: string,
+		path: string,
+		text: string,
+	) => Promise<BotSkill>
+	deleteBotSkillFile: (
+		botId: string,
+		skillId: string,
+		path: string,
+	) => Promise<void>
 	botMcpServers: (botId: string) => Promise<BotMcpServer[]>
 	setBotMcpServer: (
 		botId: string,
@@ -86,6 +102,13 @@ export type TranscriptStore = TranscriptPort & {
 		isPreloaded: boolean,
 	) => Promise<BotSkill>
 	deleteUserPluginSkill: (skillId: string) => Promise<void>
+	userPluginSkillFile: (skillId: string, path: string) => Promise<string>
+	writeUserPluginSkillFile: (
+		skillId: string,
+		path: string,
+		text: string,
+	) => Promise<BotSkill>
+	deleteUserPluginSkillFile: (skillId: string, path: string) => Promise<void>
 	userPluginHistory: () => Promise<BotHistoryEntry[]>
 	userPluginHistoryDiff: (commitId: string) => Promise<string>
 	revertUserPlugin: (commitId: string) => Promise<BotHistoryEntry[]>
@@ -105,6 +128,22 @@ export type TranscriptStore = TranscriptPort & {
 		isPreloaded: boolean,
 	) => Promise<BotSkill>
 	deleteSpacePluginSkill: (spaceId: string, skillId: string) => Promise<void>
+	spacePluginSkillFile: (
+		spaceId: string,
+		skillId: string,
+		path: string,
+	) => Promise<string>
+	writeSpacePluginSkillFile: (
+		spaceId: string,
+		skillId: string,
+		path: string,
+		text: string,
+	) => Promise<BotSkill>
+	deleteSpacePluginSkillFile: (
+		spaceId: string,
+		skillId: string,
+		path: string,
+	) => Promise<void>
 	spacePluginHistory: (spaceId: string) => Promise<BotHistoryEntry[]>
 	spacePluginHistoryDiff: (spaceId: string, commitId: string) => Promise<string>
 	revertSpacePlugin: (

@@ -13,6 +13,8 @@ import {
 	DETAILED_SKILL,
 	LONG_SKILL,
 	OVER_BUDGET_SKILL,
+	SKILL_FILE_PATHS,
+	SKILL_FILES,
 	SYSTEM_SKILL,
 } from "@workspace/ui/components/plugin-settings/skills.fixtures"
 
@@ -363,5 +365,72 @@ export const WithConfirmation = meta.story({
 
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBe(null))
 		await expect(args.onDelete).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const Files = meta.story({
+	args: {
+		defaultSection: "files",
+		files: {
+			paths: SKILL_FILE_PATHS,
+			opened: null,
+			onOpen: fn(),
+			onClose: fn(),
+			onAdd: fn(),
+			onSave: fn(),
+			onDelete: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill that holds more than its own instructions, opened on its directory. The section only exists for a host that passed the files group — a skill kept nowhere but in this dialog gets one rail entry fewer rather than an empty one. Check that the skill's own header, name and save stay exactly where they are while a file is picked underneath them: opening a file is a move inside the skill, not out of it. Pick `SkillFilesPanel` for the states the section itself takes.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const [example] = SKILL_FILE_PATHS
+
+		await userEvent.click(canvas.getByRole("button", { name: example }))
+
+		await expect(args.files?.onOpen).toHaveBeenCalledWith(example)
+		await expect(
+			canvas.getByRole("button", { name: "Save skill" }),
+		).toBeVisible()
+	},
+})
+
+export const FileOpened = meta.story({
+	args: {
+		defaultSection: "files",
+		files: {
+			paths: SKILL_FILE_PATHS,
+			opened: {
+				path: SKILL_FILE_PATHS[1],
+				text: SKILL_FILES[SKILL_FILE_PATHS[1]],
+			},
+			onOpen: fn(),
+			onClose: fn(),
+			onAdd: fn(),
+			onSave: fn(),
+			onDelete: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"One of those files open, on the whole width the sections have. Check that the file's own header sits under the skill's rather than replacing it, that the contents take the height the section leaves, and that the two saves are told apart by name — one writes the skill, the other writes the file.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByLabelText("Contents")).toHaveValue(
+			SKILL_FILES[SKILL_FILE_PATHS[1]],
+		)
+		await expect(
+			canvas.getByRole("button", { name: "Save file" }),
+		).toBeVisible()
 	},
 })

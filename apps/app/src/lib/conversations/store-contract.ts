@@ -79,6 +79,7 @@ export type BotSkill = BotSkillFront & {
 	body: string
 	isPreloaded: boolean
 	isSystem: boolean
+	files: string[]
 }
 
 export type BotSkillValue =

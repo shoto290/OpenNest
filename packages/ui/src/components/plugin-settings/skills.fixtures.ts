@@ -104,3 +104,13 @@ export const SYSTEM_SKILL: BotSkillItem = {
 	isPreloaded: true,
 	isSystem: true,
 }
+
+export const SKILL_FILES: Record<string, string> = {
+	"examples/1.4.0.md":
+		"# 1.4.0\n\nWhat a finished entry reads like, kept as the one example to copy.",
+	"reference/frontmatter.md":
+		"# Frontmatter\n\nEvery field a release entry may carry, and what each one is read for.",
+	"scripts/collect.sh": '#!/bin/sh\n\ngit log --oneline "$1"..HEAD',
+}
+
+export const SKILL_FILE_PATHS = Object.keys(SKILL_FILES)

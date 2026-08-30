@@ -37,6 +37,7 @@ import {
 	HistoryPanel,
 	type PluginHistory,
 } from "@workspace/ui/components/plugin-settings/history-panel"
+import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
@@ -79,6 +80,7 @@ type BotSettingsDialogProps = {
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
+	skillFiles?: PluginSkillFiles
 	mcpServers: BotMcpServerItem[]
 	onMcpServerCreate: (name: string, config: Record<string, unknown>) => void
 	onMcpServerChange: (
@@ -113,6 +115,7 @@ const BotSettingsDialog = ({
 	onSkillChange,
 	onSkillPreloadedChange,
 	onSkillDelete,
+	skillFiles,
 	mcpServers,
 	onMcpServerCreate,
 	onMcpServerChange,
@@ -133,6 +136,7 @@ const BotSettingsDialog = ({
 	const botName = value.name.trim() || t("dialog.untitled")
 	const skillSession = useSkillSession({
 		skills,
+		files: skillFiles,
 		onSkillChange,
 		onSkillCreate,
 		onSkillDelete,

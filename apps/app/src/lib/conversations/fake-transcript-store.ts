@@ -178,6 +178,7 @@ const learnSkill = (): BotSkill => ({
 	body: "Your own directory is the plugin root you were given.",
 	isPreloaded: true,
 	isSystem: true,
+	files: [],
 })
 
 export const createFakeTranscriptStore = (
@@ -199,6 +200,7 @@ export const createFakeTranscriptStore = (
 	let mintedSections = 0
 	const commands = new Map<string, AgentCommand[]>()
 	const skills = new Map<string, BotSkill[]>([[DEFAULT_BOT.id, [learnSkill()]]])
+	const skillFiles = new Map<string, Map<string, string>>()
 	const history = new Map<string, BotHistoryEntry[]>()
 	let committed = 0
 	const servers = new Map<string, Map<string, Record<string, unknown>>>()
@@ -305,11 +307,61 @@ export const createFakeTranscriptStore = (
 	const historyEntry = (botId: string, commitId: string) =>
 		history.get(botId)?.find((entry) => entry.id === commitId)
 
+	const filesKey = (owner: string, skillId: string) => `${owner}/${skillId}`
+
+	const heldFiles = (owner: string, skillId: string) =>
+		skillFiles.get(filesKey(owner, skillId)) ?? new Map<string, string>()
+
+	const withFiles = (owner: string, skill: BotSkill): BotSkill => ({
+		...skill,
+		files: [...heldFiles(owner, skill.id).keys()].sort(),
+	})
+
+	const readSkillFile = (owner: string, skillId: string, path: string) => {
+		const text = heldFiles(owner, skillId).get(path)
+		return text === undefined
+			? refuse({ kind: "unwritableBundle", detail: "no such file" })
+			: Promise.resolve(text)
+	}
+
+	const putSkillFile = (
+		owner: string,
+		skillId: string,
+		path: string,
+		text: string,
+	) =>
+		writeSkill(
+			owner,
+			skillId,
+			(skill) => skill,
+			`file "${path}" saved from settings`,
+		).then((skill) => {
+			skillFiles.set(
+				filesKey(owner, skillId),
+				heldFiles(owner, skillId).set(path, text),
+			)
+			return withFiles(owner, skill)
+		})
+
+	const dropSkillFile = (owner: string, skillId: string, path: string) => {
+		if (!heldFiles(owner, skillId).has(path)) {
+			return refuse({ kind: "unwritableBundle", detail: "no such file" })
+		}
+		return writeSkill(
+			owner,
+			skillId,
+			(skill) => skill,
+			`file "${path}" taken away`,
+		).then(() => {
+			heldFiles(owner, skillId).delete(path)
+		})
+	}
+
 	const listSkills = (owner: string) =>
 		Promise.resolve(
-			[...(skills.get(owner) ?? [])].sort((left, right) =>
-				left.id.localeCompare(right.id),
-			),
+			[...(skills.get(owner) ?? [])]
+				.sort((left, right) => left.id.localeCompare(right.id))
+				.map((skill) => withFiles(owner, skill)),
 		)
 
 	const addSkill = (owner: string, draft: BotSkillDraft) => {
@@ -320,6 +372,7 @@ export const createFakeTranscriptStore = (
 			id: freeSkillId(held, draft.name),
 			isPreloaded: false,
 			isSystem: false,
+			files: [],
 		}
 		skills.set(owner, [...held, created])
 		recorded(owner, `Skill "${created.name}" saved from settings`)
@@ -366,7 +419,7 @@ export const createFakeTranscriptStore = (
 			held.map((skill) => (skill.id === skillId ? written : skill)),
 		)
 		recorded(botId, `Skill "${written.name}" ${verb}`)
-		return Promise.resolve(written)
+		return Promise.resolve(withFiles(botId, written))
 	}
 
 	const remember = (id: string, target: string | null) => {
@@ -859,6 +912,19 @@ export const createFakeTranscriptStore = (
 		deleteBotSkill: (botId: string, skillId: string) =>
 			dropSkill(botId, skillId),
 
+		botSkillFile: (botId: string, skillId: string, path: string) =>
+			readSkillFile(botId, skillId, path),
+
+		writeBotSkillFile: (
+			botId: string,
+			skillId: string,
+			path: string,
+			text: string,
+		) => putSkillFile(botId, skillId, path, text),
+
+		deleteBotSkillFile: (botId: string, skillId: string, path: string) =>
+			dropSkillFile(botId, skillId, path),
+
 		botMcpServers: (botId: string): Promise<BotMcpServer[]> =>
 			Promise.resolve(
 				[...(servers.get(botId)?.entries() ?? [])]
@@ -922,6 +988,15 @@ export const createFakeTranscriptStore = (
 
 		deleteUserPluginSkill: (skillId: string) => dropSkill(USER_PLUGIN, skillId),
 
+		userPluginSkillFile: (skillId: string, path: string) =>
+			readSkillFile(USER_PLUGIN, skillId, path),
+
+		writeUserPluginSkillFile: (skillId: string, path: string, text: string) =>
+			putSkillFile(USER_PLUGIN, skillId, path, text),
+
+		deleteUserPluginSkillFile: (skillId: string, path: string) =>
+			dropSkillFile(USER_PLUGIN, skillId, path),
+
 		userPluginHistory: () => Promise.resolve(historyOf(USER_PLUGIN)),
 
 		userPluginHistoryDiff: (commitId: string) => {
@@ -960,6 +1035,22 @@ export const createFakeTranscriptStore = (
 
 		deleteSpacePluginSkill: (spaceId: string, skillId: string) =>
 			dropSkill(spacePlugin(spaceId), skillId),
+
+		spacePluginSkillFile: (spaceId: string, skillId: string, path: string) =>
+			readSkillFile(spacePlugin(spaceId), skillId, path),
+
+		writeSpacePluginSkillFile: (
+			spaceId: string,
+			skillId: string,
+			path: string,
+			text: string,
+		) => putSkillFile(spacePlugin(spaceId), skillId, path, text),
+
+		deleteSpacePluginSkillFile: (
+			spaceId: string,
+			skillId: string,
+			path: string,
+		) => dropSkillFile(spacePlugin(spaceId), skillId, path),
 
 		spacePluginHistory: (spaceId: string) =>
 			Promise.resolve(historyOf(spacePlugin(spaceId))),

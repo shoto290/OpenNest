@@ -1,3 +1,9 @@
+import {
+	createSkillFilesController,
+	type OpenedSkillFile,
+	type SkillFilesController,
+} from "./skill-files-controller"
+
 import { createQueue } from "../queue"
 import type { BotSkill, BotSkillDraft } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
@@ -5,9 +11,10 @@ import type { TranscriptStore } from "../conversations/store-port"
 export type SkillsState = {
 	botId: string | null
 	skills: BotSkill[]
+	file: OpenedSkillFile | null
 }
 
-export type SkillsController = {
+export type SkillsController = SkillFilesController & {
 	getState: () => SkillsState
 	subscribe: (listener: () => void) => () => void
 	open: (botId: string) => Promise<void>
@@ -18,7 +25,11 @@ export type SkillsController = {
 	remove: (skillId: string) => void
 }
 
-export const initialSkillsState: SkillsState = { botId: null, skills: [] }
+export const initialSkillsState: SkillsState = {
+	botId: null,
+	skills: [],
+	file: null,
+}
 
 export const createSkillsController = (
 	store: TranscriptStore,
@@ -69,7 +80,27 @@ export const createSkillsController = (
 		}
 	}
 
+	const openBot = () => state.botId ?? ""
+
+	const files = createSkillFilesController(
+		{
+			read: (skillId, path) => store.botSkillFile(openBot(), skillId, path),
+			write: (skillId, path, text) =>
+				store.writeBotSkillFile(openBot(), skillId, path, text),
+			remove: (skillId, path) =>
+				store.deleteBotSkillFile(openBot(), skillId, path),
+		},
+		{
+			run: (task) => onOpenBot(() => task()),
+			getFile: () => state.file,
+			setFile: (file) => set({ file }),
+			getSkills: () => state.skills,
+			applySkill,
+		},
+	)
+
 	return {
+		...files,
 		getState: () => state,
 
 		subscribe: (listener) => {
@@ -80,7 +111,7 @@ export const createSkillsController = (
 		},
 
 		open: (botId: string) => {
-			set({ botId, skills: [] })
+			set({ botId, skills: [], file: null })
 			return enqueue(() => read(botId)).catch(() => undefined)
 		},
 
@@ -96,9 +127,11 @@ export const createSkillsController = (
 			}),
 
 		save: (skillId: string, draft: BotSkillDraft) =>
-			onOpenBot(async (botId) =>
-				applySkill(skillId, await store.updateBotSkill(botId, skillId, draft)),
-			),
+			onOpenBot(async (botId) => {
+				const saved = await store.updateBotSkill(botId, skillId, draft)
+				applySkill(skillId, saved)
+				files.carryFile(skillId, saved.id)
+			}),
 
 		setPreloaded: (skillId: string, isPreloaded: boolean) => {
 			applySkill(skillId, { isPreloaded })

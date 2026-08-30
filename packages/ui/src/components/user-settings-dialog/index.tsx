@@ -16,6 +16,7 @@ import {
 	HistoryPanel,
 	type PluginHistory,
 } from "@workspace/ui/components/plugin-settings/history-panel"
+import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsField } from "@workspace/ui/components/settings-field"
@@ -56,6 +57,7 @@ type UserSettingsDialogProps = {
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
+	skillFiles?: PluginSkillFiles
 	history: PluginHistory
 	className?: string
 }
@@ -74,6 +76,7 @@ const UserSettingsDialog = ({
 	onSkillChange,
 	onSkillPreloadedChange,
 	onSkillDelete,
+	skillFiles,
 	history,
 	className,
 }: UserSettingsDialogProps) => {
@@ -84,6 +87,7 @@ const UserSettingsDialog = ({
 	const displayName = displayNameOf(value.name)
 	const skillSession = useSkillSession({
 		skills,
+		files: skillFiles,
 		onSkillChange,
 		onSkillCreate,
 		onSkillDelete,
