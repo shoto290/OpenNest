@@ -38,7 +38,7 @@ export const createEnvironmentController = (
 
 	const read = (scope: EnvScope) =>
 		store
-			.envList(scope)
+			.environmentVariables(scope)
 			.then((entries) => {
 				if (state.scope === scope) {
 					set({ entries })
@@ -71,8 +71,9 @@ export const createEnvironmentController = (
 		},
 
 		set: (name: string, value: string) =>
-			write((scope) => store.envSet(scope, name, value)),
+			write((scope) => store.setEnvironmentVariable(scope, name, value)),
 
-		remove: (name: string) => write((scope) => store.envDelete(scope, name)),
+		remove: (name: string) =>
+			write((scope) => store.deleteEnvironmentVariable(scope, name)),
 	}
 }

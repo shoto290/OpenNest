@@ -971,7 +971,7 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve({ name, config })
 		},
 
-		envList: (scope: EnvScope) => {
+		environmentVariables: (scope: EnvScope) => {
 			const entries: EnvEntry[] = []
 			for (const step of scopeChain(scope)) {
 				for (const name of environment.get(scopeKey(step))?.keys() ?? []) {
@@ -985,14 +985,14 @@ export const createFakeTranscriptStore = (
 			)
 		},
 
-		envSet: (scope: EnvScope, name: string, value: string) => {
+		setEnvironmentVariable: (scope: EnvScope, name: string, value: string) => {
 			const held = environment.get(scopeKey(scope)) ?? new Map<string, string>()
 			held.set(name, value)
 			environment.set(scopeKey(scope), held)
 			return Promise.resolve()
 		},
 
-		envDelete: (scope: EnvScope, name: string) => {
+		deleteEnvironmentVariable: (scope: EnvScope, name: string) => {
 			environment.get(scopeKey(scope))?.delete(name)
 			return Promise.resolve()
 		},

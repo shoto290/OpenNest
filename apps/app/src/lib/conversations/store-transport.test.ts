@@ -309,18 +309,24 @@ const WRITES: WriteCase[] = [
 		],
 	},
 	{
-		member: "envList",
-		write: () => conversationStore.envList(BOT_SCOPE),
+		member: "environmentVariables",
+		write: () => conversationStore.environmentVariables(BOT_SCOPE),
 		call: ["env_list", { scope: BOT_SCOPE }],
 	},
 	{
-		member: "envSet",
-		write: () => conversationStore.envSet(BOT_SCOPE, "ATLAS_TOKEN", "sk-1"),
+		member: "setEnvironmentVariable",
+		write: () =>
+			conversationStore.setEnvironmentVariable(
+				BOT_SCOPE,
+				"ATLAS_TOKEN",
+				"sk-1",
+			),
 		call: ["env_set", { scope: BOT_SCOPE, name: "ATLAS_TOKEN", value: "sk-1" }],
 	},
 	{
-		member: "envDelete",
-		write: () => conversationStore.envDelete(BOT_SCOPE, "ATLAS_TOKEN"),
+		member: "deleteEnvironmentVariable",
+		write: () =>
+			conversationStore.deleteEnvironmentVariable(BOT_SCOPE, "ATLAS_TOKEN"),
 		call: ["env_delete", { scope: BOT_SCOPE, name: "ATLAS_TOKEN" }],
 	},
 	{
