@@ -382,6 +382,39 @@ export const createFakeTranscriptStore = (
 				.map((skill) => withFiles(owner, skill)),
 		)
 
+	const listServers = (owner: string): Promise<BotMcpServer[]> =>
+		Promise.resolve(
+			[...(servers.get(owner)?.entries() ?? [])]
+				.map(([name, config]) => ({ name, config }))
+				.sort((left, right) => left.name.localeCompare(right.name)),
+		)
+
+	const putServer = (
+		owner: string,
+		name: string,
+		config: Record<string, unknown>,
+	) => {
+		if (!isPlainObject(config)) {
+			return refuse({
+				kind: "unwritableBundle",
+				detail: "a server configuration must be a JSON object",
+			})
+		}
+		const declared = servers.get(owner) ?? new Map()
+		declared.set(name, config)
+		servers.set(owner, declared)
+		recorded(owner, `Server "${name}" saved from settings`)
+		return Promise.resolve({ name, config })
+	}
+
+	const dropServer = (owner: string, name: string) => {
+		if (!servers.get(owner)?.delete(name)) {
+			return refuse({ kind: "unwritableBundle", detail: "no such server" })
+		}
+		recorded(owner, `Server "${name}" taken away`)
+		return Promise.resolve()
+	}
+
 	const addSkill = (owner: string, draft: BotSkillDraft) => {
 		const held = skills.get(owner) ?? []
 		const created: BotSkill = {
@@ -943,33 +976,32 @@ export const createFakeTranscriptStore = (
 		deleteBotSkillFile: (botId: string, skillId: string, path: string) =>
 			dropSkillFile(botId, skillId, path),
 
-		botMcpServers: (botId: string): Promise<BotMcpServer[]> =>
-			Promise.resolve(
-				[...(servers.get(botId)?.entries() ?? [])]
-					.map(([name, config]) => ({ name, config }))
-					.sort((left, right) => left.name.localeCompare(right.name)),
-			),
+		botMcpServers: (botId: string) => listServers(botId),
 
 		setBotMcpServer: (
 			botId: string,
 			name: string,
 			config: Record<string, unknown>,
-		) => {
-			if (!bots.has(botId)) {
-				return refuse({ kind: "unknownBot", id: botId })
-			}
-			if (!isPlainObject(config)) {
-				return refuse({
-					kind: "unwritableBundle",
-					detail: "a server configuration must be a JSON object",
-				})
-			}
-			const declared = servers.get(botId) ?? new Map()
-			declared.set(name, config)
-			servers.set(botId, declared)
-			recorded(botId, `Server "${name}" saved from settings`)
-			return Promise.resolve({ name, config })
-		},
+		) =>
+			bots.has(botId)
+				? putServer(botId, name, config)
+				: refuse({ kind: "unknownBot", id: botId }),
+
+		spaceMcpServers: (spaceId: string) => listServers(spacePlugin(spaceId)),
+
+		setSpaceMcpServer: (
+			spaceId: string,
+			name: string,
+			config: Record<string, unknown>,
+		) =>
+			spaces.has(spaceId)
+				? putServer(spacePlugin(spaceId), name, config)
+				: refuse({ kind: "unknownSpace", id: spaceId }),
+
+		deleteSpaceMcpServer: (spaceId: string, name: string) =>
+			spaces.has(spaceId)
+				? dropServer(spacePlugin(spaceId), name)
+				: refuse({ kind: "unknownSpace", id: spaceId }),
 
 		environmentVariables: (scope: EnvScope) => {
 			const entries: EnvEntry[] = []
@@ -997,16 +1029,10 @@ export const createFakeTranscriptStore = (
 			return Promise.resolve()
 		},
 
-		deleteBotMcpServer: (botId: string, name: string) => {
-			if (!bots.has(botId)) {
-				return refuse({ kind: "unknownBot", id: botId })
-			}
-			if (!servers.get(botId)?.delete(name)) {
-				return refuse({ kind: "unwritableBundle", detail: "no such server" })
-			}
-			recorded(botId, `Server "${name}" taken away`)
-			return Promise.resolve()
-		},
+		deleteBotMcpServer: (botId: string, name: string) =>
+			bots.has(botId)
+				? dropServer(botId, name)
+				: refuse({ kind: "unknownBot", id: botId }),
 
 		botHistory: (botId: string) => Promise.resolve(historyOf(botId)),
 

@@ -22,9 +22,9 @@ import {
 } from "@/lib/bots/bot-settings"
 import { toSkillDraft, toSkillFiles, toSkillItem } from "@/lib/bots/skill-draft"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
-import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
 import { useEvolution } from "@/lib/bots/use-evolution"
+import { useMcpServers } from "@/lib/bots/use-mcp-servers"
 import { useModelCatalogue } from "@/lib/bots/use-model-catalogue"
 import { useRoster } from "@/lib/bots/use-roster"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
@@ -44,6 +44,7 @@ import {
 	toRosterConversations,
 	unseatedBots,
 } from "@/lib/conversations/roster-conversations"
+import type { EnvScope } from "@/lib/conversations/store-contract"
 import {
 	useConversationPreviews,
 	useConversationWorkers,
@@ -115,7 +116,8 @@ export function App() {
 	})
 	const collapsedSections = useCollapsedSections(store)
 	const skills = useBotSkills(store)
-	const mcpServers = useBotMcpServers(store)
+	const botMcpServers = useMcpServers(store)
+	const spaceMcpServers = useMcpServers(store)
 	const botEnvironment = useEnvironment(store)
 	const spaceEnvironment = useEnvironment(store)
 	const serverEnvironment = useEnvironment(store)
@@ -172,7 +174,7 @@ export function App() {
 		(conversation) => conversation.id === selectedConversationId,
 	)
 	const [isCreatingConversation, setIsCreatingConversation] = useState(false)
-	const [openedMcpServer, setOpenedMcpServer] = useState<string | null>(null)
+	const [openedMcpServer, setOpenedMcpServer] = useState<EnvScope | null>(null)
 
 	const { selectedSpaceId, isSettingsOpen: isSpaceEditing } = spaces.state
 	const selectedSpace = spaces.state.spaces.find(
@@ -227,16 +229,21 @@ export function App() {
 	}, [user.controller])
 
 	useEffect(() => {
-		if (selectedBotId) {
+		if (selectedBotId && selectedSpaceId) {
 			void skills.controller.open(selectedBotId)
-			void mcpServers.controller.open(selectedBotId)
+			void botMcpServers.controller.open({
+				kind: "bot",
+				id: selectedBotId,
+				spaceId: selectedSpaceId,
+			})
 			void history.controller.open(selectedBotId)
 		}
 	}, [
 		history.controller,
-		mcpServers.controller,
+		botMcpServers.controller,
 		skills.controller,
 		selectedBotId,
+		selectedSpaceId,
 	])
 
 	useEffect(() => {
@@ -255,23 +262,23 @@ export function App() {
 				kind: "space",
 				id: selectedSpaceId,
 			})
-		}
-	}, [spaceEnvironment.controller, isSpaceEditing, selectedSpaceId])
-
-	useEffect(() => {
-		if (openedMcpServer && selectedBotId && selectedSpaceId) {
-			void serverEnvironment.controller.open({
-				kind: "server",
-				name: openedMcpServer,
-				owner: { kind: "bot", id: selectedBotId, spaceId: selectedSpaceId },
+			void spaceMcpServers.controller.open({
+				kind: "space",
+				id: selectedSpaceId,
 			})
 		}
 	}, [
-		serverEnvironment.controller,
-		openedMcpServer,
-		selectedBotId,
+		spaceEnvironment.controller,
+		spaceMcpServers.controller,
+		isSpaceEditing,
 		selectedSpaceId,
 	])
+
+	useEffect(() => {
+		if (openedMcpServer) {
+			void serverEnvironment.controller.open(openedMcpServer)
+		}
+	}, [serverEnvironment.controller, openedMcpServer])
 
 	useEffect(() => {
 		if (!selectedBotId) {
@@ -587,15 +594,29 @@ export function App() {
 							chat.controller.redescribe(selected.id)
 						},
 					}}
-					haveMcpServersFailedToLoad={mcpServers.state.hasFailedToLoad}
-					mcpServers={mcpServers.state.servers}
+					haveMcpServersFailedToLoad={botMcpServers.state.hasFailedToLoad}
+					mcpServers={botMcpServers.state.servers}
 					environment={toEnvironmentRows(botEnvironment.state.entries)}
 					hasEnvironmentFailedToRead={botEnvironment.state.hasFailedToRead}
 					onEnvironmentSet={({ name, value }) =>
 						botEnvironment.controller.set(name, value)
 					}
 					onEnvironmentDelete={botEnvironment.controller.remove}
-					onMcpServerOpen={setOpenedMcpServer}
+					onMcpServerOpen={(name) =>
+						setOpenedMcpServer(
+							name && selectedSpaceId
+								? {
+										kind: "server",
+										name,
+										owner: {
+											kind: "bot",
+											id: selected.id,
+											spaceId: selectedSpaceId,
+										},
+									}
+								: null,
+						)
+					}
 					serverEnvironment={{
 						entries: toEnvironmentRows(serverEnvironment.state.entries),
 						hasFailedToRead: serverEnvironment.state.hasFailedToRead,
@@ -630,9 +651,9 @@ export function App() {
 							chat.controller.redescribe(selected.id)
 						}
 					}}
-					onMcpServerChange={mcpServers.controller.rename}
-					onMcpServerCreate={mcpServers.controller.create}
-					onMcpServerDelete={mcpServers.controller.remove}
+					onMcpServerChange={botMcpServers.controller.rename}
+					onMcpServerCreate={botMcpServers.controller.create}
+					onMcpServerDelete={botMcpServers.controller.remove}
 					onSkillChange={(id, draft) =>
 						skills.controller.save(
 							id,
@@ -702,6 +723,29 @@ export function App() {
 				<SpaceSettingsDialog
 					environment={toEnvironmentRows(spaceEnvironment.state.entries)}
 					hasEnvironmentFailedToRead={spaceEnvironment.state.hasFailedToRead}
+					haveMcpServersFailedToLoad={spaceMcpServers.state.hasFailedToLoad}
+					mcpServers={spaceMcpServers.state.servers}
+					onMcpServerChange={spaceMcpServers.controller.rename}
+					onMcpServerCreate={spaceMcpServers.controller.create}
+					onMcpServerDelete={spaceMcpServers.controller.remove}
+					onMcpServerOpen={(name) =>
+						setOpenedMcpServer(
+							name
+								? {
+										kind: "server",
+										name,
+										owner: { kind: "space", id: selectedSpace.id },
+									}
+								: null,
+						)
+					}
+					serverEnvironment={{
+						entries: toEnvironmentRows(serverEnvironment.state.entries),
+						hasFailedToRead: serverEnvironment.state.hasFailedToRead,
+						onSet: ({ name, value }) =>
+							serverEnvironment.controller.set(name, value),
+						onDelete: serverEnvironment.controller.remove,
+					}}
 					history={{
 						commits: spacePlugin.state.commits.map(toCommitItem),
 						onLoadDiff: spacePlugin.controller.loadDiff,
