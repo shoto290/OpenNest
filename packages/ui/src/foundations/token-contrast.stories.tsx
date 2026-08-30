@@ -1,6 +1,8 @@
+import type { CSSProperties } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { BLOT_TINTS, blotTint } from "@workspace/ui/components/bot-avatar"
 import {
 	ACTION_TOKENS,
 	SIDEBAR_TOKENS,
@@ -37,6 +39,11 @@ const CROSS_FAMILY_PAIRS: TokenPair[] = [
 ]
 
 const TOKEN_PAIRS = [ROOT_PAIR, ...SUFFIXED_PAIRS, ...CROSS_FAMILY_PAIRS]
+
+const USER_BUBBLE_PAIR: TokenPair = {
+	background: "--user-bubble",
+	foreground: "--user-bubble-foreground",
+}
 
 const PAIRS_AWAITING_DESIGN_DECISION: Record<string, number> = {
 	"light --sidebar-primary-foreground on --sidebar-primary": 2.6,
@@ -193,6 +200,50 @@ export const SemanticPairsMeetAaText = meta.story({
 		await expect(
 			problems,
 			`Semantic token pairs failing their contrast floor:\n${problems.join("\n")}`,
+		).toEqual([])
+	},
+})
+
+export const TintedUserBubbleMeetsAaText = meta.story({
+	render: () => (
+		<>
+			{THEMES.map((scheme) => (
+				<div key={scheme} className={scheme} data-scheme-scope={scheme}>
+					{BLOT_TINTS.map((blot) => (
+						<div
+							key={blot}
+							data-blot-scope={blot}
+							data-space-tint={blot}
+							style={{ "--space-tint": blotTint(blot) } as CSSProperties}
+						/>
+					))}
+				</div>
+			))}
+		</>
+	),
+	play: async ({ canvasElement }) => {
+		const pixel = createPixel()
+		const measurements = THEMES.map((scheme) =>
+			probeTheme(pixel, canvasElement, scheme),
+		).flatMap((theme) =>
+			BLOT_TINTS.map((blot) => {
+				const scope = theme.scope.querySelector<HTMLElement>(
+					`[data-blot-scope="${blot}"]`,
+				)
+				if (!scope) {
+					throw new Error(`Missing tint scope for ${blot}.`)
+				}
+				return {
+					key: `${theme.scheme} ${blot} ${pairKey(theme.scheme, USER_BUBBLE_PAIR)}`,
+					ratio: measurePair(pixel, { ...theme, scope }, USER_BUBBLE_PAIR),
+				}
+			}),
+		)
+		const problems = failuresIn(measurements)
+
+		await expect(
+			problems,
+			`Tinted user bubbles failing their contrast floor:\n${problems.join("\n")}`,
 		).toEqual([])
 	},
 })
