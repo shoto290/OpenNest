@@ -7,6 +7,7 @@ export type BotCommit = BotHistoryEntry & { diff?: string }
 export type HistoryState = {
 	botId: string | null
 	commits: BotCommit[]
+	hasFailedToLoad: boolean
 }
 
 export type HistoryController = {
@@ -18,7 +19,11 @@ export type HistoryController = {
 	revert: (commitId: string) => void
 }
 
-const INITIAL_STATE: HistoryState = { botId: null, commits: [] }
+const INITIAL_STATE: HistoryState = {
+	botId: null,
+	commits: [],
+	hasFailedToLoad: false,
+}
 
 export const createHistoryController = (
 	store: TranscriptStore,
@@ -39,19 +44,24 @@ export const createHistoryController = (
 		publish()
 	}
 
-	const applyTo = (botId: string, commits: BotCommit[]) => {
+	const applyTo = (botId: string, fields: Partial<HistoryState>) => {
 		if (state.botId === botId) {
-			set({ commits })
+			set(fields)
 		}
 	}
 
 	const read = async (botId: string) =>
-		applyTo(botId, await store.botHistory(botId))
+		applyTo(botId, {
+			commits: await store.botHistory(botId),
+			hasFailedToLoad: false,
+		})
+
+	const noteFailedRead = () => set({ hasFailedToLoad: true })
 
 	const reload = () => {
 		const botId = state.botId
 		if (botId) {
-			void enqueue(() => read(botId)).catch(() => undefined)
+			void enqueue(() => read(botId)).catch(noteFailedRead)
 		}
 	}
 
@@ -73,8 +83,8 @@ export const createHistoryController = (
 		},
 
 		open: (botId: string) => {
-			set({ botId, commits: [] })
-			return enqueue(() => read(botId)).catch(() => undefined)
+			set({ botId, commits: [], hasFailedToLoad: false })
+			return enqueue(() => read(botId)).catch(noteFailedRead)
 		},
 
 		reload,
@@ -86,18 +96,17 @@ export const createHistoryController = (
 			}
 			onOpenBot(async (botId) => {
 				const diff = await store.botHistoryDiff(botId, commitId)
-				applyTo(
-					botId,
-					state.commits.map((commit) =>
+				applyTo(botId, {
+					commits: state.commits.map((commit) =>
 						commit.id === commitId ? { ...commit, diff } : commit,
 					),
-				)
+				})
 			})
 		},
 
 		revert: (commitId: string) =>
 			onOpenBot(async (botId) =>
-				applyTo(botId, await store.revertBot(botId, commitId)),
+				applyTo(botId, { commits: await store.revertBot(botId, commitId) }),
 			),
 	}
 }

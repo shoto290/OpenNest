@@ -10,12 +10,29 @@ import { SETTINGS_EMPTY_CLASS } from "@workspace/ui/components/settings-styles"
 
 type McpServersPanelProps = {
 	servers: BotMcpServerItem[]
+	haveFailedToLoad?: boolean
 	onOpen: (server: BotMcpServerItem) => void
 	onAdd: () => void
 }
 
-const McpServersPanel = ({ servers, onOpen, onAdd }: McpServersPanelProps) => {
+const McpServersPanel = ({
+	servers,
+	haveFailedToLoad = false,
+	onOpen,
+	onAdd,
+}: McpServersPanelProps) => {
 	const { t } = useTranslation("bots")
+
+	if (haveFailedToLoad) {
+		return (
+			<div className={SETTINGS_EMPTY_CLASS}>
+				<Icons.Alert aria-hidden="true" className="size-8 text-destructive" />
+				<p className="max-w-xs text-muted-foreground text-sm">
+					{t("mcp.unavailable")}
+				</p>
+			</div>
+		)
+	}
 
 	if (servers.length === 0) {
 		return (

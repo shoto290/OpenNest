@@ -178,6 +178,27 @@ describe("createRosterController", () => {
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
 
+	it("reports a roster it could not read instead of an empty sidebar", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
+		const controller = createRosterController(store)
+
+		await controller.load(opening())
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
+	it("clears the reported failure once the roster reads again", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "bots").mockRejectedValueOnce(new Error("no record"))
+		const controller = createRosterController(store)
+		await controller.load(opening())
+
+		await controller.load(opening())
+
+		expect(controller.getState().hasFailedToLoad).toBe(false)
+	})
+
 	it("creates a bot immediately, selects it and leaves the settings closed", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

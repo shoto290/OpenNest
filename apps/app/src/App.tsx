@@ -491,6 +491,7 @@ export function App() {
 						data-tauri-drag-region="deep"
 						insetWindowControls={hasOverlayWindowControls()}
 						bots={rosterBots}
+						haveBotsFailedToLoad={roster.state.hasFailedToLoad}
 						botsBySpaceId={rosterBotsBySpace}
 						conversations={rosterConversations}
 						conversationsBySpaceId={rosterConversationsBySpace}
@@ -539,12 +540,14 @@ export function App() {
 				<BotSettingsDialog
 					history={{
 						commits: history.state.commits.map(toCommitItem),
+						haveFailedToLoad: history.state.hasFailedToLoad,
 						onLoadDiff: history.controller.loadDiff,
 						onRevert: (commitId) => {
 							history.controller.revert(commitId)
 							chat.controller.redescribe(selected.id)
 						},
 					}}
+					haveMcpServersFailedToLoad={mcpServers.state.hasFailedToLoad}
 					mcpServers={mcpServers.state.servers}
 					models={modelOptionsFor(selected.model, catalogue)}
 					outputStyle={readBotOutputStyle(selected.outputStyle)}

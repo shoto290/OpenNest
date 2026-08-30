@@ -82,6 +82,7 @@ type BotSettingsDialogProps = {
 	onSkillDelete: (id: string) => void
 	skillFiles?: PluginSkillFiles
 	mcpServers: BotMcpServerItem[]
+	haveMcpServersFailedToLoad?: boolean
 	onMcpServerCreate: (name: string, config: Record<string, unknown>) => void
 	onMcpServerChange: (
 		openedName: string,
@@ -117,6 +118,7 @@ const BotSettingsDialog = ({
 	onSkillDelete,
 	skillFiles,
 	mcpServers,
+	haveMcpServersFailedToLoad,
 	onMcpServerCreate,
 	onMcpServerChange,
 	onMcpServerDelete,
@@ -359,6 +361,7 @@ const BotSettingsDialog = ({
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">
 							<McpServersPanel
+								haveFailedToLoad={haveMcpServersFailedToLoad}
 								onAdd={() => setServer({ draft: BLANK_MCP_SERVER_DRAFT })}
 								onOpen={(opened) =>
 									setServer({
@@ -375,6 +378,7 @@ const BotSettingsDialog = ({
 								<HistoryPanel
 									authorName={botName}
 									commits={history.commits}
+									haveFailedToLoad={history.haveFailedToLoad}
 									onLoadDiff={history.onLoadDiff}
 									onRevert={history.onRevert}
 								/>

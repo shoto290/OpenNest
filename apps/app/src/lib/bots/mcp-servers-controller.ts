@@ -5,6 +5,7 @@ import type { TranscriptStore } from "../conversations/store-port"
 export type McpServersState = {
 	botId: string | null
 	servers: BotMcpServer[]
+	hasFailedToLoad: boolean
 }
 
 export type McpServersController = {
@@ -23,6 +24,7 @@ export type McpServersController = {
 export const initialMcpServersState: McpServersState = {
 	botId: null,
 	servers: [],
+	hasFailedToLoad: false,
 }
 
 export const createMcpServersController = (
@@ -44,19 +46,24 @@ export const createMcpServersController = (
 		publish()
 	}
 
-	const applyTo = (botId: string, servers: BotMcpServer[]) => {
+	const applyTo = (botId: string, fields: Partial<McpServersState>) => {
 		if (state.botId === botId) {
-			set({ servers })
+			set(fields)
 		}
 	}
 
 	const read = async (botId: string) =>
-		applyTo(botId, await store.botMcpServers(botId))
+		applyTo(botId, {
+			servers: await store.botMcpServers(botId),
+			hasFailedToLoad: false,
+		})
+
+	const noteFailedRead = () => set({ hasFailedToLoad: true })
 
 	const reload = () => {
 		const botId = state.botId
 		if (botId) {
-			void enqueue(() => read(botId)).catch(() => undefined)
+			void enqueue(() => read(botId)).catch(noteFailedRead)
 		}
 	}
 
@@ -82,13 +89,12 @@ export const createMcpServersController = (
 			if (openedName && openedName !== name) {
 				await store.deleteBotMcpServer(botId, openedName)
 			}
-			applyTo(
-				botId,
-				written(
+			applyTo(botId, {
+				servers: written(
 					state.servers.filter((held) => held.name !== openedName),
 					server,
 				),
-			)
+			})
 		})
 
 	return {
@@ -102,8 +108,8 @@ export const createMcpServersController = (
 		},
 
 		open: (botId: string) => {
-			set({ botId, servers: [] })
-			return enqueue(() => read(botId)).catch(() => undefined)
+			set({ botId, servers: [], hasFailedToLoad: false })
+			return enqueue(() => read(botId)).catch(noteFailedRead)
 		},
 
 		create: (name: string, config: Record<string, unknown>) =>
@@ -114,10 +120,9 @@ export const createMcpServersController = (
 		remove: (name: string) =>
 			onOpenBot(async (botId) => {
 				await store.deleteBotMcpServer(botId, name)
-				applyTo(
-					botId,
-					state.servers.filter((server) => server.name !== name),
-				)
+				applyTo(botId, {
+					servers: state.servers.filter((server) => server.name !== name),
+				})
 			}),
 	}
 }
