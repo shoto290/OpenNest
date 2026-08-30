@@ -1024,13 +1024,17 @@ export const MarkdownPreview = meta.story({
 })
 
 export const RowContextMenu = meta.story({
-	args: { bots: ROSTER.slice(0, 4), selectedBotId: "beacon" },
+	args: {
+		bots: ROSTER.slice(0, 4),
+		selectedBotId: "beacon",
+		onPinRoster: fn(),
+	},
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which is what this story presses. Check that the menu offers bot settings, a duplicate under it and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page. The highlight is drawn on the item under the pointer and nowhere else: it does not slide across from the item before it, which is a deliberate local deviation from the registry component's gliding row — travel under a pointer reads as lag. The row says it carries a menu through `aria-haspopup`, and says whether it is open. The menu is left open here so the panel can be read with it up. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
+					"The actions behind a row, on the third one. There is no button to find: the row itself is the trigger, so the columns never move to make room for a control and nothing appears on hover. A pointer right-clicks the row; a keyboard reaches the same menu with the Menu key or Shift+F10 on the focused row, which is what this story presses. Check that the menu leads with pin and a rule under it, then offers bot settings, a duplicate under it and delete with delete reading as destructive, that the arrow keys walk them, and that Escape closes the menu and puts focus back on the row it belongs to rather than dropping it on the page. The highlight is drawn on the item under the pointer and nowhere else: it does not slide across from the item before it, which is a deliberate local deviation from the registry component's gliding row — travel under a pointer reads as lag. The row says it carries a menu through `aria-haspopup`, and says whether it is open. The menu is left open here so the panel can be read with it up. Delete carries `--destructive`, which does not clear AA against a light popup at this size — the same open question `Primitives/Button` already carries on its own destructive variant, and a token decision rather than a decision this menu can make on its own.",
 			},
 		},
 	},
@@ -1053,18 +1057,28 @@ export const RowContextMenu = meta.story({
 		const menu = await overlay.findByRole("menu", {
 			name: "Actions for Cinder",
 		})
-		const settings = within(menu).getByRole("menuitem", { name: "Settings" })
-		const duplicate = within(menu).getByRole("menuitem", { name: "Duplicate" })
-		const remove = within(menu).getByRole("menuitem", { name: "Delete" })
+		const items = within(menu).getAllByRole("menuitem")
+		await expect(items.map((item) => item.textContent)).toEqual([
+			"Pin",
+			"Settings",
+			"Duplicate",
+			"Delete",
+		])
+		const [pin, settings, duplicate, remove] = items
+		await expect(pin.nextElementSibling).toBe(
+			within(menu).getAllByRole("separator")[0],
+		)
 		await expect(trigger).toHaveAttribute("aria-expanded", "true")
 		await waitFor(async () => {
-			await expect(settings).toHaveFocus()
+			await expect(pin).toHaveFocus()
 		}, FRAME_POLL)
-		await expect(highlightIn(settings)).not.toBeNull()
+		await expect(highlightIn(pin)).not.toBeNull()
 		await expect(getComputedStyle(remove).color).not.toBe(
 			getComputedStyle(settings).color,
 		)
 
+		await userEvent.keyboard("{ArrowDown}")
+		await expect(settings).toHaveFocus()
 		await userEvent.keyboard("{ArrowDown}")
 		await expect(duplicate).toHaveFocus()
 		await userEvent.keyboard("{ArrowDown}")
@@ -2936,7 +2950,7 @@ export const FullRowMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every branch a row can carry, open at once — the account that has sections to file under and spaces to travel to, which is the only place the four middle entries are read side by side. They are ordered by how far they reach: the plain duplicate and the section branch keep the bot in the space it is in, the two space branches take it out of it, so the band widens downward and the entry with the longest reach sits nearest delete. The two that name a space are adjacent and differ on the verb and the glyph alone — `Duplicate to space` under the copy, `Move to space` under the arrow — while the section branch reads `Move to section` under its folder, so every branch names what it lands in and none of them is read as a truncation of the one above. The middle stays one band: the rules are spent under settings and over delete and nowhere else, so a hand aimed anywhere in the middle can never land on delete. Pick `RowDuplicateToSpace` and `RowMoveToSpace` for each space branch opened, `MoveBotToSection` for the section one.",
+					"Every branch a row can carry, open at once — the account that has sections to file under and spaces to travel to, which is the only place the four middle entries are read side by side. They are ordered by how far they reach: the plain duplicate and the section branch keep the bot in the space it is in, the two space branches take it out of it, so the band widens downward and the entry with the longest reach sits nearest delete. The two that name a space are adjacent and differ on the verb and the glyph alone — `Duplicate to space` under the copy, `Move to space` under the arrow — while the section branch reads `Move to section` under its folder, so every branch names what it lands in and none of them is read as a truncation of the one above. Pin leads the menu with a rule under it, and the middle stays one band: the other rules are spent under settings and over delete and nowhere else, so a hand aimed anywhere in the middle can never land on delete. Pick `RowDuplicateToSpace` and `RowMoveToSpace` for each space branch opened, `MoveBotToSection` for the section one.",
 			},
 		},
 	},
@@ -2946,15 +2960,15 @@ export const FullRowMenu = meta.story({
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
 		).toEqual([
+			"Pin",
 			"Settings",
 			"Duplicate",
-			"Pin",
 			MOVE_TO,
 			DUPLICATE_TO,
 			MOVE_TO_SPACE,
 			"Delete",
 		])
-		await expect(menu.getAllByRole("separator")).toHaveLength(2)
+		await expect(menu.getAllByRole("separator")).toHaveLength(3)
 	},
 })
 
@@ -2965,7 +2979,7 @@ export const MoveBotToSection = meta.story({
 		docs: {
 			description: {
 				story:
-					"The branch under a row that files the bot. It sits directly under the plain duplicate, in the same band as it — copying a bot and filing a bot both keep the bot in the space it is in, so nothing is drawn between them and the branches that carry it to another space come after; the rules are spent where they matter, one under settings and one over delete, so a hand aimed at anything in the middle can never land on delete. It offers every section plus the entry that files it under none, and it marks the one the bot holds now, so the branch reads as where the bot is before it reads as where it could go — Beacon sits in Research here. Choosing one reports the bot and the section, and the entry that clears it reports `null` rather than an empty string, so a host never has to guess what no section means. The branch is only drawn to a host that listens for it: `RowContextMenu` and `OneSpaceRowMenu` pass no section handlers and keep the three plain actions they always had.",
+					"The branch under a row that files the bot. It sits directly under the plain duplicate, in the same band as it — copying a bot and filing a bot both keep the bot in the space it is in, so nothing is drawn between them and the branches that carry it to another space come after; the rules are spent where they matter, one under the leading pin, one under settings and one over delete, so a hand aimed at anything in the middle can never land on delete. It offers every section plus the entry that files it under none, and it marks the one the bot holds now, so the branch reads as where the bot is before it reads as where it could go — Beacon sits in Research here. Choosing one reports the bot and the section, and the entry that clears it reports `null` rather than an empty string, so a host never has to guess what no section means. The branch is only drawn to a host that listens for it: `RowContextMenu` and `OneSpaceRowMenu` pass no section handlers and keep the three plain actions they always had.",
 			},
 		},
 	},
@@ -2973,7 +2987,7 @@ export const MoveBotToSection = meta.story({
 		const menu = await openRowMenu(canvasElement, "Beacon")
 		const branch = menu.getByRole("menuitem", { name: MOVE_TO })
 		await expect(branch).toHaveAttribute("aria-haspopup", "menu")
-		await expect(menu.getAllByRole("separator")).toHaveLength(2)
+		await expect(menu.getAllByRole("separator")).toHaveLength(3)
 
 		await userEvent.hover(branch)
 		const panel = within(
@@ -3085,7 +3099,7 @@ export const RosterSurfaceMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel itself answers a right-click. Everything the sidebar can make used to need a row to start from — a bot to hang a section on, a switcher to open for a space — so the empty ground under the roster was the one place a reader could aim and get nothing. It now carries the three things this panel makes on its own: a bot, a section, a space. The ground is the leftover column under the last row, so it is only ever reached when the aim missed every row, every section header and the header above them: those keep their own menus and take the click first. Check the menu names the three, in the order the panel builds them, and that a right-click on a row still opens that row's actions and not this.",
+					"The panel itself answers a right-click. Everything the sidebar can make used to need a row to start from — a bot to hang a section on, a switcher to open for a space — so the empty ground under the roster was the one place a reader could aim and get nothing. It now carries the three things this panel makes on its own — a bot, a section, a space — and, under a rule that closes them off, the way into the space's own settings. The ground is the leftover column under the last row, so it is only ever reached when the aim missed every row, every section header and the header above them: those keep their own menus and take the click first. Check the menu names the three, in the order the panel builds them, that space settings sits last behind its rule, and that a right-click on a row still opens that row's actions and not this. Pick `RosterSurfaceWithoutSpaceSettings` for the panel given no settings handler.",
 			},
 		},
 	},
@@ -3093,10 +3107,18 @@ export const RosterSurfaceMenu = meta.story({
 		const menu = await openSurfaceMenu(canvasElement)
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["New bot", NEW_SECTION, "New space"])
+		).toEqual(["New bot", NEW_SECTION, "New space", "Space settings"])
+		await expect(menu.getAllByRole("separator")).toHaveLength(1)
 
 		await userEvent.click(menu.getByRole("menuitem", { name: "New bot" }))
 		await expect(args.onCreateBot).toHaveBeenCalled()
+
+		await userEvent.click(
+			(await openSurfaceMenu(canvasElement)).getByRole("menuitem", {
+				name: "Space settings",
+			}),
+		)
+		await expect(args.onOpenSpaceSettings).toHaveBeenCalled()
 
 		await userEvent.click(
 			(await openSurfaceMenu(canvasElement)).getByRole("menuitem", {
@@ -3107,6 +3129,26 @@ export const RosterSurfaceMenu = meta.story({
 
 		const row = await openRowMenu(canvasElement, "Beacon")
 		await expect(row.getByRole("menuitem", { name: "Settings" })).toBeVisible()
+	},
+})
+
+export const RosterSurfaceWithoutSpaceSettings = meta.story({
+	args: { ...sectionArgs(), onOpenSpaceSettings: undefined },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The same ground, for a host that has no settings dialog to open. The menu keeps the three things the panel makes and drops both the space settings entry and the rule that would have led to it, so the menu never ends on a rule with nothing under it. Pick `RosterSurfaceMenu` for the full menu.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const menu = await openSurfaceMenu(canvasElement)
+		await expect(
+			menu.getAllByRole("menuitem").map((item) => item.textContent),
+		).toEqual(["New bot", NEW_SECTION, "New space"])
+		await expect(menu.queryAllByRole("separator")).toHaveLength(0)
 	},
 })
 
@@ -4016,7 +4058,7 @@ export const ConversationRowMenu = meta.story({
 		docs: {
 			description: {
 				story:
-					"The actions behind a room, reached the same way a bot's are: a right-click on the row, no button on hover. A room offers less than a bot, and deliberately — settings, the branch that files it, and delete. There is nothing to duplicate, because a room is the bots in it and copying it would fork a history rather than a template. The branch is the one a bot row uses, so it marks the section the room sits in now and reports `null` for the entry that clears it; a rule sits over delete and nowhere else, so a hand aimed at moving can never land on removing.",
+					"The actions behind a room, reached the same way a bot's are: a right-click on the row, no button on hover. A room offers less than a bot, and deliberately — pin leading the menu with a rule under it, then settings, the branch that files it, and delete. There is nothing to duplicate, because a room is the bots in it and copying it would fork a history rather than a template. The branch is the one a bot row uses, so it marks the section the room sits in now and reports `null` for the entry that clears it; a rule sits over delete and nowhere else, so a hand aimed at moving can never land on removing.",
 			},
 		},
 	},
@@ -4024,9 +4066,9 @@ export const ConversationRowMenu = meta.story({
 		const menu = await openRowMenu(canvasElement, "Launch review")
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["Settings", "Pin", MOVE_TO, "Delete"])
+		).toEqual(["Pin", "Settings", MOVE_TO, "Delete"])
 		await expect(menu.queryByRole("menuitem", { name: "Duplicate" })).toBeNull()
-		await expect(menu.getAllByRole("separator")).toHaveLength(1)
+		await expect(menu.getAllByRole("separator")).toHaveLength(2)
 
 		await userEvent.hover(menu.getByRole("menuitem", { name: MOVE_TO }))
 		const branch = within(

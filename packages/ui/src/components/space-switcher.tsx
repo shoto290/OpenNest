@@ -216,6 +216,7 @@ const SpaceSwitcher = ({
 							<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
 							{t("spaces.moveDown")}
 						</ContextMenuItem>
+						<ContextMenuSeparator />
 					</>
 				) : null}
 				<ContextMenuItem onSelect={onCreateSpace}>
