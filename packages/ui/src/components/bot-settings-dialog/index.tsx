@@ -481,8 +481,5 @@ export {
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
-	type EnvironmentEntry,
-	type EnvironmentSection,
-	type EnvironmentWrite,
 	type PluginHistory,
 }

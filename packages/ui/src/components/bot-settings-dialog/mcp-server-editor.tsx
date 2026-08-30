@@ -343,13 +343,7 @@ const McpServerEditor = ({
 						unreadable
 					)}
 					{environment ? (
-						<EnvironmentPanel
-							entries={environment.entries}
-							hasFailedToRead={environment.hasFailedToRead}
-							onDelete={environment.onDelete}
-							onSet={environment.onSet}
-							scope="server"
-						/>
+						<EnvironmentPanel {...environment} scope="server" />
 					) : null}
 				</SettingsScrollingPanel>
 
