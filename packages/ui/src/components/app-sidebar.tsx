@@ -129,7 +129,7 @@ const SECTION_PAD =
 	"px-[4.5px] pb-[4.5px] group-data-[state=collapsed]/sidebar:p-0"
 
 const SECTION_CARD =
-	"rounded-2xl transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70 has-[[data-slot=roster-section-trigger]:focus-visible]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:bg-transparent"
+	"rounded-2xl transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:is(:hover,:focus-visible)]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:bg-transparent"
 
 const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
@@ -212,7 +212,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-0.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-2.25 group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-0.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-[9px] group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
