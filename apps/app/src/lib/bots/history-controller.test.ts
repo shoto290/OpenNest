@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { createHistoryController } from "./history-controller"
 
@@ -28,6 +28,25 @@ describe("history controller", () => {
 		expect(controller.getState().commits).toMatchObject([
 			{ author: "user", title: `Skill "${A_SKILL.name}" saved from settings` },
 		])
+	})
+
+	it("reports a history it could not read instead of an empty panel", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "botHistory").mockRejectedValue(new Error("no bundle"))
+
+		const controller = await written(store)
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
+	it("clears the reported failure once the history reads again", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "botHistory").mockRejectedValueOnce(new Error("no bundle"))
+		const controller = await written(store)
+
+		await controller.open("default")
+
+		expect(controller.getState().hasFailedToLoad).toBe(false)
 	})
 
 	it("reads a diff onto the commit it was asked for", async () => {

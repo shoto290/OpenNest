@@ -79,3 +79,23 @@ export const LongContent = meta.story({
 		},
 	},
 })
+
+export const Unreadable = meta.story({
+	args: { servers: [], haveFailedToLoad: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read of this bot's servers came back refused. The panel says so instead of showing the empty state, so nobody reads a lost list as a bot that declares no server.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("These MCP servers could not be read."),
+		).toBeVisible()
+		await expect(
+			canvas.queryByRole("button", { name: "Add server" }),
+		).not.toBeInTheDocument()
+	},
+})

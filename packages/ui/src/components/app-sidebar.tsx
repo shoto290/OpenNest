@@ -1230,6 +1230,7 @@ interface BotRosterProps
 		RosterCreateActions {
 	spaceId?: string
 	bots: AppSidebarBot[]
+	haveBotsFailedToLoad?: boolean
 	conversations: AppSidebarConversation[]
 	selectedBotId?: string
 	selectedConversationId?: string
@@ -1243,6 +1244,7 @@ interface BotRosterProps
 const BotRoster = ({
 	spaceId,
 	bots,
+	haveBotsFailedToLoad = false,
 	conversations,
 	selectedBotId,
 	selectedConversationId,
@@ -1565,6 +1567,13 @@ const BotRoster = ({
 		onCreateSpace,
 	}
 
+	if (haveBotsFailedToLoad && bots.length === 0)
+		return (
+			<RosterSurface {...surface}>
+				<p className={EMPTY_COPY}>{t("roster.unavailable")}</p>
+			</RosterSurface>
+		)
+
 	if (
 		!naming &&
 		bots.length === 0 &&
@@ -1869,6 +1878,7 @@ interface AppSidebarProps
 		ConversationRosterActions,
 		SectionActions {
 	bots: AppSidebarBot[]
+	haveBotsFailedToLoad?: boolean
 	botsBySpaceId?: Record<string, AppSidebarBot[]>
 	conversations?: AppSidebarConversation[]
 	conversationsBySpaceId?: Record<string, AppSidebarConversation[]>
@@ -1895,6 +1905,7 @@ interface AppSidebarProps
 
 const AppSidebarBase = ({
 	bots: roster,
+	haveBotsFailedToLoad,
 	botsBySpaceId,
 	conversations: rooms = NO_CONVERSATIONS,
 	conversationsBySpaceId,
@@ -2051,6 +2062,7 @@ const AppSidebarBase = ({
 									{...actions}
 									bots={rosterOf(space.id)}
 									collapsedSectionIds={collapsedSectionIds}
+									haveBotsFailedToLoad={haveBotsFailedToLoad}
 									conversations={roomsOf(space.id)}
 									destinations={destinationsFrom(space.id)}
 									naming={space.id === selectedSpaceId ? naming : null}
@@ -2069,6 +2081,7 @@ const AppSidebarBase = ({
 							{...actions}
 							bots={roster}
 							collapsedSectionIds={collapsedSectionIds}
+							haveBotsFailedToLoad={haveBotsFailedToLoad}
 							conversations={rooms}
 							destinations={destinationsFrom(selectedSpaceId)}
 							naming={naming}

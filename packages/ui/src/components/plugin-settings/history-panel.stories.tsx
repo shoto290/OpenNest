@@ -227,3 +227,21 @@ export const Undoing = meta.story({
 		await expect(args.onRevert).toHaveBeenCalledWith(NEWEST?.id)
 	},
 })
+
+export const Unreadable = meta.story({
+	args: { commits: [], haveFailedToLoad: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read of this plugin's history came back refused. The panel says so instead of showing the empty state, so nobody reads a lost history as a plugin nobody has changed.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("This history could not be read."),
+		).toBeVisible()
+		await expect(canvas.queryAllByRole("listitem")).toHaveLength(0)
+	},
+})

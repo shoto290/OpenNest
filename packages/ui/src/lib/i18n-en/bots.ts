@@ -18,6 +18,7 @@ const bots = {
 			preview: "{{name}}: {{text}}",
 		},
 		empty: "No bots yet",
+		unavailable: "Your bots could not be read.",
 		actions: "Actions for {{name}}",
 		settings: "Settings",
 		duplicate: "Duplicate",
@@ -108,6 +109,7 @@ const bots = {
 	},
 	history: {
 		empty: "Nothing has been changed here yet.",
+		unavailable: "This history could not be read.",
 		author: {
 			user: "You",
 		},
@@ -331,6 +333,7 @@ const bots = {
 			description:
 				"An MCP server gives this bot tools it does not have on its own. Adding one lets this bot start that program on your machine.",
 		},
+		unavailable: "These MCP servers could not be read.",
 		name: {
 			label: "Name",
 			placeholder: "atlas",

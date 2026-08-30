@@ -17,6 +17,7 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type PluginHistory = {
 	commits: BotCommitItem[]
+	haveFailedToLoad?: boolean
 	onLoadDiff: (commitId: string) => void
 	onRevert: (commitId: string) => void
 }
@@ -88,6 +89,7 @@ const CommitDiff = ({ patch }: CommitDiffProps) => {
 
 const HistoryPanel = ({
 	commits,
+	haveFailedToLoad = false,
 	authorName,
 	onLoadDiff,
 	onRevert,
@@ -108,6 +110,17 @@ const HistoryPanel = ({
 
 		setExpanded([...expanded, commit.id])
 		onLoadDiff(commit.id)
+	}
+
+	if (haveFailedToLoad) {
+		return (
+			<div className={SETTINGS_EMPTY_CLASS}>
+				<Icons.Alert aria-hidden="true" className="size-8 text-destructive" />
+				<p className="max-w-xs text-muted-foreground text-sm">
+					{t("history.unavailable")}
+				</p>
+			</div>
+		)
 	}
 
 	if (newestFirst.length === 0) {

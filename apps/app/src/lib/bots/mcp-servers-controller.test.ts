@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { createMcpServersController } from "./mcp-servers-controller"
 
@@ -27,6 +27,27 @@ describe("mcp servers controller", () => {
 		expect(controller.getState().servers).toEqual([
 			{ name: "atlas", config: ATLAS },
 		])
+	})
+
+	it("reports a listing it could not read instead of an empty panel", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "botMcpServers").mockRejectedValue(new Error("no bundle"))
+
+		const controller = await opened(store)
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
+	it("clears the reported failure once the listing reads again", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "botMcpServers").mockRejectedValueOnce(
+			new Error("no bundle"),
+		)
+		const controller = await opened(store)
+
+		await controller.open("default")
+
+		expect(controller.getState().hasFailedToLoad).toBe(false)
 	})
 
 	it("writes a server under the name it was given", async () => {

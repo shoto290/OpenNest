@@ -40,6 +40,7 @@ export type RosterState = {
 	isShowingDanger: boolean
 	isEditingConversation: boolean
 	hasLoaded: boolean
+	hasFailedToLoad: boolean
 }
 
 export type RosterOpening = {
@@ -113,6 +114,7 @@ export const initialRosterState: RosterState = {
 	isShowingDanger: false,
 	isEditingConversation: false,
 	hasLoaded: false,
+	hasFailedToLoad: false,
 }
 
 const LOOSE = { sectionId: null, pinPosition: null }
@@ -316,8 +318,10 @@ export const createRosterController = (
 		apply({ ...bot, ...toIdentity(value, bot) })
 	}
 
+	const noteFailedRead = () => set({ hasFailedToLoad: true })
+
 	const readFrom = (opening: RosterOpening) =>
-		enqueue(() => read(opening)).catch(() => undefined)
+		enqueue(() => read(opening)).catch(noteFailedRead)
 
 	const reload = () =>
 		readFrom({
@@ -347,6 +351,7 @@ export const createRosterController = (
 			rosters,
 			conversationRosters,
 			spaceId,
+			hasFailedToLoad: false,
 			...landOn(
 				rosterIn(rosters, spaceId),
 				rosterIn(conversationRosters, spaceId),

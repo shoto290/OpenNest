@@ -524,6 +524,23 @@ export const Empty = meta.story({
 	},
 })
 
+export const UnreadableRoster = meta.story({
+	args: { bots: [], haveBotsFailedToLoad: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read of the roster came back refused. The sidebar says the bots could not be read instead of the invitation to create a first one, so an owner of forty bots is never told they have none. Check no row is drawn and that the create button is still reachable.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(rowsIn(canvasElement)).toHaveLength(0)
+		await expect(canvas.getByText("Your bots could not be read.")).toBeVisible()
+		await expect(canvas.queryByText("No bots yet")).not.toBeInTheDocument()
+	},
+})
+
 export const SingleBot = meta.story({
 	args: { bots: [ROSTER[1]], selectedBotId: "beacon" },
 	parameters: {

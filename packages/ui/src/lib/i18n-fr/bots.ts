@@ -9,6 +9,7 @@ const bots = {
 			preview: "{{name}} : {{text}}",
 		},
 		empty: "Aucun bot pour l'instant",
+		unavailable: "Vos bots n'ont pas pu être lus.",
 		actions: "Actions pour {{name}}",
 		settings: "Réglages",
 		duplicate: "Dupliquer",
@@ -99,6 +100,7 @@ const bots = {
 	},
 	history: {
 		empty: "Rien n'a encore été modifié ici.",
+		unavailable: "Cet historique n'a pas pu être lu.",
 		author: {
 			user: "Vous",
 		},
@@ -323,6 +325,7 @@ const bots = {
 			description:
 				"Un serveur MCP donne à ce bot des outils qu'il n'a pas seul. En ajouter un l'autorise à démarrer ce programme sur votre machine.",
 		},
+		unavailable: "Ces serveurs MCP n'ont pas pu être lus.",
 		name: {
 			label: "Nom",
 			placeholder: "atlas",
