@@ -7,6 +7,7 @@ import {
 	MessageScroller,
 	type MessageScrollerHandle,
 	type MessageScrollerProps,
+	type MessageScrollerRow,
 } from "@workspace/ui/components/message-scroller"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
@@ -118,6 +119,19 @@ const OLDER_PAGES: TranscriptEntry[][] = [
 	],
 ]
 
+const LONG_TRANSCRIPT_RUNS = 200
+
+const MOUNTED_ROW_LIMIT = 20
+
+const LONG_TRANSCRIPT: TranscriptEntry[] = Array.from(
+	{ length: LONG_TRANSCRIPT_RUNS },
+	(_, index) => ({
+		id: `long-${index}`,
+		from: index % 2 === 0 ? "user" : "assistant",
+		text: `Run ${index + 1} of the resumed conversation.`,
+	}),
+)
+
 const ANCHOR_TEXT = TRANSCRIPT[0].text
 
 const distanceFromEnd = (viewport: HTMLElement) =>
@@ -178,6 +192,10 @@ const scrollToHistoryStart = async ({
 const FRAME_CLASS =
 	"flex h-80 w-96 flex-col overflow-hidden rounded-xl border border-border bg-background"
 
+const ROW_GAP = 8
+
+const ROW_HEIGHT = 72
+
 const TranscriptRow = ({ entry }: { entry: TranscriptEntry }) => (
 	<div
 		className={cn(
@@ -190,6 +208,13 @@ const TranscriptRow = ({ entry }: { entry: TranscriptEntry }) => (
 		{entry.text}
 	</div>
 )
+
+const toRows = (entries: TranscriptEntry[]): MessageScrollerRow[] =>
+	entries.map((entry) => ({
+		key: entry.id,
+		messageIds: [entry.id],
+		render: () => <TranscriptRow entry={entry} />,
+	}))
 
 interface TranscriptScrollerProps
 	extends Omit<MessageScrollerProps, "children" | "scrollerRef"> {
@@ -251,12 +276,11 @@ const TranscriptScroller = ({
 				scrollerRef={scrollerRef}
 				onFollowChange={onFollowChange}
 				className="flex-1"
-				contentClassName="flex flex-col gap-2 p-3"
-			>
-				{visible.map((entry) => (
-					<TranscriptRow key={entry.id} entry={entry} />
-				))}
-			</MessageScroller>
+				contentClassName="flex flex-col p-3"
+				estimatedRowHeight={ROW_HEIGHT}
+				rowGap={ROW_GAP}
+				rows={toRows(visible)}
+			/>
 			<div className="flex items-center justify-between gap-2 border-border border-t p-2">
 				<Button size="sm" disabled={!nextIncoming} onClick={deliverIncoming}>
 					Send reply
@@ -355,16 +379,15 @@ const StreamingTranscript = ({
 				onFollowChange={onFollowChange}
 				busy={isStreaming}
 				className="flex-1"
-				contentClassName="flex flex-col gap-2 p-3"
-			>
-				{TRANSCRIPT.map((entry) => (
-					<TranscriptRow key={entry.id} entry={entry} />
-				))}
-				{hasPrompt ? <TranscriptRow entry={STREAM_PROMPT} /> : null}
-				{deliveredWords > 0 ? (
-					<TranscriptRow entry={streamedAnswer(deliveredWords)} />
-				) : null}
-			</MessageScroller>
+				contentClassName="flex flex-col p-3"
+				estimatedRowHeight={ROW_HEIGHT}
+				rowGap={ROW_GAP}
+				rows={toRows([
+					...TRANSCRIPT,
+					...(hasPrompt ? [STREAM_PROMPT] : []),
+					...(deliveredWords > 0 ? [streamedAnswer(deliveredWords)] : []),
+				])}
+			/>
 			<div className="flex items-center gap-2 border-border border-t p-2">
 				<Button size="sm" disabled={isStreaming} onClick={sendPrompt}>
 					Send prompt
@@ -394,12 +417,11 @@ const ConversationSwitcher = (
 				{...props}
 				transcriptKey={isSecond ? "second" : "first"}
 				className="flex-1"
-				contentClassName="flex flex-col gap-2 p-3"
-			>
-				{(isSecond ? OTHER_TRANSCRIPT : TRANSCRIPT).map((entry) => (
-					<TranscriptRow key={entry.id} entry={entry} />
-				))}
-			</MessageScroller>
+				contentClassName="flex flex-col p-3"
+				estimatedRowHeight={ROW_HEIGHT}
+				rowGap={ROW_GAP}
+				rows={toRows(isSecond ? OTHER_TRANSCRIPT : TRANSCRIPT)}
+			/>
 			<div className="border-border border-t p-2">
 				<Button size="sm" onClick={() => setIsSecond((current) => !current)}>
 					Open other conversation
@@ -430,20 +452,20 @@ const AnchoredTranscript = () => {
 				scrollerRef={scrollerRef}
 				highlightedMessageId={highlightedMessageId}
 				className="flex-1"
-				contentClassName="flex flex-col gap-3 p-3"
-			>
-				{TRANSCRIPT.map((entry) =>
-					entry.from === "user" ? (
-						<UserTurn key={entry.id} messageId={entry.id}>
-							{entry.text}
-						</UserTurn>
-					) : (
-						<AssistantTurn key={entry.id} messageId={entry.id}>
-							{entry.text}
-						</AssistantTurn>
-					),
-				)}
-			</MessageScroller>
+				contentClassName="flex flex-col p-3"
+				estimatedRowHeight={ROW_HEIGHT}
+				rowGap={ROW_GAP}
+				rows={TRANSCRIPT.map((entry) => ({
+					key: entry.id,
+					messageIds: [entry.id],
+					render: () =>
+						entry.from === "user" ? (
+							<UserTurn messageId={entry.id}>{entry.text}</UserTurn>
+						) : (
+							<AssistantTurn messageId={entry.id}>{entry.text}</AssistantTurn>
+						),
+				}))}
+			/>
 			<div className="flex items-center gap-2 border-border border-t p-2">
 				<Button size="sm" onClick={() => jumpTo(TRANSCRIPT[0].id)}>
 					Jump to the quoted message
@@ -471,7 +493,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. It renders its own jump-to-latest control while the reader sits away from the live edge, reports the switch through `onFollowChange`, and exposes `scrollerRef.scrollToEnd()` so a host can return to the live edge when it accepts a prompt. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all. `scrollerRef.scrollToMessage(id)` brings a message anchored under `data-message-id` back into the middle of the viewport and answers whether it found one, and `highlightedMessageId` marks that message while the host names it.",
+					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. It renders its own jump-to-latest control while the reader sits away from the live edge, reports the switch through `onFollowChange`, and exposes `scrollerRef.scrollToEnd()` so a host can return to the live edge when it accepts a prompt. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all. `scrollerRef.scrollToMessage(id)` brings a message anchored under `data-message-id` back into the middle of the viewport and answers whether it found one, and `highlightedMessageId` marks that message while the host names it. The transcript itself is passed as `rows`, one entry per run with its own `key` and the `messageIds` it anchors: only the rows near the viewport are mounted, so a thousand-run conversation costs the same first paint as a ten-run one. Anything passed as `children` sits under the rows and is always mounted — the working indicator and the queued turns of a live thread.",
 			},
 		},
 	},
@@ -491,6 +513,10 @@ const meta = preview.meta({
 		busy: { control: "boolean" },
 		label: { control: "text" },
 		older: { control: "object" },
+		rowGap: { control: { type: "number", min: 0, max: 48, step: 4 } },
+		estimatedRowHeight: {
+			control: { type: "number", min: 24, max: 480, step: 8 },
+		},
 	},
 	render: (args) => <TranscriptScroller {...args} />,
 })
@@ -1118,6 +1144,32 @@ export const RowsArriveAfterEmpty = meta.story({
 			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
 		)
 		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+	},
+})
+
+export const LongTranscript = meta.story({
+	render: (args) => <TranscriptScroller {...args} entries={LONG_TRANSCRIPT} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a resumed conversation with hundreds of runs behind it — the case the transcript is virtualised for. Check that the viewport still opens on the newest run and that only a handful of rows are mounted: every row outside the viewport and its overscan is left out of the DOM, so the first paint never walks the whole history.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		await expect(
+			canvasElement.querySelectorAll('[data-slot="message-scroller-row"]')
+				.length,
+		).toBeLessThan(MOUNTED_ROW_LIMIT)
+		await expect(
+			canvas.getByText(LONG_TRANSCRIPT[LONG_TRANSCRIPT.length - 1].text),
+		).toBeVisible()
 	},
 })
 

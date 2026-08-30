@@ -1,5 +1,6 @@
 "use client"
 
+import { useVirtualizer } from "@tanstack/react-virtual"
 import {
 	AnimatePresence,
 	type HTMLMotionProps,
@@ -8,6 +9,8 @@ import {
 } from "motion/react"
 import {
 	type ComponentPropsWithRef,
+	memo,
+	type ReactNode,
 	type Ref,
 	useCallback,
 	useEffect,
@@ -25,34 +28,18 @@ import { useOverlayScroll } from "@workspace/ui/hooks/use-overlay-scroll"
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
-const SETTLE_TIMEOUT = 150
+const ESTIMATED_ROW_HEIGHT = 120
 
-const NOTHING_LANDED = Symbol("nothing landed")
+const ROW_OVERSCAN = 3
 
 const JUMP_HIDDEN = { opacity: 0, y: 6 } as const
 const JUMP_VISIBLE = { opacity: 1, y: 0 } as const
-
-interface PrependPin {
-	anchor: HTMLElement
-	offset: number
-}
-
-const offsetFromViewportTop = (anchor: HTMLElement, viewportTop: number) =>
-	anchor.getBoundingClientRect().top - viewportTop
 
 const distanceFromEnd = (viewport: HTMLElement) =>
 	viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
 
 const isOnLastBubble = (viewport: HTMLElement, threshold: number) =>
 	distanceFromEnd(viewport) <= threshold
-
-const isTravellingDown = (viewport: HTMLElement, targetTop: number) =>
-	targetTop > viewport.scrollTop
-
-const hasReachedTarget = (viewport: HTMLElement, targetTop: number) => {
-	const maxTop = viewport.scrollHeight - viewport.clientHeight
-	return Math.abs(viewport.scrollTop - Math.min(targetTop, maxTop)) <= 1
-}
 
 const anchorFor = (viewport: HTMLElement, messageId: string) => {
 	for (const anchor of viewport.querySelectorAll<HTMLElement>(
@@ -62,24 +49,26 @@ const anchorFor = (viewport: HTMLElement, messageId: string) => {
 	}
 }
 
-const centeredTop = (viewport: HTMLElement, anchor: HTMLElement) => {
-	const offset = offsetFromViewportTop(
-		anchor,
-		viewport.getBoundingClientRect().top,
-	)
-	const gutter = (viewport.clientHeight - anchor.clientHeight) / 2
-	return Math.max(viewport.scrollTop + offset - gutter, 0)
-}
+const offsetWithinViewport = (list: HTMLElement, viewport: HTMLElement) =>
+	list.getBoundingClientRect().top -
+	viewport.getBoundingClientRect().top +
+	viewport.scrollTop
 
-const topVisibleRow = (content: HTMLElement, viewportTop: number) => {
-	const rows = Array.from(content.children) as HTMLElement[]
-	return rows.find((row) => row.getBoundingClientRect().bottom > viewportTop)
+const nextFrames = (run: () => void) => {
+	const outer = requestAnimationFrame(() => requestAnimationFrame(run))
+	return () => cancelAnimationFrame(outer)
 }
 
 export interface MessageScrollerHandle {
 	scrollToEnd: (behavior?: ScrollBehavior) => void
 	scrollToMessage: (messageId: string, behavior?: ScrollBehavior) => boolean
 	isFollowing: () => boolean
+}
+
+export interface MessageScrollerRow {
+	key: string
+	messageIds?: string[]
+	render: () => ReactNode
 }
 
 export interface MessageScrollerOlder {
@@ -91,6 +80,9 @@ export interface MessageScrollerOlder {
 }
 
 export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
+	rows?: MessageScrollerRow[]
+	rowGap?: number
+	estimatedRowHeight?: number
 	transcriptKey?: string
 	followOutput?: boolean
 	followThreshold?: number
@@ -114,7 +106,16 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
 	>
 }
 
+const RowContent = memo(({ render }: { render: () => ReactNode }) => (
+	<>{render()}</>
+))
+
+const NO_ROWS: MessageScrollerRow[] = []
+
 export function MessageScroller({
+	rows = NO_ROWS,
+	rowGap = 0,
+	estimatedRowHeight = ESTIMATED_ROW_HEIGHT,
 	transcriptKey,
 	followOutput = true,
 	followThreshold = 56,
@@ -138,19 +139,18 @@ export function MessageScroller({
 	const reduce = useReducedMotion() ?? false
 	const viewportRef = useRef<HTMLElement>(null)
 	const overlayScroll = useOverlayScroll()
-	const contentRef = useRef<HTMLDivElement>(null)
+	const listRef = useRef<HTMLDivElement>(null)
+	const tailRef = useRef<HTMLDivElement>(null)
 	const followingRef = useRef(followOutput)
 	const [isAtLiveEdge, setIsAtLiveEdge] = useState(followOutput)
-	const programmaticScrollRef = useRef(false)
-	const targetTopRef = useRef(0)
-	const scrollTimerRef = useRef<number | undefined>(undefined)
-	const frameRef = useRef<number | undefined>(undefined)
-	const landedKeyRef = useRef<string | typeof NOTHING_LANDED | undefined>(
-		NOTHING_LANDED,
-	)
-	const landedRowsRef = useRef(0)
-	const pinRef = useRef<PrependPin | null>(null)
+	const [listOffset, setListOffset] = useState(0)
+	const landingRef = useRef(false)
+	const holdFrameRef = useRef<number | undefined>(undefined)
 	const lastScrollTopRef = useRef(0)
+	const centerFrameRef = useRef<(() => void) | undefined>(undefined)
+	const landedKeyRef = useRef(transcriptKey)
+	const landedRowsRef = useRef(0)
+	const hasRows = rows.length > 0
 	const behavior: ScrollBehavior = reduce || !smooth ? "auto" : "smooth"
 	const {
 		onScroll: onViewportScroll,
@@ -159,6 +159,55 @@ export function MessageScroller({
 		onKeyDown: onViewportKeyDown,
 		...restViewportProps
 	} = viewportProps ?? {}
+
+	const scrollViewportToEnd = useCallback((nextBehavior: ScrollBehavior) => {
+		const viewport = viewportRef.current
+		if (!viewport || distanceFromEnd(viewport) <= 1) return
+
+		landingRef.current = true
+		if (typeof viewport.scrollTo === "function") {
+			viewport.scrollTo({ top: viewport.scrollHeight, behavior: nextBehavior })
+		} else {
+			viewport.scrollTop = viewport.scrollHeight
+		}
+		lastScrollTopRef.current = viewport.scrollTop
+	}, [])
+
+	const measureListOffset = useCallback(() => {
+		const list = listRef.current
+		const viewport = viewportRef.current
+		if (!list || !viewport) return
+
+		const offset = offsetWithinViewport(list, viewport)
+		setListOffset((current) =>
+			Math.abs(current - offset) <= 1 ? current : offset,
+		)
+	}, [])
+
+	const holdLiveEdge = useCallback(() => {
+		if (holdFrameRef.current) return
+
+		holdFrameRef.current = requestAnimationFrame(() => {
+			holdFrameRef.current = undefined
+		})
+		if (!followOutput || !followingRef.current) return
+
+		scrollViewportToEnd("auto")
+	}, [followOutput, scrollViewportToEnd])
+
+	const virtualizer = useVirtualizer({
+		anchorTo: "end",
+		directDomUpdates: true,
+		count: rows.length,
+		estimateSize: () => estimatedRowHeight,
+		gap: rowGap,
+		getItemKey: (index) => rows[index]?.key ?? index,
+		getScrollElement: () => viewportRef.current,
+		onChange: holdLiveEdge,
+		overscan: ROW_OVERSCAN,
+		scrollEndThreshold: followThreshold,
+		scrollMargin: listOffset,
+	})
 
 	const setViewportRef = useCallback(
 		(node: HTMLElement | null) => {
@@ -182,114 +231,45 @@ export function MessageScroller({
 		[onFollowChange],
 	)
 
-	const holdLastBubble = useCallback(() => {
-		const viewport = viewportRef.current
-		if (viewport && isOnLastBubble(viewport, followThreshold))
-			setFollowing(true)
-	}, [followThreshold, setFollowing])
-
-	const syncFollowing = useCallback(() => {
-		const viewport = viewportRef.current
-		if (!viewport) return
-		setFollowing(isOnLastBubble(viewport, followThreshold))
-	}, [followThreshold, setFollowing])
-
-	const releaseProgrammaticScroll = useCallback(() => {
-		programmaticScrollRef.current = false
-		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
-	}, [])
-
-	const abandonProgrammaticScroll = useCallback(() => {
-		releaseProgrammaticScroll()
-		holdLastBubble()
-	}, [holdLastBubble, releaseProgrammaticScroll])
-
-	const deferSettle = useCallback(() => {
-		if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
-		scrollTimerRef.current = window.setTimeout(
-			abandonProgrammaticScroll,
-			SETTLE_TIMEOUT,
-		)
-	}, [abandonProgrammaticScroll])
-
-	const holdProgrammaticScroll = useCallback(
-		(targetTop: number) => {
-			programmaticScrollRef.current = true
-			targetTopRef.current = targetTop
-			deferSettle()
-		},
-		[deferSettle],
-	)
-
-	const rememberPosition = useCallback((viewport: HTMLElement) => {
-		lastScrollTopRef.current = viewport.scrollTop
-	}, [])
-
-	const scrollToEnd = useCallback(
-		(nextBehavior: ScrollBehavior) => {
-			const viewport = viewportRef.current
-			if (!viewport || distanceFromEnd(viewport) <= 1) return
-
-			holdProgrammaticScroll(viewport.scrollHeight)
-			if (typeof viewport.scrollTo === "function") {
-				viewport.scrollTo({
-					top: viewport.scrollHeight,
-					behavior: nextBehavior,
-				})
-			} else {
-				viewport.scrollTop = viewport.scrollHeight
-			}
-			rememberPosition(viewport)
-		},
-		[holdProgrammaticScroll, rememberPosition],
-	)
-
-	const landOnLiveEdge = useCallback(() => {
-		const rows = contentRef.current?.children.length ?? 0
-		const isSameTranscript = landedKeyRef.current === transcriptKey
-		const hasNewRow = rows !== landedRowsRef.current
-
-		scrollToEnd(isSameTranscript && hasNewRow ? behavior : "auto")
-		if (rows > 0) {
-			landedKeyRef.current = transcriptKey
-			landedRowsRef.current = rows
-		}
-	}, [behavior, scrollToEnd, transcriptKey])
-
 	const returnToLiveEdge = useCallback(
 		(nextBehavior: ScrollBehavior = behavior) => {
 			setFollowing(true)
-			scrollToEnd(nextBehavior)
+			scrollViewportToEnd(nextBehavior)
 		},
-		[behavior, scrollToEnd, setFollowing],
+		[behavior, scrollViewportToEnd, setFollowing],
 	)
 
-	const scrollToMessage = useCallback(
+	const centerAnchor = useCallback(
 		(messageId: string, nextBehavior: ScrollBehavior) => {
 			const viewport = viewportRef.current
 			const anchor = viewport && anchorFor(viewport, messageId)
 			if (!anchor) return false
 
-			setFollowing(false)
-			holdProgrammaticScroll(centeredTop(viewport, anchor))
 			anchor.scrollIntoView({ behavior: nextBehavior, block: "center" })
-			rememberPosition(viewport)
 			return true
 		},
-		[holdProgrammaticScroll, rememberPosition, setFollowing],
+		[],
 	)
 
-	const pinTopVisibleRow = useCallback(() => {
-		const viewport = viewportRef.current
-		const content = contentRef.current
-		if (!viewport || !content) return
+	const scrollToMessage = useCallback(
+		(messageId: string, nextBehavior: ScrollBehavior) => {
+			landingRef.current = false
+			if (centerAnchor(messageId, nextBehavior)) {
+				setFollowing(false)
+				return true
+			}
 
-		const viewportTop = viewport.getBoundingClientRect().top
-		const anchor = topVisibleRow(content, viewportTop)
-		pinRef.current = anchor
-			? { anchor, offset: offsetFromViewportTop(anchor, viewportTop) }
-			: null
-	}, [])
+			const index = rows.findIndex((row) => row.messageIds?.includes(messageId))
+			if (index < 0) return false
+
+			setFollowing(false)
+			virtualizer.scrollToIndex(index, { align: "center", behavior: "auto" })
+			centerFrameRef.current?.()
+			centerFrameRef.current = nextFrames(() => centerAnchor(messageId, "auto"))
+			return true
+		},
+		[centerAnchor, rows, setFollowing, virtualizer],
+	)
 
 	const handleScroll = useCallback(() => {
 		const viewport = viewportRef.current
@@ -298,35 +278,20 @@ export function MessageScroller({
 		const hasReaderMovedUp = viewport.scrollTop < lastScrollTopRef.current
 		lastScrollTopRef.current = viewport.scrollTop
 
-		if (programmaticScrollRef.current) {
-			const isReaderTakingOver =
-				hasReaderMovedUp && isTravellingDown(viewport, targetTopRef.current)
+		const atLiveEdge = isOnLastBubble(viewport, followThreshold)
+		if (landingRef.current && !atLiveEdge && !hasReaderMovedUp) return
 
-			if (
-				!isReaderTakingOver &&
-				!hasReachedTarget(viewport, targetTopRef.current)
-			) {
-				deferSettle()
-				return
-			}
-			releaseProgrammaticScroll()
-		}
+		landingRef.current = false
+		if (hasReaderMovedUp) setFollowing(atLiveEdge)
+		else if (atLiveEdge) setFollowing(true)
+	}, [followThreshold, setFollowing])
 
-		if (pinRef.current) pinTopVisibleRow()
-
-		if (hasReaderMovedUp) syncFollowing()
-		else holdLastBubble()
-	}, [
-		deferSettle,
-		holdLastBubble,
-		pinTopVisibleRow,
-		releaseProgrammaticScroll,
-		syncFollowing,
-	])
+	const releaseLanding = useCallback(() => {
+		landingRef.current = false
+	}, [])
 
 	const requestOlder = () => {
 		if (!older || older.isLoading) return
-		pinTopVisibleRow()
 		older.onLoad()
 	}
 
@@ -341,56 +306,45 @@ export function MessageScroller({
 		[behavior, returnToLiveEdge, scrollToMessage],
 	)
 
+	useLayoutEffect(measureListOffset)
+
 	useLayoutEffect(() => {
 		setFollowing(followOutput)
-		if (!followOutput) return
-
-		frameRef.current = requestAnimationFrame(landOnLiveEdge)
-		return () => {
-			if (frameRef.current) cancelAnimationFrame(frameRef.current)
-		}
-	}, [followOutput, landOnLiveEdge, setFollowing])
+	}, [followOutput, setFollowing])
 
 	useLayoutEffect(() => {
-		const viewport = viewportRef.current
-		const pin = pinRef.current
-		if (!viewport || !pin) return
+		const { count } = virtualizer.options
+		const isSameTranscript = landedKeyRef.current === transcriptKey
+		if (isSameTranscript && count === landedRowsRef.current) return
 
-		if (!pin.anchor.isConnected) {
-			pinRef.current = null
-			return
-		}
+		const hasLandedBefore = isSameTranscript && landedRowsRef.current > 0
+		landedKeyRef.current = transcriptKey
+		landedRowsRef.current = count
+		if (!isSameTranscript) setFollowing(followOutput)
+		if (!followOutput || !followingRef.current) return
 
-		const viewportTop = viewport.getBoundingClientRect().top
-		const drift = offsetFromViewportTop(pin.anchor, viewportTop) - pin.offset
-		if (drift !== 0) {
-			holdProgrammaticScroll(viewport.scrollTop + drift)
-			viewport.scrollTop += drift
-			rememberPosition(viewport)
-		}
-		if (!older?.isLoading) pinRef.current = null
+		scrollViewportToEnd(hasLandedBefore ? behavior : "auto")
 	})
 
 	useEffect(() => {
-		const content = contentRef.current
 		const viewport = viewportRef.current
-		if (!content || !viewport || typeof ResizeObserver === "undefined") return
+		if (!viewport || typeof ResizeObserver === "undefined") return
 
+		const tail = hasRows ? tailRef.current : null
 		const observer = new ResizeObserver(() => {
-			if (pinRef.current) return
-			if (!followOutput || !followingRef.current) return
-			landOnLiveEdge()
+			measureListOffset()
+			holdLiveEdge()
 		})
-		observer.observe(content)
 		observer.observe(viewport)
+		if (tail) observer.observe(tail)
 
 		return () => observer.disconnect()
-	}, [followOutput, landOnLiveEdge])
+	}, [holdLiveEdge, measureListOffset, hasRows])
 
 	useEffect(
 		() => () => {
-			if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current)
-			if (frameRef.current) cancelAnimationFrame(frameRef.current)
+			centerFrameRef.current?.()
+			if (holdFrameRef.current) cancelAnimationFrame(holdFrameRef.current)
 		},
 		[],
 	)
@@ -412,16 +366,16 @@ export function MessageScroller({
 					onViewportScroll?.(event)
 				}}
 				onWheel={(event) => {
-					releaseProgrammaticScroll()
+					releaseLanding()
 					onViewportWheel?.(event)
 				}}
 				onTouchStart={(event) => {
-					releaseProgrammaticScroll()
+					releaseLanding()
 					onViewportTouchStart?.(event)
 				}}
 				onKeyDown={(event) => {
 					if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
-						releaseProgrammaticScroll()
+						releaseLanding()
 					}
 					onViewportKeyDown?.(event)
 				}}
@@ -461,16 +415,53 @@ export function MessageScroller({
 				) : null}
 
 				<div
-					ref={contentRef}
 					role="log"
 					aria-live="polite"
 					aria-relevant="additions text"
 					aria-busy={busy}
 					className={contentClassName}
 					{...contentProps}
+					style={{ gap: rowGap, ...contentProps?.style }}
 				>
 					<MessageHighlightProvider messageId={highlightedMessageId}>
-						{children}
+						{hasRows ? (
+							<>
+								<div
+									ref={mergeRefs<HTMLDivElement>(
+										listRef,
+										virtualizer.containerRef,
+									)}
+									data-slot="message-scroller-rows"
+									className="relative w-full"
+									style={{ height: virtualizer.getTotalSize() }}
+								>
+									{virtualizer.getVirtualItems().map((item) => (
+										<div
+											key={item.key}
+											data-index={item.index}
+											data-slot="message-scroller-row"
+											ref={virtualizer.measureElement}
+											className="absolute inset-x-0 top-0"
+											style={{
+												transform: `translateY(${item.start - listOffset}px)`,
+											}}
+										>
+											<RowContent render={rows[item.index].render} />
+										</div>
+									))}
+								</div>
+								<div
+									ref={tailRef}
+									data-slot="message-scroller-tail"
+									className="flex flex-col"
+									style={{ gap: rowGap }}
+								>
+									{children}
+								</div>
+							</>
+						) : (
+							children
+						)}
 					</MessageHighlightProvider>
 				</div>
 			</motion.section>

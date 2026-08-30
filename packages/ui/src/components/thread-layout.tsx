@@ -5,12 +5,15 @@ import {
 	MessageScroller,
 	type MessageScrollerHandle,
 	type MessageScrollerOlder,
+	type MessageScrollerRow,
 } from "@workspace/ui/components/message-scroller"
 import {
 	PromptReply,
 	type ReplyQuote,
 } from "@workspace/ui/components/prompt-reply"
 import { cn } from "@workspace/ui/lib/utils"
+
+const TRANSCRIPT_ROW_GAP = 24
 
 interface ThreadLayoutProps {
 	header?: ReactNode
@@ -23,6 +26,7 @@ interface ThreadLayoutProps {
 	busy?: boolean
 	label?: string
 	older?: MessageScrollerOlder
+	rows?: MessageScrollerRow[]
 	onFollowChange?: (following: boolean) => void
 	children: ReactNode
 	rootRef?: Ref<HTMLDivElement>
@@ -42,6 +46,7 @@ function ThreadLayout({
 	busy,
 	label,
 	older,
+	rows,
 	onFollowChange,
 	children,
 	rootRef,
@@ -60,22 +65,26 @@ function ThreadLayout({
 		>
 			{header}
 
-			<MessageScroller
-				className="flex-1"
-				transcriptKey={transcriptKey}
-				busy={busy}
-				label={label}
-				older={older}
-				onFollowChange={onFollowChange}
-				highlightedMessageId={highlightedMessageId}
-				scrollerRef={scrollerRef}
-				contentClassName={cn(
-					"flex min-h-full w-full flex-col gap-6 px-6 py-8",
-					contentClassName,
-				)}
-			>
-				<MarkProvider transcriptKey={transcriptKey}>{children}</MarkProvider>
-			</MessageScroller>
+			<MarkProvider transcriptKey={transcriptKey}>
+				<MessageScroller
+					className="flex-1"
+					transcriptKey={transcriptKey}
+					busy={busy}
+					label={label}
+					older={older}
+					rows={rows}
+					rowGap={TRANSCRIPT_ROW_GAP}
+					onFollowChange={onFollowChange}
+					highlightedMessageId={highlightedMessageId}
+					scrollerRef={scrollerRef}
+					contentClassName={cn(
+						"flex min-h-full w-full flex-col px-6 py-8",
+						contentClassName,
+					)}
+				>
+					{children}
+				</MessageScroller>
+			</MarkProvider>
 
 			{notice || pending || composer ? (
 				<div className="flex w-full shrink-0 flex-col gap-3 px-6 pb-6">
