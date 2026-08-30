@@ -129,7 +129,7 @@ const SECTION_PAD =
 	"px-[4.5px] pb-[4.5px] group-data-[state=collapsed]/sidebar:p-0"
 
 const SECTION_CARD =
-	"rounded-2xl transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:is(:hover,:focus-visible)]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:bg-transparent"
+	"rounded-2xl border border-border transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:is(:hover,:focus-visible)]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:border-transparent group-data-[state=collapsed]/sidebar:bg-transparent"
 
 const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
