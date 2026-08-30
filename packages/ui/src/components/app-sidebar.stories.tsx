@@ -2769,12 +2769,11 @@ export const SectionCard = meta.story({
 		await expect(chevron.left - name.right).toBeLessThanOrEqual(8)
 		await expect(card.right - chevron.right).toBeGreaterThan(16)
 
-		await userEvent.click(sectionHeader(canvasElement, "Research"))
+		const header = sectionHeader(canvasElement, "Research")
+		await userEvent.click(header)
+		await expect(header).toHaveAttribute("aria-expanded", "false")
+		await userEvent.unhover(header)
 		await waitFor(() => expect(isLightened(research)).toBe(false), FRAME_POLL)
-		await expect(sectionHeader(canvasElement, "Research")).toHaveAttribute(
-			"aria-expanded",
-			"false",
-		)
 	},
 })
 
@@ -3184,10 +3183,14 @@ const under = (node: Element) => ({
 	clientY: Math.round(node.getBoundingClientRect().bottom) - 2,
 })
 
-const inTheGutterUnder = (node: Element) => ({
-	clientX: centreOf(node).clientX,
-	clientY: Math.round(node.getBoundingClientRect().bottom) + 4,
-})
+const inTheGutterUnder = (node: Element) => {
+	const { bottom } = node.getBoundingClientRect()
+	const below = node.nextElementSibling?.getBoundingClientRect()
+	return {
+		clientX: centreOf(node).clientX,
+		clientY: Math.round(below ? (bottom + below.top) / 2 : bottom + 4),
+	}
+}
 
 const moveUnder = (handle: HTMLElement, onto: Element) => {
 	fireEvent.pointerMove(handle, { ...POINTER, ...under(onto) })

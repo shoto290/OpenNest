@@ -129,7 +129,7 @@ const SECTION_PAD =
 	"px-[4.5px] pb-[4.5px] group-data-[state=collapsed]/sidebar:p-0"
 
 const SECTION_CARD =
-	"rounded-xl border border-border transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:is(:hover,:focus-visible)]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:border-transparent group-data-[state=collapsed]/sidebar:bg-transparent"
+	"rounded-xl border border-border transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:border-transparent group-data-[state=collapsed]/sidebar:bg-transparent"
 
 const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
@@ -173,7 +173,7 @@ const DROP_AREA_LIFTED =
 const INSERTION_LINE =
 	"pointer-events-none absolute inset-x-2 z-20 h-0.5 rounded-full bg-sidebar-primary"
 
-const PINNED_ZONE_STACK = "flex flex-col gap-0.5"
+const PINNED_ZONE_STACK = "flex flex-col gap-1.5"
 
 const ZONE_SEPARATOR =
 	"mx-1.5 my-1 block h-px shrink-0 rounded-full bg-sidebar-border group-data-[state=collapsed]/sidebar:hidden"
@@ -212,7 +212,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-0.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-[9px] group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-1.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-[9px] group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
