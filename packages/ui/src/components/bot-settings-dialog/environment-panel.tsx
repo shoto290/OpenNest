@@ -12,6 +12,7 @@ import {
 	Title,
 } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
+import { Notice } from "@workspace/ui/components/notice"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	SETTINGS_EMPTY_CLASS,
@@ -42,6 +43,7 @@ type EnvironmentWrite = {
 type EnvironmentPanelProps = {
 	scope: EnvironmentScope
 	entries: EnvironmentEntry[]
+	hasFailedToRead?: boolean
 	onSet: (write: EnvironmentWrite) => void | Promise<void>
 	onDelete: (name: string) => void | Promise<void>
 }
@@ -217,6 +219,7 @@ const EnvironmentRow = ({
 const EnvironmentPanel = ({
 	scope,
 	entries,
+	hasFailedToRead,
 	onSet,
 	onDelete,
 }: EnvironmentPanelProps) => {
@@ -246,6 +249,17 @@ const EnvironmentPanel = ({
 			/>
 		)
 
+	const failureNotice = hasFailedToRead ? (
+		<Notice
+			description={t("environment.unreadable.description")}
+			title={t("environment.unreadable.title")}
+		/>
+	) : null
+
+	if (entries.length === 0 && hasFailedToRead) {
+		return failureNotice
+	}
+
 	if (entries.length === 0) {
 		return (
 			<>
@@ -274,6 +288,8 @@ const EnvironmentPanel = ({
 
 	return (
 		<>
+			{failureNotice}
+
 			<div className="flex shrink-0 items-start justify-between gap-3">
 				<p className="max-w-sm text-muted-foreground text-xs leading-relaxed">
 					{t("environment.notice")}

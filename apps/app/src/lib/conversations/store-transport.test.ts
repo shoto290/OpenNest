@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
 	BotSkillDraft,
+	EnvScope,
 	NewAssistantMessage,
 	NewTurn,
 	NewUserMessage,
@@ -78,6 +79,8 @@ const SKILL_DRAFT: BotSkillDraft = {
 }
 
 const SERVER = { command: "atlas-mcp", args: ["--stdio"] }
+
+const BOT_SCOPE: EnvScope = { kind: "bot", id: "b-1", spaceId: "s-1" }
 
 const WRITES: WriteCase[] = [
 	{
@@ -304,6 +307,27 @@ const WRITES: WriteCase[] = [
 			"conversation_delete_bot_mcp_server",
 			{ botId: "b-1", name: "atlas" },
 		],
+	},
+	{
+		member: "environmentVariables",
+		write: () => conversationStore.environmentVariables(BOT_SCOPE),
+		call: ["env_list", { scope: BOT_SCOPE }],
+	},
+	{
+		member: "setEnvironmentVariable",
+		write: () =>
+			conversationStore.setEnvironmentVariable(
+				BOT_SCOPE,
+				"ATLAS_TOKEN",
+				"sk-1",
+			),
+		call: ["env_set", { scope: BOT_SCOPE, name: "ATLAS_TOKEN", value: "sk-1" }],
+	},
+	{
+		member: "deleteEnvironmentVariable",
+		write: () =>
+			conversationStore.deleteEnvironmentVariable(BOT_SCOPE, "ATLAS_TOKEN"),
+		call: ["env_delete", { scope: BOT_SCOPE, name: "ATLAS_TOKEN" }],
 	},
 	{
 		member: "recordBotCommands",

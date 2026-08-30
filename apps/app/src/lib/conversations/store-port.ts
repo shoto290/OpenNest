@@ -11,6 +11,8 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	EnvEntry,
+	EnvScope,
 	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
@@ -88,6 +90,13 @@ export type TranscriptStore = TranscriptPort & {
 		config: Record<string, unknown>,
 	) => Promise<BotMcpServer>
 	deleteBotMcpServer: (botId: string, name: string) => Promise<void>
+	environmentVariables: (scope: EnvScope) => Promise<EnvEntry[]>
+	setEnvironmentVariable: (
+		scope: EnvScope,
+		name: string,
+		value: string,
+	) => Promise<void>
+	deleteEnvironmentVariable: (scope: EnvScope, name: string) => Promise<void>
 	botHistory: (botId: string) => Promise<BotHistoryEntry[]>
 	botHistoryDiff: (botId: string, commitId: string) => Promise<string>
 	revertBot: (botId: string, commitId: string) => Promise<BotHistoryEntry[]>

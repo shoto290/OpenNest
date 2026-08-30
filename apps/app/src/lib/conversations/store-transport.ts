@@ -13,6 +13,8 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	EnvEntry,
+	EnvScope,
 	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
@@ -170,6 +172,15 @@ export const conversationStore: TranscriptStore = {
 
 	deleteBotMcpServer: (botId: string, name: string) =>
 		invoke<void>("conversation_delete_bot_mcp_server", { botId, name }),
+
+	environmentVariables: (scope: EnvScope) =>
+		invoke<EnvEntry[]>("env_list", { scope }),
+
+	setEnvironmentVariable: (scope: EnvScope, name: string, value: string) =>
+		invoke<void>("env_set", { scope, name, value }),
+
+	deleteEnvironmentVariable: (scope: EnvScope, name: string) =>
+		invoke<void>("env_delete", { scope, name }),
 
 	botHistory: (botId: string) =>
 		invoke<BotHistoryEntry[]>("conversation_bot_history", { botId }),

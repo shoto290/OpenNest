@@ -65,6 +65,7 @@ const bots = {
 			instructions: "Instructions",
 			skills: "Compétences",
 			mcp: "Serveurs MCP",
+			environment: "Environnement",
 			history: "Historique",
 			permissions: "Permissions",
 			runtime: "Exécution",
@@ -403,6 +404,11 @@ const bots = {
 		add: "Ajouter une variable",
 		notice:
 			"Une valeur est écrite une fois et remise à ce qui démarre ici. Rien ne la relit, elle n'est donc jamais réaffichée — ni ici, ni ailleurs.",
+		unreadable: {
+			title: "Les variables n'ont pas pu être lues",
+			description:
+				"Rien n'est perdu. Ce qui est enregistré ici est toujours sur le disque, et cette liste le montrera de nouveau dès qu'elle pourra le lire.",
+		},
 		empty: {
 			title: "Aucune variable",
 			description:

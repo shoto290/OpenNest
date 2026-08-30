@@ -122,6 +122,20 @@ export type BotMcpServer = {
 	config: Record<string, unknown>
 }
 
+export type EnvOwner =
+	| { kind: "space"; id: string }
+	| { kind: "bot"; id: string; spaceId: string }
+
+export type EnvScope =
+	| EnvOwner
+	| { kind: "server"; name: string; owner: EnvOwner }
+
+export type EnvEntry = {
+	name: string
+	definedIn: EnvScope
+	servedFrom: EnvScope
+}
+
 export type BotHistoryAuthor = "user" | "bot"
 
 export type BotHistoryEntry = {

@@ -18,6 +18,8 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	EnvEntry,
+	EnvScope,
 	MessagePin,
 	MessageReference,
 	NewAssistantMessage,
@@ -181,6 +183,21 @@ const learnSkill = (): BotSkill => ({
 	files: [],
 })
 
+const scopeKey = (scope: EnvScope): string =>
+	scope.kind === "server"
+		? `server:${scope.name}:${scopeKey(scope.owner)}`
+		: `${scope.kind}:${scope.id}`
+
+const scopeChain = (scope: EnvScope): EnvScope[] => {
+	if (scope.kind === "space") {
+		return [scope]
+	}
+	if (scope.kind === "bot") {
+		return [scope, { kind: "space", id: scope.spaceId }]
+	}
+	return [scope, ...scopeChain(scope.owner)]
+}
+
 export const createFakeTranscriptStore = (
 	options: FakeTranscriptStoreOptions = {},
 ): TranscriptStore => {
@@ -204,6 +221,7 @@ export const createFakeTranscriptStore = (
 	const history = new Map<string, BotHistoryEntry[]>()
 	let committed = 0
 	const servers = new Map<string, Map<string, Record<string, unknown>>>()
+	const environment = new Map<string, Map<string, string>>()
 	const rows = new Map<string, TranscriptMessage>()
 	const pins = new Map<string, Map<number, number>>()
 	const turns = new Map<string, NewTurn & { seq: number }>()
@@ -951,6 +969,32 @@ export const createFakeTranscriptStore = (
 			servers.set(botId, declared)
 			recorded(botId, `Server "${name}" saved from settings`)
 			return Promise.resolve({ name, config })
+		},
+
+		environmentVariables: (scope: EnvScope) => {
+			const entries: EnvEntry[] = []
+			for (const step of scopeChain(scope)) {
+				for (const name of environment.get(scopeKey(step))?.keys() ?? []) {
+					const servedFrom =
+						entries.find((entry) => entry.name === name)?.servedFrom ?? step
+					entries.push({ name, definedIn: step, servedFrom })
+				}
+			}
+			return Promise.resolve(
+				entries.sort((left, right) => left.name.localeCompare(right.name)),
+			)
+		},
+
+		setEnvironmentVariable: (scope: EnvScope, name: string, value: string) => {
+			const held = environment.get(scopeKey(scope)) ?? new Map<string, string>()
+			held.set(name, value)
+			environment.set(scopeKey(scope), held)
+			return Promise.resolve()
+		},
+
+		deleteEnvironmentVariable: (scope: EnvScope, name: string) => {
+			environment.get(scopeKey(scope))?.delete(name)
+			return Promise.resolve()
 		},
 
 		deleteBotMcpServer: (botId: string, name: string) => {

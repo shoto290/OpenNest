@@ -20,7 +20,9 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "@/lib/bots/bot-settings"
+import { toEnvironmentRows } from "@/lib/bots/environment-rows"
 import { toSkillDraft, toSkillFiles, toSkillItem } from "@/lib/bots/skill-draft"
+import { useBotEnvironment } from "@/lib/bots/use-bot-environment"
 import { useBotHistory } from "@/lib/bots/use-bot-history"
 import { useBotMcpServers } from "@/lib/bots/use-bot-mcp-servers"
 import { useBotSkills } from "@/lib/bots/use-bot-skills"
@@ -114,6 +116,7 @@ export function App() {
 	const collapsedSections = useCollapsedSections(store)
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
+	const environment = useBotEnvironment(store)
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -232,6 +235,16 @@ export function App() {
 		skills.controller,
 		selectedBotId,
 	])
+
+	useEffect(() => {
+		if (isEditing && selectedBotId && selectedSpaceId) {
+			void environment.controller.open({
+				kind: "bot",
+				id: selectedBotId,
+				spaceId: selectedSpaceId,
+			})
+		}
+	}, [environment.controller, isEditing, selectedBotId, selectedSpaceId])
 
 	useEffect(() => {
 		if (!selectedBotId) {
@@ -546,6 +559,12 @@ export function App() {
 						},
 					}}
 					mcpServers={mcpServers.state.servers}
+					environment={toEnvironmentRows(environment.state.entries)}
+					hasEnvironmentFailedToRead={environment.state.hasFailedToRead}
+					onEnvironmentSet={({ name, value }) =>
+						environment.controller.set(name, value)
+					}
+					onEnvironmentDelete={environment.controller.remove}
 					models={modelOptionsFor(selected.model, catalogue)}
 					outputStyle={readBotOutputStyle(selected.outputStyle)}
 					memory={selected.memory}
