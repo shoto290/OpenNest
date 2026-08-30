@@ -139,7 +139,6 @@ export function MessageScroller({
 	const reduce = useReducedMotion() ?? false
 	const viewportRef = useRef<HTMLElement>(null)
 	const overlayScroll = useOverlayScroll()
-	const contentRef = useRef<HTMLDivElement>(null)
 	const listRef = useRef<HTMLDivElement>(null)
 	const tailRef = useRef<HTMLDivElement>(null)
 	const followingRef = useRef(followOutput)
@@ -172,6 +171,17 @@ export function MessageScroller({
 			viewport.scrollTop = viewport.scrollHeight
 		}
 		lastScrollTopRef.current = viewport.scrollTop
+	}, [])
+
+	const measureListOffset = useCallback(() => {
+		const list = listRef.current
+		const viewport = viewportRef.current
+		if (!list || !viewport) return
+
+		const offset = offsetWithinViewport(list, viewport)
+		setListOffset((current) =>
+			Math.abs(current - offset) <= 1 ? current : offset,
+		)
 	}, [])
 
 	const holdLiveEdge = useCallback(() => {
@@ -296,16 +306,7 @@ export function MessageScroller({
 		[behavior, returnToLiveEdge, scrollToMessage],
 	)
 
-	useLayoutEffect(() => {
-		const list = listRef.current
-		const viewport = viewportRef.current
-		if (!list || !viewport) return
-
-		const offset = offsetWithinViewport(list, viewport)
-		setListOffset((current) =>
-			Math.abs(current - offset) <= 1 ? current : offset,
-		)
-	})
+	useLayoutEffect(measureListOffset)
 
 	useLayoutEffect(() => {
 		setFollowing(followOutput)
@@ -330,12 +331,15 @@ export function MessageScroller({
 		if (!viewport || typeof ResizeObserver === "undefined") return
 
 		const tail = hasRows ? tailRef.current : null
-		const observer = new ResizeObserver(holdLiveEdge)
+		const observer = new ResizeObserver(() => {
+			measureListOffset()
+			holdLiveEdge()
+		})
 		observer.observe(viewport)
 		if (tail) observer.observe(tail)
 
 		return () => observer.disconnect()
-	}, [holdLiveEdge, hasRows])
+	}, [holdLiveEdge, measureListOffset, hasRows])
 
 	useEffect(
 		() => () => {
@@ -411,7 +415,6 @@ export function MessageScroller({
 				) : null}
 
 				<div
-					ref={contentRef}
 					role="log"
 					aria-live="polite"
 					aria-relevant="additions text"
@@ -422,40 +425,40 @@ export function MessageScroller({
 				>
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{hasRows ? (
-							<div
-								ref={mergeRefs<HTMLDivElement>(
-									listRef,
-									virtualizer.containerRef,
-								)}
-								data-slot="message-scroller-rows"
-								className="relative w-full"
-								style={{ height: virtualizer.getTotalSize() }}
-							>
-								{virtualizer.getVirtualItems().map((item) => (
-									<div
-										key={item.key}
-										data-index={item.index}
-										data-slot="message-scroller-row"
-										ref={virtualizer.measureElement}
-										className="absolute inset-x-0 top-0"
-										style={{
-											transform: `translateY(${item.start - listOffset}px)`,
-										}}
-									>
-										<RowContent render={rows[item.index].render} />
-									</div>
-								))}
-							</div>
-						) : null}
-						{hasRows ? (
-							<div
-								ref={tailRef}
-								data-slot="message-scroller-tail"
-								className="flex flex-col"
-								style={{ gap: rowGap }}
-							>
-								{children}
-							</div>
+							<>
+								<div
+									ref={mergeRefs<HTMLDivElement>(
+										listRef,
+										virtualizer.containerRef,
+									)}
+									data-slot="message-scroller-rows"
+									className="relative w-full"
+									style={{ height: virtualizer.getTotalSize() }}
+								>
+									{virtualizer.getVirtualItems().map((item) => (
+										<div
+											key={item.key}
+											data-index={item.index}
+											data-slot="message-scroller-row"
+											ref={virtualizer.measureElement}
+											className="absolute inset-x-0 top-0"
+											style={{
+												transform: `translateY(${item.start - listOffset}px)`,
+											}}
+										>
+											<RowContent render={rows[item.index].render} />
+										</div>
+									))}
+								</div>
+								<div
+									ref={tailRef}
+									data-slot="message-scroller-tail"
+									className="flex flex-col"
+									style={{ gap: rowGap }}
+								>
+									{children}
+								</div>
+							</>
 						) : (
 							children
 						)}
