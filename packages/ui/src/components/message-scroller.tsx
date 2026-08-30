@@ -24,7 +24,6 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { MessageHighlightProvider } from "@workspace/ui/components/message-highlight-context"
-import { useOverlayScroll } from "@workspace/ui/hooks/use-overlay-scroll"
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
@@ -138,7 +137,6 @@ export function MessageScroller({
 	const { t } = useTranslation("chat")
 	const reduce = useReducedMotion() ?? false
 	const viewportRef = useRef<HTMLElement>(null)
-	const overlayScroll = useOverlayScroll()
 	const listRef = useRef<HTMLDivElement>(null)
 	const tailRef = useRef<HTMLDivElement>(null)
 	const followingRef = useRef(followOutput)
@@ -146,6 +144,7 @@ export function MessageScroller({
 	const [listOffset, setListOffset] = useState(0)
 	const landingRef = useRef(false)
 	const holdFrameRef = useRef<number | undefined>(undefined)
+	const hasMissedResizeRef = useRef(false)
 	const lastScrollTopRef = useRef(0)
 	const centerFrameRef = useRef<(() => void) | undefined>(undefined)
 	const landedKeyRef = useRef(transcriptKey)
@@ -185,10 +184,19 @@ export function MessageScroller({
 	}, [])
 
 	const holdLiveEdge = useCallback(() => {
-		if (holdFrameRef.current) return
+		if (holdFrameRef.current) {
+			hasMissedResizeRef.current = true
+			return
+		}
 
 		holdFrameRef.current = requestAnimationFrame(() => {
 			holdFrameRef.current = undefined
+			if (!hasMissedResizeRef.current) return
+
+			hasMissedResizeRef.current = false
+			if (!followOutput || !followingRef.current) return
+
+			scrollViewportToEnd("auto")
 		})
 		if (!followOutput || !followingRef.current) return
 
@@ -197,7 +205,6 @@ export function MessageScroller({
 
 	const virtualizer = useVirtualizer({
 		anchorTo: "end",
-		directDomUpdates: true,
 		count: rows.length,
 		estimateSize: () => estimatedRowHeight,
 		gap: rowGap,
@@ -357,7 +364,7 @@ export function MessageScroller({
 		>
 			<motion.section
 				layoutScroll
-				ref={mergeRefs<HTMLElement>(overlayScroll, setViewportRef)}
+				ref={setViewportRef}
 				aria-label={label ?? t("transcript.label")}
 				tabIndex={0}
 				{...restViewportProps}
@@ -380,7 +387,7 @@ export function MessageScroller({
 					onViewportKeyDown?.(event)
 				}}
 				className={cn(
-					"h-full overflow-y-auto overscroll-contain outline-none [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+					"h-full overflow-y-auto overscroll-contain outline-none scrollbar-overlay [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 					viewportClassName,
 				)}
 			>

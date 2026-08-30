@@ -1163,6 +1163,8 @@ export const LongTranscript = meta.story({
 		await waitFor(() =>
 			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
 		)
+		await expect(viewport).toHaveClass("scrollbar-overlay")
+		await expect(viewport.clientWidth).toBe(viewport.offsetWidth)
 		await expect(
 			canvasElement.querySelectorAll('[data-slot="message-scroller-row"]')
 				.length,

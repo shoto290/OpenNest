@@ -70,7 +70,6 @@ import {
 	UserChip,
 	type UserChipIdentity,
 } from "@workspace/ui/components/user-chip"
-import { useOverlayScroll } from "@workspace/ui/hooks/use-overlay-scroll"
 import {
 	dropArea,
 	dropAreaAt,
@@ -80,7 +79,7 @@ import {
 import { useSpaceShortcut } from "@workspace/ui/hooks/use-space-shortcut"
 import { toPlainText } from "@workspace/ui/lib/plain-text"
 import { probeRender } from "@workspace/ui/lib/render-probe"
-import { cn, mergeRefs } from "@workspace/ui/lib/utils"
+import { cn } from "@workspace/ui/lib/utils"
 
 const HEADER =
 	"h-12 flex-row items-center justify-end py-0 pr-2.5 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0"
@@ -212,7 +211,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-1.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-[9px] group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-1.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-[9px] scrollbar-app group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
@@ -1731,8 +1730,6 @@ const SpacePanel = ({
 	scrolls,
 	children,
 }: SpacePanelProps) => {
-	const overlayScroll = useOverlayScroll()
-
 	return (
 		<div
 			className={CAROUSEL_PANEL}
@@ -1741,9 +1738,9 @@ const SpacePanel = ({
 			onScroll={(event) => {
 				scrolls.set(spaceId, event.currentTarget.scrollTop)
 			}}
-			ref={mergeRefs<HTMLDivElement>(overlayScroll, (node) => {
+			ref={(node) => {
 				if (node) node.scrollTop = scrolls.get(spaceId) ?? 0
-			})}
+			}}
 		>
 			{children}
 		</div>

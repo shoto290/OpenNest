@@ -5,7 +5,6 @@ import type { ComponentProps, ReactElement, ReactNode } from "react"
 
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { Tooltip } from "@workspace/ui/components/motion/tooltip"
-import { useOverlayScroll } from "@workspace/ui/hooks/use-overlay-scroll"
 import { cn } from "@workspace/ui/lib/utils"
 
 const RAIL_LABELS_MIN_WIDTH = 672
@@ -23,7 +22,7 @@ const SETTINGS_PANEL_CLASS =
 
 const SETTINGS_SCROLLING_PANEL_CLASS = cn(
 	SETTINGS_PANEL_CLASS,
-	"overflow-y-auto",
+	"overflow-y-auto scrollbar-app",
 )
 
 type SettingsScrollingPanelProps = Omit<
@@ -31,17 +30,9 @@ type SettingsScrollingPanelProps = Omit<
 	"className"
 >
 
-const SettingsScrollingPanel = (props: SettingsScrollingPanelProps) => {
-	const overlayScroll = useOverlayScroll()
-
-	return (
-		<Tabs.Panel
-			{...props}
-			className={SETTINGS_SCROLLING_PANEL_CLASS}
-			ref={overlayScroll}
-		/>
-	)
-}
+const SettingsScrollingPanel = (props: SettingsScrollingPanelProps) => (
+	<Tabs.Panel {...props} className={SETTINGS_SCROLLING_PANEL_CLASS} />
+)
 
 const named = (item: ReactElement, label: string, iconsOnly: boolean) =>
 	iconsOnly ? (

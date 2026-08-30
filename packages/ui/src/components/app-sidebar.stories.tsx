@@ -1605,7 +1605,7 @@ export const OneSpace = meta.story({
 		const carousel = carouselIn(canvasElement)
 		const panels = panelsIn(canvasElement)
 		await expect(panels).toHaveLength(1)
-		await expect(panels[0].clientWidth).toBe(carousel.clientWidth)
+		await expect(panels[0].offsetWidth).toBe(carousel.clientWidth)
 
 		await expect(carousel.scrollWidth).toBe(carousel.clientWidth)
 
@@ -2021,10 +2021,10 @@ export const SpaceScrolling = meta.story({
 			const style = getComputedStyle(panel)
 			await expect(style.scrollSnapAlign).toBe("start")
 			await expect(style.scrollSnapStop).toBe("always")
-			await expect(panel).toHaveAttribute("data-overlayscrollbars-viewport")
+			await expect(panel).toHaveClass("scrollbar-app")
 			await expect(style.overscrollBehaviorY).toBe("contain")
 			await expect(style.overscrollBehaviorX).toBe("auto")
-			await expect(panel.clientWidth).toBe(carousel.clientWidth)
+			await expect(panel.offsetWidth).toBe(carousel.clientWidth)
 		}
 
 		const still = [
@@ -2292,7 +2292,7 @@ export const SpacesWithoutRosters = meta.story({
 		await expect(rowsIn(canvasElement)).toHaveLength(ROSTER.length)
 
 		const content = slotIn(canvasElement, "sidebar-content")
-		await expect(content).toHaveAttribute("data-overlayscrollbars-viewport")
+		await expect(content).toHaveClass("scrollbar-app")
 
 		await expect(content.scrollWidth).toBe(content.clientWidth)
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
