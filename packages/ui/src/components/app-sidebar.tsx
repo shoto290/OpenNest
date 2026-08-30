@@ -129,7 +129,7 @@ const SECTION_PAD =
 	"px-[4.5px] pb-[4.5px] group-data-[state=collapsed]/sidebar:p-0"
 
 const SECTION_CARD =
-	"rounded-2xl border border-border transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:is(:hover,:focus-visible)]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:border-transparent group-data-[state=collapsed]/sidebar:bg-transparent"
+	"rounded-xl border border-border transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:is(:hover,:focus-visible)]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:border-transparent group-data-[state=collapsed]/sidebar:bg-transparent"
 
 const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
@@ -138,7 +138,7 @@ const SECTION_LABEL =
 	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-xs normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
 
 const SECTION_TRIGGER =
-	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-2xl px-[10.5px] py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-xl px-[10.5px] py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
 const SECTION_NAME = "min-w-0 truncate"
 
