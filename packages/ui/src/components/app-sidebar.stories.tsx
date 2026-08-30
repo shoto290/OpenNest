@@ -2757,7 +2757,7 @@ export const SectionCard = meta.story({
 		docs: {
 			description: {
 				story:
-					"What an open section is drawn as. Header and rows are held in one rounded card, so a section reads as a single object the eye can take in rather than a title with a list loose beneath it. The card is a wash laid over the panel and never a colour of its own — a sister branch tints the sidebar with the colour of the space on screen, and that tint has to survive under every card. Its rows are inset by the card's own gutter while the bots filed under no section sit flush on the panel, so the indent is what says a row is held by something. Shut the section and the card goes with the rows it held — a closed section is a bare title line on the panel, with no surface and no border left behind. The name carries the section on weight alone — semibold where a bot's name is medium, at the same size, so the header leads the card without shouting over the rows it holds — and the chevron travels one gap behind it instead of sitting against the far edge. Check the open card is painted and holds its rows, that the loose bots sit on no card at all, and that shutting Research strips the surface. Pick `SectionCollapse` for the movement between the two, `DragBotToSection` for the card under a lifted bot.",
+					"What an open section is drawn as. Header and rows are held in one rounded card, so a section reads as a single object the eye can take in rather than a title with a list loose beneath it. The card is a wash laid over the panel and never a colour of its own — a sister branch tints the sidebar with the colour of the space on screen, and that tint has to survive under every card. Its rows sit on the card's own gutter, half a step in from the bots filed under no section, so the wash and that hair of an inset say together that a row is held by something without either of them shouting it. Shut the section and the card goes with the rows it held — a closed section is a bare title line on the panel, with no surface and no border left behind. The name carries the section on weight alone — semibold where a bot's name is medium, at the same size, so the header leads the card without shouting over the rows it holds — and the chevron travels one gap behind it instead of sitting against the far edge. Check the open card is painted and holds its rows, that the loose bots sit on no card at all, and that shutting Research strips the surface. Pick `SectionCollapse` for the movement between the two, `DragBotToSection` for the card under a lifted bot.",
 			},
 		},
 	},
@@ -2786,12 +2786,28 @@ export const SectionCard = meta.story({
 		await expect(chevron.left - name.right).toBeLessThanOrEqual(8)
 		await expect(card.right - chevron.right).toBeGreaterThan(16)
 
-		await userEvent.click(sectionHeader(canvasElement, "Research"))
+		const header = sectionHeader(canvasElement, "Research")
+		await userEvent.click(header)
+		await expect(header).toHaveAttribute("aria-expanded", "false")
+		await userEvent.unhover(header)
 		await waitFor(() => expect(isLightened(research)).toBe(false), FRAME_POLL)
-		await expect(sectionHeader(canvasElement, "Research")).toHaveAttribute(
-			"aria-expanded",
-			"false",
-		)
+	},
+})
+
+export const SectionHeaderHover = meta.story({
+	args: sectionArgs(),
+	render: (args) => <LiveSections {...args} />,
+	parameters: {
+		pseudo: {
+			hover:
+				'[data-slot="roster-drop-area"] > [data-slot="roster-drop-area"]:first-of-type [data-slot="roster-section-trigger"]',
+		},
+		docs: {
+			description: {
+				story:
+					"The header under the pointer. It grows no pill of its own: pointing at it deepens the wash of the whole card instead, so what lights up is exactly what the click acts on — the section and every row it holds, opening or shutting as one object. A pill drawn around the name alone would promise a smaller target than the header really is and would read as a second row stacked over the bots. Only the card under the pointer answers, the sections either side keep their resting wash, and a bot row hovered inside a card lights the row alone and leaves the card where it was. The keyboard gets the same answer: the header taking focus deepens the card as the pointer does, with the focus ring still drawn on the header so the caret is never lost inside the surface. Pick `SectionCard` for the card at rest, `SectionCollapse` for what the click does.",
+			},
+		},
 	},
 })
 
@@ -3184,10 +3200,14 @@ const under = (node: Element) => ({
 	clientY: Math.round(node.getBoundingClientRect().bottom) - 2,
 })
 
-const inTheGutterUnder = (node: Element) => ({
-	clientX: centreOf(node).clientX,
-	clientY: Math.round(node.getBoundingClientRect().bottom) + 4,
-})
+const inTheGutterUnder = (node: Element) => {
+	const { bottom } = node.getBoundingClientRect()
+	const below = node.nextElementSibling?.getBoundingClientRect()
+	return {
+		clientX: centreOf(node).clientX,
+		clientY: Math.round(below ? (bottom + below.top) / 2 : bottom + 4),
+	}
+}
 
 const moveUnder = (handle: HTMLElement, onto: Element) => {
 	fireEvent.pointerMove(handle, { ...POINTER, ...under(onto) })
