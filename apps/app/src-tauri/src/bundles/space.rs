@@ -5,9 +5,9 @@ use std::sync::{Mutex, PoisonError};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::{
-	drafted, git, learned, Author, Evolution, HistoryEntry, Skill, SkillDraft, SkillFront,
-	LEARNED_NAME, MANIFEST_DIR, MANIFEST_NAME, OPENNEST_KEY, PRELOAD_KEY, SKILLS_DIR, SKILL_NAME,
-	VERSION,
+	drafted, git, learned, Author, Evolution, HistoryEntry, McpServer, Skill, SkillDraft,
+	SkillFront, LEARNED_NAME, MANIFEST_DIR, MANIFEST_NAME, OPENNEST_KEY, PRELOAD_KEY,
+	SERVER_SUBJECT, SKILLS_DIR, SKILL_NAME, VERSION,
 };
 use crate::private_files;
 
@@ -115,6 +115,30 @@ pub fn write_skill_file(
 pub fn remove_skill_file(path: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
 	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::remove_skill_file_at(path, skill_id, relative)
+}
+
+pub fn mcp_servers(path: &Path) -> Vec<McpServer> {
+	super::mcp_servers_at(path)
+}
+
+pub fn set_mcp_server(
+	path: &Path,
+	name: &str,
+	config: &serde_json::Value,
+) -> std::io::Result<McpServer> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	let server = super::set_mcp_server_at(path, name, config)?;
+	super::rewrite_declared_servers(path)?;
+	super::recorded(path, SERVER_SUBJECT, name, "saved from settings");
+	Ok(server)
+}
+
+pub fn remove_mcp_server(path: &Path, name: &str) -> std::io::Result<()> {
+	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	super::remove_mcp_server_at(path, name)?;
+	super::rewrite_declared_servers(path)?;
+	super::recorded(path, SERVER_SUBJECT, name, "removed from settings");
+	Ok(())
 }
 
 pub fn history(path: &Path) -> Result<Vec<HistoryEntry>, git2::Error> {
@@ -301,6 +325,79 @@ mod tests {
 
 		assert!(!skills(&path).iter().any(|skill| skill.id == "passing"));
 		assert!(git::changes(&path).is_empty(), "the removal reached the history");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	fn mcp_file(path: &Path) -> PathBuf {
+		path.join(super::super::MCP_NAME)
+	}
+
+	fn declared_manifest(path: &Path) -> serde_json::Value {
+		serde_json::from_str(&fs::read_to_string(manifest_file(path)).expect("it reads"))
+			.expect("the manifest is JSON")
+	}
+
+	#[test]
+	fn a_server_written_in_the_space_is_declared_by_the_manifest_and_reaches_the_history() {
+		let path = a_path("served");
+		lay_down_at(&path).expect("the plugin is laid down");
+
+		let written = set_mcp_server(&path, "clock", &serde_json::json!({ "command": "clock" }))
+			.expect("the server lands");
+
+		assert_eq!(written.name, "clock");
+		assert_eq!(mcp_servers(&path).len(), 1);
+		assert_eq!(declared_manifest(&path)["mcpServers"], "./.mcp.json");
+		assert!(git::changes(&path).is_empty(), "the write reached the history");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn a_server_that_is_not_an_object_is_refused_and_leaves_the_file_as_it_was() {
+		let path = a_path("refused");
+		lay_down_at(&path).expect("the plugin is laid down");
+		set_mcp_server(&path, "clock", &serde_json::json!({ "command": "clock" }))
+			.expect("the server lands");
+		let held = fs::read_to_string(mcp_file(&path)).expect("the file reads");
+
+		let refused = set_mcp_server(&path, "broken", &serde_json::json!("clock"));
+
+		assert!(
+			matches!(&refused, Err(error) if error.kind() == std::io::ErrorKind::InvalidInput),
+			"the write is refused"
+		);
+		assert_eq!(fs::read_to_string(mcp_file(&path)).expect("the file reads"), held);
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn the_last_server_removed_takes_the_file_and_its_declaration_with_it() {
+		let path = a_path("unserved");
+		lay_down_at(&path).expect("the plugin is laid down");
+		set_mcp_server(&path, "clock", &serde_json::json!({ "command": "clock" }))
+			.expect("the server lands");
+
+		remove_mcp_server(&path, "clock").expect("the server is removed");
+
+		assert!(mcp_servers(&path).is_empty());
+		assert!(!mcp_file(&path).exists(), "the file is gone");
+		assert!(declared_manifest(&path).get("mcpServers").is_none());
+		assert!(git::changes(&path).is_empty(), "the removal reached the history");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn removing_a_server_the_space_never_declared_fails() {
+		let path = a_path("absent");
+		lay_down_at(&path).expect("the plugin is laid down");
+
+		let refused = remove_mcp_server(&path, "clock");
+
+		assert_eq!(refused.expect_err("it is refused").kind(), std::io::ErrorKind::NotFound);
 
 		let _ = fs::remove_dir_all(&path);
 	}

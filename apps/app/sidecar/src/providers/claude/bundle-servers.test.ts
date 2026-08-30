@@ -61,14 +61,16 @@ describe("bundleServers", () => {
 describe("sessionServers", () => {
 	let bot: string
 	let system: string
+	let space: string
 
 	beforeEach(() => {
 		bot = newBundle("bot")
 		system = newBundle("system")
+		space = newBundle("space")
 	})
 
 	afterEach(() => {
-		for (const bundle of [bot, system]) {
+		for (const bundle of [bot, system, space]) {
 			rmSync(bundle, { recursive: true, force: true })
 		}
 	})
@@ -83,16 +85,45 @@ describe("sessionServers", () => {
 			shared: { command: "only-system" },
 		})
 
-		expect(sessionServers(bot, system)).toEqual({
+		expect(
+			sessionServers({ pluginPath: bot, systemPluginPath: system }),
+		).toEqual({
 			probe: { command: "bot" },
 			own: { command: "only-bot" },
 			shared: { command: "only-system" },
 		})
 	})
 
+	it("lays the space over the app and under the bot", () => {
+		declaringServers(system, {
+			probe: { command: "system" },
+			shared: { command: "system" },
+		})
+		declaringServers(space, {
+			probe: { command: "space" },
+			shared: { command: "space" },
+			team: { command: "only-space" },
+		})
+		declaringServers(bot, { probe: { command: "bot" } })
+
+		expect(
+			sessionServers({
+				pluginPath: bot,
+				systemPluginPath: system,
+				spacePluginPath: space,
+			}),
+		).toEqual({
+			probe: { command: "bot" },
+			shared: { command: "space" },
+			team: { command: "only-space" },
+		})
+	})
+
 	it("hands over the bot's alone when the host names no app plugin", () => {
 		declaringServers(bot, { own: { command: "only-bot" } })
 
-		expect(sessionServers(bot)).toEqual({ own: { command: "only-bot" } })
+		expect(sessionServers({ pluginPath: bot })).toEqual({
+			own: { command: "only-bot" },
+		})
 	})
 })

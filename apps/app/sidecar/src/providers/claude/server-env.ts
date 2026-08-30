@@ -111,7 +111,11 @@ export const resolveServers = (
 export const resolvedServers = (request: SessionRequest): ResolvedServers =>
 	resolveServers(
 		request.pluginPath
-			? sessionServers(request.pluginPath, request.systemPluginPath)
+			? sessionServers({
+					pluginPath: request.pluginPath,
+					systemPluginPath: request.systemPluginPath,
+					spacePluginPath: request.spacePluginPath,
+				})
 			: {},
 		request.serverEnv ?? {},
 	)
