@@ -14,7 +14,10 @@ import {
 	MessageQuote,
 	type QuotedMessage,
 } from "@workspace/ui/components/message-quote"
-import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
+import type {
+	MessageScrollerHandle,
+	MessageScrollerRow,
+} from "@workspace/ui/components/message-scroller"
 import {
 	PINNED_AVATAR_SIZE,
 	type PinnedMessage,
@@ -261,10 +264,7 @@ const ThreadApproval = ({
 }: ThreadApprovalProps) => {
 	if (thread.kind === "bot") {
 		return thread.state.permission ? (
-			<ApprovalPrompt
-				request={thread.state.permission}
-				responder={responder}
-			/>
+			<ApprovalPrompt request={thread.state.permission} responder={responder} />
 		) : null
 	}
 
@@ -301,11 +301,7 @@ const ThreadPending = ({
 					size="md"
 				/>
 			) : null}
-			<ThreadApproval
-				authors={authors}
-				responder={responder}
-				thread={thread}
-			/>
+			<ThreadApproval authors={authors} responder={responder} thread={thread} />
 		</>
 	)
 }
@@ -418,7 +414,7 @@ const ThreadRun = ({
 	</TurnGroup>
 )
 
-type ThreadRunsProps = Omit<
+type RunRowsProps = Omit<
 	ThreadRunProps,
 	"run" | "carriesMark" | "avatarIndex"
 > & {
@@ -427,34 +423,31 @@ type ThreadRunsProps = Omit<
 	isWorking: boolean
 }
 
-const ThreadRuns = ({
+const toRunRows = ({
 	runs,
 	markedRuns,
 	isWorking,
 	...shared
-}: ThreadRunsProps) => {
+}: RunRowsProps): MessageScrollerRow[] => {
 	const newestIndex = runs.length - 1
 
-	return (
-		<>
-			{runs.map((run, runIndex) => {
-				const newest = runIndex === newestIndex
-				const live = isWorking && newest
+	return runs.map((run, runIndex) => {
+		const newest = runIndex === newestIndex
+		const live = isWorking && newest
 
-				return (
-					<ThreadRun
-						{...shared}
-						avatarIndex={shared.isSoloThread && !live ? run.length - 1 : -1}
-						carriesMark={
-							shared.isSoloThread ? newest : markedRuns.has(runIndex)
-						}
-						key={bubbleIdOf(run[0].messageId, run[0].blockIndex)}
-						run={run}
-					/>
-				)
-			})}
-		</>
-	)
+		return {
+			key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
+			messageIds: run.map((row) => row.messageId),
+			render: () => (
+				<ThreadRun
+					{...shared}
+					avatarIndex={shared.isSoloThread && !live ? run.length - 1 : -1}
+					carriesMark={shared.isSoloThread ? newest : markedRuns.has(runIndex)}
+					run={run}
+				/>
+			),
+		}
+	})
 }
 
 type BotThreadTailProps = {
@@ -684,6 +677,22 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 	const markedRuns = isSoloThread
 		? NO_MARKS
 		: markedRunsOf(runs, facts.workingBotIds)
+	const runRows = toRunRows({
+		asked,
+		authors,
+		botFace,
+		isSoloThread,
+		isWorking: facts.botWork !== null,
+		markedRuns,
+		onReply: holdReply,
+		onRetry: botController ? retry : undefined,
+		pins,
+		quotes,
+		rejectedPromptId: facts.rejectedPromptId,
+		responder: promptResponder,
+		runs,
+		toQuote,
+	})
 	const errorNotice =
 		facts.latestError?.id === dismissedErrorId ? undefined : facts.latestError
 	const looping = facts.loopingPair?.map((botId) =>
@@ -763,6 +772,7 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 						: undefined
 				}
 				rootRef={rootRef}
+				rows={runRows}
 				scrollerRef={scrollerRef}
 				transcriptKey={facts.id}
 			>
@@ -774,23 +784,6 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 						thread={thread}
 					/>
 				) : null}
-
-				<ThreadRuns
-					isSoloThread={isSoloThread}
-					asked={asked}
-					authors={authors}
-					responder={promptResponder}
-					botFace={botFace}
-					isWorking={facts.botWork !== null}
-					markedRuns={markedRuns}
-					onReply={holdReply}
-					onRetry={botController ? retry : undefined}
-					pins={pins}
-					quotes={quotes}
-					rejectedPromptId={facts.rejectedPromptId}
-					runs={runs}
-					toQuote={toQuote}
-				/>
 
 				<ThreadTail
 					botWork={facts.botWork}

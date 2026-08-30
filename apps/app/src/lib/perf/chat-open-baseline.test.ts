@@ -18,6 +18,7 @@ import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -210,6 +211,7 @@ const mountApp = async ({
 	delayMs = 0,
 	pageBotIndex,
 }: MountOptions = {}): Promise<MountedApp> => {
+	layout = fakeLayout()
 	const store = createFakeTranscriptStore()
 	const bots = await seedBots(store)
 	for (const [index, bot] of bots.entries()) {
@@ -347,9 +349,13 @@ const measurePage = async () => {
 	}
 }
 
+let layout: FakeLayout | null = null
+
 describe("PRF5 chat open baseline", () => {
 	afterEach(() => {
 		setRenderProbe(null)
+		layout?.restore()
+		layout = null
 		cleanup()
 		vi.useRealTimers()
 	})
@@ -454,10 +460,10 @@ describe("PRF5 chat open baseline", () => {
 			{
 			  "commitsToFirstRow": 5,
 			  "commitsToSettled": 11,
-			  "highlightCalls": 10,
+			  "highlightCalls": 4,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 30,
-			  "paintedRows": 20,
+			  "markdownProcessors": 12,
+			  "paintedRows": 8,
 			}
 		`)
 	})
