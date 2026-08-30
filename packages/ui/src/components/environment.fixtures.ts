@@ -1,4 +1,4 @@
-import type { EnvironmentEntry } from "@workspace/ui/components/bot-settings-dialog/environment-panel"
+import type { EnvironmentEntry } from "@workspace/ui/components/environment-panel"
 
 export const SPACE_ENVIRONMENT: EnvironmentEntry[] = [
 	{ name: "ATLAS_TOKEN", definedIn: "space", servedFrom: "space" },

@@ -25,11 +25,6 @@ import {
 	toMcpServerDraft,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-import {
-	type EnvironmentEntry,
-	EnvironmentPanel,
-	type EnvironmentWrite,
-} from "@workspace/ui/components/bot-settings-dialog/environment-panel"
 import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
 import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
@@ -37,6 +32,12 @@ import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/p
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
+import {
+	type EnvironmentEntry,
+	EnvironmentPanel,
+	type EnvironmentSection,
+	type EnvironmentWrite,
+} from "@workspace/ui/components/environment-panel"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	HistoryPanel,
@@ -99,6 +100,8 @@ type BotSettingsDialogProps = {
 	hasEnvironmentFailedToRead?: boolean
 	onEnvironmentSet: (write: EnvironmentWrite) => void | Promise<void>
 	onEnvironmentDelete: (name: string) => void | Promise<void>
+	onMcpServerOpen?: (name: string | null) => void
+	serverEnvironment?: EnvironmentSection
 	history?: PluginHistory
 	seed?: string
 	onDelete: () => void
@@ -135,6 +138,8 @@ const BotSettingsDialog = ({
 	hasEnvironmentFailedToRead,
 	onEnvironmentSet,
 	onEnvironmentDelete,
+	onMcpServerOpen,
+	serverEnvironment,
 	history,
 	seed,
 	onDelete,
@@ -165,9 +170,14 @@ const BotSettingsDialog = ({
 		server && isMcpServerDraftUnsaved(server.draft, server.saved),
 	)
 
+	const openServer = (session: McpSession | null) => {
+		setServer(session)
+		onMcpServerOpen?.(session?.saved?.name ?? null)
+	}
+
 	const leave = () => {
 		skillSession.discard()
-		setServer(null)
+		openServer(null)
 		onClose()
 	}
 
@@ -198,18 +208,19 @@ const BotSettingsDialog = ({
 			onMcpServerCreate(draft.name, config)
 		}
 
-		setServer(null)
+		openServer(null)
 	}
 
 	const deleteServer = (saved: BotMcpServerDraft) => {
 		onMcpServerDelete(saved.name)
-		setServer(null)
+		openServer(null)
 	}
 
 	const openServerEditor = ({ draft, saved }: McpSession) => (
 		<McpServerEditor
 			draft={draft}
-			onBack={() => setServer(null)}
+			environment={saved ? serverEnvironment : undefined}
+			onBack={() => openServer(null)}
 			onDelete={saved ? () => deleteServer(saved) : undefined}
 			onDraftChange={(next) => setServer({ draft: next, saved })}
 			onSave={(config) => saveServer({ draft, saved }, config)}
@@ -381,9 +392,9 @@ const BotSettingsDialog = ({
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">
 							<McpServersPanel
 								haveFailedToLoad={haveMcpServersFailedToLoad}
-								onAdd={() => setServer({ draft: BLANK_MCP_SERVER_DRAFT })}
+								onAdd={() => openServer({ draft: BLANK_MCP_SERVER_DRAFT })}
 								onOpen={(opened) =>
-									setServer({
+									openServer({
 										draft: toMcpServerDraft(opened),
 										saved: toMcpServerDraft(opened),
 									})
@@ -470,7 +481,5 @@ export {
 	type BotSettingsValue,
 	type BotSkillDraft,
 	type BotSkillItem,
-	type EnvironmentEntry,
-	type EnvironmentWrite,
 	type PluginHistory,
 }

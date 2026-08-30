@@ -7,7 +7,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
-import { SPACE_ENVIRONMENT } from "@workspace/ui/components/bot-settings-dialog/environment.fixtures"
+import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
 import {

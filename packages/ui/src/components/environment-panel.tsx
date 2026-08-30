@@ -40,12 +40,15 @@ type EnvironmentWrite = {
 	value: string
 }
 
-type EnvironmentPanelProps = {
-	scope: EnvironmentScope
+type EnvironmentSection = {
 	entries: EnvironmentEntry[]
 	hasFailedToRead?: boolean
 	onSet: (write: EnvironmentWrite) => void | Promise<void>
 	onDelete: (name: string) => void | Promise<void>
+}
+
+type EnvironmentPanelProps = EnvironmentSection & {
+	scope: EnvironmentScope
 }
 
 type EnvironmentWriteDialogProps = {
@@ -328,6 +331,7 @@ export {
 	EnvironmentPanel,
 	type EnvironmentPanelProps,
 	type EnvironmentScope,
+	type EnvironmentSection,
 	type EnvironmentWrite,
 	isEnvironmentName,
 }

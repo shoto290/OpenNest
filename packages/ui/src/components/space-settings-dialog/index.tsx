@@ -9,13 +9,13 @@ import type {
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
+import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import {
 	type EnvironmentEntry,
 	EnvironmentPanel,
 	type EnvironmentWrite,
-} from "@workspace/ui/components/bot-settings-dialog/environment-panel"
-import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import { Content, Root, Title } from "@workspace/ui/components/dialog"
+} from "@workspace/ui/components/environment-panel"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	HistoryPanel,

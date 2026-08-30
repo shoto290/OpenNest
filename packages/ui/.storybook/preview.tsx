@@ -113,6 +113,7 @@ export default definePreview({
 					"Settings/Bot",
 					"Settings/User",
 					"Settings/Space",
+					"Settings/Environment",
 					"Settings/Conversation",
 					"Settings/Plugins",
 				]

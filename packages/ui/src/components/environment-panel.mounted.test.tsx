@@ -3,8 +3,8 @@
 import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { BOT_ENVIRONMENT } from "@workspace/ui/components/bot-settings-dialog/environment.fixtures"
-import { EnvironmentPanel } from "@workspace/ui/components/bot-settings-dialog/environment-panel"
+import { BOT_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
+import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 
 import "@workspace/ui/lib/i18n"
 
