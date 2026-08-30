@@ -5,6 +5,7 @@ const settings = {
 	rail: {
 		profile: "Profil",
 		space: "Espace",
+		environment: "Environnement",
 		appearance: "Apparence",
 		notifications: "Notifications",
 		language: "Langue",
