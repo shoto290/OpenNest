@@ -187,55 +187,33 @@ const renderScrollingPanels = (args: SettingsRailProps) => (
 	</Tabs.Root>
 )
 
-const scrollbarIn = (panel: HTMLElement) =>
-	panel.querySelector(".os-scrollbar-vertical")
-
-const handleIn = (panel: HTMLElement) => {
-	const handle = scrollbarIn(panel)?.querySelector<HTMLElement>(
-		".os-scrollbar-handle",
-	)
-	if (!handle) throw new Error("no thumb to drag")
-	const { left, top, width, height } = handle.getBoundingClientRect()
-	return { handle, x: left + width / 2, y: top + height / 2 }
-}
-
 export const ScrollingPanel = meta.story({
 	render: renderScrollingPanels,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The panel beside the rail once its group runs past the height of the dialog. The thumb is drawn over the content rather than beside it, so the rows keep their full width whether the group scrolls or not, and nothing reflows when a reader switches from a long group to a short one. Check that the thumb fades in on the way into the panel and out again on the way out, that a group short enough to fit shows none, and that dragging the thumb carries the rows with it.",
+					"The panel beside the rail once its group runs past the height of the dialog. The panel scrolls natively and reserves its scrollbar gutter, so the rows keep the same width whether the group scrolls or not and nothing reflows when a reader switches from a long group to a short one. The thumb itself is drawn by the browser from `--scrollbar`, fading in on the way into the panel and out again on the way out. Check that the long group overflows and scrolls, and that the short group beside it measures the same content width.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const long = canvas.getByRole("tabpanel")
 
-		await waitFor(() =>
-			expect(scrollbarIn(long)).not.toHaveClass("os-scrollbar-unusable"),
-		)
+		await expect(long).toHaveClass("scrollbar-app")
+		await expect(getComputedStyle(long).scrollbarGutter).toBe("stable")
 		await expect(long.scrollHeight).toBeGreaterThan(long.clientHeight)
-		await expect(long.clientWidth).toBe(long.offsetWidth)
+		const contentWidth = long.clientWidth
 
-		await userEvent.hover(long)
-		const { handle, x, y } = handleIn(long)
-		await userEvent.pointer([
-			{
-				keys: "[MouseLeft>]",
-				target: handle,
-				coords: { clientX: x, clientY: y },
-			},
-			{ target: handle, coords: { clientX: x, clientY: y + 60 } },
-			{ keys: "[/MouseLeft]" },
-		])
-		await waitFor(() => expect(long.scrollTop).toBeGreaterThan(0))
+		long.scrollTop = 60
+		await expect(long.scrollTop).toBe(60)
 
 		await userEvent.click(canvas.getByRole("tab", { name: "Appearance" }))
 		const short = canvas.getByRole("tabpanel")
 
 		await waitFor(() =>
-			expect(scrollbarIn(short)).toHaveClass("os-scrollbar-unusable"),
+			expect(short.scrollHeight).toBeLessThanOrEqual(short.clientHeight),
 		)
+		await expect(short.clientWidth).toBe(contentWidth)
 	},
 })
