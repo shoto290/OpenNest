@@ -146,6 +146,8 @@ export function MessageScroller({
 	const holdFrameRef = useRef<number | undefined>(undefined)
 	const hasMissedResizeRef = useRef(false)
 	const lastScrollTopRef = useRef(0)
+	const heldViewportHeightRef = useRef(0)
+	const isHoldPendingRef = useRef(false)
 	const centerFrameRef = useRef<(() => void) | undefined>(undefined)
 	const landedKeyRef = useRef(transcriptKey)
 	const landedRowsRef = useRef(0)
@@ -161,7 +163,10 @@ export function MessageScroller({
 
 	const scrollViewportToEnd = useCallback((nextBehavior: ScrollBehavior) => {
 		const viewport = viewportRef.current
-		if (!viewport || distanceFromEnd(viewport) <= 1) return
+		if (!viewport) return
+
+		heldViewportHeightRef.current = viewport.clientHeight
+		if (distanceFromEnd(viewport) <= 1) return
 
 		landingRef.current = true
 		if (typeof viewport.scrollTo === "function") {
@@ -282,19 +287,29 @@ export function MessageScroller({
 		const viewport = viewportRef.current
 		if (!viewport) return
 
+		const hasLostHeight = viewport.clientHeight < heldViewportHeightRef.current
 		const hasReaderMovedUp = viewport.scrollTop < lastScrollTopRef.current
 		lastScrollTopRef.current = viewport.scrollTop
+		if (hasLostHeight && followOutput && followingRef.current) {
+			isHoldPendingRef.current = true
+		}
 
 		const atLiveEdge = isOnLastBubble(viewport, followThreshold)
+		if (isHoldPendingRef.current) {
+			isHoldPendingRef.current = !atLiveEdge
+			return
+		}
+
 		if (landingRef.current && !atLiveEdge && !hasReaderMovedUp) return
 
 		landingRef.current = false
 		if (hasReaderMovedUp) setFollowing(atLiveEdge)
 		else if (atLiveEdge) setFollowing(true)
-	}, [followThreshold, setFollowing])
+	}, [followOutput, followThreshold, setFollowing])
 
 	const releaseLanding = useCallback(() => {
 		landingRef.current = false
+		isHoldPendingRef.current = false
 	}, [])
 
 	const requestOlder = () => {
