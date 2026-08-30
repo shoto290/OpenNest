@@ -9,6 +9,11 @@ import type {
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
+import {
+	type EnvironmentEntry,
+	EnvironmentPanel,
+	type EnvironmentWrite,
+} from "@workspace/ui/components/bot-settings-dialog/environment-panel"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
@@ -43,6 +48,10 @@ type SpaceSettingsDialogProps = {
 	onClose: () => void
 	value: SpaceSettingsValue
 	onValueChange: (value: SpaceSettingsValue) => void
+	environment: EnvironmentEntry[]
+	hasEnvironmentFailedToRead?: boolean
+	onEnvironmentSet: (write: EnvironmentWrite) => void | Promise<void>
+	onEnvironmentDelete: (name: string) => void | Promise<void>
 	skills: BotSkillItem[]
 	onSkillCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
@@ -60,6 +69,10 @@ const SpaceSettingsDialog = ({
 	onClose,
 	value,
 	onValueChange,
+	environment,
+	hasEnvironmentFailedToRead,
+	onEnvironmentSet,
+	onEnvironmentDelete,
 	skills,
 	onSkillCreate,
 	onSkillChange,
@@ -129,6 +142,12 @@ const SpaceSettingsDialog = ({
 								value={FIRST_TAB}
 							/>
 							<SettingsRailItem
+								icon={Icons.Json}
+								iconsOnly={iconsOnly}
+								label={t("rail.environment")}
+								value="environment"
+							/>
+							<SettingsRailItem
 								icon={Icons.Skill}
 								iconsOnly={iconsOnly}
 								label={t("rail.skills")}
@@ -153,6 +172,16 @@ const SpaceSettingsDialog = ({
 						<SettingsScrollingPanel value={FIRST_TAB}>
 							<SpaceFields onValueChange={onValueChange} value={value} />
 						</SettingsScrollingPanel>
+
+						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="environment">
+							<EnvironmentPanel
+								entries={environment}
+								hasFailedToRead={hasEnvironmentFailedToRead}
+								onDelete={onEnvironmentDelete}
+								onSet={onEnvironmentSet}
+								scope="space"
+							/>
+						</Tabs.Panel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="skills">
 							{skillSession.panel}

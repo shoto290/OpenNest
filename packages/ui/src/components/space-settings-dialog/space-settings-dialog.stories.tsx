@@ -7,6 +7,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
+import { SPACE_ENVIRONMENT } from "@workspace/ui/components/bot-settings-dialog/environment.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
 import {
@@ -56,7 +57,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a space is, in one overlay — the reader's own settings, told about a work area instead of a person. A breadcrumb heads it with the space's tint dot and its name, so the dialog is visibly the one that space opened. Down the left is a rail of three entries: the space itself, what it is called and the tint it wears; its skills, the plugin every bot in it reads before answering; its history, everything ever written into that plugin. Below a separator sits the danger zone, set apart in destructive tone exactly as a bot's settings sets it apart, because a space takes its bots with it. It opens on the space every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce — closing it is never a question, except while a skill is half written.",
+					"Everything a space is, in one overlay — the reader's own settings, told about a work area instead of a person. A breadcrumb heads it with the space's tint dot and its name, so the dialog is visibly the one that space opened. Down the left is a rail of four entries: the space itself, what it is called and the tint it wears; its environment, the variables every bot in it starts with; its skills, the plugin every bot in it reads before answering; its history, everything ever written into that plugin. Below a separator sits the danger zone, set apart in destructive tone exactly as a bot's settings sets it apart, because a space takes its bots with it. It opens on the space every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce — closing it is never a question, except while a skill is half written.",
 			},
 		},
 	},
@@ -65,6 +66,9 @@ const meta = preview.meta({
 		value: FILLED_SPACE,
 		onClose: fn(),
 		onValueChange: fn(),
+		environment: SPACE_ENVIRONMENT,
+		onEnvironmentSet: fn(),
+		onEnvironmentDelete: fn(),
 		skills: BOT_SKILLS,
 		onSkillCreate: fn(),
 		onSkillChange: fn(),
@@ -110,6 +114,48 @@ export const Default = meta.story({
 		await expect(args.onValueChange).toHaveBeenLastCalledWith({
 			name: "Release desk!",
 			colour: "pink",
+		})
+	},
+})
+
+export const Environment = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The variables the space hands to every bot in it — the same panel a bot's settings draws, read at space scope, so each name is the space's own and every one of them can be replaced or removed here. A name a bot redefines is still listed, marked as served from the bot, because the space is where it was written even when it is not the value that runs. Check that adding a name reports it, and that the panel never shows a value back.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(
+			within(dialog).getByRole("tab", { name: "Environment" }),
+		)
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Environment",
+		})
+
+		await expect(within(panel).getByText("ATLAS_TOKEN")).toBeVisible()
+		await expect(within(panel).getByText("Overridden by Bot")).toBeVisible()
+
+		await userEvent.click(
+			within(panel).getByRole("button", { name: "Add variable" }),
+		)
+		const write = await screen.findByRole("dialog", {
+			name: "Add a variable",
+		})
+
+		await userEvent.type(within(write).getByLabelText("Name"), "RELEASE_DESK")
+		await userEvent.type(within(write).getByLabelText("Value"), "sk-live")
+		await userEvent.click(
+			within(write).getByRole("button", { name: "Save variable" }),
+		)
+
+		await expect(args.onEnvironmentSet).toHaveBeenCalledWith({
+			name: "RELEASE_DESK",
+			value: "sk-live",
 		})
 	},
 })

@@ -116,7 +116,8 @@ export function App() {
 	const collapsedSections = useCollapsedSections(store)
 	const skills = useBotSkills(store)
 	const mcpServers = useBotMcpServers(store)
-	const environment = useBotEnvironment(store)
+	const botEnvironment = useBotEnvironment(store)
+	const spaceEnvironment = useBotEnvironment(store)
 	const history = useBotHistory(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -238,13 +239,22 @@ export function App() {
 
 	useEffect(() => {
 		if (isEditing && selectedBotId && selectedSpaceId) {
-			void environment.controller.open({
+			void botEnvironment.controller.open({
 				kind: "bot",
 				id: selectedBotId,
 				spaceId: selectedSpaceId,
 			})
 		}
-	}, [environment.controller, isEditing, selectedBotId, selectedSpaceId])
+	}, [botEnvironment.controller, isEditing, selectedBotId, selectedSpaceId])
+
+	useEffect(() => {
+		if (isSpaceEditing && selectedSpaceId) {
+			void spaceEnvironment.controller.open({
+				kind: "space",
+				id: selectedSpaceId,
+			})
+		}
+	}, [spaceEnvironment.controller, isSpaceEditing, selectedSpaceId])
 
 	useEffect(() => {
 		if (!selectedBotId) {
@@ -562,12 +572,12 @@ export function App() {
 					}}
 					haveMcpServersFailedToLoad={mcpServers.state.hasFailedToLoad}
 					mcpServers={mcpServers.state.servers}
-					environment={toEnvironmentRows(environment.state.entries)}
-					hasEnvironmentFailedToRead={environment.state.hasFailedToRead}
+					environment={toEnvironmentRows(botEnvironment.state.entries)}
+					hasEnvironmentFailedToRead={botEnvironment.state.hasFailedToRead}
 					onEnvironmentSet={({ name, value }) =>
-						environment.controller.set(name, value)
+						botEnvironment.controller.set(name, value)
 					}
-					onEnvironmentDelete={environment.controller.remove}
+					onEnvironmentDelete={botEnvironment.controller.remove}
 					models={modelOptionsFor(selected.model, catalogue)}
 					outputStyle={readBotOutputStyle(selected.outputStyle)}
 					memory={selected.memory}
@@ -665,6 +675,8 @@ export function App() {
 			) : null}
 			{selectedSpace ? (
 				<SpaceSettingsDialog
+					environment={toEnvironmentRows(spaceEnvironment.state.entries)}
+					hasEnvironmentFailedToRead={spaceEnvironment.state.hasFailedToRead}
 					history={{
 						commits: spacePlugin.state.commits.map(toCommitItem),
 						onLoadDiff: spacePlugin.controller.loadDiff,
@@ -675,6 +687,10 @@ export function App() {
 					onDelete={() => {
 						void spaces.controller.remove(selectedSpace.id)
 					}}
+					onEnvironmentDelete={spaceEnvironment.controller.remove}
+					onEnvironmentSet={({ name, value }) =>
+						spaceEnvironment.controller.set(name, value)
+					}
 					onSkillChange={(id, draft) =>
 						spacePlugin.controller.saveSkill(
 							id,
