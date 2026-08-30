@@ -328,6 +328,10 @@ interface RosterCreateActions {
 	onCreateSpace?: () => void
 }
 
+interface RosterSpaceActions {
+	onOpenSpaceSettings?: () => void
+}
+
 interface RosterPin {
 	id: string
 	sectionId: string | null
@@ -499,29 +503,26 @@ const RosterZoneSeparator = () => (
 	/>
 )
 
-interface PinItemProps extends RosterPinActions {
+interface PinGroupProps extends RosterPinActions {
 	id: string
 	isPinned: boolean
 }
 
-const PinItem = ({ id, isPinned, onPin, onUnpin }: PinItemProps) => {
+const PinGroup = ({ id, isPinned, onPin, onUnpin }: PinGroupProps) => {
 	const { t } = useTranslation("bots")
 
-	if (isPinned) {
-		if (!onUnpin) return null
-		return (
-			<ContextMenuItem onSelect={() => onUnpin(id)}>
-				<Icons.Unpin aria-hidden="true" className="size-3.5" />
-				{t("roster.unpin")}
-			</ContextMenuItem>
-		)
-	}
-	if (!onPin) return null
+	const toggle = isPinned ? onUnpin : onPin
+	if (!toggle) return null
+
+	const PinIcon = isPinned ? Icons.Unpin : Icons.Pin
 	return (
-		<ContextMenuItem onSelect={() => onPin(id)}>
-			<Icons.Pin aria-hidden="true" className="size-3.5" />
-			{t("roster.pin")}
-		</ContextMenuItem>
+		<>
+			<ContextMenuItem onSelect={() => toggle(id)}>
+				<PinIcon aria-hidden="true" className="size-3.5" />
+				{t(isPinned ? "roster.unpin" : "roster.pin")}
+			</ContextMenuItem>
+			<ContextMenuSeparator />
+		</>
 	)
 }
 
@@ -631,6 +632,12 @@ const BotRosterRow = ({
 					</AnimatedSidebarMenuButton>
 				</ContextMenuTrigger>
 				<ContextMenuContent ariaLabel={t("roster.actions", { name: bot.name })}>
+					<PinGroup
+						id={bot.id}
+						isPinned={isPinned}
+						onPin={onPin}
+						onUnpin={onUnpin}
+					/>
 					<ContextMenuItem onSelect={() => onEdit?.(bot.id)}>
 						<Icons.Settings aria-hidden="true" className="size-3.5" />
 						{t("roster.settings")}
@@ -640,12 +647,6 @@ const BotRosterRow = ({
 						<Icons.Copy aria-hidden="true" className="size-3.5" />
 						{t("roster.duplicate")}
 					</ContextMenuItem>
-					<PinItem
-						id={bot.id}
-						isPinned={isPinned}
-						onPin={onPin}
-						onUnpin={onUnpin}
-					/>
 					<SectionBranch
 						id={bot.id}
 						onCreateSectionFor={onCreateSectionFor}
@@ -784,16 +785,16 @@ const ConversationRosterRow = ({
 				<ContextMenuContent
 					ariaLabel={t("roster.actions", { name: conversation.name })}
 				>
-					<ContextMenuItem onSelect={() => onOpenSettings?.(conversation.id)}>
-						<Icons.Settings aria-hidden="true" className="size-3.5" />
-						{t("roster.settings")}
-					</ContextMenuItem>
-					<PinItem
+					<PinGroup
 						id={conversation.id}
 						isPinned={isPinned}
 						onPin={onPin}
 						onUnpin={onUnpin}
 					/>
+					<ContextMenuItem onSelect={() => onOpenSettings?.(conversation.id)}>
+						<Icons.Settings aria-hidden="true" className="size-3.5" />
+						{t("roster.settings")}
+					</ContextMenuItem>
 					<SectionBranch
 						id={conversation.id}
 						onCreateSectionFor={onCreateSectionFor}
@@ -860,7 +861,7 @@ const CreateItems = ({
 	)
 }
 
-interface RosterSurfaceProps extends RosterCreateActions {
+interface RosterSurfaceProps extends RosterCreateActions, RosterSpaceActions {
 	onCreateSection?: () => void
 	children?: ReactNode
 }
@@ -869,6 +870,7 @@ const RosterSurface = ({
 	onCreateBot,
 	onCreateSection,
 	onCreateSpace,
+	onOpenSpaceSettings,
 	children,
 }: RosterSurfaceProps) => {
 	const { t } = useTranslation("bots")
@@ -888,6 +890,15 @@ const RosterSurface = ({
 					onCreateSection={onCreateSection}
 					onCreateSpace={onCreateSpace}
 				/>
+				{onOpenSpaceSettings ? (
+					<>
+						<ContextMenuSeparator />
+						<ContextMenuItem onSelect={onOpenSpaceSettings}>
+							<Icons.Settings aria-hidden="true" className="size-3.5" />
+							{t("spaces.settings")}
+						</ContextMenuItem>
+					</>
+				) : null}
 			</ContextMenuContent>
 		</ContextMenu>
 	)
@@ -1229,7 +1240,8 @@ interface BotRosterProps
 	extends BotRosterActions,
 		ConversationRosterActions,
 		SectionActions,
-		RosterCreateActions {
+		RosterCreateActions,
+		RosterSpaceActions {
 	spaceId?: string
 	bots: AppSidebarBot[]
 	haveBotsFailedToLoad?: boolean
@@ -1258,6 +1270,7 @@ const BotRoster = ({
 	onNaming,
 	onCreateBot,
 	onCreateSpace,
+	onOpenSpaceSettings,
 	onSelectConversation,
 	onOpenConversationSettings,
 	onDeleteConversation,
@@ -1567,6 +1580,7 @@ const BotRoster = ({
 		onCreateBot,
 		onCreateSection: onCreateSection ? nameLooseSection : undefined,
 		onCreateSpace,
+		onOpenSpaceSettings,
 	}
 
 	if (haveBotsFailedToLoad && bots.length === 0)
@@ -1952,7 +1966,8 @@ const AppSidebarBase = ({
 	const actions: BotRosterActions &
 		ConversationRosterActions &
 		SectionActions &
-		RosterCreateActions = {
+		RosterCreateActions &
+		RosterSpaceActions = {
 		onCollapseSection,
 		onCreateBot,
 		onCreateSpace,
@@ -1965,6 +1980,7 @@ const AppSidebarBase = ({
 		onEditBot,
 		onMoveBotToSpace,
 		onOpenConversationSettings,
+		onOpenSpaceSettings,
 		onPinRoster,
 		onRenameSection,
 		onSelectBot,

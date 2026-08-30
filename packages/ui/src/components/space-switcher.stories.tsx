@@ -244,7 +244,7 @@ export const Open = meta.story({
 		docs: {
 			description: {
 				story:
-					"The menu the press opens, which is the only place a space is chosen, created, or configured. Check the spaces are a single-choice group — one mark, on the open one, and arrows walk the whole list — that each row carries its tint and its rank as `⌘1`…`⌘9`, and that the two items under the separator read as verbs rather than as a sixth space. Choosing a row reports the id and closes; the settings item only reports, since the dialog belongs to the host. Pick `Default` for the resting button.",
+					"The menu the press opens, which is the only place a space is chosen, created, or configured. Check the spaces are a single-choice group — one mark, on the open one, and arrows walk the whole list — that each row carries its tint and its rank as `⌘1`…`⌘9`, and that the reordering pair sits in a band of its own, that the two items under the last rule read as verbs rather than as a sixth space. Choosing a row reports the id and closes; the settings item only reports, since the dialog belongs to the host. Pick `Default` for the resting button.",
 			},
 		},
 	},
@@ -259,6 +259,13 @@ export const Open = meta.story({
 		await expect(spaces[0]).toHaveAttribute("aria-checked", "false")
 		await expect(within(menu).getByText("⌘1")).toBeInTheDocument()
 		await expect(within(menu).getByText("⌘5")).toBeInTheDocument()
+
+		const rules = within(menu).getAllByRole("separator")
+		await expect(rules).toHaveLength(2)
+		await expect(
+			within(menu).getByRole("menuitem", { name: "Move down" })
+				.nextElementSibling,
+		).toBe(rules[1])
 
 		await userEvent.click(within(menu).getByRole("menuitem", { name: /^New/ }))
 		await expect(args.onCreateSpace).toHaveBeenCalled()
@@ -307,7 +314,7 @@ export const SingleSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that the menu offers no `Move up` and no `Move down`: there is no order to set with one space in it. Pick `WithDots` for the strip once a second space exists, `MoveSpace` for the items the second one brings back.",
+					"A reader who has only ever had one space — the state every account opens in. Check the button still draws the name and still opens its menu, since creating the second space lives there, that no dot strip is drawn at all — a single dot would say nothing and would invite a press that changes nothing — and that the menu offers no `Move up` and no `Move down`: there is no order to set with one space in it, so the band they would have made is gone and a single rule is left between the list and the two verbs. Pick `WithDots` for the strip once a second space exists, `MoveSpace` for the items the second one brings back.",
 			},
 		},
 	},
@@ -326,6 +333,7 @@ export const SingleSpace = meta.story({
 		await expect(
 			within(menu).queryByRole("menuitem", { name: "Move down" }),
 		).toBeNull()
+		await expect(within(menu).getAllByRole("separator")).toHaveLength(1)
 
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
