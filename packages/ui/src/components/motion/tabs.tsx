@@ -232,7 +232,7 @@ export function TabsContent({
 			key={value}
 			initial={{ opacity: 0, y: reduce ? 0 : 4 }}
 			animate={{ opacity: 1, y: 0 }}
-			transition={{ duration: 0.18, ease: EASE_OUT }}
+			transition={{ duration: reduce ? 0 : 0.18, ease: EASE_OUT }}
 			className={cn("mt-4", className)}
 		>
 			{children}
