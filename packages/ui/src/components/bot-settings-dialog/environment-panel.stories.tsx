@@ -143,6 +143,25 @@ export const Unreadable = meta.story({
 	},
 })
 
+export const UnreadableWithEntries = meta.story({
+	args: { hasFailedToRead: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A read that came back refused after an earlier one had succeeded. Reach for this over `Unreadable` to check the case the reader is most likely to hit: the names already listed stay on screen, because they are the last thing known to be true, and the message sits above them to say the list may no longer match what is stored. Hiding the list here would take away the only thing the reader still has; showing it without the message would let a stale list pass for a current one.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Variables could not be read")).toBeVisible()
+		await expect(canvas.getByText("BOT_SEED")).toBeVisible()
+		await expect(
+			canvas.getByRole("button", { name: "Add variable" }),
+		).toBeVisible()
+	},
+})
+
 export const RefusedName = meta.story({
 	parameters: {
 		docs: {

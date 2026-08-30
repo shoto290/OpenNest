@@ -249,13 +249,15 @@ const EnvironmentPanel = ({
 			/>
 		)
 
+	const failureNotice = hasFailedToRead ? (
+		<Notice
+			description={t("environment.unreadable.description")}
+			title={t("environment.unreadable.title")}
+		/>
+	) : null
+
 	if (entries.length === 0 && hasFailedToRead) {
-		return (
-			<Notice
-				description={t("environment.unreadable.description")}
-				title={t("environment.unreadable.title")}
-			/>
-		)
+		return failureNotice
 	}
 
 	if (entries.length === 0) {
@@ -286,6 +288,8 @@ const EnvironmentPanel = ({
 
 	return (
 		<>
+			{failureNotice}
+
 			<div className="flex shrink-0 items-start justify-between gap-3">
 				<p className="max-w-sm text-muted-foreground text-xs leading-relaxed">
 					{t("environment.notice")}
