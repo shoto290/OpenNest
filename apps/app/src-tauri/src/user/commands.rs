@@ -120,6 +120,37 @@ pub async fn user_plugin_delete_skill<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn user_plugin_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	skill_id: String,
+	path: String,
+) -> Result<String, TranscriptStoreError> {
+	let plugin = plugin_path(&app)?;
+	bundled(bundles::user::skill_file(&plugin, &skill_id, &path))
+}
+
+#[tauri::command]
+pub async fn user_plugin_write_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	skill_id: String,
+	path: String,
+	text: String,
+) -> Result<Skill, TranscriptStoreError> {
+	let plugin = plugin_path(&app)?;
+	bundled(bundles::user::write_skill_file(&plugin, &skill_id, &path, &text)).map(Skill::from)
+}
+
+#[tauri::command]
+pub async fn user_plugin_delete_skill_file<R: Runtime>(
+	app: AppHandle<R>,
+	skill_id: String,
+	path: String,
+) -> Result<(), TranscriptStoreError> {
+	let plugin = plugin_path(&app)?;
+	bundled(bundles::user::remove_skill_file(&plugin, &skill_id, &path))
+}
+
+#[tauri::command]
 pub async fn user_plugin_history<R: Runtime>(
 	app: AppHandle<R>,
 ) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {

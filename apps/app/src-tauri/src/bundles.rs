@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
@@ -63,6 +63,7 @@ const UNNAMED: &str = "bot";
 
 const BOT_SUBJECT: &str = "Bot";
 const SKILL_SUBJECT: &str = "Skill";
+const SKILL_FILE_SUBJECT: &str = "Skill file";
 const SERVER_SUBJECT: &str = "MCP server";
 
 const OWNER_KEY: &str = "opennestBotId";
@@ -710,6 +711,7 @@ pub struct Skill {
 	pub body: String,
 	pub is_preloaded: bool,
 	pub is_system: bool,
+	pub files: Vec<String>,
 	pub front: SkillFront,
 }
 
@@ -753,9 +755,7 @@ pub fn skills_at(bundle: &Path) -> Vec<Skill> {
 
 pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
 	skill_dir(&dir(root, bot_id), skill_id)
-		.ok()
-		.and_then(|path| read_skill(&path))
-		.is_some_and(|skill| skill.is_system)
+		.is_ok_and(|path| front_value(&held_skill(&path), SYSTEM_KEY).as_deref() == Some(MARKED))
 }
 
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
@@ -780,7 +780,9 @@ pub fn update_skill(
 ) -> std::io::Result<Skill> {
 	let bundle = dir(root, &bot.id);
 	let path = skill_dir(&bundle, skill_id)?;
-	let skill = written_skill(root, bot, &path, drafted(Some(&held_skill(&path)), draft)?)?;
+	let text = drafted(Some(&held_skill(&path)), draft)?;
+	let path = moved_skill_dir(&bundle, path, &draft.name)?;
+	let skill = written_skill(root, bot, &path, text)?;
 	recorded(&bundle, SKILL_SUBJECT, &skill.name, "updated from settings");
 	Ok(skill)
 }
@@ -791,7 +793,9 @@ pub fn update_skill_at(
 	draft: &SkillDraft,
 ) -> std::io::Result<Skill> {
 	let path = skill_dir(bundle, skill_id)?;
-	let skill = kept_skill(&path, drafted(Some(&held_skill(&path)), draft)?)?;
+	let text = drafted(Some(&held_skill(&path)), draft)?;
+	let path = moved_skill_dir(bundle, path, &draft.name)?;
+	let skill = kept_skill(&path, text)?;
 	recorded(bundle, SKILL_SUBJECT, &skill.name, "updated from settings");
 	Ok(skill)
 }
@@ -970,6 +974,7 @@ fn read_skill(path: &Path) -> Option<Skill> {
 		body: body(&text).to_owned(),
 		is_preloaded: front_value(&text, PRELOAD_KEY).as_deref() == Some(MARKED),
 		is_system: front_value(&text, SYSTEM_KEY).as_deref() == Some(MARKED),
+		files: skill_files(path),
 		front: read_front(&text),
 		id,
 	})
@@ -1002,11 +1007,122 @@ fn read_front(text: &str) -> SkillFront {
 	}
 }
 
+fn skill_files(path: &Path) -> Vec<String> {
+	let mut held = Vec::new();
+	collect_skill_files(path, Path::new(""), &mut held);
+	held.sort();
+	held
+}
+
+fn collect_skill_files(root: &Path, relative: &Path, held: &mut Vec<String>) {
+	for entry in fs::read_dir(root.join(relative)).into_iter().flatten().flatten() {
+		let found = relative.join(entry.file_name());
+		if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+			collect_skill_files(root, &found, held);
+		} else if found != Path::new(SKILL_NAME) {
+			held.push(found.to_string_lossy().replace('\\', "/"));
+		}
+	}
+}
+
+fn skill_file_path(held: &Path, relative: &str) -> std::io::Result<PathBuf> {
+	let found = Path::new(relative);
+	let stays_inside = !relative.is_empty()
+		&& found.components().all(|part| matches!(part, Component::Normal(_)))
+		&& !links_away(held, found);
+	if !stays_inside {
+		return Err(std::io::Error::new(
+			std::io::ErrorKind::InvalidInput,
+			"a skill file path stays inside the skill",
+		));
+	}
+	Ok(held.join(found))
+}
+
+fn links_away(held: &Path, relative: &Path) -> bool {
+	let mut walked = held.to_path_buf();
+	relative.components().any(|part| {
+		walked.push(part);
+		fs::symlink_metadata(&walked).is_ok_and(|found| found.file_type().is_symlink())
+	})
+}
+
+pub fn skill_file(
+	root: &Path,
+	bot_id: &str,
+	skill_id: &str,
+	relative: &str,
+) -> std::io::Result<String> {
+	skill_file_at(&dir(root, bot_id), skill_id, relative)
+}
+
+pub fn skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<String> {
+	fs::read_to_string(skill_file_path(&skill_dir(bundle, skill_id)?, relative)?)
+}
+
+pub fn write_skill_file(
+	root: &Path,
+	bot_id: &str,
+	skill_id: &str,
+	relative: &str,
+	text: &str,
+) -> std::io::Result<Skill> {
+	write_skill_file_at(&dir(root, bot_id), skill_id, relative, text)
+}
+
+pub fn write_skill_file_at(
+	bundle: &Path,
+	skill_id: &str,
+	relative: &str,
+	text: &str,
+) -> std::io::Result<Skill> {
+	let held = skill_dir(bundle, skill_id)?;
+	private_files::replace(&skill_file_path(&held, relative)?, text.as_bytes())?;
+	recorded(bundle, SKILL_FILE_SUBJECT, relative, "saved from settings");
+	read_skill(&held).ok_or_else(|| {
+		std::io::Error::new(std::io::ErrorKind::NotFound, "the skill file was not written")
+	})
+}
+
+pub fn remove_skill_file(
+	root: &Path,
+	bot_id: &str,
+	skill_id: &str,
+	relative: &str,
+) -> std::io::Result<()> {
+	remove_skill_file_at(&dir(root, bot_id), skill_id, relative)
+}
+
+pub fn remove_skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
+	fs::remove_file(skill_file_path(&skill_dir(bundle, skill_id)?, relative)?)?;
+	recorded(bundle, SKILL_FILE_SUBJECT, relative, "removed from settings");
+	Ok(())
+}
+
 fn skill_dir(bundle: &Path, skill_id: &str) -> std::io::Result<PathBuf> {
 	skill_dirs(bundle)
 		.into_iter()
 		.find(|path| path.file_name().is_some_and(|name| name == skill_id))
 		.ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no such skill"))
+}
+
+fn moved_skill_dir(bundle: &Path, path: PathBuf, name: &str) -> std::io::Result<PathBuf> {
+	let held = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+	if holds_slug(&held, name) {
+		return Ok(path);
+	}
+	let target = free_skill_dir(bundle, name);
+	fs::rename(&path, &target)?;
+	Ok(target)
+}
+
+fn holds_slug(directory: &str, name: &str) -> bool {
+	let base = slug(name);
+	directory == base
+		|| directory
+			.strip_prefix(&base)
+			.and_then(|rest| rest.strip_prefix('-'))
+			.is_some_and(|next| next.parse::<u32>().is_ok())
 }
 
 fn free_skill_dir(bundle: &Path, name: &str) -> PathBuf {
@@ -2670,6 +2786,187 @@ mod tests {
 	fn written_skill_file(root: &Path, bot_id: &str, skill_id: &str) -> String {
 		fs::read_to_string(dir(root, bot_id).join(SKILLS_DIR).join(skill_id).join(SKILL_NAME))
 			.expect("the skill file reads")
+	}
+
+	#[test]
+	fn a_skill_reports_every_file_its_directory_holds_but_its_own() {
+		let root = a_root("skill-files-listed");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let held = dir(&root, &bot.id).join(SKILLS_DIR).join("baking");
+		for (path, text) in [
+			(held.join(SKILL_NAME), "---\nname: baking\n---\n\nBake.\n"),
+			(held.join("reference").join("crumb.md"), "Open crumb."),
+			(held.join("reference").join("deep").join("oven.md"), "Hot."),
+			(held.join("scripts").join("proof.sh"), "sleep 1"),
+		] {
+			private_files::replace(&path, text.as_bytes()).expect("the file lands");
+		}
+
+		let listed = skills(&root, &bot.id);
+
+		assert_eq!(
+			listed[0].files,
+			vec![
+				"reference/crumb.md".to_owned(),
+				"reference/deep/oven.md".to_owned(),
+				"scripts/proof.sh".to_owned(),
+			]
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_skill_file_is_written_read_back_and_deleted_alone() {
+		let root = a_root("skill-files-written");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill lands");
+
+		let written =
+			write_skill_file(&root, &bot.id, "baking", "reference/crumb.md", "Open crumb.")
+				.expect("the file lands");
+		assert_eq!(written.name, "Baking");
+		assert_eq!(written.files, vec!["reference/crumb.md".to_owned()]);
+
+		write_skill_file(&root, &bot.id, "baking", "scripts/proof.sh", "sleep 1")
+			.expect("the file lands");
+
+		assert_eq!(
+			skill_file(&root, &bot.id, "baking", "reference/crumb.md").expect("the file reads"),
+			"Open crumb."
+		);
+
+		remove_skill_file(&root, &bot.id, "baking", "reference/crumb.md")
+			.expect("the file is removed");
+
+		assert_eq!(skills(&root, &bot.id)[0].files, vec!["scripts/proof.sh".to_owned()]);
+		assert!(skill_file(&root, &bot.id, "baking", "reference/crumb.md").is_err());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_path_leaving_the_skill_is_refused_and_writes_nothing() {
+		let root = a_root("skill-files-refused");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill lands");
+
+		for leaving in ["../escaped.md", "/etc/passwd", "reference/../../escaped.md", ""] {
+			assert!(skill_file(&root, &bot.id, "baking", leaving).is_err(), "read {leaving}");
+			assert!(
+				write_skill_file(&root, &bot.id, "baking", leaving, "no").is_err(),
+				"wrote {leaving}"
+			);
+			assert!(
+				remove_skill_file(&root, &bot.id, "baking", leaving).is_err(),
+				"removed {leaving}"
+			);
+		}
+
+		assert!(skills(&root, &bot.id)[0].files.is_empty());
+		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join("escaped.md").exists());
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_path_resolving_through_a_link_is_refused_and_leaves_the_disk_alone() {
+		let root = a_root("skill-files-linked");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill lands");
+		let outside = root.join("outside");
+		private_files::replace(&outside.join("secret.md"), b"Not yours.").expect("the file lands");
+		let held = dir(&root, &bot.id).join(SKILLS_DIR).join("baking");
+		std::os::unix::fs::symlink(&outside, held.join("reference")).expect("the link lands");
+
+		for linked in ["reference", "reference/secret.md"] {
+			assert!(skill_file(&root, &bot.id, "baking", linked).is_err(), "read {linked}");
+			assert!(
+				write_skill_file(&root, &bot.id, "baking", linked, "no").is_err(),
+				"wrote {linked}"
+			);
+			assert!(
+				remove_skill_file(&root, &bot.id, "baking", linked).is_err(),
+				"removed {linked}"
+			);
+		}
+
+		assert_eq!(
+			fs::read_to_string(outside.join("secret.md")).expect("the file reads"),
+			"Not yours."
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_renamed_skill_carries_its_files_to_the_free_slug_of_its_new_name() {
+		let root = a_root("skill-renamed");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill lands");
+		write_skill_file(&root, &bot.id, "baking", "reference/crumb.md", "Open crumb.")
+			.expect("the file lands");
+
+		let renamed = update_skill(&root, &bot, "baking", &a_draft("Proofing", "Rise.", "Wait."))
+			.expect("the skill is renamed");
+
+		assert_eq!(renamed.id, "proofing");
+		assert_eq!(renamed.files, vec!["reference/crumb.md".to_owned()]);
+		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join("baking").exists());
+		assert_eq!(
+			skill_file(&root, &bot.id, "proofing", "reference/crumb.md").expect("the file reads"),
+			"Open crumb."
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_renamed_preloaded_skill_is_carried_in_the_agent_under_its_new_name() {
+		let root = a_root("skill-renamed-carried");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Bake."))
+			.expect("the skill lands");
+		set_skill_preloaded(&root, &bot, "baking", true).expect("the skill is carried");
+
+		update_skill(&root, &bot, "baking", &a_draft("Proofing", "Rise.", "Wait."))
+			.expect("the skill is renamed");
+
+		let written = written_agent(&root, &bot.id);
+		assert!(written.contains("Proofing"), "got {written}");
+		assert!(!written.contains("Baking"), "got {written}");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_skill_kept_under_a_numbered_slug_stays_where_it_is() {
+		let root = a_root("skill-numbered");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "First."))
+			.expect("the first skill lands");
+		let second = create_skill(&root, &bot, &a_draft("Baking", "How to bake.", "Second."))
+			.expect("the second skill lands");
+		assert_eq!(second.id, "baking-2");
+
+		let updated =
+			update_skill(&root, &bot, "baking-2", &a_draft("Baking", "How to.", "Again."))
+				.expect("the skill is updated");
+
+		assert_eq!(updated.id, "baking-2");
+
+		let _ = fs::remove_dir_all(&root);
 	}
 
 	#[test]
