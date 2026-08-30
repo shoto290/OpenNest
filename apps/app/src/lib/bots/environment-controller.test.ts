@@ -18,7 +18,10 @@ const opened = async (store: TranscriptStore, scope: EnvScope = BOT) => {
 
 const refusing = (
 	store: TranscriptStore,
-	member: "setEnvironmentVariable" | "deleteEnvironmentVariable",
+	member:
+		| "environmentVariables"
+		| "setEnvironmentVariable"
+		| "deleteEnvironmentVariable",
 ) => ({
 	...store,
 	[member]: () => Promise.reject(new Error("refused")),
@@ -109,13 +112,52 @@ describe("environment controller", () => {
 		])
 	})
 
+	it("says so when the list could not be read", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await opened(refusing(store, "environmentVariables"))
+
+		expect(controller.getState().hasFailedToRead).toBe(true)
+	})
+
+	it("keeps the names it already holds when a later read fails", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setEnvironmentVariable(BOT, "BOT_SEED", "1")
+		const controller = await opened(store)
+		const held = controller.getState().entries
+
+		store.environmentVariables = () => Promise.reject(new Error("refused"))
+		await controller.set("ATLAS_TOKEN", "sk-1")
+
+		expect(controller.getState().entries).toEqual(held)
+		expect(controller.getState().hasFailedToRead).toBe(true)
+	})
+
+	it("clears the failure once the list can be read again", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setEnvironmentVariable(BOT, "BOT_SEED", "1")
+		const reading = store.environmentVariables
+		store.environmentVariables = () => Promise.reject(new Error("refused"))
+		const controller = await opened(store)
+		expect(controller.getState().hasFailedToRead).toBe(true)
+
+		store.environmentVariables = reading
+		await controller.open(BOT)
+
+		expect(controller.getState().hasFailedToRead).toBe(false)
+		expect(controller.getState().entries).toHaveLength(1)
+	})
+
 	it("reads nothing while no scope is open", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = createEnvironmentController(store)
 
 		await controller.set("ATLAS_TOKEN", "sk-1")
 
-		expect(controller.getState()).toEqual({ scope: null, entries: [] })
+		expect(controller.getState()).toEqual({
+			scope: null,
+			entries: [],
+			hasFailedToRead: false,
+		})
 		expect(await store.environmentVariables(BOT)).toEqual([])
 	})
 })

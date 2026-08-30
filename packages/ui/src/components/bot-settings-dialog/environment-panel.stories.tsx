@@ -125,6 +125,24 @@ export const Empty = meta.story({
 	},
 })
 
+export const Unreadable = meta.story({
+	args: { entries: [], hasFailedToRead: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read of the scope came back refused. Reach for this to check that the panel says so rather than showing the empty state: an empty list and a failed read look the same on screen, and only one of the two means there is nothing stored. The message says nothing was lost and offers no way to add a variable, since the panel cannot know what it would be added beside.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Variables could not be read")).toBeVisible()
+		await expect(canvas.queryByRole("button", { name: "Add variable" })).toBe(
+			null,
+		)
+	},
+})
+
 export const RefusedName = meta.story({
 	parameters: {
 		docs: {

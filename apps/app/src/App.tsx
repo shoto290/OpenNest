@@ -560,6 +560,7 @@ export function App() {
 					}}
 					mcpServers={mcpServers.state.servers}
 					environment={toEnvironmentRows(environment.state.entries)}
+					hasEnvironmentFailedToRead={environment.state.hasFailedToRead}
 					onEnvironmentSet={({ name, value }) =>
 						environment.controller.set(name, value)
 					}

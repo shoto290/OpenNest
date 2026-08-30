@@ -95,6 +95,7 @@ type BotSettingsDialogProps = {
 	) => void
 	onMcpServerDelete: (name: string) => void
 	environment: EnvironmentEntry[]
+	hasEnvironmentFailedToRead?: boolean
 	onEnvironmentSet: (write: EnvironmentWrite) => void | Promise<void>
 	onEnvironmentDelete: (name: string) => void | Promise<void>
 	history?: PluginHistory
@@ -129,6 +130,7 @@ const BotSettingsDialog = ({
 	onMcpServerChange,
 	onMcpServerDelete,
 	environment,
+	hasEnvironmentFailedToRead,
 	onEnvironmentSet,
 	onEnvironmentDelete,
 	history,
@@ -390,6 +392,7 @@ const BotSettingsDialog = ({
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="environment">
 							<EnvironmentPanel
 								entries={environment}
+								hasFailedToRead={hasEnvironmentFailedToRead}
 								onDelete={onEnvironmentDelete}
 								onSet={onEnvironmentSet}
 								scope="bot"

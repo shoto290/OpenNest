@@ -12,6 +12,7 @@ import {
 	Title,
 } from "@workspace/ui/components/dialog"
 import { Icons } from "@workspace/ui/components/icons"
+import { Notice } from "@workspace/ui/components/notice"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	SETTINGS_EMPTY_CLASS,
@@ -42,6 +43,7 @@ type EnvironmentWrite = {
 type EnvironmentPanelProps = {
 	scope: EnvironmentScope
 	entries: EnvironmentEntry[]
+	hasFailedToRead?: boolean
 	onSet: (write: EnvironmentWrite) => void | Promise<void>
 	onDelete: (name: string) => void | Promise<void>
 }
@@ -217,6 +219,7 @@ const EnvironmentRow = ({
 const EnvironmentPanel = ({
 	scope,
 	entries,
+	hasFailedToRead,
 	onSet,
 	onDelete,
 }: EnvironmentPanelProps) => {
@@ -245,6 +248,15 @@ const EnvironmentPanel = ({
 				title={t("environment.remove.title", { name: removed })}
 			/>
 		)
+
+	if (entries.length === 0 && hasFailedToRead) {
+		return (
+			<Notice
+				description={t("environment.unreadable.description")}
+				title={t("environment.unreadable.title")}
+			/>
+		)
+	}
 
 	if (entries.length === 0) {
 		return (

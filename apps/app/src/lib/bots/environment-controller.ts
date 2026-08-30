@@ -4,6 +4,7 @@ import type { TranscriptStore } from "../conversations/store-port"
 export type EnvironmentState = {
 	scope: EnvScope | null
 	entries: EnvEntry[]
+	hasFailedToRead: boolean
 }
 
 export type EnvironmentController = {
@@ -17,6 +18,7 @@ export type EnvironmentController = {
 const initialEnvironmentState: EnvironmentState = {
 	scope: null,
 	entries: [],
+	hasFailedToRead: false,
 }
 
 export const createEnvironmentController = (
@@ -41,10 +43,14 @@ export const createEnvironmentController = (
 			.environmentVariables(scope)
 			.then((entries) => {
 				if (state.scope === scope) {
-					set({ entries })
+					set({ entries, hasFailedToRead: false })
 				}
 			})
-			.catch(() => undefined)
+			.catch(() => {
+				if (state.scope === scope) {
+					set({ hasFailedToRead: true })
+				}
+			})
 
 	const write = async (run: (scope: EnvScope) => Promise<void>) => {
 		const scope = state.scope
@@ -66,7 +72,7 @@ export const createEnvironmentController = (
 		},
 
 		open: (scope: EnvScope) => {
-			set({ scope, entries: [] })
+			set({ scope, entries: [], hasFailedToRead: false })
 			return read(scope)
 		},
 
