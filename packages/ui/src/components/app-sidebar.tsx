@@ -106,7 +106,8 @@ const PREVIEW_LINE =
 
 const DESTINATION_NAME = "min-w-0 truncate"
 
-const ROW = "py-1 aria-expanded:bg-sidebar-accent/70"
+const ROW =
+	"py-1.5 pl-1.5 aria-expanded:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:pl-0"
 
 const FOOTER_INSET = "group-data-[state=collapsed]/sidebar:px-0"
 
@@ -124,10 +125,11 @@ const ROSTER_ROWS = "gap-0.5"
 
 const SECTION_GROUP = "px-0 py-0"
 
-const SECTION_PAD = "p-1 group-data-[state=collapsed]/sidebar:p-0"
+const SECTION_PAD =
+	"px-[4.5px] pb-[4.5px] group-data-[state=collapsed]/sidebar:p-0"
 
 const SECTION_CARD =
-	"rounded-2xl transition-colors duration-200 ease-out motion-reduce:transition-none group-data-[state=collapsed]/sidebar:bg-transparent"
+	"rounded-2xl transition-colors duration-200 ease-out motion-reduce:transition-none has-[[data-slot=roster-section-trigger]:hover]:bg-sidebar-accent/70 has-[[data-slot=roster-section-trigger]:focus-visible]:bg-sidebar-accent/70 group-data-[state=collapsed]/sidebar:bg-transparent"
 
 const SECTION_CARD_OPEN =
 	"bg-sidebar-accent/50 group-data-[landing]/roster-drop:bg-sidebar-accent"
@@ -136,7 +138,7 @@ const SECTION_LABEL =
 	"mb-0 h-auto px-0 font-semibold text-sidebar-foreground text-xs normal-case tracking-normal group-data-[state=collapsed]/sidebar:hidden"
 
 const SECTION_TRIGGER =
-	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-2xl px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+	"flex w-full min-w-0 select-none items-center gap-1.5 rounded-2xl px-[10.5px] py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
 
 const SECTION_NAME = "min-w-0 truncate"
 
@@ -153,7 +155,7 @@ const SECTION_BODY_CLOSED = "invisible grid-rows-[0fr]"
 const SECTION_BODY_INNER = "min-h-0 overflow-hidden"
 
 const SECTION_FIELD =
-	"w-full min-w-0 border-none bg-transparent px-2.5 py-1.5 text-sidebar-foreground text-xs outline-none"
+	"w-full min-w-0 border-none bg-transparent px-[10.5px] py-2.5 text-sidebar-foreground text-xs outline-none"
 
 const SECTION_DROP =
 	"flex items-center justify-center gap-2 rounded-xl border border-sidebar-border border-dashed px-3 py-3 text-center text-muted-foreground text-xs group-data-[state=collapsed]/sidebar:hidden"
@@ -174,7 +176,7 @@ const INSERTION_LINE =
 const PINNED_ZONE_STACK = "flex flex-col gap-0.5"
 
 const ZONE_SEPARATOR =
-	"mx-3 my-1 block h-px shrink-0 rounded-full bg-sidebar-border group-data-[state=collapsed]/sidebar:hidden"
+	"mx-1.5 my-1 block h-px shrink-0 rounded-full bg-sidebar-border group-data-[state=collapsed]/sidebar:hidden"
 
 const INSERTION_ABOVE = "-top-0.5"
 
@@ -210,7 +212,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-0.5 overflow-y-auto overscroll-y-contain px-1.5 pt-0 pb-1.5 group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-0.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-2.25 group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
@@ -1091,6 +1093,7 @@ const RosterSection = ({
 								aria-controls={bodyId}
 								aria-expanded={isOpen}
 								className={SECTION_TRIGGER}
+								data-slot="roster-section-trigger"
 								onClick={() => {
 									if (lift.hasJustDropped()) return
 									onOpenChange(!isOpen)
