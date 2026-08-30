@@ -36,6 +36,12 @@ const filesystemOf = (
 	writablePaths: string[] = [],
 ) => floor(pluginPaths, writablePaths).sandbox?.filesystem
 
+const writableOf = (
+	pluginPaths: string[] = [],
+	writablePaths: string[] = [],
+): string[] | undefined =>
+	floor(pluginPaths, writablePaths).permissions?.additionalDirectories
+
 describe("securityFloor", () => {
 	it("denies reads of the host's credential paths, expanded from home", () => {
 		const deny = denyOf()
@@ -197,11 +203,18 @@ describe("securityFloor", () => {
 	})
 
 	it("writes back only into the bundles the bot owns", () => {
+		const writable = writableOf(PLUGIN_PATHS, WRITABLE_PATHS)
 		const filesystem = filesystemOf(PLUGIN_PATHS, WRITABLE_PATHS)
 
-		expect(filesystem?.allowWrite).toEqual(WRITABLE_PATHS)
-		expect(filesystem?.allowWrite).not.toContain(SYSTEM_PATH)
+		expect(writable).toEqual(WRITABLE_PATHS)
+		expect(writable).not.toContain(SYSTEM_PATH)
 		expect(filesystem?.allowRead).toContain(SYSTEM_PATH)
+	})
+
+	it("leaves the write allowance off the key the policy tier drops", () => {
+		const filesystem = filesystemOf(PLUGIN_PATHS, WRITABLE_PATHS)
+
+		expect(filesystem).not.toHaveProperty("allowWrite")
 	})
 
 	it("holds the standing denials while the bundles stay writable", () => {
@@ -213,8 +226,8 @@ describe("securityFloor", () => {
 	})
 
 	it("leaves the write allowance out when the session owns no bundle", () => {
-		expect(filesystemOf(PLUGIN_PATHS)?.allowWrite).toBeUndefined()
-		expect(filesystemOf()?.allowWrite).toBeUndefined()
+		expect(writableOf(PLUGIN_PATHS)).toBeUndefined()
+		expect(writableOf()).toBeUndefined()
 	})
 
 	it("sandboxes every spawned command, with no domain gate", () => {

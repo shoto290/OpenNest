@@ -155,6 +155,9 @@ export const securityFloor = ({
 				...rulesFor("Read", foreignAttachments(appDataDir, attachments)),
 				...rulesFor("Edit", writes),
 			],
+			...(writablePaths.length > 0
+				? { additionalDirectories: writablePaths }
+				: {}),
 		},
 		sandbox: {
 			...SANDBOX,
@@ -162,7 +165,6 @@ export const securityFloor = ({
 				denyRead: [...pathsOf(reads), ...under(appDataDir, DENIED_TREES)],
 				denyWrite: pathsOf(writes),
 				...(readablePaths.length > 0 ? { allowRead: readablePaths } : {}),
-				...(writablePaths.length > 0 ? { allowWrite: writablePaths } : {}),
 			},
 		},
 	}
