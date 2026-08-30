@@ -110,7 +110,7 @@ function bubbleContentClass(
 		MESSAGE_BUBBLE_INLINE_PADDING,
 		hasSurface(variant) && MENTION_OPENING_PADDING,
 		MARKDOWN_PROSE_CLASS,
-		variant === "solid" && "text-primary-foreground",
+		variant === "solid" && "text-user-bubble-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
 		variant === "danger" && "text-destructive",
@@ -122,9 +122,9 @@ function bubbleContentClass(
 function bubbleSurfaceClass(variant: MessageBubbleVariant) {
 	return cn(
 		"pointer-events-none absolute inset-0 -z-10 rounded-[inherit]",
-		variant === "solid" && "bg-primary",
+		variant === "solid" && "surface-user-bubble",
 		variant === "soft" && "bg-muted",
-		variant === "tint" && "bg-primary/10",
+		variant === "tint" && "surface-user-bubble-soft",
 		variant === "outline" && "border border-border/70 bg-background",
 		variant === "danger" && "bg-destructive/10",
 	)

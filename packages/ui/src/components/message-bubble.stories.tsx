@@ -1,3 +1,4 @@
+import type { CSSProperties, ReactNode } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -5,6 +6,11 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	listExhaustively,
 } from "@workspace/storybook/story-utils"
+import {
+	BLOT_TINTS,
+	type BotAvatarBlot,
+	blotTint,
+} from "@workspace/ui/components/bot-avatar"
 import { MessageTyping } from "@workspace/ui/components/message"
 import {
 	MessageBubble,
@@ -25,6 +31,17 @@ const MESSAGE_BUBBLE_VARIANTS = listExhaustively<MessageBubbleVariant>({
 })
 
 const THREAD_WIDTH = "w-[34rem] max-w-full"
+
+type SpaceTintScopeProps = { blot: BotAvatarBlot; children: ReactNode }
+
+const SpaceTintScope = ({ blot, children }: SpaceTintScopeProps) => (
+	<div
+		data-space-tint={blot}
+		style={{ "--space-tint": blotTint(blot) } as CSSProperties}
+	>
+		{children}
+	</div>
+)
 
 const USER_PROMPT =
 	"Summarise yesterday's onboarding call and pull out the follow-ups."
@@ -209,4 +226,42 @@ export const Streaming = meta.story({
 			</MessageBubble>
 		</MessageBubbleGroup>
 	),
+})
+
+export const SpaceTinted = meta.story({
+	parameters: {
+		layout: "padded",
+		docs: {
+			description: {
+				story:
+					"What the user sent, read inside a space that carries a colour: `solid` takes the space colour at full strength in light and a deepened variant in dark, `tint` keeps the queued opacity over the same colour. Check that the ink stays legible on all eight colours in both themes, and that a bubble outside any tinted space keeps the OpenNest yellow of `Default`.",
+			},
+		},
+	},
+	render: () => (
+		<div className="flex flex-col gap-4">
+			{BLOT_TINTS.map((blot) => (
+				<SpaceTintScope key={blot} blot={blot}>
+					<MessageBubbleGroup spacing="default" className={THREAD_WIDTH}>
+						<MessageBubble variant="solid" align="end">
+							<MessageBubbleContent>{`Sent in the ${blot} space`}</MessageBubbleContent>
+						</MessageBubble>
+						<MessageBubble variant="tint" align="end">
+							<MessageBubbleContent>{`Queued in the ${blot} space`}</MessageBubbleContent>
+						</MessageBubble>
+					</MessageBubbleGroup>
+				</SpaceTintScope>
+			))}
+		</div>
+	),
+	play: async ({ canvas }) => {
+		const sent = canvas
+			.getByText("Sent in the blue space")
+			.closest("[data-slot]")
+
+		await expect(sent?.closest("[data-space-tint]")).toHaveAttribute(
+			"data-space-tint",
+			"blue",
+		)
+	},
 })

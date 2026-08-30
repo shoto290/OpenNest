@@ -51,6 +51,7 @@ const WorkspaceShell = ({
 		defaultWidth={defaultWidth}
 		onWidthChange={onWidthChange}
 		isResizable={isResizable}
+		data-space-tint={spaceTint ?? undefined}
 		style={spaceTint ? { "--space-tint": blotTint(spaceTint) } : undefined}
 		className={className}
 	>

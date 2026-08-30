@@ -58,6 +58,8 @@
 	--sidebar-width-mobile: 18rem;
 	--scrollbar: oklch(0.72 0.013 285.938);
 	--scrollbar-hover: oklch(0.6 0.014 285.938);
+	--user-bubble-tint-strength: 100%;
+	--user-bubble-tint-ink: var(--bot-blot-ink);
 }
 
 .dark {
@@ -96,6 +98,8 @@
 	--sidebar-ring: oklch(0.552 0.016 285.938);
 	--scrollbar: oklch(0.44 0.008 286.033);
 	--scrollbar-hover: oklch(0.55 0.01 286.033);
+	--user-bubble-tint-strength: 50%;
+	--user-bubble-tint-ink: var(--foreground);
 }
 
 @theme inline {
@@ -125,6 +129,7 @@
 	--color-bot-badge-attention: var(--bot-badge-attention);
 	--color-bot-badge-done: var(--bot-badge-done);
 	--color-bot-badge-failed: var(--bot-badge-failed);
+	--color-user-bubble-foreground: var(--user-bubble-foreground);
 	--radius-sm: calc(var(--radius) * 0.6);
 	--radius-md: calc(var(--radius) * 0.8);
 	--radius-lg: var(--radius);
@@ -171,6 +176,17 @@
 		--sidebar-untinted: var(--sidebar);
 		--sidebar-accent-untinted: var(--sidebar-accent);
 		--sidebar-border-untinted: var(--sidebar-border);
+		--user-bubble: var(--primary);
+		--user-bubble-foreground: var(--primary-foreground);
+	}
+
+	[data-space-tint] {
+		--user-bubble: color-mix(
+			in oklab,
+			var(--space-tint) var(--user-bubble-tint-strength),
+			var(--card)
+		);
+		--user-bubble-foreground: var(--user-bubble-tint-ink);
 	}
 }
 
@@ -246,6 +262,24 @@
 		var(--space-tint, var(--sidebar-untinted)) var(--space-tint-strength),
 		var(--sidebar-untinted)
 	);
+	transition: background-color 400ms ease-out;
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}
+
+@utility surface-user-bubble {
+	background-color: var(--user-bubble);
+	transition: background-color 400ms ease-out;
+
+	@media (prefers-reduced-motion: reduce) {
+		transition: none;
+	}
+}
+
+@utility surface-user-bubble-soft {
+	background-color: color-mix(in oklab, var(--user-bubble) 10%, transparent);
 	transition: background-color 400ms ease-out;
 
 	@media (prefers-reduced-motion: reduce) {
