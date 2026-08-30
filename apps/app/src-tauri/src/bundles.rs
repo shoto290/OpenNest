@@ -635,6 +635,21 @@ fn declare_servers(kept: &mut serde_json::Map<String, serde_json::Value>, bundle
 	}
 }
 
+fn rewrite_declared_servers(bundle: &Path) -> std::io::Result<()> {
+	let path = manifest_file(bundle);
+	let kept = object_at(&path);
+	let mut rewritten = kept.clone();
+	if bundle.join(MCP_NAME).is_file() {
+		declare_servers(&mut rewritten, bundle);
+	} else if rewritten.get(SERVERS_KEY).and_then(serde_json::Value::as_str) == Some(MCP_SOURCE) {
+		rewritten.remove(SERVERS_KEY);
+	}
+	if rewritten == kept {
+		return Ok(());
+	}
+	private_files::replace(&path, indented_json(&serde_json::Value::Object(rewritten)).as_bytes())
+}
+
 fn undeclare_servers(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let bundle = dir(root, &bot.id);
 	if bundle.join(MCP_NAME).is_file() {
@@ -907,7 +922,11 @@ pub struct McpServer {
 }
 
 pub fn mcp_servers(root: &Path, bot_id: &str) -> Vec<McpServer> {
-	declared(&mcp_file(root, bot_id))
+	mcp_servers_at(&dir(root, bot_id))
+}
+
+pub fn mcp_servers_at(bundle: &Path) -> Vec<McpServer> {
+	declared(&bundle.join(MCP_NAME))
 		.into_iter()
 		.map(|(name, config)| McpServer { name, config })
 		.collect()
@@ -919,32 +938,45 @@ pub fn set_mcp_server(
 	name: &str,
 	config: &serde_json::Value,
 ) -> std::io::Result<McpServer> {
+	let server = set_mcp_server_at(&dir(root, &bot.id), name, config)?;
+	rewrite_manifest(root, bot)?;
+	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings");
+	Ok(server)
+}
+
+pub fn set_mcp_server_at(
+	bundle: &Path,
+	name: &str,
+	config: &serde_json::Value,
+) -> std::io::Result<McpServer> {
 	if !config.is_object() {
 		return Err(std::io::Error::new(
 			std::io::ErrorKind::InvalidInput,
 			"a server configuration must be a JSON object",
 		));
 	}
-	let path = mcp_file(root, &bot.id);
+	let path = bundle.join(MCP_NAME);
 	let mut servers = declared(&path);
 	servers.insert(name.to_owned(), config.clone());
 	write_servers(&path, servers)?;
-	rewrite_manifest(root, bot)?;
-	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings");
 	Ok(McpServer { name: name.to_owned(), config: config.clone() })
 }
 
 pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<()> {
-	let path = mcp_file(root, &bot.id);
-	let mut servers = declared(&path);
-	if servers.remove(name).is_none() {
-		return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no such server"));
-	}
-	write_servers(&path, servers)?;
+	remove_mcp_server_at(&dir(root, &bot.id), name)?;
 	rewrite_manifest(root, bot)?;
 	undeclare_servers(root, bot)?;
 	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "removed from settings");
 	Ok(())
+}
+
+pub fn remove_mcp_server_at(bundle: &Path, name: &str) -> std::io::Result<()> {
+	let path = bundle.join(MCP_NAME);
+	let mut servers = declared(&path);
+	if servers.remove(name).is_none() {
+		return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "no such server"));
+	}
+	write_servers(&path, servers)
 }
 
 fn write_servers(
@@ -964,10 +996,6 @@ fn write_servers(
 		kept.insert(SERVERS_KEY.to_owned(), serde_json::Value::Object(servers));
 	}
 	private_files::replace(path, serde_json::Value::Object(kept).to_string().as_bytes())
-}
-
-fn mcp_file(root: &Path, bot_id: &str) -> PathBuf {
-	dir(root, bot_id).join(MCP_NAME)
 }
 
 fn declared(path: &Path) -> serde_json::Map<String, serde_json::Value> {

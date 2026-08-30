@@ -107,7 +107,7 @@ pub async fn bot_move_to_space(
 	Ok(ready(&state)?.spaces().move_bot(bot_id, space_id).await?)
 }
 
-fn plugin_path<R: Runtime>(
+pub(crate) fn plugin_path<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 ) -> Result<PathBuf, TranscriptStoreError> {

@@ -24,10 +24,21 @@ export const bundleServers = (pluginPath: string): Servers => {
 	}
 }
 
-export const sessionServers = (
-	pluginPath: string,
-	systemPluginPath?: string,
-): Servers => ({
-	...(systemPluginPath ? bundleServers(systemPluginPath) : {}),
+type SessionPlugins = {
+	pluginPath: string
+	systemPluginPath?: string
+	spacePluginPath?: string
+}
+
+const layeredServers = (pluginPath?: string): Servers =>
+	pluginPath ? bundleServers(pluginPath) : {}
+
+export const sessionServers = ({
+	pluginPath,
+	systemPluginPath,
+	spacePluginPath,
+}: SessionPlugins): Servers => ({
+	...layeredServers(systemPluginPath),
+	...layeredServers(spacePluginPath),
 	...bundleServers(pluginPath),
 })

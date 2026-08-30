@@ -65,14 +65,26 @@ pub fn resolve(root: &Path, owner: &EnvOwner) -> Result<ResolvedEnv, EnvError> {
 		base.extend(stored(&file(root, &step)?)?);
 	}
 	let mut per_server = PerServer::new();
-	for name in server_names(root, owner)? {
-		let held = EnvScope::Server { name: name.clone(), owner: owner.clone() };
-		let own: Values = stored(&file(root, &held)?)?.into_iter().collect();
-		if !own.is_empty() {
-			per_server.insert(name, own);
+	for held in owners(owner) {
+		for name in server_names(root, &held)? {
+			let scope = EnvScope::Server { name: name.clone(), owner: held.clone() };
+			let own = stored(&file(root, &scope)?)?;
+			if own.is_empty() {
+				continue;
+			}
+			per_server.entry(name).or_default().extend(own);
 		}
 	}
 	Ok(ResolvedEnv { base, per_server, failure: None })
+}
+
+fn owners(owner: &EnvOwner) -> Vec<EnvOwner> {
+	match owner {
+		EnvOwner::Space { .. } => vec![owner.clone()],
+		EnvOwner::Bot { space_id, .. } => {
+			vec![EnvOwner::Space { id: space_id.clone() }, owner.clone()]
+		}
+	}
 }
 
 fn server_names(root: &Path, owner: &EnvOwner) -> Result<Vec<String>, EnvError> {
@@ -400,6 +412,31 @@ mod tests {
 		assert_eq!(resolved.per_server["clock"], holding(&[("SHARED", "server")]));
 		assert_eq!(resolved.per_server["weather"], holding(&[("TOKEN", "weather")]));
 		assert_eq!(resolved.failure, None);
+	}
+
+	#[test]
+	fn resolution_carries_the_servers_of_the_space_under_those_of_the_bot() {
+		let root = a_root("resolve-space-servers");
+		let held = EnvScope::Server {
+			name: "clock".to_owned(),
+			owner: EnvOwner::Space { id: "s1".to_owned() },
+		};
+		let only_space = EnvScope::Server {
+			name: "weather".to_owned(),
+			owner: EnvOwner::Space { id: "s1".to_owned() },
+		};
+		set(&root, &held, "SHARED", "space").expect("the space server keeps it");
+		set(&root, &held, "ONLY_SPACE", "space").expect("the space server keeps it");
+		set(&root, &only_space, "TOKEN", "space").expect("the space server keeps it");
+		set(&root, &a_server(), "SHARED", "bot").expect("the bot server keeps it");
+
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+
+		assert_eq!(
+			resolved.per_server["clock"],
+			holding(&[("ONLY_SPACE", "space"), ("SHARED", "bot")])
+		);
+		assert_eq!(resolved.per_server["weather"], holding(&[("TOKEN", "space")]));
 	}
 
 	#[test]

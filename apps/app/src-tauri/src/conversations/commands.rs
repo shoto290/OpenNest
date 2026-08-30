@@ -20,6 +20,7 @@ use crate::db::repositories::messages::MessagePageQuery;
 use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::environment;
 use crate::environment::contract::EnvOwner;
+use crate::spaces::commands::plugin_path;
 
 const DUPLICATE_SUFFIX: &str = " copy";
 
@@ -505,6 +506,40 @@ pub async fn conversation_delete_bot_mcp_server<R: Runtime>(
 		&EnvOwner::Bot { id: bot.id, space_id: bot.space_id },
 		&name,
 	);
+	Ok(())
+}
+
+#[tauri::command]
+pub async fn conversation_space_mcp_servers<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+) -> Result<Vec<McpServer>, TranscriptStoreError> {
+	let Some(path) = bundles::space::laid_down(&app, &space_id) else {
+		return Ok(Vec::new());
+	};
+	Ok(bundles::space::mcp_servers(&path).into_iter().map(McpServer::from).collect())
+}
+
+#[tauri::command]
+pub async fn conversation_set_space_mcp_server<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	name: String,
+	config: serde_json::Value,
+) -> Result<McpServer, TranscriptStoreError> {
+	let path = plugin_path(&app, &space_id)?;
+	bundled(bundles::space::set_mcp_server(&path, &name, &config)).map(McpServer::from)
+}
+
+#[tauri::command]
+pub async fn conversation_delete_space_mcp_server<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	name: String,
+) -> Result<(), TranscriptStoreError> {
+	let path = plugin_path(&app, &space_id)?;
+	bundled(bundles::space::remove_mcp_server(&path, &name))?;
+	environment::store::forget_server(&app, &EnvOwner::Space { id: space_id }, &name);
 	Ok(())
 }
 
