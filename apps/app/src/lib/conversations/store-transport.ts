@@ -173,6 +173,23 @@ export const conversationStore: TranscriptStore = {
 	deleteBotMcpServer: (botId: string, name: string) =>
 		invoke<void>("conversation_delete_bot_mcp_server", { botId, name }),
 
+	spaceMcpServers: (spaceId: string) =>
+		invoke<BotMcpServer[]>("conversation_space_mcp_servers", { spaceId }),
+
+	setSpaceMcpServer: (
+		spaceId: string,
+		name: string,
+		config: Record<string, unknown>,
+	) =>
+		invoke<BotMcpServer>("conversation_set_space_mcp_server", {
+			spaceId,
+			name,
+			config,
+		}),
+
+	deleteSpaceMcpServer: (spaceId: string, name: string) =>
+		invoke<void>("conversation_delete_space_mcp_server", { spaceId, name }),
+
 	environmentVariables: (scope: EnvScope) =>
 		invoke<EnvEntry[]>("env_list", { scope }),
 

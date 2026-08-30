@@ -10,6 +10,7 @@ const settings = {
 		notifications: "Notifications",
 		language: "Langue",
 		skills: "Compétences",
+		mcp: "Serveurs MCP",
 		history: "Historique",
 		danger: "Zone sensible",
 	},

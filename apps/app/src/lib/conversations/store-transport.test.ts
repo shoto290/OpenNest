@@ -309,6 +309,27 @@ const WRITES: WriteCase[] = [
 		],
 	},
 	{
+		member: "spaceMcpServers",
+		write: () => conversationStore.spaceMcpServers("s-1"),
+		call: ["conversation_space_mcp_servers", { spaceId: "s-1" }],
+	},
+	{
+		member: "setSpaceMcpServer",
+		write: () => conversationStore.setSpaceMcpServer("s-1", "atlas", SERVER),
+		call: [
+			"conversation_set_space_mcp_server",
+			{ spaceId: "s-1", name: "atlas", config: SERVER },
+		],
+	},
+	{
+		member: "deleteSpaceMcpServer",
+		write: () => conversationStore.deleteSpaceMcpServer("s-1", "atlas"),
+		call: [
+			"conversation_delete_space_mcp_server",
+			{ spaceId: "s-1", name: "atlas" },
+		],
+	},
+	{
 		member: "environmentVariables",
 		write: () => conversationStore.environmentVariables(BOT_SCOPE),
 		call: ["env_list", { scope: BOT_SCOPE }],

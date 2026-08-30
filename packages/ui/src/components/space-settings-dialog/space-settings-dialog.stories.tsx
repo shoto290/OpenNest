@@ -7,6 +7,7 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import { BLOT_TINTS } from "@workspace/ui/components/bot-settings"
+import { BOT_MCP_SERVERS } from "@workspace/ui/components/bot-settings-dialog/mcp-servers.fixtures"
 import { SPACE_ENVIRONMENT } from "@workspace/ui/components/environment.fixtures"
 import { BOT_COMMITS } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
@@ -57,7 +58,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a space is, in one overlay — the reader's own settings, told about a work area instead of a person. A breadcrumb heads it with the space's tint dot and its name, so the dialog is visibly the one that space opened. Down the left is a rail of four entries: the space itself, what it is called and the tint it wears; its environment, the variables every bot in it starts with; its skills, the plugin every bot in it reads before answering; its history, everything ever written into that plugin. Below a separator sits the danger zone, set apart in destructive tone exactly as a bot's settings sets it apart, because a space takes its bots with it. It opens on the space every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce — closing it is never a question, except while a skill is half written.",
+					"Everything a space is, in one overlay — the reader's own settings, told about a work area instead of a person. A breadcrumb heads it with the space's tint dot and its name, so the dialog is visibly the one that space opened. Down the left is a rail of five entries: the space itself, what it is called and the tint it wears; its environment, the variables every bot in it starts with; its skills, the plugin every bot in it reads before answering; its MCP servers, the ones every bot in it inherits; its history, everything ever written into that plugin. Below a separator sits the danger zone, set apart in destructive tone exactly as a bot's settings sets it apart, because a space takes its bots with it. It opens on the space every time. Same contract as a bot's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce — closing it is never a question, except while a skill or a server is half written.",
 			},
 		},
 	},
@@ -74,6 +75,10 @@ const meta = preview.meta({
 		onSkillChange: fn(),
 		onSkillPreloadedChange: fn(),
 		onSkillDelete: fn(),
+		mcpServers: BOT_MCP_SERVERS,
+		onMcpServerCreate: fn(),
+		onMcpServerChange: fn(),
+		onMcpServerDelete: fn(),
 		history: {
 			commits: BOT_COMMITS,
 			onLoadDiff: fn(),
@@ -187,6 +192,65 @@ export const Skills = meta.story({
 		await expect(
 			within(dialog).getByRole("tab", { name: "Skills" }),
 		).toBeVisible()
+	},
+})
+
+export const McpServers = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The servers the space declares, inherited by every bot in it \u2014 the same panel and the same editor a bot\u2019s settings draws, written into the space plugin instead of a bot bundle. A bot that declares a server of the same name wins for itself and leaves this one where it is. Check that opening one swaps the whole body for the editor, and that the way back restores the rail. Pick `McpServersUnavailable` for the listing that could not be read.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(
+			within(dialog).getByRole("tab", { name: "MCP servers" }),
+		)
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "MCP servers",
+		})
+
+		await userEvent.click(within(panel).getByRole("button", { name: /atlas/ }))
+		const back = within(dialog).getByRole("button", { name: "All servers" })
+		await expect(back).toBeVisible()
+
+		await userEvent.click(back)
+		await expect(
+			within(dialog).getByRole("tab", { name: "MCP servers" }),
+		).toBeVisible()
+	},
+})
+
+export const McpServersUnavailable = meta.story({
+	args: { haveMcpServersFailedToLoad: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The space plugin could not be read. Check that the panel says so instead of inviting a first server, because an empty list and an unreadable one are not the same fact.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(
+			within(dialog).getByRole("tab", { name: "MCP servers" }),
+		)
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "MCP servers",
+		})
+
+		await expect(
+			within(panel).getByText("These MCP servers could not be read."),
+		).toBeVisible()
+		await expect(
+			within(panel).queryByRole("button", { name: "Add server" }),
+		).toBe(null)
 	},
 })
 

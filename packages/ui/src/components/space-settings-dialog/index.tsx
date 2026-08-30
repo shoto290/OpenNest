@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import type {
+	BotMcpServerItem,
 	BotSkillDraft,
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
@@ -14,6 +15,7 @@ import { Content, Root, Title } from "@workspace/ui/components/dialog"
 import {
 	type EnvironmentEntry,
 	EnvironmentPanel,
+	type EnvironmentSection,
 	type EnvironmentWrite,
 } from "@workspace/ui/components/environment-panel"
 import { Icons } from "@workspace/ui/components/icons"
@@ -22,6 +24,7 @@ import {
 	type PluginHistory,
 } from "@workspace/ui/components/plugin-settings/history-panel"
 import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
+import { useMcpSession } from "@workspace/ui/components/plugin-settings/use-mcp-session"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import {
 	DANGER_RAIL_ITEM_CLASS,
@@ -58,6 +61,17 @@ type SpaceSettingsDialogProps = {
 	onSkillPreloadedChange: (id: string, isPreloaded: boolean) => void
 	onSkillDelete: (id: string) => void
 	skillFiles?: PluginSkillFiles
+	mcpServers: BotMcpServerItem[]
+	haveMcpServersFailedToLoad?: boolean
+	onMcpServerCreate: (name: string, config: Record<string, unknown>) => void
+	onMcpServerChange: (
+		openedName: string,
+		name: string,
+		config: Record<string, unknown>,
+	) => void
+	onMcpServerDelete: (name: string) => void
+	onMcpServerOpen?: (name: string | null) => void
+	serverEnvironment?: EnvironmentSection
 	history: PluginHistory
 	onDelete: () => void
 	isDeletable?: boolean
@@ -79,6 +93,13 @@ const SpaceSettingsDialog = ({
 	onSkillPreloadedChange,
 	onSkillDelete,
 	skillFiles,
+	mcpServers,
+	haveMcpServersFailedToLoad,
+	onMcpServerCreate,
+	onMcpServerChange,
+	onMcpServerDelete,
+	onMcpServerOpen,
+	serverEnvironment,
 	history,
 	onDelete,
 	isDeletable = true,
@@ -97,13 +118,36 @@ const SpaceSettingsDialog = ({
 		onSkillPreloadedChange,
 		skills,
 	})
+	const mcpSession = useMcpSession({
+		servers: mcpServers,
+		haveFailedToLoad: haveMcpServersFailedToLoad,
+		onServerChange: onMcpServerChange,
+		onServerCreate: onMcpServerCreate,
+		onServerDelete: onMcpServerDelete,
+		onServerOpen: onMcpServerOpen,
+		serverEnvironment,
+	})
 
 	const leave = () => {
 		skillSession.discard()
+		mcpSession.discard()
 		onClose()
 	}
 
-	const close = () => (skillSession.isUnsaved ? setLeaving(true) : leave())
+	const close = () =>
+		skillSession.isUnsaved || mcpSession.isUnsaved ? setLeaving(true) : leave()
+
+	const leaveCopy = mcpSession.isOpen
+		? {
+				title: t("mcp.leave.title", { ns: "bots" }),
+				description: t("mcp.leave.description", { ns: "bots" }),
+				action: t("mcp.leave.action", { ns: "bots" }),
+			}
+		: {
+				title: t("skills.leave.title", { ns: "bots" }),
+				description: t("skills.leave.description", { ns: "bots" }),
+				action: t("skills.leave.action", { ns: "bots" }),
+			}
 
 	return (
 		<Root onOpenChange={(next) => !next && close()} open={open}>
@@ -127,7 +171,7 @@ const SpaceSettingsDialog = ({
 					</Title>
 				</header>
 
-				{skillSession.editor ?? (
+				{skillSession.editor ?? mcpSession.editor ?? (
 					<Tabs.Root
 						className="flex min-h-0 flex-1"
 						defaultValue={FIRST_TAB}
@@ -152,6 +196,12 @@ const SpaceSettingsDialog = ({
 								iconsOnly={iconsOnly}
 								label={t("rail.skills")}
 								value="skills"
+							/>
+							<SettingsRailItem
+								icon={Icons.Server}
+								iconsOnly={iconsOnly}
+								label={t("rail.mcp")}
+								value="mcp"
 							/>
 							<SettingsRailItem
 								icon={Icons.History}
@@ -187,6 +237,10 @@ const SpaceSettingsDialog = ({
 							{skillSession.panel}
 						</Tabs.Panel>
 
+						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">
+							{mcpSession.panel}
+						</Tabs.Panel>
+
 						<SettingsScrollingPanel value="history">
 							<HistoryPanel
 								authorName={t("plugin.author.bot")}
@@ -213,12 +267,12 @@ const SpaceSettingsDialog = ({
 				)}
 
 				<ConfirmDialog
-					confirmLabel={t("skills.leave.action", { ns: "bots" })}
-					description={t("skills.leave.description", { ns: "bots" })}
+					confirmLabel={leaveCopy.action}
+					description={leaveCopy.description}
 					onConfirm={leave}
 					onOpenChange={setLeaving}
 					open={isLeaving}
-					title={t("skills.leave.title", { ns: "bots" })}
+					title={leaveCopy.title}
 				/>
 			</Content>
 		</Root>

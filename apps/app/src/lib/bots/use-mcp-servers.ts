@@ -8,12 +8,12 @@ import {
 
 import type { TranscriptStore } from "../conversations/store-port"
 
-export type BotMcpServers = {
+export type McpServers = {
 	state: McpServersState
 	controller: McpServersController
 }
 
-export const useBotMcpServers = (store: TranscriptStore): BotMcpServers => {
+export const useMcpServers = (store: TranscriptStore): McpServers => {
 	const [controller] = useState(() => createMcpServersController(store))
 	const state = useSyncExternalStore(controller.subscribe, controller.getState)
 

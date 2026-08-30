@@ -9,24 +9,18 @@ import {
 	BotIdentityAvatar,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { BotIdentityFields } from "@workspace/ui/components/bot-identity-fields"
-import {
-	BLANK_MCP_SERVER_DRAFT,
-	type BotCommitItem,
-	type BotIdentity,
-	type BotMcpServerDraft,
-	type BotMcpServerItem,
-	type BotModelOption,
-	type BotOutputStyle,
-	type BotPermissions,
-	type BotSettingsValue,
-	type BotSkillDraft,
-	type BotSkillItem,
-	isMcpServerDraftUnsaved,
-	toMcpServerDraft,
+import type {
+	BotCommitItem,
+	BotIdentity,
+	BotMcpServerItem,
+	BotModelOption,
+	BotOutputStyle,
+	BotPermissions,
+	BotSettingsValue,
+	BotSkillDraft,
+	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
 import { DangerZone } from "@workspace/ui/components/bot-settings-dialog/danger-zone"
-import { McpServerEditor } from "@workspace/ui/components/bot-settings-dialog/mcp-server-editor"
-import { McpServersPanel } from "@workspace/ui/components/bot-settings-dialog/mcp-servers-panel"
 import { MemoryPanel } from "@workspace/ui/components/bot-settings-dialog/memory-panel"
 import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
@@ -44,6 +38,7 @@ import {
 	type PluginHistory,
 } from "@workspace/ui/components/plugin-settings/history-panel"
 import type { PluginSkillFiles } from "@workspace/ui/components/plugin-settings/skill-files-panel"
+import { useMcpSession } from "@workspace/ui/components/plugin-settings/use-mcp-session"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
@@ -63,11 +58,6 @@ import { cn } from "@workspace/ui/lib/utils"
 const FIRST_TAB = "general"
 
 const DANGER_TAB = "danger"
-
-type McpSession = {
-	draft: BotMcpServerDraft
-	saved?: BotMcpServerDraft
-}
 
 type BotSettingsDialogProps = {
 	open: boolean
@@ -150,7 +140,6 @@ const BotSettingsDialog = ({
 }: BotSettingsDialogProps) => {
 	const { t } = useTranslation("bots")
 	const [tabs, setTabs] = useState<HTMLDivElement | null>(null)
-	const [server, setServer] = useState<McpSession | null>(null)
 	const [isLeaving, setLeaving] = useState(false)
 	const iconsOnly = useIsNarrowerThan(tabs, RAIL_LABELS_MIN_WIDTH)
 	const botName = value.name.trim() || t("dialog.untitled")
@@ -162,29 +151,29 @@ const BotSettingsDialog = ({
 		onSkillDelete,
 		onSkillPreloadedChange,
 	})
+	const mcpSession = useMcpSession({
+		servers: mcpServers,
+		haveFailedToLoad: haveMcpServersFailedToLoad,
+		onServerChange: onMcpServerChange,
+		onServerCreate: onMcpServerCreate,
+		onServerDelete: onMcpServerDelete,
+		onServerOpen: onMcpServerOpen,
+		serverEnvironment,
+	})
 
 	const patch = (fields: Partial<BotSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
-	const isServerUnsaved = Boolean(
-		server && isMcpServerDraftUnsaved(server.draft, server.saved),
-	)
-
-	const openServer = (session: McpSession | null) => {
-		setServer(session)
-		onMcpServerOpen?.(session?.saved?.name ?? null)
-	}
-
 	const leave = () => {
 		skillSession.discard()
-		openServer(null)
+		mcpSession.discard()
 		onClose()
 	}
 
 	const close = () =>
-		skillSession.isUnsaved || isServerUnsaved ? setLeaving(true) : leave()
+		skillSession.isUnsaved || mcpSession.isUnsaved ? setLeaving(true) : leave()
 
-	const leaveCopy = server
+	const leaveCopy = mcpSession.isOpen
 		? {
 				title: t("mcp.leave.title"),
 				description: t("mcp.leave.description"),
@@ -197,43 +186,6 @@ const BotSettingsDialog = ({
 			}
 
 	useSettingsShortcut({ isEnabled: open, onToggle: close })
-
-	const saveServer = (
-		{ draft, saved }: McpSession,
-		config: Record<string, unknown>,
-	) => {
-		if (saved) {
-			onMcpServerChange(saved.name, draft.name, config)
-		} else {
-			onMcpServerCreate(draft.name, config)
-		}
-
-		openServer(null)
-	}
-
-	const deleteServer = (saved: BotMcpServerDraft) => {
-		onMcpServerDelete(saved.name)
-		openServer(null)
-	}
-
-	const openServerEditor = ({ draft, saved }: McpSession) => (
-		<McpServerEditor
-			draft={draft}
-			environment={saved ? serverEnvironment : undefined}
-			onBack={() => openServer(null)}
-			onDelete={saved ? () => deleteServer(saved) : undefined}
-			onDraftChange={(next) => setServer({ draft: next, saved })}
-			onSave={(config) => saveServer({ draft, saved }, config)}
-			saved={saved}
-		/>
-	)
-
-	const openEditor = () => {
-		if (skillSession.editor) return skillSession.editor
-		if (server) return openServerEditor(server)
-
-		return null
-	}
 
 	return (
 		<Root onOpenChange={(next) => !next && close()} open={open}>
@@ -266,7 +218,7 @@ const BotSettingsDialog = ({
 					</Title>
 				</header>
 
-				{openEditor() ?? (
+				{skillSession.editor ?? mcpSession.editor ?? (
 					<Tabs.Root
 						className="flex min-h-0 flex-1"
 						defaultValue={showDanger ? DANGER_TAB : FIRST_TAB}
@@ -390,17 +342,7 @@ const BotSettingsDialog = ({
 						</Tabs.Panel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="mcp">
-							<McpServersPanel
-								haveFailedToLoad={haveMcpServersFailedToLoad}
-								onAdd={() => openServer({ draft: BLANK_MCP_SERVER_DRAFT })}
-								onOpen={(opened) =>
-									openServer({
-										draft: toMcpServerDraft(opened),
-										saved: toMcpServerDraft(opened),
-									})
-								}
-								servers={mcpServers}
-							/>
+							{mcpSession.panel}
 						</Tabs.Panel>
 
 						<Tabs.Panel className={SETTINGS_PANEL_CLASS} value="environment">

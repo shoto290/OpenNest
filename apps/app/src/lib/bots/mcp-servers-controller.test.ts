@@ -3,15 +3,20 @@ import { describe, expect, it, vi } from "vitest"
 import { createMcpServersController } from "./mcp-servers-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import type { EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+
+const BOT: EnvOwner = { kind: "bot", id: "default", spaceId: "personal" }
+
+const SPACE: EnvOwner = { kind: "space", id: "personal" }
 
 const ATLAS = { command: "npx", args: ["-y", "@atlas/mcp-server"] }
 
 const LEDGER = { type: "http", url: "https://ledger.internal/mcp" }
 
-const opened = async (store: TranscriptStore, botId = "default") => {
+const opened = async (store: TranscriptStore, owner: EnvOwner = BOT) => {
 	const controller = createMcpServersController(store)
-	await controller.open(botId)
+	await controller.open(owner)
 	return controller
 }
 
@@ -45,7 +50,7 @@ describe("mcp servers controller", () => {
 		)
 		const controller = await opened(store)
 
-		await controller.open("default")
+		await controller.open(BOT)
 
 		expect(controller.getState().hasFailedToLoad).toBe(false)
 	})
@@ -122,7 +127,67 @@ describe("mcp servers controller", () => {
 		])
 	})
 
-	it("writes nothing while no bot is open", async () => {
+	it("opens on the servers the space plugin already declares", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setSpaceMcpServer("personal", "atlas", ATLAS)
+
+		const controller = await opened(store, SPACE)
+
+		expect(controller.getState().servers).toEqual([
+			{ name: "atlas", config: ATLAS },
+		])
+	})
+
+	it("reports a space listing it could not read instead of an empty panel", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "spaceMcpServers").mockRejectedValue(new Error("no plugin"))
+
+		const controller = await opened(store, SPACE)
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
+	it("writes a space server into the space plugin and leaves the bots alone", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await opened(store, SPACE)
+
+		controller.create("atlas", ATLAS)
+		await settled()
+
+		expect(await store.spaceMcpServers("personal")).toEqual([
+			{ name: "atlas", config: ATLAS },
+		])
+		expect(await store.botMcpServers("default")).toEqual([])
+	})
+
+	it("moves a renamed space server rather than leaving a second one behind", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setSpaceMcpServer("personal", "ledger", LEDGER)
+		const controller = await opened(store, SPACE)
+
+		controller.rename("ledger", "books", LEDGER)
+		await settled()
+
+		expect(await store.spaceMcpServers("personal")).toEqual([
+			{ name: "books", config: LEDGER },
+		])
+	})
+
+	it("takes a removed space server out of the space plugin", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setSpaceMcpServer("personal", "atlas", ATLAS)
+		await store.setSpaceMcpServer("personal", "ledger", LEDGER)
+		const controller = await opened(store, SPACE)
+
+		controller.remove("atlas")
+		await settled()
+
+		expect(await store.spaceMcpServers("personal")).toEqual([
+			{ name: "ledger", config: LEDGER },
+		])
+	})
+
+	it("writes nothing while nothing is open", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = createMcpServersController(store)
 

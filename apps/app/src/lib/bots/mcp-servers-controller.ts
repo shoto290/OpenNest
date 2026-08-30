@@ -1,9 +1,9 @@
 import { createQueue } from "../queue"
-import type { BotMcpServer } from "../conversations/store-contract"
+import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
 export type McpServersState = {
-	botId: string | null
+	owner: EnvOwner | null
 	servers: BotMcpServer[]
 	hasFailedToLoad: boolean
 }
@@ -11,7 +11,7 @@ export type McpServersState = {
 export type McpServersController = {
 	getState: () => McpServersState
 	subscribe: (listener: () => void) => () => void
-	open: (botId: string) => Promise<void>
+	open: (owner: EnvOwner) => Promise<void>
 	create: (name: string, config: Record<string, unknown>) => void
 	rename: (
 		openedName: string,
@@ -22,10 +22,13 @@ export type McpServersController = {
 }
 
 export const initialMcpServersState: McpServersState = {
-	botId: null,
+	owner: null,
 	servers: [],
 	hasFailedToLoad: false,
 }
+
+const isSameOwner = (left: EnvOwner | null, right: EnvOwner) =>
+	left?.kind === right.kind && left?.id === right.id
 
 export const createMcpServersController = (
 	store: TranscriptStore,
@@ -46,31 +49,50 @@ export const createMcpServersController = (
 		publish()
 	}
 
-	const applyTo = (botId: string, fields: Partial<McpServersState>) => {
-		if (state.botId === botId) {
+	const applyTo = (owner: EnvOwner, fields: Partial<McpServersState>) => {
+		if (isSameOwner(state.owner, owner)) {
 			set(fields)
 		}
 	}
 
-	const read = async (botId: string) =>
-		applyTo(botId, {
-			servers: await store.botMcpServers(botId),
+	const declared = (owner: EnvOwner) =>
+		owner.kind === "space"
+			? store.spaceMcpServers(owner.id)
+			: store.botMcpServers(owner.id)
+
+	const declare = (
+		owner: EnvOwner,
+		name: string,
+		config: Record<string, unknown>,
+	) =>
+		owner.kind === "space"
+			? store.setSpaceMcpServer(owner.id, name, config)
+			: store.setBotMcpServer(owner.id, name, config)
+
+	const undeclare = (owner: EnvOwner, name: string) =>
+		owner.kind === "space"
+			? store.deleteSpaceMcpServer(owner.id, name)
+			: store.deleteBotMcpServer(owner.id, name)
+
+	const read = async (owner: EnvOwner) =>
+		applyTo(owner, {
+			servers: await declared(owner),
 			hasFailedToLoad: false,
 		})
 
 	const noteFailedRead = () => set({ hasFailedToLoad: true })
 
 	const reload = () => {
-		const botId = state.botId
-		if (botId) {
-			void enqueue(() => read(botId)).catch(noteFailedRead)
+		const owner = state.owner
+		if (owner) {
+			void enqueue(() => read(owner)).catch(noteFailedRead)
 		}
 	}
 
-	const onOpenBot = (run: (botId: string) => Promise<void>) => {
-		const botId = state.botId
-		if (botId) {
-			void enqueue(() => run(botId)).catch(reload)
+	const onOpenOwner = (run: (owner: EnvOwner) => Promise<void>) => {
+		const owner = state.owner
+		if (owner) {
+			void enqueue(() => run(owner)).catch(reload)
 		}
 	}
 
@@ -84,12 +106,12 @@ export const createMcpServersController = (
 		name: string,
 		config: Record<string, unknown>,
 	) =>
-		onOpenBot(async (botId) => {
-			const server = await store.setBotMcpServer(botId, name, config)
+		onOpenOwner(async (owner) => {
+			const server = await declare(owner, name, config)
 			if (openedName && openedName !== name) {
-				await store.deleteBotMcpServer(botId, openedName)
+				await undeclare(owner, openedName)
 			}
-			applyTo(botId, {
+			applyTo(owner, {
 				servers: written(
 					state.servers.filter((held) => held.name !== openedName),
 					server,
@@ -107,9 +129,9 @@ export const createMcpServersController = (
 			}
 		},
 
-		open: (botId: string) => {
-			set({ botId, servers: [], hasFailedToLoad: false })
-			return enqueue(() => read(botId)).catch(noteFailedRead)
+		open: (owner: EnvOwner) => {
+			set({ owner, servers: [], hasFailedToLoad: false })
+			return enqueue(() => read(owner)).catch(noteFailedRead)
 		},
 
 		create: (name: string, config: Record<string, unknown>) =>
@@ -118,9 +140,9 @@ export const createMcpServersController = (
 		rename: write,
 
 		remove: (name: string) =>
-			onOpenBot(async (botId) => {
-				await store.deleteBotMcpServer(botId, name)
-				applyTo(botId, {
+			onOpenOwner(async (owner) => {
+				await undeclare(owner, name)
+				applyTo(owner, {
 					servers: state.servers.filter((server) => server.name !== name),
 				})
 			}),

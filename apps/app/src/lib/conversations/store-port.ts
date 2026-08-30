@@ -90,6 +90,13 @@ export type TranscriptStore = TranscriptPort & {
 		config: Record<string, unknown>,
 	) => Promise<BotMcpServer>
 	deleteBotMcpServer: (botId: string, name: string) => Promise<void>
+	spaceMcpServers: (spaceId: string) => Promise<BotMcpServer[]>
+	setSpaceMcpServer: (
+		spaceId: string,
+		name: string,
+		config: Record<string, unknown>,
+	) => Promise<BotMcpServer>
+	deleteSpaceMcpServer: (spaceId: string, name: string) => Promise<void>
 	environmentVariables: (scope: EnvScope) => Promise<EnvEntry[]>
 	setEnvironmentVariable: (
 		scope: EnvScope,
