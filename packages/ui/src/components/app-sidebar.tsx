@@ -242,6 +242,7 @@ interface AppSidebarBot {
 	title?: string
 	lastMessage?: string
 	timestamp?: string
+	lastActivityAt?: number
 	animal?: BotAvatarAnimal
 	blot?: BotAvatarBlot
 	image?: string
@@ -259,6 +260,7 @@ interface AppSidebarConversation {
 	lastMessage?: string
 	lastSpeaker?: string
 	timestamp?: string
+	lastActivityAt?: number
 	status?: AppSidebarStatus
 	badge?: BotBadge
 }
@@ -1206,6 +1208,14 @@ interface PinnedEntry {
 
 const byRank = (one: PinnedEntry, other: PinnedEntry) => one.rank - other.rank
 
+const NO_ACTIVITY = -1
+
+const activityOf = ({ bot, conversation }: PinnedEntry) =>
+	bot?.lastActivityAt ?? conversation?.lastActivityAt ?? NO_ACTIVITY
+
+const byMostRecent = (one: PinnedEntry, other: PinnedEntry) =>
+	activityOf(other) - activityOf(one)
+
 const toPin = ({ id, sectionId }: PinnedEntry): RosterPin => ({ id, sectionId })
 
 const botEntry = (
@@ -1575,7 +1585,7 @@ const BotRoster = ({
 					conversationEntry(conversation),
 				),
 				...held.map((bot) => botEntry(bot)),
-			],
+			].toSorted(byMostRecent),
 			false,
 		)
 

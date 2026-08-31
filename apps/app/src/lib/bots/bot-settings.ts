@@ -219,6 +219,7 @@ export const toRosterBots = (
 			image: avatarSrc(bot.avatarImagePath),
 			lastMessage: preview?.text,
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
+			lastActivityAt: lastSpokeAt(bot, activity),
 			status: working?.isWorking ? "working" : "idle",
 			pose: working?.kind,
 		}
