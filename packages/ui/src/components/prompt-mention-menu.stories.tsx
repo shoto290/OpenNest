@@ -16,15 +16,23 @@ const CROWDED_BOTS = [...CONVERSATION_BOTS, ...LONG_NAMED_BOTS]
 
 const ROW_GAP = 8
 
-const slotsOf = (row: HTMLElement) => {
-	const name = row.querySelector('[data-slot="prompt-mention-name"]')
-	const count = row.querySelector('[data-slot="prompt-mention-count"]')
+const countedNameOf = (row: HTMLElement) => {
+	const name = row.querySelector<HTMLElement>(
+		'[data-slot="prompt-mention-name"]',
+	)
+	const count = row.querySelector<HTMLElement>(
+		'[data-slot="prompt-mention-count"]',
+	)
 
 	if (!name || !count) throw new Error("The row drew no counted name")
 
 	return {
-		name: name.getBoundingClientRect(),
-		count: count.getBoundingClientRect(),
+		name,
+		count,
+		gap:
+			count.getBoundingClientRect().left - name.getBoundingClientRect().right,
+		tail:
+			row.getBoundingClientRect().right - count.getBoundingClientRect().right,
 	}
 }
 
@@ -285,12 +293,10 @@ export const Counted = meta.story({
 		)
 		await expect(options[3]).toHaveAccessibleName("Dorian")
 
-		const { name, count } = slotsOf(options[1])
+		const { gap, tail } = countedNameOf(options[1])
 
-		await expect(count.left - name.right).toBeLessThanOrEqual(ROW_GAP + 1)
-		await expect(
-			options[1].getBoundingClientRect().right - count.right,
-		).toBeGreaterThan(ROW_GAP * 4)
+		await expect(gap).toBeLessThanOrEqual(ROW_GAP + 1)
+		await expect(tail).toBeGreaterThan(ROW_GAP * 4)
 	},
 })
 
@@ -337,24 +343,12 @@ export const CountedLongName = meta.story({
 	},
 	play: async ({ canvas }) => {
 		const row = canvas.getByRole("option", { name: /Release notes editor/ })
-		const named = row.querySelector<HTMLElement>(
-			'[data-slot="prompt-mention-name"]',
-		)
-		const counted = row.querySelector<HTMLElement>(
-			'[data-slot="prompt-mention-count"]',
-		)
+		const { name, count, gap, tail } = countedNameOf(row)
 
-		if (!named || !counted) throw new Error("The row drew no count")
-
-		await expect(named.scrollWidth).toBeGreaterThan(named.clientWidth)
-		await expect(counted.scrollWidth).toBe(counted.clientWidth)
-
-		const { name, count } = slotsOf(row)
-
-		await expect(count.left - name.right).toBeLessThanOrEqual(ROW_GAP + 1)
-		await expect(count.right).toBeLessThanOrEqual(
-			row.getBoundingClientRect().right,
-		)
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(count.scrollWidth).toBe(count.clientWidth)
+		await expect(gap).toBeLessThanOrEqual(ROW_GAP + 1)
+		await expect(tail).toBeGreaterThanOrEqual(0)
 	},
 })
 
