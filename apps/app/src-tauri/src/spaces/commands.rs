@@ -28,7 +28,8 @@ pub async fn space_create<R: Runtime>(
 	name: String,
 ) -> Result<Space, SpaceError> {
 	let created = ready(&state)?.spaces().create(name).await?;
-	bundles::space::lay_down(&app, &created.id);
+	bundles::space::lay_down(&app, &created.id)
+		.map_err(|failure| SpaceError::UnwritableBundle { detail: failure.to_string() })?;
 	Ok(Space::from(created))
 }
 

@@ -64,6 +64,10 @@ pub enum SpaceError {
 	UnknownBot {
 		id: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	UnwritableBundle {
+		detail: String,
+	},
 	IncompleteOrder,
 	LastSpace,
 }

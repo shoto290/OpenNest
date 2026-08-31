@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
@@ -136,10 +137,27 @@ const MAX_HEADING: usize = 6;
 const FENCE: &str = "---";
 const CLOSING_FENCE: &str = "\n---";
 
-static COMMITS: Mutex<()> = Mutex::new(());
+static COMMITS: LazyLock<Mutex<HashMap<PathBuf, &'static Mutex<()>>>> =
+	LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn serialised() -> MutexGuard<'static, ()> {
-	COMMITS.lock().unwrap_or_else(PoisonError::into_inner)
+fn commits(bundle: &Path) -> &'static Mutex<()> {
+	let mut held = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	*held.entry(bundle.to_path_buf()).or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
+}
+
+pub(super) fn serialised(bundle: &Path) -> MutexGuard<'static, ()> {
+	commits(bundle).lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn serialised_both(
+	source: &Path,
+	target: &Path,
+) -> (MutexGuard<'static, ()>, Option<MutexGuard<'static, ()>>) {
+	if source == target {
+		return (serialised(source), None);
+	}
+	let (first, second) = if source < target { (source, target) } else { (target, source) };
+	(serialised(first), Some(serialised(second)))
 }
 
 pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
@@ -299,7 +317,7 @@ pub fn set_permissions(
 	bot: &Bot,
 	permissions: &BotPermissions,
 ) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	let path = settings_path(root, &bot.id);
 	let mut kept = object_at(&path);
 	let mut declared = match kept.remove(PERMISSIONS_KEY) {
@@ -400,7 +418,7 @@ pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
 }
 
 pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	write_serialised(root, bot)
 }
 
@@ -409,7 +427,7 @@ fn write_serialised(root: &Path, bot: &Bot) -> std::io::Result<()> {
 }
 
 pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	write_styled_serialised(root, bot, output_style)
 }
 
@@ -431,7 +449,7 @@ fn write_styled_serialised(root: &Path, bot: &Bot, output_style: &str) -> std::i
 }
 
 pub fn write_remembered(root: &Path, bot: &Bot, memory: &str) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	rewrite_agent_holding(root, bot, memory)?;
 	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "memory saved from settings")
 		.map_err(unrecorded)?;
@@ -439,9 +457,9 @@ pub fn write_remembered(root: &Path, bot: &Bot, memory: &str) -> std::io::Result
 }
 
 pub fn inherit(root: &Path, source_id: &str, bot_id: &str) -> std::io::Result<()> {
-	let _serialised = serialised();
 	let source = dir(root, source_id);
 	let target = dir(root, bot_id);
+	let _serialised = serialised_both(&source, &target);
 	copied_tree(&source.join(SKILLS_DIR), &target.join(SKILLS_DIR))?;
 	copied_tree(&source.join(HOOKS_DIR), &target.join(HOOKS_DIR))?;
 	copied_file(&source.join(MCP_NAME), &target.join(MCP_NAME))
@@ -529,7 +547,7 @@ fn agent_path(root: &Path, bot_id: &str) -> PathBuf {
 }
 
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	settled(root, bot);
 	if agent_file(root, &bot.id).is_some() {
 		rewrite_agent(root, bot)?;
@@ -547,7 +565,7 @@ pub struct Evolution {
 }
 
 pub fn evolve(root: &Path, bot: &Bot) -> Option<Evolution> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	evolve_serialised(root, bot)
 }
 
@@ -615,7 +633,7 @@ pub fn revert(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2
 }
 
 pub fn revert_at(bundle: &Path, commit_id: &str) -> Result<String, git2::Error> {
-	let _serialised = serialised();
+	let _serialised = serialised(bundle);
 	git::revert(bundle, commit_id)
 }
 
@@ -868,8 +886,8 @@ pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
 }
 
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
-	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
+	let _serialised = serialised(&bundle);
 	let path = free_skill_dir(&bundle, &draft.name);
 	let skill = written_skill(root, bot, &path, drafted(None, draft)?)?;
 	recorded(&bundle, SKILL_SUBJECT, &skill.name, "created from settings").map_err(unrecorded)?;
@@ -877,7 +895,7 @@ pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Resu
 }
 
 pub fn create_skill_at(bundle: &Path, draft: &SkillDraft) -> std::io::Result<Skill> {
-	let _serialised = serialised();
+	let _serialised = serialised(bundle);
 	let skill = kept_skill(&free_skill_dir(bundle, &draft.name), drafted(None, draft)?)?;
 	recorded(bundle, SKILL_SUBJECT, &skill.name, "created from settings").map_err(unrecorded)?;
 	Ok(skill)
@@ -889,8 +907,8 @@ pub fn update_skill(
 	skill_id: &str,
 	draft: &SkillDraft,
 ) -> std::io::Result<Skill> {
-	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
+	let _serialised = serialised(&bundle);
 	let path = skill_dir(&bundle, skill_id)?;
 	let text = drafted(Some(&held_skill(&path)), draft)?;
 	let path = moved_skill_dir(&bundle, path, &draft.name)?;
@@ -904,7 +922,7 @@ pub fn update_skill_at(
 	skill_id: &str,
 	draft: &SkillDraft,
 ) -> std::io::Result<Skill> {
-	let _serialised = serialised();
+	let _serialised = serialised(bundle);
 	let path = skill_dir(bundle, skill_id)?;
 	let text = drafted(Some(&held_skill(&path)), draft)?;
 	let path = moved_skill_dir(bundle, path, &draft.name)?;
@@ -919,8 +937,8 @@ pub fn set_skill_preloaded(
 	skill_id: &str,
 	is_preloaded: bool,
 ) -> std::io::Result<Skill> {
-	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
+	let _serialised = serialised(&bundle);
 	let path = skill_dir(&bundle, skill_id)?;
 	let skill = written_skill(root, bot, &path, marked(&held_skill(&path), is_preloaded)?)?;
 	recorded(&bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded)).map_err(unrecorded)?;
@@ -932,7 +950,7 @@ pub fn set_skill_preloaded_at(
 	skill_id: &str,
 	is_preloaded: bool,
 ) -> std::io::Result<Skill> {
-	let _serialised = serialised();
+	let _serialised = serialised(bundle);
 	let path = skill_dir(bundle, skill_id)?;
 	let skill = kept_skill(&path, marked(&held_skill(&path), is_preloaded)?)?;
 	recorded(bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded)).map_err(unrecorded)?;
@@ -952,8 +970,8 @@ fn marking(is_preloaded: bool) -> &'static str {
 }
 
 pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<()> {
-	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
+	let _serialised = serialised(&bundle);
 	let name = deleted_skill(&bundle, skill_id)?;
 	rewrite_agent(root, bot)?;
 	recorded(&bundle, SKILL_SUBJECT, &name, "removed from settings").map_err(unrecorded)?;
@@ -961,7 +979,7 @@ pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<(
 }
 
 pub fn remove_skill_at(bundle: &Path, skill_id: &str) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(bundle);
 	let name = deleted_skill(bundle, skill_id)?;
 	recorded(bundle, SKILL_SUBJECT, &name, "removed from settings").map_err(unrecorded)?;
 	Ok(())
@@ -996,7 +1014,7 @@ pub fn set_mcp_server(
 	name: &str,
 	config: &serde_json::Value,
 ) -> std::io::Result<McpServer> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	let server = set_mcp_server_at(&dir(root, &bot.id), name, config)?;
 	rewrite_manifest(root, bot)?;
 	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings")
@@ -1023,7 +1041,7 @@ pub fn set_mcp_server_at(
 }
 
 pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(&dir(root, &bot.id));
 	remove_mcp_server_at(&dir(root, &bot.id), name)?;
 	rewrite_manifest(root, bot)?;
 	undeclare_servers(root, bot)?;
@@ -1217,7 +1235,7 @@ pub fn write_skill_file_at(
 	relative: &str,
 	text: &str,
 ) -> std::io::Result<Skill> {
-	let _serialised = serialised();
+	let _serialised = serialised(bundle);
 	let held = skill_dir(bundle, skill_id)?;
 	private_files::replace(&skill_file_path(&held, relative)?, text.as_bytes())?;
 	recorded(bundle, SKILL_FILE_SUBJECT, relative, "saved from settings").map_err(unrecorded)?;
@@ -1236,7 +1254,7 @@ pub fn remove_skill_file(
 }
 
 pub fn remove_skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
-	let _serialised = serialised();
+	let _serialised = serialised(bundle);
 	fs::remove_file(skill_file_path(&skill_dir(bundle, skill_id)?, relative)?)?;
 	recorded(bundle, SKILL_FILE_SUBJECT, relative, "removed from settings").map_err(unrecorded)?;
 	Ok(())
@@ -4012,6 +4030,32 @@ mod tests {
 	const AT_ONCE: [&str; 4] = ["figs", "dates", "plums", "pears"];
 
 	fn nothing_prepared(_root: &Path, _bot: &Bot, _label: &str) {}
+
+	#[test]
+	fn a_bot_write_and_a_space_skill_write_do_not_wait_on_each_other() {
+		let root = a_root("locks-apart");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		let elsewhere = a_root("locks-apart-space");
+		space::lay_down_at(&elsewhere).expect("the space plugin is laid down");
+
+		let held = serialised(&dir(&root, &bot.id));
+		let (written, waited) = std::sync::mpsc::channel();
+		let space_path = elsewhere.clone();
+		let writer = std::thread::spawn(move || {
+			space::create_skill(&space_path, &a_draft("figs", "What it is for.", "How it goes."))
+				.expect("the skill is created");
+			written.send(()).expect("the write is reported");
+		});
+		waited
+			.recv_timeout(std::time::Duration::from_secs(5))
+			.expect("the space write waited on the bot bundle lock");
+		drop(held);
+		writer.join().expect("the space write ends");
+
+		let _ = fs::remove_dir_all(&root);
+		let _ = fs::remove_dir_all(&elsewhere);
+	}
 
 	fn commits_at_once(
 		root_name: &str,

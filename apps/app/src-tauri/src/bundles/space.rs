@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
 
 use tauri::{AppHandle, Manager, Runtime};
 
@@ -25,25 +24,22 @@ const WRITTEN_TITLE: &str = "The bot changed what it knows about the space";
 
 const LAID_DOWN_TITLE: &str = "The space's plugin was laid down";
 
-static COMMITS: Mutex<()> = Mutex::new(());
-
 pub fn path<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME).join(space_id))
 }
 
-pub fn lay_down<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
-	let Some(path) = path(app, space_id) else {
-		return;
-	};
-	let _ = lay_down_at(&path);
+pub fn lay_down<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> std::io::Result<()> {
+	let path = path(app, space_id).ok_or_else(|| {
+		std::io::Error::new(std::io::ErrorKind::NotFound, "the space plugin has no home on disk")
+	})?;
+	lay_down_at(&path)
 }
 
 pub fn lay_down_at(path: &Path) -> std::io::Result<()> {
 	kept(&path.join(SKILLS_DIR).join(ABOUT_ID).join(SKILL_NAME), about()?.as_bytes())?;
 	kept(&manifest_file(path), manifest().as_bytes())?;
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
-	let _ = git::commit(path, Author::User, LAID_DOWN_TITLE, "");
-	Ok(())
+	let _serialised = super::serialised(path);
+	git::commit(path, Author::User, LAID_DOWN_TITLE, "").map(|_| ()).map_err(super::unrecorded)
 }
 
 pub fn laid_down<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Option<PathBuf> {
@@ -58,7 +54,7 @@ pub fn remove<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
 }
 
 pub fn evolve(path: &Path) -> Option<Evolution> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	let _serialised = super::serialised(path);
 	let changed = git::changes(path);
 	if changed.is_empty() {
 		return None;
@@ -75,12 +71,10 @@ pub fn skills(path: &Path) -> Vec<Skill> {
 }
 
 pub fn create_skill(path: &Path, draft: &SkillDraft) -> std::io::Result<Skill> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::create_skill_at(path, draft)
 }
 
 pub fn update_skill(path: &Path, skill_id: &str, draft: &SkillDraft) -> std::io::Result<Skill> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::update_skill_at(path, skill_id, draft)
 }
 
@@ -89,12 +83,10 @@ pub fn set_skill_preloaded(
 	skill_id: &str,
 	is_preloaded: bool,
 ) -> std::io::Result<Skill> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::set_skill_preloaded_at(path, skill_id, is_preloaded)
 }
 
 pub fn remove_skill(path: &Path, skill_id: &str) -> std::io::Result<()> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::remove_skill_at(path, skill_id)
 }
 
@@ -108,12 +100,10 @@ pub fn write_skill_file(
 	relative: &str,
 	text: &str,
 ) -> std::io::Result<Skill> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::write_skill_file_at(path, skill_id, relative, text)
 }
 
 pub fn remove_skill_file(path: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::remove_skill_file_at(path, skill_id, relative)
 }
 
@@ -126,7 +116,7 @@ pub fn set_mcp_server(
 	name: &str,
 	config: &serde_json::Value,
 ) -> std::io::Result<McpServer> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	let _serialised = super::serialised(path);
 	let server = super::set_mcp_server_at(path, name, config)?;
 	super::rewrite_declared_servers(path)?;
 	super::recorded(path, SERVER_SUBJECT, name, "saved from settings")
@@ -135,7 +125,7 @@ pub fn set_mcp_server(
 }
 
 pub fn remove_mcp_server(path: &Path, name: &str) -> std::io::Result<()> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
+	let _serialised = super::serialised(path);
 	super::remove_mcp_server_at(path, name)?;
 	super::rewrite_declared_servers(path)?;
 	super::recorded(path, SERVER_SUBJECT, name, "removed from settings")
@@ -152,7 +142,6 @@ pub fn diff(path: &Path, commit_id: &str) -> Result<String, git2::Error> {
 }
 
 pub fn revert(path: &Path, commit_id: &str) -> Result<String, git2::Error> {
-	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::revert_at(path, commit_id)
 }
 
@@ -223,6 +212,18 @@ mod tests {
 		assert!(text.contains(&format!("{INVOCATION_KEY}: true")), "got {text}");
 		let (_, body) = text.rsplit_once("\n---\n").expect("the skill has frontmatter");
 		assert!(body.trim().is_empty(), "got {body}");
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn a_plugin_whose_repository_refuses_the_commit_reports_the_failure() {
+		let path = a_path("commit-refused");
+		fs::create_dir_all(&path).expect("the plugin directory is there");
+		fs::write(path.join(".git"), "not a repository").expect("the gitfile lands");
+
+		let failure = lay_down_at(&path).expect_err("the commit is refused");
+		assert_eq!(failure.kind(), std::io::ErrorKind::Other);
 
 		let _ = fs::remove_dir_all(&path);
 	}
