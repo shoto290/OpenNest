@@ -184,18 +184,14 @@ export function MessageBubbleContent({
 	className,
 	children,
 	ref,
-	onDoubleClick,
 	...props
 }: MessageBubbleContentProps) {
 	const variant = useContext(MessageBubbleVariantContext)
 	const interactive = render?.type === "button" || render?.type === "a"
 	const filled = hasSurface(variant)
 	const classes = cn(bubbleContentClass(variant, interactive), className)
-	const selectMessageText = (event: MouseEvent<HTMLDivElement>) => {
-		onDoubleClick?.(event)
-		if (event.defaultPrevented) return
+	const selectMessageText = (event: MouseEvent<HTMLDivElement>) =>
 		selectMessageTextAt(event.target)
-	}
 	const composedChildren = (
 		<>
 			{filled ? (
