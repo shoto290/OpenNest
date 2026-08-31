@@ -1169,9 +1169,11 @@ export const LongTranscript = meta.story({
 			canvasElement.querySelectorAll('[data-slot="message-scroller-row"]')
 				.length,
 		).toBeLessThan(MOUNTED_ROW_LIMIT)
-		await expect(
-			canvas.getByText(LONG_TRANSCRIPT[LONG_TRANSCRIPT.length - 1].text),
-		).toBeVisible()
+		await waitFor(() =>
+			expect(
+				canvas.getByText(LONG_TRANSCRIPT[LONG_TRANSCRIPT.length - 1].text),
+			).toBeVisible(),
+		)
 	},
 })
 
