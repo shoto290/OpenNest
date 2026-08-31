@@ -5,6 +5,7 @@ import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 import { ThreadScreen } from "@/components/thread-screen"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
+import type { DraftsController } from "@/lib/chat/drafts-controller"
 import type { Thread } from "@/lib/chat/thread-contract"
 import type { Chat } from "@/lib/chat/use-chat"
 import type { ConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
@@ -20,6 +21,7 @@ type WorkspaceBodyProps = {
 	conversationRuntimes: ConversationRuntimes
 	chat: Chat
 	attachments: AttachmentsController
+	drafts: DraftsController
 	readerName: string
 	isSettingsOpen: boolean
 	isOverlayOpen: boolean
@@ -92,6 +94,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 	return (
 		<ThreadScreen
 			attachments={props.attachments}
+			drafts={props.drafts}
 			readerName={props.readerName}
 			thread={thread}
 		/>

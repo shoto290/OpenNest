@@ -6,6 +6,7 @@ import { moveBotToSpace } from "../bots/bot-space-move"
 import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { ChatController } from "../chat/chat-controller"
+import type { DraftsController } from "../chat/drafts-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { CollapsedSectionsController } from "../sections/collapsed-sections-controller"
 import { newSectionFor } from "../sections/section-space"
@@ -48,6 +49,7 @@ export type SidebarActionsSource = {
 	attachments: AttachmentsController
 	chat: ChatController
 	collapsedSections: CollapsedSectionsController
+	drafts: DraftsController
 	roster: RosterController
 	runtimes: ConversationRuntimes
 	sections: SectionsController
@@ -61,6 +63,7 @@ export const useSidebarActions = ({
 	attachments,
 	chat,
 	collapsedSections,
+	drafts,
 	roster,
 	runtimes,
 	sections,
@@ -107,6 +110,7 @@ export const useSidebarActions = ({
 			onDeleteConversation: async (id) => {
 				await runtimes.release(id)
 				attachments.forget({ kind: "conversation", id })
+				drafts.forget(id)
 				await roster.removeConversation(id)
 			},
 			onDeleteSection: (id) => {
@@ -153,6 +157,7 @@ export const useSidebarActions = ({
 			attachments,
 			chat,
 			collapsedSections,
+			drafts,
 			roster,
 			runtimes,
 			sections,
