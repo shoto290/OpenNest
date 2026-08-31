@@ -425,18 +425,21 @@ fn write_styled_serialised(root: &Path, bot: &Bot, output_style: &str) -> std::i
 		},
 	)?;
 	settled(root, bot);
-	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "saved from settings");
+	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "saved from settings")
+		.map_err(unrecorded)?;
 	Ok(())
 }
 
 pub fn write_remembered(root: &Path, bot: &Bot, memory: &str) -> std::io::Result<()> {
 	let _serialised = serialised();
 	rewrite_agent_holding(root, bot, memory)?;
-	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "memory saved from settings");
+	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "memory saved from settings")
+		.map_err(unrecorded)?;
 	Ok(())
 }
 
 pub fn inherit(root: &Path, source_id: &str, bot_id: &str) -> std::io::Result<()> {
+	let _serialised = serialised();
 	let source = dir(root, source_id);
 	let target = dir(root, bot_id);
 	copied_tree(&source.join(SKILLS_DIR), &target.join(SKILLS_DIR))?;
@@ -469,9 +472,13 @@ fn copied_file(source: &Path, target: &Path) -> std::io::Result<()> {
 	private_files::replace(target, &fs::read(source)?)
 }
 
-fn recorded(bundle: &Path, subject: &str, name: &str, verb: &str) {
+fn recorded(bundle: &Path, subject: &str, name: &str, verb: &str) -> Result<(), git2::Error> {
 	let title = format!("{subject} \"{}\" {verb}", name.trim());
-	let _ = git::commit(bundle, Author::User, &title, "");
+	git::commit(bundle, Author::User, &title, "").map(|_| ())
+}
+
+pub(super) fn unrecorded(error: git2::Error) -> std::io::Error {
+	std::io::Error::other(error)
 }
 
 struct Written<'a> {
@@ -526,7 +533,8 @@ pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	settled(root, bot);
 	if agent_file(root, &bot.id).is_some() {
 		rewrite_agent(root, bot)?;
-		recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "added to the history");
+		recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "added to the history")
+			.map_err(unrecorded)?;
 		return Ok(());
 	}
 	write_serialised(root, bot)
@@ -552,8 +560,8 @@ fn evolve_serialised(root: &Path, bot: &Bot) -> Option<Evolution> {
 	let _ = rewrite_agent(root, bot);
 	let (title, body) =
 		learned(&bundle).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
-	let _ = fs::remove_file(bundle.join(LEARNED_NAME));
 	let commit_id = git::commit(&bundle, Author::Bot, &title, &body).ok().flatten()?;
+	let _ = fs::remove_file(bundle.join(LEARNED_NAME));
 	Some(Evolution { commit_id, title })
 }
 
@@ -607,6 +615,7 @@ pub fn revert(root: &Path, bot_id: &str, commit_id: &str) -> Result<String, git2
 }
 
 pub fn revert_at(bundle: &Path, commit_id: &str) -> Result<String, git2::Error> {
+	let _serialised = serialised();
 	git::revert(bundle, commit_id)
 }
 
@@ -863,14 +872,14 @@ pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Resu
 	let bundle = dir(root, &bot.id);
 	let path = free_skill_dir(&bundle, &draft.name);
 	let skill = written_skill(root, bot, &path, drafted(None, draft)?)?;
-	recorded(&bundle, SKILL_SUBJECT, &skill.name, "created from settings");
+	recorded(&bundle, SKILL_SUBJECT, &skill.name, "created from settings").map_err(unrecorded)?;
 	Ok(skill)
 }
 
 pub fn create_skill_at(bundle: &Path, draft: &SkillDraft) -> std::io::Result<Skill> {
 	let _serialised = serialised();
 	let skill = kept_skill(&free_skill_dir(bundle, &draft.name), drafted(None, draft)?)?;
-	recorded(bundle, SKILL_SUBJECT, &skill.name, "created from settings");
+	recorded(bundle, SKILL_SUBJECT, &skill.name, "created from settings").map_err(unrecorded)?;
 	Ok(skill)
 }
 
@@ -886,7 +895,7 @@ pub fn update_skill(
 	let text = drafted(Some(&held_skill(&path)), draft)?;
 	let path = moved_skill_dir(&bundle, path, &draft.name)?;
 	let skill = written_skill(root, bot, &path, text)?;
-	recorded(&bundle, SKILL_SUBJECT, &skill.name, "updated from settings");
+	recorded(&bundle, SKILL_SUBJECT, &skill.name, "updated from settings").map_err(unrecorded)?;
 	Ok(skill)
 }
 
@@ -900,7 +909,7 @@ pub fn update_skill_at(
 	let text = drafted(Some(&held_skill(&path)), draft)?;
 	let path = moved_skill_dir(bundle, path, &draft.name)?;
 	let skill = kept_skill(&path, text)?;
-	recorded(bundle, SKILL_SUBJECT, &skill.name, "updated from settings");
+	recorded(bundle, SKILL_SUBJECT, &skill.name, "updated from settings").map_err(unrecorded)?;
 	Ok(skill)
 }
 
@@ -914,7 +923,7 @@ pub fn set_skill_preloaded(
 	let bundle = dir(root, &bot.id);
 	let path = skill_dir(&bundle, skill_id)?;
 	let skill = written_skill(root, bot, &path, marked(&held_skill(&path), is_preloaded)?)?;
-	recorded(&bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded));
+	recorded(&bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded)).map_err(unrecorded)?;
 	Ok(skill)
 }
 
@@ -926,7 +935,7 @@ pub fn set_skill_preloaded_at(
 	let _serialised = serialised();
 	let path = skill_dir(bundle, skill_id)?;
 	let skill = kept_skill(&path, marked(&held_skill(&path), is_preloaded)?)?;
-	recorded(bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded));
+	recorded(bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded)).map_err(unrecorded)?;
 	Ok(skill)
 }
 
@@ -947,14 +956,14 @@ pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<(
 	let bundle = dir(root, &bot.id);
 	let name = deleted_skill(&bundle, skill_id)?;
 	rewrite_agent(root, bot)?;
-	recorded(&bundle, SKILL_SUBJECT, &name, "removed from settings");
+	recorded(&bundle, SKILL_SUBJECT, &name, "removed from settings").map_err(unrecorded)?;
 	Ok(())
 }
 
 pub fn remove_skill_at(bundle: &Path, skill_id: &str) -> std::io::Result<()> {
 	let _serialised = serialised();
 	let name = deleted_skill(bundle, skill_id)?;
-	recorded(bundle, SKILL_SUBJECT, &name, "removed from settings");
+	recorded(bundle, SKILL_SUBJECT, &name, "removed from settings").map_err(unrecorded)?;
 	Ok(())
 }
 
@@ -990,7 +999,8 @@ pub fn set_mcp_server(
 	let _serialised = serialised();
 	let server = set_mcp_server_at(&dir(root, &bot.id), name, config)?;
 	rewrite_manifest(root, bot)?;
-	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings");
+	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings")
+		.map_err(unrecorded)?;
 	Ok(server)
 }
 
@@ -1017,7 +1027,8 @@ pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<
 	remove_mcp_server_at(&dir(root, &bot.id), name)?;
 	rewrite_manifest(root, bot)?;
 	undeclare_servers(root, bot)?;
-	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "removed from settings");
+	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "removed from settings")
+		.map_err(unrecorded)?;
 	Ok(())
 }
 
@@ -1209,7 +1220,7 @@ pub fn write_skill_file_at(
 	let _serialised = serialised();
 	let held = skill_dir(bundle, skill_id)?;
 	private_files::replace(&skill_file_path(&held, relative)?, text.as_bytes())?;
-	recorded(bundle, SKILL_FILE_SUBJECT, relative, "saved from settings");
+	recorded(bundle, SKILL_FILE_SUBJECT, relative, "saved from settings").map_err(unrecorded)?;
 	read_skill(&held).ok_or_else(|| {
 		std::io::Error::new(std::io::ErrorKind::NotFound, "the skill file was not written")
 	})
@@ -1227,7 +1238,7 @@ pub fn remove_skill_file(
 pub fn remove_skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
 	let _serialised = serialised();
 	fs::remove_file(skill_file_path(&skill_dir(bundle, skill_id)?, relative)?)?;
-	recorded(bundle, SKILL_FILE_SUBJECT, relative, "removed from settings");
+	recorded(bundle, SKILL_FILE_SUBJECT, relative, "removed from settings").map_err(unrecorded)?;
 	Ok(())
 }
 
@@ -4210,6 +4221,279 @@ mod tests {
 			assert_eq!(titles(&root, &bot.id).len(), before + evolved + 1, "{label} lost a commit");
 			assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "{label} left work behind");
 		}
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	const BULK_SKILLS: usize = 24;
+	const BULK_FILES: usize = 96;
+
+	fn a_locked_index(bundle: &Path) {
+		private_files::replace(&bundle.join(".git").join("index.lock"), b"")
+			.expect("the lock lands");
+	}
+
+	fn bulk_label(index: usize) -> String {
+		format!("skill-{index}")
+	}
+
+	fn a_bulk_tree(root: &Path, bot_id: &str) {
+		for index in 0..BULK_SKILLS {
+			let label = bulk_label(index);
+			a_bot_writes(root, bot_id, &label, "How it goes.");
+			let held = dir(root, bot_id).join(SKILLS_DIR).join(&label);
+			for file in 0..BULK_FILES {
+				fs::write(held.join(format!("note-{file}.md")), b"Notes.").expect("the file lands");
+			}
+		}
+	}
+
+	fn whole_copy_or_none(root: &Path, bot_id: &str, commit_id: &str) {
+		let patch = diff(root, bot_id, commit_id).expect("the diff reads");
+		let landed = (0..BULK_SKILLS)
+			.filter(|index| patch.contains(&format!("{SKILLS_DIR}/{}/", bulk_label(*index))))
+			.count();
+		assert!(landed == 0 || landed == BULK_SKILLS, "{landed} skills of the copy landed");
+	}
+
+	#[test]
+	fn a_skill_saved_while_a_bundle_is_inherited_lands_the_whole_copy_or_none_of_it() {
+		let root = a_root("inherit-and-save");
+		let source_id = "b0";
+		a_bulk_tree(&root, source_id);
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
+		let copying = std::thread::spawn({
+			let (root, source_id, bot_id) = (root.clone(), source_id.to_owned(), bot.id.clone());
+			let ready = std::sync::Arc::clone(&ready);
+			move || {
+				ready.wait();
+				inherit(&root, &source_id, &bot_id).expect("the copy lands");
+			}
+		});
+		let saving = std::thread::spawn({
+			let root = root.clone();
+			let ready = std::sync::Arc::clone(&ready);
+			move || {
+				ready.wait();
+				create_skill(
+					&root,
+					&a_bot("Bean", "Answer briefly."),
+					&a_draft("kneading", "How to knead.", "Ten minutes."),
+				)
+				.expect("the skill is created");
+			}
+		});
+		copying.join().expect("the copy ran");
+		saving.join().expect("the save ran");
+
+		let entry = &history(&root, &bot.id).expect("the history reads")[0];
+		assert!(entry.title.contains("kneading"), "got {}", entry.title);
+		whole_copy_or_none(&root, &bot.id, &entry.id);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_ending_while_a_bundle_is_inherited_lands_the_whole_copy_or_none_of_it() {
+		let root = a_root("inherit-and-evolve");
+		let source_id = "b0";
+		a_bulk_tree(&root, source_id);
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "learned", "Bean likes them.");
+
+		let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
+		let copying = std::thread::spawn({
+			let (root, source_id, bot_id) = (root.clone(), source_id.to_owned(), bot.id.clone());
+			let ready = std::sync::Arc::clone(&ready);
+			move || {
+				ready.wait();
+				inherit(&root, &source_id, &bot_id).expect("the copy lands");
+			}
+		});
+		let turn = std::thread::spawn({
+			let root = root.clone();
+			let ready = std::sync::Arc::clone(&ready);
+			move || {
+				ready.wait();
+				evolve(&root, &a_bot("Bean", "Answer briefly."))
+			}
+		});
+		copying.join().expect("the copy ran");
+		let evolution = turn.join().expect("the turn ran").expect("the turn is recorded");
+
+		whole_copy_or_none(&root, &bot.id, &evolution.commit_id);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn the_files_saved_while_undos_run_all_reach_the_history() {
+		let root = a_root("undo-and-save");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("kneading", "How to knead.", "Ten minutes."))
+			.expect("the skill is created");
+		a_bulk_tree(&root, &bot.id);
+		create_skill(&root, &bot, &a_draft("figs", "What it is for.", "How it goes."))
+			.expect("the skill is created");
+		let written = history(&root, &bot.id).expect("the history reads");
+		let undone = [written[0].id.clone()];
+		let saved = ["one.md", "two.md", "three.md", "four.md"];
+		let before = written.len();
+
+		let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
+		let saving = std::thread::spawn({
+			let (root, bot_id) = (root.clone(), bot.id.clone());
+			let ready = std::sync::Arc::clone(&ready);
+			move || {
+				ready.wait();
+				for file in saved {
+					write_skill_file(&root, &bot_id, "kneading", file, "Notes.")
+						.expect("the file is written");
+				}
+			}
+		});
+		let undoing = std::thread::spawn({
+			let (root, bot_id) = (root.clone(), bot.id.clone());
+			let ready = std::sync::Arc::clone(&ready);
+			move || {
+				ready.wait();
+				for commit_id in undone {
+					revert(&root, &bot_id, &commit_id).expect("the write is undone");
+				}
+			}
+		});
+		saving.join().expect("the save ran");
+		undoing.join().expect("the undo ran");
+
+		assert_eq!(titles(&root, &bot.id).len(), before + saved.len() + 1);
+		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn two_undos_at_once_both_reach_the_history() {
+		let root = a_root("undo-at-once");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		for label in ["figs", "dates"] {
+			create_skill(&root, &bot, &a_draft(label, "What it is for.", "How it goes."))
+				.expect("the skill is created");
+		}
+		let written = history(&root, &bot.id).expect("the history reads");
+		let undone = [written[0].id.clone(), written[1].id.clone()];
+		let before = written.len();
+
+		let ready = std::sync::Arc::new(std::sync::Barrier::new(undone.len()));
+		let undoing: Vec<_> = undone
+			.into_iter()
+			.map(|commit_id| {
+				let (root, bot_id) = (root.clone(), bot.id.clone());
+				let ready = std::sync::Arc::clone(&ready);
+				std::thread::spawn(move || {
+					ready.wait();
+					revert(&root, &bot_id, &commit_id).expect("the write is undone");
+				})
+			})
+			.collect();
+		for undo in undoing {
+			undo.join().expect("the undo ran");
+		}
+
+		assert_eq!(titles(&root, &bot.id).len(), before + 2);
+		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_skill_whose_commit_fails_reports_the_failure() {
+		let root = a_root("commit-refused-skill");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_locked_index(&dir(&root, &bot.id));
+
+		let refused =
+			create_skill(&root, &bot, &a_draft("figs", "What it is for.", "How it goes."));
+
+		assert!(refused.is_err(), "the failed commit was reported as a success");
+		let listed: Vec<String> = skills(&root, &bot.id).into_iter().map(|it| it.id).collect();
+		assert_eq!(listed, vec!["figs"]);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_skill_file_whose_commit_fails_reports_the_failure() {
+		let root = a_root("commit-refused-file");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		create_skill(&root, &bot, &a_draft("figs", "What it is for.", "How it goes."))
+			.expect("the skill is created");
+		a_locked_index(&dir(&root, &bot.id));
+
+		let refused = write_skill_file(&root, &bot.id, "figs", "notes.md", "Notes.");
+
+		assert!(refused.is_err(), "the failed commit was reported as a success");
+		assert_eq!(
+			skill_file(&root, &bot.id, "figs", "notes.md").expect("the file reads"),
+			"Notes."
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_whose_commit_fails_keeps_the_note_on_disk() {
+		let root = a_root("evolve-refused");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		private_files::replace(
+			&dir(&root, &bot.id).join(LEARNED_NAME),
+			b"Bean learned about figs
+
+They said figs, not dates.
+",
+		)
+		.expect("the note lands");
+		a_locked_index(&dir(&root, &bot.id));
+
+		assert_eq!(evolve(&root, &bot), None);
+		assert!(dir(&root, &bot.id).join(LEARNED_NAME).is_file(), "the note was thrown away");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_that_failed_keeps_its_note_for_the_next_turn() {
+		let root = a_root("evolve-refused-then");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		private_files::replace(
+			&dir(&root, &bot.id).join(LEARNED_NAME),
+			b"Bean learned about figs
+
+They said figs, not dates.
+",
+		)
+		.expect("the note lands");
+		a_locked_index(&dir(&root, &bot.id));
+		assert_eq!(evolve(&root, &bot), None);
+		fs::remove_file(dir(&root, &bot.id).join(".git").join("index.lock"))
+			.expect("the lock is lifted");
+
+		let evolution = evolve(&root, &bot).expect("the turn is recorded");
+
+		assert_eq!(evolution.title, "Bean learned about figs");
+		let entry = &history(&root, &bot.id).expect("the history reads")[0];
+		assert_eq!(entry.body, "They said figs, not dates.");
 
 		let _ = fs::remove_dir_all(&root);
 	}
