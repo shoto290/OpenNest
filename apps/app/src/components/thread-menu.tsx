@@ -18,29 +18,6 @@ export type ThreadMenuWiring = {
 	menu: (slot: ThreadMenuSlot) => ReactNode
 }
 
-type CommandMenuProps = ThreadMenuSlot & {
-	commands: AgentCommand[]
-}
-
-const CommandMenu = ({
-	commands,
-	query,
-	isOpen,
-	onDismiss,
-	onPick,
-	children,
-}: CommandMenuProps) => (
-	<PromptCommandMenu
-		commands={commandOptionsFor(commands)}
-		onDismiss={onDismiss}
-		onSelect={(option) => onPick(promptForCommand(option))}
-		open={isOpen}
-		query={query}
-	>
-		{children}
-	</PromptCommandMenu>
-)
-
 export const promptWithPickedMention = (
 	prompt: string,
 	bots: RosterBot[],
@@ -49,33 +26,6 @@ export const promptWithPickedMention = (
 	const picked = bots.find((bot) => bot.id === botId)
 	return picked ? promptWithMention(prompt, picked.name) : prompt
 }
-
-type MentionMenuProps = ThreadMenuSlot & {
-	bots: RosterBot[]
-	leadId?: string
-}
-
-const MentionMenu = ({
-	bots,
-	leadId,
-	prompt,
-	query,
-	isOpen,
-	onDismiss,
-	onPick,
-	children,
-}: MentionMenuProps) => (
-	<PromptMentionMenu
-		bots={bots}
-		leadId={leadId}
-		onDismiss={onDismiss}
-		onSelect={(botId) => onPick(promptWithPickedMention(prompt, bots, botId))}
-		open={isOpen}
-		query={query}
-	>
-		{children}
-	</PromptMentionMenu>
-)
 
 type BotThreadMenuInput = {
 	commands: AgentCommand[]
@@ -88,7 +38,17 @@ export const botThreadMenu = ({
 }: BotThreadMenuInput): ThreadMenuWiring => ({
 	queryIn: (prompt) =>
 		isOverlayOpen ? null : commandQueryIn(prompt, commands),
-	menu: (slot) => <CommandMenu {...slot} commands={commands} />,
+	menu: ({ query, isOpen, onDismiss, onPick, children }) => (
+		<PromptCommandMenu
+			commands={commandOptionsFor(commands)}
+			onDismiss={onDismiss}
+			onSelect={(option) => onPick(promptForCommand(option))}
+			open={isOpen}
+			query={query}
+		>
+			{children}
+		</PromptCommandMenu>
+	),
 })
 
 type ConversationThreadMenuInput = {
@@ -101,5 +61,16 @@ export const conversationThreadMenu = ({
 	leadId,
 }: ConversationThreadMenuInput): ThreadMenuWiring => ({
 	queryIn: mentionQueryIn,
-	menu: (slot) => <MentionMenu {...slot} bots={bots} leadId={leadId} />,
+	menu: ({ prompt, query, isOpen, onDismiss, onPick, children }) => (
+		<PromptMentionMenu
+			bots={bots}
+			leadId={leadId}
+			onDismiss={onDismiss}
+			onSelect={(botId) => onPick(promptWithPickedMention(prompt, bots, botId))}
+			open={isOpen}
+			query={query}
+		>
+			{children}
+		</PromptMentionMenu>
+	),
 })
