@@ -29,16 +29,7 @@ pub async fn space_create<R: Runtime>(
 ) -> Result<Space, SpaceError> {
 	let database = ready(&state)?;
 	let created = database.spaces().create(name).await?;
-	let laid_down = bundles::space::lay_down(&app, &created.id);
-	kept_if_laid_down(database, created, laid_down).await
-}
-
-async fn kept_if_laid_down(
-	database: &db::Database,
-	created: db::repositories::spaces::Space,
-	laid_down: std::io::Result<()>,
-) -> Result<Space, SpaceError> {
-	let Err(failure) = laid_down else {
+	let Err(failure) = bundles::space::lay_down(&app, &created.id) else {
 		return Ok(Space::from(created));
 	};
 	database.spaces().delete(created.id).await?;
@@ -260,6 +251,8 @@ mod tests {
 
 	use super::*;
 	use crate::db::repositories::conversations::{AvatarAnimal, BotIdentity};
+	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+	use tauri::{App, Manager};
 
 	fn a_root(name: &str) -> PathBuf {
 		let root = std::env::temp_dir().join(format!("opennest-space-bundles-{name}"));
@@ -302,26 +295,34 @@ mod tests {
 			.id
 	}
 
-	#[tokio::test]
-	async fn a_space_whose_plugin_refuses_the_commit_leaves_no_row_behind() {
-		let root = a_root("plugin-refused");
-		let database = a_database(&root);
-		let created =
-			database.spaces().create("Vocca".to_owned()).await.expect("the space is created");
-		let plugin = root.join(&created.id);
-		fs::create_dir_all(&plugin).expect("the plugin directory stands");
-		fs::write(plugin.join(".git"), "not a repository").expect("the gitfile lands");
+	fn a_host(name: &str) -> App<MockRuntime> {
+		let mut context = mock_context(noop_assets());
+		context.config_mut().identifier =
+			format!("com.opennest.space-commands-{name}-{}", std::process::id()).into();
+		let app = mock_builder().build(context).expect("the app builds");
+		if let Ok(dir) = app.path().app_data_dir() {
+			let _ = fs::remove_dir_all(&dir);
+		}
+		app.manage(db::bootstrap(app.handle()));
+		app
+	}
 
-		let failure =
-			kept_if_laid_down(&database, created.clone(), bundles::space::lay_down_at(&plugin))
-				.await
-				.expect_err("the space is refused");
+	#[tokio::test]
+	async fn a_space_whose_plugin_cannot_be_laid_down_leaves_no_row_behind() {
+		let app = a_host("plugin-refused");
+		let data = app.path().app_data_dir().expect("the data dir is named");
+		fs::create_dir_all(&data).expect("the data dir stands");
+		fs::write(data.join("spaces"), "not a directory").expect("the blocking file lands");
+
+		let failure = space_create(app.handle().clone(), app.state(), "Vocca".to_owned())
+			.await
+			.expect_err("the space is refused");
 
 		assert!(matches!(failure, SpaceError::UnwritableBundle { .. }), "got {failure:?}");
-		let listed = database.spaces().list().await.expect("the spaces read");
-		assert!(!listed.iter().any(|space| space.id == created.id), "got {listed:?}");
+		let listed = space_list(app.state()).await.expect("the spaces read");
+		assert!(!listed.iter().any(|space| space.name == "Vocca"), "got {listed:?}");
 
-		let _ = fs::remove_dir_all(&root);
+		let _ = fs::remove_dir_all(&data);
 	}
 
 	#[tokio::test]
