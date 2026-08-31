@@ -157,31 +157,33 @@ const PromptMentionMenu = ({
 												size={ROW_AVATAR_SIZE}
 											/>
 										</span>
-										<span
-											className="min-w-0 flex-1 truncate"
-											data-slot="prompt-mention-name"
-										>
-											{bot.name}
+										<span className="flex min-w-0 items-center gap-2">
+											<span
+												className="truncate"
+												data-slot="prompt-mention-name"
+											>
+												{bot.name}
+											</span>
+											{count > 0 ? (
+												<>
+													<span
+														aria-hidden="true"
+														className="shrink-0 text-muted-foreground tabular-nums"
+														data-slot="prompt-mention-count"
+													>
+														{`${COUNT_GLYPH}${count}`}
+													</span>
+													<span className="sr-only">
+														{t("composer.mentioned", { count })}
+													</span>
+												</>
+											) : null}
 										</span>
-										{count > 0 ? (
-											<>
-												<span
-													aria-hidden="true"
-													className="shrink-0 text-muted-foreground tabular-nums"
-													data-slot="prompt-mention-count"
-												>
-													{`${COUNT_GLYPH}${count}`}
-												</span>
-												<span className="sr-only">
-													{t("composer.mentioned", { count })}
-												</span>
-											</>
-										) : null}
 										{bot.id === leadId ? (
 											<>
 												<Icons.Crown
 													aria-hidden="true"
-													className="size-4 shrink-0 text-bot-badge-attention"
+													className="ml-auto size-4 shrink-0 text-bot-badge-attention"
 													data-slot="prompt-mention-lead"
 												/>
 												<span className="sr-only">

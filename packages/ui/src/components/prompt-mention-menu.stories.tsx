@@ -14,6 +14,20 @@ import {
 
 const CROWDED_BOTS = [...CONVERSATION_BOTS, ...LONG_NAMED_BOTS]
 
+const ROW_GAP = 8
+
+const slotsOf = (row: HTMLElement) => {
+	const name = row.querySelector('[data-slot="prompt-mention-name"]')
+	const count = row.querySelector('[data-slot="prompt-mention-count"]')
+
+	if (!name || !count) throw new Error("The row drew no counted name")
+
+	return {
+		name: name.getBoundingClientRect(),
+		count: count.getBoundingClientRect(),
+	}
+}
+
 const CountingMenu = (props: PromptMentionMenuProps) => {
 	const [counts, setCounts] = useState<Record<string, number>>({
 		"bot-atlas": 1,
@@ -253,7 +267,7 @@ export const Counted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The draft already names two of the listed bots, one once and one three times, and says nothing of the others. Check that a counted row carries the multiplication sign glued to its digits at the trailing edge, that the number is announced as a phrase rather than as a bare glyph, and that a bot the draft never names renders exactly as it does everywhere else — no zero, no placeholder.",
+					"The draft already names two of the listed bots, one once and one three times, and says nothing of the others. Check that the count reads as part of the name it counts, one row-gap after its last glyph and nowhere near the trailing edge, that the number is announced as a phrase rather than as a bare glyph, and that a bot the draft never names renders exactly as it does everywhere else — no zero, no placeholder.",
 			},
 		},
 	},
@@ -270,6 +284,13 @@ export const Counted = meta.story({
 			"Cl\u00e9mence 3 mentions in the draft",
 		)
 		await expect(options[3]).toHaveAccessibleName("Dorian")
+
+		const { name, count } = slotsOf(options[1])
+
+		await expect(count.left - name.right).toBeLessThanOrEqual(ROW_GAP + 1)
+		await expect(
+			options[1].getBoundingClientRect().right - count.right,
+		).toBeGreaterThan(ROW_GAP * 4)
 	},
 })
 
@@ -314,20 +335,24 @@ export const CountedLongName = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas }) => {
 		const row = canvas.getByRole("option", { name: /Release notes editor/ })
-		const name = row.querySelector<HTMLElement>(
+		const named = row.querySelector<HTMLElement>(
 			'[data-slot="prompt-mention-name"]',
 		)
-		const count = canvasElement.querySelector<HTMLElement>(
+		const counted = row.querySelector<HTMLElement>(
 			'[data-slot="prompt-mention-count"]',
 		)
 
-		if (!name || !count) throw new Error("The row drew no count")
+		if (!named || !counted) throw new Error("The row drew no count")
 
-		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
-		await expect(count.scrollWidth).toBe(count.clientWidth)
-		await expect(count.getBoundingClientRect().right).toBeLessThanOrEqual(
+		await expect(named.scrollWidth).toBeGreaterThan(named.clientWidth)
+		await expect(counted.scrollWidth).toBe(counted.clientWidth)
+
+		const { name, count } = slotsOf(row)
+
+		await expect(count.left - name.right).toBeLessThanOrEqual(ROW_GAP + 1)
+		await expect(count.right).toBeLessThanOrEqual(
 			row.getBoundingClientRect().right,
 		)
 	},

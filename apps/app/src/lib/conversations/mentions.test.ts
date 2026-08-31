@@ -137,6 +137,13 @@ describe("mentionCountsIn", () => {
 		expect(mentionCountsIn("@Ada then @Ada", BOTS)).toEqual({ ada: 1 })
 	})
 
+	it("leaves a partial name being typed out of the counts", () => {
+		expect(mentionCountsIn("@Ada ping @Nyx now @Ad", BOTS)).toEqual({
+			ada: 1,
+			nyx: 1,
+		})
+	})
+
 	it("counts nobody when no name is written", () => {
 		expect(mentionCountsIn("@", BOTS)).toEqual({})
 	})
