@@ -22,7 +22,7 @@ export type ThreadMenuSlot = {
 	children: ReactNode
 }
 
-export type ThreadComposerProps = {
+type ThreadComposerProps = {
 	attachments: StagedAttachment[]
 	canAttach: boolean
 	isDropTarget: boolean

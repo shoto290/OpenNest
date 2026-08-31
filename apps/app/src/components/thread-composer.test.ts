@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, type ReactNode } from "react"
 import { afterEach, describe, expect, it } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
 import {
 	ThreadComposer,
-	type ThreadComposerProps,
+	type ThreadMenuSlot,
 } from "@/components/thread-composer"
 import type { StagedAttachment } from "@/lib/chat/attachments"
 
@@ -18,7 +18,7 @@ type ComposerFixture = {
 	onSubmitPrompt: (text: string) => Promise<boolean>
 	canAttach?: boolean
 	queryIn?: (prompt: string) => string | null
-	menu?: ThreadComposerProps["menu"]
+	menu?: (slot: ThreadMenuSlot) => ReactNode
 }
 
 const composerOf = ({
