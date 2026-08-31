@@ -105,26 +105,30 @@ const permissionOf = (
 	request: PermissionRequest | null,
 ): ThreadPermission | null => (request ? { request, authorBotId: null } : null)
 
-const botFactsOf = (thread: LoadedBotThread): ThreadFacts => ({
-	id: thread.bot.id,
-	bot: thread.bot,
-	botController: thread.controller,
-	conversation: null,
-	botWork: workingStateFor(thread.state),
-	isReady: isSessionReady(thread.state),
-	isBusy: isTurnBusy(thread.state.turn),
-	isLoadingOlder: thread.state.loadingOlder,
-	isPromptPending: thread.state.permission !== null,
-	isOverlayOpen: thread.isOverlayOpen,
-	canAttach: isSessionReady(thread.state),
-	permission: permissionOf(thread.state.permission),
-	latestError: thread.state.errors.at(-1),
-	question: thread.state.question,
-	refused: null,
-	rejectedPromptId: thread.state.rejectedPromptId,
-	workingBotIds: NO_WORKING_BOT_IDS,
-	loopingPair: null,
-})
+const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
+	const isReady = isSessionReady(thread.state)
+
+	return {
+		id: thread.bot.id,
+		bot: thread.bot,
+		botController: thread.controller,
+		conversation: null,
+		botWork: workingStateFor(thread.state),
+		isReady,
+		isBusy: isTurnBusy(thread.state.turn),
+		isLoadingOlder: thread.state.loadingOlder,
+		isPromptPending: thread.state.permission !== null,
+		isOverlayOpen: thread.isOverlayOpen,
+		canAttach: isReady,
+		permission: permissionOf(thread.state.permission),
+		latestError: thread.state.errors.at(-1),
+		question: thread.state.question,
+		refused: null,
+		rejectedPromptId: thread.state.rejectedPromptId,
+		workingBotIds: NO_WORKING_BOT_IDS,
+		loopingPair: null,
+	}
+}
 
 const conversationFactsOf = (
 	thread: LoadedConversationThread,

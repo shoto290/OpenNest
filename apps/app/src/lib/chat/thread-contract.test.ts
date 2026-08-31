@@ -79,24 +79,28 @@ const conversationState = (
 	latestError: null,
 })
 
+const botController = {} as ChatController
+
 const botThreadOf = (state: ChatState): LoadedBotThread => ({
 	kind: "bot",
 	bot,
-	chat: { state, controller: {} as ChatController },
+	chat: { state, controller: botController },
 	isSettingsOpen: false,
 	isOverlayOpen: false,
 	onToggleSettings: () => undefined,
 	state,
-	controller: {} as ChatController,
+	controller: botController,
 })
+
+type ConversationThreadFixture = {
+	participants: Participant[]
+	pendingPrompt: PendingPrompt | null
+}
 
 const conversationThreadOf = ({
 	participants,
 	pendingPrompt,
-}: {
-	participants: Participant[]
-	pendingPrompt: PendingPrompt | null
-}): LoadedConversationThread => ({
+}: ConversationThreadFixture): LoadedConversationThread => ({
 	kind: "conversation",
 	conversation: conversationOf(participants),
 	runtimes: {} as ConversationRuntimes,
