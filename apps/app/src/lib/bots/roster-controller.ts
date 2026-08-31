@@ -365,20 +365,15 @@ export const createRosterController = (
 		const conversationRosters = Object.fromEntries(
 			listed.map(({ id, conversations }) => [id, conversations] as const),
 		)
+		const bots = rosterIn(rosters, spaceId)
+		const conversations = rosterIn(conversationRosters, spaceId)
 		set({
 			rosters,
 			conversationRosters,
 			spaceId,
 			hasFailedToLoad: false,
-			...landOn(
-				rosterIn(rosters, spaceId),
-				rosterIn(conversationRosters, spaceId),
-				lastRowId,
-			),
-			...settingsStandingIn(
-				rosterIn(rosters, spaceId),
-				rosterIn(conversationRosters, spaceId),
-			),
+			...landOn(bots, conversations, lastRowId),
+			...settingsStandingIn(bots, conversations),
 		})
 	}
 

@@ -7,13 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import "@workspace/ui/lib/i18n"
 
 import { newBotIdentity } from "@/lib/bots/bot-settings"
+import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 
 const harness = vi.hoisted(
-	(): { store: TranscriptStore | null; driver: unknown } => ({
+	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
 		store: null,
 		driver: null,
 	}),
@@ -55,7 +56,7 @@ const rowFor = (name: string) => {
 	return button
 }
 
-const openedThreadName = () =>
+const openedThreadHeader = () =>
 	document.querySelector('[data-slot="app-header"]')?.textContent ?? ""
 
 const seedRoster = async (store: TranscriptStore) => {
@@ -117,7 +118,7 @@ describe("settings opened from the sidebar", () => {
 		await openSettingsFromContextMenu(ELSEWHERE)
 
 		expect(screen.getByRole("dialog").textContent).toContain(ELSEWHERE)
-		expect(openedThreadName()).toContain(OPENED)
+		expect(openedThreadHeader()).toContain(OPENED)
 	})
 
 	it("shows the settings of the conversation it was asked about and holds the open thread", async () => {
@@ -128,6 +129,6 @@ describe("settings opened from the sidebar", () => {
 		await openSettingsFromContextMenu(ROOM)
 
 		expect(screen.getByRole("dialog").textContent).toContain(ROOM)
-		expect(openedThreadName()).toContain(OPENED)
+		expect(openedThreadHeader()).toContain(OPENED)
 	})
 })
