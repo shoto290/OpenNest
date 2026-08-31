@@ -358,6 +358,9 @@ const expectMutedSecondaryText = async (row: HTMLElement, muted: string) => {
 	await expect(colorOf(row, "roster-row-name")).not.toBe(muted)
 }
 
+const shimmerIn = (row: HTMLElement) =>
+	row.querySelector<HTMLElement>('[data-slot="text-shimmer"]')
+
 const highlightIn = (item: HTMLElement) => item.querySelector("span")
 
 const railWidth = () => {
@@ -769,14 +772,15 @@ export const Working = meta.story({
 		docs: {
 			description: {
 				story:
-					"Four bots running at once and one at rest. Check that each running row holds its own work pose in the avatar and no activity dot, that the verb takes over the message line while it runs, and that the row at rest keeps its blot and its idle frame instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. Pick `Identities` for the rows that hold still, `PermissionPending` for the one running state that looks like rest.",
+					"Four bots running at once and one at rest. Check that each running row holds its own work pose in the avatar and no activity dot, that the verb takes over the message line while it runs, and that the row at rest keeps its blot and its idle frame instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. The running line also shimmers, the same sweep the activity indicator runs over its own label, so a row reads as busy from the message line alone and not only from its avatar. Pick `Identities` for the rows that hold still, `PermissionPending` for the one running state that looks like rest, `WorkingLongSummary` for a shimmering line too long for its row.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas, canvasElement, userEvent }) => {
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
 		await expect(panel).toHaveAttribute("aria-busy", "true")
 
+		const muted = tokenColor(canvasElement, "--muted-foreground")
 		const running = rowFor(canvasElement, "Cinder")
 		await expect(
 			running.querySelector('[data-slot="bot-activity-dot"]'),
@@ -796,6 +800,16 @@ export const Working = meta.story({
 			within(resting).getByRole("img", { name: /idle$/ }),
 		).toBeVisible()
 		await expect(blotFillsIn(resting)).toEqual(["var(--bot-blot-purple)"])
+		await expect(shimmerIn(resting)).toBeNull()
+		await expect(colorOf(resting, "roster-row-preview")).toBe(muted)
+
+		const shimmer = shimmerIn(running)
+		if (!shimmer) throw new Error("The running row has no shimmering summary")
+		await expect(rowButton(running)).toHaveAttribute("aria-current", "page")
+		await expect(getComputedStyle(shimmer).color).toBe(muted)
+
+		await userEvent.hover(rowButton(running))
+		await expect(getComputedStyle(shimmer).color).toBe(muted)
 
 		await expect(
 			within(rowFor(canvasElement, "Atlas")).getByRole("img", {
@@ -1223,7 +1237,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel under `prefers-reduced-motion: reduce`, which is how the test browser renders every story here. Check that the running avatar settles on a static frame of its pose, that the shell drops its width and row springs to zero duration, and that nothing else changes: the rows keep their selection, their focus ring and their two lines, so the state is still readable without motion.",
+					"The panel under `prefers-reduced-motion: reduce`, which is how the test browser renders every story here. Check that the running avatar settles on a static frame of its pose, that the running message line drops its sweep and its gradient for the flat muted colour every other line wears, that the shell drops its width and row springs to zero duration, and that nothing else changes: the rows keep their selection, their focus ring and their two lines, so the state is still readable without motion.",
 			},
 		},
 	},
@@ -1231,6 +1245,13 @@ export const ReducedMotion = meta.story({
 		const row = rowFor(canvasElement, "Cinder")
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
 		await expect(row.querySelector('[data-slot="bot-activity-dot"]')).toBeNull()
+
+		const shimmer = shimmerIn(row)
+		if (!shimmer) throw new Error("The running row has no shimmering summary")
+		await expect(getComputedStyle(shimmer).animationName).toBe("none")
+		await expect(getComputedStyle(shimmer).color).toBe(
+			tokenColor(canvasElement, "--muted-foreground"),
+		)
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Cinder selected, working",
 		)
@@ -3732,6 +3753,8 @@ const stackIn = (row: HTMLElement) =>
 
 const CREATE = "Create"
 
+const LONG_SPEAKER = "Bartholomew Featherstonehaugh the Third"
+
 export const Conversations = meta.story({
 	args: conversationArgs(),
 	parameters: {
@@ -4013,6 +4036,58 @@ export const ConversationWorking = meta.story({
 		await expect(slotIn(poseless, "roster-row-preview")).toHaveTextContent(
 			"Atlas: thinking…",
 		)
+	},
+})
+
+export const WorkingLongSummary = meta.story({
+	args: {
+		...conversationArgs(),
+		selectedConversationId: "launch",
+		conversations: [
+			{
+				...CONVERSATIONS[0],
+				participants: [
+					{
+						...PAIR[0],
+						name: LONG_SPEAKER,
+						status: "working" as const,
+						pose: "searching" as const,
+					},
+					PAIR[1],
+				],
+				lastSpeaker: LONG_SPEAKER,
+			},
+			CONVERSATIONS[1],
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A running line longer than the row it sits on, on the row the reader is in. Check that it clips to one line like any other message rather than wrapping — the shimmer is painted onto the glyphs, so a wrapped line would take the row taller and move every row under it — and that the ellipsis is drawn in the resting muted colour by the line itself rather than swept by the gradient, which keeps the clip readable at the darkest phase of the sweep. The selected row keeps the same reading: the sweep runs between the muted and the plain foreground on the selected surface too, so it never dims into the pill it sits on. Pick `Working` for the sweep on a line that fits, `ReducedMotion` for the same line held still.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const muted = tokenColor(canvasElement, "--muted-foreground")
+		const row = rowFor(canvasElement, "Launch review")
+		const preview = slotIn(row, "roster-row-preview")
+		const quiet = slotIn(
+			rowFor(canvasElement, "Transport migration"),
+			"roster-row-preview",
+		)
+
+		const shimmer = shimmerIn(row)
+		if (!shimmer) throw new Error("The running row has no shimmering summary")
+		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
+		await expect(preview).toHaveTextContent(`${LONG_SPEAKER}: searching…`)
+		await expect(isClipped(preview)).toBe(true)
+		await expect(getComputedStyle(shimmer).display).toBe("inline")
+		await expect(colorOf(row, "roster-row-preview")).toBe(muted)
+		await expect(preview.getBoundingClientRect().height).toBe(
+			quiet.getBoundingClientRect().height,
+		)
+		await expect(uniqueCount(rowHeights(rowsIn(canvasElement)))).toBe(1)
 	},
 })
 
