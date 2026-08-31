@@ -60,6 +60,10 @@ import {
 	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "@workspace/ui/components/motion/context-menu"
+import {
+	TextShimmer,
+	WORKING_SHIMMER_DURATION,
+} from "@workspace/ui/components/motion/text-shimmer"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
 import {
 	SpaceDot,
@@ -278,6 +282,23 @@ const badgeOf = (conversation: AppSidebarConversation) =>
 const workingBotOf = ({ participants, lastSpeaker }: AppSidebarConversation) =>
 	participants.find((bot) => isBusy(bot) && bot.name === lastSpeaker) ??
 	participants.find(isBusy)
+
+interface RowPreviewProps {
+	isWorking: boolean
+	children: ReactNode
+}
+
+const RowPreview = ({ isWorking, children }: RowPreviewProps) => (
+	<span className={PREVIEW_LINE} data-slot="roster-row-preview">
+		{isWorking ? (
+			<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
+				{children}
+			</TextShimmer>
+		) : (
+			children
+		)}
+	</span>
+)
 
 const previewOf = (
 	t: TFunction<"bots">,
@@ -621,11 +642,11 @@ const BotRosterRow = ({
 									{bot.timestamp}
 								</span>
 							</span>
-							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
+							<RowPreview isWorking={working}>
 								{working
 									? t("roster.working", { pose: t(`roster.pose.${pose}`) })
 									: bot.lastMessage && toPlainText(bot.lastMessage)}
-							</span>
+							</RowPreview>
 							{rowBadge ? (
 								<BotBadgeDot
 									badge={rowBadge}
@@ -774,9 +795,9 @@ const ConversationRosterRow = ({
 									{conversation.timestamp}
 								</span>
 							</span>
-							<span className={PREVIEW_LINE} data-slot="roster-row-preview">
+							<RowPreview isWorking={Boolean(workingBotOf(conversation))}>
 								{previewOf(t, conversation)}
-							</span>
+							</RowPreview>
 							{rowBadge ? (
 								<BotBadgeDot
 									badge={rowBadge}

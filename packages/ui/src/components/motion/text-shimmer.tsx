@@ -1,11 +1,8 @@
-import type { ElementType, ReactNode } from "react"
+import type { CSSProperties, ElementType, ReactNode } from "react"
 
-import {
-	TEXT_SHIMMER_CLASS_NAME,
-	TEXT_SHIMMER_KEYFRAMES,
-	textShimmerStyle,
-} from "@workspace/ui/lib/text-shimmer"
 import { cn } from "@workspace/ui/lib/utils"
+
+export const WORKING_SHIMMER_DURATION = 1.8
 
 export interface TextShimmerProps {
 	children: ReactNode
@@ -21,14 +18,12 @@ export function TextShimmer({
 	className,
 }: TextShimmerProps) {
 	return (
-		<>
-			<style>{TEXT_SHIMMER_KEYFRAMES}</style>
-			<Comp
-				style={textShimmerStyle(duration)}
-				className={cn("inline-block", TEXT_SHIMMER_CLASS_NAME, className)}
-			>
-				{children}
-			</Comp>
-		</>
+		<Comp
+			className={cn("inline-block text-shimmer", className)}
+			data-slot="text-shimmer"
+			style={{ "--text-shimmer-duration": `${duration}s` } as CSSProperties}
+		>
+			{children}
+		</Comp>
 	)
 }

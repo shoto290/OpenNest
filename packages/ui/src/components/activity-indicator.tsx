@@ -13,7 +13,10 @@ import {
 import { Icons } from "@workspace/ui/components/icons"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
-import { TextShimmer } from "@workspace/ui/components/motion/text-shimmer"
+import {
+	TextShimmer,
+	WORKING_SHIMMER_DURATION,
+} from "@workspace/ui/components/motion/text-shimmer"
 import { ProgressGrid } from "@workspace/ui/components/progress-grid"
 import { TURN_AVATAR_SIZE } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
@@ -31,8 +34,6 @@ interface ActivityIndicatorProps {
 	size?: number
 	className?: string
 }
-
-const SHIMMER_DURATION = 1.8
 
 const STOP_OVERLAY =
 	"pointer-events-none absolute inset-0 flex items-center justify-center bg-background/75 text-foreground"
@@ -127,7 +128,10 @@ function ActivityIndicator({
 				{isTimed(kind) ? (
 					<ProgressGrid indicator={null} label={text} running={pointed} />
 				) : (
-					<TextShimmer className="font-medium" duration={SHIMMER_DURATION}>
+					<TextShimmer
+						className="font-medium"
+						duration={WORKING_SHIMMER_DURATION}
+					>
 						{text}
 					</TextShimmer>
 				)}

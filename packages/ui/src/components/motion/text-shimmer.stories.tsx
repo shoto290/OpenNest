@@ -11,7 +11,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Text that reads as still working. A light band sweeps across the glyphs on a loop, from `--muted-foreground` through `--foreground` and back, by clipping a gradient to the text rather than painting anything on top of it. Reach for it on a label whose work has no measurable progress — a turn being drafted, a tool still thinking — and drop it the moment there is a number to show, where a progress bar says more. It is a single looping CSS animation with no exit: it stops when the label is replaced, so keep the swap in the caller. Two cautions carry: the glyphs are painted through `bg-clip-text` on transparent text, so the label must never be the only copy of a status a reader needs, and the loop is CSS rather than Motion, so it keeps sweeping under `prefers-reduced-motion` — hide it at the call site when the surface must go still.",
+					"Text that reads as still working. A light band sweeps across the glyphs on a loop, from `--muted-foreground` through `--foreground` and back, by clipping a gradient to the text rather than painting anything on top of it. Reach for it on a label whose work has no measurable progress — a turn being drafted, a tool still thinking — and drop it the moment there is a number to show, where a progress bar says more. It is a single looping CSS animation with no exit: it stops when the label is replaced, so keep the swap in the caller. Two cautions carry: the glyphs are painted through `bg-clip-text` on transparent text, so the label must never be the only copy of a status a reader needs, and under `prefers-reduced-motion` it drops the gradient and settles on `--muted-foreground` rather than sweeping.",
 			},
 		},
 	},

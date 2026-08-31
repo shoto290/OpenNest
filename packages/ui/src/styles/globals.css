@@ -350,3 +350,32 @@
 		var(--sidebar-border-untinted)
 	);
 }
+
+@keyframes ui-text-shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+@utility text-shimmer {
+	background-image: linear-gradient(
+		110deg,
+		var(--muted-foreground) 30%,
+		var(--foreground) 50%,
+		var(--muted-foreground) 70%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: ui-text-shimmer var(--text-shimmer-duration) linear infinite;
+
+	@media (prefers-reduced-motion: reduce) {
+		animation: none;
+		background-image: none;
+		color: var(--muted-foreground);
+	}
+}
