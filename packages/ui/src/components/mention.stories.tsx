@@ -34,8 +34,39 @@ const Conversation = ({ children }: { children: ReactNode }) => (
 	</RosterProvider>
 )
 
+type MessageProps = { source: string }
+
+const Message = ({ source }: MessageProps) => (
+	<RosterProvider bots={ROOM}>
+		<div className="max-w-md">
+			<Markdown>{source}</Markdown>
+		</div>
+	</RosterProvider>
+)
+
+const pills = (canvasElement: HTMLElement) =>
+	canvasElement.querySelectorAll<HTMLElement>('[data-slot="bot-mention"]')
+
+const counts = (canvasElement: HTMLElement) =>
+	canvasElement.querySelectorAll<HTMLElement>('[data-slot="bot-mention-count"]')
+
 const HANDOVER =
 	"I stopped at the failing migration — <@bot-basile> owns that script, and <@bot-ghost> wrote the fixture it reads."
+
+const LITERAL = "Write `<@bot-atlas>` to name Atlas in a message."
+
+const PAIR = "Ask <@bot-atlas> <@bot-atlas> to split the failing suite."
+
+const CROWD =
+	"Fan the migration out to <@bot-atlas> <@bot-atlas> <@bot-atlas> <@bot-atlas> <@bot-atlas> <@bot-atlas> <@bot-atlas> <@bot-atlas> <@bot-atlas> and let <@bot-basile> collect the diffs."
+
+const GHOST_PAIR = "<@bot-ghost> <@bot-ghost> were the ones holding that lock."
+
+const LONG_PAIR = "Ask <@bot-release> <@bot-release> for the two changelogs."
+
+const NEIGHBOURS = "Ask <@bot-atlas> <@bot-basile> to trade notes."
+
+const APART = "Ask <@bot-atlas> first, then ask <@bot-atlas> for a second pass."
 
 const meta = preview.meta({
 	title: "Conversation/Message/Mention",
@@ -109,7 +140,7 @@ export const LongName = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const name = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="bot-mention"] > span:last-child',
+			'[data-slot="bot-mention-name"]',
 		)
 
 		if (!name) throw new Error("The chip drew no name")
@@ -127,13 +158,7 @@ export const InText = meta.story({
 			},
 		},
 	},
-	render: () => (
-		<RosterProvider bots={ROOM}>
-			<div className="max-w-md">
-				<Markdown>{HANDOVER}</Markdown>
-			</div>
-		</RosterProvider>
-	),
+	render: () => <Message source={HANDOVER} />,
 	play: async ({ canvas }) => {
 		await expect(canvas.getByText("Basile")).toBeVisible()
 		await expect(canvas.getByText("Unknown bot")).toBeVisible()
@@ -149,19 +174,140 @@ export const InCode = meta.story({
 			},
 		},
 	},
-	render: () => (
-		<RosterProvider bots={ROOM}>
-			<div className="max-w-md">
-				<Markdown>
-					{"Write `<@bot-atlas>` to name Atlas in a message."}
-				</Markdown>
-			</div>
-		</RosterProvider>
-	),
+	render: () => <Message source={LITERAL} />,
 	play: async ({ canvas, canvasElement }) => {
 		await expect(canvas.getByText("<@bot-atlas>")).toBeVisible()
+		await expect(pills(canvasElement)).toHaveLength(0)
+	},
+})
+
+export const Counted = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same bot named twice in a row, which is how a message addresses two live instances of it. Check that the two tokens draw one chip carrying `×2` rather than two chips side by side, that the space that separated them is gone, and that the multiplier keeps the count from reading as the instance ordinal a live row and a message author show after a name. A screen reader hears *Atlas 2 mentions*: the glyph is hidden and the count spelled out beside it.",
+			},
+		},
+	},
+	render: () => <Message source={PAIR} />,
+	play: async ({ canvas, canvasElement }) => {
+		await expect(pills(canvasElement)).toHaveLength(1)
+		await expect(canvas.getByText("×2")).toBeVisible()
+		await expect(canvas.getByText("Atlas")).toBeVisible()
+		await expect(canvas.getByText("2 mentions")).toBeInTheDocument()
+	},
+})
+
+export const CountedToNine = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Nine repeats of one bot, the widest count a single digit reaches, next to a bot named once. Check that the counted chip is exactly as tall as the plain one and sits on the same baseline, that `×9` sits inside the chip one space after the name, and that its digit is drawn in the tabular figures the rest of the app counts with.",
+			},
+		},
+	},
+	render: () => <Message source={CROWD} />,
+	play: async ({ canvas, canvasElement }) => {
+		const [counted, plain] = [...pills(canvasElement)]
+
+		await expect(canvas.getByText("×9")).toBeVisible()
+		await expect(canvas.getByText("9 mentions")).toBeInTheDocument()
+
+		const [count] = [...counts(canvasElement)]
+
+		if (!count) throw new Error("The chip drew no count")
+
+		await expect(getComputedStyle(count).fontVariantNumeric).toContain(
+			"tabular-nums",
+		)
+
+		const drawn = counted.getBoundingClientRect()
+		const beside = plain.getBoundingClientRect()
+
+		await expect(drawn.height).toBeCloseTo(beside.height, 1)
+		await expect(drawn.top).toBeCloseTo(beside.top, 1)
+	},
+})
+
+export const CountedUnknown = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A repeated id the conversation cannot resolve. Check that an unknown id collapses on exactly the same rule as a known one: one dimmed chip with a silhouette, *Unknown bot* and the count, never two identical unknown chips in a row.",
+			},
+		},
+	},
+	render: () => <Message source={GHOST_PAIR} />,
+	play: async ({ canvas, canvasElement }) => {
+		await expect(pills(canvasElement)).toHaveLength(1)
 		await expect(
-			canvasElement.querySelectorAll('[data-slot="bot-mention"]'),
-		).toHaveLength(0)
+			canvasElement.querySelector('[data-unknown="true"]'),
+		).not.toBeNull()
+		await expect(canvas.getByText("Unknown bot")).toBeVisible()
+		await expect(canvas.getByText("2 mentions")).toBeInTheDocument()
+	},
+})
+
+export const CountedLongName = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A count on a bot whose name is a sentence of its own. Check that the name is still the part that truncates and that the count stays whole and inside the chip: a reader must never lose the number to an ellipsis.",
+			},
+		},
+	},
+	render: () => <Message source={LONG_PAIR} />,
+	play: async ({ canvasElement }) => {
+		const [pill] = [...pills(canvasElement)]
+		const [count] = [...counts(canvasElement)]
+		const name = canvasElement.querySelector<HTMLElement>(
+			'[data-slot="bot-mention-name"]',
+		)
+
+		if (!pill || !name || !count) throw new Error("The chip drew no count")
+
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(count.scrollWidth).toBe(count.clientWidth)
+		await expect(count.getBoundingClientRect().right).toBeLessThanOrEqual(
+			pill.getBoundingClientRect().right,
+		)
+	},
+})
+
+export const DifferentBotsAdjacent = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two different bots named back to back. Check that adjacency alone collapses nothing: two ids means two chips, each with its own avatar and no count.",
+			},
+		},
+	},
+	render: () => <Message source={NEIGHBOURS} />,
+	play: async ({ canvas, canvasElement }) => {
+		await expect(pills(canvasElement)).toHaveLength(2)
+		await expect(canvas.getByText("Atlas")).toBeVisible()
+		await expect(canvas.getByText("Basile")).toBeVisible()
+		await expect(counts(canvasElement)).toHaveLength(0)
+	},
+})
+
+export const RepeatedApart = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same bot named twice with words in between. Check that only whitespace collapses a repeat: prose between the two tokens means the reader wrote two mentions in two places, so the sentence keeps two chips and no count.",
+			},
+		},
+	},
+	render: () => <Message source={APART} />,
+	play: async ({ canvasElement }) => {
+		await expect(pills(canvasElement)).toHaveLength(2)
+		await expect(counts(canvasElement)).toHaveLength(0)
 	},
 })

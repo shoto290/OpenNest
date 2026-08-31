@@ -9,13 +9,34 @@ const MENTION = /<@([\w-]+)>/g
 
 const BOT_MENTION_ATTRIBUTE = "data-bot-mention"
 
+const BOT_MENTION_COUNT_ATTRIBUTE = "data-bot-mention-count"
+
 const mentionOf = (id: string): MdastNode => ({
 	type: "botMention",
-	data: { hName: "span", hProperties: { [BOT_MENTION_ATTRIBUTE]: id } },
+	data: {
+		hName: "span",
+		hProperties: {
+			[BOT_MENTION_ATTRIBUTE]: id,
+			[BOT_MENTION_COUNT_ATTRIBUTE]: 1,
+		},
+	},
 	children: [],
 })
 
 const textOf = (value: string): MdastNode => ({ type: "text", value })
+
+const repeatedProperties = (
+	node: MdastNode | undefined,
+	id: string,
+	gap: string,
+) => {
+	const properties =
+		node?.type === "botMention" ? node.data?.hProperties : undefined
+
+	if (!properties || gap.trim() !== "") return undefined
+
+	return properties[BOT_MENTION_ATTRIBUTE] === id ? properties : undefined
+}
 
 const splitMentions = (value: string) => {
 	const parts: MdastNode[] = []
@@ -23,9 +44,19 @@ const splitMentions = (value: string) => {
 
 	for (const match of value.matchAll(MENTION)) {
 		const at = match.index ?? 0
-		if (at > read) parts.push(textOf(value.slice(read, at)))
-		parts.push(mentionOf(match[1]))
+		const gap = value.slice(read, at)
 		read = at + match[0].length
+
+		const repeated = repeatedProperties(parts.at(-1), match[1], gap)
+
+		if (repeated) {
+			repeated[BOT_MENTION_COUNT_ATTRIBUTE] =
+				Number(repeated[BOT_MENTION_COUNT_ATTRIBUTE]) + 1
+			continue
+		}
+
+		if (gap) parts.push(textOf(gap))
+		parts.push(mentionOf(match[1]))
 	}
 
 	if (parts.length === 0) return null
@@ -51,4 +82,4 @@ export const remarkBotMentions = () => (tree: MdastNode) => {
 	rewrite(tree)
 }
 
-export { BOT_MENTION_ATTRIBUTE }
+export { BOT_MENTION_ATTRIBUTE, BOT_MENTION_COUNT_ATTRIBUTE }

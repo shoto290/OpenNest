@@ -46,6 +46,9 @@ const chat = {
 		},
 		mention: {
 			unknown: "Bot inconnu",
+			counted_one: "{{count}} mention",
+			counted_many: "{{count}} mentions",
+			counted_other: "{{count}} mentions",
 		},
 	},
 	turn: {
