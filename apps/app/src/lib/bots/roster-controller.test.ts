@@ -344,12 +344,13 @@ describe("createRosterController", () => {
 		)
 	})
 
-	it("closes the panel and lands on the first row once a bot is deleted", async () => {
+	it("closes the panel and holds the open thread once a bot is deleted", async () => {
 		const controller = await loaded(await anEmptyStore())
 		await controller.create()
 		await controller.create()
 		await controller.create()
 		const [first, second, third] = controller.getState().bots
+		controller.select(first.id)
 
 		controller.askToDelete(second.id)
 		await controller.remove(second.id)
@@ -358,6 +359,7 @@ describe("createRosterController", () => {
 		expect(state.bots.map((bot) => bot.id)).toEqual([first.id, third.id])
 		expect(state).toMatchObject({
 			selectedBotId: first.id,
+			settingsBotId: null,
 			isEditing: false,
 			isShowingDanger: false,
 		})
@@ -439,7 +441,7 @@ describe("createRosterController", () => {
 		)
 	})
 
-	it("selects the bot a delete is asked about and opens it on the danger group", async () => {
+	it("opens the settings of the bot a delete is asked about on the danger group", async () => {
 		const store = createFakeTranscriptStore()
 		const deleted = vi.spyOn(store, "deleteBot")
 		const controller = await loaded(store)
@@ -447,7 +449,7 @@ describe("createRosterController", () => {
 		controller.askToDelete("default")
 
 		expect(controller.getState()).toMatchObject({
-			selectedBotId: "default",
+			settingsBotId: "default",
 			isEditing: true,
 			isShowingDanger: true,
 		})
@@ -457,6 +459,22 @@ describe("createRosterController", () => {
 		expect(controller.getState().isShowingDanger).toBe(false)
 	})
 
+	it("holds the open thread when it opens the settings of another bot", async () => {
+		const controller = await loaded(await anEmptyStore())
+		await controller.create()
+		await controller.create()
+		const [first, second] = controller.getState().bots
+		controller.select(first.id)
+
+		controller.edit(second.id)
+
+		expect(controller.getState()).toMatchObject({
+			selectedBotId: first.id,
+			settingsBotId: second.id,
+			isEditing: true,
+		})
+	})
+
 	it("lets go of the danger group when the panel is pointed at another bot", async () => {
 		const controller = await loaded(await anEmptyStore())
 		await controller.create()
@@ -464,14 +482,12 @@ describe("createRosterController", () => {
 		const [first, second] = controller.getState().bots
 
 		controller.askToDelete(second.id)
-		controller.select(first.id)
-
-		expect(controller.getState().isShowingDanger).toBe(false)
-
-		controller.askToDelete(second.id)
 		controller.edit(first.id)
 
-		expect(controller.getState().isShowingDanger).toBe(false)
+		expect(controller.getState()).toMatchObject({
+			settingsBotId: first.id,
+			isShowingDanger: false,
+		})
 	})
 
 	it("closes the panel when a read no longer holds the bot it was open on", async () => {
@@ -530,6 +546,22 @@ describe("createRosterController on a space", () => {
 
 		expect(controller.getState().bots).toEqual([])
 		expect(controller.getState().selectedBotId).toBeNull()
+	})
+
+	it("closes the settings it holds open when the reader changes space", async () => {
+		const store = createFakeTranscriptStore()
+		const elsewhere = await store.createSpace("Vocca")
+		await store.createBot(newBotIdentity([]), elsewhere.id)
+		const controller = createRosterController(store)
+		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
+		controller.edit("default")
+
+		controller.enter({ spaceId: elsewhere.id, lastRowId: null })
+
+		expect(controller.getState()).toMatchObject({
+			settingsBotId: null,
+			isEditing: false,
+		})
 	})
 
 	it("holds an empty roster for a space it has never read", async () => {
@@ -1040,8 +1072,27 @@ describe("createRosterController on conversations", () => {
 
 		const state = controller.getState()
 		expect(state.isEditingConversation).toBe(true)
-		expect(state.selectedConversationId).toBe(created?.id)
+		expect(state.settingsConversationId).toBe(created?.id)
 		expect(state.isEditing).toBe(false)
+	})
+
+	it("holds the open thread when it opens the settings of a conversation", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const created = await controller.createConversation({
+			title: "Launch",
+			botIds: ["default"],
+		})
+		controller.select("default")
+
+		controller.editConversation(created?.id ?? "")
+
+		expect(controller.getState()).toMatchObject({
+			selectedBotId: "default",
+			selectedConversationId: null,
+			settingsConversationId: created?.id,
+			isEditingConversation: true,
+		})
 	})
 
 	it("stores the name and the instructions that are written", async () => {
