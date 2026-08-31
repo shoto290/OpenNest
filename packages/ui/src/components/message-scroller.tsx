@@ -31,6 +31,8 @@ const ESTIMATED_ROW_HEIGHT = 120
 
 const ROW_OVERSCAN = 3
 
+const AIM_FRAME_BUDGET = 20
+
 const JUMP_HIDDEN = { opacity: 0, y: 6 } as const
 const JUMP_VISIBLE = { opacity: 1, y: 0 } as const
 
@@ -52,11 +54,6 @@ const offsetWithinViewport = (list: HTMLElement, viewport: HTMLElement) =>
 	list.getBoundingClientRect().top -
 	viewport.getBoundingClientRect().top +
 	viewport.scrollTop
-
-const nextFrames = (run: () => void) => {
-	const outer = requestAnimationFrame(() => requestAnimationFrame(run))
-	return () => cancelAnimationFrame(outer)
-}
 
 type MessageScrollerTracePhase = "landing" | "live"
 
@@ -174,7 +171,7 @@ export function MessageScroller({
 	const lastScrollTopRef = useRef(0)
 	const heldViewportHeightRef = useRef(0)
 	const isHoldPendingRef = useRef(false)
-	const centerFrameRef = useRef<(() => void) | undefined>(undefined)
+	const aimFrameRef = useRef<number | undefined>(undefined)
 	const landedKeyRef = useRef(transcriptKey)
 	const landedRowsRef = useRef(0)
 	const traceRef = useRef(onLandingTrace)
@@ -342,44 +339,85 @@ export function MessageScroller({
 		[onFollowChange],
 	)
 
+	const stopAiming = useCallback(() => {
+		if (aimFrameRef.current === undefined) return
+
+		cancelAnimationFrame(aimFrameRef.current)
+		aimFrameRef.current = undefined
+	}, [])
+
 	const returnToLiveEdge = useCallback(
 		(nextBehavior: ScrollBehavior = behavior) => {
+			stopAiming()
 			setFollowing(true)
 			scrollViewportToEnd(nextBehavior)
 		},
-		[behavior, scrollViewportToEnd, setFollowing],
+		[behavior, scrollViewportToEnd, setFollowing, stopAiming],
 	)
 
 	const centerAnchor = useCallback(
 		(messageId: string, nextBehavior: ScrollBehavior) => {
 			const viewport = viewportRef.current
 			const anchor = viewport && anchorFor(viewport, messageId)
-			if (!anchor) return false
-
-			anchor.scrollIntoView({ behavior: nextBehavior, block: "center" })
-			return true
+			anchor?.scrollIntoView({ behavior: nextBehavior, block: "center" })
 		},
 		[],
+	)
+
+	const offsetOfRow = useCallback(
+		(index: number) => virtualizer.getOffsetForIndex(index, "center")?.[0],
+		[virtualizer],
+	)
+
+	const aimAtRow = useCallback(
+		(index: number, messageId: string, nextBehavior: ScrollBehavior) => {
+			virtualizer.scrollToIndex(index, {
+				align: "center",
+				behavior: nextBehavior,
+			})
+			centerAnchor(messageId, nextBehavior)
+		},
+		[centerAnchor, virtualizer],
+	)
+
+	const holdAimOnRow = useCallback(
+		(index: number, messageId: string) => {
+			let framesLeft = AIM_FRAME_BUDGET
+			let lastOffset = offsetOfRow(index)
+
+			const reaim = () => {
+				const offset = offsetOfRow(index)
+				const hasMoved = offset !== lastOffset
+				lastOffset = offset
+				framesLeft -= 1
+				if (framesLeft <= 0) {
+					aimFrameRef.current = undefined
+					return
+				}
+
+				if (hasMoved) aimAtRow(index, messageId, "auto")
+				aimFrameRef.current = requestAnimationFrame(reaim)
+			}
+
+			aimFrameRef.current = requestAnimationFrame(reaim)
+		},
+		[aimAtRow, offsetOfRow],
 	)
 
 	const scrollToMessage = useCallback(
 		(messageId: string, nextBehavior: ScrollBehavior) => {
 			landingRef.current = false
-			if (centerAnchor(messageId, nextBehavior)) {
-				setFollowing(false)
-				return true
-			}
+			stopAiming()
 
 			const index = rows.findIndex((row) => row.messageIds?.includes(messageId))
 			if (index < 0) return false
 
 			setFollowing(false)
-			virtualizer.scrollToIndex(index, { align: "center", behavior: "auto" })
-			centerFrameRef.current?.()
-			centerFrameRef.current = nextFrames(() => centerAnchor(messageId, "auto"))
+			aimAtRow(index, messageId, nextBehavior)
+			holdAimOnRow(index, messageId)
 			return true
 		},
-		[centerAnchor, rows, setFollowing, virtualizer],
+		[aimAtRow, holdAimOnRow, rows, setFollowing, stopAiming],
 	)
 
 	const handleScroll = useCallback(() => {
@@ -412,7 +450,8 @@ export function MessageScroller({
 		landingRef.current = false
 		tracePhaseRef.current = "live"
 		isHoldPendingRef.current = false
-	}, [])
+		stopAiming()
+	}, [stopAiming])
 
 	const requestOlder = () => {
 		if (!older || older.isLoading) return
@@ -467,10 +506,10 @@ export function MessageScroller({
 
 	useEffect(
 		() => () => {
-			centerFrameRef.current?.()
+			stopAiming()
 			if (holdFrameRef.current) cancelAnimationFrame(holdFrameRef.current)
 		},
-		[],
+		[stopAiming],
 	)
 
 	return (

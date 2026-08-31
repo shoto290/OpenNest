@@ -445,7 +445,7 @@ const toRunRows = ({
 
 		return {
 			key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
-			messageIds: run.map((row) => row.messageId),
+			messageIds: run.map((row) => bubbleIdOf(row.messageId, row.blockIndex)),
 			render: () => (
 				<ThreadRun
 					{...shared}
