@@ -135,8 +135,6 @@ const NO_PINS: MessagePin[] = []
 
 const NO_SPEAKERS: SpeakingBot[] = []
 
-const NO_STARTED: Speaker[] = []
-
 const isSamePair = (
 	left: [string, string] | null,
 	right: [string, string] | null,
@@ -269,15 +267,10 @@ export const createConversationController = (
 			stop: () => stopSpeaker(held.botId),
 		}))
 
-	const oldestPrompt = (): PendingPrompt | null => {
-		let oldest: Speaker | null = null
-		for (const held of runningSpeakers()) {
-			if (held.pending && (!oldest || held.askedAt < oldest.askedAt)) {
-				oldest = held
-			}
-		}
-		return oldest?.pending ?? null
-	}
+	const oldestPrompt = (): PendingPrompt | null =>
+		runningSpeakers()
+			.filter((held) => held.pending !== null)
+			.sort((left, right) => left.askedAt - right.askedAt)[0]?.pending ?? null
 
 	const sync = () => {
 		settle({
@@ -537,17 +530,10 @@ export const createConversationController = (
 		}
 	}
 
-	const speakerAt = (scope: RuntimeScope | null): Speaker | undefined => {
-		if (!scope) {
-			return undefined
-		}
-		for (const held of speakers.values()) {
-			if (held.scope && isSameRuntimeScope(scope, held.scope)) {
-				return held
-			}
-		}
-		return undefined
-	}
+	const speakerAt = (scope: RuntimeScope | null) =>
+		[...speakers.values()].find(
+			(held) => held.scope !== null && isSameRuntimeScope(scope, held.scope),
+		)
 
 	const route = (scope: RuntimeScope | null, event: AgentEvent) => {
 		const held = speakerAt(scope)
@@ -632,7 +618,7 @@ export const createConversationController = (
 	const openWave = (): Speaker[] => {
 		const turn = activeTurn
 		if (!turn || speakers.size > 0 || queue.waiting.length === 0) {
-			return NO_STARTED
+			return []
 		}
 		queue = openedWave(queue)
 		const started = queue.wave.map((summons) => newSpeaker(summons, turn))
@@ -811,14 +797,8 @@ export const createConversationController = (
 		)
 	}
 
-	const speakerAsked = (id: string): Speaker | undefined => {
-		for (const held of speakers.values()) {
-			if (held.pending?.request.id === id) {
-				return held
-			}
-		}
-		return undefined
-	}
+	const speakerAsked = (id: string) =>
+		[...speakers.values()].find((held) => held.pending?.request.id === id)
 
 	const answer = async (id: string, answers: QuestionAnswers) => {
 		const held = speakerAsked(id)
@@ -863,15 +843,9 @@ export const createConversationController = (
 	const stop = async () => {
 		const running = [...speakers.values()]
 		queue = reopenedFor(queue, [])
-		for (const held of running) {
-			held.isDropped = true
-		}
 		sync()
-		if (running.length === 0) {
-			drive()
-			return
-		}
 		await Promise.all(running.map(cancelSpeaker))
+		drive()
 	}
 
 	const open = async (next: Conversation) => {
