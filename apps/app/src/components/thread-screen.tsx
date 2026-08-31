@@ -40,7 +40,7 @@ import {
 import {
 	ApprovalPrompt,
 	QuestionPrompt,
-	SpokenPrompt,
+	SpokenApproval,
 } from "@/components/thread-prompt"
 import { QueuedTurn, RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
@@ -71,6 +71,7 @@ import {
 	type Thread,
 	type ThreadAuthors,
 	type ThreadFace,
+	type ThreadPermission,
 	type ThreadQuotes,
 } from "@/lib/chat/thread-contract"
 import {
@@ -262,30 +263,30 @@ const ThreadComposerSlot = ({
 	)
 
 type ThreadApprovalProps = {
-	thread: LoadedThread
+	permission: ThreadPermission | null
 	authors: ThreadAuthors
 	responder: PromptResponder
 }
 
 const ThreadApproval = ({
-	thread,
+	permission,
 	authors,
 	responder,
 }: ThreadApprovalProps) => {
-	if (thread.kind === "bot") {
-		return thread.state.permission ? (
-			<ApprovalPrompt request={thread.state.permission} responder={responder} />
-		) : null
+	if (!permission) {
+		return null
 	}
 
-	const prompt = thread.state.pendingPrompt
-	return prompt?.kind === "permission" ? (
-		<SpokenPrompt
-			author={authors.get(prompt.botId)}
-			prompt={prompt}
+	const { request, authorBotId } = permission
+	return authorBotId === null ? (
+		<ApprovalPrompt request={request} responder={responder} />
+	) : (
+		<SpokenApproval
+			author={authors.get(authorBotId)}
+			request={request}
 			responder={responder}
 		/>
-	) : null
+	)
 }
 
 type ThreadPendingProps = ThreadApprovalProps & {
@@ -293,7 +294,7 @@ type ThreadPendingProps = ThreadApprovalProps & {
 }
 
 const ThreadPending = ({
-	thread,
+	permission,
 	authors,
 	responder,
 	questionRecall,
@@ -311,7 +312,11 @@ const ThreadPending = ({
 					size="md"
 				/>
 			) : null}
-			<ThreadApproval authors={authors} responder={responder} thread={thread} />
+			<ThreadApproval
+				authors={authors}
+				permission={permission}
+				responder={responder}
+			/>
 		</>
 	)
 }
@@ -643,12 +648,11 @@ function ThreadView({
 	const botImage = botFace?.image
 	const isSoloThread = facts.bot !== null
 
-	const canAttach = facts.bot ? facts.isReady : present.length > 0
 	const owner = useMemo<AttachmentsOwner>(
 		() => ({ kind: facts.bot ? "bot" : "conversation", id: facts.id }),
 		[facts.bot, facts.id],
 	)
-	const staged = useAttachments(attachments, owner, canAttach, rootRef)
+	const staged = useAttachments(attachments, owner, facts.canAttach, rootRef)
 
 	const repliedToRefusal = facts.refused?.repliedToMessageId
 	const alsoQuoted = useMemo(
@@ -757,7 +761,7 @@ function ThreadView({
 				busy={facts.isBusy}
 				composer={
 					<ThreadComposerSlot
-						canAttach={canAttach}
+						canAttach={facts.canAttach}
 						composerRef={composerRef}
 						onPromptChange={rememberDraft}
 						onSubmitPrompt={submitPrompt}
@@ -806,9 +810,9 @@ function ThreadView({
 				pending={
 					<ThreadPending
 						authors={authors}
+						permission={facts.permission}
 						questionRecall={recall}
 						responder={promptResponder}
-						thread={thread}
 					/>
 				}
 				reply={
