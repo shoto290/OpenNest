@@ -449,10 +449,10 @@ fn write_styled_serialised(root: &Path, bot: &Bot, output_style: &str) -> std::i
 }
 
 pub fn write_remembered(root: &Path, bot: &Bot, memory: &str) -> std::io::Result<()> {
-	let _serialised = serialised(&dir(root, &bot.id));
+	let bundle = dir(root, &bot.id);
+	let _serialised = serialised(&bundle);
 	rewrite_agent_holding(root, bot, memory)?;
-	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "memory saved from settings")
-		.map_err(unrecorded)?;
+	recorded(&bundle, BOT_SUBJECT, &bot.name, "memory saved from settings").map_err(unrecorded)?;
 	Ok(())
 }
 
@@ -1014,11 +1014,11 @@ pub fn set_mcp_server(
 	name: &str,
 	config: &serde_json::Value,
 ) -> std::io::Result<McpServer> {
-	let _serialised = serialised(&dir(root, &bot.id));
-	let server = set_mcp_server_at(&dir(root, &bot.id), name, config)?;
+	let bundle = dir(root, &bot.id);
+	let _serialised = serialised(&bundle);
+	let server = set_mcp_server_at(&bundle, name, config)?;
 	rewrite_manifest(root, bot)?;
-	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings")
-		.map_err(unrecorded)?;
+	recorded(&bundle, SERVER_SUBJECT, name, "saved from settings").map_err(unrecorded)?;
 	Ok(server)
 }
 
@@ -1041,12 +1041,12 @@ pub fn set_mcp_server_at(
 }
 
 pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<()> {
-	let _serialised = serialised(&dir(root, &bot.id));
-	remove_mcp_server_at(&dir(root, &bot.id), name)?;
+	let bundle = dir(root, &bot.id);
+	let _serialised = serialised(&bundle);
+	remove_mcp_server_at(&bundle, name)?;
 	rewrite_manifest(root, bot)?;
 	undeclare_servers(root, bot)?;
-	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "removed from settings")
-		.map_err(unrecorded)?;
+	recorded(&bundle, SERVER_SUBJECT, name, "removed from settings").map_err(unrecorded)?;
 	Ok(())
 }
 
