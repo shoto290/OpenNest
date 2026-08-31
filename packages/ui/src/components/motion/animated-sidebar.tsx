@@ -26,6 +26,7 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { useMediaQuery } from "@workspace/ui/hooks/use-media-query"
+import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import {
 	EASE_DRAWER,
 	SPRING_LAYOUT,
@@ -46,6 +47,8 @@ export const SIDEBAR_MAX_WIDTH = 416
 export const SIDEBAR_WIDTH_STEP = 16
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 const SIDEBAR_KEYBOARD_SHORTCUT_UPPER = "B"
+
+const CLIPPED_SIDEWAYS = { overflow: { x: "hidden" } } as const
 
 const PANEL_TRANSITION = {
 	duration: 0.36,
@@ -726,17 +729,30 @@ export const AnimatedSidebarHeader = forwardRef<
 	)
 })
 
+interface AnimatedSidebarContentProps extends HTMLAttributes<HTMLDivElement> {
+	isScrollable?: boolean
+}
+
 export const AnimatedSidebarContent = forwardRef<
 	HTMLDivElement,
-	HTMLAttributes<HTMLDivElement>
->(function AnimatedSidebarContent({ className, ...props }, forwardedRef) {
+	AnimatedSidebarContentProps
+>(function AnimatedSidebarContent(
+	{ className, isScrollable = true, ...props },
+	forwardedRef,
+) {
+	const content = useRef<HTMLDivElement>(null)
+	useOverlayScrollbars(content, {
+		isEnabled: isScrollable,
+		options: CLIPPED_SIDEWAYS,
+	})
+
 	return (
 		<div
 			{...props}
-			ref={forwardedRef}
+			ref={mergeRefs<HTMLDivElement>(content, forwardedRef)}
 			data-slot="sidebar-content"
 			className={cn(
-				"flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden overscroll-contain px-2 py-2 scrollbar-app",
+				"flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden overscroll-contain px-2 py-2",
 				className,
 			)}
 		/>

@@ -1,3 +1,4 @@
+import { OverlayScrollbars } from "overlayscrollbars"
 import type { ComponentType, ReactNode } from "react"
 import type { ExtraProps } from "react-markdown"
 import { expect, waitFor } from "storybook/test"
@@ -49,6 +50,15 @@ export const Row = ({ children }: { children: React.ReactNode }) => (
 
 export const slotsIn = (root: Element, slot: string) =>
 	Array.from(root.querySelectorAll<HTMLElement>(`[data-slot="${slot}"]`))
+
+export const slotIn = (root: Element, slot: string) => {
+	const node = root.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
+	if (!node) throw new Error(`Nothing here draws a ${slot}`)
+	return node
+}
+
+export const hasOverlayScrollbars = (element: HTMLElement) =>
+	OverlayScrollbars.valid(OverlayScrollbars(element))
 
 export const widthInRems = (element: HTMLElement) =>
 	element.getBoundingClientRect().width /

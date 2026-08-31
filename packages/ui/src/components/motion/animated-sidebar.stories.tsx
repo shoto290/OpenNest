@@ -4,9 +4,11 @@ import { expect, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	FRAME_POLL,
+	hasOverlayScrollbars,
 	listExhaustively,
 	Row,
 	settled,
+	slotIn,
 } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -104,6 +106,7 @@ interface NavShellProps extends AnimatedSidebarProps {
 	activeId?: string
 	defaultOpen?: boolean
 	withFooter?: boolean
+	isScrollable?: boolean
 }
 
 const NavShell = ({
@@ -111,6 +114,7 @@ const NavShell = ({
 	activeId = "overview",
 	defaultOpen = true,
 	withFooter = true,
+	isScrollable = true,
 	...sidebar
 }: NavShellProps) => (
 	<AnimatedSidebarProvider
@@ -123,7 +127,7 @@ const NavShell = ({
 					<Icons.More className="size-4" />
 				</AnimatedSidebarTrigger>
 			</AnimatedSidebarHeader>
-			<AnimatedSidebarContent>
+			<AnimatedSidebarContent isScrollable={isScrollable}>
 				<AnimatedSidebarGroup>
 					<AnimatedSidebarGroupLabel>Workspace</AnimatedSidebarGroupLabel>
 					<AnimatedSidebarGroupContent>
@@ -408,6 +412,35 @@ export const LongContent = meta.story({
 		},
 	},
 	render: (args) => <NavShell {...args} items={LONG_NAV_ITEMS} />,
+	play: async ({ canvasElement }) => {
+		const content = slotIn(canvasElement, "sidebar-content")
+
+		await waitFor(() => expect(hasOverlayScrollbars(content)).toBe(true))
+		await expect(content.scrollHeight).toBeGreaterThan(content.clientHeight)
+		await expect(content.clientWidth).toBe(content.offsetWidth)
+		await expect(getComputedStyle(content).scrollbarWidth).toBe("none")
+	},
+})
+
+export const ScrollHandedToChildren = meta.story({
+	args: { ariaLabel: "Sidebar whose children scroll" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"`isScrollable={false}` for a content area that hands scrolling to a child — the carousel of `AppSidebar` is the case it exists for. No OverlayScrollbars instance is attached, so nothing rewrites the overflow of a surface that never scrolls and no child scroll position is disturbed on mount. Check that the content carries no instance. Pick `LongContent` for the usual case where the content scrolls itself.",
+			},
+		},
+	},
+	render: (args) => (
+		<NavShell {...args} isScrollable={false} items={LONG_NAV_ITEMS} />
+	),
+	play: async ({ canvasElement }) => {
+		const content = slotIn(canvasElement, "sidebar-content")
+
+		await settled(content)
+		await expect(hasOverlayScrollbars(content)).toBe(false)
+	},
 })
 
 export const InLayout = meta.story({

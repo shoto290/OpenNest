@@ -5,7 +5,9 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	FRAME_POLL,
+	hasOverlayScrollbars,
 	settled,
+	slotIn,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import {
@@ -249,12 +251,6 @@ const rowsIn = (canvasElement: HTMLElement) =>
 			'[data-slot="sidebar-menu-item"]',
 		),
 	)
-
-const slotIn = (row: HTMLElement, slot: string) => {
-	const node = row.querySelector<HTMLElement>(`[data-slot="${slot}"]`)
-	if (!node) throw new Error(`Nothing here draws a ${slot}`)
-	return node
-}
 
 const rowFor = (canvasElement: HTMLElement, name: string) => {
 	const row = rowsIn(canvasElement).find(
@@ -2035,7 +2031,10 @@ export const SpaceScrolling = meta.story({
 			const style = getComputedStyle(panel)
 			await expect(style.scrollSnapAlign).toBe("start")
 			await expect(style.scrollSnapStop).toBe("always")
-			await expect(panel).toHaveClass("scrollbar-app")
+			await expect(hasOverlayScrollbars(panel)).toBe(true)
+			await expect(style.scrollbarWidth).toBe("none")
+			await expect(panel.clientWidth).toBe(panel.offsetWidth)
+			await expect(style.paddingLeft).toBe(style.paddingRight)
 			await expect(style.overscrollBehaviorY).toBe("contain")
 			await expect(style.overscrollBehaviorX).toBe("auto")
 			await expect(panel.offsetWidth).toBe(carousel.clientWidth)
@@ -2306,7 +2305,7 @@ export const SpacesWithoutRosters = meta.story({
 		await expect(rowsIn(canvasElement)).toHaveLength(ROSTER.length)
 
 		const content = slotIn(canvasElement, "sidebar-content")
-		await expect(content).toHaveClass("scrollbar-app")
+		await expect(hasOverlayScrollbars(content)).toBe(true)
 
 		await expect(content.scrollWidth).toBe(content.clientWidth)
 		await expect(args.onSelectSpace).not.toHaveBeenCalled()
