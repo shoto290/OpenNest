@@ -14,7 +14,9 @@ import {
 
 const CROWDED_BOTS = [...CONVERSATION_BOTS, ...LONG_NAMED_BOTS]
 
-const ROW_GAP = 8
+const NAME_TO_COUNT_GAP = 8
+
+const ROW_EDGE_PADDING = 8
 
 const countedNameOf = (row: HTMLElement) => {
 	const name = row.querySelector<HTMLElement>(
@@ -295,8 +297,8 @@ export const Counted = meta.story({
 
 		const { gap, tail } = countedNameOf(options[1])
 
-		await expect(gap).toBeLessThanOrEqual(ROW_GAP + 1)
-		await expect(tail).toBeGreaterThan(ROW_GAP * 4)
+		await expect(gap).toBeCloseTo(NAME_TO_COUNT_GAP, 0)
+		await expect(tail).toBeGreaterThan(ROW_EDGE_PADDING)
 	},
 })
 
@@ -328,6 +330,9 @@ export const CountedLead = meta.story({
 		await expect(count.getBoundingClientRect().right).toBeLessThanOrEqual(
 			crown.getBoundingClientRect().left,
 		)
+		await expect(
+			row.getBoundingClientRect().right - crown.getBoundingClientRect().right,
+		).toBeCloseTo(ROW_EDGE_PADDING, 0)
 	},
 })
 
@@ -347,8 +352,8 @@ export const CountedLongName = meta.story({
 
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
 		await expect(count.scrollWidth).toBe(count.clientWidth)
-		await expect(gap).toBeLessThanOrEqual(ROW_GAP + 1)
-		await expect(tail).toBeGreaterThanOrEqual(0)
+		await expect(gap).toBeCloseTo(NAME_TO_COUNT_GAP, 0)
+		await expect(tail).toBeCloseTo(ROW_EDGE_PADDING, 0)
 	},
 })
 
