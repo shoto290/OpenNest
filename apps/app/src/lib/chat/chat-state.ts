@@ -69,6 +69,7 @@ export type ChatAction =
 	| { type: "promptRejected"; id: string | null; error: TransportError }
 	| { type: "promptRetried"; id: string }
 	| { type: "stopRejected"; error: TransportError }
+	| { type: "errorDismissed"; id: string }
 	| { type: "binaryVersion"; version: string | null }
 
 export const initialChatState: ChatState = {
@@ -233,6 +234,13 @@ function pushError(state: ChatState, error: TransportError): ChatState {
 		errorCount: state.errorCount + 1,
 		errors: [...state.errors, entry].slice(-MAX_ERRORS),
 	}
+}
+
+function applyErrorDismissed(state: ChatState, id: string): ChatState {
+	if (state.errors.at(-1)?.id !== id) {
+		return state
+	}
+	return { ...state, errors: [] }
 }
 
 function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
@@ -454,6 +462,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 			return applyPromptRetried(state, action.id)
 		case "stopRejected":
 			return applyStopRejected(state, action.error)
+		case "errorDismissed":
+			return applyErrorDismissed(state, action.id)
 		case "binaryVersion":
 			return { ...state, binaryVersion: action.version }
 	}

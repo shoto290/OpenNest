@@ -89,6 +89,7 @@ export type ChatController = {
 	) => Promise<string[]>
 	stop: () => Promise<void>
 	discard: (id: string) => void
+	dismissError: (id: string) => void
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	answer: (id: string, answers: QuestionAnswers) => Promise<void>
 	retry: (id: string) => Promise<void>
@@ -1223,6 +1224,8 @@ export function createChatController(
 		stop: () => onSelected(stop, undefined),
 		discard: (id) =>
 			forSelected((bot) => dispatch(bot, { type: "outboxEntryRemoved", id })),
+		dismissError: (id) =>
+			forSelected((bot) => dispatch(bot, { type: "errorDismissed", id })),
 		respond: (id, decision) =>
 			onSelected((bot) => respond(bot, id, decision), undefined),
 		answer: (id, answers) =>

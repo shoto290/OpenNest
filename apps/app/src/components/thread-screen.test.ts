@@ -10,7 +10,11 @@ import { ThreadScreen } from "@/components/thread-screen"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createDraftsController } from "@/lib/chat/drafts-controller"
 import type { ChatController } from "@/lib/chat/chat-controller"
-import { type ChatError, initialChatState } from "@/lib/chat/chat-state"
+import {
+	type ChatError,
+	chatReducer,
+	initialChatState,
+} from "@/lib/chat/chat-state"
 import type { BotThread, Thread } from "@/lib/chat/thread-contract"
 import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
@@ -28,6 +32,13 @@ const CRASH: ChatError = {
 const NO_ERRORS: ChatError[] = []
 
 const CRASH_TITLE = "Claude Code stopped"
+
+const SPAWN_FAILURE: ChatError = {
+	id: "spawnFailed-1",
+	error: { kind: "spawnFailed", detail: "no binary" },
+}
+
+const SPAWN_TITLE = "Claude Code is unavailable"
 
 const PINS_TITLE = "Pinned messages are out of date"
 
@@ -80,6 +91,7 @@ const stubController = (
 	answer: async () => undefined,
 	retry: async () => undefined,
 	shutdown: async () => undefined,
+	dismissError: () => undefined,
 	...overrides,
 })
 
@@ -164,32 +176,88 @@ describe("ThreadScreen", () => {
 		layout.restore()
 	})
 
-	it("forgets the reply target and the dismissed error of the thread left behind", async () => {
+	it("forgets the reply target of the thread left behind", async () => {
 		const first = threadOf({
 			id: "bot-1",
 			name: "Nyx",
 			said: "the first answer",
-			errors: [CRASH],
 		})
 		const second = threadOf({
 			id: "bot-2",
 			name: "Vex",
 			said: "the second answer",
-			errors: [CRASH],
 		})
 		const { rerender } = render(screenOf(first))
 		await settle()
 
 		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0])
-		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
 		expect(screen.getByRole("button", { name: "Cancel reply" })).toBeTruthy()
-		expect(screen.queryByText(CRASH_TITLE)).toBeNull()
 
 		rerender(screenOf(second))
 		await settle()
 
 		expect(screen.queryByRole("button", { name: "Cancel reply" })).toBeNull()
+	})
+
+	it("leaves a dismissed bot failure dismissed when the reader returns", async () => {
+		let held = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+			errors: [CRASH],
+		})
+		const controller = stubController({
+			dismissError: (id) => {
+				held = {
+					...held,
+					chat: {
+						...held.chat,
+						state: chatReducer(held.chat.state, {
+							type: "errorDismissed",
+							id,
+						}),
+					},
+				}
+			},
+		})
+		held = { ...held, chat: { ...held.chat, controller } }
+		const { unmount } = render(screenOf(held))
+		await settle()
+
 		expect(screen.getByText(CRASH_TITLE)).toBeTruthy()
+
+		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
+		unmount()
+		render(screenOf(held))
+		await settle()
+
+		expect(screen.queryByText(CRASH_TITLE)).toBeNull()
+	})
+
+	it("shows the failure that came after the one the reader dismissed", async () => {
+		const dismissed = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+			errors: [CRASH],
+		})
+		const later = chatReducer(dismissed.chat.state, {
+			type: "errorDismissed",
+			id: CRASH.id,
+		})
+
+		render(
+			screenOf({
+				...dismissed,
+				chat: {
+					...dismissed.chat,
+					state: { ...later, errors: [SPAWN_FAILURE] },
+				},
+			}),
+		)
+		await settle()
+
+		expect(screen.getByText(SPAWN_TITLE)).toBeTruthy()
 	})
 
 	it("leaves a dismissed conversation failure dismissed when the reader returns", async () => {

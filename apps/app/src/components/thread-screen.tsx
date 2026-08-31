@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useMemo, useRef, useState } from "react"
+import { type RefObject, useCallback, useMemo, useRef } from "react"
 
 import {
 	ActivityIndicator,
@@ -636,7 +636,6 @@ function ThreadView({
 	const rootRef = useRef<HTMLDivElement>(null)
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
 	const promptResponder = usePromptResponder(controller, scrollerRef)
-	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
 	const reader = readerName || t("working.name")
 	const roster = useThreadRoster(facts)
@@ -693,13 +692,10 @@ function ThreadView({
 		focusComposer,
 	})
 
-	const { botController, conversationController } = facts
+	const { botController } = facts
 	const dismissError = useCallback(
-		(id: string) => {
-			setDismissedErrorId(id)
-			conversationController?.dismissError(id)
-		},
-		[conversationController],
+		(id: string) => controller.dismissError(id),
+		[controller],
 	)
 	const readDraft = useCallback(() => drafts.read(facts.id), [drafts, facts.id])
 	const rememberDraft = useCallback(
@@ -755,8 +751,6 @@ function ThreadView({
 		runs,
 		toQuote,
 	})
-	const errorNotice =
-		facts.latestError?.id === dismissedErrorId ? undefined : facts.latestError
 	const refusedTarget = repliedToRefusal
 		? quotes.get(repliedToRefusal)
 		: undefined
@@ -793,7 +787,7 @@ function ThreadView({
 				notice={
 					<ThreadNotices
 						bots={bots}
-						error={errorNotice}
+						error={facts.latestError}
 						loopingPair={facts.loopingPair}
 						onDismissError={dismissError}
 						onRestart={botController ? restartAfterError : undefined}

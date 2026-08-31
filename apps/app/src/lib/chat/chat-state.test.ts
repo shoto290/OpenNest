@@ -714,3 +714,40 @@ describe("toTransportError", () => {
 		})
 	})
 })
+
+describe("dismissing a failure", () => {
+	const failed = (state: ChatState, detail: string): ChatState =>
+		chatReducer(state, {
+			type: "driverEvent",
+			scope: null,
+			event: { type: "failed", error: { kind: "spawnFailed", detail } },
+		})
+
+	it("drops the failure the reader dismissed", () => {
+		const shown = failed(initialChatState, "no binary")
+		const held = shown.errors.at(-1)
+
+		const dismissed = chatReducer(shown, {
+			type: "errorDismissed",
+			id: held?.id ?? "",
+		})
+
+		expect(dismissed.errors).toEqual([])
+	})
+
+	it("keeps a failure that landed after the dismissed one", () => {
+		const shown = failed(initialChatState, "no binary")
+		const held = shown.errors.at(-1)
+		const later = failed(shown, "still no binary")
+
+		const dismissed = chatReducer(later, {
+			type: "errorDismissed",
+			id: held?.id ?? "",
+		})
+
+		expect(dismissed.errors.at(-1)?.error).toEqual({
+			kind: "spawnFailed",
+			detail: "still no binary",
+		})
+	})
+})

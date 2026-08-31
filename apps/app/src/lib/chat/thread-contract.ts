@@ -69,7 +69,6 @@ export type ThreadFacts = {
 	bot: Bot | null
 	botController: ChatController | null
 	conversation: Conversation | null
-	conversationController: ConversationController | null
 	botWork: WorkingState | null
 	isReady: boolean
 	isBusy: boolean
@@ -94,7 +93,6 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => ({
 	bot: thread.bot,
 	botController: thread.controller,
 	conversation: null,
-	conversationController: null,
 	botWork: workingStateFor(thread.state),
 	isReady: isSessionReady(thread.state),
 	isBusy: isTurnBusy(thread.state.turn),
@@ -116,7 +114,6 @@ const conversationFactsOf = (
 	bot: null,
 	botController: null,
 	conversation: thread.conversation,
-	conversationController: thread.controller,
 	botWork: null,
 	isReady: false,
 	isBusy: thread.state.speakingBotId !== null,
