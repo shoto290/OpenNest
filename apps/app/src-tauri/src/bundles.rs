@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
@@ -134,6 +135,12 @@ const MAX_HEADING: usize = 6;
 
 const FENCE: &str = "---";
 const CLOSING_FENCE: &str = "\n---";
+
+static COMMITS: Mutex<()> = Mutex::new(());
+
+fn serialised() -> MutexGuard<'static, ()> {
+	COMMITS.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
@@ -292,6 +299,7 @@ pub fn set_permissions(
 	bot: &Bot,
 	permissions: &BotPermissions,
 ) -> std::io::Result<()> {
+	let _serialised = serialised();
 	let path = settings_path(root, &bot.id);
 	let mut kept = object_at(&path);
 	let mut declared = match kept.remove(PERMISSIONS_KEY) {
@@ -503,9 +511,10 @@ fn agent_path(root: &Path, bot_id: &str) -> PathBuf {
 }
 
 pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	let _serialised = serialised();
 	settled(root, bot);
 	if agent_file(root, &bot.id).is_some() {
-		rewrite_agent(root, bot)?;
+		rewrite_agent_serialised(root, bot)?;
 		recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "added to the history");
 		return Ok(());
 	}
@@ -519,16 +528,21 @@ pub struct Evolution {
 }
 
 pub fn evolve(root: &Path, bot: &Bot) -> Option<Evolution> {
+	let _serialised = serialised();
+	evolve_serialised(root, bot)
+}
+
+fn evolve_serialised(root: &Path, bot: &Bot) -> Option<Evolution> {
 	let bundle = dir(root, &bot.id);
 	let changed = git::changes(&bundle);
 	if changed.is_empty() {
 		return None;
 	}
-	let _ = rewrite_agent(root, bot);
+	let _ = rewrite_agent_serialised(root, bot);
 	let (title, body) =
 		learned(&bundle).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
-	let commit_id = git::commit(&bundle, Author::Bot, &title, &body).ok().flatten()?;
 	let _ = fs::remove_file(bundle.join(LEARNED_NAME));
+	let commit_id = git::commit(&bundle, Author::Bot, &title, &body).ok().flatten()?;
 	Some(Evolution { commit_id, title })
 }
 
@@ -1042,6 +1056,11 @@ fn kept_skill(path: &Path, text: String) -> std::io::Result<Skill> {
 }
 
 fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	let _serialised = serialised();
+	rewrite_agent_serialised(root, bot)
+}
+
+fn rewrite_agent_serialised(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	rewrite_agent_holding(root, bot, &kept_memory(root, bot))
 }
 
@@ -3957,6 +3976,71 @@ mod tests {
 		let evolution = evolve(&root, &bot).expect("the turn is recorded");
 
 		assert_eq!(evolution.title, EVOLVED_TITLE);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_waits_for_the_write_already_running_on_that_bundle() {
+		let root = a_root("evolve-serialised");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+
+		let held = serialised();
+		let (sender, receiver) = std::sync::mpsc::channel();
+		let waiting = std::thread::spawn({
+			let root = root.clone();
+			move || {
+				let bot = a_bot("Bean", "Answer briefly.");
+				sender.send(evolve(&root, &bot)).expect("the turn is reported");
+			}
+		});
+
+		assert!(receiver.recv_timeout(std::time::Duration::from_millis(50)).is_err());
+		drop(held);
+		assert!(receiver.recv().expect("the turn ends").is_some());
+		waiting.join().expect("the turn ran");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn two_turns_writing_at_once_each_record_their_own_write() {
+		let root = a_root("evolve-concurrent");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		let turns: Vec<_> = ["figs", "dates"]
+			.into_iter()
+			.map(|name| {
+				let root = root.clone();
+				std::thread::spawn(move || {
+					let _serialised = serialised();
+					let bot = a_bot("Bean", "Answer briefly.");
+					let bundle = dir(&root, &bot.id);
+					a_bot_writes(&root, &bot.id, name, &format!("Bean likes {name}."));
+					private_files::replace(
+						&bundle.join(LEARNED_NAME),
+						format!("Bean learned about {name}\n").as_bytes(),
+					)
+					.expect("the note lands");
+					evolve_serialised(&root, &bot)
+				})
+			})
+			.collect();
+		let recorded: Vec<Evolution> =
+			turns.into_iter().filter_map(|turn| turn.join().expect("the turn ran")).collect();
+
+		assert_eq!(recorded.len(), 2, "got {recorded:?}");
+		let titles = titles(&root, &bot.id);
+		assert!(titles.contains(&"Bean learned about figs".to_owned()), "got {titles:?}");
+		assert!(titles.contains(&"Bean learned about dates".to_owned()), "got {titles:?}");
+		let listed: Vec<String> = skills(&root, &bot.id).into_iter().map(|it| it.id).collect();
+		assert!(listed.contains(&"figs".to_owned()), "got {listed:?}");
+		assert!(listed.contains(&"dates".to_owned()), "got {listed:?}");
+		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
+		assert!(!dir(&root, &bot.id).join(LEARNED_NAME).exists(), "a note is still there");
 
 		let _ = fs::remove_dir_all(&root);
 	}
