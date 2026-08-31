@@ -9,7 +9,6 @@ use crate::conversations::contract::{
 	AvatarBlot, BotHistoryEntry, Skill, SkillDraft, TranscriptStoreError,
 };
 use crate::db;
-use crate::db::repositories::spaces;
 use crate::environment;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceError> {
@@ -36,7 +35,7 @@ pub async fn space_create<R: Runtime>(
 
 async fn kept_if_laid_down(
 	database: &db::Database,
-	created: spaces::Space,
+	created: db::repositories::spaces::Space,
 	laid_down: std::io::Result<()>,
 ) -> Result<Space, SpaceError> {
 	let Err(failure) = laid_down else {
