@@ -6,6 +6,7 @@ import {
 	type MessageScrollerHandle,
 	type MessageScrollerOlder,
 	type MessageScrollerRow,
+	type MessageScrollerTrace,
 } from "@workspace/ui/components/message-scroller"
 import {
 	PromptReply,
@@ -28,6 +29,7 @@ interface ThreadLayoutProps {
 	older?: MessageScrollerOlder
 	rows?: MessageScrollerRow[]
 	onFollowChange?: (following: boolean) => void
+	onLandingTrace?: (event: MessageScrollerTrace) => void
 	children: ReactNode
 	rootRef?: Ref<HTMLDivElement>
 	scrollerRef?: Ref<MessageScrollerHandle>
@@ -48,6 +50,7 @@ function ThreadLayout({
 	older,
 	rows,
 	onFollowChange,
+	onLandingTrace,
 	children,
 	rootRef,
 	scrollerRef,
@@ -75,6 +78,7 @@ function ThreadLayout({
 					rows={rows}
 					rowGap={TRANSCRIPT_ROW_GAP}
 					onFollowChange={onFollowChange}
+					onLandingTrace={onLandingTrace}
 					highlightedMessageId={highlightedMessageId}
 					scrollerRef={scrollerRef}
 					contentClassName={cn(

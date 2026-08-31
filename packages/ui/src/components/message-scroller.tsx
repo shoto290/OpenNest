@@ -1,6 +1,6 @@
 "use client"
 
-import { useVirtualizer } from "@tanstack/react-virtual"
+import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual"
 import {
 	AnimatePresence,
 	type HTMLMotionProps,
@@ -58,6 +58,30 @@ const nextFrames = (run: () => void) => {
 	return () => cancelAnimationFrame(outer)
 }
 
+type MessageScrollerTracePhase = "landing" | "live"
+
+type MessageScrollerTraceDetail =
+	| {
+			type: "scroll-to-end"
+			behavior: ScrollBehavior
+			target: number
+			totalSize: number
+	  }
+	| {
+			type: "size-change"
+			previousTotalSize: number
+			totalSize: number
+			distanceFromEnd: number
+	  }
+	| { type: "reader-scroll"; atLiveEdge: boolean; isFollowing: boolean }
+
+export type MessageScrollerTrace = MessageScrollerTraceDetail & {
+	seq: number
+	phase: MessageScrollerTracePhase
+	scrollTop: number
+	scrollHeight: number
+}
+
 export interface MessageScrollerHandle {
 	scrollToEnd: (behavior?: ScrollBehavior) => void
 	scrollToMessage: (messageId: string, behavior?: ScrollBehavior) => boolean
@@ -87,6 +111,7 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
 	followThreshold?: number
 	smooth?: boolean
 	onFollowChange?: (following: boolean) => void
+	onLandingTrace?: (event: MessageScrollerTrace) => void
 	label?: string
 	busy?: boolean
 	highlightedMessageId?: string
@@ -120,6 +145,7 @@ export function MessageScroller({
 	followThreshold = 56,
 	smooth = true,
 	onFollowChange,
+	onLandingTrace,
 	label,
 	busy,
 	highlightedMessageId,
@@ -151,6 +177,11 @@ export function MessageScroller({
 	const centerFrameRef = useRef<(() => void) | undefined>(undefined)
 	const landedKeyRef = useRef(transcriptKey)
 	const landedRowsRef = useRef(0)
+	const traceRef = useRef(onLandingTrace)
+	const virtualizerRef = useRef<Virtualizer<HTMLElement, Element> | null>(null)
+	const traceSeqRef = useRef(0)
+	const tracedTotalSizeRef = useRef(0)
+	const tracePhaseRef = useRef<MessageScrollerTracePhase>("landing")
 	const hasRows = rows.length > 0
 	const behavior: ScrollBehavior = reduce || !smooth ? "auto" : "smooth"
 	const {
@@ -161,21 +192,86 @@ export function MessageScroller({
 		...restViewportProps
 	} = viewportProps ?? {}
 
-	const scrollViewportToEnd = useCallback((nextBehavior: ScrollBehavior) => {
+	traceRef.current = onLandingTrace
+
+	const emitTrace = useCallback((detail: MessageScrollerTraceDetail) => {
+		const sink = traceRef.current
 		const viewport = viewportRef.current
-		if (!viewport) return
+		if (!sink || !viewport) return
 
-		heldViewportHeightRef.current = viewport.clientHeight
-		if (distanceFromEnd(viewport) <= 1) return
-
-		landingRef.current = true
-		if (typeof viewport.scrollTo === "function") {
-			viewport.scrollTo({ top: viewport.scrollHeight, behavior: nextBehavior })
-		} else {
-			viewport.scrollTop = viewport.scrollHeight
-		}
-		lastScrollTopRef.current = viewport.scrollTop
+		traceSeqRef.current += 1
+		sink({
+			...detail,
+			seq: traceSeqRef.current,
+			phase: tracePhaseRef.current,
+			scrollTop: viewport.scrollTop,
+			scrollHeight: viewport.scrollHeight,
+		})
 	}, [])
+
+	const traceScrollRequest = useCallback(
+		(nextBehavior: ScrollBehavior, viewport: HTMLElement) => {
+			if (!traceRef.current) return
+
+			emitTrace({
+				type: "scroll-to-end",
+				behavior: nextBehavior,
+				target: viewport.scrollHeight,
+				totalSize: virtualizerRef.current?.getTotalSize() ?? 0,
+			})
+		},
+		[emitTrace],
+	)
+
+	const traceSizeChange = useCallback(() => {
+		const viewport = viewportRef.current
+		if (!traceRef.current || !viewport) return
+
+		const totalSize = virtualizerRef.current?.getTotalSize() ?? 0
+		emitTrace({
+			type: "size-change",
+			previousTotalSize: tracedTotalSizeRef.current,
+			totalSize,
+			distanceFromEnd: distanceFromEnd(viewport),
+		})
+		tracedTotalSizeRef.current = totalSize
+	}, [emitTrace])
+
+	const traceReaderScroll = useCallback(
+		(atLiveEdge: boolean) => {
+			if (!traceRef.current) return
+
+			emitTrace({
+				type: "reader-scroll",
+				atLiveEdge,
+				isFollowing: followingRef.current,
+			})
+		},
+		[emitTrace],
+	)
+
+	const scrollViewportToEnd = useCallback(
+		(nextBehavior: ScrollBehavior) => {
+			const viewport = viewportRef.current
+			if (!viewport) return
+
+			traceScrollRequest(nextBehavior, viewport)
+			heldViewportHeightRef.current = viewport.clientHeight
+			if (distanceFromEnd(viewport) <= 1) return
+
+			landingRef.current = true
+			if (typeof viewport.scrollTo === "function") {
+				viewport.scrollTo({
+					top: viewport.scrollHeight,
+					behavior: nextBehavior,
+				})
+			} else {
+				viewport.scrollTop = viewport.scrollHeight
+			}
+			lastScrollTopRef.current = viewport.scrollTop
+		},
+		[traceScrollRequest],
+	)
 
 	const measureListOffset = useCallback(() => {
 		const list = listRef.current
@@ -189,6 +285,7 @@ export function MessageScroller({
 	}, [])
 
 	const holdLiveEdge = useCallback(() => {
+		traceSizeChange()
 		if (holdFrameRef.current) {
 			hasMissedResizeRef.current = true
 			return
@@ -206,7 +303,7 @@ export function MessageScroller({
 		if (!followOutput || !followingRef.current) return
 
 		scrollViewportToEnd("auto")
-	}, [followOutput, scrollViewportToEnd])
+	}, [followOutput, scrollViewportToEnd, traceSizeChange])
 
 	const virtualizer = useVirtualizer({
 		anchorTo: "end",
@@ -220,6 +317,8 @@ export function MessageScroller({
 		scrollEndThreshold: followThreshold,
 		scrollMargin: listOffset,
 	})
+
+	virtualizerRef.current = virtualizer
 
 	const setViewportRef = useCallback(
 		(node: HTMLElement | null) => {
@@ -295,6 +394,7 @@ export function MessageScroller({
 		}
 
 		const atLiveEdge = isOnLastBubble(viewport, followThreshold)
+		traceReaderScroll(atLiveEdge)
 		if (isHoldPendingRef.current) {
 			isHoldPendingRef.current = !atLiveEdge
 			return
@@ -303,12 +403,14 @@ export function MessageScroller({
 		if (landingRef.current && !atLiveEdge && !hasReaderMovedUp) return
 
 		landingRef.current = false
+		tracePhaseRef.current = "live"
 		if (hasReaderMovedUp) setFollowing(atLiveEdge)
 		else if (atLiveEdge) setFollowing(true)
-	}, [followOutput, followThreshold, setFollowing])
+	}, [followOutput, followThreshold, setFollowing, traceReaderScroll])
 
 	const releaseLanding = useCallback(() => {
 		landingRef.current = false
+		tracePhaseRef.current = "live"
 		isHoldPendingRef.current = false
 	}, [])
 
