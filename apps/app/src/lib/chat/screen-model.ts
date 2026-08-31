@@ -315,3 +315,44 @@ export function markedRunsOf(
 
 	return new Set(closingRunOfBot.values())
 }
+
+export type RunPresentation = {
+	isMarked: boolean
+	avatarIndex: number
+	hasBareTables: boolean
+}
+
+export type RunPresentationInput = {
+	runs: TranscriptRow[][]
+	workingBotIds: (string | null)[]
+	hasSingleBot: boolean
+	isWorking: boolean
+}
+
+const NO_AVATAR = -1
+
+export function runPresentationsOf({
+	runs,
+	workingBotIds,
+	hasSingleBot,
+	isWorking,
+}: RunPresentationInput): RunPresentation[] {
+	if (!hasSingleBot) {
+		const marked = markedRunsOf(runs, workingBotIds)
+		return runs.map((_, index) => ({
+			isMarked: marked.has(index),
+			avatarIndex: NO_AVATAR,
+			hasBareTables: false,
+		}))
+	}
+
+	const newestIndex = runs.length - 1
+	return runs.map((run, index) => {
+		const isNewest = index === newestIndex
+		return {
+			isMarked: isNewest,
+			avatarIndex: isWorking && isNewest ? NO_AVATAR : run.length - 1,
+			hasBareTables: true,
+		}
+	})
+}
