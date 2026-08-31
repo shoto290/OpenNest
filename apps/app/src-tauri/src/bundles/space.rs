@@ -129,7 +129,8 @@ pub fn set_mcp_server(
 	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	let server = super::set_mcp_server_at(path, name, config)?;
 	super::rewrite_declared_servers(path)?;
-	super::recorded(path, SERVER_SUBJECT, name, "saved from settings").map_err(super::unrecorded)?;
+	super::recorded(path, SERVER_SUBJECT, name, "saved from settings")
+		.map_err(super::unrecorded)?;
 	Ok(server)
 }
 
@@ -137,7 +138,8 @@ pub fn remove_mcp_server(path: &Path, name: &str) -> std::io::Result<()> {
 	let _serialised = COMMITS.lock().unwrap_or_else(PoisonError::into_inner);
 	super::remove_mcp_server_at(path, name)?;
 	super::rewrite_declared_servers(path)?;
-	super::recorded(path, SERVER_SUBJECT, name, "removed from settings").map_err(super::unrecorded)?;
+	super::recorded(path, SERVER_SUBJECT, name, "removed from settings")
+		.map_err(super::unrecorded)?;
 	Ok(())
 }
 

@@ -4341,7 +4341,7 @@ mod tests {
 		create_skill(&root, &bot, &a_draft("figs", "What it is for.", "How it goes."))
 			.expect("the skill is created");
 		let written = history(&root, &bot.id).expect("the history reads");
-		let undone = [written[0].id.clone()];
+		let undone = written[0].id.clone();
 		let saved = ["one.md", "two.md", "three.md", "four.md"];
 		let before = written.len();
 
@@ -4362,9 +4362,7 @@ mod tests {
 			let ready = std::sync::Arc::clone(&ready);
 			move || {
 				ready.wait();
-				for commit_id in undone {
-					revert(&root, &bot_id, &commit_id).expect("the write is undone");
-				}
+				revert(&root, &bot_id, &undone).expect("the write is undone");
 			}
 		});
 		saving.join().expect("the save ran");
