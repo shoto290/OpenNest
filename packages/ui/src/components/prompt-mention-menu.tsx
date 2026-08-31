@@ -20,12 +20,15 @@ const PANEL_LEAVING = { ...PANEL_HIDDEN, pointerEvents: "none" } as const
 
 const ROW_AVATAR_SIZE = 24
 
+const COUNT_GLYPH = "\u00d7"
+
 const scrollActiveIntoView = (row: HTMLButtonElement | null) => {
 	row?.scrollIntoView({ block: "nearest" })
 }
 
 interface PromptMentionMenuProps {
 	bots: RosterBot[]
+	counts?: Record<string, number>
 	leadId?: string
 	open: boolean
 	query: string
@@ -37,6 +40,7 @@ interface PromptMentionMenuProps {
 
 const PromptMentionMenu = ({
 	bots,
+	counts,
 	leadId,
 	open,
 	query,
@@ -115,56 +119,81 @@ const PromptMentionMenu = ({
 							tabIndex={0}
 							className="max-h-64 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 						>
-							{matches.map((bot, index) => (
-								<button
-									key={bot.id}
-									ref={index === active ? scrollActiveIntoView : undefined}
-									type="button"
-									role="option"
-									aria-selected={index === active}
-									tabIndex={-1}
-									onPointerMove={(event) => {
-										if (event.pointerType === "touch") return
-										const { x, y } = lastPointer.current
-										lastPointer.current = {
-											x: event.clientX,
-											y: event.clientY,
-										}
-										if (event.clientX !== x || event.clientY !== y) {
-											setActiveIndex(index)
-										}
-									}}
-									onClick={() => onSelect(bot.id)}
-									className={cn(
-										"flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-foreground text-sm outline-none",
-										index === active && "bg-muted",
-									)}
-								>
-									<span aria-hidden="true" className="contents">
-										<BotIdentityAvatar
-											animal={bot.animal}
-											blot={bot.blot}
-											image={bot.image}
-											name={bot.name}
-											seed={bot.id}
-											size={ROW_AVATAR_SIZE}
-										/>
-									</span>
-									<span className="min-w-0 flex-1 truncate">{bot.name}</span>
-									{bot.id === leadId ? (
-										<>
-											<Icons.Crown
-												aria-hidden="true"
-												className="size-4 shrink-0 text-bot-badge-attention"
-												data-slot="prompt-mention-lead"
+							{matches.map((bot, index) => {
+								const count = counts?.[bot.id] ?? 0
+
+								return (
+									<button
+										key={bot.id}
+										ref={index === active ? scrollActiveIntoView : undefined}
+										type="button"
+										role="option"
+										aria-selected={index === active}
+										tabIndex={-1}
+										onPointerMove={(event) => {
+											if (event.pointerType === "touch") return
+											const { x, y } = lastPointer.current
+											lastPointer.current = {
+												x: event.clientX,
+												y: event.clientY,
+											}
+											if (event.clientX !== x || event.clientY !== y) {
+												setActiveIndex(index)
+											}
+										}}
+										onClick={() => onSelect(bot.id)}
+										className={cn(
+											"flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-foreground text-sm outline-none",
+											index === active && "bg-muted",
+										)}
+									>
+										<span aria-hidden="true" className="contents">
+											<BotIdentityAvatar
+												animal={bot.animal}
+												blot={bot.blot}
+												image={bot.image}
+												name={bot.name}
+												seed={bot.id}
+												size={ROW_AVATAR_SIZE}
 											/>
-											<span className="sr-only">
-												{t("newConversation.picked.lead")}
+										</span>
+										<span className="flex min-w-0 items-center gap-1">
+											<span
+												className="truncate"
+												data-slot="prompt-mention-name"
+											>
+												{bot.name}
 											</span>
-										</>
-									) : null}
-								</button>
-							))}
+											{count > 0 ? (
+												<>
+													<span
+														aria-hidden="true"
+														className="shrink-0 text-muted-foreground tabular-nums"
+														data-slot="prompt-mention-count"
+													>
+														{`${COUNT_GLYPH}${count}`}
+													</span>
+													<span className="sr-only">
+														{t("composer.mentioned", { count })}
+													</span>
+												</>
+											) : null}
+										</span>
+										{bot.id === leadId ? (
+											<>
+												<Icons.Crown
+													aria-hidden="true"
+													className="ml-auto size-4 shrink-0 text-bot-badge-attention"
+													data-slot="prompt-mention-lead"
+												/>
+												<span className="sr-only">
+													{t("newConversation.picked.lead")}
+												</span>
+											</>
+										) : null}
+									</button>
+								)
+							})}
 						</div>
 					</motion.div>
 				) : null}

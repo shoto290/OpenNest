@@ -110,6 +110,8 @@ const chat = {
 		send: "Send prompt",
 		commands: "Commands",
 		mentions: "Bots",
+		mentioned_one: "{{count}} mention in the draft",
+		mentioned_other: "{{count}} mentions in the draft",
 	},
 	toolApproval: {
 		title: "Allow this tool to run?",

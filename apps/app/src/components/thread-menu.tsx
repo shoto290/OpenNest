@@ -11,7 +11,11 @@ import {
 	commandQueryIn,
 	promptForCommand,
 } from "@/lib/chat/prompt-commands"
-import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
+import {
+	mentionCountsIn,
+	mentionQueryIn,
+	promptWithMention,
+} from "@/lib/conversations/mentions"
 
 export type ThreadMenuWiring = {
 	queryIn: (prompt: string) => string | null
@@ -64,6 +68,7 @@ export const conversationThreadMenu = ({
 	menu: ({ prompt, query, isOpen, onDismiss, onPick, children }) => (
 		<PromptMentionMenu
 			bots={bots}
+			counts={mentionCountsIn(prompt, bots)}
 			leadId={leadId}
 			onDismiss={onDismiss}
 			onSelect={(botId) => onPick(promptWithPickedMention(prompt, bots, botId))}

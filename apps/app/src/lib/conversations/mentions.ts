@@ -81,3 +81,29 @@ export const promptWithMention = (prompt: string, name: string): string => {
 	const kept = prompt.slice(0, prompt.length - draft[1].length - 1)
 	return `${kept}${ARROBASE}${name} `
 }
+
+export const mentionCountsIn = (
+	prompt: string,
+	bots: MentionBot[],
+): Record<string, number> => {
+	const draft = MENTION_DRAFT.exec(prompt)
+	const written = draft
+		? prompt.slice(0, prompt.length - draft[1].length - 1)
+		: prompt
+	const counts: Record<string, number> = {}
+	let read = 0
+
+	while (read < written.length) {
+		const at = written.indexOf(ARROBASE, read)
+		if (at < 0) {
+			break
+		}
+		const named = botNamedAt(written, at + 1, bots)
+		if (named) {
+			counts[named.id] = (counts[named.id] ?? 0) + 1
+		}
+		read = at + 1 + (named?.name.length ?? 0)
+	}
+
+	return counts
+}
