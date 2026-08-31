@@ -358,9 +358,6 @@ const expectMutedSecondaryText = async (row: HTMLElement, muted: string) => {
 	await expect(colorOf(row, "roster-row-name")).not.toBe(muted)
 }
 
-const shimmerIn = (row: HTMLElement) =>
-	row.querySelector<HTMLElement>('[data-slot="text-shimmer"]')
-
 const highlightIn = (item: HTMLElement) => item.querySelector("span")
 
 const railWidth = () => {
@@ -800,11 +797,10 @@ export const Working = meta.story({
 			within(resting).getByRole("img", { name: /idle$/ }),
 		).toBeVisible()
 		await expect(blotFillsIn(resting)).toEqual(["var(--bot-blot-purple)"])
-		await expect(shimmerIn(resting)).toBeNull()
+		await expect(resting.querySelector('[data-slot="text-shimmer"]')).toBeNull()
 		await expect(colorOf(resting, "roster-row-preview")).toBe(muted)
 
-		const shimmer = shimmerIn(running)
-		if (!shimmer) throw new Error("The running row has no shimmering summary")
+		const shimmer = slotIn(running, "text-shimmer")
 		await expect(rowButton(running)).toHaveAttribute("aria-current", "page")
 		await expect(getComputedStyle(shimmer).color).toBe(muted)
 
@@ -1246,8 +1242,7 @@ export const ReducedMotion = meta.story({
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
 		await expect(row.querySelector('[data-slot="bot-activity-dot"]')).toBeNull()
 
-		const shimmer = shimmerIn(row)
-		if (!shimmer) throw new Error("The running row has no shimmering summary")
+		const shimmer = slotIn(row, "text-shimmer")
 		await expect(getComputedStyle(shimmer).animationName).toBe("none")
 		await expect(getComputedStyle(shimmer).color).toBe(
 			tokenColor(canvasElement, "--muted-foreground"),
@@ -4077,8 +4072,7 @@ export const WorkingLongSummary = meta.story({
 			"roster-row-preview",
 		)
 
-		const shimmer = shimmerIn(row)
-		if (!shimmer) throw new Error("The running row has no shimmering summary")
+		const shimmer = slotIn(row, "text-shimmer")
 		await expect(rowButton(row)).toHaveAttribute("aria-current", "page")
 		await expect(preview).toHaveTextContent(`${LONG_SPEAKER}: searching…`)
 		await expect(isClipped(preview)).toBe(true)
