@@ -1,69 +1,61 @@
 import {
-	memo,
+	type ReactNode,
 	type RefObject,
 	useCallback,
-	useMemo,
 	useRef,
 	useState,
 } from "react"
 
 import { PromptAttachButton } from "@workspace/ui/components/prompt-attach-button"
 import { PromptAttachments } from "@workspace/ui/components/prompt-attachments"
-import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
-import { PromptMentionMenu } from "@workspace/ui/components/prompt-mention-menu"
-import type { RosterBot } from "@workspace/ui/components/roster"
-import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import type { AgentCommand } from "@/lib/agent/contract"
 import type { StagedAttachment } from "@/lib/chat/attachments"
-import {
-	commandOptionsFor,
-	commandQueryIn,
-	holdsDismissal,
-	promptForCommand,
-} from "@/lib/chat/prompt-commands"
-import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
+import { holdsDismissal } from "@/lib/chat/prompt-commands"
 
-type StagedFields = {
+export type ThreadMenuSlot = {
+	prompt: string
+	query: string
+	isOpen: boolean
+	onDismiss: () => void
+	onPick: (text: string) => void
+	children: ReactNode
+}
+
+type ThreadComposerProps = {
 	attachments: StagedAttachment[]
 	canAttach: boolean
 	isDropTarget: boolean
 	onAttach: (files: File[]) => void
 	onRemoveAttachment: (id: string) => void
-}
-
-type BotComposerProps = StagedFields & {
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	readDraft: () => string
 	onPromptChange: (draft: string) => void
-	botName: string
-	commands: AgentCommand[]
-	isOverlayOpen: boolean
 	onSubmitPrompt: (text: string) => Promise<boolean>
+	placeholder: string
+	queryIn: (prompt: string) => string | null
+	menu: (slot: ThreadMenuSlot) => ReactNode
 }
 
-export const BotComposer = memo(function BotComposer({
-	composerRef,
-	readDraft,
-	onPromptChange,
-	botName,
-	commands,
-	canAttach,
-	isOverlayOpen,
+export const ThreadComposer = ({
 	attachments,
+	canAttach,
 	isDropTarget,
 	onAttach,
 	onRemoveAttachment,
+	composerRef,
+	readDraft,
+	onPromptChange,
 	onSubmitPrompt,
-}: BotComposerProps) {
-	const t = useChatCopy()
-	const [wasDismissed, setWasDismissed] = useState(false)
+	placeholder,
+	queryIn,
+	menu,
+}: ThreadComposerProps) => {
 	const [prompt, setPrompt] = useState(readDraft)
+	const [wasDismissed, setWasDismissed] = useState(false)
 	const latestPrompt = useRef(prompt)
-	const options = useMemo(() => commandOptionsFor(commands), [commands])
-	const query = isOverlayOpen ? null : commandQueryIn(prompt, commands)
 
+	const query = queryIn(prompt)
 	const isDismissed = holdsDismissal(wasDismissed, query)
 	if (wasDismissed !== isDismissed) {
 		setWasDismissed(isDismissed)
@@ -88,24 +80,21 @@ export const BotComposer = memo(function BotComposer({
 		[changePrompt, onSubmitPrompt],
 	)
 
-	const select = useCallback(
-		(option: string) => {
-			changePrompt(promptForCommand(option))
+	const pick = useCallback(
+		(text: string) => {
+			changePrompt(text)
 			composerRef.current?.focus({ preventScroll: true })
 		},
 		[changePrompt, composerRef],
 	)
 
-	const dismiss = useCallback(() => setWasDismissed(true), [])
-
-	return (
-		<PromptCommandMenu
-			commands={options}
-			onDismiss={dismiss}
-			onSelect={select}
-			open={query !== null && !isDismissed}
-			query={query ?? ""}
-		>
+	return menu({
+		prompt,
+		query: query ?? "",
+		isOpen: query !== null && !isDismissed,
+		onDismiss: () => setWasDismissed(true),
+		onPick: pick,
+		children: (
 			<PromptInput
 				attachments={
 					<PromptAttachments
@@ -120,101 +109,10 @@ export const BotComposer = memo(function BotComposer({
 				onAttach={canAttach ? onAttach : undefined}
 				onSubmit={submit}
 				onValueChange={changePrompt}
-				placeholder={t("screen.placeholder", { name: botName })}
+				placeholder={placeholder}
 				textareaRef={composerRef}
 				value={prompt}
 			/>
-		</PromptCommandMenu>
-	)
-})
-
-type ConversationComposerProps = StagedFields & {
-	bots: RosterBot[]
-	leadId?: string
-	composerRef: RefObject<HTMLTextAreaElement | null>
-	readDraft: () => string
-	onPromptChange: (draft: string) => void
-	onSubmitPrompt: (text: string) => Promise<boolean>
-}
-
-export const ConversationComposer = ({
-	bots,
-	leadId,
-	composerRef,
-	canAttach,
-	attachments,
-	isDropTarget,
-	onAttach,
-	onRemoveAttachment,
-	readDraft,
-	onPromptChange,
-	onSubmitPrompt,
-}: ConversationComposerProps) => {
-	const t = useChatCopy()
-	const [prompt, setPrompt] = useState(readDraft)
-	const [wasDismissed, setWasDismissed] = useState(false)
-
-	const changePrompt = useCallback(
-		(next: string) => {
-			setPrompt(next)
-			onPromptChange(next)
-		},
-		[onPromptChange],
-	)
-
-	const query = mentionQueryIn(prompt)
-	const isDismissed = holdsDismissal(wasDismissed, query)
-	if (wasDismissed !== isDismissed) {
-		setWasDismissed(isDismissed)
-	}
-
-	const select = useCallback(
-		(botId: string) => {
-			const taken = bots.find((bot) => bot.id === botId)
-			if (taken) {
-				changePrompt(promptWithMention(prompt, taken.name))
-			}
-			composerRef.current?.focus({ preventScroll: true })
-		},
-		[bots, changePrompt, prompt, composerRef],
-	)
-
-	const submit = useCallback(
-		async (value: string) => {
-			if (await onSubmitPrompt(value)) {
-				changePrompt("")
-			}
-		},
-		[changePrompt, onSubmitPrompt],
-	)
-
-	return (
-		<PromptMentionMenu
-			bots={bots}
-			leadId={leadId}
-			onDismiss={() => setWasDismissed(true)}
-			onSelect={select}
-			open={query !== null && !isDismissed}
-			query={query ?? ""}
-		>
-			<PromptInput
-				attachments={
-					<PromptAttachments
-						items={attachments}
-						onRemove={onRemoveAttachment}
-					/>
-				}
-				dropTarget={isDropTarget}
-				leading={
-					<PromptAttachButton disabled={!canAttach} onAttach={onAttach} />
-				}
-				onAttach={canAttach ? onAttach : undefined}
-				onSubmit={submit}
-				onValueChange={changePrompt}
-				placeholder={t("composer.placeholder")}
-				textareaRef={composerRef}
-				value={prompt}
-			/>
-		</PromptMentionMenu>
-	)
+		),
+	})
 }
