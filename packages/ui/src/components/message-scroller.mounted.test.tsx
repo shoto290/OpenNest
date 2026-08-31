@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render } from "@testing-library/react"
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react"
 import { createRef } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -95,10 +102,16 @@ const stubLayout = (
 		configurable: true,
 		get: () => scrollTop,
 		set: (next: number) => {
-			scrollTop = Math.max(
+			const clamped = Math.max(
 				0,
 				Math.min(next, viewport.scrollHeight - viewportHeight()),
 			)
+			if (clamped === scrollTop) return
+
+			scrollTop = clamped
+			requestAnimationFrame(() => {
+				viewport.dispatchEvent(new Event("scroll"))
+			})
 		},
 	})
 }
@@ -179,10 +192,12 @@ const settle = async (viewport: HTMLElement, rounds = 4) => {
 
 const renderJumpScroller = () => {
 	const scrollerRef = createRef<MessageScrollerHandle>()
+	const onFollowChange = vi.fn()
 	const view = render(
 		<MessageScroller
 			smooth={false}
 			estimatedRowHeight={ESTIMATED_ROW_HEIGHT}
+			onFollowChange={onFollowChange}
 			rows={jumpRows()}
 			scrollerRef={scrollerRef}
 		/>,
@@ -200,7 +215,46 @@ const renderJumpScroller = () => {
 	)
 	stubRectTop(viewport, () => 0)
 	stubRectTop(list, () => -viewport.scrollTop)
-	return { scrollerRef, viewport }
+	return { onFollowChange, scrollerRef, viewport }
+}
+
+const rowAt = (viewport: HTMLElement, index: number) =>
+	viewport.querySelector<HTMLElement>(
+		`[data-slot="message-scroller-row"][data-index="${index}"]`,
+	)
+
+const isLastRowInViewport = (viewport: HTMLElement) => {
+	const row = rowAt(viewport, JUMP_ROW_COUNT - 1)
+	if (!row) return false
+
+	const start = startOfRow(row)
+	return (
+		start < viewport.scrollTop + VIEWPORT_HEIGHT &&
+		start + MEASURED_ROW_HEIGHT > viewport.scrollTop
+	)
+}
+
+const queryJumpToLatest = () =>
+	screen.queryByRole("button", { name: "Jump to latest" })
+
+const MEASUREMENT_ROUNDS = 8
+
+const settleMeasurements = async () => {
+	for (let index = 0; index < MEASUREMENT_ROUNDS; index += 1) {
+		await act(async () => {
+			flushResize()
+			await nextFrame()
+		})
+	}
+}
+
+const readerScrollsToTop = async (viewport: HTMLElement) => {
+	await act(async () => {
+		fireEvent.wheel(viewport)
+		viewport.scrollTop = 0
+		fireEvent.scroll(viewport)
+	})
+	await settleMeasurements()
 }
 
 type ScrollerSetup = {
@@ -389,6 +443,45 @@ describe("MessageScroller mounted", () => {
 		fireEvent.scroll(viewport)
 
 		expect(onFollowChange).toHaveBeenCalledWith(false)
+	})
+
+	it("comes to rest on the last row when a taller-than-estimated transcript mounts", async () => {
+		stubRowMeasurement()
+		const { viewport } = renderJumpScroller()
+
+		await settleMeasurements()
+
+		expect(isLastRowInViewport(viewport)).toBe(true)
+	})
+
+	it("reports following once the mounted transcript rests on the last row", async () => {
+		stubRowMeasurement()
+		const { onFollowChange, scrollerRef } = renderJumpScroller()
+
+		await settleMeasurements()
+
+		expect(scrollerRef.current?.isFollowing()).toBe(true)
+		expect(onFollowChange).not.toHaveBeenCalledWith(false)
+		expect(queryJumpToLatest()).toBeNull()
+	})
+
+	it("brings the last row back when the reader activates jump to latest", async () => {
+		stubRowMeasurement()
+		const { onFollowChange, viewport } = renderJumpScroller()
+		await settleMeasurements()
+		await readerScrollsToTop(viewport)
+		expect(onFollowChange).toHaveBeenLastCalledWith(false)
+		const jump = queryJumpToLatest()
+		if (!jump) throw new Error("jump to latest never appeared")
+
+		await act(async () => {
+			fireEvent.click(jump)
+		})
+		await settleMeasurements()
+
+		expect(isLastRowInViewport(viewport)).toBe(true)
+		expect(onFollowChange).toHaveBeenLastCalledWith(true)
+		await waitFor(() => expect(queryJumpToLatest()).toBeNull())
 	})
 
 	it("lands on an unmounted bubble of a later block once its row is measured", async () => {

@@ -172,6 +172,7 @@ export function MessageScroller({
 	const heldViewportHeightRef = useRef(0)
 	const isHoldPendingRef = useRef(false)
 	const aimFrameRef = useRef<number | undefined>(undefined)
+	const landingFrameRef = useRef<number | undefined>(undefined)
 	const landedKeyRef = useRef(transcriptKey)
 	const landedRowsRef = useRef(0)
 	const traceRef = useRef(onLandingTrace)
@@ -247,15 +248,15 @@ export function MessageScroller({
 		[emitTrace],
 	)
 
-	const scrollViewportToEnd = useCallback(
+	const aimAtEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
 			const viewport = viewportRef.current
 			if (!viewport) return
 
-			traceScrollRequest(nextBehavior, viewport)
 			heldViewportHeightRef.current = viewport.clientHeight
 			if (distanceFromEnd(viewport) <= 1) return
 
+			traceScrollRequest(nextBehavior, viewport)
 			landingRef.current = true
 			if (typeof viewport.scrollTo === "function") {
 				viewport.scrollTo({
@@ -268,6 +269,37 @@ export function MessageScroller({
 			lastScrollTopRef.current = viewport.scrollTop
 		},
 		[traceScrollRequest],
+	)
+
+	const stopLanding = useCallback(() => {
+		if (landingFrameRef.current === undefined) return
+
+		cancelAnimationFrame(landingFrameRef.current)
+		landingFrameRef.current = undefined
+	}, [])
+
+	const holdAimAtEnd = useCallback(() => {
+		let framesLeft = AIM_FRAME_BUDGET
+
+		const reaim = () => {
+			landingFrameRef.current = undefined
+			framesLeft -= 1
+			if (framesLeft <= 0 || !followingRef.current) return
+
+			aimAtEnd("auto")
+			landingFrameRef.current = requestAnimationFrame(reaim)
+		}
+
+		stopLanding()
+		landingFrameRef.current = requestAnimationFrame(reaim)
+	}, [aimAtEnd, stopLanding])
+
+	const scrollViewportToEnd = useCallback(
+		(nextBehavior: ScrollBehavior) => {
+			aimAtEnd(nextBehavior)
+			holdAimAtEnd()
+		},
+		[aimAtEnd, holdAimAtEnd],
 	)
 
 	const measureListOffset = useCallback(() => {
@@ -407,6 +439,7 @@ export function MessageScroller({
 	const scrollToMessage = useCallback(
 		(messageId: string, nextBehavior: ScrollBehavior) => {
 			landingRef.current = false
+			stopLanding()
 			stopAiming()
 
 			const index = rows.findIndex((row) => row.messageIds?.includes(messageId))
@@ -417,7 +450,7 @@ export function MessageScroller({
 			holdAimOnRow(index, messageId)
 			return true
 		},
-		[aimAtRow, holdAimOnRow, rows, setFollowing, stopAiming],
+		[aimAtRow, holdAimOnRow, rows, setFollowing, stopAiming, stopLanding],
 	)
 
 	const handleScroll = useCallback(() => {
@@ -450,8 +483,9 @@ export function MessageScroller({
 		landingRef.current = false
 		tracePhaseRef.current = "live"
 		isHoldPendingRef.current = false
+		stopLanding()
 		stopAiming()
-	}, [stopAiming])
+	}, [stopAiming, stopLanding])
 
 	const requestOlder = () => {
 		if (!older || older.isLoading) return
@@ -507,9 +541,10 @@ export function MessageScroller({
 	useEffect(
 		() => () => {
 			stopAiming()
+			stopLanding()
 			if (holdFrameRef.current) cancelAnimationFrame(holdFrameRef.current)
 		},
-		[stopAiming],
+		[stopAiming, stopLanding],
 	)
 
 	return (
