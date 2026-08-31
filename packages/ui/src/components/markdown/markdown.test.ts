@@ -519,7 +519,7 @@ describe("bot mentions", () => {
 
 		expect(count(html, 'data-slot="bot-mention"')).toBe(1)
 		expect(html).toContain('data-slot="bot-mention-count"')
-		expect(html).toContain(">2<")
+		expect(html).toContain("×2")
 		expect(html).toContain("ask ")
 		expect(html).toContain(" to split it")
 	})

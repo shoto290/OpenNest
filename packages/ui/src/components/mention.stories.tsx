@@ -183,14 +183,14 @@ export const Counted = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same bot named twice in a row, which is how a message addresses two live instances of it. Check that the two tokens draw one chip carrying `2` rather than two chips side by side, that the space that separated them is gone, and that the chip is announced as *Atlas, 2 mentions* in one go instead of leaving a bare number for a screen reader to read alone.",
+					"The same bot named twice in a row, which is how a message addresses two live instances of it. Check that the two tokens draw one chip carrying `×2` rather than two chips side by side, that the space that separated them is gone, and that the multiplier keeps the count from reading as the instance ordinal a live row and a message author show after a name. A screen reader hears *Atlas 2 mentions*: the glyph is hidden and the count spelled out beside it.",
 			},
 		},
 	},
 	render: () => <Message source={PAIR} />,
 	play: async ({ canvas, canvasElement }) => {
 		await expect(pills(canvasElement)).toHaveLength(1)
-		await expect(canvas.getByText("2")).toBeVisible()
+		await expect(canvas.getByText("×2")).toBeVisible()
 		await expect(canvas.getByText("Atlas")).toBeVisible()
 		await expect(canvas.getByText("2 mentions")).toBeInTheDocument()
 	},
@@ -201,7 +201,7 @@ export const CountedToNine = meta.story({
 		docs: {
 			description: {
 				story:
-					"Nine repeats of one bot, the widest count a single digit reaches, next to a bot named once. Check that the counted chip is exactly as tall as the plain one and sits on the same baseline, that the number sits inside the chip after the name, and that the digit is drawn in the tabular figures the rest of the app counts with.",
+					"Nine repeats of one bot, the widest count a single digit reaches, next to a bot named once. Check that the counted chip is exactly as tall as the plain one and sits on the same baseline, that `×9` sits inside the chip one space after the name, and that its digit is drawn in the tabular figures the rest of the app counts with.",
 			},
 		},
 	},
@@ -209,7 +209,7 @@ export const CountedToNine = meta.story({
 	play: async ({ canvas, canvasElement }) => {
 		const [counted, plain] = [...pills(canvasElement)]
 
-		await expect(canvas.getByText("9")).toBeVisible()
+		await expect(canvas.getByText("×9")).toBeVisible()
 		await expect(canvas.getByText("9 mentions")).toBeInTheDocument()
 
 		const count = canvasElement.querySelector<HTMLElement>(

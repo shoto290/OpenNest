@@ -12,11 +12,15 @@ const MENTION_AVATAR_SIZE = 16
 const MENTION_CLASS =
 	"inline-flex max-w-full items-center gap-1 rounded-full bg-current/10 pr-2 pl-1 align-top font-medium"
 
-const UNKNOWN_CLASS = "pl-2 text-current/70"
+const DIM_CLASS = "text-current/70"
+
+const UNKNOWN_CLASS = `pl-2 ${DIM_CLASS}`
 
 const NAME_CLASS = "max-w-40 truncate"
 
-const COUNT_CLASS = "shrink-0 text-current/70 tabular-nums"
+const COUNT_CLASS = "shrink-0 tabular-nums"
+
+const COUNT_GLYPH = "×"
 
 type MentionProps = {
 	botId: string
@@ -57,10 +61,10 @@ const Mention = ({ botId, count = 1, className }: MentionProps) => {
 				<>
 					<span
 						aria-hidden="true"
-						className={COUNT_CLASS}
+						className={cn(COUNT_CLASS, bot && DIM_CLASS)}
 						data-slot="bot-mention-count"
 					>
-						{count}
+						{`${COUNT_GLYPH}${count}`}
 					</span>
 					<span className="sr-only">
 						{t("transcript.mention.counted", { count })}
