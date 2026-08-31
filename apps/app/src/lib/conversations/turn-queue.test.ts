@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest"
 
 import {
-	closedSpeaker,
 	emptyQueue,
 	type Handover,
 	handedOver,
 	loopingPairIn,
+	openedWave,
 	reopenedFor,
 	type Summons,
-	startedNext,
 } from "./turn-queue"
 
 const SAID = "m-1"
@@ -27,63 +26,70 @@ const opened = (botIds: string[]) =>
 const waitingIn = (queue: { waiting: Summons[] }) =>
 	queue.waiting.map(({ botId }) => botId)
 
+const waveIn = (queue: { wave: Summons[] }) =>
+	queue.wave.map(({ botId }) => botId)
+
 const handover = (from: string, to: string): Handover => ({ from, to })
 
-describe("startedNext", () => {
-	it("takes the bot at the head of the queue", () => {
-		const queue = startedNext(opened(["ada", "nyx"]))
-		expect(queue.speaking?.botId).toBe("ada")
-		expect(waitingIn(queue)).toEqual(["nyx"])
+describe("openedWave", () => {
+	it("takes every bot held, in the order they were named", () => {
+		const queue = openedWave(opened(["ada", "nyx"]))
+		expect(waveIn(queue)).toEqual(["ada", "nyx"])
+		expect(queue.waiting).toEqual([])
 	})
 
-	it("leaves the queue alone while a bot is speaking", () => {
-		const running = startedNext(opened(["ada", "nyx"]))
-		expect(startedNext(running)).toBe(running)
+	it("leaves the queue alone when no bot is held", () => {
+		const running = openedWave(opened(["ada"]))
+		expect(openedWave(running)).toBe(running)
 	})
 })
 
 describe("handedOver", () => {
-	it("puts the bot named at the end of the same turn, pointed at the message that named it", () => {
+	it("holds the bot named for the next wave, pointed at the message that named it", () => {
 		const queue = handedOver(
-			startedNext(opened(["ada"])),
+			openedWave(opened(["ada"])),
 			"ada",
 			summons("nyx", "m-said-by-ada"),
 		)
 		expect(queue.waiting).toEqual([{ botId: "nyx", promptId: "m-said-by-ada" }])
 	})
 
-	it("leaves a bot already waiting where it is", () => {
+	it("leaves a bot already held where it is", () => {
 		const queue = handedOver(opened(["ada", "nyx"]), "ada", summons("nyx"))
 		expect(waitingIn(queue)).toEqual(["ada", "nyx"])
 		expect(queue.handovers).toEqual([])
 	})
 
+	it("ignores a bot already running in the open wave", () => {
+		const queue = handedOver(
+			openedWave(opened(["ada", "nyx"])),
+			"ada",
+			summons("nyx"),
+		)
+		expect(queue.waiting).toEqual([])
+		expect(queue.handovers).toEqual([])
+	})
+
 	it("ignores a bot naming itself", () => {
-		const queue = handedOver(opened([]), "ada", summons("ada"))
+		const queue = handedOver(openedWave(opened(["ada"])), "ada", summons("ada"))
 		expect(queue.waiting).toEqual([])
 	})
 })
 
 describe("reopenedFor", () => {
-	it("drops those waiting and leaves the one in flight", () => {
-		const running = startedNext(opened(["ada", "nyx", "iris"]))
+	it("drops those held and leaves the open wave in flight", () => {
+		const running = openedWave(opened(["ada", "nyx", "iris"]))
 		const queue = reopenedFor(running, [])
-		expect(queue.speaking?.botId).toBe("ada")
+		expect(waveIn(queue)).toEqual(["ada", "nyx", "iris"])
 		expect(queue.waiting).toEqual([])
 	})
 
-	it("keeps the bot in flight and queues the ones newly named", () => {
-		const running = startedNext(opened(["ada", "nyx"]))
+	it("keeps the open wave and holds the ones newly named", () => {
+		const running = openedWave(opened(["ada", "nyx"]))
 		const queue = reopenedFor(running, [summons("iris")])
-		expect(queue.speaking?.botId).toBe("ada")
+		expect(waveIn(queue)).toEqual(["ada", "nyx"])
 		expect(waitingIn(queue)).toEqual(["iris"])
 		expect(queue.handovers).toEqual([])
-	})
-})
-
-describe("closedSpeaker", () => {
-	it("lets go of the bot that stopped writing", () => {
-		expect(closedSpeaker(startedNext(opened(["ada"]))).speaking).toBeNull()
 	})
 })
 

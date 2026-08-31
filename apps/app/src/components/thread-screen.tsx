@@ -102,6 +102,7 @@ import {
 	useThreadRoster,
 } from "@/lib/chat/use-thread-roster"
 import type { WorkingState } from "@/lib/chat/working-kind"
+import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import { leadOf } from "@/lib/conversations/roster-conversations"
 import { useConversation } from "@/lib/conversations/use-conversation"
 
@@ -479,23 +480,32 @@ const BotThreadTail = ({
 	</>
 )
 
+type SpeakingRow = {
+	seated: RosterBot
+	speaking: SpeakingBot
+}
+
+const speakingRowsIn = (
+	speakers: SpeakingBot[],
+	bots: RosterBot[],
+): SpeakingRow[] =>
+	speakers.flatMap((speaking) => {
+		const seated = bots.find(({ id }) => id === speaking.botId)
+		return seated && !speaking.hasWritten ? [{ seated, speaking }] : []
+	})
+
 type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
 	bots: RosterBot[]
 	refusedQuote?: QuotedMessage
-	onStop: () => void
 }
 
 const ConversationThreadTail = ({
 	thread,
 	bots,
 	refusedQuote,
-	onStop,
 }: ConversationThreadTailProps) => {
-	const seatedOf = (botId: string) => bots.find((seated) => seated.id === botId)
-	const { refusedMessage, speakingBotId, speakingWork, waitingBotIds } =
-		thread.state
-	const speaking = speakingBotId ? seatedOf(speakingBotId) : undefined
+	const { refusedMessage, speakers, waitingBotIds } = thread.state
 
 	return (
 		<>
@@ -506,16 +516,19 @@ const ConversationThreadTail = ({
 					repliedTo={refusedQuote}
 				/>
 			) : null}
-			{speaking ? (
+			{speakingRowsIn(speakers, bots).map(({ seated, speaking }) => (
 				<WorkingBot
-					face={speaking}
-					kind={speakingWork?.kind}
-					label={speakingWork?.label}
-					onStop={onStop}
+					face={seated}
+					key={seated.id}
+					kind={speaking.work.kind}
+					label={speaking.work.label}
+					onStop={() => {
+						void speaking.stop()
+					}}
 				/>
-			) : null}
+			))}
 			{waitingBotIds
-				.flatMap((botId) => seatedOf(botId) ?? [])
+				.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
 				.map((seated) => (
 					<WorkingBot face={seated} key={seated.id} kind="waiting" />
 				))}
@@ -548,7 +561,6 @@ const ThreadTail = ({
 	) : (
 		<ConversationThreadTail
 			bots={bots}
-			onStop={onStop}
 			refusedQuote={refusedQuote}
 			thread={thread}
 		/>

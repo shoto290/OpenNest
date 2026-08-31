@@ -16,7 +16,7 @@ export type NotificationSwitches = Pick<
 
 export type ConversationRound = Pick<
 	ConversationState,
-	"speakingBotId" | "waitingBotIds"
+	"speakers" | "waitingBotIds"
 >
 
 export type NotificationPolicyInput = {
@@ -80,8 +80,8 @@ export type ConversationPolicyInput = {
 	hasFocus: boolean
 }
 
-const isRoundBusy = ({ speakingBotId, waitingBotIds }: ConversationRound) =>
-	speakingBotId !== null || waitingBotIds.length > 0
+const isRoundBusy = ({ speakers, waitingBotIds }: ConversationRound) =>
+	speakers.length > 0 || waitingBotIds.length > 0
 
 export const notifiesFinishedRound = ({
 	before,

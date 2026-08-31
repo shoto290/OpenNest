@@ -68,15 +68,15 @@ const workersIn = (
 	if (!controller) {
 		return NO_WORKERS
 	}
-	const { speakingBotId, speakingWork, waitingBotIds } = controller.getState()
-	const waiting = waitingBotIds.map(
-		(botId): ConversationWorker => ({ botId, kind: "waiting" }),
-	)
-	if (!speakingBotId) {
-		return waiting
-	}
-	const kind = speakingWork?.kind ?? "thinking"
-	return [{ botId: speakingBotId, kind }, ...waiting]
+	const { speakers, waitingBotIds } = controller.getState()
+	return [
+		...speakers.map(
+			({ botId, work }): ConversationWorker => ({ botId, kind: work.kind }),
+		),
+		...waitingBotIds.map(
+			(botId): ConversationWorker => ({ botId, kind: "waiting" }),
+		),
+	]
 }
 
 export const useConversationWorkers = (

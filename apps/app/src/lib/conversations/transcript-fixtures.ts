@@ -3,6 +3,7 @@ import {
 	DEFAULT_BOT_OUTPUT_STYLE,
 } from "@workspace/ui/components/bot-settings"
 
+import type { SpeakingBot } from "./conversation-controller"
 import type { BotIdentity } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type { TranscriptMessage } from "./transcript-contract"
@@ -44,6 +45,17 @@ export const botIdentity = (
 	deniedTools: [],
 	permissions: BLANK_BOT_PERMISSIONS,
 	outputStyle: DEFAULT_BOT_OUTPUT_STYLE,
+	...overrides,
+})
+
+export const speakingBot = (
+	botId: string,
+	overrides: Partial<SpeakingBot> = {},
+): SpeakingBot => ({
+	botId,
+	work: { kind: "thinking" },
+	hasWritten: false,
+	stop: () => Promise.resolve(),
 	...overrides,
 })
 
