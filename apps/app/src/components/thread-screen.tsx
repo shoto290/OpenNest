@@ -225,6 +225,7 @@ type ThreadComposerSlotProps = {
 	composerRef: RefObject<HTMLTextAreaElement | null>
 	staged: StagedFiles
 	canAttach: boolean
+	placeholder: string
 	present: RosterBot[]
 	readDraft: () => string
 	onPromptChange: (draft: string) => void
@@ -299,15 +300,16 @@ const ThreadComposerSlot = ({
 	composerRef,
 	staged,
 	canAttach,
+	placeholder,
 	present,
 	readDraft,
 	onPromptChange,
 	onSubmitPrompt,
 }: ThreadComposerSlotProps) => {
-	const t = useChatCopy()
 	const shared = {
 		attachments: staged.items,
 		canAttach,
+		placeholder,
 		composerRef,
 		isDropTarget: staged.isDropTarget,
 		onAttach: staged.stage,
@@ -324,7 +326,6 @@ const ThreadComposerSlot = ({
 			menu={(slot) => (
 				<CommandMenu {...slot} commands={thread.state.commands} />
 			)}
-			placeholder={t("screen.placeholder", { name: thread.bot.name })}
 			queryIn={(prompt) =>
 				thread.isOverlayOpen
 					? null
@@ -342,7 +343,6 @@ const ThreadComposerSlot = ({
 					leadId={leadOf(thread.conversation)}
 				/>
 			)}
-			placeholder={t("composer.placeholder")}
 			queryIn={mentionQueryIn}
 		/>
 	)
@@ -729,6 +729,9 @@ function ThreadView({
 	const promptResponder = usePromptResponder(controller, scrollerRef)
 
 	const reader = readerName || t("working.name")
+	const composerPlaceholder = facts.bot
+		? t("screen.placeholder", { name: facts.bot.name })
+		: t("composer.placeholder")
 	const roster = useThreadRoster(facts)
 	const { bots, present, authors, botFace } = roster
 	const botImage = botFace?.image
@@ -851,6 +854,7 @@ function ThreadView({
 						composerRef={composerRef}
 						onPromptChange={rememberDraft}
 						onSubmitPrompt={submitPrompt}
+						placeholder={composerPlaceholder}
 						present={present}
 						readDraft={readDraft}
 						staged={staged}
