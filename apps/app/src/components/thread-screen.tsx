@@ -17,6 +17,7 @@ import {
 import type {
 	MessageScrollerHandle,
 	MessageScrollerRow,
+	MessageScrollerTrace,
 } from "@workspace/ui/components/message-scroller"
 import {
 	PINNED_AVATAR_SIZE,
@@ -99,6 +100,12 @@ import { leadOf } from "@/lib/conversations/roster-conversations"
 import { useConversation } from "@/lib/conversations/use-conversation"
 
 const NO_MARKS: ReadonlySet<number> = new Set()
+
+const logLandingTrace = (event: MessageScrollerTrace) => {
+	console.info("transcript landing", event)
+}
+
+const landingTrace = import.meta.env.DEV ? logLandingTrace : undefined
 
 type WorkingBotProps = {
 	face: ThreadFace
@@ -758,6 +765,7 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 						: undefined
 				}
 				onFollowChange={controller.follow}
+				onLandingTrace={landingTrace}
 				pending={
 					<ThreadPending
 						authors={authors}
