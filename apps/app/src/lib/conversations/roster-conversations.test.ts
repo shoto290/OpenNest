@@ -101,6 +101,7 @@ describe("toRosterConversations", () => {
 				lastMessage: undefined,
 				lastSpeaker: undefined,
 				timestamp: undefined,
+				lastActivityAt: 1,
 				status: "idle",
 			},
 		])

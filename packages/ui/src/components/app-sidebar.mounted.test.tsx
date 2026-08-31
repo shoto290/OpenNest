@@ -142,3 +142,49 @@ describe("AppSidebar section collapse across spaces mounted", () => {
 		)
 	})
 })
+
+const AT_NINE = 1_700_000_000_000
+
+const BEACON: AppSidebarBot = {
+	id: "beacon",
+	name: "Beacon",
+	lastActivityAt: AT_NINE + 2_000,
+}
+
+const OLDER_ATLAS: AppSidebarBot = { ...ATLAS, lastActivityAt: AT_NINE }
+
+const MIDDLE_REVIEW: AppSidebarConversation = {
+	...REVIEW,
+	lastActivityAt: AT_NINE + 1_000,
+}
+
+const rowNamesIn = (container: HTMLElement) =>
+	[
+		...container.querySelectorAll<HTMLElement>('[data-slot="roster-row-name"]'),
+	].map((name) => name.textContent)
+
+describe("AppSidebar merged roster order mounted", () => {
+	afterEach(cleanup)
+
+	it("interleaves bots and conversations by their last activity", () => {
+		const { container } = render(
+			<WorkspaceShell
+				defaultOpen
+				sidebar={
+					<AppSidebar
+						bots={[BEACON, OLDER_ATLAS]}
+						conversations={[MIDDLE_REVIEW]}
+					/>
+				}
+			>
+				{null}
+			</WorkspaceShell>,
+		)
+
+		expect(rowNamesIn(container)).toEqual([
+			BEACON.name,
+			MIDDLE_REVIEW.name,
+			OLDER_ATLAS.name,
+		])
+	})
+})

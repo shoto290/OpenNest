@@ -162,6 +162,7 @@ export const toRosterConversations = (
 			lastMessage: previewText(conversation, preview),
 			lastSpeaker: speakerNameAmong(seated, preview),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
+			lastActivityAt: lastSpokeAt(conversation, activity),
 			status: workers.length > 0 ? "working" : "idle",
 		}
 	})
