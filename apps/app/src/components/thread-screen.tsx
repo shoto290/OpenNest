@@ -258,6 +258,15 @@ const CommandMenu = ({
 	)
 }
 
+const mentioned = (
+	prompt: string,
+	bots: RosterBot[],
+	botId: string,
+): string => {
+	const taken = bots.find((bot) => bot.id === botId)
+	return taken ? promptWithMention(prompt, taken.name) : prompt
+}
+
 type MentionMenuProps = ThreadMenuSlot & {
 	bots: RosterBot[]
 	leadId?: string
@@ -284,15 +293,6 @@ const MentionMenu = ({
 		{children}
 	</PromptMentionMenu>
 )
-
-const mentioned = (
-	prompt: string,
-	bots: RosterBot[],
-	botId: string,
-): string => {
-	const taken = bots.find((bot) => bot.id === botId)
-	return taken ? promptWithMention(prompt, taken.name) : prompt
-}
 
 const ThreadComposerSlot = ({
 	thread,
