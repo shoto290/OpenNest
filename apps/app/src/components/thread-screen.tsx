@@ -693,10 +693,6 @@ function ThreadView({
 	})
 
 	const { botController } = facts
-	const dismissError = useCallback(
-		(id: string) => controller.dismissError(id),
-		[controller],
-	)
 	const readDraft = useCallback(() => drafts.read(facts.id), [drafts, facts.id])
 	const rememberDraft = useCallback(
 		(draft: string) => drafts.remember(facts.id, draft),
@@ -713,10 +709,10 @@ function ThreadView({
 	)
 	const restartAfterError = useCallback(
 		(id: string) => {
-			dismissError(id)
+			controller.dismissError(id)
 			void botController?.restart()
 		},
-		[botController, dismissError],
+		[botController, controller],
 	)
 	const stop = useCallback(() => {
 		void controller.stop()
@@ -789,7 +785,7 @@ function ThreadView({
 						bots={bots}
 						error={facts.latestError}
 						loopingPair={facts.loopingPair}
-						onDismissError={dismissError}
+						onDismissError={controller.dismissError}
 						onRestart={botController ? restartAfterError : undefined}
 						onStop={stop}
 						pins={pins}

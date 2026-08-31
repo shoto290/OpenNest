@@ -200,35 +200,27 @@ describe("ThreadScreen", () => {
 	})
 
 	it("leaves a dismissed bot failure dismissed when the reader returns", async () => {
-		let held = threadOf({
+		const opened = threadOf({
 			id: "bot-1",
 			name: "Nyx",
 			said: "the first answer",
 			errors: [CRASH],
 		})
+		let state = opened.chat.state
 		const controller = stubController({
 			dismissError: (id) => {
-				held = {
-					...held,
-					chat: {
-						...held.chat,
-						state: chatReducer(held.chat.state, {
-							type: "errorDismissed",
-							id,
-						}),
-					},
-				}
+				state = chatReducer(state, { type: "errorDismissed", id })
 			},
 		})
-		held = { ...held, chat: { ...held.chat, controller } }
-		const { unmount } = render(screenOf(held))
+		const shown = (): BotThread => ({ ...opened, chat: { state, controller } })
+		const { unmount } = render(screenOf(shown()))
 		await settle()
 
 		expect(screen.getByText(CRASH_TITLE)).toBeTruthy()
 
 		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
 		unmount()
-		render(screenOf(held))
+		render(screenOf(shown()))
 		await settle()
 
 		expect(screen.queryByText(CRASH_TITLE)).toBeNull()
