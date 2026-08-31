@@ -9,6 +9,7 @@ use crate::conversations::contract::{
 	AvatarBlot, BotHistoryEntry, Skill, SkillDraft, TranscriptStoreError,
 };
 use crate::db;
+use crate::db::repositories::spaces;
 use crate::environment;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, SpaceError> {
@@ -27,10 +28,22 @@ pub async fn space_create<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	name: String,
 ) -> Result<Space, SpaceError> {
-	let created = ready(&state)?.spaces().create(name).await?;
-	bundles::space::lay_down(&app, &created.id)
-		.map_err(|failure| SpaceError::UnwritableBundle { detail: failure.to_string() })?;
-	Ok(Space::from(created))
+	let database = ready(&state)?;
+	let created = database.spaces().create(name).await?;
+	let laid_down = bundles::space::lay_down(&app, &created.id);
+	kept_if_laid_down(database, created, laid_down).await
+}
+
+async fn kept_if_laid_down(
+	database: &db::Database,
+	created: spaces::Space,
+	laid_down: std::io::Result<()>,
+) -> Result<Space, SpaceError> {
+	let Err(failure) = laid_down else {
+		return Ok(Space::from(created));
+	};
+	database.spaces().delete(created.id).await?;
+	Err(SpaceError::UnwritableBundle { detail: failure.to_string() })
 }
 
 #[tauri::command]
@@ -288,6 +301,28 @@ mod tests {
 			.await
 			.expect("the bot is created")
 			.id
+	}
+
+	#[tokio::test]
+	async fn a_space_whose_plugin_refuses_the_commit_leaves_no_row_behind() {
+		let root = a_root("plugin-refused");
+		let database = a_database(&root);
+		let created =
+			database.spaces().create("Vocca".to_owned()).await.expect("the space is created");
+		let plugin = root.join(&created.id);
+		fs::create_dir_all(&plugin).expect("the plugin directory stands");
+		fs::write(plugin.join(".git"), "not a repository").expect("the gitfile lands");
+
+		let failure =
+			kept_if_laid_down(&database, created.clone(), bundles::space::lay_down_at(&plugin))
+				.await
+				.expect_err("the space is refused");
+
+		assert!(matches!(failure, SpaceError::UnwritableBundle { .. }), "got {failure:?}");
+		let listed = database.spaces().list().await.expect("the spaces read");
+		assert!(!listed.iter().any(|space| space.id == created.id), "got {listed:?}");
+
+		let _ = fs::remove_dir_all(&root);
 	}
 
 	#[tokio::test]

@@ -4032,7 +4032,7 @@ mod tests {
 	fn nothing_prepared(_root: &Path, _bot: &Bot, _label: &str) {}
 
 	#[test]
-	fn a_bot_write_and_a_space_skill_write_do_not_wait_on_each_other() {
+	fn a_bot_write_and_a_space_write_do_not_wait_on_each_other() {
 		let root = a_root("locks-apart");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
@@ -4049,7 +4049,7 @@ mod tests {
 		});
 		waited
 			.recv_timeout(std::time::Duration::from_secs(5))
-			.expect("the space write waited on the bot bundle lock");
+			.expect("the space write finished while the bot bundle lock was held");
 		drop(held);
 		writer.join().expect("the space write ends");
 

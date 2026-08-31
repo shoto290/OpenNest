@@ -84,6 +84,13 @@ export const createSpacesController = (
 		void enqueue(() => read(null)).catch(noteFailedLoad)
 	}
 
+	const noteRefusedCreate = () => {
+		noteFailedLoad()
+		return enqueue(async () => set({ spaces: await store.spaces() })).catch(
+			noteFailedLoad,
+		)
+	}
+
 	const writes = createWriteLoop<SpaceSettingsValue, Space>({
 		enqueue,
 		write: (id, value) => store.updateSpace(id, value.name, value.colour),
@@ -117,7 +124,7 @@ export const createSpacesController = (
 					spaces: [...state.spaces, created],
 					selectedSpaceId: created.id,
 				})
-			}).catch(reload),
+			}).catch(noteRefusedCreate),
 
 		setSettingsOpen: (isSettingsOpen: boolean) => set({ isSettingsOpen }),
 

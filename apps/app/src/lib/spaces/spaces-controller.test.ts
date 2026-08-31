@@ -205,6 +205,18 @@ describe("createSpacesController", () => {
 		expect(reorder).not.toHaveBeenCalled()
 	})
 
+	it("reports the refused create and holds the roster the record holds", async () => {
+		const store = createFakeTranscriptStore()
+		await store.createSpace("Vocca")
+		const controller = await loaded(store)
+		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
+
+		await controller.create()
+
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+		expect(held(controller)).toEqual(await names(store))
+	})
+
 	it("stays on the space it is in when a create is refused", async () => {
 		const store = createFakeTranscriptStore()
 		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
