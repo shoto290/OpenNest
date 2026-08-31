@@ -16,6 +16,7 @@ import {
 	quotedMessageIdsIn,
 	quotedTargetsIn,
 	replyTargetOfReference,
+	runPresentationsOf,
 	sidebarActivityFor,
 	toRuns,
 	toTranscriptRows,
@@ -630,5 +631,73 @@ describe("markedRunsOf", () => {
 		)
 
 		expect([...markedRunsOf(runs, ["bot-2"])]).toEqual([0])
+	})
+})
+
+describe("runPresentationsOf", () => {
+	const soloRuns = toRuns(
+		toTranscriptRows([
+			message({ id: "a", content: "One.\n\nTwo.", completion: "complete" }),
+			prompt({ id: "local-1", createdAt: 6 * 60_000 }),
+			message({
+				id: "b",
+				content: "Three.",
+				completion: "complete",
+				createdAt: 7 * 60_000,
+			}),
+		]),
+	)
+	const solo = (isWorking: boolean) =>
+		runPresentationsOf({
+			runs: soloRuns,
+			workingBotIds: [],
+			hasSingleBot: true,
+			isWorking,
+		})
+
+	it("marks the newest run alone in a single bot thread", () => {
+		expect(solo(false).map((run) => run.isMarked)).toEqual([false, false, true])
+	})
+
+	it("places the avatar on the last row of a settled run", () => {
+		expect(solo(false).map((run) => run.avatarIndex)).toEqual([1, 0, 0])
+	})
+
+	it("drops the avatar of the newest run while the bot works", () => {
+		expect(solo(true).map((run) => run.avatarIndex)).toEqual([1, 0, -1])
+	})
+
+	it("renders tables bare in a single bot thread", () => {
+		expect(solo(false).every((run) => run.hasBareTables)).toBe(true)
+	})
+
+	it("marks the runs of the bots that stopped working in a conversation", () => {
+		const spoken = (id: string, authorBotId: string) =>
+			message({ id, authorBotId, content: "Said.", completion: "complete" })
+		const runs = toRuns(
+			toTranscriptRows([spoken("a", "bot-1"), spoken("b", "bot-2")]),
+		)
+
+		const presentations = runPresentationsOf({
+			runs,
+			workingBotIds: ["bot-2"],
+			hasSingleBot: false,
+			isWorking: true,
+		})
+
+		expect(presentations.map((run) => run.isMarked)).toEqual([true, false])
+		expect(presentations.map((run) => run.avatarIndex)).toEqual([-1, -1])
+		expect(presentations.some((run) => run.hasBareTables)).toBe(false)
+	})
+
+	it("returns nothing for an empty transcript", () => {
+		expect(
+			runPresentationsOf({
+				runs: [],
+				workingBotIds: [],
+				hasSingleBot: true,
+				isWorking: false,
+			}),
+		).toEqual([])
 	})
 })

@@ -66,8 +66,9 @@ import {
 import {
 	bubbleIdOf,
 	emptyStateStatusFor,
-	markedRunsOf,
 	type ReplyTarget,
+	type RunPresentation,
+	runPresentationsOf,
 	type TranscriptRow,
 	toRuns,
 	toTranscriptRows,
@@ -114,8 +115,6 @@ import type { WorkingState } from "@/lib/chat/working-kind"
 import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
 import { leadOf } from "@/lib/conversations/roster-conversations"
 import { useConversation } from "@/lib/conversations/use-conversation"
-
-const NO_MARKS: ReadonlySet<number> = new Set()
 
 const logLandingTrace = (event: MessageScrollerTrace) => {
 	console.info("transcript landing", event)
@@ -448,10 +447,8 @@ const ThreadEmptyState = ({
 
 type ThreadRunProps = {
 	run: TranscriptRow[]
-	carriesMark: boolean
-	avatarIndex: number
+	presentation: RunPresentation
 	rejectedPromptId: string | null
-	isSoloThread: boolean
 	asked: AskedBubble | null
 	responder: PromptResponder
 	botFace: ThreadFace | null
@@ -465,10 +462,8 @@ type ThreadRunProps = {
 
 const ThreadRun = ({
 	run,
-	carriesMark,
-	avatarIndex,
+	presentation,
 	rejectedPromptId,
-	isSoloThread,
 	asked,
 	responder,
 	botFace,
@@ -479,7 +474,7 @@ const ThreadRun = ({
 	onReply,
 	onRetry,
 }: ThreadRunProps) => (
-	<TurnGroup carriesMark={carriesMark}>
+	<TurnGroup carriesMark={presentation.isMarked}>
 		{run.map((row, index) => {
 			const bubble = bubbleIdOf(row.messageId, row.blockIndex)
 			const asking = asked?.messageId === row.messageId ? asked : null
@@ -494,9 +489,11 @@ const ThreadRun = ({
 					}
 					author={row.authorBotId ? authors.get(row.authorBotId) : undefined}
 					avatarFace={
-						index === avatarIndex ? (botFace ?? undefined) : undefined
+						index === presentation.avatarIndex
+							? (botFace ?? undefined)
+							: undefined
 					}
-					bare={isSoloThread && isTableBlock(row.text)}
+					bare={presentation.hasBareTables && isTableBlock(row.text)}
 					botId={botFace?.id}
 					key={bubble}
 					onPin={pins.toggle}
@@ -515,41 +512,23 @@ const ThreadRun = ({
 	</TurnGroup>
 )
 
-type RunRowsProps = Omit<
-	ThreadRunProps,
-	"run" | "carriesMark" | "avatarIndex"
-> & {
+type RunRowsProps = Omit<ThreadRunProps, "run" | "presentation"> & {
 	runs: TranscriptRow[][]
-	markedRuns: ReadonlySet<number>
-	isWorking: boolean
+	presentations: RunPresentation[]
 }
 
 const toRunRows = ({
 	runs,
-	markedRuns,
-	isWorking,
+	presentations,
 	...shared
-}: RunRowsProps): MessageScrollerRow[] => {
-	const newestIndex = runs.length - 1
-
-	return runs.map((run, runIndex) => {
-		const newest = runIndex === newestIndex
-		const live = isWorking && newest
-
-		return {
-			key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
-			messageIds: run.map((row) => bubbleIdOf(row.messageId, row.blockIndex)),
-			render: () => (
-				<ThreadRun
-					{...shared}
-					avatarIndex={shared.isSoloThread && !live ? run.length - 1 : -1}
-					carriesMark={shared.isSoloThread ? newest : markedRuns.has(runIndex)}
-					run={run}
-				/>
-			),
-		}
-	})
-}
+}: RunRowsProps): MessageScrollerRow[] =>
+	runs.map((run, runIndex) => ({
+		key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
+		messageIds: run.map((row) => bubbleIdOf(row.messageId, row.blockIndex)),
+		render: () => (
+			<ThreadRun {...shared} presentation={presentations[runIndex]} run={run} />
+		),
+	}))
 
 type BotThreadTailProps = {
 	thread: LoadedBotThread
@@ -821,19 +800,20 @@ function ThreadView({
 	})
 
 	const runs = toRuns(toTranscriptRows(state.messages))
-	const markedRuns = isSoloThread
-		? NO_MARKS
-		: markedRunsOf(runs, facts.workingBotIds)
+	const presentations = runPresentationsOf({
+		runs,
+		workingBotIds: facts.workingBotIds,
+		hasSingleBot: isSoloThread,
+		isWorking: facts.botWork !== null,
+	})
 	const runRows = toRunRows({
 		asked,
 		authors,
 		botFace,
-		isSoloThread,
-		isWorking: facts.botWork !== null,
-		markedRuns,
 		onReply: holdReply,
 		onRetry: botController ? retry : undefined,
 		pins,
+		presentations,
 		quotes,
 		rejectedPromptId: facts.rejectedPromptId,
 		responder: promptResponder,
