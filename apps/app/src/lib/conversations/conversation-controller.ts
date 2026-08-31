@@ -809,6 +809,14 @@ export const createConversationController = (
 		}
 	}
 
+	const dismissError = (id: string) => {
+		if (latestError?.id !== id) {
+			return
+		}
+		forgetFailure()
+		sync()
+	}
+
 	const loadOlder = async () => {
 		if (!conversation || !state.hasOlder || state.isLoadingOlder) {
 			return
@@ -873,13 +881,7 @@ export const createConversationController = (
 		pin,
 		unpin,
 		pins,
-		dismissError: (id: string) => {
-			if (latestError?.id !== id) {
-				return
-			}
-			forgetFailure()
-			sync()
-		},
+		dismissError,
 		answer,
 		respond,
 		stop,
