@@ -2,7 +2,7 @@ import { Tabs } from "@base-ui/react/tabs"
 import { expect, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotsIn } from "@workspace/storybook/story-utils"
+import { hasOverlayScrollbars, slotsIn } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	SETTINGS_PANEL_CLASS,
@@ -193,17 +193,22 @@ export const ScrollingPanel = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel beside the rail once its group runs past the height of the dialog. The panel scrolls natively and reserves its scrollbar gutter, so the rows keep the same width whether the group scrolls or not and nothing reflows when a reader switches from a long group to a short one. The thumb itself is drawn by the browser from `--scrollbar`, fading in on the way into the panel and out again on the way out. Check that the long group overflows and scrolls, and that the short group beside it measures the same content width.",
+					"The panel beside the rail once its group runs past the height of the dialog. An OverlayScrollbars instance draws the handle over the content and reserves no gutter, so the rows keep the same width whether the group scrolls or not and nothing reflows when a reader switches from a long group to a short one. The handle fades in on the way into the panel and out again on the way out, and holds still under reduced motion \u2014 the mode these stories run in. Check that the panel carries a live instance, that the long group overflows and scrolls, and that the short group beside it measures the same content width.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const long = canvas.getByRole("tabpanel")
 
-		await expect(long).toHaveClass("scrollbar-app")
-		await expect(getComputedStyle(long).scrollbarGutter).toBe("stable")
+		await waitFor(() => expect(hasOverlayScrollbars(long)).toBe(true))
 		await expect(long.scrollHeight).toBeGreaterThan(long.clientHeight)
+		await expect(getComputedStyle(long).scrollbarWidth).toBe("none")
+		await expect(long.clientWidth).toBe(long.offsetWidth)
 		const contentWidth = long.clientWidth
+
+		const handle = long.querySelector<HTMLElement>(".os-scrollbar")
+		if (!handle) throw new Error("The overlay scrollbar is not mounted.")
+		await expect(getComputedStyle(handle).transitionProperty).toBe("none")
 
 		long.scrollTop = 60
 		await expect(long.scrollTop).toBe(60)

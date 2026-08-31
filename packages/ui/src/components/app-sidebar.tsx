@@ -70,6 +70,7 @@ import {
 	UserChip,
 	type UserChipIdentity,
 } from "@workspace/ui/components/user-chip"
+import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
 import {
 	dropArea,
 	dropAreaAt,
@@ -201,6 +202,8 @@ const drawnFrom = <Item,>(pool: Item[], seed: string) => {
 
 const CONTENT_INSET = "pr-1 group-data-[state=collapsed]/sidebar:px-0"
 
+const CLIPPED_SIDEWAYS = { overflow: { x: "hidden" } } as const
+
 const CAROUSEL_CONTENT = "overflow-y-hidden p-0"
 
 const CAROUSEL =
@@ -211,7 +214,7 @@ const CAROUSEL_SWIPEABLE = "overflow-x-auto"
 const CAROUSEL_HELD = "overflow-x-hidden"
 
 const CAROUSEL_PANEL =
-	"flex w-full flex-none snap-start snap-always flex-col gap-1.5 overflow-y-auto overscroll-y-contain pt-0 pr-[4.5px] pb-1.5 pl-[9px] scrollbar-app group-data-[state=collapsed]/sidebar:px-0"
+	"flex w-full flex-none snap-start snap-always flex-col gap-1.5 overflow-y-auto overscroll-y-contain px-[9px] pt-0 pb-1.5 group-data-[state=collapsed]/sidebar:px-0"
 
 type AppSidebarStatus = "idle" | "working"
 
@@ -1744,6 +1747,9 @@ const SpacePanel = ({
 	scrolls,
 	children,
 }: SpacePanelProps) => {
+	const panel = useRef<HTMLDivElement>(null)
+	useOverlayScrollbars(panel, { options: CLIPPED_SIDEWAYS })
+
 	return (
 		<div
 			className={CAROUSEL_PANEL}
@@ -1753,6 +1759,7 @@ const SpacePanel = ({
 				scrolls.set(spaceId, event.currentTarget.scrollTop)
 			}}
 			ref={(node) => {
+				panel.current = node
 				if (node) node.scrollTop = scrolls.get(spaceId) ?? 0
 			}}
 		>
@@ -2068,6 +2075,7 @@ const AppSidebarBase = ({
 				</AnimatedSidebarHeader>
 				<AnimatedSidebarContent
 					className={hasRosterPerSpace ? CAROUSEL_CONTENT : CONTENT_INSET}
+					isScrollable={!hasRosterPerSpace}
 				>
 					{hasRosterPerSpace ? (
 						<SpaceCarousel

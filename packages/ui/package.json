@@ -41,6 +41,7 @@
 		"lucide-react": "^1.31.0",
 		"mermaid": "^11.16.1",
 		"motion": "^13.1.0",
+		"overlayscrollbars": "^2.15.0",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6",
 		"react-i18next": "^17.0.12",
