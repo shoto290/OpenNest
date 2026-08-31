@@ -156,12 +156,25 @@ function messageTextNodesOf(root: Element) {
 	return nodes
 }
 
-function selectMessageTextAt(eventTarget: EventTarget | null) {
+function messageTextContainerIn(target: Element, content: Element) {
+	const nearest = target.closest(MESSAGE_BUBBLE_TEXT_SELECTOR)
+
+	if (nearest && content.contains(nearest)) return nearest
+
+	return [...content.children].find((child) =>
+		child.matches(MESSAGE_BUBBLE_TEXT_SELECTOR),
+	)
+}
+
+function selectMessageTextAt(
+	eventTarget: EventTarget | null,
+	content: Element,
+) {
 	const target = eventTarget instanceof Element ? eventTarget : null
 
 	if (!target || target.closest(NATIVE_SELECTION_SELECTOR)) return
 
-	const textContainer = target.closest(MESSAGE_BUBBLE_TEXT_SELECTOR)
+	const textContainer = messageTextContainerIn(target, content)
 	const selection = window.getSelection()
 
 	if (!textContainer || !selection) return
@@ -191,7 +204,7 @@ export function MessageBubbleContent({
 	const filled = hasSurface(variant)
 	const classes = cn(bubbleContentClass(variant, interactive), className)
 	const selectMessageText = (event: MouseEvent<HTMLDivElement>) =>
-		selectMessageTextAt(event.target)
+		selectMessageTextAt(event.target, event.currentTarget)
 	const composedChildren = (
 		<>
 			{filled ? (

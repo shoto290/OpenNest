@@ -26,6 +26,9 @@ const selectedText = () => window.getSelection()?.toString() ?? ""
 
 const doubleClickOn = (element: Element) => fireEvent.doubleClick(element)
 
+const contentOf = (container: HTMLElement) =>
+	container.querySelector('[data-slot="message-bubble-content"]') as HTMLElement
+
 afterEach(() => {
 	cleanup()
 	window.getSelection()?.removeAllRanges()
@@ -113,6 +116,32 @@ describe("double-click inside a message bubble", () => {
 		expect(selectedText()).not.toContain("Show more")
 	})
 
+	it("selects the whole text from the padding of the bubble", () => {
+		const { container } = render(
+			<MessageBubble variant="solid" align="end">
+				<MessageBubbleContent>{USER_PROMPT}</MessageBubbleContent>
+			</MessageBubble>,
+		)
+
+		doubleClickOn(contentOf(container))
+
+		expect(selectedText()).toBe(USER_PROMPT)
+	})
+
+	it("leaves the selection untouched from the padding of an attachment-only bubble", () => {
+		const { container } = render(
+			<MessageBubble variant="solid" align="end">
+				<MessageBubbleContent>
+					<MessageAttachments items={[ATTACHMENT]} onOpen={() => {}} />
+				</MessageBubbleContent>
+			</MessageBubble>,
+		)
+
+		doubleClickOn(contentOf(container))
+
+		expect(window.getSelection()?.rangeCount ?? 0).toBe(0)
+	})
+
 	it("leaves the native selection untouched inside a code block", () => {
 		render(
 			<MessageBubble variant="soft">
@@ -134,11 +163,7 @@ describe("double-click inside a message bubble", () => {
 			</MessageBubble>,
 		)
 
-		const content = container.querySelector(
-			'[data-slot="message-bubble-content"]',
-		) as HTMLElement
-
-		doubleClickOn(content)
+		doubleClickOn(contentOf(container))
 
 		expect(window.getSelection()?.rangeCount ?? 0).toBe(0)
 	})
