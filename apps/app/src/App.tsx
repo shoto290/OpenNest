@@ -31,6 +31,7 @@ import { useRosterClock } from "@/lib/bots/use-roster-clock"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createAttachmentsPort } from "@/lib/chat/attachments-port"
 import { createChatDriver } from "@/lib/chat/create-driver"
+import { createDraftsController } from "@/lib/chat/drafts-controller"
 import { toSpaceBadges, withBadges } from "@/lib/chat/sidebar-badges"
 import { useBotBadges } from "@/lib/chat/use-bot-badges"
 import { useBotActivity, useBotPreviews, useChat } from "@/lib/chat/use-chat"
@@ -109,6 +110,7 @@ export function App() {
 			),
 		[chat.controller, driver, conversationRuntimes],
 	)
+	const drafts = useMemo(createDraftsController, [])
 	const sections = useSections(store, {
 		move: roster.controller.moveToSection,
 		clear: roster.controller.clearSection,
@@ -312,6 +314,7 @@ export function App() {
 		attachments,
 		chat: chat.controller,
 		collapsedSections: collapsedSections.controller,
+		drafts,
 		roster: roster.controller,
 		runtimes: conversationRuntimes,
 		sections: sections.controller,
@@ -324,6 +327,7 @@ export function App() {
 	const deleteBot = async (id: string) => {
 		await chat.controller.close(id)
 		attachments.forget({ kind: "bot", id })
+		drafts.forget(id)
 		await roster.controller.remove(id)
 	}
 
@@ -563,6 +567,7 @@ export function App() {
 					chat={chat}
 					conversation={selectedConversation}
 					conversationRuntimes={conversationRuntimes}
+					drafts={drafts}
 					hasLoaded={hasLoaded}
 					haveSpacesFailed={spaces.state.hasFailedToLoad}
 					isConversationSettingsOpen={isEditingConversation}

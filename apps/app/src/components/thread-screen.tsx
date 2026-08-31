@@ -44,6 +44,7 @@ import { QueuedTurn, RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import { canStopTurn } from "@/lib/chat/chat-state"
+import type { DraftsController } from "@/lib/chat/drafts-controller"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import { pinTimestamp } from "@/lib/chat/pin-timestamp"
@@ -564,10 +565,16 @@ const ThreadTail = ({
 type ThreadViewProps = {
 	thread: LoadedThread
 	attachments: AttachmentsController
+	drafts: DraftsController
 	readerName: string
 }
 
-function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
+function ThreadView({
+	thread,
+	attachments,
+	drafts,
+	readerName,
+}: ThreadViewProps) {
 	const t = useChatCopy()
 	const { state, controller } = thread
 	const facts = factsOf(thread)
@@ -575,7 +582,6 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 	const rootRef = useRef<HTMLDivElement>(null)
 	const scrollerRef = useRef<MessageScrollerHandle>(null)
 	const promptResponder = usePromptResponder(controller, scrollerRef)
-	const drafts = useRef<Record<string, string>>({})
 	const [dismissedErrorId, setDismissedErrorId] = useState<string | null>(null)
 
 	const reader = readerName || t("working.name")
@@ -634,15 +640,10 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 	})
 
 	const { botController } = facts
-	const readDraft = useCallback(
-		() => drafts.current[facts.id] ?? "",
-		[facts.id],
-	)
+	const readDraft = useCallback(() => drafts.read(facts.id), [drafts, facts.id])
 	const rememberDraft = useCallback(
-		(draft: string) => {
-			drafts.current[facts.id] = draft
-		},
-		[facts.id],
+		(draft: string) => drafts.remember(facts.id, draft),
+		[drafts, facts.id],
 	)
 	const restart = useCallback(() => {
 		void botController?.restart()
@@ -800,6 +801,7 @@ function ThreadView({ thread, attachments, readerName }: ThreadViewProps) {
 type ThreadScreenProps = {
 	thread: Thread
 	attachments: AttachmentsController
+	drafts: DraftsController
 	readerName: string
 }
 
@@ -810,6 +812,7 @@ type ConversationThreadViewProps = Omit<ThreadScreenProps, "thread"> & {
 function ConversationThreadView({
 	thread,
 	attachments,
+	drafts,
 	readerName,
 }: ConversationThreadViewProps) {
 	const { state, controller } = useConversation(
@@ -820,6 +823,7 @@ function ConversationThreadView({
 	return (
 		<ThreadView
 			attachments={attachments}
+			drafts={drafts}
 			readerName={readerName}
 			thread={{ ...thread, state, controller }}
 		/>
@@ -829,12 +833,14 @@ function ConversationThreadView({
 export function ThreadScreen({
 	thread,
 	attachments,
+	drafts,
 	readerName,
 }: ThreadScreenProps) {
 	if (thread.kind === "conversation") {
 		return (
 			<ConversationThreadView
 				attachments={attachments}
+				drafts={drafts}
 				readerName={readerName}
 				thread={thread}
 			/>
@@ -844,6 +850,7 @@ export function ThreadScreen({
 	return (
 		<ThreadView
 			attachments={attachments}
+			drafts={drafts}
 			readerName={readerName}
 			thread={{
 				...thread,
