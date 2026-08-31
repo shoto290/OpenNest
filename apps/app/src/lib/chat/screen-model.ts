@@ -322,7 +322,7 @@ export type RunPresentation = {
 	hasBareTables: boolean
 }
 
-export type TranscriptPresentation = {
+export type RunPresentationInput = {
 	runs: TranscriptRow[][]
 	workingBotIds: (string | null)[]
 	hasSingleBot: boolean
@@ -336,7 +336,7 @@ export function runPresentationsOf({
 	workingBotIds,
 	hasSingleBot,
 	isWorking,
-}: TranscriptPresentation): RunPresentation[] {
+}: RunPresentationInput): RunPresentation[] {
 	if (!hasSingleBot) {
 		const marked = markedRunsOf(runs, workingBotIds)
 		return runs.map((_, index) => ({
