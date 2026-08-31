@@ -11,7 +11,9 @@ import {
 	type BotAvatarBlot,
 	blotTint,
 } from "@workspace/ui/components/bot-avatar"
+import { CodeSnippet } from "@workspace/ui/components/code-snippet"
 import { MessageTyping } from "@workspace/ui/components/message"
+import { MessageAttachments } from "@workspace/ui/components/message-attachments"
 import {
 	MessageBubble,
 	MessageBubbleCollapsible,
@@ -175,6 +177,58 @@ export const LongContent = meta.story({
 		await expect(
 			canvas.getByRole("button", { name: "Show less" }),
 		).toHaveAttribute("aria-expanded", "true")
+	},
+})
+
+const ATTACHMENT = { id: "brief", name: "brief.pdf" }
+
+const SNIPPET = "bun run build"
+
+const selectedText = () => window.getSelection()?.toString() ?? ""
+
+export const TextSelection = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"Double-click inside a bubble to select that message whole, ready for a copy. Check that the highlight spans every paragraph and stops at the attachment chip, that a second double-click moves the highlight instead of adding one, and that a double-click inside the fence keeps the native word selection.",
+			},
+		},
+	},
+	render: () => (
+		<MessageBubbleGroup spacing="default" className={THREAD_WIDTH}>
+			<MessageBubble variant="solid" align="end">
+				<MessageBubbleContent>
+					<MessageAttachments items={[ATTACHMENT]} onOpen={() => {}} />
+					<p>{USER_PROMPT}</p>
+				</MessageBubbleContent>
+			</MessageBubble>
+			<MessageBubble variant="soft" align="start">
+				<MessageBubbleContent>
+					{AGENT_LONG_REPLY.slice(0, 2).map((paragraph) => (
+						<p key={paragraph}>{paragraph}</p>
+					))}
+					<CodeSnippet code={SNIPPET} language="bash" />
+				</MessageBubbleContent>
+			</MessageBubble>
+		</MessageBubbleGroup>
+	),
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await userEvent.dblClick(canvas.getByText(USER_PROMPT))
+
+		await expect(selectedText()).toBe(USER_PROMPT)
+
+		await userEvent.dblClick(canvas.getByText(AGENT_LONG_REPLY[0]))
+
+		await expect(window.getSelection()?.rangeCount).toBe(1)
+		await expect(selectedText()).toContain(AGENT_LONG_REPLY[1])
+
+		await userEvent.dblClick(
+			canvasElement.querySelector("pre code") as HTMLElement,
+		)
+
+		await expect(selectedText()).not.toContain(AGENT_LONG_REPLY[1])
 	},
 })
 
