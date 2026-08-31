@@ -9,7 +9,7 @@ import type { Chat } from "./use-chat"
 import type { WorkingState } from "./working-kind"
 
 import { avatarSrc } from "../host"
-import type { QuestionRequest } from "../agent/contract"
+import type { PermissionRequest, QuestionRequest } from "../agent/contract"
 import type {
 	ConversationController,
 	ConversationState,
@@ -17,6 +17,7 @@ import type {
 	RefusedMessage,
 } from "../conversations/conversation-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
+import { presentParticipants } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
 
 export type ThreadFace = RosterBot
@@ -64,6 +65,11 @@ export const faceOfBot = (bot: Bot): ThreadFace => ({
 	image: avatarSrc(bot.avatarImagePath),
 })
 
+export type ThreadPermission = {
+	request: PermissionRequest
+	authorBotId: string | null
+}
+
 export type ThreadFacts = {
 	id: string
 	bot: Bot | null
@@ -75,6 +81,8 @@ export type ThreadFacts = {
 	isLoadingOlder: boolean
 	isPromptPending: boolean
 	isOverlayOpen: boolean
+	canAttach: boolean
+	permission: ThreadPermission | null
 	latestError?: ChatError
 	question: QuestionRequest | null
 	refused: RefusedMessage | null
@@ -88,24 +96,39 @@ const NO_WORKING_BOT_IDS: (string | null)[] = []
 const questionIn = (prompt: PendingPrompt | null): QuestionRequest | null =>
 	prompt?.kind === "question" ? prompt.request : null
 
-const botFactsOf = (thread: LoadedBotThread): ThreadFacts => ({
-	id: thread.bot.id,
-	bot: thread.bot,
-	botController: thread.controller,
-	conversation: null,
-	botWork: workingStateFor(thread.state),
-	isReady: isSessionReady(thread.state),
-	isBusy: isTurnBusy(thread.state.turn),
-	isLoadingOlder: thread.state.loadingOlder,
-	isPromptPending: thread.state.permission !== null,
-	isOverlayOpen: thread.isOverlayOpen,
-	latestError: thread.state.errors.at(-1),
-	question: thread.state.question,
-	refused: null,
-	rejectedPromptId: thread.state.rejectedPromptId,
-	workingBotIds: NO_WORKING_BOT_IDS,
-	loopingPair: null,
-})
+const permissionIn = (prompt: PendingPrompt | null): ThreadPermission | null =>
+	prompt?.kind === "permission"
+		? { request: prompt.request, authorBotId: prompt.botId }
+		: null
+
+const permissionOf = (
+	request: PermissionRequest | null,
+): ThreadPermission | null => (request ? { request, authorBotId: null } : null)
+
+const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
+	const isReady = isSessionReady(thread.state)
+
+	return {
+		id: thread.bot.id,
+		bot: thread.bot,
+		botController: thread.controller,
+		conversation: null,
+		botWork: workingStateFor(thread.state),
+		isReady,
+		isBusy: isTurnBusy(thread.state.turn),
+		isLoadingOlder: thread.state.loadingOlder,
+		isPromptPending: thread.state.permission !== null,
+		isOverlayOpen: thread.isOverlayOpen,
+		canAttach: isReady,
+		permission: permissionOf(thread.state.permission),
+		latestError: thread.state.errors.at(-1),
+		question: thread.state.question,
+		refused: null,
+		rejectedPromptId: thread.state.rejectedPromptId,
+		workingBotIds: NO_WORKING_BOT_IDS,
+		loopingPair: null,
+	}
+}
 
 const conversationFactsOf = (
 	thread: LoadedConversationThread,
@@ -120,6 +143,8 @@ const conversationFactsOf = (
 	isLoadingOlder: thread.state.isLoadingOlder,
 	isPromptPending: false,
 	isOverlayOpen: false,
+	canAttach: presentParticipants(thread.conversation).length > 0,
+	permission: permissionIn(thread.state.pendingPrompt),
 	latestError: thread.state.latestError ?? undefined,
 	question: questionIn(thread.state.pendingPrompt),
 	refused: thread.state.refusedMessage,

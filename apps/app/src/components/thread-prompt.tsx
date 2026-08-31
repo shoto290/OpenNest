@@ -16,7 +16,6 @@ import type {
 	QuestionRequest,
 } from "@/lib/agent/contract"
 import type { PromptResponder } from "@/lib/chat/use-prompt-responder"
-import type { PendingPrompt } from "@/lib/conversations/conversation-controller"
 
 type ApprovalPromptProps = {
 	request: PermissionRequest
@@ -85,26 +84,18 @@ export const QuestionPrompt = ({ request, responder }: QuestionPromptProps) => (
 	/>
 )
 
-type SpokenPromptProps = {
-	prompt: PendingPrompt
+type SpokenApprovalProps = {
+	request: PermissionRequest
 	author?: MessageAuthor
 	responder: PromptResponder
 }
 
-export const SpokenPrompt = ({
-	prompt,
+export const SpokenApproval = ({
+	request,
 	author,
 	responder,
-}: SpokenPromptProps) => (
-	<AssistantTurn
-		author={author}
-		bare={prompt.kind !== "question"}
-		fills={prompt.kind === "question"}
-	>
-		{prompt.kind === "question" ? (
-			<QuestionPrompt request={prompt.request} responder={responder} />
-		) : (
-			<ApprovalPrompt request={prompt.request} responder={responder} />
-		)}
+}: SpokenApprovalProps) => (
+	<AssistantTurn author={author} bare>
+		<ApprovalPrompt request={request} responder={responder} />
 	</AssistantTurn>
 )
