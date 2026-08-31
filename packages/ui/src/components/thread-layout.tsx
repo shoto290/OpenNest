@@ -82,7 +82,7 @@ function ThreadLayout({
 					highlightedMessageId={highlightedMessageId}
 					scrollerRef={scrollerRef}
 					contentClassName={cn(
-						"flex min-h-full w-full flex-col px-6 py-8",
+						"flex min-h-full w-full flex-col px-6 pt-8 pb-4",
 						contentClassName,
 					)}
 				>
