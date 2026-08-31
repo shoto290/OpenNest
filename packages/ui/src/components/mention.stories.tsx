@@ -45,7 +45,10 @@ const Message = ({ source }: MessageProps) => (
 )
 
 const pills = (canvasElement: HTMLElement) =>
-	canvasElement.querySelectorAll('[data-slot="bot-mention"]')
+	canvasElement.querySelectorAll<HTMLElement>('[data-slot="bot-mention"]')
+
+const counts = (canvasElement: HTMLElement) =>
+	canvasElement.querySelectorAll<HTMLElement>('[data-slot="bot-mention-count"]')
 
 const HANDOVER =
 	"I stopped at the failing migration — <@bot-basile> owns that script, and <@bot-ghost> wrote the fixture it reads."
@@ -212,9 +215,7 @@ export const CountedToNine = meta.story({
 		await expect(canvas.getByText("×9")).toBeVisible()
 		await expect(canvas.getByText("9 mentions")).toBeInTheDocument()
 
-		const count = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="bot-mention-count"]',
-		)
+		const [count] = [...counts(canvasElement)]
 
 		if (!count) throw new Error("The chip drew no count")
 
@@ -261,14 +262,10 @@ export const CountedLongName = meta.story({
 	},
 	render: () => <Message source={LONG_PAIR} />,
 	play: async ({ canvasElement }) => {
-		const pill = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="bot-mention"]',
-		)
+		const [pill] = [...pills(canvasElement)]
+		const [count] = [...counts(canvasElement)]
 		const name = canvasElement.querySelector<HTMLElement>(
 			'[data-slot="bot-mention-name"]',
-		)
-		const count = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="bot-mention-count"]',
 		)
 
 		if (!pill || !name || !count) throw new Error("The chip drew no count")
@@ -295,9 +292,7 @@ export const DifferentBotsAdjacent = meta.story({
 		await expect(pills(canvasElement)).toHaveLength(2)
 		await expect(canvas.getByText("Atlas")).toBeVisible()
 		await expect(canvas.getByText("Basile")).toBeVisible()
-		await expect(
-			canvasElement.querySelectorAll('[data-slot="bot-mention-count"]'),
-		).toHaveLength(0)
+		await expect(counts(canvasElement)).toHaveLength(0)
 	},
 })
 
@@ -313,8 +308,6 @@ export const RepeatedApart = meta.story({
 	render: () => <Message source={APART} />,
 	play: async ({ canvasElement }) => {
 		await expect(pills(canvasElement)).toHaveLength(2)
-		await expect(
-			canvasElement.querySelectorAll('[data-slot="bot-mention-count"]'),
-		).toHaveLength(0)
+		await expect(counts(canvasElement)).toHaveLength(0)
 	},
 })
