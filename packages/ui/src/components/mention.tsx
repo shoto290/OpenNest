@@ -14,14 +14,21 @@ const MENTION_CLASS =
 
 const UNKNOWN_CLASS = "pl-2 text-current/70"
 
+const NAME_CLASS = "max-w-40 truncate"
+
+const COUNT_CLASS = "shrink-0 text-current/70 tabular-nums"
+
 type MentionProps = {
 	botId: string
+	count?: number
 	className?: string
 }
 
-const Mention = ({ botId, className }: MentionProps) => {
+const Mention = ({ botId, count = 1, className }: MentionProps) => {
 	const { t } = useTranslation("chat")
 	const bot = useRosterBot(botId)
+	const name = bot?.name ?? t("transcript.mention.unknown")
+	const isCounted = count > 1
 
 	return (
 		<span
@@ -43,9 +50,23 @@ const Mention = ({ botId, className }: MentionProps) => {
 			) : (
 				<Icons.User aria-hidden="true" className="size-3 shrink-0" />
 			)}
-			<span className="max-w-40 truncate">
-				{bot?.name ?? t("transcript.mention.unknown")}
+			<span className={NAME_CLASS} data-slot="bot-mention-name">
+				{name}
 			</span>
+			{isCounted ? (
+				<>
+					<span
+						aria-hidden="true"
+						className={COUNT_CLASS}
+						data-slot="bot-mention-count"
+					>
+						{count}
+					</span>
+					<span className="sr-only">
+						{t("transcript.mention.counted", { count })}
+					</span>
+				</>
+			) : null}
 		</span>
 	)
 }
