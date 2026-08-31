@@ -159,7 +159,7 @@ describe("double-click inside a message bubble", () => {
 	it("leaves the native selection untouched when the target holds no text", () => {
 		const { container } = render(
 			<MessageBubble variant="soft">
-				<MessageBubbleContent>{null}</MessageBubbleContent>
+				<MessageBubbleContent />
 			</MessageBubble>,
 		)
 
