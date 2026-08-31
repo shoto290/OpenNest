@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render } from "@testing-library/react"
+import { createRef } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
 	MessageScroller,
+	type MessageScrollerHandle,
 	type MessageScrollerRow,
 	type MessageScrollerTrace,
 } from "@workspace/ui/components/message-scroller"
@@ -18,6 +20,8 @@ const ANCHOR_DRIFT = 6
 const ESTIMATED_ROW_HEIGHT = 120
 const MEASURED_ROW_HEIGHT = 600
 const TRACED_ROWS = 8
+const JUMP_ROW_COUNT = 40
+const JUMP_TARGET = "row-5#2"
 
 interface ResizeEntry {
 	target: Element
@@ -97,6 +101,106 @@ const stubLayout = (
 			)
 		},
 	})
+}
+
+const jumpRows = (): MessageScrollerRow[] =>
+	Array.from({ length: JUMP_ROW_COUNT }, (_, index) => ({
+		key: `row-${index}`,
+		messageIds: [`row-${index}`, `row-${index}#2`],
+		render: () => (
+			<div data-message-id={`row-${index}#2`}>{`Row ${index}`}</div>
+		),
+	}))
+
+const MEASURED_PROPERTIES = ["clientHeight", "offsetHeight"] as const
+
+const heldDescriptors = new Map<string, PropertyDescriptor | undefined>()
+
+const stubRowMeasurement = () => {
+	for (const property of MEASURED_PROPERTIES) {
+		heldDescriptors.set(
+			property,
+			Object.getOwnPropertyDescriptor(HTMLElement.prototype, property),
+		)
+		Object.defineProperty(HTMLElement.prototype, property, {
+			configurable: true,
+			get(this: HTMLElement) {
+				return this.dataset.slot === "message-scroller-row"
+					? MEASURED_ROW_HEIGHT
+					: 0
+			},
+		})
+	}
+}
+
+const restoreRowMeasurement = () => {
+	for (const [property, descriptor] of heldDescriptors) {
+		if (descriptor)
+			Object.defineProperty(HTMLElement.prototype, property, descriptor)
+	}
+	heldDescriptors.clear()
+}
+
+const stubRectTop = (element: HTMLElement, top: () => number) => {
+	element.getBoundingClientRect = () => ({ top: top(), height: 0 }) as DOMRect
+}
+
+const startOfRow = (row: HTMLElement) =>
+	Number.parseFloat(row.style.transform.replace(/[^\d.-]/g, "")) || 0
+
+const nextFrame = () =>
+	new Promise((resolve) => {
+		requestAnimationFrame(resolve)
+	})
+
+const runFrames = async (viewport: HTMLElement, count: number) => {
+	for (let index = 0; index < count; index += 1) {
+		await act(async () => {
+			fireEvent.scroll(viewport)
+			await nextFrame()
+		})
+	}
+}
+
+const deliverMeasurements = async (viewport: HTMLElement) => {
+	await act(async () => {
+		flushResize()
+		await nextFrame()
+	})
+	await runFrames(viewport, 2)
+}
+
+const settle = async (viewport: HTMLElement, rounds = 4) => {
+	for (let index = 0; index < rounds; index += 1) {
+		await runFrames(viewport, 3)
+		await deliverMeasurements(viewport)
+	}
+}
+
+const renderJumpScroller = () => {
+	const scrollerRef = createRef<MessageScrollerHandle>()
+	const view = render(
+		<MessageScroller
+			smooth={false}
+			estimatedRowHeight={ESTIMATED_ROW_HEIGHT}
+			rows={jumpRows()}
+			scrollerRef={scrollerRef}
+		/>,
+	)
+	const viewport = view.container.querySelector<HTMLElement>("section")
+	const list = view.container.querySelector<HTMLElement>(
+		'[data-slot="message-scroller-rows"]',
+	)
+	if (!viewport || !list) throw new Error("viewport never mounted")
+
+	stubLayout(
+		viewport,
+		() => VIEWPORT_HEIGHT,
+		() => Number.parseFloat(list.style.height) || 0,
+	)
+	stubRectTop(viewport, () => 0)
+	stubRectTop(list, () => -viewport.scrollTop)
+	return { scrollerRef, viewport }
 }
 
 type ScrollerSetup = {
@@ -188,6 +292,7 @@ describe("MessageScroller mounted", () => {
 
 	afterEach(() => {
 		cleanup()
+		restoreRowMeasurement()
 		vi.unstubAllGlobals()
 	})
 
@@ -284,5 +389,32 @@ describe("MessageScroller mounted", () => {
 		fireEvent.scroll(viewport)
 
 		expect(onFollowChange).toHaveBeenCalledWith(false)
+	})
+
+	it("lands on an unmounted bubble of a later block once its row is measured", async () => {
+		stubRowMeasurement()
+		const { scrollerRef, viewport } = renderJumpScroller()
+		await settle(viewport)
+		expect(
+			viewport.querySelector(`[data-message-id="${JUMP_TARGET}"]`),
+		).toBeNull()
+
+		await act(async () => {
+			expect(scrollerRef.current?.scrollToMessage(JUMP_TARGET)).toBe(true)
+		})
+		await settle(viewport)
+
+		const anchor = viewport.querySelector<HTMLElement>(
+			`[data-message-id="${JUMP_TARGET}"]`,
+		)
+		const row = anchor?.closest<HTMLElement>(
+			'[data-slot="message-scroller-row"]',
+		)
+		if (!row) throw new Error("target row never mounted")
+
+		const start = startOfRow(row)
+		expect(start).toBeLessThan(viewport.scrollTop + VIEWPORT_HEIGHT)
+		expect(start + MEASURED_ROW_HEIGHT).toBeGreaterThan(viewport.scrollTop)
+		expect(scrollerRef.current?.isFollowing()).toBe(false)
 	})
 })
