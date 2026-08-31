@@ -27,9 +27,13 @@ pub async fn space_create<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	name: String,
 ) -> Result<Space, SpaceError> {
-	let created = ready(&state)?.spaces().create(name).await?;
-	bundles::space::lay_down(&app, &created.id);
-	Ok(Space::from(created))
+	let database = ready(&state)?;
+	let created = database.spaces().create(name).await?;
+	let Err(failure) = bundles::space::lay_down(&app, &created.id) else {
+		return Ok(Space::from(created));
+	};
+	database.spaces().delete(created.id).await?;
+	Err(SpaceError::UnwritableBundle { detail: failure.to_string() })
 }
 
 #[tauri::command]
@@ -247,6 +251,8 @@ mod tests {
 
 	use super::*;
 	use crate::db::repositories::conversations::{AvatarAnimal, BotIdentity};
+	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
+	use tauri::{App, Manager};
 
 	fn a_root(name: &str) -> PathBuf {
 		let root = std::env::temp_dir().join(format!("opennest-space-bundles-{name}"));
@@ -287,6 +293,36 @@ mod tests {
 			.await
 			.expect("the bot is created")
 			.id
+	}
+
+	fn a_host(name: &str) -> App<MockRuntime> {
+		let mut context = mock_context(noop_assets());
+		context.config_mut().identifier =
+			format!("com.opennest.space-commands-{name}-{}", std::process::id()).into();
+		let app = mock_builder().build(context).expect("the app builds");
+		if let Ok(dir) = app.path().app_data_dir() {
+			let _ = fs::remove_dir_all(&dir);
+		}
+		app.manage(db::bootstrap(app.handle()));
+		app
+	}
+
+	#[tokio::test]
+	async fn a_space_whose_plugin_cannot_be_laid_down_leaves_no_row_behind() {
+		let app = a_host("plugin-refused");
+		let data = app.path().app_data_dir().expect("the data dir is named");
+		fs::create_dir_all(&data).expect("the data dir stands");
+		fs::write(data.join("spaces"), "not a directory").expect("the blocking file lands");
+
+		let failure = space_create(app.handle().clone(), app.state(), "Vocca".to_owned())
+			.await
+			.expect_err("the space is refused");
+
+		assert!(matches!(failure, SpaceError::UnwritableBundle { .. }), "got {failure:?}");
+		let listed = space_list(app.state()).await.expect("the spaces read");
+		assert!(!listed.iter().any(|space| space.name == "Vocca"), "got {listed:?}");
+
+		let _ = fs::remove_dir_all(&data);
 	}
 
 	#[tokio::test]

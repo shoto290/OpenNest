@@ -274,6 +274,7 @@ export type SpaceError =
 	| { kind: "unavailable"; failure: StorageFailure }
 	| { kind: "storage"; failure: StorageFailure }
 	| { kind: "unknownSpace"; id: string }
+	| { kind: "unwritableBundle"; detail: string }
 	| { kind: "lastSpace" }
 
 export type SectionError =

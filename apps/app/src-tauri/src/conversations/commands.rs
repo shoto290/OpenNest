@@ -72,7 +72,9 @@ pub async fn list_bundles_at_launch<R: Runtime>(app: &AppHandle<R>) {
 		let _ = bundles::system::write(&path);
 	}
 	if let Some(path) = bundles::user::path(app) {
-		let _ = bundles::user::lay_down(&path);
+		if let Err(failure) = bundles::user::lay_down(&path) {
+			report_unlaid(&path, &failure);
+		}
 	}
 	let state = app.state::<db::DatabaseState>();
 	let Ok(database) = state.inner().as_ref() else {
@@ -87,8 +89,17 @@ async fn lay_down_space_plugins<R: Runtime>(app: &AppHandle<R>, database: &db::D
 		return;
 	};
 	for space in &spaces {
-		bundles::space::lay_down(app, &space.id);
+		let Some(path) = bundles::space::path(app, &space.id) else {
+			continue;
+		};
+		if let Err(failure) = bundles::space::lay_down_at(&path) {
+			report_unlaid(&path, &failure);
+		}
 	}
+}
+
+fn report_unlaid(bundle: &Path, failure: &std::io::Error) {
+	eprintln!("the plugin at {} was not laid down: {failure}", bundle.display());
 }
 
 pub(crate) async fn list_bundles(root: Option<&Path>, database: &db::Database) {

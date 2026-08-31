@@ -12,6 +12,7 @@ export type SpacesState = {
 	selectedSpaceId: string | null
 	isSettingsOpen: boolean
 	hasFailedToLoad: boolean
+	hasFailedToCreate: boolean
 }
 
 export type SpacesController = {
@@ -41,6 +42,7 @@ export const initialSpacesState: SpacesState = {
 	selectedSpaceId: null,
 	isSettingsOpen: false,
 	hasFailedToLoad: false,
+	hasFailedToCreate: false,
 }
 
 export const createSpacesController = (
@@ -75,6 +77,7 @@ export const createSpacesController = (
 			spaces,
 			selectedSpaceId: stillHeld ?? remembered ?? spaces[0]?.id ?? null,
 			hasFailedToLoad: false,
+			hasFailedToCreate: false,
 		})
 	}
 
@@ -82,6 +85,13 @@ export const createSpacesController = (
 
 	const reload = () => {
 		void enqueue(() => read(null)).catch(noteFailedLoad)
+	}
+
+	const noteRefusedCreate = () => {
+		set({ hasFailedToCreate: true })
+		return enqueue(async () => set({ spaces: await store.spaces() })).catch(
+			noteFailedLoad,
+		)
 	}
 
 	const writes = createWriteLoop<SpaceSettingsValue, Space>({
@@ -116,8 +126,9 @@ export const createSpacesController = (
 				set({
 					spaces: [...state.spaces, created],
 					selectedSpaceId: created.id,
+					hasFailedToCreate: false,
 				})
-			}).catch(reload),
+			}).catch(noteRefusedCreate),
 
 		setSettingsOpen: (isSettingsOpen: boolean) => set({ isSettingsOpen }),
 

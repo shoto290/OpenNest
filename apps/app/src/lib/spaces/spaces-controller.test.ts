@@ -205,6 +205,56 @@ describe("createSpacesController", () => {
 		expect(reorder).not.toHaveBeenCalled()
 	})
 
+	it("reports the refused create apart from a listing it could not read", async () => {
+		const store = createFakeTranscriptStore()
+		await store.createSpace("Vocca")
+		const controller = await loaded(store)
+		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
+
+		await controller.create()
+
+		expect(controller.getState().hasFailedToCreate).toBe(true)
+		expect(controller.getState().hasFailedToLoad).toBe(false)
+		expect(held(controller)).toEqual(await names(store))
+	})
+
+	it("clears the refused create once a create lands", async () => {
+		const store = createFakeTranscriptStore()
+		const create = vi
+			.spyOn(store, "createSpace")
+			.mockRejectedValueOnce(new Error("no record"))
+		const controller = await loaded(store)
+		await controller.create()
+
+		await controller.create()
+
+		expect(create).toHaveBeenCalledTimes(2)
+		expect(controller.getState().hasFailedToCreate).toBe(false)
+	})
+
+	it("clears the refused create once the listing reads again", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
+		const controller = await loaded(store)
+		await controller.create()
+
+		await controller.load(null)
+
+		expect(controller.getState().hasFailedToCreate).toBe(false)
+	})
+
+	it("reports the listing it could not read while re-reading after a refused create", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
+		vi.spyOn(store, "spaces").mockRejectedValue(new Error("no record"))
+
+		await controller.create()
+
+		expect(controller.getState().hasFailedToCreate).toBe(true)
+		expect(controller.getState().hasFailedToLoad).toBe(true)
+	})
+
 	it("stays on the space it is in when a create is refused", async () => {
 		const store = createFakeTranscriptStore()
 		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
