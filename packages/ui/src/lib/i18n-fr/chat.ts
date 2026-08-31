@@ -114,6 +114,9 @@ const chat = {
 		send: "Envoyer l'invite",
 		commands: "Commandes",
 		mentions: "Bots",
+		mentioned_one: "{{count}} mention dans le brouillon",
+		mentioned_many: "{{count}} mentions dans le brouillon",
+		mentioned_other: "{{count}} mentions dans le brouillon",
 	},
 	toolApproval: {
 		title: "Autoriser cet outil à s'exécuter ?",

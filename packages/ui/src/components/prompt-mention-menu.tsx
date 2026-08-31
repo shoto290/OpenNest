@@ -20,12 +20,15 @@ const PANEL_LEAVING = { ...PANEL_HIDDEN, pointerEvents: "none" } as const
 
 const ROW_AVATAR_SIZE = 24
 
+const COUNT_GLYPH = "\u00d7"
+
 const scrollActiveIntoView = (row: HTMLButtonElement | null) => {
 	row?.scrollIntoView({ block: "nearest" })
 }
 
 interface PromptMentionMenuProps {
 	bots: RosterBot[]
+	counts?: Record<string, number>
 	leadId?: string
 	open: boolean
 	query: string
@@ -37,6 +40,7 @@ interface PromptMentionMenuProps {
 
 const PromptMentionMenu = ({
 	bots,
+	counts,
 	leadId,
 	open,
 	query,
@@ -150,7 +154,26 @@ const PromptMentionMenu = ({
 											size={ROW_AVATAR_SIZE}
 										/>
 									</span>
-									<span className="min-w-0 flex-1 truncate">{bot.name}</span>
+									<span
+										className="min-w-0 flex-1 truncate"
+										data-slot="prompt-mention-name"
+									>
+										{bot.name}
+									</span>
+									{counts?.[bot.id] ? (
+										<>
+											<span
+												aria-hidden="true"
+												className="shrink-0 text-muted-foreground tabular-nums"
+												data-slot="prompt-mention-count"
+											>
+												{`${COUNT_GLYPH}${counts[bot.id]}`}
+											</span>
+											<span className="sr-only">
+												{t("composer.mentioned", { count: counts[bot.id] })}
+											</span>
+										</>
+									) : null}
 									{bot.id === leadId ? (
 										<>
 											<Icons.Crown

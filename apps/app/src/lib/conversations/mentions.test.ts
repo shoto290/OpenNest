@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
 	addresseesIn,
 	type MentionBot,
+	mentionCountsIn,
 	mentionQueryIn,
 	promptWithMention,
 	toMentionNames,
@@ -108,5 +109,35 @@ describe("promptWithMention", () => {
 
 	it("leaves the prompt alone when no draft is open", () => {
 		expect(promptWithMention("hello", "Ada")).toBe("hello")
+	})
+})
+
+describe("mentionCountsIn", () => {
+	it("counts every name written behind an arobase in the draft", () => {
+		expect(mentionCountsIn("@Ada ping @Nyx now", BOTS)).toEqual({
+			ada: 1,
+			nyx: 1,
+		})
+	})
+
+	it("counts a name written again", () => {
+		expect(mentionCountsIn("@Ada then @Ada once more", BOTS)).toEqual({
+			ada: 2,
+		})
+	})
+
+	it("reads the longest name so a shorter one does not swallow it", () => {
+		expect(mentionCountsIn("@Adam Smith and @Ada, hold", BOTS)).toEqual({
+			adam: 1,
+			ada: 1,
+		})
+	})
+
+	it("leaves the mention being typed out of the counts", () => {
+		expect(mentionCountsIn("@Ada then @Ada", BOTS)).toEqual({ ada: 1 })
+	})
+
+	it("counts nobody when no name is written", () => {
+		expect(mentionCountsIn("@", BOTS)).toEqual({})
 	})
 })
