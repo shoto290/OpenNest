@@ -181,6 +181,10 @@ pub enum TransportError {
 	NotStarted,
 	TurnAlreadyRunning,
 	TransitionInProgress,
+	#[serde(rename_all = "camelCase")]
+	TooManyLiveSessions {
+		cap: usize,
+	},
 	NoActiveTurn,
 	#[serde(rename_all = "camelCase")]
 	StaleRuntimeSession {
@@ -235,6 +239,9 @@ impl std::fmt::Display for TransportError {
 			TransportError::TurnAlreadyRunning => write!(f, "a turn is already running"),
 			TransportError::TransitionInProgress => {
 				write!(f, "a session transition is already in progress")
+			}
+			TransportError::TooManyLiveSessions { cap } => {
+				write!(f, "{cap} live sessions are already running")
 			}
 			TransportError::NoActiveTurn => write!(f, "no active turn"),
 			TransportError::StaleRuntimeSession { runtime_session_id } => {

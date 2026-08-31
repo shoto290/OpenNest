@@ -349,12 +349,14 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 		harness.scoped_events()
 	);
 	assert_eq!(
+		harness.call("agent_shutdown", json!({ "scope": refused_run })),
+		Ok(Value::Null),
+		"the run the rotation left behind could not be shut down"
+	);
+	assert_eq!(
 		harness.call("agent_submit_prompt", json!({ "scope": refused_run, "text": "hello" })),
-		Err(json!({
-			"kind": "staleRuntimeSession",
-			"runtimeSessionId": refused_run.runtime_session_id
-		})),
-		"a caller naming the rotated run reached the process that replaced it"
+		Err(json!({ "kind": "notStarted" })),
+		"a caller reached the run the rotation left behind after it was shut down"
 	);
 
 	let after = harness.page(&conversation);

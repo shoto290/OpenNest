@@ -89,8 +89,8 @@ pub struct NewCheckpoint {
 }
 
 const ROTATE_LIVE_SESSION: &str = "UPDATE runtime_sessions
-	SET status = 'rotated', ended_at = ?3, rotation_reason = ?4
-	WHERE conversation_id = ?1 AND bot_id = ?2 AND status = 'active'";
+	SET status = 'rotated', ended_at = ?2, rotation_reason = ?3
+	WHERE id = ?1 AND status = 'active'";
 
 const OPEN_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, seq, status, started_at)
@@ -115,7 +115,9 @@ const PARTICIPANTS_SESSION_BY_ID: &str =
 	"SELECT * FROM runtime_sessions WHERE id = ?1 AND conversation_id = ?2 AND bot_id = ?3";
 
 const ACTIVE_SESSION: &str = "SELECT * FROM runtime_sessions
-	WHERE conversation_id = ?1 AND bot_id = ?2 AND status = 'active'";
+	WHERE conversation_id = ?1 AND bot_id = ?2 AND status = 'active'
+	ORDER BY seq
+	LIMIT 1";
 
 const SESSIONS_FOR: &str = "SELECT * FROM runtime_sessions
 	WHERE conversation_id = ?1 AND bot_id = ?2
@@ -170,15 +172,9 @@ impl RuntimeContextRepository {
 		self.access
 			.call_mut(move |connection| {
 				let transaction = connection.transaction()?;
-				transaction.execute(
-					ROTATE_LIVE_SESSION,
-					params![
-						participant.conversation_id,
-						participant.bot_id,
-						started_at,
-						rotation_reason
-					],
-				)?;
+				if let Some(reason) = rotation_reason.as_deref() {
+					rotate_the_live_session(&transaction, &participant, started_at, reason)?;
+				}
 				let seq = transaction.query_row(
 					OPEN_SESSION,
 					params![id, participant.conversation_id, participant.bot_id, started_at],
@@ -400,6 +396,26 @@ impl RuntimeContextRepository {
 			})
 			.await
 	}
+}
+
+fn rotate_the_live_session(
+	transaction: &rusqlite::Transaction<'_>,
+	participant: &ParticipantKey,
+	ended_at: i64,
+	reason: &str,
+) -> Result<(), DatabaseError> {
+	let live = transaction
+		.query_row(
+			ACTIVE_SESSION,
+			params![participant.conversation_id, participant.bot_id],
+			session_from,
+		)
+		.optional()?;
+	let Some(live) = live else {
+		return Ok(());
+	};
+	transaction.execute(ROTATE_LIVE_SESSION, params![live.id, ended_at, reason])?;
+	Ok(())
 }
 
 fn end_live_session(
@@ -649,6 +665,68 @@ mod tests {
 			1,
 			"the participant holds two live sessions"
 		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn two_instances_of_one_bot_hold_a_live_session_each() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let runtime = database.runtime_context();
+
+		let first = runtime.open(participant("b1"), 1, None).await.expect("the first instance");
+		let second = runtime.open(participant("b1"), 2, None).await.expect("the second instance");
+
+		assert_eq!(second.seq, 2, "the second instance restarted the lineage");
+		assert_eq!(live_session_count(&database).await, 2, "one instance lost its live session");
+		assert_eq!(
+			stored_session(&database, "b1", &first.id).await.status,
+			RuntimeSessionStatus::Active,
+			"the second instance rotated the first one out"
+		);
+		assert_eq!(
+			runtime.active_session(participant("b1")).await.expect("the live session"),
+			Some(first),
+			"the participant's live session is not the one that opened first"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_rotation_leaves_the_other_instances_of_the_bot_alone() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let runtime = database.runtime_context();
+		let lineage = runtime.open(participant("b1"), 1, None).await.expect("the first instance");
+		let beside_it =
+			runtime.open(participant("b1"), 2, None).await.expect("the second instance");
+
+		let rotated_in = runtime
+			.open(participant("b1"), 3, Some("context full".to_owned()))
+			.await
+			.expect("the rotation opens a session");
+
+		assert_eq!(
+			stored_session(&database, "b1", &lineage.id).await.status,
+			RuntimeSessionStatus::Rotated,
+			"the rotation left the session it replaced live"
+		);
+		assert_eq!(
+			stored_session(&database, "b1", &beside_it.id).await.status,
+			RuntimeSessionStatus::Active,
+			"the rotation ended an instance it was not asked about"
+		);
+		assert_eq!(live_session_count(&database).await, 2, "the rotation lost a live session");
+		assert_eq!(
+			runtime.active_session(participant("b1")).await.expect("the live session"),
+			Some(stored_session(&database, "b1", &beside_it.id).await),
+			"the live session is not the earliest one still running"
+		);
+		assert_eq!(rotated_in.seq, 3, "the rotation restarted the lineage");
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

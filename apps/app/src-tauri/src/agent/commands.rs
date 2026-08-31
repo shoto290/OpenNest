@@ -24,11 +24,19 @@ pub const EVENT_CHANNEL: &str = "agent://event";
 
 const RUNS_DIR: &str = "runs";
 
+const MAX_LIVE_SESSIONS: usize = 8;
+
 fn announce<R: Runtime>(app: &AppHandle<R>, scope: Option<RuntimeScope>, event: AgentEvent) {
 	let _ = app.emit(EVENT_CHANNEL, ScopedEvent { scope, event });
 }
 
 type Participant = (String, String);
+
+type RunKey = String;
+
+fn run_key(scope: &RuntimeScope) -> RunKey {
+	scope.runtime_session_id.clone()
+}
 
 fn participant(scope: &RuntimeScope) -> Participant {
 	(scope.conversation_id.clone(), scope.bot_id.clone())
@@ -39,12 +47,23 @@ fn participant_key(scope: &RuntimeScope) -> ParticipantKey {
 }
 
 struct Live<S = Arc<Session>> {
-	runs: std::sync::Mutex<HashMap<Participant, Run<S>>>,
+	runs: std::sync::Mutex<HashMap<RunKey, Run<S>>>,
 }
 
 struct Run<S> {
 	scope: RuntimeScope,
 	session: Option<S>,
+}
+
+struct Admission<S> {
+	replaced: Option<S>,
+	keeps_lineage: bool,
+}
+
+impl<S> Admission<S> {
+	fn resume(&self, asked: Option<String>) -> Option<String> {
+		asked.filter(|_| self.keeps_lineage)
+	}
 }
 
 impl<S> Default for Live<S> {
@@ -54,15 +73,23 @@ impl<S> Default for Live<S> {
 }
 
 impl<S: Clone> Live<S> {
-	fn take_over(&self, scope: RuntimeScope) -> Option<S> {
+	fn take_over(&self, scope: RuntimeScope) -> Result<Admission<S>, TransportError> {
 		let mut runs = self.runs.lock().expect("live runs");
-		runs.insert(participant(&scope), Run { scope, session: None })
-			.and_then(|replaced| replaced.session)
+		let key = run_key(&scope);
+		if !runs.contains_key(&key) && runs.len() >= MAX_LIVE_SESSIONS {
+			return Err(TransportError::TooManyLiveSessions { cap: MAX_LIVE_SESSIONS });
+		}
+		let keeps_lineage = !runs
+			.iter()
+			.any(|(held, run)| held != &key && participant(&run.scope) == participant(&scope));
+		let replaced =
+			runs.insert(key, Run { scope, session: None }).and_then(|replaced| replaced.session);
+		Ok(Admission { replaced, keeps_lineage })
 	}
 
 	fn install(&self, scope: &RuntimeScope, session: S) -> bool {
 		let mut runs = self.runs.lock().expect("live runs");
-		let Some(run) = runs.get_mut(&participant(scope)) else {
+		let Some(run) = runs.get_mut(&run_key(scope)) else {
 			return false;
 		};
 		if &run.scope != scope {
@@ -73,7 +100,7 @@ impl<S: Clone> Live<S> {
 	}
 
 	fn clear(&self, scope: &RuntimeScope) -> Option<S> {
-		self.runs.lock().expect("live runs").remove(&participant(scope)).and_then(|run| run.session)
+		self.runs.lock().expect("live runs").remove(&run_key(scope)).and_then(|run| run.session)
 	}
 
 	fn clear_all(&self) -> Vec<S> {
@@ -91,13 +118,13 @@ impl<S: Clone> Live<S> {
 		self.runs
 			.lock()
 			.expect("live runs")
-			.get(&participant(scope))
+			.get(&run_key(scope))
 			.is_some_and(|run| &run.scope != scope)
 	}
 
 	fn session_for(&self, scope: &RuntimeScope) -> Result<S, TransportError> {
 		let runs = self.runs.lock().expect("live runs");
-		let Some(run) = runs.get(&participant(scope)) else {
+		let Some(run) = runs.get(&run_key(scope)) else {
 			return Err(TransportError::NotStarted);
 		};
 		if &run.scope != scope {
@@ -111,12 +138,16 @@ struct RunSink<R: Runtime> {
 	app: AppHandle<R>,
 	scope: RuntimeScope,
 	live: Arc<Live>,
+	records_its_own_lineage: bool,
 }
 
 impl<R: Runtime> EventSink for RunSink<R> {
 	fn emit(&self, event: AgentEvent) {
 		if !self.live.holds(&self.scope) {
 			return;
+		}
+		if let AgentEvent::SessionReady { session_id, .. } = &event {
+			self.record_its_own_lineage(session_id.clone());
 		}
 		let ended = matches!(event, AgentEvent::TurnEnded { .. });
 		announce(&self.app, Some(self.scope.clone()), event);
@@ -127,6 +158,29 @@ impl<R: Runtime> EventSink for RunSink<R> {
 }
 
 impl<R: Runtime> RunSink<R> {
+	fn record_its_own_lineage(&self, provider_session_id: String) {
+		if !self.records_its_own_lineage {
+			return;
+		}
+		let app = self.app.clone();
+		let scope = self.scope.clone();
+		tauri::async_runtime::spawn(async move {
+			let refused = match bot_database(&app) {
+				Some(database) => {
+					record_its_own_provider_session(database, &scope, provider_session_id)
+						.await
+						.err()
+				}
+				None => Some(TransportError::WriteFailed {
+					detail: NO_DATABASE_FOR_THE_LINEAGE.to_owned(),
+				}),
+			};
+			if let Some(error) = refused {
+				announce(&app, Some(scope), AgentEvent::Failed { error });
+			}
+		});
+	}
+
 	fn record_writes(&self) {
 		let app = self.app.clone();
 		let scope = self.scope.clone();
@@ -181,6 +235,27 @@ async fn evolutions<R: Runtime>(
 	announced
 }
 
+const NO_DATABASE_FOR_THE_LINEAGE: &str =
+	"the provider session id could not be recorded without the store";
+
+async fn record_its_own_provider_session(
+	database: &db::Database,
+	scope: &RuntimeScope,
+	provider_session_id: String,
+) -> Result<(), TransportError> {
+	database
+		.runtime_context()
+		.record_provider_session(
+			participant_key(scope),
+			scope.runtime_session_id.clone(),
+			provider_session_id,
+		)
+		.await
+		.map_err(|error| TransportError::WriteFailed {
+			detail: format!("the provider session id could not be recorded: {error:?}"),
+		})
+}
+
 fn bot_database<R: Runtime>(app: &AppHandle<R>) -> Option<&db::Database> {
 	app.try_state::<db::DatabaseState>()?.inner().as_ref().ok()
 }
@@ -197,7 +272,7 @@ async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
 #[derive(Default)]
 struct Gate {
 	quitting: bool,
-	busy: HashSet<Participant>,
+	busy: HashSet<RunKey>,
 }
 
 #[derive(Default)]
@@ -210,12 +285,13 @@ pub struct AgentState {
 }
 
 impl AgentState {
-	fn claim(&self, participant: Participant) -> Result<Claim<'_>, TransportError> {
+	fn claim(&self, scope: &RuntimeScope) -> Result<Claim<'_>, TransportError> {
 		let mut gate = self.gate.lock().expect("gate");
-		if gate.quitting || !gate.busy.insert(participant.clone()) {
+		let run = run_key(scope);
+		if gate.quitting || !gate.busy.insert(run.clone()) {
 			return Err(TransportError::TransitionInProgress);
 		}
-		Ok(Claim { state: self, participant })
+		Ok(Claim { state: self, run })
 	}
 
 	fn enter_quit(&self) {
@@ -274,12 +350,12 @@ impl AgentState {
 
 struct Claim<'a> {
 	state: &'a AgentState,
-	participant: Participant,
+	run: RunKey,
 }
 
 impl Drop for Claim<'_> {
 	fn drop(&mut self) {
-		self.state.gate.lock().expect("gate").busy.remove(&self.participant);
+		self.state.gate.lock().expect("gate").busy.remove(&self.run);
 	}
 }
 
@@ -466,10 +542,12 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	resume: Option<String>,
 	cwd: Option<String>,
 ) -> Result<SessionHandle, TransportError> {
-	let _claim = state.claim(participant(&scope))?;
+	let _claim = state.claim(&scope)?;
 
-	let previous = state.live.take_over(scope.clone());
-	if let Some(previous) = previous {
+	let admitted = state.live.take_over(scope.clone())?;
+	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
+	let resume = admitted.resume(resume);
+	if let Some(previous) = admitted.replaced {
 		previous.shutdown().await;
 	}
 
@@ -478,8 +556,12 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	let anywhere = cwd.map(PathBuf::from).unwrap_or_else(|| its_own_directory(&app, &scope.bot_id));
 	let (working_dir, refused_dir) = where_it_runs(identity.working_dir, anywhere);
 
-	let sink: Arc<dyn EventSink> =
-		Arc::new(RunSink { app: app.clone(), scope: scope.clone(), live: state.live.clone() });
+	let sink: Arc<dyn EventSink> = Arc::new(RunSink {
+		app: app.clone(),
+		scope: scope.clone(),
+		live: state.live.clone(),
+		records_its_own_lineage: lineage_is_held_elsewhere,
+	});
 	let options = SessionOptions::new(working_dir)
 		.bundled(identity.bundle)
 		.serving(identity.server_env)
@@ -498,6 +580,12 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	if let Some(path) = refused_dir {
 		sink.emit(AgentEvent::Failed { error: TransportError::WorkingDirectoryRefused { path } });
+	}
+
+	if lineage_is_held_elsewhere {
+		sink.emit(AgentEvent::Failed {
+			error: TransportError::ResumeFailed { forgot_session_id: false },
+		});
 	}
 
 	if let Some(refusal) = &started.resume_refusal {
@@ -634,7 +722,7 @@ pub async fn agent_shutdown<R: Runtime>(
 	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
-	let _claim = state.claim(participant(&scope))?;
+	let _claim = state.claim(&scope)?;
 	if state.live.is_foreign(&scope) {
 		return Err(stale(&scope));
 	}
@@ -646,6 +734,7 @@ pub async fn agent_shutdown<R: Runtime>(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::db::repositories::runtime_context::RuntimeSessionStatus;
 
 	fn a_fresh_app_data(name: &str) -> PathBuf {
 		let app_data = std::env::temp_dir().join(format!("opennest-app-data-{name}"));
@@ -892,6 +981,14 @@ mod tests {
 
 	const ANOTHER_BOTS_SESSION: &str = "the session of the bot next door";
 
+	fn a_run_named(runtime_session_id: &str) -> RuntimeScope {
+		RuntimeScope { runtime_session_id: runtime_session_id.into(), ..a_scope() }
+	}
+
+	fn admitted<S: Clone>(live: &Live<S>, scope: RuntimeScope) -> Admission<S> {
+		live.take_over(scope).expect("the host admits the run")
+	}
+
 	fn is_stale(outcome: &Result<&str, TransportError>) -> bool {
 		matches!(outcome, Err(TransportError::StaleRuntimeSession { .. }))
 	}
@@ -901,55 +998,133 @@ mod tests {
 	}
 
 	#[test]
-	fn a_scope_differing_on_the_run_is_stale_and_one_naming_another_bot_is_not_held() {
+	fn a_scope_differing_on_the_epoch_is_stale_and_one_naming_another_run_is_not_held() {
 		let live = Live::<&str>::default();
-		live.take_over(a_scope());
-		live.install(&a_scope(), REPLACED_SESSION);
+		admitted(&live, a_scope());
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
 
 		assert!(live.holds(&a_scope()), "the host stopped recognising the run it holds");
 		assert!(!live.is_foreign(&a_scope()), "the live run was refused as somebody else's");
+
+		let drifted = RuntimeScope { epoch: 2, ..a_scope() };
+		assert!(live.is_foreign(&drifted), "a scope naming another epoch reached the run");
+		assert!(!live.holds(&drifted), "a run the host never held was taken for it");
+		assert!(
+			is_stale(&live.session_for(&drifted)),
+			"a scope naming another epoch was handed the session"
+		);
+
 		for other in [
-			RuntimeScope { epoch: 2, ..a_scope() },
-			RuntimeScope { runtime_session_id: "r2".into(), ..a_scope() },
+			the_next_run(),
+			another_bots_run(),
+			RuntimeScope { bot_id: "b2".into(), runtime_session_id: "r3".into(), ..a_scope() },
 		] {
-			assert!(
-				live.is_foreign(&other),
-				"a run the participant had moved past was taken for the live one: {other:?}"
-			);
 			assert!(!live.holds(&other), "a run the host never held was taken for it: {other:?}");
 			assert!(
-				is_stale(&live.session_for(&other)),
-				"a run the host never held was handed the session it is holding: {other:?}"
-			);
-		}
-		for other in [
-			RuntimeScope { bot_id: "b2".into(), ..a_scope() },
-			RuntimeScope { conversation_id: "c2".into(), ..a_scope() },
-		] {
-			assert!(
-				!live.holds(&other),
-				"another participant's run was taken for this one: {other:?}"
-			);
-			assert!(
 				!live.is_foreign(&other),
-				"a participant with no run of its own was refused as a stale one: {other:?}"
+				"a run the host never held was refused as a stale one: {other:?}"
 			);
 			assert!(
 				is_unheld(&live.session_for(&other)),
-				"a bot with no session of its own was handed another's: {other:?}"
+				"a run the host never held was handed another's session: {other:?}"
 			);
 		}
+	}
+
+	#[test]
+	fn two_runs_of_one_bot_are_held_at_the_same_time_and_only_the_first_keeps_the_lineage() {
+		let live = Live::<&str>::default();
+
+		let first = admitted(&live, a_scope());
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+		let second = admitted(&live, the_next_run());
+		assert!(live.install(&the_next_run(), REPLACEMENT_SESSION));
+
+		assert!(first.keeps_lineage, "the first instance of a bot was refused the lineage");
+		assert!(
+			second.replaced.is_none(),
+			"a second instance handed back the first one's child to be shut down"
+		);
+		assert!(!second.keeps_lineage, "two instances of one bot both kept the lineage");
+		assert_eq!(
+			live.session_for(&a_scope()).ok(),
+			Some(REPLACED_SESSION),
+			"the first instance lost its session to the second one"
+		);
+		assert_eq!(live.session_for(&the_next_run()).ok(), Some(REPLACEMENT_SESSION));
+		assert!(live.holds(&a_scope()) && live.holds(&the_next_run()));
+	}
+
+	#[test]
+	fn a_run_started_again_under_its_own_id_hands_back_the_child_it_replaces() {
+		let live = Live::<&str>::default();
+		admitted(&live, a_scope());
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+
+		let again = admitted(&live, a_scope());
+
+		assert_eq!(
+			again.replaced,
+			Some(REPLACED_SESSION),
+			"a restart of one run left its child behind"
+		);
+		assert!(again.keeps_lineage, "a run restarting under its own id was refused the lineage");
+		assert!(
+			is_unheld(&live.session_for(&a_scope())),
+			"a restarted run answered with the child it replaced"
+		);
+	}
+
+	#[test]
+	fn the_lineage_comes_back_to_the_next_run_once_the_bot_holds_none() {
+		let live = Live::<&str>::default();
+		admitted(&live, a_scope());
+		assert!(!admitted(&live, the_next_run()).keeps_lineage);
+
+		live.clear(&a_scope());
+		live.clear(&the_next_run());
+
+		assert!(
+			admitted(&live, a_scope()).keeps_lineage,
+			"the lineage stayed with a run the host had let go"
+		);
+	}
+
+	#[test]
+	fn the_ninth_live_session_is_refused_and_the_eight_it_found_stay() {
+		let live = Live::<&str>::default();
+		for index in 0..MAX_LIVE_SESSIONS {
+			let scope = a_run_named(&format!("r{index}"));
+			admitted(&live, scope.clone());
+			assert!(live.install(&scope, REPLACED_SESSION));
+		}
+
+		let refused = live.take_over(a_run_named("r-one-too-many")).err();
+
+		assert_eq!(
+			refused,
+			Some(TransportError::TooManyLiveSessions { cap: MAX_LIVE_SESSIONS }),
+			"the ninth live session was let in"
+		);
+		assert!(
+			!live.holds(&a_run_named("r-one-too-many")),
+			"a refused start was still taken for a live run"
+		);
+		assert_eq!(
+			live.clear_all().len(),
+			MAX_LIVE_SESSIONS,
+			"the sessions the host was already holding did not survive the refusal"
+		);
 	}
 
 	#[test]
 	fn two_bots_each_hold_their_own_session_at_the_same_time() {
 		let live = Live::<&str>::default();
 
-		assert_eq!(live.take_over(a_scope()), None);
+		assert!(admitted(&live, a_scope()).replaced.is_none());
 		assert!(live.install(&a_scope(), REPLACED_SESSION));
-		assert_eq!(
-			live.take_over(another_bots_run()),
-			None,
+		assert!(
+			admitted(&live, another_bots_run()).replaced.is_none(),
 			"starting one bot handed back another bot's child to be shut down"
 		);
 		assert!(live.install(&another_bots_run(), ANOTHER_BOTS_SESSION));
@@ -973,15 +1148,11 @@ mod tests {
 	#[test]
 	fn the_exit_gives_up_every_bots_child_at_once() {
 		let live = Live::<&str>::default();
-		live.take_over(a_scope());
+		admitted(&live, a_scope());
 		live.install(&a_scope(), REPLACED_SESSION);
-		live.take_over(another_bots_run());
+		admitted(&live, another_bots_run());
 		live.install(&another_bots_run(), ANOTHER_BOTS_SESSION);
-		live.take_over(RuntimeScope {
-			conversation_id: "c3".into(),
-			bot_id: "b3".into(),
-			..a_scope()
-		});
+		admitted(&live, a_run_named("r7"));
 
 		let mut ended = live.clear_all();
 		ended.sort_unstable();
@@ -998,52 +1169,9 @@ mod tests {
 	}
 
 	#[test]
-	fn a_replaced_run_is_refused_and_a_participant_holding_none_refuses_nobody() {
-		let replaced = a_scope();
-		let live = Live::<&str>::default();
-		live.take_over(replaced.clone());
-
-		live.take_over(the_next_run());
-		assert!(live.is_foreign(&replaced), "a replaced run still reached the host");
-
-		live.clear(&replaced);
-		assert!(
-			!live.is_foreign(&replaced),
-			"a participant holding no run refused a caller anyway"
-		);
-		assert!(!live.holds(&replaced), "a participant holding no run claimed to hold one");
-	}
-
-	#[test]
-	fn a_caller_that_read_the_run_before_a_handover_is_refused_at_the_session() {
-		let replaced = a_scope();
-		let live = Live::<&str>::default();
-		live.take_over(replaced.clone());
-		assert!(live.install(&replaced, REPLACED_SESSION));
-
-		assert!(!live.is_foreign(&replaced), "the caller's first question was already refused");
-
-		let handed_back = live.take_over(the_next_run());
-		assert_eq!(handed_back, Some(REPLACED_SESSION), "the handover kept the child it replaced");
-		assert!(live.install(&the_next_run(), REPLACEMENT_SESSION));
-
-		let answered = live.session_for(&replaced);
-
-		assert!(
-			is_stale(&answered),
-			"a caller naming the replaced run was handed the session that replaced it: {answered:?}"
-		);
-		assert_eq!(
-			live.session_for(&the_next_run()).ok(),
-			Some(REPLACEMENT_SESSION),
-			"the run the host is holding was refused its own session"
-		);
-	}
-
-	#[test]
 	fn a_child_built_for_a_run_the_host_has_left_is_never_installed() {
 		let live = Live::<&str>::default();
-		live.take_over(a_scope());
+		admitted(&live, a_scope());
 
 		live.clear_all();
 
@@ -1058,24 +1186,25 @@ mod tests {
 	}
 
 	#[test]
-	fn a_transition_holds_one_bot_and_lets_every_other_bot_through() {
+	fn a_transition_holds_one_run_and_lets_every_other_run_through() {
 		let state = AgentState::default();
 
-		let held = state.claim(participant(&a_scope())).expect("the first claim is free");
+		let held = state.claim(&a_scope()).expect("the first claim is free");
 		assert!(
-			matches!(
-				state.claim(participant(&the_next_run())),
-				Err(TransportError::TransitionInProgress)
-			),
-			"one bot took two transitions at once"
+			matches!(state.claim(&a_scope()), Err(TransportError::TransitionInProgress)),
+			"one run took two transitions at once"
 		);
 		assert!(
-			state.claim(participant(&another_bots_run())).is_ok(),
+			state.claim(&the_next_run()).is_ok(),
+			"one instance's transition refused another instance of the same bot"
+		);
+		assert!(
+			state.claim(&another_bots_run()).is_ok(),
 			"one bot's transition refused another bot's"
 		);
 
 		drop(held);
-		assert!(state.claim(participant(&a_scope())).is_ok(), "a spent transition kept its seat");
+		assert!(state.claim(&a_scope()).is_ok(), "a spent transition kept its seat");
 	}
 
 	#[test]
@@ -1085,10 +1214,7 @@ mod tests {
 
 		for scope in [a_scope(), another_bots_run()] {
 			assert!(
-				matches!(
-					state.claim(participant(&scope)),
-					Err(TransportError::TransitionInProgress)
-				),
+				matches!(state.claim(&scope), Err(TransportError::TransitionInProgress)),
 				"a start was let through after the quit: {scope:?}"
 			);
 		}
@@ -1133,6 +1259,68 @@ mod tests {
 			.await
 			.expect("the live session")
 			.and_then(|session| session.provider_session_id)
+	}
+
+	async fn a_conversation_of_two_instances() -> (db::DatabaseState, RuntimeScope, RuntimeScope) {
+		let database = crate::db::open(&crate::db::connection::temp_dir());
+		database
+			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
+			.await
+			.expect("the conversation is there");
+		let participant = participant_key(&a_scope());
+		let runtime = database.runtime_context();
+		let first = runtime.open(participant.clone(), 1, None).await.expect("the first instance");
+		let second = runtime.open(participant.clone(), 2, None).await.expect("the second instance");
+		runtime
+			.record_provider_session(participant, first.id.clone(), "session-1".to_owned())
+			.await
+			.expect("the lineage is recorded");
+		let scope_of =
+			|id: String, seq: i64| RuntimeScope { runtime_session_id: id, epoch: seq, ..a_scope() };
+		(Ok(database), scope_of(first.id, first.seq), scope_of(second.id, second.seq))
+	}
+
+	#[tokio::test]
+	async fn a_second_instance_starts_cold_and_records_its_own_provider_session() {
+		let (state, lineage, beside_it) = a_conversation_of_two_instances().await;
+		let live = Live::<&str>::default();
+
+		let holder = admitted(&live, lineage.clone());
+		let cold = admitted(&live, beside_it.clone());
+
+		assert_eq!(
+			holder.resume(Some("session-1".to_owned())),
+			Some("session-1".to_owned()),
+			"the instance holding the lineage was refused its own resume id"
+		);
+		assert_eq!(
+			cold.resume(Some("session-1".to_owned())),
+			None,
+			"a second instance was handed the resume id the first one is running on"
+		);
+
+		let database = state.as_ref().expect("the database opens");
+		record_its_own_provider_session(database, &beside_it, "session-2".to_owned())
+			.await
+			.expect("the second instance records its own provider session");
+
+		let sessions = database
+			.runtime_context()
+			.sessions_for(participant_key(&a_scope()))
+			.await
+			.expect("the sessions");
+		let recorded: Vec<_> = sessions
+			.iter()
+			.map(|session| (session.provider_session_id.as_deref(), session.status))
+			.collect();
+		assert_eq!(
+			recorded,
+			vec![
+				(Some("session-1"), RuntimeSessionStatus::Active),
+				(Some("session-2"), RuntimeSessionStatus::Active)
+			],
+			"the second instance did not write its own id on its own live row"
+		);
 	}
 
 	#[tokio::test]

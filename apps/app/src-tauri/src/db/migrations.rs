@@ -26,6 +26,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 17, statements: ROSTER_PIN },
 	Migration { version: 18, statements: OPTIONAL_SPACE_COLOUR },
 	Migration { version: 19, statements: SPACE_SETTINGS },
+	Migration { version: 20, statements: SEVERAL_LIVE_SESSIONS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -389,6 +390,10 @@ INSERT INTO spaces (id, name, colour, position, created_at)
 	SELECT id, name, colour, position, created_at FROM spaces_always_coloured;
 
 DROP TABLE spaces_always_coloured;
+";
+
+const SEVERAL_LIVE_SESSIONS: &str = "
+DROP INDEX IF EXISTS runtime_sessions_active_per_participant;
 ";
 
 pub fn latest_version() -> u32 {
@@ -831,7 +836,7 @@ mod tests {
 	fn a_file_that_missed_the_space_settings_step_gains_the_table() {
 		let dir = temp_dir();
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
-		apply_each(&mut connection, &MIGRATIONS[..MIGRATIONS.len() - 1])
+		apply_each(&mut connection, &MIGRATIONS[..MIGRATIONS.len() - 2])
 			.expect("the build that shipped without the settings step installs");
 		assert!(!has_table(&connection, "space_settings"), "the file already held the table");
 
@@ -1406,7 +1411,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_participant_holds_one_live_session_at_a_time() {
+	fn a_participant_holds_as_many_live_sessions_as_it_started() {
 		let dir = temp_dir();
 		let connection = fixture(&dir);
 		write(&connection, A_LIVE_SESSION).expect("the session is inserted");
@@ -1431,9 +1436,38 @@ mod tests {
 				VALUES ('s4', 'c1', 'b1', 'claude-4', 3, 'rotated', 4, 5, 'context full')",
 		);
 
-		assert!(second_live.is_err(), "a participant was given two live sessions at once");
+		assert!(
+			second_live.is_ok(),
+			"a second instance of one bot was refused a live session: {second_live:?}"
+		);
 		assert!(another_bot.is_ok(), "a second bot was refused a session of its own");
 		assert!(spent.is_ok(), "a rotated session was refused alongside the live one");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_that_forbade_two_live_sessions_lets_them_in_once_it_is_upgraded() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, &MIGRATIONS[..MIGRATIONS.len() - 1])
+			.expect("the build that shipped the one live session rule installs");
+		connection.execute_batch(FIXTURE).expect("the fixture is inserted");
+		write(&connection, A_LIVE_SESSION).expect("the session is inserted");
+		let a_second_instance = "INSERT INTO runtime_sessions
+			(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
+			VALUES ('s2', 'c1', 'b1', 'claude-2', 2, 'active', 2)";
+		assert!(
+			write(&connection, a_second_instance).is_err(),
+			"the file never held the one live session rule"
+		);
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		let admitted = write(&connection, a_second_instance);
+		assert!(admitted.is_ok(), "the upgraded file still holds the rule: {admitted:?}");
+		assert_eq!(version(&connection).expect("version"), latest_version());
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
