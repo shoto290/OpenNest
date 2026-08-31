@@ -31,6 +31,7 @@ export function usePinnedMessages(
 	const [hasFailed, setHasFailed] = useState(false)
 
 	const noteFailure = useCallback(() => setHasFailed(true), [])
+	const dismissFailure = useCallback(() => setHasFailed(false), [])
 
 	const recall = useCallback(() => {
 		if (!conversationId) {
@@ -80,8 +81,6 @@ export function usePinnedMessages(
 		},
 		[controller, held, recall, noteFailure],
 	)
-
-	const dismissFailure = useCallback(() => setHasFailed(false), [])
 
 	return useMemo(
 		() => ({
