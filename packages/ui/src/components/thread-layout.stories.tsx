@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn } from "storybook/test"
+import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
@@ -55,6 +55,27 @@ const CONVERSATION = (
 const SCROLLING_TRANSCRIPT = LONG_TRANSCRIPT.map((question) => (
 	<UserTurn key={question}>{question}</UserTurn>
 ))
+
+const TRANSCRIPT_TOP_PADDING = 32
+const TRANSCRIPT_BOTTOM_PADDING = 16
+
+const scrollerOf = (transcript: HTMLElement) => {
+	const scroller = transcript.closest<HTMLElement>(
+		'[data-slot="message-scroller"]',
+	)
+	if (!scroller)
+		throw new globalThis.Error("This transcript sits in no scroller")
+	return scroller
+}
+
+const spaceUnderLastRow = (transcript: HTMLElement, scroller: HTMLElement) => {
+	const lastRow = transcript.lastElementChild
+	if (!lastRow) throw new globalThis.Error("This transcript holds no row")
+	return Math.round(
+		scroller.getBoundingClientRect().bottom -
+			lastRow.getBoundingClientRect().bottom,
+	)
+}
 
 const RegionProbe = (props: ThreadLayoutProps) => {
 	const [region, setRegion] = useState<HTMLDivElement | null>(null)
@@ -141,9 +162,25 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this once the transcript is taller than the viewport. Check that only the transcript scrolls — the header and the composer must stay put — and that the rows wrap inside the full-width transcript however wide the window gets, without pushing the layout sideways. Pick `Default` for a transcript that fits.",
+					"Reach for this once the transcript is taller than the viewport. Check that only the transcript scrolls — the header and the composer must stay put — and that the rows wrap inside the full-width transcript however wide the window gets, without pushing the layout sideways. At the live edge the last row keeps one small gap above the composer, never a band of empty space. Pick `Default` for a transcript that fits.",
 			},
 		},
+	},
+	play: async ({ canvas }) => {
+		const transcript = canvas.getByRole("log")
+		const scroller = scrollerOf(transcript)
+		const spacing = getComputedStyle(transcript)
+
+		await expect(spacing.paddingTop).toBe(`${TRANSCRIPT_TOP_PADDING}px`)
+		await expect(spacing.paddingBottom).toBe(`${TRANSCRIPT_BOTTOM_PADDING}px`)
+
+		scroller.scrollTo({ top: scroller.scrollHeight })
+
+		await waitFor(() =>
+			expect(spaceUnderLastRow(transcript, scroller)).toBeGreaterThanOrEqual(
+				TRANSCRIPT_BOTTOM_PADDING,
+			),
+		)
 	},
 })
 
