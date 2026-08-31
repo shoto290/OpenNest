@@ -35,7 +35,7 @@ import type { ChatError } from "../chat/chat-state"
 import {
 	chatErrorOf,
 	isSameRuntimeScope,
-	toStoreError,
+	toReadError,
 	toTransportError,
 } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
@@ -91,6 +91,7 @@ export type ConversationController = {
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
+	dismissError: (id: string) => void
 	answer: (id: string, answers: QuestionAnswers) => Promise<void>
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	stop: () => Promise<void>
@@ -215,6 +216,10 @@ export const createConversationController = (
 	const noteFailure = (error: TransportError) => {
 		latestError = chatErrorOf(error, errorCount)
 		errorCount += 1
+	}
+
+	const forgetFailure = () => {
+		latestError = null
 	}
 
 	const readTranscript = () => {
@@ -580,6 +585,8 @@ export const createConversationController = (
 			sync()
 			try {
 				await speak(next, turn)
+				forgetFailure()
+				sync()
 				return
 			} catch (reason) {
 				speaker = null
@@ -790,6 +797,7 @@ export const createConversationController = (
 		queue = emptyQueue
 		activeTurn = null
 		refused = null
+		forgetFailure()
 		sync()
 		await enqueue(() => transcript.load(next.id)).catch(() => undefined)
 		sync()
@@ -809,8 +817,9 @@ export const createConversationController = (
 		settle({ ...state, isLoadingOlder: true })
 		try {
 			await enqueue(() => transcript.loadOlder(conversationId))
+			forgetFailure()
 		} catch (reason) {
-			noteFailure(toStoreError(reason))
+			noteFailure(toReadError(reason))
 		} finally {
 			settle({ ...state, isLoadingOlder: false, latestError })
 		}
@@ -864,6 +873,13 @@ export const createConversationController = (
 		pin,
 		unpin,
 		pins,
+		dismissError: (id: string) => {
+			if (latestError?.id !== id) {
+				return
+			}
+			forgetFailure()
+			sync()
+		},
 		answer,
 		respond,
 		stop,

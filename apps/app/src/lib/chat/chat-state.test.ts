@@ -8,6 +8,7 @@ import {
 	isSameRuntimeScope,
 	isSessionReady,
 	isTurnBusy,
+	toTransportError,
 } from "./chat-state"
 
 import type { AgentEvent, ChatMessage, RuntimeScope } from "../agent/contract"
@@ -689,5 +690,27 @@ describe("the outbox a prompt waits in", () => {
 		})
 
 		expect(queued(reset)).toEqual(["one", "two", "three"])
+	})
+})
+
+describe("toTransportError", () => {
+	it("passes a rejection carrying a transport kind through", () => {
+		const refusal = { kind: "notStarted" }
+
+		expect(toTransportError(refusal)).toBe(refusal)
+	})
+
+	it("describes a rejection carrying an unknown kind as an unknown failure", () => {
+		expect(toTransportError({ kind: "somethingElse" })).toEqual({
+			kind: "unknownFailure",
+			detail: "somethingElse",
+		})
+	})
+
+	it("describes a rejection carrying no kind as an unknown failure", () => {
+		expect(toTransportError(new Error("refused"))).toEqual({
+			kind: "unknownFailure",
+			detail: "Error: refused",
+		})
 	})
 })

@@ -9,6 +9,7 @@ import {
 	isSameRuntimeScope,
 	isSessionReady,
 	isTurnBusy,
+	toReadError,
 	toStoreError,
 	toTransportError,
 } from "./chat-state"
@@ -195,6 +196,9 @@ export function createChatController(
 
 	const reportStore = (bot: BotChat, reason: unknown) =>
 		announce(bot, { type: "failed", error: toStoreError(reason) })
+
+	const reportRead = (bot: BotChat, reason: unknown) =>
+		announce(bot, { type: "failed", error: toReadError(reason) })
 
 	const write = (
 		bot: BotChat,
@@ -773,7 +777,7 @@ export function createChatController(
 		try {
 			await enqueue(() => transcript.loadOlder(conversationId))
 		} catch (reason) {
-			reportStore(bot, reason)
+			reportRead(bot, reason)
 		} finally {
 			dispatch(bot, { type: "olderLoading", loading: false })
 		}

@@ -7,10 +7,17 @@ import { useBubbleVisibility } from "./use-bubble-visibility"
 
 const BUBBLE = "m-1#0"
 
-const mountAnchor = () => {
+const mountTranscript = () => {
+	const transcript = document.createElement("div")
+	transcript.setAttribute("data-slot", "message-scroller")
+	document.body.append(transcript)
+	return transcript
+}
+
+const mountAnchor = (transcript: Element) => {
 	const anchor = document.createElement("div")
 	anchor.setAttribute("data-message-id", BUBBLE)
-	document.body.append(anchor)
+	transcript.append(anchor)
 	return anchor
 }
 
@@ -20,7 +27,7 @@ afterEach(() => {
 })
 
 it("reports a bubble the scroller has unmounted as out of view", async () => {
-	const anchor = mountAnchor()
+	const anchor = mountAnchor(mountTranscript())
 	const { result } = renderHook(() => useBubbleVisibility(BUBBLE))
 
 	expect(result.current).toBe(true)
@@ -33,6 +40,7 @@ it("reports a bubble the scroller has unmounted as out of view", async () => {
 })
 
 it("reports a bubble that was never mounted as out of view", async () => {
+	mountTranscript()
 	const { result } = renderHook(() => useBubbleVisibility(BUBBLE))
 
 	await act(async () => {

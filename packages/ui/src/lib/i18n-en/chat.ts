@@ -180,6 +180,7 @@ const chat = {
 			serverEnvRejected: "A server was left out",
 			unavailable: "Claude Code is unavailable",
 			failed: "That request did not go through",
+			readFailed: "Earlier messages not loaded",
 		},
 		transport: {
 			binaryNotFound: "OpenNest's built-in agent is unreachable.",
@@ -206,6 +207,8 @@ const chat = {
 				"That session has been replaced. The one running now took its place.",
 			unknownPermission: "Unknown permission request ({{id}}).",
 			writeFailed: "The prompt could not be sent: {{detail}}",
+			readFailed: "The earlier messages could not be read: {{detail}}",
+			unknownFailure: "Something went wrong: {{detail}}",
 		},
 		attachment: {
 			megabytes: "{{size}} MB",

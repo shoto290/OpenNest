@@ -11,8 +11,12 @@ import { createAttachmentsController } from "@/lib/chat/attachments-controller"
 import { createDraftsController } from "@/lib/chat/drafts-controller"
 import type { ChatController } from "@/lib/chat/chat-controller"
 import { type ChatError, initialChatState } from "@/lib/chat/chat-state"
-import type { BotThread } from "@/lib/chat/thread-contract"
+import type { BotThread, Thread } from "@/lib/chat/thread-contract"
+import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
+import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
+import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
 import type { Bot } from "@/lib/conversations/store-contract"
+import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { botIdentity, message } from "@/lib/conversations/transcript-fixtures"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 
@@ -26,6 +30,25 @@ const NO_ERRORS: ChatError[] = []
 const CRASH_TITLE = "Claude Code stopped"
 
 const PINS_TITLE = "Pinned messages are out of date"
+
+const READ_TITLE = "Earlier messages not loaded"
+
+const SPACE = "personal"
+
+const refusingOlderStore = (): TranscriptStore => {
+	const base = createFakeTranscriptStore()
+	return {
+		...base,
+		loadPage: (conversationId, cursor) =>
+			cursor
+				? Promise.reject(new Error("refused"))
+				: Promise.resolve({
+						conversationId,
+						messages: [message({ conversationId, seq: 2 })],
+						hasMore: true,
+					}),
+	}
+}
 
 const stubController = (
 	overrides: Partial<ChatController> = {},
@@ -116,7 +139,7 @@ const threadOf = ({
 	onToggleSettings: () => undefined,
 })
 
-const screenOf = (thread: BotThread) =>
+const screenOf = (thread: Thread) =>
 	createElement(ThreadScreen, {
 		attachments,
 		drafts: createDraftsController(),
@@ -167,6 +190,39 @@ describe("ThreadScreen", () => {
 
 		expect(screen.queryByRole("button", { name: "Cancel reply" })).toBeNull()
 		expect(screen.getByText(CRASH_TITLE)).toBeTruthy()
+	})
+
+	it("leaves a dismissed conversation failure dismissed when the reader returns", async () => {
+		const store = refusingOlderStore()
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [],
+		})
+		const runtimes = createConversationRuntimes(createScriptedDriver(), store)
+		const thread: Thread = {
+			kind: "conversation",
+			conversation,
+			runtimes,
+			isSettingsOpen: false,
+			onOpenSettings: () => undefined,
+		}
+		const { unmount } = render(screenOf(thread))
+		await settle()
+
+		fireEvent.click(screen.getByRole("button", { name: "Load older messages" }))
+		await settle()
+		expect(screen.getByText(READ_TITLE)).toBeTruthy()
+
+		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
+		expect(screen.queryByText(READ_TITLE)).toBeNull()
+
+		unmount()
+		render(screenOf(thread))
+		await settle()
+
+		expect(screen.queryByText(READ_TITLE)).toBeNull()
 	})
 
 	it("tells the reader when the pinned messages could not be read", async () => {

@@ -101,6 +101,8 @@ export type TransportError =
 	| { kind: "staleRuntimeSession"; runtimeSessionId: string }
 	| { kind: "unknownPermission"; id: string }
 	| { kind: "writeFailed"; detail: string }
+	| { kind: "readFailed"; detail: string }
+	| { kind: "unknownFailure"; detail: string }
 
 export type CheckReport = {
 	connection: ConnectionState

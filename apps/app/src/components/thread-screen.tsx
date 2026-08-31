@@ -693,7 +693,14 @@ function ThreadView({
 		focusComposer,
 	})
 
-	const { botController } = facts
+	const { botController, conversationController } = facts
+	const dismissError = useCallback(
+		(id: string) => {
+			setDismissedErrorId(id)
+			conversationController?.dismissError(id)
+		},
+		[conversationController],
+	)
 	const readDraft = useCallback(() => drafts.read(facts.id), [drafts, facts.id])
 	const rememberDraft = useCallback(
 		(draft: string) => drafts.remember(facts.id, draft),
@@ -710,10 +717,10 @@ function ThreadView({
 	)
 	const restartAfterError = useCallback(
 		(id: string) => {
-			setDismissedErrorId(id)
+			dismissError(id)
 			void botController?.restart()
 		},
-		[botController],
+		[botController, dismissError],
 	)
 	const stop = useCallback(() => {
 		void controller.stop()
@@ -788,7 +795,7 @@ function ThreadView({
 						bots={bots}
 						error={errorNotice}
 						loopingPair={facts.loopingPair}
-						onDismissError={setDismissedErrorId}
+						onDismissError={dismissError}
 						onRestart={botController ? restartAfterError : undefined}
 						onStop={stop}
 						pins={pins}

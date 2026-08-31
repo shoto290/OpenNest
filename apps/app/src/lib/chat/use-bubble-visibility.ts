@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react"
 
-const anchorFor = (bubbleId: string) =>
-	document.querySelector(`[data-message-id="${CSS.escape(bubbleId)}"]`)
+const TRANSCRIPT = '[data-slot="message-scroller"]'
+
+const anchorIn = (transcript: Element, bubbleId: string) =>
+	transcript.querySelector(`[data-message-id="${CSS.escape(bubbleId)}"]`)
 
 export function useBubbleVisibility(bubbleId: string | null): boolean {
 	const [isInView, setIsInView] = useState(true)
 
 	useEffect(() => {
-		if (!bubbleId || typeof IntersectionObserver === "undefined") {
+		const transcript = document.querySelector(TRANSCRIPT)
+		if (
+			!bubbleId ||
+			!transcript ||
+			typeof IntersectionObserver === "undefined"
+		) {
 			return
 		}
 		let watched: Element | null = null
@@ -24,15 +31,15 @@ export function useBubbleVisibility(bubbleId: string | null): boolean {
 			observer.observe(anchor)
 		}
 		const followMounts = () => {
-			const anchor = anchorFor(bubbleId)
+			const anchor = anchorIn(transcript, bubbleId)
 			if (anchor !== watched) {
 				observeAnchor(anchor)
 			}
 		}
 
-		observeAnchor(anchorFor(bubbleId))
+		observeAnchor(anchorIn(transcript, bubbleId))
 		const mounts = new MutationObserver(followMounts)
-		mounts.observe(document.body, { childList: true, subtree: true })
+		mounts.observe(transcript, { childList: true, subtree: true })
 
 		return () => {
 			mounts.disconnect()

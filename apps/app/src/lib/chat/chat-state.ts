@@ -92,21 +92,55 @@ export const initialChatState: ChatState = {
 	errorCount: 0,
 }
 
-export const toTransportError = (reason: unknown): TransportError =>
-	typeof reason === "object" && reason !== null && "kind" in reason
-		? (reason as TransportError)
-		: { kind: "writeFailed", detail: String(reason) }
-
-export const toStoreError = (reason: unknown): TransportError => {
-	const kind =
-		typeof reason === "object" && reason !== null && "kind" in reason
-			? String((reason as { kind: unknown }).kind)
-			: String(reason)
-	return {
-		kind: "writeFailed",
-		detail: `the transcript store refused it (${kind})`,
-	}
+const TRANSPORT_KINDS: Record<TransportError["kind"], true> = {
+	binaryNotFound: true,
+	notAuthenticated: true,
+	authCheckFailed: true,
+	spawnFailed: true,
+	startupTimeout: true,
+	crashed: true,
+	resumeFailed: true,
+	workingDirectoryRefused: true,
+	invalidFrame: true,
+	settingsRejected: true,
+	serverEnvRejected: true,
+	notStarted: true,
+	turnAlreadyRunning: true,
+	transitionInProgress: true,
+	noActiveTurn: true,
+	staleRuntimeSession: true,
+	unknownPermission: true,
+	writeFailed: true,
+	readFailed: true,
+	unknownFailure: true,
 }
+
+const kindIn = (reason: unknown): string | null =>
+	typeof reason === "object" && reason !== null && "kind" in reason
+		? String((reason as { kind: unknown }).kind)
+		: null
+
+const isTransportError = (reason: unknown): reason is TransportError => {
+	const kind = kindIn(reason)
+	return kind !== null && Object.hasOwn(TRANSPORT_KINDS, kind)
+}
+
+const detailOf = (reason: unknown): string => kindIn(reason) ?? String(reason)
+
+export const toTransportError = (reason: unknown): TransportError =>
+	isTransportError(reason)
+		? reason
+		: { kind: "unknownFailure", detail: detailOf(reason) }
+
+export const toStoreError = (reason: unknown): TransportError => ({
+	kind: "writeFailed",
+	detail: `the transcript store refused it (${detailOf(reason)})`,
+})
+
+export const toReadError = (reason: unknown): TransportError => ({
+	kind: "readFailed",
+	detail: detailOf(reason),
+})
 
 export const chatErrorOf = (
 	error: TransportError,

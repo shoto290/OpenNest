@@ -183,6 +183,7 @@ const chat = {
 			serverEnvRejected: "Un serveur a été laissé de côté",
 			unavailable: "Claude Code est indisponible",
 			failed: "Cette demande n'est pas passée",
+			readFailed: "Messages précédents non chargés",
 		},
 		transport: {
 			binaryNotFound: "L'agent intégré d'OpenNest est injoignable.",
@@ -210,6 +211,8 @@ const chat = {
 				"Cette session a été remplacée. Celle qui tourne maintenant a pris sa place.",
 			unknownPermission: "Demande d'autorisation inconnue ({{id}}).",
 			writeFailed: "L'invite n'a pas pu être envoyée : {{detail}}",
+			readFailed: "Les messages précédents n'ont pas pu être lus : {{detail}}",
+			unknownFailure: "Quelque chose s'est mal passé : {{detail}}",
 		},
 		attachment: {
 			megabytes: "{{size}} Mo",

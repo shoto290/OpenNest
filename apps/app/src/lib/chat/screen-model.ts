@@ -56,6 +56,8 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	staleRuntimeSession: false,
 	unknownPermission: false,
 	writeFailed: false,
+	readFailed: false,
+	unknownFailure: false,
 }
 
 const RUN_GAP_MS = 5 * 60_000
@@ -271,6 +273,9 @@ export function noticeTitleFor(t: ChatCopy, error: TransportError): string {
 	}
 	if (error.kind === "serverEnvRejected") {
 		return t("screen.notice.serverEnvRejected")
+	}
+	if (error.kind === "readFailed") {
+		return t("screen.notice.readFailed")
 	}
 	if (needsFreshSession(error)) {
 		return t("screen.notice.unavailable")
