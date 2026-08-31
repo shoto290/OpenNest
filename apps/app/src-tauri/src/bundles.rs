@@ -400,10 +400,20 @@ pub fn instructions(root: &Path, bot_id: &str) -> Option<String> {
 }
 
 pub fn write(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	write_styled(root, bot, &output_style(root, &bot.id))
+	let _serialised = serialised();
+	write_serialised(root, bot)
+}
+
+fn write_serialised(root: &Path, bot: &Bot) -> std::io::Result<()> {
+	write_styled_serialised(root, bot, &output_style(root, &bot.id))
 }
 
 pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
+	let _serialised = serialised();
+	write_styled_serialised(root, bot, output_style)
+}
+
+fn write_styled_serialised(root: &Path, bot: &Bot, output_style: &str) -> std::io::Result<()> {
 	write_briefed(
 		root,
 		bot,
@@ -420,6 +430,7 @@ pub fn write_styled(root: &Path, bot: &Bot, output_style: &str) -> std::io::Resu
 }
 
 pub fn write_remembered(root: &Path, bot: &Bot, memory: &str) -> std::io::Result<()> {
+	let _serialised = serialised();
 	rewrite_agent_holding(root, bot, memory)?;
 	recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "memory saved from settings");
 	Ok(())
@@ -514,11 +525,11 @@ pub fn ensure(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	let _serialised = serialised();
 	settled(root, bot);
 	if agent_file(root, &bot.id).is_some() {
-		rewrite_agent_serialised(root, bot)?;
+		rewrite_agent(root, bot)?;
 		recorded(&dir(root, &bot.id), BOT_SUBJECT, &bot.name, "added to the history");
 		return Ok(());
 	}
-	write(root, bot)
+	write_serialised(root, bot)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -538,7 +549,7 @@ fn evolve_serialised(root: &Path, bot: &Bot) -> Option<Evolution> {
 	if changed.is_empty() {
 		return None;
 	}
-	let _ = rewrite_agent_serialised(root, bot);
+	let _ = rewrite_agent(root, bot);
 	let (title, body) =
 		learned(&bundle).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
 	let _ = fs::remove_file(bundle.join(LEARNED_NAME));
@@ -848,6 +859,7 @@ pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
 }
 
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
+	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
 	let path = free_skill_dir(&bundle, &draft.name);
 	let skill = written_skill(root, bot, &path, drafted(None, draft)?)?;
@@ -856,6 +868,7 @@ pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Resu
 }
 
 pub fn create_skill_at(bundle: &Path, draft: &SkillDraft) -> std::io::Result<Skill> {
+	let _serialised = serialised();
 	let skill = kept_skill(&free_skill_dir(bundle, &draft.name), drafted(None, draft)?)?;
 	recorded(bundle, SKILL_SUBJECT, &skill.name, "created from settings");
 	Ok(skill)
@@ -867,6 +880,7 @@ pub fn update_skill(
 	skill_id: &str,
 	draft: &SkillDraft,
 ) -> std::io::Result<Skill> {
+	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
 	let path = skill_dir(&bundle, skill_id)?;
 	let text = drafted(Some(&held_skill(&path)), draft)?;
@@ -881,6 +895,7 @@ pub fn update_skill_at(
 	skill_id: &str,
 	draft: &SkillDraft,
 ) -> std::io::Result<Skill> {
+	let _serialised = serialised();
 	let path = skill_dir(bundle, skill_id)?;
 	let text = drafted(Some(&held_skill(&path)), draft)?;
 	let path = moved_skill_dir(bundle, path, &draft.name)?;
@@ -895,6 +910,7 @@ pub fn set_skill_preloaded(
 	skill_id: &str,
 	is_preloaded: bool,
 ) -> std::io::Result<Skill> {
+	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
 	let path = skill_dir(&bundle, skill_id)?;
 	let skill = written_skill(root, bot, &path, marked(&held_skill(&path), is_preloaded)?)?;
@@ -907,6 +923,7 @@ pub fn set_skill_preloaded_at(
 	skill_id: &str,
 	is_preloaded: bool,
 ) -> std::io::Result<Skill> {
+	let _serialised = serialised();
 	let path = skill_dir(bundle, skill_id)?;
 	let skill = kept_skill(&path, marked(&held_skill(&path), is_preloaded)?)?;
 	recorded(bundle, SKILL_SUBJECT, &skill.name, marking(is_preloaded));
@@ -926,6 +943,7 @@ fn marking(is_preloaded: bool) -> &'static str {
 }
 
 pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<()> {
+	let _serialised = serialised();
 	let bundle = dir(root, &bot.id);
 	let name = deleted_skill(&bundle, skill_id)?;
 	rewrite_agent(root, bot)?;
@@ -934,6 +952,7 @@ pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<(
 }
 
 pub fn remove_skill_at(bundle: &Path, skill_id: &str) -> std::io::Result<()> {
+	let _serialised = serialised();
 	let name = deleted_skill(bundle, skill_id)?;
 	recorded(bundle, SKILL_SUBJECT, &name, "removed from settings");
 	Ok(())
@@ -968,6 +987,7 @@ pub fn set_mcp_server(
 	name: &str,
 	config: &serde_json::Value,
 ) -> std::io::Result<McpServer> {
+	let _serialised = serialised();
 	let server = set_mcp_server_at(&dir(root, &bot.id), name, config)?;
 	rewrite_manifest(root, bot)?;
 	recorded(&dir(root, &bot.id), SERVER_SUBJECT, name, "saved from settings");
@@ -993,6 +1013,7 @@ pub fn set_mcp_server_at(
 }
 
 pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<()> {
+	let _serialised = serialised();
 	remove_mcp_server_at(&dir(root, &bot.id), name)?;
 	rewrite_manifest(root, bot)?;
 	undeclare_servers(root, bot)?;
@@ -1056,11 +1077,6 @@ fn kept_skill(path: &Path, text: String) -> std::io::Result<Skill> {
 }
 
 fn rewrite_agent(root: &Path, bot: &Bot) -> std::io::Result<()> {
-	let _serialised = serialised();
-	rewrite_agent_serialised(root, bot)
-}
-
-fn rewrite_agent_serialised(root: &Path, bot: &Bot) -> std::io::Result<()> {
 	rewrite_agent_holding(root, bot, &kept_memory(root, bot))
 }
 
@@ -1190,6 +1206,7 @@ pub fn write_skill_file_at(
 	relative: &str,
 	text: &str,
 ) -> std::io::Result<Skill> {
+	let _serialised = serialised();
 	let held = skill_dir(bundle, skill_id)?;
 	private_files::replace(&skill_file_path(&held, relative)?, text.as_bytes())?;
 	recorded(bundle, SKILL_FILE_SUBJECT, relative, "saved from settings");
@@ -1208,6 +1225,7 @@ pub fn remove_skill_file(
 }
 
 pub fn remove_skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
+	let _serialised = serialised();
 	fs::remove_file(skill_file_path(&skill_dir(bundle, skill_id)?, relative)?)?;
 	recorded(bundle, SKILL_FILE_SUBJECT, relative, "removed from settings");
 	Ok(())
@@ -3980,66 +3998,218 @@ mod tests {
 		let _ = fs::remove_dir_all(&root);
 	}
 
-	#[test]
-	fn a_turn_waits_for_the_write_already_running_on_that_bundle() {
-		let root = a_root("evolve-serialised");
+	const AT_ONCE: [&str; 4] = ["figs", "dates", "plums", "pears"];
+
+	fn nothing_prepared(_root: &Path, _bot: &Bot, _label: &str) {}
+
+	fn commits_at_once(
+		root_name: &str,
+		prepare: fn(&Path, &Bot, &str),
+		act: fn(&Path, &Bot, &str),
+	) {
+		let root = a_root(root_name);
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
-		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		for label in AT_ONCE {
+			prepare(&root, &bot, label);
+		}
+		let before = titles(&root, &bot.id).len();
 
-		let held = serialised();
-		let (sender, receiver) = std::sync::mpsc::channel();
-		let waiting = std::thread::spawn({
-			let root = root.clone();
-			move || {
-				let bot = a_bot("Bean", "Answer briefly.");
-				sender.send(evolve(&root, &bot)).expect("the turn is reported");
-			}
+		let ready = std::sync::Arc::new(std::sync::Barrier::new(AT_ONCE.len()));
+		let writers: Vec<_> = AT_ONCE
+			.into_iter()
+			.map(|label| {
+				let root = root.clone();
+				let ready = std::sync::Arc::clone(&ready);
+				std::thread::spawn(move || {
+					ready.wait();
+					act(&root, &a_bot("Bean", "Answer briefly."), label)
+				})
+			})
+			.collect();
+		for writer in writers {
+			writer.join().expect("the write ran");
+		}
+
+		assert_eq!(
+			titles(&root, &bot.id).len(),
+			before + AT_ONCE.len(),
+			"{root_name} lost a commit"
+		);
+		assert!(
+			git::changes(&dir(&root, &bot.id)).is_empty(),
+			"{root_name} left the bundle uncommitted"
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	fn a_skill_is_created(root: &Path, bot: &Bot, label: &str) {
+		create_skill(root, bot, &a_draft(label, "What it is for.", "How it goes."))
+			.expect("the skill is created");
+	}
+
+	fn a_skill_file_is_written(root: &Path, bot: &Bot, label: &str) {
+		a_skill_is_created(root, bot, label);
+		write_skill_file(root, &bot.id, label, "notes.md", label).expect("the file is written");
+	}
+
+	#[test]
+	fn the_bot_files_saved_at_once_each_reach_the_history() {
+		commits_at_once("at-once-write", nothing_prepared, |root, _bot, label| {
+			write(root, &a_bot("Bean", label)).expect("the bundle is written");
 		});
+		commits_at_once("at-once-styled", nothing_prepared, |root, bot, label| {
+			write_styled(root, bot, label).expect("the bundle is written");
+		});
+		commits_at_once("at-once-remembered", nothing_prepared, |root, bot, label| {
+			write_remembered(root, bot, label).expect("the memory is written");
+		});
+		commits_at_once("at-once-ensure", nothing_prepared, |root, _bot, label| {
+			let mut bot = a_bot("Bean", "Answer briefly.");
+			bot.model = label.to_owned();
+			ensure(root, &bot).expect("the bundle is ensured");
+		});
+	}
 
-		assert!(receiver.recv_timeout(std::time::Duration::from_millis(50)).is_err());
-		drop(held);
-		assert!(receiver.recv().expect("the turn ends").is_some());
-		waiting.join().expect("the turn ran");
+	#[test]
+	fn the_skills_saved_at_once_each_reach_the_history() {
+		commits_at_once("at-once-created", nothing_prepared, a_skill_is_created);
+		commits_at_once("at-once-created-at", nothing_prepared, |root, bot, label| {
+			create_skill_at(
+				&dir(root, &bot.id),
+				&a_draft(label, "What it is for.", "How it goes."),
+			)
+			.expect("the skill is created");
+		});
+		commits_at_once("at-once-updated", a_skill_is_created, |root, bot, label| {
+			update_skill(root, bot, label, &a_draft(label, "What it is for.", "How it now goes."))
+				.expect("the skill is updated");
+		});
+		commits_at_once("at-once-updated-at", a_skill_is_created, |root, bot, label| {
+			update_skill_at(
+				&dir(root, &bot.id),
+				label,
+				&a_draft(label, "What it is for.", "How it now goes."),
+			)
+			.expect("the skill is updated");
+		});
+		commits_at_once("at-once-preloaded", a_skill_is_created, |root, bot, label| {
+			set_skill_preloaded(root, bot, label, true).expect("the skill is marked");
+		});
+		commits_at_once("at-once-preloaded-at", a_skill_is_created, |root, bot, label| {
+			set_skill_preloaded_at(&dir(root, &bot.id), label, true).expect("the skill is marked");
+		});
+		commits_at_once("at-once-removed", a_skill_is_created, |root, bot, label| {
+			remove_skill(root, bot, label).expect("the skill is removed");
+		});
+		commits_at_once("at-once-removed-at", a_skill_is_created, |root, bot, label| {
+			remove_skill_at(&dir(root, &bot.id), label).expect("the skill is removed");
+		});
+	}
+
+	#[test]
+	fn the_skill_files_saved_at_once_each_reach_the_history() {
+		commits_at_once("at-once-file", a_skill_is_created, |root, bot, label| {
+			write_skill_file(root, &bot.id, label, "notes.md", label).expect("the file is written");
+		});
+		commits_at_once("at-once-file-at", a_skill_is_created, |root, bot, label| {
+			write_skill_file_at(&dir(root, &bot.id), label, "notes.md", label)
+				.expect("the file is written");
+		});
+		commits_at_once("at-once-file-gone", a_skill_file_is_written, |root, bot, label| {
+			remove_skill_file(root, &bot.id, label, "notes.md").expect("the file is removed");
+		});
+		commits_at_once("at-once-file-gone-at", a_skill_file_is_written, |root, bot, label| {
+			remove_skill_file_at(&dir(root, &bot.id), label, "notes.md")
+				.expect("the file is removed");
+		});
+	}
+
+	#[test]
+	fn the_servers_saved_at_once_each_reach_the_history() {
+		commits_at_once("at-once-server", nothing_prepared, |root, bot, label| {
+			set_mcp_server(root, bot, label, &serde_json::json!({ "command": label }))
+				.expect("the server is saved");
+		});
+		commits_at_once("at-once-server-gone", a_server_is_saved, |root, bot, label| {
+			remove_mcp_server(root, bot, label).expect("the server is removed");
+		});
+	}
+
+	fn a_server_is_saved(root: &Path, bot: &Bot, label: &str) {
+		set_mcp_server(root, bot, label, &serde_json::json!({ "command": label }))
+			.expect("the server is saved");
+	}
+
+	#[test]
+	fn turns_ending_at_once_record_one_commit_for_the_one_that_wrote_it() {
+		let root = a_root("evolve-at-once");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+
+		for label in AT_ONCE {
+			a_bot_writes(&root, &bot.id, label, "Bean likes them.");
+			let before = titles(&root, &bot.id).len();
+			let ready = std::sync::Arc::new(std::sync::Barrier::new(AT_ONCE.len()));
+			let turns: Vec<_> = AT_ONCE
+				.map(|_| {
+					let root = root.clone();
+					let ready = std::sync::Arc::clone(&ready);
+					std::thread::spawn(move || {
+						ready.wait();
+						evolve(&root, &a_bot("Bean", "Answer briefly."))
+					})
+				})
+				.into_iter()
+				.collect();
+			let recorded: Vec<Evolution> =
+				turns.into_iter().filter_map(|turn| turn.join().expect("the turn ran")).collect();
+
+			assert_eq!(titles(&root, &bot.id).len(), before + recorded.len(), "got {recorded:?}");
+			assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is uncommitted");
+		}
 
 		let _ = fs::remove_dir_all(&root);
 	}
 
 	#[test]
-	fn two_turns_writing_at_once_each_record_their_own_write() {
-		let root = a_root("evolve-concurrent");
+	fn a_turn_ending_while_a_skill_is_saved_leaves_both_in_the_history() {
+		let root = a_root("evolve-and-settings");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 
-		let turns: Vec<_> = ["figs", "dates"]
-			.into_iter()
-			.map(|name| {
+		for label in AT_ONCE {
+			a_bot_writes(&root, &bot.id, &format!("{label}-learned"), "Bean likes them.");
+			let before = titles(&root, &bot.id).len();
+			let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
+			let turn = std::thread::spawn({
 				let root = root.clone();
-				std::thread::spawn(move || {
-					let _serialised = serialised();
-					let bot = a_bot("Bean", "Answer briefly.");
-					a_bot_writes(&root, &bot.id, name, &format!("Bean likes {name}."));
-					private_files::replace(
-						&dir(&root, &bot.id).join(LEARNED_NAME),
-						format!("Bean learned about {name}\n").as_bytes(),
+				let ready = std::sync::Arc::clone(&ready);
+				move || {
+					ready.wait();
+					evolve(&root, &a_bot("Bean", "Answer briefly."))
+				}
+			});
+			let saved = std::thread::spawn({
+				let root = root.clone();
+				let ready = std::sync::Arc::clone(&ready);
+				move || {
+					ready.wait();
+					create_skill(
+						&root,
+						&a_bot("Bean", "Answer briefly."),
+						&a_draft(&format!("{label}-saved"), "What it is for.", "How it goes."),
 					)
-					.expect("the note lands");
-					evolve_serialised(&root, &bot)
-				})
-			})
-			.collect();
-		let recorded: Vec<Evolution> =
-			turns.into_iter().filter_map(|turn| turn.join().expect("the turn ran")).collect();
+					.expect("the skill is created");
+				}
+			});
+			let evolved = usize::from(turn.join().expect("the turn ran").is_some());
+			saved.join().expect("the skill was saved");
 
-		assert_eq!(recorded.len(), 2, "got {recorded:?}");
-		let titles = titles(&root, &bot.id);
-		assert!(titles.contains(&"Bean learned about figs".to_owned()), "got {titles:?}");
-		assert!(titles.contains(&"Bean learned about dates".to_owned()), "got {titles:?}");
-		let listed: Vec<String> = skills(&root, &bot.id).into_iter().map(|it| it.id).collect();
-		assert!(listed.contains(&"figs".to_owned()), "got {listed:?}");
-		assert!(listed.contains(&"dates".to_owned()), "got {listed:?}");
-		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
-		assert!(!dir(&root, &bot.id).join(LEARNED_NAME).exists(), "a note is still there");
+			assert_eq!(titles(&root, &bot.id).len(), before + evolved + 1, "{label} lost a commit");
+			assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "{label} left work behind");
+		}
 
 		let _ = fs::remove_dir_all(&root);
 	}
