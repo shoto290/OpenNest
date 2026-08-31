@@ -92,7 +92,6 @@ const ActionFailureDialog = ({
 							onClick={retry}
 							ref={retryRef}
 							size="sm"
-							variant="default"
 						>
 							{t("dialog.retry")}
 						</Button>
