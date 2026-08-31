@@ -14,7 +14,7 @@ import {
 
 const CROWDED_BOTS = [...CONVERSATION_BOTS, ...LONG_NAMED_BOTS]
 
-const NAME_TO_COUNT_GAP = 8
+const NAME_TO_COUNT_GAP = 4
 
 const ROW_EDGE_PADDING = 8
 

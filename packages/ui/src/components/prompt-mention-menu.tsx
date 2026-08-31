@@ -157,7 +157,7 @@ const PromptMentionMenu = ({
 												size={ROW_AVATAR_SIZE}
 											/>
 										</span>
-										<span className="flex min-w-0 items-center gap-2">
+										<span className="flex min-w-0 items-center gap-1">
 											<span
 												className="truncate"
 												data-slot="prompt-mention-name"
