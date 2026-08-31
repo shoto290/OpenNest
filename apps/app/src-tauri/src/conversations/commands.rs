@@ -17,7 +17,7 @@ use crate::db::repositories::conversations::{
 	Bot as StoredBot, Conversation as StoredConversation, ConversationDraft, ConversationEdit,
 };
 use crate::db::repositories::messages::MessagePageQuery;
-use crate::db::repositories::runtime_context::{ParticipantKey, Rotation};
+use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
 use crate::environment;
 use crate::environment::contract::EnvOwner;
 use crate::spaces::commands::plugin_path;
@@ -722,9 +722,8 @@ pub async fn conversation_open_runtime_session(
 	reason: Option<String>,
 ) -> Result<RuntimeSession, TranscriptStoreError> {
 	let participant = ParticipantKey { conversation_id, bot_id };
-	let rotation =
-		runtime_session_id.zip(reason).map(|(session_id, reason)| Rotation { session_id, reason });
-	Ok(ready(&state)?.runtime_context().open(participant, started_at, rotation).await?.into())
+	let handover = runtime_session_id.map(|session_id| Handover { session_id, reason });
+	Ok(ready(&state)?.runtime_context().open(participant, started_at, handover).await?.into())
 }
 
 #[tauri::command]

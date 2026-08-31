@@ -1172,6 +1172,53 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn two_instances_of_one_bot_fold_the_same_stretch_and_keep_their_own_summary() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let conversation = a_conversation(&database).await;
+		let participant = participant_of(&conversation, "default");
+		let first_run = a_run_of(&database, &conversation, "default").await;
+		let second_run = a_run_of(&database, &conversation, "default").await;
+		spoken_so_far(&database, &conversation, SPOKEN).await;
+
+		let first = capture_checkpoint(&database, participant.clone(), first_run.clone(), 7)
+			.await
+			.expect("the first instance folds")
+			.expect("something to fold");
+		let second = capture_checkpoint(&database, participant.clone(), second_run.clone(), 8)
+			.await
+			.expect("the second instance folds")
+			.expect("something to fold");
+
+		assert_eq!(
+			second.last_message_seq, first.last_message_seq,
+			"the two instances did not fold the same stretch"
+		);
+		assert_ne!(second.id, first.id, "the second instance wrote over the first one's row");
+		assert_eq!(
+			database
+				.runtime_context()
+				.latest_checkpoint(first_run)
+				.await
+				.expect("the first instance's restore point"),
+			Some(first),
+			"an instance was rebuilt from something other than its own summary"
+		);
+		assert_eq!(
+			database
+				.runtime_context()
+				.latest_checkpoint(second_run)
+				.await
+				.expect("the second instance's restore point"),
+			Some(second),
+			"an instance was rebuilt from something other than its own summary"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
 	async fn a_refused_capture_leaves_the_previous_checkpoint_answering_for_the_chat() {
 		let dir = temp_dir();
 		let database = open(&dir);

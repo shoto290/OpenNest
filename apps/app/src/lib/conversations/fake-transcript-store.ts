@@ -241,17 +241,17 @@ export const createFakeTranscriptStore = (
 	const participantKey = (conversationId: string, botId: string) =>
 		`${conversationId}/${botId}`
 
-	const rotate = (participant: string, rotating: string, opened: string) => {
-		const row = runRows.get(rotating)
+	const handOver = (participant: string, named: string, opened: string) => {
+		const row = runRows.get(named)
 		if (!row?.live || row.participant !== participant) {
 			return
 		}
 		row.live = false
-		const carried = checkpoints.get(rotating)
+		const carried = checkpoints.get(named)
 		if (!carried) {
 			return
 		}
-		checkpoints.delete(rotating)
+		checkpoints.delete(named)
 		checkpoints.set(opened, carried)
 	}
 
@@ -1314,14 +1314,14 @@ export const createFakeTranscriptStore = (
 			botId: string,
 			startedAt: number,
 			runtimeSessionId: string | null,
-			reason: string | null,
+			_reason: string | null,
 		) => {
 			const participant = participantKey(conversationId, botId)
 			const seq = (runs.get(participant) ?? 0) + 1
 			runs.set(participant, seq)
 			const id = `run-${participant}-${seq}`
-			if (reason !== null && runtimeSessionId !== null) {
-				rotate(participant, runtimeSessionId, id)
+			if (runtimeSessionId !== null) {
+				handOver(participant, runtimeSessionId, id)
 			}
 			runRows.set(id, { participant, live: true, providerSessionId: null })
 			return Promise.resolve<RuntimeSession>({

@@ -2295,7 +2295,7 @@ describe("the provider session a run answered under", () => {
 		expect(state.turn).toBe("idle")
 	})
 
-	it("writes a late callback onto the run that answered under it", async () => {
+	it("cannot write a replaced run's id onto the run that took its place", async () => {
 		const base = createFakeTranscriptStore()
 		const { store: recording, recorded } = recordingStore(base)
 		const settled = deferred()
@@ -2331,7 +2331,7 @@ describe("the provider session a run answered under", () => {
 		expect(replacement.runtimeSessionId).not.toBe(replaced.runtimeSessionId)
 		expect(recorded).toEqual([[replaced.runtimeSessionId, "stale-process"]])
 		expect(state.runtime).toEqual(replacement)
-		expect(state.errors.at(-1)?.error).not.toEqual(REFUSED_BY_THE_STORE)
+		expect(state.errors.at(-1)?.error).toEqual(REFUSED_BY_THE_STORE)
 		await expect(
 			base.recordProviderSession(
 				replacement.conversationId,

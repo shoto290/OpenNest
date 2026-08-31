@@ -51,9 +51,18 @@ impl FromSql for RuntimeSessionStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Rotation {
+pub struct Handover {
 	pub session_id: String,
-	pub reason: String,
+	pub reason: Option<String>,
+}
+
+impl Handover {
+	fn status(&self) -> RuntimeSessionStatus {
+		match self.reason {
+			Some(_) => RuntimeSessionStatus::Rotated,
+			None => RuntimeSessionStatus::Ended,
+		}
+	}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,8 +103,8 @@ pub struct NewCheckpoint {
 	pub created_at: i64,
 }
 
-const ROTATE_LIVE_SESSION: &str = "UPDATE runtime_sessions
-	SET status = 'rotated', ended_at = ?4, rotation_reason = ?5
+const HAND_OVER_SESSION: &str = "UPDATE runtime_sessions
+	SET status = ?4, ended_at = ?5, rotation_reason = ?6
 	WHERE id = ?1 AND conversation_id = ?2 AND bot_id = ?3 AND status = 'active'";
 
 const OPEN_SESSION: &str = "INSERT INTO runtime_sessions
@@ -174,15 +183,15 @@ impl RuntimeContextRepository {
 		&self,
 		participant: ParticipantKey,
 		started_at: i64,
-		rotation: Option<Rotation>,
+		handover: Option<Handover>,
 	) -> Result<RuntimeSession, DatabaseError> {
 		let id = uuid::Uuid::new_v4().to_string();
 		self.access
 			.call_mut(move |connection| {
 				let transaction = connection.transaction()?;
-				let rotated = match rotation.as_ref() {
-					Some(rotation) => {
-						rotate_the_named_session(&transaction, &participant, rotation, started_at)?
+				let handed_over = match handover.as_ref() {
+					Some(handover) => {
+						end_the_named_session(&transaction, &participant, handover, started_at)?
 					}
 					None => false,
 				};
@@ -191,8 +200,8 @@ impl RuntimeContextRepository {
 					params![id, participant.conversation_id, participant.bot_id, started_at],
 					|row| row.get::<_, i64>(0),
 				)?;
-				if let Some(rotation) = rotation.as_ref().filter(|_| rotated) {
-					carry_the_checkpoint_forward(&transaction, &rotation.session_id, &id)?;
+				if let Some(handover) = handover.as_ref().filter(|_| handed_over) {
+					carry_the_checkpoint_forward(&transaction, &handover.session_id, &id)?;
 				}
 				transaction.commit()?;
 				Ok(RuntimeSession {
@@ -408,23 +417,24 @@ impl RuntimeContextRepository {
 	}
 }
 
-fn rotate_the_named_session(
+fn end_the_named_session(
 	transaction: &rusqlite::Transaction<'_>,
 	participant: &ParticipantKey,
-	rotation: &Rotation,
+	handover: &Handover,
 	ended_at: i64,
 ) -> Result<bool, DatabaseError> {
-	let rotated = transaction.execute(
-		ROTATE_LIVE_SESSION,
+	let ended = transaction.execute(
+		HAND_OVER_SESSION,
 		params![
-			rotation.session_id,
+			handover.session_id,
 			participant.conversation_id,
 			participant.bot_id,
+			handover.status(),
 			ended_at,
-			rotation.reason
+			handover.reason
 		],
 	)?;
-	Ok(rotated == 1)
+	Ok(ended == 1)
 }
 
 fn carry_the_checkpoint_forward(
@@ -601,8 +611,12 @@ mod tests {
 			.map(|checkpoint| checkpoint.last_message_seq)
 	}
 
-	fn rotating(session: &RuntimeSession) -> Option<Rotation> {
-		Some(Rotation { session_id: session.id.clone(), reason: "context full".to_owned() })
+	fn rotating(session: &RuntimeSession) -> Option<Handover> {
+		Some(Handover { session_id: session.id.clone(), reason: Some("context full".to_owned()) })
+	}
+
+	fn leaving(session: &RuntimeSession) -> Option<Handover> {
+		Some(Handover { session_id: session.id.clone(), reason: None })
 	}
 
 	fn a_checkpoint_at(
@@ -792,9 +806,9 @@ mod tests {
 		let database = seeded(&dir).await;
 		let runtime = database.runtime_context();
 		let live = runtime.open(participant("b1"), 1, None).await.expect("the live session");
-		let gone = Rotation {
+		let gone = Handover {
 			session_id: "a session of nobody's".to_owned(),
-			reason: "context full".to_owned(),
+			reason: Some("context full".to_owned()),
 		};
 
 		let opened =
@@ -807,6 +821,101 @@ mod tests {
 		);
 		assert_eq!(live_session_count(&database).await, 2, "the rotation lost a live session");
 		assert_eq!(opened.seq, 2, "the session that was opened did not continue the lineage");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_restore_point_is_read_through_the_index_that_serves_it() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+
+		let plan = database
+			.call(|connection| {
+				Ok(connection.query_row(
+					&format!("EXPLAIN QUERY PLAN {LATEST_CHECKPOINT}"),
+					params!["s1"],
+					|row| row.get::<_, String>(3),
+				)?)
+			})
+			.await
+			.expect("the plan");
+
+		assert!(
+			plan.contains("context_checkpoints_per_session"),
+			"a restore point is read without the index that serves it: {plan}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_start_naming_its_own_previous_session_ends_that_one_and_no_other() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let runtime = database.runtime_context();
+		let left_behind = runtime.open(participant("b1"), 1, None).await.expect("the first start");
+		let beside_it =
+			runtime.open(participant("b1"), 2, None).await.expect("the instance beside");
+
+		runtime
+			.open(participant("b1"), 3, leaving(&left_behind))
+			.await
+			.expect("the start that leaves the first one behind");
+
+		let ended = stored_session(&database, "b1", &left_behind.id).await;
+		assert_eq!(
+			ended.status,
+			RuntimeSessionStatus::Ended,
+			"a start that named the session it left behind kept that row live"
+		);
+		assert_eq!(ended.ended_at, Some(3), "the session it left behind never ended");
+		assert_eq!(ended.rotation_reason, None, "a start with no reason invented one");
+		assert_eq!(
+			stored_session(&database, "b1", &beside_it.id).await.status,
+			RuntimeSessionStatus::Active,
+			"the start ended an instance the caller never named"
+		);
+		assert_eq!(live_session_count(&database).await, 2, "the start lost a live session");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_start_naming_its_own_previous_session_opens_on_that_sessions_checkpoint() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let runtime = database.runtime_context();
+		let left_behind = runtime.open(participant("b1"), 1, None).await.expect("the first start");
+		let beside_it =
+			runtime.open(participant("b1"), 2, None).await.expect("the instance beside");
+		runtime
+			.checkpoint(a_checkpoint_at(participant("b1"), left_behind.id.clone(), 4))
+			.await
+			.expect("the outgoing instance folds its own history");
+		runtime
+			.checkpoint(a_checkpoint_at(participant("b1"), beside_it.id.clone(), 4))
+			.await
+			.expect("the instance beside it folds the same stretch");
+
+		let opened = runtime
+			.open(participant("b1"), 3, leaving(&left_behind))
+			.await
+			.expect("the start that leaves the first one behind");
+
+		assert_eq!(
+			restore_point(&database, &opened.id).await,
+			Some(4),
+			"the start opened on an empty transcript instead of what it left behind"
+		);
+		assert_eq!(
+			restore_point(&database, &beside_it.id).await,
+			Some(4),
+			"the start carried away the restore point of an instance it never named"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
