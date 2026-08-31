@@ -76,9 +76,19 @@ const createHarness = async (
 			isRefusingNextWrite = false
 			return Promise.reject(new Error("refused"))
 		},
-		boundedContext: (conversationId, botId, promptMessageId) => {
+		boundedContext: (
+			conversationId,
+			botId,
+			runtimeSessionId,
+			promptMessageId,
+		) => {
 			contexts.push([botId, promptMessageId])
-			return base.boundedContext(conversationId, botId, promptMessageId)
+			return base.boundedContext(
+				conversationId,
+				botId,
+				runtimeSessionId,
+				promptMessageId,
+			)
 		},
 	}
 	const refuseNextWrite = () => {

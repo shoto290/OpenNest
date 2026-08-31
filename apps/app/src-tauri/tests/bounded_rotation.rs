@@ -104,7 +104,13 @@ impl Harness {
 		}
 	}
 
-	fn open_run(&self, conversation: &str, started_at: i64, reason: Option<&str>) -> RuntimeScope {
+	fn open_run(
+		&self,
+		conversation: &str,
+		started_at: i64,
+		rotating: Option<&RuntimeScope>,
+		reason: Option<&str>,
+	) -> RuntimeScope {
 		let opened = self
 			.call(
 				"conversation_open_runtime_session",
@@ -112,6 +118,7 @@ impl Harness {
 					"conversationId": conversation,
 					"botId": BOT,
 					"startedAt": started_at,
+					"runtimeSessionId": rotating.map(|run| run.runtime_session_id.clone()),
 					"reason": reason
 				}),
 			)
@@ -251,7 +258,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 	assert_eq!(before.len(), SPOKEN, "the history was not written as it was told");
 
 	scenario("resume_crash");
-	let refused_run = harness.open_run(&conversation, 1, None);
+	let refused_run = harness.open_run(&conversation, 1, None, None);
 	assert_eq!(
 		harness.start(&refused_run, Some("a session that is gone")),
 		Ok(json!({ "resumed": false }))
@@ -277,7 +284,12 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 	assert!(checkpoint["tokenCount"].as_i64().is_some_and(|count| count > 0));
 
 	scenario("normal");
-	let live = harness.open_run(&conversation, 3, Some("the provider session was refused"));
+	let live = harness.open_run(
+		&conversation,
+		3,
+		Some(&refused_run),
+		Some("the provider session was refused"),
+	);
 	assert_eq!(live.epoch, 2, "the rotation did not continue the lineage");
 	assert_ne!(live.runtime_session_id, refused_run.runtime_session_id);
 	assert_eq!(harness.start(&live, None), Ok(json!({ "resumed": false })));
@@ -320,6 +332,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 			json!({
 				"conversationId": conversation,
 				"botId": BOT,
+				"runtimeSessionId": live.runtime_session_id,
 				"promptMessageId": PROMPT
 			}),
 		)

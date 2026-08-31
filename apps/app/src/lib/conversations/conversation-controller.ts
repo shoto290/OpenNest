@@ -535,6 +535,7 @@ export const createConversationController = (
 			botId,
 			now(),
 			null,
+			null,
 		)
 		return {
 			conversationId: opened.conversationId,
@@ -569,6 +570,7 @@ export const createConversationController = (
 		const context = await store.boundedContext(
 			conversationId,
 			summons.botId,
+			scope.runtimeSessionId,
 			summons.promptId,
 		)
 		await driver.submitPrompt(scope, context)

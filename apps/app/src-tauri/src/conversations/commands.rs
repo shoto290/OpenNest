@@ -17,7 +17,7 @@ use crate::db::repositories::conversations::{
 	Bot as StoredBot, Conversation as StoredConversation, ConversationDraft, ConversationEdit,
 };
 use crate::db::repositories::messages::MessagePageQuery;
-use crate::db::repositories::runtime_context::ParticipantKey;
+use crate::db::repositories::runtime_context::{ParticipantKey, Rotation};
 use crate::environment;
 use crate::environment::contract::EnvOwner;
 use crate::spaces::commands::plugin_path;
@@ -718,10 +718,13 @@ pub async fn conversation_open_runtime_session(
 	conversation_id: String,
 	bot_id: String,
 	started_at: i64,
+	runtime_session_id: Option<String>,
 	reason: Option<String>,
 ) -> Result<RuntimeSession, TranscriptStoreError> {
 	let participant = ParticipantKey { conversation_id, bot_id };
-	Ok(ready(&state)?.runtime_context().open(participant, started_at, reason).await?.into())
+	let rotation =
+		runtime_session_id.zip(reason).map(|(session_id, reason)| Rotation { session_id, reason });
+	Ok(ready(&state)?.runtime_context().open(participant, started_at, rotation).await?.into())
 }
 
 #[tauri::command]
@@ -744,10 +747,12 @@ pub async fn conversation_bounded_context(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 	bot_id: String,
+	runtime_session_id: String,
 	prompt_message_id: String,
 ) -> Result<String, TranscriptStoreError> {
 	let participant = ParticipantKey { conversation_id, bot_id };
-	context::bounded_context(ready(&state)?, participant, prompt_message_id).await
+	context::bounded_context(ready(&state)?, participant, runtime_session_id, prompt_message_id)
+		.await
 }
 
 #[tauri::command]
@@ -755,7 +760,7 @@ pub async fn conversation_capture_checkpoint(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 	bot_id: String,
-	runtime_session_id: Option<String>,
+	runtime_session_id: String,
 	created_at: i64,
 ) -> Result<Option<ContextCheckpoint>, TranscriptStoreError> {
 	let participant = ParticipantKey { conversation_id, bot_id };

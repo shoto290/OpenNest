@@ -51,6 +51,12 @@ impl FromSql for RuntimeSessionStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rotation {
+	pub session_id: String,
+	pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParticipantKey {
 	pub conversation_id: String,
 	pub bot_id: String,
@@ -81,7 +87,7 @@ pub struct ContextCheckpoint {
 
 pub struct NewCheckpoint {
 	pub participant: ParticipantKey,
-	pub runtime_session_id: Option<String>,
+	pub runtime_session_id: String,
 	pub summary: String,
 	pub last_message_seq: i64,
 	pub token_count: i64,
@@ -89,8 +95,8 @@ pub struct NewCheckpoint {
 }
 
 const ROTATE_LIVE_SESSION: &str = "UPDATE runtime_sessions
-	SET status = 'rotated', ended_at = ?2, rotation_reason = ?3
-	WHERE id = ?1 AND status = 'active'";
+	SET status = 'rotated', ended_at = ?4, rotation_reason = ?5
+	WHERE id = ?1 AND conversation_id = ?2 AND bot_id = ?3 AND status = 'active'";
 
 const OPEN_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, seq, status, started_at)
@@ -129,9 +135,11 @@ const INSERT_CHECKPOINT: &str = "INSERT INTO context_checkpoints
 	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
 
 const LATEST_CHECKPOINT: &str = "SELECT * FROM context_checkpoints
-	WHERE conversation_id = ?1 AND bot_id = ?2
+	WHERE runtime_session_id = ?1
 	ORDER BY last_message_seq DESC
 	LIMIT 1";
+
+const FORGET_CHECKPOINT: &str = "DELETE FROM context_checkpoints WHERE id = ?1";
 
 const CHECKPOINTS_FOR: &str = "SELECT * FROM context_checkpoints
 	WHERE conversation_id = ?1 AND bot_id = ?2
@@ -166,20 +174,26 @@ impl RuntimeContextRepository {
 		&self,
 		participant: ParticipantKey,
 		started_at: i64,
-		rotation_reason: Option<String>,
+		rotation: Option<Rotation>,
 	) -> Result<RuntimeSession, DatabaseError> {
 		let id = uuid::Uuid::new_v4().to_string();
 		self.access
 			.call_mut(move |connection| {
 				let transaction = connection.transaction()?;
-				if let Some(reason) = rotation_reason.as_deref() {
-					rotate_the_live_session(&transaction, &participant, started_at, reason)?;
-				}
+				let rotated = match rotation.as_ref() {
+					Some(rotation) => {
+						rotate_the_named_session(&transaction, &participant, rotation, started_at)?
+					}
+					None => false,
+				};
 				let seq = transaction.query_row(
 					OPEN_SESSION,
 					params![id, participant.conversation_id, participant.bot_id, started_at],
 					|row| row.get::<_, i64>(0),
 				)?;
+				if let Some(rotation) = rotation.as_ref().filter(|_| rotated) {
+					carry_the_checkpoint_forward(&transaction, &rotation.session_id, &id)?;
+				}
 				transaction.commit()?;
 				Ok(RuntimeSession {
 					id,
@@ -336,7 +350,7 @@ impl RuntimeContextRepository {
 		let stored = ContextCheckpoint {
 			id: uuid::Uuid::new_v4().to_string(),
 			participant: checkpoint.participant,
-			runtime_session_id: checkpoint.runtime_session_id,
+			runtime_session_id: Some(checkpoint.runtime_session_id),
 			summary: checkpoint.summary,
 			last_message_seq: checkpoint.last_message_seq,
 			token_count: checkpoint.token_count,
@@ -364,16 +378,12 @@ impl RuntimeContextRepository {
 
 	pub async fn latest_checkpoint(
 		&self,
-		participant: ParticipantKey,
+		runtime_session_id: String,
 	) -> Result<Option<ContextCheckpoint>, DatabaseError> {
 		self.access
 			.call(move |connection| {
 				Ok(connection
-					.query_row(
-						LATEST_CHECKPOINT,
-						params![participant.conversation_id, participant.bot_id],
-						checkpoint_from,
-					)
+					.query_row(LATEST_CHECKPOINT, params![runtime_session_id], checkpoint_from)
 					.optional()?)
 			})
 			.await
@@ -398,23 +408,50 @@ impl RuntimeContextRepository {
 	}
 }
 
-fn rotate_the_live_session(
+fn rotate_the_named_session(
 	transaction: &rusqlite::Transaction<'_>,
 	participant: &ParticipantKey,
+	rotation: &Rotation,
 	ended_at: i64,
-	reason: &str,
+) -> Result<bool, DatabaseError> {
+	let rotated = transaction.execute(
+		ROTATE_LIVE_SESSION,
+		params![
+			rotation.session_id,
+			participant.conversation_id,
+			participant.bot_id,
+			ended_at,
+			rotation.reason
+		],
+	)?;
+	Ok(rotated == 1)
+}
+
+fn carry_the_checkpoint_forward(
+	transaction: &rusqlite::Transaction<'_>,
+	rotated_session_id: &str,
+	opened_session_id: &str,
 ) -> Result<(), DatabaseError> {
-	let live = transaction
-		.query_row(
-			ACTIVE_SESSION,
-			params![participant.conversation_id, participant.bot_id],
-			session_from,
-		)
+	let carried = transaction
+		.query_row(LATEST_CHECKPOINT, params![rotated_session_id], checkpoint_from)
 		.optional()?;
-	let Some(live) = live else {
+	let Some(carried) = carried else {
 		return Ok(());
 	};
-	transaction.execute(ROTATE_LIVE_SESSION, params![live.id, ended_at, reason])?;
+	transaction.execute(FORGET_CHECKPOINT, params![carried.id])?;
+	transaction.execute(
+		INSERT_CHECKPOINT,
+		params![
+			carried.id,
+			carried.participant.conversation_id,
+			carried.participant.bot_id,
+			opened_session_id,
+			carried.summary,
+			carried.last_message_seq,
+			carried.token_count,
+			carried.created_at
+		],
+	)?;
 	Ok(())
 }
 
@@ -555,10 +592,27 @@ mod tests {
 			.expect("query")
 	}
 
-	fn a_checkpoint_at(participant: ParticipantKey, last_message_seq: i64) -> NewCheckpoint {
+	async fn restore_point(database: &Database, runtime_session_id: &str) -> Option<i64> {
+		database
+			.runtime_context()
+			.latest_checkpoint(runtime_session_id.to_owned())
+			.await
+			.expect("the restore point")
+			.map(|checkpoint| checkpoint.last_message_seq)
+	}
+
+	fn rotating(session: &RuntimeSession) -> Option<Rotation> {
+		Some(Rotation { session_id: session.id.clone(), reason: "context full".to_owned() })
+	}
+
+	fn a_checkpoint_at(
+		participant: ParticipantKey,
+		runtime_session_id: String,
+		last_message_seq: i64,
+	) -> NewCheckpoint {
 		NewCheckpoint {
 			participant,
-			runtime_session_id: None,
+			runtime_session_id,
 			summary: format!("the conversation up to message {last_message_seq}"),
 			last_message_seq,
 			token_count: 120,
@@ -575,7 +629,7 @@ mod tests {
 		let first = runtime.open(participant("b1"), 1, None).await.expect("b1 opens a session");
 		let second = runtime.open(participant("b2"), 2, None).await.expect("b2 opens a session");
 		runtime
-			.open(participant("b1"), 3, Some("context full".to_owned()))
+			.open(participant("b1"), 3, rotating(&first))
 			.await
 			.expect("b1 opens a second session");
 
@@ -604,12 +658,14 @@ mod tests {
 		let runtime = database.runtime_context();
 
 		let mut opened_seqs = Vec::new();
+		let mut live = None;
 		for started_at in 1..=3 {
 			let session = runtime
-				.open(participant("b1"), started_at, Some("context full".to_owned()))
+				.open(participant("b1"), started_at, live.as_ref().and_then(rotating))
 				.await
 				.expect("the session opens");
 			opened_seqs.push(session.seq);
+			live = Some(session);
 		}
 
 		assert_eq!(opened_seqs, vec![1, 2, 3], "a reopen did not continue the lineage");
@@ -636,10 +692,8 @@ mod tests {
 		let runtime = database.runtime_context();
 		let first = runtime.open(participant("b1"), 1, None).await.expect("the first session");
 
-		let second = runtime
-			.open(participant("b1"), 5, Some("context full".to_owned()))
-			.await
-			.expect("the second session");
+		let second =
+			runtime.open(participant("b1"), 5, rotating(&first)).await.expect("the second session");
 
 		let sessions = runtime.sessions_for(participant("b1")).await.expect("the sessions");
 		let rotated = sessions.first().expect("the replaced session");
@@ -706,27 +760,127 @@ mod tests {
 			runtime.open(participant("b1"), 2, None).await.expect("the second instance");
 
 		let rotated_in = runtime
-			.open(participant("b1"), 3, Some("context full".to_owned()))
+			.open(participant("b1"), 3, rotating(&beside_it))
 			.await
 			.expect("the rotation opens a session");
 
 		assert_eq!(
-			stored_session(&database, "b1", &lineage.id).await.status,
+			stored_session(&database, "b1", &beside_it.id).await.status,
 			RuntimeSessionStatus::Rotated,
-			"the rotation left the session it replaced live"
+			"the session the caller named at open stayed live"
 		);
 		assert_eq!(
-			stored_session(&database, "b1", &beside_it.id).await.status,
+			stored_session(&database, "b1", &lineage.id).await.status,
 			RuntimeSessionStatus::Active,
-			"the rotation ended an instance it was not asked about"
+			"the rotation ended an instance the caller never named"
 		);
 		assert_eq!(live_session_count(&database).await, 2, "the rotation lost a live session");
 		assert_eq!(
 			runtime.active_session(participant("b1")).await.expect("the live session"),
-			Some(stored_session(&database, "b1", &beside_it.id).await),
+			Some(lineage),
 			"the live session is not the earliest one still running"
 		);
 		assert_eq!(rotated_in.seq, 3, "the rotation restarted the lineage");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_rotation_naming_a_session_that_is_no_longer_live_ends_nothing() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let runtime = database.runtime_context();
+		let live = runtime.open(participant("b1"), 1, None).await.expect("the live session");
+		let gone = Rotation {
+			session_id: "a session of nobody's".to_owned(),
+			reason: "context full".to_owned(),
+		};
+
+		let opened =
+			runtime.open(participant("b1"), 2, Some(gone)).await.expect("the session opens");
+
+		assert_eq!(
+			stored_session(&database, "b1", &live.id).await.status,
+			RuntimeSessionStatus::Active,
+			"a rotation naming a session the file does not hold ended the live one"
+		);
+		assert_eq!(live_session_count(&database).await, 2, "the rotation lost a live session");
+		assert_eq!(opened.seq, 2, "the session that was opened did not continue the lineage");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn two_instances_of_one_bot_read_back_their_own_restore_point() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let runtime = database.runtime_context();
+		let first = runtime.open(participant("b1"), 1, None).await.expect("the first instance");
+		let second = runtime.open(participant("b1"), 2, None).await.expect("the second instance");
+
+		runtime
+			.checkpoint(a_checkpoint_at(participant("b1"), first.id.clone(), 4))
+			.await
+			.expect("the first instance folds its own history");
+		runtime
+			.checkpoint(a_checkpoint_at(participant("b1"), second.id.clone(), 12))
+			.await
+			.expect("the second instance folds its own history");
+
+		assert_eq!(
+			restore_point(&database, &first.id).await,
+			Some(4),
+			"an instance was rebuilt from the checkpoint of the one beside it"
+		);
+		assert_eq!(
+			restore_point(&database, &second.id).await,
+			Some(12),
+			"an instance lost its own restore point to the one beside it"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_session_opened_by_rotation_reads_back_the_checkpoint_of_the_one_it_replaced() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let runtime = database.runtime_context();
+		let rotated = runtime.open(participant("b1"), 1, None).await.expect("the first instance");
+		let beside_it =
+			runtime.open(participant("b1"), 2, None).await.expect("the second instance");
+		runtime
+			.checkpoint(a_checkpoint_at(participant("b1"), rotated.id.clone(), 4))
+			.await
+			.expect("the outgoing instance folds its own history");
+		runtime
+			.checkpoint(a_checkpoint_at(participant("b1"), beside_it.id.clone(), 12))
+			.await
+			.expect("the instance beside it folds its own history");
+
+		let opened = runtime
+			.open(participant("b1"), 3, rotating(&rotated))
+			.await
+			.expect("the rotation opens a session");
+
+		assert_eq!(
+			restore_point(&database, &opened.id).await,
+			Some(4),
+			"the rotation dropped the checkpoint taken on the session it replaced"
+		);
+		assert_eq!(
+			restore_point(&database, &beside_it.id).await,
+			Some(12),
+			"the rotation carried away the restore point of an instance it never named"
+		);
+		assert_eq!(
+			restore_point(&database, &rotated.id).await,
+			None,
+			"the checkpoint stayed under the session the rotation ended"
+		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -766,17 +920,22 @@ mod tests {
 		let dir = temp_dir();
 		let database = seeded(&dir).await;
 		let runtime = database.runtime_context();
+		let session = runtime.open(participant("b1"), 1, None).await.expect("the session");
 
 		for last_message_seq in [4, 12, 8] {
 			runtime
-				.checkpoint(a_checkpoint_at(participant("b1"), last_message_seq))
+				.checkpoint(a_checkpoint_at(
+					participant("b1"),
+					session.id.clone(),
+					last_message_seq,
+				))
 				.await
 				.expect("the checkpoint is stored");
 		}
 
 		assert_eq!(
 			runtime
-				.latest_checkpoint(participant("b1"))
+				.latest_checkpoint(session.id.clone())
 				.await
 				.expect("the latest checkpoint")
 				.map(|checkpoint| checkpoint.last_message_seq),
@@ -814,10 +973,7 @@ mod tests {
 			.await
 			.expect("the provider session is recorded");
 		runtime
-			.checkpoint(NewCheckpoint {
-				runtime_session_id: Some(session.id.clone()),
-				..a_checkpoint_at(participant("b1"), 7)
-			})
+			.checkpoint(a_checkpoint_at(participant("b1"), session.id.clone(), 7))
 			.await
 			.expect("the checkpoint is stored");
 		let sessions_before = runtime.sessions_for(participant("b1")).await.expect("the sessions");
@@ -870,10 +1026,7 @@ mod tests {
 		let database = seeded(&dir).await;
 		let runtime = database.runtime_context();
 		let replaced = runtime.open(participant("b1"), 1, None).await.expect("the first session");
-		runtime
-			.open(participant("b1"), 5, Some("context full".to_owned()))
-			.await
-			.expect("the second session");
+		runtime.open(participant("b1"), 5, rotating(&replaced)).await.expect("the second session");
 
 		let closed = runtime.close(replaced.id.clone(), 9).await;
 		let failed = runtime.fail(replaced.id.clone(), 9, "the process died".to_owned()).await;
@@ -1032,7 +1185,7 @@ mod tests {
 			.await
 			.expect("the provider session is recorded");
 		let ended = runtime
-			.open(participant("b1"), 5, Some("context full".to_owned()))
+			.open(participant("b1"), 5, rotating(&rotated))
 			.await
 			.expect("b1's second session");
 		runtime.close(ended.id.clone(), 6).await.expect("the session closes");

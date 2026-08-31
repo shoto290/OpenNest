@@ -192,6 +192,7 @@ export type TranscriptStore = TranscriptPort & {
 		conversationId: string,
 		botId: string,
 		startedAt: number,
+		runtimeSessionId: string | null,
 		reason: string | null,
 	) => Promise<RuntimeSession>
 	recordProviderSession: (
@@ -203,12 +204,13 @@ export type TranscriptStore = TranscriptPort & {
 	boundedContext: (
 		conversationId: string,
 		botId: string,
+		runtimeSessionId: string,
 		promptMessageId: string,
 	) => Promise<string>
 	captureCheckpoint: (
 		conversationId: string,
 		botId: string,
-		runtimeSessionId: string | null,
+		runtimeSessionId: string,
 		createdAt: number,
 	) => Promise<ContextCheckpoint | null>
 	messageReference: (

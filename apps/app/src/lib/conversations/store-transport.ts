@@ -359,12 +359,14 @@ export const conversationStore: TranscriptStore = {
 		conversationId: string,
 		botId: string,
 		startedAt: number,
+		runtimeSessionId: string | null,
 		reason: string | null,
 	) =>
 		invoke<RuntimeSession>("conversation_open_runtime_session", {
 			conversationId,
 			botId,
 			startedAt,
+			runtimeSessionId,
 			reason,
 		}),
 
@@ -384,18 +386,20 @@ export const conversationStore: TranscriptStore = {
 	boundedContext: (
 		conversationId: string,
 		botId: string,
+		runtimeSessionId: string,
 		promptMessageId: string,
 	) =>
 		invoke<string>("conversation_bounded_context", {
 			conversationId,
 			botId,
+			runtimeSessionId,
 			promptMessageId,
 		}),
 
 	captureCheckpoint: (
 		conversationId: string,
 		botId: string,
-		runtimeSessionId: string | null,
+		runtimeSessionId: string,
 		createdAt: number,
 	) =>
 		invoke<ContextCheckpoint | null>("conversation_capture_checkpoint", {

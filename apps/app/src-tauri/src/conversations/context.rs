@@ -37,6 +37,7 @@ const MENTION_CLOSE: &str = ">";
 pub async fn bounded_context(
 	database: &Database,
 	participant: ParticipantKey,
+	runtime_session_id: String,
 	prompt_message_id: String,
 ) -> Result<String, TranscriptStoreError> {
 	let conversation_id = participant.conversation_id.clone();
@@ -45,7 +46,7 @@ pub async fn bounded_context(
 		.message(conversation_id.clone(), prompt_message_id)
 		.await?
 		.ok_or_else(no_such_message)?;
-	let checkpoint = database.runtime_context().latest_checkpoint(participant.clone()).await?;
+	let checkpoint = database.runtime_context().latest_checkpoint(runtime_session_id).await?;
 	let recent = database
 		.messages()
 		.window_messages(MessageWindowQuery {
@@ -126,11 +127,11 @@ pub async fn run_behind(
 pub async fn capture_checkpoint(
 	database: &Database,
 	participant: ParticipantKey,
-	runtime_session_id: Option<String>,
+	runtime_session_id: String,
 	created_at: i64,
 ) -> Result<Option<ContextCheckpoint>, TranscriptStoreError> {
 	let conversation_id = participant.conversation_id.clone();
-	let previous = database.runtime_context().latest_checkpoint(participant.clone()).await?;
+	let previous = database.runtime_context().latest_checkpoint(runtime_session_id.clone()).await?;
 	let baseline = previous.as_ref().map_or(0, |checkpoint| checkpoint.last_message_seq);
 	let last_seq = database.messages().last_seq(conversation_id.clone()).await?;
 	let cutoff = last_seq - i64::from(RECENT_TAIL);
@@ -695,6 +696,15 @@ mod tests {
 		ParticipantKey { conversation_id: conversation_id.to_owned(), bot_id: bot_id.to_owned() }
 	}
 
+	async fn a_run_of(database: &Database, conversation_id: &str, bot_id: &str) -> String {
+		database
+			.runtime_context()
+			.open(participant_of(conversation_id, bot_id), 1, None)
+			.await
+			.expect("the run is opened")
+			.id
+	}
+
 	async fn another_bot(database: &Database, conversation_id: &str, id: &'static str) {
 		let conversation_id = conversation_id.to_owned();
 		database
@@ -888,16 +898,21 @@ mod tests {
 		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		told(&database, "default", "Answer briefly.").await;
+		let run = a_run_of(&database, &conversation, "default").await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
-		capture_checkpoint(&database, participant_of(&conversation, "default"), None, 7)
+		capture_checkpoint(&database, participant_of(&conversation, "default"), run.clone(), 7)
 			.await
 			.expect("the checkpoint is taken");
 		prompt(&database, &conversation, "p1", None).await;
 
-		let context =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		assert!(context.starts_with(SUMMARY_LABEL), "the context did not open on the summary");
 		assert_eq!(
@@ -934,15 +949,16 @@ mod tests {
 		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		let participant = participant_of(&conversation, "default");
+		let run = a_run_of(&database, &conversation, "default").await;
 		ruled(&database, &conversation, "Speak in French.").await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
-		let checkpoint = capture_checkpoint(&database, participant.clone(), None, 7)
+		let checkpoint = capture_checkpoint(&database, participant.clone(), run.clone(), 7)
 			.await
 			.expect("the checkpoint is taken")
 			.expect("something to fold");
 		prompt(&database, &conversation, "p1", None).await;
 
-		let first = bounded_context(&database, participant.clone(), "p1".to_owned())
+		let first = bounded_context(&database, participant.clone(), run.clone(), "p1".to_owned())
 			.await
 			.expect("the context is rebuilt");
 
@@ -958,7 +974,7 @@ mod tests {
 
 		ruled(&database, &conversation, "Speak in Dutch.").await;
 		prompt(&database, &conversation, "p2", None).await;
-		let second = bounded_context(&database, participant.clone(), "p2".to_owned())
+		let second = bounded_context(&database, participant.clone(), run.clone(), "p2".to_owned())
 			.await
 			.expect("the context is rebuilt");
 
@@ -966,7 +982,7 @@ mod tests {
 		assert_eq!(
 			database
 				.runtime_context()
-				.latest_checkpoint(participant)
+				.latest_checkpoint(run)
 				.await
 				.expect("the latest checkpoint")
 				.map(|found| found.summary),
@@ -986,15 +1002,24 @@ mod tests {
 		spoken_so_far(&database, &conversation, SPOKEN).await;
 		prompt(&database, &conversation, "p1", Some("m1")).await;
 		prompt(&database, &conversation, "p2", Some("m30")).await;
+		let run = a_run_of(&database, &conversation, "default").await;
 
-		let old =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
-		let recent =
-			bounded_context(&database, participant_of(&conversation, "default"), "p2".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let old = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run.clone(),
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
+		let recent = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p2".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		assert_eq!(
 			section(&old, REPLY_LABEL),
@@ -1024,11 +1049,16 @@ mod tests {
 		spoken_so_far(&database, &conversation, SPOKEN).await;
 		ran(&database, &conversation, "m30").await;
 		prompt(&database, &conversation, "p1", Some("m30")).await;
+		let run = a_run_of(&database, &conversation, "default").await;
 
-		let context =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		assert_eq!(
 			section(&context, REPLY_LABEL),
@@ -1048,10 +1078,16 @@ mod tests {
 		let content = a_long_message(&database, &conversation, "long").await;
 		prompt(&database, &conversation, "p1", Some("long")).await;
 
-		let context =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let run = a_run_of(&database, &conversation, "default").await;
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		assert_eq!(
 			section(&context, REPLY_LABEL),
@@ -1071,10 +1107,16 @@ mod tests {
 		spoken_so_far(&database, &conversation, 2).await;
 		prompt(&database, &conversation, "p1", None).await;
 
-		let context =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let run = a_run_of(&database, &conversation, "default").await;
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		assert!(
 			!context.contains(REPLY_LABEL),
@@ -1091,19 +1133,20 @@ mod tests {
 		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		let participant = participant_of(&conversation, "default");
+		let run = a_run_of(&database, &conversation, "default").await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
-		let first = capture_checkpoint(&database, participant.clone(), None, 7)
+		let first = capture_checkpoint(&database, participant.clone(), run.clone(), 7)
 			.await
 			.expect("the first checkpoint")
 			.expect("something to fold");
 
-		let nothing_new = capture_checkpoint(&database, participant.clone(), None, 8)
+		let nothing_new = capture_checkpoint(&database, participant.clone(), run.clone(), 8)
 			.await
 			.expect("the checkpoint is considered");
 		for index in SPOKEN + 1..=SPOKEN + 20 {
 			say(&database, &conversation, index).await;
 		}
-		let second = capture_checkpoint(&database, participant.clone(), None, 9)
+		let second = capture_checkpoint(&database, participant.clone(), run.clone(), 9)
 			.await
 			.expect("the second checkpoint")
 			.expect("something to fold");
@@ -1116,7 +1159,7 @@ mod tests {
 		assert_eq!(
 			database
 				.runtime_context()
-				.latest_checkpoint(participant)
+				.latest_checkpoint(run)
 				.await
 				.expect("the latest checkpoint")
 				.map(|checkpoint| checkpoint.id),
@@ -1134,8 +1177,9 @@ mod tests {
 		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 		let participant = participant_of(&conversation, "default");
+		let run = a_run_of(&database, &conversation, "default").await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
-		let kept = capture_checkpoint(&database, participant.clone(), None, 7)
+		let kept = capture_checkpoint(&database, participant.clone(), run.clone(), 7)
 			.await
 			.expect("the first checkpoint")
 			.expect("something to fold");
@@ -1143,19 +1187,15 @@ mod tests {
 			say(&database, &conversation, index).await;
 		}
 
-		let refused = capture_checkpoint(
-			&database,
-			participant.clone(),
-			Some("a run of nobody's".to_owned()),
-			9,
-		)
-		.await;
+		let refused =
+			capture_checkpoint(&database, participant.clone(), "a run of nobody's".to_owned(), 9)
+				.await;
 
 		assert!(refused.is_err(), "a checkpoint naming a run of nobody's was stored: {refused:?}");
 		assert_eq!(
 			database
 				.runtime_context()
-				.latest_checkpoint(participant.clone())
+				.latest_checkpoint(run.clone())
 				.await
 				.expect("the latest checkpoint")
 				.map(|checkpoint| (checkpoint.id.clone(), checkpoint.summary)),
@@ -1164,7 +1204,7 @@ mod tests {
 		);
 
 		prompt(&database, &conversation, "p1", None).await;
-		let context = bounded_context(&database, participant, "p1".to_owned())
+		let context = bounded_context(&database, participant, run, "p1".to_owned())
 			.await
 			.expect("the context is rebuilt");
 
@@ -1188,20 +1228,35 @@ mod tests {
 		told(&database, "default", "Answer briefly.").await;
 		told(&database, "second", "Answer at length.").await;
 		spoken_so_far(&database, &conversation, SPOKEN).await;
+		let first_run = a_run_of(&database, &conversation, "default").await;
+		let second_run = a_run_of(&database, &conversation, "second").await;
 
-		capture_checkpoint(&database, participant_of(&conversation, "default"), None, 7)
-			.await
-			.expect("the first bot's checkpoint")
-			.expect("something to fold");
+		capture_checkpoint(
+			&database,
+			participant_of(&conversation, "default"),
+			first_run.clone(),
+			7,
+		)
+		.await
+		.expect("the first bot's checkpoint")
+		.expect("something to fold");
 		prompt(&database, &conversation, "p1", None).await;
-		let first =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
-		let second =
-			bounded_context(&database, participant_of(&conversation, "second"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let first = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			first_run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
+		let second = bounded_context(
+			&database,
+			participant_of(&conversation, "second"),
+			second_run.clone(),
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		for (context, told) in [(&first, "Answer briefly."), (&second, "Answer at length.")] {
 			assert!(!context.contains(told), "a bot's instructions were printed into its context");
@@ -1214,7 +1269,7 @@ mod tests {
 		assert_eq!(
 			database
 				.runtime_context()
-				.latest_checkpoint(participant_of(&conversation, "second"))
+				.latest_checkpoint(second_run)
 				.await
 				.expect("the second bot's checkpoint"),
 			None,
@@ -1260,10 +1315,16 @@ mod tests {
 		said_by(&database, &conversation, "second", "<@default> what about the roof?").await;
 		prompt(&database, &conversation, "p1", Some("s1")).await;
 
-		let context =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let run = a_run_of(&database, &conversation, "default").await;
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		assert_eq!(
 			section(&context, ROOM_LABEL),
@@ -1292,10 +1353,16 @@ mod tests {
 		spoken_so_far(&database, &conversation, 2).await;
 		prompt(&database, &conversation, "p1", None).await;
 
-		let context =
-			bounded_context(&database, participant_of(&conversation, "default"), "p1".to_owned())
-				.await
-				.expect("the context is rebuilt");
+		let run = a_run_of(&database, &conversation, "default").await;
+
+		let context = bounded_context(
+			&database,
+			participant_of(&conversation, "default"),
+			run,
+			"p1".to_owned(),
+		)
+		.await
+		.expect("the context is rebuilt");
 
 		assert!(!context.contains(ROOM_LABEL), "a chat of one bot was given a room: {context}");
 		assert_eq!(
@@ -1314,9 +1381,12 @@ mod tests {
 		let database = open(&dir);
 		let conversation = a_conversation(&database).await;
 
+		let run = a_run_of(&database, &conversation, "default").await;
+
 		let refused = bounded_context(
 			&database,
 			participant_of(&conversation, "default"),
+			run,
 			"no such message".to_owned(),
 		)
 		.await;

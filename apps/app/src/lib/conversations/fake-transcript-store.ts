@@ -241,6 +241,20 @@ export const createFakeTranscriptStore = (
 	const participantKey = (conversationId: string, botId: string) =>
 		`${conversationId}/${botId}`
 
+	const rotate = (participant: string, rotating: string, opened: string) => {
+		const row = runRows.get(rotating)
+		if (!row?.live || row.participant !== participant) {
+			return
+		}
+		row.live = false
+		const carried = checkpoints.get(rotating)
+		if (!carried) {
+			return
+		}
+		checkpoints.delete(rotating)
+		checkpoints.set(opened, carried)
+	}
+
 	const liveSessionOf = (conversationId: string, botId: string | null) => {
 		if (!botId) {
 			return null
@@ -1299,16 +1313,15 @@ export const createFakeTranscriptStore = (
 			conversationId: string,
 			botId: string,
 			startedAt: number,
-			_reason: string | null,
+			runtimeSessionId: string | null,
+			reason: string | null,
 		) => {
 			const participant = participantKey(conversationId, botId)
 			const seq = (runs.get(participant) ?? 0) + 1
 			runs.set(participant, seq)
 			const id = `run-${participant}-${seq}`
-			for (const row of runRows.values()) {
-				if (row.participant === participant) {
-					row.live = false
-				}
+			if (reason !== null && runtimeSessionId !== null) {
+				rotate(participant, runtimeSessionId, id)
 			}
 			runRows.set(id, { participant, live: true, providerSessionId: null })
 			return Promise.resolve<RuntimeSession>({
@@ -1344,7 +1357,8 @@ export const createFakeTranscriptStore = (
 
 		boundedContext: (
 			conversationId: string,
-			botId: string,
+			_botId: string,
+			runtimeSessionId: string,
 			promptMessageId: string,
 		) => {
 			const prompt = rows.get(promptMessageId)
@@ -1354,7 +1368,7 @@ export const createFakeTranscriptStore = (
 					failure: { kind: "sqlite", detail: "no such message" },
 				})
 			}
-			const checkpoint = checkpoints.get(participantKey(conversationId, botId))
+			const checkpoint = checkpoints.get(runtimeSessionId)
 			const baseline = checkpoint?.lastMessageSeq ?? 0
 			const recent = ordered(conversationId)
 				.filter((row) => row.seq > baseline && row.seq < prompt.seq)
@@ -1381,11 +1395,11 @@ export const createFakeTranscriptStore = (
 		captureCheckpoint: (
 			conversationId: string,
 			botId: string,
-			runtimeSessionId: string | null,
+			runtimeSessionId: string,
 			createdAt: number,
 		) => {
 			const participant = participantKey(conversationId, botId)
-			const previous = checkpoints.get(participant)
+			const previous = checkpoints.get(runtimeSessionId)
 			const baseline = previous?.lastMessageSeq ?? 0
 			const spokenSoFar = ordered(conversationId)
 			const cutoff = (spokenSoFar.at(-1)?.seq ?? 0) - RECENT_TAIL
@@ -1396,7 +1410,7 @@ export const createFakeTranscriptStore = (
 				.filter((row) => row.seq > baseline && row.seq <= cutoff)
 				.map(spoken)
 			const summary = [previous?.summary, ...folded].filter(Boolean).join("\n")
-			checkpoints.set(participant, { summary, lastMessageSeq: cutoff })
+			checkpoints.set(runtimeSessionId, { summary, lastMessageSeq: cutoff })
 			return Promise.resolve<ContextCheckpoint>({
 				id: `checkpoint-${participant}-${cutoff}`,
 				conversationId,
