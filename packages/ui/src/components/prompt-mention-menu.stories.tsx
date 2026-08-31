@@ -312,20 +312,17 @@ export const CountedLead = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
+	play: async ({ canvas }) => {
 		const row = canvas.getAllByRole("option")[0]
 
 		await expect(row).toHaveAccessibleName("Atlas 2 mentions in the draft Lead")
 
-		const count = canvasElement.querySelector<HTMLElement>(
-			'[data-slot="prompt-mention-count"]',
-		)
-		const crown = canvasElement.querySelector<HTMLElement>(
+		const { count } = countedNameOf(row)
+		const crown = row.querySelector<HTMLElement>(
 			'[data-slot="prompt-mention-lead"]',
 		)
 
-		if (!count || !crown)
-			throw new Error("The row drew no count beside a crown")
+		if (!crown) throw new Error("The row drew no crown beside its count")
 
 		await expect(count.getBoundingClientRect().right).toBeLessThanOrEqual(
 			crown.getBoundingClientRect().left,
