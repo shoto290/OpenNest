@@ -59,6 +59,9 @@ const POINTER = {
 
 const dotsIn = (root: HTMLElement) => slotsIn(root, "space-dot-button")
 
+const stripDotsIn = (root: HTMLElement) =>
+	dotsIn(root).map((button) => slotsIn(button, "space-dot")[0])
+
 const dotNames = (root: HTMLElement) =>
 	dotsIn(root).map((dot) => dot.getAttribute("aria-label"))
 
@@ -354,16 +357,18 @@ export const Colourless = meta.story({
 		docs: {
 			description: {
 				story:
-					"Spaces carrying no colour, which is what a space is created as. Check that their dots wear the muted neutral the strip already gives a closed space rather than borrowing a tint, that the open one is still told apart by its size, and that a coloured space beside them still shows its tint. Pick `WithDots` for a strip where every space is tinted.",
+					"Spaces carrying no colour, which is what a space is created as. Check that their dots wear the muted neutral the strip already gives a closed space rather than borrowing a tint, that the open one is told apart by its shape — a horizontal pill at full weight where the closed ones stay muted circles — and that a coloured space beside them still shows its tint once opened. Pick `WithDots` for a strip where every space is tinted.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const dots = slotsIn(canvasElement, "space-dot")
+		const [open, ...closed] = stripDotsIn(canvasElement)
 
-		await expect(dots[0]?.style.backgroundColor).toBe("")
-		await expect(dots[1]?.style.backgroundColor).toBe("")
-		await expect(dots[2]?.style.backgroundColor).toBe("")
+		await expect(open.style.backgroundColor).toBe("")
+		for (const dot of closed) {
+			await expect(dot.style.backgroundColor).toBe("")
+			await expect(open.offsetWidth).toBeGreaterThan(dot.offsetWidth)
+		}
 	},
 })
 
@@ -373,7 +378,7 @@ export const WithDots = meta.story({
 		docs: {
 			description: {
 				story:
-					"The button and its dot strip driven by one selection, which is how a sidebar mounts them. Check that pressing a dot moves the button's name with it, that the open dot is the only filled and full-size one so the state never rests on colour alone, and that every dot is a named stop for a screen reader instead of an anonymous circle. Pick `Open` for the menu, `SingleSpace` for the strip's absent case.",
+					"The button and its dot strip driven by one selection, which is how a sidebar mounts them. Check that pressing a dot moves the button's name with it, that the open dot is the only pill in a row of circles so the state never rests on colour alone, and that every dot is a named stop for a screen reader instead of an anonymous circle. Pick `Open` for the menu, `SingleSpace` for the strip's absent case.",
 			},
 		},
 	},

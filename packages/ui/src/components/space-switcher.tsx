@@ -40,13 +40,13 @@ const SWITCHER_NAME =
 
 const SWITCHER_DOT = "hidden group-data-[state=collapsed]/sidebar:block"
 
-const DOT = "size-2.5 shrink-0 rounded-full"
+const DOT = "h-2.5 w-2.5 shrink-0 rounded-full"
 
 const DOTS =
 	"flex flex-wrap items-center justify-center group-data-[state=collapsed]/sidebar:hidden"
 
 const DOT_BUTTON =
-	"relative grid size-5 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+	"group/space-dot relative grid size-5 shrink-0 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 
 const DOT_LIFTED =
 	"pointer-events-none z-10 scale-125 drop-shadow-md translate-x-[var(--lift-dx,0px)] translate-y-[var(--lift-dy,0px)]"
@@ -59,9 +59,11 @@ const INSERTION_BEFORE = "start-0"
 const INSERTION_AFTER = "end-0"
 
 const DOT_MOTION =
-	"transition-transform duration-150 ease-out motion-reduce:transition-none"
+	"transition-[width,background-color] duration-150 ease-out motion-reduce:transition-none"
 
-const DOT_RESTING = "scale-75"
+const DOT_OPEN = "w-4 bg-sidebar-foreground"
+
+const DOT_CLOSED = "group-hover/space-dot:bg-sidebar-foreground"
 
 const DOT_UNTINTED = "bg-sidebar-foreground/30"
 
@@ -99,7 +101,6 @@ const SpaceDot = ({
 			className={cn(
 				DOT,
 				DOT_MOTION,
-				!isFilled && DOT_RESTING,
 				!tint && DOT_UNTINTED,
 				badge && botBadgeRingVariants({ badge }),
 				className,
@@ -310,6 +311,7 @@ const SpaceDots = ({
 						) : null}
 						<SpaceDot
 							badge={badgesBySpaceId?.[space.id]}
+							className={isSelected ? DOT_OPEN : DOT_CLOSED}
 							colour={space.colour}
 							isFilled={isSelected}
 						/>
