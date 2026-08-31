@@ -92,6 +92,30 @@ export const initialChatState: ChatState = {
 	errorCount: 0,
 }
 
+export const toTransportError = (reason: unknown): TransportError =>
+	typeof reason === "object" && reason !== null && "kind" in reason
+		? (reason as TransportError)
+		: { kind: "writeFailed", detail: String(reason) }
+
+export const toStoreError = (reason: unknown): TransportError => {
+	const kind =
+		typeof reason === "object" && reason !== null && "kind" in reason
+			? String((reason as { kind: unknown }).kind)
+			: String(reason)
+	return {
+		kind: "writeFailed",
+		detail: `the transcript store refused it (${kind})`,
+	}
+}
+
+export const chatErrorOf = (
+	error: TransportError,
+	count: number,
+): ChatError => ({
+	id: `${error.kind}-${count}`,
+	error,
+})
+
 const MAX_ERRORS = 20
 
 const TURN_TRANSITIONS: Record<TurnState, TurnState[]> = {
@@ -169,7 +193,7 @@ function setTurn(state: ChatState, next: TurnState): ChatState {
 }
 
 function pushError(state: ChatState, error: TransportError): ChatState {
-	const entry = { id: `${error.kind}-${state.errorCount}`, error }
+	const entry = chatErrorOf(error, state.errorCount)
 	return {
 		...state,
 		errorCount: state.errorCount + 1,

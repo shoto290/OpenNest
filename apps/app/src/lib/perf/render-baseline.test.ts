@@ -468,7 +468,7 @@ describe("PRF1 render baseline", () => {
 		expect(opened.mountedRuns).toBeLessThan(MOUNTED_RUN_LIMIT)
 		expect(opened).toMatchInlineSnapshot(`
 			{
-			  "commits": 11,
+			  "commits": 10,
 			  "messages": 500,
 			  "mountedRuns": 8,
 			}

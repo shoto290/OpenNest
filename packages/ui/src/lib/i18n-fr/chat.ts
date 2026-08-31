@@ -75,6 +75,11 @@ const chat = {
 		jumpTo: "Aller au message de {{author}}",
 		unpin: "Retirer l'épingle du message de {{author}}",
 		empty: "Aucun message n'est épinglé dans cette conversation.",
+		unavailable: {
+			title: "Les messages épinglés ne sont pas à jour",
+			description:
+				"Les épingles n'ont pas pu être lues ou modifiées. Réessayez dans un instant.",
+		},
 	},
 	working: {
 		name: "Sans nom",

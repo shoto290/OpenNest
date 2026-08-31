@@ -29,8 +29,15 @@ import type {
 	QuestionAnswers,
 	QuestionRequest,
 	RuntimeScope,
+	TransportError,
 } from "../agent/contract"
-import { isSameRuntimeScope } from "../chat/chat-state"
+import type { ChatError } from "../chat/chat-state"
+import {
+	chatErrorOf,
+	isSameRuntimeScope,
+	toStoreError,
+	toTransportError,
+} from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
 import {
 	answeredText,
@@ -69,6 +76,7 @@ export type ConversationState = {
 	loopingPair: [string, string] | null
 	refusedMessage: RefusedMessage | null
 	pendingPrompt: PendingPrompt | null
+	latestError: ChatError | null
 }
 
 export type ConversationController = {
@@ -143,7 +151,8 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
 	isSamePair(left.loopingPair, right.loopingPair) &&
 	left.refusedMessage === right.refusedMessage &&
-	left.pendingPrompt === right.pendingPrompt
+	left.pendingPrompt === right.pendingPrompt &&
+	left.latestError === right.latestError
 
 const promptWork = (pending: PendingPrompt): WorkingState => ({
 	kind: "waiting",
@@ -164,6 +173,7 @@ const initialState: ConversationState = {
 	loopingPair: null,
 	refusedMessage: null,
 	pendingPrompt: null,
+	latestError: null,
 }
 
 export const createConversationController = (
@@ -183,6 +193,8 @@ export const createConversationController = (
 	let activeTurn: OpenTurn | null = null
 	let speaker: Speaker | null = null
 	let refused: RefusedMessage | null = null
+	let latestError: ChatError | null = null
+	let errorCount = 0
 	let detach: Promise<() => void> | null = null
 	let driving: Promise<void> | null = null
 
@@ -198,6 +210,11 @@ export const createConversationController = (
 		}
 		state = next
 		publish()
+	}
+
+	const noteFailure = (error: TransportError) => {
+		latestError = chatErrorOf(error, errorCount)
+		errorCount += 1
 	}
 
 	const readTranscript = () => {
@@ -236,6 +253,7 @@ export const createConversationController = (
 			loopingPair: loopingPairIn(queue.handovers),
 			refusedMessage: refused,
 			pendingPrompt: speaker?.pending ?? null,
+			latestError,
 		})
 	}
 
@@ -563,9 +581,10 @@ export const createConversationController = (
 			try {
 				await speak(next, turn)
 				return
-			} catch {
+			} catch (reason) {
 				speaker = null
 				queue = closedSpeaker(queue)
+				noteFailure(toTransportError(reason))
 				sync()
 			}
 		}
@@ -790,10 +809,10 @@ export const createConversationController = (
 		settle({ ...state, isLoadingOlder: true })
 		try {
 			await enqueue(() => transcript.loadOlder(conversationId))
-		} catch {
-			// the page stays where it is
+		} catch (reason) {
+			noteFailure(toStoreError(reason))
 		} finally {
-			settle({ ...state, isLoadingOlder: false })
+			settle({ ...state, isLoadingOlder: false, latestError })
 		}
 	}
 

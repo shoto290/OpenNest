@@ -120,7 +120,7 @@ const conversationFactsOf = (
 	isLoadingOlder: thread.state.isLoadingOlder,
 	isPromptPending: false,
 	isOverlayOpen: false,
-	latestError: undefined,
+	latestError: thread.state.latestError ?? undefined,
 	question: questionIn(thread.state.pendingPrompt),
 	refused: thread.state.refusedMessage,
 	rejectedPromptId: null,

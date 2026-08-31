@@ -33,6 +33,7 @@ import { FaceAvatar } from "@/components/face-avatar"
 import { BotComposer, ConversationComposer } from "@/components/thread-composer"
 import {
 	HandoverNotice,
+	PinsNotice,
 	ThreadNotice,
 	TransportNotice,
 } from "@/components/thread-notice"
@@ -44,6 +45,7 @@ import {
 import { QueuedTurn, RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
+import type { ChatError } from "@/lib/chat/chat-state"
 import { canStopTurn } from "@/lib/chat/chat-state"
 import type { DraftsController } from "@/lib/chat/drafts-controller"
 import { isTableBlock } from "@/lib/chat/markdown-blocks"
@@ -569,6 +571,51 @@ const ThreadTail = ({
 		/>
 	)
 
+type ThreadNoticesProps = {
+	staged: StagedFiles
+	pins: PinnedBubbles
+	bots: RosterBot[]
+	loopingPair: [string, string] | null
+	error?: ChatError
+	onDismissError: (id: string) => void
+	onRestart?: (id: string) => void
+	onStop: () => void
+}
+
+const ThreadNotices = ({
+	staged,
+	pins,
+	bots,
+	loopingPair,
+	error,
+	onDismissError,
+	onRestart,
+	onStop,
+}: ThreadNoticesProps) => {
+	const looping = loopingPair?.map((botId) =>
+		bots.find((seated) => seated.id === botId),
+	)
+
+	return (
+		<ThreadNotice
+			onDismissRefusal={staged.dismissRefusal}
+			refusal={staged.refusal}
+		>
+			{error ? (
+				<TransportNotice
+					error={error}
+					onDismiss={onDismissError}
+					onRestart={onRestart}
+				/>
+			) : null}
+			{pins.hasFailed ? <PinsNotice onDismiss={pins.dismissFailure} /> : null}
+			{looping?.[0] && looping[1] ? (
+				<HandoverNotice onStop={onStop} pair={[looping[0], looping[1]]} />
+			) : null}
+		</ThreadNotice>
+	)
+}
+
 type ThreadViewProps = {
 	thread: LoadedThread
 	attachments: AttachmentsController
@@ -703,9 +750,6 @@ function ThreadView({
 	})
 	const errorNotice =
 		facts.latestError?.id === dismissedErrorId ? undefined : facts.latestError
-	const looping = facts.loopingPair?.map((botId) =>
-		bots.find((seated) => seated.id === botId),
-	)
 	const refusedTarget = repliedToRefusal
 		? quotes.get(repliedToRefusal)
 		: undefined
@@ -740,21 +784,16 @@ function ThreadView({
 				highlightedMessageId={highlightedMessageId}
 				label={t("screen.label")}
 				notice={
-					<ThreadNotice
-						onDismissRefusal={staged.dismissRefusal}
-						refusal={staged.refusal}
-					>
-						{errorNotice ? (
-							<TransportNotice
-								error={errorNotice}
-								onDismiss={setDismissedErrorId}
-								onRestart={restartAfterError}
-							/>
-						) : null}
-						{looping?.[0] && looping[1] ? (
-							<HandoverNotice onStop={stop} pair={[looping[0], looping[1]]} />
-						) : null}
-					</ThreadNotice>
+					<ThreadNotices
+						bots={bots}
+						error={errorNotice}
+						loopingPair={facts.loopingPair}
+						onDismissError={setDismissedErrorId}
+						onRestart={botController ? restartAfterError : undefined}
+						onStop={stop}
+						pins={pins}
+						staged={staged}
+					/>
 				}
 				older={
 					state.messages.length > 0
@@ -849,6 +888,7 @@ export function ThreadScreen({
 			<ConversationThreadView
 				attachments={attachments}
 				drafts={drafts}
+				key={thread.conversation.id}
 				readerName={readerName}
 				thread={thread}
 			/>
@@ -859,6 +899,7 @@ export function ThreadScreen({
 		<ThreadView
 			attachments={attachments}
 			drafts={drafts}
+			key={thread.bot.id}
 			readerName={readerName}
 			thread={{
 				...thread,

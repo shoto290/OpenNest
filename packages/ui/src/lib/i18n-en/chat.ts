@@ -72,6 +72,11 @@ const chat = {
 		jumpTo: "Jump to the message from {{author}}",
 		unpin: "Unpin the message from {{author}}",
 		empty: "No message is pinned in this conversation yet.",
+		unavailable: {
+			title: "Pinned messages are out of date",
+			description:
+				"The pins could not be read or changed. Try again in a moment.",
+		},
 	},
 	working: {
 		name: "No name",

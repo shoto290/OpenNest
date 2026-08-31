@@ -12,7 +12,7 @@ import {
 } from "./scripted-driver"
 import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
-import { seatBots } from "./transcript-fixtures"
+import { message, seatBots } from "./transcript-fixtures"
 
 import type { ActivityStatus, AgentEvent } from "../agent/contract"
 
@@ -42,6 +42,12 @@ type Harness = {
 	detach: () => void
 	settled: () => Promise<void>
 	refuseNextWrite: () => void
+}
+
+const settled = async () => {
+	for (let round = 0; round < 20; round += 1) {
+		await Promise.resolve()
+	}
 }
 
 type Naming = {
@@ -96,11 +102,6 @@ const createHarness = async (
 	})
 	const detach = controller.attach()
 	await controller.open(conversation)
-	const settled = async () => {
-		for (let round = 0; round < 20; round += 1) {
-			await Promise.resolve()
-		}
-	}
 	await settled()
 	return {
 		driver,
@@ -886,5 +887,72 @@ describe("naming a conversation from its first message", () => {
 		await harness.settled()
 
 		expect(harness.named).toEqual([])
+	})
+})
+
+describe("failures the conversation carries to the screen", () => {
+	it("holds the failure and keeps the older page in reach when the store refuses it", async () => {
+		const base = createFakeTranscriptStore()
+		const store: TranscriptStore = {
+			...base,
+			loadPage: (conversationId, cursor) =>
+				cursor
+					? Promise.reject(new Error("refused"))
+					: Promise.resolve({
+							conversationId,
+							messages: [message({ conversationId, seq: 2 })],
+							hasMore: true,
+						}),
+		}
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [],
+		})
+		const controller = createConversationController(
+			createScriptedDriver(),
+			store,
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+
+		await controller.loadOlder()
+
+		const state = controller.getState()
+		expect(state.latestError?.error.kind).toBe("writeFailed")
+		expect(state.hasOlder).toBe(true)
+		expect(state.isLoadingOlder).toBe(false)
+		detach()
+	})
+
+	it("holds the transport failure that kept a bot from taking the turn", async () => {
+		const store = createFakeTranscriptStore()
+		const bots = await seatBots(store, SPACE, ["Ada"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		const controller = createConversationController(
+			{
+				...createScriptedDriver(),
+				startOrResumeSession: () =>
+					Promise.reject({ kind: "spawnFailed", detail: "no binary" }),
+			},
+			store,
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+
+		await controller.send("how do we hold the walls?")
+		await settled()
+
+		expect(controller.getState().latestError?.error).toEqual({
+			kind: "spawnFailed",
+			detail: "no binary",
+		})
+		detach()
 	})
 })

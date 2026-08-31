@@ -10,16 +10,34 @@ export function useBubbleVisibility(bubbleId: string | null): boolean {
 		if (!bubbleId || typeof IntersectionObserver === "undefined") {
 			return
 		}
-		const anchor = anchorFor(bubbleId)
-		if (!anchor) {
-			return
-		}
-		setIsInView(true)
+		let watched: Element | null = null
 		const observer = new IntersectionObserver(([entry]) =>
 			setIsInView(entry.isIntersecting),
 		)
-		observer.observe(anchor)
-		return () => observer.disconnect()
+		const watch = (anchor: Element | null) => {
+			observer.disconnect()
+			watched = anchor
+			if (!anchor) {
+				setIsInView(false)
+				return
+			}
+			observer.observe(anchor)
+		}
+		const rewatch = () => {
+			const anchor = anchorFor(bubbleId)
+			if (anchor !== watched) {
+				watch(anchor)
+			}
+		}
+
+		watch(anchorFor(bubbleId))
+		const mounts = new MutationObserver(rewatch)
+		mounts.observe(document.body, { childList: true, subtree: true })
+
+		return () => {
+			mounts.disconnect()
+			observer.disconnect()
+		}
 	}, [bubbleId])
 
 	return isInView
