@@ -237,8 +237,10 @@ const isLastRowInViewport = (viewport: HTMLElement) => {
 const queryJumpToLatest = () =>
 	screen.queryByRole("button", { name: "Jump to latest" })
 
-const settleMeasurements = async (rounds = 8) => {
-	for (let index = 0; index < rounds; index += 1) {
+const MEASUREMENT_ROUNDS = 8
+
+const settleMeasurements = async () => {
+	for (let index = 0; index < MEASUREMENT_ROUNDS; index += 1) {
 		await act(async () => {
 			flushResize()
 			await nextFrame()
