@@ -24,13 +24,18 @@ import {
 	type PinnedMessage,
 	PinnedMessages,
 } from "@workspace/ui/components/pinned-messages"
+import { PromptCommandMenu } from "@workspace/ui/components/prompt-command-menu"
+import { PromptMentionMenu } from "@workspace/ui/components/prompt-mention-menu"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { TurnGroup } from "@workspace/ui/components/turn"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import { FaceAvatar } from "@/components/face-avatar"
-import { BotComposer, ConversationComposer } from "@/components/thread-composer"
+import {
+	ThreadComposer,
+	type ThreadMenuSlot,
+} from "@/components/thread-composer"
 import {
 	HandoverNotice,
 	PinsNotice,
@@ -43,6 +48,7 @@ import {
 	SpokenApproval,
 } from "@/components/thread-prompt"
 import { QueuedTurn, RefusedTurn, ThreadTurn } from "@/components/thread-turn"
+import type { AgentCommand } from "@/lib/agent/contract"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { ChatError } from "@/lib/chat/chat-state"
@@ -52,6 +58,11 @@ import { isTableBlock } from "@/lib/chat/markdown-blocks"
 import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import { pinTimestamp } from "@/lib/chat/pin-timestamp"
 import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
+import {
+	commandOptionsFor,
+	commandQueryIn,
+	promptForCommand,
+} from "@/lib/chat/prompt-commands"
 import {
 	bubbleIdOf,
 	emptyStateStatusFor,
@@ -100,6 +111,7 @@ import {
 	useThreadRoster,
 } from "@/lib/chat/use-thread-roster"
 import type { WorkingState } from "@/lib/chat/working-kind"
+import { mentionQueryIn, promptWithMention } from "@/lib/conversations/mentions"
 import { leadOf } from "@/lib/conversations/roster-conversations"
 import { useConversation } from "@/lib/conversations/use-conversation"
 
@@ -219,6 +231,69 @@ type ThreadComposerSlotProps = {
 	onSubmitPrompt: (text: string) => Promise<boolean>
 }
 
+type CommandMenuProps = ThreadMenuSlot & {
+	commands: AgentCommand[]
+}
+
+const CommandMenu = ({
+	commands,
+	query,
+	isOpen,
+	onDismiss,
+	onPick,
+	children,
+}: CommandMenuProps) => {
+	const options = useMemo(() => commandOptionsFor(commands), [commands])
+
+	return (
+		<PromptCommandMenu
+			commands={options}
+			onDismiss={onDismiss}
+			onSelect={(option) => onPick(promptForCommand(option))}
+			open={isOpen}
+			query={query}
+		>
+			{children}
+		</PromptCommandMenu>
+	)
+}
+
+type MentionMenuProps = ThreadMenuSlot & {
+	bots: RosterBot[]
+	leadId?: string
+}
+
+const MentionMenu = ({
+	bots,
+	leadId,
+	prompt,
+	query,
+	isOpen,
+	onDismiss,
+	onPick,
+	children,
+}: MentionMenuProps) => (
+	<PromptMentionMenu
+		bots={bots}
+		leadId={leadId}
+		onDismiss={onDismiss}
+		onSelect={(botId) => onPick(mentioned(prompt, bots, botId))}
+		open={isOpen}
+		query={query}
+	>
+		{children}
+	</PromptMentionMenu>
+)
+
+const mentioned = (
+	prompt: string,
+	bots: RosterBot[],
+	botId: string,
+): string => {
+	const taken = bots.find((bot) => bot.id === botId)
+	return taken ? promptWithMention(prompt, taken.name) : prompt
+}
+
 const ThreadComposerSlot = ({
 	thread,
 	composerRef,
@@ -228,39 +303,50 @@ const ThreadComposerSlot = ({
 	readDraft,
 	onPromptChange,
 	onSubmitPrompt,
-}: ThreadComposerSlotProps) =>
-	thread.kind === "bot" ? (
-		<BotComposer
-			attachments={staged.items}
-			botName={thread.bot.name}
-			canAttach={canAttach}
-			commands={thread.state.commands}
-			composerRef={composerRef}
-			isDropTarget={staged.isDropTarget}
-			isOverlayOpen={thread.isOverlayOpen}
+}: ThreadComposerSlotProps) => {
+	const t = useChatCopy()
+	const shared = {
+		attachments: staged.items,
+		canAttach,
+		composerRef,
+		isDropTarget: staged.isDropTarget,
+		onAttach: staged.stage,
+		onPromptChange,
+		onRemoveAttachment: staged.remove,
+		onSubmitPrompt,
+		readDraft,
+	}
+
+	return thread.kind === "bot" ? (
+		<ThreadComposer
+			{...shared}
 			key={thread.bot.id}
-			onAttach={staged.stage}
-			onPromptChange={onPromptChange}
-			onRemoveAttachment={staged.remove}
-			onSubmitPrompt={onSubmitPrompt}
-			readDraft={readDraft}
+			menu={(slot) => (
+				<CommandMenu {...slot} commands={thread.state.commands} />
+			)}
+			placeholder={t("screen.placeholder", { name: thread.bot.name })}
+			queryIn={(prompt) =>
+				thread.isOverlayOpen
+					? null
+					: commandQueryIn(prompt, thread.state.commands)
+			}
 		/>
 	) : (
-		<ConversationComposer
-			attachments={staged.items}
-			bots={present}
-			canAttach={canAttach}
-			composerRef={composerRef}
-			isDropTarget={staged.isDropTarget}
+		<ThreadComposer
+			{...shared}
 			key={thread.conversation.id}
-			leadId={leadOf(thread.conversation)}
-			onAttach={staged.stage}
-			onPromptChange={onPromptChange}
-			onRemoveAttachment={staged.remove}
-			onSubmitPrompt={onSubmitPrompt}
-			readDraft={readDraft}
+			menu={(slot) => (
+				<MentionMenu
+					{...slot}
+					bots={present}
+					leadId={leadOf(thread.conversation)}
+				/>
+			)}
+			placeholder={t("composer.placeholder")}
+			queryIn={mentionQueryIn}
 		/>
 	)
+}
 
 type ThreadApprovalProps = {
 	permission: ThreadPermission | null
