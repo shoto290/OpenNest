@@ -166,6 +166,8 @@ export function App() {
 		conversations,
 		selectedBotId,
 		selectedConversationId,
+		settingsBotId,
+		settingsConversationId,
 		isEditing,
 		isShowingDanger,
 		isEditingConversation,
@@ -174,6 +176,10 @@ export function App() {
 	const selected = bots.find((bot) => bot.id === selectedBotId)
 	const selectedConversation = conversations.find(
 		(conversation) => conversation.id === selectedConversationId,
+	)
+	const settingsBot = bots.find((bot) => bot.id === settingsBotId)
+	const settingsConversation = conversations.find(
+		(conversation) => conversation.id === settingsConversationId,
 	)
 	const [isCreatingConversation, setIsCreatingConversation] = useState(false)
 	const [openedMcpServer, setOpenedMcpServer] = useState<EnvScope | null>(null)
@@ -231,32 +237,26 @@ export function App() {
 	}, [user.controller])
 
 	useEffect(() => {
-		if (selectedBotId && selectedSpaceId) {
-			void skills.controller.open(selectedBotId)
-			void botMcpServers.controller.open({
-				kind: "bot",
-				id: selectedBotId,
-				spaceId: selectedSpaceId,
-			})
-			void history.controller.open(selectedBotId)
+		if (!settingsBotId || !selectedSpaceId) {
+			return
 		}
+		const scope = {
+			kind: "bot",
+			id: settingsBotId,
+			spaceId: selectedSpaceId,
+		} as const
+		void skills.controller.open(settingsBotId)
+		void botMcpServers.controller.open(scope)
+		void botEnvironment.controller.open(scope)
+		void history.controller.open(settingsBotId)
 	}, [
 		history.controller,
+		botEnvironment.controller,
 		botMcpServers.controller,
 		skills.controller,
-		selectedBotId,
+		settingsBotId,
 		selectedSpaceId,
 	])
-
-	useEffect(() => {
-		if (isEditing && selectedBotId && selectedSpaceId) {
-			void botEnvironment.controller.open({
-				kind: "bot",
-				id: selectedBotId,
-				spaceId: selectedSpaceId,
-			})
-		}
-	}, [botEnvironment.controller, isEditing, selectedBotId, selectedSpaceId])
 
 	useEffect(() => {
 		if (isSpaceEditing && selectedSpaceId) {
@@ -344,7 +344,7 @@ export function App() {
 		botIds,
 		roster.state.previews,
 	)
-	const activity = selectedBotId ? working[selectedBotId] : undefined
+	const activity = settingsBotId ? working[settingsBotId] : undefined
 
 	const busyBotCount = useMemo(
 		() => Object.values(working).filter((bot) => bot.isWorking).length,
@@ -452,16 +452,16 @@ export function App() {
 
 	const seatedBots = useMemo(
 		() =>
-			selectedConversation
-				? toConversationBots(presentParticipants(selectedConversation))
+			settingsConversation
+				? toConversationBots(presentParticipants(settingsConversation))
 				: [],
-		[selectedConversation],
+		[settingsConversation],
 	)
 
 	const recruitableBots = useMemo(
 		() =>
-			selectedConversation ? unseatedBots(bots, selectedConversation) : [],
-		[bots, selectedConversation],
+			settingsConversation ? unseatedBots(bots, settingsConversation) : [],
+		[bots, settingsConversation],
 	)
 
 	const rosterConversationsBySpace = useMemo(
@@ -495,10 +495,20 @@ export function App() {
 		isSpaceEditing ||
 		isCreatingConversation
 
-	const toggleSettings = useCallback(
-		() => roster.controller.setEditing(!isEditing),
-		[roster.controller, isEditing],
-	)
+	const isThreadSettingsOpen = isEditing && settingsBotId === selectedBotId
+
+	const isThreadConversationSettingsOpen =
+		isEditingConversation && settingsConversationId === selectedConversationId
+
+	const toggleSettings = useCallback(() => {
+		if (isThreadSettingsOpen) {
+			roster.controller.setEditing(false)
+			return
+		}
+		if (selectedBotId) {
+			roster.controller.edit(selectedBotId)
+		}
+	}, [roster.controller, isThreadSettingsOpen, selectedBotId])
 
 	const userSettings = useMemo(
 		() => toUserSettingsValue(preferences),
@@ -570,9 +580,9 @@ export function App() {
 					drafts={drafts}
 					hasLoaded={hasLoaded}
 					haveSpacesFailed={spaces.state.hasFailedToLoad}
-					isConversationSettingsOpen={isEditingConversation}
+					isConversationSettingsOpen={isThreadConversationSettingsOpen}
 					isOverlayOpen={isOverlayOpen}
-					isSettingsOpen={isEditing}
+					isSettingsOpen={isThreadSettingsOpen}
 					onOpenConversationSettings={roster.controller.editConversation}
 					onRetrySpaces={loadSpaces}
 					onToggleSettings={toggleSettings}
@@ -588,7 +598,7 @@ export function App() {
 				}}
 				open={isCreatingConversation}
 			/>
-			{selected ? (
+			{settingsBot ? (
 				<BotSettingsDialog
 					history={{
 						commits: history.state.commits.map(toCommitItem),
@@ -596,7 +606,7 @@ export function App() {
 						onLoadDiff: history.controller.loadDiff,
 						onRevert: (commitId) => {
 							history.controller.revert(commitId)
-							chat.controller.redescribe(selected.id)
+							chat.controller.redescribe(settingsBot.id)
 						},
 					}}
 					haveMcpServersFailedToLoad={botMcpServers.state.hasFailedToLoad}
@@ -615,7 +625,7 @@ export function App() {
 										name,
 										owner: {
 											kind: "bot",
-											id: selected.id,
+											id: settingsBot.id,
 											spaceId: selectedSpaceId,
 										},
 									}
@@ -629,31 +639,31 @@ export function App() {
 							serverEnvironment.controller.set(name, value),
 						onDelete: serverEnvironment.controller.remove,
 					}}
-					models={modelOptionsFor(selected.model, catalogue)}
-					outputStyle={readBotOutputStyle(selected.outputStyle)}
-					memory={selected.memory}
+					models={modelOptionsFor(settingsBot.model, catalogue)}
+					outputStyle={readBotOutputStyle(settingsBot.outputStyle)}
+					memory={settingsBot.memory}
 					onMemoryChange={(memory) => {
-						void roster.controller.remember(selected.id, memory)
+						void roster.controller.remember(settingsBot.id, memory)
 					}}
 					onAvatarUpload={(file) => {
-						void roster.controller.uploadAvatar(selected.id, file)
+						void roster.controller.uploadAvatar(settingsBot.id, file)
 					}}
 					onBrowseWorkingDirectory={browseWorkingDirectory}
 					onClose={() => roster.controller.setEditing(false)}
 					onDelete={() => {
-						void deleteBot(selected.id)
+						void deleteBot(settingsBot.id)
 					}}
 					onOutputStyleChange={(outputStyle) => {
-						if (outputStyle === selected.outputStyle) {
+						if (outputStyle === settingsBot.outputStyle) {
 							return
 						}
-						roster.controller.restyle(selected.id, outputStyle)
-						chat.controller.redescribe(selected.id)
+						roster.controller.restyle(settingsBot.id, outputStyle)
+						chat.controller.redescribe(settingsBot.id)
 					}}
 					onValueChange={(value) => {
-						roster.controller.describe(selected.id, value)
-						if (changesRuntime(selected, value)) {
-							chat.controller.redescribe(selected.id)
+						roster.controller.describe(settingsBot.id, value)
+						if (changesRuntime(settingsBot, value)) {
+							chat.controller.redescribe(settingsBot.id)
 						}
 					}}
 					onMcpServerChange={botMcpServers.controller.rename}
@@ -674,7 +684,7 @@ export function App() {
 					onSkillDelete={skills.controller.remove}
 					onSkillPreloadedChange={skills.controller.setPreloaded}
 					open={isEditing}
-					seed={selected.id}
+					seed={settingsBot.id}
 					skillFiles={toSkillFiles(
 						skills.state.skills,
 						skills.state.file,
@@ -682,46 +692,46 @@ export function App() {
 					)}
 					skills={skills.state.skills.map(toSkillItem)}
 					showDanger={isShowingDanger}
-					value={toSettingsValue(selected)}
+					value={toSettingsValue(settingsBot)}
 					working={activity?.isWorking ?? false}
 					workingKind={activity?.kind}
 				/>
 			) : null}
-			{selectedConversation ? (
+			{settingsConversation ? (
 				<ConversationSettingsDialog
 					bots={recruitableBots}
-					leadId={leadOf(selectedConversation) ?? ""}
+					leadId={leadOf(settingsConversation) ?? ""}
 					onClose={() => roster.controller.setConversationEditing(false)}
 					onDelete={() => {
-						void sidebarActions.onDeleteConversation(selectedConversation.id)
+						void sidebarActions.onDeleteConversation(settingsConversation.id)
 					}}
 					onDismiss={(botId) => {
 						void roster.controller.dismissFromConversation(
-							selectedConversation.id,
+							settingsConversation.id,
 							botId,
 						)
 					}}
 					onLeadChange={(botId) => {
 						void roster.controller.setConversationLead(
-							selectedConversation.id,
+							settingsConversation.id,
 							botId,
 						)
 					}}
 					onRecruit={(botId) => {
 						void roster.controller.recruitToConversation(
-							selectedConversation.id,
+							settingsConversation.id,
 							botId,
 						)
 					}}
 					onValueChange={(value) =>
 						roster.controller.describeConversation(
-							selectedConversation.id,
+							settingsConversation.id,
 							value,
 						)
 					}
 					open={isEditingConversation}
 					participants={seatedBots}
-					value={toConversationSettingsValue(selectedConversation)}
+					value={toConversationSettingsValue(settingsConversation)}
 				/>
 			) : null}
 			{selectedSpace ? (

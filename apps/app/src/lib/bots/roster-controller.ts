@@ -36,6 +36,8 @@ export type RosterState = {
 	conversationPreviews: ConversationPreviews
 	selectedBotId: string | null
 	selectedConversationId: string | null
+	settingsBotId: string | null
+	settingsConversationId: string | null
 	isEditing: boolean
 	isShowingDanger: boolean
 	isEditingConversation: boolean
@@ -110,6 +112,8 @@ export const initialRosterState: RosterState = {
 	conversationPreviews: {},
 	selectedBotId: null,
 	selectedConversationId: null,
+	settingsBotId: null,
+	settingsConversationId: null,
 	isEditing: false,
 	isShowingDanger: false,
 	isEditingConversation: false,
@@ -185,6 +189,16 @@ const NOTHING_SELECTED: Landing = {
 	selectedConversationId: null,
 }
 
+const NO_SETTINGS = {
+	settingsBotId: null,
+	settingsConversationId: null,
+	isEditing: false,
+	isShowingDanger: false,
+	isEditingConversation: false,
+}
+
+type BotSettingsOpening = { id: string; isShowingDanger: boolean }
+
 export const createRosterController = (
 	store: TranscriptStore,
 ): RosterController => {
@@ -242,15 +256,24 @@ export const createRosterController = (
 		lastRowId: string | null,
 	) => {
 		const selectedRowId = state.selectedBotId ?? state.selectedConversationId
-		const stillHeld = landingOn(bots, conversations, selectedRowId)
-		const holdsBot = stillHeld !== null && stillHeld.selectedBotId !== null
-		const holdsConversation =
-			stillHeld !== null && stillHeld.selectedConversationId !== null
+		return (
+			landingOn(bots, conversations, selectedRowId) ??
+			landingOn(bots, conversations, lastRowId) ??
+			landingOn(bots, conversations, firstRowId(bots, conversations)) ??
+			NOTHING_SELECTED
+		)
+	}
+
+	const settingsStandingIn = (bots: Bot[], conversations: Conversation[]) => {
+		const holdsBot = bots.some((bot) => bot.id === state.settingsBotId)
+		const holdsConversation = conversations.some(
+			(conversation) => conversation.id === state.settingsConversationId,
+		)
 		return {
-			...(stillHeld ??
-				landingOn(bots, conversations, lastRowId) ??
-				landingOn(bots, conversations, firstRowId(bots, conversations)) ??
-				NOTHING_SELECTED),
+			settingsBotId: holdsBot ? state.settingsBotId : null,
+			settingsConversationId: holdsConversation
+				? state.settingsConversationId
+				: null,
 			isEditing: state.isEditing && holdsBot,
 			isShowingDanger: state.isShowingDanger && holdsBot,
 			isEditingConversation: state.isEditingConversation && holdsConversation,
@@ -266,8 +289,6 @@ export const createRosterController = (
 			spaceId,
 			selectedBotId: written.id,
 			selectedConversationId: null,
-			isShowingDanger: false,
-			isEditingConversation: false,
 		})
 	}
 
@@ -280,9 +301,6 @@ export const createRosterController = (
 			spaceId,
 			selectedBotId: null,
 			selectedConversationId: written.id,
-			isEditing: false,
-			isShowingDanger: false,
-			isEditingConversation: false,
 		})
 	}
 
@@ -347,16 +365,15 @@ export const createRosterController = (
 		const conversationRosters = Object.fromEntries(
 			listed.map(({ id, conversations }) => [id, conversations] as const),
 		)
+		const bots = rosterIn(rosters, spaceId)
+		const conversations = rosterIn(conversationRosters, spaceId)
 		set({
 			rosters,
 			conversationRosters,
 			spaceId,
 			hasFailedToLoad: false,
-			...landOn(
-				rosterIn(rosters, spaceId),
-				rosterIn(conversationRosters, spaceId),
-				lastRowId,
-			),
+			...landOn(bots, conversations, lastRowId),
+			...settingsStandingIn(bots, conversations),
 		})
 	}
 
@@ -459,6 +476,14 @@ export const createRosterController = (
 		onRefused: reload,
 	})
 
+	const openBotSettings = ({ id, isShowingDanger }: BotSettingsOpening) =>
+		set({
+			settingsBotId: id,
+			isEditing: true,
+			isShowingDanger,
+			isEditingConversation: false,
+		})
+
 	return {
 		getState: () => state,
 
@@ -497,31 +522,21 @@ export const createRosterController = (
 				},
 				spaceId,
 				...landOn(bots, conversations, lastRowId),
+				...NO_SETTINGS,
 			})
 		},
 
 		select: (id: string) => {
 			if (id !== state.selectedBotId) {
 				catchUpOnLeftConversation()
-				set({
-					selectedBotId: id,
-					selectedConversationId: null,
-					isShowingDanger: false,
-					isEditingConversation: false,
-				})
+				set({ selectedBotId: id, selectedConversationId: null })
 			}
 		},
 
 		selectConversation: (id: string) => {
 			if (id !== state.selectedConversationId) {
 				catchUpOnLeftConversation()
-				set({
-					selectedBotId: null,
-					selectedConversationId: id,
-					isEditing: false,
-					isShowingDanger: false,
-					isEditingConversation: false,
-				})
+				set({ selectedBotId: null, selectedConversationId: id })
 			}
 		},
 
@@ -563,14 +578,7 @@ export const createRosterController = (
 				return null
 			}),
 
-		edit: (id: string) =>
-			set({
-				selectedBotId: id,
-				selectedConversationId: null,
-				isEditing: true,
-				isShowingDanger: false,
-				isEditingConversation: false,
-			}),
+		edit: (id: string) => openBotSettings({ id, isShowingDanger: false }),
 
 		setEditing: (isEditing: boolean) =>
 			set({
@@ -670,14 +678,7 @@ export const createRosterController = (
 			})
 		},
 
-		askToDelete: (id: string) =>
-			set({
-				selectedBotId: id,
-				selectedConversationId: null,
-				isEditing: true,
-				isShowingDanger: true,
-				isEditingConversation: false,
-			}),
+		askToDelete: (id: string) => openBotSettings({ id, isShowingDanger: true }),
 
 		remove: (id: string) =>
 			enqueue(async () => {
@@ -693,8 +694,7 @@ export const createRosterController = (
 					conversationRosters: withConversations(state.spaceId, conversations),
 					previews,
 					...landOn(bots, conversations, null),
-					isEditing: false,
-					isShowingDanger: false,
+					...settingsStandingIn(bots, conversations),
 				})
 			}).catch(reload),
 
@@ -723,8 +723,7 @@ export const createRosterController = (
 
 		editConversation: (id: string) =>
 			set({
-				selectedBotId: null,
-				selectedConversationId: id,
+				settingsConversationId: id,
 				isEditing: false,
 				isShowingDanger: false,
 				isEditingConversation: true,
@@ -777,6 +776,7 @@ export const createRosterController = (
 					conversationRosters: withConversations(state.spaceId, conversations),
 					conversationPreviews,
 					...landOn(state.bots, conversations, null),
+					...settingsStandingIn(state.bots, conversations),
 				})
 			}).catch(reload),
 	}
