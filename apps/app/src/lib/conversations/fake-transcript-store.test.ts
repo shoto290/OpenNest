@@ -376,7 +376,13 @@ describe("createFakeTranscriptStore", () => {
 		const store = createFakeTranscriptStore()
 		await store.startTurn(TURN)
 		await store.appendUserMessage(PROMPT)
-		const run = await store.openRuntimeSession(FAKE_CHAT_ID, "default", 3, null)
+		const run = await store.openRuntimeSession(
+			FAKE_CHAT_ID,
+			"default",
+			3,
+			null,
+			null,
+		)
 		await store.recordProviderSession(
 			FAKE_CHAT_ID,
 			"default",

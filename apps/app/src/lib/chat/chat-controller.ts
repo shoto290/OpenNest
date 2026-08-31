@@ -552,13 +552,14 @@ export function createChatController(
 
 	const openRun = async (
 		conversationId: string,
-		bot: string,
+		bot: BotChat,
 		reason: RotationReason | null,
 	): Promise<RuntimeScope> => {
 		const opened = await store.openRuntimeSession(
 			conversationId,
-			bot,
+			bot.id,
 			now(),
+			bot.state.runtime?.runtimeSessionId ?? null,
 			reason,
 		)
 		return {
@@ -584,7 +585,7 @@ export function createChatController(
 
 		let runtime: RuntimeScope
 		try {
-			runtime = await openRun(conversationId, bot.id, rotatedFor)
+			runtime = await openRun(conversationId, bot, rotatedFor)
 		} catch (reason) {
 			reportStore(bot, reason)
 			return null
@@ -816,11 +817,17 @@ export function createChatController(
 
 	const contextFor = async (bot: BotChat, promptId: string, text: string) => {
 		const conversationId = bot.state.conversationId
-		if (bot.run.carried || !conversationId) {
+		const runtime = bot.state.runtime
+		if (bot.run.carried || !conversationId || !runtime) {
 			return text
 		}
 		await capture(bot)
-		return store.boundedContext(conversationId, bot.id, promptId)
+		return store.boundedContext(
+			conversationId,
+			bot.id,
+			runtime.runtimeSessionId,
+			promptId,
+		)
 	}
 
 	const submit = async (bot: BotChat, id: string, text: string) => {

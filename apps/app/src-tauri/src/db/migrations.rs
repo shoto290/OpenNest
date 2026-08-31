@@ -26,6 +26,8 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 17, statements: ROSTER_PIN },
 	Migration { version: 18, statements: OPTIONAL_SPACE_COLOUR },
 	Migration { version: 19, statements: SPACE_SETTINGS },
+	Migration { version: 20, statements: SEVERAL_LIVE_SESSIONS },
+	Migration { version: 21, statements: CHECKPOINT_PER_SESSION },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -391,6 +393,51 @@ INSERT INTO spaces (id, name, colour, position, created_at)
 DROP TABLE spaces_always_coloured;
 ";
 
+const SEVERAL_LIVE_SESSIONS: &str = "
+DROP INDEX IF EXISTS runtime_sessions_active_per_participant;
+";
+
+const CHECKPOINT_PER_SESSION: &str = "
+DROP TRIGGER context_checkpoints_are_written_once;
+
+PRAGMA legacy_alter_table = ON;
+ALTER TABLE context_checkpoints RENAME TO context_checkpoints_shared_by_a_bot;
+PRAGMA legacy_alter_table = OFF;
+
+CREATE TABLE context_checkpoints (
+	id TEXT PRIMARY KEY,
+	conversation_id TEXT NOT NULL,
+	bot_id TEXT NOT NULL,
+	runtime_session_id TEXT,
+	summary TEXT NOT NULL,
+	last_message_seq INTEGER NOT NULL,
+	token_count INTEGER NOT NULL,
+	created_at INTEGER NOT NULL,
+	FOREIGN KEY (conversation_id, bot_id)
+		REFERENCES conversation_participants (conversation_id, bot_id) ON DELETE CASCADE,
+	FOREIGN KEY (runtime_session_id, conversation_id, bot_id)
+		REFERENCES runtime_sessions (id, conversation_id, bot_id)
+);
+
+INSERT INTO context_checkpoints
+	(id, conversation_id, bot_id, runtime_session_id, summary, last_message_seq,
+		token_count, created_at)
+	SELECT id, conversation_id, bot_id, runtime_session_id, summary, last_message_seq,
+		token_count, created_at
+	FROM context_checkpoints_shared_by_a_bot;
+
+DROP TABLE context_checkpoints_shared_by_a_bot;
+
+CREATE UNIQUE INDEX context_checkpoints_per_session
+	ON context_checkpoints (runtime_session_id, last_message_seq);
+
+CREATE TRIGGER context_checkpoints_are_written_once
+BEFORE UPDATE ON context_checkpoints
+BEGIN
+	SELECT RAISE(ABORT, 'a checkpoint records one moment: insert a new one, never edit this row');
+END;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -456,6 +503,10 @@ mod tests {
 			VALUES ('a1', 't1', 'tool', 'running', '{}', 1, 1);
 	";
 
+	const SPACE_SETTINGS_STEP: u32 = 19;
+	const SEVERAL_LIVE_SESSIONS_STEP: u32 = 20;
+	const CHECKPOINT_PER_SESSION_STEP: u32 = 21;
+
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
 		VALUES ('s1', 'c1', 'b1', 'claude-1', 1, 'active', 1)";
@@ -481,6 +532,11 @@ mod tests {
 				VALUES ('{id}', 'c1', 'b1', {session}, 'the conversation so far',
 					{last_message_seq}, 120, 1)"
 		)
+	}
+
+	fn shipped_before(version: u32) -> &'static [Migration] {
+		let steps = MIGRATIONS.iter().take_while(|migration| migration.version < version).count();
+		&MIGRATIONS[..steps]
 	}
 
 	fn migrated(dir: &Path) -> Connection {
@@ -831,7 +887,7 @@ mod tests {
 	fn a_file_that_missed_the_space_settings_step_gains_the_table() {
 		let dir = temp_dir();
 		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
-		apply_each(&mut connection, &MIGRATIONS[..MIGRATIONS.len() - 1])
+		apply_each(&mut connection, shipped_before(SPACE_SETTINGS_STEP))
 			.expect("the build that shipped without the settings step installs");
 		assert!(!has_table(&connection, "space_settings"), "the file already held the table");
 
@@ -1406,7 +1462,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_participant_holds_one_live_session_at_a_time() {
+	fn a_participant_holds_as_many_live_sessions_as_it_started() {
 		let dir = temp_dir();
 		let connection = fixture(&dir);
 		write(&connection, A_LIVE_SESSION).expect("the session is inserted");
@@ -1431,9 +1487,87 @@ mod tests {
 				VALUES ('s4', 'c1', 'b1', 'claude-4', 3, 'rotated', 4, 5, 'context full')",
 		);
 
-		assert!(second_live.is_err(), "a participant was given two live sessions at once");
+		assert!(
+			second_live.is_ok(),
+			"a second instance of one bot was refused a live session: {second_live:?}"
+		);
 		assert!(another_bot.is_ok(), "a second bot was refused a session of its own");
 		assert!(spent.is_ok(), "a rotated session was refused alongside the live one");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_that_kept_one_checkpoint_per_bot_keeps_its_rows_and_takes_one_per_session() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(CHECKPOINT_PER_SESSION_STEP))
+			.expect("the build that shipped one checkpoint per bot installs");
+		connection.execute_batch(FIXTURE).expect("the fixture is inserted");
+		connection
+			.execute_batch(
+				"INSERT INTO runtime_sessions
+					(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
+					VALUES ('s1', 'c1', 'b1', 'claude-1', 1, 'active', 1),
+						('s2', 'c1', 'b1', 'claude-2', 2, 'active', 2);",
+			)
+			.expect("two instances of one bot");
+		write(&connection, A_CHECKPOINT).expect("the checkpoint is inserted");
+		let beside_it = a_checkpoint_naming("'s2'", "k2", 1);
+		assert!(
+			write(&connection, &beside_it).is_err(),
+			"the file never held one checkpoint per bot"
+		);
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(
+			connection
+				.query_row("SELECT summary FROM context_checkpoints WHERE id = 'k1'", [], |row| row
+					.get::<_, String>(0))
+				.expect("query"),
+			"the conversation so far",
+			"the step dropped a checkpoint the older build had written"
+		);
+		let admitted = write(&connection, &beside_it);
+		assert!(admitted.is_ok(), "a second instance was refused its own checkpoint: {admitted:?}");
+		assert!(
+			write(&connection, &a_checkpoint_naming("'s2'", "k3", 1)).is_err(),
+			"one session took two checkpoints at one message"
+		);
+		assert!(
+			write(&connection, "UPDATE context_checkpoints SET summary = 'else' WHERE id = 'k1'")
+				.is_err(),
+			"the step left the rewritten row unguarded"
+		);
+		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_that_forbade_two_live_sessions_lets_them_in_once_it_is_upgraded() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(SEVERAL_LIVE_SESSIONS_STEP))
+			.expect("the build that shipped the one live session rule installs");
+		connection.execute_batch(FIXTURE).expect("the fixture is inserted");
+		write(&connection, A_LIVE_SESSION).expect("the session is inserted");
+		let a_second_instance = "INSERT INTO runtime_sessions
+			(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
+			VALUES ('s2', 'c1', 'b1', 'claude-2', 2, 'active', 2)";
+		assert!(
+			write(&connection, a_second_instance).is_err(),
+			"the file never held the one live session rule"
+		);
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		let admitted = write(&connection, a_second_instance);
+		assert!(admitted.is_ok(), "the upgraded file still holds the rule: {admitted:?}");
+		assert_eq!(version(&connection).expect("version"), latest_version());
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

@@ -116,6 +116,15 @@ impl Harness {
 	}
 }
 
+fn a_run_whose_epoch_drifted() -> Value {
+	json!({
+		"conversationId": "c1",
+		"botId": "default",
+		"runtimeSessionId": "r1",
+		"epoch": 5
+	})
+}
+
 fn another_bots_run() -> Value {
 	json!({
 		"conversationId": "c2",
@@ -154,49 +163,71 @@ fn stale(runtime_session_id: &str) -> Result<Value, Value> {
 }
 
 #[test]
-fn a_run_the_host_replaced_reaches_nothing_and_the_one_it_holds_still_answers() {
+fn two_runs_of_one_bot_answer_at_once_and_a_scope_naming_another_epoch_reaches_nothing() {
 	let _serial = serial();
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_AGENT_SCENARIO", "normal");
 
 	let harness = launch();
-	let replaced = a_run(1);
-	let live = a_run(2);
-	assert_eq!(harness.start(&replaced), Ok(json!({ "resumed": false })));
-	assert_eq!(harness.start(&live), Ok(json!({ "resumed": false })));
-
+	let first = a_run(1);
+	let second = a_run(2);
+	assert_eq!(harness.start(&first), Ok(json!({ "resumed": false })));
 	assert_eq!(
-		harness.call("agent_submit_prompt", json!({ "scope": replaced, "text": "salut" })),
-		stale("r1"),
-		"a replaced run submitted a prompt to the session that took its place"
-	);
-	assert_eq!(
-		harness.call("agent_cancel_turn", json!({ "scope": replaced })),
-		stale("r1"),
-		"a replaced run was answered about the live session's turn"
-	);
-	assert_eq!(
-		harness.call(
-			"agent_respond_to_permission",
-			json!({ "scope": replaced, "id": "whatever", "decision": "allowOnce" })
-		),
-		stale("r1"),
-		"a replaced run answered a permission on the live session"
-	);
-	assert_eq!(
-		harness.call("agent_shutdown", json!({ "scope": replaced })),
-		stale("r1"),
-		"a replaced run shut down the session that took its place"
+		harness.start(&second),
+		Ok(json!({ "resumed": false })),
+		"a second instance of one bot was refused a session of its own"
 	);
 
+	let drifted = a_run_whose_epoch_drifted();
+	assert_eq!(
+		harness.call("agent_submit_prompt", json!({ "scope": drifted, "text": "salut" })),
+		stale("r1"),
+		"a scope naming another epoch submitted a prompt to the run holding its id"
+	);
+	assert_eq!(
+		harness.call("agent_cancel_turn", json!({ "scope": drifted })),
+		stale("r1"),
+		"a scope naming another epoch was answered about the live run's turn"
+	);
+	assert_eq!(
+		harness.call("agent_shutdown", json!({ "scope": drifted })),
+		stale("r1"),
+		"a scope naming another epoch shut down the run holding its id"
+	);
+
+	let one = named(&first);
+	let other = named(&second);
 	harness.forget_events();
-	harness.prompt_is_taken(&live);
-	assert_eq!(
-		harness.wait_for("the live run to finish its turn", turn_outcome),
-		TurnOutcome::Completed,
-		"the live session stopped answering after the refusals"
+	harness.prompt_is_taken(&first);
+	harness.prompt_is_taken(&second);
+
+	harness.wait_for("both instances to finish their turn", |seen| {
+		outcome_under(seen, &one).zip(outcome_under(seen, &other))
+	});
+	let streamed = harness.events();
+	assert!(
+		spoke_under(&streamed, &one) && spoke_under(&streamed, &other),
+		"an instance of the bot never streamed under its own run: {streamed:#?}"
 	);
-	assert_eq!(harness.call("agent_shutdown", json!({ "scope": live })), Ok(Value::Null));
+	assert!(
+		streamed
+			.iter()
+			.all(|scoped| scoped.scope.as_ref() == Some(&one)
+				|| scoped.scope.as_ref() == Some(&other)),
+		"an event crossed under a run neither instance was started for: {streamed:#?}"
+	);
+
+	assert_eq!(harness.call("agent_shutdown", json!({ "scope": first })), Ok(Value::Null));
+	harness.forget_events();
+	harness.prompt_is_taken(&second);
+	assert_eq!(
+		harness.wait_for("the instance left running to finish its turn", |seen| {
+			outcome_under(seen, &other)
+		}),
+		TurnOutcome::Completed,
+		"ending one instance stopped the instance beside it"
+	);
+	assert_eq!(harness.call("agent_shutdown", json!({ "scope": second })), Ok(Value::Null));
 
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
 }

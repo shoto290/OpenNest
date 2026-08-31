@@ -193,6 +193,7 @@ export const createConversationController = (
 	let queue: TurnQueue = emptyQueue
 	let activeTurn: OpenTurn | null = null
 	let speaker: Speaker | null = null
+	const runs = new Map<string, RuntimeScope>()
 	let refused: RefusedMessage | null = null
 	let latestError: ChatError | null = null
 	let errorCount = 0
@@ -534,14 +535,17 @@ export const createConversationController = (
 			conversationId,
 			botId,
 			now(),
+			runs.get(botId)?.runtimeSessionId ?? null,
 			null,
 		)
-		return {
+		const scope = {
 			conversationId: opened.conversationId,
 			botId: opened.botId,
 			runtimeSessionId: opened.id,
 			epoch: opened.seq,
 		}
+		runs.set(botId, scope)
+		return scope
 	}
 
 	const speak = async (summons: Summons, turn: OpenTurn) => {
@@ -569,6 +573,7 @@ export const createConversationController = (
 		const context = await store.boundedContext(
 			conversationId,
 			summons.botId,
+			scope.runtimeSessionId,
 			summons.promptId,
 		)
 		await driver.submitPrompt(scope, context)

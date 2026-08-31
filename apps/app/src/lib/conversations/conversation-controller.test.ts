@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
 	type ConversationController,
@@ -76,9 +76,19 @@ const createHarness = async (
 			isRefusingNextWrite = false
 			return Promise.reject(new Error("refused"))
 		},
-		boundedContext: (conversationId, botId, promptMessageId) => {
+		boundedContext: (
+			conversationId,
+			botId,
+			runtimeSessionId,
+			promptMessageId,
+		) => {
 			contexts.push([botId, promptMessageId])
-			return base.boundedContext(conversationId, botId, promptMessageId)
+			return base.boundedContext(
+				conversationId,
+				botId,
+				runtimeSessionId,
+				promptMessageId,
+			)
 		},
 	}
 	const refuseNextWrite = () => {
@@ -241,6 +251,24 @@ describe("createConversationController", () => {
 
 		expect(spokenIn(harness.controller)).toEqual([[null, "and now?"]])
 		expect(harness.controller.getState().speakingBotId).toBeNull()
+	})
+
+	it("names the run it left behind when the same bot speaks again", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const opened = vi.spyOn(harness.store, "openRuntimeSession")
+		await harness.controller.send("and now?")
+		await harness.settled()
+		const first = harness.driver.submissions.at(-1)?.scope
+
+		harness.driver.pushTo(ada, spoke(ada, "walls up"))
+		await harness.settled()
+		await harness.controller.send("and then?")
+		await harness.settled()
+
+		expect(opened.mock.calls.map((call) => call[3])).toEqual([
+			null,
+			first?.runtimeSessionId,
+		])
 	})
 
 	it("puts the bot a speaker names at the end of the same turn", async () => {

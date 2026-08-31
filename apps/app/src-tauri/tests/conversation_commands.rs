@@ -170,6 +170,22 @@ fn a_run(conversation_id: &str, bot: &Value, started_at: i64) -> Value {
 	json!({ "conversationId": conversation_id, "botId": bot["id"], "startedAt": started_at })
 }
 
+fn a_rotation(
+	conversation_id: &str,
+	bot: &Value,
+	started_at: i64,
+	rotating: &Value,
+	reason: &str,
+) -> Value {
+	json!({
+		"conversationId": conversation_id,
+		"botId": bot["id"],
+		"startedAt": started_at,
+		"runtimeSessionId": rotating["id"],
+		"reason": reason
+	})
+}
+
 fn a_provider_session(
 	conversation_id: &str,
 	bot_id: &Value,
@@ -188,6 +204,7 @@ fn checkpoint(
 	window: &WebviewWindow<MockRuntime>,
 	conversation_id: &str,
 	bot: &Value,
+	runtime_session_id: &str,
 	created_at: i64,
 ) -> Value {
 	call(
@@ -196,7 +213,7 @@ fn checkpoint(
 		json!({
 			"conversationId": conversation_id,
 			"botId": bot["id"],
-			"runtimeSessionId": null,
+			"runtimeSessionId": runtime_session_id,
 			"createdAt": created_at
 		}),
 	)
@@ -429,9 +446,12 @@ fn the_id_a_run_answers_under_is_recorded_once_and_only_while_it_is_live() {
 	let disagreed = record(a_provider_session(&conversation, &bot["id"], &run, "claude-0000"));
 	let outsider = record(a_provider_session(&conversation, &json!("nobody"), &run, "claude-1111"));
 
-	let replacement =
-		call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 2))
-			.expect("the run that replaces it opens");
+	let replacement = call(
+		&window,
+		"conversation_open_runtime_session",
+		a_rotation(&conversation, &bot, 2, &run, "the context filled up"),
+	)
+	.expect("the run that replaces it opens");
 	let late = record(a_provider_session(&conversation, &bot["id"], &run, ANNOUNCED));
 	let fresh = record(a_provider_session(&conversation, &bot["id"], &replacement, "claude-4d2a"));
 
@@ -727,7 +747,10 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 		"the reply the dead host left came back as something else"
 	);
 
-	let folded = checkpoint(&window, &conversation, &bot, 1);
+	let run = call(&window, "conversation_open_runtime_session", a_run(&conversation, &bot, 1))
+		.expect("the run opens");
+	let run = run["id"].as_str().expect("the run holds an id").to_owned();
+	let folded = checkpoint(&window, &conversation, &bot, &run, 1);
 	assert_eq!(
 		folded["lastMessageSeq"],
 		json!(HISTORY - TAIL),
@@ -742,7 +765,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	)
 	.expect("the prompt is appended");
 
-	let again = checkpoint(&window, &conversation, &bot, 2);
+	let again = checkpoint(&window, &conversation, &bot, &run, 2);
 	assert_eq!(
 		again["lastMessageSeq"],
 		json!(HISTORY + 1 - TAIL),
@@ -755,6 +778,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 		json!({
 			"conversationId": conversation,
 			"botId": bot["id"],
+			"runtimeSessionId": run,
 			"promptMessageId": PROMPT
 		}),
 	)

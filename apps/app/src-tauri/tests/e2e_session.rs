@@ -90,6 +90,11 @@ impl Harness {
 	}
 
 	fn start(&self, resume: Option<&str>) -> Result<Value, Value> {
+		assert_eq!(
+			self.call("agent_shutdown", json!({ "scope": self.scope() })),
+			Ok(Value::Null),
+			"the run this one is opened beside could not be shut down"
+		);
 		{
 			let mut run = self.run.lock().expect("run");
 			*run = a_run(run.epoch + 1);

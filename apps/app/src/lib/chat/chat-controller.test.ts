@@ -1594,10 +1594,20 @@ describe("a run replaced under a conversation that carries on", () => {
 				refusing && member === "captureCheckpoint"
 					? refused()
 					: base.captureCheckpoint(conversationId, botId, runtimeSessionId, at),
-			boundedContext: (conversationId, botId, promptMessageId) =>
+			boundedContext: (
+				conversationId,
+				botId,
+				runtimeSessionId,
+				promptMessageId,
+			) =>
 				refusing && member === "boundedContext"
 					? refused()
-					: base.boundedContext(conversationId, botId, promptMessageId),
+					: base.boundedContext(
+							conversationId,
+							botId,
+							runtimeSessionId,
+							promptMessageId,
+						),
 		}
 	}
 
@@ -1614,6 +1624,11 @@ describe("a run replaced under a conversation that carries on", () => {
 		String(submitted.mock.calls.at(-1)?.[1] ?? "")
 
 	const reasons = (opened: { mock: { calls: unknown[][] } }, botId: string) =>
+		opened.mock.calls
+			.filter((call) => call[1] === botId)
+			.map((call) => call[4] ?? null)
+
+	const rotated = (opened: { mock: { calls: unknown[][] } }, botId: string) =>
 		opened.mock.calls
 			.filter((call) => call[1] === botId)
 			.map((call) => call[3] ?? null)
@@ -1638,6 +1653,7 @@ describe("a run replaced under a conversation that carries on", () => {
 
 		expect(carried).toEqual(first)
 		expect(reasons(opened, "default")).toEqual([null, NEARING_THE_BOUND])
+		expect(rotated(opened, "default")).toEqual([null, first.runtimeSessionId])
 		expect(captured.mock.calls.map((call) => call[2])).toContain(
 			first.runtimeSessionId,
 		)
@@ -2482,7 +2498,7 @@ describe("a handover nothing may run twice", () => {
 				captureCheckpoint: async (
 					conversationId: string,
 					botId: string,
-					runtimeSessionId: string | null,
+					runtimeSessionId: string,
 					createdAt: number,
 				) => {
 					if (holding) {
@@ -2592,13 +2608,25 @@ describe("a handover nothing may run twice", () => {
 		let refusing = false
 		const store: TranscriptStore = {
 			...base,
-			openRuntimeSession: (conversationId, botId, startedAt, reason) =>
+			openRuntimeSession: (
+				conversationId,
+				botId,
+				startedAt,
+				runtimeSessionId,
+				reason,
+			) =>
 				refusing
 					? Promise.reject({
 							kind: "storage",
 							failure: { kind: "poisonedConnection" },
 						})
-					: base.openRuntimeSession(conversationId, botId, startedAt, reason),
+					: base.openRuntimeSession(
+							conversationId,
+							botId,
+							startedAt,
+							runtimeSessionId,
+							reason,
+						),
 		}
 		const watched = watching()
 		const harness = await bootedHarness({
