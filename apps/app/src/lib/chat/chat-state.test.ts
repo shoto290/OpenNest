@@ -8,6 +8,7 @@ import {
 	isSameRuntimeScope,
 	isSessionReady,
 	isTurnBusy,
+	toTransportError,
 } from "./chat-state"
 
 import type { AgentEvent, ChatMessage, RuntimeScope } from "../agent/contract"
@@ -689,5 +690,64 @@ describe("the outbox a prompt waits in", () => {
 		})
 
 		expect(queued(reset)).toEqual(["one", "two", "three"])
+	})
+})
+
+describe("toTransportError", () => {
+	it("passes a rejection carrying a transport kind through", () => {
+		const refusal = { kind: "notStarted" }
+
+		expect(toTransportError(refusal)).toBe(refusal)
+	})
+
+	it("describes a rejection carrying an unknown kind as an unknown failure", () => {
+		expect(toTransportError({ kind: "somethingElse" })).toEqual({
+			kind: "unknownFailure",
+			detail: "somethingElse",
+		})
+	})
+
+	it("describes a rejection carrying no kind as an unknown failure", () => {
+		expect(toTransportError(new Error("refused"))).toEqual({
+			kind: "unknownFailure",
+			detail: "Error: refused",
+		})
+	})
+})
+
+describe("dismissing a failure", () => {
+	const failed = (state: ChatState, detail: string): ChatState =>
+		chatReducer(state, {
+			type: "driverEvent",
+			scope: null,
+			event: { type: "failed", error: { kind: "spawnFailed", detail } },
+		})
+
+	it("drops the failure the reader dismissed", () => {
+		const shown = failed(initialChatState, "no binary")
+		const held = shown.errors.at(-1)
+
+		const dismissed = chatReducer(shown, {
+			type: "errorDismissed",
+			id: held?.id ?? "",
+		})
+
+		expect(dismissed.errors).toEqual([])
+	})
+
+	it("keeps a failure that landed after the dismissed one", () => {
+		const shown = failed(initialChatState, "no binary")
+		const held = shown.errors.at(-1)
+		const later = failed(shown, "still no binary")
+
+		const dismissed = chatReducer(later, {
+			type: "errorDismissed",
+			id: held?.id ?? "",
+		})
+
+		expect(dismissed.errors.at(-1)?.error).toEqual({
+			kind: "spawnFailed",
+			detail: "still no binary",
+		})
 	})
 })

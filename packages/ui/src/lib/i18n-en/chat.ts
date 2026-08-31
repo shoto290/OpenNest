@@ -72,6 +72,11 @@ const chat = {
 		jumpTo: "Jump to the message from {{author}}",
 		unpin: "Unpin the message from {{author}}",
 		empty: "No message is pinned in this conversation yet.",
+		unavailable: {
+			title: "Pinned messages are out of date",
+			description:
+				"The pins could not be read or changed. Try again in a moment.",
+		},
 	},
 	working: {
 		name: "No name",
@@ -175,6 +180,7 @@ const chat = {
 			serverEnvRejected: "A server was left out",
 			unavailable: "Claude Code is unavailable",
 			failed: "That request did not go through",
+			readFailed: "Earlier messages not loaded",
 		},
 		transport: {
 			binaryNotFound: "OpenNest's built-in agent is unreachable.",
@@ -201,6 +207,8 @@ const chat = {
 				"That session has been replaced. The one running now took its place.",
 			unknownPermission: "Unknown permission request ({{id}}).",
 			writeFailed: "The prompt could not be sent: {{detail}}",
+			readFailed: "The earlier messages could not be read: {{detail}}",
+			unknownFailure: "Something went wrong: {{detail}}",
 		},
 		attachment: {
 			megabytes: "{{size}} MB",

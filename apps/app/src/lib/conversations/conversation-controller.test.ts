@@ -12,9 +12,10 @@ import {
 } from "./scripted-driver"
 import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
-import { seatBots } from "./transcript-fixtures"
+import { message, seatBots } from "./transcript-fixtures"
 
 import type { ActivityStatus, AgentEvent } from "../agent/contract"
+import type { ChatDriver } from "../chat/driver"
 
 const SPACE = "personal"
 
@@ -42,6 +43,12 @@ type Harness = {
 	detach: () => void
 	settled: () => Promise<void>
 	refuseNextWrite: () => void
+}
+
+const settled = async () => {
+	for (let round = 0; round < 20; round += 1) {
+		await Promise.resolve()
+	}
 }
 
 type Naming = {
@@ -96,11 +103,6 @@ const createHarness = async (
 	})
 	const detach = controller.attach()
 	await controller.open(conversation)
-	const settled = async () => {
-		for (let round = 0; round < 20; round += 1) {
-			await Promise.resolve()
-		}
-	}
 	await settled()
 	return {
 		driver,
@@ -886,5 +888,138 @@ describe("naming a conversation from its first message", () => {
 		await harness.settled()
 
 		expect(harness.named).toEqual([])
+	})
+})
+
+describe("failures the conversation carries to the screen", () => {
+	const olderPageStore = (refusals: number): TranscriptStore => {
+		const base = createFakeTranscriptStore()
+		let refused = 0
+		return {
+			...base,
+			loadPage: (conversationId, cursor) => {
+				if (!cursor) {
+					return Promise.resolve({
+						conversationId,
+						messages: [message({ id: "m-2", conversationId, seq: 2 })],
+						hasMore: true,
+					})
+				}
+				if (refused < refusals) {
+					refused += 1
+					return Promise.reject(new Error("refused"))
+				}
+				return Promise.resolve({
+					conversationId,
+					messages: [message({ id: "m-1", conversationId, seq: 1 })],
+					hasMore: false,
+				})
+			},
+		}
+	}
+
+	const openedOn = async (store: TranscriptStore) => {
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [],
+		})
+		const controller = createConversationController(
+			createScriptedDriver(),
+			store,
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		return { controller, detach }
+	}
+
+	it("holds the failure and keeps the older page in reach when the store refuses it", async () => {
+		const { controller, detach } = await openedOn(olderPageStore(1))
+
+		await controller.loadOlder()
+
+		const state = controller.getState()
+		expect(state.latestError?.error.kind).toBe("readFailed")
+		expect(state.hasOlder).toBe(true)
+		expect(state.isLoadingOlder).toBe(false)
+		detach()
+	})
+
+	it("forgets the failure once the older page comes through", async () => {
+		const { controller, detach } = await openedOn(olderPageStore(1))
+
+		await controller.loadOlder()
+		await controller.loadOlder()
+
+		expect(controller.getState().latestError).toBeNull()
+		detach()
+	})
+
+	it("forgets the failure the reader dismissed", async () => {
+		const { controller, detach } = await openedOn(olderPageStore(1))
+
+		await controller.loadOlder()
+		const held = controller.getState().latestError
+
+		controller.dismissError(held?.id ?? "")
+
+		expect(controller.getState().latestError).toBeNull()
+		detach()
+	})
+
+	const seatedOn = async (driver: ChatDriver) => {
+		const store = createFakeTranscriptStore()
+		const bots = await seatBots(store, SPACE, ["Ada"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: bots.map((bot) => bot.id),
+		})
+		const controller = createConversationController(driver, store)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		return { controller, detach }
+	}
+
+	const refusingSessions = (refusals: number): ChatDriver => {
+		const scripted = createScriptedDriver()
+		let refused = 0
+		return {
+			...scripted,
+			startOrResumeSession: (scope) => {
+				if (refused < refusals) {
+					refused += 1
+					return Promise.reject({ kind: "spawnFailed", detail: "no binary" })
+				}
+				return scripted.startOrResumeSession(scope)
+			},
+		}
+	}
+
+	it("holds the transport failure that kept a bot from taking the turn", async () => {
+		const { controller, detach } = await seatedOn(refusingSessions(1))
+
+		await controller.send("how do we hold the walls?")
+		await settled()
+
+		expect(controller.getState().latestError?.error).toEqual({
+			kind: "spawnFailed",
+			detail: "no binary",
+		})
+		detach()
+	})
+
+	it("forgets the failure once a bot takes the turn", async () => {
+		const { controller, detach } = await seatedOn(refusingSessions(1))
+
+		await controller.send("how do we hold the walls?")
+		await settled()
+		await controller.send("and the gates?")
+		await settled()
+
+		expect(controller.getState().latestError).toBeNull()
+		detach()
 	})
 })

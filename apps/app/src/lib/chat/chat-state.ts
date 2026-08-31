@@ -69,6 +69,7 @@ export type ChatAction =
 	| { type: "promptRejected"; id: string | null; error: TransportError }
 	| { type: "promptRetried"; id: string }
 	| { type: "stopRejected"; error: TransportError }
+	| { type: "errorDismissed"; id: string }
 	| { type: "binaryVersion"; version: string | null }
 
 export const initialChatState: ChatState = {
@@ -91,6 +92,64 @@ export const initialChatState: ChatState = {
 	errors: [],
 	errorCount: 0,
 }
+
+const TRANSPORT_KINDS: Record<TransportError["kind"], true> = {
+	binaryNotFound: true,
+	notAuthenticated: true,
+	authCheckFailed: true,
+	spawnFailed: true,
+	startupTimeout: true,
+	crashed: true,
+	resumeFailed: true,
+	workingDirectoryRefused: true,
+	invalidFrame: true,
+	settingsRejected: true,
+	serverEnvRejected: true,
+	notStarted: true,
+	turnAlreadyRunning: true,
+	transitionInProgress: true,
+	noActiveTurn: true,
+	staleRuntimeSession: true,
+	unknownPermission: true,
+	writeFailed: true,
+	readFailed: true,
+	unknownFailure: true,
+}
+
+const kindIn = (reason: unknown): string | null =>
+	typeof reason === "object" && reason !== null && "kind" in reason
+		? String((reason as { kind: unknown }).kind)
+		: null
+
+const isTransportError = (reason: unknown): reason is TransportError => {
+	const kind = kindIn(reason)
+	return kind !== null && Object.hasOwn(TRANSPORT_KINDS, kind)
+}
+
+const detailOf = (reason: unknown): string => kindIn(reason) ?? String(reason)
+
+export const toTransportError = (reason: unknown): TransportError =>
+	isTransportError(reason)
+		? reason
+		: { kind: "unknownFailure", detail: detailOf(reason) }
+
+export const toStoreError = (reason: unknown): TransportError => ({
+	kind: "writeFailed",
+	detail: `the transcript store refused it (${detailOf(reason)})`,
+})
+
+export const toReadError = (reason: unknown): TransportError => ({
+	kind: "readFailed",
+	detail: detailOf(reason),
+})
+
+export const chatErrorOf = (
+	error: TransportError,
+	count: number,
+): ChatError => ({
+	id: `${error.kind}-${count}`,
+	error,
+})
 
 const MAX_ERRORS = 20
 
@@ -169,12 +228,19 @@ function setTurn(state: ChatState, next: TurnState): ChatState {
 }
 
 function pushError(state: ChatState, error: TransportError): ChatState {
-	const entry = { id: `${error.kind}-${state.errorCount}`, error }
+	const entry = chatErrorOf(error, state.errorCount)
 	return {
 		...state,
 		errorCount: state.errorCount + 1,
 		errors: [...state.errors, entry].slice(-MAX_ERRORS),
 	}
+}
+
+function applyErrorDismissed(state: ChatState, id: string): ChatState {
+	if (state.errors.at(-1)?.id !== id) {
+		return state
+	}
+	return { ...state, errors: [] }
 }
 
 function applyActivity(state: ChatState, activity: ActivityEvent): ChatState {
@@ -396,6 +462,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 			return applyPromptRetried(state, action.id)
 		case "stopRejected":
 			return applyStopRejected(state, action.error)
+		case "errorDismissed":
+			return applyErrorDismissed(state, action.id)
 		case "binaryVersion":
 			return { ...state, binaryVersion: action.version }
 	}

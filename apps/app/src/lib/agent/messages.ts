@@ -49,5 +49,9 @@ export function describeTransportError(
 			return t("screen.transport.unknownPermission", { id: error.id })
 		case "writeFailed":
 			return t("screen.transport.writeFailed", { detail: error.detail })
+		case "readFailed":
+			return t("screen.transport.readFailed", { detail: error.detail })
+		case "unknownFailure":
+			return t("screen.transport.unknownFailure", { detail: error.detail })
 	}
 }

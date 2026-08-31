@@ -37,10 +37,27 @@ export const ThreadNotice = ({
 	)
 }
 
+type PinsNoticeProps = {
+	onDismiss: () => void
+}
+
+export const PinsNotice = ({ onDismiss }: PinsNoticeProps) => {
+	const t = useChatCopy()
+
+	return (
+		<Notice
+			description={t("pinned.unavailable.description")}
+			onDismiss={onDismiss}
+			title={t("pinned.unavailable.title")}
+			tone="warning"
+		/>
+	)
+}
+
 type TransportNoticeProps = {
 	error: ChatError
 	onDismiss: (id: string) => void
-	onRestart: (id: string) => void
+	onRestart?: (id: string) => void
 }
 
 export const TransportNotice = ({
@@ -56,7 +73,7 @@ export const TransportNotice = ({
 			description={describeTransportError(t, error.error)}
 			onDismiss={() => onDismiss(error.id)}
 			retry={
-				stale
+				stale && onRestart
 					? { label: t("screen.restart"), onRetry: () => onRestart(error.id) }
 					: undefined
 			}

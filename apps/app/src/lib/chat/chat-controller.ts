@@ -9,6 +9,9 @@ import {
 	isSameRuntimeScope,
 	isSessionReady,
 	isTurnBusy,
+	toReadError,
+	toStoreError,
+	toTransportError,
 } from "./chat-state"
 import type { ChatDriver } from "./driver"
 import {
@@ -42,7 +45,6 @@ import type {
 	QuestionRequest,
 	RuntimeScope,
 	SessionHandle,
-	TransportError,
 } from "../agent/contract"
 import type {
 	MessagePin,
@@ -87,6 +89,7 @@ export type ChatController = {
 	) => Promise<string[]>
 	stop: () => Promise<void>
 	discard: (id: string) => void
+	dismissError: (id: string) => void
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
 	answer: (id: string, answers: QuestionAnswers) => Promise<void>
 	retry: (id: string) => Promise<void>
@@ -125,24 +128,6 @@ type TransitionKind = "open" | "close"
 type BotTransition = {
 	kind: TransitionKind
 	settled: Promise<unknown>
-}
-
-function toTransportError(reason: unknown): TransportError {
-	if (typeof reason === "object" && reason !== null && "kind" in reason) {
-		return reason as TransportError
-	}
-	return { kind: "writeFailed", detail: String(reason) }
-}
-
-function toStoreError(reason: unknown): TransportError {
-	const kind =
-		typeof reason === "object" && reason !== null && "kind" in reason
-			? String((reason as { kind: unknown }).kind)
-			: String(reason)
-	return {
-		kind: "writeFailed",
-		detail: `the transcript store refused it (${kind})`,
-	}
 }
 
 export function createChatController(
@@ -212,6 +197,9 @@ export function createChatController(
 
 	const reportStore = (bot: BotChat, reason: unknown) =>
 		announce(bot, { type: "failed", error: toStoreError(reason) })
+
+	const reportRead = (bot: BotChat, reason: unknown) =>
+		announce(bot, { type: "failed", error: toReadError(reason) })
 
 	const write = (
 		bot: BotChat,
@@ -790,7 +778,7 @@ export function createChatController(
 		try {
 			await enqueue(() => transcript.loadOlder(conversationId))
 		} catch (reason) {
-			reportStore(bot, reason)
+			reportRead(bot, reason)
 		} finally {
 			dispatch(bot, { type: "olderLoading", loading: false })
 		}
@@ -1236,6 +1224,8 @@ export function createChatController(
 		stop: () => onSelected(stop, undefined),
 		discard: (id) =>
 			forSelected((bot) => dispatch(bot, { type: "outboxEntryRemoved", id })),
+		dismissError: (id) =>
+			forSelected((bot) => dispatch(bot, { type: "errorDismissed", id })),
 		respond: (id, decision) =>
 			onSelected((bot) => respond(bot, id, decision), undefined),
 		answer: (id, answers) =>

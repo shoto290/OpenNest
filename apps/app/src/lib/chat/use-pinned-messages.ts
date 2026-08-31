@@ -15,10 +15,12 @@ export type PinnedMessagesController = {
 
 export type PinnedBubbles = {
 	bubbles: PinnedBubble[]
+	hasFailed: boolean
 	isPinned: (bubbleId: string) => boolean
 	anchorOf: (bubbleId: string) => string
 	toggle: (messageId: string, blockIndex: number) => void
 	unpin: (bubbleId: string) => void
+	dismissFailure: () => void
 }
 
 export function usePinnedMessages(
@@ -26,14 +28,21 @@ export function usePinnedMessages(
 	conversationId: string | null,
 ): PinnedBubbles {
 	const [pins, setPins] = useState<MessagePin[]>(NO_PINS)
+	const [hasFailed, setHasFailed] = useState(false)
+
+	const noteFailure = useCallback(() => setHasFailed(true), [])
+	const dismissFailure = useCallback(() => setHasFailed(false), [])
 
 	const recall = useCallback(() => {
 		if (!conversationId) {
 			setPins(NO_PINS)
 			return
 		}
-		void controller.pins().then(setPins, () => undefined)
-	}, [controller, conversationId])
+		void controller.pins().then((held) => {
+			setPins(held)
+			setHasFailed(false)
+		}, noteFailure)
+	}, [controller, conversationId, noteFailure])
 
 	useEffect(recall, [recall])
 
@@ -55,9 +64,9 @@ export function usePinnedMessages(
 			const act = isPinned(bubbleIdOf(messageId, blockIndex))
 				? controller.unpin(messageId, blockIndex)
 				: controller.pin(messageId, blockIndex)
-			void act.then(recall, () => undefined)
+			void act.then(recall, noteFailure)
 		},
-		[controller, isPinned, recall],
+		[controller, isPinned, recall, noteFailure],
 	)
 
 	const unpin = useCallback(
@@ -68,13 +77,21 @@ export function usePinnedMessages(
 			}
 			void controller
 				.unpin(shown.pin.message.id, shown.pin.blockIndex)
-				.then(recall, () => undefined)
+				.then(recall, noteFailure)
 		},
-		[controller, held, recall],
+		[controller, held, recall, noteFailure],
 	)
 
 	return useMemo(
-		() => ({ bubbles, isPinned, anchorOf, toggle, unpin }),
-		[bubbles, isPinned, anchorOf, toggle, unpin],
+		() => ({
+			bubbles,
+			hasFailed,
+			isPinned,
+			anchorOf,
+			toggle,
+			unpin,
+			dismissFailure,
+		}),
+		[bubbles, hasFailed, isPinned, anchorOf, toggle, unpin, dismissFailure],
 	)
 }

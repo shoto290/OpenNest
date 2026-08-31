@@ -75,6 +75,11 @@ const chat = {
 		jumpTo: "Aller au message de {{author}}",
 		unpin: "Retirer l'épingle du message de {{author}}",
 		empty: "Aucun message n'est épinglé dans cette conversation.",
+		unavailable: {
+			title: "Les messages épinglés ne sont pas à jour",
+			description:
+				"Les épingles n'ont pas pu être lues ou modifiées. Réessayez dans un instant.",
+		},
 	},
 	working: {
 		name: "Sans nom",
@@ -178,6 +183,7 @@ const chat = {
 			serverEnvRejected: "Un serveur a été laissé de côté",
 			unavailable: "Claude Code est indisponible",
 			failed: "Cette demande n'est pas passée",
+			readFailed: "Messages précédents non chargés",
 		},
 		transport: {
 			binaryNotFound: "L'agent intégré d'OpenNest est injoignable.",
@@ -205,6 +211,8 @@ const chat = {
 				"Cette session a été remplacée. Celle qui tourne maintenant a pris sa place.",
 			unknownPermission: "Demande d'autorisation inconnue ({{id}}).",
 			writeFailed: "L'invite n'a pas pu être envoyée : {{detail}}",
+			readFailed: "Les messages précédents n'ont pas pu être lus : {{detail}}",
+			unknownFailure: "Quelque chose s'est mal passé : {{detail}}",
 		},
 		attachment: {
 			megabytes: "{{size}} Mo",
