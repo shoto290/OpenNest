@@ -4148,27 +4148,27 @@ mod tests {
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 
-		for label in AT_ONCE {
-			a_bot_writes(&root, &bot.id, label, "Bean likes them.");
-			let before = titles(&root, &bot.id).len();
-			let ready = std::sync::Arc::new(std::sync::Barrier::new(AT_ONCE.len()));
-			let turns: Vec<_> = AT_ONCE
-				.map(|_| {
-					let root = root.clone();
-					let ready = std::sync::Arc::clone(&ready);
-					std::thread::spawn(move || {
-						ready.wait();
-						evolve(&root, &a_bot("Bean", "Answer briefly."))
-					})
-				})
-				.into_iter()
-				.collect();
-			let recorded: Vec<Evolution> =
-				turns.into_iter().filter_map(|turn| turn.join().expect("the turn ran")).collect();
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		let before = titles(&root, &bot.id).len();
 
-			assert_eq!(titles(&root, &bot.id).len(), before + recorded.len(), "got {recorded:?}");
-			assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is uncommitted");
-		}
+		let ready = std::sync::Arc::new(std::sync::Barrier::new(AT_ONCE.len()));
+		let turns: Vec<_> = AT_ONCE
+			.into_iter()
+			.map(|_| {
+				let root = root.clone();
+				let ready = std::sync::Arc::clone(&ready);
+				std::thread::spawn(move || {
+					ready.wait();
+					evolve(&root, &a_bot("Bean", "Answer briefly."))
+				})
+			})
+			.collect();
+		let recorded: Vec<Evolution> =
+			turns.into_iter().filter_map(|turn| turn.join().expect("the turn ran")).collect();
+
+		assert_eq!(recorded.len(), 1, "got {recorded:?}");
+		assert_eq!(titles(&root, &bot.id).len(), before + recorded.len());
+		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is uncommitted");
 
 		let _ = fs::remove_dir_all(&root);
 	}
