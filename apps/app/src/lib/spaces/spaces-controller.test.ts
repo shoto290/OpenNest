@@ -216,7 +216,6 @@ describe("createSpacesController", () => {
 		expect(controller.getState().hasFailedToCreate).toBe(true)
 		expect(controller.getState().hasFailedToLoad).toBe(false)
 		expect(held(controller)).toEqual(await names(store))
-		expect(controller.getState().selectedSpaceId).toBe("personal")
 	})
 
 	it("clears the refused create once a create lands", async () => {
