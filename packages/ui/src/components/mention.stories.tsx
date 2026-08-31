@@ -34,7 +34,9 @@ const Conversation = ({ children }: { children: ReactNode }) => (
 	</RosterProvider>
 )
 
-const Message = ({ source }: { source: string }) => (
+type MessageProps = { source: string }
+
+const Message = ({ source }: MessageProps) => (
 	<RosterProvider bots={ROOM}>
 		<div className="max-w-md">
 			<Markdown>{source}</Markdown>
@@ -219,14 +221,12 @@ export const CountedToNine = meta.story({
 		await expect(getComputedStyle(count).fontVariantNumeric).toContain(
 			"tabular-nums",
 		)
-		await expect(counted.getBoundingClientRect().height).toBeCloseTo(
-			plain.getBoundingClientRect().height,
-			1,
-		)
-		await expect(counted.getBoundingClientRect().top).toBeCloseTo(
-			plain.getBoundingClientRect().top,
-			1,
-		)
+
+		const drawn = counted.getBoundingClientRect()
+		const beside = plain.getBoundingClientRect()
+
+		await expect(drawn.height).toBeCloseTo(beside.height, 1)
+		await expect(drawn.top).toBeCloseTo(beside.top, 1)
 	},
 })
 
