@@ -4018,10 +4018,9 @@ mod tests {
 				std::thread::spawn(move || {
 					let _serialised = serialised();
 					let bot = a_bot("Bean", "Answer briefly.");
-					let bundle = dir(&root, &bot.id);
 					a_bot_writes(&root, &bot.id, name, &format!("Bean likes {name}."));
 					private_files::replace(
-						&bundle.join(LEARNED_NAME),
+						&dir(&root, &bot.id).join(LEARNED_NAME),
 						format!("Bean learned about {name}\n").as_bytes(),
 					)
 					.expect("the note lands");
