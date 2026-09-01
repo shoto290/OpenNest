@@ -58,10 +58,10 @@ const ActionFailureDialog = ({
 
 		try {
 			await onRetry()
-			setRetrying(false)
 			change(false)
 		} catch {
 			setRetryFailed(true)
+		} finally {
 			setRetrying(false)
 		}
 	}
