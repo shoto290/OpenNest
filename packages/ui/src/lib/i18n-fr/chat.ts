@@ -32,6 +32,10 @@ const chat = {
 		label: "Conversation",
 		loadOlder: "Charger les messages plus anciens",
 		jumpToLatest: "Aller au dernier message",
+		newMessages: "Nouveaux messages",
+		newCounted_one: "{{count}} nouveau message",
+		newCounted_many: "{{count}} nouveaux messages",
+		newCounted_other: "{{count}} nouveaux messages",
 		startOfHistory: "Début de la conversation",
 		message: {
 			user: "message de l'utilisateur",

@@ -26,6 +26,9 @@ interface ThreadLayoutProps {
 	transcriptKey?: string
 	busy?: boolean
 	label?: string
+	anchorOnSend?: boolean
+	marksNewMessages?: boolean
+	countsNewMessages?: boolean
 	older?: MessageScrollerOlder
 	rows?: MessageScrollerRow[]
 	onFollowChange?: (following: boolean) => void
@@ -47,6 +50,9 @@ function ThreadLayout({
 	transcriptKey,
 	busy,
 	label,
+	anchorOnSend,
+	marksNewMessages,
+	countsNewMessages,
 	older,
 	rows,
 	onFollowChange,
@@ -74,6 +80,9 @@ function ThreadLayout({
 					transcriptKey={transcriptKey}
 					busy={busy}
 					label={label}
+					anchorOnSend={anchorOnSend}
+					marksNewMessages={marksNewMessages}
+					countsNewMessages={countsNewMessages}
 					older={older}
 					rows={rows}
 					rowGap={TRANSCRIPT_ROW_GAP}
