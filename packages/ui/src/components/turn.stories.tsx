@@ -951,6 +951,45 @@ export const FailedNoStop = meta.story({
 	},
 })
 
+export const StreamingStoppableOtherIdentity = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn
+				author={LEAD}
+				copyText={PARTIAL}
+				identity={SECOND}
+				onStop={stopTurn}
+				state="streaming"
+				stoppable
+			>
+				{PARTIAL}
+			</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row whose two identities disagree: `author` names the bot the words are attributed to, `identity` names the face the screen wants in the gutter, and the screen is free to send both. The gutter answers to `identity` alone — avatar, stop name and veil — while the line above the bubble keeps answering to `author`. Check that the control names the bot drawn under it and not the one written above the bubble, so a stop can never reach a bot the reader is not looking at.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [gutter] = slotsIn(canvasElement, "message-gutter")
+		const drawn = within(gutter).getByRole("img")
+
+		await expect(
+			canvas.getByRole("button", { name: `Stop ${SECOND.name}` }),
+		).toBeVisible()
+		await expect(
+			canvas.queryByRole("button", { name: `Stop ${LEAD.name}` }),
+		).toBeNull()
+		await expect(drawn).toHaveAccessibleName(new RegExp(`${SECOND.animal}`))
+		await expect(drawn).not.toHaveAccessibleName(new RegExp(`${LEAD.animal}`))
+		await expect(canvas.getByText(LEAD.name)).toBeVisible()
+	},
+})
+
 export const StreamingStoppablePicture = meta.story({
 	render: () => <StoppableTurn author={PICTURED} state="streaming" stoppable />,
 	parameters: {
