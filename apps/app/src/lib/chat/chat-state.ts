@@ -108,6 +108,7 @@ const TRANSPORT_KINDS: Record<TransportError["kind"], true> = {
 	notStarted: true,
 	turnAlreadyRunning: true,
 	transitionInProgress: true,
+	tooManyLiveSessions: true,
 	noActiveTurn: true,
 	staleRuntimeSession: true,
 	unknownPermission: true,
