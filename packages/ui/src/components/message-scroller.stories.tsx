@@ -1813,15 +1813,16 @@ export const TailWithoutRows = meta.story({
 	},
 })
 
-const markedTranscript = async ({
-	canvas,
-	canvasElement,
-	userEvent,
-}: {
-	canvas: ReturnType<typeof within>
+interface MarkedTranscriptOptions {
 	canvasElement: HTMLElement
-	userEvent: { click: (element: Element) => Promise<void> }
-}) => {
+	click: (element: Element) => Promise<void>
+}
+
+const markedTranscript = async ({
+	canvasElement,
+	click,
+}: MarkedTranscriptOptions) => {
+	const canvas = within(canvasElement)
 	const viewport = canvas.getByRole("region", { name: "Conversation" })
 	await waitForLastBubble(viewport)
 
@@ -1829,9 +1830,9 @@ const markedTranscript = async ({
 	await canvas.findByRole("button", { name: "Jump to latest" })
 
 	const send = canvas.getByRole("button", { name: "Send reply" })
-	await userEvent.click(send)
-	await userEvent.click(send)
-	await userEvent.click(canvas.getByRole("button", { name: "Jump to latest" }))
+	await click(send)
+	await click(send)
+	await click(canvas.getByRole("button", { name: "Jump to latest" }))
 	await waitForLastBubble(viewport)
 
 	const line = newLine(canvasElement)
@@ -1856,8 +1857,11 @@ export const NewMessageSeparatorInLight = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const line = await markedTranscript({ canvas, canvasElement, userEvent })
+	play: async ({ canvasElement, userEvent }) => {
+		const line = await markedTranscript({
+			canvasElement,
+			click: userEvent.click,
+		})
 
 		await expect(line).toBeVisible()
 	},
@@ -1874,8 +1878,11 @@ export const NewMessageSeparatorInDark = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		const line = await markedTranscript({ canvas, canvasElement, userEvent })
+	play: async ({ canvasElement, userEvent }) => {
+		const line = await markedTranscript({
+			canvasElement,
+			click: userEvent.click,
+		})
 
 		await expect(line).toBeVisible()
 	},
