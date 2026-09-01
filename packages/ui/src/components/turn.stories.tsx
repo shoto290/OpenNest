@@ -3,6 +3,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
@@ -951,27 +952,37 @@ export const FailedNoStop = meta.story({
 	},
 })
 
+const accessibleNameOf = (mark: HTMLElement) => {
+	const label = mark.getAttribute("aria-label")
+	if (!label) throw new globalThis.Error("This mark carries no accessible name")
+	return label
+}
+
 export const StreamingStoppableSameBotEitherWay = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-4xl gap-6">
-			<AssistantTurn
-				author={LEAD}
-				copyText={PARTIAL}
-				onStop={stopTurn}
-				state="streaming"
-				stoppable
-			>
-				{PARTIAL}
-			</AssistantTurn>
-			<AssistantTurn
-				copyText={PARTIAL}
-				identity={LEAD}
-				onStop={stopTurn}
-				state="streaming"
-				stoppable
-			>
-				{PARTIAL}
-			</AssistantTurn>
+			<div data-slot="author-named-row" className="min-w-0 flex-1">
+				<AssistantTurn
+					author={LEAD}
+					copyText={PARTIAL}
+					onStop={stopTurn}
+					state="streaming"
+					stoppable
+				>
+					{PARTIAL}
+				</AssistantTurn>
+			</div>
+			<div data-slot="identity-named-row" className="min-w-0 flex-1">
+				<AssistantTurn
+					copyText={PARTIAL}
+					identity={LEAD}
+					onStop={stopTurn}
+					state="streaming"
+					stoppable
+				>
+					{PARTIAL}
+				</AssistantTurn>
+			</div>
 		</div>
 	),
 	parameters: {
@@ -982,19 +993,32 @@ export const StreamingStoppableSameBotEitherWay = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		const [authored, identified] = slotsIn(canvasElement, "message-gutter").map(
-			(gutter) => within(gutter).getByRole("img"),
+	play: async ({ canvasElement }) => {
+		const authored = within(slotIn(canvasElement, "author-named-row"))
+		const identified = within(slotIn(canvasElement, "identity-named-row"))
+		const animal = new RegExp(LEAD.animal ?? "")
+		const authoredMark = authored.getByRole("img", { name: animal })
+
+		await expect(
+			identified.getByRole("img", { name: animal }),
+		).toHaveAccessibleName(accessibleNameOf(authoredMark))
+		await expect(
+			authored.getAllByRole("button", { name: `Stop ${LEAD.name}` }),
+		).toHaveLength(1)
+		await expect(
+			identified.getAllByRole("button", { name: `Stop ${LEAD.name}` }),
+		).toHaveLength(1)
+
+		const nameLines = slotsIn(
+			slotIn(canvasElement, "author-named-row"),
+			"message-author",
 		)
 
-		await expect(identified).toHaveAccessibleName(
-			authored.getAttribute("aria-label") ?? "",
-		)
+		await expect(nameLines).toHaveLength(1)
+		await expect(nameLines[0]).toHaveTextContent(LEAD.name)
 		await expect(
-			canvas.getAllByRole("button", { name: `Stop ${LEAD.name}` }),
-		).toHaveLength(2)
-		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(1)
-		await expect(canvas.getByText(LEAD.name)).toBeVisible()
+			slotsIn(slotIn(canvasElement, "identity-named-row"), "message-author"),
+		).toHaveLength(0)
 	},
 })
 
