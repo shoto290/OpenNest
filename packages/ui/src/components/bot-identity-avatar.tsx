@@ -97,7 +97,7 @@ type BotStopProps =
 	| { stoppable?: false; onStop?: () => void }
 
 type BotStopButtonProps = {
-	name?: string
+	name: string
 	image?: string
 	onStop: () => void
 	children: ReactNode
@@ -116,7 +116,7 @@ const BotStopButton = ({
 		<button
 			type="button"
 			data-slot="bot-working-stop"
-			aria-label={t("working.stop", { name: name ?? t("working.name") })}
+			aria-label={t("working.stop", { name })}
 			onClick={onStop}
 			onPointerEnter={() => setArmed(true)}
 			onPointerLeave={() => setArmed(false)}

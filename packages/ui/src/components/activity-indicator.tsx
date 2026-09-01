@@ -82,7 +82,7 @@ function ActivityIndicator(props: ActivityIndicatorProps) {
 		>
 			<SharedMark markId={markId} className="shrink-0" {...pointing}>
 				{props.stoppable ? (
-					<BotStopButton image={image} name={name} onStop={props.onStop}>
+					<BotStopButton image={image} name={named} onStop={props.onStop}>
 						{avatar}
 					</BotStopButton>
 				) : (
