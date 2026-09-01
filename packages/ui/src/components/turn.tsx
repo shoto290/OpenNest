@@ -380,7 +380,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const footer = footerKey ? t(footerKey) : undefined
 	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
-	const canStop = props.stoppable && state === "streaming"
+	const canStop = props.stoppable === true
 	const gutterBot = identity ?? (closesRun(run) ? author : undefined)
 	const mark = gutterBot ? (
 		<BotIdentityAvatar

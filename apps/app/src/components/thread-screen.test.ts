@@ -174,6 +174,25 @@ const settle = () =>
 		}
 	})
 
+const WRITING: AgentEvent[] = [
+	{
+		type: "messageStarted",
+		message: {
+			id: "msg-writing",
+			role: "assistant",
+			text: "",
+			completion: "streaming",
+			timestamp: 1,
+		},
+	},
+	{
+		type: "messageDelta",
+		id: "msg-writing",
+		seq: 1,
+		text: "the walls hold\n\nand",
+	},
+]
+
 const SAID_AND_LANDED: AgentEvent[] = [
 	{
 		type: "messageStarted",
@@ -396,6 +415,24 @@ describe("ThreadScreen", () => {
 
 		expect(stopFor("Ada")).toBeTruthy()
 		expect(stopFor("Nyx")).toBeNull()
+	})
+
+	it("carries the stop onto the run a speaking bot is writing", async () => {
+		const room = await roomOf(["Ada"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), WRITING)
+		})
+		await settle()
+
+		expect(screen.getByText("the walls hold")).toBeTruthy()
+		fireEvent.click(screen.getByRole("button", { name: "Stop Ada" }))
+		await settle()
+
+		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
 	})
 
 	it("leaves no stop on the turn a bot has landed", async () => {
