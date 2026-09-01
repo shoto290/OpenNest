@@ -735,21 +735,53 @@ describe("createConversationController", () => {
 			)
 		})
 
-		it("leaves the bot removed and its turn completed when the shutdown fails", async () => {
+		it("leaves the bot removed and its turn completed when the release fails", async () => {
 			const completed = vi.spyOn(harness.store, "completeTurn")
+			const reported = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => undefined)
 			vi.spyOn(harness.driver, "shutdown").mockRejectedValue({
-				kind: "spawnFailed",
-				detail: "gone",
+				kind: "transitionInProgress",
 			})
 
-			await spokenOnce(harness, "walls are held")
+			const nyx = await spokenOnce(harness, "walls are held")
 
 			expect(runningIn(harness.controller)).toEqual([])
 			expect(completed).toHaveBeenCalledTimes(1)
-			expect(harness.controller.getState().latestError?.error).toEqual({
-				kind: "spawnFailed",
-				detail: "gone",
+			expect(harness.controller.getState().latestError).toBeNull()
+			expect(spokenIn(harness.controller)).toEqual([
+				[null, `<@${nyx}> take the walls`],
+				[nyx, "walls are held"],
+			])
+			expect(reported).toHaveBeenCalledWith(
+				"conversation controller: agent_shutdown failed",
+				{ kind: "transitionInProgress" },
+			)
+			reported.mockRestore()
+		})
+
+		it("releases the scopes left when one release rejects on shutdown", async () => {
+			const reported = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => undefined)
+			const nyx = idOf(harness.conversation, "Nyx")
+			const iris = idOf(harness.conversation, "Iris")
+			await harness.controller.send("@Nyx then @Iris")
+			await harness.settled()
+			const released: string[] = []
+			vi.spyOn(harness.driver, "shutdown").mockImplementation((scope) => {
+				if (scope.botId === nyx) {
+					return Promise.reject(new Error("refused"))
+				}
+				released.push(scope.botId)
+				return Promise.resolve()
 			})
+
+			await harness.controller.shutdown()
+
+			expect(released).toEqual([iris])
+			expect(harness.controller.getState().latestError).toBeNull()
+			reported.mockRestore()
 		})
 
 		it("resumes the next turn of a bot from the session its closed scope stored", async () => {

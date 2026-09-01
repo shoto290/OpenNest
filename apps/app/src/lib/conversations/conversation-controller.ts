@@ -941,8 +941,10 @@ export const createConversationController = (
 	const shutdownSpeaker = (held: Speaker) =>
 		held.scope
 			? driver.shutdown(held.scope).catch((reason) => {
-					noteFailure(toTransportError(reason))
-					sync()
+					console.error(
+						"conversation controller: agent_shutdown failed",
+						reason,
+					)
 				})
 			: Promise.resolve()
 
