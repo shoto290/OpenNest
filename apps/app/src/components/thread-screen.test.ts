@@ -7,21 +7,29 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import "@workspace/ui/lib/i18n"
 
 import { ThreadScreen } from "@/components/thread-screen"
+import type { AgentEvent } from "@/lib/agent/contract"
 import { createAttachmentsController } from "@/lib/chat/attachments-controller"
-import { createDraftsController } from "@/lib/chat/drafts-controller"
 import type { ChatController } from "@/lib/chat/chat-controller"
 import {
 	type ChatError,
 	chatReducer,
 	initialChatState,
 } from "@/lib/chat/chat-state"
+import { createDraftsController } from "@/lib/chat/drafts-controller"
 import type { BotThread, Thread } from "@/lib/chat/thread-contract"
 import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
-import { createScriptedDriver } from "@/lib/conversations/scripted-driver"
+import {
+	createScriptedDriver,
+	type ScriptedDriver,
+} from "@/lib/conversations/scripted-driver"
 import type { Bot } from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { botIdentity, message } from "@/lib/conversations/transcript-fixtures"
+import {
+	botIdentity,
+	message,
+	seatBots,
+} from "@/lib/conversations/transcript-fixtures"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 
 const CRASH: ChatError = {
@@ -161,8 +169,70 @@ const screenOf = (thread: Thread) =>
 
 const settle = () =>
 	act(async () => {
-		await Promise.resolve()
+		for (let round = 0; round < 20; round += 1) {
+			await Promise.resolve()
+		}
 	})
+
+const WROTE: AgentEvent[] = [
+	{
+		type: "messageStarted",
+		message: {
+			id: "msg-said",
+			role: "assistant",
+			text: "",
+			completion: "streaming",
+			timestamp: 1,
+		},
+	},
+	{ type: "messageDelta", id: "msg-said", seq: 1, text: "the walls hold" },
+]
+
+const LANDED: AgentEvent[] = [
+	{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+]
+
+type Room = {
+	driver: ScriptedDriver
+	thread: Thread
+	idOf: (name: string) => string
+	send: (text: string) => Promise<void>
+}
+
+const roomOf = async (names: string[]): Promise<Room> => {
+	const store = createFakeTranscriptStore()
+	const bots = await seatBots(store, SPACE, names)
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: bots.map((bot) => bot.id),
+	})
+	const driver = createScriptedDriver()
+	const runtimes = createConversationRuntimes(driver, store)
+	const controller = runtimes.runtimeFor(conversation.id)
+
+	return {
+		driver,
+		thread: {
+			kind: "conversation",
+			conversation,
+			runtimes,
+			isSettingsOpen: false,
+			onOpenSettings: () => undefined,
+		},
+		idOf: (name) => bots.find((bot) => bot.name === name)?.id ?? name,
+		send: async (text) => {
+			await act(async () => {
+				await controller.send(text)
+			})
+			await settle()
+		},
+	}
+}
+
+const stopFor = (name: string) =>
+	screen.queryByRole("button", { name: `Stop ${name}` })
 
 describe("ThreadScreen", () => {
 	let layout: FakeLayout
@@ -302,5 +372,71 @@ describe("ThreadScreen", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Dismiss notice" }))
 
 		expect(screen.queryByText(PINS_TITLE)).toBeNull()
+	})
+
+	it("stops the bot whose working row carries the stop, and no other", async () => {
+		const room = await roomOf(["Ada", "Nyx"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada @Nyx now")
+
+		expect(stopFor("Nyx")).toBeTruthy()
+		fireEvent.click(screen.getByRole("button", { name: "Stop Ada" }))
+		await settle()
+
+		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
+		expect(stopFor("Nyx")).toBeTruthy()
+	})
+
+	it("leaves no stop on the waiting row of a bot holding no seat", async () => {
+		const room = await roomOf(["Ada", "Nyx"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada now")
+		await room.send("@Nyx after")
+
+		expect(stopFor("Ada")).toBeTruthy()
+		expect(stopFor("Nyx")).toBeNull()
+	})
+
+	it("leaves no stop on the turn a bot has landed", async () => {
+		const room = await roomOf(["Ada"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), [...WROTE, ...LANDED])
+		})
+		await settle()
+
+		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(stopFor("Ada")).toBeNull()
+	})
+
+	it("stops the solo bot from the row it works on", async () => {
+		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "the answer" })
+		const cancelled: string[] = []
+		render(
+			screenOf({
+				...thread,
+				chat: {
+					state: { ...thread.chat.state, turn: "running" },
+					controller: stubController({
+						stop: async () => {
+							cancelled.push("Nyx")
+						},
+					}),
+				},
+			}),
+		)
+		await settle()
+
+		fireEvent.click(screen.getByRole("button", { name: "Stop Nyx" }))
+		await settle()
+
+		expect(cancelled).toEqual(["Nyx"])
 	})
 })
