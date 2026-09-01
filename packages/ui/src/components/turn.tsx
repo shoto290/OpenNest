@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next"
 import {
 	BotIdentityAvatar,
 	BotStopButton,
+	type BotStopProps,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { useMarkId } from "@workspace/ui/components/mark-context"
@@ -77,7 +78,7 @@ interface UserTurnProps {
 	className?: string
 }
 
-interface AssistantTurnProps {
+type AssistantTurnProps = BotStopProps & {
 	children: ReactNode
 	state?: TurnState
 	run?: TurnRun
@@ -93,8 +94,6 @@ interface AssistantTurnProps {
 	author?: MessageAuthor
 	avatar?: ReactNode
 	carriesMark?: boolean
-	stoppable?: boolean
-	onStop?: () => void
 	className?: string
 }
 
@@ -354,26 +353,26 @@ function UserTurn({
 	)
 }
 
-function AssistantTurn({
-	children,
-	state = "complete",
-	run = "single",
-	copyText,
-	messageId,
-	repliedTo,
-	onReply,
-	onPin,
-	pinned = false,
-	bare = false,
-	fills = false,
-	botId,
-	author,
-	avatar,
-	carriesMark = false,
-	stoppable = false,
-	onStop,
-	className,
-}: AssistantTurnProps) {
+function AssistantTurn(props: AssistantTurnProps) {
+	const {
+		children,
+		state = "complete",
+		run = "single",
+		copyText,
+		messageId,
+		repliedTo,
+		onReply,
+		onPin,
+		pinned = false,
+		bare = false,
+		fills = false,
+		botId,
+		author,
+		avatar,
+		carriesMark = false,
+		className,
+	} = props
+	const canStop = props.stoppable && state === "streaming"
 	const { t } = useTranslation("chat")
 	const markedBotId = carriesMark ? (botId ?? author?.id) : undefined
 	const markId = useMarkId(markedBotId)
@@ -415,16 +414,16 @@ function AssistantTurn({
 				) : null}
 				<span
 					data-slot="message-gutter"
-					aria-hidden={stoppable ? undefined : "true"}
+					aria-hidden={canStop ? undefined : "true"}
 					className="col-start-1 row-start-2 self-end"
 				>
 					{mark ? (
 						<SharedMark markId={markId}>
-							{stoppable ? (
+							{canStop ? (
 								<BotStopButton
 									image={author?.image}
 									name={author?.name}
-									onStop={onStop}
+									onStop={props.onStop}
 								>
 									{mark}
 								</BotStopButton>

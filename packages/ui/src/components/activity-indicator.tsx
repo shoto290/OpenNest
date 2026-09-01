@@ -9,6 +9,7 @@ import {
 	type ActivityIndicatorKind,
 	BotIdentityAvatar,
 	BotStopButton,
+	type BotStopProps,
 } from "@workspace/ui/components/bot-identity-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
@@ -20,7 +21,7 @@ import { ProgressGrid } from "@workspace/ui/components/progress-grid"
 import { TURN_AVATAR_SIZE } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
 
-interface ActivityIndicatorProps {
+type ActivityIndicatorProps = BotStopProps & {
 	kind?: ActivityIndicatorKind
 	botId?: string
 	name?: string
@@ -29,8 +30,6 @@ interface ActivityIndicatorProps {
 	blot?: BotAvatarBlot
 	image?: string
 	seed?: string
-	stoppable?: boolean
-	onStop?: () => void
 	size?: number
 	className?: string
 }
@@ -38,20 +37,19 @@ interface ActivityIndicatorProps {
 const isTimed = (kind: ActivityIndicatorKind) =>
 	kind === "searching" || kind === "working"
 
-function ActivityIndicator({
-	kind = "thinking",
-	botId,
-	name,
-	label,
-	animal,
-	blot,
-	image,
-	seed,
-	stoppable = false,
-	onStop,
-	size = TURN_AVATAR_SIZE,
-	className,
-}: ActivityIndicatorProps) {
+function ActivityIndicator(props: ActivityIndicatorProps) {
+	const {
+		kind = "thinking",
+		botId,
+		name,
+		label,
+		animal,
+		blot,
+		image,
+		seed,
+		size = TURN_AVATAR_SIZE,
+		className,
+	} = props
 	const { t } = useTranslation("chat")
 	const markId = useMarkId(botId)
 	const [pointed, setPointed] = useState(false)
@@ -83,8 +81,8 @@ function ActivityIndicator({
 			className={cn("flex min-w-0 items-center gap-2", className)}
 		>
 			<SharedMark markId={markId} className="shrink-0" {...pointing}>
-				{stoppable ? (
-					<BotStopButton image={image} name={name} onStop={onStop}>
+				{props.stoppable ? (
+					<BotStopButton image={image} name={name} onStop={props.onStop}>
 						{avatar}
 					</BotStopButton>
 				) : (

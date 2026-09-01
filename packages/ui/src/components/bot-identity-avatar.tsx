@@ -92,10 +92,14 @@ function BotIdentityAvatar({
 const STOP_OVERLAY =
 	"pointer-events-none absolute inset-0 flex items-center justify-center bg-background/75 text-foreground"
 
+type BotStopProps =
+	| { stoppable: true; onStop: () => void }
+	| { stoppable?: false; onStop?: () => void }
+
 type BotStopButtonProps = {
 	name?: string
 	image?: string
-	onStop?: () => void
+	onStop: () => void
 	children: ReactNode
 }
 
@@ -143,4 +147,5 @@ export {
 	type BotIdentityAvatarProps,
 	BotStopButton,
 	type BotStopButtonProps,
+	type BotStopProps,
 }
