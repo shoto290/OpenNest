@@ -2,7 +2,10 @@ import { useState } from "react"
 import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotsIn } from "@workspace/storybook/story-utils"
+import {
+	slotsIn,
+	UPLOADED_AVATAR_IMAGE,
+} from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { Button } from "@workspace/ui/components/button"
@@ -138,20 +141,31 @@ const expectNoStop = async (
 ) => {
 	const [gutter] = slotsIn(canvasElement, "message-gutter")
 
-	await expect(canvas.queryByRole("button", { name: "Stop Atlas" })).toBeNull()
+	await expect(canvas.queryByRole("button", { name: /^Stop/ })).toBeNull()
 	await expect(gutter).toHaveAttribute("aria-hidden", "true")
 }
 
-type StoppableTurnProps = { state: TurnState; stoppable?: boolean }
+const PICTURED: MessageAuthor = { ...LEAD, image: UPLOADED_AVATAR_IMAGE }
 
-const StoppableTurn = ({ state, stoppable = false }: StoppableTurnProps) => {
-	const text = state === "streaming" ? ANSWER.slice(0, 48) : ANSWER
+const PARTIAL = ANSWER.slice(0, 48)
+
+type StoppableTurnProps = {
+	state: TurnState
+	stoppable?: boolean
+	author?: MessageAuthor
+}
+
+const StoppableTurn = ({
+	state,
+	stoppable = false,
+	author = LEAD,
+}: StoppableTurnProps) => {
+	const text = state === "streaming" ? PARTIAL : ANSWER
 
 	return (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<AssistantTurn
-				author={LEAD}
-				avatar={<Avatar />}
+				author={author}
 				copyText={text}
 				onStop={stopTurn}
 				state={state}
@@ -258,7 +272,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. `stoppable` comes in from the screen and turns the gutter avatar into the stop for that one bot, so a wave is ended one seat at a time; it is never read off `state`, since a turn can be read back as `streaming` from a crash and stop nothing, and it only ever draws on the row that is streaming, since a bot writing a new run still carries an avatar on the run it closed before. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. `stoppable` comes in from the screen and turns the gutter avatar into the stop for that one bot, so a wave is ended one seat at a time; it is never read off `state`, since a turn can be read back as `streaming` from a crash and stop nothing, and it only ever draws on the row that is streaming, since a bot writing a new run still carries an avatar on the run it closed before, and only on a gutter the row drew itself from `author`, since a stop named after nobody stops nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -922,6 +936,53 @@ export const FailedNoStop = meta.story({
 			description: {
 				story:
 					"The turn the transport gave up on, still `stoppable` and still holding its `onStop`. Check that the row keeps its failure footer and its copy, and that the gutter offers no stop and stays hidden from assistive technology.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expectNoStop(canvas, canvasElement)
+	},
+})
+
+export const StreamingStoppablePicture = meta.story({
+	render: () => <StoppableTurn author={PICTURED} state="streaming" stoppable />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same stop on a bot that uploaded its own picture. Name and veil both come from the identity the gutter draws, so neither can drift from the face under them. Check that the control is named after that bot and that the veil holds to the circle of the picture instead of squaring off its corners.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [glyph] = slotsIn(canvasElement, "bot-working-stop-glyph")
+
+		await expect(
+			canvas.getByRole("button", { name: "Stop Atlas" }),
+		).toBeVisible()
+		await expect(glyph).toHaveClass("rounded-full")
+	},
+})
+
+export const StreamingStoppableWithoutAuthor = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn
+				avatar={<Avatar />}
+				copyText={PARTIAL}
+				onStop={stopTurn}
+				state="streaming"
+				stoppable
+			>
+				{PARTIAL}
+			</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A streaming row the screen called stoppable, handed a drawn avatar and nobody to name: the row cannot say whose face that is, so it offers no stop rather than a control named after no one. Check that no stop is reachable and that the gutter stays hidden from assistive technology.",
 			},
 		},
 	},

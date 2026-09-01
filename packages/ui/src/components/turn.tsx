@@ -380,18 +380,28 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 	const canStop = props.stoppable && state === "streaming"
-	const mark =
-		avatar ??
-		(author && closesRun(run) ? (
-			<BotIdentityAvatar
-				animal={author.animal}
-				blot={author.blot}
-				image={author.image}
-				name={author.name}
-				seed={author.id}
-				size={TURN_AVATAR_SIZE}
-			/>
-		) : null)
+	const runAuthor = author && closesRun(run) ? author : undefined
+	const authorAvatar = runAuthor ? (
+		<BotIdentityAvatar
+			animal={runAuthor.animal}
+			blot={runAuthor.blot}
+			image={runAuthor.image}
+			name={runAuthor.name}
+			seed={runAuthor.id}
+			size={TURN_AVATAR_SIZE}
+		/>
+	) : null
+	const mark = avatar ?? authorAvatar
+	const stop =
+		canStop && runAuthor && mark === authorAvatar ? (
+			<BotStopButton
+				image={runAuthor.image}
+				name={runAuthor.name}
+				onStop={props.onStop}
+			>
+				{authorAvatar}
+			</BotStopButton>
+		) : null
 
 	return (
 		<Message
@@ -414,23 +424,11 @@ function AssistantTurn(props: AssistantTurnProps) {
 				) : null}
 				<span
 					data-slot="message-gutter"
-					aria-hidden={canStop ? undefined : "true"}
+					aria-hidden={stop ? undefined : "true"}
 					className="col-start-1 row-start-2 self-end"
 				>
 					{mark ? (
-						<SharedMark markId={markId}>
-							{canStop ? (
-								<BotStopButton
-									image={author?.image}
-									name={author?.name}
-									onStop={props.onStop}
-								>
-									{mark}
-								</BotStopButton>
-							) : (
-								mark
-							)}
-						</SharedMark>
+						<SharedMark markId={markId}>{stop ?? mark}</SharedMark>
 					) : null}
 				</span>
 				<MessageBubble
