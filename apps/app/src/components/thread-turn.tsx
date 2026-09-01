@@ -4,7 +4,6 @@ import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import {
 	AssistantTurn,
-	TURN_AVATAR_SIZE,
 	TurnGroup,
 	type TurnRun,
 	type TurnState,
@@ -12,7 +11,6 @@ import {
 } from "@workspace/ui/components/turn"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
-import { FaceAvatar } from "@/components/face-avatar"
 import { TurnBody } from "@/components/turn-body"
 import type { ChatController } from "@/lib/chat/chat-controller"
 import type { OutboxEntry } from "@/lib/chat/chat-state"
@@ -93,11 +91,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	return (
 		<AssistantTurn
 			author={author}
-			avatar={
-				avatarFace ? (
-					<FaceAvatar face={avatarFace} size={TURN_AVATAR_SIZE} />
-				) : undefined
-			}
+			identity={avatarFace}
 			bare={bare}
 			botId={botId}
 			copyText={text}

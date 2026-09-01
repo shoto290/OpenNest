@@ -43,6 +43,7 @@ import {
 	ContextMenuSeparator,
 } from "@workspace/ui/components/motion/context-menu"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -92,7 +93,7 @@ type AssistantTurnProps = BotStopProps & {
 	fills?: boolean
 	botId?: string
 	author?: MessageAuthor
-	avatar?: ReactNode
+	identity?: RosterBot
 	carriesMark?: boolean
 	className?: string
 }
@@ -368,7 +369,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		fills = false,
 		botId,
 		author,
-		avatar,
+		identity,
 		carriesMark = false,
 		className,
 	} = props
@@ -380,26 +381,25 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 	const canStop = props.stoppable && state === "streaming"
-	const runAuthor = author && closesRun(run) ? author : undefined
-	const authorAvatar = runAuthor ? (
+	const gutterBot = identity ?? (closesRun(run) ? author : undefined)
+	const mark = gutterBot ? (
 		<BotIdentityAvatar
-			animal={runAuthor.animal}
-			blot={runAuthor.blot}
-			image={runAuthor.image}
-			name={runAuthor.name}
-			seed={runAuthor.id}
+			animal={gutterBot.animal}
+			blot={gutterBot.blot}
+			image={gutterBot.image}
+			name={gutterBot.name}
+			seed={gutterBot.id}
 			size={TURN_AVATAR_SIZE}
 		/>
 	) : null
-	const mark = avatar ?? authorAvatar
 	const stop =
-		canStop && runAuthor && mark === authorAvatar ? (
+		canStop && gutterBot ? (
 			<BotStopButton
-				image={runAuthor.image}
-				name={runAuthor.name}
+				image={gutterBot.image}
+				name={gutterBot.name}
 				onStop={props.onStop}
 			>
-				{authorAvatar}
+				{mark}
 			</BotStopButton>
 		) : null
 

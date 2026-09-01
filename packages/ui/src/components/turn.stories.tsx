@@ -7,7 +7,6 @@ import {
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { Button } from "@workspace/ui/components/button"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
 import { Markdown } from "@workspace/ui/components/markdown"
@@ -131,7 +130,12 @@ const TURN_STATES: TurnState[] = [
 	"failed",
 ]
 
-const Avatar = () => <BotAvatar animated={false} size={TURN_AVATAR_SIZE} />
+const BOT: RosterBot = {
+	id: "bot-skippy",
+	name: "Skippy",
+	animal: "owl",
+	blot: "blue",
+}
 
 const stopTurn = fn()
 
@@ -179,6 +183,13 @@ const StoppableTurn = ({
 
 const MARKED_BOT_ID = "bot-lyra"
 
+const MARKED_FACE: RosterBot = {
+	id: MARKED_BOT_ID,
+	name: "Lyra",
+	animal: "rabbit",
+	blot: "purple",
+}
+
 const bubbleStyleOf = (node: Element) => {
 	const bubble = node.closest<HTMLElement>(
 		'[data-slot="message-bubble-content"]',
@@ -204,8 +215,8 @@ const MarkHandoff = () => {
 				<UserTurn>How is this workspace laid out?</UserTurn>
 				{delivered ? (
 					<AssistantTurn
-						avatar={<Avatar />}
 						botId={MARKED_BOT_ID}
+						identity={MARKED_FACE}
 						carriesMark
 						copyText={ANSWER}
 					>
@@ -239,8 +250,8 @@ const MarkedHistory = () => {
 				<UserTurn>How is this workspace laid out?</UserTurn>
 				<TurnGroup>
 					<AssistantTurn
-						avatar={<Avatar />}
 						botId={MARKED_BOT_ID}
+						identity={MARKED_FACE}
 						copyText={ANSWER}
 					>
 						{ANSWER}
@@ -249,7 +260,7 @@ const MarkedHistory = () => {
 				<UserTurn>And where do the tests live?</UserTurn>
 				<TurnGroup carriesMark>
 					<AssistantTurn
-						avatar={working ? null : <Avatar />}
+						identity={working ? undefined : MARKED_FACE}
 						botId={MARKED_BOT_ID}
 						copyText={TESTS}
 					>
@@ -272,7 +283,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. `stoppable` comes in from the screen and turns the gutter avatar into the stop for that one bot, so a wave is ended one seat at a time; it is never read off `state`, since a turn can be read back as `streaming` from a crash and stop nothing, and it only ever draws on the row that is streaming, since a bot writing a new run still carries an avatar on the run it closed before, and only on a gutter the row drew itself from `author`, since a stop named after nobody stops nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass `identity` on the row that closes the run — a row with no `identity` falls back to the `author` it closes its run with, and both draw the same bot avatar. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. `stoppable` comes in from the screen and turns the gutter avatar into the stop for that one bot, so a wave is ended one seat at a time; it is never read off `state`, since a turn can be read back as `streaming` from a crash and stop nothing, and it only ever draws on the row that is streaming, since a bot writing a new run still carries an avatar on the run it closed before, and it is named and shaped after the very identity the gutter draws, since a stop named after another bot stops the wrong one. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -285,7 +296,7 @@ export const Default = meta.story({
 			<UserTurn copyText="How is this workspace laid out?">
 				How is this workspace laid out?
 			</UserTurn>
-			<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
+			<AssistantTurn copyText={ANSWER} identity={BOT}>
 				{ANSWER}
 			</AssistantTurn>
 		</div>
@@ -317,7 +328,7 @@ export const Run = meta.story({
 				{RUN.map((paragraph, index) => (
 					<AssistantTurn
 						key={paragraph}
-						avatar={index === RUN.length - 1 ? <Avatar /> : undefined}
+						identity={index === RUN.length - 1 ? BOT : undefined}
 						copyText={paragraph}
 					>
 						{paragraph}
@@ -419,13 +430,13 @@ export const Variants = meta.story({
 						key={state}
 						state={state}
 						copyText={text}
-						avatar={<Avatar />}
+						identity={BOT}
 					>
 						{text}
 					</AssistantTurn>
 				)
 			})}
-			<AssistantTurn state="cancelled" copyText="" avatar={<Avatar />}>
+			<AssistantTurn state="cancelled" copyText="" identity={BOT}>
 				{""}
 			</AssistantTurn>
 		</div>
@@ -453,7 +464,7 @@ export const Table = meta.story({
 			</UserTurn>
 			<TurnGroup>
 				<AssistantTurn copyText={TABLE_INTRO}>{TABLE_INTRO}</AssistantTurn>
-				<AssistantTurn bare copyText={TABLE} avatar={<Avatar />}>
+				<AssistantTurn bare copyText={TABLE} identity={BOT}>
 					<Markdown>{TABLE}</Markdown>
 				</AssistantTurn>
 			</TurnGroup>
@@ -512,7 +523,7 @@ export const LongContent = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<UserTurn copyText={PASTED}>{PASTED}</UserTurn>
-			<AssistantTurn copyText={`${ANSWER}\n\n${ANSWER}`} avatar={<Avatar />}>
+			<AssistantTurn copyText={`${ANSWER}\n\n${ANSWER}`} identity={BOT}>
 				{`${ANSWER}\n\n${ANSWER}`}
 			</AssistantTurn>
 		</div>
@@ -567,10 +578,10 @@ export const Reply = meta.story({
 			<UserTurn copyText={QUESTION} onReply={reply}>
 				{QUESTION}
 			</UserTurn>
-			<AssistantTurn copyText={ANSWER} avatar={<Avatar />} onReply={reply}>
+			<AssistantTurn copyText={ANSWER} identity={BOT} onReply={reply}>
 				{ANSWER}
 			</AssistantTurn>
-			<AssistantTurn copyText={TESTS} avatar={<Avatar />}>
+			<AssistantTurn copyText={TESTS} identity={BOT}>
 				{TESTS}
 			</AssistantTurn>
 		</div>
@@ -603,7 +614,7 @@ export const Pinned = meta.story({
 			</UserTurn>
 			<AssistantTurn
 				copyText={ANSWER}
-				avatar={<Avatar />}
+				identity={BOT}
 				onReply={reply}
 				pinned
 				onPin={pin}
@@ -641,14 +652,14 @@ export const Menu = meta.story({
 			</UserTurn>
 			<AssistantTurn
 				copyText={ANSWER}
-				avatar={<Avatar />}
+				identity={BOT}
 				onReply={reply}
 				pinned
 				onPin={pin}
 			>
 				{ANSWER}
 			</AssistantTurn>
-			<AssistantTurn avatar={<Avatar />}>{TESTS}</AssistantTurn>
+			<AssistantTurn identity={BOT}>{TESTS}</AssistantTurn>
 		</div>
 	),
 	parameters: {
@@ -695,17 +706,13 @@ export const Menu = meta.story({
 export const Quoted = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<AssistantTurn copyText={ANSWER} avatar={<Avatar />}>
+			<AssistantTurn copyText={ANSWER} identity={BOT}>
 				{ANSWER}
 			</AssistantTurn>
 			<UserTurn copyText={QUESTION} repliedTo={QUOTED_BOT}>
 				{QUESTION}
 			</UserTurn>
-			<AssistantTurn
-				copyText={TESTS}
-				avatar={<Avatar />}
-				repliedTo={QUOTED_READER}
-			>
+			<AssistantTurn copyText={TESTS} identity={BOT} repliedTo={QUOTED_READER}>
 				{TESTS}
 			</AssistantTurn>
 		</div>
@@ -794,10 +801,10 @@ export const OpenedByMention = meta.story({
 	render: () => (
 		<RosterProvider bots={ROOM}>
 			<div className="mx-auto flex max-w-2xl flex-col gap-6">
-				<AssistantTurn copyText={MENTION_OPENING} avatar={<Avatar />}>
+				<AssistantTurn copyText={MENTION_OPENING} identity={BOT}>
 					<Markdown>{MENTION_OPENING}</Markdown>
 				</AssistantTurn>
-				<AssistantTurn copyText={WORD_OPENING} avatar={<Avatar />}>
+				<AssistantTurn copyText={WORD_OPENING} identity={BOT}>
 					<Markdown>{WORD_OPENING}</Markdown>
 				</AssistantTurn>
 			</div>
@@ -964,12 +971,12 @@ export const StreamingStoppablePicture = meta.story({
 	},
 })
 
-export const StreamingStoppableWithoutAuthor = meta.story({
+export const StreamingStoppableIdentity = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<AssistantTurn
-				avatar={<Avatar />}
 				copyText={PARTIAL}
+				identity={BOT}
 				onStop={stopTurn}
 				state="streaming"
 				stoppable
@@ -982,11 +989,14 @@ export const StreamingStoppableWithoutAuthor = meta.story({
 		docs: {
 			description: {
 				story:
-					"A streaming row the screen called stoppable, handed a drawn avatar and nobody to name: the row cannot say whose face that is, so it offers no stop rather than a control named after no one. Check that no stop is reachable and that the gutter stays hidden from assistive technology.",
+					"A row that names its gutter through `identity` rather than `author`: the screen hands the face it draws, so the stop can only ever be named after the bot under it. Check that the control is named after that bot and that the bubble carries no name line above it, since naming the row above the bubble is the author's job alone.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		await expectNoStop(canvas, canvasElement)
+		await expect(
+			canvas.getByRole("button", { name: "Stop Skippy" }),
+		).toBeVisible()
+		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(0)
 	},
 })

@@ -3,11 +3,11 @@ import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { AppHeader } from "@workspace/ui/components/app-header"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Notice } from "@workspace/ui/components/notice"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import {
 	ThreadLayout,
 	type ThreadLayoutProps,
@@ -16,14 +16,17 @@ import {
 	ToolApproval,
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
-import {
-	AssistantTurn,
-	TURN_AVATAR_SIZE,
-	UserTurn,
-} from "@workspace/ui/components/turn"
+import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
+
+const BOT: RosterBot = {
+	id: "bot-skippy",
+	name: "Skippy",
+	animal: "owl",
+	blot: "blue",
+}
 
 const LONG_TRANSCRIPT = [
 	"Walk me through the workspace layout.",
@@ -43,10 +46,7 @@ const READY_HEADER = (
 const CONVERSATION = (
 	<>
 		<UserTurn>How is this workspace laid out?</UserTurn>
-		<AssistantTurn
-			copyText={ANSWER}
-			avatar={<BotAvatar animated={false} size={TURN_AVATAR_SIZE} />}
-		>
+		<AssistantTurn copyText={ANSWER} identity={BOT}>
 			{ANSWER}
 		</AssistantTurn>
 	</>
