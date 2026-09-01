@@ -407,10 +407,9 @@ export function MessageScroller({
 		const anchor = virtualizerRef.current
 			?.getVirtualItems()
 			.find((item) => item.key === anchorKey)
-		const contentBelowAnchor =
-			anchor === undefined
-				? 0
-				: viewport.scrollHeight - room.offsetHeight - anchor.start
+		const contentBelowAnchor = anchor
+			? viewport.scrollHeight - room.offsetHeight - anchor.start
+			: viewport.clientHeight
 		const height = Math.max(0, viewport.clientHeight - contentBelowAnchor)
 
 		room.style.height = `${height}px`
