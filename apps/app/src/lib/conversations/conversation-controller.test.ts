@@ -703,6 +703,161 @@ describe("createConversationController", () => {
 		expect(harness.driver.shutdowns).toEqual([nyx, iris])
 	})
 
+	describe("releasing the scope a speaker held", () => {
+		const spokenOnce = async (harness: Harness, text: string) => {
+			const nyx = idOf(harness.conversation, "Nyx")
+			await harness.controller.send("@Nyx take the walls")
+			await harness.settled()
+			harness.driver.pushTo(nyx, spoke(nyx, text))
+			await harness.settled()
+			return nyx
+		}
+
+		it("shuts the scope of a bot down once its turn ends", async () => {
+			const nyx = await spokenOnce(harness, "walls are held")
+
+			expect(harness.driver.shutdowns).toEqual([nyx])
+		})
+
+		it("settles the reply of a bot whose shutdown never answers", async () => {
+			vi.spyOn(harness.driver, "shutdown").mockReturnValue(
+				new Promise(() => undefined),
+			)
+
+			const nyx = await spokenOnce(harness, "walls are held")
+
+			expect(spokenIn(harness.controller)).toContainEqual([
+				nyx,
+				"walls are held",
+			])
+			expect(harness.controller.getState().messages.at(-1)?.completion).toBe(
+				"complete",
+			)
+		})
+
+		it("leaves the bot removed and its turn completed when the release fails", async () => {
+			const completed = vi.spyOn(harness.store, "completeTurn")
+			const reported = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => undefined)
+			vi.spyOn(harness.driver, "shutdown").mockRejectedValue({
+				kind: "transitionInProgress",
+			})
+
+			const nyx = await spokenOnce(harness, "walls are held")
+
+			expect(runningIn(harness.controller)).toEqual([])
+			expect(completed).toHaveBeenCalledTimes(1)
+			expect(harness.controller.getState().latestError).toBeNull()
+			expect(spokenIn(harness.controller)).toEqual([
+				[null, `<@${nyx}> take the walls`],
+				[nyx, "walls are held"],
+			])
+			expect(reported).toHaveBeenCalledWith(
+				"conversation controller: agent_shutdown failed",
+				{ kind: "transitionInProgress" },
+			)
+			reported.mockRestore()
+		})
+
+		it("releases the scopes left when one release rejects on shutdown", async () => {
+			const reported = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => undefined)
+			const nyx = idOf(harness.conversation, "Nyx")
+			const iris = idOf(harness.conversation, "Iris")
+			await harness.controller.send("@Nyx then @Iris")
+			await harness.settled()
+			const released: string[] = []
+			vi.spyOn(harness.driver, "shutdown").mockImplementation((scope) => {
+				if (scope.botId === nyx) {
+					return Promise.reject(new Error("refused"))
+				}
+				released.push(scope.botId)
+				return Promise.resolve()
+			})
+
+			await harness.controller.shutdown()
+
+			expect(released).toEqual([iris])
+			expect(harness.controller.getState().latestError).toBeNull()
+			reported.mockRestore()
+		})
+
+		it("resumes the next turn of a bot from the session its closed scope stored", async () => {
+			const opened = vi.spyOn(harness.store, "openRuntimeSession")
+			const nyx = await spokenOnce(harness, "walls are held")
+			const first = harness.driver.submissions[0].scope.runtimeSessionId
+
+			await harness.controller.send("@Nyx and the gates?")
+			await harness.settled()
+
+			expect(opened).toHaveBeenLastCalledWith(
+				harness.conversation.id,
+				nyx,
+				expect.anything(),
+				first,
+				null,
+			)
+		})
+
+		it("holds one open scope at most per bot over ten turns", async () => {
+			const openRuntimeSession = harness.store.openRuntimeSession
+			let live = 0
+			let peak = 0
+			vi.spyOn(harness.store, "openRuntimeSession").mockImplementation(
+				async (...args) => {
+					const session = await openRuntimeSession(...args)
+					live += 1
+					peak = Math.max(peak, live)
+					return session
+				},
+			)
+			vi.spyOn(harness.driver, "shutdown").mockImplementation(() => {
+				live -= 1
+				return Promise.resolve()
+			})
+
+			for (let turn = 0; turn < 10; turn += 1) {
+				await spokenOnce(harness, "wall".repeat(turn + 1))
+			}
+
+			expect(peak).toBe(1)
+			expect(live).toBe(0)
+		})
+
+		const refusedOn = async (refused: Partial<TranscriptStore>) => {
+			const driver = createScriptedDriver()
+			const controller = createConversationController(driver, {
+				...harness.store,
+				...refused,
+			})
+			const detach = controller.attach()
+			await controller.open(harness.conversation)
+			await controller.send("hold the walls")
+			await settled()
+			detach()
+			return { driver, controller }
+		}
+
+		it("shuts nothing down for a bot that opened no scope", async () => {
+			const { driver, controller } = await refusedOn({
+				openRuntimeSession: () => Promise.reject(new Error("refused")),
+			})
+
+			expect(driver.shutdowns).toEqual([])
+			expect(runningIn(controller)).toEqual([])
+		})
+
+		it("shuts the scope down of a bot whose prompt was refused", async () => {
+			const { driver } = await refusedOn({
+				boundedContext: () => Promise.reject(new Error("refused")),
+			})
+
+			expect(driver.shutdowns).toEqual([idOf(harness.conversation, "Ada")])
+		})
+	})
+
 	describe("a bot asking the reader", () => {
 		const askedIn = async (harness: Harness) => {
 			const nyx = idOf(harness.conversation, "Nyx")

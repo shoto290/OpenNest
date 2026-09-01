@@ -209,6 +209,8 @@ const chat = {
 			notStarted: "No session is running.",
 			turnAlreadyRunning: "A turn is already running.",
 			transitionInProgress: "A session change is already in progress.",
+			tooManyLiveSessions:
+				"The app already runs {{cap}} bot sessions. Send your message again in a moment.",
 			noActiveTurn: "There is no turn to interrupt.",
 			staleRuntimeSession:
 				"That session has been replaced. The one running now took its place.",
