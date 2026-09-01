@@ -630,12 +630,8 @@ export function MessageScroller({
 	])
 
 	const forgetRelease = useCallback(() => {
-		const room = roomRef.current
 		anchorKeyRef.current = undefined
-		if (room) {
-			room.style.height = "0px"
-			room.style.display = "none"
-		}
+		if (roomRef.current) roomRef.current.style.display = "none"
 		setCountAfterKey(null)
 		setSeparatorAfterKey(null)
 	}, [])
