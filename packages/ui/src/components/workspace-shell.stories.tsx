@@ -8,7 +8,6 @@ import {
 	AppSidebar,
 	type AppSidebarBot,
 } from "@workspace/ui/components/app-sidebar"
-import { BotAvatar } from "@workspace/ui/components/bot-avatar"
 import { ConnectionStatus } from "@workspace/ui/components/connection-status"
 import { Icons } from "@workspace/ui/components/icons"
 import {
@@ -28,16 +27,20 @@ import {
 	SIDEBAR_WIDTH_STEP,
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { PromptInput } from "@workspace/ui/components/prompt-input"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
-import {
-	AssistantTurn,
-	TURN_AVATAR_SIZE,
-	UserTurn,
-} from "@workspace/ui/components/turn"
+import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const ANSWER =
 	"Two packages: `@workspace/ui` holds the design system, `app` holds the Tauri shell."
+
+const BOT: RosterBot = {
+	id: "bot-skippy",
+	name: "Skippy",
+	animal: "owl",
+	blot: "blue",
+}
 
 const ROSTER: AppSidebarBot[] = [
 	{
@@ -83,10 +86,7 @@ const chat = (leading?: ReactNode) => (
 		composer={<PromptInput onSubmit={fn()} />}
 	>
 		<UserTurn>How is this workspace laid out?</UserTurn>
-		<AssistantTurn
-			copyText={ANSWER}
-			avatar={<BotAvatar animated={false} size={TURN_AVATAR_SIZE} />}
-		>
+		<AssistantTurn copyText={ANSWER} identity={BOT}>
 			{ANSWER}
 		</AssistantTurn>
 	</ThreadLayout>

@@ -10,7 +10,11 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	BotIdentityAvatar,
+	BotStopButton,
+	type BotStopProps,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import {
@@ -39,6 +43,7 @@ import {
 	ContextMenuSeparator,
 } from "@workspace/ui/components/motion/context-menu"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -74,7 +79,7 @@ interface UserTurnProps {
 	className?: string
 }
 
-interface AssistantTurnProps {
+type AssistantTurnProps = BotStopProps & {
 	children: ReactNode
 	state?: TurnState
 	run?: TurnRun
@@ -88,7 +93,7 @@ interface AssistantTurnProps {
 	fills?: boolean
 	botId?: string
 	author?: MessageAuthor
-	avatar?: ReactNode
+	identity?: RosterBot
 	carriesMark?: boolean
 	className?: string
 }
@@ -349,24 +354,25 @@ function UserTurn({
 	)
 }
 
-function AssistantTurn({
-	children,
-	state = "complete",
-	run = "single",
-	copyText,
-	messageId,
-	repliedTo,
-	onReply,
-	onPin,
-	pinned = false,
-	bare = false,
-	fills = false,
-	botId,
-	author,
-	avatar,
-	carriesMark = false,
-	className,
-}: AssistantTurnProps) {
+function AssistantTurn(props: AssistantTurnProps) {
+	const {
+		children,
+		state = "complete",
+		run = "single",
+		copyText,
+		messageId,
+		repliedTo,
+		onReply,
+		onPin,
+		pinned = false,
+		bare = false,
+		fills = false,
+		botId,
+		author,
+		identity,
+		carriesMark = false,
+		className,
+	} = props
 	const { t } = useTranslation("chat")
 	const markedBotId = carriesMark ? (botId ?? author?.id) : undefined
 	const markId = useMarkId(markedBotId)
@@ -374,18 +380,28 @@ function AssistantTurn({
 	const footer = footerKey ? t(footerKey) : undefined
 	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
-	const mark =
-		avatar ??
-		(author && closesRun(run) ? (
-			<BotIdentityAvatar
-				animal={author.animal}
-				blot={author.blot}
-				image={author.image}
-				name={author.name}
-				seed={author.id}
-				size={TURN_AVATAR_SIZE}
-			/>
-		) : null)
+	const canStop = props.stoppable && state === "streaming"
+	const gutterBot = identity ?? (closesRun(run) ? author : undefined)
+	const mark = gutterBot ? (
+		<BotIdentityAvatar
+			animal={gutterBot.animal}
+			blot={gutterBot.blot}
+			image={gutterBot.image}
+			name={gutterBot.name}
+			seed={gutterBot.id}
+			size={TURN_AVATAR_SIZE}
+		/>
+	) : null
+	const stop =
+		canStop && gutterBot ? (
+			<BotStopButton
+				image={gutterBot.image}
+				name={gutterBot.name}
+				onStop={props.onStop}
+			>
+				{mark}
+			</BotStopButton>
+		) : null
 
 	return (
 		<Message
@@ -408,10 +424,12 @@ function AssistantTurn({
 				) : null}
 				<span
 					data-slot="message-gutter"
-					aria-hidden="true"
+					aria-hidden={stop ? undefined : "true"}
 					className="col-start-1 row-start-2 self-end"
 				>
-					{mark ? <SharedMark markId={markId}>{mark}</SharedMark> : null}
+					{mark ? (
+						<SharedMark markId={markId}>{stop ?? mark}</SharedMark>
+					) : null}
 				</span>
 				<MessageBubble
 					variant={bare ? "bare" : "soft"}
