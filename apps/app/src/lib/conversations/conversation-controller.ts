@@ -39,6 +39,7 @@ import {
 	toTransportError,
 } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
+import { toPublishedBlocks } from "../chat/markdown-blocks"
 import {
 	answeredText,
 	questionMessageIdOf,
@@ -68,7 +69,7 @@ export type PendingPrompt =
 export type SpeakingBot = {
 	botId: string
 	work: WorkingState
-	hasWritten: boolean
+	hasPublished: boolean
 	stop: () => Promise<void>
 }
 
@@ -158,7 +159,7 @@ const isSameSpeakers = (left: SpeakingBot[], right: SpeakingBot[]) =>
 	left.every(
 		(speaking, rank) =>
 			speaking.botId === right[rank].botId &&
-			speaking.hasWritten === right[rank].hasWritten &&
+			speaking.hasPublished === right[rank].hasPublished &&
 			isSameWork(speaking.work, right[rank].work),
 	)
 
@@ -256,18 +257,24 @@ export const createConversationController = (
 	const runningSpeakers = (): Speaker[] =>
 		queue.wave.flatMap(({ botId }) => speakers.get(botId) ?? [])
 
-	const workOf = (held: Speaker): WorkingState =>
-		held.pending
-			? promptWork(held.pending)
-			: workingFor(held.activities, held.written.size > 0)
+	const hasPublishedBlock = (held: Speaker): boolean =>
+		[...held.written].some(
+			([id, text]) =>
+				toPublishedBlocks(text, held.openMessages.has(id)).length > 0,
+		)
 
 	const speakingBots = (): SpeakingBot[] =>
-		runningSpeakers().map((held) => ({
-			botId: held.botId,
-			work: workOf(held),
-			hasWritten: held.written.size > 0,
-			stop: () => stopSpeaker(held.botId),
-		}))
+		runningSpeakers().map((held) => {
+			const hasPublished = hasPublishedBlock(held)
+			return {
+				botId: held.botId,
+				work: held.pending
+					? promptWork(held.pending)
+					: workingFor(held.activities, hasPublished),
+				hasPublished,
+				stop: () => stopSpeaker(held.botId),
+			}
+		})
 
 	const oldestPrompt = (): PendingPrompt | null =>
 		runningSpeakers()
