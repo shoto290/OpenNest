@@ -951,6 +951,53 @@ export const FailedNoStop = meta.story({
 	},
 })
 
+export const StreamingStoppableSameBotEitherWay = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-4xl gap-6">
+			<AssistantTurn
+				author={LEAD}
+				copyText={PARTIAL}
+				onStop={stopTurn}
+				state="streaming"
+				stoppable
+			>
+				{PARTIAL}
+			</AssistantTurn>
+			<AssistantTurn
+				copyText={PARTIAL}
+				identity={LEAD}
+				onStop={stopTurn}
+				state="streaming"
+				stoppable
+			>
+				{PARTIAL}
+			</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same bot reaching the gutter by either road: the row on the leading edge is named by `author`, the row beside it by `identity`, and nothing else differs. Check that both gutters draw the very same mark and offer a stop under the same name, and that only the `author` row carries the name line above its bubble, since `identity` says who is drawn and never who is speaking.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [authored, identified] = slotsIn(canvasElement, "message-gutter").map(
+			(gutter) => within(gutter).getByRole("img"),
+		)
+
+		await expect(identified).toHaveAccessibleName(
+			authored.getAttribute("aria-label") ?? "",
+		)
+		await expect(
+			canvas.getAllByRole("button", { name: `Stop ${LEAD.name}` }),
+		).toHaveLength(2)
+		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(1)
+		await expect(canvas.getByText(LEAD.name)).toBeVisible()
+	},
+})
+
 export const StreamingStoppableOtherIdentity = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
