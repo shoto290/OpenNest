@@ -132,6 +132,16 @@ const Avatar = () => <BotAvatar animated={false} size={TURN_AVATAR_SIZE} />
 
 const stopTurn = fn()
 
+const expectNoStop = async (
+	canvas: ReturnType<typeof within>,
+	canvasElement: HTMLElement,
+) => {
+	const [gutter] = slotsIn(canvasElement, "message-gutter")
+
+	await expect(canvas.queryByRole("button", { name: "Stop Atlas" })).toBeNull()
+	await expect(gutter).toHaveAttribute("aria-hidden", "true")
+}
+
 type StoppableTurnProps = { state: TurnState; stoppable?: boolean }
 
 const StoppableTurn = ({ state, stoppable = false }: StoppableTurnProps) => {
@@ -871,12 +881,7 @@ export const StreamingNotStoppable = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const [gutter] = slotsIn(canvasElement, "message-gutter")
-
-		await expect(
-			canvas.queryByRole("button", { name: "Stop Atlas" }),
-		).toBeNull()
-		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+		await expectNoStop(canvas, canvasElement)
 	},
 })
 
@@ -891,12 +896,7 @@ export const CompleteNoStop = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const [gutter] = slotsIn(canvasElement, "message-gutter")
-
-		await expect(
-			canvas.queryByRole("button", { name: "Stop Atlas" }),
-		).toBeNull()
-		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+		await expectNoStop(canvas, canvasElement)
 	},
 })
 
@@ -911,12 +911,7 @@ export const CancelledNoStop = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const [gutter] = slotsIn(canvasElement, "message-gutter")
-
-		await expect(
-			canvas.queryByRole("button", { name: "Stop Atlas" }),
-		).toBeNull()
-		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+		await expectNoStop(canvas, canvasElement)
 	},
 })
 
@@ -931,11 +926,6 @@ export const FailedNoStop = meta.story({
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		const [gutter] = slotsIn(canvasElement, "message-gutter")
-
-		await expect(
-			canvas.queryByRole("button", { name: "Stop Atlas" }),
-		).toBeNull()
-		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+		await expectNoStop(canvas, canvasElement)
 	},
 })
