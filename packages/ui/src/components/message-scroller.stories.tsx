@@ -1794,13 +1794,8 @@ export const TailReservesTheControlBand = meta.story({
 	},
 })
 
-const tailTopLeavesTheFrame = async ({
-	canvas,
-	canvasElement,
-}: {
-	canvas: ReturnType<typeof within>
-	canvasElement: HTMLElement
-}) => {
+const tailTopLeavesTheFrame = async (canvasElement: HTMLElement) => {
+	const canvas = within(canvasElement)
 	const viewport = canvas.getByRole("region", { name: "Conversation" })
 	await waitForLastBubble(viewport)
 	await readerScroll(viewport, READER_RELEASE)
@@ -1820,7 +1815,6 @@ const tailTopLeavesTheFrame = async ({
 	).toBe(true)
 	await answersAPointer(control)
 	await hidesWhatItCovers(control)
-	return control
 }
 
 export const TailTopLeavesTheFrame = meta.story({
@@ -1835,8 +1829,8 @@ export const TailTopLeavesTheFrame = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		await tailTopLeavesTheFrame({ canvas, canvasElement })
+	play: async ({ canvasElement }) => {
+		await tailTopLeavesTheFrame(canvasElement)
 	},
 })
 
@@ -1853,8 +1847,8 @@ export const TailTopLeavesTheFrameInDark = meta.story({
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		await tailTopLeavesTheFrame({ canvas, canvasElement })
+	play: async ({ canvasElement }) => {
+		await tailTopLeavesTheFrame(canvasElement)
 	},
 })
 
@@ -1879,7 +1873,7 @@ export const ControlCrossesTheBandBoundary = meta.story({
 			name: "Jump to latest",
 		})
 		const boxes: DOMRect[] = []
-		const sides: number[] = []
+		const sides: boolean[] = []
 		const restsUnderTheFrameTop = () =>
 			Math.round(
 				control.getBoundingClientRect().top -
@@ -1892,9 +1886,7 @@ export const ControlCrossesTheBandBoundary = meta.story({
 				await readerScroll(viewport, direction * BOUNDARY_STEP)
 				boxes.push(control.getBoundingClientRect())
 				sides.push(
-					Math.sign(
-						tailRect(canvasElement).top - viewport.getBoundingClientRect().top,
-					),
+					tailRect(canvasElement).top < viewport.getBoundingClientRect().top,
 				)
 				places.push(restsUnderTheFrameTop())
 			}
