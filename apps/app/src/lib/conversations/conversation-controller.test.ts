@@ -794,39 +794,35 @@ describe("createConversationController", () => {
 			expect(live).toBe(0)
 		})
 
-		it("shuts nothing down for a bot that opened no scope", async () => {
-			const store: TranscriptStore = {
-				...harness.store,
-				openRuntimeSession: () => Promise.reject(new Error("refused")),
-			}
+		const refusedOn = async (refused: Partial<TranscriptStore>) => {
 			const driver = createScriptedDriver()
-			const controller = createConversationController(driver, store)
+			const controller = createConversationController(driver, {
+				...harness.store,
+				...refused,
+			})
 			const detach = controller.attach()
 			await controller.open(harness.conversation)
-
 			await controller.send("hold the walls")
 			await settled()
+			detach()
+			return { driver, controller }
+		}
+
+		it("shuts nothing down for a bot that opened no scope", async () => {
+			const { driver, controller } = await refusedOn({
+				openRuntimeSession: () => Promise.reject(new Error("refused")),
+			})
 
 			expect(driver.shutdowns).toEqual([])
 			expect(runningIn(controller)).toEqual([])
-			detach()
 		})
 
 		it("shuts the scope down of a bot whose prompt was refused", async () => {
-			const store: TranscriptStore = {
-				...harness.store,
+			const { driver } = await refusedOn({
 				boundedContext: () => Promise.reject(new Error("refused")),
-			}
-			const driver = createScriptedDriver()
-			const controller = createConversationController(driver, store)
-			const detach = controller.attach()
-			await controller.open(harness.conversation)
-
-			await controller.send("hold the walls")
-			await settled()
+			})
 
 			expect(driver.shutdowns).toEqual([idOf(harness.conversation, "Ada")])
-			detach()
 		})
 	})
 
