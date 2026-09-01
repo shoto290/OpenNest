@@ -49,8 +49,14 @@ const TRAVEL_REST_MS = 320
 
 const JUMP_INSET = 12
 
-const JUMP_HIDDEN = { opacity: 0, y: 6 } as const
-const JUMP_VISIBLE = { opacity: 1, y: 0 } as const
+const JUMP_DROP = 6
+
+const bandFor = (control: number | undefined) =>
+	control ? control + JUMP_INSET * 2 : 0
+
+const jumpAtRest = (lift: number) => ({ opacity: 1, y: -lift })
+
+const jumpHidden = (lift: number) => ({ opacity: 0, y: -lift + JUMP_DROP })
 
 const distanceFromEnd = (viewport: HTMLElement) =>
 	viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
@@ -215,11 +221,13 @@ export function MessageScroller({
 	const viewportRef = useRef<HTMLElement>(null)
 	const listRef = useRef<HTMLDivElement>(null)
 	const tailRef = useRef<HTMLDivElement>(null)
+	const controlRef = useRef<HTMLDivElement>(null)
 	const roomRef = useRef<HTMLDivElement>(null)
 	const followingRef = useRef(followOutput)
 	const [isAtLiveEdge, setIsAtLiveEdge] = useState(followOutput)
 	const [listOffset, setListOffset] = useState(0)
 	const [tailClearance, setTailClearance] = useState(0)
+	const [controlHeight, setControlHeight] = useState(0)
 	const landingRef = useRef(false)
 	const holdFrameRef = useRef<number | undefined>(undefined)
 	const hasMissedResizeRef = useRef(false)
@@ -438,13 +446,25 @@ export function MessageScroller({
 
 		const frame = viewport.getBoundingClientRect()
 		const box = tail.getBoundingClientRect()
+		const band = bandFor(controlRef.current?.getBoundingClientRect().height)
 		const overlap = box.height === 0 ? 0 : frame.bottom - box.top
-		const clearance = Math.max(0, Math.min(overlap, frame.height / 2))
+		const clearance = Math.max(0, Math.min(overlap - band, frame.height - band))
 
 		setTailClearance((current) =>
 			Math.abs(current - clearance) <= 1 ? current : clearance,
 		)
 	}, [])
+
+	const setControlRef = useCallback(
+		(node: HTMLDivElement | null) => {
+			controlRef.current = node
+			if (!node) return
+
+			setControlHeight(node.getBoundingClientRect().height)
+			measureTailClearance()
+		},
+		[measureTailClearance],
+	)
 
 	const holdLiveEdge = useCallback(() => {
 		traceSizeChange()
@@ -862,7 +882,10 @@ export function MessageScroller({
 							ref={tailRef}
 							data-slot="message-scroller-tail"
 							className={cn("flex flex-col empty:hidden", !hasRows && "flex-1")}
-							style={{ gap: rowGap }}
+							style={{
+								gap: rowGap,
+								paddingTop: isAtLiveEdge ? undefined : bandFor(controlHeight),
+							}}
 						>
 							{children}
 						</div>
@@ -881,12 +904,13 @@ export function MessageScroller({
 			<AnimatePresence>
 				{isAtLiveEdge ? null : (
 					<motion.div
+						ref={setControlRef}
 						data-slot="message-scroller-live-edge"
-						className="pointer-events-none absolute inset-x-0 flex justify-center"
-						style={{ bottom: JUMP_INSET + tailClearance }}
-						initial={JUMP_HIDDEN}
-						animate={JUMP_VISIBLE}
-						exit={JUMP_HIDDEN}
+						className="pointer-events-none absolute inset-x-0 z-10 flex justify-center"
+						style={{ bottom: JUMP_INSET }}
+						initial={jumpHidden(tailClearance)}
+						animate={jumpAtRest(tailClearance)}
+						exit={jumpHidden(tailClearance)}
 						transition={reduce ? TRANSITION_NONE : SPRING_PANEL}
 					>
 						<Button

@@ -1658,6 +1658,68 @@ const tailRect = (canvasElement: HTMLElement) => {
 	return tail.getBoundingClientRect()
 }
 
+const seatRects = (canvasElement: HTMLElement) =>
+	Array.from(canvasElement.querySelectorAll(`${TAIL_SLOT} > *`)).map((seat) =>
+		seat.getBoundingClientRect(),
+	)
+
+const firstSeatRect = (canvasElement: HTMLElement) => {
+	const [first] = seatRects(canvasElement)
+	if (!first) throw new Error("the tail slot never took a seat")
+
+	return first
+}
+
+const bandHeight = (canvasElement: HTMLElement) =>
+	firstSeatRect(canvasElement).top - tailRect(canvasElement).top
+
+const CONTROL_INSET = 12
+
+const TALL_TAIL_SEATS = 8
+
+const TALL_TAIL_LIFT = 176
+
+const READER_RELEASE = 60
+
+const BOUNDARY_STEP = 8
+
+const BOUNDARY_STEPS = 8
+
+const BAND_REST_MS = 420
+
+const readerScroll = (viewport: HTMLElement, distance: number) => {
+	viewport.scrollTop -= distance
+	return settleScroll()
+}
+
+const resolvedSurface = (scope: HTMLElement) => {
+	const probe = document.createElement("span")
+	probe.style.backgroundColor = "var(--secondary)"
+	scope.append(probe)
+	const resolved = getComputedStyle(probe).backgroundColor
+	probe.remove()
+	return resolved
+}
+
+const hidesWhatItCovers = async (control: HTMLElement) => {
+	const painted = getComputedStyle(control).backgroundColor
+
+	await expect(painted).toBe(resolvedSurface(control))
+	await expect(painted).not.toMatch(/\//)
+	await expect(painted).not.toMatch(/^(?:rgba|hsla)\(|^transparent$/)
+}
+
+const answersAPointer = async (control: HTMLElement) => {
+	const box = control.getBoundingClientRect()
+	const hit = document.elementFromPoint(
+		box.left + box.width / 2,
+		box.top + box.height / 2,
+	)
+
+	await expect(hit).not.toBeNull()
+	await expect(control.contains(hit)).toBe(true)
+}
+
 export const TailHoldsTheLiveEdge = meta.story({
 	render: (args) => <TranscriptScroller {...args} tailSeats={2} />,
 	parameters: {
@@ -1688,8 +1750,204 @@ export const TailHoldsTheLiveEdge = meta.story({
 			viewport.getBoundingClientRect().bottom,
 		)
 		await expect(control.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-			tailRect(canvasElement).top,
+			firstSeatRect(canvasElement).top,
 		)
+	},
+})
+
+export const TailReservesTheControlBand = meta.story({
+	render: (args) => (
+		<TranscriptScroller {...args} tailSeats={TALL_TAIL_SEATS} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the wave under the rows is taller than the frame and its first seat is still on screen. Check that the tail opens a band at its own top, sized from the control and not from the tail, that the control comes to rest inside that band, and that the first seat keeps its whole box below it: the way back is chrome over the transcript, and it must never be read at the price of a row it hides.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+		await readerScroll(viewport, TALL_TAIL_LIFT)
+
+		const control = await canvas.findByRole("button", {
+			name: "Jump to latest",
+		})
+		const frame = viewport.getBoundingClientRect()
+		const tail = tailRect(canvasElement)
+		const seat = firstSeatRect(canvasElement)
+		const box = control.getBoundingClientRect()
+
+		await expect(tail.height).toBeGreaterThan(frame.height)
+		await expect(tail.top).toBeGreaterThan(frame.top)
+		await expect(bandHeight(canvasElement)).toBeCloseTo(
+			box.height + CONTROL_INSET * 2,
+			0,
+		)
+		await expect(box.top).toBeGreaterThanOrEqual(frame.top)
+		await expect(box.bottom).toBeLessThanOrEqual(frame.bottom)
+		await expect(box.top).toBeGreaterThanOrEqual(tail.top)
+		await expect(box.bottom).toBeLessThanOrEqual(seat.top)
+		await answersAPointer(control)
+	},
+})
+
+const tailTopLeavesTheFrame = async ({
+	canvas,
+	canvasElement,
+}: {
+	canvas: ReturnType<typeof within>
+	canvasElement: HTMLElement
+}) => {
+	const viewport = canvas.getByRole("region", { name: "Conversation" })
+	await waitForLastBubble(viewport)
+	await readerScroll(viewport, READER_RELEASE)
+
+	const control = await canvas.findByRole("button", { name: "Jump to latest" })
+	const frame = viewport.getBoundingClientRect()
+	const tail = tailRect(canvasElement)
+	const box = control.getBoundingClientRect()
+
+	await expect(tail.top).toBeLessThan(frame.top)
+	await expect(box.top - frame.top).toBeCloseTo(CONTROL_INSET, 0)
+	await expect(box.bottom).toBeLessThanOrEqual(frame.bottom)
+	await expect(
+		seatRects(canvasElement).some(
+			(seat) => seat.top < box.bottom && seat.bottom > box.top,
+		),
+	).toBe(true)
+	await answersAPointer(control)
+	await hidesWhatItCovers(control)
+	return control
+}
+
+export const TailTopLeavesTheFrame = meta.story({
+	render: (args) => (
+		<TranscriptScroller {...args} tailSeats={TALL_TAIL_SEATS} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the wave is so tall that its own top is off the fold: there is no band left on screen to rest in. Check that the control comes down to one inset below the top of the frame, whole, that it takes the pointer aimed at it, and that the seat it lands on is hidden behind a surface the theme owns rather than showing through it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await tailTopLeavesTheFrame({ canvas, canvasElement })
+	},
+})
+
+export const TailTopLeavesTheFrameInDark = meta.story({
+	render: (args) => (
+		<TranscriptScroller {...args} tailSeats={TALL_TAIL_SEATS} />
+	),
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same control over the same tail on the dark surface, where an opacity on the fill would let the seat behind it read straight through. The story reads the painted background against `--secondary` resolved in the control's own scope, so a translucent fill fails here and not only to the eye.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await tailTopLeavesTheFrame({ canvas, canvasElement })
+	},
+})
+
+export const ControlCrossesTheBandBoundary = meta.story({
+	render: (args) => (
+		<TranscriptScroller {...args} tailSeats={TALL_TAIL_SEATS} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the crossing itself: the reader walks the tail top back and forth over the top of the frame, which is where resting in the band and resting under the top of the frame meet. Check that the same control travels across it: one box, one surface, one label, and that its resting place changes at most once per direction, never alternating frame to frame.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+		await readerScroll(viewport, READER_RELEASE)
+
+		const control = await canvas.findByRole("button", {
+			name: "Jump to latest",
+		})
+		const boxes: DOMRect[] = []
+		const sides: number[] = []
+		const restsUnderTheFrameTop = () =>
+			Math.round(
+				control.getBoundingClientRect().top -
+					viewport.getBoundingClientRect().top,
+			) === CONTROL_INSET
+
+		const walk = async (direction: number) => {
+			const places: boolean[] = []
+			for (let step = 0; step < BOUNDARY_STEPS; step += 1) {
+				await readerScroll(viewport, direction * BOUNDARY_STEP)
+				boxes.push(control.getBoundingClientRect())
+				sides.push(
+					Math.sign(
+						tailRect(canvasElement).top - viewport.getBoundingClientRect().top,
+					),
+				)
+				places.push(restsUnderTheFrameTop())
+			}
+			return places.filter(
+				(place, index) => index > 0 && place !== places[index - 1],
+			).length
+		}
+
+		const first = await walk(1)
+		await expect(first).toBeLessThanOrEqual(1)
+		await expect(await walk(-1)).toBeLessThanOrEqual(1)
+		await expect(new Set(sides).size).toBeGreaterThan(1)
+		await expect(new Set(boxes.map((box) => box.width)).size).toBe(1)
+		await expect(new Set(boxes.map((box) => box.height)).size).toBe(1)
+		await expect(control).toHaveTextContent("Jump to latest")
+		await hidesWhatItCovers(control)
+	},
+})
+
+export const LiveEdgeReturnCarriesTheBand = meta.story({
+	render: (args) => (
+		<TranscriptScroller {...args} tailSeats={TALL_TAIL_SEATS} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the band leaving. It opens while the tail is below the fold and nobody sees it; it closes under the reader's eyes, on the way back down. Check that the transcript comes to rest once: the tail's top offset on the frame the return settles is the offset it keeps, so the band is given back inside the movement and not one beat after it.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+		await readerScroll(viewport, READER_RELEASE)
+
+		const control = await canvas.findByRole("button", {
+			name: "Jump to latest",
+		})
+		await expect(bandHeight(canvasElement)).toBeGreaterThan(CONTROL_INSET)
+
+		control.click()
+		await waitForLastBubble(viewport)
+		await settleScroll()
+
+		const settled = tailRect(canvasElement).top
+		await new Promise((resolve) => setTimeout(resolve, BAND_REST_MS))
+		await settleScroll()
+
+		await expect(tailRect(canvasElement).top).toBeCloseTo(settled, 0)
+		await expect(
+			canvas.queryByRole("button", { name: "Jump to latest" }),
+		).toBeNull()
 	},
 })
 
