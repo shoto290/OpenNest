@@ -52,6 +52,11 @@ export const handedOver = (
 	}
 }
 
+export const droppedWaiting = (queue: TurnQueue, botId: string): TurnQueue => {
+	const waiting = queue.waiting.filter((summons) => summons.botId !== botId)
+	return waiting.length === queue.waiting.length ? queue : { ...queue, waiting }
+}
+
 const isBetween = (handover: Handover, pair: [string, string]) =>
 	pair.includes(handover.from) && pair.includes(handover.to)
 

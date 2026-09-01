@@ -626,6 +626,67 @@ describe("createConversationController", () => {
 		expect(submittedIn(harness)).toEqual([nyx, iris])
 	})
 
+	describe("stopping a summons held for the next wave", () => {
+		const withOneHeld = async () => {
+			const ada = idOf(harness.conversation, "Ada")
+			const nyx = idOf(harness.conversation, "Nyx")
+			await harness.controller.send("@Nyx then @Iris")
+			await harness.settled()
+
+			harness.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+			await harness.settled()
+			return { ada, nyx, iris: idOf(harness.conversation, "Iris") }
+		}
+
+		it("drops the summons the reader stopped before it speaks", async () => {
+			const { ada, nyx, iris } = await withOneHeld()
+			expect(harness.controller.getState().waitingBotIds).toEqual([ada])
+
+			harness.controller.stopWaiting(ada)
+
+			expect(harness.controller.getState().waitingBotIds).toEqual([])
+
+			harness.driver.pushTo(iris, spoke(iris, "gates up"))
+			await harness.settled()
+
+			expect(submittedIn(harness)).toEqual([nyx, iris])
+		})
+
+		it("leaves the state alone when the bot is held nowhere", async () => {
+			const { ada, nyx } = await withOneHeld()
+			const before = harness.controller.getState()
+
+			harness.controller.stopWaiting(nyx)
+
+			expect(harness.controller.getState()).toBe(before)
+			expect(before.waitingBotIds).toEqual([ada])
+		})
+
+		it("leaves a bot of the open wave in its seat, running", async () => {
+			const { ada, iris } = await withOneHeld()
+
+			harness.controller.stopWaiting(iris)
+			await harness.settled()
+
+			expect(runningIn(harness.controller)).toEqual([iris])
+			expect(harness.driver.cancelled).toEqual([])
+			expect(harness.controller.getState().waitingBotIds).toEqual([ada])
+		})
+
+		it("completes the open turn once the wave ends with nothing left held", async () => {
+			const completed = vi.spyOn(harness.store, "completeTurn")
+			const { ada, iris } = await withOneHeld()
+
+			harness.controller.stopWaiting(ada)
+			expect(completed).not.toHaveBeenCalled()
+
+			harness.driver.pushTo(iris, spoke(iris, "gates up"))
+			await harness.settled()
+
+			expect(completed).toHaveBeenCalledTimes(1)
+		})
+	})
+
 	it("shuts down the runtime of every bot of the open wave", async () => {
 		const nyx = idOf(harness.conversation, "Nyx")
 		const iris = idOf(harness.conversation, "Iris")

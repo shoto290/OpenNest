@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	droppedWaiting,
 	emptyQueue,
 	type Handover,
 	handedOver,
@@ -80,6 +81,34 @@ describe("handedOver", () => {
 	it("ignores a bot naming itself", () => {
 		const queue = handedOver(openedWave(opened(["ada"])), "ada", summons("ada"))
 		expect(queue.waiting).toEqual([])
+	})
+})
+
+describe("droppedWaiting", () => {
+	it("returns a new queue without the summons held for the bot", () => {
+		const held = opened(["ada", "nyx"])
+		const queue = droppedWaiting(held, "ada")
+		expect(waitingIn(queue)).toEqual(["nyx"])
+		expect(waitingIn(held)).toEqual(["ada", "nyx"])
+	})
+
+	it("leaves the queue alone when the bot is held nowhere", () => {
+		const held = opened(["ada"])
+		expect(droppedWaiting(held, "iris")).toBe(held)
+	})
+
+	it("leaves a bot seated in the open wave in its seat", () => {
+		const running = openedWave(opened(["ada", "nyx"]))
+		expect(droppedWaiting(running, "ada")).toBe(running)
+		expect(waveIn(running)).toEqual(["ada", "nyx"])
+	})
+
+	it("keeps the handovers already recorded", () => {
+		const running = openedWave(opened(["ada"]))
+		const named = handedOver(running, "ada", summons("nyx"))
+		const queue = droppedWaiting(named, "nyx")
+		expect(queue.waiting).toEqual([])
+		expect(queue.handovers).toEqual([handover("ada", "nyx")])
 	})
 })
 
