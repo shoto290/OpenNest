@@ -60,14 +60,21 @@ describe("handedOver", () => {
 		expect(queue.handovers).toEqual([])
 	})
 
-	it("ignores a bot already running in the open wave", () => {
+	it("holds for the next wave a bot running in the open one", () => {
 		const queue = handedOver(
 			openedWave(opened(["ada", "nyx"])),
 			"ada",
 			summons("nyx"),
 		)
-		expect(queue.waiting).toEqual([])
-		expect(queue.handovers).toEqual([])
+		expect(waitingIn(queue)).toEqual(["nyx"])
+		expect(queue.handovers).toEqual([handover("ada", "nyx")])
+	})
+
+	it("opens a second wave with the bot the first one named", () => {
+		const first = openedWave(opened(["ada", "nyx"]))
+		const second = openedWave(handedOver(first, "ada", summons("nyx")))
+		expect(waveIn(second)).toEqual(["nyx"])
+		expect(second.waiting).toEqual([])
 	})
 
 	it("ignores a bot naming itself", () => {

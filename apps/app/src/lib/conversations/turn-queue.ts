@@ -41,10 +41,8 @@ export const handedOver = (
 	from: string,
 	summons: Summons,
 ): TurnQueue => {
-	const isHeld = [...queue.wave, ...queue.waiting].some(
-		({ botId }) => botId === summons.botId,
-	)
-	if (isHeld) {
+	const isHeld = queue.waiting.some(({ botId }) => botId === summons.botId)
+	if (summons.botId === from || isHeld) {
 		return queue
 	}
 	return {
