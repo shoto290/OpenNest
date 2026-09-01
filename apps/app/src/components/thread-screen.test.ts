@@ -174,7 +174,7 @@ const settle = () =>
 		}
 	})
 
-const WROTE: AgentEvent[] = [
+const SAID_AND_LANDED: AgentEvent[] = [
 	{
 		type: "messageStarted",
 		message: {
@@ -186,9 +186,6 @@ const WROTE: AgentEvent[] = [
 		},
 	},
 	{ type: "messageDelta", id: "msg-said", seq: 1, text: "the walls hold" },
-]
-
-const LANDED: AgentEvent[] = [
 	{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
 ]
 
@@ -408,7 +405,7 @@ describe("ThreadScreen", () => {
 
 		await room.send("@Ada now")
 		act(() => {
-			room.driver.pushTo(room.idOf("Ada"), [...WROTE, ...LANDED])
+			room.driver.pushTo(room.idOf("Ada"), SAID_AND_LANDED)
 		})
 		await settle()
 
