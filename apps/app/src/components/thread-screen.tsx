@@ -6,6 +6,7 @@ import {
 } from "@workspace/ui/components/activity-indicator"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { Avatar } from "@workspace/ui/components/avatar"
+import type { BotStopProps } from "@workspace/ui/components/bot-identity-avatar"
 import { ChatEmptyState } from "@workspace/ui/components/chat-empty-state"
 import { ConversationEmptyState } from "@workspace/ui/components/conversation-empty-state"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
@@ -112,15 +113,15 @@ const logLandingTrace = (event: MessageScrollerTrace) => {
 
 const landingTrace = import.meta.env.DEV ? logLandingTrace : undefined
 
-type WorkingBotProps = {
+type WorkingBotProps = BotStopProps & {
 	face: ThreadFace
 	kind?: ActivityIndicatorKind
 	label?: string
-	onStop?: () => void
 }
 
-const WorkingBot = ({ face, kind, label, onStop }: WorkingBotProps) => (
+const WorkingBot = ({ face, kind, label, ...stop }: WorkingBotProps) => (
 	<ActivityIndicator
+		{...stop}
 		animal={face.animal}
 		blot={face.blot}
 		botId={face.id}
@@ -128,7 +129,6 @@ const WorkingBot = ({ face, kind, label, onStop }: WorkingBotProps) => (
 		kind={kind}
 		label={label}
 		name={face.name}
-		onStop={onStop}
 		seed={face.id}
 	/>
 )
@@ -359,6 +359,27 @@ const ThreadEmptyState = ({
 	) : null
 }
 
+const stopOf = (speaking: SpeakingBot) => () => {
+	void speaking.stop()
+}
+
+type SpeakerStops = ReadonlyMap<string, () => void>
+
+const NO_SPEAKER_STOPS: SpeakerStops = new Map()
+
+const speakerStopsOf = (thread: LoadedThread): SpeakerStops =>
+	thread.kind === "conversation"
+		? new Map(
+				thread.state.speakers.map((speaking) => [
+					speaking.botId,
+					stopOf(speaking),
+				]),
+			)
+		: NO_SPEAKER_STOPS
+
+const stopOfRow = (row: TranscriptRow, stops: SpeakerStops) =>
+	row.authorBotId ? stops.get(row.authorBotId) : undefined
+
 type ThreadRunProps = {
 	run: TranscriptRow[]
 	presentation: RunPresentation
@@ -370,6 +391,7 @@ type ThreadRunProps = {
 	quotes: ThreadQuotes
 	pins: PinnedBubbles
 	toQuote: ThreadNaming["toQuote"]
+	speakerStops: SpeakerStops
 	onReply: (target: ReplyTarget) => void
 	onRetry?: (messageId: string) => void
 }
@@ -385,6 +407,7 @@ const ThreadRun = ({
 	quotes,
 	pins,
 	toQuote,
+	speakerStops,
 	onReply,
 	onRetry,
 }: ThreadRunProps) => (
@@ -413,6 +436,7 @@ const ThreadRun = ({
 					onPin={pins.toggle}
 					onReply={onReply}
 					onRetry={onRetry}
+					onStop={stopOfRow(row, speakerStops)}
 					pinned={pins.isPinned(bubble)}
 					quoted={
 						row.quotedMessageId ? quotes.get(row.quotedMessageId) : undefined
@@ -456,29 +480,35 @@ const BotThreadTail = ({
 	face,
 	botWork,
 	onStop,
-}: BotThreadTailProps) => (
-	<>
-		{botWork ? (
-			<WorkingBot
-				face={face}
-				kind={botWork.kind}
-				label={botWork.label}
-				onStop={canStopTurn(thread.state.turn) ? onStop : undefined}
-			/>
-		) : null}
-		{thread.state.outbox.length > 0 ? (
-			<TurnGroup>
-				{thread.state.outbox.map((entry) => (
-					<QueuedTurn
-						controller={thread.controller}
-						entry={entry}
-						key={entry.id}
-					/>
-				))}
-			</TurnGroup>
-		) : null}
-	</>
-)
+}: BotThreadTailProps) => {
+	const stop: BotStopProps = canStopTurn(thread.state.turn)
+		? { stoppable: true, onStop }
+		: {}
+
+	return (
+		<>
+			{botWork ? (
+				<WorkingBot
+					{...stop}
+					face={face}
+					kind={botWork.kind}
+					label={botWork.label}
+				/>
+			) : null}
+			{thread.state.outbox.length > 0 ? (
+				<TurnGroup>
+					{thread.state.outbox.map((entry) => (
+						<QueuedTurn
+							controller={thread.controller}
+							entry={entry}
+							key={entry.id}
+						/>
+					))}
+				</TurnGroup>
+			) : null}
+		</>
+	)
+}
 
 type SpeakingRow = {
 	seated: RosterBot
@@ -522,9 +552,8 @@ const ConversationThreadTail = ({
 					key={seated.id}
 					kind={speaking.work.kind}
 					label={speaking.work.label}
-					onStop={() => {
-						void speaking.stop()
-					}}
+					onStop={stopOf(speaking)}
+					stoppable
 				/>
 			))}
 			{waitingBotIds
@@ -743,6 +772,7 @@ function ThreadView({
 		rejectedPromptId: facts.rejectedPromptId,
 		responder: promptResponder,
 		runs,
+		speakerStops: speakerStopsOf(thread),
 		toQuote,
 	})
 	const refusedTarget = repliedToRefusal
