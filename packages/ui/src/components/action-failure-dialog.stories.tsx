@@ -71,26 +71,60 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The retry still in flight. Both actions are disabled while the caller works, so a slow write cannot be fired twice and the reader cannot walk out from under a press they already made. The dialog holds on the same description: nothing is claimed until the callback answers.",
+					"The retry still in flight. Both actions stay in the tab order and are marked unavailable rather than removed from it, so the focus a reader placed on Try again is still theirs when the callback answers, and a screen reader still meets both controls where it left them. A second press is ignored, by pointer or by keyboard, so a slow write cannot be fired twice. The dialog holds on the same description: nothing is claimed until the callback answers.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const popup = await report()
+		const retryAction = within(popup).getByRole("button", { name: "Try again" })
+		const closeAction = within(popup).getByRole("button", { name: "Close" })
 
-		await userEvent.click(
-			within(popup).getByRole("button", { name: "Try again" }),
-		)
+		await userEvent.click(retryAction)
 
 		await waitFor(() =>
-			expect(
-				within(popup).getByRole("button", { name: "Try again" }),
-			).toBeDisabled(),
+			expect(retryAction).toHaveAttribute("aria-disabled", "true"),
 		)
-		await expect(
-			within(popup).getByRole("button", { name: "Close" }),
-		).toBeDisabled()
+		await expect(closeAction).toHaveAttribute("aria-disabled", "true")
+		await expect(retryAction).not.toBeDisabled()
+		await expect(closeAction).not.toBeDisabled()
+		await expect(retryAction).toHaveProperty("tabIndex", 0)
+		await expect(closeAction).toHaveProperty("tabIndex", 0)
+		await expect(retryAction).toHaveFocus()
+
+		await userEvent.keyboard("{Enter}")
+
+		await expect(args.onRetry).toHaveBeenCalledTimes(1)
+		await expect(retryAction).toHaveFocus()
 		await expect(popup).toBeVisible()
+	},
+})
+
+export const EscapeWhileRetrying = meta.story({
+	args: {
+		onRetry: fn(() => new Promise<void>(() => undefined)),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Escape pressed on a retry that has not answered yet. The dialog holds: a reader cannot walk out from under a write they already started, because the surface behind would then be read as settled while the caller is still working. Focus stays on Try again, and the dialog closes on Escape again the moment the callback answers.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const popup = await report()
+		const retryAction = within(popup).getByRole("button", { name: "Try again" })
+
+		await userEvent.click(retryAction)
+		await waitFor(() =>
+			expect(retryAction).toHaveAttribute("aria-disabled", "true"),
+		)
+
+		await userEvent.keyboard("{Escape}")
+
+		await expect(popup).toBeVisible()
+		await expect(retryAction).toHaveFocus()
 		await expect(args.onRetry).toHaveBeenCalledTimes(1)
 	},
 })
@@ -123,10 +157,10 @@ export const Error = meta.story({
 		await expect(popup).toBeVisible()
 		await expect(
 			within(popup).getByRole("button", { name: "Try again" }),
-		).toBeEnabled()
+		).toHaveAttribute("aria-disabled", "false")
 		await expect(
 			within(popup).getByRole("button", { name: "Close" }),
-		).toBeEnabled()
+		).toHaveAttribute("aria-disabled", "false")
 		await expect(args.onRetry).toHaveBeenCalledTimes(1)
 	},
 })

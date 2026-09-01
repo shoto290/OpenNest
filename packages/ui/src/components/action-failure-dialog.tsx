@@ -11,6 +11,9 @@ import {
 } from "@workspace/ui/components/settings-styles"
 import { cn } from "@workspace/ui/lib/utils"
 
+const UNAVAILABLE_ACTION_CLASS =
+	"aria-disabled:pointer-events-none aria-disabled:opacity-50"
+
 type ActionFailureDialogProps = {
 	open?: boolean
 	onOpenChange?: (open: boolean) => void
@@ -42,22 +45,29 @@ const ActionFailureDialog = ({
 		onOpenChange?.(next)
 	}
 
+	const requestChange = (next: boolean) => {
+		if (isRetrying && !next) return
+		change(next)
+	}
+
 	const retry = async () => {
+		if (isRetrying) return
+
 		setRetryFailed(false)
 		setRetrying(true)
 
 		try {
 			await onRetry()
+			setRetrying(false)
 			change(false)
 		} catch {
 			setRetryFailed(true)
-		} finally {
 			setRetrying(false)
 		}
 	}
 
 	return (
-		<AlertDialog.Root onOpenChange={change} open={open ?? isOpen}>
+		<AlertDialog.Root onOpenChange={requestChange} open={open ?? isOpen}>
 			<AlertDialog.Portal>
 				<AlertDialog.Backdrop className={BACKDROP_CLASS} />
 				<AlertDialog.Popup
@@ -82,13 +92,17 @@ const ActionFailureDialog = ({
 					) : null}
 					<div className="flex flex-wrap justify-end gap-2">
 						<AlertDialog.Close
-							className={buttonVariants({ variant: "outline", size: "sm" })}
-							disabled={isRetrying}
+							aria-disabled={isRetrying}
+							className={cn(
+								buttonVariants({ variant: "outline", size: "sm" }),
+								UNAVAILABLE_ACTION_CLASS,
+							)}
 						>
 							{t("dialog.close")}
 						</AlertDialog.Close>
 						<Button
-							disabled={isRetrying}
+							aria-disabled={isRetrying}
+							className={UNAVAILABLE_ACTION_CLASS}
 							onClick={retry}
 							ref={retryRef}
 							size="sm"
