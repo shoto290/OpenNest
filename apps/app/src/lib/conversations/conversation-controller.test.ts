@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
 	type ConversationController,
@@ -624,6 +624,96 @@ describe("createConversationController", () => {
 		expect(harness.driver.cancelled).toEqual([iris])
 		expect(harness.controller.getState().waitingBotIds).toEqual([])
 		expect(submittedIn(harness)).toEqual([nyx, iris])
+	})
+
+	describe("stopping a summons held for the next wave", () => {
+		let held: Harness
+
+		beforeEach(async () => {
+			held = await createHarness(["Ada", "Nyx", "Iris", "Vero"])
+		})
+
+		afterEach(() => {
+			held.detach()
+		})
+
+		const heldFor = async (said: string) => {
+			await held.controller.send(said)
+			await held.settled()
+		}
+
+		it("drops the summons the reader stopped and leaves the others held", async () => {
+			const ada = idOf(held.conversation, "Ada")
+			const nyx = idOf(held.conversation, "Nyx")
+			const iris = idOf(held.conversation, "Iris")
+			const vero = idOf(held.conversation, "Vero")
+			await heldFor("@Nyx then @Iris")
+
+			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}> and <@${vero}>`))
+			await held.settled()
+			expect(held.controller.getState().waitingBotIds).toEqual([ada, vero])
+
+			held.controller.stopWaiting(ada)
+
+			expect(held.controller.getState().waitingBotIds).toEqual([vero])
+
+			held.driver.pushTo(iris, spoke(iris, "gates up"))
+			await held.settled()
+
+			expect(submittedIn(held)).toEqual([nyx, iris, vero])
+		})
+
+		it("leaves the state alone when the bot is held nowhere", async () => {
+			const ada = idOf(held.conversation, "Ada")
+			const nyx = idOf(held.conversation, "Nyx")
+			await heldFor("@Nyx then @Iris")
+
+			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+			await held.settled()
+			const before = held.controller.getState()
+
+			held.controller.stopWaiting(idOf(held.conversation, "Vero"))
+
+			expect(held.controller.getState()).toBe(before)
+			expect(before.waitingBotIds).toEqual([ada])
+		})
+
+		it("leaves a bot of the open wave in its seat, running", async () => {
+			const ada = idOf(held.conversation, "Ada")
+			const nyx = idOf(held.conversation, "Nyx")
+			const iris = idOf(held.conversation, "Iris")
+			await heldFor("@Nyx then @Iris")
+
+			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+			await held.settled()
+
+			held.controller.stopWaiting(iris)
+			await held.settled()
+
+			expect(runningIn(held.controller)).toEqual([iris])
+			expect(held.driver.cancelled).toEqual([])
+			expect(held.controller.getState().waitingBotIds).toEqual([ada])
+		})
+
+		it("completes the open turn once the wave ends with nothing left held", async () => {
+			const ada = idOf(held.conversation, "Ada")
+			const nyx = idOf(held.conversation, "Nyx")
+			const iris = idOf(held.conversation, "Iris")
+			const completed = vi.spyOn(held.store, "completeTurn")
+			await heldFor("@Nyx then @Iris")
+
+			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+			await held.settled()
+
+			held.controller.stopWaiting(ada)
+			expect(completed).not.toHaveBeenCalled()
+
+			held.driver.pushTo(iris, spoke(iris, "gates up"))
+			await held.settled()
+
+			expect(submittedIn(held)).toEqual([nyx, iris])
+			expect(completed).toHaveBeenCalledTimes(1)
+		})
 	})
 
 	it("shuts down the runtime of every bot of the open wave", async () => {
