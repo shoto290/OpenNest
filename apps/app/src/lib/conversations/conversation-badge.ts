@@ -6,11 +6,11 @@ import type { BotBadge } from "../chat/bot-badge"
 
 export type ConversationAnswer = Pick<
 	ConversationState,
-	"speakingBotId" | "waitingBotIds" | "messages" | "pendingPrompt"
+	"speakers" | "waitingBotIds" | "messages" | "pendingPrompt"
 >
 
-const isAnswering = ({ speakingBotId, waitingBotIds }: ConversationAnswer) =>
-	speakingBotId !== null || waitingBotIds.length > 0
+const isAnswering = ({ speakers, waitingBotIds }: ConversationAnswer) =>
+	speakers.length > 0 || waitingBotIds.length > 0
 
 const hasStoppedAnswering = (
 	before: ConversationAnswer,

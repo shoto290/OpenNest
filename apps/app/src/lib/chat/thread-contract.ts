@@ -139,7 +139,7 @@ const conversationFactsOf = (
 	conversation: thread.conversation,
 	botWork: null,
 	isReady: false,
-	isBusy: thread.state.speakingBotId !== null,
+	isBusy: thread.state.speakers.length > 0,
 	isLoadingOlder: thread.state.isLoadingOlder,
 	isPromptPending: false,
 	isOverlayOpen: false,
@@ -149,7 +149,10 @@ const conversationFactsOf = (
 	question: questionIn(thread.state.pendingPrompt),
 	refused: thread.state.refusedMessage,
 	rejectedPromptId: null,
-	workingBotIds: [thread.state.speakingBotId, ...thread.state.waitingBotIds],
+	workingBotIds: [
+		...thread.state.speakers.map(({ botId }) => botId),
+		...thread.state.waitingBotIds,
+	],
 	loopingPair: thread.state.loopingPair,
 })
 

@@ -9,13 +9,12 @@ import type {
 import { createTranscriptController } from "./transcript-controller"
 import { selectHasMore, selectMessages } from "./transcript-state"
 import {
-	closedSpeaker,
 	emptyQueue,
 	handedOver,
 	loopingPairIn,
+	openedWave,
 	reopenedFor,
 	type Summons,
-	startedNext,
 	type TurnQueue,
 } from "./turn-queue"
 
@@ -65,13 +64,19 @@ export type PendingPrompt =
 	| { kind: "question"; botId: string; request: QuestionRequest }
 	| { kind: "permission"; botId: string; request: PermissionRequest }
 
+export type SpeakingBot = {
+	botId: string
+	work: WorkingState
+	hasWritten: boolean
+	stop: () => Promise<void>
+}
+
 export type ConversationState = {
 	conversationId: string | null
 	messages: TranscriptMessage[]
 	hasOlder: boolean
 	isLoadingOlder: boolean
-	speakingBotId: string | null
-	speakingWork: WorkingState | null
+	speakers: SpeakingBot[]
 	waitingBotIds: string[]
 	loopingPair: [string, string] | null
 	refusedMessage: RefusedMessage | null
@@ -111,7 +116,8 @@ type OpenTurn = {
 
 type Speaker = {
 	botId: string
-	scope: RuntimeScope
+	promptId: string
+	scope: RuntimeScope | null
 	turn: OpenTurn
 	openMessages: Map<string, number>
 	settledMessages: Set<string>
@@ -119,12 +125,15 @@ type Speaker = {
 	written: Map<string, string>
 	activities: ActivityEvent[]
 	pending: PendingPrompt | null
+	askedAt: number
 	isDropped: boolean
 }
 
 const NO_MESSAGES: TranscriptMessage[] = []
 
 const NO_PINS: MessagePin[] = []
+
+const NO_SPEAKERS: SpeakingBot[] = []
 
 const isSamePair = (
 	left: [string, string] | null,
@@ -142,13 +151,21 @@ const isSameWork = (left: WorkingState | null, right: WorkingState | null) =>
 const isSameOrder = (left: string[], right: string[]) =>
 	left.length === right.length && left.every((id, rank) => id === right[rank])
 
+const isSameSpeakers = (left: SpeakingBot[], right: SpeakingBot[]) =>
+	left.length === right.length &&
+	left.every(
+		(speaking, rank) =>
+			speaking.botId === right[rank].botId &&
+			speaking.hasWritten === right[rank].hasWritten &&
+			isSameWork(speaking.work, right[rank].work),
+	)
+
 const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.conversationId === right.conversationId &&
 	left.messages === right.messages &&
 	left.hasOlder === right.hasOlder &&
 	left.isLoadingOlder === right.isLoadingOlder &&
-	left.speakingBotId === right.speakingBotId &&
-	isSameWork(left.speakingWork, right.speakingWork) &&
+	isSameSpeakers(left.speakers, right.speakers) &&
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
 	isSamePair(left.loopingPair, right.loopingPair) &&
 	left.refusedMessage === right.refusedMessage &&
@@ -168,8 +185,7 @@ const initialState: ConversationState = {
 	messages: NO_MESSAGES,
 	hasOlder: false,
 	isLoadingOlder: false,
-	speakingBotId: null,
-	speakingWork: null,
+	speakers: NO_SPEAKERS,
 	waitingBotIds: [],
 	loopingPair: null,
 	refusedMessage: null,
@@ -192,13 +208,13 @@ export const createConversationController = (
 	let conversation: Conversation | null = null
 	let queue: TurnQueue = emptyQueue
 	let activeTurn: OpenTurn | null = null
-	let speaker: Speaker | null = null
+	const speakers = new Map<string, Speaker>()
+	let asks = 0
 	const runs = new Map<string, RuntimeScope>()
 	let refused: RefusedMessage | null = null
 	let latestError: ChatError | null = null
 	let errorCount = 0
 	let detach: Promise<() => void> | null = null
-	let driving: Promise<void> | null = null
 
 	const publish = () => {
 		for (const listener of listeners) {
@@ -235,30 +251,37 @@ export const createConversationController = (
 		}
 	}
 
-	const speakingWork = (): WorkingState | null => {
-		if (!queue.speaking) {
-			return null
-		}
-		if (!speaker) {
-			return { kind: "thinking" }
-		}
-		if (speaker.pending) {
-			return promptWork(speaker.pending)
-		}
-		return workingFor(speaker.activities, speaker.written.size > 0)
-	}
+	const runningSpeakers = (): Speaker[] =>
+		queue.wave.flatMap(({ botId }) => speakers.get(botId) ?? [])
+
+	const workOf = (held: Speaker): WorkingState =>
+		held.pending
+			? promptWork(held.pending)
+			: workingFor(held.activities, held.written.size > 0)
+
+	const speakingBots = (): SpeakingBot[] =>
+		runningSpeakers().map((held) => ({
+			botId: held.botId,
+			work: workOf(held),
+			hasWritten: held.written.size > 0,
+			stop: () => stopSpeaker(held.botId),
+		}))
+
+	const oldestPrompt = (): PendingPrompt | null =>
+		runningSpeakers()
+			.filter((held) => held.pending !== null)
+			.sort((left, right) => left.askedAt - right.askedAt)[0]?.pending ?? null
 
 	const sync = () => {
 		settle({
 			...state,
 			...readTranscript(),
 			conversationId: conversation?.id ?? null,
-			speakingBotId: queue.speaking?.botId ?? null,
-			speakingWork: speakingWork(),
+			speakers: speakingBots(),
 			waitingBotIds: queue.waiting.map(({ botId }) => botId),
 			loopingPair: loopingPairIn(queue.handovers),
 			refusedMessage: refused,
-			pendingPrompt: speaker?.pending ?? null,
+			pendingPrompt: oldestPrompt(),
 			latestError,
 		})
 	}
@@ -284,10 +307,11 @@ export const createConversationController = (
 		!held.openMessages.has(id) && !held.settledMessages.has(id)
 
 	const openReply = (held: Speaker, message: ChatMessage) => {
-		if (!conversation || !isUnwritten(held, message.id)) {
+		if (!conversation || !held.scope || !isUnwritten(held, message.id)) {
 			return
 		}
 		const conversationId = conversation.id
+		const { runtimeSessionId } = held.scope
 		held.openMessages.set(message.id, 0)
 		write(
 			() =>
@@ -310,7 +334,7 @@ export const createConversationController = (
 					createdAt: message.timestamp,
 					authorBotId: held.botId,
 					repliedToMessageId: held.turn.promptId,
-					runtimeSessionId: held.scope.runtimeSessionId,
+					runtimeSessionId,
 				}),
 		)
 		streamReply(held, message.id, 1, message.text)
@@ -418,20 +442,21 @@ export const createConversationController = (
 		}
 	}
 
-	const closeSpeaker = (completion: TerminalCompletion) => {
-		const held = speaker
-		if (!held) {
+	const isTurnRunning = (turn: OpenTurn) =>
+		[...speakers.values()].some((held) => held.turn === turn)
+
+	const closeSpeaker = (held: Speaker, completion: TerminalCompletion) => {
+		if (speakers.get(held.botId) !== held) {
 			return
 		}
-		speaker = null
+		speakers.delete(held.botId)
 		settleOpenReplies(held, completion)
 		if (!held.isDropped) {
 			noteHandovers(held)
 		}
-		if (held.turn !== activeTurn) {
+		if (held.turn !== activeTurn && !isTurnRunning(held.turn)) {
 			completeTurn(held.turn)
 		}
-		queue = closedSpeaker(queue)
 		sync()
 		drive()
 	}
@@ -443,6 +468,8 @@ export const createConversationController = (
 
 	const holdPrompt = (held: Speaker, pending: PendingPrompt) => {
 		held.pending = pending
+		held.askedAt = asks
+		asks += 1
 		sync()
 	}
 
@@ -495,17 +522,22 @@ export const createConversationController = (
 			case "permissionResolved":
 				return releasePrompt(held, event.id)
 			case "turnEnded":
-				return closeSpeaker(ENDING_FOR_OUTCOME[event.ended.outcome])
+				return closeSpeaker(held, ENDING_FOR_OUTCOME[event.ended.outcome])
 			case "failed":
-				return closeSpeaker("failed")
+				return closeSpeaker(held, "failed")
 			default:
 				return
 		}
 	}
 
+	const speakerAt = (scope: RuntimeScope | null) =>
+		[...speakers.values()].find(
+			(held) => held.scope !== null && isSameRuntimeScope(scope, held.scope),
+		)
+
 	const route = (scope: RuntimeScope | null, event: AgentEvent) => {
-		const held = speaker
-		if (!held || !isSameRuntimeScope(scope, held.scope)) {
+		const held = speakerAt(scope)
+		if (!held) {
 			return
 		}
 		apply(held, event)
@@ -548,71 +580,81 @@ export const createConversationController = (
 		return scope
 	}
 
-	const speak = async (summons: Summons, turn: OpenTurn) => {
+	const speak = async (held: Speaker) => {
 		if (!conversation) {
 			return
 		}
 		const conversationId = conversation.id
-		const scope = await openScope(conversationId, summons.botId)
-		speaker = {
-			botId: summons.botId,
-			scope,
-			turn,
-			openMessages: new Map(),
-			settledMessages: new Set(),
-			heldReply: null,
-			written: new Map(),
-			activities: [],
-			pending: null,
-			isDropped: false,
-		}
-		if (detach) {
-			await connect()
-		}
+		const scope = await openScope(conversationId, held.botId)
+		held.scope = scope
 		await driver.startOrResumeSession(scope)
 		const context = await store.boundedContext(
 			conversationId,
-			summons.botId,
+			held.botId,
 			scope.runtimeSessionId,
-			summons.promptId,
+			held.promptId,
 		)
 		await driver.submitPrompt(scope, context)
 	}
 
-	const runNext = async () => {
-		while (speaker === null && queue.waiting.length > 0) {
-			const next = queue.waiting[0]
-			const turn = activeTurn
-			if (!turn) {
-				return
-			}
-			queue = startedNext(queue)
-			sync()
-			try {
-				await speak(next, turn)
-				forgetFailure()
-				sync()
-				return
-			} catch (reason) {
-				speaker = null
-				queue = closedSpeaker(queue)
-				noteFailure(toTransportError(reason))
-				sync()
-			}
+	const newSpeaker = (
+		{ botId, promptId }: Summons,
+		turn: OpenTurn,
+	): Speaker => ({
+		botId,
+		promptId,
+		scope: null,
+		turn,
+		openMessages: new Map(),
+		settledMessages: new Set(),
+		heldReply: null,
+		written: new Map(),
+		activities: [],
+		pending: null,
+		askedAt: 0,
+		isDropped: false,
+	})
+
+	const openWave = (): Speaker[] => {
+		const turn = activeTurn
+		if (!turn || speakers.size > 0 || queue.waiting.length === 0) {
+			return []
 		}
-		if (speaker === null && queue.waiting.length === 0 && activeTurn) {
-			completeTurn(activeTurn)
-			activeTurn = null
+		queue = openedWave(queue)
+		const started = queue.wave.map((summons) => newSpeaker(summons, turn))
+		for (const held of started) {
+			speakers.set(held.botId, held)
 		}
+		sync()
+		return started
+	}
+
+	const begin = async (held: Speaker) => {
+		try {
+			await speak(held)
+			forgetFailure()
+		} catch (reason) {
+			speakers.delete(held.botId)
+			noteFailure(toTransportError(reason))
+		}
+		sync()
+	}
+
+	const completeIdleTurn = () => {
+		if (!activeTurn || speakers.size > 0 || queue.waiting.length > 0) {
+			return
+		}
+		completeTurn(activeTurn)
+		activeTurn = null
 	}
 
 	const drive = () => {
-		if (driving) {
+		const started = openWave()
+		if (started.length === 0) {
+			completeIdleTurn()
 			return
 		}
-		driving = runNext().finally(() => {
-			driving = null
-		})
+		void Promise.all(started.map(begin)).then(drive)
 	}
 
 	const storePrompt = async (turn: OpenTurn, said: TranscriptMessage) => {
@@ -695,8 +737,10 @@ export const createConversationController = (
 			void nameFrom(conversationId, trimmed)
 		}
 		transcript.append(said)
-		if (speaker) {
-			speaker.isDropped = true
+		if (speakers.size > 0) {
+			for (const held of speakers.values()) {
+				held.isDropped = true
+			}
 		} else if (activeTurn) {
 			completeTurn(activeTurn)
 		}
@@ -753,10 +797,13 @@ export const createConversationController = (
 		)
 	}
 
+	const speakerAsked = (id: string) =>
+		[...speakers.values()].find((held) => held.pending?.request.id === id)
+
 	const answer = async (id: string, answers: QuestionAnswers) => {
-		const held = speaker
+		const held = speakerAsked(id)
 		const pending = held?.pending
-		if (!held || pending?.kind !== "question" || pending.request.id !== id) {
+		if (!held?.scope || pending?.kind !== "question") {
 			return
 		}
 		await driver.answerQuestion(held.scope, id, answers).catch(() => undefined)
@@ -765,8 +812,8 @@ export const createConversationController = (
 	}
 
 	const respond = async (id: string, decision: PermissionDecision) => {
-		const held = speaker
-		if (held?.pending?.request.id !== id) {
+		const held = speakerAsked(id)
+		if (!held?.scope) {
 			return
 		}
 		await driver
@@ -775,20 +822,29 @@ export const createConversationController = (
 		releasePrompt(held, id)
 	}
 
-	const stop = async () => {
-		const held = speaker
-		if (held?.pending) {
+	const cancelSpeaker = async (held: Speaker) => {
+		held.isDropped = true
+		if (held.pending) {
 			await respond(held.pending.request.id, "deny")
 		}
-		queue = reopenedFor(queue, [])
-		if (held) {
-			held.isDropped = true
-		}
-		sync()
-		if (held) {
+		if (held.scope) {
 			await driver.cancelTurn(held.scope).catch(() => undefined)
+		}
+	}
+
+	const stopSpeaker = async (botId: string) => {
+		const held = speakers.get(botId)
+		if (!held) {
 			return
 		}
+		await cancelSpeaker(held)
+	}
+
+	const stop = async () => {
+		const running = [...speakers.values()]
+		queue = reopenedFor(queue, [])
+		sync()
+		await Promise.all(running.map(cancelSpeaker))
 		drive()
 	}
 
@@ -861,11 +917,13 @@ export const createConversationController = (
 			: Promise.resolve(NO_PINS)
 	}
 
+	const shutdownSpeaker = (held: Speaker) =>
+		held.scope
+			? driver.shutdown(held.scope).catch(() => undefined)
+			: Promise.resolve()
+
 	const shutdown = async () => {
-		const held = speaker
-		if (held) {
-			await driver.shutdown(held.scope).catch(() => undefined)
-		}
+		await Promise.all([...speakers.values()].map(shutdownSpeaker))
 		disconnect()
 	}
 

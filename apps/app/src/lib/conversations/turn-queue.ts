@@ -9,7 +9,7 @@ export type Summons = {
 }
 
 export type TurnQueue = {
-	speaking: Summons | null
+	wave: Summons[]
 	waiting: Summons[]
 	handovers: Handover[]
 }
@@ -17,7 +17,7 @@ export type TurnQueue = {
 const HANDOVERS_BEFORE_NOTICE = 3
 
 export const emptyQueue: TurnQueue = {
-	speaking: null,
+	wave: [],
 	waiting: [],
 	handovers: [],
 }
@@ -26,29 +26,23 @@ export const reopenedFor = (
 	queue: TurnQueue,
 	summoned: Summons[],
 ): TurnQueue => ({
-	speaking: queue.speaking,
+	wave: queue.wave,
 	waiting: [...summoned],
 	handovers: [],
 })
 
-export const startedNext = (queue: TurnQueue): TurnQueue => {
-	const [next, ...rest] = queue.waiting
-	if (queue.speaking !== null || next === undefined) {
-		return queue
-	}
-	return { ...queue, speaking: next, waiting: rest }
-}
-
-export const closedSpeaker = (queue: TurnQueue): TurnQueue =>
-	queue.speaking === null ? queue : { ...queue, speaking: null }
+export const openedWave = (queue: TurnQueue): TurnQueue =>
+	queue.waiting.length === 0
+		? queue
+		: { ...queue, wave: queue.waiting, waiting: [] }
 
 export const handedOver = (
 	queue: TurnQueue,
 	from: string,
 	summons: Summons,
 ): TurnQueue => {
-	const isWaiting = queue.waiting.some(({ botId }) => botId === summons.botId)
-	if (summons.botId === from || isWaiting) {
+	const isHeld = queue.waiting.some(({ botId }) => botId === summons.botId)
+	if (summons.botId === from || isHeld) {
 		return queue
 	}
 	return {

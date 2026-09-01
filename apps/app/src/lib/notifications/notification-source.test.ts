@@ -14,6 +14,7 @@ import {
 import type { PermissionRequest, QuestionRequest } from "../agent/contract"
 import { type ChatState, initialChatState } from "../chat/chat-state"
 import type { Conversation } from "../conversations/store-contract"
+import { speakingBot } from "../conversations/transcript-fixtures"
 
 const BOT = { kind: "bot", id: "bot-one" } as const
 
@@ -105,7 +106,7 @@ const createFakeRuntimes = () => {
 			round: Partial<ConversationRound> = {},
 		) => {
 			rounds.set(conversationId, {
-				speakingBotId: null,
+				speakers: [],
 				waitingBotIds: [],
 				...round,
 			})
@@ -396,7 +397,7 @@ describe("startNotificationSource", () => {
 describe("startNotificationSource on a conversation", () => {
 	it("names the conversation whose round has finished", async () => {
 		const harness = await start()
-		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
 		harness.runtimes.publish("room-one")
 
@@ -407,9 +408,9 @@ describe("startNotificationSource on a conversation", () => {
 
 	it("sends nothing while a bot of the conversation is still speaking", async () => {
 		const harness = await start()
-		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
-		harness.runtimes.publish("room-one", { speakingBotId: "bot-two" })
+		harness.runtimes.publish("room-one", { speakers: [speakingBot("bot-two")] })
 
 		expect(harness.notifications.sent).toEqual([])
 	})
@@ -417,12 +418,12 @@ describe("startNotificationSource on a conversation", () => {
 	it("sends one notification for a round several bots answered in turn", async () => {
 		const harness = await start()
 		seedRound(harness, "room-one", {
-			speakingBotId: "bot-one",
+			speakers: [speakingBot("bot-one")],
 			waitingBotIds: ["bot-two"],
 		})
 
 		harness.runtimes.publish("room-one", { waitingBotIds: ["bot-two"] })
-		harness.runtimes.publish("room-one", { speakingBotId: "bot-two" })
+		harness.runtimes.publish("room-one", { speakers: [speakingBot("bot-two")] })
 		harness.runtimes.publish("room-one")
 
 		expect(harness.notifications.sent).toEqual([
@@ -449,7 +450,7 @@ describe("startNotificationSource on a conversation", () => {
 	it("sends nothing while the window holds the focus", async () => {
 		const harness = await start()
 		harness.windowFocus.tell(true)
-		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
 		harness.runtimes.publish("room-one")
 
@@ -460,7 +461,7 @@ describe("startNotificationSource on a conversation", () => {
 		const harness = await start({
 			switches: () => ({ ...ALL_ON, notifyOnFinishedTurn: false }),
 		})
-		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
 		harness.runtimes.publish("room-one")
 
@@ -469,7 +470,7 @@ describe("startNotificationSource on a conversation", () => {
 
 	it("plays the chime the sound switch asks for", async () => {
 		const harness = await start()
-		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
 		harness.runtimes.publish("room-one")
 
@@ -500,7 +501,7 @@ describe("startNotificationSource on a conversation", () => {
 
 	it("forgets the round of a conversation whose runtime was let go", async () => {
 		const harness = await start()
-		seedRound(harness, "room-one", { speakingBotId: "bot-one" })
+		seedRound(harness, "room-one", { speakers: [speakingBot("bot-one")] })
 
 		harness.runtimes.release("room-one")
 		harness.runtimes.publish("room-two")

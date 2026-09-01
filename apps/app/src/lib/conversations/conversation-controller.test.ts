@@ -153,6 +153,21 @@ const spokenIn = (controller: ConversationController) =>
 		.getState()
 		.messages.map((message) => [message.authorBotId, message.content])
 
+const runningIn = (controller: ConversationController) =>
+	controller.getState().speakers.map(({ botId }) => botId)
+
+const unwrittenIn = (controller: ConversationController) =>
+	controller
+		.getState()
+		.speakers.filter(({ hasWritten }) => !hasWritten)
+		.map(({ botId }) => botId)
+
+const workIn = (controller: ConversationController) =>
+	controller.getState().speakers[0]?.work ?? null
+
+const submittedIn = (harness: Harness) =>
+	harness.driver.submissions.map(({ scope }) => scope.botId)
+
 describe("createConversationController", () => {
 	let harness: Harness
 
@@ -221,24 +236,172 @@ describe("createConversationController", () => {
 		expect(answering?.repliedToMessageId).toBeNull()
 	})
 
-	it("runs the bots named one at a time, in the order they are named", async () => {
+	it("runs every bot named at the same time, ranked by first mention", async () => {
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Iris and @Nyx, both of you")
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([iris, nyx])
+		expect(runningIn(harness.controller)).toEqual([iris, nyx])
+		expect(harness.controller.getState().waitingBotIds).toEqual([])
+	})
+
+	it("keeps the rank of a bot whatever the order its wave mates answer in", async () => {
 		const nyx = idOf(harness.conversation, "Nyx")
 		const iris = idOf(harness.conversation, "Iris")
 		await harness.controller.send("@Nyx then @Iris")
 		await harness.settled()
 
-		expect(harness.driver.submissions.map(({ scope }) => scope.botId)).toEqual([
-			nyx,
+		harness.driver.pushTo(iris, [
+			{
+				type: "messageStarted",
+				message: {
+					id: "msg-iris",
+					role: "assistant",
+					text: "",
+					completion: "streaming",
+					timestamp: 1,
+				},
+			},
+			{ type: "messageDelta", id: "msg-iris", seq: 1, text: "gates first" },
 		])
-		expect(harness.controller.getState().waitingBotIds).toEqual([iris])
+		await harness.settled()
+
+		expect(runningIn(harness.controller)).toEqual([nyx, iris])
+	})
+
+	it("reads the bounded context of every bot of the wave at the message sent", async () => {
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+
+		const said = harness.controller.getState().messages[0].id
+		expect(harness.contexts).toEqual([
+			[nyx, said],
+			[iris, said],
+		])
+	})
+
+	it("holds the bot a speaker names until its whole wave has stopped", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+
+		harness.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([nyx, iris])
+		expect(harness.controller.getState().waitingBotIds).toEqual([ada])
+
+		harness.driver.pushTo(iris, spoke(iris, "gates up"))
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([nyx, iris, ada])
+	})
+
+	it("runs in a second wave the bot a wave mate named", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		const completed = vi.spyOn(harness.store, "completeTurn")
+		await harness.controller.send("@Ada then @Nyx")
+		await harness.settled()
+
+		harness.driver.pushTo(ada, spoke(ada, `over to <@${nyx}>`))
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([ada, nyx])
+		expect(harness.controller.getState().waitingBotIds).toEqual([nyx])
 
 		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
 		await harness.settled()
 
-		expect(harness.driver.submissions.map(({ scope }) => scope.botId)).toEqual([
-			nyx,
-			iris,
+		expect(submittedIn(harness)).toEqual([ada, nyx, nyx])
+		expect(runningIn(harness.controller)).toEqual([nyx])
+		expect(completed).not.toHaveBeenCalled()
+
+		harness.driver.pushTo(nyx, spoke(nyx, "and the gates too"))
+		await harness.settled()
+
+		expect(runningIn(harness.controller)).toEqual([])
+		expect(completed).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps the named order of the bots yet to write while a wave mate writes", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Ada then @Nyx then @Iris")
+		await harness.settled()
+
+		harness.driver.pushTo(nyx, [
+			{
+				type: "messageStarted",
+				message: {
+					id: "msg-nyx",
+					role: "assistant",
+					text: "",
+					completion: "streaming",
+					timestamp: 1,
+				},
+			},
+			{ type: "messageDelta", id: "msg-nyx", seq: 1, text: "walls first" },
 		])
+		await harness.settled()
+
+		expect(runningIn(harness.controller)).toEqual([ada, nyx, iris])
+		expect(unwrittenIn(harness.controller)).toEqual([ada, iris])
+	})
+
+	it("holds one summons only for a bot two speakers of a wave name", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+
+		harness.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+		harness.driver.pushTo(iris, spoke(iris, `and <@${ada}> too`))
+		await harness.settled()
+
+		expect(submittedIn(harness)).toEqual([nyx, iris, ada])
+		expect(runningIn(harness.controller)).toEqual([ada])
+	})
+
+	it("drops an event carrying the scope of no running bot", async () => {
+		const nyx = idOf(harness.conversation, "Nyx")
+		await harness.controller.send("@Nyx take the walls")
+		await harness.settled()
+		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
+		await harness.settled()
+
+		harness.driver.pushTo(nyx, spoke(nyx, "and the gates"))
+		await harness.settled()
+
+		expect(spokenIn(harness.controller)).toEqual([
+			[null, `<@${nyx}> take the walls`],
+			[nyx, "walls up"],
+		])
+	})
+
+	it("completes the turn once when the last bot of the wave stops", async () => {
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		const completed = vi.spyOn(harness.store, "completeTurn")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+
+		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
+		await harness.settled()
+		expect(completed).not.toHaveBeenCalled()
+
+		harness.driver.pushTo(iris, spoke(iris, "gates up"))
+		await harness.settled()
+
+		expect(completed).toHaveBeenCalledTimes(1)
 	})
 
 	it("leaves no message of a bot that ended its turn writing nothing", async () => {
@@ -250,7 +413,7 @@ describe("createConversationController", () => {
 		await harness.settled()
 
 		expect(spokenIn(harness.controller)).toEqual([[null, "and now?"]])
-		expect(harness.controller.getState().speakingBotId).toBeNull()
+		expect(runningIn(harness.controller)).toEqual([])
 	})
 
 	it("names the run it left behind when the same bot speaks again", async () => {
@@ -353,23 +516,7 @@ describe("createConversationController", () => {
 		])
 	})
 
-	it("points a bot the reader named at the message the reader sent", async () => {
-		const nyx = idOf(harness.conversation, "Nyx")
-		const iris = idOf(harness.conversation, "Iris")
-		await harness.controller.send("@Nyx then @Iris")
-		await harness.settled()
-
-		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
-		await harness.settled()
-
-		const said = harness.controller.getState().messages[0].id
-		expect(harness.contexts).toEqual([
-			[nyx, said],
-			[iris, said],
-		])
-	})
-
-	it("lets the bot in flight finish and drops those waiting when a message comes in", async () => {
+	it("drops the bots of the open wave when a message comes in", async () => {
 		const nyx = idOf(harness.conversation, "Nyx")
 		const iris = idOf(harness.conversation, "Iris")
 		const ada = idOf(harness.conversation, "Ada")
@@ -379,15 +526,15 @@ describe("createConversationController", () => {
 		await harness.controller.send("@Ada instead")
 		await harness.settled()
 
-		expect(harness.controller.getState().speakingBotId).toBe(nyx)
+		expect(runningIn(harness.controller)).toEqual([nyx, iris])
 		expect(harness.controller.getState().waitingBotIds).toEqual([ada])
 
-		harness.driver.pushTo(nyx, spoke(nyx, "walls up"))
+		harness.driver.pushTo(nyx, spoke(nyx, `over to <@${iris}>`))
+		harness.driver.pushTo(iris, spoke(iris, "gates up"))
 		await harness.settled()
 
-		const spoken = harness.driver.submissions.map(({ scope }) => scope.botId)
-		expect(spoken).toEqual([nyx, ada])
-		expect(spoken).not.toContain(iris)
+		expect(submittedIn(harness)).toEqual([nyx, iris, ada])
+		expect(runningIn(harness.controller)).toEqual([ada])
 	})
 
 	it("shows a notice naming the two bots that keep handing the turn over", async () => {
@@ -410,6 +557,7 @@ describe("createConversationController", () => {
 
 	it("leaves what the bot in flight wrote in place when the turn is stopped", async () => {
 		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
 		await harness.controller.send("@Nyx then @Iris")
 		await harness.settled()
 
@@ -434,12 +582,59 @@ describe("createConversationController", () => {
 		])
 		await harness.settled()
 
-		expect(harness.driver.cancelled).toEqual([nyx])
+		expect(harness.driver.cancelled).toEqual([nyx, iris])
 		expect(spokenIn(harness.controller)).toContainEqual([nyx, "half a wall"])
-		expect(harness.driver.submissions.map(({ scope }) => scope.botId)).toEqual([
-			nyx,
-		])
 		expect(harness.controller.getState().waitingBotIds).toEqual([])
+	})
+
+	it("cancels the bot alone whose row the reader stopped", async () => {
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+
+		const stopped = harness.controller
+			.getState()
+			.speakers.find(({ botId }) => botId === iris)
+		await stopped?.stop()
+		harness.driver.pushTo(iris, [
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "cancelled" } },
+		])
+		await harness.settled()
+
+		expect(harness.driver.cancelled).toEqual([iris])
+		expect(runningIn(harness.controller)).toEqual([nyx])
+	})
+
+	it("cancels every bot and drops the summons held when the reader stops the conversation", async () => {
+		const ada = idOf(harness.conversation, "Ada")
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+		harness.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+		await harness.settled()
+
+		await harness.controller.stop()
+		harness.driver.pushTo(iris, [
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "cancelled" } },
+		])
+		await harness.settled()
+
+		expect(harness.driver.cancelled).toEqual([iris])
+		expect(harness.controller.getState().waitingBotIds).toEqual([])
+		expect(submittedIn(harness)).toEqual([nyx, iris])
+	})
+
+	it("shuts down the runtime of every bot of the open wave", async () => {
+		const nyx = idOf(harness.conversation, "Nyx")
+		const iris = idOf(harness.conversation, "Iris")
+		await harness.controller.send("@Nyx then @Iris")
+		await harness.settled()
+
+		await harness.controller.shutdown()
+
+		expect(harness.driver.shutdowns).toEqual([nyx, iris])
 	})
 
 	describe("a bot asking the reader", () => {
@@ -519,7 +714,7 @@ describe("createConversationController", () => {
 		it("draws the bot that asked as waiting on its first question", async () => {
 			await askedIn(harness)
 
-			expect(harness.controller.getState().speakingWork).toEqual({
+			expect(workIn(harness.controller)).toEqual({
 				kind: "waiting",
 				label: "Walls",
 			})
@@ -528,7 +723,7 @@ describe("createConversationController", () => {
 		it("draws the bot that asked as waiting on the permission it wants", async () => {
 			await permittedIn(harness)
 
-			expect(harness.controller.getState().speakingWork).toEqual({
+			expect(workIn(harness.controller)).toEqual({
 				kind: "waiting",
 				label: "Run the mason",
 			})
@@ -540,7 +735,7 @@ describe("createConversationController", () => {
 			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
 			await harness.settled()
 
-			expect(harness.controller.getState().speakingWork).toEqual({
+			expect(workIn(harness.controller)).toEqual({
 				kind: "thinking",
 			})
 		})
@@ -633,6 +828,94 @@ describe("createConversationController", () => {
 			])
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
 			expect(harness.driver.cancelled).toEqual([nyx])
+		})
+	})
+
+	describe("two bots of a wave asking the reader", () => {
+		const askedBoth = async (harness: Harness) => {
+			const nyx = idOf(harness.conversation, "Nyx")
+			const iris = idOf(harness.conversation, "Iris")
+			await harness.controller.send("@Nyx then @Iris")
+			await harness.settled()
+			harness.driver.pushTo(nyx, [
+				{
+					type: "questionRequested",
+					request: {
+						id: "ask-1",
+						questions: [
+							{
+								header: "Walls",
+								question: "Which wall?",
+								options: [],
+								multiSelect: false,
+							},
+						],
+					},
+				},
+			])
+			harness.driver.pushTo(iris, [
+				{
+					type: "permissionRequested",
+					request: {
+						id: "let-1",
+						toolName: "Bash",
+						title: "Run the mason",
+						detail: "mason --build",
+					},
+				},
+			])
+			await harness.settled()
+			return { nyx, iris }
+		}
+
+		it("exposes the oldest ask alone", async () => {
+			await askedBoth(harness)
+
+			expect(harness.controller.getState().pendingPrompt).toMatchObject({
+				kind: "question",
+				request: { id: "ask-1" },
+			})
+		})
+
+		it("gives each bot of the wave the work it is doing", async () => {
+			await askedBoth(harness)
+
+			expect(
+				harness.controller.getState().speakers.map(({ work }) => work),
+			).toEqual([
+				{ kind: "waiting", label: "Walls" },
+				{ kind: "waiting", label: "Run the mason" },
+			])
+		})
+
+		it("exposes the next ask once the oldest is released", async () => {
+			const { nyx } = await askedBoth(harness)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			expect(harness.driver.answered).toEqual([
+				{
+					botId: nyx,
+					id: "ask-1",
+					answers: { "Which wall?": "the north" },
+				},
+			])
+			expect(harness.controller.getState().pendingPrompt).toMatchObject({
+				kind: "permission",
+				request: { id: "let-1" },
+			})
+		})
+
+		it("decides on the runtime of the bot holding the permission", async () => {
+			const { iris } = await askedBoth(harness)
+
+			await harness.controller.respond("let-1", "allowOnce")
+			await harness.settled()
+
+			expect(harness.driver.decided).toEqual([
+				{ botId: iris, id: "let-1", decision: "allowOnce" },
+			])
 		})
 	})
 
@@ -817,7 +1100,7 @@ describe("what a speaking bot is doing", () => {
 	})
 
 	it("says a bot that has neither run a tool nor written is thinking", () => {
-		expect(harness.controller.getState().speakingWork).toEqual({
+		expect(workIn(harness.controller)).toEqual({
 			kind: "thinking",
 		})
 	})
@@ -826,7 +1109,7 @@ describe("what a speaking bot is doing", () => {
 		harness.driver.pushTo(ada, [ran("a-1", "Grep · walls", "running")])
 		await harness.settled()
 
-		expect(harness.controller.getState().speakingWork).toEqual({
+		expect(workIn(harness.controller)).toEqual({
 			kind: "searching",
 			label: "Grep · walls",
 		})
@@ -850,7 +1133,7 @@ describe("what a speaking bot is doing", () => {
 		])
 		await harness.settled()
 
-		expect(harness.controller.getState().speakingWork).toEqual({
+		expect(workIn(harness.controller)).toEqual({
 			kind: "writing",
 		})
 	})
@@ -862,7 +1145,7 @@ describe("what a speaking bot is doing", () => {
 		])
 		await harness.settled()
 
-		expect(harness.controller.getState().speakingWork).toBeNull()
+		expect(workIn(harness.controller)).toBeNull()
 	})
 })
 

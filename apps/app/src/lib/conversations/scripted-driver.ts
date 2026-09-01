@@ -29,6 +29,7 @@ export type ScriptedDriver = ChatDriver & {
 	cancelled: string[]
 	answered: Answered[]
 	decided: Decided[]
+	shutdowns: string[]
 }
 
 export const createScriptedDriver = (): ScriptedDriver => {
@@ -39,6 +40,7 @@ export const createScriptedDriver = (): ScriptedDriver => {
 	const cancelled: string[] = []
 	const answered: Answered[] = []
 	const decided: Decided[] = []
+	const shutdowns: string[] = []
 
 	const scopeOf = (botId: string) => {
 		const last = submissions.findLast(
@@ -55,6 +57,7 @@ export const createScriptedDriver = (): ScriptedDriver => {
 		cancelled,
 		answered,
 		decided,
+		shutdowns,
 		pushTo: (botId, events) => {
 			const scope = scopeOf(botId)
 			for (const event of events) {
@@ -89,7 +92,10 @@ export const createScriptedDriver = (): ScriptedDriver => {
 			answered.push({ botId: scope.botId, id, answers })
 			return Promise.resolve()
 		},
-		shutdown: () => Promise.resolve(),
+		shutdown: (scope) => {
+			shutdowns.push(scope.botId)
+			return Promise.resolve()
+		},
 		subscribe: (onEvent) => {
 			listeners.add(onEvent)
 			return Promise.resolve(() => listeners.delete(onEvent))

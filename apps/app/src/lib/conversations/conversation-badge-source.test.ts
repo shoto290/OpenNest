@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest"
 import type { ConversationAnswer } from "./conversation-badge"
 import { createConversationBadgeSource } from "./conversation-badge-source"
 import type { TranscriptCompletion } from "./transcript-contract"
+import { speakingBot } from "./transcript-fixtures"
 
 const answered = (completion: TranscriptCompletion): ConversationAnswer => ({
-	speakingBotId: null,
+	speakers: [],
 	waitingBotIds: [],
 	messages: [
 		{
@@ -26,7 +27,7 @@ const answered = (completion: TranscriptCompletion): ConversationAnswer => ({
 })
 
 const answering: ConversationAnswer = {
-	speakingBotId: "bot-one",
+	speakers: [speakingBot("bot-one")],
 	waitingBotIds: [],
 	messages: [],
 	pendingPrompt: null,
