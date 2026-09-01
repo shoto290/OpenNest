@@ -1813,6 +1813,48 @@ export const TailWithoutRows = meta.story({
 	},
 })
 
+const MARK_TOKEN = "--transcript-new-mark"
+
+const SHADOW_SOURCE = "var(--foreground)"
+
+const paintedMark = (line: HTMLElement) => {
+	const [lead, label, trail] = Array.from(line.children) as HTMLElement[]
+	return [
+		getComputedStyle(lead).backgroundColor,
+		getComputedStyle(label).color,
+		getComputedStyle(trail).backgroundColor,
+	]
+}
+
+const resolvedMark = (scope: HTMLElement) => {
+	const probe = document.createElement("span")
+	probe.style.backgroundColor = `var(${MARK_TOKEN})`
+	scope.append(probe)
+	const resolved = getComputedStyle(probe).backgroundColor
+	probe.remove()
+	return resolved
+}
+
+const drawnFrom = async (line: HTMLElement, source: string) => {
+	const painted = paintedMark(line)
+
+	await expect(new Set(painted).size).toBe(1)
+	await expect(painted).toEqual([source, source, source])
+}
+
+const marksReadTheToken = async (line: HTMLElement) => {
+	const declared = resolvedMark(line)
+	await drawnFrom(line, declared)
+
+	line.style.setProperty(MARK_TOKEN, SHADOW_SOURCE)
+	const shadowed = resolvedMark(line)
+	await expect(shadowed).not.toBe(declared)
+	await drawnFrom(line, shadowed)
+
+	line.style.removeProperty(MARK_TOKEN)
+	await drawnFrom(line, declared)
+}
+
 interface MarkedTranscriptOptions {
 	canvasElement: HTMLElement
 	click: (element: Element) => Promise<void>
@@ -1853,7 +1895,7 @@ export const NewMessageSeparatorInLight = meta.story({
 		docs: {
 			description: {
 				story:
-					"The separator on the light surface, with the messages the reader had already read above it and the ones that arrived below. Check that the rule and its label are legible against the transcript surface: both are drawn from `--transcript-new-mark`, a step of the amber ramp dark enough to clear the text floor on white, never the primary fill.",
+					"The separator on the light surface, with the messages the reader had already read above it and the ones that arrived below. The two rules and the label must all three resolve to `--transcript-new-mark`: the story reads that value from the separator's own scope, then shadows the variable there and checks the three follow it, so a rule reaching for the primary fill again fails here even in the theme where the two colours happen to coincide.",
 			},
 		},
 	},
@@ -1864,6 +1906,7 @@ export const NewMessageSeparatorInLight = meta.story({
 		})
 
 		await expect(line).toBeVisible()
+		await marksReadTheToken(line)
 	},
 })
 
@@ -1874,7 +1917,7 @@ export const NewMessageSeparatorInDark = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same separator on the dark surface, where the token rises to the amber the rest of the dark theme accents with. Check that the rule and the label read as the same mark as in light rather than as an inverted one, and that they keep their distance from the surface behind them.",
+					"The same separator on the dark surface, where the token rises to the amber the rest of the dark theme accents with — the exact value `--primary` carries there, which is why the colour alone proves nothing and the story shadows the variable to tell the two apart.",
 			},
 		},
 	},
@@ -1885,5 +1928,6 @@ export const NewMessageSeparatorInDark = meta.story({
 		})
 
 		await expect(line).toBeVisible()
+		await marksReadTheToken(line)
 	},
 })
