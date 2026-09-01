@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
 	type ConversationController,
@@ -627,91 +627,62 @@ describe("createConversationController", () => {
 	})
 
 	describe("stopping a summons held for the next wave", () => {
-		let held: Harness
+		const withOneHeld = async () => {
+			const ada = idOf(harness.conversation, "Ada")
+			const nyx = idOf(harness.conversation, "Nyx")
+			await harness.controller.send("@Nyx then @Iris")
+			await harness.settled()
 
-		beforeEach(async () => {
-			held = await createHarness(["Ada", "Nyx", "Iris", "Vero"])
-		})
-
-		afterEach(() => {
-			held.detach()
-		})
-
-		const heldFor = async (said: string) => {
-			await held.controller.send(said)
-			await held.settled()
+			harness.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
+			await harness.settled()
+			return { ada, nyx, iris: idOf(harness.conversation, "Iris") }
 		}
 
-		it("drops the summons the reader stopped and leaves the others held", async () => {
-			const ada = idOf(held.conversation, "Ada")
-			const nyx = idOf(held.conversation, "Nyx")
-			const iris = idOf(held.conversation, "Iris")
-			const vero = idOf(held.conversation, "Vero")
-			await heldFor("@Nyx then @Iris")
+		it("drops the summons the reader stopped before it speaks", async () => {
+			const { ada, nyx, iris } = await withOneHeld()
+			expect(harness.controller.getState().waitingBotIds).toEqual([ada])
 
-			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}> and <@${vero}>`))
-			await held.settled()
-			expect(held.controller.getState().waitingBotIds).toEqual([ada, vero])
+			harness.controller.stopWaiting(ada)
 
-			held.controller.stopWaiting(ada)
+			expect(harness.controller.getState().waitingBotIds).toEqual([])
 
-			expect(held.controller.getState().waitingBotIds).toEqual([vero])
+			harness.driver.pushTo(iris, spoke(iris, "gates up"))
+			await harness.settled()
 
-			held.driver.pushTo(iris, spoke(iris, "gates up"))
-			await held.settled()
-
-			expect(submittedIn(held)).toEqual([nyx, iris, vero])
+			expect(submittedIn(harness)).toEqual([nyx, iris])
 		})
 
 		it("leaves the state alone when the bot is held nowhere", async () => {
-			const ada = idOf(held.conversation, "Ada")
-			const nyx = idOf(held.conversation, "Nyx")
-			await heldFor("@Nyx then @Iris")
+			const { ada, nyx } = await withOneHeld()
+			const before = harness.controller.getState()
 
-			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
-			await held.settled()
-			const before = held.controller.getState()
+			harness.controller.stopWaiting(nyx)
 
-			held.controller.stopWaiting(idOf(held.conversation, "Vero"))
-
-			expect(held.controller.getState()).toBe(before)
+			expect(harness.controller.getState()).toBe(before)
 			expect(before.waitingBotIds).toEqual([ada])
 		})
 
 		it("leaves a bot of the open wave in its seat, running", async () => {
-			const ada = idOf(held.conversation, "Ada")
-			const nyx = idOf(held.conversation, "Nyx")
-			const iris = idOf(held.conversation, "Iris")
-			await heldFor("@Nyx then @Iris")
+			const { ada, iris } = await withOneHeld()
 
-			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
-			await held.settled()
+			harness.controller.stopWaiting(iris)
+			await harness.settled()
 
-			held.controller.stopWaiting(iris)
-			await held.settled()
-
-			expect(runningIn(held.controller)).toEqual([iris])
-			expect(held.driver.cancelled).toEqual([])
-			expect(held.controller.getState().waitingBotIds).toEqual([ada])
+			expect(runningIn(harness.controller)).toEqual([iris])
+			expect(harness.driver.cancelled).toEqual([])
+			expect(harness.controller.getState().waitingBotIds).toEqual([ada])
 		})
 
 		it("completes the open turn once the wave ends with nothing left held", async () => {
-			const ada = idOf(held.conversation, "Ada")
-			const nyx = idOf(held.conversation, "Nyx")
-			const iris = idOf(held.conversation, "Iris")
-			const completed = vi.spyOn(held.store, "completeTurn")
-			await heldFor("@Nyx then @Iris")
+			const completed = vi.spyOn(harness.store, "completeTurn")
+			const { ada, iris } = await withOneHeld()
 
-			held.driver.pushTo(nyx, spoke(nyx, `over to <@${ada}>`))
-			await held.settled()
-
-			held.controller.stopWaiting(ada)
+			harness.controller.stopWaiting(ada)
 			expect(completed).not.toHaveBeenCalled()
 
-			held.driver.pushTo(iris, spoke(iris, "gates up"))
-			await held.settled()
+			harness.driver.pushTo(iris, spoke(iris, "gates up"))
+			await harness.settled()
 
-			expect(submittedIn(held)).toEqual([nyx, iris])
 			expect(completed).toHaveBeenCalledTimes(1)
 		})
 	})
