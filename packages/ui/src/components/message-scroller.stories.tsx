@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { type RefObject, useImperativeHandle, useRef, useState } from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -216,12 +216,50 @@ const toRows = (entries: TranscriptEntry[]): MessageScrollerRow[] =>
 		render: () => <TranscriptRow entry={entry} />,
 	}))
 
+const TAIL_SEAT_HEIGHT = 40
+
+const seatLabel = (index: number) => `Seat ${index + 1} waiting`
+
+interface TailSeatsHandle {
+	add: () => void
+	clear: () => void
+}
+
+interface TailSeatsProps {
+	seats: number
+	seatsRef: RefObject<TailSeatsHandle | null>
+}
+
+const TailSeats = ({ seats, seatsRef }: TailSeatsProps) => {
+	const [count, setCount] = useState(seats)
+
+	useImperativeHandle(seatsRef, () => ({
+		add: () => setCount((current) => current + 1),
+		clear: () => setCount(0),
+	}))
+
+	return (
+		<>
+			{Array.from({ length: count }, (_, index) => (
+				<div
+					key={seatLabel(index)}
+					className="flex items-center rounded-lg border border-border border-dashed px-3 text-muted-foreground text-xs"
+					style={{ height: TAIL_SEAT_HEIGHT }}
+				>
+					{seatLabel(index)}
+				</div>
+			))}
+		</>
+	)
+}
+
 interface TranscriptScrollerProps
 	extends Omit<MessageScrollerProps, "children" | "scrollerRef"> {
 	entries?: TranscriptEntry[]
 	incoming?: TranscriptEntry[]
 	olderPages?: TranscriptEntry[][]
 	hasComposer?: boolean
+	tailSeats?: number
 }
 
 const TranscriptScroller = ({
@@ -229,10 +267,12 @@ const TranscriptScroller = ({
 	incoming = INCOMING,
 	olderPages,
 	hasComposer,
+	tailSeats,
 	onFollowChange,
 	...scrollerProps
 }: TranscriptScrollerProps) => {
 	const [visible, setVisible] = useState(entries)
+	const seatsRef = useRef<TailSeatsHandle>(null)
 	const [sent, setSent] = useState(0)
 	const [pending, setPending] = useState(olderPages ?? [])
 	const [isLoadingOlder, setIsLoadingOlder] = useState(false)
@@ -280,7 +320,11 @@ const TranscriptScroller = ({
 				estimatedRowHeight={ROW_HEIGHT}
 				rowGap={ROW_GAP}
 				rows={toRows(visible)}
-			/>
+			>
+				{tailSeats === undefined ? null : (
+					<TailSeats seats={tailSeats} seatsRef={seatsRef} />
+				)}
+			</MessageScroller>
 			<div className="flex items-center justify-between gap-2 border-border border-t p-2">
 				<Button size="sm" disabled={!nextIncoming} onClick={deliverIncoming}>
 					Send reply
@@ -304,13 +348,31 @@ const TranscriptScroller = ({
 						size="sm"
 						variant="outline"
 						onClick={() => {
-							scrollerRef.current?.scrollToEnd("auto")
+							scrollerRef.current?.anchorSend()
 							deliverIncoming()
 						}}
 					>
 						Send prompt
 					</Button>
 				) : null}
+				{tailSeats === undefined ? null : (
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => seatsRef.current?.add()}
+					>
+						Add seat
+					</Button>
+				)}
+				{tailSeats === undefined ? null : (
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => seatsRef.current?.clear()}
+					>
+						Clear seats
+					</Button>
+				)}
 			</div>
 			{hasComposer ? (
 				<div
@@ -410,6 +472,13 @@ const ConversationSwitcher = (
 	props: Omit<MessageScrollerProps, "children" | "transcriptKey">,
 ) => {
 	const [isSecond, setIsSecond] = useState(false)
+	const [sent, setSent] = useState(0)
+	const nextIncoming = INCOMING[sent]
+
+	const openOther = () => {
+		setIsSecond((current) => !current)
+		setSent(0)
+	}
 
 	return (
 		<div className={FRAME_CLASS}>
@@ -420,11 +489,22 @@ const ConversationSwitcher = (
 				contentClassName="flex flex-col p-3"
 				estimatedRowHeight={ROW_HEIGHT}
 				rowGap={ROW_GAP}
-				rows={toRows(isSecond ? OTHER_TRANSCRIPT : TRANSCRIPT)}
+				rows={toRows([
+					...(isSecond ? OTHER_TRANSCRIPT : TRANSCRIPT),
+					...INCOMING.slice(0, sent),
+				])}
 			/>
-			<div className="border-border border-t p-2">
-				<Button size="sm" onClick={() => setIsSecond((current) => !current)}>
+			<div className="flex items-center gap-2 border-border border-t p-2">
+				<Button size="sm" onClick={openOther}>
 					Open other conversation
+				</Button>
+				<Button
+					size="sm"
+					variant="outline"
+					disabled={!nextIncoming}
+					onClick={() => setSent((current) => current + 1)}
+				>
+					Send reply
 				</Button>
 			</div>
 		</div>
@@ -493,7 +573,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. It renders its own jump-to-latest control while the reader sits away from the live edge, reports the switch through `onFollowChange`, and exposes `scrollerRef.scrollToEnd()` so a host can return to the live edge when it accepts a prompt. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all. `scrollerRef.scrollToMessage(id)` brings a message anchored under `data-message-id` back into the middle of the viewport and answers whether it found one, and `highlightedMessageId` marks that message while the host names it. The transcript itself is passed as `rows`, one entry per run with its own `key` and the `messageIds` it anchors: only the rows near the viewport are mounted, so a thousand-run conversation costs the same first paint as a ten-run one. Anything passed as `children` sits under the rows and is always mounted — the working indicator and the queued turns of a live thread.",
+					"Scroll container for a streamed transcript. It pins the viewport to the newest content while the reader sits at the live edge, and hands scroll control back the moment they move up into the history. It renders its own jump-to-latest control while the reader sits away from the live edge, reports the switch through `onFollowChange`, and exposes `scrollerRef.scrollToEnd()` so a host can return to the live edge when it accepts a prompt. Pass `older` to add the load-older control at the top of the viewport: the reader's anchor is held to the pixel while the page is prepended above it. Without that prop the affordance is not rendered at all. `scrollerRef.scrollToMessage(id)` brings a message anchored under `data-message-id` back into the middle of the viewport and answers whether it found one, and `highlightedMessageId` marks that message while the host names it. The transcript itself is passed as `rows`, one entry per run with its own `key` and the `messageIds` it anchors: only the rows near the viewport are mounted, so a thousand-run conversation costs the same first paint as a ten-run one. Anything passed as `children` sits under the rows and is always mounted — the working indicator and the queued turns of a live thread — and its own height changes hold the live edge exactly like a row, with or without rows above it. Three behaviours are the caller's to turn on, off by default: `anchorOnSend` puts the message the host announces through `scrollerRef.anchorSend()` at the top of the viewport and keeps the room below it for the answer, `marksNewMessages` marks the first message that arrives after the reader is released, and `countsNewMessages` names on the way back how many arrived since. A new `transcriptKey` forgets both marks.",
 			},
 		},
 	},
@@ -1241,5 +1321,613 @@ export const Jump = meta.story({
 		await expect(canvas.getByText("Not on screen")).toBeVisible()
 		await expect(viewport.scrollTop).toBe(0)
 		await expect(highlighted()).toBeUndefined()
+	},
+})
+
+export const NewMessageCount = meta.story({
+	args: { countsNewMessages: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the host wants the way back to say how much was missed — the conversation case. Check that the control counts every message that landed since the reader was released, that it counts up as they keep arriving, that it draws the number in tabular figures so the control does not jitter as the count grows, and that activating it drops the count with the control. `ReturnToLatest` runs the same way back with the count left off.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+
+		const send = canvas.getByRole("button", { name: "Send reply" })
+		await userEvent.click(send)
+		await canvas.findByRole("button", { name: "1 new message" })
+
+		await userEvent.click(send)
+		const control = await canvas.findByRole("button", {
+			name: "2 new messages",
+		})
+		await expect(getComputedStyle(control).fontVariantNumeric).toContain(
+			"tabular-nums",
+		)
+
+		await userEvent.click(control)
+
+		await waitForLastBubble(viewport)
+		await waitFor(() =>
+			expect(canvas.queryByRole("button", { name: /new message/ })).toBeNull(),
+		)
+	},
+})
+
+export const NewMessageSeparator = meta.story({
+	args: { marksNewMessages: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the reader's own place in the transcript: the first message that lands after they were released is marked, the way Slack marks the new-messages line. Check that the mark carries a label rather than a colour alone, that it sits above the first message that arrived and not above the one they had already read, and that it survives the way back to the newest content — a reader who returns still wants to see where they left off. `ConversationChangeForgetsNewMarks` covers the only thing that clears it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const markedRow = () =>
+			newLine(canvasElement)?.closest('[data-slot="message-scroller-row"]')
+		await waitForLastBubble(viewport)
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+		await expect(newLine(canvasElement)).toBeNull()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await userEvent.click(
+			await canvas.findByRole("button", { name: "Jump to latest" }),
+		)
+		await waitForLastBubble(viewport)
+
+		await waitFor(() => expect(newLine(canvasElement)).not.toBeNull())
+		await expect(newLine(canvasElement)).toHaveTextContent("New messages")
+		await expect(markedRow()).toHaveTextContent(INCOMING[0].text)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await waitForLastBubble(viewport)
+
+		await expect(markedRow()).toHaveTextContent(INCOMING[0].text)
+	},
+})
+
+export const ConversationChangeForgetsNewMarks = meta.story({
+	args: { marksNewMessages: true, countsNewMessages: true },
+	render: (args) => <ConversationSwitcher {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the host swaps the conversation under a scroller it keeps mounted, with both marks turned on. The mark and the count belong to the visit, not to the component: check that opening another transcript drops the separator, and that leaving its live edge offers a bare way back rather than one still counting the messages of the conversation before it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await userEvent.click(
+			await canvas.findByRole("button", { name: "1 new message" }),
+		)
+		await waitForLastBubble(viewport)
+		await waitFor(() => expect(newLine(canvasElement)).not.toBeNull())
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Open other conversation" }),
+		)
+		await waitForLastBubble(viewport)
+		await expect(newLine(canvasElement)).toBeNull()
+
+		viewport.scrollTop = 0
+
+		await canvas.findByRole("button", { name: "Jump to latest" })
+		await expect(newLine(canvasElement)).toBeNull()
+	},
+})
+
+export const ReaderStopsTheTravel = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the reader who changes their mind mid-landing: they ask for the newest content, then scroll back up before the transcript has settled. Check that their gesture wins — the travel is dropped where they stopped it, the transcript stays released, and the way back is offered again instead of the landing dragging them down.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+
+		viewport.scrollTop = 0
+		const jump = await canvas.findByRole("button", { name: "Jump to latest" })
+
+		await userEvent.click(jump)
+		viewport.dispatchEvent(new WheelEvent("wheel", { bubbles: true }))
+		viewport.scrollTop = 60
+		await settleScroll()
+		await settleScroll()
+
+		await expect(viewport.scrollTop).toBe(60)
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(false)
+		await canvas.findByRole("button", { name: "Jump to latest" })
+	},
+})
+
+export const LandsWithoutMotion = meta.story({
+	args: { smooth: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this under a reader who asked for less motion — the test environment included. The way back is a spring, and a spring is motion: check that it collapses to a single jump, so the newest content is reached within one frame instead of travelled to over dozens. `SmoothFollow` is the same travel left to run.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+
+		viewport.scrollTop = 0
+		await userEvent.click(
+			await canvas.findByRole("button", { name: "Jump to latest" }),
+		)
+		await settleScroll()
+
+		await expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1)
+	},
+})
+
+const NEW_LINE_SLOT = '[data-slot="message-scroller-new-line"]'
+
+const newLine = (canvasElement: HTMLElement) =>
+	canvasElement.querySelector<HTMLElement>(NEW_LINE_SLOT)
+
+const ANCHOR_INCOMING: TranscriptEntry[] = [
+	{
+		id: "anchor-user",
+		from: "user",
+		text: "Summarise the rollout for the deploy channel.",
+	},
+	{
+		id: "anchor-assistant-1",
+		from: "assistant",
+		text: "The index build runs first and reports done at around four minutes, then the migration opens a single transaction that copies the legacy role string into role_id.",
+	},
+	{
+		id: "anchor-assistant-2",
+		from: "assistant",
+		text: "The drop of the legacy column is the last statement in that transaction, so a failure anywhere rolls the whole thing back. The invites backfill is queued behind it and takes another two minutes, touching nothing the accounts table depends on.",
+	},
+]
+
+const ANCHOR_TOP_BAND = 24
+
+const roomHeight = (canvasElement: HTMLElement) =>
+	canvasElement
+		.querySelector('[data-slot="message-scroller-room"]')
+		?.getBoundingClientRect().height ?? 0
+
+export const AnchorOnSend = meta.story({
+	args: { anchorOnSend: true },
+	render: (args) => (
+		<TranscriptScroller {...args} hasComposer incoming={ANCHOR_INCOMING} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the send of a bot thread: the prompt the reader just wrote goes to the top of the viewport and the room below it is left empty for the answer. Check that the sent message lands on the top band rather than at the bottom, that the room is taken from the bottom of the scrolled content, that it shrinks as the answer grows until nothing empty is left under it, and that the transcript never reports itself as released while it places the message — the system moving is not the reader leaving. `PromptReturnsToLiveEdge` runs the same send with the anchor left off.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const topBand = () =>
+			canvas.getByText(ANCHOR_INCOMING[0].text).getBoundingClientRect().top -
+			viewport.getBoundingClientRect().top
+		await waitForLastBubble(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitFor(() => expect(roomHeight(canvasElement)).toBeGreaterThan(0))
+		await settleScroll()
+
+		await expect(topBand()).toBeLessThanOrEqual(ANCHOR_TOP_BAND)
+		const roomForTheAnswer = roomHeight(canvasElement)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await settleScroll()
+
+		await expect(roomHeight(canvasElement)).toBeLessThan(roomForTheAnswer)
+		await expect(topBand()).toBeLessThanOrEqual(ANCHOR_TOP_BAND)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send reply" }))
+		await waitFor(() => expect(roomHeight(canvasElement)).toBe(0))
+
+		await expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1)
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+	},
+})
+
+const COLLAPSING_ID = "collapsing"
+
+const COLLAPSING_LONG =
+	"The plan has three parts. First the index build, which the database reports as done at around four minutes. Then the migration itself, one transaction covering the copy into role_id and the drop of the legacy column. Last the invites backfill, queued behind both."
+
+const COLLAPSING_SHORT = "Collapsed to a line."
+
+const READER_NUDGE = 4
+
+const CollapsingTranscript = ({
+	onFollowChange,
+	...scrollerProps
+}: Omit<MessageScrollerProps, "children" | "rows">) => {
+	const [isCollapsed, setIsCollapsed] = useState(false)
+
+	return (
+		<div className={FRAME_CLASS}>
+			<MessageScroller
+				{...scrollerProps}
+				onFollowChange={onFollowChange}
+				className="flex-1"
+				contentClassName="flex flex-col p-3"
+				estimatedRowHeight={ROW_HEIGHT}
+				rowGap={ROW_GAP}
+				rows={toRows([
+					{
+						id: COLLAPSING_ID,
+						from: "assistant",
+						text: isCollapsed ? COLLAPSING_SHORT : COLLAPSING_LONG,
+					},
+					...TRANSCRIPT,
+				])}
+			/>
+			<div className="border-border border-t p-2">
+				<Button size="sm" onClick={() => setIsCollapsed(true)}>
+					Collapse the first answer
+				</Button>
+			</div>
+		</div>
+	)
+}
+
+export const HistoryShrinksAbove = meta.story({
+	render: (args) => <CollapsingTranscript {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when a row above the fold changes height under a reader who is up in the history — a collapsed answer, a picture that finally measured. Check that the row under their eye keeps the exact same offset on screen while the content above it shrinks: growth above is covered by `LoadOlderPage`, and shrinking must be corrected the same way or the reader is thrown down the transcript.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const anchorTop = () =>
+			canvas.getByText(TRANSCRIPT[0].text).getBoundingClientRect().top
+		await waitForOverflow(viewport)
+		await settleScroll()
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+		await settleScroll()
+
+		const collapsingRow = () =>
+			canvas.getByText(COLLAPSING_LONG).getBoundingClientRect().bottom.valueOf()
+
+		viewport.scrollTop +=
+			collapsingRow() - viewport.getBoundingClientRect().top + READER_NUDGE * 2
+		await settleScroll()
+		viewport.scrollTop -= READER_NUDGE
+		await settleScroll()
+
+		await expect(collapsingRow()).toBeLessThanOrEqual(
+			viewport.getBoundingClientRect().top,
+		)
+		const offsetBefore = anchorTop()
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Collapse the first answer" }),
+		)
+		await waitFor(() => expect(canvas.queryByText(COLLAPSING_LONG)).toBeNull())
+		await settleScroll()
+
+		await expect(Math.abs(anchorTop() - offsetBefore)).toBeLessThanOrEqual(2)
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(false)
+	},
+})
+
+const TAIL_SLOT = '[data-slot="message-scroller-tail"]'
+
+const REST_UNDER_LAST_ROW = 15
+
+const tailRect = (canvasElement: HTMLElement) => {
+	const tail = canvasElement.querySelector(TAIL_SLOT)
+	if (!tail) throw new Error("the tail slot never mounted")
+
+	return tail.getBoundingClientRect()
+}
+
+export const TailHoldsTheLiveEdge = meta.story({
+	render: (args) => <TranscriptScroller {...args} tailSeats={2} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the slot under the rows carries something — the waiting seats of a wave, the working indicator. Check that resting on the newest content shows the last row and the whole tail rather than cutting the tail off below the fold, and that the way back, once the reader leaves, is drawn clear of both: the release threshold is deeper than the control's own band, so the control never sits on the content it offers to leave.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+
+		const frame = viewport.getBoundingClientRect()
+		await expect(tailRect(canvasElement).top).toBeGreaterThanOrEqual(frame.top)
+		await expect(tailRect(canvasElement).bottom).toBeLessThanOrEqual(
+			frame.bottom + 1,
+		)
+		await expect(canvas.getByText(seatLabel(1))).toBeVisible()
+
+		viewport.scrollTop -= 60
+		const control = await canvas.findByRole("button", {
+			name: "Jump to latest",
+		})
+
+		await expect(tailRect(canvasElement).top).toBeLessThan(
+			viewport.getBoundingClientRect().bottom,
+		)
+		await expect(control.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			tailRect(canvasElement).top,
+		)
+	},
+})
+
+export const TailGrowsAtLiveEdge = meta.story({
+	render: (args) => <TranscriptScroller {...args} tailSeats={2} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the tail grows on its own, with no row arriving: a seat joins the wave under the last bubble. Check that the transcript follows that growth the way it follows a row, that the whole tail stays in view, and that a slot changing height is never reported as the reader leaving. `TailShrinksToNothing` covers the other direction.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+		const heightBefore = tailRect(canvasElement).height
+
+		await userEvent.click(canvas.getByRole("button", { name: "Add seat" }))
+
+		await waitFor(() =>
+			expect(tailRect(canvasElement).height).toBeGreaterThan(heightBefore),
+		)
+		await waitFor(() =>
+			expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1),
+		)
+		await expect(tailRect(canvasElement).top).toBeGreaterThanOrEqual(
+			viewport.getBoundingClientRect().top,
+		)
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+	},
+})
+
+export const TailShrinksToNothing = meta.story({
+	render: (args) => <TranscriptScroller {...args} tailSeats={3} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this when the wave finishes and its waiting seats unmount at once. Check that the transcript stays on the newest content and that the last row comes to rest against the bottom of the scrolled content: an emptied tail must take back every pixel it held, gap included, instead of leaving a hole under the last bubble.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await waitForLastBubble(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Clear seats" }))
+		await waitFor(() => expect(canvas.queryByText(seatLabel(0))).toBeNull())
+		await settleScroll()
+
+		await expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1)
+		const lastRow = canvas
+			.getByText(TRANSCRIPT[TRANSCRIPT.length - 1].text)
+			.getBoundingClientRect()
+		await expect(
+			viewport.getBoundingClientRect().bottom - lastRow.bottom,
+		).toBeLessThanOrEqual(REST_UNDER_LAST_ROW)
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+	},
+})
+
+export const TailChangesWhileScrolledBack = meta.story({
+	render: (args) => <TranscriptScroller {...args} tailSeats={2} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the tail moving under a reader who is up in the history. Check that the row under their eye keeps the exact same offset while a seat joins the tail below the fold, and that they stay released — the slot growing is not an invitation back down.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const anchorTop = () =>
+			canvas.getByText(TRANSCRIPT[0].text).getBoundingClientRect().top
+		await waitForLastBubble(viewport)
+
+		viewport.scrollTop = 0
+		await waitFor(() => expect(args.onFollowChange).toHaveBeenCalledWith(false))
+		const offsetBefore = anchorTop()
+		const heightBefore = tailRect(canvasElement).height
+
+		await userEvent.click(canvas.getByRole("button", { name: "Add seat" }))
+		await waitFor(() =>
+			expect(tailRect(canvasElement).height).toBeGreaterThan(heightBefore),
+		)
+		await settleScroll()
+
+		await expect(viewport.scrollTop).toBe(0)
+		await expect(anchorTop()).toBe(offsetBefore)
+		await expect(args.onFollowChange).toHaveBeenLastCalledWith(false)
+	},
+})
+
+export const TailWithoutRows = meta.story({
+	render: (args) => (
+		<TranscriptScroller {...args} entries={[]} incoming={[]} tailSeats={0} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for the first wave of an empty conversation: the waiting seats are the only thing on screen, and they grow one by one past the frame. Check that the newest seat stays in view — with no rows to change, the tail's own growth is the only thing left to measure, and nothing else would bring the viewport down.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		const addSeat = canvas.getByRole("button", { name: "Add seat" })
+		for (let seat = 0; seat < 10; seat += 1) {
+			await userEvent.click(addSeat)
+		}
+
+		await waitForOverflow(viewport)
+		await settleScroll()
+
+		await expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(1)
+		await expect(canvas.getByText(seatLabel(9))).toBeVisible()
+		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
+	},
+})
+
+const MARK_TOKEN = "--transcript-new-mark"
+
+const SHADOW_SOURCE = "var(--foreground)"
+
+const paintedMark = (line: HTMLElement) => {
+	const [lead, label, trail] = Array.from(line.children) as HTMLElement[]
+	return [
+		getComputedStyle(lead).backgroundColor,
+		getComputedStyle(label).color,
+		getComputedStyle(trail).backgroundColor,
+	]
+}
+
+const resolvedMark = (scope: HTMLElement) => {
+	const probe = document.createElement("span")
+	probe.style.backgroundColor = `var(${MARK_TOKEN})`
+	scope.append(probe)
+	const resolved = getComputedStyle(probe).backgroundColor
+	probe.remove()
+	return resolved
+}
+
+const drawnFrom = async (line: HTMLElement, source: string) => {
+	const painted = paintedMark(line)
+
+	await expect(new Set(painted).size).toBe(1)
+	await expect(painted).toEqual([source, source, source])
+}
+
+const marksReadTheToken = async (line: HTMLElement) => {
+	const declared = resolvedMark(line)
+	await drawnFrom(line, declared)
+
+	line.style.setProperty(MARK_TOKEN, SHADOW_SOURCE)
+	const shadowed = resolvedMark(line)
+	await expect(shadowed).not.toBe(declared)
+	await drawnFrom(line, shadowed)
+
+	line.style.removeProperty(MARK_TOKEN)
+	await drawnFrom(line, declared)
+}
+
+interface MarkedTranscriptOptions {
+	canvasElement: HTMLElement
+	click: (element: Element) => Promise<void>
+}
+
+const markedTranscript = async ({
+	canvasElement,
+	click,
+}: MarkedTranscriptOptions) => {
+	const canvas = within(canvasElement)
+	const viewport = canvas.getByRole("region", { name: "Conversation" })
+	await waitForLastBubble(viewport)
+
+	viewport.scrollTop = 0
+	await canvas.findByRole("button", { name: "Jump to latest" })
+
+	const send = canvas.getByRole("button", { name: "Send reply" })
+	await click(send)
+	await click(send)
+	await click(canvas.getByRole("button", { name: "Jump to latest" }))
+	await waitForLastBubble(viewport)
+
+	const line = newLine(canvasElement)
+	if (!line) throw new Error("the new-message line never mounted")
+
+	const markedRow = line.closest<HTMLElement>(
+		'[data-slot="message-scroller-row"]',
+	)
+	await expect(markedRow).toHaveTextContent(INCOMING[0].text)
+	await expect(canvas.getByText(INCOMING[1].text)).toBeVisible()
+	return line
+}
+
+export const NewMessageSeparatorInLight = meta.story({
+	args: { marksNewMessages: true },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The separator on the light surface, with the messages the reader had already read above it and the ones that arrived below. The two rules and the label must all three resolve to `--transcript-new-mark`: the story reads that value from the separator's own scope, then shadows the variable there and checks the three follow it, so a rule reaching for the primary fill again fails here even in the theme where the two colours happen to coincide.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const line = await markedTranscript({
+			canvasElement,
+			click: userEvent.click,
+		})
+
+		await expect(line).toBeVisible()
+		await marksReadTheToken(line)
+	},
+})
+
+export const NewMessageSeparatorInDark = meta.story({
+	args: { marksNewMessages: true },
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same separator on the dark surface, where the token rises to the amber the rest of the dark theme accents with — the exact value `--primary` carries there, which is why the colour alone proves nothing and the story shadows the variable to tell the two apart.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const line = await markedTranscript({
+			canvasElement,
+			click: userEvent.click,
+		})
+
+		await expect(line).toBeVisible()
+		await marksReadTheToken(line)
 	},
 })

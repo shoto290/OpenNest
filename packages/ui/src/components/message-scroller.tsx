@@ -1,6 +1,10 @@
 "use client"
 
-import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual"
+import {
+	useVirtualizer,
+	type VirtualItem,
+	type Virtualizer,
+} from "@tanstack/react-virtual"
 import {
 	AnimatePresence,
 	type HTMLMotionProps,
@@ -25,6 +29,12 @@ import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
 import { MessageHighlightProvider } from "@workspace/ui/components/message-highlight-context"
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
+import {
+	isScrollSpringAtRest,
+	SCROLL_SPRING_AT_REST,
+	type ScrollSpringState,
+	stepScrollSpring,
+} from "@workspace/ui/lib/scroll-spring"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
 const ESTIMATED_ROW_HEIGHT = 120
@@ -32,6 +42,12 @@ const ESTIMATED_ROW_HEIGHT = 120
 const ROW_OVERSCAN = 3
 
 const AIM_FRAME_BUDGET = 20
+
+const TRAVEL_CAP_MS = 10_000
+
+const TRAVEL_REST_MS = 320
+
+const JUMP_INSET = 12
 
 const JUMP_HIDDEN = { opacity: 0, y: 6 } as const
 const JUMP_VISIBLE = { opacity: 1, y: 0 } as const
@@ -54,6 +70,36 @@ const offsetWithinViewport = (list: HTMLElement, viewport: HTMLElement) =>
 	list.getBoundingClientRect().top -
 	viewport.getBoundingClientRect().top +
 	viewport.scrollTop
+
+const holdsReadingPosition = (
+	item: VirtualItem,
+	_delta: number,
+	instance: Virtualizer<HTMLElement, Element>,
+) => {
+	const fold = (instance.scrollOffset ?? 0) + instance.scrollAdjustments
+	return instance.itemSizeCache.has(item.key)
+		? item.end <= fold
+		: item.start < fold
+}
+
+const indexOfKey = (rows: MessageScrollerRow[], key: string | null) =>
+	key === null ? -1 : rows.findIndex((row) => row.key === key)
+
+const keyAfter = (rows: MessageScrollerRow[], key: string | null) => {
+	const index = indexOfKey(rows, key)
+	return index < 0 ? undefined : rows[index + 1]?.key
+}
+
+const messagesAfter = (rows: MessageScrollerRow[], key: string | null) => {
+	const index = indexOfKey(rows, key)
+	if (index < 0) return 0
+
+	let counted = 0
+	for (let next = index + 1; next < rows.length; next += 1) {
+		counted += rows[next].messageIds?.length ?? 1
+	}
+	return counted
+}
 
 type MessageScrollerTracePhase = "landing" | "live"
 
@@ -82,6 +128,7 @@ export type MessageScrollerTrace = MessageScrollerTraceDetail & {
 export interface MessageScrollerHandle {
 	scrollToEnd: (behavior?: ScrollBehavior) => void
 	scrollToMessage: (messageId: string, behavior?: ScrollBehavior) => boolean
+	anchorSend: () => void
 	isFollowing: () => boolean
 }
 
@@ -107,6 +154,9 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
 	followOutput?: boolean
 	followThreshold?: number
 	smooth?: boolean
+	anchorOnSend?: boolean
+	marksNewMessages?: boolean
+	countsNewMessages?: boolean
 	onFollowChange?: (following: boolean) => void
 	onLandingTrace?: (event: MessageScrollerTrace) => void
 	label?: string
@@ -141,6 +191,9 @@ export function MessageScroller({
 	followOutput = true,
 	followThreshold = 56,
 	smooth = true,
+	anchorOnSend = false,
+	marksNewMessages = false,
+	countsNewMessages = false,
 	onFollowChange,
 	onLandingTrace,
 	label,
@@ -162,9 +215,11 @@ export function MessageScroller({
 	const viewportRef = useRef<HTMLElement>(null)
 	const listRef = useRef<HTMLDivElement>(null)
 	const tailRef = useRef<HTMLDivElement>(null)
+	const roomRef = useRef<HTMLDivElement>(null)
 	const followingRef = useRef(followOutput)
 	const [isAtLiveEdge, setIsAtLiveEdge] = useState(followOutput)
 	const [listOffset, setListOffset] = useState(0)
+	const [tailClearance, setTailClearance] = useState(0)
 	const landingRef = useRef(false)
 	const holdFrameRef = useRef<number | undefined>(undefined)
 	const hasMissedResizeRef = useRef(false)
@@ -180,6 +235,15 @@ export function MessageScroller({
 	const traceSeqRef = useRef(0)
 	const tracedTotalSizeRef = useRef(0)
 	const tracePhaseRef = useRef<MessageScrollerTracePhase>("landing")
+	const springRef = useRef<ScrollSpringState>(SCROLL_SPRING_AT_REST)
+	const springClockRef = useRef<number | undefined>(undefined)
+	const rowsRef = useRef(rows)
+	const pendingSendRef = useRef<number | undefined>(undefined)
+	const anchorKeyRef = useRef<string | undefined>(undefined)
+	const [countAfterKey, setCountAfterKey] = useState<string | null>(null)
+	const [separatorAfterKey, setSeparatorAfterKey] = useState<string | null>(
+		null,
+	)
 	const hasRows = rows.length > 0
 	const behavior: ScrollBehavior = reduce || !smooth ? "auto" : "smooth"
 	const {
@@ -191,6 +255,7 @@ export function MessageScroller({
 	} = viewportProps ?? {}
 
 	traceRef.current = onLandingTrace
+	rowsRef.current = rows
 
 	const emitTrace = useCallback((detail: MessageScrollerTraceDetail) => {
 		const sink = traceRef.current
@@ -251,14 +316,37 @@ export function MessageScroller({
 	const aimAtEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
 			const viewport = viewportRef.current
-			if (!viewport) return
+			if (!viewport) return true
 
 			heldViewportHeightRef.current = viewport.clientHeight
-			if (distanceFromEnd(viewport) <= 1) return
+			if (distanceFromEnd(viewport) <= 1) {
+				springRef.current = SCROLL_SPRING_AT_REST
+				springClockRef.current = undefined
+				return true
+			}
 
 			traceScrollRequest(nextBehavior, viewport)
 			landingRef.current = true
-			if (typeof viewport.scrollTo === "function") {
+			if (nextBehavior === "smooth") {
+				const target = viewport.scrollHeight - viewport.clientHeight
+				const now = performance.now()
+				const elapsed =
+					springClockRef.current === undefined
+						? 0
+						: now - springClockRef.current
+				springClockRef.current = now
+				springRef.current = stepScrollSpring(
+					{
+						...springRef.current,
+						position: viewport.scrollTop,
+					},
+					target,
+					elapsed,
+				)
+				viewport.scrollTop = isScrollSpringAtRest(springRef.current, target)
+					? target
+					: springRef.current.position
+			} else if (typeof viewport.scrollTo === "function") {
 				viewport.scrollTo({
 					top: viewport.scrollHeight,
 					behavior: nextBehavior,
@@ -267,6 +355,7 @@ export function MessageScroller({
 				viewport.scrollTop = viewport.scrollHeight
 			}
 			lastScrollTopRef.current = viewport.scrollTop
+			return false
 		},
 		[traceScrollRequest],
 	)
@@ -278,26 +367,36 @@ export function MessageScroller({
 		landingFrameRef.current = undefined
 	}, [])
 
-	const holdAimAtEnd = useCallback(() => {
-		let framesLeft = AIM_FRAME_BUDGET
+	const holdAimAtEnd = useCallback(
+		(nextBehavior: ScrollBehavior) => {
+			const startedAt = performance.now()
+			let restingSince: number | undefined
 
-		const reaim = () => {
-			landingFrameRef.current = undefined
-			framesLeft -= 1
-			if (framesLeft <= 0 || !followingRef.current) return
+			const reaim = () => {
+				landingFrameRef.current = undefined
+				const now = performance.now()
+				if (now - startedAt >= TRAVEL_CAP_MS || !followingRef.current) return
 
-			aimAtEnd("auto")
+				if (aimAtEnd(nextBehavior)) {
+					restingSince ??= now
+					if (now - restingSince >= TRAVEL_REST_MS) return
+				} else {
+					restingSince = undefined
+				}
+
+				landingFrameRef.current = requestAnimationFrame(reaim)
+			}
+
+			stopLanding()
 			landingFrameRef.current = requestAnimationFrame(reaim)
-		}
-
-		stopLanding()
-		landingFrameRef.current = requestAnimationFrame(reaim)
-	}, [aimAtEnd, stopLanding])
+		},
+		[aimAtEnd, stopLanding],
+	)
 
 	const scrollViewportToEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
 			aimAtEnd(nextBehavior)
-			holdAimAtEnd()
+			holdAimAtEnd(nextBehavior)
 		},
 		[aimAtEnd, holdAimAtEnd],
 	)
@@ -313,8 +412,44 @@ export function MessageScroller({
 		)
 	}, [])
 
+	const measureSendRoom = useCallback(() => {
+		const viewport = viewportRef.current
+		const room = roomRef.current
+		const anchorKey = anchorKeyRef.current
+		if (!viewport || !room || anchorKey === undefined) return
+
+		const anchor = virtualizerRef.current
+			?.getVirtualItems()
+			.find((item) => item.key === anchorKey)
+		const contentBelowAnchor = anchor
+			? viewport.scrollHeight - room.offsetHeight - anchor.start
+			: viewport.clientHeight
+		const height = Math.max(0, viewport.clientHeight - contentBelowAnchor)
+
+		room.style.height = `${height}px`
+		room.style.display = height === 0 ? "none" : "block"
+		if (height === 0) anchorKeyRef.current = undefined
+	}, [])
+
+	const measureTailClearance = useCallback(() => {
+		const viewport = viewportRef.current
+		const tail = tailRef.current
+		if (!viewport || !tail || followingRef.current) return
+
+		const frame = viewport.getBoundingClientRect()
+		const box = tail.getBoundingClientRect()
+		const overlap = box.height === 0 ? 0 : frame.bottom - box.top
+		const clearance = Math.max(0, Math.min(overlap, frame.height / 2))
+
+		setTailClearance((current) =>
+			Math.abs(current - clearance) <= 1 ? current : clearance,
+		)
+	}, [])
+
 	const holdLiveEdge = useCallback(() => {
 		traceSizeChange()
+		measureSendRoom()
+		measureTailClearance()
 		if (holdFrameRef.current) {
 			hasMissedResizeRef.current = true
 			return
@@ -332,7 +467,13 @@ export function MessageScroller({
 		if (!followOutput || !followingRef.current) return
 
 		scrollViewportToEnd("auto")
-	}, [followOutput, scrollViewportToEnd, traceSizeChange])
+	}, [
+		followOutput,
+		measureSendRoom,
+		measureTailClearance,
+		scrollViewportToEnd,
+		traceSizeChange,
+	])
 
 	const virtualizer = useVirtualizer({
 		anchorTo: "end",
@@ -348,6 +489,7 @@ export function MessageScroller({
 	})
 
 	virtualizerRef.current = virtualizer
+	virtualizer.shouldAdjustScrollPositionOnItemSizeChange = holdsReadingPosition
 
 	const setViewportRef = useCallback(
 		(node: HTMLElement | null) => {
@@ -361,14 +503,23 @@ export function MessageScroller({
 		[externalViewportRef],
 	)
 
+	const markRelease = useCallback(() => {
+		const lastKey = rowsRef.current.at(-1)?.key
+		if (lastKey === undefined) return
+
+		setCountAfterKey(lastKey)
+		setSeparatorAfterKey((current) => current ?? lastKey)
+	}, [])
+
 	const setFollowing = useCallback(
 		(next: boolean) => {
 			if (followingRef.current === next) return
 			followingRef.current = next
 			setIsAtLiveEdge(next)
+			if (!next) markRelease()
 			onFollowChange?.(next)
 		},
-		[onFollowChange],
+		[markRelease, onFollowChange],
 	)
 
 	const stopAiming = useCallback(() => {
@@ -381,11 +532,18 @@ export function MessageScroller({
 	const returnToLiveEdge = useCallback(
 		(nextBehavior: ScrollBehavior = behavior) => {
 			stopAiming()
+			springRef.current = SCROLL_SPRING_AT_REST
+			springClockRef.current = undefined
 			setFollowing(true)
 			scrollViewportToEnd(nextBehavior)
 		},
 		[behavior, scrollViewportToEnd, setFollowing, stopAiming],
 	)
+
+	const anchorSend = useCallback(() => {
+		if (anchorOnSend) pendingSendRef.current = rowsRef.current.length
+		returnToLiveEdge("auto")
+	}, [anchorOnSend, returnToLiveEdge])
 
 	const centerAnchor = useCallback(
 		(messageId: string, nextBehavior: ScrollBehavior) => {
@@ -477,7 +635,21 @@ export function MessageScroller({
 		tracePhaseRef.current = "live"
 		if (hasReaderMovedUp) setFollowing(atLiveEdge)
 		else if (atLiveEdge) setFollowing(true)
-	}, [followOutput, followThreshold, setFollowing, traceReaderScroll])
+		measureTailClearance()
+	}, [
+		followOutput,
+		followThreshold,
+		measureTailClearance,
+		setFollowing,
+		traceReaderScroll,
+	])
+
+	const forgetRelease = useCallback(() => {
+		anchorKeyRef.current = undefined
+		if (roomRef.current) roomRef.current.style.display = "none"
+		setCountAfterKey(null)
+		setSeparatorAfterKey(null)
+	}, [])
 
 	const releaseLanding = useCallback(() => {
 		landingRef.current = false
@@ -498,9 +670,10 @@ export function MessageScroller({
 			scrollToEnd: returnToLiveEdge,
 			scrollToMessage: (messageId, nextBehavior) =>
 				scrollToMessage(messageId, nextBehavior ?? behavior),
+			anchorSend,
 			isFollowing: () => followingRef.current,
 		}),
-		[behavior, returnToLiveEdge, scrollToMessage],
+		[anchorSend, behavior, returnToLiveEdge, scrollToMessage],
 	)
 
 	useLayoutEffect(measureListOffset)
@@ -515,19 +688,31 @@ export function MessageScroller({
 		if (isSameTranscript && count === landedRowsRef.current) return
 
 		const hasLandedBefore = isSameTranscript && landedRowsRef.current > 0
+		const pendingSend = pendingSendRef.current
 		landedKeyRef.current = transcriptKey
 		landedRowsRef.current = count
-		if (!isSameTranscript) setFollowing(followOutput)
+		if (!isSameTranscript) {
+			forgetRelease()
+			pendingSendRef.current = undefined
+			setFollowing(followOutput)
+		} else if (pendingSend !== undefined && count > pendingSend) {
+			pendingSendRef.current = undefined
+			anchorKeyRef.current = rows.at(-1)?.key
+		}
+
+		measureSendRoom()
 		if (!followOutput || !followingRef.current) return
 
-		scrollViewportToEnd(hasLandedBefore ? behavior : "auto")
+		scrollViewportToEnd(
+			hasLandedBefore && pendingSend === undefined ? behavior : "auto",
+		)
 	})
 
 	useEffect(() => {
 		const viewport = viewportRef.current
 		if (!viewport || typeof ResizeObserver === "undefined") return
 
-		const tail = hasRows ? tailRef.current : null
+		const tail = tailRef.current
 		const observer = new ResizeObserver(() => {
 			measureListOffset()
 			holdLiveEdge()
@@ -536,7 +721,7 @@ export function MessageScroller({
 		if (tail) observer.observe(tail)
 
 		return () => observer.disconnect()
-	}, [holdLiveEdge, measureListOffset, hasRows])
+	}, [holdLiveEdge, measureListOffset])
 
 	useEffect(
 		() => () => {
@@ -546,6 +731,12 @@ export function MessageScroller({
 		},
 		[stopAiming, stopLanding],
 	)
+
+	const separatorKey = marksNewMessages
+		? keyAfter(rows, separatorAfterKey)
+		: undefined
+	const newMessagesLabel = t("transcript.newMessages")
+	const newCount = countsNewMessages ? messagesAfter(rows, countAfterKey) : 0
 
 	return (
 		<div
@@ -623,43 +814,66 @@ export function MessageScroller({
 				>
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{hasRows ? (
-							<>
-								<div
-									ref={mergeRefs<HTMLDivElement>(
-										listRef,
-										virtualizer.containerRef,
-									)}
-									data-slot="message-scroller-rows"
-									className="relative w-full"
-									style={{ height: virtualizer.getTotalSize() }}
-								>
-									{virtualizer.getVirtualItems().map((item) => (
-										<div
-											key={item.key}
-											data-index={item.index}
-											data-slot="message-scroller-row"
-											ref={virtualizer.measureElement}
-											className="absolute inset-x-0 top-0"
-											style={{
-												transform: `translateY(${item.start - listOffset}px)`,
-											}}
-										>
-											<RowContent render={rows[item.index].render} />
-										</div>
-									))}
-								</div>
-								<div
-									ref={tailRef}
-									data-slot="message-scroller-tail"
-									className="flex flex-col"
-									style={{ gap: rowGap }}
-								>
-									{children}
-								</div>
-							</>
-						) : (
-							children
-						)}
+							<div
+								ref={mergeRefs<HTMLDivElement>(
+									listRef,
+									virtualizer.containerRef,
+								)}
+								data-slot="message-scroller-rows"
+								className="relative w-full"
+								style={{ height: virtualizer.getTotalSize() }}
+							>
+								{virtualizer.getVirtualItems().map((item) => (
+									<div
+										key={item.key}
+										data-index={item.index}
+										data-slot="message-scroller-row"
+										ref={virtualizer.measureElement}
+										className="absolute inset-x-0 top-0 flex flex-col"
+										style={{
+											gap: rowGap,
+											transform: `translateY(${item.start - listOffset}px)`,
+										}}
+									>
+										{item.key === separatorKey ? (
+											<div
+												data-slot="message-scroller-new-line"
+												className="flex items-center gap-3"
+											>
+												<span
+													aria-hidden="true"
+													className="h-px flex-1 bg-transcript-new-mark"
+												/>
+												<span className="font-medium text-transcript-new-mark text-xs">
+													{newMessagesLabel}
+												</span>
+												<span
+													aria-hidden="true"
+													className="h-px flex-1 bg-transcript-new-mark"
+												/>
+											</div>
+										) : null}
+										<RowContent render={rows[item.index].render} />
+									</div>
+								))}
+							</div>
+						) : null}
+						<div
+							ref={tailRef}
+							data-slot="message-scroller-tail"
+							className={cn("flex flex-col empty:hidden", !hasRows && "flex-1")}
+							style={{ gap: rowGap }}
+						>
+							{children}
+						</div>
+						{anchorOnSend ? (
+							<div
+								ref={roomRef}
+								data-slot="message-scroller-room"
+								aria-hidden="true"
+								style={{ display: "none" }}
+							/>
+						) : null}
 					</MessageHighlightProvider>
 				</div>
 			</motion.section>
@@ -668,7 +882,8 @@ export function MessageScroller({
 				{isAtLiveEdge ? null : (
 					<motion.div
 						data-slot="message-scroller-live-edge"
-						className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+						className="pointer-events-none absolute inset-x-0 flex justify-center"
+						style={{ bottom: JUMP_INSET + tailClearance }}
 						initial={JUMP_HIDDEN}
 						animate={JUMP_VISIBLE}
 						exit={JUMP_HIDDEN}
@@ -677,11 +892,13 @@ export function MessageScroller({
 						<Button
 							variant="secondary"
 							size="sm"
-							className="pointer-events-auto rounded-full shadow-xl"
+							className="pointer-events-auto rounded-full shadow-xl tabular-nums"
 							onClick={() => returnToLiveEdge()}
 						>
 							<Icons.ArrowDown data-icon="inline-start" />
-							{t("transcript.jumpToLatest")}
+							{newCount > 0
+								? t("transcript.newCounted", { count: newCount })
+								: t("transcript.jumpToLatest")}
 						</Button>
 					</motion.div>
 				)}

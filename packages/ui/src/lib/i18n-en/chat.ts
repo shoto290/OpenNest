@@ -30,6 +30,9 @@ const chat = {
 		label: "Conversation",
 		loadOlder: "Load older messages",
 		jumpToLatest: "Jump to latest",
+		newMessages: "New messages",
+		newCounted_one: "{{count}} new message",
+		newCounted_other: "{{count}} new messages",
 		startOfHistory: "Beginning of the conversation",
 		message: {
 			user: "user message",
