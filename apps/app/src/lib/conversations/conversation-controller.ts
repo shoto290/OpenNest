@@ -460,6 +460,7 @@ export const createConversationController = (
 		}
 		speakers.delete(held.botId)
 		settleOpenReplies(held, completion)
+		void shutdownSpeaker(held)
 		if (!held.isDropped) {
 			noteHandovers(held)
 		}
@@ -644,6 +645,7 @@ export const createConversationController = (
 			forgetFailure()
 		} catch (reason) {
 			speakers.delete(held.botId)
+			void shutdownSpeaker(held)
 			noteFailure(toTransportError(reason))
 		}
 		sync()
@@ -938,7 +940,10 @@ export const createConversationController = (
 
 	const shutdownSpeaker = (held: Speaker) =>
 		held.scope
-			? driver.shutdown(held.scope).catch(() => undefined)
+			? driver.shutdown(held.scope).catch((reason) => {
+					noteFailure(toTransportError(reason))
+					sync()
+				})
 			: Promise.resolve()
 
 	const shutdown = async () => {
