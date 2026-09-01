@@ -193,6 +193,29 @@ const WRITING: AgentEvent[] = [
 	},
 ]
 
+const FIRST_TOKEN: AgentEvent[] = [
+	{
+		type: "messageStarted",
+		message: {
+			id: "msg-writing",
+			role: "assistant",
+			text: "",
+			completion: "streaming",
+			timestamp: 1,
+		},
+	},
+	{
+		type: "messageDelta",
+		id: "msg-writing",
+		seq: 1,
+		text: "the walls hold",
+	},
+]
+
+const BLOCK_CLOSED: AgentEvent[] = [
+	{ type: "messageDelta", id: "msg-writing", seq: 2, text: "\n\nand" },
+]
+
 const SAID_AND_LANDED: AgentEvent[] = [
 	{
 		type: "messageStarted",
@@ -433,6 +456,39 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
+	})
+
+	it("holds a seated bot on its waiting row until it publishes a block", async () => {
+		const room = await roomOf(["Ada"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+		})
+		await settle()
+
+		expect(screen.queryByText("the walls hold")).toBeNull()
+		expect(screen.getByText("Ada is thinking…")).toBeTruthy()
+		expect(stopFor("Ada")).toBeTruthy()
+	})
+
+	it("swaps the waiting row of a seated bot for the block it publishes", async () => {
+		const room = await roomOf(["Ada"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+			room.driver.pushTo(room.idOf("Ada"), BLOCK_CLOSED)
+		})
+		await settle()
+
+		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(screen.queryByText("Ada is thinking…")).toBeNull()
+		expect(screen.getAllByRole("button", { name: "Stop Ada" })).toHaveLength(1)
 	})
 
 	it("leaves no stop on the turn a bot has landed", async () => {

@@ -156,10 +156,10 @@ const spokenIn = (controller: ConversationController) =>
 const runningIn = (controller: ConversationController) =>
 	controller.getState().speakers.map(({ botId }) => botId)
 
-const unwrittenIn = (controller: ConversationController) =>
+const unpublishedIn = (controller: ConversationController) =>
 	controller
 		.getState()
-		.speakers.filter(({ hasWritten }) => !hasWritten)
+		.speakers.filter(({ hasPublished }) => !hasPublished)
 		.map(({ botId }) => botId)
 
 const workIn = (controller: ConversationController) =>
@@ -330,7 +330,7 @@ describe("createConversationController", () => {
 		expect(completed).toHaveBeenCalledTimes(1)
 	})
 
-	it("keeps the named order of the bots yet to write while a wave mate writes", async () => {
+	it("keeps the named order of the bots yet to publish while a wave mate publishes", async () => {
 		const ada = idOf(harness.conversation, "Ada")
 		const nyx = idOf(harness.conversation, "Nyx")
 		const iris = idOf(harness.conversation, "Iris")
@@ -348,12 +348,17 @@ describe("createConversationController", () => {
 					timestamp: 1,
 				},
 			},
-			{ type: "messageDelta", id: "msg-nyx", seq: 1, text: "walls first" },
+			{
+				type: "messageDelta",
+				id: "msg-nyx",
+				seq: 1,
+				text: "walls first\n\n",
+			},
 		])
 		await harness.settled()
 
 		expect(runningIn(harness.controller)).toEqual([ada, nyx, iris])
-		expect(unwrittenIn(harness.controller)).toEqual([ada, iris])
+		expect(unpublishedIn(harness.controller)).toEqual([ada, iris])
 	})
 
 	it("holds one summons only for a bot two speakers of a wave name", async () => {
@@ -1176,24 +1181,42 @@ describe("what a speaking bot is doing", () => {
 		})
 	})
 
-	it("says a bot is writing once its words have started to arrive", async () => {
-		harness.driver.pushTo(ada, [
-			ran("a-1", "Grep · walls", "running"),
-			ran("a-1", "Grep · walls", "succeeded"),
-			{
-				type: "messageStarted",
-				message: {
-					id: "msg-ada",
-					role: "assistant",
-					text: "",
-					completion: "streaming",
-					timestamp: 1,
-				},
+	const started: AgentEvent[] = [
+		ran("a-1", "Grep · walls", "running"),
+		ran("a-1", "Grep · walls", "succeeded"),
+		{
+			type: "messageStarted",
+			message: {
+				id: "msg-ada",
+				role: "assistant",
+				text: "",
+				completion: "streaming",
+				timestamp: 1,
 			},
+		},
+	]
+
+	it("keeps a bot thinking between its first token and its first block", async () => {
+		harness.driver.pushTo(ada, [
+			...started,
 			{ type: "messageDelta", id: "msg-ada", seq: 1, text: "walls up" },
 		])
 		await harness.settled()
 
+		expect(unpublishedIn(harness.controller)).toEqual([ada])
+		expect(workIn(harness.controller)).toEqual({
+			kind: "thinking",
+		})
+	})
+
+	it("says a bot is writing once it has published a block", async () => {
+		harness.driver.pushTo(ada, [
+			...started,
+			{ type: "messageDelta", id: "msg-ada", seq: 1, text: "walls up\n\n" },
+		])
+		await harness.settled()
+
+		expect(unpublishedIn(harness.controller)).toEqual([])
 		expect(workIn(harness.controller)).toEqual({
 			kind: "writing",
 		})

@@ -54,7 +54,7 @@ export const speakingBot = (
 ): SpeakingBot => ({
 	botId,
 	work: { kind: "thinking" },
-	hasWritten: false,
+	hasPublished: false,
 	stop: () => Promise.resolve(),
 	...overrides,
 })
