@@ -372,7 +372,6 @@ function AssistantTurn(props: AssistantTurnProps) {
 		carriesMark = false,
 		className,
 	} = props
-	const canStop = props.stoppable && state === "streaming"
 	const { t } = useTranslation("chat")
 	const markedBotId = carriesMark ? (botId ?? author?.id) : undefined
 	const markId = useMarkId(markedBotId)
@@ -380,6 +379,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const footer = footerKey ? t(footerKey) : undefined
 	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
+	const canStop = props.stoppable && state === "streaming"
 	const mark =
 		avatar ??
 		(author && closesRun(run) ? (
