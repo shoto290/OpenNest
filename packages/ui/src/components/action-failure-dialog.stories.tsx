@@ -71,7 +71,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The retry still in flight. Both actions stay in the tab order and are marked unavailable rather than removed from it, so the focus a reader placed on Try again is still theirs when the callback answers, and a screen reader still meets both controls where it left them. A second press is ignored, by pointer or by keyboard, so a slow write cannot be fired twice. The dialog holds on the same description: nothing is claimed until the callback answers.",
+					"The retry still in flight. Both actions stay in the tab order and are marked unavailable rather than removed from it, so the focus a reader placed on Try again is still theirs when the callback answers, and a screen reader still meets both controls where it left them. A second press on either action is ignored, by pointer or by keyboard: Try again does not fire the callback twice, and a keyboard press on Close leaves the dialog up with focus still inside it. The dialog holds on the same description: nothing is claimed until the callback answers.",
 			},
 		},
 	},
@@ -97,6 +97,14 @@ export const Loading = meta.story({
 		await expect(args.onRetry).toHaveBeenCalledTimes(1)
 		await expect(retryAction).toHaveFocus()
 		await expect(popup).toBeVisible()
+
+		await userEvent.tab({ shift: true })
+		await expect(closeAction).toHaveFocus()
+		await userEvent.keyboard("{Enter}")
+
+		await expect(popup).toBeVisible()
+		await expect(args.onRetry).toHaveBeenCalledTimes(1)
+		await expect(closeAction).toHaveFocus()
 	},
 })
 
