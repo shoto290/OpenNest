@@ -174,17 +174,19 @@ const settle = () =>
 		}
 	})
 
-const WRITING: AgentEvent[] = [
-	{
-		type: "messageStarted",
-		message: {
-			id: "msg-writing",
-			role: "assistant",
-			text: "",
-			completion: "streaming",
-			timestamp: 1,
-		},
+const WRITING_STARTED: AgentEvent = {
+	type: "messageStarted",
+	message: {
+		id: "msg-writing",
+		role: "assistant",
+		text: "",
+		completion: "streaming",
+		timestamp: 1,
 	},
+}
+
+const WRITING: AgentEvent[] = [
+	WRITING_STARTED,
 	{
 		type: "messageDelta",
 		id: "msg-writing",
@@ -194,22 +196,8 @@ const WRITING: AgentEvent[] = [
 ]
 
 const FIRST_TOKEN: AgentEvent[] = [
-	{
-		type: "messageStarted",
-		message: {
-			id: "msg-writing",
-			role: "assistant",
-			text: "",
-			completion: "streaming",
-			timestamp: 1,
-		},
-	},
-	{
-		type: "messageDelta",
-		id: "msg-writing",
-		seq: 1,
-		text: "the walls hold",
-	},
+	WRITING_STARTED,
+	{ type: "messageDelta", id: "msg-writing", seq: 1, text: "the walls hold" },
 ]
 
 const BLOCK_CLOSED: AgentEvent[] = [

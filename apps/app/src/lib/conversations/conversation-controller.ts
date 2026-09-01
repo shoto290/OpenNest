@@ -263,17 +263,14 @@ export const createConversationController = (
 				toPublishedBlocks(text, held.openMessages.has(id)).length > 0,
 		)
 
-	const workOf = (held: Speaker, hasPublished: boolean): WorkingState =>
-		held.pending
-			? promptWork(held.pending)
-			: workingFor(held.activities, hasPublished)
-
 	const speakingBots = (): SpeakingBot[] =>
 		runningSpeakers().map((held) => {
 			const hasPublished = hasPublishedBlock(held)
 			return {
 				botId: held.botId,
-				work: workOf(held, hasPublished),
+				work: held.pending
+					? promptWork(held.pending)
+					: workingFor(held.activities, hasPublished),
 				hasPublished,
 				stop: () => stopSpeaker(held.botId),
 			}
