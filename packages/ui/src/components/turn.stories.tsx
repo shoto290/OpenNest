@@ -130,6 +130,29 @@ const TURN_STATES: TurnState[] = [
 
 const Avatar = () => <BotAvatar animated={false} size={TURN_AVATAR_SIZE} />
 
+const stopTurn = fn()
+
+type StoppableTurnProps = { state: TurnState; stoppable?: boolean }
+
+const StoppableTurn = ({ state, stoppable = false }: StoppableTurnProps) => {
+	const text = state === "streaming" ? ANSWER.slice(0, 48) : ANSWER
+
+	return (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<AssistantTurn
+				author={LEAD}
+				avatar={<Avatar />}
+				copyText={text}
+				onStop={stopTurn}
+				state={state}
+				stoppable={stoppable}
+			>
+				{text}
+			</AssistantTurn>
+		</div>
+	)
+}
+
 const MARKED_BOT_ID = "bot-lyra"
 
 const bubbleStyleOf = (node: Element) => {
@@ -225,7 +248,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The two transcript rows, one per side. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the bot's avatar. Only the bots are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass the avatar on the row that closes the run. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. `stoppable` comes in from the screen and turns the gutter avatar into the stop for that one bot, so a wave is ended one seat at a time; it is never read off `state`, since a turn can be read back as `streaming` from a crash and stop nothing. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -803,5 +826,116 @@ export const DeletedAuthor = meta.story({
 			canvasElement.querySelector('[data-slot="message-author-deleted"]'),
 		).toHaveAttribute("title", "Deleted bot")
 		await expect(canvas.getByText(GONE_REPLY)).toBeVisible()
+	},
+})
+
+export const StreamingStoppable = meta.story({
+	render: () => <StoppableTurn state="streaming" stoppable />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The row a bot is writing into, with its own way out: `stoppable` turns the gutter avatar into the same control the waiting seat carries, named after the bot, and opens the gutter to assistive technology so the control can be reached at all. The wave keeps running around it — this stop ends one bot. Check that the control is the size of the avatar it rides, that pointing at it or reaching it by keyboard veils the animal with the stop glyph, and that the ring shows where focus landed.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		stopTurn.mockClear()
+
+		const stop = canvas.getByRole("button", { name: "Stop Atlas" })
+		const [gutter] = slotsIn(canvasElement, "message-gutter")
+		const [glyph] = slotsIn(canvasElement, "bot-working-stop-glyph")
+
+		await expect(gutter).not.toHaveAttribute("aria-hidden")
+		await expect(Math.round(stop.getBoundingClientRect().height)).toBe(
+			TURN_AVATAR_SIZE,
+		)
+
+		stop.focus()
+		await expect(stop).toHaveFocus()
+		await waitFor(() => expect(glyph).toBeVisible())
+
+		await userEvent.click(stop)
+		await expect(stopTurn).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const StreamingNotStoppable = meta.story({
+	render: () => <StoppableTurn state="streaming" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same row while the screen says nothing can be stopped — a turn read back from the database as `streaming` after a crash is exactly that. The row still holds an `onStop`, and it draws no control: the stop follows `stoppable` alone, never the handler and never the state. Check that the gutter is a drawing again, hidden from assistive technology, with no button to reach.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [gutter] = slotsIn(canvasElement, "message-gutter")
+
+		await expect(
+			canvas.queryByRole("button", { name: "Stop Atlas" }),
+		).toBeNull()
+		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+	},
+})
+
+export const CompleteNoStop = meta.story({
+	render: () => <StoppableTurn state="complete" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The landed answer, holding an `onStop` it must ignore: there is nothing left to stop once the turn is complete. Check that the gutter carries the avatar and no control, and stays hidden from assistive technology.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [gutter] = slotsIn(canvasElement, "message-gutter")
+
+		await expect(
+			canvas.queryByRole("button", { name: "Stop Atlas" }),
+		).toBeNull()
+		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+	},
+})
+
+export const CancelledNoStop = meta.story({
+	render: () => <StoppableTurn state="cancelled" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The turn that was already stopped, still holding its `onStop`. Check that the row keeps the words it had written and its `Stopped` footer, and that the gutter offers no second stop and stays hidden from assistive technology.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [gutter] = slotsIn(canvasElement, "message-gutter")
+
+		await expect(
+			canvas.queryByRole("button", { name: "Stop Atlas" }),
+		).toBeNull()
+		await expect(gutter).toHaveAttribute("aria-hidden", "true")
+	},
+})
+
+export const FailedNoStop = meta.story({
+	render: () => <StoppableTurn state="failed" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The turn the transport gave up on, still holding its `onStop`. Check that the row keeps its failure footer and its copy, and that the gutter offers no stop and stays hidden from assistive technology.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const [gutter] = slotsIn(canvasElement, "message-gutter")
+
+		await expect(
+			canvas.queryByRole("button", { name: "Stop Atlas" }),
+		).toBeNull()
+		await expect(gutter).toHaveAttribute("aria-hidden", "true")
 	},
 })

@@ -15,7 +15,7 @@ import { BLOT_TINTS } from "@workspace/ui/components/bot-avatar"
 import { ANIMALS } from "@workspace/ui/components/bot-avatar-animals"
 import { Button } from "@workspace/ui/components/button"
 import { MarkProvider } from "@workspace/ui/components/mark-context"
-import { UserTurn } from "@workspace/ui/components/turn"
+import { TURN_AVATAR_SIZE, UserTurn } from "@workspace/ui/components/turn"
 
 const BUSY_BOT = { animal: "owl", blot: "blue", seed: "bot-7" } as const
 
@@ -26,6 +26,15 @@ const ROOM_BOTS = [
 ] as const
 
 const [SPEAKING_BOT, ...WAITING_BOTS] = ROOM_BOTS
+
+const stopOrion = fn()
+
+const stopVega = fn()
+
+const SEAT_STOPS: Record<string, typeof stopOrion> = {
+	"bot-orion": stopOrion,
+	"bot-vega": stopVega,
+}
 
 const ROOMS = [
 	{
@@ -111,7 +120,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What the transcript shows while the bot is busy: its avatar, alone, in the pose that matches the work. The avatar is also the stop control — given `onStop`, pointing at it or reaching it by keyboard covers the animal with a stop glyph, so the composer below stays free for the next prompt. The words only appear while the reader points at the avatar — timed kinds add a clock to them, untimed ones only shimmer. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is understood to be the same mark the `AssistantTurn` gutter shows once the turn lands, so it travels there rather than being replaced — give both rows the same `botId` and it does, within that one conversation. See `Mark`, `MarkPerBot` for a room where several bots are busy at once, and `ConversationChange` for what a swapped conversation does to them.",
+					"What the transcript shows while the bot is busy: its avatar, alone, in the pose that matches the work. The avatar is also the stop control — given `stoppable`, pointing at it or reaching it by keyboard covers the animal with a stop glyph, so the composer below stays free for the next prompt. The words only appear while the reader points at the avatar — timed kinds add a clock to them, untimed ones only shimmer. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is understood to be the same mark the `AssistantTurn` gutter shows once the turn lands, so it travels there rather than being replaced — give both rows the same `botId` and it does, within that one conversation. See `Mark`, `MarkPerBot` for a room where several bots are busy at once, and `ConversationChange` for what a swapped conversation does to them.",
 			},
 		},
 	},
@@ -304,20 +313,21 @@ export const Stop = meta.story({
 		kind: "working",
 		name: "Atlas",
 		label: "Bash · npm test",
+		stoppable: true,
 		onStop: fn(),
 	},
 	render: (args) => (
 		<div className="flex flex-col gap-4">
 			<ActivityIndicator {...args} />
 			<ActivityIndicator {...args} image={UPLOADED_AVATAR_IMAGE} />
-			<ActivityIndicator {...args} onStop={undefined} />
+			<ActivityIndicator {...args} stoppable={false} />
 		</div>
 	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Interrupting the run, from the row that is running it: the first two avatars take `onStop` and become controls, the last takes none and stays a drawing. Check that the veil covers the drawn avatar corner to corner and holds to the circle of the uploaded picture, that it appears the instant the avatar is pointed at with no fade — pointing at the words beside it reveals them and nothing else — that Tab reaches each control and lights the same glyph, and that the last row exposes no button at all.",
+					"Interrupting the run, from the row that is running it: the first two avatars are `stoppable` and become controls, the last is not and stays a drawing. Check that the veil covers the drawn avatar corner to corner and holds to the circle of the uploaded picture, that it appears the instant the avatar is pointed at with no fade — pointing at the words beside it reveals them and nothing else — that Tab reaches each control and lights the same glyph, and that the last row exposes no button at all.",
 			},
 		},
 	},
@@ -353,5 +363,53 @@ export const Stop = meta.story({
 
 		await userEvent.click(stop)
 		await expect(args.onStop).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const WaitingSeatStop = meta.story({
+	render: () => (
+		<MarkProvider transcriptKey={ROOMS[0].id}>
+			<div className="flex flex-col gap-4">
+				{WAITING_BOTS.map((bot) => (
+					<ActivityIndicator
+						{...bot}
+						key={bot.botId}
+						kind="waiting"
+						onStop={SEAT_STOPS[bot.botId]}
+						seed={bot.botId}
+						stoppable
+					/>
+				))}
+			</div>
+		</MarkProvider>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A wave seats several bots at once, and each seat carries its own way out: every waiting row is `stoppable`, so the reader stops one bot without ending the wave. Check that each control is named after the bot it holds, that it is the size of the avatar it rides, that Tab reaches it and lights the glyph, and that stopping one leaves the other seat drawn exactly as it was.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		stopOrion.mockClear()
+		stopVega.mockClear()
+
+		const orion = canvas.getByRole("button", { name: "Stop Orion" })
+		const vega = canvas.getByRole("button", { name: "Stop Vega" })
+		const [glyph] = slotsIn(canvasElement, "bot-working-stop-glyph")
+
+		await expect(Math.round(orion.getBoundingClientRect().height)).toBe(
+			TURN_AVATAR_SIZE,
+		)
+
+		await userEvent.tab()
+		await expect(orion).toHaveFocus()
+		await waitFor(() => expect(glyph).toBeVisible())
+
+		await userEvent.click(orion)
+		await expect(stopOrion).toHaveBeenCalledTimes(1)
+		await expect(stopVega).not.toHaveBeenCalled()
+		await expect(vega).toBeVisible()
 	},
 })

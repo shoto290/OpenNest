@@ -10,7 +10,10 @@ import {
 } from "react"
 import { useTranslation } from "react-i18next"
 
-import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	BotIdentityAvatar,
+	BotStopButton,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import {
@@ -90,6 +93,8 @@ interface AssistantTurnProps {
 	author?: MessageAuthor
 	avatar?: ReactNode
 	carriesMark?: boolean
+	stoppable?: boolean
+	onStop?: () => void
 	className?: string
 }
 
@@ -365,6 +370,8 @@ function AssistantTurn({
 	author,
 	avatar,
 	carriesMark = false,
+	stoppable = false,
+	onStop,
 	className,
 }: AssistantTurnProps) {
 	const { t } = useTranslation("chat")
@@ -408,10 +415,24 @@ function AssistantTurn({
 				) : null}
 				<span
 					data-slot="message-gutter"
-					aria-hidden="true"
+					aria-hidden={stoppable ? undefined : "true"}
 					className="col-start-1 row-start-2 self-end"
 				>
-					{mark ? <SharedMark markId={markId}>{mark}</SharedMark> : null}
+					{mark ? (
+						<SharedMark markId={markId}>
+							{stoppable ? (
+								<BotStopButton
+									image={author?.image}
+									name={author?.name}
+									onStop={onStop}
+								>
+									{mark}
+								</BotStopButton>
+							) : (
+								mark
+							)}
+						</SharedMark>
+					) : null}
 				</span>
 				<MessageBubble
 					variant={bare ? "bare" : "soft"}
