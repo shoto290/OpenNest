@@ -20,6 +20,8 @@ export const ACTION_TOKENS = [
 
 export const FEEDBACK_TOKENS = ["--destructive"]
 
+export const TRANSCRIPT_TOKENS = ["--transcript-new-mark"]
+
 export const CONTROL_TOKENS = ["--border", "--input", "--ring"]
 
 export const SCROLLBAR_TOKENS = ["--scrollbar", "--scrollbar-hover"]

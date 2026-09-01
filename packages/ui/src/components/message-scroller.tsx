@@ -31,6 +31,7 @@ import { MessageHighlightProvider } from "@workspace/ui/components/message-highl
 import { SPRING_PANEL, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 import {
 	isScrollSpringAtRest,
+	SCROLL_SPRING_AT_REST,
 	type ScrollSpringState,
 	stepScrollSpring,
 } from "@workspace/ui/lib/scroll-spring"
@@ -42,9 +43,9 @@ const ROW_OVERSCAN = 3
 
 const AIM_FRAME_BUDGET = 20
 
-const TRAVEL_FRAME_CAP = 600
+const TRAVEL_CAP_MS = 10_000
 
-const REST_SPRING: ScrollSpringState = { position: 0, velocity: 0 }
+const TRAVEL_REST_MS = 320
 
 const JUMP_INSET = 12
 
@@ -234,7 +235,8 @@ export function MessageScroller({
 	const traceSeqRef = useRef(0)
 	const tracedTotalSizeRef = useRef(0)
 	const tracePhaseRef = useRef<MessageScrollerTracePhase>("landing")
-	const springRef = useRef<ScrollSpringState>(REST_SPRING)
+	const springRef = useRef<ScrollSpringState>(SCROLL_SPRING_AT_REST)
+	const springClockRef = useRef<number | undefined>(undefined)
 	const rowsRef = useRef(rows)
 	const pendingSendRef = useRef<number | undefined>(undefined)
 	const anchorKeyRef = useRef<string | undefined>(undefined)
@@ -318,7 +320,8 @@ export function MessageScroller({
 
 			heldViewportHeightRef.current = viewport.clientHeight
 			if (distanceFromEnd(viewport) <= 1) {
-				springRef.current = REST_SPRING
+				springRef.current = SCROLL_SPRING_AT_REST
+				springClockRef.current = undefined
 				return true
 			}
 
@@ -326,12 +329,19 @@ export function MessageScroller({
 			landingRef.current = true
 			if (nextBehavior === "smooth") {
 				const target = viewport.scrollHeight - viewport.clientHeight
+				const now = performance.now()
+				const elapsed =
+					springClockRef.current === undefined
+						? 0
+						: now - springClockRef.current
+				springClockRef.current = now
 				springRef.current = stepScrollSpring(
 					{
+						...springRef.current,
 						position: viewport.scrollTop,
-						velocity: springRef.current.velocity,
 					},
 					target,
+					elapsed,
 				)
 				viewport.scrollTop = isScrollSpringAtRest(springRef.current, target)
 					? target
@@ -359,16 +369,20 @@ export function MessageScroller({
 
 	const holdAimAtEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
-			let restFrames = AIM_FRAME_BUDGET
-			let framesLeft = TRAVEL_FRAME_CAP
+			const startedAt = performance.now()
+			let restingSince: number | undefined
 
 			const reaim = () => {
 				landingFrameRef.current = undefined
-				framesLeft -= 1
-				if (framesLeft <= 0 || !followingRef.current) return
+				const now = performance.now()
+				if (now - startedAt >= TRAVEL_CAP_MS || !followingRef.current) return
 
-				restFrames = aimAtEnd(nextBehavior) ? restFrames - 1 : AIM_FRAME_BUDGET
-				if (restFrames <= 0) return
+				if (aimAtEnd(nextBehavior)) {
+					restingSince ??= now
+					if (now - restingSince >= TRAVEL_REST_MS) return
+				} else {
+					restingSince = undefined
+				}
 
 				landingFrameRef.current = requestAnimationFrame(reaim)
 			}
@@ -518,7 +532,8 @@ export function MessageScroller({
 	const returnToLiveEdge = useCallback(
 		(nextBehavior: ScrollBehavior = behavior) => {
 			stopAiming()
-			springRef.current = REST_SPRING
+			springRef.current = SCROLL_SPRING_AT_REST
+			springClockRef.current = undefined
 			setFollowing(true)
 			scrollViewportToEnd(nextBehavior)
 		},
@@ -827,14 +842,14 @@ export function MessageScroller({
 											>
 												<span
 													aria-hidden="true"
-													className="h-px flex-1 bg-primary"
+													className="h-px flex-1 bg-transcript-new-mark"
 												/>
-												<span className="font-medium text-foreground text-xs">
+												<span className="font-medium text-transcript-new-mark text-xs">
 													{newMessagesLabel}
 												</span>
 												<span
 													aria-hidden="true"
-													className="h-px flex-1 bg-primary"
+													className="h-px flex-1 bg-transcript-new-mark"
 												/>
 											</div>
 										) : null}

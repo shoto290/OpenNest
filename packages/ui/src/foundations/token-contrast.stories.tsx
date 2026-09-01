@@ -7,6 +7,7 @@ import {
 	ACTION_TOKENS,
 	SIDEBAR_TOKENS,
 	SURFACE_TOKENS,
+	TRANSCRIPT_TOKENS,
 } from "@workspace/ui/foundations/color-tokens"
 import { contrastRatio, type Rgb } from "@workspace/ui/lib/contrast"
 
@@ -36,6 +37,10 @@ const SUFFIXED_PAIRS: TokenPair[] = SEMANTIC_TOKENS.filter((token) =>
 const CROSS_FAMILY_PAIRS: TokenPair[] = [
 	{ background: "--sidebar", foreground: "--muted-foreground" },
 	{ background: "--sidebar-accent", foreground: "--muted-foreground" },
+	...TRANSCRIPT_TOKENS.map((foreground) => ({
+		background: ROOT_PAIR.background,
+		foreground,
+	})),
 ]
 
 const TOKEN_PAIRS = [ROOT_PAIR, ...SUFFIXED_PAIRS, ...CROSS_FAMILY_PAIRS]

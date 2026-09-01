@@ -1812,3 +1812,71 @@ export const TailWithoutRows = meta.story({
 		await expect(args.onFollowChange).not.toHaveBeenCalledWith(false)
 	},
 })
+
+const markedTranscript = async ({
+	canvas,
+	canvasElement,
+	userEvent,
+}: {
+	canvas: ReturnType<typeof within>
+	canvasElement: HTMLElement
+	userEvent: { click: (element: Element) => Promise<void> }
+}) => {
+	const viewport = canvas.getByRole("region", { name: "Conversation" })
+	await waitForLastBubble(viewport)
+
+	viewport.scrollTop = 0
+	await canvas.findByRole("button", { name: "Jump to latest" })
+
+	const send = canvas.getByRole("button", { name: "Send reply" })
+	await userEvent.click(send)
+	await userEvent.click(send)
+	await userEvent.click(canvas.getByRole("button", { name: "Jump to latest" }))
+	await waitForLastBubble(viewport)
+
+	const line = newLine(canvasElement)
+	if (!line) throw new Error("the new-message line never mounted")
+
+	const markedRow = line.closest<HTMLElement>(
+		'[data-slot="message-scroller-row"]',
+	)
+	await expect(markedRow).toHaveTextContent(INCOMING[0].text)
+	await expect(canvas.getByText(INCOMING[1].text)).toBeVisible()
+	return line
+}
+
+export const NewMessageSeparatorInLight = meta.story({
+	args: { marksNewMessages: true },
+	globals: { theme: "light" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The separator on the light surface, with the messages the reader had already read above it and the ones that arrived below. Check that the rule and its label are legible against the transcript surface: both are drawn from `--transcript-new-mark`, a step of the amber ramp dark enough to clear the text floor on white, never the primary fill.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const line = await markedTranscript({ canvas, canvasElement, userEvent })
+
+		await expect(line).toBeVisible()
+	},
+})
+
+export const NewMessageSeparatorInDark = meta.story({
+	args: { marksNewMessages: true },
+	globals: { theme: "dark" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same separator on the dark surface, where the token rises to the amber the rest of the dark theme accents with. Check that the rule and the label read as the same mark as in light rather than as an inverted one, and that they keep their distance from the surface behind them.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const line = await markedTranscript({ canvas, canvasElement, userEvent })
+
+		await expect(line).toBeVisible()
+	},
+})
