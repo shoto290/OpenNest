@@ -6,12 +6,13 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
 use super::contract::{
-	AgentEvent, CheckReport, ConnectionState, EvolvedBundle, PermissionDecision, RuntimeScope,
-	ScopedEvent, SessionHandle, TransportError,
+	AgentEvent, CheckReport, ConnectionState, EvolvedBundle, LiveSession, PermissionDecision,
+	RuntimeScope, ScopedEvent, SessionHandle, TransportError,
 };
 use super::redact;
 use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
+use super::translate::now_ms;
 use crate::bundles;
 use crate::db;
 use crate::db::repositories::conversations::Bot as StoredBot;
@@ -51,6 +52,18 @@ struct Live<S = Arc<Session>> {
 struct Run<S> {
 	scope: RuntimeScope,
 	session: Option<S>,
+	started_at: i64,
+}
+
+impl<S> Run<S> {
+	fn reported(&self) -> LiveSession {
+		LiveSession {
+			bot_id: self.scope.bot_id.clone(),
+			conversation_id: self.scope.conversation_id.clone(),
+			runtime_session_id: self.scope.runtime_session_id.clone(),
+			started_at: self.started_at,
+		}
+	}
 }
 
 struct Admission<S> {
@@ -77,8 +90,9 @@ impl<S: Clone> Live<S> {
 		let keeps_lineage = !runs
 			.iter()
 			.any(|(held, run)| held != &key && participant(&run.scope) == participant(&scope));
-		let replaced =
-			runs.insert(key, Run { scope, session: None }).and_then(|replaced| replaced.session);
+		let replaced = runs
+			.insert(key, Run { scope, session: None, started_at: now_ms() })
+			.and_then(|replaced| replaced.session);
 		Admission { replaced, keeps_lineage }
 	}
 
@@ -103,6 +117,13 @@ impl<S: Clone> Live<S> {
 			.into_values()
 			.filter_map(|run| run.session)
 			.collect()
+	}
+
+	fn report(&self) -> Vec<LiveSession> {
+		let mut held: Vec<LiveSession> =
+			self.runs.lock().expect("live runs").values().map(Run::reported).collect();
+		held.sort_by_key(|entry| entry.started_at);
+		held
 	}
 
 	fn holds(&self, scope: &RuntimeScope) -> bool {
@@ -687,6 +708,13 @@ pub async fn agent_answer_question(
 	state.live.session_for(&scope)?.answer_question(&id, answers, annotations).await
 }
 
+#[tauri::command]
+pub async fn agent_live_sessions(
+	state: State<'_, AgentState>,
+) -> Result<Vec<LiveSession>, TransportError> {
+	Ok(state.live.report())
+}
+
 pub async fn shutdown_session(state: &AgentState, scope: &RuntimeScope) {
 	let session = state.live.clear(scope);
 	if let Some(session) = session {
@@ -1147,6 +1175,71 @@ mod tests {
 			is_unheld(&live.session_for(&another_bots_run())),
 			"a command reached a session after the exit gave it up"
 		);
+	}
+
+	fn reported_runs<S: Clone>(live: &Live<S>) -> Vec<String> {
+		live.report().into_iter().map(|held| held.runtime_session_id).collect()
+	}
+
+	#[test]
+	fn the_report_names_every_run_the_host_holds_in_the_order_they_started() {
+		let live = Live::<&str>::default();
+		admitted(&live, a_scope());
+		std::thread::sleep(std::time::Duration::from_millis(2));
+		admitted(&live, another_bots_run());
+
+		let held = live.report();
+
+		assert_eq!(
+			reported_runs(&live),
+			["r1", "r9"],
+			"the runs were not reported in the order they started"
+		);
+		assert_eq!((held[0].bot_id.as_str(), held[0].conversation_id.as_str()), ("b1", "c1"));
+		assert_eq!((held[1].bot_id.as_str(), held[1].conversation_id.as_str()), ("b2", "c2"));
+		assert!(
+			held[0].started_at < held[1].started_at,
+			"a later run started before an earlier one"
+		);
+	}
+
+	#[test]
+	fn a_run_started_again_under_its_own_id_is_reported_once_and_installing_keeps_its_start() {
+		let live = Live::<&str>::default();
+		admitted(&live, a_scope());
+		let started_at = live.report()[0].started_at;
+
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+		assert_eq!(
+			live.report()[0].started_at,
+			started_at,
+			"installing a session moved the start of the run it was installed on"
+		);
+
+		admitted(&live, a_scope());
+		assert!(live.install(&a_scope(), REPLACEMENT_SESSION));
+
+		assert_eq!(
+			reported_runs(&live),
+			["r1"],
+			"a run started again under its own id was reported twice"
+		);
+	}
+
+	#[test]
+	fn a_run_the_host_let_go_leaves_the_report_and_the_exit_empties_it() {
+		let live = Live::<&str>::default();
+		assert!(live.report().is_empty(), "a host holding no run reported one");
+
+		admitted(&live, a_scope());
+		admitted(&live, another_bots_run());
+		live.clear(&a_scope());
+
+		assert_eq!(reported_runs(&live), ["r9"], "a run the host let go stayed in the report");
+
+		live.clear_all();
+
+		assert!(live.report().is_empty(), "the exit left a run in the report");
 	}
 
 	#[test]

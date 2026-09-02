@@ -259,6 +259,15 @@ pub struct RuntimeScope {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LiveSession {
+	pub bot_id: String,
+	pub conversation_id: String,
+	pub runtime_session_id: String,
+	pub started_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScopedEvent {
 	pub scope: Option<RuntimeScope>,
 	pub event: AgentEvent,
