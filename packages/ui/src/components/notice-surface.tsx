@@ -25,14 +25,13 @@ type NoticeMessage = {
 	description?: string
 }
 
-const raiseTransientNotice = ({ title, description }: NoticeMessage) => {
-	noticeManager.add({ title, description, type: "transient", priority: "low" })
+const raiseTransientNotice = (message: NoticeMessage) => {
+	noticeManager.add({ ...message, type: "transient", priority: "low" })
 }
 
-const raiseFailureNotice = ({ title, description }: NoticeMessage) => {
+const raiseFailureNotice = (message: NoticeMessage) => {
 	noticeManager.add({
-		title,
-		description,
+		...message,
 		type: "failure",
 		priority: "high",
 		timeout: 0,

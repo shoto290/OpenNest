@@ -63,7 +63,7 @@ const viewport = () => {
 const noticesOnScreen = () =>
 	Array.from(
 		viewport().querySelectorAll<HTMLElement>("[data-slot=toast]"),
-	).filter((notice) => notice.getAttribute("data-limited") === null)
+	).filter((notice) => !notice.hasAttribute("data-limited"))
 
 const meta = preview.meta({
 	title: "Overlays/NoticeSurface",
@@ -101,7 +101,7 @@ export const Default = meta.story({
 
 		const notice = await screen.findByRole("dialog")
 		await expect(notice).toHaveAccessibleName(SAVED.title)
-		await expect(notice).toHaveAccessibleDescription(SAVED.description ?? "")
+		await expect(notice).toHaveAccessibleDescription(SAVED.description)
 
 		const box = notice.getBoundingClientRect()
 		await expect(box.top).toBeLessThanOrEqual(24)
