@@ -1570,7 +1570,7 @@ describe("failures the conversation carries to the screen", () => {
 		detach()
 	})
 
-	const failingOnFirstStart = (error: TransportError): ChatDriver => {
+	const failingOnFirstStart = (): ChatDriver => {
 		const scripted = createScriptedDriver()
 		let isFirstStart = true
 		return {
@@ -1578,7 +1578,7 @@ describe("failures the conversation carries to the screen", () => {
 			startOrResumeSession: (scope) => {
 				if (isFirstStart) {
 					isFirstStart = false
-					scripted.emit(scope, { type: "failed", error })
+					scripted.emit(scope, { type: "failed", error: SERVER_ENV_REJECTED })
 				}
 				return scripted.startOrResumeSession(scope)
 			},
@@ -1586,9 +1586,7 @@ describe("failures the conversation carries to the screen", () => {
 	}
 
 	it("holds the failure a speaker met while its session was starting", async () => {
-		const { controller, detach } = await seatedOn(
-			failingOnFirstStart(SERVER_ENV_REJECTED),
-		)
+		const { controller, detach } = await seatedOn(failingOnFirstStart())
 
 		await controller.send("how do we hold the walls?")
 		await settled()
@@ -1601,10 +1599,10 @@ describe("failures the conversation carries to the screen", () => {
 	})
 
 	it("holds the failure of one speaker when its neighbour of the wave starts", async () => {
-		const { controller, detach } = await seatedOn(
-			failingOnFirstStart(SERVER_ENV_REJECTED),
-			["Ada", "Nyx"],
-		)
+		const { controller, detach } = await seatedOn(failingOnFirstStart(), [
+			"Ada",
+			"Nyx",
+		])
 
 		await controller.send("@Ada and @Nyx")
 		await settled()
