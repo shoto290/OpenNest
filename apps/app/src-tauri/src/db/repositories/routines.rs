@@ -82,7 +82,7 @@ const RECORD_DEDUPE_VALUE: &str =
 	"INSERT INTO routine_dedupe_values (routine_id, value, seen_at) VALUES (?1, ?2, ?3)
 	ON CONFLICT (routine_id, value) DO UPDATE SET seen_at = excluded.seen_at";
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct EnabledRoutine {
 	pub routine: Routine,
 	pub last_occurrence_at: Option<i64>,

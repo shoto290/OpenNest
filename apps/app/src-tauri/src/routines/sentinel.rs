@@ -15,7 +15,7 @@ use crate::conversations::commands::ready;
 use crate::db;
 use crate::db::repositories::routines::EnabledRoutine;
 
-pub const TICK: Duration = Duration::from_secs(5);
+const TICK: Duration = Duration::from_secs(5);
 
 const SETTLED_BATCHES: usize = 64;
 

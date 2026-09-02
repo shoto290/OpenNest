@@ -5,7 +5,7 @@ use std::time::Duration;
 use chrono::{DateTime, SecondsFormat, Utc};
 use notify_debouncer_full::notify::event::{EventKind, ModifyKind, RenameMode};
 use notify_debouncer_full::DebouncedEvent;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Map, Value};
 
 use super::contract::RoutineError;
@@ -16,7 +16,7 @@ pub const SETTLE: Duration = Duration::from_millis(500);
 
 const PATH_FIELD: &str = "path";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Change {
 	Created,
@@ -24,14 +24,14 @@ pub enum Change {
 	Removed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Observation {
 	pub path: PathBuf,
 	pub change: Change,
 	pub at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Settled {
 	pub path: PathBuf,
 	pub change: Change,
@@ -45,20 +45,16 @@ pub fn declared(trigger_config: &Value) -> Result<&str, RoutineError> {
 }
 
 pub fn observed(events: &[DebouncedEvent], at: i64) -> Vec<Observation> {
-	events
-		.iter()
-		.flat_map(|event| {
-			let change = change_of(&event.event.kind);
-			event
-				.event
-				.paths
-				.iter()
-				.filter_map(move |path| {
-					change.map(|change| Observation { path: path.clone(), change, at })
-				})
-				.collect::<Vec<_>>()
-		})
-		.collect()
+	let mut observations = Vec::new();
+	for event in events {
+		let Some(change) = change_of(&event.event.kind) else {
+			continue;
+		};
+		for path in &event.event.paths {
+			observations.push(Observation { path: path.clone(), change, at });
+		}
+	}
+	observations
 }
 
 pub fn settled(observations: &[Observation]) -> Vec<Settled> {
