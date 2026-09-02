@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { createElement } from "react"
+import { createElement, Profiler, type ProfilerOnRenderCallback } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { setRenderProbe } from "@workspace/ui/lib/render-probe"
@@ -54,6 +54,10 @@ const SHORT_TURN_CHUNKS = 11
 
 const LONG_TURN_CHUNKS = 22
 
+const OPEN_STEP_LIMIT = 400
+
+const LONG_TRANSCRIPT_MESSAGES = 500
+
 const replyOf = (chunks: number) =>
 	"word ".repeat(chunks * WORDS_PER_CHUNK).trim()
 
@@ -75,6 +79,64 @@ const seedRoster = async (store: TranscriptStore) => {
 }
 
 type FrameClock = { advance: (now: number) => void }
+
+const seedTranscript = async (
+	store: TranscriptStore,
+	botId: string,
+	messages: number,
+) => {
+	const conversationId = `chat-${botId}`
+	for (let index = 0; index < messages; index += 1) {
+		const turnId = `${botId}-turn-${index}`
+		const id = `${botId}-m${index}`
+		await store.startTurn({ conversationId, id: turnId, startedAt: index })
+		if (index % 2 === 0) {
+			await store.appendUserMessage({
+				authorBotId: null,
+				content: `Question ${index} for the transcript`,
+				conversationId,
+				createdAt: index,
+				id,
+				repliedToMessageId: null,
+				turnId,
+			})
+		} else {
+			await store.openAssistantMessage({
+				authorBotId: botId,
+				conversationId,
+				createdAt: index,
+				id,
+				repliedToMessageId: null,
+				turnId,
+			})
+			await store.appendText(id, `Answer ${index} in prose`)
+			await store.finalizeMessage(id, "complete")
+		}
+		await store.completeTurn(turnId, index)
+	}
+}
+
+type CommitCounter = { count: number; onRender: ProfilerOnRenderCallback }
+
+const countCommits = (): CommitCounter => {
+	const counter: CommitCounter = {
+		count: 0,
+		onRender: () => {
+			counter.count += 1
+		},
+	}
+	return counter
+}
+
+const rowFor = (name: string) => {
+	const labels = [...document.querySelectorAll('[data-slot="roster-row-name"]')]
+	const row = labels.find((label) => label.textContent === name)
+	const button = row?.closest("button")
+	if (!button) {
+		throw new Error(`no roster row for ${name}`)
+	}
+	return button
+}
 
 const takeFrameClock = (): FrameClock => {
 	const pending = new Map<number, FrameRequestCallback>()
@@ -245,6 +307,48 @@ const mountApp = async (replyFor?: (prompt: string) => string) => {
 	return { watch, frames }
 }
 
+const measureLongTranscriptOpen = async () => {
+	layout = fakeLayout()
+	const store = createFakeTranscriptStore({
+		pageSize: LONG_TRANSCRIPT_MESSAGES,
+	})
+	const [space] = await store.spaces()
+	const bot = await store.createBot(
+		newBotIdentity(await store.bots(space.id)),
+		space.id,
+	)
+	await seedTranscript(store, bot.id, LONG_TRANSCRIPT_MESSAGES)
+	harness.store = store
+	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
+	const commits = countCommits()
+	render(
+		createElement(
+			Profiler,
+			{ id: "app", onRender: commits.onRender },
+			createElement(App),
+		),
+	)
+	await settle(MOUNT_MS)
+
+	const openedAt = commits.count
+	let hasPaintedRow = false
+	setRenderProbe((name) => {
+		hasPaintedRow ||= name === "ThreadTurn"
+	})
+	await act(async () => {
+		fireEvent.click(rowFor(bot.name))
+	})
+	for (let step = 0; step < OPEN_STEP_LIMIT && !hasPaintedRow; step += 1) {
+		await settle(STEP_MS)
+	}
+	await settle(MOUNT_MS)
+
+	return {
+		commits: commits.count - openedAt,
+		messages: LONG_TRANSCRIPT_MESSAGES,
+	}
+}
+
 const measureTurn = async (chunks: number) => {
 	const tally = tallyRenders()
 	const { watch } = await mountApp(() => replyOf(chunks))
@@ -348,6 +452,17 @@ describe("PRF1 render baseline", () => {
 			    "quietFrames": 0,
 			    "writes": 1004,
 			  },
+			}
+		`)
+	})
+
+	it("opens a five hundred message transcript", async () => {
+		vi.useFakeTimers()
+
+		expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
+			{
+			  "commits": 10,
+			  "messages": 500,
 			}
 		`)
 	})

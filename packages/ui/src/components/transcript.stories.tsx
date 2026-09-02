@@ -243,7 +243,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A transcript short enough to fit the frame. Nothing scrolls, the reader is following, and the return control stays out of the way.",
+					"A transcript short enough to fit the frame. Nothing scrolls, the reader is following, the return control stays out of the way, and the viewport carries no scroll fade over its edges.",
 			},
 		},
 	},
@@ -257,6 +257,7 @@ export const Default = meta.story({
 			"data-active",
 			"false",
 		)
+		await expect(getComputedStyle(viewport).maskImage).toBe("none")
 	},
 })
 

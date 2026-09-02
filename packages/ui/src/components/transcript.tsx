@@ -259,7 +259,7 @@ const TranscriptBody = ({
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
 			<MessageScrollerViewport
 				aria-label={label ?? t("transcript.label")}
-				className="scrollbar-overlay focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+				className="scrollbar-overlay [animation:none] [mask-image:none] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 			>
 				{older ? (
 					<TranscriptOlderControl
@@ -270,12 +270,13 @@ const TranscriptBody = ({
 
 				<MessageScrollerContent
 					aria-busy={busy}
+					aria-relevant="additions text"
 					className={cn("gap-6", contentClassName)}
 				>
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{rows.map((row) => (
 							<MessageScrollerItem
-								className="flex flex-col gap-6 [content-visibility:visible]"
+								className="flex flex-col gap-6"
 								key={row.key}
 								messageId={row.key}
 								scrollAnchor={row.key === anchorKey}
