@@ -45,8 +45,6 @@ const AIM_FRAME_BUDGET = 20
 
 const TRAVEL_CAP_MS = 10_000
 
-const TRAVEL_REST_MS = 320
-
 const JUMP_INSET = 12
 
 const JUMP_DROP = 6
@@ -378,19 +376,22 @@ export function MessageScroller({
 	const holdAimAtEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
 			const startedAt = performance.now()
-			let restingSince: number | undefined
+			let heldScrollHeight: number | undefined
+			let heldTotalSize: number | undefined
 
 			const reaim = () => {
 				landingFrameRef.current = undefined
-				const now = performance.now()
-				if (now - startedAt >= TRAVEL_CAP_MS || !followingRef.current) return
+				const hasRunOut = performance.now() - startedAt >= TRAVEL_CAP_MS
+				if (hasRunOut || !followingRef.current) return
 
-				if (aimAtEnd(nextBehavior)) {
-					restingSince ??= now
-					if (now - restingSince >= TRAVEL_REST_MS) return
-				} else {
-					restingSince = undefined
-				}
+				const hasLanded = aimAtEnd(nextBehavior)
+				const scrollHeight = viewportRef.current?.scrollHeight ?? 0
+				const totalSize = virtualizerRef.current?.getTotalSize() ?? 0
+				const isGeometryHeld =
+					scrollHeight === heldScrollHeight && totalSize === heldTotalSize
+				heldScrollHeight = scrollHeight
+				heldTotalSize = totalSize
+				if (hasLanded && isGeometryHeld) return
 
 				landingFrameRef.current = requestAnimationFrame(reaim)
 			}

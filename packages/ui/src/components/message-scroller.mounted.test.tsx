@@ -30,6 +30,8 @@ const TRACED_ROWS = 8
 const JUMP_ROW_COUNT = 40
 const JUMP_TARGET = "row-5#2"
 
+type TargetFilter = (target: Element) => boolean
+
 interface ResizeEntry {
 	target: Element
 	borderBoxSize: { inlineSize: number; blockSize: number }[]
@@ -59,11 +61,12 @@ class TestResizeObserver {
 		observers.delete(this)
 	}
 
-	flush() {
-		if (this.targets.size === 0) return
+	flush(accepts: TargetFilter) {
+		const flushed = [...this.targets].filter(accepts)
+		if (flushed.length === 0) return
 
 		this.callback(
-			[...this.targets].map((target) => ({
+			flushed.map((target) => ({
 				target,
 				borderBoxSize: [
 					{ inlineSize: target.clientWidth, blockSize: target.clientHeight },
@@ -73,8 +76,10 @@ class TestResizeObserver {
 	}
 }
 
-const flushResize = () => {
-	for (const observer of [...observers]) observer.flush()
+const acceptsEveryTarget: TargetFilter = () => true
+
+const flushResize = (accepts: TargetFilter = acceptsEveryTarget) => {
+	for (const observer of [...observers]) observer.flush(accepts)
 }
 
 const rowsUpTo = (count: number): MessageScrollerRow[] =>
@@ -248,6 +253,39 @@ const settleMeasurements = async () => {
 	}
 }
 
+const LANDING_FRAME_GAP_MS = 400
+
+const MEASURED_BATCH_CUT = 20
+
+const isInFirstBatch: TargetFilter = (target) => {
+	const index = target.getAttribute("data-index")
+	return index === null || Number(index) < MEASURED_BATCH_CUT
+}
+
+const holdSlowClock = () => {
+	let elapsed = 0
+	vi.spyOn(performance, "now").mockImplementation(() => elapsed)
+	return () => {
+		elapsed += LANDING_FRAME_GAP_MS
+	}
+}
+
+const deliverMeasurementBatch = async (
+	accepts: TargetFilter,
+	tick: () => void,
+) => {
+	for (let index = 0; index < MEASUREMENT_ROUNDS; index += 1) {
+		await act(async () => {
+			flushResize(accepts)
+			tick()
+			await nextFrame()
+		})
+	}
+}
+
+const distanceFromEndOf = (viewport: HTMLElement) =>
+	viewport.scrollHeight - viewport.scrollTop - VIEWPORT_HEIGHT
+
 const readerScrollsToTop = async (viewport: HTMLElement) => {
 	await act(async () => {
 		fireEvent.wheel(viewport)
@@ -347,6 +385,7 @@ describe("MessageScroller mounted", () => {
 	afterEach(() => {
 		cleanup()
 		restoreRowMeasurement()
+		vi.restoreAllMocks()
 		vi.unstubAllGlobals()
 	})
 
@@ -482,6 +521,18 @@ describe("MessageScroller mounted", () => {
 		expect(isLastRowInViewport(viewport)).toBe(true)
 		expect(onFollowChange).toHaveBeenLastCalledWith(true)
 		await waitFor(() => expect(queryJumpToLatest()).toBeNull())
+	})
+
+	it("settles on the end when measurement grows the transcript batch after batch", async () => {
+		stubRowMeasurement()
+		const tick = holdSlowClock()
+		const { scrollerRef, viewport } = renderJumpScroller()
+
+		await deliverMeasurementBatch(isInFirstBatch, tick)
+		await deliverMeasurementBatch(acceptsEveryTarget, tick)
+
+		expect(distanceFromEndOf(viewport)).toBe(0)
+		expect(scrollerRef.current?.isFollowing()).toBe(true)
 	})
 
 	it("lands on an unmounted bubble of a later block once its row is measured", async () => {
