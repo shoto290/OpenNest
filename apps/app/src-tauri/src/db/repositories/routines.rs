@@ -1,6 +1,6 @@
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
-use serde_json::{Map, Value};
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::db::{Access, DatabaseError};
@@ -28,10 +28,9 @@ impl FromSql for RunOutcome {
 fn serialized(outcome: &RunOutcome) -> rusqlite::Result<String> {
 	match serde_json::to_value(outcome) {
 		Ok(Value::String(text)) => Ok(text),
-		Ok(held) => Err(rusqlite::Error::ToSqlConversionFailure(
-			format!("a run outcome serialised as {held}, not as a name").into(),
+		held => Err(rusqlite::Error::ToSqlConversionFailure(
+			format!("a run outcome did not serialise as a name: {held:?}").into(),
 		)),
-		Err(error) => Err(rusqlite::Error::ToSqlConversionFailure(Box::new(error))),
 	}
 }
 
@@ -330,8 +329,7 @@ fn admitted_for_run_now(
 	let held = prepared(&transaction, routine_id, now)?;
 	let facts = facts(&transaction, &held, Dedupe::Missing, now)?;
 	let verdict = core::verdict_for_run_now(&facts, now);
-	let admitted =
-		applied(&transaction, &held, verdict, RunCause::RunNow, Value::Object(Map::new()), now)?;
+	let admitted = applied(&transaction, &held, verdict, RunCause::RunNow, json!({}), now)?;
 	transaction.commit()?;
 	Ok(admitted)
 }
