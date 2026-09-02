@@ -7,6 +7,7 @@ import {
 	type Ref,
 	useEffect,
 	useImperativeHandle,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react"
@@ -138,6 +139,27 @@ const useNewMarks = ({
 	}
 }
 
+type AnchorReleaseInput = {
+	busy?: boolean
+	isFollowing: boolean
+}
+
+const useAnchorRelease = ({ busy, isFollowing }: AnchorReleaseInput) => {
+	const { scrollToEnd } = useMessageScroller()
+	const wasBusyRef = useRef(busy ?? false)
+	const isFollowingRef = useRef(isFollowing)
+
+	isFollowingRef.current = isFollowing
+
+	useLayoutEffect(() => {
+		const hasSettled = wasBusyRef.current && !busy
+		wasBusyRef.current = busy ?? false
+		if (!hasSettled || !isFollowingRef.current) return
+
+		scrollToEnd({ behavior: "auto" })
+	}, [busy, scrollToEnd])
+}
+
 const useTranscriptHandle = (
 	scrollerRef: Ref<TranscriptHandle> | undefined,
 	rows: TranscriptItem[],
@@ -245,6 +267,9 @@ const TranscriptBody = ({
 	const isReducedMotion = useReducedMotion() ?? false
 	const behavior: ScrollBehavior = isReducedMotion ? "auto" : "smooth"
 	const { end: hasContentBelow } = useMessageScrollerScrollable()
+
+	useAnchorRelease({ busy, isFollowing: !hasContentBelow })
+
 	const { markKey, newCount } = useNewMarks({
 		countsNewMessages,
 		isFollowing: !hasContentBelow,
@@ -281,7 +306,7 @@ const TranscriptBody = ({
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{rows.map((row) => (
 							<MessageScrollerItem
-								className="flex flex-col gap-6"
+								className="flex flex-col gap-6 [content-visibility:visible]"
 								key={row.key}
 								messageId={row.key}
 								scrollAnchor={row.key === anchorKey}

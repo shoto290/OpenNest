@@ -54,6 +54,8 @@ const ANSWER_WORDS = (
 	"neither does."
 ).split(" ")
 
+const SHORT_ANSWER_WORDS = ANSWER_WORDS.slice(0, 1)
+
 const STREAM_TICK_MS = 16
 
 const ONE_LINE = 24
@@ -93,6 +95,19 @@ const settleScroll = () =>
 
 const atLiveEdge = (viewport: HTMLElement) =>
 	waitFor(() => expect(distanceFromEnd(viewport)).toBeLessThanOrEqual(2))
+
+const RESTING_PADDING = 12
+
+const spaceUnder = (viewport: HTMLElement, bubble: HTMLElement) => {
+	const bottom =
+		bubble.getBoundingClientRect().bottom -
+		viewport.getBoundingClientRect().top +
+		viewport.scrollTop
+	return viewport.scrollHeight - bottom
+}
+
+const expectRestingPadding = (viewport: HTMLElement, bubble: HTMLElement) =>
+	expect(spaceUnder(viewport, bubble)).toBeLessThanOrEqual(RESTING_PADDING)
 
 const RETURN_CONTROL = { name: /Jump to latest|new messages?/ }
 
@@ -156,9 +171,14 @@ const TranscriptDemo = ({
 	)
 }
 
-const StreamingDemo = (
-	transcriptProps: Omit<TranscriptProps, "children" | "rows">,
-) => {
+type StreamingDemoProps = Omit<TranscriptProps, "children" | "rows"> & {
+	answerWords?: string[]
+}
+
+const StreamingDemo = ({
+	answerWords = ANSWER_WORDS,
+	...transcriptProps
+}: StreamingDemoProps) => {
 	const [shown, setShown] = useState(HISTORY)
 	const [words, setWords] = useState(0)
 	const [isStreaming, setIsStreaming] = useState(false)
@@ -173,7 +193,7 @@ const StreamingDemo = (
 		timerRef.current = window.setInterval(() => {
 			delivered += 1
 			setWords(delivered)
-			if (delivered < ANSWER_WORDS.length) return
+			if (delivered < answerWords.length) return
 			window.clearInterval(timerRef.current)
 			setIsStreaming(false)
 		}, STREAM_TICK_MS)
@@ -185,7 +205,7 @@ const StreamingDemo = (
 					{
 						id: "answer",
 						from: "assistant" as const,
-						text: ANSWER_WORDS.slice(0, words).join(" "),
+						text: answerWords.slice(0, words).join(" "),
 					},
 				]
 			: []
@@ -198,7 +218,13 @@ const StreamingDemo = (
 				className="flex-1"
 				contentClassName="flex flex-col p-3"
 				rows={toItems([...shown, ...streamed])}
-			/>
+			>
+				{isStreaming ? (
+					<div className="flex h-10 items-center text-muted-foreground text-xs">
+						Working
+					</div>
+				) : null}
+			</Transcript>
 			<div className="flex items-center gap-2 border-border border-t p-2">
 				<Button disabled={isStreaming} onClick={sendPrompt} size="sm">
 					Send prompt
@@ -485,6 +511,66 @@ export const MarksAndCountsNewMessages = meta.story({
 			expect(
 				canvas.getByRole("button", { name: "2 new messages" }),
 			).toBeInTheDocument(),
+		)
+	},
+})
+
+export const RestsWithoutABand = meta.story({
+	args: { anchorOnSend: true },
+	render: (args) => (
+		<StreamingDemo {...args} answerWords={SHORT_ANSWER_WORDS} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same solo thread once the answer has landed and the working row has left the tail. The send anchor is released, so the room it held under the last bubble collapses and only the resting padding is left between that bubble and the composer.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await atLiveEdge(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitFor(() => expect(canvas.getByText("Working")).toBeInTheDocument())
+		await waitFor(() => expect(canvas.queryByText("Working")).toBeNull(), {
+			timeout: 5000,
+		})
+
+		await expectRestingPadding(
+			viewport,
+			canvas.getByText(SHORT_ANSWER_WORDS.join(" ")),
+		)
+	},
+})
+
+export const ConversationRestsWithoutABand = meta.story({
+	args: { countsNewMessages: true, marksNewMessages: true },
+	render: (args) => (
+		<StreamingDemo {...args} answerWords={SHORT_ANSWER_WORDS} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same rest in a conversation, where nothing is anchored on send. Once the answer has landed and the working row has left the tail, the space under the last bubble is the resting padding, not a band left by a row the browser never sized.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await atLiveEdge(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitFor(() => expect(canvas.getByText("Working")).toBeInTheDocument())
+		await waitFor(() => expect(canvas.queryByText("Working")).toBeNull(), {
+			timeout: 5000,
+		})
+
+		await expectRestingPadding(
+			viewport,
+			canvas.getByText(SHORT_ANSWER_WORDS.join(" ")),
 		)
 	},
 })

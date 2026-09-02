@@ -22,9 +22,24 @@ const harness = vi.hoisted(
 	}),
 )
 
+const builds = vi.hoisted(() => ({ markdownRenders: 0 }))
+
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
 }))
+
+vi.mock("@workspace/ui/components/markdown", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("@workspace/ui/components/markdown")>()
+	const { createElement: element } = await import("react")
+	return {
+		...actual,
+		Markdown: (props: Parameters<typeof actual.Markdown>[0]) => {
+			builds.markdownRenders += 1
+			return element(actual.Markdown, props)
+		},
+	}
+})
 
 vi.mock("@/lib/chat/create-driver", () => ({
 	createChatDriver: () => harness.driver,
@@ -39,6 +54,8 @@ const STEP_LIMIT = 200
 const STEPS_INTO_TURN = 6
 
 const MOUNT_MS = 200
+
+const MOUNT_TASKS = 200
 
 const SPACE_COUNT = 3
 
@@ -57,6 +74,12 @@ const LONG_TURN_CHUNKS = 22
 const OPEN_STEP_LIMIT = 400
 
 const LONG_TRANSCRIPT_MESSAGES = 500
+
+const LONG_THREAD_RUNS = 200
+
+const OPEN_BUDGET_MS = 300
+
+const OPEN_FRAME_LIMIT = 4_000
 
 const replyOf = (chunks: number) =>
 	"word ".repeat(chunks * WORDS_PER_CHUNK).trim()
@@ -307,6 +330,57 @@ const mountApp = async (replyFor?: (prompt: string) => string) => {
 	return { watch, frames }
 }
 
+const nextTask = (frames: FrameClock) =>
+	act(async () => {
+		frames.advance(performance.now())
+		await new Promise((resolve) => {
+			setTimeout(resolve, 0)
+		})
+	})
+
+const flushTasks = async (frames: FrameClock, count: number) => {
+	for (let step = 0; step < count; step += 1) {
+		await nextTask(frames)
+	}
+}
+
+const measureThreadOpen = async () => {
+	const frames = takeFrameClock()
+	layout = fakeLayout()
+	const messages = LONG_THREAD_RUNS * 2
+	const store = createFakeTranscriptStore()
+	const [space] = await store.spaces()
+	const bot = await store.createBot(
+		newBotIdentity(await store.bots(space.id)),
+		space.id,
+	)
+	await seedTranscript(store, bot.id, messages)
+	harness.store = store
+	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
+	render(createElement(App))
+	await flushTasks(frames, MOUNT_TASKS)
+
+	const lastMessage = `Answer ${messages - 1} in prose`
+	const startedAt = performance.now()
+	await act(async () => {
+		fireEvent.click(rowFor(bot.name))
+	})
+	let painted = 0
+	while (
+		painted < OPEN_FRAME_LIMIT &&
+		!document.body.textContent?.includes(lastMessage)
+	) {
+		await nextTask(frames)
+		painted += 1
+	}
+	const elapsedMs = performance.now() - startedAt
+	if (painted >= OPEN_FRAME_LIMIT) {
+		throw new Error(`no last message for a ${LONG_THREAD_RUNS} run thread`)
+	}
+
+	return { elapsedMs, runs: LONG_THREAD_RUNS }
+}
+
 const measureLongTranscriptOpen = async () => {
 	layout = fakeLayout()
 	const store = createFakeTranscriptStore({
@@ -331,6 +405,7 @@ const measureLongTranscriptOpen = async () => {
 	await settle(MOUNT_MS)
 
 	const openedAt = commits.count
+	builds.markdownRenders = 0
 	let hasPaintedRow = false
 	setRenderProbe((name) => {
 		hasPaintedRow ||= name === "ThreadTurn"
@@ -345,6 +420,7 @@ const measureLongTranscriptOpen = async () => {
 
 	return {
 		commits: commits.count - openedAt,
+		markdownProcessors: builds.markdownRenders,
 		messages: LONG_TRANSCRIPT_MESSAGES,
 	}
 }
@@ -456,12 +532,20 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
+	it("shows the last message of a two hundred run thread inside the budget", async () => {
+		const opened = await measureThreadOpen()
+
+		expect(opened.runs).toBe(LONG_THREAD_RUNS)
+		expect(opened.elapsedMs).toBeLessThan(OPEN_BUDGET_MS)
+	})
+
 	it("opens a five hundred message transcript", async () => {
 		vi.useFakeTimers()
 
 		expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
 			{
 			  "commits": 10,
+			  "markdownProcessors": 500,
 			  "messages": 500,
 			}
 		`)
