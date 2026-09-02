@@ -143,7 +143,7 @@ async fn carried<R: Runtime>(
 	let source =
 		declared_source(app, database, &routine.bot_id, &routine.trigger_source_id).await?;
 	let event = TriggerEvent {
-		routine_id: routine.id.clone(),
+		routine_id: routine.id,
 		source,
 		payload: payload(body, SystemClock.now_ms())?,
 	};
