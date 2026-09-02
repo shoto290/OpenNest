@@ -40,7 +40,7 @@ export const unavailableServersSection = (rejections: string[]): string =>
 	[
 		"# Servers left out of this session",
 		rejections.map((detail) => `- ${detail}`).join("\n"),
-		"Answer the person with the tools you still hold. When what they ask for needs one of these servers, tell them that server is unavailable and name the variable no scope defines, so they can define it. Naming the server and the variable is the one exception to saying nothing about the machinery you run on.",
+		"Answer the person with the tools you still hold. When what they ask for needs one of these servers, tell them that server is unavailable and give them the reason listed for it, so they can act on it. Naming that server and its reason is the one exception to saying nothing about the machinery you run on.",
 	].join("\n\n")
 
 export const skillLine = (directory: string): string =>

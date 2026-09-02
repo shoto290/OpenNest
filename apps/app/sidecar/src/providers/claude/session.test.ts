@@ -491,11 +491,24 @@ describe("layerFor", () => {
 		)
 	})
 
-	it("tells the bot to answer with the tools it holds and to name what it lacks", () => {
+	it("tells the bot to answer with the tools it holds and to give the reason listed", () => {
 		const section = unavailableServersSection(leftOut)
 
 		expect(section).toContain("Answer the person with the tools you still hold")
-		expect(section).toContain("name the variable no scope defines")
+		expect(section).toContain("give them the reason listed for it")
+		expect(section).toContain(
+			"the one exception to saying nothing about the machinery you run on",
+		)
+	})
+
+	it("holds for a rejection naming no variable, such as an unreadable store", () => {
+		const section = unavailableServersSection([
+			"the environment store could not be read",
+			'the server "clock" was left out: the environment store could not be read',
+		])
+
+		expect(section).not.toContain("variable")
+		expect(section).toContain("give them the reason listed for it")
 		expect(section).toContain(
 			"the one exception to saying nothing about the machinery you run on",
 		)
