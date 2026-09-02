@@ -451,11 +451,11 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measurePage()).toMatchInlineSnapshot(`
 			{
 			  "commitsToFirstRow": 5,
-			  "commitsToSettled": 11,
-			  "highlightCalls": 4,
+			  "commitsToSettled": 15,
+			  "highlightCalls": 5,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 12,
-			  "paintedRows": 8,
+			  "markdownProcessors": 16,
+			  "paintedRows": 11,
 			}
 		`)
 	})

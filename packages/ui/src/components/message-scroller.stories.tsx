@@ -3,12 +3,17 @@ import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Button } from "@workspace/ui/components/button"
+import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	MessageScroller,
 	type MessageScrollerHandle,
 	type MessageScrollerProps,
 	type MessageScrollerRow,
 } from "@workspace/ui/components/message-scroller"
+import {
+	ToolApproval,
+	ToolApprovalCode,
+} from "@workspace/ui/components/tool-approval"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -2179,5 +2184,141 @@ export const NewMessageSeparatorInDark = meta.story({
 
 		await expect(line).toBeVisible()
 		await marksReadTheToken(line)
+	},
+})
+
+const MEASURE_FRAME_CLASS =
+	"flex h-[1600px] w-[800px] flex-col overflow-hidden rounded-xl border border-border bg-background"
+
+const ONE_LINE_REPLY = "Queued behind the index build."
+
+const MARKDOWN_ANSWER = [
+	"It rewrites three tables: accounts, memberships and invites. Accounts gains a nullable region column, memberships loses the legacy role string, and invites moves its expiry to a timestamptz.",
+	"The legacy role string is copied into role_id before the column is dropped, so the drop is the last statement of the transaction and a failure halfway rolls every statement back.",
+	"The down migration recreates the role string from role_id, which is lossless for every row the up migration wrote, so the rollback path stays open once it has shipped.",
+].join("\n\n")
+
+const CODE_ANSWER = [
+	"```ts",
+	"export const migrate = async (db: Database) => {",
+	'  await db.addColumn("accounts", "region", "text")',
+	'  await db.copyColumn("memberships", "role", "role_id")',
+	'  await db.dropColumn("memberships", "role")',
+	"}",
+	"```",
+].join("\n")
+
+const USER_MESSAGE =
+	"Can you walk me through what the migration script touches?"
+
+const TOOL_DETAIL = "bun run migrate --dry-run"
+
+const MEASURED_ROWS: MessageScrollerRow[] = [
+	{
+		key: "one-line-reply",
+		messageIds: ["one-line-reply"],
+		render: () => (
+			<AssistantTurn>
+				<Markdown>{ONE_LINE_REPLY}</Markdown>
+			</AssistantTurn>
+		),
+	},
+	{
+		key: "markdown-answer",
+		messageIds: ["markdown-answer"],
+		render: () => (
+			<AssistantTurn>
+				<Markdown>{MARKDOWN_ANSWER}</Markdown>
+			</AssistantTurn>
+		),
+	},
+	{
+		key: "code-answer",
+		messageIds: ["code-answer"],
+		render: () => (
+			<AssistantTurn>
+				<Markdown>{CODE_ANSWER}</Markdown>
+			</AssistantTurn>
+		),
+	},
+	{
+		key: "tool-block",
+		messageIds: ["tool-block"],
+		render: () => (
+			<AssistantTurn fills>
+				<ToolApproval
+					description="Claude Code is waiting on you before it runs this tool."
+					tool="Bash"
+					title="Run the migration dry run"
+				>
+					<ToolApprovalCode code={TOOL_DETAIL} />
+				</ToolApproval>
+			</AssistantTurn>
+		),
+	},
+	{
+		key: "user-message",
+		messageIds: ["user-message"],
+		render: () => <UserTurn>{USER_MESSAGE}</UserTurn>,
+	},
+]
+
+const heightsByShape = (canvasElement: HTMLElement) => {
+	const rows = canvasElement.querySelectorAll<HTMLElement>(
+		'[data-slot="message-scroller-row"]',
+	)
+	return Object.fromEntries(
+		[...rows].map((row, index) => [
+			MEASURED_ROWS[Number(row.dataset.index ?? index)].key,
+			Math.round(row.getBoundingClientRect().height),
+		]),
+	)
+}
+
+const sortedHeights = (heights: Record<string, number>) =>
+	Object.values(heights).sort((left, right) => left - right)
+
+const medianOf = (heights: number[]) =>
+	heights[Math.floor((heights.length - 1) / 2)]
+
+const p90Of = (heights: number[]) =>
+	heights[Math.ceil(heights.length * 0.9) - 1]
+
+export const RowHeights = meta.story({
+	name: "Row Heights",
+	render: () => (
+		<div className={MEASURE_FRAME_CLASS}>
+			<MessageScroller
+				className="flex-1"
+				contentClassName="flex flex-col p-3"
+				label="Conversation"
+				rowGap={ROW_GAP}
+				rows={MEASURED_ROWS}
+			/>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The ruler behind `ESTIMATED_ROW_HEIGHT` and the perf harness's row heights: one row per content shape a transcript carries, laid out at the 800px width the harness assumes. The play function pins each measured height, plus the median and the p90 of the set, so a change to a turn's padding, a bubble's radius or the markdown scale shows up here as a failing number instead of silently rotting the estimate the virtualizer starts from.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(() =>
+			expect(heightsByShape(canvasElement)).toEqual({
+				"code-answer": 185,
+				"markdown-answer": 252,
+				"one-line-reply": 44,
+				"tool-block": 234,
+				"user-message": 44,
+			}),
+		)
+
+		const heights = sortedHeights(heightsByShape(canvasElement))
+
+		await expect(medianOf(heights)).toBe(185)
+		await expect(p90Of(heights)).toBe(252)
 	},
 })

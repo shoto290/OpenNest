@@ -80,6 +80,14 @@ const seedRoster = async (store: TranscriptStore) => {
 	}
 }
 
+const MEASURED_SHAPE_LENGTHS = [30, 58, 212, 539]
+
+const shapedContent = (text: string, index: number) =>
+	text.padEnd(
+		MEASURED_SHAPE_LENGTHS[index % MEASURED_SHAPE_LENGTHS.length],
+		" and more of the same answer",
+	)
+
 const seedTranscript = async (
 	store: TranscriptStore,
 	botId: string,
@@ -93,7 +101,7 @@ const seedTranscript = async (
 		if (index % 2 === 0) {
 			await store.appendUserMessage({
 				authorBotId: null,
-				content: `Question ${index} for the transcript`,
+				content: shapedContent(`Question ${index} for the transcript`, index),
 				conversationId,
 				createdAt: index,
 				id,
@@ -109,7 +117,10 @@ const seedTranscript = async (
 				repliedToMessageId: null,
 				turnId,
 			})
-			await store.appendText(id, `Answer ${index} in prose`)
+			await store.appendText(
+				id,
+				shapedContent(`Answer ${index} in prose`, index),
+			)
 			await store.finalizeMessage(id, "complete")
 		}
 		await store.completeTurn(turnId, index)
@@ -468,7 +479,7 @@ describe("PRF1 render baseline", () => {
 		expect(opened.mountedRuns).toBeLessThan(MOUNTED_RUN_LIMIT)
 		expect(opened).toMatchInlineSnapshot(`
 			{
-			  "commits": 10,
+			  "commits": 12,
 			  "messages": 500,
 			  "mountedRuns": 8,
 			}

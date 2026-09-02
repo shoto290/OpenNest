@@ -2,7 +2,9 @@ const VIEWPORT_WIDTH = 800
 
 const VIEWPORT_HEIGHT = 600
 
-const ROW_HEIGHT = 120
+const ROW_HEIGHT_BASE = 43
+
+const ROW_HEIGHT_PER_CHARACTER = 0.42
 
 const VIEWPORT_SELECTOR = '[data-slot="message-scroller"] > section'
 
@@ -10,8 +12,13 @@ const ROW_SELECTOR = '[data-slot="message-scroller-row"]'
 
 export type FakeLayout = { restore: () => void }
 
+const rowHeightFor = (text: string) =>
+	Math.round(ROW_HEIGHT_BASE + ROW_HEIGHT_PER_CHARACTER * text.length)
+
 const heightOf = (element: Element) => {
-	if (element.matches(ROW_SELECTOR)) return ROW_HEIGHT
+	if (element.matches(ROW_SELECTOR)) {
+		return rowHeightFor(element.textContent ?? "")
+	}
 	if (element.matches(VIEWPORT_SELECTOR)) return VIEWPORT_HEIGHT
 	return 0
 }
