@@ -219,6 +219,16 @@ pub struct RunClosing {
 	pub cost_usd: Option<f64>,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub model_usage: Option<serde_json::Value>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub reported_turn_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportedRun {
+	pub turn_id: String,
+	pub routine_title: String,
+	pub trigger_source_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -319,6 +329,14 @@ pub enum RoutineError {
 	UnknownParticipant { conversation_id: String, bot_id: String },
 	#[serde(rename_all = "camelCase")]
 	UnknownSource { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownTurn { id: String },
+	#[serde(rename_all = "camelCase")]
+	TurnOfAnotherConversation { turn_id: String, conversation_id: String },
+	#[serde(rename_all = "camelCase")]
+	TurnAlreadyReported { turn_id: String, run_id: String },
+	#[serde(rename_all = "camelCase")]
+	TurnWithoutReport { turn_id: String, outcome: RunOutcome },
 	#[serde(rename_all = "camelCase")]
 	BlankField { field: String },
 	#[serde(rename_all = "camelCase")]
@@ -548,6 +566,46 @@ mod tests {
 		assert_eq!(serialised_fields(&draft), mirrored_fields("RoutineDraft"));
 		assert_eq!(serialised_fields(&edit), mirrored_fields("RoutineEdit"));
 		assert_eq!(serialised_fields(&requested), mirrored_fields("RunRequested"));
+	}
+
+	#[test]
+	fn a_closing_and_a_reported_run_name_the_fields_the_front_declares() {
+		let closing = RunClosing {
+			outcome: RunOutcome::Ok,
+			reason: Some("done".to_owned()),
+			cost_usd: Some(0.42),
+			model_usage: Some(json!({ "sonnet": { "inputTokens": 120 } })),
+			reported_turn_id: Some("t1".to_owned()),
+		};
+		let reported = ReportedRun {
+			turn_id: "t1".to_owned(),
+			routine_title: "Nightly report".to_owned(),
+			trigger_source_id: "schedule".to_owned(),
+		};
+
+		assert_eq!(serialised_fields(&closing), mirrored_fields("RunClosing"));
+		assert_eq!(serialised_fields(&reported), mirrored_fields("ReportedRun"));
+	}
+
+	#[test]
+	fn every_refusal_of_a_reported_turn_carries_the_kind_the_front_declares() {
+		let refusals = [
+			RoutineError::UnknownTurn { id: "t1".to_owned() },
+			RoutineError::TurnOfAnotherConversation {
+				turn_id: "t1".to_owned(),
+				conversation_id: "c2".to_owned(),
+			},
+			RoutineError::TurnAlreadyReported {
+				turn_id: "t1".to_owned(),
+				run_id: "run-1".to_owned(),
+			},
+			RoutineError::TurnWithoutReport {
+				turn_id: "t1".to_owned(),
+				outcome: RunOutcome::Nothing,
+			},
+		];
+
+		assert_eq!(tagged(&refusals), mirrored("ReportRefusal"));
 	}
 
 	#[test]

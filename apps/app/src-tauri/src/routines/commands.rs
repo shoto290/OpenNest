@@ -4,8 +4,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Runtime, State};
 
 use super::contract::{
-	Filter, Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineKey, RoutineRun, RunClosing,
-	RunRequested, TriggerDecision, TriggerSource,
+	Filter, ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineKey, RoutineRun,
+	RunClosing, RunRequested, TriggerDecision, TriggerSource,
 };
 use super::core::{self, Clock, RunSink, SystemClock};
 use super::filter;
@@ -140,6 +140,14 @@ pub async fn routine_runs(
 	limit: u32,
 ) -> Result<Vec<RoutineRun>, RoutineError> {
 	ready(&state)?.routines().runs(routine_id, limit).await
+}
+
+#[tauri::command]
+pub async fn routine_reported_runs(
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+) -> Result<Vec<ReportedRun>, RoutineError> {
+	ready(&state)?.routines().reported(conversation_id).await
 }
 
 #[tauri::command]

@@ -75,6 +75,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
 		routines::commands::routine_delete,
 		routines::commands::routine_list,
 		routines::commands::routine_runs,
+		routines::commands::routine_reported_runs,
 		routines::commands::routine_run_now,
 		routines::commands::routine_renew_lease,
 		routines::commands::routine_close_run,
