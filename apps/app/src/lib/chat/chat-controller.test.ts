@@ -1488,25 +1488,6 @@ describe("history above the transcript", () => {
 		expect(ids[0]).toBe("stored-1")
 	})
 
-	it("drops the pages loaded above the window when the reader leaves", async () => {
-		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
-		const other = await store.createBot(botIdentity({ name: "Second" }))
-		const harness = await bootedHarness({ store })
-		await harness.controller.loadOlder()
-		await harness.controller.loadOlder()
-		await harness.controller.loadOlder()
-		expect(harness.controller.getState().messages).toHaveLength(80)
-
-		await harness.controller.open(other.id)
-		await vi.runAllTimersAsync()
-
-		const left = harness.controller.stateFor(BOT)
-		expect(left.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE)
-		expect(left.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
-		expect(left.hasOlder).toBe(true)
-		harness.detach()
-	})
-
 	it("pages back into the store when the reader comes back", async () => {
 		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
 		const other = await store.createBot(botIdentity({ name: "Second" }))
@@ -1514,9 +1495,10 @@ describe("history above the transcript", () => {
 		await harness.controller.loadOlder()
 		await harness.controller.loadOlder()
 		await harness.controller.loadOlder()
+		harness.controller.leave(BOT)
+
 		await harness.controller.open(other.id)
 		await vi.runAllTimersAsync()
-
 		await harness.controller.open(BOT)
 		await vi.runAllTimersAsync()
 		await harness.controller.loadOlder()

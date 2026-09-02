@@ -717,9 +717,6 @@ export function createChatController(
 	}
 
 	const choose = (botId: string | null) => {
-		if (chosenBotId !== null && chosenBotId !== botId) {
-			leaveThread(chosenBotId)
-		}
 		chosenBotId = botId
 		publish()
 	}
