@@ -1,8 +1,19 @@
+use tauri::{AppHandle, Manager, Runtime};
+
 #[cfg(target_os = "macos")]
 pub use macos::center_in_header;
 
 #[cfg(not(target_os = "macos"))]
 pub fn center_in_header(_window: &tauri::WebviewWindow) {}
+
+pub fn raise_main<R: Runtime>(app: &AppHandle<R>) {
+	let Some(window) = app.get_webview_window("main") else {
+		return;
+	};
+	let _ = window.unminimize();
+	let _ = window.show();
+	let _ = window.set_focus();
+}
 
 #[cfg(target_os = "macos")]
 mod macos {

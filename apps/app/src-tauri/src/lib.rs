@@ -23,11 +23,7 @@ use commands::invoke_handler;
 pub fn run() {
 	tauri::Builder::default()
 		.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-			if let Some(window) = app.get_webview_window("main") {
-				let _ = window.unminimize();
-				let _ = window.show();
-				let _ = window.set_focus();
-			}
+			window_controls::raise_main(app);
 		}))
 		.plugin(
 			tauri_plugin_window_state::Builder::default()
