@@ -524,6 +524,15 @@ const speakingRowsIn = (
 		return seated ? [{ seated, speaking }] : []
 	})
 
+const waitingRowsIn = (
+	waitingBotIds: string[],
+	speakers: SpeakingBot[],
+	bots: RosterBot[],
+): RosterBot[] =>
+	waitingBotIds
+		.filter((botId) => !speakers.some((speaking) => speaking.botId === botId))
+		.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
+
 type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
 	bots: RosterBot[]
@@ -556,14 +565,9 @@ const ConversationThreadTail = ({
 					stoppable
 				/>
 			))}
-			{waitingBotIds
-				.filter(
-					(botId) => !speakers.some((speaking) => speaking.botId === botId),
-				)
-				.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
-				.map((seated) => (
-					<WorkingBot face={seated} key={seated.id} kind="waiting" />
-				))}
+			{waitingRowsIn(waitingBotIds, speakers, bots).map((seated) => (
+				<WorkingBot face={seated} key={seated.id} kind="waiting" />
+			))}
 		</>
 	)
 }
