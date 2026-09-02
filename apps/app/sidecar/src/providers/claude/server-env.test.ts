@@ -99,6 +99,16 @@ describe("resolveServers", () => {
 		])
 	})
 
+	it("reports nothing and keeps every server when the store failure costs none", () => {
+		const { servers, rejections } = resolveServers(
+			{ plain },
+			{ failure: "the environment store could not be read" },
+		)
+
+		expect(servers.plain).toBe(plain)
+		expect(rejections).toEqual([])
+	})
+
 	it("keeps a value of a scope out of what it reports when the store could not be read", () => {
 		const { rejections } = resolveServers(
 			{ probe },

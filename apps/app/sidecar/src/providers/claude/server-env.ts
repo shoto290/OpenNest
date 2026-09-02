@@ -85,7 +85,7 @@ export const resolveServers = (
 	env: ServerEnv,
 ): ResolvedServers => {
 	const kept: Servers = {}
-	const rejections = env.failure ? [env.failure] : []
+	const rejections: string[] = []
 	for (const [name, server] of Object.entries(servers)) {
 		if (!declaresVariable(server)) {
 			kept[name] = server
@@ -108,7 +108,13 @@ export const resolveServers = (
 		}
 		kept[name] = expanded
 	}
-	return { servers: kept, rejections }
+	return {
+		servers: kept,
+		rejections:
+			env.failure && rejections.length
+				? [env.failure, ...rejections]
+				: rejections,
+	}
 }
 
 export const resolvedServers = (request: SessionRequest): ResolvedServers =>
