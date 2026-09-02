@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
 	type TerminalCompletion,
+	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
 	type TranscriptCompletion,
 	type TranscriptDraft,
@@ -693,16 +694,16 @@ describe("leaving a thread", () => {
 		drafts.reduce((state, draft) => append(state, draft, false), SEEDED)
 
 	const grown = saidOffTheLiveEdge(
-		Array.from({ length: TRANSCRIPT_WINDOW_SIZE + OVERFLOW }, (_, index) =>
+		Array.from({ length: TRANSCRIPT_PAGE_SIZE + OVERFLOW }, (_, index) =>
 			settledDraft(`m-${index + 1}`),
 		),
 	)
 
-	it("drops the pages loaded past the window", () => {
+	it("drops everything the reader loaded above one page", () => {
 		const left = leave(grown)
 
 		expect(selectMessages(left, CONVERSATION)).toHaveLength(
-			TRANSCRIPT_WINDOW_SIZE,
+			TRANSCRIPT_PAGE_SIZE,
 		)
 		expect(idsOf(left)).not.toContain(`m-${OVERFLOW}`)
 		expect(idsOf(left)).toContain(`m-${OVERFLOW + 1}`)
@@ -713,7 +714,7 @@ describe("leaving a thread", () => {
 		expect(selectHasMore(leave(grown), CONVERSATION)).toBe(true)
 	})
 
-	it("holds a thread that never grew past the window", () => {
+	it("holds a thread that never grew past one page", () => {
 		const short = saidOffTheLiveEdge([settledDraft("m-1")])
 
 		expect(leave(short)).toBe(short)
@@ -723,7 +724,7 @@ describe("leaving a thread", () => {
 		const streaming = saidOffTheLiveEdge([
 			settledDraft("m-1"),
 			streamingDraft("live"),
-			...Array.from({ length: TRANSCRIPT_WINDOW_SIZE + OVERFLOW }, (_, index) =>
+			...Array.from({ length: TRANSCRIPT_PAGE_SIZE + OVERFLOW }, (_, index) =>
 				settledDraft(`m-${index + 2}`),
 			),
 		])
@@ -733,7 +734,7 @@ describe("leaving a thread", () => {
 		expect(idsOf(left)).not.toContain("m-1")
 		expect(idsOf(left)).toContain("live")
 		expect(selectMessages(left, CONVERSATION)).toHaveLength(
-			TRANSCRIPT_WINDOW_SIZE + OVERFLOW + 1,
+			TRANSCRIPT_PAGE_SIZE + OVERFLOW + 1,
 		)
 	})
 

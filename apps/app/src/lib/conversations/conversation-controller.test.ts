@@ -12,7 +12,7 @@ import {
 } from "./scripted-driver"
 import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
-import { TRANSCRIPT_WINDOW_SIZE } from "./transcript-contract"
+import { TRANSCRIPT_PAGE_SIZE } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
 
 import type {
@@ -1741,7 +1741,7 @@ describe("the pages a conversation holds", () => {
 		controller.leave()
 
 		const state = controller.getState()
-		expect(state.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE)
+		expect(state.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE)
 		expect(state.messages.at(-1)?.id).toBe(`m-${HISTORY}`)
 		expect(state.hasOlder).toBe(true)
 		detach()
@@ -1757,9 +1757,9 @@ describe("the pages a conversation holds", () => {
 		await controller.loadOlder()
 
 		const state = controller.getState()
-		expect(state.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE + PAGE)
+		expect(state.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE + PAGE)
 		expect(state.messages.at(0)?.id).toBe(
-			`m-${HISTORY - TRANSCRIPT_WINDOW_SIZE - PAGE + 1}`,
+			`m-${HISTORY - TRANSCRIPT_PAGE_SIZE - PAGE + 1}`,
 		)
 		detach()
 	})

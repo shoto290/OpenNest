@@ -638,7 +638,7 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
-	it("reopens a thread on its window, not on the pages it had loaded", async () => {
+	it("reopens a thread on one page, like a cold open", async () => {
 		expect(await measureThreadReopen()).toMatchInlineSnapshot(`
 			{
 			  "cold": {
@@ -649,10 +649,10 @@ describe("PRF1 render baseline", () => {
 			  "grown": 80,
 			  "reopened": {
 			    "commits": 7,
-			    "markdownProcessors": 60,
+			    "markdownProcessors": 20,
 			    "tasksToLastMessage": 0,
 			  },
-			  "rows": 60,
+			  "rows": 20,
 			}
 		`)
 	})

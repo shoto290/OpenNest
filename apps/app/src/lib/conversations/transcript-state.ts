@@ -1,5 +1,6 @@
 import {
 	type TerminalCompletion,
+	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
 	type TranscriptCompletion,
 	type TranscriptDraft,
@@ -223,9 +224,10 @@ const applyPageLoaded = (
 
 const droppedCount = (
 	messages: TranscriptMessage[],
+	kept: number,
 	isHeld: (message: TranscriptMessage) => boolean,
 ): number => {
-	const overflow = messages.length - TRANSCRIPT_WINDOW_SIZE
+	const overflow = messages.length - kept
 	if (overflow <= 0) {
 		return 0
 	}
@@ -250,7 +252,9 @@ const applyMessageAppended = (
 	const grown = [...current.messages, { ...draft, seq }]
 	const isRunning = (message: TranscriptMessage) =>
 		message.turnId === draft.turnId || isUnfinished(message)
-	const dropped = isAtLiveEdge ? droppedCount(grown, isRunning) : 0
+	const dropped = isAtLiveEdge
+		? droppedCount(grown, TRANSCRIPT_WINDOW_SIZE, isRunning)
+		: 0
 	return withConversation(state, draft.conversationId, {
 		messages: grown.slice(dropped),
 		hasMore: current.hasMore || dropped > 0,
@@ -265,7 +269,11 @@ const applyThreadLeft = (
 	if (!current) {
 		return state
 	}
-	const dropped = droppedCount(current.messages, isUnfinished)
+	const dropped = droppedCount(
+		current.messages,
+		TRANSCRIPT_PAGE_SIZE,
+		isUnfinished,
+	)
 	if (dropped === 0) {
 		return state
 	}

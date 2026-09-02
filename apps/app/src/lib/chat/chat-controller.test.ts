@@ -27,7 +27,7 @@ import {
 } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
 import {
-	TRANSCRIPT_WINDOW_SIZE,
+	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptCompletion,
 	type TranscriptMessage,
 } from "../conversations/transcript-contract"
@@ -1501,7 +1501,7 @@ describe("history above the transcript", () => {
 		await vi.runAllTimersAsync()
 
 		const left = harness.controller.stateFor(BOT)
-		expect(left.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE)
+		expect(left.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE)
 		expect(left.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
 		expect(left.hasOlder).toBe(true)
 		harness.detach()
@@ -1522,7 +1522,7 @@ describe("history above the transcript", () => {
 		await harness.controller.loadOlder()
 
 		const state = harness.controller.getState()
-		expect(state.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE + 20)
+		expect(state.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE * 2)
 		expect(state.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
 		expect(new Set(state.messages.map((message) => message.id)).size).toBe(
 			state.messages.length,
@@ -1546,7 +1546,7 @@ describe("history above the transcript", () => {
 		harness.controller.leave(BOT)
 
 		const left = harness.controller.stateFor(BOT)
-		expect(left.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE)
+		expect(left.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE)
 		expect(left.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
 		expect(left.hasOlder).toBe(true)
 		expect(harness.controller.stateFor(other.id).messages).toBe(held)
