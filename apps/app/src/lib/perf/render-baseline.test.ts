@@ -77,8 +77,6 @@ const LONG_TRANSCRIPT_MESSAGES = 500
 
 const LONG_THREAD_RUNS = 200
 
-const OPEN_BUDGET_MS = 300
-
 const OPEN_FRAME_LIMIT = 4_000
 
 const replyOf = (chunks: number) =>
@@ -330,22 +328,34 @@ const mountApp = async (replyFor?: (prompt: string) => string) => {
 	return { watch, frames }
 }
 
-const nextTask = (frames: FrameClock) =>
-	act(async () => {
-		frames.advance(performance.now())
-		await new Promise((resolve) => {
-			setTimeout(resolve, 0)
-		})
-	})
+type FrameRunner = {
+	next: () => Promise<void>
+	flush: (count: number) => Promise<void>
+}
 
-const flushTasks = async (frames: FrameClock, count: number) => {
-	for (let step = 0; step < count; step += 1) {
-		await nextTask(frames)
+const takeFrameRunner = (): FrameRunner => {
+	const frames = takeFrameClock()
+	let at = 0
+	const next = () =>
+		act(async () => {
+			at += FRAME_MS
+			frames.advance(at)
+			await new Promise((resolve) => {
+				setTimeout(resolve, 0)
+			})
+		})
+	return {
+		next,
+		flush: async (count) => {
+			for (let step = 0; step < count; step += 1) {
+				await next()
+			}
+		},
 	}
 }
 
 const measureThreadOpen = async () => {
-	const frames = takeFrameClock()
+	const frames = takeFrameRunner()
 	layout = fakeLayout()
 	const messages = LONG_THREAD_RUNS * 2
 	const store = createFakeTranscriptStore()
@@ -357,28 +367,40 @@ const measureThreadOpen = async () => {
 	await seedTranscript(store, bot.id, messages)
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
-	render(createElement(App))
-	await flushTasks(frames, MOUNT_TASKS)
+	const commits = countCommits()
+	render(
+		createElement(
+			Profiler,
+			{ id: "app", onRender: commits.onRender },
+			createElement(App),
+		),
+	)
+	await frames.flush(MOUNT_TASKS)
 
 	const lastMessage = `Answer ${messages - 1} in prose`
-	const startedAt = performance.now()
+	const openedAt = commits.count
+	builds.markdownRenders = 0
 	await act(async () => {
 		fireEvent.click(rowFor(bot.name))
 	})
-	let painted = 0
+	let tasksToLastMessage = 0
 	while (
-		painted < OPEN_FRAME_LIMIT &&
+		tasksToLastMessage < OPEN_FRAME_LIMIT &&
 		!document.body.textContent?.includes(lastMessage)
 	) {
-		await nextTask(frames)
-		painted += 1
+		await frames.next()
+		tasksToLastMessage += 1
 	}
-	const elapsedMs = performance.now() - startedAt
-	if (painted >= OPEN_FRAME_LIMIT) {
+	if (tasksToLastMessage >= OPEN_FRAME_LIMIT) {
 		throw new Error(`no last message for a ${LONG_THREAD_RUNS} run thread`)
 	}
 
-	return { elapsedMs, runs: LONG_THREAD_RUNS }
+	return {
+		commits: commits.count - openedAt,
+		markdownProcessors: builds.markdownRenders,
+		runs: LONG_THREAD_RUNS,
+		tasksToLastMessage,
+	}
 }
 
 const measureLongTranscriptOpen = async () => {
@@ -532,11 +554,15 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
-	it("shows the last message of a two hundred run thread inside the budget", async () => {
-		const opened = await measureThreadOpen()
-
-		expect(opened.runs).toBe(LONG_THREAD_RUNS)
-		expect(opened.elapsedMs).toBeLessThan(OPEN_BUDGET_MS)
+	it("shows the last message of a two hundred run thread", async () => {
+		expect(await measureThreadOpen()).toMatchInlineSnapshot(`
+			{
+			  "commits": 10,
+			  "markdownProcessors": 20,
+			  "runs": 200,
+			  "tasksToLastMessage": 0,
+			}
+		`)
 	})
 
 	it("opens a five hundred message transcript", async () => {

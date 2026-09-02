@@ -19,6 +19,8 @@ interface Entry {
 const FRAME_CLASS =
 	"flex h-80 w-96 flex-col overflow-hidden rounded-xl border border-border bg-background"
 
+const FRAME_HEIGHTS = [320, 220]
+
 const entryOf = (index: number): Entry => ({
 	id: `turn-${index}`,
 	from: index % 2 === 0 ? "user" : "assistant",
@@ -182,6 +184,7 @@ const StreamingDemo = ({
 	const [shown, setShown] = useState(HISTORY)
 	const [words, setWords] = useState(0)
 	const [isStreaming, setIsStreaming] = useState(false)
+	const [frameHeight, setFrameHeight] = useState(FRAME_HEIGHTS[0])
 	const timerRef = useRef<number | undefined>(undefined)
 
 	const sendPrompt = () => {
@@ -211,7 +214,7 @@ const StreamingDemo = ({
 			: []
 
 	return (
-		<div className={FRAME_CLASS}>
+		<div className={FRAME_CLASS} style={{ blockSize: frameHeight }}>
 			<Transcript
 				{...transcriptProps}
 				busy={isStreaming}
@@ -228,6 +231,19 @@ const StreamingDemo = ({
 			<div className="flex items-center gap-2 border-border border-t p-2">
 				<Button disabled={isStreaming} onClick={sendPrompt} size="sm">
 					Send prompt
+				</Button>
+				<Button
+					onClick={() =>
+						setFrameHeight((current) =>
+							current === FRAME_HEIGHTS[0]
+								? FRAME_HEIGHTS[1]
+								: FRAME_HEIGHTS[0],
+						)
+					}
+					size="sm"
+					variant="outline"
+				>
+					Resize frame
 				</Button>
 				<span className="text-muted-foreground text-xs">
 					{isStreaming ? "Streaming" : "Idle"}
@@ -572,5 +588,41 @@ export const ConversationRestsWithoutABand = meta.story({
 			viewport,
 			canvas.getByText(SHORT_ANSWER_WORDS.join(" ")),
 		)
+	},
+})
+
+export const RestsAfterAResize = meta.story({
+	args: { anchorOnSend: true },
+	render: (args) => (
+		<StreamingDemo {...args} answerWords={SHORT_ANSWER_WORDS} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The window changes size once the answer has settled. The transcript follows the new frame down to its last bubble and leaves the resting padding under it, with no band opening up as rows are skipped and un-skipped.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const viewport = canvas.getByRole("region", { name: "Conversation" })
+		await atLiveEdge(viewport)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send prompt" }))
+		await waitFor(() => expect(canvas.getByText("Working")).toBeInTheDocument())
+		await waitFor(() => expect(canvas.queryByText("Working")).toBeNull(), {
+			timeout: 5000,
+		})
+
+		const answer = canvas.getByText(SHORT_ANSWER_WORDS.join(" "))
+		await expectRestingPadding(viewport, answer)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Resize frame" }))
+		await settleScroll()
+		await expectRestingPadding(viewport, answer)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Resize frame" }))
+		await settleScroll()
+		await expectRestingPadding(viewport, answer)
 	},
 })

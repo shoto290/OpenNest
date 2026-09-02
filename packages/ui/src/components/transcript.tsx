@@ -67,6 +67,8 @@ const NO_ROWS: TranscriptItem[] = []
 
 const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
 
+const ALWAYS_RENDERED = "[content-visibility:visible]"
+
 const indexOfKey = (rows: TranscriptItem[], key: string | null) =>
 	key === null ? -1 : rows.findIndex((row) => row.key === key)
 
@@ -284,6 +286,7 @@ const TranscriptBody = ({
 	useTranscriptHandle(scrollerRef, rows, behavior)
 
 	const anchorKey = anchorOnSend ? lastAnchorKey(rows) : undefined
+	const lastRowKey = rows.at(-1)?.key
 
 	return (
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
@@ -309,7 +312,10 @@ const TranscriptBody = ({
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{rows.map((row) => (
 							<MessageScrollerItem
-								className="flex flex-col gap-6 [content-visibility:visible]"
+								className={cn(
+									"flex flex-col gap-6",
+									row.key === lastRowKey && ALWAYS_RENDERED,
+								)}
 								key={row.key}
 								messageId={row.key}
 								scrollAnchor={row.key === anchorKey}
