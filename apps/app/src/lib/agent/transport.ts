@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event"
 
 import type {
 	CheckReport,
+	LiveSession,
 	PermissionDecision,
 	QuestionAnswers,
 	RuntimeScope,
@@ -67,3 +68,5 @@ export const agentTransport: ChatDriver = {
 	subscribe: (onEvent: (event: ScopedEvent) => void) =>
 		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }) => onEvent(payload)),
 }
+
+export const liveSessions = () => invoke<LiveSession[]>("agent_live_sessions")
