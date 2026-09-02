@@ -374,9 +374,9 @@ const TurnRunHeader = ({ author, cause, className }: TurnRunHeaderProps) => {
 	const { t } = useTranslation("chat")
 
 	if (!cause) {
-		if (!author) return null
-
-		return <MessageAuthor author={author} className={className} />
+		return author ? (
+			<MessageAuthor author={author} className={className} />
+		) : null
 	}
 
 	const TriggerIcon = TRIGGER_SOURCE_ICON[cause.triggerSourceId] ?? Icons.Bell
