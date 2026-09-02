@@ -1,4 +1,3 @@
-import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { Notice } from "@workspace/ui/components/notice"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
@@ -13,7 +12,6 @@ import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { hasOverlayWindowControls } from "@/lib/host"
 
 type WorkspaceBodyProps = {
-	hasLoaded: boolean
 	haveSpacesFailed: boolean
 	onRetrySpaces: () => void
 	bot?: Bot
@@ -74,10 +72,6 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 				title={t("spaces.unavailable.title")}
 			/>
 		)
-	}
-
-	if (!props.hasLoaded) {
-		return <AppBootScreen data-tauri-drag-region="deep" />
 	}
 
 	const thread = threadOf(props)
