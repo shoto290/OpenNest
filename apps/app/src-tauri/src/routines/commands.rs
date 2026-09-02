@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use super::contract::{
 	Filter, ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineKey, RoutineRun,
@@ -11,6 +11,7 @@ use super::core::{self, Clock, RunSink, SystemClock};
 use super::filter;
 use super::schedule;
 use super::sources;
+use super::webhook;
 use crate::bundles;
 use crate::conversations::commands::{bot_row, ready};
 use crate::conversations::contract::TranscriptStoreError;
@@ -186,7 +187,11 @@ pub async fn routine_key<R: Runtime>(
 	let held = routine_row(database, &id).await?;
 	let source = declared_source(&app, database, &held.bot_id, &held.trigger_source_id).await?;
 	let key = database.routines().key_of(id).await?;
-	Ok(RoutineKey { key, header: source.header })
+	Ok(RoutineKey { key, header: source.header, url: called_at(&app) })
+}
+
+fn called_at<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+	app.try_state::<webhook::Webhook>().and_then(|webhook| webhook.url())
 }
 
 async fn routine_row(database: &db::Database, id: &str) -> Result<Routine, RoutineError> {

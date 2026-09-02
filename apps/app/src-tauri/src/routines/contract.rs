@@ -194,6 +194,8 @@ pub struct RoutineKey {
 	pub key: String,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub header: Option<String>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -606,6 +608,17 @@ mod tests {
 		];
 
 		assert_eq!(tagged(&refusals), mirrored("ReportRefusal"));
+	}
+
+	#[test]
+	fn the_key_answer_names_the_fields_the_front_declares() {
+		let answer = RoutineKey {
+			key: "the-key".to_owned(),
+			header: Some("X-OpenNest-Delivery".to_owned()),
+			url: Some("http://127.0.0.1:45367/routines/call".to_owned()),
+		};
+
+		assert_eq!(serialised_fields(&answer), mirrored_fields("RoutineKey"));
 	}
 
 	#[test]

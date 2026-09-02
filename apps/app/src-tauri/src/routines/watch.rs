@@ -2,13 +2,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use notify_debouncer_full::notify::event::{EventKind, ModifyKind, RenameMode};
 use notify_debouncer_full::DebouncedEvent;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
 use super::contract::RoutineError;
+use super::core::moment;
 
 pub const SOURCE_ID: &str = "file-watch";
 
@@ -103,12 +103,6 @@ fn change_of(kind: &EventKind) -> Option<Change> {
 		EventKind::Remove(_) => Some(Change::Removed),
 		EventKind::Access(_) | EventKind::Any | EventKind::Other => None,
 	}
-}
-
-fn moment(at: i64) -> Result<String, RoutineError> {
-	DateTime::<Utc>::from_timestamp_millis(at)
-		.map(|instant| instant.to_rfc3339_opts(SecondsFormat::Millis, true))
-		.ok_or_else(|| RoutineError::Unexpected { detail: format!("{at} is not an instant") })
 }
 
 #[cfg(test)]

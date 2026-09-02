@@ -46,6 +46,7 @@ pub fn run() {
 				window_controls::center_in_header(&window);
 			}
 			app.manage(routines::sentinel::spawn(app.handle().clone()));
+			app.manage(routines::webhook::start(app.handle().clone()));
 			let handle = app.handle().clone();
 			tauri::async_runtime::spawn(async move {
 				conversations::commands::list_bundles_at_launch(&handle).await;
@@ -59,6 +60,9 @@ pub fn run() {
 			if matches!(event, RunEvent::Exit) {
 				if let Some(sentinel) = app.try_state::<routines::sentinel::Sentinel>() {
 					sentinel.stop();
+				}
+				if let Some(webhook) = app.try_state::<routines::webhook::Webhook>() {
+					webhook.stop();
 				}
 				tauri::async_runtime::block_on(terminate_session(
 					app.state::<AgentState>().inner(),

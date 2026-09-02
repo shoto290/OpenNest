@@ -44,7 +44,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-os = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "process", "io-util", "net", "sync", "time", "rt-multi-thread"] }
 uuid = { version = "1", features = ["v4"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
@@ -60,6 +60,9 @@ notify-debouncer-full = "0.6"
 # Already in the tree under croner; named here so an instant in milliseconds becomes the wall
 # clock a cron expression is read against, and the moment a payload carries.
 chrono = "0.4"
+# Answers the one local route a webhook routine is called on. Shows through hyper, which
+# tauri already carries; only the HTTP/1 server is compiled in.
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
