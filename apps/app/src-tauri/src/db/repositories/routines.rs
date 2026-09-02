@@ -37,12 +37,12 @@ fn serialized(outcome: &RunOutcome) -> rusqlite::Result<String> {
 pub const MAX_RUNS_PER_PAGE: u32 = 200;
 
 const SELECT_ROUTINE: &str = "SELECT id, conversation_id, bot_id, title, instruction,
-	trigger_source_id, trigger_config, event_filter, is_enabled, consecutive_failures, created_at
+	trigger_source_id, event_filter, trigger_config, is_enabled, consecutive_failures, created_at
 	FROM routines WHERE id = ?1";
 
 const SELECT_ROUTINES_OF_CONVERSATION: &str =
 	"SELECT id, conversation_id, bot_id, title, instruction,
-	trigger_source_id, trigger_config, event_filter, is_enabled, consecutive_failures, created_at
+	trigger_source_id, event_filter, trigger_config, is_enabled, consecutive_failures, created_at
 	FROM routines WHERE conversation_id = ?1 ORDER BY created_at, id";
 
 const SELECT_RUN: &str = "SELECT id, routine_id, started_at, ended_at, outcome, reason,
@@ -522,8 +522,8 @@ fn routine(row: &Row<'_>) -> rusqlite::Result<Routine> {
 		title: row.get(3)?,
 		instruction: row.get(4)?,
 		trigger_source_id: row.get(5)?,
-		trigger_config: from_text(row, 6)?,
-		filter: from_text(row, 7)?,
+		filter: from_text(row, 6)?,
+		trigger_config: from_text(row, 7)?,
 		is_enabled: row.get(8)?,
 		consecutive_failures: row.get(9)?,
 		created_at: row.get(10)?,
