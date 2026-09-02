@@ -45,6 +45,13 @@ const SELECT_ROUTINES_OF_CONVERSATION: &str =
 	trigger_source_id, event_filter, trigger_config, is_enabled, consecutive_failures, created_at
 	FROM routines WHERE conversation_id = ?1 ORDER BY created_at, id";
 
+const SELECT_ENABLED_ON_SOURCE: &str = "SELECT id, conversation_id, bot_id, title, instruction,
+	trigger_source_id, event_filter, trigger_config, is_enabled, consecutive_failures, created_at,
+	last_occurrence_at
+	FROM routines WHERE trigger_source_id = ?1 AND is_enabled = 1 ORDER BY created_at, id";
+
+const RECORD_OCCURRENCE: &str = "UPDATE routines SET last_occurrence_at = ?2 WHERE id = ?1";
+
 const SELECT_RUN: &str = "SELECT id, routine_id, started_at, ended_at, outcome, reason,
 	cost_usd, model_usage FROM routine_runs WHERE id = ?1";
 
@@ -74,6 +81,12 @@ const HAS_DEDUPE_VALUE: &str =
 const RECORD_DEDUPE_VALUE: &str =
 	"INSERT INTO routine_dedupe_values (routine_id, value, seen_at) VALUES (?1, ?2, ?3)
 	ON CONFLICT (routine_id, value) DO UPDATE SET seen_at = excluded.seen_at";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnabledRoutine {
+	pub routine: Routine,
+	pub last_occurrence_at: Option<i64>,
+}
 
 #[derive(Debug)]
 pub struct Admitted {
@@ -119,6 +132,24 @@ impl RoutinesRepository {
 				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 			})
 			.await?)
+	}
+
+	pub async fn enabled_on_source(
+		&self,
+		trigger_source_id: String,
+	) -> Result<Vec<EnabledRoutine>, RoutineError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(SELECT_ENABLED_ON_SOURCE)?;
+				let rows = statement.query_map([&trigger_source_id], enabled_routine)?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await?)
+	}
+
+	pub async fn record_occurrence(&self, id: String, at: i64) -> Result<(), RoutineError> {
+		self.access.call_mut(move |connection| Ok(recorded_occurrence(connection, &id, at))).await?
 	}
 
 	pub async fn held(&self, id: String) -> Result<Option<Routine>, RoutineError> {
@@ -256,6 +287,16 @@ fn deleted(connection: &mut Connection, id: &str) -> Result<(), RoutineError> {
 	let transaction = write_transaction(connection)?;
 	let removed = transaction.execute("DELETE FROM routines WHERE id = ?1", [id])?;
 	if removed == 0 {
+		return Err(RoutineError::UnknownRoutine { id: id.to_owned() });
+	}
+	transaction.commit()?;
+	Ok(())
+}
+
+fn recorded_occurrence(connection: &mut Connection, id: &str, at: i64) -> Result<(), RoutineError> {
+	let transaction = write_transaction(connection)?;
+	let recorded = transaction.execute(RECORD_OCCURRENCE, params![id, at])?;
+	if recorded == 0 {
 		return Err(RoutineError::UnknownRoutine { id: id.to_owned() });
 	}
 	transaction.commit()?;
@@ -528,6 +569,10 @@ fn routine(row: &Row<'_>) -> rusqlite::Result<Routine> {
 		consecutive_failures: row.get(9)?,
 		created_at: row.get(10)?,
 	})
+}
+
+fn enabled_routine(row: &Row<'_>) -> rusqlite::Result<EnabledRoutine> {
+	Ok(EnabledRoutine { routine: routine(row)?, last_occurrence_at: row.get(11)? })
 }
 
 fn run(row: &Row<'_>) -> rusqlite::Result<RoutineRun> {
@@ -1167,5 +1212,80 @@ mod tests {
 		assert_eq!(listed, vec![held]);
 		assert_eq!(listed[0].filter, filter);
 		assert_eq!(listed[0].trigger_config, json!({ "every": "1h" }));
+	}
+
+	#[tokio::test]
+	async fn only_the_enabled_routines_of_the_source_asked_for_are_read() {
+		let (database, _dir) = planted().await;
+		let held = a_routine(&database, no_filter()).await;
+		let other = database
+			.routines()
+			.create(
+				RoutineDraft { trigger_source_id: "file-watch".to_owned(), ..a_draft(no_filter()) },
+				"another-key".to_owned(),
+				NOW,
+			)
+			.await
+			.expect("the watching routine is written");
+		database
+			.routines()
+			.update(
+				other.id.clone(),
+				RoutineEdit {
+					title: other.title.clone(),
+					instruction: other.instruction.clone(),
+					filter: no_filter(),
+					trigger_config: other.trigger_config.clone(),
+					is_enabled: false,
+				},
+			)
+			.await
+			.expect("the watching routine is disabled");
+
+		let scheduled = database
+			.routines()
+			.enabled_on_source("schedule".to_owned())
+			.await
+			.expect("the scheduled routines read");
+		let watching = database
+			.routines()
+			.enabled_on_source("file-watch".to_owned())
+			.await
+			.expect("the watching routines read");
+
+		assert_eq!(scheduled, vec![EnabledRoutine { routine: held, last_occurrence_at: None }]);
+		assert!(watching.is_empty(), "a disabled routine was read as enabled");
+	}
+
+	#[tokio::test]
+	async fn the_occurrence_recorded_on_a_routine_is_read_back_with_it() {
+		let (database, _dir) = planted().await;
+		let held = a_routine(&database, no_filter()).await;
+
+		database
+			.routines()
+			.record_occurrence(held.id.clone(), NOW + 60_000)
+			.await
+			.expect("the occurrence is recorded");
+
+		let scheduled = database
+			.routines()
+			.enabled_on_source("schedule".to_owned())
+			.await
+			.expect("the scheduled routines read");
+		assert_eq!(scheduled[0].last_occurrence_at, Some(NOW + 60_000));
+	}
+
+	#[tokio::test]
+	async fn an_occurrence_of_a_routine_that_is_gone_is_refused() {
+		let (database, _dir) = planted().await;
+
+		let failure = database
+			.routines()
+			.record_occurrence("nowhere".to_owned(), NOW)
+			.await
+			.expect_err("the occurrence is refused");
+
+		assert!(matches!(failure, RoutineError::UnknownRoutine { .. }), "got {failure:?}");
 	}
 }
