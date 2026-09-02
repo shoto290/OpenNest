@@ -43,12 +43,6 @@ const MISSING_OUTPUT_REASON = "the run's turn ended with no structured output"
 const detailOf = (thrown: unknown) =>
 	thrown instanceof Error ? thrown.message : JSON.stringify(thrown)
 
-const startFailureReason = (thrown: unknown) =>
-	`the run could not start: ${detailOf(thrown)}`
-
-const reportFailureReason = (thrown: unknown) =>
-	`the report could not be written: ${detailOf(thrown)}`
-
 const listening = (
 	opening: Promise<RunUnsubscribe>,
 	label: string,
@@ -101,20 +95,15 @@ export const startRunDriver = ({
 		}
 	}
 
-	const hold = (requested: RunRequested, scope: RuntimeScope): LiveRun => {
-		const held: LiveRun = {
-			requested,
-			scope,
-			lease: setInterval(() => void renew(requested.runId), LEASE_INTERVAL_MS),
-		}
-		live.set(requested.runId, held)
-		return held
-	}
-
 	const begin = async (requested: RunRequested) => {
+		const { runId } = requested
 		try {
 			const scope = await openScope(requested)
-			hold(requested, scope)
+			live.set(runId, {
+				requested,
+				scope,
+				lease: setInterval(() => void renew(runId), LEASE_INTERVAL_MS),
+			})
 			await driver.startOrResumeSession(
 				scope,
 				undefined,
@@ -123,13 +112,13 @@ export const startRunDriver = ({
 			)
 			await driver.submitPrompt(scope, runPromptFor(requested))
 		} catch (thrown) {
-			const held = live.get(requested.runId)
+			const held = live.get(runId)
 			if (held) {
 				end(held)
 			}
-			await close(requested.runId, {
+			await close(runId, {
 				outcome: "failed",
-				reason: startFailureReason(thrown),
+				reason: `the run could not start: ${detailOf(thrown)}`,
 			})
 		}
 	}
@@ -142,46 +131,39 @@ export const startRunDriver = ({
 			text,
 		})
 
-	const settle = async (held: LiveRun, ended: TurnEnded) => {
-		const { runId } = held.requested
-		const spent = { costUsd: ended.totalCostUsd, modelUsage: ended.modelUsage }
-		end(held)
-
+	const closingFor = async (
+		held: LiveRun,
+		ended: TurnEnded,
+	): Promise<RunClosing> => {
 		if (ended.outcome !== "completed") {
-			await close(runId, {
-				outcome: "failed",
-				reason: REASON_FOR_OUTCOME[ended.outcome],
-				...spent,
-			})
-			return
+			return { outcome: "failed", reason: REASON_FOR_OUTCOME[ended.outcome] }
 		}
-
 		const report = readRunReport(ended.structuredOutput)
 		if (!report) {
-			await close(runId, {
-				outcome: "failed",
-				reason: MISSING_OUTPUT_REASON,
-				...spent,
-			})
-			return
+			return { outcome: "failed", reason: MISSING_OUTPUT_REASON }
 		}
-
 		if (report.outcome === "nothing") {
-			await close(runId, { outcome: "nothing", ...spent })
-			return
+			return { outcome: "nothing" }
 		}
-
 		try {
 			await writeReport(held, report.text)
 		} catch (thrown) {
-			await close(runId, {
+			return {
 				outcome: "failed",
-				reason: reportFailureReason(thrown),
-				...spent,
-			})
-			return
+				reason: `the report could not be written: ${detailOf(thrown)}`,
+			}
 		}
-		await close(runId, { outcome: "ok", ...spent })
+		return { outcome: "ok" }
+	}
+
+	const settle = async (held: LiveRun, ended: TurnEnded) => {
+		end(held)
+		const closing = await closingFor(held, ended)
+		await close(held.requested.runId, {
+			...closing,
+			costUsd: ended.totalCostUsd,
+			modelUsage: ended.modelUsage,
+		})
 	}
 
 	const runAt = (scope: RuntimeScope | null) =>
