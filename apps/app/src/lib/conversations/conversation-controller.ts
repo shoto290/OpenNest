@@ -67,6 +67,13 @@ export type PendingPrompt =
 	| { kind: "question"; botId: string; request: QuestionRequest }
 	| { kind: "permission"; botId: string; request: PermissionRequest }
 
+export type RunReportDraft = {
+	conversationId: string
+	botId: string
+	runtimeSessionId: string
+	text: string
+}
+
 export type SpeakingBot = {
 	botId: string
 	work: WorkingState
@@ -96,6 +103,7 @@ export type ConversationController = {
 	follow: (isAtLiveEdge: boolean) => void
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
 	sendAgain: (messageId: string) => Promise<void>
+	reportRun: (draft: RunReportDraft) => Promise<void>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
@@ -786,6 +794,48 @@ export const createConversationController = (
 			: Promise.resolve()
 	}
 
+	const storeReport = async (reported: TranscriptMessage) => {
+		await store.startTurn({
+			id: reported.turnId,
+			conversationId: reported.conversationId,
+			startedAt: reported.createdAt,
+		})
+		await store.openAssistantMessage({
+			id: reported.id,
+			conversationId: reported.conversationId,
+			turnId: reported.turnId,
+			authorBotId: reported.authorBotId,
+			repliedToMessageId: null,
+			createdAt: reported.createdAt,
+		})
+		await store.appendText(reported.id, reported.content)
+		await store.finalizeMessage(reported.id, "complete")
+		await store.completeTurn(reported.turnId, now())
+	}
+
+	const reportRun = async ({
+		conversationId,
+		botId,
+		runtimeSessionId,
+		text,
+	}: RunReportDraft) => {
+		const reported: TranscriptMessage = {
+			id: newId(),
+			conversationId,
+			turnId: newId(),
+			seq: 0,
+			role: "assistant",
+			content: text,
+			completion: "complete",
+			createdAt: now(),
+			authorBotId: botId,
+			repliedToMessageId: null,
+			runtimeSessionId,
+		}
+		await enqueue(() => storeReport(reported))
+		transcript.append(reported)
+	}
+
 	const recordAnswers = (
 		held: Speaker,
 		request: QuestionRequest,
@@ -985,6 +1035,7 @@ export const createConversationController = (
 		follow,
 		send,
 		sendAgain,
+		reportRun,
 		pin,
 		unpin,
 		pins,

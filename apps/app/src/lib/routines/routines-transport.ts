@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 
 import type {
 	Routine,
@@ -7,8 +8,10 @@ import type {
 	RoutineKey,
 	RoutineRun,
 	RunClosing,
+	RunRequested,
 	TriggerDecision,
 } from "./routine-contract"
+import type { RunRequestListener } from "./run-port"
 
 export const RUN_REQUESTED_EVENT = "routine://run-requested"
 
@@ -28,4 +31,8 @@ export const routinesTransport = {
 	closeRun: (runId: string, closing: RunClosing) =>
 		invoke<RoutineRun>("routine_close_run", { runId, closing }),
 	key: (id: string) => invoke<RoutineKey>("routine_key", { id }),
+	onRunRequested: (listener: RunRequestListener) =>
+		listen<RunRequested>(RUN_REQUESTED_EVENT, ({ payload }) =>
+			listener(payload),
+		),
 }
