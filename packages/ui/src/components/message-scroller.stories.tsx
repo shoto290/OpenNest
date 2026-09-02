@@ -2214,19 +2214,19 @@ const rowFor = (key: string, render: () => ReactNode): MessageScrollerRow => ({
 	render,
 })
 
+const markdownBody = (measured: MeasuredRow) => (
+	<Markdown>{measured.content}</Markdown>
+)
+
 const markdownRow = (measured: MeasuredRow) =>
 	rowFor(measured.key, () => (
-		<AssistantTurn>
-			<Markdown>{measured.content}</Markdown>
-		</AssistantTurn>
+		<AssistantTurn>{markdownBody(measured)}</AssistantTurn>
 	))
 
 const MEASURED_SCROLLER_ROWS: MessageScrollerRow[] = [
 	markdownRow(ONE_LINE_REPLY),
 	rowFor(USER_MESSAGE.key, () => (
-		<UserTurn>
-			<Markdown>{USER_MESSAGE.content}</Markdown>
-		</UserTurn>
+		<UserTurn>{markdownBody(USER_MESSAGE)}</UserTurn>
 	)),
 	markdownRow(CODE_ANSWER),
 	markdownRow(MARKDOWN_ANSWER),
