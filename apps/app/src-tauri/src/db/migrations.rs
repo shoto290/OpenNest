@@ -502,7 +502,7 @@ const ROUTINE_REPORTED_TURN: &str = "
 ALTER TABLE routine_runs ADD COLUMN reported_turn_id TEXT
 	REFERENCES turns (id) ON DELETE SET NULL;
 
-CREATE INDEX IF NOT EXISTS routine_runs_by_reported_turn
+CREATE UNIQUE INDEX IF NOT EXISTS routine_runs_one_run_per_reported_turn
 	ON routine_runs (reported_turn_id) WHERE reported_turn_id IS NOT NULL;
 ";
 
@@ -1073,6 +1073,43 @@ mod tests {
 			.expect("the column is there and the row survived");
 		assert_eq!(held, (None, Some(2)), "a run written before the step reported in no turn");
 		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_second_run_naming_a_turn_already_reported_in_is_refused_by_the_schema() {
+		let dir = temp_dir();
+		let connection = fixture(&dir);
+		write(
+			&connection,
+			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at)
+				VALUES ('r1', 'c1', 'b1', 'schedule', '{}', '{}', 'k1', 1)",
+		)
+		.expect("a routine of a participant");
+		write(
+			&connection,
+			"INSERT INTO routine_runs (id, routine_id, started_at, ended_at, outcome,
+				lease_renewed_at, reported_turn_id)
+				VALUES ('run1', 'r1', 1, 2, 'ok', 1, 't1')",
+		)
+		.expect("a run that reported in a turn");
+
+		let refused = write(
+			&connection,
+			"INSERT INTO routine_runs (id, routine_id, started_at, ended_at, outcome,
+				lease_renewed_at, reported_turn_id)
+				VALUES ('run2', 'r1', 3, 4, 'ok', 3, 't1')",
+		);
+
+		assert!(refused.is_err(), "a turn was reported in by two runs");
+		assert_eq!(rows_in(&connection, "routine_runs"), 1, "the refused run landed anyway");
+		assert!(
+			has_index(&connection, "routine_runs_one_run_per_reported_turn"),
+			"the reported turn carries no unique index"
+		);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

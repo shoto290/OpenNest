@@ -334,6 +334,10 @@ pub enum RoutineError {
 	#[serde(rename_all = "camelCase")]
 	TurnOfAnotherConversation { turn_id: String, conversation_id: String },
 	#[serde(rename_all = "camelCase")]
+	TurnAlreadyReported { turn_id: String, run_id: String },
+	#[serde(rename_all = "camelCase")]
+	TurnWithoutReport { turn_id: String, outcome: RunOutcome },
+	#[serde(rename_all = "camelCase")]
 	BlankField { field: String },
 	#[serde(rename_all = "camelCase")]
 	UnsupportedOperator {
@@ -581,6 +585,27 @@ mod tests {
 
 		assert_eq!(serialised_fields(&closing), mirrored_fields("RunClosing"));
 		assert_eq!(serialised_fields(&reported), mirrored_fields("ReportedRun"));
+	}
+
+	#[test]
+	fn every_refusal_of_a_reported_turn_carries_the_kind_the_front_declares() {
+		let refusals = [
+			RoutineError::UnknownTurn { id: "t1".to_owned() },
+			RoutineError::TurnOfAnotherConversation {
+				turn_id: "t1".to_owned(),
+				conversation_id: "c2".to_owned(),
+			},
+			RoutineError::TurnAlreadyReported {
+				turn_id: "t1".to_owned(),
+				run_id: "run-1".to_owned(),
+			},
+			RoutineError::TurnWithoutReport {
+				turn_id: "t1".to_owned(),
+				outcome: RunOutcome::Nothing,
+			},
+		];
+
+		assert_eq!(tagged(&refusals), mirrored("ReportRefusal"));
 	}
 
 	#[test]

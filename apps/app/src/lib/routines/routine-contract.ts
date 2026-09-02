@@ -58,6 +58,12 @@ export type RunClosing = {
 	reportedTurnId?: string
 }
 
+export type ReportRefusal =
+	| "unknownTurn"
+	| "turnOfAnotherConversation"
+	| "turnAlreadyReported"
+	| "turnWithoutReport"
+
 export type ReportedRun = {
 	turnId: string
 	routineTitle: string

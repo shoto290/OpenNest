@@ -80,6 +80,9 @@ const CONVERSATION_OF_OPEN_RUN: &str = "SELECT routines.conversation_id
 	FROM routine_runs JOIN routines ON routines.id = routine_runs.routine_id
 	WHERE routine_runs.id = ?1 AND routine_runs.ended_at IS NULL";
 
+const RUN_REPORTING_IN_TURN: &str =
+	"SELECT id FROM routine_runs WHERE reported_turn_id = ?1";
+
 const SELECT_REPORTED_RUNS: &str = "SELECT routine_runs.reported_turn_id, routines.title,
 	routines.trigger_source_id
 	FROM routine_runs JOIN routines ON routines.id = routine_runs.routine_id
@@ -350,9 +353,7 @@ fn closed(
 	now: i64,
 ) -> Result<RoutineRun, RoutineError> {
 	let transaction = write_transaction(connection)?;
-	if let Some(turn_id) = &closing.reported_turn_id {
-		refuse_unreportable_turn(&transaction, run_id, turn_id)?;
-	}
+	refuse_unreportable_turn(&transaction, run_id, closing)?;
 	let written = transaction.execute(
 		CLOSE_RUN,
 		params![
@@ -377,8 +378,17 @@ fn closed(
 fn refuse_unreportable_turn(
 	transaction: &Transaction<'_>,
 	run_id: &str,
-	turn_id: &str,
+	closing: &RunClosing,
 ) -> Result<(), RoutineError> {
+	let Some(turn_id) = closing.reported_turn_id.as_deref() else {
+		return Ok(());
+	};
+	if closing.outcome != RunOutcome::Ok {
+		return Err(RoutineError::TurnWithoutReport {
+			turn_id: turn_id.to_owned(),
+			outcome: closing.outcome,
+		});
+	}
 	let of_run: Option<String> =
 		transaction.query_row(CONVERSATION_OF_OPEN_RUN, [run_id], |row| row.get(0)).optional()?;
 	let Some(of_run) = of_run else {
@@ -394,6 +404,11 @@ fn refuse_unreportable_turn(
 			turn_id: turn_id.to_owned(),
 			conversation_id,
 		});
+	}
+	let reported_by: Option<String> =
+		transaction.query_row(RUN_REPORTING_IN_TURN, [turn_id], |row| row.get(0)).optional()?;
+	if let Some(run_id) = reported_by {
+		return Err(RoutineError::TurnAlreadyReported { turn_id: turn_id.to_owned(), run_id });
 	}
 	Ok(())
 }
@@ -1360,6 +1375,73 @@ mod tests {
 			RoutineError::TurnOfAnotherConversation {
 				turn_id: "t2".to_owned(),
 				conversation_id: "c2".to_owned(),
+			}
+		);
+		assert_eq!(open_runs(&database, run_id).await, 1, "the refused closing ended the run");
+	}
+
+	#[tokio::test]
+	async fn a_closing_naming_a_turn_another_run_reported_in_is_refused_and_leaves_both_runs_alone()
+	{
+		let (database, _dir) = planted().await;
+		plant(&database, A_TURN).await;
+		let held = a_routine(&database, no_filter()).await;
+		let first = started(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+		database
+			.routines()
+			.close_run(first.clone(), reporting("t1"), NOW + 10)
+			.await
+			.expect("the first run closes");
+		let second = started(&database, &held.id, "2026-09-02T11:00:00Z", NOW + HOUR_MS).await;
+
+		let refused = database
+			.routines()
+			.close_run(second.clone(), reporting("t1"), NOW + HOUR_MS + 10)
+			.await
+			.expect_err("a turn already reported in does not close a second run");
+
+		assert_eq!(
+			refused,
+			RoutineError::TurnAlreadyReported { turn_id: "t1".to_owned(), run_id: first }
+		);
+		assert_eq!(open_runs(&database, second).await, 1, "the refused closing ended the run");
+		assert_eq!(
+			database
+				.routines()
+				.reported(CONVERSATION.to_owned())
+				.await
+				.expect("the reported runs read")
+				.len(),
+			1,
+			"the turn is reported in by more than one run"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_closing_naming_a_turn_without_the_outcome_ok_is_refused_and_leaves_the_run_open() {
+		let (database, _dir) = planted().await;
+		plant(&database, A_TURN).await;
+		let held = a_routine(&database, no_filter()).await;
+		let run_id = started(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+
+		let refused = database
+			.routines()
+			.close_run(
+				run_id.clone(),
+				RunClosing {
+					reported_turn_id: Some("t1".to_owned()),
+					..closing(RunOutcome::Nothing)
+				},
+				NOW + 10,
+			)
+			.await
+			.expect_err("a run that wrote no report does not name a turn");
+
+		assert_eq!(
+			refused,
+			RoutineError::TurnWithoutReport {
+				turn_id: "t1".to_owned(),
+				outcome: RunOutcome::Nothing,
 			}
 		);
 		assert_eq!(open_runs(&database, run_id).await, 1, "the refused closing ended the run");
