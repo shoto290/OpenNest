@@ -16,8 +16,6 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const TRANSCRIPT_ROW_GAP = 24
 
-const TRANSCRIPT_ESTIMATED_ROW_HEIGHT = 320
-
 interface ThreadLayoutProps {
 	header?: ReactNode
 	notice?: ReactNode
@@ -88,7 +86,6 @@ function ThreadLayout({
 					older={older}
 					rows={rows}
 					rowGap={TRANSCRIPT_ROW_GAP}
-					estimatedRowHeight={TRANSCRIPT_ESTIMATED_ROW_HEIGHT}
 					onFollowChange={onFollowChange}
 					onLandingTrace={onLandingTrace}
 					highlightedMessageId={highlightedMessageId}
