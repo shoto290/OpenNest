@@ -1,6 +1,8 @@
+import { useState } from "react"
 import { expect, fn, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { Button } from "@workspace/ui/components/button"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	MessageBubble,
@@ -452,6 +454,26 @@ export const summarise = async (id: string) => {
 
 ${WIDE_TABLE}`
 
+const STREAMED_BODY = `## Nest report
+
+The archive pass finished at 09:12.
+
+- read the nest
+- summarise the occupants
+
+> The sync ran twice and the second pass found nothing.
+
+\`\`\`ts
+export const summarise = async (id: string) => {
+	const nest = await readNest(id)
+	return { id: nest.id, occupants: nest.occupants.length }
+}
+\`\`\``
+
+const STREAMED_APPENDIX = `
+
+Two nests archived since the last pass.`
+
 const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
 
 const bubbleContentsOf = (canvasElement: HTMLElement) => [
@@ -553,6 +575,14 @@ const blockGapsIn = (root: HTMLElement) =>
 		gapsBetweenChildren,
 	)
 
+const blockOffsetsIn = (root: HTMLElement) => {
+	const origin = root.getBoundingClientRect().top
+
+	return [...root.children].map(
+		(block) => block.getBoundingClientRect().top - origin,
+	)
+}
+
 const contentRangeOf = (element: Element) => {
 	const range = document.createRange()
 	range.selectNodeContents(element)
@@ -647,6 +677,25 @@ const meta = preview.meta({
 		(Story) => <div className="w-[44rem] max-w-full">{Story()}</div>,
 	],
 })
+
+const StreamedBody = ({ source }: { source: string }) => {
+	const [appended, setAppended] = useState(false)
+
+	return (
+		<div className="flex flex-col items-start gap-4">
+			<MessageBubble>
+				<MessageBubbleContent>
+					<Markdown>
+						{appended ? `${source}${STREAMED_APPENDIX}` : source}
+					</Markdown>
+				</MessageBubbleContent>
+			</MessageBubble>
+			<Button onClick={() => setAppended(true)} size="sm" variant="outline">
+				Append the next block
+			</Button>
+		</div>
+	)
+}
 
 export const Playground = meta.story({})
 
@@ -1725,5 +1774,32 @@ export const TypesetInBubble = meta.story({
 			await expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth)
 			await expect(content.scrollWidth).toBe(content.clientWidth)
 		}
+	},
+})
+
+export const AppendedBlock = meta.story({
+	args: { children: STREAMED_BODY },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A body growing the way a streamed answer grows. Appending a paragraph must not move a single block already on screen: the rhythm is carried by the top margin each block owns, so nothing above the insertion point is asked to reflow. The fence is the block to watch — it drops its closing margin while it is last and takes it back once a paragraph follows, which changes what sits below it and nothing above. Press the button and check that the heading, the paragraph, the list and the quote all stay where they were.",
+			},
+		},
+	},
+	render: ({ children }) => <StreamedBody source={children} />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const [root] = markdownRootsOf(canvasElement)
+		const before = blockOffsetsIn(root)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Append the next block" }),
+		)
+
+		await waitFor(() =>
+			expect(blockOffsetsIn(root)).toHaveLength(before.length + 1),
+		)
+
+		await expect(blockOffsetsIn(root).slice(0, before.length)).toEqual(before)
 	},
 })
