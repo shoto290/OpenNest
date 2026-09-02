@@ -59,6 +59,10 @@ const transportReason = (error: TransportError) =>
 const detailOf = (thrown: unknown) =>
 	thrown instanceof Error ? thrown.message : JSON.stringify(thrown)
 
+const reporting = (command: string) => (reason: unknown) => {
+	console.error(`run driver: ${command} failed`, reason)
+}
+
 const listening = (
 	opening: Promise<RunUnsubscribe>,
 	label: string,
@@ -78,14 +82,10 @@ export const startRunDriver = ({
 	const live = new Map<string, LiveRun>()
 
 	const close = (runId: string, closing: RunClosing) =>
-		runs.closeRun(runId, closing).catch((reason) => {
-			console.error("run driver: routine_close_run failed", reason)
-		})
+		runs.closeRun(runId, closing).catch(reporting("routine_close_run"))
 
 	const renew = (runId: string) =>
-		runs.renewLease(runId).catch((reason) => {
-			console.error("run driver: routine_renew_lease failed", reason)
-		})
+		runs.renewLease(runId).catch(reporting("routine_renew_lease"))
 
 	const forget = (held: LiveRun) => {
 		clearInterval(held.lease)
@@ -93,9 +93,7 @@ export const startRunDriver = ({
 	}
 
 	const shutdownSession = (scope: RuntimeScope) => {
-		void driver.shutdown(scope).catch((reason) => {
-			console.error("run driver: agent_shutdown failed", reason)
-		})
+		void driver.shutdown(scope).catch(reporting("agent_shutdown"))
 	}
 
 	const end = (held: LiveRun) => {
@@ -207,9 +205,7 @@ export const startRunDriver = ({
 	const refuse = async (held: LiveRun, reason: string) => {
 		const { scope } = held
 		forget(held)
-		await driver.cancelTurn(scope).catch((thrown) => {
-			console.error("run driver: agent_cancel_turn failed", thrown)
-		})
+		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
 		shutdownSession(scope)
 		await close(held.requested.runId, { outcome: "failed", reason })
 	}
