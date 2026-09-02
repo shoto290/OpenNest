@@ -204,6 +204,23 @@ const BLOCK_CLOSED: AgentEvent[] = [
 	{ type: "messageDelta", id: "msg-writing", seq: 2, text: "\n\nand" },
 ]
 
+const ASKED: AgentEvent[] = [
+	{
+		type: "questionRequested",
+		request: {
+			id: "ask-1",
+			questions: [
+				{
+					header: "Which wall",
+					question: "Which wall holds?",
+					options: [],
+					multiSelect: false,
+				},
+			],
+		},
+	},
+]
+
 const SAID_AND_LANDED: AgentEvent[] = [
 	{
 		type: "messageStarted",
@@ -440,7 +457,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		fireEvent.click(screen.getByRole("button", { name: "Stop Ada" }))
+		fireEvent.click(screen.getAllByRole("button", { name: "Stop Ada" })[0])
 		await settle()
 
 		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
@@ -462,7 +479,7 @@ describe("ThreadScreen", () => {
 		expect(stopFor("Ada")).toBeTruthy()
 	})
 
-	it("swaps the waiting row of a seated bot for the block it publishes", async () => {
+	it("keeps the working row of a seated bot that has published a block", async () => {
 		const room = await roomOf(["Ada"])
 		render(screenOf(room.thread))
 		await settle()
@@ -475,8 +492,28 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		expect(screen.queryByText("Ada is thinking…")).toBeNull()
-		expect(screen.getAllByRole("button", { name: "Stop Ada" })).toHaveLength(1)
+		expect(screen.getByText("Ada is writing…")).toBeTruthy()
+
+		fireEvent.click(screen.getAllByRole("button", { name: "Stop Ada" })[1])
+		await settle()
+
+		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
+	})
+
+	it("keeps the working row of a bot asking after it published a block", async () => {
+		const room = await roomOf(["Ada"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+			room.driver.pushTo(room.idOf("Ada"), BLOCK_CLOSED)
+			room.driver.pushTo(room.idOf("Ada"), ASKED)
+		})
+		await settle()
+
+		expect(screen.getByText("Ada · Which wall")).toBeTruthy()
 	})
 
 	it("leaves no stop on the turn a bot has landed", async () => {
@@ -491,6 +528,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
+		expect(screen.queryByText("Ada is writing…")).toBeNull()
 		expect(stopFor("Ada")).toBeNull()
 	})
 

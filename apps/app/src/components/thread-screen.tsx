@@ -521,7 +521,7 @@ const speakingRowsIn = (
 ): SpeakingRow[] =>
 	speakers.flatMap((speaking) => {
 		const seated = bots.find(({ id }) => id === speaking.botId)
-		return seated && !speaking.hasPublished ? [{ seated, speaking }] : []
+		return seated ? [{ seated, speaking }] : []
 	})
 
 type ConversationThreadTailProps = {
