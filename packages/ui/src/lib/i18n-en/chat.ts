@@ -289,6 +289,34 @@ const chat = {
 			},
 		},
 	},
+	routines: {
+		panel: {
+			label: "Routines",
+			toggle: "Routines of this conversation",
+			title: "Routines",
+		},
+		row: {
+			delete: "Delete {{title}}",
+			stopped: "Stopped itself",
+		},
+		confirm: {
+			title: "Delete {{title}}?",
+			description:
+				"The routine and its run history go with it. Nothing it already said in this conversation is touched.",
+			label: "Delete routine",
+			failure: "The routine could not be deleted. Try again.",
+		},
+		empty: {
+			title: "No routine yet",
+			description:
+				"A routine runs a bot of this conversation on its own, on a schedule or when a file it watches changes.",
+		},
+		failure: {
+			title: "Routines could not be read",
+			description:
+				"Nothing was changed. Try again to read the routines of this conversation.",
+		},
+	},
 } as const
 
 export { chat }

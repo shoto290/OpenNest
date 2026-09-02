@@ -21,6 +21,7 @@ import {
 	PinnedMessages,
 } from "@workspace/ui/components/pinned-messages"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
+import { RoutinesPanelTrigger } from "@workspace/ui/components/routines-panel"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import type {
 	TranscriptHandle,
@@ -43,6 +44,7 @@ import {
 	QuestionPrompt,
 	SpokenApproval,
 } from "@/components/thread-prompt"
+import { ThreadRoutines } from "@/components/thread-routines"
 import { QueuedTurn, RefusedTurn, ThreadTurn } from "@/components/thread-turn"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
@@ -166,42 +168,55 @@ const ThreadHeader = ({
 	pinnedRows,
 	onJumpToPin,
 	onUnpin,
-}: ThreadHeaderProps) => (
-	<AppHeader
-		data-tauri-drag-region="deep"
-		leading={
-			thread.kind === "bot" ? (
-				<HeaderIdentityButton
-					animal={thread.bot.avatarAnimal}
-					blot={thread.bot.avatarBlot ?? undefined}
-					connection={thread.state.connection}
-					image={botImage}
-					isSettingsOpen={thread.isSettingsOpen}
-					kind={botWork?.kind}
-					name={thread.bot.name}
-					onOpenSettings={thread.onToggleSettings}
-					seed={thread.bot.id}
-					version={thread.state.binaryVersion}
-					working={botWork !== null}
-				/>
-			) : (
-				<HeaderConversationButton
-					bots={present}
-					isSettingsOpen={thread.isSettingsOpen}
-					name={thread.conversation.title}
-					onOpenSettings={() => thread.onOpenSettings(thread.conversation.id)}
-				/>
-			)
-		}
-		trailing={
-			<PinnedMessages
-				messages={pinnedRows}
-				onJump={onJumpToPin}
-				onUnpin={onUnpin}
-			/>
-		}
-	/>
-)
+}: ThreadHeaderProps) => {
+	const pinned = (
+		<PinnedMessages
+			messages={pinnedRows}
+			onJump={onJumpToPin}
+			onUnpin={onUnpin}
+		/>
+	)
+
+	return (
+		<AppHeader
+			data-tauri-drag-region="deep"
+			leading={
+				thread.kind === "bot" ? (
+					<HeaderIdentityButton
+						animal={thread.bot.avatarAnimal}
+						blot={thread.bot.avatarBlot ?? undefined}
+						connection={thread.state.connection}
+						image={botImage}
+						isSettingsOpen={thread.isSettingsOpen}
+						kind={botWork?.kind}
+						name={thread.bot.name}
+						onOpenSettings={thread.onToggleSettings}
+						seed={thread.bot.id}
+						version={thread.state.binaryVersion}
+						working={botWork !== null}
+					/>
+				) : (
+					<HeaderConversationButton
+						bots={present}
+						isSettingsOpen={thread.isSettingsOpen}
+						name={thread.conversation.title}
+						onOpenSettings={() => thread.onOpenSettings(thread.conversation.id)}
+					/>
+				)
+			}
+			trailing={
+				thread.kind === "conversation" ? (
+					<>
+						{pinned}
+						<RoutinesPanelTrigger />
+					</>
+				) : (
+					pinned
+				)
+			}
+		/>
+	)
+}
 
 type ThreadComposerSlotProps = {
 	thread: LoadedThread
@@ -781,96 +796,106 @@ function ThreadView({
 		? quotes.get(repliedToRefusal)
 		: undefined
 
-	return (
-		<RosterProvider bots={bots}>
-			<ThreadLayout
-				anchorOnSend={isSoloThread}
-				busy={facts.isBusy}
-				composer={
-					<ThreadComposerSlot
-						canAttach={facts.canAttach}
-						composerRef={composerRef}
-						onPromptChange={rememberDraft}
-						onSubmitPrompt={submitPrompt}
-						placeholder={composerPlaceholder}
-						present={present}
-						readDraft={readDraft}
-						staged={staged}
-						thread={thread}
-					/>
-				}
-				header={
-					<ThreadHeader
-						botImage={botImage}
-						botWork={facts.botWork}
-						onJumpToPin={(bubbleId) => jumpToMessage(pins.anchorOf(bubbleId))}
-						onUnpin={pins.unpin}
-						pinnedRows={pinnedRows}
-						present={present}
-						thread={thread}
-					/>
-				}
-				highlightedMessageId={highlightedMessageId}
-				label={t("screen.label")}
-				notice={
-					<ThreadNotices
-						bots={bots}
-						error={facts.latestError}
-						loopingPair={facts.loopingPair}
-						onDismissError={controller.dismissError}
-						onRestart={botController ? restartAfterError : undefined}
-						onStop={stop}
-						pins={pins}
-						staged={staged}
-					/>
-				}
-				countsNewMessages={!isSoloThread}
-				marksNewMessages={!isSoloThread}
-				older={
-					state.messages.length > 0
-						? {
-								has: state.hasOlder,
-								isLoading: facts.isLoadingOlder,
-								onLoad: loadOlder,
-							}
-						: undefined
-				}
-				onFollowChange={controller.follow}
-				pending={
-					<ThreadPending
-						authors={authors}
-						permission={facts.permission}
-						questionRecall={recall}
-						responder={promptResponder}
-					/>
-				}
-				reply={
-					replyTarget
-						? { ...toQuote(replyTarget), onDismiss: releaseReply }
-						: undefined
-				}
-				rootRef={rootRef}
-				rows={runRows}
-				scrollerRef={scrollerRef}
-				transcriptKey={facts.id}
-			>
-				{state.messages.length === 0 ? (
-					<ThreadEmptyState
-						botImage={botImage}
-						onRestart={restart}
-						present={present}
-						thread={thread}
-					/>
-				) : null}
-
-				<ThreadTail
-					botWork={facts.botWork}
-					bots={bots}
-					onStop={stop}
-					refusedQuote={refusedTarget ? toQuote(refusedTarget) : undefined}
+	const layout = (
+		<ThreadLayout
+			anchorOnSend={isSoloThread}
+			busy={facts.isBusy}
+			composer={
+				<ThreadComposerSlot
+					canAttach={facts.canAttach}
+					composerRef={composerRef}
+					onPromptChange={rememberDraft}
+					onSubmitPrompt={submitPrompt}
+					placeholder={composerPlaceholder}
+					present={present}
+					readDraft={readDraft}
+					staged={staged}
 					thread={thread}
 				/>
-			</ThreadLayout>
+			}
+			header={
+				<ThreadHeader
+					botImage={botImage}
+					botWork={facts.botWork}
+					onJumpToPin={(bubbleId) => jumpToMessage(pins.anchorOf(bubbleId))}
+					onUnpin={pins.unpin}
+					pinnedRows={pinnedRows}
+					present={present}
+					thread={thread}
+				/>
+			}
+			highlightedMessageId={highlightedMessageId}
+			label={t("screen.label")}
+			notice={
+				<ThreadNotices
+					bots={bots}
+					error={facts.latestError}
+					loopingPair={facts.loopingPair}
+					onDismissError={controller.dismissError}
+					onRestart={botController ? restartAfterError : undefined}
+					onStop={stop}
+					pins={pins}
+					staged={staged}
+				/>
+			}
+			countsNewMessages={!isSoloThread}
+			marksNewMessages={!isSoloThread}
+			older={
+				state.messages.length > 0
+					? {
+							has: state.hasOlder,
+							isLoading: facts.isLoadingOlder,
+							onLoad: loadOlder,
+						}
+					: undefined
+			}
+			onFollowChange={controller.follow}
+			pending={
+				<ThreadPending
+					authors={authors}
+					permission={facts.permission}
+					questionRecall={recall}
+					responder={promptResponder}
+				/>
+			}
+			reply={
+				replyTarget
+					? { ...toQuote(replyTarget), onDismiss: releaseReply }
+					: undefined
+			}
+			rootRef={rootRef}
+			rows={runRows}
+			scrollerRef={scrollerRef}
+			transcriptKey={facts.id}
+		>
+			{state.messages.length === 0 ? (
+				<ThreadEmptyState
+					botImage={botImage}
+					onRestart={restart}
+					present={present}
+					thread={thread}
+				/>
+			) : null}
+
+			<ThreadTail
+				botWork={facts.botWork}
+				bots={bots}
+				onStop={stop}
+				refusedQuote={refusedTarget ? toQuote(refusedTarget) : undefined}
+				thread={thread}
+			/>
+		</ThreadLayout>
+	)
+
+	return (
+		<RosterProvider bots={bots}>
+			{facts.conversation ? (
+				<ThreadRoutines conversationId={facts.conversation.id}>
+					{layout}
+				</ThreadRoutines>
+			) : (
+				layout
+			)}
 		</RosterProvider>
 	)
 }

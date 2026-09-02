@@ -145,6 +145,7 @@ export interface AnimatedSidebarProviderProps
 	defaultWidth?: number
 	onWidthChange?: (width: number) => void
 	isResizable?: boolean
+	hasKeyboardShortcut?: boolean
 	style?: SidebarProviderStyle
 }
 
@@ -160,6 +161,7 @@ export function AnimatedSidebarProvider({
 	defaultWidth = SIDEBAR_DEFAULT_WIDTH,
 	onWidthChange,
 	isResizable = true,
+	hasKeyboardShortcut = true,
 	className,
 	style,
 	...props
@@ -217,6 +219,8 @@ export function AnimatedSidebarProvider({
 	toggleSidebarRef.current = toggleSidebar
 
 	useEffect(() => {
+		if (!hasKeyboardShortcut) return
+
 		const handleShortcut = (event: KeyboardEvent) => {
 			if (!event.metaKey && !event.ctrlKey) return
 			if (
@@ -231,7 +235,7 @@ export function AnimatedSidebarProvider({
 
 		window.addEventListener("keydown", handleShortcut)
 		return () => window.removeEventListener("keydown", handleShortcut)
-	}, [])
+	}, [hasKeyboardShortcut])
 
 	const widthStyle: SidebarProviderStyle = {
 		...style,
@@ -696,22 +700,31 @@ export const AnimatedSidebarTrigger = forwardRef<
 	)
 })
 
-export type AnimatedSidebarInsetProps = HTMLMotionProps<"main">
+export type AnimatedSidebarInsetProps = HTMLMotionProps<"main"> & {
+	isLandmark?: boolean
+}
 
 export const AnimatedSidebarInset = forwardRef<
 	HTMLElement,
 	AnimatedSidebarInsetProps
->(function AnimatedSidebarInset({ className, ...props }, forwardedRef) {
-	return (
-		<motion.main
-			{...props}
-			ref={forwardedRef}
-			data-slot="sidebar-inset"
-			className={cn(
-				"relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background",
-				className,
-			)}
-		/>
+>(function AnimatedSidebarInset(
+	{ isLandmark = true, className, ...props },
+	forwardedRef,
+) {
+	const inset = {
+		...props,
+		ref: forwardedRef,
+		"data-slot": "sidebar-inset",
+		className: cn(
+			"relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background",
+			className,
+		),
+	}
+
+	return isLandmark ? (
+		<motion.main {...inset} />
+	) : (
+		<motion.div {...inset} ref={forwardedRef as Ref<HTMLDivElement>} />
 	)
 })
 
