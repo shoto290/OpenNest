@@ -2251,6 +2251,8 @@ const RECORDED_SHAPES = Object.fromEntries(
 	]),
 )
 
+const RECORDED_HEIGHTS = MEASURED_ROWS.map((measured) => measured.height)
+
 const shapesByKey = (canvasElement: HTMLElement) => {
 	const rows = canvasElement.querySelectorAll<HTMLElement>(
 		'[data-slot="message-scroller-row"]',
@@ -2310,8 +2312,6 @@ export const RowHeights = meta.story({
 
 		await expect(medianOf(heights)).toBe(185)
 		await expect(p90Of(heights)).toBe(252)
-		await expect(ESTIMATED_ROW_HEIGHT).toBe(
-			meanOf(MEASURED_ROWS.map((measured) => measured.height)),
-		)
+		await expect(ESTIMATED_ROW_HEIGHT).toBe(meanOf(RECORDED_HEIGHTS))
 	},
 })
