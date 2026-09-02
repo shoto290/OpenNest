@@ -1691,15 +1691,18 @@ describe("the pages a conversation holds", () => {
 	const PAGE = 20
 	const HISTORY = 200
 
+	const stored = (conversationId: string) =>
+		Array.from({ length: HISTORY }, (_, index) =>
+			message({ id: `m-${index + 1}`, conversationId, seq: index + 1 }),
+		)
+
 	const pagingStore = (): TranscriptStore => {
 		const base = createFakeTranscriptStore()
 		return {
 			...base,
 			loadPage: (conversationId, cursor) => {
 				const before = cursor?.beforeSeq ?? HISTORY + 1
-				const page = Array.from({ length: HISTORY }, (_, index) =>
-					message({ id: `m-${index + 1}`, conversationId, seq: index + 1 }),
-				)
+				const page = stored(conversationId)
 					.filter((held) => held.seq < before)
 					.slice(-PAGE)
 				return Promise.resolve({

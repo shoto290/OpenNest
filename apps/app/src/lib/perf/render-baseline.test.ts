@@ -83,7 +83,7 @@ const OPEN_FRAME_LIMIT = 4_000
 
 const OLDER_PAGES = 3
 
-const OLDER_TASKS = 20
+const SETTLE_TASKS = 20
 
 const OLDER_LABEL = "Load older messages"
 
@@ -452,14 +452,17 @@ const measureThreadOpen = async () => {
 	return { ...opened, runs: LONG_THREAD_RUNS }
 }
 
-const loadOlderPages = async (pages: number, frames: FrameRunner) => {
-	for (let page = 0; page < pages; page += 1) {
+const loadOlderPages = async (frames: FrameRunner) => {
+	for (let page = 0; page < OLDER_PAGES; page += 1) {
 		await act(async () => {
 			fireEvent.click(screen.getByRole("button", { name: OLDER_LABEL }))
 		})
-		await frames.flush(OLDER_TASKS)
+		await frames.flush(SETTLE_TASKS)
 	}
 }
+
+const bubbleCount = () =>
+	document.querySelectorAll('[data-slot="message-bubble"]').length
 
 const measureThreadReopen = async () => {
 	const frames = takeFrameRunner()
@@ -476,21 +479,16 @@ const measureThreadReopen = async () => {
 		commits,
 	}
 	const cold = await openThread(opening)
-	await loadOlderPages(OLDER_PAGES, frames)
-	const grown = document.querySelectorAll('[data-slot="message-bubble"]').length
+	await loadOlderPages(frames)
+	const grown = bubbleCount()
 
 	await act(async () => {
 		fireEvent.click(rowFor(other.name))
 	})
-	await frames.flush(OLDER_TASKS)
+	await frames.flush(SETTLE_TASKS)
 	const reopened = await openThread(opening)
 
-	return {
-		cold,
-		grown,
-		reopened,
-		rows: document.querySelectorAll('[data-slot="message-bubble"]').length,
-	}
+	return { cold, grown, reopened, rows: bubbleCount() }
 }
 
 const measureLongTranscriptOpen = async () => {
