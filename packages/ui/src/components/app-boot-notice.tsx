@@ -12,9 +12,10 @@ const AppBootNotice = ({ title, description, onRetry }: AppBootNoticeProps) => (
 	<div
 		data-slot="app-boot-notice"
 		className="flex h-svh w-full flex-col items-center justify-center gap-6 bg-background p-6"
+		data-tauri-drag-region="deep"
 	>
 		<BotIdentityAvatar animal="rabbit" size={BOOT_MARK_SIZE} />
-		<div className="w-full max-w-sm">
+		<div className="w-full max-w-sm" data-tauri-drag-region="false">
 			<Notice description={description} retry={{ onRetry }} title={title} />
 		</div>
 	</div>

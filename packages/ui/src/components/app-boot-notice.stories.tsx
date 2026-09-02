@@ -12,7 +12,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a desktop window shows when its first read fails: the same window-filling surface as the boot screen, holding a single notice and the one action that can still help. It takes the window because there is no shell to put it in yet — the record never answered, so there is nothing to draw a sidebar from. Once the app is running, a failed read belongs to a notice inside the screen it broke, not to this one.",
+					"What a desktop window shows when its very first read fails: the same window-filling surface as the boot screen, holding a single notice and the one action that can still help. It takes the window because there is no shell to put it in yet — the record never answered, so there is nothing to draw a sidebar from. Once the app is running, a failed read belongs to a notice inside the screen it broke, not to this one.",
 			},
 		},
 	},
@@ -33,7 +33,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"The launch failure. Check that the notice sits centred in the window with no shell around it, that it stops growing on a wide window, and that Retry is the first stop on Tab.",
+					"The launch failure. Check that the notice sits centred in the window with no shell around it, that it stops growing on a wide window, that Retry is the first stop on Tab, and that the window still drags from the background while Retry stays clickable.",
 			},
 		},
 	},
@@ -41,6 +41,7 @@ export const Default = meta.story({
 		const surface = slotIn(canvasElement, "app-boot-notice")
 
 		await expect(surface.clientHeight).toBe(window.innerHeight)
+		await expect(surface).toHaveAttribute("data-tauri-drag-region", "deep")
 		await expect(botIdentityAvatars(canvasElement)).toHaveLength(1)
 
 		await userEvent.tab()

@@ -2,14 +2,6 @@ import { AppBootNotice } from "@workspace/ui/components/app-boot-notice"
 import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
-type StartupState = {
-	hasLoaded: boolean
-	haveSpacesFailed: boolean
-}
-
-export const isStarting = ({ hasLoaded, haveSpacesFailed }: StartupState) =>
-	haveSpacesFailed || !hasLoaded
-
 type StartupScreenProps = {
 	haveSpacesFailed: boolean
 	onRetrySpaces: () => void
