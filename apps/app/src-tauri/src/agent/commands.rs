@@ -1196,9 +1196,9 @@ mod tests {
 	#[test]
 	fn the_report_names_every_run_the_host_holds_in_the_order_they_started() {
 		let live = Live::<&str>::default();
-		admitted(&live, a_scope());
+		live.take_over(a_scope());
 		std::thread::sleep(std::time::Duration::from_millis(2));
-		admitted(&live, another_bots_run());
+		live.take_over(another_bots_run());
 
 		let held = live.report();
 
@@ -1234,7 +1234,7 @@ mod tests {
 	#[test]
 	fn a_run_started_again_under_its_own_id_is_reported_once_and_installing_keeps_its_start() {
 		let live = Live::<&str>::default();
-		admitted(&live, a_scope());
+		live.take_over(a_scope());
 		let started_at = live.report()[0].started_at;
 
 		assert!(live.install(&a_scope(), REPLACED_SESSION));
@@ -1244,7 +1244,7 @@ mod tests {
 			"installing a session moved the start of the run it was installed on"
 		);
 
-		admitted(&live, a_scope());
+		live.take_over(a_scope());
 		assert!(live.install(&a_scope(), REPLACEMENT_SESSION));
 
 		assert_eq!(
@@ -1259,8 +1259,8 @@ mod tests {
 		let live = Live::<&str>::default();
 		assert!(live.report().is_empty(), "a host holding no run reported one");
 
-		admitted(&live, a_scope());
-		admitted(&live, another_bots_run());
+		live.take_over(a_scope());
+		live.take_over(another_bots_run());
 		live.clear(&a_scope());
 
 		assert_eq!(reported_runs(&live), ["r9"], "a run the host let go stayed in the report");
