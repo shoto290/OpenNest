@@ -21,7 +21,7 @@ import type { TranscriptStore } from "@/lib/conversations/store-port"
 import {
 	type FakeLayout,
 	fakeLayout,
-	shapedContent,
+	MEASURED_ROW_CONTENTS,
 } from "@/lib/perf/fake-layout"
 
 const harness = vi.hoisted(
@@ -97,8 +97,6 @@ const WRITE_CALLS = new Set([
 
 const HIGHLIGHTED_CODE = "const answer = 42"
 
-const CODE_BLOCK = `\`\`\`ts\n${HIGHLIGHTED_CODE}\n\`\`\``
-
 const timeOf = (run: () => unknown) => {
 	const startedAt = performance.now()
 	run()
@@ -167,7 +165,6 @@ const seedTranscript = async (
 	store: TranscriptStore,
 	botId: string,
 	messages: number,
-	withCode = false,
 ) => {
 	const conversationId = `chat-${botId}`
 	for (let index = 0; index < messages; index += 1) {
@@ -177,7 +174,7 @@ const seedTranscript = async (
 		if (index % 2 === 0) {
 			await store.appendUserMessage({
 				authorBotId: null,
-				content: shapedContent(`Question ${index}`, index),
+				content: MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
 				conversationId,
 				createdAt: index,
 				id,
@@ -193,10 +190,10 @@ const seedTranscript = async (
 				repliedToMessageId: null,
 				turnId,
 			})
-			const body = withCode
-				? `Answer ${index} with code\n\n${CODE_BLOCK}`
-				: `Answer ${index}`
-			await store.appendText(id, shapedContent(body, index))
+			await store.appendText(
+				id,
+				MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
+			)
 			await store.finalizeMessage(id, "complete")
 		}
 		await store.completeTurn(turnId, index)
@@ -224,7 +221,6 @@ const mountApp = async ({
 			store,
 			bot.id,
 			isPage ? PAGE_MESSAGES : SEEDED_MESSAGES,
-			isPage,
 		)
 	}
 	const trace = traceStore(store, delayMs)
@@ -456,7 +452,7 @@ describe("PRF5 chat open baseline", () => {
 			{
 			  "commitsToFirstRow": 5,
 			  "commitsToSettled": 13,
-			  "highlightCalls": 4,
+			  "highlightCalls": 2,
 			  "highlighterBuilds": 0,
 			  "markdownProcessors": 12,
 			  "paintedRows": 8,

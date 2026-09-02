@@ -16,7 +16,7 @@ import type { TranscriptStore } from "@/lib/conversations/store-port"
 import {
 	type FakeLayout,
 	fakeLayout,
-	shapedContent,
+	MEASURED_ROW_CONTENTS,
 } from "@/lib/perf/fake-layout"
 
 const harness = vi.hoisted(
@@ -97,7 +97,7 @@ const seedTranscript = async (
 		if (index % 2 === 0) {
 			await store.appendUserMessage({
 				authorBotId: null,
-				content: shapedContent(`Question ${index}`, index),
+				content: MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
 				conversationId,
 				createdAt: index,
 				id,
@@ -113,7 +113,10 @@ const seedTranscript = async (
 				repliedToMessageId: null,
 				turnId,
 			})
-			await store.appendText(id, shapedContent(`Answer ${index}`, index))
+			await store.appendText(
+				id,
+				MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
+			)
 			await store.finalizeMessage(id, "complete")
 		}
 		await store.completeTurn(turnId, index)
@@ -472,9 +475,9 @@ describe("PRF1 render baseline", () => {
 		expect(opened.mountedRuns).toBeLessThan(MOUNTED_RUN_LIMIT)
 		expect(opened).toMatchInlineSnapshot(`
 			{
-			  "commits": 11,
+			  "commits": 12,
 			  "messages": 500,
-			  "mountedRuns": 7,
+			  "mountedRuns": 8,
 			}
 		`)
 	})

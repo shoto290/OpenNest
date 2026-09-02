@@ -4,15 +4,40 @@ const VIEWPORT_HEIGHT = 600
 
 export type MeasuredRowShape = { length: number; height: number }
 
-export const MEASURED_ROW_SHAPES: MeasuredRowShape[] = [
-	{ length: 25, height: 234 },
-	{ length: 30, height: 44 },
-	{ length: 58, height: 44 },
-	{ length: 212, height: 185 },
-	{ length: 539, height: 252 },
+const ONE_LINE_REPLY = "Queued behind the index build."
+
+const USER_MESSAGE =
+	"Can you walk me through what the migration script touches?"
+
+const CODE_ANSWER = [
+	"```ts",
+	"export const migrate = async (db: Database) => {",
+	'  await db.addColumn("accounts", "region", "text")',
+	'  await db.copyColumn("memberships", "role", "role_id")',
+	'  await db.dropColumn("memberships", "role")',
+	"}",
+	"```",
+].join("\n")
+
+const MARKDOWN_ANSWER = [
+	"It rewrites three tables: accounts, memberships and invites. Accounts gains a nullable region column, memberships loses the legacy role string, and invites moves its expiry to a timestamptz.",
+	"The legacy role string is copied into role_id before the column is dropped, so the drop is the last statement of the transaction and a failure halfway rolls every statement back.",
+	"The down migration recreates the role string from role_id, which is lossless for every row the up migration wrote, so the rollback path stays open once it has shipped.",
+].join("\n\n")
+
+export const MEASURED_ROW_CONTENTS = [
+	ONE_LINE_REPLY,
+	USER_MESSAGE,
+	CODE_ANSWER,
+	MARKDOWN_ANSWER,
 ]
 
-const SHAPE_FILLER = " and more of the same answer"
+export const MEASURED_ROW_SHAPES: MeasuredRowShape[] = [
+	{ length: 30, height: 44 },
+	{ length: 58, height: 44 },
+	{ length: 202, height: 185 },
+	{ length: 537, height: 252 },
+]
 
 const SHORTEST_SHAPE = MEASURED_ROW_SHAPES[0]
 
@@ -33,8 +58,7 @@ const between = (
 	((high.height - low.height) * (length - low.length)) /
 		(high.length - low.length)
 
-const rowHeightFor = (text: string) => {
-	const { length } = text
+export const rowHeightFor = (length: number) => {
 	if (length <= SHORTEST_SHAPE.length) return SHORTEST_SHAPE.height
 	if (length >= LONGEST_SHAPE.length) return LONGEST_SHAPE.height
 
@@ -44,16 +68,9 @@ const rowHeightFor = (text: string) => {
 	)
 }
 
-export const shapedContent = (text: string, index: number) => {
-	const held = MEASURED_ROW_SHAPES.filter(
-		(shape) => shape.length >= text.length,
-	)
-	return text.padEnd(held[index % held.length].length, SHAPE_FILLER)
-}
-
 const heightOf = (element: Element) => {
 	if (element.matches(ROW_SELECTOR)) {
-		return rowHeightFor(element.textContent ?? "")
+		return rowHeightFor((element.textContent ?? "").length)
 	}
 	if (element.matches(VIEWPORT_SELECTOR)) return VIEWPORT_HEIGHT
 	return 0

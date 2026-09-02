@@ -2263,17 +2263,25 @@ const MEASURED_ROWS: MessageScrollerRow[] = [
 	},
 ]
 
-const heightsByShape = (canvasElement: HTMLElement) => {
+const shapesByKey = (canvasElement: HTMLElement) => {
 	const rows = canvasElement.querySelectorAll<HTMLElement>(
 		'[data-slot="message-scroller-row"]',
 	)
 	return Object.fromEntries(
 		[...rows].map((row) => [
 			MEASURED_ROWS[Number(row.dataset.index)].key,
-			Math.round(row.getBoundingClientRect().height),
+			{
+				height: Math.round(row.getBoundingClientRect().height),
+				length: (row.textContent ?? "").length,
+			},
 		]),
 	)
 }
+
+const heightsIn = (shapes: Record<string, { height: number }>) =>
+	Object.values(shapes)
+		.map((shape) => shape.height)
+		.sort((left, right) => left - right)
 
 const medianOf = (heights: number[]) =>
 	heights[Math.floor((heights.length - 1) / 2)]
@@ -2298,24 +2306,22 @@ export const RowHeights = meta.story({
 		docs: {
 			description: {
 				story:
-					"The ruler behind `ESTIMATED_ROW_HEIGHT` and the perf harness's row heights: one row per content shape a transcript carries, laid out at the 800px width the harness assumes. The play function pins each measured height, plus the median and the p90 of the set, so a change to a turn's padding, a bubble's radius or the markdown scale shows up here as a failing number instead of silently rotting the estimate the virtualizer starts from.",
+					"The ruler behind `ESTIMATED_ROW_HEIGHT` and the perf harness's row heights: one row per content shape a transcript carries, laid out at the 800px width the harness assumes. The play function pins each row's rendered text length and the height it takes at that length, plus the median and the p90 of the set, so a change to a turn's padding, a bubble's radius or the markdown scale shows up here as a failing number instead of silently rotting the estimate the virtualizer starts from. The harness keys its height table on these lengths, and leaves the tool card out of it: its height comes from the card, not from its text.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		await waitFor(() =>
-			expect(heightsByShape(canvasElement)).toEqual({
-				"code-answer": 185,
-				"markdown-answer": 252,
-				"one-line-reply": 44,
-				"tool-block": 234,
-				"user-message": 44,
+			expect(shapesByKey(canvasElement)).toEqual({
+				"code-answer": { height: 185, length: 202 },
+				"markdown-answer": { height: 252, length: 537 },
+				"one-line-reply": { height: 44, length: 30 },
+				"tool-block": { height: 234, length: 140 },
+				"user-message": { height: 44, length: 58 },
 			}),
 		)
 
-		const heights = Object.values(heightsByShape(canvasElement)).sort(
-			(left, right) => left - right,
-		)
+		const heights = heightsIn(shapesByKey(canvasElement))
 
 		await expect(medianOf(heights)).toBe(185)
 		await expect(p90Of(heights)).toBe(252)

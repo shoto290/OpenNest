@@ -37,7 +37,7 @@ import {
 } from "@workspace/ui/lib/scroll-spring"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
 
-const ESTIMATED_ROW_HEIGHT = 120
+const ESTIMATED_ROW_HEIGHT = 131
 
 const ROW_OVERSCAN = 3
 
