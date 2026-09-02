@@ -47,7 +47,8 @@ const CELL_CLASS =
 
 const TABLE_CLASS = `w-max border-collapse tabular-nums ${CELL_CLASS}`
 
-const FRAME_CLASS = "group/markdown-table relative my-2 w-fit max-w-full"
+const FRAME_CLASS =
+	"not-typeset group/markdown-table relative my-2 w-fit max-w-full first:mt-0 last:mb-0"
 
 const VIEWPORT_CLASS =
 	"overflow-x-auto rounded-xl border border-foreground/15 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"

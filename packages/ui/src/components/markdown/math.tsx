@@ -14,7 +14,7 @@ type MathContent = Pick<
 	"children" | "dangerouslySetInnerHTML"
 >
 
-const DISPLAY_CLASS = "my-3 overflow-x-auto"
+const DISPLAY_CLASS = "not-typeset my-3 overflow-x-auto first:mt-0 last:mb-0"
 
 const contentOf = (html: string, source: string): MathContent =>
 	html ? { dangerouslySetInnerHTML: { __html: html } } : { children: source }
@@ -45,5 +45,5 @@ export const MarkdownMath = ({
 		)
 	}
 
-	return <span data-slot="markdown-math" {...content} />
+	return <span data-slot="markdown-math" className="not-typeset" {...content} />
 }

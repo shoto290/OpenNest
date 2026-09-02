@@ -431,12 +431,49 @@ A code span keeps its own run: \`a     b\` beside \`a b\`.
 > quoted line one
 > and quoted line two`
 
+const TYPESET_BUBBLE = `## Nest report
+
+The nest answers to \`readNest(id)\` and holds three occupants.
+
+- occupants
+	- resident
+		- arrived this week
+	- visitor
+- structure
+
+> The sync ran twice and the second pass found nothing.
+
+\`\`\`ts
+export const summarise = async (id: string) => {
+	const nest = await readNest(id)
+	return { id: nest.id, occupants: nest.occupants.length }
+}
+\`\`\`
+
+${WIDE_TABLE}`
+
 const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
 
 const bubbleContentOf = (canvasElement: HTMLElement) =>
 	canvasElement.querySelector(
 		'[data-slot="message-bubble-content"]',
 	) as HTMLElement
+
+const bubbleContentsOf = (canvasElement: HTMLElement) => [
+	...canvasElement.querySelectorAll<HTMLElement>(
+		'[data-slot="message-bubble-content"]',
+	),
+]
+
+const firstBlockOf = (content: HTMLElement) =>
+	content.querySelector('[data-slot="markdown"]')
+		?.firstElementChild as HTMLElement
+
+const topInsetOf = (content: HTMLElement, block: HTMLElement) =>
+	block.getBoundingClientRect().top - content.getBoundingClientRect().top
+
+const paddingTopOf = (element: HTMLElement) =>
+	Number.parseFloat(getComputedStyle(element).paddingTop)
 
 const fragmentOf = (reference: HTMLElement) =>
 	reference.getAttribute("href")?.slice(1) ?? ""
@@ -1649,5 +1686,46 @@ export const PreservedWhitespace = meta.story({
 			textWidthOf(paddedCell) - textWidthOf(plainCell),
 		).toBeGreaterThan(SPACE_RUN)
 		await expect(renderedLinesOf(quoted)).toBe(2)
+	},
+})
+
+export const TypesetInBubble = meta.story({
+	args: { children: TYPESET_BUBBLE },
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The whole rhythm inside the surface it ships on, drawn in both schemes at once. Heading, nested list, quote, fence, wide table and inline code all take their type from the vendored `typeset` stylesheet, while the fence and the table keep their own frame through the `not-typeset` escape hatch. Check that the heading opens flush with the bubble padding rather than pushing a blank line above itself, that the table scrolls on its own axis instead of widening the bubble, and that every tone — heading ink, quote rule, list markers, code chip — holds on the bubble surface in both schemes.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvasElement }) => {
+		const contents = bubbleContentsOf(canvasElement)
+
+		await expect(contents).toHaveLength(2)
+
+		for (const content of contents) {
+			const first = firstBlockOf(content)
+			const viewport = content.querySelector(
+				'[data-slot="markdown-table"] [role="group"]',
+			) as HTMLElement
+
+			await expect(first.tagName).toBe("H2")
+			await expect(getComputedStyle(first).marginBlockStart).toBe("0px")
+			await expect(Math.round(topInsetOf(content, first))).toBe(
+				Math.round(paddingTopOf(content)),
+			)
+
+			await expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth)
+			await expect(content.scrollWidth).toBe(content.clientWidth)
+		}
 	},
 })

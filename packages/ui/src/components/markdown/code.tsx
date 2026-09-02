@@ -97,7 +97,10 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 	}, [code, language, painted, ready])
 
 	return (
-		<div data-slot="markdown-fence" className="relative my-2">
+		<div
+			data-slot="markdown-fence"
+			className="not-typeset relative my-2 first:mt-0 last:mb-0"
+		>
 			<pre>
 				<span
 					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable

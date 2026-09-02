@@ -12,7 +12,7 @@ export interface MarkdownMermaidProps {
 	source: string
 }
 
-const FRAME_CLASS = "my-2 w-fit max-w-full"
+const FRAME_CLASS = "not-typeset my-2 w-fit max-w-full first:mt-0 last:mb-0"
 
 const VIEWPORT_CLASS =
 	"overflow-x-auto rounded-xl border border-foreground/15 p-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
