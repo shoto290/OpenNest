@@ -12,6 +12,7 @@ import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { useSettingsShortcut } from "@workspace/ui/hooks/use-settings-shortcut"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
+import { isStarting, StartupScreen } from "@/components/startup-screen"
 import { WorkspaceBody } from "@/components/workspace-body"
 import {
 	changesRuntime,
@@ -539,6 +540,15 @@ export function App() {
 		onToggle: toggleSettings,
 	})
 
+	const startup = {
+		hasLoaded,
+		haveSpacesFailed: spaces.state.hasFailedToLoad,
+	}
+
+	if (isStarting(startup)) {
+		return <StartupScreen {...startup} onRetrySpaces={loadSpaces} />
+	}
+
 	return (
 		<>
 			<WorkspaceShell
@@ -578,13 +588,10 @@ export function App() {
 					conversation={selectedConversation}
 					conversationRuntimes={conversationRuntimes}
 					drafts={drafts}
-					hasLoaded={hasLoaded}
-					haveSpacesFailed={spaces.state.hasFailedToLoad}
 					isConversationSettingsOpen={isThreadConversationSettingsOpen}
 					isOverlayOpen={isOverlayOpen}
 					isSettingsOpen={isThreadSettingsOpen}
 					onOpenConversationSettings={roster.controller.editConversation}
-					onRetrySpaces={loadSpaces}
 					onToggleSettings={toggleSettings}
 					readerName={preferences.displayName}
 				/>
