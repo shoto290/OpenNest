@@ -15,11 +15,6 @@ import {
 	MessageQuote,
 	type QuotedMessage,
 } from "@workspace/ui/components/message-quote"
-import type {
-	MessageScrollerHandle,
-	MessageScrollerRow,
-	MessageScrollerTrace,
-} from "@workspace/ui/components/message-scroller"
 import {
 	PINNED_AVATAR_SIZE,
 	type PinnedMessage,
@@ -27,6 +22,10 @@ import {
 } from "@workspace/ui/components/pinned-messages"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
+import type {
+	TranscriptHandle,
+	TranscriptItem,
+} from "@workspace/ui/components/transcript"
 import { TurnGroup } from "@workspace/ui/components/turn"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
@@ -106,12 +105,6 @@ import type { WorkingState } from "@/lib/chat/working-kind"
 import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import { leadOf } from "@/lib/conversations/roster-conversations"
 import { useConversation } from "@/lib/conversations/use-conversation"
-
-const logLandingTrace = (event: MessageScrollerTrace) => {
-	console.info("transcript landing", event)
-}
-
-const landingTrace = import.meta.env.DEV ? logLandingTrace : undefined
 
 type WorkingBotProps = BotStopProps & {
 	face: ThreadFace
@@ -459,10 +452,11 @@ const toRunRows = ({
 	runs,
 	presentations,
 	...shared
-}: RunRowsProps): MessageScrollerRow[] =>
+}: RunRowsProps): TranscriptItem[] =>
 	runs.map((run, runIndex) => ({
 		key: bubbleIdOf(run[0].messageId, run[0].blockIndex),
 		messageIds: run.map((row) => bubbleIdOf(row.messageId, row.blockIndex)),
+		isAnchor: run[0].role === "user",
 		render: () => (
 			<ThreadRun {...shared} presentation={presentations[runIndex]} run={run} />
 		),
@@ -665,7 +659,7 @@ function ThreadView({
 	const facts = factsOf(thread)
 	const composerRef = useRef<HTMLTextAreaElement>(null)
 	const rootRef = useRef<HTMLDivElement>(null)
-	const scrollerRef = useRef<MessageScrollerHandle>(null)
+	const scrollerRef = useRef<TranscriptHandle>(null)
 	const promptResponder = usePromptResponder(controller, scrollerRef)
 
 	const reader = readerName || t("working.name")
@@ -789,6 +783,7 @@ function ThreadView({
 	return (
 		<RosterProvider bots={bots}>
 			<ThreadLayout
+				anchorOnSend={isSoloThread}
 				busy={facts.isBusy}
 				composer={
 					<ThreadComposerSlot
@@ -828,6 +823,8 @@ function ThreadView({
 						staged={staged}
 					/>
 				}
+				countsNewMessages={!isSoloThread}
+				marksNewMessages={!isSoloThread}
 				older={
 					state.messages.length > 0
 						? {
@@ -838,7 +835,6 @@ function ThreadView({
 						: undefined
 				}
 				onFollowChange={controller.follow}
-				onLandingTrace={landingTrace}
 				pending={
 					<ThreadPending
 						authors={authors}

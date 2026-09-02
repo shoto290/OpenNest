@@ -161,6 +161,16 @@
 			}
 		},
 		{
+			"includes": ["packages/ui/src/components/message-scroller.tsx"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["packages/ui/src/components/icons.tsx"],
 			"linter": {
 				"rules": {

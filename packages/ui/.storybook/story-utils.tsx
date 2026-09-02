@@ -31,7 +31,8 @@ export const A11Y_FLOATING_FOCUS_GUARDS = {
 export const FRAME_POLL = { interval: 10 }
 
 const runsToAnEnd = (animation: Animation) =>
-	animation.effect?.getTiming().duration !== "auto"
+	animation.effect?.getTiming().duration !== "auto" &&
+	animation.timeline instanceof DocumentTimeline
 
 export const settled = async (element: HTMLElement) => {
 	await waitFor(() => expect(element).toBeVisible(), FRAME_POLL)

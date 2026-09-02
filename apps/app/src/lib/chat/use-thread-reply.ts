@@ -1,12 +1,12 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 
-import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
+import type { TranscriptHandle } from "@workspace/ui/components/transcript"
 
 import { claimsComposerFocus, type ReplyTarget } from "./screen-model"
 
 type ThreadReplyInput = {
 	composerRef: RefObject<HTMLTextAreaElement | null>
-	scrollerRef: RefObject<MessageScrollerHandle | null>
+	scrollerRef: RefObject<TranscriptHandle | null>
 	send: (text: string, repliedToMessageId?: string) => Promise<boolean>
 }
 

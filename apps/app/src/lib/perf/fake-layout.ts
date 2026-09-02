@@ -4,9 +4,9 @@ const VIEWPORT_HEIGHT = 600
 
 const ROW_HEIGHT = 120
 
-const VIEWPORT_SELECTOR = '[data-slot="message-scroller"] > section'
+const VIEWPORT_SELECTOR = '[data-slot="message-scroller-viewport"]'
 
-const ROW_SELECTOR = '[data-slot="message-scroller-row"]'
+const ROW_SELECTOR = '[data-slot="message-scroller-item"]'
 
 export type FakeLayout = { restore: () => void }
 
