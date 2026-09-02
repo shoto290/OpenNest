@@ -1180,6 +1180,15 @@ mod tests {
 		);
 	}
 
+	const ONE_START: i64 = 1_700_000_000_000;
+
+	fn held_since<S>(live: &Live<S>, scope: RuntimeScope, started_at: i64) {
+		live.runs
+			.lock()
+			.expect("live runs")
+			.insert(run_key(&scope), Run { scope, session: None, started_at });
+	}
+
 	fn reported_runs<S: Clone>(live: &Live<S>) -> Vec<String> {
 		live.report().into_iter().map(|held| held.runtime_session_id).collect()
 	}
@@ -1207,10 +1216,10 @@ mod tests {
 	}
 
 	#[test]
-	fn runs_admitted_in_the_same_millisecond_are_reported_by_id_and_in_the_same_order_twice() {
+	fn runs_sharing_one_start_are_reported_by_id_and_in_the_same_order_twice() {
 		let live = Live::<&str>::default();
-		admitted(&live, the_next_run());
-		admitted(&live, a_scope());
+		held_since(&live, the_next_run(), ONE_START);
+		held_since(&live, a_scope(), ONE_START);
 
 		let held = live.report();
 
