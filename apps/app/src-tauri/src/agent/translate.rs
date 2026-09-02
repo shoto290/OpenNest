@@ -12,7 +12,7 @@ use super::contract::{
 };
 use super::protocol::{
 	CommandsFrame, ContentBlock, ContentDelta, ControlRequestBody, Frame, RejectionFrame,
-	StreamEvent, SystemFrame,
+	ResultFrame, StreamEvent, SystemFrame,
 };
 use super::redact;
 
@@ -142,7 +142,7 @@ impl Translator {
 				if let Some(id) = result.session_id.clone() {
 					self.session_id.get_or_insert(id);
 				}
-				self.on_result(result.subtype.as_deref(), result.is_error)
+				self.on_result(result)
 			}
 			Frame::Commands(frame) => Self::on_commands(frame),
 			Frame::SettingsRejected(frame) => Self::on_settings_rejected(frame),
@@ -286,10 +286,12 @@ impl Translator {
 		events
 	}
 
-	fn on_result(&mut self, subtype: Option<&str>, is_error: bool) -> Vec<AgentEvent> {
+	fn on_result(&mut self, frame: ResultFrame) -> Vec<AgentEvent> {
 		let outcome = if self.cancelling {
 			TurnOutcome::Cancelled
-		} else if is_error || subtype.is_some_and(|subtype| subtype != "success") {
+		} else if frame.is_error
+			|| frame.subtype.as_deref().is_some_and(|subtype| subtype != "success")
+		{
 			TurnOutcome::Failed
 		} else {
 			TurnOutcome::Completed
@@ -315,7 +317,13 @@ impl Translator {
 		self.pending_permissions.clear();
 
 		events.push(AgentEvent::TurnEnded {
-			ended: TurnEnded { session_id: self.session_id.clone(), outcome },
+			ended: TurnEnded {
+				session_id: self.session_id.clone(),
+				outcome,
+				structured_output: frame.structured_output,
+				total_cost_usd: frame.total_cost_usd,
+				model_usage: frame.model_usage,
+			},
 		});
 		events
 	}
@@ -494,10 +502,53 @@ mod tests {
 	}
 
 	fn outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
+		turn_ended(events).map(|ended| ended.outcome)
+	}
+
+	fn turn_ended(events: &[AgentEvent]) -> Option<&TurnEnded> {
 		events.iter().find_map(|event| match event {
-			AgentEvent::TurnEnded { ended } => Some(ended.outcome),
+			AgentEvent::TurnEnded { ended } => Some(ended),
 			_ => None,
 		})
+	}
+
+	#[test]
+	fn a_result_carries_its_structured_output_cost_and_model_usage_to_the_turn() {
+		let structured_output = json!({ "Verdict": "routine", "notes": ["nothing to report"] });
+		let model_usage = json!({ "claude-sonnet-4-5": { "inputTokens": 12, "costUSD": 0.03 } });
+		let mut translator = Translator::new(false);
+
+		let events = ingest(
+			&mut translator,
+			vec![json!({
+				"type": "result",
+				"subtype": "success",
+				"is_error": false,
+				"session_id": "s-1",
+				"structured_output": structured_output,
+				"total_cost_usd": 0.0425,
+				"modelUsage": model_usage,
+			})],
+		);
+
+		let ended = turn_ended(&events).expect("a turn that ended");
+		assert_eq!(ended.structured_output, Some(structured_output));
+		assert_eq!(ended.total_cost_usd, Some(0.0425));
+		assert_eq!(ended.model_usage, Some(model_usage));
+	}
+
+	#[test]
+	fn a_result_without_the_three_values_ends_the_turn_with_none_of_them() {
+		let mut translator = Translator::new(false);
+
+		let events = ingest(&mut translator, vec![result("success", false)]);
+
+		let ended = turn_ended(&events).expect("a turn that ended");
+		assert_eq!(ended.session_id.as_deref(), Some("s-1"));
+		assert_eq!(ended.outcome, TurnOutcome::Completed);
+		assert_eq!(ended.structured_output, None);
+		assert_eq!(ended.total_cost_usd, None);
+		assert_eq!(ended.model_usage, None);
 	}
 
 	#[test]

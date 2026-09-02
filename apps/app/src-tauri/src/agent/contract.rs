@@ -1,4 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,11 +119,17 @@ pub enum EvolvedBundle {
 	Space,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnEnded {
 	pub session_id: Option<String>,
 	pub outcome: TurnOutcome,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub structured_output: Option<Value>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub total_cost_usd: Option<f64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub model_usage: Option<Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,7 +273,7 @@ pub struct LiveSession {
 	pub started_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScopedEvent {
 	pub scope: Option<RuntimeScope>,
@@ -330,7 +337,7 @@ impl<'de> Deserialize<'de> for AgentCommand {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AgentEvent {
 	#[serde(rename_all = "camelCase")]

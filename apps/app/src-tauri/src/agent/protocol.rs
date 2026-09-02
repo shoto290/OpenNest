@@ -194,6 +194,12 @@ pub struct ResultFrame {
 	pub session_id: Option<String>,
 	#[serde(default, deserialize_with = "null_as_default")]
 	pub is_error: bool,
+	#[serde(default)]
+	pub structured_output: Option<Value>,
+	#[serde(default)]
+	pub total_cost_usd: Option<f64>,
+	#[serde(default, rename = "modelUsage")]
+	pub model_usage: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
