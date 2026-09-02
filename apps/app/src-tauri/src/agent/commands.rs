@@ -122,7 +122,10 @@ impl<S: Clone> Live<S> {
 	fn report(&self) -> Vec<LiveSession> {
 		let mut held: Vec<LiveSession> =
 			self.runs.lock().expect("live runs").values().map(Run::reported).collect();
-		held.sort_by_key(|entry| entry.started_at);
+		held.sort_by(|left, right| {
+			(left.started_at, &left.runtime_session_id)
+				.cmp(&(right.started_at, &right.runtime_session_id))
+		});
 		held
 	}
 
@@ -1201,6 +1204,22 @@ mod tests {
 			held[0].started_at < held[1].started_at,
 			"a later run started before an earlier one"
 		);
+	}
+
+	#[test]
+	fn runs_admitted_in_the_same_millisecond_are_reported_by_id_and_in_the_same_order_twice() {
+		let live = Live::<&str>::default();
+		admitted(&live, the_next_run());
+		admitted(&live, a_scope());
+
+		let held = live.report();
+
+		assert_eq!(
+			reported_runs(&live),
+			["r1", "r2"],
+			"runs sharing a start were not reported by their runtime session id"
+		);
+		assert_eq!(live.report(), held, "two reports of the same runs disagreed on the order");
 	}
 
 	#[test]
