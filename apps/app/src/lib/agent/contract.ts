@@ -97,7 +97,6 @@ export type TransportError =
 	| { kind: "notStarted" }
 	| { kind: "turnAlreadyRunning" }
 	| { kind: "transitionInProgress" }
-	| { kind: "tooManyLiveSessions"; cap: number }
 	| { kind: "noActiveTurn" }
 	| { kind: "staleRuntimeSession"; runtimeSessionId: string }
 	| { kind: "unknownPermission"; id: string }

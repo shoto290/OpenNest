@@ -24,8 +24,6 @@ pub const EVENT_CHANNEL: &str = "agent://event";
 
 const RUNS_DIR: &str = "runs";
 
-const MAX_LIVE_SESSIONS: usize = 8;
-
 fn announce<R: Runtime>(app: &AppHandle<R>, scope: Option<RuntimeScope>, event: AgentEvent) {
 	let _ = app.emit(EVENT_CHANNEL, ScopedEvent { scope, event });
 }
@@ -73,18 +71,15 @@ impl<S> Default for Live<S> {
 }
 
 impl<S: Clone> Live<S> {
-	fn take_over(&self, scope: RuntimeScope) -> Result<Admission<S>, TransportError> {
+	fn take_over(&self, scope: RuntimeScope) -> Admission<S> {
 		let mut runs = self.runs.lock().expect("live runs");
 		let key = run_key(&scope);
-		if !runs.contains_key(&key) && runs.len() >= MAX_LIVE_SESSIONS {
-			return Err(TransportError::TooManyLiveSessions { cap: MAX_LIVE_SESSIONS });
-		}
 		let keeps_lineage = !runs
 			.iter()
 			.any(|(held, run)| held != &key && participant(&run.scope) == participant(&scope));
 		let replaced =
 			runs.insert(key, Run { scope, session: None }).and_then(|replaced| replaced.session);
-		Ok(Admission { replaced, keeps_lineage })
+		Admission { replaced, keeps_lineage }
 	}
 
 	fn install(&self, scope: &RuntimeScope, session: S) -> bool {
@@ -544,7 +539,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 ) -> Result<SessionHandle, TransportError> {
 	let _claim = state.claim(&scope)?;
 
-	let admitted = state.live.take_over(scope.clone())?;
+	let admitted = state.live.take_over(scope.clone());
 	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
 	let resume = admitted.resume(resume);
 	if let Some(previous) = admitted.replaced {
@@ -986,7 +981,7 @@ mod tests {
 	}
 
 	fn admitted<S: Clone>(live: &Live<S>, scope: RuntimeScope) -> Admission<S> {
-		live.take_over(scope).expect("the host admits the run")
+		live.take_over(scope)
 	}
 
 	fn is_stale(outcome: &Result<&str, TransportError>) -> bool {
@@ -1091,30 +1086,19 @@ mod tests {
 	}
 
 	#[test]
-	fn the_ninth_live_session_is_refused_and_the_eight_it_found_stay() {
+	fn ten_runs_admitted_in_a_row_are_all_held_live() {
 		let live = Live::<&str>::default();
-		for index in 0..MAX_LIVE_SESSIONS {
-			let scope = a_run_named(&format!("r{index}"));
+		let runs: Vec<RuntimeScope> = (0..10).map(|index| a_run_named(&format!("r{index}"))).collect();
+
+		for scope in &runs {
 			admitted(&live, scope.clone());
-			assert!(live.install(&scope, REPLACED_SESSION));
+			assert!(live.install(scope, REPLACED_SESSION));
 		}
 
-		let refused = live.take_over(a_run_named("r-one-too-many")).err();
-
-		assert_eq!(
-			refused,
-			Some(TransportError::TooManyLiveSessions { cap: MAX_LIVE_SESSIONS }),
-			"the ninth live session was let in"
-		);
-		assert!(
-			!live.holds(&a_run_named("r-one-too-many")),
-			"a refused start was still taken for a live run"
-		);
-		assert_eq!(
-			live.clear_all().len(),
-			MAX_LIVE_SESSIONS,
-			"the sessions the host was already holding did not survive the refusal"
-		);
+		for scope in &runs {
+			assert!(live.holds(scope), "a run the host admitted was not held live");
+		}
+		assert_eq!(live.clear_all().len(), runs.len(), "the host let go of a run it had admitted");
 	}
 
 	#[test]

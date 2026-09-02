@@ -41,8 +41,6 @@ export function describeTransportError(
 			return t("screen.transport.turnAlreadyRunning")
 		case "transitionInProgress":
 			return t("screen.transport.transitionInProgress")
-		case "tooManyLiveSessions":
-			return t("screen.transport.tooManyLiveSessions", { cap: error.cap })
 		case "noActiveTurn":
 			return t("screen.transport.noActiveTurn")
 		case "staleRuntimeSession":
