@@ -67,9 +67,9 @@ const NO_ROWS: TranscriptItem[] = []
 
 const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
 
-const ALWAYS_RENDERED = "[content-visibility:visible]"
-
 const NO_SCROLLBAR_GUTTER = "scrollbar-auto scrollbar-gutter-auto"
+
+const ALWAYS_RENDERED = "[content-visibility:visible]"
 
 const indexOfKey = (rows: TranscriptItem[], key: string | null) =>
 	key === null ? -1 : rows.findIndex((row) => row.key === key)
