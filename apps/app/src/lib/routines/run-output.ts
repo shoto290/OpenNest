@@ -35,5 +35,5 @@ export const readRunReport = (structuredOutput: unknown): RunReport | null => {
 		return null
 	}
 	const text = report.trim()
-	return text.length > 0 ? { outcome: "report", text } : null
+	return text.length > 0 ? { outcome: "report", text } : { outcome: "nothing" }
 }

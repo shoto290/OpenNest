@@ -4,7 +4,12 @@ import { createFakeRunPort, type FakeRunPort } from "./fake-run-port"
 import type { RunCause, RunRequested } from "./routine-contract"
 import { LEASE_INTERVAL_MS, startRunDriver } from "./run-driver"
 
-import type { RuntimeScope, TurnEnded } from "../agent/contract"
+import type {
+	AgentEvent,
+	RuntimeScope,
+	TransportError,
+	TurnEnded,
+} from "../agent/contract"
 import type { ConversationState } from "../conversations/conversation-controller"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -40,6 +45,7 @@ type Harness = {
 	requested: (cause?: RunCause) => RunRequested
 	state: () => ConversationState
 	shown: () => [string | null, string][]
+	emitAtRun: (event: AgentEvent) => Promise<void>
 	endTurn: (ended: Partial<TurnEnded>) => Promise<void>
 	openOnScreen: () => Promise<void>
 }
@@ -84,17 +90,20 @@ const createHarness = async (
 		payload: { issue: "PROJ-12", state: "closed" },
 	})
 
-	const endTurn = async (ended: Partial<TurnEnded>) => {
+	const emitAtRun = async (event: AgentEvent) => {
 		const start = starts.at(-1)
 		if (!start) {
 			throw new Error("no run session was opened")
 		}
-		driver.emit(start.scope, {
+		driver.emit(start.scope, event)
+		await settled()
+	}
+
+	const endTurn = (ended: Partial<TurnEnded>) =>
+		emitAtRun({
 			type: "turnEnded",
 			ended: { sessionId: null, outcome: "completed", ...ended },
 		})
-		await settled()
-	}
 
 	const openOnScreen = async () => {
 		await runtimes.runtimeFor(conversation.id).open(conversation)
@@ -120,6 +129,7 @@ const createHarness = async (
 		requested,
 		state,
 		shown,
+		emitAtRun,
 		endTurn,
 		openOnScreen,
 	}
@@ -128,6 +138,42 @@ const createHarness = async (
 const reported = (report: string): Partial<TurnEnded> => ({
 	structuredOutput: { outcome: "report", report },
 })
+
+const CRASHED: TransportError = {
+	kind: "crashed",
+	code: 1,
+	detail: "the sidecar died",
+}
+
+const STALE: TransportError = {
+	kind: "staleRuntimeSession",
+	runtimeSessionId: "rs-9",
+}
+
+const ASKED: AgentEvent = {
+	type: "questionRequested",
+	request: {
+		id: "q-1",
+		questions: [
+			{
+				header: "Which board?",
+				question: "Which board should I read?",
+				options: [],
+				multiSelect: false,
+			},
+		],
+	},
+}
+
+const PERMITTED: AgentEvent = {
+	type: "permissionRequested",
+	request: {
+		id: "p-1",
+		toolName: "Bash",
+		title: "Run a command",
+		detail: null,
+	},
+}
 
 describe("startRunDriver", () => {
 	let harness: Harness
@@ -332,4 +378,97 @@ describe("startRunDriver", () => {
 			})
 		},
 	)
+
+	it("closes the run failed naming a transport error that ends the session", async () => {
+		vi.useFakeTimers()
+		harness.runs.request(harness.requested())
+		await vi.advanceTimersByTimeAsync(0)
+		await harness.emitAtRun({ type: "failed", error: CRASHED })
+
+		expect(harness.driver.shutdowns).toEqual([harness.botId])
+		expect(harness.runs.closings[0].closing).toEqual({
+			outcome: "failed",
+			reason: "the run's session failed with crashed: the sidecar died",
+		})
+
+		await vi.advanceTimersByTimeAsync(LEASE_INTERVAL_MS * 2)
+		expect(harness.runs.renewals).toEqual([])
+	})
+
+	it("keeps the run live on a transport error that does not end the session", async () => {
+		vi.useFakeTimers()
+		harness.runs.request(harness.requested())
+		await vi.advanceTimersByTimeAsync(0)
+		await harness.emitAtRun({ type: "failed", error: STALE })
+
+		expect(harness.runs.closings).toEqual([])
+		expect(harness.driver.shutdowns).toEqual([])
+
+		await vi.advanceTimersByTimeAsync(LEASE_INTERVAL_MS * 2)
+		expect(harness.runs.renewals).toEqual(["run-1", "run-1"])
+	})
+
+	it.each([
+		[ASKED, "a run cannot be asked a question"],
+		[PERMITTED, "a run cannot be asked for a permission"],
+	])(
+		"cancels the turn and closes the run failed when asked",
+		async (asked, reason) => {
+			await harness.openOnScreen()
+			harness.runs.request(harness.requested())
+			await settled()
+			await harness.emitAtRun(asked)
+
+			expect(harness.driver.cancelled).toEqual([harness.botId])
+			expect(harness.driver.shutdowns).toEqual([harness.botId])
+			expect(harness.shown()).toEqual([])
+			expect(harness.runs.closings).toEqual([
+				{ runId: "run-1", closing: { outcome: "failed", reason } },
+			])
+		},
+	)
+
+	it("closes the run once, whatever arrives after the closing", async () => {
+		vi.useFakeTimers()
+		harness.runs.request(harness.requested())
+		await vi.advanceTimersByTimeAsync(0)
+		await harness.emitAtRun(ASKED)
+		await harness.endTurn({ outcome: "cancelled" })
+		await harness.emitAtRun({ type: "failed", error: CRASHED })
+
+		expect(harness.runs.closings).toHaveLength(1)
+
+		await vi.advanceTimersByTimeAsync(LEASE_INTERVAL_MS * 2)
+		expect(harness.runs.renewals).toEqual([])
+	})
+
+	it("writes nothing and closes the run nothing on a blank report", async () => {
+		await harness.openOnScreen()
+		harness.runs.request(harness.requested())
+		await settled()
+		await harness.endTurn(reported("   "))
+
+		expect(harness.shown()).toEqual([])
+		expect(harness.runs.closings[0].closing).toMatchObject({
+			outcome: "nothing",
+		})
+	})
+
+	it("leaves an event untouched when no live run sits at its scope", async () => {
+		harness.runs.request(harness.requested())
+		await settled()
+		harness.driver.emit(
+			{
+				conversationId: harness.conversation.id,
+				botId: harness.botId,
+				runtimeSessionId: "rs-other",
+				epoch: 1,
+			},
+			{ type: "failed", error: CRASHED },
+		)
+		await settled()
+
+		expect(harness.runs.closings).toEqual([])
+		expect(harness.driver.shutdowns).toEqual([])
+	})
 })

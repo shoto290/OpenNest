@@ -6,11 +6,13 @@ import { runPromptFor } from "./run-prompt"
 import type {
 	RuntimeScope,
 	ScopedEvent,
+	TransportError,
 	TurnEnded,
 	TurnOutcome,
 } from "../agent/contract"
 import { isSameRuntimeScope } from "../chat/chat-state"
 import type { ChatDriver } from "../chat/driver"
+import { needsFreshSession } from "../chat/screen-model"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { TranscriptStore } from "../conversations/store-port"
 
@@ -19,7 +21,11 @@ export const LEASE_INTERVAL_MS = 60_000
 export type RunDriverOptions = {
 	driver: Pick<
 		ChatDriver,
-		"startOrResumeSession" | "submitPrompt" | "shutdown" | "subscribe"
+		| "startOrResumeSession"
+		| "submitPrompt"
+		| "cancelTurn"
+		| "shutdown"
+		| "subscribe"
 	>
 	store: Pick<TranscriptStore, "openRuntimeSession">
 	runtimes: Pick<ConversationRuntimes, "runtimeFor">
@@ -39,6 +45,16 @@ const REASON_FOR_OUTCOME: Record<Exclude<TurnOutcome, "completed">, string> = {
 }
 
 const MISSING_OUTPUT_REASON = "the run's turn ended with no structured output"
+
+const QUESTION_REASON = "a run cannot be asked a question"
+
+const PERMISSION_REASON = "a run cannot be asked for a permission"
+
+const detailIn = (error: TransportError) =>
+	"detail" in error && error.detail ? `: ${error.detail}` : ""
+
+const transportReason = (error: TransportError) =>
+	`the run's session failed with ${error.kind}${detailIn(error)}`
 
 const detailOf = (thrown: unknown) =>
 	thrown instanceof Error ? thrown.message : JSON.stringify(thrown)
@@ -71,12 +87,20 @@ export const startRunDriver = ({
 			console.error("run driver: routine_renew_lease failed", reason)
 		})
 
-	const end = (held: LiveRun) => {
+	const forget = (held: LiveRun) => {
 		clearInterval(held.lease)
 		live.delete(held.requested.runId)
-		void driver.shutdown(held.scope).catch((reason) => {
+	}
+
+	const shutdownSession = (scope: RuntimeScope) => {
+		void driver.shutdown(scope).catch((reason) => {
 			console.error("run driver: agent_shutdown failed", reason)
 		})
+	}
+
+	const end = (held: LiveRun) => {
+		forget(held)
+		shutdownSession(held.scope)
 	}
 
 	const openScope = async ({ conversationId, botId }: RunRequested) => {
@@ -169,15 +193,44 @@ export const startRunDriver = ({
 	const runAt = (scope: RuntimeScope | null) =>
 		[...live.values()].find((held) => isSameRuntimeScope(scope, held.scope))
 
-	const route = ({ scope, event }: ScopedEvent) => {
-		if (event.type !== "turnEnded") {
+	const fail = async (held: LiveRun, error: TransportError) => {
+		if (!needsFreshSession(error)) {
 			return
 		}
+		end(held)
+		await close(held.requested.runId, {
+			outcome: "failed",
+			reason: transportReason(error),
+		})
+	}
+
+	const refuse = async (held: LiveRun, reason: string) => {
+		const { scope } = held
+		forget(held)
+		await driver.cancelTurn(scope).catch((thrown) => {
+			console.error("run driver: agent_cancel_turn failed", thrown)
+		})
+		shutdownSession(scope)
+		await close(held.requested.runId, { outcome: "failed", reason })
+	}
+
+	const route = ({ scope, event }: ScopedEvent) => {
 		const held = runAt(scope)
 		if (!held) {
 			return
 		}
-		void settle(held, event.ended)
+		switch (event.type) {
+			case "turnEnded":
+				return void settle(held, event.ended)
+			case "failed":
+				return void fail(held, event.error)
+			case "questionRequested":
+				return void refuse(held, QUESTION_REASON)
+			case "permissionRequested":
+				return void refuse(held, PERMISSION_REASON)
+			default:
+				return
+		}
 	}
 
 	const requests = listening(
