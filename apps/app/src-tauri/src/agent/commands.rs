@@ -1191,7 +1191,7 @@ mod tests {
 		let held = live.report();
 
 		assert_eq!(
-			reported_runs(&live),
+			held.iter().map(|run| run.runtime_session_id.as_str()).collect::<Vec<_>>(),
 			["r1", "r9"],
 			"the runs were not reported in the order they started"
 		);
