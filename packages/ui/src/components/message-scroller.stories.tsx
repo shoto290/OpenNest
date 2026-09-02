@@ -2251,7 +2251,7 @@ const RECORDED_SHAPES = Object.fromEntries(
 	]),
 )
 
-const RECORDED_HEIGHTS = MEASURED_ROWS.map((measured) => measured.height)
+const TABLE_HEIGHTS = MEASURED_ROWS.map((measured) => measured.height)
 
 const LINE_BAND = 24
 
@@ -2345,15 +2345,15 @@ export const RowHeights = meta.story({
 		await expect(driftedHeights(canvasElement)).toEqual([])
 
 		const heights = heightsIn(shapesByKey(canvasElement))
-		const recorded = heightsIn(RECORDED_SHAPES)
+		const recordedHeights = heightsIn(RECORDED_SHAPES)
 
-		await expect(Math.abs(medianOf(heights) - medianOf(recorded))).toBeLessThan(
-			LINE_BAND,
-		)
-		await expect(Math.abs(p90Of(heights) - p90Of(recorded))).toBeLessThan(
-			LINE_BAND,
-		)
+		await expect(
+			Math.abs(medianOf(heights) - medianOf(recordedHeights)),
+		).toBeLessThan(LINE_BAND)
+		await expect(
+			Math.abs(p90Of(heights) - p90Of(recordedHeights)),
+		).toBeLessThan(LINE_BAND)
 		await expect(heights[heights.length - 1]).toBeGreaterThan(2 * heights[0])
-		await expect(ESTIMATED_ROW_HEIGHT).toBe(meanOf(RECORDED_HEIGHTS))
+		await expect(ESTIMATED_ROW_HEIGHT).toBe(meanOf(TABLE_HEIGHTS))
 	},
 })
