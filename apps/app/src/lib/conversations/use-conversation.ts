@@ -32,6 +32,8 @@ export const useConversation = (
 		void controller.open(conversation)
 	}, [controller, conversation])
 
+	useEffect(() => () => controller.leave(), [controller])
+
 	return { state, controller }
 }
 

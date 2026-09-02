@@ -708,7 +708,17 @@ export function createChatController(
 		return settled
 	}
 
+	const leaveThread = (botId: string) => {
+		const conversationId = bots.get(botId)?.state.conversationId
+		if (conversationId) {
+			transcript.leave(conversationId)
+		}
+	}
+
 	const choose = (botId: string | null) => {
+		if (chosenBotId !== null && chosenBotId !== botId) {
+			leaveThread(chosenBotId)
+		}
 		chosenBotId = botId
 		publish()
 	}

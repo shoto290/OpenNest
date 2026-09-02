@@ -26,9 +26,10 @@ import {
 	FAKE_CHAT_ID,
 } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
-import type {
-	TranscriptCompletion,
-	TranscriptMessage,
+import {
+	TRANSCRIPT_WINDOW_SIZE,
+	type TranscriptCompletion,
+	type TranscriptMessage,
 } from "../conversations/transcript-contract"
 import {
 	botIdentity,
@@ -1485,6 +1486,48 @@ describe("history above the transcript", () => {
 			Array.from({ length: HISTORY }, (_, index) => index + 1),
 		)
 		expect(ids[0]).toBe("stored-1")
+	})
+
+	it("drops the pages loaded above the window when the reader leaves", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		await harness.controller.loadOlder()
+		await harness.controller.loadOlder()
+		await harness.controller.loadOlder()
+		expect(harness.controller.getState().messages).toHaveLength(80)
+
+		await harness.controller.open(other.id)
+		await vi.runAllTimersAsync()
+
+		const left = harness.controller.stateFor(BOT)
+		expect(left.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE)
+		expect(left.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
+		expect(left.hasOlder).toBe(true)
+		harness.detach()
+	})
+
+	it("pages back into the store when the reader comes back", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store })
+		await harness.controller.loadOlder()
+		await harness.controller.loadOlder()
+		await harness.controller.loadOlder()
+		await harness.controller.open(other.id)
+		await vi.runAllTimersAsync()
+
+		await harness.controller.open(BOT)
+		await vi.runAllTimersAsync()
+		await harness.controller.loadOlder()
+
+		const state = harness.controller.getState()
+		expect(state.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE + 20)
+		expect(state.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
+		expect(new Set(state.messages.map((message) => message.id)).size).toBe(
+			state.messages.length,
+		)
+		harness.detach()
 	})
 
 	it("asks for nothing more once the beginning has been reached", async () => {
