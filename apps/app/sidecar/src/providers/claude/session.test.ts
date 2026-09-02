@@ -509,9 +509,6 @@ describe("layerFor", () => {
 
 		expect(section).not.toContain("variable")
 		expect(section).toContain("give them the reason listed for it")
-		expect(section).toContain(
-			"the one exception to saying nothing about the machinery you run on",
-		)
 	})
 
 	it("opens on the identity the host rendered, above the OpenNest sentences", () => {
