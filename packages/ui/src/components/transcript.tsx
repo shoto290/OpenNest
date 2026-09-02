@@ -3,7 +3,6 @@
 import { useReducedMotion } from "motion/react"
 import {
 	type ComponentPropsWithRef,
-	memo,
 	type ReactNode,
 	type Ref,
 	useEffect,
@@ -95,17 +94,21 @@ const rowHolding = (rows: TranscriptItem[], messageId: string) =>
 		(row) => row.key === messageId || row.messageIds?.includes(messageId),
 	)
 
-const RowContent = memo(({ render }: { render: () => ReactNode }) => (
-	<>{render()}</>
-))
-
 type NewMarksInput = {
 	rows: TranscriptItem[]
 	isFollowing: boolean
+	marksNewMessages?: boolean
+	countsNewMessages?: boolean
 	onFollowChange?: (following: boolean) => void
 }
 
-const useNewMarks = ({ rows, isFollowing, onFollowChange }: NewMarksInput) => {
+const useNewMarks = ({
+	rows,
+	isFollowing,
+	marksNewMessages,
+	countsNewMessages,
+	onFollowChange,
+}: NewMarksInput) => {
 	const [releasedAfterKey, setReleasedAfterKey] = useState<string | null>(null)
 	const [markedAfterKey, setMarkedAfterKey] = useState<string | null>(null)
 	const lastRowKeyRef = useRef<string | undefined>(undefined)
@@ -127,7 +130,10 @@ const useNewMarks = ({ rows, isFollowing, onFollowChange }: NewMarksInput) => {
 		setMarkedAfterKey((current) => current ?? lastRowKey)
 	}, [isFollowing, onFollowChange])
 
-	return { markedAfterKey, releasedAfterKey }
+	return {
+		markKey: marksNewMessages ? keyAfter(rows, markedAfterKey) : undefined,
+		newCount: countsNewMessages ? messagesAfter(rows, releasedAfterKey) : 0,
+	}
 }
 
 const useTranscriptHandle = (
@@ -159,12 +165,12 @@ const useTranscriptHandle = (
 
 type TranscriptOlderControlProps = {
 	older: TranscriptOlder
-	isStill: boolean
+	isReducedMotion: boolean
 }
 
 const TranscriptOlderControl = ({
 	older,
-	isStill,
+	isReducedMotion,
 }: TranscriptOlderControlProps) => {
 	const { t } = useTranslation("chat")
 
@@ -187,7 +193,7 @@ const TranscriptOlderControl = ({
 					{older.isLoading ? (
 						<Icons.Loading
 							data-icon="inline-start"
-							className={cn(!isStill && "animate-spin")}
+							className={cn(!isReducedMotion && "animate-spin")}
 						/>
 					) : null}
 					{older.label ?? t("transcript.loadOlder")}
@@ -234,20 +240,20 @@ const TranscriptBody = ({
 	...props
 }: TranscriptBodyProps) => {
 	const { t } = useTranslation("chat")
-	const isStill = useReducedMotion() ?? false
-	const behavior: ScrollBehavior = isStill ? "auto" : "smooth"
+	const isReducedMotion = useReducedMotion() ?? false
+	const behavior: ScrollBehavior = isReducedMotion ? "auto" : "smooth"
 	const { end: hasContentBelow } = useMessageScrollerScrollable()
-	const { markedAfterKey, releasedAfterKey } = useNewMarks({
-		rows,
+	const { markKey, newCount } = useNewMarks({
+		countsNewMessages,
 		isFollowing: !hasContentBelow,
+		marksNewMessages,
 		onFollowChange,
+		rows,
 	})
 
 	useTranscriptHandle(scrollerRef, rows, behavior)
 
 	const anchorKey = anchorOnSend ? lastAnchorKey(rows) : undefined
-	const markKey = marksNewMessages ? keyAfter(rows, markedAfterKey) : undefined
-	const newCount = countsNewMessages ? messagesAfter(rows, releasedAfterKey) : 0
 
 	return (
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
@@ -256,7 +262,10 @@ const TranscriptBody = ({
 				className="scrollbar-overlay focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 			>
 				{older ? (
-					<TranscriptOlderControl isStill={isStill} older={older} />
+					<TranscriptOlderControl
+						isReducedMotion={isReducedMotion}
+						older={older}
+					/>
 				) : null}
 
 				<MessageScrollerContent
@@ -272,7 +281,7 @@ const TranscriptBody = ({
 								scrollAnchor={row.key === anchorKey}
 							>
 								{row.key === markKey ? <TranscriptNewMark /> : null}
-								<RowContent render={row.render} />
+								{row.render()}
 							</MessageScrollerItem>
 						))}
 						{children}
