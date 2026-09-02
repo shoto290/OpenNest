@@ -89,6 +89,9 @@ export const startRunDriver = ({
 	const close = (runId: string, closing: RunClosing) =>
 		runs.closeRun(runId, closing).catch(reporting("routine_close_run"))
 
+	const closeFailed = (runId: string, reason: string) =>
+		close(runId, { outcome: "failed", reason })
+
 	const renew = (runId: string) =>
 		runs.renewLease(runId).catch(reporting("routine_renew_lease"))
 
@@ -112,7 +115,7 @@ export const startRunDriver = ({
 		forget(held)
 		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
 		shutdownSession(scope)
-		await close(held.requested.runId, { outcome: "failed", reason })
+		await closeFailed(held.requested.runId, reason)
 	}
 
 	const expire = async (runId: string) => {
@@ -161,10 +164,7 @@ export const startRunDriver = ({
 			if (held) {
 				end(held)
 			}
-			await close(runId, {
-				outcome: "failed",
-				reason: `the run could not start: ${detailOf(thrown)}`,
-			})
+			await closeFailed(runId, `the run could not start: ${detailOf(thrown)}`)
 		}
 	}
 
@@ -219,10 +219,7 @@ export const startRunDriver = ({
 			return
 		}
 		end(held)
-		await close(held.requested.runId, {
-			outcome: "failed",
-			reason: transportReason(error),
-		})
+		await closeFailed(held.requested.runId, transportReason(error))
 	}
 
 	const route = ({ scope, event }: ScopedEvent) => {
