@@ -30,6 +30,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 21, statements: CHECKPOINT_PER_SESSION },
 	Migration { version: 22, statements: ROUTINES },
 	Migration { version: 23, statements: ROUTINE_TASK },
+	Migration { version: 24, statements: ROUTINE_LAST_OCCURRENCE },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -492,6 +493,10 @@ ALTER TABLE routines ADD COLUMN title TEXT NOT NULL DEFAULT '';
 ALTER TABLE routines ADD COLUMN instruction TEXT NOT NULL DEFAULT '';
 ";
 
+const ROUTINE_LAST_OCCURRENCE: &str = "
+ALTER TABLE routines ADD COLUMN last_occurrence_at INTEGER;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -561,6 +566,7 @@ mod tests {
 	const SEVERAL_LIVE_SESSIONS_STEP: u32 = 20;
 	const CHECKPOINT_PER_SESSION_STEP: u32 = 21;
 	const ROUTINE_TASK_STEP: u32 = 23;
+	const ROUTINE_LAST_OCCURRENCE_STEP: u32 = 24;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -990,6 +996,35 @@ mod tests {
 			(String::new(), String::new()),
 			"the step left a routine written before it unreadable"
 		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_that_missed_the_last_occurrence_step_gains_the_column_and_keeps_its_routines() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(ROUTINE_LAST_OCCURRENCE_STEP))
+			.expect("the build that shipped without the occurrence column installs");
+		connection.execute_batch(FIXTURE).expect("the fixture is inserted");
+		write(
+			&connection,
+			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at)
+				VALUES ('r1', 'c1', 'b1', 'schedule', '{}', '{}', 'k1', 1)",
+		)
+		.expect("a routine of the earlier build");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		let held: Option<i64> = connection
+			.query_row("SELECT last_occurrence_at FROM routines WHERE id = 'r1'", [], |row| {
+				row.get(0)
+			})
+			.expect("the column is there and the row survived");
+		assert_eq!(held, None, "a routine that never fired carries no occurrence");
+		assert_eq!(version(&connection).expect("version"), latest_version());
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

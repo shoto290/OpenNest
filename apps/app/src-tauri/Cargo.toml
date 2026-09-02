@@ -51,6 +51,15 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # Every bundle is its own repository and no machine is asked for a `git` binary:
 # libgit2 is compiled in, and no transport is — nothing here ever leaves the disk.
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+# The one cron library that enumerates the occurrence before a given instant, which the
+# catch-up of the occurrences missed while the app was closed reads.
+croner = "4"
+# Watches paths from the core rather than through `tauri-plugin-fs`, whose watch command only
+# answers a window: a routine fires whether or not one listens. Shows `notify` through.
+notify-debouncer-full = "0.6"
+# Already in the tree under croner; named here so an instant in milliseconds becomes the wall
+# clock a cron expression is read against, and the moment a payload carries.
+chrono = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

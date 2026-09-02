@@ -49,6 +49,7 @@ pub fn run() {
 			if let Some(window) = app.get_webview_window("main") {
 				window_controls::center_in_header(&window);
 			}
+			app.manage(routines::sentinel::spawn(app.handle().clone()));
 			let handle = app.handle().clone();
 			tauri::async_runtime::spawn(async move {
 				conversations::commands::list_bundles_at_launch(&handle).await;
@@ -60,6 +61,9 @@ pub fn run() {
 		.expect("error while building tauri application")
 		.run(|app, event| {
 			if matches!(event, RunEvent::Exit) {
+				if let Some(sentinel) = app.try_state::<routines::sentinel::Sentinel>() {
+					sentinel.stop();
+				}
 				tauri::async_runtime::block_on(terminate_session(
 					app.state::<AgentState>().inner(),
 				));

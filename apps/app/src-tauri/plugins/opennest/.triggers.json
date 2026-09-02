@@ -17,9 +17,10 @@
 				{ "name": "path", "type": "string" },
 				{ "name": "change", "type": "string" },
 				{ "name": "changedAt", "type": "datetime" },
-				{ "name": "sizeBytes", "type": "number" }
+				{ "name": "sizeBytes", "type": "number" },
+				{ "name": "changeId", "type": "string" }
 			],
-			"dedupeKey": "path"
+			"dedupeKey": "changeId"
 		},
 		{
 			"id": "local-webhook",

@@ -333,6 +333,8 @@ pub enum RoutineError {
 	#[serde(rename_all = "camelCase")]
 	UnreadableSources { path: String, reason: String },
 	#[serde(rename_all = "camelCase")]
+	UnreadableExpression { expression: String, reason: String },
+	#[serde(rename_all = "camelCase")]
 	Undeliverable { detail: String },
 	#[serde(rename_all = "camelCase")]
 	Unexpected { detail: String },
