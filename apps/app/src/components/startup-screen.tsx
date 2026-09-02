@@ -10,7 +10,8 @@ type StartupState = {
 export const isStarting = ({ hasLoaded, haveSpacesFailed }: StartupState) =>
 	haveSpacesFailed || !hasLoaded
 
-type StartupScreenProps = StartupState & {
+type StartupScreenProps = {
+	haveSpacesFailed: boolean
 	onRetrySpaces: () => void
 }
 

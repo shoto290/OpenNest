@@ -546,7 +546,12 @@ export function App() {
 	}
 
 	if (isStarting(startup)) {
-		return <StartupScreen {...startup} onRetrySpaces={loadSpaces} />
+		return (
+			<StartupScreen
+				haveSpacesFailed={startup.haveSpacesFailed}
+				onRetrySpaces={loadSpaces}
+			/>
+		)
 	}
 
 	return (
