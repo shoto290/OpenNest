@@ -44,11 +44,10 @@ const rowHeightFor = (text: string) => {
 	)
 }
 
-const shapesHolding = (text: string) =>
-	MEASURED_ROW_SHAPES.filter((shape) => shape.length >= text.length)
-
 export const shapedContent = (text: string, index: number) => {
-	const held = shapesHolding(text)
+	const held = MEASURED_ROW_SHAPES.filter(
+		(shape) => shape.length >= text.length,
+	)
 	return text.padEnd(held[index % held.length].length, SHAPE_FILLER)
 }
 
