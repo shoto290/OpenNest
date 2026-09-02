@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 
 use super::contract::{
-	Filter, FilterMatchMode, Refusal, RoutineDraft, RoutineError, RunRequested, SkipReason,
-	TriggerDecision, TriggerEvent, TriggerSource,
+	Filter, Refusal, RoutineError, RunRequested, SkipReason, TriggerDecision, TriggerEvent,
+	TriggerSource,
 };
 use super::filter;
 use crate::db;
@@ -122,8 +122,8 @@ fn backing_off(facts: &Facts, now: i64) -> bool {
 	facts.last_failed_at.is_some_and(|failed| now - failed < backoff_ms(facts.consecutive_failures))
 }
 
-pub fn refuse_blank_task(draft: &RoutineDraft) -> Result<(), RoutineError> {
-	for (field, text) in [("title", &draft.title), ("instruction", &draft.instruction)] {
+pub fn refuse_blank_task(title: &str, instruction: &str) -> Result<(), RoutineError> {
+	for (field, text) in [("title", title), ("instruction", instruction)] {
 		if text.trim().is_empty() {
 			return Err(RoutineError::BlankField { field: field.to_owned() });
 		}
@@ -164,21 +164,9 @@ fn announce<S: RunSink>(sink: &S, admitted: Admitted) -> Result<TriggerDecision,
 mod tests {
 	use super::*;
 
-	fn a_draft(title: &str, instruction: &str) -> RoutineDraft {
-		RoutineDraft {
-			conversation_id: "c1".to_owned(),
-			bot_id: "b1".to_owned(),
-			title: title.to_owned(),
-			instruction: instruction.to_owned(),
-			trigger_source_id: "schedule".to_owned(),
-			filter: Filter { match_mode: FilterMatchMode::All, rows: Vec::new() },
-			trigger_config: Value::Null,
-		}
-	}
-
 	#[test]
-	fn a_draft_naming_a_task_is_admitted_and_one_leaving_a_field_blank_names_it() {
-		assert_eq!(refuse_blank_task(&a_draft("Daily report", "Write it up")), Ok(()));
+	fn a_task_naming_both_fields_is_admitted_and_one_leaving_a_field_blank_names_it() {
+		assert_eq!(refuse_blank_task("Daily report", "Write it up"), Ok(()));
 
 		for (title, instruction, blank) in [
 			("", "Write it up", "title"),
@@ -187,9 +175,9 @@ mod tests {
 			("Daily report", "\n\t ", "instruction"),
 		] {
 			assert_eq!(
-				refuse_blank_task(&a_draft(title, instruction)),
+				refuse_blank_task(title, instruction),
 				Err(RoutineError::BlankField { field: blank.to_owned() }),
-				"a draft with a blank {blank} was admitted"
+				"a task with a blank {blank} was admitted"
 			);
 		}
 	}
