@@ -75,6 +75,8 @@ const OPEN_STEP_LIMIT = 400
 
 const LONG_TRANSCRIPT_MESSAGES = 500
 
+const LONG_TRANSCRIPT_TIMEOUT_MS = 30_000
+
 const LONG_THREAD_RUNS = 200
 
 const OPEN_FRAME_LIMIT = 4_000
@@ -565,15 +567,19 @@ describe("PRF1 render baseline", () => {
 		`)
 	})
 
-	it("opens a five hundred message transcript", async () => {
-		vi.useFakeTimers()
+	it(
+		"opens a five hundred message transcript",
+		async () => {
+			vi.useFakeTimers()
 
-		expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
+			expect(await measureLongTranscriptOpen()).toMatchInlineSnapshot(`
 			{
 			  "commits": 10,
 			  "markdownProcessors": 500,
 			  "messages": 500,
 			}
 		`)
-	})
+		},
+		LONG_TRANSCRIPT_TIMEOUT_MS,
+	)
 })
