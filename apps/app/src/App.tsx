@@ -57,6 +57,7 @@ import { useEnvironment } from "@/lib/environment/use-environment"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
 import { useExternalLinks } from "@/lib/links/use-external-links"
 import { useNotifications } from "@/lib/notifications/use-notifications"
+import { useRunDriver } from "@/lib/routines/use-run-driver"
 import { useCollapsedSections } from "@/lib/sections/use-collapsed-sections"
 import { useSections } from "@/lib/sections/use-sections"
 import { useSidebarActions } from "@/lib/sidebar/use-sidebar-actions"
@@ -135,6 +136,8 @@ export function App() {
 	const updater = useUpdater()
 
 	useExternalLinks()
+
+	useRunDriver({ driver, store, runtimes: conversationRuntimes })
 
 	useNotifications({
 		chat: chat.controller,
