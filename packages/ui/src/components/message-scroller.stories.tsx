@@ -11,6 +11,7 @@ import preview from "@workspace/storybook/preview"
 import { Button } from "@workspace/ui/components/button"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
+	ESTIMATED_ROW_HEIGHT,
 	MessageScroller,
 	type MessageScrollerHandle,
 	type MessageScrollerProps,
@@ -2276,6 +2277,9 @@ const medianOf = (heights: number[]) =>
 const p90Of = (heights: number[]) =>
 	heights[Math.ceil(heights.length * 0.9) - 1]
 
+const meanOf = (heights: number[]) =>
+	Math.round(heights.reduce((sum, height) => sum + height, 0) / heights.length)
+
 export const RowHeights = meta.story({
 	name: "Row Heights",
 	render: () => (
@@ -2306,5 +2310,8 @@ export const RowHeights = meta.story({
 
 		await expect(medianOf(heights)).toBe(185)
 		await expect(p90Of(heights)).toBe(252)
+		await expect(ESTIMATED_ROW_HEIGHT).toBe(
+			meanOf(MEASURED_ROWS.map((measured) => measured.height)),
+		)
 	},
 })
