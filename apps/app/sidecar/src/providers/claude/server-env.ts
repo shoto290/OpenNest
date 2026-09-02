@@ -108,13 +108,10 @@ export const resolveServers = (
 		}
 		kept[name] = expanded
 	}
-	return {
-		servers: kept,
-		rejections:
-			env.failure && rejections.length
-				? [env.failure, ...rejections]
-				: rejections,
+	if (env.failure && rejections.length) {
+		return { servers: kept, rejections: [env.failure, ...rejections] }
 	}
+	return { servers: kept, rejections }
 }
 
 export const resolvedServers = (request: SessionRequest): ResolvedServers =>
