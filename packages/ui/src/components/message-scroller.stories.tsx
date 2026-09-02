@@ -2223,7 +2223,11 @@ const markdownRow = (measured: MeasuredRow) =>
 
 const MEASURED_SCROLLER_ROWS: MessageScrollerRow[] = [
 	markdownRow(ONE_LINE_REPLY),
-	rowFor(USER_MESSAGE.key, () => <UserTurn>{USER_MESSAGE.content}</UserTurn>),
+	rowFor(USER_MESSAGE.key, () => (
+		<UserTurn>
+			<Markdown>{USER_MESSAGE.content}</Markdown>
+		</UserTurn>
+	)),
 	markdownRow(CODE_ANSWER),
 	markdownRow(MARKDOWN_ANSWER),
 	rowFor(TOOL_CARD.key, () => (
