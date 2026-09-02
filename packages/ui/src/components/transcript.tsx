@@ -144,16 +144,19 @@ type AnchorReleaseInput = {
 	isFollowing: boolean
 }
 
-const useAnchorRelease = ({ busy, isFollowing }: AnchorReleaseInput) => {
+const useAnchorRelease = ({
+	busy = false,
+	isFollowing,
+}: AnchorReleaseInput) => {
 	const { scrollToEnd } = useMessageScroller()
-	const wasBusyRef = useRef(busy ?? false)
+	const wasBusyRef = useRef(busy)
 	const isFollowingRef = useRef(isFollowing)
 
 	isFollowingRef.current = isFollowing
 
 	useLayoutEffect(() => {
 		const hasSettled = wasBusyRef.current && !busy
-		wasBusyRef.current = busy ?? false
+		wasBusyRef.current = busy
 		if (!hasSettled || !isFollowingRef.current) return
 
 		scrollToEnd({ behavior: "auto" })
