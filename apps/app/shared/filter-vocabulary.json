@@ -1,0 +1,18 @@
+{
+	"fieldTypes": ["string", "number", "boolean", "datetime"],
+	"operatorsByFieldType": {
+		"string": [
+			"exists",
+			"not_exists",
+			"equals",
+			"not_equals",
+			"contains",
+			"not_contains",
+			"starts_with",
+			"ends_with"
+		],
+		"number": ["exists", "not_exists", "equals", "not_equals", "gt", "lt"],
+		"boolean": ["exists", "not_exists", "equals", "not_equals"],
+		"datetime": ["exists", "not_exists", "gt", "lt"]
+	}
+}

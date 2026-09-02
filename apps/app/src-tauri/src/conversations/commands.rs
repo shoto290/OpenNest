@@ -24,7 +24,7 @@ use crate::spaces::commands::plugin_path;
 
 const DUPLICATE_SUFFIX: &str = " copy";
 
-fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreError> {
+pub(crate) fn ready(state: &db::DatabaseState) -> Result<&db::Database, TranscriptStoreError> {
 	state.as_ref().map_err(|failure| TranscriptStoreError::Unavailable { failure: failure.into() })
 }
 
@@ -602,7 +602,10 @@ fn writable_root<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, TranscriptSt
 	})
 }
 
-async fn bot_row(database: &db::Database, bot_id: &str) -> Result<StoredBot, TranscriptStoreError> {
+pub(crate) async fn bot_row(
+	database: &db::Database,
+	bot_id: &str,
+) -> Result<StoredBot, TranscriptStoreError> {
 	database
 		.conversations()
 		.bot(bot_id.to_owned())

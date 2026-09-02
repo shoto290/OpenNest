@@ -1,0 +1,36 @@
+{
+	"sources": [
+		{
+			"id": "schedule",
+			"title": "On a schedule",
+			"payload": [
+				{ "name": "occurrenceId", "type": "string" },
+				{ "name": "firedAt", "type": "datetime" },
+				{ "name": "expression", "type": "string" }
+			],
+			"dedupeKey": "occurrenceId"
+		},
+		{
+			"id": "file-watch",
+			"title": "When a watched file changes",
+			"payload": [
+				{ "name": "path", "type": "string" },
+				{ "name": "change", "type": "string" },
+				{ "name": "changedAt", "type": "datetime" },
+				{ "name": "sizeBytes", "type": "number" }
+			],
+			"dedupeKey": "path"
+		},
+		{
+			"id": "local-webhook",
+			"title": "When a local webhook is called",
+			"header": "X-OpenNest-Delivery",
+			"payload": [
+				{ "name": "deliveryId", "type": "string" },
+				{ "name": "receivedAt", "type": "datetime" },
+				{ "name": "body", "type": "string" }
+			],
+			"dedupeKey": "deliveryId"
+		}
+	]
+}

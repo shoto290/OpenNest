@@ -14,8 +14,11 @@ const MANIFEST: &str = ".claude-plugin/plugin.json";
 
 const LEARN: &str = "skills/learn/SKILL.md";
 
-const FILES: [(&str, &[u8]); 5] = [
+const TRIGGERS: &str = ".triggers.json";
+
+const FILES: [(&str, &[u8]); 6] = [
 	(MANIFEST, include_bytes!("../../plugins/opennest/.claude-plugin/plugin.json")),
+	(TRIGGERS, include_bytes!("../../plugins/opennest/.triggers.json")),
 	(LEARN, include_bytes!("../../plugins/opennest/skills/learn/SKILL.md")),
 	(
 		"skills/learn/references/skills.md",
