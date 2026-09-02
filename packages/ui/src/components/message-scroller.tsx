@@ -45,8 +45,6 @@ const AIM_FRAME_BUDGET = 20
 
 const TRAVEL_CAP_MS = 10_000
 
-const TRAVEL_REST_MS = 320
-
 const JUMP_INSET = 12
 
 const JUMP_DROP = 6
@@ -57,6 +55,14 @@ const bandFor = (control: number | undefined) =>
 const jumpAtRest = (lift: number) => ({ opacity: 1, y: -lift })
 
 const jumpHidden = (lift: number) => ({ opacity: 0, y: -lift + JUMP_DROP })
+
+type LandingGeometry = {
+	scrollHeight: number
+	totalSize: number
+}
+
+const isSameGeometry = (held: LandingGeometry, next: LandingGeometry) =>
+	held.scrollHeight === next.scrollHeight && held.totalSize === next.totalSize
 
 const distanceFromEnd = (viewport: HTMLElement) =>
 	viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
@@ -375,22 +381,30 @@ export function MessageScroller({
 		landingFrameRef.current = undefined
 	}, [])
 
+	const readLandingGeometry = useCallback(
+		(): LandingGeometry => ({
+			scrollHeight: viewportRef.current?.scrollHeight ?? 0,
+			totalSize: virtualizerRef.current?.getTotalSize() ?? 0,
+		}),
+		[],
+	)
+
 	const holdAimAtEnd = useCallback(
 		(nextBehavior: ScrollBehavior) => {
 			const startedAt = performance.now()
-			let restingSince: number | undefined
+			let heldGeometry: LandingGeometry | undefined
 
 			const reaim = () => {
 				landingFrameRef.current = undefined
-				const now = performance.now()
-				if (now - startedAt >= TRAVEL_CAP_MS || !followingRef.current) return
+				const hasRunOut = performance.now() - startedAt >= TRAVEL_CAP_MS
+				if (hasRunOut || !followingRef.current) return
 
-				if (aimAtEnd(nextBehavior)) {
-					restingSince ??= now
-					if (now - restingSince >= TRAVEL_REST_MS) return
-				} else {
-					restingSince = undefined
-				}
+				const hasLanded = aimAtEnd(nextBehavior)
+				const geometry = readLandingGeometry()
+				const isGeometryHeld =
+					heldGeometry !== undefined && isSameGeometry(heldGeometry, geometry)
+				heldGeometry = geometry
+				if (hasLanded && isGeometryHeld) return
 
 				landingFrameRef.current = requestAnimationFrame(reaim)
 			}
@@ -398,7 +412,7 @@ export function MessageScroller({
 			stopLanding()
 			landingFrameRef.current = requestAnimationFrame(reaim)
 		},
-		[aimAtEnd, stopLanding],
+		[aimAtEnd, readLandingGeometry, stopLanding],
 	)
 
 	const scrollViewportToEnd = useCallback(
