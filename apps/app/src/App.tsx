@@ -406,11 +406,6 @@ export function App() {
 		)
 	}, [rosters, working, previews, now, badges])
 
-	const badgesBySpaceId = useMemo(
-		() => toSpaceBadges(rosterBotsBySpace),
-		[rosterBotsBySpace],
-	)
-
 	const conversationRosters = roster.state.conversationRosters
 
 	const conversationIds = useMemo(
@@ -487,6 +482,11 @@ export function App() {
 			now,
 			conversationBadges,
 		],
+	)
+
+	const badgesBySpaceId = useMemo(
+		() => toSpaceBadges(rosterBotsBySpace, rosterConversationsBySpace),
+		[rosterBotsBySpace, rosterConversationsBySpace],
 	)
 
 	const isOverlayOpen =
