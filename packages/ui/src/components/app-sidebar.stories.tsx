@@ -3108,13 +3108,13 @@ const openSurfaceMenu = async (canvasElement: HTMLElement) => {
 }
 
 export const RosterSurfaceMenu = meta.story({
-	args: sectionArgs(),
+	args: { ...sectionArgs(), onCreateConversation: fn() },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"The panel itself answers a right-click. Everything the sidebar can make used to need a row to start from — a bot to hang a section on, a switcher to open for a space — so the empty ground under the roster was the one place a reader could aim and get nothing. It now carries the three things this panel makes on its own — a bot, a section, a space — and, under a rule that closes them off, the way into the space's own settings. The ground is the leftover column under the last row, so it is only ever reached when the aim missed every row, every section header and the header above them: those keep their own menus and take the click first. Check the menu names the three, in the order the panel builds them, that space settings sits last behind its rule, and that a right-click on a row still opens that row's actions and not this. Pick `RosterSurfaceWithoutSpaceSettings` for the panel given no settings handler.",
+					"The panel itself answers a right-click. Everything the sidebar can make used to need a row to start from — a bot to hang a section on, a header menu to open for a conversation — so the empty ground under the roster was the one place a reader could aim and get nothing. It now carries the three things this panel makes on its own — a bot, a conversation, a section — and, under a rule that closes them off, the way into the space's own settings. The ground is the leftover column under the last row, so it is only ever reached when the aim missed every row, every section header and the header above them: those keep their own menus and take the click first. Check the menu names the three, in the order the panel builds them, that space settings sits last behind its rule, and that a right-click on a row still opens that row's actions and not this. Pick `RosterSurfaceWithoutSpaceSettings` for the panel given no settings handler.",
 			},
 		},
 	},
@@ -3122,7 +3122,7 @@ export const RosterSurfaceMenu = meta.story({
 		const menu = await openSurfaceMenu(canvasElement)
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["New bot", NEW_SECTION, "New space", "Space settings"])
+		).toEqual(["New bot", "New conversation", NEW_SECTION, "Space settings"])
 		await expect(menu.getAllByRole("separator")).toHaveLength(1)
 
 		await userEvent.click(menu.getByRole("menuitem", { name: "New bot" }))
@@ -3137,10 +3137,10 @@ export const RosterSurfaceMenu = meta.story({
 
 		await userEvent.click(
 			(await openSurfaceMenu(canvasElement)).getByRole("menuitem", {
-				name: "New space",
+				name: "New conversation",
 			}),
 		)
-		await expect(args.onCreateSpace).toHaveBeenCalled()
+		await expect(args.onCreateConversation).toHaveBeenCalled()
 
 		const row = await openRowMenu(canvasElement, "Beacon")
 		await expect(row.getByRole("menuitem", { name: "Settings" })).toBeVisible()
@@ -3148,7 +3148,11 @@ export const RosterSurfaceMenu = meta.story({
 })
 
 export const RosterSurfaceWithoutSpaceSettings = meta.story({
-	args: { ...sectionArgs(), onOpenSpaceSettings: undefined },
+	args: {
+		...sectionArgs(),
+		onCreateConversation: fn(),
+		onOpenSpaceSettings: undefined,
+	},
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
@@ -3162,7 +3166,7 @@ export const RosterSurfaceWithoutSpaceSettings = meta.story({
 		const menu = await openSurfaceMenu(canvasElement)
 		await expect(
 			menu.getAllByRole("menuitem").map((item) => item.textContent),
-		).toEqual(["New bot", NEW_SECTION, "New space"])
+		).toEqual(["New bot", "New conversation", NEW_SECTION])
 		await expect(menu.queryAllByRole("separator")).toHaveLength(0)
 	},
 })
