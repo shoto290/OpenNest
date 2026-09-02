@@ -216,11 +216,10 @@ const mountApp = async ({
 	const store = createFakeTranscriptStore()
 	const bots = await seedBots(store)
 	for (const [index, bot] of bots.entries()) {
-		const isPage = index === pageBotIndex
 		await seedTranscript(
 			store,
 			bot.id,
-			isPage ? PAGE_MESSAGES : SEEDED_MESSAGES,
+			index === pageBotIndex ? PAGE_MESSAGES : SEEDED_MESSAGES,
 		)
 	}
 	const trace = traceStore(store, delayMs)

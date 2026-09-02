@@ -2,7 +2,7 @@ const VIEWPORT_WIDTH = 800
 
 const VIEWPORT_HEIGHT = 600
 
-export type MeasuredRowShape = { length: number; height: number }
+type MeasuredRowShape = { length: number; height: number }
 
 const ONE_LINE_REPLY = "Queued behind the index build."
 
