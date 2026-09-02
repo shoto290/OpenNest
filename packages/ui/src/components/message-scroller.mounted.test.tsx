@@ -258,8 +258,8 @@ const LANDING_FRAME_GAP_MS = 400
 const MEASURED_BATCH_CUT = 20
 
 const isInFirstBatch: TargetFilter = (target) => {
-	const index = Number.parseInt((target as HTMLElement).dataset.index ?? "", 10)
-	return Number.isNaN(index) || index < MEASURED_BATCH_CUT
+	const index = target.getAttribute("data-index")
+	return index === null || Number(index) < MEASURED_BATCH_CUT
 }
 
 const holdSlowClock = () => {
