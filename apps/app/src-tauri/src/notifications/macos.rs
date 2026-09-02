@@ -56,8 +56,7 @@ fn through_notification_center<R: Runtime>(
 			}
 		}
 
-		let sent = Notification::new().title(title).message(body).send().await;
-		let handle = match sent {
+		let handle = match Notification::new().title(title).message(body).send().await {
 			Ok(handle) => handle,
 			Err(failure) => {
 				return report_unshown(format!("the notification center refused it: {failure}"));
