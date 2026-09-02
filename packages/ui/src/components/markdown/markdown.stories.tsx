@@ -470,7 +470,7 @@ export const summarise = async (id: string) => {
 }
 \`\`\``
 
-const STREAMED_APPENDIX = `
+const STREAMED_NEXT_BLOCK = `
 
 Two nests archived since the last pass.`
 
@@ -678,7 +678,11 @@ const meta = preview.meta({
 	],
 })
 
-const StreamedBody = ({ source }: { source: string }) => {
+interface StreamedBodyProps {
+	source: string
+}
+
+const StreamedBody = ({ source }: StreamedBodyProps) => {
 	const [appended, setAppended] = useState(false)
 
 	return (
@@ -686,7 +690,7 @@ const StreamedBody = ({ source }: { source: string }) => {
 			<MessageBubble>
 				<MessageBubbleContent>
 					<Markdown>
-						{appended ? `${source}${STREAMED_APPENDIX}` : source}
+						{appended ? `${source}${STREAMED_NEXT_BLOCK}` : source}
 					</Markdown>
 				</MessageBubbleContent>
 			</MessageBubble>
