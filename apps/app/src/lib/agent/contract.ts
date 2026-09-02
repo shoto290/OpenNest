@@ -68,6 +68,9 @@ export type TurnOutcome = "completed" | "cancelled" | "failed"
 export type TurnEnded = {
 	sessionId: string | null
 	outcome: TurnOutcome
+	structuredOutput?: unknown
+	totalCostUsd?: number
+	modelUsage?: unknown
 }
 
 export type RuntimeScope = {
