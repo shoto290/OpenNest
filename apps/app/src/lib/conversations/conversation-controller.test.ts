@@ -12,6 +12,7 @@ import {
 } from "./scripted-driver"
 import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
+import { TRANSCRIPT_PAGE_SIZE } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
 
 import type {
@@ -1683,5 +1684,83 @@ describe("a failure reaching a speaker", () => {
 
 		expect(runningIn(harness.controller)).toEqual([])
 		expect(harness.controller.getState().latestError?.error).toEqual(CRASHED)
+	})
+})
+
+describe("the pages a conversation holds", () => {
+	const PAGE = 20
+	const HISTORY = 200
+
+	const stored = (conversationId: string) =>
+		Array.from({ length: HISTORY }, (_, index) =>
+			message({ id: `m-${index + 1}`, conversationId, seq: index + 1 }),
+		)
+
+	const pagingStore = (): TranscriptStore => {
+		const base = createFakeTranscriptStore()
+		return {
+			...base,
+			loadPage: (conversationId, cursor) => {
+				const before = cursor?.beforeSeq ?? HISTORY + 1
+				const page = stored(conversationId)
+					.filter((held) => held.seq < before)
+					.slice(-PAGE)
+				return Promise.resolve({
+					conversationId,
+					messages: page,
+					hasMore: (page[0]?.seq ?? 1) > 1,
+				})
+			},
+		}
+	}
+
+	const openedOnHistory = async () => {
+		const store = pagingStore()
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [],
+		})
+		const controller = createConversationController(
+			createScriptedDriver(),
+			store,
+		)
+		const detach = controller.attach()
+		await controller.open(conversation)
+		return { controller, detach }
+	}
+
+	it("drops the pages loaded above the window when the reader leaves", async () => {
+		const { controller, detach } = await openedOnHistory()
+		await controller.loadOlder()
+		await controller.loadOlder()
+		await controller.loadOlder()
+		expect(controller.getState().messages).toHaveLength(PAGE * 4)
+
+		controller.leave()
+
+		const state = controller.getState()
+		expect(state.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE)
+		expect(state.messages.at(-1)?.id).toBe(`m-${HISTORY}`)
+		expect(state.hasOlder).toBe(true)
+		detach()
+	})
+
+	it("pages back into the store when the reader comes back", async () => {
+		const { controller, detach } = await openedOnHistory()
+		await controller.loadOlder()
+		await controller.loadOlder()
+		await controller.loadOlder()
+		controller.leave()
+
+		await controller.loadOlder()
+
+		const state = controller.getState()
+		expect(state.messages).toHaveLength(TRANSCRIPT_PAGE_SIZE + PAGE)
+		expect(state.messages.at(0)?.id).toBe(
+			`m-${HISTORY - TRANSCRIPT_PAGE_SIZE - PAGE + 1}`,
+		)
+		detach()
 	})
 })

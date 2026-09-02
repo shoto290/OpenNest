@@ -81,6 +81,12 @@ const LONG_THREAD_RUNS = 200
 
 const OPEN_FRAME_LIMIT = 4_000
 
+const OLDER_PAGES = 3
+
+const SETTLE_TASKS = 20
+
+const OLDER_LABEL = "Load older messages"
+
 const replyOf = (chunks: number) =>
 	"word ".repeat(chunks * WORDS_PER_CHUNK).trim()
 
@@ -372,7 +378,12 @@ const seedThreadApp = async ({ messages, pageSize }: SeededThread) => {
 	await seedTranscript(store, bot.id, messages)
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
-	return bot
+	return { bot, store }
+}
+
+const seedOtherBot = async (store: TranscriptStore) => {
+	const [space] = await store.spaces()
+	return store.createBot(newBotIdentity(await store.bots(space.id)), space.id)
 }
 
 const renderProfiledApp = () => {
@@ -387,18 +398,23 @@ const renderProfiledApp = () => {
 	return commits
 }
 
-const measureThreadOpen = async () => {
-	const frames = takeFrameRunner()
-	const messages = LONG_THREAD_RUNS * 2
-	const bot = await seedThreadApp({ messages })
-	const commits = renderProfiledApp()
-	await frames.flush(MOUNT_TASKS)
+type ThreadOpening = {
+	name: string
+	lastMessage: string
+	frames: FrameRunner
+	commits: CommitCounter
+}
 
-	const lastMessage = `Answer ${messages - 1} in prose`
+const openThread = async ({
+	name,
+	lastMessage,
+	frames,
+	commits,
+}: ThreadOpening) => {
 	const openedAt = commits.count
 	builds.markdownRenders = 0
 	await act(async () => {
-		fireEvent.click(rowFor(bot.name))
+		fireEvent.click(rowFor(name))
 	})
 	let tasksToLastMessage = 0
 	while (
@@ -409,19 +425,74 @@ const measureThreadOpen = async () => {
 		tasksToLastMessage += 1
 	}
 	if (tasksToLastMessage >= OPEN_FRAME_LIMIT) {
-		throw new Error(`no last message for a ${LONG_THREAD_RUNS} run thread`)
+		throw new Error(`no last message for the thread of ${name}`)
 	}
 
 	return {
 		commits: commits.count - openedAt,
 		markdownProcessors: builds.markdownRenders,
-		runs: LONG_THREAD_RUNS,
 		tasksToLastMessage,
 	}
 }
 
+const measureThreadOpen = async () => {
+	const frames = takeFrameRunner()
+	const messages = LONG_THREAD_RUNS * 2
+	const { bot } = await seedThreadApp({ messages })
+	const commits = renderProfiledApp()
+	await frames.flush(MOUNT_TASKS)
+
+	const opened = await openThread({
+		name: bot.name,
+		lastMessage: `Answer ${messages - 1} in prose`,
+		frames,
+		commits,
+	})
+
+	return { ...opened, runs: LONG_THREAD_RUNS }
+}
+
+const loadOlderPages = async (frames: FrameRunner) => {
+	for (let page = 0; page < OLDER_PAGES; page += 1) {
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: OLDER_LABEL }))
+		})
+		await frames.flush(SETTLE_TASKS)
+	}
+}
+
+const bubbleCount = () =>
+	document.querySelectorAll('[data-slot="message-bubble"]').length
+
+const measureThreadReopen = async () => {
+	const frames = takeFrameRunner()
+	const messages = LONG_THREAD_RUNS * 2
+	const { bot, store } = await seedThreadApp({ messages })
+	const other = await seedOtherBot(store)
+	const commits = renderProfiledApp()
+	await frames.flush(MOUNT_TASKS)
+
+	const opening = {
+		name: bot.name,
+		lastMessage: `Answer ${messages - 1} in prose`,
+		frames,
+		commits,
+	}
+	const cold = await openThread(opening)
+	await loadOlderPages(frames)
+	const grown = bubbleCount()
+
+	await act(async () => {
+		fireEvent.click(rowFor(other.name))
+	})
+	await frames.flush(SETTLE_TASKS)
+	const reopened = await openThread(opening)
+
+	return { cold, grown, reopened, rows: bubbleCount() }
+}
+
 const measureLongTranscriptOpen = async () => {
-	const bot = await seedThreadApp({
+	const { bot } = await seedThreadApp({
 		messages: LONG_TRANSCRIPT_MESSAGES,
 		pageSize: LONG_TRANSCRIPT_MESSAGES,
 	})
@@ -563,6 +634,25 @@ describe("PRF1 render baseline", () => {
 			  "markdownProcessors": 20,
 			  "runs": 200,
 			  "tasksToLastMessage": 0,
+			}
+		`)
+	})
+
+	it("reopens a thread on one page, like a cold open", async () => {
+		expect(await measureThreadReopen()).toMatchInlineSnapshot(`
+			{
+			  "cold": {
+			    "commits": 10,
+			    "markdownProcessors": 20,
+			    "tasksToLastMessage": 0,
+			  },
+			  "grown": 80,
+			  "reopened": {
+			    "commits": 7,
+			    "markdownProcessors": 20,
+			    "tasksToLastMessage": 0,
+			  },
+			  "rows": 20,
 			}
 		`)
 	})

@@ -1,5 +1,6 @@
 import {
 	type TerminalCompletion,
+	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
 	type TranscriptCompletion,
 	type TranscriptDraft,
@@ -38,6 +39,7 @@ export type TranscriptAction =
 	  }
 	| { type: "messageStreamed"; delta: TranscriptDelta }
 	| { type: "messageSettled"; settlement: TranscriptSettlement }
+	| { type: "threadLeft"; conversationId: string }
 
 export const initialTranscriptState: TranscriptState = { conversations: {} }
 
@@ -222,19 +224,19 @@ const applyPageLoaded = (
 
 const droppedCount = (
 	messages: TranscriptMessage[],
-	runningTurnId: string,
+	kept: number,
+	isHeld: (message: TranscriptMessage) => boolean,
 ): number => {
-	const overflow = messages.length - TRANSCRIPT_WINDOW_SIZE
+	const overflow = messages.length - kept
 	if (overflow <= 0) {
 		return 0
 	}
-	const held = messages.findIndex(
-		(message) =>
-			message.turnId === runningTurnId ||
-			!isTerminalCompletion(message.completion),
-	)
-	return Math.min(overflow, held)
+	const held = messages.findIndex(isHeld)
+	return held === -1 ? overflow : Math.min(overflow, held)
 }
+
+const isUnfinished = (message: TranscriptMessage): boolean =>
+	!isTerminalCompletion(message.completion)
 
 const applyMessageAppended = (
 	state: TranscriptState,
@@ -248,10 +250,36 @@ const applyMessageAppended = (
 	}
 	const seq = (current.messages.at(-1)?.seq ?? 0) + 1
 	const grown = [...current.messages, { ...draft, seq }]
-	const dropped = isAtLiveEdge ? droppedCount(grown, draft.turnId) : 0
+	const isRunning = (message: TranscriptMessage) =>
+		message.turnId === draft.turnId || isUnfinished(message)
+	const dropped = isAtLiveEdge
+		? droppedCount(grown, TRANSCRIPT_WINDOW_SIZE, isRunning)
+		: 0
 	return withConversation(state, draft.conversationId, {
 		messages: grown.slice(dropped),
 		hasMore: current.hasMore || dropped > 0,
+	})
+}
+
+const applyThreadLeft = (
+	state: TranscriptState,
+	conversationId: string,
+): TranscriptState => {
+	const current = state.conversations[conversationId]
+	if (!current) {
+		return state
+	}
+	const dropped = droppedCount(
+		current.messages,
+		TRANSCRIPT_PAGE_SIZE,
+		isUnfinished,
+	)
+	if (dropped === 0) {
+		return state
+	}
+	return withConversation(state, conversationId, {
+		messages: current.messages.slice(dropped),
+		hasMore: true,
 	})
 }
 
@@ -324,5 +352,7 @@ export const transcriptReducer = (
 			return applyMessageStreamed(state, action.delta)
 		case "messageSettled":
 			return applyMessageSettled(state, action.settlement)
+		case "threadLeft":
+			return applyThreadLeft(state, action.conversationId)
 	}
 }

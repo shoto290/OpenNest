@@ -17,6 +17,7 @@ export type TranscriptController = {
 	load: (conversationId: string) => Promise<void>
 	loadOlder: (conversationId: string) => Promise<void>
 	follow: (conversationId: string, isAtLiveEdge: boolean) => void
+	leave: (conversationId: string) => void
 	append: (draft: TranscriptDraft) => void
 	stream: (delta: TranscriptDelta) => void
 	settle: (settlement: TranscriptSettlement) => void
@@ -71,6 +72,7 @@ export const createTranscriptController = (
 		follow: (conversationId, isAtLiveEdge) => {
 			liveEdges.set(conversationId, isAtLiveEdge)
 		},
+		leave: (conversationId) => dispatch({ type: "threadLeft", conversationId }),
 		append: (draft) =>
 			dispatch({
 				type: "messageAppended",

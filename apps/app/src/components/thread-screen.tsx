@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useMemo, useRef } from "react"
+import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react"
 
 import {
 	ActivityIndicator,
@@ -64,6 +64,7 @@ import {
 	toTranscriptRows,
 } from "@/lib/chat/screen-model"
 import {
+	type BotThread,
 	type ConversationThread,
 	faceOfBot,
 	factsOf,
@@ -906,6 +907,31 @@ function ConversationThreadView({
 	)
 }
 
+type BotThreadViewProps = Omit<ThreadScreenProps, "thread"> & {
+	thread: BotThread
+}
+
+function BotThreadView({
+	thread,
+	attachments,
+	drafts,
+	readerName,
+}: BotThreadViewProps) {
+	const { controller } = thread.chat
+	const botId = thread.bot.id
+
+	useEffect(() => () => controller.leave(botId), [controller, botId])
+
+	return (
+		<ThreadView
+			attachments={attachments}
+			drafts={drafts}
+			readerName={readerName}
+			thread={{ ...thread, state: thread.chat.state, controller }}
+		/>
+	)
+}
+
 export function ThreadScreen({
 	thread,
 	attachments,
@@ -925,16 +951,12 @@ export function ThreadScreen({
 	}
 
 	return (
-		<ThreadView
+		<BotThreadView
 			attachments={attachments}
 			drafts={drafts}
 			key={thread.bot.id}
 			readerName={readerName}
-			thread={{
-				...thread,
-				state: thread.chat.state,
-				controller: thread.chat.controller,
-			}}
+			thread={thread}
 		/>
 	)
 }

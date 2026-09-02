@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
 	type TerminalCompletion,
+	TRANSCRIPT_PAGE_SIZE,
 	TRANSCRIPT_WINDOW_SIZE,
 	type TranscriptCompletion,
 	type TranscriptDraft,
@@ -675,5 +676,73 @@ describe("the transcript window", () => {
 
 		expect(idsOf(held)).toContain("live-0")
 		expect(idsOf(held)).not.toContain("m-1")
+	})
+})
+
+describe("leaving a thread", () => {
+	const OVERFLOW = 3
+
+	const leave = (state: TranscriptState, conversationId = CONVERSATION) =>
+		transcriptReducer(state, { type: "threadLeft", conversationId })
+
+	const settledDraft = (id: string): TranscriptDraft => ({
+		...streamingDraft(id),
+		completion: "complete",
+	})
+
+	const saidOffTheLiveEdge = (drafts: TranscriptDraft[]) =>
+		drafts.reduce((state, draft) => append(state, draft, false), SEEDED)
+
+	const grown = saidOffTheLiveEdge(
+		Array.from({ length: TRANSCRIPT_PAGE_SIZE + OVERFLOW }, (_, index) =>
+			settledDraft(`m-${index + 1}`),
+		),
+	)
+
+	it("drops everything the reader loaded above one page", () => {
+		const left = leave(grown)
+
+		expect(selectMessages(left, CONVERSATION)).toHaveLength(
+			TRANSCRIPT_PAGE_SIZE,
+		)
+		expect(idsOf(left)).not.toContain(`m-${OVERFLOW}`)
+		expect(idsOf(left)).toContain(`m-${OVERFLOW + 1}`)
+	})
+
+	it("reports older messages to load for what it dropped", () => {
+		expect(selectHasMore(grown, CONVERSATION)).toBe(false)
+		expect(selectHasMore(leave(grown), CONVERSATION)).toBe(true)
+	})
+
+	it("holds a thread that never grew past one page", () => {
+		const short = saidOffTheLiveEdge([settledDraft("m-1")])
+
+		expect(leave(short)).toBe(short)
+	})
+
+	it("holds a message that has not settled, and everything after it", () => {
+		const streaming = saidOffTheLiveEdge([
+			settledDraft("m-1"),
+			streamingDraft("live"),
+			...Array.from({ length: TRANSCRIPT_PAGE_SIZE + OVERFLOW }, (_, index) =>
+				settledDraft(`m-${index + 2}`),
+			),
+		])
+
+		const left = leave(streaming)
+
+		expect(idsOf(left)).not.toContain("m-1")
+		expect(idsOf(left)).toContain("live")
+		expect(selectMessages(left, CONVERSATION)).toHaveLength(
+			TRANSCRIPT_PAGE_SIZE + OVERFLOW + 1,
+		)
+	})
+
+	it("leaves every other conversation untouched", () => {
+		expectOtherUntouched(leave(grown))
+	})
+
+	it("holds a conversation nothing has ever loaded", () => {
+		expect(leave(SEEDED, "c-unknown")).toBe(SEEDED)
 	})
 })

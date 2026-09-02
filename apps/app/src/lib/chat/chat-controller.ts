@@ -68,6 +68,7 @@ export type ChatController = {
 	preflight: (resume?: string) => Promise<SessionHandle | null>
 	open: (botId: string) => Promise<SessionHandle | null>
 	close: (botId: string) => Promise<void>
+	leave: (botId: string) => void
 	redescribe: (botId: string) => void
 	restart: () => Promise<SessionHandle | null>
 	rotate: () => Promise<SessionHandle | null>
@@ -708,6 +709,13 @@ export function createChatController(
 		return settled
 	}
 
+	const leaveThread = (botId: string) => {
+		const conversationId = bots.get(botId)?.state.conversationId
+		if (conversationId) {
+			transcript.leave(conversationId)
+		}
+	}
+
 	const choose = (botId: string | null) => {
 		chosenBotId = botId
 		publish()
@@ -1203,6 +1211,7 @@ export function createChatController(
 		preflight: (resume) => onSelected((bot) => preflightFor(bot, resume), null),
 		open,
 		close,
+		leave: leaveThread,
 		redescribe,
 		restart: () =>
 			onSelected(

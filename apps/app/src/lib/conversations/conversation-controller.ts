@@ -101,6 +101,7 @@ export type ConversationController = {
 	open: (conversation: Conversation) => Promise<void>
 	loadOlder: () => Promise<void>
 	follow: (isAtLiveEdge: boolean) => void
+	leave: () => void
 	send: (text: string, repliedToMessageId?: string) => Promise<void>
 	sendAgain: (messageId: string) => Promise<void>
 	reportRun: (draft: RunReportDraft) => Promise<void>
@@ -959,6 +960,12 @@ export const createConversationController = (
 		}
 	}
 
+	const leave = () => {
+		if (conversation) {
+			transcript.leave(conversation.id)
+		}
+	}
+
 	const dismissError = (id: string) => {
 		if (latestError?.id !== id) {
 			return
@@ -1033,6 +1040,7 @@ export const createConversationController = (
 		open,
 		loadOlder,
 		follow,
+		leave,
 		send,
 		sendAgain,
 		reportRun,
