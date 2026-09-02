@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use crate::conversations::contract::{StorageFailure, TranscriptStoreError};
+use crate::db::DatabaseError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FieldType {
@@ -125,6 +128,232 @@ pub struct TriggerSource {
 	pub header: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RunOutcome {
+	Ok,
+	Nothing,
+	Skipped,
+	Failed,
+}
+
+impl RunOutcome {
+	pub const ALL: [RunOutcome; 4] =
+		[RunOutcome::Ok, RunOutcome::Nothing, RunOutcome::Skipped, RunOutcome::Failed];
+
+	pub fn is_failure(self) -> bool {
+		matches!(self, RunOutcome::Failed)
+	}
+
+	pub fn clears_failures(self) -> bool {
+		matches!(self, RunOutcome::Ok | RunOutcome::Nothing)
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Routine {
+	pub id: String,
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub trigger_source_id: String,
+	pub filter: Filter,
+	pub trigger_config: serde_json::Value,
+	pub is_enabled: bool,
+	pub consecutive_failures: u32,
+	pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineDraft {
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub trigger_source_id: String,
+	pub filter: Filter,
+	pub trigger_config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineEdit {
+	pub filter: Filter,
+	pub trigger_config: serde_json::Value,
+	pub is_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineKey {
+	pub key: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub header: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineRun {
+	pub id: String,
+	pub routine_id: String,
+	pub started_at: i64,
+	pub ended_at: Option<i64>,
+	pub outcome: Option<RunOutcome>,
+	pub reason: Option<String>,
+	pub cost_usd: Option<f64>,
+	pub model_usage: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunClosing {
+	pub outcome: RunOutcome,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub reason: Option<String>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub cost_usd: Option<f64>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub model_usage: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TriggerEvent {
+	pub routine_id: String,
+	pub source: TriggerSource,
+	pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunRequested {
+	pub cause: RunCause,
+	pub routine_id: String,
+	pub run_id: String,
+	pub bot_id: String,
+	pub conversation_id: String,
+	pub trigger_source_id: String,
+	pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunCause {
+	Trigger,
+	RunNow,
+}
+
+impl RunCause {
+	pub const ALL: [RunCause; 2] = [RunCause::Trigger, RunCause::RunNow];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SkipReason {
+	LeaseHeld,
+	HourlyCap,
+	BackingOff,
+}
+
+impl SkipReason {
+	pub const ALL: [SkipReason; 3] =
+		[SkipReason::LeaseHeld, SkipReason::HourlyCap, SkipReason::BackingOff];
+
+	pub fn recorded(self) -> &'static str {
+		match self {
+			SkipReason::LeaseHeld => "previous run still in progress",
+			SkipReason::HourlyCap => "hourly cap",
+			SkipReason::BackingOff => "backing off",
+		}
+	}
+}
+
+pub const LEASE_EXPIRED: &str = "lease expired";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Refusal {
+	Disabled,
+	Filter,
+	DedupeValueMissing,
+	AlreadySeen,
+}
+
+impl Refusal {
+	pub const ALL: [Refusal; 4] =
+		[Refusal::Disabled, Refusal::Filter, Refusal::DedupeValueMissing, Refusal::AlreadySeen];
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TriggerDecision {
+	#[serde(rename_all = "camelCase")]
+	Started { run_id: String },
+	#[serde(rename_all = "camelCase")]
+	Skipped { run_id: String, reason: SkipReason },
+	#[serde(rename_all = "camelCase")]
+	Refused { by: Refusal },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RoutineError {
+	#[serde(rename_all = "camelCase")]
+	Unavailable { failure: StorageFailure },
+	#[serde(rename_all = "camelCase")]
+	Storage { failure: StorageFailure },
+	#[serde(rename_all = "camelCase")]
+	UnknownRoutine { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownRun { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownBot { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownParticipant { conversation_id: String, bot_id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownSource { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnsupportedOperator {
+		row: usize,
+		field: String,
+		operator: FilterOperator,
+		field_type: FieldType,
+	},
+	#[serde(rename_all = "camelCase")]
+	RunAlreadyClosed { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnreadableSources { path: String, reason: String },
+	#[serde(rename_all = "camelCase")]
+	Undeliverable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	Unexpected { detail: String },
+}
+
+impl From<DatabaseError> for RoutineError {
+	fn from(error: DatabaseError) -> Self {
+		RoutineError::Storage { failure: (&error).into() }
+	}
+}
+
+impl From<rusqlite::Error> for RoutineError {
+	fn from(error: rusqlite::Error) -> Self {
+		RoutineError::from(DatabaseError::Sqlite(error))
+	}
+}
+
+impl From<TranscriptStoreError> for RoutineError {
+	fn from(error: TranscriptStoreError) -> Self {
+		match error {
+			TranscriptStoreError::Unavailable { failure } => RoutineError::Unavailable { failure },
+			TranscriptStoreError::UnknownBot { id } => RoutineError::UnknownBot { id },
+			TranscriptStoreError::UnreadableSources { path, reason } => {
+				RoutineError::UnreadableSources { path, reason }
+			}
+			TranscriptStoreError::Storage { failure } => RoutineError::Storage { failure },
+			other => RoutineError::Unexpected { detail: format!("{other:?}") },
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use std::collections::BTreeSet;
@@ -200,6 +429,83 @@ mod tests {
 		let vocabulary = vocabulary();
 
 		assert_eq!(named(&FilterMatchMode::ALL), listed(&vocabulary["matchModes"]));
+	}
+
+	fn mirror() -> String {
+		let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+			.join("..")
+			.join("src")
+			.join("lib")
+			.join("routines")
+			.join("routine-contract.ts");
+		std::fs::read_to_string(&path).expect("the mirror reads")
+	}
+
+	fn mirrored(alias: &str) -> BTreeSet<String> {
+		let mirror = mirror();
+		let opening = format!("export type {alias} =");
+		let start =
+			mirror.find(&opening).unwrap_or_else(|| panic!("the mirror declares no {alias}"))
+				+ opening.len();
+		let body = &mirror[start..];
+		let body = body.split("\nexport ").next().unwrap_or(body);
+		body.split('"').skip(1).step_by(2).map(str::to_owned).collect()
+	}
+
+	fn tagged<T: Serialize>(values: &[T]) -> BTreeSet<String> {
+		values
+			.iter()
+			.map(|value| {
+				to_value(value).expect("the decision serialises")["kind"]
+					.as_str()
+					.expect("the tag is a name")
+					.to_owned()
+			})
+			.collect()
+	}
+
+	#[test]
+	fn every_run_outcome_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&RunOutcome::ALL), mirrored("RunOutcome"));
+	}
+
+	#[test]
+	fn every_run_cause_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&RunCause::ALL), mirrored("RunCause"));
+	}
+
+	#[test]
+	fn every_skip_reason_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&SkipReason::ALL), mirrored("SkipReason"));
+	}
+
+	#[test]
+	fn every_refusal_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&Refusal::ALL), mirrored("Refusal"));
+	}
+
+	#[test]
+	fn every_trigger_decision_carries_the_tag_the_front_declares() {
+		let decisions = [
+			TriggerDecision::Started { run_id: "run-1".to_owned() },
+			TriggerDecision::Skipped { run_id: "run-1".to_owned(), reason: SkipReason::HourlyCap },
+			TriggerDecision::Refused { by: Refusal::Disabled },
+		];
+
+		assert_eq!(tagged(&decisions), mirrored("TriggerDecision"));
+	}
+
+	#[test]
+	fn a_run_outcome_reads_back_from_the_text_it_serialises_as() {
+		for outcome in RunOutcome::ALL {
+			let held = name(&outcome);
+			assert_eq!(
+				serde_json::from_value::<RunOutcome>(serde_json::Value::String(held.clone()))
+					.expect("the outcome reads back"),
+				outcome,
+				"{held} did not read back as the outcome it was written from"
+			);
+		}
 	}
 
 	#[test]
