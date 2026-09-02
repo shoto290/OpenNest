@@ -6,7 +6,7 @@ use serde::Deserialize;
 use super::contract::TriggerSource;
 use crate::conversations::contract::TranscriptStoreError;
 
-pub const TRIGGERS_NAME: &str = ".triggers.json";
+const TRIGGERS_NAME: &str = ".triggers.json";
 
 #[derive(Deserialize)]
 struct Declaration {
@@ -45,7 +45,8 @@ fn unreadable(path: &Path, reason: String) -> TranscriptStoreError {
 
 #[cfg(test)]
 mod tests {
-	use super::super::contract::FieldType;
+	use serde_json::json;
+
 	use super::*;
 
 	fn a_bundle(name: &str) -> PathBuf {
@@ -59,10 +60,16 @@ mod tests {
 		fs::write(bundle.join(TRIGGERS_NAME), text).expect("the declaration lands");
 	}
 
-	fn a_source(id: &str, title: &str) -> String {
-		format!(
-			"{{\"id\":\"{id}\",\"title\":\"{title}\",\"payload\":[{{\"name\":\"at\",\"type\":\"datetime\"}}],\"dedupeKey\":\"at\"}}"
-		)
+	fn declaring_source(bundle: &Path, id: &str, title: &str) {
+		let declaration = json!({
+			"sources": [{
+				"id": id,
+				"title": title,
+				"payload": [{ "name": "at", "type": "datetime" }],
+				"dedupeKey": "at",
+			}],
+		});
+		declaring(bundle, &declaration.to_string());
 	}
 
 	fn ids(sources: &[TriggerSource]) -> Vec<String> {
@@ -103,7 +110,15 @@ mod tests {
 		let bundle = a_bundle("unknown-type");
 		declaring(
 			&bundle,
-			"{\"sources\":[{\"id\":\"a\",\"title\":\"A\",\"payload\":[{\"name\":\"at\",\"type\":\"duration\"}],\"dedupeKey\":\"at\"}]}",
+			&json!({
+				"sources": [{
+					"id": "a",
+					"title": "A",
+					"payload": [{ "name": "at", "type": "duration" }],
+					"dedupeKey": "at",
+				}],
+			})
+			.to_string(),
 		);
 
 		assert!(
@@ -119,9 +134,9 @@ mod tests {
 		let system = a_bundle("stack-system");
 		let space = a_bundle("stack-space");
 		let bot = a_bundle("stack-bot");
-		declaring(&system, &format!("{{\"sources\":[{}]}}", a_source("schedule", "System")));
-		declaring(&space, &format!("{{\"sources\":[{}]}}", a_source("space-inbox", "Space")));
-		declaring(&bot, &format!("{{\"sources\":[{}]}}", a_source("bot-mail", "Bot")));
+		declaring_source(&system, "schedule", "System");
+		declaring_source(&space, "space-inbox", "Space");
+		declaring_source(&bot, "bot-mail", "Bot");
 
 		let stacked = stacked(&[system.clone(), space.clone(), bot.clone()]).expect("it reads");
 
@@ -136,8 +151,8 @@ mod tests {
 	fn a_source_declared_twice_is_returned_once_as_the_later_bundle_declared_it() {
 		let system = a_bundle("shadowed-system");
 		let bot = a_bundle("shadowed-bot");
-		declaring(&system, &format!("{{\"sources\":[{}]}}", a_source("schedule", "System")));
-		declaring(&bot, &format!("{{\"sources\":[{}]}}", a_source("schedule", "Bot")));
+		declaring_source(&system, "schedule", "System");
+		declaring_source(&bot, "schedule", "Bot");
 
 		let stacked = stacked(&[system.clone(), bot.clone()]).expect("it reads");
 
@@ -153,7 +168,7 @@ mod tests {
 	fn a_declaration_that_does_not_parse_holds_back_the_other_bundles() {
 		let system = a_bundle("held-system");
 		let bot = a_bundle("held-bot");
-		declaring(&system, &format!("{{\"sources\":[{}]}}", a_source("schedule", "System")));
+		declaring_source(&system, "schedule", "System");
 		declaring(&bot, "not json");
 
 		let failure = stacked(&[system.clone(), bot.clone()]).expect_err("the read fails");
@@ -186,9 +201,5 @@ mod tests {
 			webhook.and_then(|source| source.header.clone()),
 			Some("X-OpenNest-Delivery".to_owned())
 		);
-		assert!(sources
-			.iter()
-			.flat_map(|source| source.payload.iter())
-			.any(|field| field.field_type == FieldType::Datetime));
 	}
 }

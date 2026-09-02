@@ -109,9 +109,10 @@ mod tests {
 			.iter()
 			.map(|value| {
 				to_value(value)
-					.ok()
-					.and_then(|value| value.as_str().map(str::to_owned))
-					.expect("the value is a string")
+					.expect("the value serialises")
+					.as_str()
+					.expect("it is a name")
+					.to_owned()
 			})
 			.collect()
 	}
