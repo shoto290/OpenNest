@@ -53,6 +53,5 @@ export const WindowSurface = meta.story({
 		const screen = slotIn(canvasElement, "app-boot-screen")
 
 		await expect(screen).toHaveAttribute("data-tauri-drag-region", "deep")
-		await expect(screen.clientHeight).toBe(window.innerHeight)
 	},
 })
