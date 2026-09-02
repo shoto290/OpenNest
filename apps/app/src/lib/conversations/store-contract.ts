@@ -269,6 +269,7 @@ export type TranscriptStoreError =
 	| { kind: "unwritableBundle"; detail: string }
 	| { kind: "systemSkill"; id: string }
 	| { kind: "unreadableHistory"; detail: string }
+	| { kind: "unreadableSources"; path: string; reason: string }
 
 export type SpaceError =
 	| { kind: "unavailable"; failure: StorageFailure }

@@ -755,6 +755,8 @@ pub enum TranscriptStoreError {
 	SystemSkill { id: String },
 	#[serde(rename_all = "camelCase")]
 	UnreadableHistory { detail: String },
+	#[serde(rename_all = "camelCase")]
+	UnreadableSources { path: String, reason: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

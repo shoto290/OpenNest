@@ -7,6 +7,7 @@ pub mod conversations;
 pub mod db;
 pub mod environment;
 pub mod notifications;
+pub mod routines;
 pub mod sections;
 pub mod spaces;
 pub mod user;
