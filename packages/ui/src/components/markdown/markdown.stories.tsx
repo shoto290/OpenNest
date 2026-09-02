@@ -1839,7 +1839,7 @@ export const DangerBubble = meta.story({
 		const [heading] = root.querySelectorAll("h2")
 		const [paragraph] = root.querySelectorAll("p")
 
-		await expect(inkOf(content)).not.toBe(inkOf(document.body))
+		await expect(inkOf(content)).not.toBe(inkOf(canvasElement))
 		await expect(inkOf(heading)).toBe(inkOf(content))
 		await expect(inkOf(paragraph)).toBe(inkOf(content))
 	},
