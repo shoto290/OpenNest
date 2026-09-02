@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 
 import type {
+	ReportedRun,
 	Routine,
 	RoutineDraft,
 	RoutineEdit,
@@ -23,6 +24,8 @@ export const routinesTransport = {
 		invoke<Routine[]>("routine_list", { conversationId }),
 	runs: (routineId: string, limit = DEFAULT_RUN_PAGE) =>
 		invoke<RoutineRun[]>("routine_runs", { routineId, limit }),
+	reportedRuns: (conversationId: string) =>
+		invoke<ReportedRun[]>("routine_reported_runs", { conversationId }),
 	runNow: (id: string) => invoke<TriggerDecision>("routine_run_now", { id }),
 	renewLease: (runId: string) => invoke<void>("routine_renew_lease", { runId }),
 	closeRun: (runId: string, closing: RunClosing) =>

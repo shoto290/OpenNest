@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::db::{Access, DatabaseError};
 use crate::routines::contract::{
-	Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineRun, RunCause, RunClosing, RunOutcome,
-	RunRequested, SkipReason, TriggerDecision, TriggerEvent, LEASE_EXPIRED,
+	ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineRun, RunCause,
+	RunClosing, RunOutcome, RunRequested, SkipReason, TriggerDecision, TriggerEvent, LEASE_EXPIRED,
 };
 use crate::routines::core::{
 	self, Dedupe, Facts, Verdict, DEDUPE_RETENTION_MS, FAILURES_BEFORE_DISABLE, HOUR_MS, LEASE_MS,
@@ -70,8 +70,21 @@ const COUNT_STARTED_SINCE: &str = "SELECT count(*) FROM routine_runs
 	WHERE routine_id = ?1 AND started_at > ?2 AND (outcome IS NULL OR outcome <> 'skipped')";
 
 const CLOSE_RUN: &str = "UPDATE routine_runs
-	SET ended_at = ?2, outcome = ?3, reason = ?4, cost_usd = ?5, model_usage = ?6
+	SET ended_at = ?2, outcome = ?3, reason = ?4, cost_usd = ?5, model_usage = ?6,
+		reported_turn_id = ?7
 	WHERE id = ?1 AND ended_at IS NULL";
+
+const CONVERSATION_OF_TURN: &str = "SELECT conversation_id FROM turns WHERE id = ?1";
+
+const CONVERSATION_OF_OPEN_RUN: &str = "SELECT routines.conversation_id
+	FROM routine_runs JOIN routines ON routines.id = routine_runs.routine_id
+	WHERE routine_runs.id = ?1 AND routine_runs.ended_at IS NULL";
+
+const SELECT_REPORTED_RUNS: &str = "SELECT routine_runs.reported_turn_id, routines.title,
+	routines.trigger_source_id
+	FROM routine_runs JOIN routines ON routines.id = routine_runs.routine_id
+	WHERE routines.conversation_id = ?1 AND routine_runs.reported_turn_id IS NOT NULL
+	ORDER BY routine_runs.started_at, routine_runs.id";
 
 const PRUNE_DEDUPE_VALUES: &str = "DELETE FROM routine_dedupe_values WHERE seen_at <= ?1";
 
@@ -206,6 +219,20 @@ impl RoutinesRepository {
 			.await?
 	}
 
+	pub async fn reported(
+		&self,
+		conversation_id: String,
+	) -> Result<Vec<ReportedRun>, RoutineError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(SELECT_REPORTED_RUNS)?;
+				let rows = statement.query_map([&conversation_id], reported_run)?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await?)
+	}
+
 	pub async fn admit(&self, event: TriggerEvent, now: i64) -> Result<Admitted, RoutineError> {
 		self.access.call_mut(move |connection| Ok(admitted(connection, &event, now))).await?
 	}
@@ -323,6 +350,9 @@ fn closed(
 	now: i64,
 ) -> Result<RoutineRun, RoutineError> {
 	let transaction = write_transaction(connection)?;
+	if let Some(turn_id) = &closing.reported_turn_id {
+		refuse_unreportable_turn(&transaction, run_id, turn_id)?;
+	}
 	let written = transaction.execute(
 		CLOSE_RUN,
 		params![
@@ -332,6 +362,7 @@ fn closed(
 			closing.reason,
 			closing.cost_usd,
 			closing.model_usage.as_ref().map(as_text).transpose()?,
+			closing.reported_turn_id,
 		],
 	)?;
 	if written == 0 {
@@ -341,6 +372,30 @@ fn closed(
 	settle_failures(&transaction, &stored.routine_id, closing.outcome, now)?;
 	transaction.commit()?;
 	Ok(stored)
+}
+
+fn refuse_unreportable_turn(
+	transaction: &Transaction<'_>,
+	run_id: &str,
+	turn_id: &str,
+) -> Result<(), RoutineError> {
+	let of_run: Option<String> =
+		transaction.query_row(CONVERSATION_OF_OPEN_RUN, [run_id], |row| row.get(0)).optional()?;
+	let Some(of_run) = of_run else {
+		return Ok(());
+	};
+	let of_turn: Option<String> =
+		transaction.query_row(CONVERSATION_OF_TURN, [turn_id], |row| row.get(0)).optional()?;
+	let Some(conversation_id) = of_turn else {
+		return Err(RoutineError::UnknownTurn { id: turn_id.to_owned() });
+	};
+	if conversation_id != of_run {
+		return Err(RoutineError::TurnOfAnotherConversation {
+			turn_id: turn_id.to_owned(),
+			conversation_id,
+		});
+	}
+	Ok(())
 }
 
 fn admitted(
@@ -588,6 +643,14 @@ fn run(row: &Row<'_>) -> rusqlite::Result<RoutineRun> {
 	})
 }
 
+fn reported_run(row: &Row<'_>) -> rusqlite::Result<ReportedRun> {
+	Ok(ReportedRun {
+		turn_id: row.get(0)?,
+		routine_title: row.get(1)?,
+		trigger_source_id: row.get(2)?,
+	})
+}
+
 fn from_text<T: serde::de::DeserializeOwned>(row: &Row<'_>, index: usize) -> rusqlite::Result<T> {
 	parsed(&row.get::<_, String>(index)?)
 }
@@ -616,7 +679,7 @@ mod tests {
 	use crate::db::{count_of, open, Database};
 	use crate::routines::contract::{
 		FieldType, Filter, FilterMatchMode, FilterOperator, FilterRow, PayloadField, Refusal,
-		TriggerSource,
+		ReportedRun, TriggerSource,
 	};
 	use crate::routines::core::{HOURLY_CAP, LEASE_MS};
 
@@ -634,6 +697,18 @@ mod tests {
 			VALUES ('c1', 'main', 'First', 1, 1);
 		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
 			VALUES ('c1', 'b1', 'assistant', 1, 0);
+	";
+
+	const A_TURN: &str = "
+		INSERT INTO turns (id, conversation_id, seq, started_at)
+			VALUES ('t1', 'c1', 1, 1);
+	";
+
+	const ANOTHER_CONVERSATION_WITH_A_TURN: &str = "
+		INSERT INTO conversations (id, kind, title, created_at, updated_at)
+			VALUES ('c2', 'topic', 'Second', 1, 1);
+		INSERT INTO turns (id, conversation_id, seq, started_at)
+			VALUES ('t2', 'c2', 1, 1);
 	";
 
 	async fn planted() -> (Database, std::path::PathBuf) {
@@ -702,7 +777,37 @@ mod tests {
 	}
 
 	fn closing(outcome: RunOutcome) -> RunClosing {
-		RunClosing { outcome, reason: None, cost_usd: None, model_usage: None }
+		RunClosing {
+			outcome,
+			reason: None,
+			cost_usd: None,
+			model_usage: None,
+			reported_turn_id: None,
+		}
+	}
+
+	fn reporting(turn_id: &str) -> RunClosing {
+		RunClosing { reported_turn_id: Some(turn_id.to_owned()), ..closing(RunOutcome::Ok) }
+	}
+
+	async fn plant(database: &Database, statement: &'static str) {
+		database
+			.call_mut(move |connection| Ok(connection.execute_batch(statement)?))
+			.await
+			.expect("the rows are planted");
+	}
+
+	async fn open_runs(database: &Database, run_id: String) -> u32 {
+		database
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT count(*) FROM routine_runs WHERE id = ?1 AND ended_at IS NULL",
+					[&run_id],
+					|row| row.get(0),
+				)?)
+			})
+			.await
+			.expect("the run reads")
 	}
 
 	async fn started(database: &Database, id: &str, at: &str, now: i64) -> String {
@@ -1161,6 +1266,7 @@ mod tests {
 					reason: Some("done".to_owned()),
 					cost_usd: Some(0.42),
 					model_usage: Some(json!({ "sonnet": { "inputTokens": 120 } })),
+					reported_turn_id: None,
 				},
 				NOW + 10,
 			)
@@ -1176,6 +1282,107 @@ mod tests {
 			.await
 			.expect_err("a closed run is not closed twice");
 		assert_eq!(refused, RoutineError::RunAlreadyClosed { id: run_id });
+	}
+
+	#[tokio::test]
+	async fn a_run_closed_naming_a_turn_of_its_conversation_is_answered_with_its_routine() {
+		let (database, _dir) = planted().await;
+		plant(&database, A_TURN).await;
+		let held = a_routine(&database, no_filter()).await;
+		let run_id = started(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+
+		database
+			.routines()
+			.close_run(run_id, reporting("t1"), NOW + 10)
+			.await
+			.expect("the run closes");
+
+		assert_eq!(
+			database
+				.routines()
+				.reported(CONVERSATION.to_owned())
+				.await
+				.expect("the reported runs read"),
+			vec![ReportedRun {
+				turn_id: "t1".to_owned(),
+				routine_title: TITLE.to_owned(),
+				trigger_source_id: "schedule".to_owned(),
+			}]
+		);
+	}
+
+	#[tokio::test]
+	async fn a_run_closed_naming_no_turn_is_left_out_of_the_reported_runs() {
+		let (database, _dir) = planted().await;
+		plant(&database, A_TURN).await;
+		let held = a_routine(&database, no_filter()).await;
+		let run_id = started(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+
+		ended(&database, run_id, RunOutcome::Ok, NOW + 10).await;
+
+		assert_eq!(
+			database.routines().reported(CONVERSATION.to_owned()).await.expect("the answer reads"),
+			Vec::new()
+		);
+	}
+
+	#[tokio::test]
+	async fn a_closing_naming_a_turn_nobody_wrote_is_refused_and_leaves_the_run_open() {
+		let (database, _dir) = planted().await;
+		let held = a_routine(&database, no_filter()).await;
+		let run_id = started(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+
+		let refused = database
+			.routines()
+			.close_run(run_id.clone(), reporting("nobody"), NOW + 10)
+			.await
+			.expect_err("a turn nobody wrote does not close a run");
+
+		assert_eq!(refused, RoutineError::UnknownTurn { id: "nobody".to_owned() });
+		assert_eq!(open_runs(&database, run_id).await, 1, "the refused closing ended the run");
+	}
+
+	#[tokio::test]
+	async fn a_closing_naming_a_turn_of_another_conversation_is_refused_and_leaves_the_run_open() {
+		let (database, _dir) = planted().await;
+		plant(&database, ANOTHER_CONVERSATION_WITH_A_TURN).await;
+		let held = a_routine(&database, no_filter()).await;
+		let run_id = started(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+
+		let refused = database
+			.routines()
+			.close_run(run_id.clone(), reporting("t2"), NOW + 10)
+			.await
+			.expect_err("a turn of another conversation does not close a run");
+
+		assert_eq!(
+			refused,
+			RoutineError::TurnOfAnotherConversation {
+				turn_id: "t2".to_owned(),
+				conversation_id: "c2".to_owned(),
+			}
+		);
+		assert_eq!(open_runs(&database, run_id).await, 1, "the refused closing ended the run");
+	}
+
+	#[tokio::test]
+	async fn a_reported_run_whose_routine_is_gone_is_left_out_of_the_reported_runs() {
+		let (database, _dir) = planted().await;
+		plant(&database, A_TURN).await;
+		let held = a_routine(&database, no_filter()).await;
+		let run_id = started(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+		database
+			.routines()
+			.close_run(run_id, reporting("t1"), NOW + 10)
+			.await
+			.expect("the run closes");
+
+		database.routines().delete(held.id).await.expect("the routine goes");
+
+		assert_eq!(
+			database.routines().reported(CONVERSATION.to_owned()).await.expect("the answer reads"),
+			Vec::new()
+		);
 	}
 
 	#[tokio::test]

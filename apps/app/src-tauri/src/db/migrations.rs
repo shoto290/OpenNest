@@ -31,6 +31,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 22, statements: ROUTINES },
 	Migration { version: 23, statements: ROUTINE_TASK },
 	Migration { version: 24, statements: ROUTINE_LAST_OCCURRENCE },
+	Migration { version: 25, statements: ROUTINE_REPORTED_TURN },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -497,6 +498,14 @@ const ROUTINE_LAST_OCCURRENCE: &str = "
 ALTER TABLE routines ADD COLUMN last_occurrence_at INTEGER;
 ";
 
+const ROUTINE_REPORTED_TURN: &str = "
+ALTER TABLE routine_runs ADD COLUMN reported_turn_id TEXT
+	REFERENCES turns (id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS routine_runs_by_reported_turn
+	ON routine_runs (reported_turn_id) WHERE reported_turn_id IS NOT NULL;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -567,6 +576,7 @@ mod tests {
 	const CHECKPOINT_PER_SESSION_STEP: u32 = 21;
 	const ROUTINE_TASK_STEP: u32 = 23;
 	const ROUTINE_LAST_OCCURRENCE_STEP: u32 = 24;
+	const ROUTINE_REPORTED_TURN_STEP: u32 = 25;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -1025,6 +1035,76 @@ mod tests {
 			.expect("the column is there and the row survived");
 		assert_eq!(held, None, "a routine that never fired carries no occurrence");
 		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_file_that_missed_the_reported_turn_step_gains_the_column_and_keeps_its_runs() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(ROUTINE_REPORTED_TURN_STEP))
+			.expect("the build that shipped without the reported turn installs");
+		connection.execute_batch(FIXTURE).expect("the fixture is inserted");
+		write(
+			&connection,
+			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at)
+				VALUES ('r1', 'c1', 'b1', 'schedule', '{}', '{}', 'k1', 1)",
+		)
+		.expect("a routine of the earlier build");
+		write(
+			&connection,
+			"INSERT INTO routine_runs (id, routine_id, started_at, ended_at, outcome,
+				lease_renewed_at)
+				VALUES ('run1', 'r1', 1, 2, 'ok', 1)",
+		)
+		.expect("a run of the earlier build");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		let held: (Option<String>, Option<i64>) = connection
+			.query_row(
+				"SELECT reported_turn_id, ended_at FROM routine_runs WHERE id = 'run1'",
+				[],
+				|row| Ok((row.get(0)?, row.get(1)?)),
+			)
+			.expect("the column is there and the row survived");
+		assert_eq!(held, (None, Some(2)), "a run written before the step reported in no turn");
+		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_turn_that_goes_leaves_the_run_that_reported_in_it_naming_no_turn() {
+		let dir = temp_dir();
+		let connection = fixture(&dir);
+		write(
+			&connection,
+			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at)
+				VALUES ('r1', 'c1', 'b1', 'schedule', '{}', '{}', 'k1', 1)",
+		)
+		.expect("a routine of a participant");
+		write(
+			&connection,
+			"INSERT INTO routine_runs (id, routine_id, started_at, ended_at, outcome,
+				lease_renewed_at, reported_turn_id)
+				VALUES ('run1', 'r1', 1, 2, 'ok', 1, 't1')",
+		)
+		.expect("a run that reported in a turn");
+
+		write(&connection, "DELETE FROM turns WHERE id = 't1'").expect("the delete lands");
+
+		let held: Option<String> = connection
+			.query_row("SELECT reported_turn_id FROM routine_runs WHERE id = 'run1'", [], |row| {
+				row.get(0)
+			})
+			.expect("the run survived the turn");
+		assert_eq!(held, None, "the run kept a turn that is gone");
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

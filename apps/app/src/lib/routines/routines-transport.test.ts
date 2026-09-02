@@ -56,6 +56,23 @@ describe("routinesTransport", () => {
 		})
 	})
 
+	it("reads the runs of a conversation that reported in a turn", async () => {
+		const reported = {
+			turnId: "t-1",
+			routineTitle: "Nightly report",
+			triggerSourceId: "schedule",
+		}
+		hostInvoke.mockResolvedValueOnce([reported])
+
+		await expect(routinesTransport.reportedRuns("c-1")).resolves.toEqual([
+			reported,
+		])
+
+		expect(hostInvoke).toHaveBeenCalledWith("routine_reported_runs", {
+			conversationId: "c-1",
+		})
+	})
+
 	it("carries the decision run now reached back to the caller", async () => {
 		hostInvoke.mockResolvedValueOnce({
 			kind: "skipped",

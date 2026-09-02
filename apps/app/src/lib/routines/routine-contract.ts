@@ -55,6 +55,13 @@ export type RunClosing = {
 	reason?: string
 	costUsd?: number
 	modelUsage?: unknown
+	reportedTurnId?: string
+}
+
+export type ReportedRun = {
+	turnId: string
+	routineTitle: string
+	triggerSourceId: string
 }
 
 export type TriggerEvent = {
