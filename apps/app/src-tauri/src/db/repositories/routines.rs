@@ -1,23 +1,41 @@
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use super::messages::stored_as_text;
 use crate::db::{Access, DatabaseError};
 use crate::routines::contract::{
-	Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineRun, RunClosing, RunOutcome,
+	Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineRun, RunCause, RunClosing, RunOutcome,
 	RunRequested, SkipReason, TriggerDecision, TriggerEvent, LEASE_EXPIRED,
 };
 use crate::routines::core::{
 	self, Dedupe, Facts, Verdict, DEDUPE_RETENTION_MS, FAILURES_BEFORE_DISABLE, HOUR_MS, LEASE_MS,
 };
 
-stored_as_text!(RunOutcome);
+impl ToSql for RunOutcome {
+	fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+		Ok(ToSqlOutput::from(serialized(self)?))
+	}
+}
+
+impl FromSql for RunOutcome {
+	fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+		serde_json::from_value(Value::String(value.as_str()?.to_owned()))
+			.map_err(|error| FromSqlError::Other(Box::new(error)))
+	}
+}
+
+fn serialized(outcome: &RunOutcome) -> rusqlite::Result<String> {
+	match serde_json::to_value(outcome) {
+		Ok(Value::String(text)) => Ok(text),
+		Ok(held) => Err(rusqlite::Error::ToSqlConversionFailure(
+			format!("a run outcome serialised as {held}, not as a name").into(),
+		)),
+		Err(error) => Err(rusqlite::Error::ToSqlConversionFailure(Box::new(error))),
+	}
+}
 
 pub const MAX_RUNS_PER_PAGE: u32 = 200;
-
-const RUN_NOW_CAUSE: &str = "runNow";
 
 const SELECT_ROUTINE: &str = "SELECT id, conversation_id, bot_id, trigger_source_id, event_filter,
 	trigger_config, is_enabled, consecutive_failures, created_at
@@ -297,7 +315,8 @@ fn admitted(
 	if let (Verdict::Start, Dedupe::Fresh(value)) = (&verdict, &facts.dedupe) {
 		transaction.execute(RECORD_DEDUPE_VALUE, params![held.id, value, now])?;
 	}
-	let admitted = applied(&transaction, &held, verdict, event.payload.clone(), now)?;
+	let admitted =
+		applied(&transaction, &held, verdict, RunCause::Trigger, event.payload.clone(), now)?;
 	transaction.commit()?;
 	Ok(admitted)
 }
@@ -311,13 +330,10 @@ fn admitted_for_run_now(
 	let held = prepared(&transaction, routine_id, now)?;
 	let facts = facts(&transaction, &held, Dedupe::Missing, now)?;
 	let verdict = core::verdict_for_run_now(&facts, now);
-	let admitted = applied(&transaction, &held, verdict, run_now_payload(), now)?;
+	let admitted =
+		applied(&transaction, &held, verdict, RunCause::RunNow, Value::Object(Map::new()), now)?;
 	transaction.commit()?;
 	Ok(admitted)
-}
-
-fn run_now_payload() -> Value {
-	serde_json::json!({ "cause": RUN_NOW_CAUSE })
 }
 
 fn prepared(
@@ -403,6 +419,7 @@ fn applied(
 	transaction: &Transaction<'_>,
 	held: &Routine,
 	verdict: Verdict,
+	cause: RunCause,
 	payload: Value,
 	now: i64,
 ) -> Result<Admitted, RoutineError> {
@@ -419,6 +436,7 @@ fn applied(
 			Ok(Admitted {
 				decision: TriggerDecision::Started { run_id: run_id.clone() },
 				requested: Some(RunRequested {
+					cause,
 					routine_id: held.id.clone(),
 					run_id,
 					bot_id: held.bot_id.clone(),
@@ -673,6 +691,7 @@ mod tests {
 		assert_eq!(
 			admitted.requested,
 			Some(RunRequested {
+				cause: RunCause::Trigger,
 				routine_id: held.id.clone(),
 				run_id,
 				bot_id: BOT.to_owned(),
@@ -959,10 +978,9 @@ mod tests {
 			.expect("the decision is reached");
 
 		assert!(matches!(admitted.decision, TriggerDecision::Started { .. }), "{admitted:?}");
-		assert_eq!(
-			admitted.requested.expect("a run is requested").payload,
-			json!({ "cause": "runNow" })
-		);
+		let requested = admitted.requested.expect("a run is requested");
+		assert_eq!(requested.cause, RunCause::RunNow);
+		assert_eq!(requested.payload, json!({}));
 		assert_eq!(count_of(&database, "routine_dedupe_values").await, 0);
 	}
 

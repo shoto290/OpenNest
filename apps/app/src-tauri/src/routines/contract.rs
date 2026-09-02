@@ -138,24 +138,8 @@ pub enum RunOutcome {
 }
 
 impl RunOutcome {
-	pub fn as_sql(&self) -> &'static str {
-		match self {
-			RunOutcome::Ok => "ok",
-			RunOutcome::Nothing => "nothing",
-			RunOutcome::Skipped => "skipped",
-			RunOutcome::Failed => "failed",
-		}
-	}
-
-	pub fn parse(text: &str) -> Option<Self> {
-		match text {
-			"ok" => Some(RunOutcome::Ok),
-			"nothing" => Some(RunOutcome::Nothing),
-			"skipped" => Some(RunOutcome::Skipped),
-			"failed" => Some(RunOutcome::Failed),
-			_ => None,
-		}
-	}
+	pub const ALL: [RunOutcome; 4] =
+		[RunOutcome::Ok, RunOutcome::Nothing, RunOutcome::Skipped, RunOutcome::Failed];
 
 	pub fn is_failure(self) -> bool {
 		matches!(self, RunOutcome::Failed)
@@ -242,12 +226,24 @@ pub struct TriggerEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunRequested {
+	pub cause: RunCause,
 	pub routine_id: String,
 	pub run_id: String,
 	pub bot_id: String,
 	pub conversation_id: String,
 	pub trigger_source_id: String,
 	pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunCause {
+	Trigger,
+	RunNow,
+}
+
+impl RunCause {
+	pub const ALL: [RunCause; 2] = [RunCause::Trigger, RunCause::RunNow];
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -259,6 +255,9 @@ pub enum SkipReason {
 }
 
 impl SkipReason {
+	pub const ALL: [SkipReason; 3] =
+		[SkipReason::LeaseHeld, SkipReason::HourlyCap, SkipReason::BackingOff];
+
 	pub fn recorded(self) -> &'static str {
 		match self {
 			SkipReason::LeaseHeld => "previous run still in progress",
@@ -277,6 +276,11 @@ pub enum Refusal {
 	Filter,
 	DedupeValueMissing,
 	AlreadySeen,
+}
+
+impl Refusal {
+	pub const ALL: [Refusal; 4] =
+		[Refusal::Disabled, Refusal::Filter, Refusal::DedupeValueMissing, Refusal::AlreadySeen];
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -425,6 +429,83 @@ mod tests {
 		let vocabulary = vocabulary();
 
 		assert_eq!(named(&FilterMatchMode::ALL), listed(&vocabulary["matchModes"]));
+	}
+
+	fn mirror() -> String {
+		let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+			.join("..")
+			.join("src")
+			.join("lib")
+			.join("routines")
+			.join("routine-contract.ts");
+		std::fs::read_to_string(&path).expect("the mirror reads")
+	}
+
+	fn mirrored(alias: &str) -> BTreeSet<String> {
+		let mirror = mirror();
+		let opening = format!("export type {alias} =");
+		let start =
+			mirror.find(&opening).unwrap_or_else(|| panic!("the mirror declares no {alias}"))
+				+ opening.len();
+		let body = &mirror[start..];
+		let body = body.split("\nexport ").next().unwrap_or(body);
+		body.split('"').skip(1).step_by(2).map(str::to_owned).collect()
+	}
+
+	fn tagged<T: Serialize>(values: &[T]) -> BTreeSet<String> {
+		values
+			.iter()
+			.map(|value| {
+				to_value(value).expect("the decision serialises")["kind"]
+					.as_str()
+					.expect("the tag is a name")
+					.to_owned()
+			})
+			.collect()
+	}
+
+	#[test]
+	fn every_run_outcome_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&RunOutcome::ALL), mirrored("RunOutcome"));
+	}
+
+	#[test]
+	fn every_run_cause_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&RunCause::ALL), mirrored("RunCause"));
+	}
+
+	#[test]
+	fn every_skip_reason_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&SkipReason::ALL), mirrored("SkipReason"));
+	}
+
+	#[test]
+	fn every_refusal_serialises_as_the_front_declares_it() {
+		assert_eq!(named(&Refusal::ALL), mirrored("Refusal"));
+	}
+
+	#[test]
+	fn every_trigger_decision_carries_the_tag_the_front_declares() {
+		let decisions = [
+			TriggerDecision::Started { run_id: "run-1".to_owned() },
+			TriggerDecision::Skipped { run_id: "run-1".to_owned(), reason: SkipReason::HourlyCap },
+			TriggerDecision::Refused { by: Refusal::Disabled },
+		];
+
+		assert_eq!(tagged(&decisions), mirrored("TriggerDecision"));
+	}
+
+	#[test]
+	fn a_run_outcome_reads_back_from_the_text_it_serialises_as() {
+		for outcome in RunOutcome::ALL {
+			let held = name(&outcome);
+			assert_eq!(
+				serde_json::from_value::<RunOutcome>(serde_json::Value::String(held.clone()))
+					.expect("the outcome reads back"),
+				outcome,
+				"{held} did not read back as the outcome it was written from"
+			);
+		}
 	}
 
 	#[test]

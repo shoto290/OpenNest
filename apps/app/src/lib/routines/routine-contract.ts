@@ -57,7 +57,10 @@ export type TriggerEvent = {
 	payload: unknown
 }
 
+export type RunCause = "trigger" | "runNow"
+
 export type RunRequested = {
+	cause: RunCause
 	routineId: string
 	runId: string
 	botId: string
