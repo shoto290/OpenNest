@@ -45,6 +45,9 @@ const chat = {
 			lead: "Lead",
 			deleted: "Deleted bot",
 		},
+		cause: {
+			label: "Routine report",
+		},
 		mention: {
 			unknown: "Unknown bot",
 			counted_one: "{{count}} mention",
