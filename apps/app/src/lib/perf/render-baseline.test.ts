@@ -354,11 +354,14 @@ const takeFrameRunner = (): FrameRunner => {
 	}
 }
 
-const measureThreadOpen = async () => {
-	const frames = takeFrameRunner()
+type SeededThread = {
+	messages: number
+	pageSize?: number
+}
+
+const seedThreadApp = async ({ messages, pageSize }: SeededThread) => {
 	layout = fakeLayout()
-	const messages = LONG_THREAD_RUNS * 2
-	const store = createFakeTranscriptStore()
+	const store = createFakeTranscriptStore({ pageSize })
 	const [space] = await store.spaces()
 	const bot = await store.createBot(
 		newBotIdentity(await store.bots(space.id)),
@@ -367,6 +370,10 @@ const measureThreadOpen = async () => {
 	await seedTranscript(store, bot.id, messages)
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
+	return bot
+}
+
+const renderProfiledApp = () => {
 	const commits = countCommits()
 	render(
 		createElement(
@@ -375,6 +382,14 @@ const measureThreadOpen = async () => {
 			createElement(App),
 		),
 	)
+	return commits
+}
+
+const measureThreadOpen = async () => {
+	const frames = takeFrameRunner()
+	const messages = LONG_THREAD_RUNS * 2
+	const bot = await seedThreadApp({ messages })
+	const commits = renderProfiledApp()
 	await frames.flush(MOUNT_TASKS)
 
 	const lastMessage = `Answer ${messages - 1} in prose`
@@ -404,26 +419,11 @@ const measureThreadOpen = async () => {
 }
 
 const measureLongTranscriptOpen = async () => {
-	layout = fakeLayout()
-	const store = createFakeTranscriptStore({
+	const bot = await seedThreadApp({
+		messages: LONG_TRANSCRIPT_MESSAGES,
 		pageSize: LONG_TRANSCRIPT_MESSAGES,
 	})
-	const [space] = await store.spaces()
-	const bot = await store.createBot(
-		newBotIdentity(await store.bots(space.id)),
-		space.id,
-	)
-	await seedTranscript(store, bot.id, LONG_TRANSCRIPT_MESSAGES)
-	harness.store = store
-	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
-	const commits = countCommits()
-	render(
-		createElement(
-			Profiler,
-			{ id: "app", onRender: commits.onRender },
-			createElement(App),
-		),
-	)
+	const commits = renderProfiledApp()
 	await settle(MOUNT_MS)
 
 	const openedAt = commits.count
