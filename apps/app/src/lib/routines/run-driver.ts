@@ -18,6 +18,8 @@ import type { TranscriptStore } from "../conversations/store-port"
 
 export const LEASE_INTERVAL_MS = 60_000
 
+export const RUN_DEADLINE_MS = 30 * 60_000
+
 export type RunDriverOptions = {
 	driver: Pick<
 		ChatDriver,
@@ -37,6 +39,7 @@ type LiveRun = {
 	requested: RunRequested
 	scope: RuntimeScope
 	lease: ReturnType<typeof setInterval>
+	deadline: ReturnType<typeof setTimeout>
 }
 
 const REASON_FOR_OUTCOME: Record<Exclude<TurnOutcome, "completed">, string> = {
@@ -49,6 +52,8 @@ const MISSING_OUTPUT_REASON = "the run's turn ended with no structured output"
 const QUESTION_REASON = "a run cannot be asked a question"
 
 const PERMISSION_REASON = "a run cannot be asked for a permission"
+
+const DEADLINE_REASON = "the run outlived its deadline"
 
 const detailIn = (error: TransportError) =>
 	"detail" in error && error.detail ? `: ${error.detail}` : ""
@@ -89,6 +94,7 @@ export const startRunDriver = ({
 
 	const forget = (held: LiveRun) => {
 		clearInterval(held.lease)
+		clearTimeout(held.deadline)
 		live.delete(held.requested.runId)
 	}
 
@@ -99,6 +105,22 @@ export const startRunDriver = ({
 	const end = (held: LiveRun) => {
 		forget(held)
 		shutdownSession(held.scope)
+	}
+
+	const refuse = async (held: LiveRun, reason: string) => {
+		const { scope } = held
+		forget(held)
+		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
+		shutdownSession(scope)
+		await close(held.requested.runId, { outcome: "failed", reason })
+	}
+
+	const expire = async (runId: string) => {
+		const held = live.get(runId)
+		if (!held) {
+			return
+		}
+		await refuse(held, DEADLINE_REASON)
 	}
 
 	const openScope = async ({ conversationId, botId }: RunRequested) => {
@@ -125,6 +147,7 @@ export const startRunDriver = ({
 				requested,
 				scope,
 				lease: setInterval(() => void renew(runId), LEASE_INTERVAL_MS),
+				deadline: setTimeout(() => void expire(runId), RUN_DEADLINE_MS),
 			})
 			await driver.startOrResumeSession(
 				scope,
@@ -200,14 +223,6 @@ export const startRunDriver = ({
 			outcome: "failed",
 			reason: transportReason(error),
 		})
-	}
-
-	const refuse = async (held: LiveRun, reason: string) => {
-		const { scope } = held
-		forget(held)
-		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
-		shutdownSession(scope)
-		await close(held.requested.runId, { outcome: "failed", reason })
 	}
 
 	const route = ({ scope, event }: ScopedEvent) => {

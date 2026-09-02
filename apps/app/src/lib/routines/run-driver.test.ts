@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createFakeRunPort, type FakeRunPort } from "./fake-run-port"
 import type { RunCause, RunRequested } from "./routine-contract"
-import { LEASE_INTERVAL_MS, startRunDriver } from "./run-driver"
+import {
+	LEASE_INTERVAL_MS,
+	RUN_DEADLINE_MS,
+	startRunDriver,
+} from "./run-driver"
 
 import type {
 	AgentEvent,
@@ -22,6 +26,8 @@ import type { TranscriptStore } from "../conversations/store-port"
 import { seatBots } from "../conversations/transcript-fixtures"
 
 const SPACE = "personal"
+
+const THIRTY_MINUTES = 30 * 60_000
 
 const settled = async () => {
 	for (let round = 0; round < 20; round += 1) {
@@ -470,5 +476,63 @@ describe("startRunDriver", () => {
 
 		expect(harness.runs.closings).toEqual([])
 		expect(harness.driver.shutdowns).toEqual([])
+	})
+
+	it("bounds a run at thirty minutes", () => {
+		expect(RUN_DEADLINE_MS).toBe(THIRTY_MINUTES)
+	})
+
+	it("cancels, shuts down and closes a run that outlives its deadline", async () => {
+		vi.useFakeTimers()
+		harness.runs.request(harness.requested())
+		await vi.advanceTimersByTimeAsync(0)
+
+		await vi.advanceTimersByTimeAsync(THIRTY_MINUTES - 1)
+		expect(harness.runs.closings).toEqual([])
+
+		await vi.advanceTimersByTimeAsync(1)
+		expect(harness.driver.cancelled).toEqual([harness.botId])
+		expect(harness.driver.shutdowns).toEqual([harness.botId])
+		expect(harness.runs.closings).toEqual([
+			{
+				runId: "run-1",
+				closing: {
+					outcome: "failed",
+					reason: "the run outlived its deadline",
+				},
+			},
+		])
+
+		const renewed = harness.runs.renewals.length
+		await vi.advanceTimersByTimeAsync(LEASE_INTERVAL_MS * 2)
+		expect(harness.runs.renewals).toHaveLength(renewed)
+	})
+
+	it("never closes a run by its deadline once its turn has ended", async () => {
+		vi.useFakeTimers()
+		harness.runs.request(harness.requested())
+		await vi.advanceTimersByTimeAsync(0)
+		await harness.endTurn(reported("All quiet."))
+
+		expect(vi.getTimerCount()).toBe(0)
+
+		await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS * 2)
+
+		expect(harness.runs.closings).toEqual([
+			{ runId: "run-1", closing: { outcome: "ok" } },
+		])
+		expect(harness.driver.cancelled).toEqual([])
+	})
+
+	it("leaves no timer alive once the driver has stopped", async () => {
+		vi.useFakeTimers()
+		harness.runs.request(harness.requested())
+		await vi.advanceTimersByTimeAsync(0)
+		harness.stop()
+
+		await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS * 2)
+
+		expect(vi.getTimerCount()).toBe(0)
+		expect(harness.runs.closings).toEqual([])
 	})
 })
