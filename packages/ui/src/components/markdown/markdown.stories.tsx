@@ -454,16 +454,14 @@ ${WIDE_TABLE}`
 
 const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
 
-const bubbleContentOf = (canvasElement: HTMLElement) =>
-	canvasElement.querySelector(
-		'[data-slot="message-bubble-content"]',
-	) as HTMLElement
-
 const bubbleContentsOf = (canvasElement: HTMLElement) => [
 	...canvasElement.querySelectorAll<HTMLElement>(
 		'[data-slot="message-bubble-content"]',
 	),
 ]
+
+const bubbleContentOf = (canvasElement: HTMLElement) =>
+	bubbleContentsOf(canvasElement)[0]
 
 const firstBlockOf = (content: HTMLElement) =>
 	content.querySelector('[data-slot="markdown"]')

@@ -1,5 +1,7 @@
 export const MARKDOWN_TYPESET_CLASS = "typeset typeset-chat"
 
+export const MARKDOWN_ESCAPED_BLOCK_CLASS = "not-typeset first:mt-0 last:mb-0"
+
 export const MARKDOWN_WHITESPACE_CLASS =
 	"whitespace-normal [&_:is(p,h1,h2,h3,h4,h5,h6,li,td,th)]:whitespace-pre-wrap [&_li:has(>:is(p,ul,ol,blockquote,div,hr))]:whitespace-normal"
 

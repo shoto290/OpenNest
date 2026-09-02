@@ -2,6 +2,8 @@
 
 import { type ComponentPropsWithoutRef, useEffect, useState } from "react"
 
+import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
+
 export const MATH_LANGUAGE = "math"
 
 export interface MarkdownMathProps {
@@ -14,7 +16,7 @@ type MathContent = Pick<
 	"children" | "dangerouslySetInnerHTML"
 >
 
-const DISPLAY_CLASS = "not-typeset my-3 overflow-x-auto first:mt-0 last:mb-0"
+const DISPLAY_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} my-3 overflow-x-auto`
 
 const contentOf = (html: string, source: string): MathContent =>
 	html ? { dangerouslySetInnerHTML: { __html: html } } : { children: source }
