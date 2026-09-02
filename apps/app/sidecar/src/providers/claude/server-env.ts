@@ -75,21 +75,24 @@ const expandServer = (
 	return { ...server, ...Object.fromEntries(expanded) } as Server
 }
 
-const leftOut = (name: string, variable: string) =>
-	`the server "${name}" was left out: ${variable} is defined by no scope`
+const leftOut = (name: string, reason: string) =>
+	`the server "${name}" was left out: ${reason}`
+
+const UNREADABLE_STORE = "the environment store could not be read"
 
 export const resolveServers = (
 	servers: Servers,
 	env: ServerEnv,
 ): ResolvedServers => {
 	const kept: Servers = {}
-	const rejections = env.failure ? [env.failure] : []
+	const rejections: string[] = []
 	for (const [name, server] of Object.entries(servers)) {
 		if (!declaresVariable(server)) {
 			kept[name] = server
 			continue
 		}
 		if (env.failure) {
+			rejections.push(leftOut(name, UNREADABLE_STORE))
 			continue
 		}
 		const missing: string[] = []
@@ -100,10 +103,13 @@ export const resolveServers = (
 		)
 		const [absent] = missing
 		if (absent) {
-			rejections.push(leftOut(name, absent))
+			rejections.push(leftOut(name, `${absent} is defined by no scope`))
 			continue
 		}
 		kept[name] = expanded
+	}
+	if (env.failure && rejections.length) {
+		return { servers: kept, rejections: [env.failure, ...rejections] }
 	}
 	return { servers: kept, rejections }
 }

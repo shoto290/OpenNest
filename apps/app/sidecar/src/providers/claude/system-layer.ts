@@ -36,6 +36,13 @@ export const userLine = (userPluginPath: string): string =>
 export const spaceLine = (spacePluginPath: string): string =>
 	`What you learn about the project this space is for lives in ${spacePluginPath}, the directory every bot of this space reads, and that is where you write it.`
 
+export const unavailableServersSection = (rejections: string[]): string =>
+	[
+		"# Servers left out of this session",
+		rejections.map((detail) => `- ${detail}`).join("\n"),
+		"Answer the person with the tools you still hold. When what they ask for needs one of these servers, tell them that server is unavailable and give them the reason listed for it, so they can act on it. Naming that server and its reason is the one exception to saying nothing about the machinery you run on.",
+	].join("\n\n")
+
 export const skillLine = (directory: string): string =>
 	`This skill lives in ${directory}, and every file it names sits under that directory.`
 
@@ -48,13 +55,16 @@ const pluginSection = (
 ): string[] =>
 	path ? [line(path), ...preloadedSkills(path).map(skillSection)] : []
 
-export const layerFor = ({
-	identity,
-	pluginPath,
-	systemPluginPath,
-	userPluginPath,
-	spacePluginPath,
-}: LayerContext): string =>
+export const layerFor = (
+	{
+		identity,
+		pluginPath,
+		systemPluginPath,
+		userPluginPath,
+		spacePluginPath,
+	}: LayerContext,
+	rejections: string[] = [],
+): string =>
 	[
 		...(identity ? [identity] : []),
 		OPENNEST_LAYER,
@@ -64,4 +74,5 @@ export const layerFor = ({
 		...(systemPluginPath
 			? preloadedSkills(systemPluginPath).map(skillSection)
 			: []),
+		...(rejections.length ? [unavailableServersSection(rejections)] : []),
 	].join("\n\n")

@@ -15,6 +15,7 @@ import {
 	OPENNEST_LAYER,
 	skillLine,
 	spaceLine,
+	unavailableServersSection,
 	userLine,
 } from "./system-layer"
 
@@ -34,6 +35,14 @@ const request = {
 	agent: "bean",
 	identity,
 }
+
+const leftOut = [
+	'the server "clock" was left out: TOKEN is defined by no scope',
+	'the server "probe" was left out: RUNNER is defined by no scope',
+]
+
+const appended = (options: ReturnType<typeof buildOptions>): string =>
+	(options.systemPrompt as { append: string }).append
 
 const spawns: SessionRequest[] = [
 	request,
@@ -268,6 +277,90 @@ describe("buildOptions", () => {
 		expect(options.agent).toBeUndefined()
 		expect(options.mcpServers).toBeUndefined()
 	})
+
+	it("names every server left out at the foot of the layer, detail for detail", () => {
+		const append = appended(
+			buildOptions(request, undefined, undefined, {
+				servers: {},
+				rejections: leftOut,
+			}),
+		)
+
+		expect(append).toBe(layerFor(request, leftOut))
+		expect(append.endsWith(unavailableServersSection(leftOut))).toBe(true)
+		for (const detail of leftOut) {
+			expect(append).toContain(detail)
+		}
+	})
+
+	it("leaves the layer without that section when no server was left out", () => {
+		const append = appended(
+			buildOptions(request, undefined, undefined, {
+				servers: {},
+				rejections: [],
+			}),
+		)
+
+		expect(append).toBe(layerFor(request))
+		expect(append).not.toContain("left out")
+	})
+
+	it("carries the failure of the environment store into that section", () => {
+		const failure = "the environment store could not be read"
+
+		expect(
+			appended(
+				buildOptions(request, undefined, undefined, {
+					servers: {},
+					rejections: [failure],
+				}),
+			),
+		).toContain(failure)
+	})
+
+	it("hands the kept servers and the rejections of one same resolution", () => {
+		const options = buildOptions(request, undefined, undefined, {
+			servers: { clock: { command: "run" } },
+			rejections: leftOut,
+		})
+
+		expect(Object.keys(options.mcpServers ?? {})).toEqual([
+			"clock",
+			DELEGATE_SERVER,
+		])
+		expect(appended(options)).toContain(leftOut[0])
+	})
+
+	it("keeps the value a scope defines out of that section", () => {
+		const bundle = mkdtempSync(join(tmpdir(), "opennest-servers-"))
+		writeFileSync(
+			join(bundle, ".mcp.json"),
+			JSON.stringify({
+				mcpServers: {
+					clock: { command: "run", args: ["--token", "${TOKEN}"] },
+					probe: { command: "${RUNNER}" },
+				},
+			}),
+		)
+
+		const append = appended(
+			buildOptions(
+				{
+					...request,
+					pluginPath: bundle,
+					serverEnv: { base: { TOKEN: "narrow" } },
+				},
+				undefined,
+			),
+		)
+		rmSync(bundle, { recursive: true, force: true })
+
+		expect(append).toContain(
+			'the server "probe" was left out: RUNNER is defined by no scope',
+		)
+		expect(append).not.toContain("clock")
+		expect(append).not.toContain("narrow")
+	})
 })
 
 describe("layerFor", () => {
@@ -374,6 +467,48 @@ describe("layerFor", () => {
 		expect(layerFor({ pluginPath: "/bots/b1", systemPluginPath: system })).toBe(
 			`${OPENNEST_LAYER}\n\n${bundleLine("/bots/b1")}`,
 		)
+	})
+
+	it("closes on the servers left out, below every other section", () => {
+		dropSkill(
+			"learn",
+			'---\nname: "learn"\nmetadata:\n  opennest:\n    preload: true\n---\n\nRules.\n',
+		)
+
+		expect(
+			layerFor(
+				{ identity, pluginPath: "/bots/b1", systemPluginPath: system },
+				leftOut,
+			),
+		).toBe(
+			[
+				identity,
+				OPENNEST_LAYER,
+				bundleLine("/bots/b1"),
+				`# learn\n\n${skillLine(join(system, "skills", "learn"))}\n\nRules.`,
+				unavailableServersSection(leftOut),
+			].join("\n\n"),
+		)
+	})
+
+	it("tells the bot to answer with the tools it holds and to give the reason listed", () => {
+		const section = unavailableServersSection(leftOut)
+
+		expect(section).toContain("Answer the person with the tools you still hold")
+		expect(section).toContain("give them the reason listed for it")
+		expect(section).toContain(
+			"the one exception to saying nothing about the machinery you run on",
+		)
+	})
+
+	it("holds for a rejection naming no variable, such as an unreadable store", () => {
+		const section = unavailableServersSection([
+			"the environment store could not be read",
+			'the server "clock" was left out: the environment store could not be read',
+		])
+
+		expect(section).not.toContain("variable")
+		expect(section).toContain("give them the reason listed for it")
 	})
 
 	it("opens on the identity the host rendered, above the OpenNest sentences", () => {

@@ -11,7 +11,7 @@ import { resolveExecutable } from "./executable"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
 import { securityFloor } from "./security-floor"
-import { resolvedServers } from "./server-env"
+import { type ResolvedServers, resolvedServers } from "./server-env"
 import { inheritedEnv } from "./session-env"
 import { layerFor } from "./system-layer"
 
@@ -69,7 +69,7 @@ export const buildOptions = (
 	request: SessionRequest,
 	canUseTool: Options["canUseTool"],
 	settings: SettingsOptions = readBotSettings(request).options,
-	servers: Options["mcpServers"] = resolvedServers(request).servers,
+	resolved: ResolvedServers = resolvedServers(request),
 ): Options => {
 	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
@@ -88,7 +88,7 @@ export const buildOptions = (
 					plugins: localPlugins(pluginPaths(request)),
 					agent: request.agent,
 					mcpServers: {
-						...servers,
+						...resolved.servers,
 						...delegateServer({ cwd: request.cwd, managedSettings }),
 					},
 				}
@@ -96,7 +96,7 @@ export const buildOptions = (
 		systemPrompt: {
 			type: "preset",
 			preset: "claude_code",
-			append: layerFor(request),
+			append: layerFor(request, resolved.rejections),
 		},
 		env: {
 			...inheritedEnv(),
@@ -121,8 +121,8 @@ export const openClaudeSession = async (
 	if (botSettings.rejection) {
 		emit({ type: "settings_rejected", detail: botSettings.rejection })
 	}
-	const { servers, rejections } = resolvedServers(request)
-	for (const detail of rejections) {
+	const resolved = resolvedServers(request)
+	for (const detail of resolved.rejections) {
 		emit({ type: "server_env_rejected", detail })
 	}
 	const run = query({
@@ -131,7 +131,7 @@ export const openClaudeSession = async (
 			request,
 			permissions.canUseTool,
 			botSettings.options,
-			servers,
+			resolved,
 		),
 	})
 

@@ -86,14 +86,37 @@ describe("resolveServers", () => {
 		expect(rejections.join(" ")).not.toContain("wide")
 	})
 
-	it("keeps only the servers declaring no variable when the store could not be read", () => {
+	it("names the store failure then every server it left out, when the store could not be read", () => {
 		const { servers, rejections } = resolveServers(
 			{ probe, plain },
 			{ failure: "the environment store could not be read" },
 		)
 
 		expect(Object.keys(servers)).toEqual(["plain"])
-		expect(rejections).toEqual(["the environment store could not be read"])
+		expect(rejections).toEqual([
+			"the environment store could not be read",
+			'the server "probe" was left out: the environment store could not be read',
+		])
+	})
+
+	it("reports nothing and keeps every server when the store failure costs none", () => {
+		const { servers, rejections } = resolveServers(
+			{ plain },
+			{ failure: "the environment store could not be read" },
+		)
+
+		expect(servers.plain).toBe(plain)
+		expect(rejections).toEqual([])
+	})
+
+	it("keeps a value of a scope out of what it reports when the store could not be read", () => {
+		const { rejections } = resolveServers(
+			{ probe },
+			{ failure: "the environment store could not be read", base: held.base },
+		)
+
+		expect(rejections.join(" ")).not.toContain("node")
+		expect(rejections.join(" ")).not.toContain("secret")
 	})
 })
 
