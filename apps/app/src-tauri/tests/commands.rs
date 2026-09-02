@@ -143,6 +143,7 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 			a_scope_value(),
 			None,
 			Some(std::env::temp_dir().to_string_lossy().into_owned()),
+			None,
 		)
 		.await
 		.expect("session starts");

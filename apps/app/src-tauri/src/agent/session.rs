@@ -92,6 +92,7 @@ pub struct SessionOptions {
 	pub startup_timeout: Duration,
 	pub extra_env: Vec<(String, String)>,
 	pub server_env: ResolvedEnv,
+	pub output_schema: Option<serde_json::Value>,
 }
 
 impl SessionOptions {
@@ -105,6 +106,7 @@ impl SessionOptions {
 			startup_timeout: DEFAULT_STARTUP_TIMEOUT,
 			extra_env: Vec::new(),
 			server_env: ResolvedEnv::default(),
+			output_schema: None,
 		}
 	}
 
@@ -138,6 +140,11 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn answering(mut self, output_schema: Option<serde_json::Value>) -> Self {
+		self.output_schema = output_schema;
+		self
+	}
+
 	pub fn open_request(&self, partial_messages: bool) -> OpenRequest {
 		OpenRequest {
 			cwd: self.cwd.to_string_lossy().into_owned(),
@@ -155,6 +162,7 @@ impl SessionOptions {
 			partial_messages,
 			env: self.extra_env.iter().cloned().collect(),
 			server_env: self.server_env.clone(),
+			output_schema: self.output_schema.clone(),
 		}
 	}
 }
@@ -611,6 +619,33 @@ mod tests {
 		assert_eq!(
 			serde_json::to_value(&request).expect("the request serializes")["serverEnv"],
 			serde_json::json!({ "base": {}, "perServer": {}, "failure": "unreadable" })
+		);
+	}
+
+	#[test]
+	fn a_run_asked_for_a_structured_answer_carries_the_schema_it_was_given_and_nothing_else() {
+		let schema = serde_json::json!({
+			"type": "object",
+			"properties": { "outcome": { "enum": ["ok", "nothing"] } },
+			"required": ["outcome"]
+		});
+		let request = options().answering(Some(schema.clone())).open_request(true);
+
+		assert_eq!(request.output_schema.as_ref(), Some(&schema));
+		assert_eq!(
+			serde_json::to_value(&request).expect("the request serializes")["outputSchema"],
+			schema
+		);
+	}
+
+	#[test]
+	fn a_run_asked_for_no_structured_answer_leaves_the_field_out() {
+		let request = options().open_request(true);
+
+		assert_eq!(request.output_schema, None);
+		assert_eq!(
+			serde_json::to_value(&request).expect("the request serializes").get("outputSchema"),
+			None
 		);
 	}
 

@@ -560,6 +560,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	scope: RuntimeScope,
 	resume: Option<String>,
 	cwd: Option<String>,
+	output_schema: Option<serde_json::Value>,
 ) -> Result<SessionHandle, TransportError> {
 	let _claim = state.claim(&scope)?;
 
@@ -585,7 +586,8 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		.bundled(identity.bundle)
 		.serving(identity.server_env)
 		.with_app_data(app.path().app_data_dir().ok())
-		.in_conversation(scope.conversation_id.clone());
+		.in_conversation(scope.conversation_id.clone())
+		.answering(output_schema);
 
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {

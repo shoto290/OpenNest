@@ -29,6 +29,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 20, statements: SEVERAL_LIVE_SESSIONS },
 	Migration { version: 21, statements: CHECKPOINT_PER_SESSION },
 	Migration { version: 22, statements: ROUTINES },
+	Migration { version: 23, statements: ROUTINE_TASK },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -486,6 +487,11 @@ CREATE TABLE IF NOT EXISTS routine_dedupe_values (
 CREATE INDEX IF NOT EXISTS routine_dedupe_values_by_age ON routine_dedupe_values (seen_at);
 ";
 
+const ROUTINE_TASK: &str = "
+ALTER TABLE routines ADD COLUMN title TEXT NOT NULL DEFAULT '';
+ALTER TABLE routines ADD COLUMN instruction TEXT NOT NULL DEFAULT '';
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -554,6 +560,7 @@ mod tests {
 	const SPACE_SETTINGS_STEP: u32 = 19;
 	const SEVERAL_LIVE_SESSIONS_STEP: u32 = 20;
 	const CHECKPOINT_PER_SESSION_STEP: u32 = 21;
+	const ROUTINE_TASK_STEP: u32 = 23;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -585,6 +592,14 @@ mod tests {
 	fn shipped_before(version: u32) -> &'static [Migration] {
 		let steps = MIGRATIONS.iter().take_while(|migration| migration.version < version).count();
 		&MIGRATIONS[..steps]
+	}
+
+	fn only_step(version: u32) -> &'static [Migration] {
+		let at = MIGRATIONS
+			.iter()
+			.position(|migration| migration.version == version)
+			.unwrap_or_else(|| panic!("no step declares version {version}"));
+		&MIGRATIONS[at..=at]
 	}
 
 	fn migrated(dir: &Path) -> Connection {
@@ -949,6 +964,38 @@ mod tests {
 	}
 
 	#[test]
+	fn the_step_that_gives_a_routine_a_task_leaves_one_written_earlier_readable() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(ROUTINE_TASK_STEP))
+			.expect("the build that shipped a routine without a task installs");
+		connection.execute_batch(FIXTURE).expect("the fixture is inserted");
+		write(
+			&connection,
+			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at)
+				VALUES ('r1', 'c1', 'b1', 'schedule', '{}', '{}', 'k1', 1)",
+		)
+		.expect("a routine of the older build");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			connection
+				.query_row("SELECT title, instruction FROM routines WHERE id = 'r1'", [], |row| Ok(
+					(row.get::<_, String>(0)?, row.get::<_, String>(1)?)
+				))
+				.expect("the routine of the older build reads back"),
+			(String::new(), String::new()),
+			"the step left a routine written before it unreadable"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
 	fn a_routine_and_what_hangs_off_it_go_with_the_participant_that_holds_them() {
 		let dir = temp_dir();
 		let connection = fixture(&dir);
@@ -1038,10 +1085,11 @@ mod tests {
 		)
 		.expect("a setting written by the build that shipped the table first");
 		connection
-			.pragma_update(None, "user_version", latest_version() - 1)
+			.pragma_update(None, "user_version", SPACE_SETTINGS_STEP - 1)
 			.expect("the version the merged build left behind");
 
-		apply(&mut connection).expect("the file comes up to this build");
+		apply_each(&mut connection, only_step(SPACE_SETTINGS_STEP))
+			.expect("the step the merged build skipped runs again");
 
 		assert_eq!(
 			connection
@@ -1055,7 +1103,7 @@ mod tests {
 			"open",
 			"the step dropped a setting the older build had written"
 		);
-		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(version(&connection).expect("version"), SPACE_SETTINGS_STEP);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

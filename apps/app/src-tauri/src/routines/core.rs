@@ -122,6 +122,15 @@ fn backing_off(facts: &Facts, now: i64) -> bool {
 	facts.last_failed_at.is_some_and(|failed| now - failed < backoff_ms(facts.consecutive_failures))
 }
 
+pub fn refuse_blank_task(title: &str, instruction: &str) -> Result<(), RoutineError> {
+	for (field, text) in [("title", title), ("instruction", instruction)] {
+		if text.trim().is_empty() {
+			return Err(RoutineError::BlankField { field: field.to_owned() });
+		}
+	}
+	Ok(())
+}
+
 pub async fn on_trigger<S: RunSink>(
 	database: &db::Database,
 	sink: &S,
@@ -154,6 +163,24 @@ fn announce<S: RunSink>(sink: &S, admitted: Admitted) -> Result<TriggerDecision,
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_task_naming_both_fields_is_admitted_and_one_leaving_a_field_blank_names_it() {
+		assert_eq!(refuse_blank_task("Daily report", "Write it up"), Ok(()));
+
+		for (title, instruction, blank) in [
+			("", "Write it up", "title"),
+			("   ", "Write it up", "title"),
+			("Daily report", "", "instruction"),
+			("Daily report", "\n\t ", "instruction"),
+		] {
+			assert_eq!(
+				refuse_blank_task(title, instruction),
+				Err(RoutineError::BlankField { field: blank.to_owned() }),
+				"a task with a blank {blank} was admitted"
+			);
+		}
+	}
 
 	#[test]
 	fn the_backoff_ladder_climbs_and_then_holds_at_an_hour() {

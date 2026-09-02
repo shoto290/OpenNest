@@ -26,6 +26,7 @@ export type SessionRequest = {
 	conversationId?: string
 	partialMessages: boolean
 	serverEnv?: ServerEnv
+	outputSchema?: Record<string, unknown>
 }
 
 export type PermissionDecision =

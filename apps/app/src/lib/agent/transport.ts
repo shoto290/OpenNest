@@ -22,11 +22,17 @@ export const agentTransport: ChatDriver = {
 
 	titleFor: (text: string) => invoke<string | null>("agent_title", { text }),
 
-	startOrResumeSession: (scope: RuntimeScope, resume?: string, cwd?: string) =>
+	startOrResumeSession: (
+		scope: RuntimeScope,
+		resume?: string,
+		cwd?: string,
+		outputSchema?: Record<string, unknown>,
+	) =>
 		invoke<SessionHandle>("agent_start_or_resume_session", {
 			scope,
 			resume: resume ?? null,
 			cwd: cwd ?? null,
+			outputSchema: outputSchema ?? null,
 		}),
 
 	submitPrompt: (scope: RuntimeScope, text: string) =>

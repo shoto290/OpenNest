@@ -11,6 +11,8 @@ const hostInvoke = vi.mocked(invoke)
 const DRAFT: RoutineDraft = {
 	conversationId: "c-1",
 	botId: "b-1",
+	title: "Nightly report",
+	instruction: "Read the shift log and report what changed.",
 	triggerSourceId: "schedule",
 	filter: { matchMode: "all", rows: [] },
 	triggerConfig: { every: "1h" },
@@ -20,6 +22,8 @@ const ROUTINE: Routine = {
 	id: "r-1",
 	conversationId: "c-1",
 	botId: "b-1",
+	title: "Nightly report",
+	instruction: "Read the shift log and report what changed.",
 	triggerSourceId: "schedule",
 	filter: { matchMode: "all", rows: [] },
 	triggerConfig: { every: "1h" },
@@ -78,6 +82,8 @@ describe("routinesTransport", () => {
 
 		await expect(
 			routinesTransport.update("r-1", {
+				title: "Nightly report",
+				instruction: "Read the shift log and report what changed.",
 				filter: { matchMode: "all", rows: [] },
 				triggerConfig: {},
 				isEnabled: true,

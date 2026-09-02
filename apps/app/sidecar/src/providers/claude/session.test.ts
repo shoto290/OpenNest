@@ -51,6 +51,28 @@ const spawns: SessionRequest[] = [
 ]
 
 describe("buildOptions", () => {
+	it("asks for the structured answer with the schema it was given", () => {
+		const schema = {
+			type: "object",
+			properties: { outcome: { enum: ["ok", "nothing"] } },
+			required: ["outcome"],
+		}
+
+		const options = buildOptions(
+			{ ...request, outputSchema: schema },
+			undefined,
+		)
+
+		expect(options.outputFormat).toEqual({ type: "json_schema", schema })
+		expect((options.outputFormat as { schema: unknown }).schema).toBe(schema)
+	})
+
+	it("asks for no structured answer when none was requested", () => {
+		for (const spawned of spawns) {
+			expect(buildOptions(spawned, undefined).outputFormat).toBeUndefined()
+		}
+	})
+
 	it("loads the bot's bundle as a local plugin and promotes its agent", () => {
 		const options = buildOptions(request, undefined)
 
