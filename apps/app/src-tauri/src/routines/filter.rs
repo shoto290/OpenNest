@@ -53,7 +53,7 @@ fn holds(row: &FilterRow, declared: &[PayloadField], payload: &Value) -> bool {
 	let Some(expected) = row.value.as_ref() else {
 		return false;
 	};
-	compared(row.operator, &read(held, field_type), &read(expected, field_type))
+	compared(row.operator, read(held, field_type), read(expected, field_type))
 }
 
 #[derive(PartialEq)]
@@ -76,19 +76,21 @@ fn read(value: &Value, field_type: FieldType) -> Option<Reading> {
 	}
 }
 
-fn compared(operator: FilterOperator, held: &Option<Reading>, expected: &Option<Reading>) -> bool {
+fn compared(operator: FilterOperator, held: Option<Reading>, expected: Option<Reading>) -> bool {
 	let (Some(held), Some(expected)) = (held, expected) else {
 		return false;
 	};
 	match operator {
 		FilterOperator::Equals => held == expected,
 		FilterOperator::NotEquals => held != expected,
-		FilterOperator::Contains => texts(held, expected).is_some_and(|(a, b)| a.contains(b)),
-		FilterOperator::NotContains => texts(held, expected).is_some_and(|(a, b)| !a.contains(b)),
-		FilterOperator::StartsWith => texts(held, expected).is_some_and(|(a, b)| a.starts_with(b)),
-		FilterOperator::EndsWith => texts(held, expected).is_some_and(|(a, b)| a.ends_with(b)),
-		FilterOperator::Gt => ordered(held, expected) == Some(Ordering::Greater),
-		FilterOperator::Lt => ordered(held, expected) == Some(Ordering::Less),
+		FilterOperator::Contains => texts(&held, &expected).is_some_and(|(a, b)| a.contains(b)),
+		FilterOperator::NotContains => texts(&held, &expected).is_some_and(|(a, b)| !a.contains(b)),
+		FilterOperator::StartsWith => {
+			texts(&held, &expected).is_some_and(|(a, b)| a.starts_with(b))
+		}
+		FilterOperator::EndsWith => texts(&held, &expected).is_some_and(|(a, b)| a.ends_with(b)),
+		FilterOperator::Gt => ordered(&held, &expected) == Some(Ordering::Greater),
+		FilterOperator::Lt => ordered(&held, &expected) == Some(Ordering::Less),
 		FilterOperator::Exists | FilterOperator::NotExists => false,
 	}
 }

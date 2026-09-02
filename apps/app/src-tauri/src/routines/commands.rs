@@ -49,11 +49,7 @@ fn stacked_bundles<R: Runtime>(app: &AppHandle<R>, space_id: &str, bot_id: &str)
 	.collect()
 }
 
-fn database<'a>(state: &'a State<'_, db::DatabaseState>) -> Result<&'a db::Database, RoutineError> {
-	Ok(ready(state)?)
-}
-
-async fn declared_payload<R: Runtime>(
+async fn declared_source<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &db::Database,
 	bot_id: &str,
@@ -67,16 +63,15 @@ async fn declared_payload<R: Runtime>(
 		.ok_or_else(|| RoutineError::UnknownSource { id: trigger_source_id.to_owned() })
 }
 
-async fn checked<R: Runtime>(
+async fn refuse_unsupported_rows<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &db::Database,
 	bot_id: &str,
 	trigger_source_id: &str,
 	held: &Filter,
-) -> Result<TriggerSource, RoutineError> {
-	let source = declared_payload(app, database, bot_id, trigger_source_id).await?;
-	filter::validate(&source.payload, held)?;
-	Ok(source)
+) -> Result<(), RoutineError> {
+	let source = declared_source(app, database, bot_id, trigger_source_id).await?;
+	filter::validate(&source.payload, held)
 }
 
 #[tauri::command]
@@ -85,8 +80,9 @@ pub async fn routine_create<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	draft: RoutineDraft,
 ) -> Result<Routine, RoutineError> {
-	let database = database(&state)?;
-	checked(&app, database, &draft.bot_id, &draft.trigger_source_id, &draft.filter).await?;
+	let database = ready(&state)?;
+	refuse_unsupported_rows(&app, database, &draft.bot_id, &draft.trigger_source_id, &draft.filter)
+		.await?;
 	let key = uuid::Uuid::new_v4().to_string();
 	database.routines().create(draft, key, SystemClock.now_ms()).await
 }
@@ -98,9 +94,10 @@ pub async fn routine_update<R: Runtime>(
 	id: String,
 	edit: RoutineEdit,
 ) -> Result<Routine, RoutineError> {
-	let database = database(&state)?;
+	let database = ready(&state)?;
 	let held = routine_row(database, &id).await?;
-	checked(&app, database, &held.bot_id, &held.trigger_source_id, &edit.filter).await?;
+	refuse_unsupported_rows(&app, database, &held.bot_id, &held.trigger_source_id, &edit.filter)
+		.await?;
 	database.routines().update(id, edit).await
 }
 
@@ -109,7 +106,7 @@ pub async fn routine_delete(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<(), RoutineError> {
-	database(&state)?.routines().delete(id).await
+	ready(&state)?.routines().delete(id).await
 }
 
 #[tauri::command]
@@ -117,7 +114,7 @@ pub async fn routine_list(
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 ) -> Result<Vec<Routine>, RoutineError> {
-	database(&state)?.routines().of_conversation(conversation_id).await
+	ready(&state)?.routines().of_conversation(conversation_id).await
 }
 
 #[tauri::command]
@@ -126,7 +123,7 @@ pub async fn routine_runs(
 	routine_id: String,
 	limit: u32,
 ) -> Result<Vec<RoutineRun>, RoutineError> {
-	database(&state)?.routines().runs(routine_id, limit).await
+	ready(&state)?.routines().runs(routine_id, limit).await
 }
 
 #[tauri::command]
@@ -135,7 +132,7 @@ pub async fn routine_run_now<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<TriggerDecision, RoutineError> {
-	core::run_now(database(&state)?, &Announcer { app: &app }, &SystemClock, id).await
+	core::run_now(ready(&state)?, &Announcer { app: &app }, &SystemClock, id).await
 }
 
 #[tauri::command]
@@ -143,7 +140,7 @@ pub async fn routine_renew_lease(
 	state: State<'_, db::DatabaseState>,
 	run_id: String,
 ) -> Result<(), RoutineError> {
-	database(&state)?.routines().renew_lease(run_id, SystemClock.now_ms()).await
+	ready(&state)?.routines().renew_lease(run_id, SystemClock.now_ms()).await
 }
 
 #[tauri::command]
@@ -152,7 +149,7 @@ pub async fn routine_close_run(
 	run_id: String,
 	closing: RunClosing,
 ) -> Result<RoutineRun, RoutineError> {
-	database(&state)?.routines().close_run(run_id, closing, SystemClock.now_ms()).await
+	ready(&state)?.routines().close_run(run_id, closing, SystemClock.now_ms()).await
 }
 
 #[tauri::command]
@@ -161,9 +158,9 @@ pub async fn routine_key<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<RoutineKey, RoutineError> {
-	let database = database(&state)?;
+	let database = ready(&state)?;
 	let held = routine_row(database, &id).await?;
-	let source = declared_payload(&app, database, &held.bot_id, &held.trigger_source_id).await?;
+	let source = declared_source(&app, database, &held.bot_id, &held.trigger_source_id).await?;
 	let key = database.routines().key_of(id).await?;
 	Ok(RoutineKey { key, header: source.header })
 }
