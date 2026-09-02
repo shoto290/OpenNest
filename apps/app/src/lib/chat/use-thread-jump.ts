@@ -1,6 +1,6 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 
-import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
+import type { TranscriptHandle } from "@workspace/ui/components/transcript"
 
 import type { TranscriptMessage } from "../conversations/transcript-contract"
 
@@ -23,7 +23,7 @@ export type ThreadJump = {
 
 export function useThreadJump(
 	controller: ThreadPager,
-	scrollerRef: RefObject<MessageScrollerHandle | null>,
+	scrollerRef: RefObject<TranscriptHandle | null>,
 ): ThreadJump {
 	const [highlightedMessageId, setHighlightedMessageId] = useState<string>()
 	const heldHighlight = useRef<ReturnType<typeof setTimeout>>(undefined)

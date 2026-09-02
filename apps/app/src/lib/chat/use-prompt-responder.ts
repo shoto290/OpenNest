@@ -1,6 +1,6 @@
 import { type RefObject, useMemo } from "react"
 
-import type { MessageScrollerHandle } from "@workspace/ui/components/message-scroller"
+import type { TranscriptHandle } from "@workspace/ui/components/transcript"
 
 import type { PermissionDecision, QuestionAnswers } from "@/lib/agent/contract"
 
@@ -30,7 +30,7 @@ export const liveEdgeResponder = ({
 
 export function usePromptResponder(
 	responder: PromptResponder,
-	scrollerRef: RefObject<MessageScrollerHandle | null>,
+	scrollerRef: RefObject<TranscriptHandle | null>,
 ): PromptResponder {
 	return useMemo(
 		() =>

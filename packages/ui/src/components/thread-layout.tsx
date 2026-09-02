@@ -2,19 +2,16 @@ import type { ReactNode, Ref } from "react"
 
 import { MarkProvider } from "@workspace/ui/components/mark-context"
 import {
-	MessageScroller,
-	type MessageScrollerHandle,
-	type MessageScrollerOlder,
-	type MessageScrollerRow,
-	type MessageScrollerTrace,
-} from "@workspace/ui/components/message-scroller"
-import {
 	PromptReply,
 	type ReplyQuote,
 } from "@workspace/ui/components/prompt-reply"
+import {
+	Transcript,
+	type TranscriptHandle,
+	type TranscriptItem,
+	type TranscriptOlder,
+} from "@workspace/ui/components/transcript"
 import { cn } from "@workspace/ui/lib/utils"
-
-const TRANSCRIPT_ROW_GAP = 24
 
 interface ThreadLayoutProps {
 	header?: ReactNode
@@ -29,13 +26,12 @@ interface ThreadLayoutProps {
 	anchorOnSend?: boolean
 	marksNewMessages?: boolean
 	countsNewMessages?: boolean
-	older?: MessageScrollerOlder
-	rows?: MessageScrollerRow[]
+	older?: TranscriptOlder
+	rows?: TranscriptItem[]
 	onFollowChange?: (following: boolean) => void
-	onLandingTrace?: (event: MessageScrollerTrace) => void
 	children: ReactNode
 	rootRef?: Ref<HTMLDivElement>
-	scrollerRef?: Ref<MessageScrollerHandle>
+	scrollerRef?: Ref<TranscriptHandle>
 	className?: string
 	contentClassName?: string
 }
@@ -56,7 +52,6 @@ function ThreadLayout({
 	older,
 	rows,
 	onFollowChange,
-	onLandingTrace,
 	children,
 	rootRef,
 	scrollerRef,
@@ -75,7 +70,7 @@ function ThreadLayout({
 			{header}
 
 			<MarkProvider transcriptKey={transcriptKey}>
-				<MessageScroller
+				<Transcript
 					className="flex-1"
 					transcriptKey={transcriptKey}
 					busy={busy}
@@ -85,9 +80,7 @@ function ThreadLayout({
 					countsNewMessages={countsNewMessages}
 					older={older}
 					rows={rows}
-					rowGap={TRANSCRIPT_ROW_GAP}
 					onFollowChange={onFollowChange}
-					onLandingTrace={onLandingTrace}
 					highlightedMessageId={highlightedMessageId}
 					scrollerRef={scrollerRef}
 					contentClassName={cn(
@@ -96,7 +89,7 @@ function ThreadLayout({
 					)}
 				>
 					{children}
-				</MessageScroller>
+				</Transcript>
 			</MarkProvider>
 
 			{notice || pending || composer ? (

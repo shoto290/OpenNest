@@ -452,10 +452,10 @@ describe("PRF5 chat open baseline", () => {
 			{
 			  "commitsToFirstRow": 5,
 			  "commitsToSettled": 11,
-			  "highlightCalls": 4,
+			  "highlightCalls": 10,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 12,
-			  "paintedRows": 8,
+			  "markdownProcessors": 32,
+			  "paintedRows": 20,
 			}
 		`)
 	})
