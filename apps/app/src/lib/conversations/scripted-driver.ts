@@ -26,6 +26,7 @@ export type Decided = {
 export type ScriptedDriver = ChatDriver & {
 	submissions: Submission[]
 	pushTo: (botId: string, events: AgentEvent[]) => void
+	emit: (scope: RuntimeScope, event: AgentEvent) => void
 	cancelled: string[]
 	answered: Answered[]
 	decided: Decided[]
@@ -52,18 +53,23 @@ export const createScriptedDriver = (): ScriptedDriver => {
 		return last.scope
 	}
 
+	const emit = (scope: RuntimeScope, event: AgentEvent) => {
+		for (const listener of listeners) {
+			listener({ scope, event })
+		}
+	}
+
 	return {
 		submissions,
 		cancelled,
 		answered,
 		decided,
 		shutdowns,
+		emit,
 		pushTo: (botId, events) => {
 			const scope = scopeOf(botId)
 			for (const event of events) {
-				for (const listener of listeners) {
-					listener({ scope, event })
-				}
+				emit(scope, event)
 			}
 		},
 		check: () =>

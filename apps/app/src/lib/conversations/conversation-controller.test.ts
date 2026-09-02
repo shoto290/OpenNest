@@ -23,6 +23,11 @@ import type { ChatDriver } from "../chat/driver"
 
 const SPACE = "personal"
 
+const SERVER_ENV_REJECTED: TransportError = {
+	kind: "serverEnvRejected",
+	detail: "PROJECT_TOKEN is undefined",
+}
+
 const SAID_NOTHING: AgentEvent[] = [
 	{
 		type: "messageStarted",
@@ -1522,9 +1527,9 @@ describe("failures the conversation carries to the screen", () => {
 		detach()
 	})
 
-	const seatedOn = async (driver: ChatDriver) => {
+	const seatedOn = async (driver: ChatDriver, names: string[] = ["Ada"]) => {
 		const store = createFakeTranscriptStore()
-		const bots = await seatBots(store, SPACE, ["Ada"])
+		const bots = await seatBots(store, SPACE, names)
 		const conversation = await store.createConversation({
 			spaceId: SPACE,
 			sectionId: null,
@@ -1534,7 +1539,7 @@ describe("failures the conversation carries to the screen", () => {
 		const controller = createConversationController(driver, store)
 		const detach = controller.attach()
 		await controller.open(conversation)
-		return { controller, detach }
+		return { controller, detach, conversation }
 	}
 
 	const refusingSessions = (refusals: number): ChatDriver => {
@@ -1565,6 +1570,52 @@ describe("failures the conversation carries to the screen", () => {
 		detach()
 	})
 
+	const failingOnFirstStart = (error: TransportError): ChatDriver => {
+		const scripted = createScriptedDriver()
+		let isFirstStart = true
+		return {
+			...scripted,
+			startOrResumeSession: (scope) => {
+				if (isFirstStart) {
+					isFirstStart = false
+					scripted.emit(scope, { type: "failed", error })
+				}
+				return scripted.startOrResumeSession(scope)
+			},
+		}
+	}
+
+	it("holds the failure a speaker met while its session was starting", async () => {
+		const { controller, detach } = await seatedOn(
+			failingOnFirstStart(SERVER_ENV_REJECTED),
+		)
+
+		await controller.send("how do we hold the walls?")
+		await settled()
+
+		expect(controller.getState().latestError?.error).toEqual(
+			SERVER_ENV_REJECTED,
+		)
+		expect(runningIn(controller)).toHaveLength(1)
+		detach()
+	})
+
+	it("holds the failure of one speaker when its neighbour of the wave starts", async () => {
+		const { controller, detach } = await seatedOn(
+			failingOnFirstStart(SERVER_ENV_REJECTED),
+			["Ada", "Nyx"],
+		)
+
+		await controller.send("@Ada and @Nyx")
+		await settled()
+
+		expect(controller.getState().latestError?.error).toEqual(
+			SERVER_ENV_REJECTED,
+		)
+		expect(runningIn(controller)).toHaveLength(2)
+		detach()
+	})
+
 	it("forgets the failure once a bot takes the turn", async () => {
 		const { controller, detach } = await seatedOn(refusingSessions(1))
 
@@ -1579,10 +1630,6 @@ describe("failures the conversation carries to the screen", () => {
 })
 
 describe("a failure reaching a speaker", () => {
-	const SERVER_ENV_REJECTED: TransportError = {
-		kind: "serverEnvRejected",
-		detail: "PROJECT_TOKEN is undefined",
-	}
 	const CRASHED: TransportError = {
 		kind: "crashed",
 		code: 1,

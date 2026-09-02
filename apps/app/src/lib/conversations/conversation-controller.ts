@@ -243,6 +243,13 @@ export const createConversationController = (
 		latestError = null
 	}
 
+	const forgetFailureSeen = (seen: ChatError | null) => {
+		if (latestError !== seen) {
+			return
+		}
+		forgetFailure()
+	}
+
 	const readTranscript = () => {
 		const conversationId = conversation?.id
 		if (!conversationId) {
@@ -650,9 +657,10 @@ export const createConversationController = (
 	}
 
 	const begin = async (held: Speaker) => {
+		const seen = latestError
 		try {
 			await speak(held)
-			forgetFailure()
+			forgetFailureSeen(seen)
 		} catch (reason) {
 			speakers.delete(held.botId)
 			void shutdownSpeaker(held)
