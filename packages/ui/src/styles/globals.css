@@ -339,6 +339,10 @@
 	);
 }
 
+@utility on-destructive {
+	--color-foreground: var(--destructive);
+}
+
 @utility on-shell {
 	--accent: color-mix(
 		in oklab,

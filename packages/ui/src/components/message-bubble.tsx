@@ -114,7 +114,7 @@ function bubbleContentClass(
 		variant === "solid" && "on-user-bubble text-user-bubble-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
-		variant === "danger" && "text-destructive",
+		variant === "danger" && "on-destructive text-destructive",
 		interactive &&
 			"cursor-pointer text-left outline-none transition-transform duration-150 hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
 	)

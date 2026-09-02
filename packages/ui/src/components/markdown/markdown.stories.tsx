@@ -2,6 +2,7 @@ import { useState } from "react"
 import { expect, fn, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
 import { Button } from "@workspace/ui/components/button"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
@@ -473,6 +474,12 @@ export const summarise = async (id: string) => {
 const STREAMED_NEXT_BLOCK = `
 
 Two nests archived since the last pass.`
+
+const DANGER_BODY = `## Sync failed
+
+The archive pass stopped at 09:12 and nothing was written.`
+
+const inkOf = (element: Element) => getComputedStyle(element).color
 
 const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
 
@@ -1805,5 +1812,35 @@ export const AppendedBlock = meta.story({
 		)
 
 		await expect(blockOffsetsIn(root).slice(0, before.length)).toEqual(before)
+	},
+})
+
+export const DangerBubble = meta.story({
+	args: { children: DANGER_BODY },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The variant a failed turn wears. The bubble sets destructive ink on its own text, and the stylesheet re-declares colour on the body from a variable resolved above the bubble, so the ink has to be bound on the bubble rather than painted on each element. Check that the heading and the paragraph read in the same red as any plain text the bubble carries, instead of dropping back to the page foreground.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble variant="danger">
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvasElement }) => {
+		const content = bubbleContentOf(canvasElement)
+		const [root] = markdownRootsOf(canvasElement)
+		const [heading] = root.querySelectorAll("h2")
+		const [paragraph] = root.querySelectorAll("p")
+
+		await expect(inkOf(content)).not.toBe(inkOf(document.body))
+		await expect(inkOf(heading)).toBe(inkOf(content))
+		await expect(inkOf(paragraph)).toBe(inkOf(content))
 	},
 })
