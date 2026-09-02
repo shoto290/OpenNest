@@ -28,6 +28,7 @@ type Command = {
 	conversationId?: string
 	partialMessages?: boolean
 	serverEnv?: ServerEnv
+	outputSchema?: Record<string, unknown>
 	text?: string
 	requestId?: string
 	decision?: PermissionDecision
@@ -48,6 +49,7 @@ export const sessionRequest = (command: Command): SessionRequest => ({
 	conversationId: command.conversationId,
 	partialMessages: command.partialMessages ?? false,
 	serverEnv: command.serverEnv,
+	outputSchema: command.outputSchema,
 })
 
 const write = (payload: unknown) => {

@@ -93,6 +93,14 @@ export const buildOptions = (
 					},
 				}
 			: {}),
+		...(request.outputSchema
+			? {
+					outputFormat: {
+						type: "json_schema" as const,
+						schema: request.outputSchema,
+					},
+				}
+			: {}),
 		systemPrompt: {
 			type: "preset",
 			preset: "claude_code",

@@ -69,7 +69,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?`, `outputSchema?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -77,6 +77,9 @@ Every other command names its session.
 
 `open` maps to SDK options directly:
 
+- `outputSchema` is the JSON schema a caller wants the turn's answer shaped by. It
+  reaches the SDK as `outputFormat: { type: "json_schema", schema }` and is read by
+  nothing on the way: a session opened without one asks for no `outputFormat` at all.
 - `resume` is the SDK's `resume`. The stored id is tried first; a refusal falls
   back to a fresh session and the id is given up on only when the refusal was a
   crash — see `commands.rs::start_with_fallback`.

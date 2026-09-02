@@ -6,6 +6,8 @@ export type Routine = {
 	id: string
 	conversationId: string
 	botId: string
+	title: string
+	instruction: string
 	triggerSourceId: string
 	filter: Filter
 	triggerConfig: unknown
@@ -17,12 +19,16 @@ export type Routine = {
 export type RoutineDraft = {
 	conversationId: string
 	botId: string
+	title: string
+	instruction: string
 	triggerSourceId: string
 	filter: Filter
 	triggerConfig: unknown
 }
 
 export type RoutineEdit = {
+	title: string
+	instruction: string
 	filter: Filter
 	triggerConfig: unknown
 	isEnabled: boolean
@@ -61,6 +67,8 @@ export type RunCause = "trigger" | "runNow"
 
 export type RunRequested = {
 	cause: RunCause
+	title: string
+	instruction: string
 	routineId: string
 	runId: string
 	botId: string

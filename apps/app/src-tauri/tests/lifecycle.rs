@@ -69,6 +69,7 @@ async fn start_run(
 		scope,
 		None,
 		Some(std::env::temp_dir().to_string_lossy().into_owned()),
+		None,
 	)
 	.await
 }

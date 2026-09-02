@@ -81,6 +81,7 @@ pub async fn routine_create<R: Runtime>(
 	draft: RoutineDraft,
 ) -> Result<Routine, RoutineError> {
 	let database = ready(&state)?;
+	core::refuse_blank_task(&draft)?;
 	refuse_unsupported_rows(&app, database, &draft.bot_id, &draft.trigger_source_id, &draft.filter)
 		.await?;
 	let key = uuid::Uuid::new_v4().to_string();

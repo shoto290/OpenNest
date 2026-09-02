@@ -36,13 +36,13 @@ fn serialized(outcome: &RunOutcome) -> rusqlite::Result<String> {
 
 pub const MAX_RUNS_PER_PAGE: u32 = 200;
 
-const SELECT_ROUTINE: &str = "SELECT id, conversation_id, bot_id, trigger_source_id, event_filter,
-	trigger_config, is_enabled, consecutive_failures, created_at
+const SELECT_ROUTINE: &str = "SELECT id, conversation_id, bot_id, title, instruction,
+	trigger_source_id, trigger_config, event_filter, is_enabled, consecutive_failures, created_at
 	FROM routines WHERE id = ?1";
 
 const SELECT_ROUTINES_OF_CONVERSATION: &str =
-	"SELECT id, conversation_id, bot_id, trigger_source_id, event_filter,
-	trigger_config, is_enabled, consecutive_failures, created_at
+	"SELECT id, conversation_id, bot_id, title, instruction,
+	trigger_source_id, trigger_config, event_filter, is_enabled, consecutive_failures, created_at
 	FROM routines WHERE conversation_id = ?1 ORDER BY created_at, id";
 
 const SELECT_RUN: &str = "SELECT id, routine_id, started_at, ended_at, outcome, reason,
@@ -200,13 +200,15 @@ fn created(
 	let id = Uuid::new_v4().to_string();
 	transaction
 		.execute(
-			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
-				trigger_config, trigger_key, created_at)
-				VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+			"INSERT INTO routines (id, conversation_id, bot_id, title, instruction,
+				trigger_source_id, event_filter, trigger_config, trigger_key, created_at)
+				VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
 			params![
 				id,
 				draft.conversation_id,
 				draft.bot_id,
+				draft.title,
+				draft.instruction,
 				draft.trigger_source_id,
 				as_text(&draft.filter)?,
 				as_text(&draft.trigger_config)?,
@@ -230,12 +232,15 @@ fn updated(
 	let held = held.ok_or_else(|| RoutineError::UnknownRoutine { id: id.to_owned() })?;
 	let revived = edit.is_enabled && !held.is_enabled;
 	transaction.execute(
-		"UPDATE routines SET event_filter = ?2, trigger_config = ?3, is_enabled = ?4,
-			consecutive_failures = CASE WHEN ?5 THEN 0 ELSE consecutive_failures END,
-			last_failed_at = CASE WHEN ?5 THEN NULL ELSE last_failed_at END
+		"UPDATE routines SET title = ?2, instruction = ?3, event_filter = ?4, trigger_config = ?5,
+			is_enabled = ?6,
+			consecutive_failures = CASE WHEN ?7 THEN 0 ELSE consecutive_failures END,
+			last_failed_at = CASE WHEN ?7 THEN NULL ELSE last_failed_at END
 			WHERE id = ?1",
 		params![
 			id,
+			edit.title,
+			edit.instruction,
 			as_text(&edit.filter)?,
 			as_text(&edit.trigger_config)?,
 			edit.is_enabled,
@@ -435,6 +440,8 @@ fn applied(
 				decision: TriggerDecision::Started { run_id: run_id.clone() },
 				requested: Some(RunRequested {
 					cause,
+					title: held.title.clone(),
+					instruction: held.instruction.clone(),
 					routine_id: held.id.clone(),
 					run_id,
 					bot_id: held.bot_id.clone(),
@@ -512,12 +519,14 @@ fn routine(row: &Row<'_>) -> rusqlite::Result<Routine> {
 		id: row.get(0)?,
 		conversation_id: row.get(1)?,
 		bot_id: row.get(2)?,
-		trigger_source_id: row.get(3)?,
-		filter: from_text(row, 4)?,
-		trigger_config: from_text(row, 5)?,
-		is_enabled: row.get(6)?,
-		consecutive_failures: row.get(7)?,
-		created_at: row.get(8)?,
+		title: row.get(3)?,
+		instruction: row.get(4)?,
+		trigger_source_id: row.get(5)?,
+		trigger_config: from_text(row, 6)?,
+		filter: from_text(row, 7)?,
+		is_enabled: row.get(8)?,
+		consecutive_failures: row.get(9)?,
+		created_at: row.get(10)?,
 	})
 }
 
@@ -570,6 +579,8 @@ mod tests {
 	const CONVERSATION: &str = "c1";
 	const BOT: &str = "b1";
 	const KEY: &str = "a-generated-key";
+	const TITLE: &str = "Nightly report";
+	const INSTRUCTION: &str = "Read the shift log and report what changed.";
 
 	const A_PARTICIPANT: &str = "
 		INSERT INTO bots (id, space_id, name, model, created_at)
@@ -615,6 +626,8 @@ mod tests {
 		RoutineDraft {
 			conversation_id: CONVERSATION.to_owned(),
 			bot_id: BOT.to_owned(),
+			title: TITLE.to_owned(),
+			instruction: INSTRUCTION.to_owned(),
 			trigger_source_id: "schedule".to_owned(),
 			filter,
 			trigger_config: json!({ "every": "1h" }),
@@ -690,6 +703,8 @@ mod tests {
 			admitted.requested,
 			Some(RunRequested {
 				cause: RunCause::Trigger,
+				title: TITLE.to_owned(),
+				instruction: INSTRUCTION.to_owned(),
 				routine_id: held.id.clone(),
 				run_id,
 				bot_id: BOT.to_owned(),
@@ -709,6 +724,8 @@ mod tests {
 			.update(
 				held.id.clone(),
 				RoutineEdit {
+					title: TITLE.to_owned(),
+					instruction: INSTRUCTION.to_owned(),
 					filter: no_filter(),
 					trigger_config: held.trigger_config.clone(),
 					is_enabled: false,
@@ -920,6 +937,73 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn a_routine_reads_back_with_the_task_it_was_written_with() {
+		let (database, _dir) = planted().await;
+		let held = a_routine(&database, no_filter()).await;
+
+		let listed = database
+			.routines()
+			.of_conversation(CONVERSATION.to_owned())
+			.await
+			.expect("the routines read");
+
+		assert_eq!(held.title, TITLE);
+		assert_eq!(held.instruction, INSTRUCTION);
+		assert_eq!(listed, vec![held]);
+	}
+
+	#[tokio::test]
+	async fn an_edit_carries_the_title_and_the_instruction_it_names() {
+		let (database, _dir) = planted().await;
+		let held = a_routine(&database, no_filter()).await;
+
+		let stored = database
+			.routines()
+			.update(
+				held.id.clone(),
+				RoutineEdit {
+					title: "Weekly digest".to_owned(),
+					instruction: "Summarise the week.".to_owned(),
+					filter: no_filter(),
+					trigger_config: held.trigger_config.clone(),
+					is_enabled: true,
+				},
+			)
+			.await
+			.expect("the routine is edited");
+
+		assert_eq!(stored.title, "Weekly digest");
+		assert_eq!(stored.instruction, "Summarise the week.");
+	}
+
+	#[tokio::test]
+	async fn a_run_requested_by_a_trigger_after_an_edit_carries_the_task_read_at_that_moment() {
+		let (database, _dir) = planted().await;
+		let held = a_routine(&database, no_filter()).await;
+		database
+			.routines()
+			.update(
+				held.id.clone(),
+				RoutineEdit {
+					title: "Weekly digest".to_owned(),
+					instruction: "Summarise the week.".to_owned(),
+					filter: no_filter(),
+					trigger_config: held.trigger_config.clone(),
+					is_enabled: true,
+				},
+			)
+			.await
+			.expect("the routine is edited");
+
+		let admitted = triggered(&database, &held.id, "2026-09-02T10:00:00Z", NOW).await;
+
+		let requested = admitted.requested.expect("a run is requested");
+		assert_eq!(requested.cause, RunCause::Trigger);
+		assert_eq!(requested.title, "Weekly digest");
+		assert_eq!(requested.instruction, "Summarise the week.");
+	}
+
+	#[tokio::test]
 	async fn a_disabled_routine_enabled_again_clears_the_failures() {
 		let (database, _dir) = planted().await;
 		let held = a_routine(&database, no_filter()).await;
@@ -930,6 +1014,8 @@ mod tests {
 			.update(
 				held.id.clone(),
 				RoutineEdit {
+					title: TITLE.to_owned(),
+					instruction: INSTRUCTION.to_owned(),
 					filter: no_filter(),
 					trigger_config: held.trigger_config.clone(),
 					is_enabled: true,
@@ -978,6 +1064,8 @@ mod tests {
 		assert!(matches!(admitted.decision, TriggerDecision::Started { .. }), "{admitted:?}");
 		let requested = admitted.requested.expect("a run is requested");
 		assert_eq!(requested.cause, RunCause::RunNow);
+		assert_eq!(requested.title, TITLE);
+		assert_eq!(requested.instruction, INSTRUCTION);
 		assert_eq!(requested.payload, json!({}));
 		assert_eq!(count_of(&database, "routine_dedupe_values").await, 0);
 	}

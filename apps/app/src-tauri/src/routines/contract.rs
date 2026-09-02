@@ -156,6 +156,8 @@ pub struct Routine {
 	pub id: String,
 	pub conversation_id: String,
 	pub bot_id: String,
+	pub title: String,
+	pub instruction: String,
 	pub trigger_source_id: String,
 	pub filter: Filter,
 	pub trigger_config: serde_json::Value,
@@ -169,6 +171,8 @@ pub struct Routine {
 pub struct RoutineDraft {
 	pub conversation_id: String,
 	pub bot_id: String,
+	pub title: String,
+	pub instruction: String,
 	pub trigger_source_id: String,
 	pub filter: Filter,
 	pub trigger_config: serde_json::Value,
@@ -177,6 +181,8 @@ pub struct RoutineDraft {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoutineEdit {
+	pub title: String,
+	pub instruction: String,
 	pub filter: Filter,
 	pub trigger_config: serde_json::Value,
 	pub is_enabled: bool,
@@ -227,6 +233,8 @@ pub struct TriggerEvent {
 #[serde(rename_all = "camelCase")]
 pub struct RunRequested {
 	pub cause: RunCause,
+	pub title: String,
+	pub instruction: String,
 	pub routine_id: String,
 	pub run_id: String,
 	pub bot_id: String,
@@ -311,6 +319,8 @@ pub enum RoutineError {
 	UnknownParticipant { conversation_id: String, bot_id: String },
 	#[serde(rename_all = "camelCase")]
 	UnknownSource { id: String },
+	#[serde(rename_all = "camelCase")]
+	BlankField { field: String },
 	#[serde(rename_all = "camelCase")]
 	UnsupportedOperator {
 		row: usize,
@@ -462,6 +472,80 @@ mod tests {
 					.to_owned()
 			})
 			.collect()
+	}
+
+	fn mirrored_fields(alias: &str) -> BTreeSet<String> {
+		let mirror = mirror();
+		let opening = format!("export type {alias} = {{\n");
+		let start =
+			mirror.find(&opening).unwrap_or_else(|| panic!("the mirror declares no {alias}"))
+				+ opening.len();
+		let body = &mirror[start..];
+		let body = body.split("\n}").next().unwrap_or(body);
+		body.lines()
+			.filter_map(|line| line.split_once(':'))
+			.map(|(name, _)| name.trim().trim_end_matches('?').to_owned())
+			.collect()
+	}
+
+	fn serialised_fields<T: Serialize>(value: &T) -> BTreeSet<String> {
+		to_value(value)
+			.expect("the value serialises")
+			.as_object()
+			.expect("the value is an object")
+			.keys()
+			.cloned()
+			.collect()
+	}
+
+	#[test]
+	fn a_routine_and_what_writes_one_name_the_fields_the_front_declares() {
+		let filter = Filter { match_mode: FilterMatchMode::All, rows: Vec::new() };
+		let routine = Routine {
+			id: "r1".to_owned(),
+			conversation_id: "c1".to_owned(),
+			bot_id: "b1".to_owned(),
+			title: "Nightly report".to_owned(),
+			instruction: "Read the shift log.".to_owned(),
+			trigger_source_id: "schedule".to_owned(),
+			filter: filter.clone(),
+			trigger_config: json!({}),
+			is_enabled: true,
+			consecutive_failures: 0,
+			created_at: 1,
+		};
+		let draft = RoutineDraft {
+			conversation_id: routine.conversation_id.clone(),
+			bot_id: routine.bot_id.clone(),
+			title: routine.title.clone(),
+			instruction: routine.instruction.clone(),
+			trigger_source_id: routine.trigger_source_id.clone(),
+			filter: filter.clone(),
+			trigger_config: json!({}),
+		};
+		let edit = RoutineEdit {
+			title: routine.title.clone(),
+			instruction: routine.instruction.clone(),
+			filter,
+			trigger_config: json!({}),
+			is_enabled: true,
+		};
+		let requested = RunRequested {
+			cause: RunCause::Trigger,
+			title: routine.title.clone(),
+			instruction: routine.instruction.clone(),
+			routine_id: routine.id.clone(),
+			run_id: "run-1".to_owned(),
+			bot_id: routine.bot_id.clone(),
+			conversation_id: routine.conversation_id.clone(),
+			trigger_source_id: routine.trigger_source_id.clone(),
+			payload: json!({}),
+		};
+
+		assert_eq!(serialised_fields(&routine), mirrored_fields("Routine"));
+		assert_eq!(serialised_fields(&draft), mirrored_fields("RoutineDraft"));
+		assert_eq!(serialised_fields(&edit), mirrored_fields("RoutineEdit"));
+		assert_eq!(serialised_fields(&requested), mirrored_fields("RunRequested"));
 	}
 
 	#[test]

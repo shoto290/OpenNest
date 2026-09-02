@@ -61,6 +61,8 @@ pub struct OpenRequest {
 	pub env: std::collections::BTreeMap<String, String>,
 	#[serde(skip_serializing_if = "ResolvedEnv::is_untouched")]
 	pub server_env: ResolvedEnv,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub output_schema: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

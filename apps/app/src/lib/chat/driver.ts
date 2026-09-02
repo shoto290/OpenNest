@@ -18,6 +18,7 @@ export type ChatDriver = {
 		scope: RuntimeScope,
 		resume?: string,
 		cwd?: string,
+		outputSchema?: Record<string, unknown>,
 	) => Promise<SessionHandle>
 	submitPrompt: (scope: RuntimeScope, text: string) => Promise<void>
 	storeAttachments: (
