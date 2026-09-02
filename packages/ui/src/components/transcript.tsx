@@ -64,6 +64,8 @@ export interface TranscriptProps extends ComponentPropsWithRef<"div"> {
 
 const NO_ROWS: TranscriptItem[] = []
 
+const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
+
 const indexOfKey = (rows: TranscriptItem[], key: string | null) =>
 	key === null ? -1 : rows.findIndex((row) => row.key === key)
 
@@ -259,7 +261,10 @@ const TranscriptBody = ({
 		<MessageScroller className={cn("min-h-0", className)} {...props}>
 			<MessageScrollerViewport
 				aria-label={label ?? t("transcript.label")}
-				className="scrollbar-overlay [animation:none] [mask-image:none] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+				className={cn(
+					NO_SCROLL_FADE,
+					"scrollbar-overlay focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+				)}
 			>
 				{older ? (
 					<TranscriptOlderControl
