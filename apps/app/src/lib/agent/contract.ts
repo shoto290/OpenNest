@@ -77,6 +77,13 @@ export type RuntimeScope = {
 	epoch: number
 }
 
+export type LiveSession = {
+	botId: string
+	conversationId: string
+	runtimeSessionId: string
+	startedAt: number
+}
+
 export type ScopedEvent = {
 	scope: RuntimeScope | null
 	event: AgentEvent
