@@ -52,7 +52,6 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	serverEnvRejected: false,
 	turnAlreadyRunning: false,
 	transitionInProgress: false,
-	tooManyLiveSessions: false,
 	noActiveTurn: false,
 	staleRuntimeSession: false,
 	unknownPermission: false,

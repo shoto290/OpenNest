@@ -24,8 +24,6 @@ pub const EVENT_CHANNEL: &str = "agent://event";
 
 const RUNS_DIR: &str = "runs";
 
-const MAX_LIVE_SESSIONS: usize = 8;
-
 fn announce<R: Runtime>(app: &AppHandle<R>, scope: Option<RuntimeScope>, event: AgentEvent) {
 	let _ = app.emit(EVENT_CHANNEL, ScopedEvent { scope, event });
 }
@@ -73,18 +71,15 @@ impl<S> Default for Live<S> {
 }
 
 impl<S: Clone> Live<S> {
-	fn take_over(&self, scope: RuntimeScope) -> Result<Admission<S>, TransportError> {
+	fn take_over(&self, scope: RuntimeScope) -> Admission<S> {
 		let mut runs = self.runs.lock().expect("live runs");
 		let key = run_key(&scope);
-		if !runs.contains_key(&key) && runs.len() >= MAX_LIVE_SESSIONS {
-			return Err(TransportError::TooManyLiveSessions { cap: MAX_LIVE_SESSIONS });
-		}
 		let keeps_lineage = !runs
 			.iter()
 			.any(|(held, run)| held != &key && participant(&run.scope) == participant(&scope));
 		let replaced =
 			runs.insert(key, Run { scope, session: None }).and_then(|replaced| replaced.session);
-		Ok(Admission { replaced, keeps_lineage })
+		Admission { replaced, keeps_lineage }
 	}
 
 	fn install(&self, scope: &RuntimeScope, session: S) -> bool {
@@ -544,7 +539,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 ) -> Result<SessionHandle, TransportError> {
 	let _claim = state.claim(&scope)?;
 
-	let admitted = state.live.take_over(scope.clone())?;
+	let admitted = state.live.take_over(scope.clone());
 	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
 	let resume = admitted.resume(resume);
 	if let Some(previous) = admitted.replaced {
@@ -985,10 +980,6 @@ mod tests {
 		RuntimeScope { runtime_session_id: runtime_session_id.into(), ..a_scope() }
 	}
 
-	fn admitted<S: Clone>(live: &Live<S>, scope: RuntimeScope) -> Admission<S> {
-		live.take_over(scope).expect("the host admits the run")
-	}
-
 	fn is_stale(outcome: &Result<&str, TransportError>) -> bool {
 		matches!(outcome, Err(TransportError::StaleRuntimeSession { .. }))
 	}
@@ -1000,7 +991,7 @@ mod tests {
 	#[test]
 	fn a_scope_differing_on_the_epoch_is_stale_and_one_naming_another_run_is_not_held() {
 		let live = Live::<&str>::default();
-		admitted(&live, a_scope());
+		live.take_over(a_scope());
 		assert!(live.install(&a_scope(), REPLACED_SESSION));
 
 		assert!(live.holds(&a_scope()), "the host stopped recognising the run it holds");
@@ -1035,9 +1026,9 @@ mod tests {
 	fn two_runs_of_one_bot_are_held_at_the_same_time_and_only_the_first_keeps_the_lineage() {
 		let live = Live::<&str>::default();
 
-		let first = admitted(&live, a_scope());
+		let first = live.take_over(a_scope());
 		assert!(live.install(&a_scope(), REPLACED_SESSION));
-		let second = admitted(&live, the_next_run());
+		let second = live.take_over(the_next_run());
 		assert!(live.install(&the_next_run(), REPLACEMENT_SESSION));
 
 		assert!(first.keeps_lineage, "the first instance of a bot was refused the lineage");
@@ -1058,10 +1049,10 @@ mod tests {
 	#[test]
 	fn a_run_started_again_under_its_own_id_hands_back_the_child_it_replaces() {
 		let live = Live::<&str>::default();
-		admitted(&live, a_scope());
+		live.take_over(a_scope());
 		assert!(live.install(&a_scope(), REPLACED_SESSION));
 
-		let again = admitted(&live, a_scope());
+		let again = live.take_over(a_scope());
 
 		assert_eq!(
 			again.replaced,
@@ -1078,53 +1069,43 @@ mod tests {
 	#[test]
 	fn the_lineage_comes_back_to_the_next_run_once_the_bot_holds_none() {
 		let live = Live::<&str>::default();
-		admitted(&live, a_scope());
-		assert!(!admitted(&live, the_next_run()).keeps_lineage);
+		live.take_over(a_scope());
+		assert!(!live.take_over(the_next_run()).keeps_lineage);
 
 		live.clear(&a_scope());
 		live.clear(&the_next_run());
 
 		assert!(
-			admitted(&live, a_scope()).keeps_lineage,
+			live.take_over(a_scope()).keeps_lineage,
 			"the lineage stayed with a run the host had let go"
 		);
 	}
 
 	#[test]
-	fn the_ninth_live_session_is_refused_and_the_eight_it_found_stay() {
+	fn ten_runs_admitted_in_a_row_are_all_held_live() {
 		let live = Live::<&str>::default();
-		for index in 0..MAX_LIVE_SESSIONS {
-			let scope = a_run_named(&format!("r{index}"));
-			admitted(&live, scope.clone());
-			assert!(live.install(&scope, REPLACED_SESSION));
+		let runs: Vec<RuntimeScope> =
+			(0..10).map(|index| a_run_named(&format!("r{index}"))).collect();
+
+		for scope in &runs {
+			live.take_over(scope.clone());
+			assert!(live.install(scope, REPLACED_SESSION));
 		}
 
-		let refused = live.take_over(a_run_named("r-one-too-many")).err();
-
-		assert_eq!(
-			refused,
-			Some(TransportError::TooManyLiveSessions { cap: MAX_LIVE_SESSIONS }),
-			"the ninth live session was let in"
-		);
-		assert!(
-			!live.holds(&a_run_named("r-one-too-many")),
-			"a refused start was still taken for a live run"
-		);
-		assert_eq!(
-			live.clear_all().len(),
-			MAX_LIVE_SESSIONS,
-			"the sessions the host was already holding did not survive the refusal"
-		);
+		for scope in &runs {
+			assert!(live.holds(scope), "a run the host admitted was not held live");
+		}
+		assert_eq!(live.clear_all().len(), runs.len(), "the host let go of a run it had admitted");
 	}
 
 	#[test]
 	fn two_bots_each_hold_their_own_session_at_the_same_time() {
 		let live = Live::<&str>::default();
 
-		assert!(admitted(&live, a_scope()).replaced.is_none());
+		assert!(live.take_over(a_scope()).replaced.is_none());
 		assert!(live.install(&a_scope(), REPLACED_SESSION));
 		assert!(
-			admitted(&live, another_bots_run()).replaced.is_none(),
+			live.take_over(another_bots_run()).replaced.is_none(),
 			"starting one bot handed back another bot's child to be shut down"
 		);
 		assert!(live.install(&another_bots_run(), ANOTHER_BOTS_SESSION));
@@ -1148,11 +1129,11 @@ mod tests {
 	#[test]
 	fn the_exit_gives_up_every_bots_child_at_once() {
 		let live = Live::<&str>::default();
-		admitted(&live, a_scope());
+		live.take_over(a_scope());
 		live.install(&a_scope(), REPLACED_SESSION);
-		admitted(&live, another_bots_run());
+		live.take_over(another_bots_run());
 		live.install(&another_bots_run(), ANOTHER_BOTS_SESSION);
-		admitted(&live, a_run_named("r7"));
+		live.take_over(a_run_named("r7"));
 
 		let mut ended = live.clear_all();
 		ended.sort_unstable();
@@ -1171,7 +1152,7 @@ mod tests {
 	#[test]
 	fn a_child_built_for_a_run_the_host_has_left_is_never_installed() {
 		let live = Live::<&str>::default();
-		admitted(&live, a_scope());
+		live.take_over(a_scope());
 
 		live.clear_all();
 
@@ -1285,8 +1266,8 @@ mod tests {
 		let (state, lineage, beside_it) = a_conversation_of_two_instances().await;
 		let live = Live::<&str>::default();
 
-		let holder = admitted(&live, lineage.clone());
-		let cold = admitted(&live, beside_it.clone());
+		let holder = live.take_over(lineage.clone());
+		let cold = live.take_over(beside_it.clone());
 
 		assert_eq!(
 			holder.resume(Some("session-1".to_owned())),

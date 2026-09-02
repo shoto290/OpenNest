@@ -700,12 +700,6 @@ describe("toTransportError", () => {
 		expect(toTransportError(refusal)).toBe(refusal)
 	})
 
-	it("passes the refusal of a session over the live cap through", () => {
-		const refusal = { kind: "tooManyLiveSessions", cap: 8 }
-
-		expect(toTransportError(refusal)).toBe(refusal)
-	})
-
 	it("describes a rejection carrying an unknown kind as an unknown failure", () => {
 		expect(toTransportError({ kind: "somethingElse" })).toEqual({
 			kind: "unknownFailure",
