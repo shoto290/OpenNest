@@ -502,10 +502,7 @@ mod tests {
 	}
 
 	fn outcome(events: &[AgentEvent]) -> Option<TurnOutcome> {
-		events.iter().find_map(|event| match event {
-			AgentEvent::TurnEnded { ended } => Some(ended.outcome),
-			_ => None,
-		})
+		turn_ended(events).map(|ended| ended.outcome)
 	}
 
 	fn turn_ended(events: &[AgentEvent]) -> Option<&TurnEnded> {
