@@ -50,6 +50,7 @@ import {
 	ENDING_FOR_OUTCOME,
 	isWorthKeeping,
 } from "../chat/reply-endings"
+import { needsFreshSession } from "../chat/screen-model"
 import {
 	type WorkingState,
 	withActivity,
@@ -471,6 +472,15 @@ export const createConversationController = (
 		drive()
 	}
 
+	const failSpeaker = (held: Speaker, error: TransportError) => {
+		noteFailure(error)
+		if (needsFreshSession(error)) {
+			closeSpeaker(held, "failed")
+			return
+		}
+		sync()
+	}
+
 	const noteActivity = (held: Speaker, activity: ActivityEvent) => {
 		held.activities = withActivity(held.activities, activity)
 		sync()
@@ -534,7 +544,7 @@ export const createConversationController = (
 			case "turnEnded":
 				return closeSpeaker(held, ENDING_FOR_OUTCOME[event.ended.outcome])
 			case "failed":
-				return closeSpeaker(held, "failed")
+				return failSpeaker(held, event.error)
 			default:
 				return
 		}
