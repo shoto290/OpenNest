@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest"
 
-import { MEASURED_ROW_SHAPES, rowHeightFor } from "@/lib/perf/fake-layout"
+import { MEASURED_ROWS } from "@workspace/ui/lib/measured-rows"
 
-const lengths = MEASURED_ROW_SHAPES.map((shape) => shape.length)
+import { rowHeightFor } from "@/lib/perf/fake-layout"
 
-const heights = MEASURED_ROW_SHAPES.map((shape) => shape.height)
+const lengths = MEASURED_ROWS.map((row) => row.length)
+
+const heights = MEASURED_ROWS.map((row) => row.height)
 
 describe("fake layout row heights", () => {
 	it("returns the measured height at every measured length", () => {
-		for (const shape of MEASURED_ROW_SHAPES) {
-			expect(rowHeightFor(shape.length)).toBe(shape.height)
+		for (const row of MEASURED_ROWS) {
+			expect(rowHeightFor(row.length)).toBe(row.height)
 		}
 	})
 

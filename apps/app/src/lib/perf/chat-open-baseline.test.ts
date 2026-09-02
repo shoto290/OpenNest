@@ -9,6 +9,7 @@ import {
 	highlighterBuildCount,
 	prepareHighlighter,
 } from "@workspace/ui/lib/code-highlight"
+import { CODE_ANSWER, MEASURED_ROWS } from "@workspace/ui/lib/measured-rows"
 import { setRenderProbe } from "@workspace/ui/lib/render-probe"
 
 import "@workspace/ui/lib/i18n"
@@ -18,11 +19,7 @@ import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import {
-	type FakeLayout,
-	fakeLayout,
-	MEASURED_ROW_CONTENTS,
-} from "@/lib/perf/fake-layout"
+import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -165,6 +162,7 @@ const seedTranscript = async (
 	store: TranscriptStore,
 	botId: string,
 	messages: number,
+	answersWithCode = false,
 ) => {
 	const conversationId = `chat-${botId}`
 	for (let index = 0; index < messages; index += 1) {
@@ -174,7 +172,7 @@ const seedTranscript = async (
 		if (index % 2 === 0) {
 			await store.appendUserMessage({
 				authorBotId: null,
-				content: MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
+				content: MEASURED_ROWS[index % MEASURED_ROWS.length].content,
 				conversationId,
 				createdAt: index,
 				id,
@@ -192,7 +190,9 @@ const seedTranscript = async (
 			})
 			await store.appendText(
 				id,
-				MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
+				answersWithCode
+					? CODE_ANSWER.content
+					: MEASURED_ROWS[index % MEASURED_ROWS.length].content,
 			)
 			await store.finalizeMessage(id, "complete")
 		}
@@ -216,10 +216,12 @@ const mountApp = async ({
 	const store = createFakeTranscriptStore()
 	const bots = await seedBots(store)
 	for (const [index, bot] of bots.entries()) {
+		const isPage = index === pageBotIndex
 		await seedTranscript(
 			store,
 			bot.id,
-			index === pageBotIndex ? PAGE_MESSAGES : SEEDED_MESSAGES,
+			isPage ? PAGE_MESSAGES : SEEDED_MESSAGES,
+			isPage,
 		)
 	}
 	const trace = traceStore(store, delayMs)
@@ -451,10 +453,10 @@ describe("PRF5 chat open baseline", () => {
 			{
 			  "commitsToFirstRow": 5,
 			  "commitsToSettled": 13,
-			  "highlightCalls": 2,
+			  "highlightCalls": 6,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 12,
-			  "paintedRows": 8,
+			  "markdownProcessors": 8,
+			  "paintedRows": 7,
 			}
 		`)
 	})

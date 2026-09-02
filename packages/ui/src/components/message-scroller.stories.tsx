@@ -15,6 +15,14 @@ import {
 	ToolApprovalCode,
 } from "@workspace/ui/components/tool-approval"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
+import {
+	CODE_ANSWER,
+	MARKDOWN_ANSWER,
+	MEASURED_ROWS,
+	type MeasuredRow,
+	ONE_LINE_REPLY,
+	USER_MESSAGE,
+} from "@workspace/ui/lib/measured-rows"
 import { cn } from "@workspace/ui/lib/utils"
 
 interface TranscriptEntry {
@@ -2190,60 +2198,32 @@ export const NewMessageSeparatorInDark = meta.story({
 const MEASURE_FRAME_CLASS =
 	"flex h-[1600px] w-[800px] flex-col overflow-hidden rounded-xl border border-border bg-background"
 
-const ONE_LINE_REPLY = "Queued behind the index build."
-
-const MARKDOWN_ANSWER = [
-	"It rewrites three tables: accounts, memberships and invites. Accounts gains a nullable region column, memberships loses the legacy role string, and invites moves its expiry to a timestamptz.",
-	"The legacy role string is copied into role_id before the column is dropped, so the drop is the last statement of the transaction and a failure halfway rolls every statement back.",
-	"The down migration recreates the role string from role_id, which is lossless for every row the up migration wrote, so the rollback path stays open once it has shipped.",
-].join("\n\n")
-
-const CODE_ANSWER = [
-	"```ts",
-	"export const migrate = async (db: Database) => {",
-	'  await db.addColumn("accounts", "region", "text")',
-	'  await db.copyColumn("memberships", "role", "role_id")',
-	'  await db.dropColumn("memberships", "role")',
-	"}",
-	"```",
-].join("\n")
-
-const USER_MESSAGE =
-	"Can you walk me through what the migration script touches?"
+const TOOL_CARD = { key: "tool-block", length: 140, height: 234 }
 
 const TOOL_DETAIL = "bun run migrate --dry-run"
 
-const MEASURED_ROWS: MessageScrollerRow[] = [
+const markdownRow = (measured: MeasuredRow): MessageScrollerRow => ({
+	key: measured.key,
+	messageIds: [measured.key],
+	render: () => (
+		<AssistantTurn>
+			<Markdown>{measured.content}</Markdown>
+		</AssistantTurn>
+	),
+})
+
+const MEASURED_SCROLLER_ROWS: MessageScrollerRow[] = [
+	markdownRow(ONE_LINE_REPLY),
 	{
-		key: "one-line-reply",
-		messageIds: ["one-line-reply"],
-		render: () => (
-			<AssistantTurn>
-				<Markdown>{ONE_LINE_REPLY}</Markdown>
-			</AssistantTurn>
-		),
+		key: USER_MESSAGE.key,
+		messageIds: [USER_MESSAGE.key],
+		render: () => <UserTurn>{USER_MESSAGE.content}</UserTurn>,
 	},
+	markdownRow(CODE_ANSWER),
+	markdownRow(MARKDOWN_ANSWER),
 	{
-		key: "markdown-answer",
-		messageIds: ["markdown-answer"],
-		render: () => (
-			<AssistantTurn>
-				<Markdown>{MARKDOWN_ANSWER}</Markdown>
-			</AssistantTurn>
-		),
-	},
-	{
-		key: "code-answer",
-		messageIds: ["code-answer"],
-		render: () => (
-			<AssistantTurn>
-				<Markdown>{CODE_ANSWER}</Markdown>
-			</AssistantTurn>
-		),
-	},
-	{
-		key: "tool-block",
-		messageIds: ["tool-block"],
+		key: TOOL_CARD.key,
+		messageIds: [TOOL_CARD.key],
 		render: () => (
 			<AssistantTurn fills>
 				<ToolApproval
@@ -2256,12 +2236,14 @@ const MEASURED_ROWS: MessageScrollerRow[] = [
 			</AssistantTurn>
 		),
 	},
-	{
-		key: "user-message",
-		messageIds: ["user-message"],
-		render: () => <UserTurn>{USER_MESSAGE}</UserTurn>,
-	},
 ]
+
+const RECORDED_SHAPES = Object.fromEntries(
+	[...MEASURED_ROWS, TOOL_CARD].map((measured) => [
+		measured.key,
+		{ height: measured.height, length: measured.length },
+	]),
+)
 
 const shapesByKey = (canvasElement: HTMLElement) => {
 	const rows = canvasElement.querySelectorAll<HTMLElement>(
@@ -2269,7 +2251,7 @@ const shapesByKey = (canvasElement: HTMLElement) => {
 	)
 	return Object.fromEntries(
 		[...rows].map((row) => [
-			MEASURED_ROWS[Number(row.dataset.index)].key,
+			MEASURED_SCROLLER_ROWS[Number(row.dataset.index)].key,
 			{
 				height: Math.round(row.getBoundingClientRect().height),
 				length: (row.textContent ?? "").length,
@@ -2298,7 +2280,7 @@ export const RowHeights = meta.story({
 				contentClassName="flex flex-col p-3"
 				label="Conversation"
 				rowGap={ROW_GAP}
-				rows={MEASURED_ROWS}
+				rows={MEASURED_SCROLLER_ROWS}
 			/>
 		</div>
 	),
@@ -2312,13 +2294,7 @@ export const RowHeights = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await waitFor(() =>
-			expect(shapesByKey(canvasElement)).toEqual({
-				"code-answer": { height: 185, length: 202 },
-				"markdown-answer": { height: 252, length: 537 },
-				"one-line-reply": { height: 44, length: 30 },
-				"tool-block": { height: 234, length: 140 },
-				"user-message": { height: 44, length: 58 },
-			}),
+			expect(shapesByKey(canvasElement)).toEqual(RECORDED_SHAPES),
 		)
 
 		const heights = heightsIn(shapesByKey(canvasElement))

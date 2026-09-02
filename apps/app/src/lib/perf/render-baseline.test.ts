@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement, Profiler, type ProfilerOnRenderCallback } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { MEASURED_ROWS } from "@workspace/ui/lib/measured-rows"
 import { setRenderProbe } from "@workspace/ui/lib/render-probe"
 
 import "@workspace/ui/lib/i18n"
@@ -13,11 +14,7 @@ import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import {
-	type FakeLayout,
-	fakeLayout,
-	MEASURED_ROW_CONTENTS,
-} from "@/lib/perf/fake-layout"
+import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -97,7 +94,7 @@ const seedTranscript = async (
 		if (index % 2 === 0) {
 			await store.appendUserMessage({
 				authorBotId: null,
-				content: MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
+				content: MEASURED_ROWS[index % MEASURED_ROWS.length].content,
 				conversationId,
 				createdAt: index,
 				id,
@@ -115,7 +112,7 @@ const seedTranscript = async (
 			})
 			await store.appendText(
 				id,
-				MEASURED_ROW_CONTENTS[index % MEASURED_ROW_CONTENTS.length],
+				MEASURED_ROWS[index % MEASURED_ROWS.length].content,
 			)
 			await store.finalizeMessage(id, "complete")
 		}
