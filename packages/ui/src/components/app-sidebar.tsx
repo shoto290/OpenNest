@@ -879,8 +879,7 @@ const CreateItems = ({
 	)
 }
 
-interface RosterSurfaceProps extends RosterCreateActions, RosterSpaceActions {
-	onCreateSection?: () => void
+interface RosterSurfaceProps extends CreateItemsProps, RosterSpaceActions {
 	children?: ReactNode
 }
 
