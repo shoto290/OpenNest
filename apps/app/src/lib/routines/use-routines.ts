@@ -72,7 +72,6 @@ export const useRoutines = (conversationId: string): ConversationRoutines => {
 					setHeld((rows) =>
 						rows.map((row) => (row.id === written.id ? written : row)),
 					)
-					setFailed(false)
 				}, noteFailure)
 		},
 		[held, noteFailure],

@@ -158,7 +158,6 @@ const RoutinesPanelTrigger = (props: AnimatedSidebarTriggerProps) => {
 }
 
 export {
-	ROUTINES_PANEL_ID,
 	ROUTINES_PANEL_WIDTH,
 	RoutinesPanel,
 	type RoutinesPanelProps,
