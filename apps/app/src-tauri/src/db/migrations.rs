@@ -28,6 +28,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 19, statements: SPACE_SETTINGS },
 	Migration { version: 20, statements: SEVERAL_LIVE_SESSIONS },
 	Migration { version: 21, statements: CHECKPOINT_PER_SESSION },
+	Migration { version: 22, statements: ROUTINES },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -436,6 +437,53 @@ BEFORE UPDATE ON context_checkpoints
 BEGIN
 	SELECT RAISE(ABORT, 'a checkpoint records one moment: insert a new one, never edit this row');
 END;
+";
+
+const ROUTINES: &str = "
+CREATE TABLE IF NOT EXISTS routines (
+	id TEXT PRIMARY KEY,
+	conversation_id TEXT NOT NULL,
+	bot_id TEXT NOT NULL,
+	trigger_source_id TEXT NOT NULL,
+	event_filter TEXT NOT NULL,
+	trigger_config TEXT NOT NULL,
+	trigger_key TEXT NOT NULL UNIQUE,
+	is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0, 1)),
+	consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
+	last_failed_at INTEGER,
+	created_at INTEGER NOT NULL,
+	FOREIGN KEY (conversation_id, bot_id)
+		REFERENCES conversation_participants (conversation_id, bot_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS routines_by_conversation ON routines (conversation_id, created_at);
+
+CREATE TABLE IF NOT EXISTS routine_runs (
+	id TEXT PRIMARY KEY,
+	routine_id TEXT NOT NULL REFERENCES routines (id) ON DELETE CASCADE,
+	started_at INTEGER NOT NULL,
+	ended_at INTEGER,
+	outcome TEXT CHECK (outcome IN ('ok', 'nothing', 'skipped', 'failed')),
+	reason TEXT,
+	cost_usd REAL,
+	model_usage TEXT,
+	lease_renewed_at INTEGER NOT NULL,
+	CHECK ((ended_at IS NULL) = (outcome IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS routine_runs_by_routine ON routine_runs (routine_id, started_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS routine_runs_one_open_per_routine
+	ON routine_runs (routine_id) WHERE ended_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS routine_dedupe_values (
+	routine_id TEXT NOT NULL REFERENCES routines (id) ON DELETE CASCADE,
+	value TEXT NOT NULL,
+	seen_at INTEGER NOT NULL,
+	PRIMARY KEY (routine_id, value)
+);
+
+CREATE INDEX IF NOT EXISTS routine_dedupe_values_by_age ON routine_dedupe_values (seen_at);
 ";
 
 pub fn latest_version() -> u32 {
@@ -895,6 +943,84 @@ mod tests {
 
 		assert!(has_table(&connection, "space_settings"), "the file never gained the table");
 		assert_eq!(version(&connection).expect("version"), latest_version());
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_routine_and_what_hangs_off_it_go_with_the_participant_that_holds_them() {
+		let dir = temp_dir();
+		let connection = fixture(&dir);
+		write(
+			&connection,
+			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at)
+				VALUES ('r1', 'c1', 'b1', 'schedule', '{}', '{}', 'k1', 1)",
+		)
+		.expect("a routine of a participant");
+		write(
+			&connection,
+			"INSERT INTO routine_runs (id, routine_id, started_at, lease_renewed_at)
+				VALUES ('run1', 'r1', 1, 1)",
+		)
+		.expect("a started run");
+		write(
+			&connection,
+			"INSERT INTO routine_dedupe_values (routine_id, value, seen_at)
+				VALUES ('r1', 'once', 1)",
+		)
+		.expect("a dedupe value");
+
+		write(&connection, "DELETE FROM conversations WHERE id = 'c1'").expect("the delete lands");
+
+		for table in ["routines", "routine_runs", "routine_dedupe_values"] {
+			let left: u32 = connection
+				.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row.get(0))
+				.expect("query");
+			assert_eq!(left, 0, "{table} kept a row of a conversation that is gone");
+		}
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_routine_holds_one_open_run_at_a_time_and_never_an_outcome_without_an_end() {
+		let dir = temp_dir();
+		let connection = fixture(&dir);
+		write(
+			&connection,
+			"INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at)
+				VALUES ('r1', 'c1', 'b1', 'schedule', '{}', '{}', 'k1', 1)",
+		)
+		.expect("a routine of a participant");
+		write(
+			&connection,
+			"INSERT INTO routine_runs (id, routine_id, started_at, lease_renewed_at)
+				VALUES ('run1', 'r1', 1, 1)",
+		)
+		.expect("a started run");
+
+		assert!(
+			write(
+				&connection,
+				"INSERT INTO routine_runs (id, routine_id, started_at, lease_renewed_at)
+					VALUES ('run2', 'r1', 2, 2)",
+			)
+			.is_err(),
+			"a second lease was taken while the first was open"
+		);
+		assert!(
+			write(
+				&connection,
+				"INSERT INTO routine_runs (id, routine_id, started_at, outcome, lease_renewed_at)
+					VALUES ('run3', 'r1', 3, 'ok', 3)",
+			)
+			.is_err(),
+			"a run took an outcome without an end"
+		);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

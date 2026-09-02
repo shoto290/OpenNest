@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use crate::conversations::contract::{StorageFailure, TranscriptStoreError};
+use crate::db::DatabaseError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FieldType {
@@ -123,6 +126,228 @@ pub struct TriggerSource {
 	pub dedupe_key: String,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub header: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RunOutcome {
+	Ok,
+	Nothing,
+	Skipped,
+	Failed,
+}
+
+impl RunOutcome {
+	pub fn as_sql(&self) -> &'static str {
+		match self {
+			RunOutcome::Ok => "ok",
+			RunOutcome::Nothing => "nothing",
+			RunOutcome::Skipped => "skipped",
+			RunOutcome::Failed => "failed",
+		}
+	}
+
+	pub fn parse(text: &str) -> Option<Self> {
+		match text {
+			"ok" => Some(RunOutcome::Ok),
+			"nothing" => Some(RunOutcome::Nothing),
+			"skipped" => Some(RunOutcome::Skipped),
+			"failed" => Some(RunOutcome::Failed),
+			_ => None,
+		}
+	}
+
+	pub fn is_failure(self) -> bool {
+		matches!(self, RunOutcome::Failed)
+	}
+
+	pub fn clears_failures(self) -> bool {
+		matches!(self, RunOutcome::Ok | RunOutcome::Nothing)
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Routine {
+	pub id: String,
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub trigger_source_id: String,
+	pub filter: Filter,
+	pub trigger_config: serde_json::Value,
+	pub is_enabled: bool,
+	pub consecutive_failures: u32,
+	pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineDraft {
+	pub conversation_id: String,
+	pub bot_id: String,
+	pub trigger_source_id: String,
+	pub filter: Filter,
+	pub trigger_config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineEdit {
+	pub filter: Filter,
+	pub trigger_config: serde_json::Value,
+	pub is_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineKey {
+	pub key: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub header: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineRun {
+	pub id: String,
+	pub routine_id: String,
+	pub started_at: i64,
+	pub ended_at: Option<i64>,
+	pub outcome: Option<RunOutcome>,
+	pub reason: Option<String>,
+	pub cost_usd: Option<f64>,
+	pub model_usage: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunClosing {
+	pub outcome: RunOutcome,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub reason: Option<String>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub cost_usd: Option<f64>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub model_usage: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TriggerEvent {
+	pub routine_id: String,
+	pub source: TriggerSource,
+	pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunRequested {
+	pub routine_id: String,
+	pub run_id: String,
+	pub bot_id: String,
+	pub conversation_id: String,
+	pub trigger_source_id: String,
+	pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SkipReason {
+	LeaseHeld,
+	HourlyCap,
+	BackingOff,
+}
+
+impl SkipReason {
+	pub fn recorded(self) -> &'static str {
+		match self {
+			SkipReason::LeaseHeld => "previous run still in progress",
+			SkipReason::HourlyCap => "hourly cap",
+			SkipReason::BackingOff => "backing off",
+		}
+	}
+}
+
+pub const LEASE_EXPIRED: &str = "lease expired";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Refusal {
+	Disabled,
+	Filter,
+	DedupeValueMissing,
+	AlreadySeen,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TriggerDecision {
+	#[serde(rename_all = "camelCase")]
+	Started { run_id: String },
+	#[serde(rename_all = "camelCase")]
+	Skipped { run_id: String, reason: SkipReason },
+	#[serde(rename_all = "camelCase")]
+	Refused { by: Refusal },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RoutineError {
+	#[serde(rename_all = "camelCase")]
+	Unavailable { failure: StorageFailure },
+	#[serde(rename_all = "camelCase")]
+	Storage { failure: StorageFailure },
+	#[serde(rename_all = "camelCase")]
+	UnknownRoutine { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownRun { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownBot { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownParticipant { conversation_id: String, bot_id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownSource { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnsupportedOperator {
+		row: usize,
+		field: String,
+		operator: FilterOperator,
+		field_type: FieldType,
+	},
+	#[serde(rename_all = "camelCase")]
+	RunAlreadyClosed { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnreadableSources { path: String, reason: String },
+	#[serde(rename_all = "camelCase")]
+	Undeliverable { detail: String },
+	#[serde(rename_all = "camelCase")]
+	Unexpected { detail: String },
+}
+
+impl From<DatabaseError> for RoutineError {
+	fn from(error: DatabaseError) -> Self {
+		RoutineError::Storage { failure: (&error).into() }
+	}
+}
+
+impl From<rusqlite::Error> for RoutineError {
+	fn from(error: rusqlite::Error) -> Self {
+		RoutineError::from(DatabaseError::Sqlite(error))
+	}
+}
+
+impl From<TranscriptStoreError> for RoutineError {
+	fn from(error: TranscriptStoreError) -> Self {
+		match error {
+			TranscriptStoreError::Unavailable { failure } => RoutineError::Unavailable { failure },
+			TranscriptStoreError::UnknownBot { id } => RoutineError::UnknownBot { id },
+			TranscriptStoreError::UnreadableSources { path, reason } => {
+				RoutineError::UnreadableSources { path, reason }
+			}
+			TranscriptStoreError::Storage { failure } => RoutineError::Storage { failure },
+			other => RoutineError::Unexpected { detail: format!("{other:?}") },
+		}
+	}
 }
 
 #[cfg(test)]
