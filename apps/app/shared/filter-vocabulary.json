@@ -14,5 +14,6 @@
 		"number": ["exists", "not_exists", "equals", "not_equals", "gt", "lt"],
 		"boolean": ["exists", "not_exists", "equals", "not_equals"],
 		"datetime": ["exists", "not_exists", "gt", "lt"]
-	}
+	},
+	"matchModes": ["all", "any"]
 }

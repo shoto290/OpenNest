@@ -12,6 +12,41 @@ pub enum FieldType {
 impl FieldType {
 	pub const ALL: [FieldType; 4] =
 		[FieldType::String, FieldType::Number, FieldType::Boolean, FieldType::Datetime];
+
+	pub fn operators(self) -> &'static [FilterOperator] {
+		match self {
+			FieldType::String => &[
+				FilterOperator::Exists,
+				FilterOperator::NotExists,
+				FilterOperator::Equals,
+				FilterOperator::NotEquals,
+				FilterOperator::Contains,
+				FilterOperator::NotContains,
+				FilterOperator::StartsWith,
+				FilterOperator::EndsWith,
+			],
+			FieldType::Number => &[
+				FilterOperator::Exists,
+				FilterOperator::NotExists,
+				FilterOperator::Equals,
+				FilterOperator::NotEquals,
+				FilterOperator::Gt,
+				FilterOperator::Lt,
+			],
+			FieldType::Boolean => &[
+				FilterOperator::Exists,
+				FilterOperator::NotExists,
+				FilterOperator::Equals,
+				FilterOperator::NotEquals,
+			],
+			FieldType::Datetime => &[
+				FilterOperator::Exists,
+				FilterOperator::NotExists,
+				FilterOperator::Gt,
+				FilterOperator::Lt,
+			],
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +84,10 @@ impl FilterOperator {
 pub enum FilterMatchMode {
 	All,
 	Any,
+}
+
+impl FilterMatchMode {
+	pub const ALL: [FilterMatchMode; 2] = [FilterMatchMode::All, FilterMatchMode::Any];
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,17 +143,12 @@ mod tests {
 		serde_json::from_str(&text).expect("the vocabulary is JSON")
 	}
 
+	fn name<T: Serialize>(value: &T) -> String {
+		to_value(value).expect("the value serialises").as_str().expect("it is a name").to_owned()
+	}
+
 	fn named<T: Serialize>(values: &[T]) -> BTreeSet<String> {
-		values
-			.iter()
-			.map(|value| {
-				to_value(value)
-					.expect("the value serialises")
-					.as_str()
-					.expect("it is a name")
-					.to_owned()
-			})
-			.collect()
+		values.iter().map(name).collect()
 	}
 
 	fn listed(value: &serde_json::Value) -> BTreeSet<String> {
@@ -134,7 +168,7 @@ mod tests {
 	}
 
 	#[test]
-	fn every_field_type_carries_the_operators_the_shared_vocabulary_gives_it() {
+	fn the_operators_are_the_ones_the_shared_vocabulary_holds() {
 		let vocabulary = vocabulary();
 		let table = vocabulary["operatorsByFieldType"].as_object().expect("the table is an object");
 
@@ -145,6 +179,27 @@ mod tests {
 		);
 		let accepted: BTreeSet<String> = table.values().flat_map(listed).collect();
 		assert_eq!(named(&FilterOperator::ALL), accepted);
+	}
+
+	#[test]
+	fn every_field_type_accepts_the_operators_the_shared_vocabulary_gives_it() {
+		let vocabulary = vocabulary();
+
+		for field_type in FieldType::ALL {
+			let held = name(&field_type);
+			assert_eq!(
+				named(field_type.operators()),
+				listed(&vocabulary["operatorsByFieldType"][&held]),
+				"the operators of {held} drifted"
+			);
+		}
+	}
+
+	#[test]
+	fn the_match_modes_are_the_ones_the_shared_vocabulary_holds() {
+		let vocabulary = vocabulary();
+
+		assert_eq!(named(&FilterMatchMode::ALL), listed(&vocabulary["matchModes"]));
 	}
 
 	#[test]

@@ -20,3 +20,22 @@ export type FilterOperator = (typeof FILTER_OPERATORS)[number]
 export const FILTER_MATCH_MODES = ["all", "any"] as const
 
 export type FilterMatchMode = (typeof FILTER_MATCH_MODES)[number]
+
+export const OPERATORS_BY_FIELD_TYPE: Record<
+	FieldType,
+	readonly FilterOperator[]
+> = {
+	string: [
+		"exists",
+		"not_exists",
+		"equals",
+		"not_equals",
+		"contains",
+		"not_contains",
+		"starts_with",
+		"ends_with",
+	],
+	number: ["exists", "not_exists", "equals", "not_equals", "gt", "lt"],
+	boolean: ["exists", "not_exists", "equals", "not_equals"],
+	datetime: ["exists", "not_exists", "gt", "lt"],
+}
