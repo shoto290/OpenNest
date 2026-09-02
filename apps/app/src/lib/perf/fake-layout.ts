@@ -2,9 +2,21 @@ const VIEWPORT_WIDTH = 800
 
 const VIEWPORT_HEIGHT = 600
 
-const ROW_HEIGHT_BASE = 43
+export type MeasuredRowShape = { length: number; height: number }
 
-const ROW_HEIGHT_PER_CHARACTER = 0.42
+export const MEASURED_ROW_SHAPES: MeasuredRowShape[] = [
+	{ length: 25, height: 234 },
+	{ length: 30, height: 44 },
+	{ length: 58, height: 44 },
+	{ length: 212, height: 185 },
+	{ length: 539, height: 252 },
+]
+
+const SHAPE_FILLER = " and more of the same answer"
+
+const SHORTEST_SHAPE = MEASURED_ROW_SHAPES[0]
+
+const LONGEST_SHAPE = MEASURED_ROW_SHAPES[MEASURED_ROW_SHAPES.length - 1]
 
 const VIEWPORT_SELECTOR = '[data-slot="message-scroller"] > section'
 
@@ -12,8 +24,33 @@ const ROW_SELECTOR = '[data-slot="message-scroller-row"]'
 
 export type FakeLayout = { restore: () => void }
 
-const rowHeightFor = (text: string) =>
-	Math.round(ROW_HEIGHT_BASE + ROW_HEIGHT_PER_CHARACTER * text.length)
+const between = (
+	length: number,
+	low: MeasuredRowShape,
+	high: MeasuredRowShape,
+) =>
+	low.height +
+	((high.height - low.height) * (length - low.length)) /
+		(high.length - low.length)
+
+const rowHeightFor = (text: string) => {
+	const { length } = text
+	if (length <= SHORTEST_SHAPE.length) return SHORTEST_SHAPE.height
+	if (length >= LONGEST_SHAPE.length) return LONGEST_SHAPE.height
+
+	const above = MEASURED_ROW_SHAPES.findIndex((shape) => shape.length >= length)
+	return Math.round(
+		between(length, MEASURED_ROW_SHAPES[above - 1], MEASURED_ROW_SHAPES[above]),
+	)
+}
+
+const shapesHolding = (text: string) =>
+	MEASURED_ROW_SHAPES.filter((shape) => shape.length >= text.length)
+
+export const shapedContent = (text: string, index: number) => {
+	const held = shapesHolding(text)
+	return text.padEnd(held[index % held.length].length, SHAPE_FILLER)
+}
 
 const heightOf = (element: Element) => {
 	if (element.matches(ROW_SELECTOR)) {

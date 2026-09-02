@@ -18,7 +18,11 @@ import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
-import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import {
+	type FakeLayout,
+	fakeLayout,
+	shapedContent,
+} from "@/lib/perf/fake-layout"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -173,7 +177,7 @@ const seedTranscript = async (
 		if (index % 2 === 0) {
 			await store.appendUserMessage({
 				authorBotId: null,
-				content: `Question ${index} for the transcript`,
+				content: shapedContent(`Question ${index}`, index),
 				conversationId,
 				createdAt: index,
 				id,
@@ -191,8 +195,8 @@ const seedTranscript = async (
 			})
 			const body = withCode
 				? `Answer ${index} with code\n\n${CODE_BLOCK}`
-				: `Answer ${index} in prose`
-			await store.appendText(id, body)
+				: `Answer ${index}`
+			await store.appendText(id, shapedContent(body, index))
 			await store.finalizeMessage(id, "complete")
 		}
 		await store.completeTurn(turnId, index)
@@ -451,11 +455,11 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measurePage()).toMatchInlineSnapshot(`
 			{
 			  "commitsToFirstRow": 5,
-			  "commitsToSettled": 15,
-			  "highlightCalls": 5,
+			  "commitsToSettled": 13,
+			  "highlightCalls": 4,
 			  "highlighterBuilds": 0,
-			  "markdownProcessors": 16,
-			  "paintedRows": 11,
+			  "markdownProcessors": 12,
+			  "paintedRows": 8,
 			}
 		`)
 	})
