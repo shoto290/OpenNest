@@ -13,7 +13,7 @@
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab",
-		"includes": ["**", "!**/*.grit"]
+		"includes": ["**", "!**/*.grit", "!packages/ui/src/styles/typeset.css"]
 	},
 	"plugins": [
 		{
