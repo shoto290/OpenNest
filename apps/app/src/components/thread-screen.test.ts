@@ -275,8 +275,10 @@ const roomOf = async (names: string[]): Promise<Room> => {
 	}
 }
 
-const stopFor = (name: string) =>
-	screen.queryByRole("button", { name: `Stop ${name}` })
+const stopsFor = (name: string) =>
+	screen.queryAllByRole("button", { name: `Stop ${name}` })
+
+const stopFor = (name: string) => stopsFor(name)[0] ?? null
 
 describe("ThreadScreen", () => {
 	let layout: FakeLayout
@@ -457,7 +459,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		fireEvent.click(screen.getAllByRole("button", { name: "Stop Ada" })[0])
+		fireEvent.click(stopsFor("Ada")[0])
 		await settle()
 
 		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
@@ -494,7 +496,7 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText("the walls hold")).toBeTruthy()
 		expect(screen.getByText("Ada is writing…")).toBeTruthy()
 
-		fireEvent.click(screen.getAllByRole("button", { name: "Stop Ada" })[1])
+		fireEvent.click(stopsFor("Ada")[1])
 		await settle()
 
 		expect(room.driver.cancelled).toEqual([room.idOf("Ada")])
