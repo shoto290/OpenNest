@@ -69,6 +69,8 @@ const NO_SCROLL_FADE = "[animation-name:none] [mask-image:none]"
 
 const ALWAYS_RENDERED = "[content-visibility:visible]"
 
+const NO_SCROLLBAR_GUTTER = "scrollbar-auto scrollbar-gutter-auto"
+
 const indexOfKey = (rows: TranscriptItem[], key: string | null) =>
 	key === null ? -1 : rows.findIndex((row) => row.key === key)
 
@@ -294,6 +296,7 @@ const TranscriptBody = ({
 				aria-label={label ?? t("transcript.label")}
 				className={cn(
 					NO_SCROLL_FADE,
+					NO_SCROLLBAR_GUTTER,
 					"scrollbar-overlay focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
 				)}
 			>

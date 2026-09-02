@@ -285,7 +285,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"A transcript short enough to fit the frame. Nothing scrolls, the reader is following, the return control stays out of the way, and the viewport carries no scroll fade over its edges.",
+					"A transcript short enough to fit the frame. Nothing scrolls, the reader is following, the return control stays out of the way, the viewport carries no scroll fade over its edges, and it reserves no gutter for a scrollbar in its layout width.",
 			},
 		},
 	},
@@ -300,6 +300,7 @@ export const Default = meta.story({
 			"false",
 		)
 		await expect(getComputedStyle(viewport).maskImage).toBe("none")
+		await expect(viewport.clientWidth).toBe(viewport.offsetWidth)
 	},
 })
 
@@ -317,6 +318,7 @@ export const LandsAtEnd = meta.story({
 
 		await expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight)
 		await atLiveEdge(viewport)
+		await expect(viewport.clientWidth).toBe(viewport.offsetWidth)
 	},
 })
 
