@@ -2253,6 +2253,14 @@ const RECORDED_SHAPES = Object.fromEntries(
 
 const RECORDED_HEIGHTS = MEASURED_ROWS.map((measured) => measured.height)
 
+const measuredFontOf = (canvasElement: HTMLElement) => {
+	const row = canvasElement.querySelector<HTMLElement>(
+		'[data-slot="message-scroller-row"]',
+	)
+	if (!row) throw new Error("no measured row on screen")
+	return getComputedStyle(row).fontFamily
+}
+
 const shapesByKey = (canvasElement: HTMLElement) => {
 	const rows = canvasElement.querySelectorAll<HTMLElement>(
 		'[data-slot="message-scroller-row"]',
@@ -2304,6 +2312,9 @@ export const RowHeights = meta.story({
 		},
 	},
 	play: async ({ canvasElement }) => {
+		await document.fonts.ready
+		await expect(measuredFontOf(canvasElement)).toContain("Roboto")
+
 		await waitFor(() =>
 			expect(shapesByKey(canvasElement)).toEqual(RECORDED_SHAPES),
 		)
