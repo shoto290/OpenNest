@@ -17,7 +17,7 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { MARKDOWN_PROSE_CLASS } from "@workspace/ui/components/markdown/prose"
+import { MARKDOWN_TYPESET_CLASS } from "@workspace/ui/components/markdown/prose"
 import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import { SPRING_SWAP } from "@workspace/ui/lib/ease"
 import { cn, mergeRefs } from "@workspace/ui/lib/utils"
@@ -110,11 +110,11 @@ function bubbleContentClass(
 		"relative z-0 min-w-9 max-w-full break-words rounded-2xl py-2.5 text-sm leading-6 text-foreground",
 		MESSAGE_BUBBLE_INLINE_PADDING,
 		hasSurface(variant) && MENTION_OPENING_PADDING,
-		MARKDOWN_PROSE_CLASS,
-		variant === "solid" && "text-user-bubble-foreground",
+		MARKDOWN_TYPESET_CLASS,
+		variant === "solid" && "on-user-bubble text-user-bubble-foreground",
 		variant === "ghost" && "w-full rounded-none px-0 py-0",
 		variant === "bare" && "w-auto rounded-none px-0 py-1",
-		variant === "danger" && "text-destructive",
+		variant === "danger" && "on-destructive text-destructive",
 		interactive &&
 			"cursor-pointer text-left outline-none transition-transform duration-150 hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]",
 	)

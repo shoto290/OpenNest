@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./typeset.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "overlayscrollbars/overlayscrollbars.css";
@@ -153,6 +154,18 @@
 	--font-heading: "Roboto Slab Variable", serif;
 }
 
+@layer components {
+	.typeset-chat {
+		--typeset-size: calc(0.875rem / 1.125);
+		--typeset-leading: calc(1.5 / 0.875);
+		--typeset-flow: 0.5rem;
+
+		@media (min-width: 48rem), print {
+			--typeset-size: 0.875rem;
+		}
+	}
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
@@ -182,6 +195,12 @@
 		--sidebar-border-untinted: var(--sidebar-border);
 		--user-bubble: var(--primary);
 		--user-bubble-foreground: var(--primary-foreground);
+		--color-foreground: var(--foreground);
+		--color-muted: var(--muted);
+		--color-muted-foreground: var(--muted-foreground);
+		--color-border: var(--border);
+		--color-primary: var(--primary);
+		--color-ring: var(--ring);
 	}
 
 	[data-space-tint] {
@@ -309,6 +328,19 @@
 	@media (prefers-reduced-motion: reduce) {
 		transition: none;
 	}
+}
+
+@utility on-user-bubble {
+	--color-foreground: var(--user-bubble-foreground);
+	--color-muted-foreground: color-mix(
+		in oklab,
+		var(--user-bubble-foreground) 70%,
+		var(--user-bubble)
+	);
+}
+
+@utility on-destructive {
+	--color-foreground: var(--destructive);
 }
 
 @utility on-shell {

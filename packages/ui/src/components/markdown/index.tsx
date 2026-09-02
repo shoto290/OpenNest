@@ -8,7 +8,7 @@ import { remarkBotMentions } from "@workspace/ui/components/markdown/bot-mention
 import { MARKDOWN_COMPONENTS } from "@workspace/ui/components/markdown/components"
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
-	MARKDOWN_PROSE_CLASS,
+	MARKDOWN_TYPESET_CLASS,
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
 import { remarkLiteralHtml } from "@workspace/ui/components/markdown/raw-html"
@@ -29,7 +29,7 @@ const MARKDOWN_REMARK_PLUGINS = [
 ]
 
 const MARKDOWN_CLASS = cn(
-	MARKDOWN_PROSE_CLASS,
+	MARKDOWN_TYPESET_CLASS,
 	MARKDOWN_CODE_SURFACE_CLASS,
 	MARKDOWN_WHITESPACE_CLASS,
 	"text-sm leading-6",

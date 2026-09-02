@@ -24,6 +24,7 @@ export const MarkdownSpan = ({
 		return (
 			<Mention
 				botId={botId}
+				className="not-typeset"
 				count={Number(props[BOT_MENTION_COUNT_ATTRIBUTE] ?? 1)}
 			/>
 		)

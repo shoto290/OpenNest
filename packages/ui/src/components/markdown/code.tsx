@@ -21,6 +21,7 @@ import {
 	MarkdownMermaid,
 	MERMAID_LANGUAGE,
 } from "@workspace/ui/components/markdown/mermaid"
+import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
 import { useCodeHighlightReady } from "@workspace/ui/hooks/use-code-highlight-ready"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { highlightCode, toCodeLines } from "@workspace/ui/lib/code-highlight"
@@ -97,7 +98,10 @@ const MarkdownFence = ({ code, language }: MarkdownFenceProps) => {
 	}, [code, language, painted, ready])
 
 	return (
-		<div data-slot="markdown-fence" className="relative my-2">
+		<div
+			data-slot="markdown-fence"
+			className={`${MARKDOWN_ESCAPED_BLOCK_CLASS} relative my-2`}
+		>
 			<pre>
 				<span
 					// biome-ignore lint/a11y/noNoninteractiveTabindex: an overflowing fence must be keyboard scrollable

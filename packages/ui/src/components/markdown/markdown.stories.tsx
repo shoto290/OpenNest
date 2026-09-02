@@ -1,6 +1,9 @@
+import { useState } from "react"
 import { expect, fn, spyOn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import { Button } from "@workspace/ui/components/button"
 import { Markdown } from "@workspace/ui/components/markdown"
 import {
 	MessageBubble,
@@ -431,12 +434,73 @@ A code span keeps its own run: \`a     b\` beside \`a b\`.
 > quoted line one
 > and quoted line two`
 
+const TYPESET_BUBBLE = `## Nest report
+
+The nest answers to \`readNest(id)\` and holds three occupants.
+
+- occupants
+	- resident
+		- arrived this week
+	- visitor
+- structure
+
+> The sync ran twice and the second pass found nothing.
+
+\`\`\`ts
+export const summarise = async (id: string) => {
+	const nest = await readNest(id)
+	return { id: nest.id, occupants: nest.occupants.length }
+}
+\`\`\`
+
+${WIDE_TABLE}`
+
+const STREAMED_BODY = `## Nest report
+
+The archive pass finished at 09:12.
+
+- read the nest
+- summarise the occupants
+
+> The sync ran twice and the second pass found nothing.
+
+\`\`\`ts
+export const summarise = async (id: string) => {
+	const nest = await readNest(id)
+	return { id: nest.id, occupants: nest.occupants.length }
+}
+\`\`\``
+
+const STREAMED_NEXT_BLOCK = `
+
+Two nests archived since the last pass.`
+
+const DANGER_BODY = `## Sync failed
+
+The archive pass stopped at 09:12 and nothing was written.`
+
+const inkOf = (element: Element) => getComputedStyle(element).color
+
 const alignmentOf = (cell: HTMLElement) => getComputedStyle(cell).textAlign
 
-const bubbleContentOf = (canvasElement: HTMLElement) =>
-	canvasElement.querySelector(
+const bubbleContentsOf = (canvasElement: HTMLElement) => [
+	...canvasElement.querySelectorAll<HTMLElement>(
 		'[data-slot="message-bubble-content"]',
-	) as HTMLElement
+	),
+]
+
+const bubbleContentOf = (canvasElement: HTMLElement) =>
+	bubbleContentsOf(canvasElement)[0]
+
+const firstBlockOf = (content: HTMLElement) =>
+	content.querySelector('[data-slot="markdown"]')
+		?.firstElementChild as HTMLElement
+
+const topInsetOf = (content: HTMLElement, block: HTMLElement) =>
+	block.getBoundingClientRect().top - content.getBoundingClientRect().top
+
+const paddingTopOf = (element: HTMLElement) =>
+	Number.parseFloat(getComputedStyle(element).paddingTop)
 
 const fragmentOf = (reference: HTMLElement) =>
 	reference.getAttribute("href")?.slice(1) ?? ""
@@ -517,6 +581,14 @@ const blockGapsIn = (root: HTMLElement) =>
 	[root, ...root.querySelectorAll("blockquote, li, ul, ol")].flatMap(
 		gapsBetweenChildren,
 	)
+
+const blockOffsetsIn = (root: HTMLElement) => {
+	const origin = root.getBoundingClientRect().top
+
+	return [...root.children].map(
+		(block) => block.getBoundingClientRect().top - origin,
+	)
+}
 
 const contentRangeOf = (element: Element) => {
 	const range = document.createRange()
@@ -612,6 +684,29 @@ const meta = preview.meta({
 		(Story) => <div className="w-[44rem] max-w-full">{Story()}</div>,
 	],
 })
+
+interface StreamedBodyProps {
+	source: string
+}
+
+const StreamedBody = ({ source }: StreamedBodyProps) => {
+	const [appended, setAppended] = useState(false)
+
+	return (
+		<div className="flex flex-col items-start gap-4">
+			<MessageBubble>
+				<MessageBubbleContent>
+					<Markdown>
+						{appended ? `${source}${STREAMED_NEXT_BLOCK}` : source}
+					</Markdown>
+				</MessageBubbleContent>
+			</MessageBubble>
+			<Button onClick={() => setAppended(true)} size="sm" variant="outline">
+				Append the next block
+			</Button>
+		</div>
+	)
+}
 
 export const Playground = meta.story({})
 
@@ -1649,5 +1744,103 @@ export const PreservedWhitespace = meta.story({
 			textWidthOf(paddedCell) - textWidthOf(plainCell),
 		).toBeGreaterThan(SPACE_RUN)
 		await expect(renderedLinesOf(quoted)).toBe(2)
+	},
+})
+
+export const TypesetInBubble = meta.story({
+	args: { children: TYPESET_BUBBLE },
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The whole rhythm inside the surface it ships on, drawn in both schemes at once. Heading, nested list, quote, fence, wide table and inline code all take their type from the vendored `typeset` stylesheet, while the fence and the table keep their own frame through the `not-typeset` escape hatch. Check that the heading opens flush with the bubble padding rather than pushing a blank line above itself, that the table scrolls on its own axis instead of widening the bubble, and that every tone — heading ink, quote rule, list markers, code chip — holds on the bubble surface in both schemes.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble>
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvasElement }) => {
+		const contents = bubbleContentsOf(canvasElement)
+
+		await expect(contents).toHaveLength(2)
+
+		for (const content of contents) {
+			const first = firstBlockOf(content)
+			const viewport = content.querySelector(
+				'[data-slot="markdown-table"] [role="group"]',
+			) as HTMLElement
+
+			await expect(first.tagName).toBe("H2")
+			await expect(getComputedStyle(first).marginBlockStart).toBe("0px")
+			await expect(Math.round(topInsetOf(content, first))).toBe(
+				Math.round(paddingTopOf(content)),
+			)
+
+			await expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth)
+			await expect(content.scrollWidth).toBe(content.clientWidth)
+		}
+	},
+})
+
+export const AppendedBlock = meta.story({
+	args: { children: STREAMED_BODY },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A body growing the way a streamed answer grows. Appending a paragraph must not move a single block already on screen: the rhythm is carried by the top margin each block owns, so nothing above the insertion point is asked to reflow. The fence is the block to watch — it drops its closing margin while it is last and takes it back once a paragraph follows, which changes what sits below it and nothing above. Press the button and check that the heading, the paragraph, the list and the quote all stay where they were.",
+			},
+		},
+	},
+	render: ({ children }) => <StreamedBody source={children} />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const [root] = markdownRootsOf(canvasElement)
+		const before = blockOffsetsIn(root)
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Append the next block" }),
+		)
+
+		await waitFor(() =>
+			expect(blockOffsetsIn(root)).toHaveLength(before.length + 1),
+		)
+
+		await expect(blockOffsetsIn(root).slice(0, before.length)).toEqual(before)
+	},
+})
+
+export const DangerBubble = meta.story({
+	args: { children: DANGER_BODY },
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		docs: {
+			description: {
+				story:
+					"The variant a failed turn wears. The bubble sets destructive ink on its own text, and the stylesheet re-declares colour on the body from a variable resolved above the bubble, so the ink has to be bound on the bubble rather than painted on each element. Check that the heading and the paragraph read in the same red as any plain text the bubble carries, instead of dropping back to the page foreground.",
+			},
+		},
+	},
+	render: (args) => (
+		<MessageBubble variant="danger">
+			<MessageBubbleContent>
+				<Markdown {...args} />
+			</MessageBubbleContent>
+		</MessageBubble>
+	),
+	play: async ({ canvasElement }) => {
+		const content = bubbleContentOf(canvasElement)
+		const [root] = markdownRootsOf(canvasElement)
+		const [heading] = root.querySelectorAll("h2")
+		const [paragraph] = root.querySelectorAll("p")
+
+		await expect(inkOf(content)).not.toBe(inkOf(canvasElement))
+		await expect(inkOf(heading)).toBe(inkOf(content))
+		await expect(inkOf(paragraph)).toBe(inkOf(content))
 	},
 })

@@ -6,6 +6,7 @@ import type { ExtraProps } from "react-markdown"
 
 import { Button } from "@workspace/ui/components/button"
 import { Icons } from "@workspace/ui/components/icons"
+import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -47,7 +48,7 @@ const CELL_CLASS =
 
 const TABLE_CLASS = `w-max border-collapse tabular-nums ${CELL_CLASS}`
 
-const FRAME_CLASS = "group/markdown-table relative my-2 w-fit max-w-full"
+const FRAME_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} group/markdown-table relative my-2 w-fit max-w-full`
 
 const VIEWPORT_CLASS =
 	"overflow-x-auto rounded-xl border border-foreground/15 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"

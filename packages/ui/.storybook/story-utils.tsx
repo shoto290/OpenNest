@@ -5,7 +5,7 @@ import { expect, waitFor } from "storybook/test"
 
 import {
 	MARKDOWN_CODE_SURFACE_CLASS,
-	MARKDOWN_PROSE_CLASS,
+	MARKDOWN_TYPESET_CLASS,
 	MARKDOWN_WHITESPACE_CLASS,
 } from "@workspace/ui/components/markdown/prose"
 import { cn } from "@workspace/ui/lib/utils"
@@ -81,7 +81,7 @@ interface MarkdownProseProps {
 export const MarkdownProse = ({ children }: MarkdownProseProps) => (
 	<div
 		className={cn(
-			MARKDOWN_PROSE_CLASS,
+			MARKDOWN_TYPESET_CLASS,
 			MARKDOWN_CODE_SURFACE_CLASS,
 			MARKDOWN_WHITESPACE_CLASS,
 			"w-[44rem] max-w-full text-sm leading-6",

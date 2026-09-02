@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { MARKDOWN_ESCAPED_BLOCK_CLASS } from "@workspace/ui/components/markdown/prose"
 import { schemeOf } from "@workspace/ui/hooks/use-color-scheme"
 import type { DiagramScheme } from "@workspace/ui/lib/render-mermaid"
 
@@ -12,7 +13,7 @@ export interface MarkdownMermaidProps {
 	source: string
 }
 
-const FRAME_CLASS = "my-2 w-fit max-w-full"
+const FRAME_CLASS = `${MARKDOWN_ESCAPED_BLOCK_CLASS} my-2 w-fit max-w-full`
 
 const VIEWPORT_CLASS =
 	"overflow-x-auto rounded-xl border border-foreground/15 p-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
