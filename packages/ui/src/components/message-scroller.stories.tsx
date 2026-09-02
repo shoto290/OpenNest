@@ -1,4 +1,10 @@
-import { type RefObject, useImperativeHandle, useRef, useState } from "react"
+import {
+	type ReactNode,
+	type RefObject,
+	useImperativeHandle,
+	useRef,
+	useState,
+} from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -2202,40 +2208,35 @@ const TOOL_CARD = { key: "tool-block", length: 140, height: 234 }
 
 const TOOL_DETAIL = "bun run migrate --dry-run"
 
-const markdownRow = (measured: MeasuredRow): MessageScrollerRow => ({
-	key: measured.key,
-	messageIds: [measured.key],
-	render: () => (
+const rowFor = (key: string, render: () => ReactNode): MessageScrollerRow => ({
+	key,
+	messageIds: [key],
+	render,
+})
+
+const markdownRow = (measured: MeasuredRow) =>
+	rowFor(measured.key, () => (
 		<AssistantTurn>
 			<Markdown>{measured.content}</Markdown>
 		</AssistantTurn>
-	),
-})
+	))
 
 const MEASURED_SCROLLER_ROWS: MessageScrollerRow[] = [
 	markdownRow(ONE_LINE_REPLY),
-	{
-		key: USER_MESSAGE.key,
-		messageIds: [USER_MESSAGE.key],
-		render: () => <UserTurn>{USER_MESSAGE.content}</UserTurn>,
-	},
+	rowFor(USER_MESSAGE.key, () => <UserTurn>{USER_MESSAGE.content}</UserTurn>),
 	markdownRow(CODE_ANSWER),
 	markdownRow(MARKDOWN_ANSWER),
-	{
-		key: TOOL_CARD.key,
-		messageIds: [TOOL_CARD.key],
-		render: () => (
-			<AssistantTurn fills>
-				<ToolApproval
-					description="Claude Code is waiting on you before it runs this tool."
-					tool="Bash"
-					title="Run the migration dry run"
-				>
-					<ToolApprovalCode code={TOOL_DETAIL} />
-				</ToolApproval>
-			</AssistantTurn>
-		),
-	},
+	rowFor(TOOL_CARD.key, () => (
+		<AssistantTurn fills>
+			<ToolApproval
+				description="Claude Code is waiting on you before it runs this tool."
+				tool="Bash"
+				title="Run the migration dry run"
+			>
+				<ToolApprovalCode code={TOOL_DETAIL} />
+			</ToolApproval>
+		</AssistantTurn>
+	)),
 ]
 
 const RECORDED_SHAPES = Object.fromEntries(
