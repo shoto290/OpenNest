@@ -557,6 +557,9 @@ const ConversationThreadTail = ({
 				/>
 			))}
 			{waitingBotIds
+				.filter(
+					(botId) => !speakers.some((speaking) => speaking.botId === botId),
+				)
 				.flatMap((botId) => bots.find(({ id }) => id === botId) ?? [])
 				.map((seated) => (
 					<WorkingBot face={seated} key={seated.id} kind="waiting" />

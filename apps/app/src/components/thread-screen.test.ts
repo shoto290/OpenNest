@@ -221,6 +221,21 @@ const ASKED: AgentEvent[] = [
 	},
 ]
 
+const HANDED_TO_ADA: AgentEvent[] = [
+	{
+		type: "messageStarted",
+		message: {
+			id: "msg-handover",
+			role: "assistant",
+			text: "",
+			completion: "streaming",
+			timestamp: 1,
+		},
+	},
+	{ type: "messageDelta", id: "msg-handover", seq: 1, text: "@Ada keep going" },
+	{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+]
+
 const SAID_AND_LANDED: AgentEvent[] = [
 	{
 		type: "messageStarted",
@@ -516,6 +531,23 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("Ada · Which wall")).toBeTruthy()
+	})
+
+	it("draws one row for a speaking bot another speaker hands over to", async () => {
+		const room = await roomOf(["Ada", "Nyx"])
+		render(screenOf(room.thread))
+		await settle()
+
+		await room.send("@Ada @Nyx now")
+		act(() => {
+			room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+			room.driver.pushTo(room.idOf("Ada"), BLOCK_CLOSED)
+			room.driver.pushTo(room.idOf("Nyx"), HANDED_TO_ADA)
+		})
+		await settle()
+
+		expect(screen.getAllByText(/^Ada is /)).toHaveLength(1)
+		expect(screen.getByText("Ada is writing…")).toBeTruthy()
 	})
 
 	it("leaves no stop on the turn a bot has landed", async () => {
