@@ -81,6 +81,7 @@ const stubController = (
 	preflight: async () => null,
 	open: async () => null,
 	close: async () => undefined,
+	leave: () => undefined,
 	redescribe: () => undefined,
 	restart: async () => null,
 	rotate: async () => null,
@@ -328,6 +329,29 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.queryByRole("button", { name: "Cancel reply" })).toBeNull()
+	})
+
+	it("drops the pages of the solo thread left behind for a conversation", async () => {
+		const left: string[] = []
+		const thread = threadOf({
+			id: "bot-1",
+			name: "Nyx",
+			said: "the first answer",
+			controller: stubController({
+				leave: (botId) => {
+					left.push(botId)
+				},
+			}),
+		})
+		const room = await roomOf(["Ada"])
+		const { rerender } = render(screenOf(thread))
+		await settle()
+		expect(left).toEqual([])
+
+		rerender(screenOf(room.thread))
+		await settle()
+
+		expect(left).toEqual(["bot-1"])
 	})
 
 	it("leaves a dismissed bot failure dismissed when the reader returns", async () => {

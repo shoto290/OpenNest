@@ -1530,6 +1530,29 @@ describe("history above the transcript", () => {
 		harness.detach()
 	})
 
+	it("drops the pages loaded above the window when the screen leaves", async () => {
+		const store = createFakeTranscriptStore({ messages: seeded(HISTORY) })
+		const other = await store.createBot(botIdentity({ name: "Second" }))
+		const harness = await bootedHarness({ store, botId: other.id })
+		await harness.controller.send("hello")
+		await vi.runAllTimersAsync()
+		const held = harness.controller.stateFor(other.id).messages
+		await harness.controller.open(BOT)
+		await vi.runAllTimersAsync()
+		await harness.controller.loadOlder()
+		await harness.controller.loadOlder()
+		await harness.controller.loadOlder()
+
+		harness.controller.leave(BOT)
+
+		const left = harness.controller.stateFor(BOT)
+		expect(left.messages).toHaveLength(TRANSCRIPT_WINDOW_SIZE)
+		expect(left.messages.at(-1)?.id).toBe(`stored-${HISTORY}`)
+		expect(left.hasOlder).toBe(true)
+		expect(harness.controller.stateFor(other.id).messages).toBe(held)
+		harness.detach()
+	})
+
 	it("asks for nothing more once the beginning has been reached", async () => {
 		const store = createFakeTranscriptStore({ messages: seeded(4) })
 		let reads = 0
