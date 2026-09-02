@@ -6,9 +6,13 @@ type BadgedRow = {
 	id: string
 }
 
-type Badged<Row> = Row & {
+type BadgeCarrier = {
 	badge?: ShownBadge
 }
+
+type BadgeCarriersBySpaceId = Record<string, BadgeCarrier[]>
+
+type Badged<Row> = Row & BadgeCarrier
 
 const STRONGEST_FIRST: ShownBadge[] = ["attention", "failed", "done"]
 
@@ -20,12 +24,6 @@ export const withBadges = <Row extends BadgedRow>(
 	badges: Record<string, BotBadge>,
 ): Badged<Row>[] =>
 	rows.map((row) => ({ ...row, badge: shownBadge(badges[row.id]) }))
-
-type BadgeCarrier = {
-	badge?: ShownBadge
-}
-
-type BadgeCarriersBySpaceId = Record<string, BadgeCarrier[]>
 
 const strongestBadge = (rows: BadgeCarrier[]): ShownBadge | undefined =>
 	STRONGEST_FIRST.find((badge) => rows.some((row) => row.badge === badge))
