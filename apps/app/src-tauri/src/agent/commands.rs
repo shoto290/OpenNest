@@ -1215,7 +1215,7 @@ mod tests {
 		let held = live.report();
 
 		assert_eq!(
-			reported_runs(&live),
+			held.iter().map(|run| run.runtime_session_id.as_str()).collect::<Vec<_>>(),
 			["r1", "r2"],
 			"runs sharing a start were not reported by their runtime session id"
 		);
