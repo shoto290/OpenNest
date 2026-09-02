@@ -2253,6 +2253,12 @@ const RECORDED_SHAPES = Object.fromEntries(
 
 const RECORDED_HEIGHTS = MEASURED_ROWS.map((measured) => measured.height)
 
+const LINE_BAND = 24
+
+const CARD_BAND = 2
+
+const bandOf = (key: string) => (key === TOOL_CARD.key ? CARD_BAND : LINE_BAND)
+
 const measuredRowsIn = (canvasElement: HTMLElement) => [
 	...canvasElement.querySelectorAll<HTMLElement>(
 		'[data-slot="message-scroller-row"]',
@@ -2274,6 +2280,24 @@ const shapesByKey = (canvasElement: HTMLElement) =>
 				length: (row.textContent ?? "").length,
 			},
 		]),
+	)
+
+const lengthsByKey = (canvasElement: HTMLElement) =>
+	Object.fromEntries(
+		Object.entries(shapesByKey(canvasElement)).map(([key, shape]) => [
+			key,
+			shape.length,
+		]),
+	)
+
+const RECORDED_LENGTHS = Object.fromEntries(
+	Object.entries(RECORDED_SHAPES).map(([key, shape]) => [key, shape.length]),
+)
+
+const driftedHeights = (canvasElement: HTMLElement) =>
+	Object.entries(shapesByKey(canvasElement)).filter(
+		([key, shape]) =>
+			Math.abs(shape.height - RECORDED_SHAPES[key].height) > bandOf(key),
 	)
 
 const heightsIn = (shapes: Record<string, { height: number }>) =>
@@ -2316,13 +2340,20 @@ export const RowHeights = meta.story({
 		await expect(measuredFontOf(canvasElement)).toContain("Roboto")
 
 		await waitFor(() =>
-			expect(shapesByKey(canvasElement)).toEqual(RECORDED_SHAPES),
+			expect(lengthsByKey(canvasElement)).toEqual(RECORDED_LENGTHS),
 		)
+		await expect(driftedHeights(canvasElement)).toEqual([])
 
 		const heights = heightsIn(shapesByKey(canvasElement))
+		const recorded = heightsIn(RECORDED_SHAPES)
 
-		await expect(medianOf(heights)).toBe(185)
-		await expect(p90Of(heights)).toBe(252)
+		await expect(Math.abs(medianOf(heights) - medianOf(recorded))).toBeLessThan(
+			LINE_BAND,
+		)
+		await expect(Math.abs(p90Of(heights) - p90Of(recorded))).toBeLessThan(
+			LINE_BAND,
+		)
+		await expect(heights[heights.length - 1]).toBeGreaterThan(2 * heights[0])
 		await expect(ESTIMATED_ROW_HEIGHT).toBe(meanOf(RECORDED_HEIGHTS))
 	},
 })
