@@ -14,10 +14,19 @@ import type { Conversation } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import { message, seatBots } from "./transcript-fixtures"
 
-import type { ActivityStatus, AgentEvent } from "../agent/contract"
+import type {
+	ActivityStatus,
+	AgentEvent,
+	TransportError,
+} from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
 
 const SPACE = "personal"
+
+const SERVER_ENV_REJECTED: TransportError = {
+	kind: "serverEnvRejected",
+	detail: "PROJECT_TOKEN is undefined",
+}
 
 const SAID_NOTHING: AgentEvent[] = [
 	{
@@ -1518,9 +1527,9 @@ describe("failures the conversation carries to the screen", () => {
 		detach()
 	})
 
-	const seatedOn = async (driver: ChatDriver) => {
+	const seatedOn = async (driver: ChatDriver, names: string[] = ["Ada"]) => {
 		const store = createFakeTranscriptStore()
-		const bots = await seatBots(store, SPACE, ["Ada"])
+		const bots = await seatBots(store, SPACE, names)
 		const conversation = await store.createConversation({
 			spaceId: SPACE,
 			sectionId: null,
@@ -1530,7 +1539,7 @@ describe("failures the conversation carries to the screen", () => {
 		const controller = createConversationController(driver, store)
 		const detach = controller.attach()
 		await controller.open(conversation)
-		return { controller, detach }
+		return { controller, detach, conversation }
 	}
 
 	const refusingSessions = (refusals: number): ChatDriver => {
@@ -1561,6 +1570,50 @@ describe("failures the conversation carries to the screen", () => {
 		detach()
 	})
 
+	const failingOnFirstStart = (): ChatDriver => {
+		const scripted = createScriptedDriver()
+		let isFirstStart = true
+		return {
+			...scripted,
+			startOrResumeSession: (scope) => {
+				if (isFirstStart) {
+					isFirstStart = false
+					scripted.emit(scope, { type: "failed", error: SERVER_ENV_REJECTED })
+				}
+				return scripted.startOrResumeSession(scope)
+			},
+		}
+	}
+
+	it("holds the failure a speaker met while its session was starting", async () => {
+		const { controller, detach } = await seatedOn(failingOnFirstStart())
+
+		await controller.send("how do we hold the walls?")
+		await settled()
+
+		expect(controller.getState().latestError?.error).toEqual(
+			SERVER_ENV_REJECTED,
+		)
+		expect(runningIn(controller)).toHaveLength(1)
+		detach()
+	})
+
+	it("holds the failure of one speaker when its neighbour of the wave starts", async () => {
+		const { controller, detach } = await seatedOn(failingOnFirstStart(), [
+			"Ada",
+			"Nyx",
+		])
+
+		await controller.send("@Ada and @Nyx")
+		await settled()
+
+		expect(controller.getState().latestError?.error).toEqual(
+			SERVER_ENV_REJECTED,
+		)
+		expect(runningIn(controller)).toHaveLength(2)
+		detach()
+	})
+
 	it("forgets the failure once a bot takes the turn", async () => {
 		const { controller, detach } = await seatedOn(refusingSessions(1))
 
@@ -1571,5 +1624,64 @@ describe("failures the conversation carries to the screen", () => {
 
 		expect(controller.getState().latestError).toBeNull()
 		detach()
+	})
+})
+
+describe("a failure reaching a speaker", () => {
+	const CRASHED: TransportError = {
+		kind: "crashed",
+		code: 1,
+		detail: "sidecar is gone",
+	}
+
+	let harness: Harness
+	let ada: string
+
+	beforeEach(async () => {
+		harness = await createHarness(["Ada"])
+		ada = idOf(harness.conversation, "Ada")
+		await harness.controller.send("how do we hold the walls?")
+		await harness.settled()
+	})
+
+	const failWith = async (error: TransportError) => {
+		harness.driver.pushTo(ada, [{ type: "failed", error }])
+		await harness.settled()
+	}
+
+	it("keeps the speaker running and holds the failure the session survives", async () => {
+		await failWith(SERVER_ENV_REJECTED)
+
+		expect(runningIn(harness.controller)).toEqual([ada])
+		expect(harness.controller.getState().latestError?.error).toEqual(
+			SERVER_ENV_REJECTED,
+		)
+	})
+
+	it("keeps the stop of a speaker kept alive in reach", async () => {
+		await failWith(SERVER_ENV_REJECTED)
+
+		harness.controller.getState().speakers[0].stop()
+		await harness.settled()
+
+		expect(harness.driver.cancelled).toEqual([ada])
+	})
+
+	it("closes a speaker kept alive on the completion its outcome maps to", async () => {
+		await failWith(SERVER_ENV_REJECTED)
+		harness.driver.pushTo(ada, spoke(ada, "walls are held"))
+		await harness.settled()
+
+		expect(runningIn(harness.controller)).toEqual([])
+		expect(harness.controller.getState().messages.at(-1)?.completion).toBe(
+			"complete",
+		)
+	})
+
+	it("closes the speaker as failed and holds the failure ending its session", async () => {
+		await failWith(CRASHED)
+
+		expect(runningIn(harness.controller)).toEqual([])
+		expect(harness.controller.getState().latestError?.error).toEqual(CRASHED)
 	})
 })
