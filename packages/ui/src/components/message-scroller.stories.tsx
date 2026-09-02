@@ -2268,15 +2268,12 @@ const heightsByShape = (canvasElement: HTMLElement) => {
 		'[data-slot="message-scroller-row"]',
 	)
 	return Object.fromEntries(
-		[...rows].map((row, index) => [
-			MEASURED_ROWS[Number(row.dataset.index ?? index)].key,
+		[...rows].map((row) => [
+			MEASURED_ROWS[Number(row.dataset.index)].key,
 			Math.round(row.getBoundingClientRect().height),
 		]),
 	)
 }
-
-const sortedHeights = (heights: Record<string, number>) =>
-	Object.values(heights).sort((left, right) => left - right)
 
 const medianOf = (heights: number[]) =>
 	heights[Math.floor((heights.length - 1) / 2)]
@@ -2316,7 +2313,9 @@ export const RowHeights = meta.story({
 			}),
 		)
 
-		const heights = sortedHeights(heightsByShape(canvasElement))
+		const heights = Object.values(heightsByShape(canvasElement)).sort(
+			(left, right) => left - right,
+		)
 
 		await expect(medianOf(heights)).toBe(185)
 		await expect(p90Of(heights)).toBe(252)
