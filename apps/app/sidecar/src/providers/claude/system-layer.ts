@@ -39,7 +39,6 @@ export const spaceLine = (spacePluginPath: string): string =>
 export const unavailableServersSection = (rejections: string[]): string =>
 	[
 		"# Servers left out of this session",
-		"These servers were left out, each for the reason given:",
 		rejections.map((detail) => `- ${detail}`).join("\n"),
 		"Answer the person with the tools you still hold. When what they ask for needs one of these servers, tell them that server is unavailable and name the variable no scope defines, so they can define it. Naming the server and the variable is the one exception to saying nothing about the machinery you run on.",
 	].join("\n\n")
