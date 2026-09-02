@@ -351,7 +351,7 @@ interface SectionNaming {
 
 interface RosterCreateActions {
 	onCreateBot?: () => void
-	onCreateSpace?: () => void
+	onCreateConversation?: () => void
 }
 
 interface RosterSpaceActions {
@@ -846,14 +846,12 @@ interface CreateItemsProps {
 	onCreateBot?: () => void
 	onCreateConversation?: () => void
 	onCreateSection?: () => void
-	onCreateSpace?: () => void
 }
 
 const CreateItems = ({
 	onCreateBot,
 	onCreateConversation,
 	onCreateSection,
-	onCreateSpace,
 }: CreateItemsProps) => {
 	const { t } = useTranslation("bots")
 
@@ -877,31 +875,25 @@ const CreateItems = ({
 					{t("roster.section.create")}
 				</ContextMenuItem>
 			) : null}
-			{onCreateSpace ? (
-				<ContextMenuItem onSelect={onCreateSpace}>
-					<Icons.Add aria-hidden="true" className="size-3.5" />
-					{t("spaces.create")}
-				</ContextMenuItem>
-			) : null}
 		</>
 	)
 }
 
-interface RosterSurfaceProps extends RosterCreateActions, RosterSpaceActions {
-	onCreateSection?: () => void
+interface RosterSurfaceProps extends CreateItemsProps, RosterSpaceActions {
 	children?: ReactNode
 }
 
 const RosterSurface = ({
 	onCreateBot,
+	onCreateConversation,
 	onCreateSection,
-	onCreateSpace,
 	onOpenSpaceSettings,
 	children,
 }: RosterSurfaceProps) => {
 	const { t } = useTranslation("bots")
 
-	if (!onCreateBot && !onCreateSection && !onCreateSpace) return <>{children}</>
+	if (!onCreateBot && !onCreateConversation && !onCreateSection)
+		return <>{children}</>
 
 	return (
 		<ContextMenu>
@@ -913,8 +905,8 @@ const RosterSurface = ({
 			<ContextMenuContent ariaLabel={t("roster.createMenu")}>
 				<CreateItems
 					onCreateBot={onCreateBot}
+					onCreateConversation={onCreateConversation}
 					onCreateSection={onCreateSection}
-					onCreateSpace={onCreateSpace}
 				/>
 				{onOpenSpaceSettings ? (
 					<>
@@ -1303,7 +1295,7 @@ const BotRoster = ({
 	naming = null,
 	onNaming,
 	onCreateBot,
-	onCreateSpace,
+	onCreateConversation,
 	onOpenSpaceSettings,
 	onSelectConversation,
 	onOpenConversationSettings,
@@ -1612,8 +1604,8 @@ const BotRoster = ({
 
 	const surface: RosterSurfaceProps = {
 		onCreateBot,
+		onCreateConversation,
 		onCreateSection: onCreateSection ? nameLooseSection : undefined,
-		onCreateSpace,
 		onOpenSpaceSettings,
 	}
 
@@ -2008,7 +2000,7 @@ const AppSidebarBase = ({
 		RosterSpaceActions = {
 		onCollapseSection,
 		onCreateBot,
-		onCreateSpace,
+		onCreateConversation,
 		onCreateSection,
 		onDeleteBot,
 		onDeleteConversation,
