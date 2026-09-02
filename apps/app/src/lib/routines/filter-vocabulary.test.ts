@@ -39,7 +39,7 @@ describe("the shared filter vocabulary", () => {
 		"gives %s the operators the front accepts",
 		(fieldType) => {
 			expect(sorted(OPERATORS_BY_FIELD_TYPE[fieldType])).toEqual(
-				sorted(vocabulary.operatorsByFieldType[fieldType] ?? []),
+				sorted(vocabulary.operatorsByFieldType[fieldType]),
 			)
 		},
 	)
