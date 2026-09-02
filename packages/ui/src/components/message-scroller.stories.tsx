@@ -2253,20 +2253,21 @@ const RECORDED_SHAPES = Object.fromEntries(
 
 const RECORDED_HEIGHTS = MEASURED_ROWS.map((measured) => measured.height)
 
-const measuredFontOf = (canvasElement: HTMLElement) => {
-	const row = canvasElement.querySelector<HTMLElement>(
+const measuredRowsIn = (canvasElement: HTMLElement) => [
+	...canvasElement.querySelectorAll<HTMLElement>(
 		'[data-slot="message-scroller-row"]',
-	)
+	),
+]
+
+const measuredFontOf = (canvasElement: HTMLElement) => {
+	const [row] = measuredRowsIn(canvasElement)
 	if (!row) throw new Error("no measured row on screen")
 	return getComputedStyle(row).fontFamily
 }
 
-const shapesByKey = (canvasElement: HTMLElement) => {
-	const rows = canvasElement.querySelectorAll<HTMLElement>(
-		'[data-slot="message-scroller-row"]',
-	)
-	return Object.fromEntries(
-		[...rows].map((row) => [
+const shapesByKey = (canvasElement: HTMLElement) =>
+	Object.fromEntries(
+		measuredRowsIn(canvasElement).map((row) => [
 			MEASURED_SCROLLER_ROWS[Number(row.dataset.index)].key,
 			{
 				height: Math.round(row.getBoundingClientRect().height),
@@ -2274,7 +2275,6 @@ const shapesByKey = (canvasElement: HTMLElement) => {
 			},
 		]),
 	)
-}
 
 const heightsIn = (shapes: Record<string, { height: number }>) =>
 	Object.values(shapes)
