@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, within } from "@testing-library/react"
+import {
+	cleanup,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, expect, it } from "vitest"
 
@@ -63,6 +69,15 @@ const watchAlongside = async (notifications: NotificationPort) => {
 	await Promise.resolve()
 }
 
+const noticesOnScreen = () => {
+	const surface = screen.getByRole("region", { name: "Notices" })
+
+	return [
+		...within(surface).queryAllByRole("alertdialog", { hidden: true }),
+		...within(surface).queryAllByRole("dialog", { hidden: true }),
+	]
+}
+
 afterEach(() => {
 	cleanup()
 })
@@ -73,7 +88,11 @@ it("shows the reader why clicking a notification stopped working", async () => {
 
 	await watchAlongside(notifications)
 
-	const notice = await screen.findByRole("alertdialog", { hidden: true })
+	await waitFor(() => {
+		expect(noticesOnScreen()).toHaveLength(1)
+	})
+
+	const [notice] = noticesOnScreen()
 
 	expect(within(notice).getByText(CLICK_FAILURE_TITLE)).toBeTruthy()
 	expect(within(notice).getByText("no listener")).toBeTruthy()
@@ -82,7 +101,5 @@ it("shows the reader why clicking a notification stopped working", async () => {
 it("leaves the surface empty while every subscription holds", async () => {
 	await watchAlongside(createFakeNotificationPort())
 
-	const surface = screen.getByRole("region", { name: "Notices" })
-
-	expect(within(surface).queryAllByRole(/dialog/, { hidden: true })).toEqual([])
+	expect(noticesOnScreen()).toEqual([])
 })
