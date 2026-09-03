@@ -78,6 +78,13 @@ const A_WEBHOOK_KEY = {
 	url: "http://127.0.0.1:4870/routines",
 }
 
+const A_SCHEDULE_FORM = {
+	title: ROUTINE.title,
+	instruction: ROUTINE.instruction,
+	triggerSourceId: "schedule",
+	expression: "0 * * * *",
+}
+
 const entered = (values: Partial<RoutineFormValues>): RoutineFormValues => ({
 	...EMPTY_ROUTINE_VALUES,
 	...values,
@@ -432,4 +439,47 @@ it("leaves the routine on the form when a refusal lands from another form", asyn
 	})
 	expect(result.current.form.open?.refusal).toBeUndefined()
 	expect(result.current.failure).toBe("write")
+})
+
+it("writes one routine when two saves are fired before either settles", async () => {
+	const result = await mountLeadRoutines([])
+	let settleSave = (_written: Routine) => {}
+	create.mockReturnValueOnce(
+		new Promise<Routine>((resolve) => {
+			settleSave = resolve
+		}),
+	)
+
+	act(() => {
+		result.current.form.onNew()
+	})
+	act(() => {
+		result.current.form.onSave(entered(A_SCHEDULE_FORM))
+		result.current.form.onSave(entered(A_SCHEDULE_FORM))
+	})
+	await act(async () => {
+		settleSave(ROUTINE)
+	})
+
+	expect(create).toHaveBeenCalledTimes(1)
+	expect(result.current.routines).toHaveLength(1)
+})
+
+it("writes again when a save is fired after an earlier save settled", async () => {
+	const result = await mountLeadRoutines([])
+	create.mockRejectedValueOnce({ kind: "blankField", field: "title" })
+
+	act(() => {
+		result.current.form.onNew()
+	})
+	await act(async () => {
+		result.current.form.onSave(entered(A_SCHEDULE_FORM))
+	})
+	create.mockResolvedValueOnce(ROUTINE)
+	await act(async () => {
+		result.current.form.onSave(entered(A_SCHEDULE_FORM))
+	})
+
+	expect(create).toHaveBeenCalledTimes(2)
+	expect(result.current.routines).toHaveLength(1)
 })

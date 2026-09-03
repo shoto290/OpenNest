@@ -60,6 +60,7 @@ export const useRoutineForm = ({
 }: RoutineFormWiring): RoutinesPanelForm => {
 	const [open, setOpen] = useState<RoutineFormModel | null>(null)
 	const placed = useRef(0)
+	const saving = useRef<number | null>(null)
 
 	const place = useCallback((model: RoutineFormModel | null) => {
 		placed.current += 1
@@ -146,6 +147,10 @@ export const useRoutineForm = ({
 			}
 
 			const placement = placed.current
+			if (saving.current === placement) {
+				return
+			}
+
 			const isStillOpen = () => placement === placed.current
 			const keepEntered = (refusal: RoutineFormRefusal | null) =>
 				revise(placement, (model) => ({
@@ -161,21 +166,28 @@ export const useRoutineForm = ({
 				return
 			}
 
-			void written.then(
-				(routine) => {
-					onWritten(routine)
-					if (isStillOpen()) {
-						show(routine)
+			saving.current = placement
+			void written
+				.then(
+					(routine) => {
+						onWritten(routine)
+						if (isStillOpen()) {
+							show(routine)
+						}
+					},
+					(reason) => {
+						const refusal = isStillOpen() ? toFormRefusal(reason) : null
+						keepEntered(refusal)
+						if (!refusal) {
+							onWriteFailure()
+						}
+					},
+				)
+				.finally(() => {
+					if (saving.current === placement) {
+						saving.current = null
 					}
-				},
-				(reason) => {
-					const refusal = isStillOpen() ? toFormRefusal(reason) : null
-					keepEntered(refusal)
-					if (!refusal) {
-						onWriteFailure()
-					}
-				},
-			)
+				})
 		},
 		[open, create, edit, onWritten, onWriteFailure, revise, show],
 	)
