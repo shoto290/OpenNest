@@ -24,7 +24,6 @@ import type { RoutineDetailModel } from "@workspace/ui/components/routine-detail
 import {
 	EMPTY_ROUTINE_VALUES,
 	type RoutineFormModel,
-	type RoutineFormValues,
 } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 import {
@@ -74,11 +73,6 @@ const DETAILS: Record<string, RoutineDetailModel> = {
 	[RELEASE_WATCH.id]: WATCH_DETAIL,
 	[SOURCE_NAMED_BY_ID.id]: CLEANUP_DETAIL,
 }
-
-const savedInto = (
-	shown: RoutineDetailModel,
-	values: RoutineFormValues,
-): RoutineDetailModel => ({ ...shown, title: values.title })
 
 const PanelHost = ({
 	isOpen,
@@ -145,7 +139,7 @@ const PanelHost = ({
 						form.onSave(values)
 						setShown(null)
 						setOpened((current) =>
-							current ? savedInto(current, values) : current,
+							current ? { ...current, title: values.title } : current,
 						)
 					},
 					open: shown,

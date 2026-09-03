@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
-import { Icons } from "@workspace/ui/components/icons"
+import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { Notice } from "@workspace/ui/components/notice"
 import { FIELD_LABEL_CLASS } from "@workspace/ui/components/settings-styles"
 import { toRelativeTime } from "@workspace/ui/lib/relative-time"
@@ -64,23 +64,23 @@ const RUN_ROW_CLASS =
 
 const SEPARATOR_CLASS = "before:me-1.5 before:content-['·']"
 
-const RUNNING = "running"
+type RunState = RoutineRunOutcome | "running"
 
-const OUTCOME_MARK = {
+const RUN_STATE_MARK: Record<RunState, Icon> = {
 	reported: Icons.Success,
 	nothing: Icons.Pending,
 	skipped: Icons.Blocked,
 	failed: Icons.Error,
-	[RUNNING]: Icons.Loading,
-} satisfies Record<RoutineRunOutcome | typeof RUNNING, typeof Icons.Success>
+	running: Icons.Loading,
+}
 
-const OUTCOME_MARK_CLASS = {
+const RUN_STATE_MARK_CLASS: Record<RunState, string> = {
 	reported: "text-foreground",
 	nothing: "text-muted-foreground",
 	skipped: "text-muted-foreground",
 	failed: "text-destructive",
-	[RUNNING]: "animate-spin text-muted-foreground motion-reduce:animate-none",
-} satisfies Record<RoutineRunOutcome | typeof RUNNING, string>
+	running: "animate-spin text-muted-foreground motion-reduce:animate-none",
+}
 
 type RunRowProps = {
 	run: RoutineRunModel
@@ -89,8 +89,8 @@ type RunRowProps = {
 
 const RunRow = ({ run, now }: RunRowProps) => {
 	const { t, i18n } = useTranslation("chat")
-	const state = run.outcome ?? RUNNING
-	const Mark = OUTCOME_MARK[state]
+	const state: RunState = run.outcome ?? "running"
+	const Mark = RUN_STATE_MARK[state]
 
 	return (
 		<li className={RUN_ROW_CLASS} data-slot="routine-run">
@@ -100,7 +100,7 @@ const RunRow = ({ run, now }: RunRowProps) => {
 						aria-hidden="true"
 						className={cn(
 							"size-3.5 shrink-0 self-center",
-							OUTCOME_MARK_CLASS[state],
+							RUN_STATE_MARK_CLASS[state],
 						)}
 					/>
 					<span className="wrap-break-word font-medium text-xs">
