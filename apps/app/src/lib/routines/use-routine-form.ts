@@ -31,6 +31,21 @@ export type RoutineFormWiring = {
 const isWebhook = (routine: Routine) =>
 	triggerKindOf(routine.triggerSourceId) === "localWebhook"
 
+const sourcesOf = (
+	open: RoutineFormModel | null,
+	declared: RoutineTriggerSource[],
+): RoutineTriggerSource[] => {
+	const carried = open?.id ? open.values.triggerSourceId : null
+	if (!carried || declared.some((source) => source.id === carried)) {
+		return declared
+	}
+
+	return [
+		...declared,
+		{ id: carried, title: carried, kind: triggerKindOf(carried) },
+	]
+}
+
 export const useRoutineForm = ({
 	conversationId,
 	leadBotId,
@@ -107,7 +122,11 @@ export const useRoutineForm = ({
 			}
 
 			const keepEntered = (refusal: RoutineFormRefusal | null) =>
-				setOpen({ ...open, values, refusal: refusal ?? undefined })
+				setOpen((current) =>
+					current
+						? { ...current, values, refusal: refusal ?? undefined }
+						: current,
+				)
 
 			const written = open.id === null ? create(values) : edit(open.id, values)
 			if (!written) {
@@ -153,7 +172,7 @@ export const useRoutineForm = ({
 	return useMemo(
 		() => ({
 			open,
-			sources,
+			sources: sourcesOf(open, sources),
 			canCreate: sources.length > 0,
 			onNew: openNew,
 			onOpen: openRoutine,

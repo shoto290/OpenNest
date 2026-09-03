@@ -8,7 +8,7 @@ import {
 	type RoutineFormValues,
 } from "@workspace/ui/components/routine-form"
 
-import type { Routine } from "./routine-contract"
+import type { Routine, RoutineKey } from "./routine-contract"
 import { routinesTransport } from "./routines-transport"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 import { useRoutines } from "./use-routines"
@@ -54,8 +54,15 @@ const WEBHOOK_ROUTINE: Routine = {
 	triggerConfig: {},
 }
 
+const SCHEDULE_SOURCE = {
+	id: "schedule",
+	title: "Schedule",
+	payload: [],
+	dedupeKey: "occurrenceId",
+}
+
 const DECLARED = [
-	{ id: "schedule", title: "Schedule", payload: [], dedupeKey: "occurrenceId" },
+	SCHEDULE_SOURCE,
 	{
 		id: "local-webhook",
 		title: "Local webhook",
@@ -285,4 +292,79 @@ it("keeps the key a later read carried when an earlier read rejects", async () =
 
 	expect(result.current.form.open?.hasFailedToReadKey).toBeUndefined()
 	expect(result.current.form.open?.webhook).toEqual(A_WEBHOOK_KEY)
+})
+
+it("hands the panel a trigger source the lead does not declare", async () => {
+	list.mockResolvedValueOnce([WEBHOOK_ROUTINE])
+	sources.mockResolvedValue([SCHEDULE_SOURCE])
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+	expect(result.current.form.sources).toEqual([
+		{ id: "schedule", title: "Schedule", kind: "schedule" },
+	])
+
+	readKey.mockResolvedValueOnce(A_WEBHOOK_KEY)
+	await act(async () => {
+		result.current.form.onOpen(WEBHOOK_ROUTINE.id)
+	})
+
+	expect(result.current.form.sources).toContainEqual({
+		id: "local-webhook",
+		title: "local-webhook",
+		kind: "localWebhook",
+	})
+})
+
+it("keeps a key that settled between a save and its refusal", async () => {
+	const result = await mountLeadRoutines([WEBHOOK_ROUTINE])
+	let settleKey = (_read: RoutineKey) => {}
+	readKey.mockReturnValueOnce(
+		new Promise<RoutineKey>((resolve) => {
+			settleKey = resolve
+		}),
+	)
+	let refuseSave = (_reason: unknown) => {}
+	update.mockReturnValueOnce(
+		new Promise<Routine>((_resolve, reject) => {
+			refuseSave = reject
+		}),
+	)
+
+	act(() => {
+		result.current.form.onOpen(WEBHOOK_ROUTINE.id)
+	})
+	act(() => {
+		result.current.form.onSave(entered({ instruction: "Read it" }))
+	})
+	await act(async () => {
+		settleKey(A_WEBHOOK_KEY)
+	})
+	await act(async () => {
+		refuseSave({ kind: "blankField", field: "title" })
+	})
+
+	expect(result.current.form.open?.webhook).toEqual(A_WEBHOOK_KEY)
+	expect(result.current.form.open?.refusal).toBe("blankTitle")
+})
+
+it("raises the write failure of a save on a routine that left the list", async () => {
+	const result = await mountLeadRoutines([ROUTINE])
+
+	act(() => {
+		result.current.form.onOpen(ROUTINE.id)
+	})
+	remove.mockResolvedValueOnce(undefined)
+	await act(async () => {
+		await result.current.remove(ROUTINE.id)
+	})
+	await act(async () => {
+		result.current.form.onSave(entered({ title: "Nightly report" }))
+	})
+
+	expect(result.current.failure).toBe("write")
+	expect(result.current.form.open?.values.title).toBe("Nightly report")
+	expect(update).not.toHaveBeenCalled()
 })
