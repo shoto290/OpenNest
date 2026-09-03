@@ -36,6 +36,7 @@ const common = {
 			clicks: "Cliquer sur une notification n'ouvrira plus sa conversation",
 			focus:
 				"Des notifications peuvent désormais apparaître alors que l'app est au premier plan",
+			reveal: "La fenêtre n'a pas pu être mise au premier plan",
 			send: "Une notification n'a pas pu être affichée",
 		},
 	},

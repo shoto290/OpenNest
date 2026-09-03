@@ -65,7 +65,7 @@ export type NotificationSourceOptions = {
 	switches: () => NotificationSourceSwitches
 	hasFocus: () => boolean
 	watchFocus: (report: (isFocused: boolean) => void) => Promise<() => void>
-	raiseWindow: () => void
+	raiseWindow: () => Promise<void>
 	playChime: () => void
 	reportFailure: FailureNoticeReporter
 }
@@ -221,7 +221,7 @@ export const startNotificationSource = ({
 	}
 
 	const activate = ({ kind, id }: NotificationTarget) => {
-		raiseWindow()
+		void raiseWindow().catch(failWith("reveal"))
 
 		const spaceId =
 			kind === "bot" ? roster.spaceOfBot(id) : roster.spaceOfConversation(id)

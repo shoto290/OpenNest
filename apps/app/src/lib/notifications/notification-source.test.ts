@@ -196,7 +196,7 @@ const start = async (
 		switches: () => ALL_ON,
 		hasFocus: () => false,
 		watchFocus: windowFocus.watch,
-		raiseWindow: () => undefined,
+		raiseWindow: async () => undefined,
 		playChime,
 		reportFailure,
 		...options,
@@ -371,7 +371,7 @@ describe("startNotificationSource", () => {
 	})
 
 	it("shows the window and opens the bot the click carries", async () => {
-		const raiseWindow = vi.fn()
+		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })
 
 		harness.notifications.activate(BOT)
@@ -380,8 +380,20 @@ describe("startNotificationSource", () => {
 		expect(harness.roster.select).toHaveBeenCalledWith("bot-one")
 	})
 
+	it("opens the bot the click carries even when the window stays behind", async () => {
+		const raiseWindow = vi.fn(() => Promise.reject(new Error("window is gone")))
+		const harness = await start({ raiseWindow })
+
+		harness.notifications.activate(BOT)
+
+		expect(harness.roster.select).toHaveBeenCalledWith("bot-one")
+		expect(harness.spaces.select).toHaveBeenCalledWith("space-one")
+		await Promise.resolve()
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+	})
+
 	it("shows the window and leaves the selection alone for a bot that is gone", async () => {
-		const raiseWindow = vi.fn()
+		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })
 		harness.roster.hold([])
 
@@ -504,7 +516,7 @@ describe("startNotificationSource on a conversation", () => {
 	})
 
 	it("shows the window and opens the conversation the click carries", async () => {
-		const raiseWindow = vi.fn()
+		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })
 
 		harness.notifications.activate(ROOM)
@@ -515,7 +527,7 @@ describe("startNotificationSource on a conversation", () => {
 	})
 
 	it("shows the window and leaves the selection alone for a conversation that is gone", async () => {
-		const raiseWindow = vi.fn()
+		const raiseWindow = vi.fn(async () => undefined)
 		const harness = await start({ raiseWindow })
 		harness.roster.holdConversations([])
 

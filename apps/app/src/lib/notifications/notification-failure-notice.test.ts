@@ -25,6 +25,8 @@ import { initialChatState } from "../chat/chat-state"
 const CLICK_FAILURE_TITLE =
 	"Clicking a notification will no longer open its conversation"
 
+const REVEAL_FAILURE_TITLE = "The window could not be brought to the front"
+
 const SWITCHES = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
@@ -50,7 +52,15 @@ const emptyRoster = {
 	selectConversation: () => undefined,
 }
 
-const watchAlongside = async (notifications: NotificationPort) => {
+type Watch = {
+	notifications: NotificationPort
+	raiseWindow?: () => Promise<void>
+}
+
+const watchAlongside = async ({
+	notifications,
+	raiseWindow = async () => undefined,
+}: Watch) => {
 	render(createElement(NoticeSurface))
 
 	startNotificationSource({
@@ -62,7 +72,7 @@ const watchAlongside = async (notifications: NotificationPort) => {
 		switches: () => SWITCHES,
 		hasFocus: () => false,
 		watchFocus: async () => () => undefined,
-		raiseWindow: () => undefined,
+		raiseWindow,
 		playChime: () => undefined,
 		reportFailure: raiseFailureNotice,
 	})
@@ -86,7 +96,7 @@ it("shows the reader why clicking a notification stopped working", async () => {
 	const notifications = createFakeNotificationPort()
 	notifications.onActivate = () => Promise.reject(new Error("no listener"))
 
-	await watchAlongside(notifications)
+	await watchAlongside({ notifications })
 
 	const [notice] = await waitFor(() => {
 		const notices = noticesOnScreen()
@@ -99,7 +109,46 @@ it("shows the reader why clicking a notification stopped working", async () => {
 })
 
 it("leaves the surface empty while every subscription holds", async () => {
-	await watchAlongside(createFakeNotificationPort())
+	await watchAlongside({ notifications: createFakeNotificationPort() })
 
 	expect(noticesOnScreen()).toEqual([])
+})
+
+it("shows the reader why the window stayed behind on a notification click", async () => {
+	const notifications = createFakeNotificationPort()
+
+	await watchAlongside({
+		notifications,
+		raiseWindow: () => Promise.reject(new Error("window is gone")),
+	})
+
+	notifications.activate({ kind: "bot", id: "bot-one" })
+
+	const [notice] = await waitFor(() => {
+		const notices = noticesOnScreen()
+		expect(notices).toHaveLength(1)
+		return notices
+	})
+
+	expect(within(notice).getByText(REVEAL_FAILURE_TITLE)).toBeTruthy()
+	expect(within(notice).getByText("window is gone")).toBeTruthy()
+})
+
+it("reports a reveal failure once however many notifications are clicked", async () => {
+	const notifications = createFakeNotificationPort()
+
+	await watchAlongside({
+		notifications,
+		raiseWindow: () => Promise.reject(new Error("window is gone")),
+	})
+
+	notifications.activate({ kind: "bot", id: "bot-one" })
+	notifications.activate({ kind: "conversation", id: "room-one" })
+
+	await waitFor(() => {
+		expect(noticesOnScreen()).toHaveLength(1)
+	})
+	await Promise.resolve()
+
+	expect(noticesOnScreen()).toHaveLength(1)
 })
