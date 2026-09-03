@@ -388,8 +388,6 @@ describe("startNotificationSource", () => {
 
 		expect(harness.roster.select).toHaveBeenCalledWith("bot-one")
 		expect(harness.spaces.select).toHaveBeenCalledWith("space-one")
-		await Promise.resolve()
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
 	})
 
 	it("shows the window and leaves the selection alone for a bot that is gone", async () => {

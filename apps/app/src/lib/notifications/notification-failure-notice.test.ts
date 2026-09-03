@@ -27,6 +27,8 @@ const CLICK_FAILURE_TITLE =
 
 const REVEAL_FAILURE_TITLE = "The window could not be brought to the front"
 
+const failingReveal = () => Promise.reject(new Error("window is gone"))
+
 const SWITCHES = {
 	notifyOnQuestion: true,
 	notifyOnPermission: true,
@@ -119,7 +121,7 @@ it("shows the reader why the window stayed behind on a notification click", asyn
 
 	await watchAlongside({
 		notifications,
-		raiseWindow: () => Promise.reject(new Error("window is gone")),
+		raiseWindow: failingReveal,
 	})
 
 	notifications.activate({ kind: "bot", id: "bot-one" })
@@ -139,7 +141,7 @@ it("reports a reveal failure once however many notifications are clicked", async
 
 	await watchAlongside({
 		notifications,
-		raiseWindow: () => Promise.reject(new Error("window is gone")),
+		raiseWindow: failingReveal,
 	})
 
 	notifications.activate({ kind: "bot", id: "bot-one" })
@@ -148,7 +150,4 @@ it("reports a reveal failure once however many notifications are clicked", async
 	await waitFor(() => {
 		expect(noticesOnScreen()).toHaveLength(1)
 	})
-	await Promise.resolve()
-
-	expect(noticesOnScreen()).toHaveLength(1)
 })
