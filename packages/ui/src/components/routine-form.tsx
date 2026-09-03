@@ -678,7 +678,6 @@ export {
 	type RoutineFormProps,
 	type RoutineFormRefusal,
 	type RoutineFormValues,
-	type RoutineOperatorRefusal,
 	type RoutinePayloadField,
 	type RoutineTriggerKind,
 	type RoutineTriggerSource,
