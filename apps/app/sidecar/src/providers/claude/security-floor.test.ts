@@ -15,11 +15,14 @@ const SPACE_PATH = join(APP_DATA, "spaces/s1")
 const PLUGIN_PATHS = [BOT_PATH, SYSTEM_PATH, USER_PATH, SPACE_PATH]
 const WRITABLE_PATHS = [BOT_PATH, USER_PATH, SPACE_PATH]
 
+const WINDOWS_HOME = "C:\\Users\\alice"
+
 const home = (path: string): string => join(homedir(), path)
 
 const floor = (pluginPaths: string[] = [], writablePaths: string[] = []) =>
 	securityFloor({
 		appDataDir: APP_DATA,
+		home: homedir(),
 		platform: "darwin",
 		pluginPaths,
 		writablePaths,
@@ -29,6 +32,7 @@ const floorIn = (appDataDir: string, conversationId: string) =>
 	securityFloor({
 		appDataDir,
 		conversationId,
+		home: homedir(),
 		platform: "darwin",
 		pluginPaths: [],
 		writablePaths: [],
@@ -36,6 +40,14 @@ const floorIn = (appDataDir: string, conversationId: string) =>
 
 const denyOf = (pluginPaths: string[] = []): string[] =>
 	floor(pluginPaths).permissions?.deny ?? []
+
+const onWindows = (): string[] =>
+	securityFloor({
+		home: WINDOWS_HOME,
+		platform: "win32",
+		pluginPaths: [],
+		writablePaths: [],
+	}).permissions?.deny ?? []
 
 const filesystemOf = (
 	pluginPaths: string[] = [],
@@ -145,6 +157,7 @@ describe("securityFloor", () => {
 		const denyOver = (pluginPaths: string[]): string[] =>
 			securityFloor({
 				appDataDir,
+				home: homedir(),
 				platform: "darwin",
 				pluginPaths,
 				writablePaths: pluginPaths,
@@ -254,6 +267,7 @@ describe("securityFloor", () => {
 
 	it("starts the session when a sandbox is out of reach on Windows", () => {
 		const sandbox = securityFloor({
+			home: WINDOWS_HOME,
 			platform: "win32",
 			pluginPaths: [],
 			writablePaths: [],
@@ -267,8 +281,50 @@ describe("securityFloor", () => {
 		})
 	})
 
+	it("emits the deny list of a darwin session in full", () => {
+		expect(denyOf()).toEqual([
+			"Agent",
+			"Task",
+			`Read(/${home(".ssh")}/**)`,
+			`Read(/${home(".aws")}/**)`,
+			`Read(/${home(".gnupg")}/**)`,
+			`Read(/${home(".config/gh")}/**)`,
+			`Read(/${home(".kube")}/**)`,
+			`Read(/${home("Library/Keychains")}/**)`,
+			`Read(/${home(".netrc")})`,
+			`Read(/${home(".npmrc")})`,
+			`Read(/${home(".docker/config.json")})`,
+			`Read(/${home(".claude.json")})`,
+			`Read(/${home(".claude/.credentials.json")})`,
+			"Read(//**/.env)",
+			"Read(//**/.env.*)",
+			`Read(/${join(APP_DATA, "conversations.sqlite3")})`,
+			`Read(/${join(APP_DATA, "conversations.sqlite3-wal")})`,
+			`Read(/${join(APP_DATA, "conversations.sqlite3-shm")})`,
+			`Read(/${join(APP_DATA, "opennest.db")})`,
+			`Read(/${join(APP_DATA, "session.json*")})`,
+			`Read(/${join(APP_DATA, "attachments")}/**)`,
+			`Edit(/${home(".claude")}/**)`,
+			`Edit(/${home("Library/LaunchAgents")}/**)`,
+			`Edit(/${home(".zshrc")})`,
+			`Edit(/${home(".bashrc")})`,
+			`Edit(/${home(".zprofile")})`,
+			`Edit(/${home(".zshenv")})`,
+		])
+	})
+
+	it("anchors a rule on the drive letter of a Windows home directory", () => {
+		const deny = onWindows()
+
+		expect(deny).toContain("Read(//c/Users/alice/.ssh/**)")
+		expect(deny).toContain("Read(//c/Users/alice/.claude/.credentials.json)")
+		expect(deny).toContain("Read(//**/.env)")
+		expect(deny).toContain("Edit(//c/Users/alice/.zshrc)")
+	})
+
 	it("holds the rest of the floor when no data directory is named", () => {
 		const bare = securityFloor({
+			home: homedir(),
 			platform: "darwin",
 			pluginPaths: [],
 			writablePaths: [],

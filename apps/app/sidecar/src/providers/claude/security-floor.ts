@@ -1,5 +1,4 @@
 import { readdirSync } from "node:fs"
-import { homedir } from "node:os"
 import { join, sep } from "node:path"
 
 import type { Settings } from "@anthropic-ai/claude-agent-sdk"
@@ -60,9 +59,21 @@ type Denial = {
 const under = (root: string | undefined, paths: string[]): string[] =>
 	root ? paths.map((path) => join(root, path)) : []
 
-const rulesFor = (tool: string, { directories, files }: Denial): string[] => [
-	...directories.map((path) => `${tool}(/${path}/**)`),
-	...files.map((path) => `${tool}(/${path})`),
+const posixPath = (path: string): string =>
+	path
+		.replace(/^([a-zA-Z]):/, (_, drive: string) => `/${drive.toLowerCase()}`)
+		.replaceAll("\\", "/")
+
+const denyPath = (platform: NodeJS.Platform, path: string): string =>
+	platform === "win32" ? posixPath(path) : path
+
+const rulesFor = (
+	tool: string,
+	{ directories, files }: Denial,
+	platform: NodeJS.Platform,
+): string[] => [
+	...directories.map((path) => `${tool}(/${denyPath(platform, path)}/**)`),
+	...files.map((path) => `${tool}(/${denyPath(platform, path)})`),
 ]
 
 const pathsOf = ({ directories, files }: Denial): string[] => [
@@ -70,17 +81,14 @@ const pathsOf = ({ directories, files }: Denial): string[] => [
 	...files,
 ]
 
-const deniedReads = (appDataDir?: string): Denial => {
-	const home = homedir()
-	return {
-		directories: under(home, READ_DIRECTORIES),
-		files: [
-			...under(home, READ_FILES),
-			...ENVIRONMENT_FILES,
-			...under(appDataDir, APP_DATA_FILES),
-		],
-	}
-}
+const deniedReads = (home: string, appDataDir?: string): Denial => ({
+	directories: under(home, READ_DIRECTORIES),
+	files: [
+		...under(home, READ_FILES),
+		...ENVIRONMENT_FILES,
+		...under(appDataDir, APP_DATA_FILES),
+	],
+})
 
 const entriesOf = (directory: string): string[] => {
 	try {
@@ -121,17 +129,15 @@ const foreignAttachments = (
 	files: [],
 })
 
-const deniedWrites = (): Denial => {
-	const home = homedir()
-	return {
-		directories: under(home, WRITE_DIRECTORIES),
-		files: under(home, WRITE_FILES),
-	}
-}
+const deniedWrites = (home: string): Denial => ({
+	directories: under(home, WRITE_DIRECTORIES),
+	files: under(home, WRITE_FILES),
+})
 
 export type FloorScope = {
 	appDataDir?: string
 	conversationId?: string
+	home: string
 	platform: NodeJS.Platform
 	pluginPaths: string[]
 	writablePaths: string[]
@@ -140,12 +146,13 @@ export type FloorScope = {
 export const securityFloor = ({
 	appDataDir,
 	conversationId,
+	home,
 	platform,
 	pluginPaths,
 	writablePaths,
 }: FloorScope): Settings => {
-	const reads = deniedReads(appDataDir)
-	const writes = deniedWrites()
+	const reads = deniedReads(home, appDataDir)
+	const writes = deniedWrites(home)
 	const attachments = ownedAttachments(appDataDir, conversationId)
 	const readablePaths = attachments
 		? [...pluginPaths, attachments]
@@ -154,10 +161,14 @@ export const securityFloor = ({
 		permissions: {
 			deny: [
 				...DENIED_TOOLS,
-				...rulesFor("Read", reads),
-				...rulesFor("Read", foreignBundles(appDataDir, pluginPaths)),
-				...rulesFor("Read", foreignAttachments(appDataDir, attachments)),
-				...rulesFor("Edit", writes),
+				...rulesFor("Read", reads, platform),
+				...rulesFor("Read", foreignBundles(appDataDir, pluginPaths), platform),
+				...rulesFor(
+					"Read",
+					foreignAttachments(appDataDir, attachments),
+					platform,
+				),
+				...rulesFor("Edit", writes, platform),
 			],
 			...(writablePaths.length > 0
 				? { additionalDirectories: writablePaths }
