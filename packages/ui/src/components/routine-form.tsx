@@ -284,10 +284,9 @@ const offeredOperators = (
 	row: RoutineFilterRow,
 ) => {
 	const accepted = operatorsOf(fieldType)
-	const held = [row.operator, fieldType ? undefined : row.readAs?.operator]
-	const kept = held.filter(
-		(operator): operator is RoutineFilterOperator =>
-			operator !== undefined && !accepted.includes(operator),
+	const read = fieldType ? row.operator : (row.readAs?.operator ?? row.operator)
+	const kept = [row.operator, read].filter(
+		(operator) => !accepted.includes(operator),
 	)
 
 	return kept.length === 0 ? accepted : [...new Set([...kept, ...accepted])]
