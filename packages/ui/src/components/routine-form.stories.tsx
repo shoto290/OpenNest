@@ -828,26 +828,20 @@ export const FilterOnAnUndescribedSource = meta.story({
 		docs: {
 			description: {
 				story:
-					"A written routine whose trigger nothing described to the form: no field is declared, so every row reads as a free path. Check that each row keeps the operator it was read with rather than falling back to presence, that the value control still carries the type the value was read in, and that editing the path leaves the operator alone: the row means what it said until the reader says otherwise.",
+					"A written routine whose trigger nothing described to the form: no field is declared, so every row reads as a free path. Check that each row keeps the operator it was read with rather than falling back to presence, and that the value control still carries the type the value was read in. Pick `FilterPathRenamedOnAnUndescribedSource` for what the reader editing that path does to the reading.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ canvas }) => {
 		const row = within(canvas.getByRole("group", { name: "Row 1" }))
 
 		await expect(
 			row.getByRole("combobox", { name: "Operator" }),
 		).toHaveTextContent("is greater than")
 		await expect(row.getByRole("spinbutton", { name: "Value" })).toHaveValue(10)
-
-		await userEvent.type(row.getByRole("textbox", { name: "Path" }), "s")
-
 		await expect(row.getByRole("textbox", { name: "Path" })).toHaveValue(
-			"unreadCounts",
+			"unreadCount",
 		)
-		await expect(
-			row.getByRole("combobox", { name: "Operator" }),
-		).toHaveTextContent("is greater than")
 	},
 })
 
