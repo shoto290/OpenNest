@@ -57,17 +57,14 @@ export const useRoutineDetail = ({
 	const readRuns = useCallback(
 		(routineId: string) => {
 			const placement = placed.current
-			revise(placement, (current) => ({
-				...current,
-				isReading: true,
-				hasFailedToReadRuns: false,
-			}))
+			revise(placement, (current) => ({ ...current, isReading: true }))
 
 			void routinesTransport.runs(routineId).then(
 				(carried) =>
 					revise(placement, (current) => ({
 						...current,
 						isReading: false,
+						hasFailedToReadRuns: false,
 						read: {
 							runs: toRunModels(carried),
 							readAt: Date.now(),

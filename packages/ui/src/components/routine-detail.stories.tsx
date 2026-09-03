@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -10,6 +11,7 @@ import {
 	ROUTINE_RUN_OUTCOMES,
 	ROUTINE_RUN_REFUSALS,
 	RoutineDetail,
+	type RoutineDetailProps,
 	type RoutineRunModel,
 	type RoutineRunOutcome,
 } from "@workspace/ui/components/routine-detail"
@@ -51,6 +53,29 @@ const LONG_TITLE =
 const LONG_REASON =
 	"the run's session failed with spawnFailed: /Users/ada/.local/bin/claude exited before the first frame: error while loading shared libraries: libssl.so.3: cannot open shared object file"
 
+const DetailHost = (props: RoutineDetailProps) => {
+	const [isRunning, setRunning] = useState(props.isRunning)
+	const [isReadingRuns, setReading] = useState(props.isReadingRuns)
+
+	return (
+		<div style={{ width: ROUTINES_PANEL_WIDTH }}>
+			<RoutineDetail
+				{...props}
+				isReadingRuns={isReadingRuns}
+				isRunning={isRunning}
+				onRetryRuns={() => {
+					props.onRetryRuns()
+					setReading(true)
+				}}
+				onRunNow={() => {
+					props.onRunNow()
+					setRunning(true)
+				}}
+			/>
+		</div>
+	)
+}
+
 const meta = preview.meta({
 	title: "Conversation/Routines/RoutineDetail",
 	component: RoutineDetail,
@@ -69,11 +94,7 @@ const meta = preview.meta({
 		onRetryRuns: fn(),
 		onRunNow: fn(),
 	},
-	render: (args) => (
-		<div style={{ width: ROUTINES_PANEL_WIDTH }}>
-			<RoutineDetail {...args} />
-		</div>
-	),
+	render: (args) => <DetailHost {...args} />,
 })
 
 export const Default = meta.story({
@@ -257,7 +278,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The runs could not be read. Check that the failure takes the place of the history rather than passing for an empty one, that it blames the read of the runs and not the read of the routines, and that its retry asks for the runs again. Pick `Empty` for the routine that really has no run.",
+					"The runs could not be read. Check that the failure takes the place of the history rather than passing for an empty one, that it blames the read of the runs and not the read of the routines, and that a retry pressed from the keyboard leaves the notice and its control exactly where they were — a control that unmounts under the reader sends the next Tab back to the top of the document. Pick `Empty` for the routine that really has no run.",
 			},
 		},
 	},
@@ -265,27 +286,38 @@ export const Error = meta.story({
 		await expect(canvas.getByText("The runs could not be read")).toBeVisible()
 		await expect(canvas.queryByText("No run recorded")).not.toBeInTheDocument()
 
-		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
+		const retry = canvas.getByRole("button", { name: "Retry" })
+		retry.focus()
+		await userEvent.keyboard("{Enter}")
+
 		await expect(args.onRetryRuns).toHaveBeenCalled()
+		await expect(canvas.getByText("The runs could not be read")).toBeVisible()
+		await expect(retry).toHaveFocus()
 	},
 })
 
 export const RunNowInFlight = meta.story({
-	args: { isRunning: true },
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		docs: {
 			description: {
 				story:
-					"A Run now request on its way. Check that the control stays where it was rather than being swapped for a spinner, that it is disabled and marked busy so a second press cannot start a second run, and that the history under it is left as it was until the request settles.",
+					"A Run now request started from the keyboard. Check that the control stays where it was rather than being swapped for a spinner, that it keeps the focus that pressed it instead of dropping it on the document body, that it reads as busy and unavailable while staying reachable by Tab, and that a second press is ignored rather than starting a second run.",
 			},
 		},
 	},
-	play: async ({ args, canvas }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		const control = canvas.getByRole("button", { name: "Run now" })
-		await expect(control).toBeDisabled()
+		control.focus()
+		await userEvent.keyboard("{Enter}")
+
+		await expect(args.onRunNow).toHaveBeenCalledTimes(1)
+		await expect(control).toHaveFocus()
 		await expect(control).toHaveAttribute("aria-busy", "true")
-		await expect(args.onRunNow).not.toHaveBeenCalled()
+		await expect(control).toHaveAttribute("aria-disabled", "true")
+
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onRunNow).toHaveBeenCalledTimes(1)
 	},
 })
 

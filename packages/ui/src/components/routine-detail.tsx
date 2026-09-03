@@ -276,9 +276,13 @@ const RoutineDetail = ({
 				</Button>
 				<Button
 					aria-busy={isRunning}
-					className="flex-1"
-					disabled={isRunning}
-					onClick={onRunNow}
+					aria-disabled={isRunning}
+					className="flex-1 aria-disabled:opacity-50"
+					onClick={() => {
+						if (!isRunning) {
+							onRunNow()
+						}
+					}}
 				>
 					<Icons.Restart
 						aria-hidden="true"

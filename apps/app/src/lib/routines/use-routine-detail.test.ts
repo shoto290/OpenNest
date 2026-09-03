@@ -158,6 +158,37 @@ it("reads the runs again when a failed read is retried", async () => {
 	expect(result.current.open?.hasFailedToReadRuns).toBe(false)
 })
 
+it("keeps the failure on screen while a retried read is in flight", async () => {
+	readRuns.mockRejectedValueOnce(new Error("the runs are unreadable"))
+	const result = mountDetail()
+
+	await act(async () => {
+		result.current.onOpen(ROW.id)
+	})
+	await waitFor(() =>
+		expect(result.current.open?.hasFailedToReadRuns).toBe(true),
+	)
+
+	let settleRead = (_carried: RoutineRun[]) => {}
+	readRuns.mockReturnValueOnce(
+		new Promise<RoutineRun[]>((resolve) => {
+			settleRead = resolve
+		}),
+	)
+	act(() => {
+		result.current.onRetryRuns()
+	})
+
+	expect(result.current.open?.hasFailedToReadRuns).toBe(true)
+
+	await act(async () => {
+		settleRead([RUN])
+	})
+
+	expect(result.current.open?.hasFailedToReadRuns).toBe(false)
+	expect(result.current.open?.runs).toHaveLength(1)
+})
+
 it("shows beside the control the refusal a Run now was answered with", async () => {
 	const result = await opened([])
 	runNow.mockResolvedValueOnce({ kind: "refused", by: "alreadySeen" })
