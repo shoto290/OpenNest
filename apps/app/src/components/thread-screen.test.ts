@@ -434,6 +434,35 @@ describe("ThreadScreen", () => {
 		expect(left).toEqual(["bot-1"])
 	})
 
+	it("reads back the reason a session died, and the bare exit code when it left none", async () => {
+		const refusal = "refusing to start: the credentials file is unreadable"
+		const reported: ChatError = {
+			id: "crashed-1",
+			error: { kind: "crashed", code: 1, detail: refusal },
+		}
+
+		const { unmount } = render(
+			screenOf(
+				threadOf({ id: "bot-1", name: "Nyx", said: "hi", errors: [reported] }),
+			),
+		)
+		await settle()
+
+		expect(
+			screen.getByText(`Claude Code exited (code 1). ${refusal}`),
+		).toBeTruthy()
+
+		unmount()
+		render(
+			screenOf(
+				threadOf({ id: "bot-1", name: "Nyx", said: "hi", errors: [CRASH] }),
+			),
+		)
+		await settle()
+
+		expect(screen.getByText("Claude Code exited (code 1).")).toBeTruthy()
+	})
+
 	it("leaves a dismissed bot failure dismissed when the reader returns", async () => {
 		const opened = threadOf({
 			id: "bot-1",
