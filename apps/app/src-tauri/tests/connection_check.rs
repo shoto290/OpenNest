@@ -72,6 +72,35 @@ fn a_host_with_no_sidecar_reports_neither_a_version_nor_a_sign_in() {
 }
 
 #[test]
+fn a_sidecar_that_died_before_ready_is_reported_with_what_it_wrote() {
+	let _serial = serial();
+	let motive = "the bundled runtime is not installed";
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
+	std::env::set_var("FAKE_AGENT_STARTUP_STDERR", motive);
+
+	let state = AgentState::default();
+	runtime().block_on(async {
+		let report = check(&state).await;
+
+		assert_eq!(report.connection, ConnectionState::Unavailable);
+		let Some(TransportError::Crashed { detail, .. }) = report.error else {
+			panic!("a sidecar that died before ready was not reported as a crash");
+		};
+		let detail = detail.expect("the crash named no detail");
+		assert!(
+			detail.starts_with("the sidecar exited during startup"),
+			"the startup failure was replaced: {detail}"
+		);
+		assert!(detail.contains(motive), "what the sidecar wrote was dropped: {detail}");
+
+		terminate_session(&state).await;
+	});
+
+	std::env::remove_var("FAKE_AGENT_STARTUP_STDERR");
+	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
+}
+
+#[test]
 fn a_probe_that_could_not_run_is_reported_apart_from_a_refusal() {
 	let _serial = serial();
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);

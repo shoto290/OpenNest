@@ -2,6 +2,19 @@ import type { ChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { TransportError } from "./contract"
 
+type Crash = Extract<TransportError, { kind: "crashed" }>
+
+function describeCrash(t: ChatCopy, { code, detail }: Crash): string {
+	if (code === null) {
+		return detail
+			? t("screen.transport.crashedUnknownCodeDetail", { detail })
+			: t("screen.transport.crashedUnknownCode")
+	}
+	return detail
+		? t("screen.transport.crashedDetail", { code, detail })
+		: t("screen.transport.crashed", { code })
+}
+
 export function describeTransportError(
 	t: ChatCopy,
 	error: TransportError,
@@ -20,9 +33,7 @@ export function describeTransportError(
 				timeoutMs: error.timeoutMs,
 			})
 		case "crashed":
-			return error.code === null
-				? t("screen.transport.crashedUnknownCode")
-				: t("screen.transport.crashed", { code: error.code })
+			return describeCrash(t, error)
 		case "resumeFailed":
 			return t("screen.transport.resumeFailed")
 		case "workingDirectoryRefused":

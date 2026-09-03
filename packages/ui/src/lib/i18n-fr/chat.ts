@@ -211,7 +211,10 @@ const chat = {
 			spawnFailed: "Claude Code n'a pas pu être démarré : {{detail}}",
 			startupTimeout: "Claude Code n'a pas répondu en {{timeoutMs}} ms.",
 			crashed: "Claude Code s'est arrêté (code {{code}}).",
+			crashedDetail: "Claude Code s'est arrêté (code {{code}}). {{detail}}",
 			crashedUnknownCode: "Claude Code s'est arrêté (code inconnu).",
+			crashedUnknownCodeDetail:
+				"Claude Code s'est arrêté (code inconnu). {{detail}}",
 			resumeFailed:
 				"Cette conversation n'a pas pu être reprise. Claude Code en a démarré une nouvelle ; vos messages sont toujours là.",
 			workingDirectoryRefused:
