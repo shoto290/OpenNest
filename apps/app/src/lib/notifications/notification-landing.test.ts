@@ -77,7 +77,7 @@ const aWorld = async () => {
 	const notifications = createFakeNotificationPort()
 	const reader = aReader()
 
-	const stop = startNotificationSource({
+	startNotificationSource({
 		chat: idleChat,
 		runtimes: idleRuntimes,
 		roster,
@@ -108,7 +108,6 @@ const aWorld = async () => {
 		neighbour,
 		away,
 		room,
-		stop,
 	}
 }
 
@@ -117,39 +116,37 @@ afterEach(() => {
 })
 
 it("enters the space holding the bot the click carries and lands on that bot", async () => {
-	const world = await aWorld()
+	const { spaces, roster, notifications, reader, elsewhere, away } =
+		await aWorld()
 
 	await act(async () => {
-		world.notifications.activate({ kind: "bot", id: world.away.id })
+		notifications.activate({ kind: "bot", id: away.id })
 	})
 
-	expect(world.spaces.getState().selectedSpaceId).toBe(world.elsewhere.id)
-	expect(world.roster.getState().selectedBotId).toBe(world.away.id)
-	expect(world.reader.reopened).toContain(world.elsewhere.id)
-	world.stop()
+	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
+	expect(roster.getState().selectedBotId).toBe(away.id)
+	expect(reader.reopened).toContain(elsewhere.id)
 })
 
 it("enters the space holding the conversation the click carries and lands on it", async () => {
-	const world = await aWorld()
+	const { spaces, roster, notifications, elsewhere, room } = await aWorld()
 
 	await act(async () => {
-		world.notifications.activate({ kind: "conversation", id: world.room.id })
+		notifications.activate({ kind: "conversation", id: room.id })
 	})
 
-	expect(world.spaces.getState().selectedSpaceId).toBe(world.elsewhere.id)
-	expect(world.roster.getState().selectedConversationId).toBe(world.room.id)
-	expect(world.roster.getState().selectedBotId).toBeNull()
-	world.stop()
+	expect(spaces.getState().selectedSpaceId).toBe(elsewhere.id)
+	expect(roster.getState().selectedConversationId).toBe(room.id)
+	expect(roster.getState().selectedBotId).toBeNull()
 })
 
 it("lands on a bot of the space already on screen without changing space", async () => {
-	const world = await aWorld()
+	const { spaces, roster, notifications, neighbour } = await aWorld()
 
 	await act(async () => {
-		world.notifications.activate({ kind: "bot", id: world.neighbour.id })
+		notifications.activate({ kind: "bot", id: neighbour.id })
 	})
 
-	expect(world.spaces.getState().selectedSpaceId).toBe(HOME)
-	expect(world.roster.getState().selectedBotId).toBe(world.neighbour.id)
-	world.stop()
+	expect(spaces.getState().selectedSpaceId).toBe(HOME)
+	expect(roster.getState().selectedBotId).toBe(neighbour.id)
 })
