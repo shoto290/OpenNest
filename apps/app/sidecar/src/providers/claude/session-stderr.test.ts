@@ -34,13 +34,10 @@ afterAll(() => {
 
 describe("openClaudeSession", () => {
 	it("names once what Claude Code refused with, in the rejection and in the closed frame", async () => {
-		let announce: (frame: SessionFrame) => void = () => {}
-		const closed = new Promise<SessionFrame>((resolve) => {
-			announce = resolve
-		})
+		const closed = Promise.withResolvers<SessionFrame>()
 		const emit = (frame: SessionFrame) => {
 			if (frame.type === "closed") {
-				announce(frame)
+				closed.resolve(frame)
 			}
 		}
 		let rejection = ""
@@ -53,6 +50,6 @@ describe("openClaudeSession", () => {
 		}
 
 		expect(times(rejection)).toBe(1)
-		expect(times(String((await closed).detail))).toBe(1)
+		expect(times(String((await closed.promise).detail))).toBe(1)
 	})
 })
