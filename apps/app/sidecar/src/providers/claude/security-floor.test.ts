@@ -18,12 +18,18 @@ const WRITABLE_PATHS = [BOT_PATH, USER_PATH, SPACE_PATH]
 const home = (path: string): string => join(homedir(), path)
 
 const floor = (pluginPaths: string[] = [], writablePaths: string[] = []) =>
-	securityFloor({ appDataDir: APP_DATA, pluginPaths, writablePaths })
+	securityFloor({
+		appDataDir: APP_DATA,
+		platform: "darwin",
+		pluginPaths,
+		writablePaths,
+	})
 
 const floorIn = (appDataDir: string, conversationId: string) =>
 	securityFloor({
 		appDataDir,
 		conversationId,
+		platform: "darwin",
 		pluginPaths: [],
 		writablePaths: [],
 	})
@@ -137,8 +143,12 @@ describe("securityFloor", () => {
 		}
 
 		const denyOver = (pluginPaths: string[]): string[] =>
-			securityFloor({ appDataDir, pluginPaths, writablePaths: pluginPaths })
-				.permissions?.deny ?? []
+			securityFloor({
+				appDataDir,
+				platform: "darwin",
+				pluginPaths,
+				writablePaths: pluginPaths,
+			}).permissions?.deny ?? []
 
 		beforeEach(() => {
 			appDataDir = mkdtempSync(join(tmpdir(), "security-floor-"))
@@ -242,8 +252,27 @@ describe("securityFloor", () => {
 		expect(sandbox?.network).toBeUndefined()
 	})
 
+	it("starts the session when a sandbox is out of reach on Windows", () => {
+		const sandbox = securityFloor({
+			platform: "win32",
+			pluginPaths: [],
+			writablePaths: [],
+		}).sandbox
+
+		expect(sandbox).toMatchObject({
+			enabled: true,
+			failIfUnavailable: false,
+			allowUnsandboxedCommands: false,
+			autoAllowBashIfSandboxed: false,
+		})
+	})
+
 	it("holds the rest of the floor when no data directory is named", () => {
-		const bare = securityFloor({ pluginPaths: [], writablePaths: [] })
+		const bare = securityFloor({
+			platform: "darwin",
+			pluginPaths: [],
+			writablePaths: [],
+		})
 
 		expect(bare.permissions?.deny).toContain(`Read(/${home(".ssh")}/**)`)
 		expect(bare.sandbox?.filesystem?.denyRead).toContain(home(".ssh"))
