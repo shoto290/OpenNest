@@ -396,6 +396,49 @@ const chat = {
 					"{{operator}} does not fit a field declared as {{fieldType}}.",
 			},
 		},
+		detail: {
+			title: "Routine",
+			back: "Back to the routine",
+			runNow: {
+				action: "Run now",
+				refusal: {
+					disabled: "This routine is off, so no run was started.",
+					filter:
+						"The filter of this routine let nothing through, so no run was started.",
+					dedupeValueMissing:
+						"This trigger carries nothing to tell one event from another, so no run was started.",
+					alreadySeen: "This event was already run, so no run was started.",
+				},
+			},
+			history: {
+				label: "Run history",
+				reading: "Reading the runs of this routine.",
+				counted_one: "{{count}} run",
+				counted_other: "{{count}} runs",
+				page_one: "Last {{count}} run read",
+				page_other: "Last {{count}} runs read",
+				reported_one: "{{count}} report",
+				reported_other: "{{count}} reports",
+				latest: "Most recent {{when}}",
+				outcome: {
+					reported: "Reported",
+					nothing: "Nothing to report",
+					skipped: "Skipped",
+					failed: "Failed",
+					running: "Running",
+				},
+				empty: {
+					title: "No run recorded",
+					description:
+						"No run of this routine was recorded. Runs land here as they happen.",
+				},
+				failure: {
+					title: "The runs could not be read",
+					description:
+						"Nothing was changed. Try again to read the runs of this routine.",
+				},
+			},
+		},
 		row: {
 			delete: "Delete {{title}}",
 			stopped: "Stopped itself",

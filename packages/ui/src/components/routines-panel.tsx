@@ -18,6 +18,11 @@ import {
 } from "@workspace/ui/components/motion/animated-sidebar"
 import { Notice } from "@workspace/ui/components/notice"
 import {
+	ROUTINE_DETAIL_EDIT_OPENER,
+	RoutineDetail,
+	type RoutineDetailModel,
+} from "@workspace/ui/components/routine-detail"
+import {
 	RoutineForm,
 	type RoutineFormModel,
 	type RoutineFormValues,
@@ -47,6 +52,14 @@ type RoutinesPanelForm = {
 	onSave: (values: RoutineFormValues) => void
 }
 
+type RoutinesPanelDetail = {
+	open: RoutineDetailModel | null
+	onOpen: (routineId: string) => void
+	onClose: () => void
+	onRetryRuns: () => void
+	onRunNow: () => void
+}
+
 type RoutinesPanelListProps = {
 	routines: RoutineRowModel[]
 	failure: RoutinesFailure | null
@@ -54,6 +67,7 @@ type RoutinesPanelListProps = {
 	onEnabledChange: (id: string, isEnabled: boolean) => void
 	onDelete: (id: string) => void | Promise<void>
 	form?: RoutinesPanelForm
+	detail?: RoutinesPanelDetail
 }
 
 type RoutinesPanelProps = RoutinesPanelListProps & {
@@ -64,7 +78,8 @@ type RoutinesPanelProps = RoutinesPanelListProps & {
 
 type RoutinesPanelBodyProps = RoutinesPanelListProps & {
 	onNewRoutine: () => void
-	onOpenRoutine: (routineId: string) => void
+	onOpenRoutine?: (routineId: string) => void
+	onEditRoutine: () => void
 }
 
 const RoutinesPanelBody = ({
@@ -74,8 +89,10 @@ const RoutinesPanelBody = ({
 	onEnabledChange,
 	onDelete,
 	form,
+	detail,
 	onNewRoutine,
 	onOpenRoutine,
+	onEditRoutine,
 }: RoutinesPanelBodyProps) => {
 	const { t } = useTranslation("chat")
 
@@ -96,6 +113,21 @@ const RoutinesPanelBody = ({
 					key={form.open.id ?? NEW_ROUTINE_KEY}
 					onSave={form.onSave}
 					sources={form.sources}
+				/>
+			</>
+		)
+	}
+
+	if (detail?.open) {
+		return (
+			<>
+				{notice}
+				<RoutineDetail
+					{...detail.open}
+					key={detail.open.id}
+					onEdit={onEditRoutine}
+					onRetryRuns={detail.onRetryRuns}
+					onRunNow={detail.onRunNow}
 				/>
 			</>
 		)
@@ -139,7 +171,7 @@ const RoutinesPanelBody = ({
 						onEnabledChange={(isEnabled) =>
 							onEnabledChange(routine.id, isEnabled)
 						}
-						onOpen={form ? () => onOpenRoutine(routine.id) : undefined}
+						onOpen={onOpenRoutine ? () => onOpenRoutine(routine.id) : undefined}
 					/>
 				))}
 			</ul>
@@ -147,14 +179,45 @@ const RoutinesPanelBody = ({
 	)
 }
 
+type PanelHeading = {
+	back: "routines.detail.back" | "routines.form.back"
+	onBack: () => void
+	title: "routines.detail.title" | "routines.form.edit" | "routines.form.new"
+}
+
+const headingOf = (
+	form: RoutinesPanelForm | undefined,
+	detail: RoutinesPanelDetail | undefined,
+): PanelHeading | null => {
+	if (form?.open) {
+		return {
+			back: detail?.open ? "routines.detail.back" : "routines.form.back",
+			onBack: form.onClose,
+			title: form.open.id ? "routines.form.edit" : "routines.form.new",
+		}
+	}
+
+	if (detail?.open) {
+		return {
+			back: "routines.form.back",
+			onBack: detail.onClose,
+			title: "routines.detail.title",
+		}
+	}
+
+	return null
+}
+
 const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 	const { t } = useTranslation("chat")
 	const { open, triggerRef } = useAnimatedSidebar()
 	const wasOpen = useRef(open)
 	const surface = useRef<HTMLElement>(null)
-	const opener = useRef<string | null>(null)
-	const { form } = props
-	const isFormOpen = Boolean(form?.open)
+	const openers = useRef<string[]>([])
+	const { form, detail } = props
+	const heading = headingOf(form, detail)
+	const depth = (detail?.open ? 1 : 0) + (form?.open ? 1 : 0)
+	const shownDepth = useRef(depth)
 
 	useEffect(() => {
 		if (wasOpen.current && !open) {
@@ -164,19 +227,30 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 	}, [open, triggerRef])
 
 	useEffect(() => {
-		if (isFormOpen || !opener.current) {
+		const hasPopped = depth < shownDepth.current
+		shownDepth.current = depth
+		const opener = hasPopped ? openers.current.pop() : undefined
+		if (!opener) {
 			return
 		}
 
 		surface.current
-			?.querySelector<HTMLElement>(`[data-opens="${opener.current}"]`)
+			?.querySelector<HTMLElement>(`[data-opens="${opener}"]`)
 			?.focus({ preventScroll: true })
-		opener.current = null
-	}, [isFormOpen])
+	}, [depth])
 
 	const remember = (picked: string, act: () => void) => {
-		opener.current = picked
+		openers.current.push(picked)
 		act()
+	}
+
+	const openRow = detail?.onOpen ?? form?.onOpen
+
+	const editOpenRoutine = () => {
+		const openId = detail?.open?.id
+		if (openId) {
+			remember(ROUTINE_DETAIL_EDIT_OPENER, () => form?.onOpen(openId))
+		}
 	}
 
 	return (
@@ -191,19 +265,17 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 		>
 			<AnimatedSidebarHeader>
 				<div className="flex h-7 items-center gap-2">
-					{form?.open ? (
+					{heading ? (
 						<>
 							<Button
-								aria-label={t("routines.form.back")}
-								onClick={form.onClose}
+								aria-label={t(heading.back)}
+								onClick={heading.onBack}
 								size="icon-sm"
 								variant="ghost"
 							>
 								<Icons.Previous aria-hidden="true" />
 							</Button>
-							<h2 className="font-medium text-sm">
-								{t(form.open.id ? "routines.form.edit" : "routines.form.new")}
-							</h2>
+							<h2 className="font-medium text-sm">{t(heading.title)}</h2>
 						</>
 					) : (
 						<>
@@ -228,9 +300,11 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 			<AnimatedSidebarContent>
 				<RoutinesPanelBody
 					{...props}
+					onEditRoutine={editOpenRoutine}
 					onNewRoutine={() => remember(EMPTY_OPENER, () => form?.onNew())}
-					onOpenRoutine={(routineId) =>
-						remember(routineId, () => form?.onOpen(routineId))
+					onOpenRoutine={
+						openRow &&
+						((routineId) => remember(routineId, () => openRow(routineId)))
 					}
 				/>
 			</AnimatedSidebarContent>
@@ -276,6 +350,7 @@ export {
 	ROUTINES_PANEL_WIDTH,
 	type RoutinesFailure,
 	RoutinesPanel,
+	type RoutinesPanelDetail,
 	type RoutinesPanelForm,
 	type RoutinesPanelProps,
 	RoutinesPanelTrigger,
