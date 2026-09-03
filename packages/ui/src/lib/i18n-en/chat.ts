@@ -47,6 +47,11 @@ const chat = {
 		},
 		cause: {
 			label: "Routine report",
+			unavailable: {
+				title: "Routine reports could not be read",
+				description:
+					"The conversation is intact. What opened each report is missing until the next read.",
+			},
 		},
 		mention: {
 			unknown: "Unknown bot",

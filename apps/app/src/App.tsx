@@ -88,11 +88,9 @@ export function App() {
 	const roster = useRoster(store)
 	const conversationRuntimes = useMemo(
 		() =>
-			createConversationRuntimes(
-				driver,
-				store,
-				roster.controller.nameConversation,
-			),
+			createConversationRuntimes(driver, store, {
+				onNamed: roster.controller.nameConversation,
+			}),
 		[driver, store, roster.controller],
 	)
 

@@ -21,6 +21,7 @@ import type {
 	TransportError,
 } from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
+import type { ReportedRun } from "../routines/routine-contract"
 
 const SPACE = "personal"
 
@@ -1762,5 +1763,58 @@ describe("the pages a conversation holds", () => {
 			`m-${HISTORY - TRANSCRIPT_PAGE_SIZE - PAGE + 1}`,
 		)
 		detach()
+	})
+})
+
+describe("the routine causes a conversation holds", () => {
+	const REPORTED_EARLIER = {
+		turnId: "t-earlier",
+		routineTitle: "Weekly digest",
+		triggerSourceId: "schedule",
+	}
+
+	it("keeps the cause of a report that landed while the read was in flight", async () => {
+		const store = createFakeTranscriptStore()
+		const [bot] = await seatBots(store, SPACE, ["Ada"])
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [bot.id],
+		})
+		let settleRead: (reported: ReportedRun[]) => void = () => undefined
+		const controller = createConversationController(
+			createScriptedDriver(),
+			store,
+			{
+				readReportedRuns: () =>
+					new Promise((resolve) => {
+						settleRead = resolve
+					}),
+			},
+		)
+		const opening = controller.open(conversation)
+
+		const turnId = await controller.reportRun({
+			conversationId: conversation.id,
+			botId: bot.id,
+			runtimeSessionId: "rs-1",
+			text: "Two tickets closed.",
+			routineTitle: "Nightly report",
+			triggerSourceId: "schedule",
+		})
+		settleRead([REPORTED_EARLIER])
+		await opening
+
+		const { reportedCauses } = controller.getState()
+
+		expect(reportedCauses.get(turnId)).toEqual({
+			turnId,
+			routineTitle: "Nightly report",
+			triggerSourceId: "schedule",
+		})
+		expect(reportedCauses.get(REPORTED_EARLIER.turnId)).toEqual(
+			REPORTED_EARLIER,
+		)
 	})
 })

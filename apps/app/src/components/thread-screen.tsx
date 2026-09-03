@@ -108,6 +108,7 @@ import type { WorkingState } from "@/lib/chat/working-kind"
 import type { SpeakingBot } from "@/lib/conversations/conversation-controller"
 import { leadOf } from "@/lib/conversations/roster-conversations"
 import { useConversation } from "@/lib/conversations/use-conversation"
+import type { ReportedRunsByTurnId } from "@/lib/routines/routine-contract"
 
 type WorkingBotProps = BotStopProps & {
 	face: ThreadFace
@@ -392,6 +393,7 @@ const stopOfRow = (row: TranscriptRow, stops: SpeakerStops) =>
 type ThreadRunProps = {
 	run: TranscriptRow[]
 	presentation: RunPresentation
+	causes: ReportedRunsByTurnId
 	rejectedPromptId: string | null
 	asked: AskedBubble | null
 	responder: PromptResponder
@@ -408,6 +410,7 @@ type ThreadRunProps = {
 const ThreadRun = ({
 	run,
 	presentation,
+	causes,
 	rejectedPromptId,
 	asked,
 	responder,
@@ -441,6 +444,7 @@ const ThreadRun = ({
 					}
 					bare={presentation.hasBareTables && isTableBlock(row.text)}
 					botId={botFace?.id}
+					cause={causes.get(row.turnId)}
 					key={bubble}
 					onPin={pins.toggle}
 					onReply={onReply}
@@ -770,7 +774,7 @@ function ThreadView({
 		toQuote,
 	})
 
-	const runs = toRuns(toTranscriptRows(state.messages))
+	const runs = toRuns(toTranscriptRows(state.messages), facts.causes)
 	const presentations = runPresentationsOf({
 		runs,
 		workingBotIds: facts.workingBotIds,
@@ -781,6 +785,7 @@ function ThreadView({
 		asked,
 		authors,
 		botFace,
+		causes: facts.causes,
 		onReply: holdReply,
 		onRetry: botController ? retry : undefined,
 		pins,

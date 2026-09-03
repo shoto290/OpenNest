@@ -1,5 +1,5 @@
 import { routinesTransport } from "./routines-transport"
-import type { RunPort } from "./run-port"
+import type { ReportedRunsReader, RunPort } from "./run-port"
 
 import { isDesktopHost } from "../host"
 
@@ -11,3 +11,6 @@ export const createRunPort = (): RunPort =>
 				renewLease: async () => undefined,
 				closeRun: async () => undefined,
 			}
+
+export const createReportedRunsReader = (): ReportedRunsReader =>
+	isDesktopHost() ? routinesTransport.reportedRuns : async () => []

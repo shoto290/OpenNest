@@ -16,9 +16,14 @@ import type {
 	TranscriptRole,
 } from "../conversations/transcript-contract"
 import { isTerminalCompletion } from "../conversations/transcript-state"
+import {
+	NO_REPORTED_RUNS,
+	type ReportedRunsByTurnId,
+} from "../routines/routine-contract"
 
 export type TranscriptRow = {
 	messageId: string
+	turnId: string
 	blockIndex: number
 	quotedMessageId: string | null
 	authorBotId: string | null
@@ -71,6 +76,7 @@ function toRow(
 	const { blockIndex = 0, ...rest } = fields
 	return {
 		messageId: message.id,
+		turnId: message.turnId,
 		blockIndex,
 		quotedMessageId:
 			message.role === "user" ? message.repliedToMessageId : null,
@@ -126,7 +132,18 @@ export function toTranscriptRows(
 	})
 }
 
-export function toRuns(rows: TranscriptRow[]): TranscriptRow[][] {
+const isPartedByCause = (
+	previous: TranscriptRow,
+	row: TranscriptRow,
+	causes: ReportedRunsByTurnId,
+) =>
+	previous.turnId !== row.turnId &&
+	(causes.has(previous.turnId) || causes.has(row.turnId))
+
+export function toRuns(
+	rows: TranscriptRow[],
+	causes: ReportedRunsByTurnId = NO_REPORTED_RUNS,
+): TranscriptRow[][] {
 	const runs: TranscriptRow[][] = []
 	for (const row of rows) {
 		const current = runs.at(-1)
@@ -136,7 +153,8 @@ export function toRuns(rows: TranscriptRow[]): TranscriptRow[][] {
 			previous &&
 			previous.role === row.role &&
 			previous.authorBotId === row.authorBotId &&
-			row.timestamp - previous.timestamp <= RUN_GAP_MS
+			row.timestamp - previous.timestamp <= RUN_GAP_MS &&
+			!isPartedByCause(previous, row, causes)
 		) {
 			current.push(row)
 		} else {

@@ -174,6 +174,8 @@ export const startRunDriver = ({
 			botId: requested.botId,
 			runtimeSessionId: scope.runtimeSessionId,
 			text,
+			routineTitle: requested.title,
+			triggerSourceId: requested.triggerSourceId,
 		})
 
 	const closingFor = async (
@@ -191,14 +193,16 @@ export const startRunDriver = ({
 			return { outcome: "nothing" }
 		}
 		try {
-			await writeReport(held, report.text)
+			return {
+				outcome: "ok",
+				reportedTurnId: await writeReport(held, report.text),
+			}
 		} catch (thrown) {
 			return {
 				outcome: "failed",
 				reason: `the report could not be written: ${detailOf(thrown)}`,
 			}
 		}
-		return { outcome: "ok" }
 	}
 
 	const settle = async (held: LiveRun, ended: TurnEnded) => {

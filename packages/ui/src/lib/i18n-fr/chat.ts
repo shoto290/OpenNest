@@ -50,6 +50,11 @@ const chat = {
 		},
 		cause: {
 			label: "Rapport de routine",
+			unavailable: {
+				title: "Les rapports de routine n'ont pas pu être lus",
+				description:
+					"La conversation est intacte. Ce qui a déclenché chaque rapport manque jusqu'à la prochaine lecture.",
+			},
 		},
 		mention: {
 			unknown: "Bot inconnu",
