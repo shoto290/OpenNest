@@ -484,6 +484,11 @@ fn on_permission(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 }
 
 fn serve() {
+	if let Ok(motive) = std::env::var("FAKE_AGENT_STARTUP_STDERR") {
+		eprintln!("{motive}");
+		std::process::exit(70);
+	}
+
 	emit_raw(
 		&json!({
 			"type": "ready",

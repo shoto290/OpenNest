@@ -434,7 +434,10 @@ async fn startup_detail(tail: StderrTail, reader: JoinHandle<()>) -> String {
 	if tokio::time::timeout(STDERR_DRAIN_GRACE, reader).await.is_err() {
 		eprintln!("the sidecar left its stderr open past the drain grace");
 	}
-	tail.kept().unwrap_or_else(|| STARTUP_EXIT.to_owned())
+	match tail.kept() {
+		Some(written) => format!("{STARTUP_EXIT}: {written}"),
+		None => STARTUP_EXIT.to_owned(),
+	}
 }
 
 async fn keep_stderr(mut stderr: tokio::process::ChildStderr, tail: StderrTail) {
@@ -545,7 +548,7 @@ mod tests {
 
 		let detail = startup_detail(tail, reader).await;
 
-		assert_eq!(detail, "refusing to start: the port is taken");
+		assert_eq!(detail, format!("{STARTUP_EXIT}: refusing to start: the port is taken"));
 	}
 
 	#[tokio::test]
