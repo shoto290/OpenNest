@@ -5,6 +5,7 @@ pub mod filter;
 pub mod rate_limit;
 pub mod schedule;
 pub mod sentinel;
+pub mod silence;
 pub mod sources;
 pub mod watch;
 pub mod webhook;

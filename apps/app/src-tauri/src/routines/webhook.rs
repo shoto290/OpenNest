@@ -15,9 +15,10 @@ use tokio::sync::watch as signal;
 use uuid::Uuid;
 
 use super::commands::{declared_source, Announcer};
-use super::contract::{RoutineError, TriggerEvent};
+use super::contract::{RoutineError, TriggerDecision, TriggerEvent};
 use super::core::{self, Clock, SystemClock};
 use super::rate_limit::RateLimit;
+use super::silence::Silence;
 use crate::conversations::commands::ready;
 use crate::db;
 
@@ -73,7 +74,12 @@ pub fn start<R: Runtime>(app: AppHandle<R>) -> Webhook {
 
 fn started<R: Runtime>(app: AppHandle<R>, clock: Arc<dyn Clock>) -> Webhook {
 	let (stop, halted) = signal::channel(false);
-	let calls = Calls { app, clock, limit: Arc::new(RateLimit::default()) };
+	let calls = Calls {
+		app,
+		clock,
+		limit: Arc::new(RateLimit::default()),
+		silence: Arc::new(Silence::default()),
+	};
 	let address = match listening() {
 		Ok((listener, address)) => {
 			tauri::async_runtime::spawn(serving(calls, listener, halted));
@@ -128,11 +134,17 @@ struct Calls<R: Runtime> {
 	app: AppHandle<R>,
 	clock: Arc<dyn Clock>,
 	limit: Arc<RateLimit>,
+	silence: Arc<Silence>,
 }
 
 impl<R: Runtime> Clone for Calls<R> {
 	fn clone(&self) -> Self {
-		Calls { app: self.app.clone(), clock: self.clock.clone(), limit: self.limit.clone() }
+		Calls {
+			app: self.app.clone(),
+			clock: self.clock.clone(),
+			limit: self.limit.clone(),
+			silence: self.silence.clone(),
+		}
 	}
 }
 
@@ -190,6 +202,10 @@ async fn carried<R: Runtime>(
 	let Some(routine) = held else {
 		return Ok(REFUSED);
 	};
+	let mut turn = calls.silence.turn(&routine.id, calls.clock.as_ref()).await;
+	if turn.holds() {
+		return Ok(FLOODED);
+	}
 	if !calls.limit.admits(&routine.id, calls.clock.as_ref()).await {
 		return Ok(FLOODED);
 	}
@@ -201,7 +217,12 @@ async fn carried<R: Runtime>(
 		source,
 		payload: payload(body, delivery_id, calls.clock.now_ms())?,
 	};
-	core::on_trigger(database, &Announcer { app }, calls.clock.as_ref(), event).await?;
+	let decision =
+		core::on_trigger(database, &Announcer { app }, calls.clock.as_ref(), event).await?;
+	if let TriggerDecision::Skipped { reason, .. } = decision {
+		turn.hold(reason);
+		return Ok(FLOODED);
+	}
 	Ok(ACCEPTED)
 }
 
@@ -262,10 +283,14 @@ mod tests {
 	use tokio::net::TcpStream;
 
 	use super::super::commands::RUN_REQUESTED_EVENT;
-	use super::super::contract::{Filter, FilterMatchMode, RoutineDraft};
+	use super::super::contract::{
+		Filter, FilterMatchMode, RoutineDraft, RoutineRun, RunClosing, RunOutcome, SkipReason,
+	};
+	use super::super::core::{HOURLY_CAP, HOUR_MS, LEASE_MS};
 	use super::super::rate_limit::{CALLS_PER_WINDOW, WINDOW_MS};
 	use super::*;
 	use crate::bundles;
+	use crate::db::repositories::routines::MAX_RUNS_PER_PAGE;
 
 	const NOON: i64 = 1_800_000_000_000;
 
@@ -295,6 +320,10 @@ mod tests {
 		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
 			VALUES ('c1', 'b1', 'assistant', 1, 0);
 	";
+
+	const A_TICK: i64 = 1_000;
+
+	const A_HUNDRED_CALLS: usize = 100;
 
 	const A_KEY: &str = "the-webhook-key";
 
@@ -421,6 +450,99 @@ mod tests {
 		(REFUSED.0.as_u16(), REFUSED.1.to_owned())
 	}
 
+	fn accepted() -> (u16, String) {
+		(ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned())
+	}
+
+	fn flooded() -> (u16, String) {
+		(FLOODED.0.as_u16(), FLOODED.1.to_owned())
+	}
+
+	#[derive(Debug, Default, PartialEq, Eq)]
+	struct Answers {
+		accepted: usize,
+		flooded: usize,
+	}
+
+	impl Answers {
+		fn counting(&mut self, answer: (u16, String)) {
+			match answer {
+				held if held == accepted() => self.accepted += 1,
+				held if held == flooded() => self.flooded += 1,
+				held => panic!("a call was answered {held:?}"),
+			}
+		}
+	}
+
+	async fn calling_with_the_run_left_open(
+		address: SocketAddr,
+		clock: &Ticking,
+		key: &str,
+		times: usize,
+	) -> Answers {
+		let mut answers = Answers::default();
+		for _ in 0..times {
+			answers.counting(answered(address, calling(Some(key), "{}")).await);
+			clock.moved_by(A_TICK);
+		}
+		answers
+	}
+
+	async fn calling_with_each_run_closed(
+		app: &App<MockRuntime>,
+		address: SocketAddr,
+		clock: &Ticking,
+		key: &str,
+		times: usize,
+	) -> Answers {
+		let mut answers = Answers::default();
+		for _ in 0..times {
+			answers.counting(answered(address, calling(Some(key), "{}")).await);
+			closed_open_runs(app, key, clock.now_ms()).await;
+			clock.moved_by(A_TICK);
+		}
+		answers
+	}
+
+	async fn closed_open_runs(app: &App<MockRuntime>, key: &str, at: i64) {
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database opens");
+		let open = runs_of_key(app, key).await.into_iter().filter(|run| run.ended_at.is_none());
+		for run in open {
+			database.routines().close_run(run.id, closing(), at).await.expect("the run closes");
+		}
+	}
+
+	async fn runs_of_key(app: &App<MockRuntime>, key: &str) -> Vec<RoutineRun> {
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database opens");
+		let routine = database
+			.routines()
+			.keyed_on_source(key.to_owned(), SOURCE_ID.to_owned())
+			.await
+			.expect("the routine reads")
+			.expect("a routine holds the key");
+		database.routines().runs(routine.id, MAX_RUNS_PER_PAGE).await.expect("the runs read")
+	}
+
+	fn closing() -> RunClosing {
+		RunClosing {
+			outcome: RunOutcome::Ok,
+			reason: None,
+			cost_usd: None,
+			model_usage: None,
+			reported_turn_id: None,
+		}
+	}
+
+	async fn skipped_rows(app: &App<MockRuntime>, key: &str, reason: SkipReason) -> usize {
+		runs_of_key(app, key)
+			.await
+			.iter()
+			.filter(|run| run.reason.as_deref() == Some(reason.recorded()))
+			.count()
+	}
+
 	async fn runs_of(app: &App<MockRuntime>) -> i64 {
 		let state = app.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
@@ -529,13 +651,15 @@ mod tests {
 	#[tokio::test]
 	async fn a_call_naming_the_loopback_with_or_without_the_bound_port_is_carried() {
 		let app = a_host("loopback").await;
-		let webhook = start(app.handle().clone());
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
 		let address = address_of(&webhook);
 
 		for host in ["localhost", "127.0.0.1", &format!("localhost:{}", address.port())] {
 			let request = reaching("POST", PATH, Some(host), Some(A_KEY), "{}");
 			let answer = answered(address, request).await;
 			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()), "{host} was refused");
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 
 		webhook.stop();
@@ -570,15 +694,16 @@ mod tests {
 		let webhook = started(app.handle().clone(), clock.clone());
 		let address = address_of(&webhook);
 		for _ in 0..CALLS_PER_WINDOW {
-			let answer = answered(address, calling(Some(A_KEY), "{}")).await;
-			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()));
+			let answer = answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
+			assert_eq!(answer, accepted());
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 		let carried_runs = runs_of(&app).await;
 		let carried_dedupe_values = dedupe_values_of(&app).await;
 
-		let flooded = answered(address, calling(Some(A_KEY), "{}")).await;
+		let refused = answered(address, delivering(Some(A_KEY), "delivery-2", "{}")).await;
 
-		assert_eq!(flooded, (FLOODED.0.as_u16(), FLOODED.1.to_owned()));
+		assert_eq!(refused, flooded());
 		assert_eq!(runs_of(&app).await, carried_runs, "the refused call wrote a run");
 		assert_eq!(
 			dedupe_values_of(&app).await,
@@ -588,9 +713,141 @@ mod tests {
 
 		clock.moved_by(WINDOW_MS);
 
-		let answer = answered(address, calling(Some(A_KEY), "{}")).await;
-		assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()));
+		let answer = answered(address, delivering(Some(A_KEY), "delivery-2", "{}")).await;
+		assert_eq!(answer, accepted());
 		assert_eq!(runs_of(&app).await, carried_runs + 1);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_hundred_calls_inside_one_hour_write_the_cap_in_starts_and_one_skip_naming_the_cap() {
+		let app = a_host("hourly-flood").await;
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
+		let started_runs = HOURLY_CAP as usize;
+		let silenced = A_HUNDRED_CALLS - started_runs - 1;
+
+		let answers = calling_with_each_run_closed(
+			&app,
+			address_of(&webhook),
+			&clock,
+			A_KEY,
+			A_HUNDRED_CALLS,
+		)
+		.await;
+
+		assert_eq!(answers, Answers { accepted: started_runs, flooded: silenced + 1 });
+		assert_eq!(runs_of(&app).await, started_runs as i64 + 1);
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::HourlyCap).await, 1);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_call_landing_after_the_hour_of_silence_writes_a_second_skip_naming_the_cap() {
+		let app = a_host("hourly-forgotten").await;
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
+		let address = address_of(&webhook);
+		let to_the_cap = HOURLY_CAP as usize + 1;
+		calling_with_each_run_closed(&app, address, &clock, A_KEY, to_the_cap).await;
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::HourlyCap).await, 1);
+
+		clock.moved_by(HOUR_MS);
+		let answers = calling_with_each_run_closed(&app, address, &clock, A_KEY, to_the_cap).await;
+
+		assert_eq!(answers, Answers { accepted: HOURLY_CAP as usize, flooded: 1 });
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::HourlyCap).await, 2);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn two_routines_flooded_in_the_same_hour_each_keep_their_own_skip_naming_the_cap() {
+		let app = a_host("hourly-two").await;
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
+		let address = address_of(&webhook);
+		let to_the_cap = HOURLY_CAP as usize + 1;
+
+		let first = calling_with_each_run_closed(&app, address, &clock, A_KEY, to_the_cap).await;
+		let second =
+			calling_with_each_run_closed(&app, address, &clock, A_SECOND_KEY, to_the_cap).await;
+
+		assert_eq!(first, Answers { accepted: HOURLY_CAP as usize, flooded: 1 });
+		assert_eq!(second, first);
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::HourlyCap).await, 1);
+		assert_eq!(skipped_rows(&app, A_SECOND_KEY, SkipReason::HourlyCap).await, 1);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_hundred_calls_while_the_first_run_stays_open_write_one_start_and_one_skip() {
+		let app = a_host("leased-flood").await;
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
+
+		let answers =
+			calling_with_the_run_left_open(address_of(&webhook), &clock, A_KEY, A_HUNDRED_CALLS)
+				.await;
+
+		assert_eq!(answers, Answers { accepted: 1, flooded: A_HUNDRED_CALLS - 1 });
+		assert_eq!(runs_of(&app).await, 2);
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn calls_fired_at_once_while_the_first_run_stays_open_write_one_start_and_one_skip() {
+		let app = a_host("leased-at-once").await;
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
+		let address = address_of(&webhook);
+		let silenced = CALLS_PER_WINDOW - 2;
+
+		let fired: Vec<_> = (0..CALLS_PER_WINDOW)
+			.map(|_| {
+				tokio::spawn(async move { answered(address, calling(Some(A_KEY), "{}")).await })
+			})
+			.collect();
+
+		let mut answers = Answers::default();
+		for call in fired {
+			answers.counting(call.await.expect("the call is answered"));
+		}
+		assert_eq!(answers, Answers { accepted: 1, flooded: silenced + 1 });
+		assert_eq!(runs_of(&app).await, 2);
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn a_call_landing_after_the_length_of_a_lease_reaches_the_admission_again() {
+		let app = a_host("leased-forgotten").await;
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
+		let address = address_of(&webhook);
+		calling_with_the_run_left_open(address, &clock, A_KEY, 2).await;
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
+		closed_open_runs(&app, A_KEY, clock.now_ms()).await;
+		assert_eq!(calling_with_the_run_left_open(address, &clock, A_KEY, 3).await.accepted, 0);
+		assert_eq!(runs_of(&app).await, 2);
+
+		clock.moved_by(LEASE_MS);
+		let answer = answered(address, calling(Some(A_KEY), "{}")).await;
+
+		assert_eq!(answer, accepted());
+		assert_eq!(runs_of(&app).await, 3);
 
 		webhook.stop();
 		cleaned(&app);
@@ -619,12 +876,14 @@ mod tests {
 	#[tokio::test]
 	async fn one_delivery_id_carried_twice_opens_one_run_and_two_delivery_ids_open_two() {
 		let app = a_host("delivered").await;
-		let webhook = start(app.handle().clone());
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
 		let address = address_of(&webhook);
 
 		for _ in 0..2 {
 			let answer = answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
 			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()));
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 
 		assert_eq!(runs_of(&app).await, 1);
@@ -634,6 +893,7 @@ mod tests {
 				answered(address, delivering(Some(A_KEY), id, "{}")).await,
 				(ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned())
 			);
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 
 		assert_eq!(runs_of(&app).await, 3);
