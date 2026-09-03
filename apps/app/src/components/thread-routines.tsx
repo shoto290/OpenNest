@@ -6,17 +6,25 @@ import { useRoutines } from "@/lib/routines/use-routines"
 
 type ThreadRoutinesProps = {
 	conversationId: string
+	leadBotId?: string
 	children: ReactNode
 }
 
-const ThreadRoutines = ({ conversationId, children }: ThreadRoutinesProps) => {
+const ThreadRoutines = ({
+	conversationId,
+	leadBotId,
+	children,
+}: ThreadRoutinesProps) => {
 	const [isOpen, setOpen] = useState(false)
-	const { routines, failure, reload, setEnabled, remove } =
-		useRoutines(conversationId)
+	const { routines, failure, reload, setEnabled, remove, form } = useRoutines(
+		conversationId,
+		leadBotId,
+	)
 
 	return (
 		<RoutinesPanel
 			failure={failure}
+			form={form}
 			isOpen={isOpen}
 			onDelete={remove}
 			onEnabledChange={setEnabled}
