@@ -130,13 +130,10 @@ const keyLineOf = ({
 	return webhook ? null : "reading"
 }
 
-const WebhookBlock = ({
-	webhook,
-	hasFailedToReadKey,
-	isWritten,
-}: WebhookBlockProps) => {
+const WebhookBlock = (props: WebhookBlockProps) => {
 	const { t } = useTranslation("chat")
-	const line = keyLineOf({ hasFailedToReadKey, isWritten, webhook })
+	const { webhook } = props
+	const line = keyLineOf(props)
 
 	return (
 		<div className="flex flex-col gap-2" data-slot="routine-webhook">
