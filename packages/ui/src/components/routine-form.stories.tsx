@@ -119,7 +119,7 @@ export const OnAWebhookCall = meta.story({
 		docs: {
 			description: {
 				story:
-					"A written routine a local webhook call fires, once its key has been minted. Check that the address, the key and the header name all read as read only, that each carries its own copy control, and that copying announces itself in the polite region rather than through the icon alone. Pick `BeforeItsFirstWrite` for the same trigger before the key exists.",
+					"A written routine a local webhook call fires, once its key has been minted. Check that the address, the key and the header name all read as read only, that each carries its own copy control and its value rather than a description standing in for it, and that copying announces itself in the polite region rather than through the icon alone. Pick `BeforeItsFirstWrite` for the same trigger before the key exists.",
 			},
 		},
 	},
@@ -139,6 +139,10 @@ export const OnAWebhookCall = meta.story({
 		)
 		await expect(writeText).toHaveBeenCalledWith(CALLED_FORM.webhook?.key)
 		await expect(await canvas.findByText("Key copied")).toBeInTheDocument()
+
+		const key = canvas.getByLabelText("Key")
+		await expect(key).toHaveValue(CALLED_FORM.webhook?.key)
+		await expect(key).not.toHaveAccessibleDescription()
 
 		writeText.mockRestore()
 	},
@@ -175,7 +179,7 @@ export const KeyStillReading = meta.story({
 		docs: {
 			description: {
 				story:
-					"Every edit of a webhook routine starts here: the routine is written, its key is read after the form opens, and the three fields hold nothing for as long as that read is out. Check that the block says the read is running instead of borrowing the line of a routine that was never written, and that it says it once — never beside the pending line or the failure. Pick `BeforeItsFirstWrite` for the routine that has no key yet, `KeyUnreadable` for the read that came back empty handed.",
+					"Every edit of a webhook routine starts here: the routine is written, its key is read after the form opens, and the three fields hold nothing for as long as that read is out. Check that the block says the read is running instead of borrowing the line of a routine that was never written, that it says it once — never beside the pending line or the failure — and that each of the three fields is described by it, so a reader tabbing into an empty control is told why it is empty rather than meeting a blank. Pick `BeforeItsFirstWrite` for the routine that has no key yet, `KeyUnreadable` for the read that came back empty handed.",
 			},
 		},
 	},
@@ -193,6 +197,9 @@ export const KeyStillReading = meta.story({
 				"The address and the key of this routine could not be read.",
 			),
 		).not.toBeInTheDocument()
+		await expect(canvas.getByLabelText("Key")).toHaveAccessibleDescription(
+			"The address and the key are being read.",
+		)
 	},
 })
 

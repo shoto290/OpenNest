@@ -68,9 +68,10 @@ const INSTRUCTION_ROWS = 5
 type WebhookFieldProps = {
 	label: string
 	value: string
+	describedBy?: string
 }
 
-const WebhookField = ({ label, value }: WebhookFieldProps) => {
+const WebhookField = ({ label, value, describedBy }: WebhookFieldProps) => {
 	const { t } = useTranslation("chat")
 	const { copied, copy } = useCopyText(value)
 	const id = useId()
@@ -82,6 +83,7 @@ const WebhookField = ({ label, value }: WebhookFieldProps) => {
 			</label>
 			<div className="flex items-center gap-1.5">
 				<input
+					aria-describedby={describedBy}
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						FIELD_CONTROL_READONLY_CLASS,
@@ -134,26 +136,32 @@ const WebhookBlock = (props: WebhookBlockProps) => {
 	const { t } = useTranslation("chat")
 	const { webhook } = props
 	const line = keyLineOf(props)
+	const lineId = useId()
+	const describedBy = line ? lineId : undefined
 
 	return (
 		<div className="flex flex-col gap-2" data-slot="routine-webhook">
 			<WebhookField
+				describedBy={describedBy}
 				label={t("routines.form.webhook.url")}
 				value={webhook?.url ?? ""}
 			/>
 			<WebhookField
+				describedBy={describedBy}
 				label={t("routines.form.webhook.key")}
 				value={webhook?.key ?? ""}
 			/>
 			<WebhookField
+				describedBy={describedBy}
 				label={t("routines.form.webhook.header")}
 				value={webhook?.header ?? ""}
 			/>
 			<p
 				className={cn(
-					"text-xs empty:hidden",
+					"text-xs empty:absolute",
 					line === "failure" ? "text-destructive" : "text-muted-foreground",
 				)}
+				id={lineId}
 				role="status"
 			>
 				{line ? t(`routines.form.webhook.${line}`) : null}
