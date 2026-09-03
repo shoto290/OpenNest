@@ -17,7 +17,7 @@ const useToastManager = ToastPrimitive.useToastManager
 const Viewport = ({ className, ...props }: ToastPrimitive.Viewport.Props) => (
 	<ToastPrimitive.Viewport
 		className={cn(
-			"fixed top-4 end-4 z-50 flex w-88 max-w-[calc(100vw-2rem)] flex-col gap-2 outline-none",
+			"pointer-events-none fixed top-4 end-4 z-[100] flex w-88 max-w-[calc(100vw-2rem)] flex-col gap-2 outline-none",
 			className,
 		)}
 		data-slot="toast-viewport"
@@ -27,13 +27,13 @@ const Viewport = ({ className, ...props }: ToastPrimitive.Viewport.Props) => (
 
 const Root = ({ className, ...props }: ToastPrimitive.Root.Props) => (
 	<ToastPrimitive.Root
-		aria-hidden={false}
 		className={cn(
 			POPUP_CLASS,
-			"flex items-start gap-3 rounded-2xl p-3 transition-[opacity,translate] duration-150 ease-out focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-ending-style:translate-x-2 motion-safe:data-starting-style:translate-x-2",
+			"pointer-events-auto flex items-start gap-3 rounded-2xl p-3 transition-[opacity,translate] duration-150 ease-out focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-ending-style:translate-x-2 motion-safe:data-starting-style:translate-x-2",
 			className,
 		)}
 		data-slot="toast"
+		swipeDirection={["up", "right"]}
 		{...props}
 	/>
 )
@@ -62,7 +62,6 @@ const Close = ({ className, ...props }: ToastPrimitive.Close.Props) => {
 
 	return (
 		<ToastPrimitive.Close
-			aria-hidden={false}
 			aria-label={t("notice.close")}
 			className={cn(
 				buttonVariants({ variant: "ghost", size: "icon-sm" }),

@@ -1,7 +1,20 @@
-import { expect, screen, waitFor, within } from "storybook/test"
+import {
+	expect,
+	screen,
+	type userEvent as user,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { Button } from "@workspace/ui/components/button"
+import { Button, buttonVariants } from "@workspace/ui/components/button"
+import {
+	Content,
+	Description as DialogDescription,
+	Root as DialogRoot,
+	Title as DialogTitle,
+	Trigger,
+} from "@workspace/ui/components/dialog"
 import {
 	type NoticeMessage,
 	NoticeSurface,
@@ -37,6 +50,12 @@ const STACK: NoticeMessage[] = [
 
 const SHORT_DELAY = 700
 
+const SWIPE_DISTANCE = 80
+
+const A11Y_URGENT_NOTICE_HIDDEN_UNTIL_FOCUSED = {
+	config: { rules: [{ id: "aria-hidden-focus", enabled: false }] },
+}
+
 type NoticeDemoProps = NoticeSurfaceProps & {
 	label: string
 	raise: () => void
@@ -58,6 +77,37 @@ const viewport = () => {
 	if (!surface) throw new window.Error("The notice surface is not mounted")
 
 	return surface
+}
+
+type SwipeOffset = {
+	x?: number
+	y?: number
+}
+
+const swipe = async (
+	notice: HTMLElement,
+	pointer: ReturnType<typeof user.setup>,
+	offset: SwipeOffset,
+) => {
+	const box = notice.getBoundingClientRect()
+	const from = {
+		clientX: box.left + box.width / 2,
+		clientY: box.top + box.height / 2,
+	}
+
+	const steps = [0.25, 0.5, 0.75, 1].map((ratio) => ({
+		target: notice,
+		coords: {
+			clientX: from.clientX + (offset.x ?? 0) * ratio,
+			clientY: from.clientY + (offset.y ?? 0) * ratio,
+		},
+	}))
+
+	await pointer.pointer([
+		{ keys: "[MouseLeft>]", target: notice, coords: from },
+		...steps,
+		{ keys: "[/MouseLeft]" },
+	])
 }
 
 const noticesOnScreen = () =>
@@ -129,7 +179,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The failure tier, the one a background job reaches for when nobody opened anything. The story raises the failure from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. Check that it is announced urgently, that the close control is reachable by keyboard with a visible ring, and that pressing it takes the notice off screen. Pick `Default` for the tier that leaves on its own, `LongContent` for a failure whose strings run past the notice width.",
+					"The failure tier, the one a background job reaches for when nobody opened anything. The story raises the failure from the trigger and a transient notice straight from the module, outside any component, then waits for the transient to leave: the failure is still there after a delay that already emptied its neighbour, because it holds until the reader closes it. While nobody has focused the surface, the urgent announcement is the library's hidden mirror and the drawn notice stays out of the accessibility tree, so the title is announced once rather than twice; a Tab to the close control puts the notice back in the tree, with a visible ring, and Enter takes it off screen. Pick `Default` for the tier that leaves on its own, `Dismissing` for the gesture, `LongContent` for a failure whose strings run past the notice width.",
 			},
 		},
 	},
@@ -141,9 +191,16 @@ export const Error = meta.story({
 		const announcement = await screen.findByRole("alert")
 		await expect(announcement).toHaveTextContent(FAILURE.title)
 
-		const notice = await within(viewport()).findByRole("alertdialog")
+		const notice = await within(viewport()).findByRole("alertdialog", {
+			hidden: true,
+		})
 		await waitFor(() => expect(notice).toBeVisible())
-		await expect(notice).toHaveAccessibleName(FAILURE.title)
+
+		const announced = screen.getAllByText(FAILURE.title, {
+			ignore: '[aria-hidden="true"], [aria-hidden="true"] *',
+		})
+		await expect(announced).toHaveLength(1)
+		await expect(announcement).toContainElement(announced[0])
 
 		raiseTransientNotice(SAVED)
 		await within(viewport()).findByText(SAVED.title)
@@ -154,14 +211,17 @@ export const Error = meta.story({
 
 		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
 
-		const close = within(viewport()).getByRole("button", {
-			name: "Close notice",
-		})
+		const close = within(viewport()).getByRole("button", { hidden: true })
 		await waitFor(async () => {
 			await userEvent.tab()
 			await expect(close).toHaveFocus()
 		})
 		await expect(close.matches(":focus-visible")).toBe(true)
+		await expect(close).toHaveAccessibleName("Close notice")
+		await expect(await screen.findByRole("alertdialog")).toHaveAccessibleName(
+			FAILURE.title,
+		)
+		await expect(screen.queryByRole("alert")).toBe(null)
 
 		await userEvent.keyboard("{Enter}")
 		await waitFor(() =>
@@ -172,10 +232,11 @@ export const Error = meta.story({
 
 export const Stacked = meta.story({
 	parameters: {
+		a11y: A11Y_URGENT_NOTICE_HIDDEN_UNTIL_FOCUSED,
 		docs: {
 			description: {
 				story:
-					"Four failures raised in a row from the module itself, three kept. Reach for this when several jobs fail at once: check that the surface holds no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the top inline-end edge so a reader's eye lands on what just happened rather than on what they already read.",
+					"Four failures raised in a row from the module itself, three kept. Reach for this when several jobs fail at once: check that the surface holds no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the top inline-end edge so a reader's eye lands on what just happened rather than on what they already read. The `aria-hidden-focus` audit is off here for the same reason as in `LongContent`: three urgent notices sit unfocused, hidden from the accessibility tree by the library while their mirrors do the announcing.",
 			},
 		},
 	},
@@ -207,10 +268,11 @@ export const LongContent = meta.story({
 		/>
 	),
 	parameters: {
+		a11y: A11Y_URGENT_NOTICE_HIDDEN_UNTIL_FOCUSED,
 		docs: {
 			description: {
 				story:
-					"A failure whose title is one unbreakable word and whose description runs several sentences. Check that both wrap inside the notice instead of pushing it wider than the window, and that the close control keeps its own column at the inline end, still fully inside the notice and still 24 CSS pixels of hit area.",
+					"A failure whose title is one unbreakable word and whose description runs several sentences. Check that both wrap inside the notice instead of pushing it wider than the window, and that the close control keeps its own column at the inline end, still fully inside the notice and still 24 CSS pixels of hit area. The `aria-hidden-focus` audit is off here: the library keeps an urgent notice out of the accessibility tree until the surface is focused, so that its hidden mirror announces it once, and the close control stays in the tab order meanwhile.",
 			},
 		},
 	},
@@ -219,11 +281,13 @@ export const LongContent = meta.story({
 			canvas.getByRole("button", { name: "Report the long failure" }),
 		)
 
-		const notice = await within(viewport()).findByRole("alertdialog")
-		const close = within(viewport()).getByRole("button", {
-			name: "Close notice",
+		const notice = await within(viewport()).findByRole("alertdialog", {
+			hidden: true,
 		})
+		const close = within(viewport()).getByRole("button", { hidden: true })
 		await waitFor(() => expect(notice).toBeVisible())
+
+		await expect(close).toHaveAttribute("aria-label", "Close notice")
 
 		const noticeBox = notice.getBoundingClientRect()
 		const closeBox = close.getBoundingClientRect()
@@ -235,5 +299,93 @@ export const LongContent = meta.story({
 		await expect(
 			within(viewport()).getByText(LONG_FAILURE.title).scrollWidth,
 		).toBeLessThanOrEqual(Math.ceil(noticeBox.width))
+	},
+})
+
+export const Dismissing = meta.story({
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() => raiseFailureNotice(FAILURE)}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The pointer way out. Notices are anchored to the top inline-end corner, so they leave through that corner: a drag up or toward the inline end dismisses, a drag toward the middle of the window snaps back and keeps the notice. Reach for this when checking that the gesture points at the nearest edge rather than dragging the notice across the surface.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Run the routine" }),
+		)
+
+		const notice = await within(viewport()).findByRole("alertdialog", {
+			hidden: true,
+		})
+		await waitFor(() => expect(notice).toBeVisible())
+
+		await swipe(notice, userEvent, { y: SWIPE_DISTANCE })
+		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
+
+		await swipe(notice, userEvent, { y: -SWIPE_DISTANCE })
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
+		)
+	},
+})
+
+export const WithDialog = meta.story({
+	render: () => (
+		<>
+			<DialogRoot>
+				<Trigger className={buttonVariants({ variant: "outline" })}>
+					Bot settings
+				</Trigger>
+				<Content>
+					<DialogTitle>Bot settings</DialogTitle>
+					<DialogDescription>
+						Name the bot, point it at a folder and tell it how to behave.
+					</DialogDescription>
+				</Content>
+			</DialogRoot>
+			<NoticeSurface />
+		</>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A background failure raised while a modal dialog holds the window — the moment the surface exists for. The dialog dims the page and takes pointer interaction away from everything behind it, so the notice viewport draws above it and takes its own pointer events back: check that the notice is the topmost element under its own centre, that its close control dismisses it, and that the dialog is still open and untouched afterwards. Focus stays trapped in the dialog while it is open, so the notice is reachable here by pointer, not by Tab.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Bot settings" }))
+		const dialog = await screen.findByRole("dialog")
+		await waitFor(() => expect(dialog).toBeVisible())
+
+		raiseFailureNotice(FAILURE)
+		const notice = await within(viewport()).findByRole("alertdialog", {
+			hidden: true,
+		})
+		await waitFor(() => expect(notice).toBeVisible())
+
+		const box = notice.getBoundingClientRect()
+		const topmost = document.elementFromPoint(
+			box.left + box.width / 2,
+			box.top + box.height / 2,
+		)
+		await expect(notice.contains(topmost)).toBe(true)
+
+		await userEvent.click(
+			within(viewport()).getByRole("button", { hidden: true }),
+		)
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
+		)
+		await expect(dialog).toBeVisible()
 	},
 })
