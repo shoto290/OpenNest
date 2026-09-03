@@ -149,16 +149,15 @@ const WebhookBlock = (props: WebhookBlockProps) => {
 				label={t("routines.form.webhook.header")}
 				value={webhook?.header ?? ""}
 			/>
-			{line ? (
-				<p
-					className={cn(
-						"text-xs",
-						line === "failure" ? "text-destructive" : "text-muted-foreground",
-					)}
-				>
-					{t(`routines.form.webhook.${line}`)}
-				</p>
-			) : null}
+			<p
+				className={cn(
+					"text-xs empty:hidden",
+					line === "failure" ? "text-destructive" : "text-muted-foreground",
+				)}
+				role="status"
+			>
+				{line ? t(`routines.form.webhook.${line}`) : null}
+			</p>
 		</div>
 	)
 }

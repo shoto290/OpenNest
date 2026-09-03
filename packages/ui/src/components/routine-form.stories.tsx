@@ -1,10 +1,15 @@
+import { useState } from "react"
 import { expect, fn, screen, spyOn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import {
 	EMPTY_ROUTINE_VALUES,
 	RoutineForm,
+	type RoutineFormProps,
 } from "@workspace/ui/components/routine-form"
 import {
 	CALLED_FORM,
@@ -188,6 +193,53 @@ export const KeyStillReading = meta.story({
 				"The address and the key of this routine could not be read.",
 			),
 		).not.toBeInTheDocument()
+	},
+})
+
+const FAIL_THE_READ = "Fail the key read"
+
+const KeyReadHost = (props: RoutineFormProps) => {
+	const [hasFailedToReadKey, setFailed] = useState(false)
+
+	return (
+		<div
+			className="flex flex-col gap-3"
+			style={{ width: ROUTINES_PANEL_WIDTH }}
+		>
+			<button onClick={() => setFailed(true)} type="button">
+				{FAIL_THE_READ}
+			</button>
+			<RoutineForm {...props} hasFailedToReadKey={hasFailedToReadKey} />
+		</div>
+	)
+}
+
+export const KeyReadFailingWhileOpen = meta.story({
+	args: { ...CALLED_FORM, webhook: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The read of the key failing under a form the reader is already looking at, the way it happens in the panel. The control beside the form stands in for the read coming back. Check that the failure replaces the reading line in the same status region rather than in a second one, that the form is never remounted under it, and so that a screen reader hears the failure instead of being left on the last thing it was told.",
+			},
+		},
+	},
+	render: (args) => <KeyReadHost {...args} />,
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const region = canvas.getByRole("status")
+		const form = slotIn(canvasElement, "routine-form")
+
+		await expect(region).toHaveTextContent(
+			"The address and the key are being read.",
+		)
+
+		await userEvent.click(canvas.getByRole("button", { name: FAIL_THE_READ }))
+
+		await expect(canvas.getByRole("status")).toBe(region)
+		await expect(region).toHaveTextContent(
+			"The address and the key of this routine could not be read.",
+		)
+		await expect(slotIn(canvasElement, "routine-form")).toBe(form)
 	},
 })
 
