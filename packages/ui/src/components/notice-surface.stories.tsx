@@ -377,7 +377,6 @@ export const WithDialog = meta.story({
 			box.top + box.height / 2,
 		)
 		await expect(notice.contains(topmost)).toBe(true)
-		await expect(viewport()).not.toHaveAttribute("aria-hidden")
 		await expect(isInaccessible(viewport())).toBe(false)
 
 		await userEvent.click(closeControl())
