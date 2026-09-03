@@ -308,6 +308,50 @@ const chat = {
 			toggle: "Routines de cette conversation",
 			title: "Routines",
 		},
+		form: {
+			new: "Nouvelle routine",
+			edit: "Modifier la routine",
+			back: "Retour aux routines",
+			save: "Enregistrer la routine",
+			title: {
+				label: "Titre",
+				placeholder: "Résumé du matin",
+			},
+			instruction: {
+				label: "Instruction",
+				placeholder:
+					"Lis ce qui est arrivé cette nuit et écris un court résumé.",
+			},
+			source: {
+				label: "Déclencheur",
+				placeholder: "Choisissez ce qui déclenche cette routine",
+				tied: "La clé et la configuration d'une routine tiennent à son déclencheur : celui d'une routine enregistrée ne peut plus changer.",
+			},
+			expression: {
+				label: "Expression cron",
+				placeholder: "0 8 * * *",
+			},
+			path: {
+				label: "Fichier surveillé",
+				placeholder: "/notes/CHANGELOG.md",
+			},
+			webhook: {
+				url: "Adresse",
+				key: "Clé",
+				header: "Nom de l'en-tête",
+				copy: "Copier {{field}} de cette routine",
+				copied: "{{field}} copié",
+				pending:
+					"L'adresse, la clé et le nom de l'en-tête seront disponibles une fois la routine enregistrée.",
+				failure: "L'adresse et la clé de cette routine n'ont pas pu être lues.",
+			},
+			error: {
+				blankTitle: "Une routine a besoin d'un titre.",
+				blankInstruction: "Une routine a besoin d'une instruction.",
+				unreadableExpression:
+					"Cette expression n'est pas lisible comme un horaire.",
+			},
+		},
 		row: {
 			delete: "Supprimer {{title}}",
 			stopped: "S'est arrêtée",

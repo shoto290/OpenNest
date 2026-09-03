@@ -300,6 +300,48 @@ const chat = {
 			toggle: "Routines of this conversation",
 			title: "Routines",
 		},
+		form: {
+			new: "New routine",
+			edit: "Edit routine",
+			back: "Back to the routines",
+			save: "Save routine",
+			title: {
+				label: "Title",
+				placeholder: "Morning digest",
+			},
+			instruction: {
+				label: "Instruction",
+				placeholder: "Read what came in overnight and write a short digest.",
+			},
+			source: {
+				label: "Trigger",
+				placeholder: "Pick what fires this routine",
+				tied: "The key and the configuration of a routine are tied to its trigger, so the trigger of a saved routine cannot be changed.",
+			},
+			expression: {
+				label: "Cron expression",
+				placeholder: "0 8 * * *",
+			},
+			path: {
+				label: "Watched path",
+				placeholder: "/notes/CHANGELOG.md",
+			},
+			webhook: {
+				url: "Address",
+				key: "Key",
+				header: "Header name",
+				copy: "Copy the {{field}} of this routine",
+				copied: "{{field}} copied",
+				pending:
+					"The address, the key and the header name are available once the routine is saved.",
+				failure: "The address and the key of this routine could not be read.",
+			},
+			error: {
+				blankTitle: "A routine needs a title.",
+				blankInstruction: "A routine needs an instruction.",
+				unreadableExpression: "This expression cannot be read as a schedule.",
+			},
+		},
 		row: {
 			delete: "Delete {{title}}",
 			stopped: "Stopped itself",

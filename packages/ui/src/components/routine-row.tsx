@@ -20,39 +20,57 @@ type RoutineRowModel = {
 type RoutineRowProps = RoutineRowModel & {
 	onEnabledChange: (isEnabled: boolean) => void
 	onDelete: () => void | Promise<void>
+	onOpen?: () => void
 }
 
 const RoutineRow = ({
+	id,
 	title,
 	triggerSourceTitle,
 	isEnabled,
 	hasStoppedItself,
 	onEnabledChange,
 	onDelete,
+	onOpen,
 }: RoutineRowProps) => {
 	const { t } = useTranslation("chat")
 	const titleId = useId()
+
+	const identity = (
+		<>
+			<span className="truncate font-medium text-sm" id={titleId}>
+				{title}
+			</span>
+			<span className="flex min-w-0 items-center gap-1.5">
+				<span className="truncate text-muted-foreground text-xs">
+					{triggerSourceTitle}
+				</span>
+				{hasStoppedItself ? (
+					<Badge data-slot="routine-stopped" variant="destructive">
+						{t("routines.row.stopped")}
+					</Badge>
+				) : null}
+			</span>
+		</>
+	)
 
 	return (
 		<li
 			className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 p-2.5"
 			data-slot="routine-row"
 		>
-			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				<p className="truncate font-medium text-sm" id={titleId}>
-					{title}
-				</p>
-				<div className="flex min-w-0 items-center gap-1.5">
-					<span className="truncate text-muted-foreground text-xs">
-						{triggerSourceTitle}
-					</span>
-					{hasStoppedItself ? (
-						<Badge data-slot="routine-stopped" variant="destructive">
-							{t("routines.row.stopped")}
-						</Badge>
-					) : null}
-				</div>
-			</div>
+			{onOpen ? (
+				<button
+					className="flex min-w-0 flex-1 flex-col gap-1 rounded-lg text-start outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+					data-opens={id}
+					onClick={onOpen}
+					type="button"
+				>
+					{identity}
+				</button>
+			) : (
+				<div className="flex min-w-0 flex-1 flex-col gap-1">{identity}</div>
+			)}
 			<Switch
 				aria-labelledby={titleId}
 				checked={isEnabled}
