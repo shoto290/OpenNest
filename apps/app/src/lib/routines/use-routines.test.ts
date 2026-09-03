@@ -524,3 +524,50 @@ it("keeps a value typed by the source the lead bot does not declare", async () =
 		expect.objectContaining({ filter: INBOX_ROUTINE.filter }),
 	)
 })
+
+it("leaves the filter of a routine whose source went unread as it was read", async () => {
+	list.mockResolvedValueOnce([INBOX_ROUTINE])
+	sources.mockImplementation((botId: string) =>
+		botId === INBOX_ROUTINE.botId
+			? Promise.reject(new Error("the sources are unreadable"))
+			: Promise.resolve(DECLARED),
+	)
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+
+	act(() => {
+		result.current.form.onOpen(INBOX_ROUTINE.id)
+	})
+
+	expect(result.current.form.open?.refusal).toBeUndefined()
+	expect(result.current.form.open?.values.filter).toEqual({
+		matchMode: "all",
+		rows: [{ field: "unreadCount", operator: "gt", value: "10" }],
+	})
+
+	update.mockResolvedValueOnce(INBOX_ROUTINE)
+	await act(async () => {
+		result.current.form.onSave(
+			entered({
+				title: "Inbox digest",
+				instruction: INBOX_ROUTINE.instruction,
+				triggerSourceId: INBOX_ROUTINE.triggerSourceId,
+				filter: {
+					matchMode: "all",
+					rows: [{ field: "unreadCount", operator: "gt", value: "10" }],
+				},
+			}),
+		)
+	})
+
+	expect(update).toHaveBeenCalledWith(
+		INBOX_ROUTINE.id,
+		expect.objectContaining({
+			title: "Inbox digest",
+			filter: INBOX_ROUTINE.filter,
+		}),
+	)
+})

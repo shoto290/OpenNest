@@ -11,6 +11,7 @@ import type { RoutinesPanelForm } from "@workspace/ui/components/routines-panel"
 
 import type { Routine } from "./routine-contract"
 import {
+	isFilterAsRead,
 	type KnownSources,
 	sourceKeyOf,
 	toFilter,
@@ -162,7 +163,9 @@ export const useRoutineForm = ({
 				? routinesTransport.update(id, {
 						title: values.title,
 						instruction: values.instruction,
-						filter: filterOf(values),
+						filter: isFilterAsRead(values.filter, routine.filter)
+							? routine.filter
+							: filterOf(values),
 						triggerConfig: toTriggerConfig(values),
 						isEnabled: routine.isEnabled,
 					})

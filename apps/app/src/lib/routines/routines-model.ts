@@ -123,6 +123,24 @@ const toFormRow = ({
 	value: value === undefined ? "" : String(value),
 })
 
+export const isFilterAsRead = (
+	entered: RoutineFilterValues,
+	held: Filter,
+): boolean => {
+	const read = toFormFilter(held)
+
+	return (
+		entered.matchMode === read.matchMode &&
+		entered.rows.length === read.rows.length &&
+		entered.rows.every((row, at) => isSameRow(row, read.rows[at]))
+	)
+}
+
+const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>
+	row.field === held.field &&
+	row.operator === held.operator &&
+	row.value === held.value
+
 export const toFormFilter = (filter: Filter): RoutineFilterValues => ({
 	matchMode: filter.matchMode,
 	rows: filter.rows.map(toFormRow),

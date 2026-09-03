@@ -161,6 +161,34 @@ describe("RoutinesPanel", () => {
 		expect(onSave).toHaveBeenCalledTimes(1)
 	})
 
+	it("shows a row as it was read when the source declares no field", () => {
+		const { onSave } = panelHolding({
+			id: "routine-unread-source",
+			values: {
+				...FILTERED_FORM.values,
+				triggerSourceId: "space-newsletter",
+			},
+		})
+
+		const rowOf = (rank: number) =>
+			within(screen.getByRole("group", { name: `Row ${rank}` }))
+
+		expect(
+			rowOf(1).getByRole("combobox", { name: "Operator" }).textContent,
+		).toContain("contains")
+		expect(
+			(rowOf(1).getByRole("textbox", { name: "Value" }) as HTMLInputElement)
+				.value,
+		).toBe("invoice")
+
+		fireEvent.click(screen.getByRole("button", { name: "Save routine" }))
+
+		expect(onSave).toHaveBeenCalledWith({
+			...FILTERED_FORM.values,
+			triggerSourceId: "space-newsletter",
+		})
+	})
+
 	it("holds the values it was read with when the write is refused", () => {
 		const { onSave } = panelHolding({
 			...SCHEDULED_FORM,

@@ -750,3 +750,73 @@ export const FilterCarriedToAnotherSource = meta.story({
 		await expect(await screen.findAllByRole("option")).toHaveLength(2)
 	},
 })
+
+export const FilterRefusedThenMovedToAnotherSource = meta.story({
+	args: {
+		id: null,
+		values: FILTERED_FORM.values,
+		refusal: { row: 1, operator: "gt", fieldType: "boolean" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A refusal raised against one source, on a routine still unwritten, then another trigger picked. The refusal names a rank in a filter written for the source that was on screen; the rows are rehomed by the pick, so the refusal describes nothing any more. Check that no row is left marked and that the message is gone rather than hanging over the row that took its place.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("combobox", { name: "Trigger" }))
+		await userEvent.click(
+			await screen.findByRole("option", { name: "On a schedule" }),
+		)
+
+		await expect(
+			canvas.queryByText(
+				"is greater than does not fit a field declared as boolean.",
+			),
+		).not.toBeInTheDocument()
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole(
+				"combobox",
+				{
+					name: "Operator",
+				},
+			),
+		).not.toHaveAttribute("aria-invalid")
+	},
+})
+
+export const FilterOnAPathTheNextSourceDeclares = meta.story({
+	args: { id: null, values: EMPTY_ROUTINE_VALUES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row moved onto a free path under one trigger, whose path names a field the next trigger declares. Check that picking that trigger hands the row the field control of a declared field instead of leaving it on the path control it was built with: the path is a field again, and the operators of its declared type come back with it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const pick = async (label: string, option: string) => {
+			await userEvent.click(canvas.getByRole("combobox", { name: label }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("Trigger", "When the space inbox fills")
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		await pick("Field", "Another path")
+		await userEvent.type(row().getByRole("textbox", { name: "Path" }), "path")
+
+		await pick("Trigger", "When a watched file changes")
+
+		await expect(
+			row().queryByRole("textbox", { name: "Path" }),
+		).not.toBeInTheDocument()
+		await expect(
+			row().getByRole("combobox", { name: "Field" }),
+		).toHaveTextContent("path")
+	},
+})
