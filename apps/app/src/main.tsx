@@ -10,9 +10,15 @@ import { revealWindow } from "@/lib/host"
 import { applyLanguage, readMirror } from "@/lib/user/preferences-mirror"
 import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 
-revealWindow().catch((reason) => {
+const reportRevealFailure = (reason: unknown) => {
 	console.error("reveal at start failed", reason)
-})
+}
+
+try {
+	revealWindow().catch(reportRevealFailure)
+} catch (reason) {
+	reportRevealFailure(reason)
+}
 
 exposeLiveSessions()
 

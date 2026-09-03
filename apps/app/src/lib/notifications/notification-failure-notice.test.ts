@@ -27,6 +27,8 @@ const CLICK_FAILURE_TITLE =
 
 const REVEAL_FAILURE_TITLE = "The window could not be brought to the front"
 
+const CONTROL_TITLE = "Positive control"
+
 const failingReveal = () => Promise.reject(new Error("window is gone"))
 
 const throwingReveal = (): Promise<void> => {
@@ -183,7 +185,14 @@ it("leaves the surface empty when a click reveals the window", async () => {
 	await watchAlongside({ notifications })
 
 	notifications.activate({ kind: "bot", id: "bot-one" })
-	await Promise.resolve()
+	raiseFailureNotice({ title: CONTROL_TITLE })
 
-	expect(noticesOnScreen()).toEqual([])
+	await waitFor(() => {
+		expect(screen.getAllByText(CONTROL_TITLE)).not.toHaveLength(0)
+	})
+
+	const notices = noticesOnScreen()
+
+	expect(notices).toHaveLength(1)
+	expect(within(notices[0]).getByText(CONTROL_TITLE)).toBeTruthy()
 })
