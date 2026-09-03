@@ -170,11 +170,7 @@ it("carries the address, the key and the header name of a created webhook routin
 	})
 
 	await waitFor(() =>
-		expect(result.current.form.open?.webhook).toEqual({
-			url: A_WEBHOOK_KEY.url,
-			key: A_WEBHOOK_KEY.key,
-			header: A_WEBHOOK_KEY.header,
-		}),
+		expect(result.current.form.open?.webhook).toEqual(A_WEBHOOK_KEY),
 	)
 	expect(create).toHaveBeenCalledWith({
 		conversationId: ROUTINE.conversationId,
@@ -288,9 +284,5 @@ it("keeps the key a later read carried when an earlier read rejects", async () =
 	})
 
 	expect(result.current.form.open?.hasFailedToReadKey).toBeUndefined()
-	expect(result.current.form.open?.webhook).toEqual({
-		url: A_WEBHOOK_KEY.url,
-		key: A_WEBHOOK_KEY.key,
-		header: A_WEBHOOK_KEY.header,
-	})
+	expect(result.current.form.open?.webhook).toEqual(A_WEBHOOK_KEY)
 })

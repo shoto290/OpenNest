@@ -3,6 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import {
 	EMPTY_ROUTINE_VALUES,
 	type RoutineFormModel,
+	type RoutineFormRefusal,
 	type RoutineFormValues,
 	type RoutineTriggerSource,
 } from "@workspace/ui/components/routine-form"
@@ -105,9 +106,12 @@ export const useRoutineForm = ({
 				return
 			}
 
+			const keepEntered = (refusal: RoutineFormRefusal | null) =>
+				setOpen({ ...open, values, refusal: refusal ?? undefined })
+
 			const written = open.id === null ? create(values) : edit(open.id, values)
 			if (!written) {
-				setOpen({ ...open, values, refusal: undefined })
+				keepEntered(null)
 				onWriteFailure()
 				return
 			}
@@ -119,7 +123,7 @@ export const useRoutineForm = ({
 				},
 				(reason) => {
 					const refusal = toFormRefusal(reason)
-					setOpen({ ...open, values, refusal: refusal ?? undefined })
+					keepEntered(refusal)
 					if (!refusal) {
 						onWriteFailure()
 					}
