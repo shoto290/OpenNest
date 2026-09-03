@@ -354,16 +354,28 @@ const BOOLEAN_FILTER = filtered([
 ])
 
 const OTHER_PATH_FILTER = filtered([
-	{ field: "sender.address", operator: "ends_with", value: "@example.com" },
+	{ field: "sender.address", operator: "exists", value: "" },
+])
+
+const NUMBER_FILTER = filtered([
+	{ field: "unreadCount", operator: "gt", value: "10" },
+])
+
+const MISSING_VALUE_FILTER = filtered([
+	{ field: "subject", operator: "contains", value: "" },
 ])
 
 const LONG_FILTER = filtered([
 	{
-		field: "delivery.attachments.first.originalFileName",
+		field: "subject",
 		operator: "contains",
-		value: "quarterly-invoice-reconciliation-2026",
+		value: "quarterly-invoice-reconciliation-2026-north-region",
 	},
-	{ field: "unreadCount", operator: "gt", value: "10" },
+	{
+		field: "delivery.attachments.first.originalFileName",
+		operator: "exists",
+		value: "",
+	},
 ])
 
 export const FilterWithoutARow = meta.story({
@@ -415,8 +427,8 @@ export const FilterOnTwoRows = meta.story({
 		await expect(rowOne.getByRole("textbox", { name: "Value" })).toHaveValue(
 			"invoice",
 		)
-		await expect(rowTwo.getByRole("textbox", { name: "Value" })).toHaveValue(
-			"10",
+		await expect(rowTwo.getByRole("spinbutton", { name: "Value" })).toHaveValue(
+			10,
 		)
 
 		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
@@ -497,7 +509,7 @@ export const FilterOnAnotherPath = meta.story({
 		docs: {
 			description: {
 				story:
-					"A row on a dotted path the source does not declare. Check that the field control reads as another path and brings a text control for the path itself, and that the operator list is the full one — nothing declares the type of that path, so nothing narrows what may be asked of it. Pick `FilterOnABooleanField` for the opposite case, a field whose declared type closes both lists.",
+					"A row on a dotted path the source does not declare. Check that the field control reads as another path and brings a text control for the path itself, and that the operator list holds presence alone: the engine reads a value through the type its source declares, so a path no source declares can only be asked whether it is there. Pick `FilterOnABooleanField` for a field whose declared type opens the comparison operators.",
 			},
 		},
 	},
@@ -510,9 +522,103 @@ export const FilterOnAnotherPath = meta.story({
 		await expect(row.getByRole("textbox", { name: "Path" })).toHaveValue(
 			"sender.address",
 		)
+		await expect(
+			row.queryByRole("textbox", { name: "Value" }),
+		).not.toBeInTheDocument()
 
 		await userEvent.click(row.getByRole("combobox", { name: "Operator" }))
-		await expect(await screen.findAllByRole("option")).toHaveLength(10)
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+	},
+})
+
+export const FilterMovedToAnotherPath = meta.story({
+	args: FILTERED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row leaving a declared field for a free path, and coming back. Check that the operator falls back to one the path still offers instead of staying on a comparison no payload could ever hold, that the path control keeps the focus while a reader types a name the source happens to declare, and that picking a declared field from the field control puts that field back in place of the path.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await userEvent.click(row().getByRole("combobox", { name: "Field" }))
+		await userEvent.click(
+			await screen.findByRole("option", { name: "Another path" }),
+		)
+		await expect(
+			row().getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is present")
+
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Path" }),
+			"subject",
+		)
+		await expect(row().getByRole("textbox", { name: "Path" })).toHaveFocus()
+		await expect(row().getByRole("textbox", { name: "Path" })).toHaveValue(
+			"subject",
+		)
+
+		await userEvent.click(row().getByRole("combobox", { name: "Field" }))
+		await userEvent.click(
+			await screen.findByRole("option", { name: "subject" }),
+		)
+		await expect(
+			row().queryByRole("textbox", { name: "Path" }),
+		).not.toBeInTheDocument()
+	},
+})
+
+export const FilterOnANumberField = meta.story({
+	args: NUMBER_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row on a field the source declares as a number. Check that the value control carries a number and nothing else — the engine reads the value as the declared type, and a word saved there would make the row false for every payload — and that typing letters into it leaves it empty rather than storing them.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("spinbutton", { name: "Value" })
+
+		await expect(value).toHaveValue(10)
+		await userEvent.clear(value)
+		await userEvent.type(value, "many")
+		await expect(value).toHaveValue(null)
+	},
+})
+
+export const FilterMissingAValue = meta.story({
+	args: MISSING_VALUE_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row whose operator takes a value the reader left empty, at the moment they save. The engine accepts such a row and then never matches on it, so the form is the last place it can be caught. Check that saving marks the value control of that row, that the message is tied to that control, that the routine is left unwritten, and that filling the value clears the mark without a second save.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("textbox", { name: "Value" })
+		const message = canvas.getByText("This row needs a value.")
+
+		await expect(value).toHaveAttribute("aria-invalid", "true")
+		await expect(value.getAttribute("aria-describedby")).toContain(message.id)
+		await expect(args.onSave).not.toHaveBeenCalled()
+
+		await userEvent.type(value, "invoice")
+		await expect(value).not.toHaveAttribute("aria-invalid")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledTimes(1)
 	},
 })
 
@@ -548,6 +654,42 @@ export const FilterRefusedForItsOperator = meta.story({
 			),
 		).not.toHaveAttribute("aria-invalid")
 		await expect(canvas.getByDisplayValue("invoice")).toBeVisible()
+	},
+})
+
+export const FilterRefusedThenEdited = meta.story({
+	args: {
+		...FILTERED_FORM,
+		refusal: { row: 1, operator: "gt", fieldType: "boolean" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The row a write was refused for, removed by the reader. The refusal names a rank in the filter that was written, so it stops describing anything the moment the rows move. Check that no mark is left behind on the row that took its place, and that nothing is marked once the refused row is gone. Pick `FilterRefusedForItsOperator` for the refusal as it lands.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole("button", {
+				name: "Remove the row on unreadCount",
+			}),
+		)
+
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 1" })).getByRole(
+				"combobox",
+				{
+					name: "Operator",
+				},
+			),
+		).not.toHaveAttribute("aria-invalid")
+		await expect(
+			canvas.queryByText(
+				"is greater than does not fit a field declared as boolean.",
+			),
+		).not.toBeInTheDocument()
 	},
 })
 

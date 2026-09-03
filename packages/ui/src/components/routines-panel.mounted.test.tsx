@@ -122,17 +122,43 @@ describe("RoutinesPanel", () => {
 
 		expect(refused.getAttribute("aria-invalid")).toBe("true")
 		expect(refused.getAttribute("aria-describedby")).toContain(message.id)
-		const heldValueOf = (rank: number) =>
-			(rowOf(rank).getByRole("textbox", { name: "Value" }) as HTMLInputElement)
-				.value
+		const heldValueOf = (rank: number, role: string) =>
+			(rowOf(rank).getByRole(role, { name: "Value" }) as HTMLInputElement).value
 
 		expect(
 			rowOf(1)
 				.getByRole("combobox", { name: "Operator" })
 				.getAttribute("aria-invalid"),
 		).toBeNull()
-		expect(heldValueOf(1)).toBe("invoice")
-		expect(heldValueOf(2)).toBe("10")
+		expect(heldValueOf(1, "textbox")).toBe("invoice")
+		expect(heldValueOf(2, "spinbutton")).toBe("10")
+	})
+
+	it("leaves a routine unwritten while a row misses its value", () => {
+		const { onSave } = panelHolding({
+			...FILTERED_FORM,
+			values: {
+				...FILTERED_FORM.values,
+				filter: {
+					matchMode: "all",
+					rows: [{ field: "subject", operator: "contains", value: "" }],
+				},
+			},
+		})
+
+		fireEvent.click(screen.getByRole("button", { name: "Save routine" }))
+
+		const value = screen.getByRole("textbox", { name: "Value" })
+
+		expect(onSave).not.toHaveBeenCalled()
+		expect(value.getAttribute("aria-invalid")).toBe("true")
+		expect(value.getAttribute("aria-describedby")).toContain(
+			screen.getByText("This row needs a value.").id,
+		)
+
+		fireEvent.change(value, { target: { value: "invoice" } })
+		fireEvent.click(screen.getByRole("button", { name: "Save routine" }))
+		expect(onSave).toHaveBeenCalledTimes(1)
 	})
 
 	it("holds the values it was read with when the write is refused", () => {

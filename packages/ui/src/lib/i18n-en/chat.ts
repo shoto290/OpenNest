@@ -388,6 +388,7 @@ const chat = {
 			error: {
 				blankTitle: "A routine needs a title.",
 				blankInstruction: "A routine needs an instruction.",
+				blankValue: "This row needs a value.",
 				unreadableExpression: "This expression cannot be read as a schedule.",
 				unsupportedOperator:
 					"{{operator}} does not fit a field declared as {{fieldType}}.",

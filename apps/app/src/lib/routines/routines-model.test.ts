@@ -142,17 +142,13 @@ describe("a filter written from the form and read back into it", () => {
 		expect(toFormFilter(written).rows[0]?.value).toBe("")
 	})
 
-	it("keeps a path the source does not declare as text", () => {
+	it("writes a row on a path the source does not declare without a value", () => {
 		const rows = [
-			{
-				field: "sender.address",
-				operator: "ends_with" as const,
-				value: "@x.io",
-			},
+			{ field: "sender.address", operator: "exists" as const, value: "" },
 		]
 
-		expect(toFilter({ matchMode: "all", rows }, INBOX_PAYLOAD).rows).toEqual(
-			rows,
-		)
+		expect(toFilter({ matchMode: "all", rows }, INBOX_PAYLOAD).rows).toEqual([
+			{ field: "sender.address", operator: "exists" },
+		])
 	})
 })

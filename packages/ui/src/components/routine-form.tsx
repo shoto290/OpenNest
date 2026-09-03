@@ -265,10 +265,13 @@ const OTHER_PATH = "__other_path__"
 const typeOf = (fields: RoutinePayloadField[], field: string) =>
 	fields.find((declared) => declared.name === field)?.type
 
+const PRESENCE_OPERATORS: readonly RoutineFilterOperator[] = [
+	"exists",
+	"not_exists",
+]
+
 const operatorsOf = (fieldType: RoutineFieldType | undefined) =>
-	fieldType
-		? ROUTINE_OPERATORS_BY_FIELD_TYPE[fieldType]
-		: ROUTINE_FILTER_OPERATORS
+	fieldType ? ROUTINE_OPERATORS_BY_FIELD_TYPE[fieldType] : PRESENCE_OPERATORS
 
 const blankValueFor = (fieldType: RoutineFieldType | undefined) =>
 	fieldType === "boolean" ? "true" : ""
@@ -300,13 +303,22 @@ const naming = (
 	}
 }
 
+const rowRefusalIn = (refusal: RoutineFormRefusal | undefined) =>
+	typeof refusal === "object" ? refusal : null
+
+const isMissingValue = (row: RoutineFilterRow) =>
+	ROUTINE_OPERATOR_TAKES_VALUE[row.operator] && row.value.trim() === ""
+
 type FilterRowProps = {
 	row: RoutineFilterRow
 	rank: number
 	fields: RoutinePayloadField[]
-	error?: string
+	isOnAFreePath: boolean
+	operatorError?: string
+	valueError?: string
 	fieldRef: RefCallback<HTMLButtonElement>
 	onChange: (row: RoutineFilterRow) => void
+	onFreePath: (isFree: boolean) => void
 	onRemove: () => void
 }
 
@@ -314,14 +326,18 @@ const FilterRow = ({
 	row,
 	rank,
 	fields,
-	error,
+	isOnAFreePath,
+	operatorError,
+	valueError,
 	fieldRef,
 	onChange,
+	onFreePath,
 	onRemove,
 }: FilterRowProps) => {
 	const { t } = useTranslation("chat")
 	const fieldType = typeOf(fields, row.field)
 	const otherPath = t("routines.form.filter.field.otherPath")
+	const isFree = isOnAFreePath || fieldType === undefined
 
 	return (
 		<div
@@ -332,26 +348,27 @@ const FilterRow = ({
 		>
 			<SettingsSelect
 				label={t("routines.form.filter.field.label")}
-				onValueChange={(picked) =>
+				onValueChange={(picked) => {
+					onFreePath(picked === OTHER_PATH)
 					onChange(naming(fields, row, picked === OTHER_PATH ? "" : picked))
-				}
+				}}
 				options={[
 					...fields.map(({ name }) => ({ label: name, value: name })),
 					{ label: otherPath, value: OTHER_PATH },
 				]}
 				ref={fieldRef}
-				value={fieldType ? row.field : OTHER_PATH}
+				value={isFree ? OTHER_PATH : row.field}
 			/>
-			{fieldType ? null : (
+			{isFree ? (
 				<SettingsField
 					label={t("routines.form.filter.path.label")}
 					onValueChange={(path) => onChange(naming(fields, row, path))}
 					placeholder={t("routines.form.filter.path.placeholder")}
 					value={row.field}
 				/>
-			)}
+			) : null}
 			<SettingsSelect
-				error={error}
+				error={operatorError}
 				label={t("routines.form.filter.operator.label")}
 				onValueChange={(picked) =>
 					onChange({ ...row, operator: picked as RoutineFilterOperator })
@@ -364,6 +381,7 @@ const FilterRow = ({
 			/>
 			{ROUTINE_OPERATOR_TAKES_VALUE[row.operator] ? (
 				<ValueControl
+					error={valueError}
 					fieldType={fieldType}
 					onValueChange={(value) => onChange({ ...row, value })}
 					value={row.value}
@@ -388,12 +406,14 @@ const FilterRow = ({
 type ValueControlProps = {
 	fieldType: RoutineFieldType | undefined
 	value: string
+	error?: string
 	onValueChange: (value: string) => void
 }
 
 const ValueControl = ({
 	fieldType,
 	value,
+	error,
 	onValueChange,
 }: ValueControlProps) => {
 	const { t } = useTranslation("chat")
@@ -402,6 +422,7 @@ const ValueControl = ({
 	if (fieldType === "boolean") {
 		return (
 			<SettingsSelect
+				error={error}
 				label={label}
 				onValueChange={onValueChange}
 				options={[
@@ -414,7 +435,13 @@ const ValueControl = ({
 	}
 
 	return (
-		<SettingsField label={label} onValueChange={onValueChange} value={value} />
+		<SettingsField
+			error={error}
+			label={label}
+			numeric={fieldType === "number"}
+			onValueChange={onValueChange}
+			value={value}
+		/>
 	)
 }
 
@@ -423,7 +450,8 @@ type FilterFocus = { row: number } | "add"
 type FilterBlockProps = {
 	filter: RoutineFilterValues
 	fields: RoutinePayloadField[]
-	refusal?: RoutineFormRefusal
+	refusal: RoutineOperatorRefusal | null
+	marksMissingValues: boolean
 	onChange: (filter: RoutineFilterValues) => void
 }
 
@@ -431,10 +459,14 @@ const FilterBlock = ({
 	filter,
 	fields,
 	refusal,
+	marksMissingValues,
 	onChange,
 }: FilterBlockProps) => {
 	const { t } = useTranslation("chat")
 	const labelId = useId()
+	const [freePaths, setFreePaths] = useState(() =>
+		filter.rows.map((row) => typeOf(fields, row.field) === undefined),
+	)
 	const requested = useRef<FilterFocus | null>(null)
 	const fieldControls = useRef<(HTMLButtonElement | null)[]>([])
 	const addControl = useRef<HTMLButtonElement>(null)
@@ -451,10 +483,9 @@ const FilterBlock = ({
 		control?.focus()
 	})
 
-	const refused = typeof refusal === "object" ? refusal : null
-
 	const append = () => {
 		requested.current = { row: filter.rows.length }
+		setFreePaths((held) => [...held, fields.length === 0])
 		onChange({
 			...filter,
 			rows: [...filter.rows, appended(fields)],
@@ -465,15 +496,26 @@ const FilterBlock = ({
 		const rows = filter.rows.filter((_, at) => at !== index)
 		requested.current =
 			rows.length === 0 ? "add" : { row: Math.min(index, rows.length - 1) }
+		setFreePaths((held) => held.filter((_, at) => at !== index))
 		onChange({ ...filter, rows })
 	}
 
-	const messageFor = (index: number) =>
-		refused?.row === index
+	const holdFreePath = (index: number, isFree: boolean) =>
+		setFreePaths((held) =>
+			filter.rows.map((_, at) => (at === index ? isFree : (held[at] ?? false))),
+		)
+
+	const operatorMessageFor = (index: number) =>
+		refusal?.row === index
 			? t("routines.form.error.unsupportedOperator", {
-					fieldType: t(`routines.form.filter.fieldTypes.${refused.fieldType}`),
-					operator: t(`routines.form.filter.operators.${refused.operator}`),
+					fieldType: t(`routines.form.filter.fieldTypes.${refusal.fieldType}`),
+					operator: t(`routines.form.filter.operators.${refusal.operator}`),
 				})
+			: undefined
+
+	const valueMessageFor = (row: RoutineFilterRow) =>
+		marksMissingValues && isMissingValue(row)
+			? t("routines.form.error.blankValue")
 			: undefined
 
 	return (
@@ -505,11 +547,11 @@ const FilterBlock = ({
 			)}
 			{filter.rows.map((row, index) => (
 				<FilterRow
-					error={messageFor(index)}
 					fieldRef={(control) => {
 						fieldControls.current[index] = control
 					}}
 					fields={fields}
+					isOnAFreePath={freePaths[index] ?? false}
 					// biome-ignore lint/suspicious/noArrayIndexKey: a row is identified by its rank, which is what the reader reorders it by
 					key={index}
 					onChange={(changed) =>
@@ -520,9 +562,12 @@ const FilterBlock = ({
 							),
 						})
 					}
+					onFreePath={(isFree) => holdFreePath(index, isFree)}
 					onRemove={() => remove(index)}
+					operatorError={operatorMessageFor(index)}
 					rank={index + 1}
 					row={row}
+					valueError={valueMessageFor(row)}
 				/>
 			))}
 			<Button
@@ -550,11 +595,19 @@ const RoutineForm = ({
 }: RoutineFormProps) => {
 	const { t } = useTranslation("chat")
 	const [entered, setEntered] = useState(values)
+	const [rowRefusal, setRowRefusal] = useState(() => rowRefusalIn(refusal))
+	const [marksMissingValues, setMarksMissingValues] = useState(false)
+	const readRefusal = useRef(refusal)
 	const form = useRef<HTMLFormElement>(null)
 
 	useEffect(() => {
 		form.current?.focus({ preventScroll: true })
 	}, [])
+
+	if (readRefusal.current !== refusal) {
+		readRefusal.current = refusal
+		setRowRefusal(rowRefusalIn(refusal))
+	}
 
 	const isWritten = id !== null
 	const source = sources.find(
@@ -565,9 +618,19 @@ const RoutineForm = ({
 	const answer = (field: keyof RoutineFormValues, value: string) =>
 		setEntered((held) => ({ ...held, [field]: value }))
 
+	const changeFilter = (filter: RoutineFilterValues) => {
+		setRowRefusal(null)
+		setEntered((held) => ({ ...held, filter }))
+	}
+
 	const save = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
-		onSave(entered)
+		const isMissingAValue = entered.filter.rows.some(isMissingValue)
+		setMarksMissingValues(isMissingAValue)
+
+		if (!isMissingAValue) {
+			onSave(entered)
+		}
 	}
 
 	return (
@@ -652,8 +715,9 @@ const RoutineForm = ({
 			<FilterBlock
 				fields={source?.payload ?? []}
 				filter={entered.filter}
-				onChange={(filter) => setEntered((held) => ({ ...held, filter }))}
-				refusal={refusal}
+				marksMissingValues={marksMissingValues}
+				onChange={changeFilter}
+				refusal={rowRefusal}
 			/>
 			<Button className="w-full" type="submit">
 				{t("routines.form.save")}

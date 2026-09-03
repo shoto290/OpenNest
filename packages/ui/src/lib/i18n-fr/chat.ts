@@ -398,6 +398,7 @@ const chat = {
 			error: {
 				blankTitle: "Une routine a besoin d'un titre.",
 				blankInstruction: "Une routine a besoin d'une instruction.",
+				blankValue: "Cette ligne a besoin d'une valeur.",
 				unreadableExpression:
 					"Cette expression n'est pas lisible comme un horaire.",
 				unsupportedOperator:

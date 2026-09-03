@@ -248,3 +248,30 @@ export const Masked = meta.story({
 		await expect(args.onValueChange).toHaveBeenLastCalledWith("s3cret")
 	},
 })
+
+export const Numeric = meta.story({
+	args: {
+		label: "Attempt",
+		numeric: true,
+		value: "10",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The form a field takes when the surface behind it reads the value as a number rather than as text. Reach for this over `Default` whenever a word entered there would be stored and then silently mean nothing: the control refuses anything that is not a number instead of handing one on, decimals included, and reports an empty value rather than the letters typed into it.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const field = canvas.getByLabelText("Attempt")
+
+		await expect(field).toHaveAttribute("type", "number")
+		await expect(field).toHaveValue(10)
+
+		await userEvent.clear(field)
+		await userEvent.type(field, "many")
+		await expect(field).toHaveValue(null)
+		await expect(args.onValueChange).toHaveBeenLastCalledWith("")
+	},
+})
