@@ -506,7 +506,17 @@ it("keeps a value typed by the source the lead bot does not declare", async () =
 
 	update.mockResolvedValueOnce(INBOX_ROUTINE)
 	await act(async () => {
-		result.current.form.onSave(result.current.form.open?.values ?? entered({}))
+		result.current.form.onSave(
+			entered({
+				title: INBOX_ROUTINE.title,
+				instruction: INBOX_ROUTINE.instruction,
+				triggerSourceId: INBOX_ROUTINE.triggerSourceId,
+				filter: {
+					matchMode: "all",
+					rows: [{ field: "unreadCount", operator: "gt", value: "10" }],
+				},
+			}),
+		)
 	})
 
 	expect(update).toHaveBeenCalledWith(
