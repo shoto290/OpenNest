@@ -104,7 +104,6 @@ export type ConversationState = {
 	pendingPrompt: PendingPrompt | null
 	latestError: ChatError | null
 	reportedCauses: ReportedRunsByTurnId
-	hasFailedToReadCauses: boolean
 }
 
 export type ConversationController = {
@@ -198,8 +197,7 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.refusedMessage === right.refusedMessage &&
 	left.pendingPrompt === right.pendingPrompt &&
 	left.latestError === right.latestError &&
-	left.reportedCauses === right.reportedCauses &&
-	left.hasFailedToReadCauses === right.hasFailedToReadCauses
+	left.reportedCauses === right.reportedCauses
 
 const promptWork = (pending: PendingPrompt): WorkingState => ({
 	kind: "waiting",
@@ -226,7 +224,6 @@ const initialState: ConversationState = {
 	pendingPrompt: null,
 	latestError: null,
 	reportedCauses: NO_CAUSES,
-	hasFailedToReadCauses: false,
 }
 
 export const createConversationController = (
@@ -251,7 +248,6 @@ export const createConversationController = (
 	const runs = new Map<string, RuntimeScope>()
 	let refused: RefusedMessage | null = null
 	let reportedCauses: ReportedRunsByTurnId = NO_CAUSES
-	let hasFailedToReadCauses = false
 	let latestError: ChatError | null = null
 	let errorCount = 0
 	let detach: Promise<() => void> | null = null
@@ -337,7 +333,6 @@ export const createConversationController = (
 			pendingPrompt: oldestPrompt(),
 			latestError,
 			reportedCauses,
-			hasFailedToReadCauses,
 		})
 	}
 
@@ -849,9 +844,11 @@ export const createConversationController = (
 
 	const readCauses = async (conversationId: string) => {
 		try {
-			reportedCauses = indexedByTurnId(await readReportedRuns(conversationId))
+			reportedCauses = new Map([
+				...indexedByTurnId(await readReportedRuns(conversationId)),
+				...reportedCauses,
+			])
 		} catch {
-			hasFailedToReadCauses = true
 			raiseFailureNotice({
 				title: i18n.t("chat:transcript.cause.unavailable.title"),
 				description: i18n.t("chat:transcript.cause.unavailable.description"),
@@ -999,7 +996,6 @@ export const createConversationController = (
 		activeTurn = null
 		refused = null
 		reportedCauses = NO_CAUSES
-		hasFailedToReadCauses = false
 		forgetFailure()
 		sync()
 		await Promise.all([

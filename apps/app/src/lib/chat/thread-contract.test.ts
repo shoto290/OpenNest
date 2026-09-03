@@ -77,7 +77,6 @@ const conversationState = (
 	pendingPrompt,
 	latestError: null,
 	reportedCauses: new Map(),
-	hasFailedToReadCauses: false,
 })
 
 const botController = {} as ChatController
