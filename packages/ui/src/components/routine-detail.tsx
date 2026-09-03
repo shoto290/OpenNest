@@ -154,11 +154,49 @@ const RunHistory = ({
 	const newestFirst = [...runs].sort((a, b) => b.startedAt - a.startedAt)
 	const latest = newestFirst[0]
 
-	if (!latest && notice) {
+	if (latest) {
+		const reported = newestFirst.filter(
+			({ outcome }) => outcome === "reported",
+		).length
+
+		return (
+			<>
+				{notice}
+				<p
+					className="flex flex-wrap items-baseline text-muted-foreground text-xs tabular-nums"
+					data-slot="routine-runs-aggregate"
+				>
+					<span>
+						{t(
+							hasReadFullPage
+								? "routines.detail.history.page"
+								: "routines.detail.history.counted",
+							{ count: newestFirst.length },
+						)}
+					</span>
+					<span className={SEPARATOR_CLASS}>
+						{t("routines.detail.history.reported", { count: reported })}
+					</span>
+					<span className={SEPARATOR_CLASS}>
+						{t("routines.detail.history.latest", {
+							when: toRelativeTime(latest.startedAt, i18n.language, now),
+						})}
+					</span>
+				</p>
+				<ul className="flex flex-col gap-2" data-slot="routine-runs">
+					{newestFirst.map((run) => (
+						<RunRow key={run.id} now={now} run={run} />
+					))}
+				</ul>
+			</>
+		)
+	}
+
+	if (notice) {
 		return notice
 	}
 
-	if (!latest && isReadingRuns) {
+	if (isReadingRuns) {
 		return (
 			<p
 				className="flex items-center gap-2 text-muted-foreground text-xs"
@@ -174,56 +212,18 @@ const RunHistory = ({
 		)
 	}
 
-	if (!latest) {
-		return (
-			<EmptyStateShell
-				data-slot="routine-runs-empty"
-				description={t("routines.detail.history.empty.description")}
-				mark={
-					<Icons.History
-						aria-hidden="true"
-						className="size-8 text-muted-foreground"
-					/>
-				}
-				title={t("routines.detail.history.empty.title")}
-			/>
-		)
-	}
-
-	const reported = newestFirst.filter(
-		({ outcome }) => outcome === "reported",
-	).length
-
 	return (
-		<>
-			{notice}
-			<p
-				className="flex flex-wrap items-baseline text-muted-foreground text-xs tabular-nums"
-				data-slot="routine-runs-aggregate"
-			>
-				<span>
-					{t(
-						hasReadFullPage
-							? "routines.detail.history.page"
-							: "routines.detail.history.counted",
-						{ count: newestFirst.length },
-					)}
-				</span>
-				<span className={SEPARATOR_CLASS}>
-					{t("routines.detail.history.reported", { count: reported })}
-				</span>
-				<span className={SEPARATOR_CLASS}>
-					{t("routines.detail.history.latest", {
-						when: toRelativeTime(latest.startedAt, i18n.language, now),
-					})}
-				</span>
-			</p>
-			<ul className="flex flex-col gap-2" data-slot="routine-runs">
-				{newestFirst.map((run) => (
-					<RunRow key={run.id} now={now} run={run} />
-				))}
-			</ul>
-		</>
+		<EmptyStateShell
+			data-slot="routine-runs-empty"
+			description={t("routines.detail.history.empty.description")}
+			mark={
+				<Icons.History
+					aria-hidden="true"
+					className="size-8 text-muted-foreground"
+				/>
+			}
+			title={t("routines.detail.history.empty.title")}
+		/>
 	)
 }
 
