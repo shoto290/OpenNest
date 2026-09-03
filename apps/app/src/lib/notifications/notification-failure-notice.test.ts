@@ -84,8 +84,5 @@ it("leaves the surface empty while every subscription holds", async () => {
 
 	const surface = screen.getByRole("region", { name: "Notices" })
 
-	expect(
-		within(surface).queryByRole("alertdialog", { hidden: true }),
-	).toBeNull()
-	expect(within(surface).queryByRole("dialog", { hidden: true })).toBeNull()
+	expect(within(surface).queryAllByRole(/dialog/, { hidden: true })).toEqual([])
 })
