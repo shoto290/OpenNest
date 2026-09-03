@@ -2,6 +2,7 @@ pub mod commands;
 pub mod contract;
 pub mod core;
 pub mod filter;
+pub mod rate_limit;
 pub mod schedule;
 pub mod sentinel;
 pub mod sources;
