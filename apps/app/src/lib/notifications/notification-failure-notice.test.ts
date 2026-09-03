@@ -82,5 +82,10 @@ it("shows the reader why clicking a notification stopped working", async () => {
 it("leaves the surface empty while every subscription holds", async () => {
 	await watchAlongside(createFakeNotificationPort())
 
-	expect(screen.queryByRole("alertdialog", { hidden: true })).toBeNull()
+	const surface = screen.getByRole("region", { name: "Notices" })
+
+	expect(
+		within(surface).queryByRole("alertdialog", { hidden: true }),
+	).toBeNull()
+	expect(within(surface).queryByRole("dialog", { hidden: true })).toBeNull()
 })
