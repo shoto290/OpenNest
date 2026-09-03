@@ -430,11 +430,11 @@ impl StderrTail {
 	}
 }
 
-async fn startup_detail(kept: StderrTail, reader: JoinHandle<()>) -> String {
+async fn startup_detail(tail: StderrTail, reader: JoinHandle<()>) -> String {
 	if tokio::time::timeout(STDERR_DRAIN_GRACE, reader).await.is_err() {
 		eprintln!("the sidecar left its stderr open past the drain grace");
 	}
-	kept.kept().unwrap_or_else(|| STARTUP_EXIT.to_owned())
+	tail.kept().unwrap_or_else(|| STARTUP_EXIT.to_owned())
 }
 
 async fn keep_stderr(mut stderr: tokio::process::ChildStderr, tail: StderrTail) {
@@ -536,14 +536,14 @@ mod tests {
 
 	#[tokio::test]
 	async fn the_startup_detail_waits_for_what_the_reader_kept() {
-		let kept = StderrTail::default();
-		let writing = kept.clone();
+		let tail = StderrTail::default();
+		let writing = tail.clone();
 		let reader = tokio::spawn(async move {
 			tokio::task::yield_now().await;
 			writing.push(b"refusing to start: the port is taken\n");
 		});
 
-		let detail = startup_detail(kept, reader).await;
+		let detail = startup_detail(tail, reader).await;
 
 		assert_eq!(detail, "refusing to start: the port is taken");
 	}
