@@ -202,7 +202,8 @@ async fn carried<R: Runtime>(
 	let Some(routine) = held else {
 		return Ok(REFUSED);
 	};
-	if calls.silence.holds(&routine.id, calls.clock.as_ref()).await {
+	let mut turn = calls.silence.turn(&routine.id, calls.clock.as_ref()).await;
+	if turn.holds() {
 		return Ok(FLOODED);
 	}
 	if !calls.limit.admits(&routine.id, calls.clock.as_ref()).await {
@@ -212,14 +213,14 @@ async fn carried<R: Runtime>(
 	let source =
 		declared_source(app, database, &routine.bot_id, &routine.trigger_source_id).await?;
 	let event = TriggerEvent {
-		routine_id: routine.id.clone(),
+		routine_id: routine.id,
 		source,
 		payload: payload(body, delivery_id, calls.clock.now_ms())?,
 	};
 	let decision =
 		core::on_trigger(database, &Announcer { app }, calls.clock.as_ref(), event).await?;
 	if let TriggerDecision::Skipped { reason, .. } = decision {
-		calls.silence.hold(&routine.id, reason, calls.clock.as_ref()).await;
+		turn.hold(reason);
 		return Ok(FLOODED);
 	}
 	Ok(ACCEPTED)
@@ -797,6 +798,32 @@ mod tests {
 				.await;
 
 		assert_eq!(answers, Answers { accepted: 1, flooded: A_HUNDRED_CALLS - 1 });
+		assert_eq!(runs_of(&app).await, 2);
+		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
+
+		webhook.stop();
+		cleaned(&app);
+	}
+
+	#[tokio::test]
+	async fn calls_fired_at_once_while_the_first_run_stays_open_write_one_start_and_one_skip() {
+		let app = a_host("leased-at-once").await;
+		let clock = Ticking::at(NOON);
+		let webhook = started(app.handle().clone(), clock.clone());
+		let address = address_of(&webhook);
+		let silenced = CALLS_PER_WINDOW - 2;
+
+		let fired: Vec<_> = (0..CALLS_PER_WINDOW)
+			.map(|_| {
+				tokio::spawn(async move { answered(address, calling(Some(A_KEY), "{}")).await })
+			})
+			.collect();
+
+		let mut answers = Answers::default();
+		for call in fired {
+			answers.counting(call.await.expect("the call is answered"));
+		}
+		assert_eq!(answers, Answers { accepted: 1, flooded: silenced + 1 });
 		assert_eq!(runs_of(&app).await, 2);
 		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
 
