@@ -981,3 +981,85 @@ export const FilterPathRenamedOnAnUndescribedSource = meta.story({
 		})
 	},
 })
+
+export const FilterPathLeavingADeclaredField = meta.story({
+	args: { id: null, values: EMPTY_ROUTINE_VALUES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row taken to a free path, typed onto a field the source declares, given a comparison and a value, then typed away again onto a name nothing declares. The engine reads a comparison through the declared type of the field, so a row that leaves the field keeps nothing of what the field lent it. Check that the operator control falls back to presence and offers nothing else, that the value goes with it, and that the row saved is the one on screen.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		const pick = async (label: string, option: string) => {
+			await userEvent.click(canvas.getByRole("combobox", { name: label }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("Trigger", "When the space inbox fills")
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+		await pick("Field", "Another path")
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Path" }),
+			"subject",
+		)
+		await pick("Operator", "contains")
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Value" }),
+			"invoice",
+		)
+
+		await userEvent.type(row().getByRole("textbox", { name: "Path" }), "s")
+
+		const operator = row().getByRole("combobox", { name: "Operator" })
+		await expect(operator).toHaveTextContent("is present")
+		await expect(
+			row().queryByRole("textbox", { name: "Value" }),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(operator)
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+		await userEvent.keyboard("{Escape}")
+
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledWith({
+			...EMPTY_ROUTINE_VALUES,
+			triggerSourceId: "space-inbox",
+			filter: {
+				matchMode: "all",
+				rows: [{ field: "subjects", operator: "exists", value: "" }],
+			},
+		})
+	},
+})
+
+export const FilterPathRenamedBackOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The free path of a row read as a number, renamed and then typed back to the name it was read with. Nothing the reader did leaves a trace: check that the row saved is the row read, so the write can hand back the filter it read rather than a rebuilt one.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const path = () =>
+			within(canvas.getByRole("group", { name: "Row 1" })).getByRole(
+				"textbox",
+				{
+					name: "Path",
+				},
+			)
+
+		await userEvent.type(path(), "s")
+		await userEvent.type(path(), "{backspace}")
+		await expect(path()).toHaveValue("unreadCount")
+
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledWith(UNDESCRIBED_FORM.values)
+	},
+})

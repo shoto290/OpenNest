@@ -399,6 +399,8 @@ const chat = {
 				blankTitle: "Une routine a besoin d'un titre.",
 				blankInstruction: "Une routine a besoin d'une instruction.",
 				blankValue: "Cette ligne a besoin d'une valeur.",
+				untypedComparison:
+					"Cette comparaison a besoin d'un champ déclaré par le déclencheur.",
 				unreadableExpression:
 					"Cette expression n'est pas lisible comme un horaire.",
 				unsupportedOperator:

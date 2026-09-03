@@ -19,6 +19,7 @@ import {
 	ROUTINES,
 	SCHEDULED_FORM,
 	TRIGGER_SOURCES,
+	UNDESCRIBED_FORM,
 } from "@workspace/ui/components/routines.fixtures"
 import {
 	RoutinesPanel,
@@ -162,31 +163,47 @@ describe("RoutinesPanel", () => {
 	})
 
 	it("shows a row as it was read when the source declares no field", () => {
-		const { onSave } = panelHolding({
-			id: "routine-unread-source",
-			values: {
-				...FILTERED_FORM.values,
-				triggerSourceId: "space-newsletter",
-			},
-		})
+		const { onSave } = panelHolding(UNDESCRIBED_FORM)
 
 		const rowOf = (rank: number) =>
 			within(screen.getByRole("group", { name: `Row ${rank}` }))
 
 		expect(
 			rowOf(1).getByRole("combobox", { name: "Operator" }).textContent,
-		).toContain("contains")
+		).toContain("is greater than")
 		expect(
-			(rowOf(1).getByRole("textbox", { name: "Value" }) as HTMLInputElement)
+			(rowOf(1).getByRole("spinbutton", { name: "Value" }) as HTMLInputElement)
 				.value,
-		).toBe("invoice")
+		).toBe("10")
 
 		fireEvent.click(screen.getByRole("button", { name: "Save routine" }))
 
-		expect(onSave).toHaveBeenCalledWith({
-			...FILTERED_FORM.values,
-			triggerSourceId: "space-newsletter",
+		expect(onSave).toHaveBeenCalledWith(UNDESCRIBED_FORM.values)
+	})
+
+	it("saves no comparison on a field nothing declares and nothing typed", () => {
+		const { onSave } = panelHolding({
+			id: "routine-untyped-row",
+			values: {
+				...FILTERED_FORM.values,
+				triggerSourceId: "space-newsletter",
+				filter: {
+					matchMode: "all",
+					rows: [{ field: "unread.count", operator: "gt", value: "10" }],
+				},
+			},
 		})
+
+		fireEvent.click(screen.getByRole("button", { name: "Save routine" }))
+
+		const operator = screen.getByRole("combobox", { name: "Operator" })
+		const message = screen.getByText(
+			"This comparison needs a field the trigger declares.",
+		)
+
+		expect(onSave).not.toHaveBeenCalled()
+		expect(operator.getAttribute("aria-invalid")).toBe("true")
+		expect(operator.getAttribute("aria-describedby")).toContain(message.id)
 	})
 
 	it("holds the values it was read with when the write is refused", () => {

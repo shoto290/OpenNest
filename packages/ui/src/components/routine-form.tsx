@@ -333,7 +333,9 @@ const retyped = (
 	row: RoutineFilterRow,
 	field: string,
 ): RoutineFilterRow =>
-	typeOf(fields, field) ? naming(fields, row, field) : { ...row, field }
+	row.readAs && !typeOf(fields, field)
+		? { ...row, field }
+		: naming(fields, row, field)
 
 const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>
 	row.field === held.field &&
@@ -369,6 +371,14 @@ const rehomed = (
 
 const rowRefusalIn = (refusal: RoutineFormRefusal | undefined) =>
 	typeof refusal === "object" ? refusal : null
+
+const isUntypedComparison = (
+	row: RoutineFilterRow,
+	fields: RoutinePayloadField[],
+) =>
+	ROUTINE_OPERATOR_TAKES_VALUE[row.operator] &&
+	typeOf(fields, row.field) === undefined &&
+	row.readAs?.fieldType === undefined
 
 const isMissingValue = (row: RoutineFilterRow) =>
 	ROUTINE_OPERATOR_TAKES_VALUE[row.operator] && row.value.trim() === ""
@@ -515,7 +525,7 @@ type FilterBlockProps = {
 	filter: RoutineFilterValues
 	fields: RoutinePayloadField[]
 	refusal: RoutineOperatorRefusal | null
-	marksMissingValues: boolean
+	marksRefusedRows: boolean
 	onChange: (filter: RoutineFilterValues) => void
 }
 
@@ -523,7 +533,7 @@ const FilterBlock = ({
 	filter,
 	fields,
 	refusal,
-	marksMissingValues,
+	marksRefusedRows,
 	onChange,
 }: FilterBlockProps) => {
 	const { t } = useTranslation("chat")
@@ -569,16 +579,21 @@ const FilterBlock = ({
 			held.map((wasFree, at) => (at === index ? isFree : wasFree)),
 		)
 
-	const operatorMessageFor = (index: number) =>
-		refusal?.row === index
-			? t("routines.form.error.unsupportedOperator", {
-					fieldType: t(`routines.form.filter.fieldTypes.${refusal.fieldType}`),
-					operator: t(`routines.form.filter.operators.${refusal.operator}`),
-				})
+	const operatorMessageFor = (row: RoutineFilterRow, index: number) => {
+		if (refusal?.row === index) {
+			return t("routines.form.error.unsupportedOperator", {
+				fieldType: t(`routines.form.filter.fieldTypes.${refusal.fieldType}`),
+				operator: t(`routines.form.filter.operators.${refusal.operator}`),
+			})
+		}
+
+		return marksRefusedRows && isUntypedComparison(row, fields)
+			? t("routines.form.error.untypedComparison")
 			: undefined
+	}
 
 	const valueMessageFor = (row: RoutineFilterRow) =>
-		marksMissingValues && isMissingValue(row)
+		marksRefusedRows && isMissingValue(row)
 			? t("routines.form.error.blankValue")
 			: undefined
 
@@ -628,7 +643,7 @@ const FilterBlock = ({
 					}
 					onFreePath={(isFree) => holdFreePath(index, isFree)}
 					onRemove={() => remove(index)}
-					operatorError={operatorMessageFor(index)}
+					operatorError={operatorMessageFor(row, index)}
 					rank={index + 1}
 					row={row}
 					valueError={valueMessageFor(row)}
@@ -660,7 +675,7 @@ const RoutineForm = ({
 	const { t } = useTranslation("chat")
 	const [entered, setEntered] = useState(values)
 	const [rowRefusal, setRowRefusal] = useState(() => rowRefusalIn(refusal))
-	const [marksMissingValues, setMarksMissingValues] = useState(false)
+	const [marksRefusedRows, setMarksRefusedRows] = useState(false)
 	const readRefusal = useRef(refusal)
 	const form = useRef<HTMLFormElement>(null)
 
@@ -694,10 +709,13 @@ const RoutineForm = ({
 
 	const save = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
-		const isMissingAValue = entered.filter.rows.some(isMissingValue)
-		setMarksMissingValues(isMissingAValue)
+		const fields = source?.payload ?? []
+		const isRefused = entered.filter.rows.some(
+			(row) => isMissingValue(row) || isUntypedComparison(row, fields),
+		)
+		setMarksRefusedRows(isRefused)
 
-		if (!isMissingAValue) {
+		if (!isRefused) {
 			onSave(entered)
 		}
 	}
@@ -785,7 +803,7 @@ const RoutineForm = ({
 				fields={source?.payload ?? []}
 				key={entered.triggerSourceId}
 				filter={entered.filter}
-				marksMissingValues={marksMissingValues}
+				marksRefusedRows={marksRefusedRows}
 				onChange={changeFilter}
 				refusal={rowRefusal}
 			/>
