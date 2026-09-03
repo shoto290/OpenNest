@@ -774,7 +774,7 @@ function ThreadView({
 		toQuote,
 	})
 
-	const runs = toRuns(toTranscriptRows(state.messages))
+	const runs = toRuns(toTranscriptRows(state.messages), facts.causes)
 	const presentations = runPresentationsOf({
 		runs,
 		workingBotIds: facts.workingBotIds,

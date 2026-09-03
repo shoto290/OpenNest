@@ -64,6 +64,26 @@ const ROUTINE_TITLE = "Nightly report"
 
 const CAUSES_TITLE = "Routine reports could not be read"
 
+const A_MINUTE = 60_000
+
+const REPORTED: SpokenTurn = {
+	turnId: REPORT_TURN,
+	text: REPORT_TEXT,
+	createdAt: A_MINUTE,
+}
+
+const SAID_BEFORE: SpokenTurn = {
+	turnId: "t-before",
+	text: "the walls hold",
+	createdAt: 0,
+}
+
+const SAID_AFTER: SpokenTurn = {
+	turnId: "t-after",
+	text: "and the roof too",
+	createdAt: 2 * A_MINUTE,
+}
+
 const reportedRunsOf =
 	(turnId: string): ReportedRunsReader =>
 	async () => [
@@ -278,36 +298,42 @@ type Room = {
 	send: (text: string) => Promise<void>
 }
 
+type SpokenTurn = {
+	turnId: string
+	text: string
+	createdAt: number
+}
+
 type RoomFixture = {
 	names: string[]
 	readReportedRuns?: ReportedRunsReader
-	reportTurnId?: string
+	spoken?: SpokenTurn[]
 }
 
-const writeReport = async (
+const writeTurn = async (
 	store: TranscriptStore,
 	conversationId: string,
 	botId: string,
-	turnId: string,
+	{ turnId, text, createdAt }: SpokenTurn,
 ) => {
-	await store.startTurn({ id: turnId, conversationId, startedAt: 1 })
+	await store.startTurn({ id: turnId, conversationId, startedAt: createdAt })
 	await store.openAssistantMessage({
 		id: `m-${turnId}`,
 		conversationId,
 		turnId,
 		authorBotId: botId,
 		repliedToMessageId: null,
-		createdAt: 1,
+		createdAt,
 	})
-	await store.appendText(`m-${turnId}`, REPORT_TEXT)
+	await store.appendText(`m-${turnId}`, text)
 	await store.finalizeMessage(`m-${turnId}`, "complete")
-	await store.completeTurn(turnId, 2)
+	await store.completeTurn(turnId, createdAt)
 }
 
 const roomOf = async ({
 	names,
 	readReportedRuns,
-	reportTurnId,
+	spoken = [],
 }: RoomFixture): Promise<Room> => {
 	const store = createFakeTranscriptStore()
 	const bots = await seatBots(store, SPACE, names)
@@ -317,8 +343,8 @@ const roomOf = async ({
 		title: "Walls",
 		botIds: bots.map((bot) => bot.id),
 	})
-	if (reportTurnId) {
-		await writeReport(store, conversation.id, bots[0].id, reportTurnId)
+	for (const turn of spoken) {
+		await writeTurn(store, conversation.id, bots[0].id, turn)
 	}
 	const driver = createScriptedDriver()
 	const runtimes = createConversationRuntimes(driver, store, {
@@ -516,7 +542,7 @@ describe("ThreadScreen", () => {
 	it("names the routine on the turn its report opened", async () => {
 		const room = await roomOf({
 			names: ["Ada"],
-			reportTurnId: REPORT_TURN,
+			spoken: [REPORTED],
 			readReportedRuns: reportedRunsOf(REPORT_TURN),
 		})
 		render(screenOf(room.thread))
@@ -529,7 +555,7 @@ describe("ThreadScreen", () => {
 	it("leaves a turn outside the reported runs with no routine line", async () => {
 		const room = await roomOf({
 			names: ["Ada"],
-			reportTurnId: REPORT_TURN,
+			spoken: [REPORTED],
 			readReportedRuns: reportedRunsOf("t-elsewhere"),
 		})
 		render(screenOf(room.thread))
@@ -542,7 +568,7 @@ describe("ThreadScreen", () => {
 	it("keeps the transcript and reports a failed read of the reported runs", async () => {
 		const room = await roomOf({
 			names: ["Ada"],
-			reportTurnId: REPORT_TURN,
+			spoken: [REPORTED],
 			readReportedRuns: REFUSED_REPORTED_RUNS,
 		})
 		render(createElement(NoticeSurface))
@@ -552,6 +578,43 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
 		expect(screen.queryByText(ROUTINE_TITLE)).toBeNull()
 		expect(screen.getAllByText(CAUSES_TITLE).length).toBeGreaterThan(0)
+	})
+
+	it("names the routine on a report a minute after a message of the same bot", async () => {
+		const room = await roomOf({
+			names: ["Ada"],
+			spoken: [SAID_BEFORE, REPORTED, SAID_AFTER],
+			readReportedRuns: reportedRunsOf(REPORT_TURN),
+		})
+		render(screenOf(room.thread))
+		await settle()
+
+		const opened = screen
+			.getByText(ROUTINE_TITLE)
+			.closest('[data-slot="chat-turn-group"]')
+
+		expect(opened?.textContent).toContain(REPORT_TEXT)
+		expect(opened?.textContent).not.toContain(SAID_BEFORE.text)
+		expect(opened?.textContent).not.toContain(SAID_AFTER.text)
+		expect(screen.getByText(SAID_AFTER.text)).toBeTruthy()
+	})
+
+	it("raises one notice however many times the reader enters on a failing read", async () => {
+		const room = await roomOf({
+			names: ["Ada"],
+			spoken: [REPORTED],
+			readReportedRuns: REFUSED_REPORTED_RUNS,
+		})
+		render(createElement(NoticeSurface))
+		const { unmount } = render(screenOf(room.thread))
+		await settle()
+		const raised = screen.getAllByText(CAUSES_TITLE).length
+
+		unmount()
+		render(screenOf(room.thread))
+		await settle()
+
+		expect(screen.getAllByText(CAUSES_TITLE)).toHaveLength(raised)
 	})
 
 	it("stops the bot whose working row carries the stop, and no other", async () => {
