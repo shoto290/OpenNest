@@ -19,6 +19,14 @@ const INHERITED_KEYS = [
 	"no_proxy",
 	"NODE_EXTRA_CA_CERTS",
 	"SSL_CERT_FILE",
+	"SystemRoot",
+	"USERPROFILE",
+	"APPDATA",
+	"LOCALAPPDATA",
+	"TEMP",
+	"TMP",
+	"PATHEXT",
+	"ComSpec",
 	EXECUTABLE_OVERRIDE_ENV,
 ]
 

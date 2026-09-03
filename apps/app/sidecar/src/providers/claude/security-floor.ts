@@ -45,10 +45,12 @@ const DENIED_TOOLS = ["Agent", "Task"]
 
 const SANDBOX = {
 	enabled: true,
-	failIfUnavailable: true,
 	allowUnsandboxedCommands: false,
 	autoAllowBashIfSandboxed: false,
 } as const
+
+export const failsWithoutSandbox = (platform: NodeJS.Platform): boolean =>
+	platform !== "win32"
 
 type Denial = {
 	directories: string[]
@@ -130,6 +132,7 @@ const deniedWrites = (): Denial => {
 export type FloorScope = {
 	appDataDir?: string
 	conversationId?: string
+	platform: NodeJS.Platform
 	pluginPaths: string[]
 	writablePaths: string[]
 }
@@ -137,6 +140,7 @@ export type FloorScope = {
 export const securityFloor = ({
 	appDataDir,
 	conversationId,
+	platform,
 	pluginPaths,
 	writablePaths,
 }: FloorScope): Settings => {
@@ -161,6 +165,7 @@ export const securityFloor = ({
 		},
 		sandbox: {
 			...SANDBOX,
+			failIfUnavailable: failsWithoutSandbox(platform),
 			filesystem: {
 				denyRead: [...pathsOf(reads), ...under(appDataDir, DENIED_TREES)],
 				denyWrite: pathsOf(writes),

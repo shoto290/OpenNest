@@ -74,6 +74,7 @@ export const buildOptions = (
 	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
 		conversationId: request.conversationId,
+		platform: process.platform,
 		pluginPaths: pluginPaths(request),
 		writablePaths: writablePaths(writeScope(request)),
 	})
