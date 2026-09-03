@@ -45,6 +45,7 @@ export const useRoutineDetail = ({
 }: RoutineDetailWiring): RoutinesPanelDetail => {
 	const [held, setHeld] = useState<OpenRoutine | null>(null)
 	const placed = useRef(0)
+	const reads = useRef(0)
 
 	const revise = useCallback(
 		(placement: number, change: (held: OpenRoutine) => OpenRoutine) =>
@@ -57,11 +58,18 @@ export const useRoutineDetail = ({
 	const readRuns = useCallback(
 		(routineId: string) => {
 			const placement = placed.current
+			reads.current += 1
+			const ticket = reads.current
+			const settle = (change: (held: OpenRoutine) => OpenRoutine) =>
+				revise(placement, (current) =>
+					ticket === reads.current ? change(current) : current,
+				)
+
 			revise(placement, (current) => ({ ...current, isReading: true }))
 
 			void routinesTransport.runs(routineId).then(
 				(carried) =>
-					revise(placement, (current) => ({
+					settle((current) => ({
 						...current,
 						isReading: false,
 						hasFailedToReadRuns: false,
@@ -72,7 +80,7 @@ export const useRoutineDetail = ({
 						},
 					})),
 				() =>
-					revise(placement, (current) => ({
+					settle((current) => ({
 						...current,
 						isReading: false,
 						hasFailedToReadRuns: true,
@@ -97,7 +105,7 @@ export const useRoutineDetail = ({
 	}, [])
 
 	const onRetryRuns = useCallback(() => {
-		if (held) {
+		if (held && !held.isReading) {
 			readRuns(held.routineId)
 		}
 	}, [held, readRuns])
@@ -145,7 +153,7 @@ export const useRoutineDetail = ({
 			triggerSourceTitle: row.triggerSourceTitle,
 			hasStoppedItself: row.hasStoppedItself,
 			runs: held.read?.runs ?? [],
-			isReadingRuns: held.isReading && held.read === null,
+			isReadingRuns: held.isReading,
 			hasFailedToReadRuns: held.hasFailedToReadRuns,
 			hasReadFullPage: held.read?.hasReadFullPage ?? false,
 			isRunning: held.isRunning,

@@ -240,7 +240,7 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The first read of the runs, still in flight. Check that the reading state takes the place of both the aggregate and the rows rather than sitting above an empty list, and that it is announced politely instead of stealing the focus the detail just took.",
+					"The first read of the runs, still in flight, with nothing read yet. Check that the reading state takes the place of both the aggregate and the rows rather than sitting above an empty list, that it is announced politely instead of stealing the focus the detail just took, and that the empty state is not shown in its place. Pick `ReadingAgain` for a read fired over a history already on screen.",
 			},
 		},
 	},
@@ -278,7 +278,7 @@ export const Error = meta.story({
 		docs: {
 			description: {
 				story:
-					"The runs could not be read. Check that the failure takes the place of the history rather than passing for an empty one, that it blames the read of the runs and not the read of the routines, and that a retry pressed from the keyboard leaves the notice and its control exactly where they were — a control that unmounts under the reader sends the next Tab back to the top of the document. Pick `Empty` for the routine that really has no run.",
+					"The runs could not be read. Check that the failure takes the place of the history rather than passing for an empty one, that it blames the read of the runs and not the read of the routines, and that a retry pressed from the keyboard stays mounted, focused and busy while it runs — a second press starts no second read, and a control that unmounts under the reader sends the next Tab back to the top of the document. Pick `Empty` for the routine that really has no run.",
 			},
 		},
 	},
@@ -290,9 +290,32 @@ export const Error = meta.story({
 		retry.focus()
 		await userEvent.keyboard("{Enter}")
 
-		await expect(args.onRetryRuns).toHaveBeenCalled()
+		await expect(args.onRetryRuns).toHaveBeenCalledTimes(1)
 		await expect(canvas.getByText("The runs could not be read")).toBeVisible()
 		await expect(retry).toHaveFocus()
+		await expect(retry).toHaveAttribute("aria-busy", "true")
+		await expect(retry).toHaveAttribute("aria-disabled", "true")
+
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onRetryRuns).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const ReadingAgain = meta.story({
+	args: { isReadingRuns: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A read fired over a history already on screen — what Run now leaves behind once it settles. Check that the rows and their aggregate stay exactly where they were until the read lands, rather than being swapped for the reading indicator and back. Pick `Loading` for the first read, the one with nothing to leave in place.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(slotsIn(canvasElement, "routine-run")).toHaveLength(
+			DIGEST_RUNS.length,
+		)
+		await expect(slotsIn(canvasElement, "routine-runs-reading")).toHaveLength(0)
 	},
 })
 

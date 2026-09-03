@@ -147,25 +147,9 @@ const RunHistory = ({
 		return (
 			<Notice
 				description={t("routines.detail.history.failure.description")}
-				retry={{ onRetry: onRetryRuns }}
+				retry={{ onRetry: onRetryRuns, isBusy: isReadingRuns }}
 				title={t("routines.detail.history.failure.title")}
 			/>
-		)
-	}
-
-	if (isReadingRuns) {
-		return (
-			<p
-				className="flex items-center gap-2 text-muted-foreground text-xs"
-				data-slot="routine-runs-reading"
-				role="status"
-			>
-				<Icons.Loading
-					aria-hidden="true"
-					className="size-3.5 animate-spin motion-reduce:animate-none"
-				/>
-				{t("routines.detail.history.reading")}
-			</p>
 		)
 	}
 
@@ -173,6 +157,22 @@ const RunHistory = ({
 	const latest = newestFirst[0]
 
 	if (!latest) {
+		if (isReadingRuns) {
+			return (
+				<p
+					className="flex items-center gap-2 text-muted-foreground text-xs"
+					data-slot="routine-runs-reading"
+					role="status"
+				>
+					<Icons.Loading
+						aria-hidden="true"
+						className="size-3.5 animate-spin motion-reduce:animate-none"
+					/>
+					{t("routines.detail.history.reading")}
+				</p>
+			)
+		}
+
 		return (
 			<EmptyStateShell
 				data-slot="routine-runs-empty"
