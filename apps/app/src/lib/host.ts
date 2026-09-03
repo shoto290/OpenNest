@@ -31,10 +31,8 @@ export function revealWindow({ withFocus }: WindowReveal = {}): Promise<void> {
 		return Promise.resolve()
 	}
 	const current = getCurrentWindow()
-	if (!withFocus) {
-		return current.show()
-	}
-	return current.show().then(() => current.setFocus())
+	const shown = current.show()
+	return withFocus ? shown.then(() => current.setFocus()) : shown
 }
 
 export function watchWindowFocus(
