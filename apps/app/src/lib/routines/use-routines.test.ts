@@ -3,13 +3,24 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
+import {
+	EMPTY_ROUTINE_VALUES,
+	type RoutineFormValues,
+} from "@workspace/ui/components/routine-form"
+
 import type { Routine } from "./routine-contract"
 import { routinesTransport } from "./routines-transport"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 import { useRoutines } from "./use-routines"
 
 vi.mock("./routines-transport", () => ({
-	routinesTransport: { list: vi.fn(), update: vi.fn(), delete: vi.fn() },
+	routinesTransport: {
+		list: vi.fn(),
+		update: vi.fn(),
+		delete: vi.fn(),
+		create: vi.fn(),
+		key: vi.fn(),
+	},
 }))
 vi.mock("./trigger-sources-transport", () => ({
 	triggerSourcesTransport: { sources: vi.fn() },
@@ -18,6 +29,8 @@ vi.mock("./trigger-sources-transport", () => ({
 const list = vi.mocked(routinesTransport.list)
 const update = vi.mocked(routinesTransport.update)
 const remove = vi.mocked(routinesTransport.delete)
+const create = vi.mocked(routinesTransport.create)
+const readKey = vi.mocked(routinesTransport.key)
 const sources = vi.mocked(triggerSourcesTransport.sources)
 
 const ROUTINE: Routine = {
@@ -32,6 +45,46 @@ const ROUTINE: Routine = {
 	isEnabled: true,
 	consecutiveFailures: 0,
 	createdAt: 0,
+}
+
+const WEBHOOK_ROUTINE: Routine = {
+	...ROUTINE,
+	id: "r-2",
+	triggerSourceId: "local-webhook",
+	triggerConfig: {},
+}
+
+const DECLARED = [
+	{ id: "schedule", title: "Schedule", payload: [], dedupeKey: "occurrenceId" },
+	{
+		id: "local-webhook",
+		title: "Local webhook",
+		payload: [],
+		dedupeKey: "deliveryId",
+		header: "X-OpenNest-Key",
+	},
+]
+
+const A_WEBHOOK_KEY = {
+	key: "the-key",
+	header: "X-OpenNest-Key",
+	url: "http://127.0.0.1:4870/routines",
+}
+
+const entered = (values: Partial<RoutineFormValues>): RoutineFormValues => ({
+	...EMPTY_ROUTINE_VALUES,
+	...values,
+})
+
+const mountLeadRoutines = async (listed: Routine[]) => {
+	list.mockResolvedValueOnce(listed)
+	sources.mockResolvedValue(DECLARED)
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+	await waitFor(() => expect(result.current.form.canCreate).toBe(true))
+	return result
 }
 
 const mountHeldRoutines = async () => {
@@ -96,4 +149,105 @@ it("keeps a read failure whatever a write resolves to", async () => {
 	})
 	await waitFor(() => expect(result.current.routines[0].isEnabled).toBe(false))
 	expect(result.current.failure).toBe("read")
+})
+
+it("carries the address, the key and the header name of a created webhook routine", async () => {
+	const result = await mountLeadRoutines([])
+	create.mockResolvedValueOnce(WEBHOOK_ROUTINE)
+	readKey.mockResolvedValueOnce(A_WEBHOOK_KEY)
+
+	act(() => {
+		result.current.form.onNew()
+	})
+	await act(async () => {
+		result.current.form.onSave(
+			entered({
+				title: WEBHOOK_ROUTINE.title,
+				instruction: WEBHOOK_ROUTINE.instruction,
+				triggerSourceId: "local-webhook",
+			}),
+		)
+	})
+
+	await waitFor(() =>
+		expect(result.current.form.open?.webhook).toEqual({
+			url: A_WEBHOOK_KEY.url,
+			key: A_WEBHOOK_KEY.key,
+			header: A_WEBHOOK_KEY.header,
+		}),
+	)
+	expect(create).toHaveBeenCalledWith({
+		conversationId: ROUTINE.conversationId,
+		botId: ROUTINE.botId,
+		title: WEBHOOK_ROUTINE.title,
+		instruction: WEBHOOK_ROUTINE.instruction,
+		triggerSourceId: "local-webhook",
+		filter: { matchMode: "all", rows: [] },
+		triggerConfig: {},
+	})
+	expect(result.current.routines).toHaveLength(1)
+})
+
+it("fills the form of a schedule routine opened for edit", async () => {
+	const result = await mountLeadRoutines([
+		{ ...ROUTINE, triggerConfig: { expression: "0 * * * *" } },
+	])
+
+	act(() => {
+		result.current.form.onOpen(ROUTINE.id)
+	})
+
+	expect(result.current.form.open).toMatchObject({
+		id: ROUTINE.id,
+		values: {
+			title: ROUTINE.title,
+			instruction: ROUTINE.instruction,
+			triggerSourceId: "schedule",
+			expression: "0 * * * *",
+		},
+	})
+})
+
+it("marks the key as unreadable when its read rejects", async () => {
+	const result = await mountLeadRoutines([WEBHOOK_ROUTINE])
+	readKey.mockRejectedValueOnce(new Error("the key is unreadable"))
+
+	await act(async () => {
+		result.current.form.onOpen(WEBHOOK_ROUTINE.id)
+	})
+
+	await waitFor(() =>
+		expect(result.current.form.open?.hasFailedToReadKey).toBe(true),
+	)
+	expect(result.current.form.open?.webhook).toBeUndefined()
+})
+
+it("marks the title of a form refused for a blank title", async () => {
+	const result = await mountLeadRoutines([])
+	create.mockRejectedValueOnce({ kind: "blankField", field: "title" })
+
+	act(() => {
+		result.current.form.onNew()
+	})
+	await act(async () => {
+		result.current.form.onSave(
+			entered({
+				instruction: ROUTINE.instruction,
+				triggerSourceId: "schedule",
+				expression: "0 * * * *",
+			}),
+		)
+	})
+
+	await waitFor(() =>
+		expect(result.current.form.open?.refusal).toBe("blankTitle"),
+	)
+	expect(result.current.form.open?.values).toEqual(
+		entered({
+			instruction: ROUTINE.instruction,
+			triggerSourceId: "schedule",
+			expression: "0 * * * *",
+		}),
+	)
+	expect(result.current.failure).toBeNull()
 })

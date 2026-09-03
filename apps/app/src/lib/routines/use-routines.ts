@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+import type { RoutineTriggerSource } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
-import type { RoutinesFailure } from "@workspace/ui/components/routines-panel"
+import type {
+	RoutinesFailure,
+	RoutinesPanelForm,
+} from "@workspace/ui/components/routines-panel"
 
 import type { Routine } from "./routine-contract"
 import {
@@ -9,15 +13,19 @@ import {
 	type SourceTitles,
 	toRoutineRows,
 	toSourceTitles,
+	toTriggerSources,
 } from "./routines-model"
 import { routinesTransport } from "./routines-transport"
+import type { TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
+import { useRoutineForm } from "./use-routine-form"
 
 const withoutWriteFailure = (current: RoutinesFailure | null) =>
 	current === "write" ? null : current
 
 const NO_ROUTINES: Routine[] = []
 const NO_TITLES: SourceTitles = new Map()
+const NO_SOURCES: RoutineTriggerSource[] = []
 
 export type ConversationRoutines = {
 	routines: RoutineRowModel[]
@@ -25,36 +33,59 @@ export type ConversationRoutines = {
 	reload: () => void
 	setEnabled: (id: string, isEnabled: boolean) => void
 	remove: (id: string) => Promise<void>
+	form: RoutinesPanelForm
 }
 
-const titlesOf = async (routines: Routine[]): Promise<SourceTitles> => {
+type Declaration = { botId: string; sources: TriggerSource[] }
+
+const declaredBy = async (botIds: string[]): Promise<Declaration[]> => {
 	const reads = await Promise.allSettled(
-		botIdsOf(routines).map(async (botId) => ({
+		botIds.map(async (botId) => ({
 			botId,
 			sources: await triggerSourcesTransport.sources(botId),
 		})),
 	)
 
-	return toSourceTitles(
-		reads.flatMap((read) => (read.status === "fulfilled" ? [read.value] : [])),
+	return reads.flatMap((read) =>
+		read.status === "fulfilled" ? [read.value] : [],
 	)
 }
 
-export const useRoutines = (conversationId: string): ConversationRoutines => {
+const declaredByLead = (leadBotId: string | undefined) =>
+	leadBotId ? triggerSourcesTransport.sources(leadBotId) : Promise.resolve([])
+
+export const useRoutines = (
+	conversationId: string,
+	leadBotId?: string,
+): ConversationRoutines => {
 	const [held, setHeld] = useState<Routine[]>(NO_ROUTINES)
 	const [titles, setTitles] = useState<SourceTitles>(NO_TITLES)
+	const [sources, setSources] = useState<RoutineTriggerSource[]>(NO_SOURCES)
 	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
 
 	const reload = useCallback(() => {
-		void routinesTransport.list(conversationId).then(
-			async (listed) => {
-				setTitles(await titlesOf(listed))
+		void Promise.all([
+			routinesTransport.list(conversationId),
+			declaredByLead(leadBotId),
+		]).then(
+			async ([listed, lead]) => {
+				const others = await declaredBy(
+					botIdsOf(listed).filter((botId) => botId !== leadBotId),
+				)
+				setTitles(
+					toSourceTitles(
+						leadBotId
+							? [{ botId: leadBotId, sources: lead }, ...others]
+							: others,
+					),
+				)
+				setSources(toTriggerSources(lead))
 				setHeld(listed)
 				setFailure(null)
 			},
 			() => setFailure("read"),
 		)
-	}, [conversationId])
+	}, [conversationId, leadBotId])
 
 	useEffect(reload, [reload])
 
@@ -95,10 +126,30 @@ export const useRoutines = (conversationId: string): ConversationRoutines => {
 		[],
 	)
 
+	const hold = useCallback((written: Routine) => {
+		setHeld((rows) =>
+			rows.some((row) => row.id === written.id)
+				? rows.map((row) => (row.id === written.id ? written : row))
+				: [...rows, written],
+		)
+		setFailure(withoutWriteFailure)
+	}, [])
+
+	const raiseWriteFailure = useCallback(() => setFailure("write"), [])
+
+	const form = useRoutineForm({
+		conversationId,
+		leadBotId,
+		sources,
+		held,
+		onWritten: hold,
+		onWriteFailure: raiseWriteFailure,
+	})
+
 	const routines = useMemo(() => toRoutineRows(held, titles), [held, titles])
 
 	return useMemo(
-		() => ({ routines, failure, reload, setEnabled, remove }),
-		[routines, failure, reload, setEnabled, remove],
+		() => ({ routines, failure, reload, setEnabled, remove, form }),
+		[routines, failure, reload, setEnabled, remove, form],
 	)
 }

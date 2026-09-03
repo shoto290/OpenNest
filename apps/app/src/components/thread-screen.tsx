@@ -895,7 +895,10 @@ function ThreadView({
 	return (
 		<RosterProvider bots={bots}>
 			{facts.conversation ? (
-				<ThreadRoutines conversationId={facts.conversation.id}>
+				<ThreadRoutines
+					conversationId={facts.conversation.id}
+					leadBotId={leadOf(facts.conversation)}
+				>
 					{layout}
 				</ThreadRoutines>
 			) : (
