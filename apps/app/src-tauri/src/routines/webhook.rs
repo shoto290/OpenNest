@@ -276,7 +276,6 @@ mod tests {
 	use std::sync::mpsc;
 	use std::time::Duration;
 
-	use rusqlite::params;
 	use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
 	use tauri::{App, Listener as _};
 	use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -284,12 +283,13 @@ mod tests {
 
 	use super::super::commands::RUN_REQUESTED_EVENT;
 	use super::super::contract::{
-		Filter, FilterMatchMode, RoutineDraft, RunClosing, RunOutcome, SkipReason,
+		Filter, FilterMatchMode, RoutineDraft, RoutineRun, RunClosing, RunOutcome, SkipReason,
 	};
 	use super::super::core::{HOURLY_CAP, HOUR_MS, LEASE_MS};
 	use super::super::rate_limit::{CALLS_PER_WINDOW, WINDOW_MS};
 	use super::*;
 	use crate::bundles;
+	use crate::db::repositories::routines::MAX_RUNS_PER_PAGE;
 
 	const NOON: i64 = 1_800_000_000_000;
 
@@ -323,11 +323,6 @@ mod tests {
 	const A_TICK: i64 = 1_000;
 
 	const A_HUNDRED_CALLS: usize = 100;
-
-	const SKIPPED_ROWS_OF_KEY: &str = "SELECT count(*) FROM routine_runs
-		JOIN routines ON routines.id = routine_runs.routine_id
-		WHERE routines.trigger_key = ?1 AND routine_runs.outcome = 'skipped'
-			AND routine_runs.reason = ?2";
 
 	const A_KEY: &str = "the-webhook-key";
 
@@ -502,27 +497,31 @@ mod tests {
 		let mut answers = Answers::default();
 		for _ in 0..times {
 			answers.counting(answered(address, calling(Some(key), "{}")).await);
-			closed_open_runs(app, clock.now_ms()).await;
+			closed_open_runs(app, key, clock.now_ms()).await;
 			clock.moved_by(A_TICK);
 		}
 		answers
 	}
 
-	async fn closed_open_runs(app: &App<MockRuntime>, at: i64) {
+	async fn closed_open_runs(app: &App<MockRuntime>, key: &str, at: i64) {
 		let state = app.state::<db::DatabaseState>();
 		let database = ready(&state).expect("the database opens");
-		let open: Vec<String> = database
-			.call(|connection| {
-				let mut statement =
-					connection.prepare("SELECT id FROM routine_runs WHERE ended_at IS NULL")?;
-				let rows = statement.query_map([], |row| row.get(0))?;
-				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-			})
-			.await
-			.expect("the open runs read");
-		for run_id in open {
-			database.routines().close_run(run_id, closing(), at).await.expect("the run closes");
+		let open = runs_of_key(app, key).await.into_iter().filter(|run| run.ended_at.is_none());
+		for run in open {
+			database.routines().close_run(run.id, closing(), at).await.expect("the run closes");
 		}
+	}
+
+	async fn runs_of_key(app: &App<MockRuntime>, key: &str) -> Vec<RoutineRun> {
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the database opens");
+		let routine = database
+			.routines()
+			.keyed_on_source(key.to_owned(), SOURCE_ID.to_owned())
+			.await
+			.expect("the routine reads")
+			.expect("a routine holds the key");
+		database.routines().runs(routine.id, MAX_RUNS_PER_PAGE).await.expect("the runs read")
 	}
 
 	fn closing() -> RunClosing {
@@ -535,18 +534,12 @@ mod tests {
 		}
 	}
 
-	async fn skipped_rows(app: &App<MockRuntime>, key: &str, reason: SkipReason) -> i64 {
-		let state = app.state::<db::DatabaseState>();
-		let database = ready(&state).expect("the database opens");
-		let key = key.to_owned();
-		let recorded = reason.recorded();
-		database
-			.call(move |connection| {
-				Ok(connection
-					.query_row(SKIPPED_ROWS_OF_KEY, params![key, recorded], |row| row.get(0))?)
-			})
+	async fn skipped_rows(app: &App<MockRuntime>, key: &str, reason: SkipReason) -> usize {
+		runs_of_key(app, key)
 			.await
-			.expect("the count reads")
+			.iter()
+			.filter(|run| run.reason.as_deref() == Some(reason.recorded()))
+			.count()
 	}
 
 	async fn runs_of(app: &App<MockRuntime>) -> i64 {
@@ -665,7 +658,7 @@ mod tests {
 			let request = reaching("POST", PATH, Some(host), Some(A_KEY), "{}");
 			let answer = answered(address, request).await;
 			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()), "{host} was refused");
-			closed_open_runs(&app, clock.now_ms()).await;
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 
 		webhook.stop();
@@ -702,7 +695,7 @@ mod tests {
 		for _ in 0..CALLS_PER_WINDOW {
 			let answer = answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
 			assert_eq!(answer, accepted());
-			closed_open_runs(&app, clock.now_ms()).await;
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 		let carried_runs = runs_of(&app).await;
 		let carried_dedupe_values = dedupe_values_of(&app).await;
@@ -819,7 +812,7 @@ mod tests {
 		let address = address_of(&webhook);
 		calling_with_the_run_left_open(address, &clock, A_KEY, 2).await;
 		assert_eq!(skipped_rows(&app, A_KEY, SkipReason::LeaseHeld).await, 1);
-		closed_open_runs(&app, clock.now_ms()).await;
+		closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		assert_eq!(calling_with_the_run_left_open(address, &clock, A_KEY, 3).await.accepted, 0);
 		assert_eq!(runs_of(&app).await, 2);
 
@@ -863,7 +856,7 @@ mod tests {
 		for _ in 0..2 {
 			let answer = answered(address, delivering(Some(A_KEY), "delivery-1", "{}")).await;
 			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()));
-			closed_open_runs(&app, clock.now_ms()).await;
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 
 		assert_eq!(runs_of(&app).await, 1);
@@ -873,7 +866,7 @@ mod tests {
 				answered(address, delivering(Some(A_KEY), id, "{}")).await,
 				(ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned())
 			);
-			closed_open_runs(&app, clock.now_ms()).await;
+			closed_open_runs(&app, A_KEY, clock.now_ms()).await;
 		}
 
 		assert_eq!(runs_of(&app).await, 3);
