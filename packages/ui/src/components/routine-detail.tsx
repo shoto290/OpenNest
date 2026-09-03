@@ -156,23 +156,23 @@ const RunHistory = ({
 	const newestFirst = [...runs].sort((a, b) => b.startedAt - a.startedAt)
 	const latest = newestFirst[0]
 
-	if (!latest) {
-		if (isReadingRuns) {
-			return (
-				<p
-					className="flex items-center gap-2 text-muted-foreground text-xs"
-					data-slot="routine-runs-reading"
-					role="status"
-				>
-					<Icons.Loading
-						aria-hidden="true"
-						className="size-3.5 animate-spin motion-reduce:animate-none"
-					/>
-					{t("routines.detail.history.reading")}
-				</p>
-			)
-		}
+	if (!latest && isReadingRuns) {
+		return (
+			<p
+				className="flex items-center gap-2 text-muted-foreground text-xs"
+				data-slot="routine-runs-reading"
+				role="status"
+			>
+				<Icons.Loading
+					aria-hidden="true"
+					className="size-3.5 animate-spin motion-reduce:animate-none"
+				/>
+				{t("routines.detail.history.reading")}
+			</p>
+		)
+	}
 
+	if (!latest) {
 		return (
 			<EmptyStateShell
 				data-slot="routine-runs-empty"
