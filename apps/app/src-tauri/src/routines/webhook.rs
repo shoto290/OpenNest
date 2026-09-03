@@ -577,8 +577,7 @@ mod tests {
 	async fn a_flood_carrying_a_key_no_routine_holds_stays_refused_and_is_never_answered_too_many()
 	{
 		let app = a_host("unheld").await;
-		let clock = Ticking::at(NOON);
-		let webhook = started(app.handle().clone(), clock.clone());
+		let webhook = start(app.handle().clone());
 		let address = address_of(&webhook);
 
 		for _ in 0..CALLS_PER_WINDOW + 10 {
