@@ -26,15 +26,13 @@ export type WindowReveal = {
 	withFocus?: boolean
 }
 
-export function revealWindow({ withFocus }: WindowReveal = {}): void {
+export function revealWindow({ withFocus }: WindowReveal = {}): Promise<void> {
 	if (!isDesktopHost()) {
-		return
+		return Promise.resolve()
 	}
 	const current = getCurrentWindow()
-	current.show().catch(() => undefined)
-	if (withFocus) {
-		current.setFocus().catch(() => undefined)
-	}
+	const shown = current.show()
+	return withFocus ? shown.then(() => current.setFocus()) : shown
 }
 
 export function watchWindowFocus(

@@ -9,11 +9,12 @@ const BODY_KEY = {
 	finishedTurn: "common:notification.finishedTurn",
 } as const satisfies Record<NotifiedEvent, string>
 
-export type NotificationFailure = "clicks" | "focus" | "send"
+export type NotificationFailure = "clicks" | "focus" | "reveal" | "send"
 
 const FAILURE_TITLE_KEY = {
 	clicks: "common:notification.failure.clicks",
 	focus: "common:notification.failure.focus",
+	reveal: "common:notification.failure.reveal",
 	send: "common:notification.failure.send",
 } as const satisfies Record<NotificationFailure, string>
 

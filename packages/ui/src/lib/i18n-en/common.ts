@@ -36,6 +36,7 @@ const common = {
 		failure: {
 			clicks: "Clicking a notification will no longer open its conversation",
 			focus: "Notifications may now appear while the app is in front",
+			reveal: "The window could not be brought to the front",
 			send: "A notification could not be shown",
 		},
 	},

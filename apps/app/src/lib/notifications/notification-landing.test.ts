@@ -86,7 +86,7 @@ const aWorld = async () => {
 		switches: () => ALL_ON,
 		hasFocus: () => false,
 		watchFocus: async () => () => undefined,
-		raiseWindow: () => undefined,
+		raiseWindow: async () => undefined,
 		playChime: () => undefined,
 		reportFailure: () => undefined,
 	})
