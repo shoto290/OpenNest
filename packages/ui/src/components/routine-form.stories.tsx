@@ -19,6 +19,7 @@ import {
 	INBOX_FORM,
 	SCHEDULED_FORM,
 	TRIGGER_SOURCES,
+	UNDESCRIBED_FORM,
 	WATCHING_FORM,
 } from "@workspace/ui/components/routines.fixtures"
 import { ROUTINES_PANEL_WIDTH } from "@workspace/ui/components/routines-panel"
@@ -818,5 +819,131 @@ export const FilterOnAPathTheNextSourceDeclares = meta.story({
 		await expect(
 			row().getByRole("combobox", { name: "Field" }),
 		).toHaveTextContent("path")
+	},
+})
+
+export const FilterOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A written routine whose trigger nothing described to the form: no field is declared, so every row reads as a free path. Check that each row keeps the operator it was read with rather than falling back to presence, that the value control still carries the type the value was read in, and that editing the path leaves the operator alone: the row means what it said until the reader says otherwise.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await expect(
+			row.getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is greater than")
+		await expect(row.getByRole("spinbutton", { name: "Value" })).toHaveValue(10)
+
+		await userEvent.type(row.getByRole("textbox", { name: "Path" }), "s")
+
+		await expect(row.getByRole("textbox", { name: "Path" })).toHaveValue(
+			"unreadCounts",
+		)
+		await expect(
+			row.getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is greater than")
+	},
+})
+
+export const FilterValueEditedOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The value of a row read as a number, edited on a source that declares nothing. Check that the control takes a number and hands one back, so the write carries the type the row was read with instead of turning a comparison into text the engine cannot read.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("spinbutton", { name: "Value" })
+
+		await userEvent.clear(value)
+		await userEvent.type(value, "7")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		await expect(args.onSave).toHaveBeenCalledWith({
+			...UNDESCRIBED_FORM.values,
+			filter: {
+				matchMode: "all",
+				rows: [
+					{
+						...UNDESCRIBED_FORM.values.filter.rows[0],
+						value: "7",
+					},
+					UNDESCRIBED_FORM.values.filter.rows[1],
+				],
+			},
+		})
+	},
+})
+
+export const FilterValueRefusedOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A word typed into the value of a row read as a number. The control takes no letters, so the row is left without a value, and a row whose operator takes a value is not saved without one. Check that the row is marked, that the form stays open on what the reader entered, and that the other row keeps its value untouched.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("spinbutton", { name: "Value" })
+
+		await userEvent.clear(value)
+		await userEvent.type(value, "abc")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		await expect(args.onSave).not.toHaveBeenCalled()
+		await expect(value).toHaveAttribute("aria-invalid", "true")
+		await expect(canvas.getByText("This row needs a value.")).toBeVisible()
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole(
+				"textbox",
+				{
+					name: "Value",
+				},
+			),
+		).toHaveValue("invoice")
+	},
+})
+
+export const FilterOperatorTakenBackOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A presence operator picked on a row read with a comparison, on a source that declares nothing. Nothing on screen knows the type of that path, so the comparison the row was read with stays in the list rather than disappearing behind the pick. Check that it can be picked again and that the value comes back with it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		const pick = async (option: string) => {
+			await userEvent.click(row().getByRole("combobox", { name: "Operator" }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("is present")
+		await expect(
+			row().queryByRole("spinbutton", { name: "Value" }),
+		).not.toBeInTheDocument()
+
+		await pick("is greater than")
+		await expect(row().getByRole("spinbutton", { name: "Value" })).toHaveValue(
+			10,
+		)
 	},
 })

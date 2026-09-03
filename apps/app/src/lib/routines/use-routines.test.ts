@@ -602,7 +602,12 @@ it("keeps a value typed by the source the lead bot does not declare", async () =
 		result.current.form.onOpen(INBOX_ROUTINE.id)
 	})
 	expect(result.current.form.open?.values.filter.rows).toEqual([
-		{ field: "unreadCount", operator: "gt", value: "10" },
+		{
+			field: "unreadCount",
+			operator: "gt",
+			value: "10",
+			readAs: { operator: "gt", fieldType: "number" },
+		},
 	])
 
 	update.mockResolvedValueOnce(INBOX_ROUTINE)
@@ -636,7 +641,14 @@ it("leaves the filter of a routine whose source went unread as it was read", asy
 	expect(result.current.form.open?.refusal).toBeUndefined()
 	expect(result.current.form.open?.values.filter).toEqual({
 		matchMode: "all",
-		rows: [{ field: "unreadCount", operator: "gt", value: "10" }],
+		rows: [
+			{
+				field: "unreadCount",
+				operator: "gt",
+				value: "10",
+				readAs: { operator: "gt", fieldType: "number" },
+			},
+		],
 	})
 
 	update.mockResolvedValueOnce(INBOX_ROUTINE)
@@ -661,4 +673,22 @@ it("leaves the filter of a routine whose source went unread as it was read", asy
 			filter: INBOX_ROUTINE.filter,
 		}),
 	)
+})
+
+it("writes an edited value in the type the row was read with", async () => {
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		{
+			...READ_ROWS[0],
+			value: "7",
+			readAs: { operator: "gt", fieldType: "number" },
+		},
+		READ_ROWS[1],
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCount", operator: "gt", value: 7 },
+		{ field: "subject", operator: "contains", value: "invoice" },
+	])
 })

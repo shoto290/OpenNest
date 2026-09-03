@@ -144,3 +144,31 @@ export const FILTERED_FORM: RoutineFormModel = {
 		},
 	},
 }
+
+export const UNDESCRIBED_FORM: RoutineFormModel = {
+	id: "routine-newsletter-sweep",
+	values: {
+		title: "Newsletter sweep",
+		instruction: "Report what the newsletter inbox piled up.",
+		triggerSourceId: "space-newsletter",
+		expression: "",
+		path: "",
+		filter: {
+			matchMode: "all",
+			rows: [
+				{
+					field: "unreadCount",
+					operator: "gt",
+					value: "10",
+					readAs: { operator: "gt", fieldType: "number" },
+				},
+				{
+					field: "subject",
+					operator: "contains",
+					value: "invoice",
+					readAs: { operator: "contains", fieldType: "string" },
+				},
+			],
+		},
+	},
+}

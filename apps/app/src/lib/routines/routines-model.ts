@@ -100,8 +100,10 @@ const toFilterRow = (
 	fields: PayloadField[],
 ): FilterRow => {
 	const { field, operator } = row
+	const fieldType = typeOf(fields, field) ?? row.readAs?.fieldType
+
 	return OPERATOR_TAKES_VALUE[operator]
-		? { field, operator, value: written(row.value, typeOf(fields, field)) }
+		? { field, operator, value: written(row.value, fieldType) }
 		: { field, operator }
 }
 
@@ -119,6 +121,13 @@ export const toFilter = (
 	),
 })
 
+const readTypeOf = (value: FilterRow["value"]): FieldType | undefined => {
+	if (typeof value === "number") return "number"
+	if (typeof value === "boolean") return "boolean"
+
+	return typeof value === "string" ? "string" : undefined
+}
+
 const toFormRow = ({
 	field,
 	operator,
@@ -127,6 +136,7 @@ const toFormRow = ({
 	field,
 	operator,
 	value: value === undefined ? "" : String(value),
+	readAs: { operator, fieldType: readTypeOf(value) },
 })
 
 const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>

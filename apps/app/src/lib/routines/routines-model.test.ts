@@ -107,8 +107,18 @@ describe("a filter written from the form and read back into it", () => {
 		const entered = toFormFilter(TWO_ROWS)
 
 		expect(entered.rows).toEqual([
-			{ field: "subject", operator: "contains", value: "invoice" },
-			{ field: "unreadCount", operator: "gt", value: "10" },
+			{
+				field: "subject",
+				operator: "contains",
+				value: "invoice",
+				readAs: { operator: "contains", fieldType: "string" },
+			},
+			{
+				field: "unreadCount",
+				operator: "gt",
+				value: "10",
+				readAs: { operator: "gt", fieldType: "number" },
+			},
 		])
 		expect(toFilter(entered, INBOX_PAYLOAD)).toEqual(TWO_ROWS)
 	})

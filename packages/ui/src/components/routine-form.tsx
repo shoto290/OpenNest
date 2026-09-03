@@ -91,10 +91,16 @@ type RoutineTriggerSource = {
 	payload: RoutinePayloadField[]
 }
 
+type RoutineFilterReading = {
+	operator: RoutineFilterOperator
+	fieldType?: RoutineFieldType
+}
+
 type RoutineFilterRow = {
 	field: string
 	operator: RoutineFilterOperator
 	value: string
+	readAs?: RoutineFilterReading
 }
 
 type RoutineFilterValues = {
@@ -275,10 +281,16 @@ const operatorsOf = (fieldType: RoutineFieldType | undefined) =>
 
 const offeredOperators = (
 	fieldType: RoutineFieldType | undefined,
-	held: RoutineFilterOperator,
+	row: RoutineFilterRow,
 ) => {
 	const accepted = operatorsOf(fieldType)
-	return accepted.includes(held) ? accepted : [held, ...accepted]
+	const held = [row.operator, fieldType ? undefined : row.readAs?.operator]
+	const kept = held.filter(
+		(operator): operator is RoutineFilterOperator =>
+			operator !== undefined && !accepted.includes(operator),
+	)
+
+	return kept.length === 0 ? accepted : [...new Set([...kept, ...accepted])]
 }
 
 const blankValueFor = (fieldType: RoutineFieldType | undefined) =>
@@ -316,6 +328,15 @@ const naming = (
 	field: string,
 ): RoutineFilterRow =>
 	carried(row, field, typeOf(fields, row.field), typeOf(fields, field))
+
+const retyped = (
+	fields: RoutinePayloadField[],
+	row: RoutineFilterRow,
+	field: string,
+): RoutineFilterRow =>
+	typeOf(fields, field)
+		? naming(fields, row, field)
+		: { field, operator: row.operator, value: row.value }
 
 const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>
 	row.field === held.field &&
@@ -408,7 +429,7 @@ const FilterRow = ({
 			{isFree ? (
 				<SettingsField
 					label={t("routines.form.filter.path.label")}
-					onValueChange={(path) => onChange(naming(fields, row, path))}
+					onValueChange={(path) => onChange(retyped(fields, row, path))}
 					placeholder={t("routines.form.filter.path.placeholder")}
 					value={row.field}
 				/>
@@ -419,7 +440,7 @@ const FilterRow = ({
 				onValueChange={(picked) =>
 					onChange({ ...row, operator: picked as RoutineFilterOperator })
 				}
-				options={offeredOperators(fieldType, row.operator).map((operator) => ({
+				options={offeredOperators(fieldType, row).map((operator) => ({
 					label: t(`routines.form.filter.operators.${operator}`),
 					value: operator,
 				}))}
@@ -428,7 +449,7 @@ const FilterRow = ({
 			{ROUTINE_OPERATOR_TAKES_VALUE[row.operator] ? (
 				<ValueControl
 					error={valueError}
-					fieldType={fieldType}
+					fieldType={fieldType ?? row.readAs?.fieldType}
 					onValueChange={(value) => onChange({ ...row, value })}
 					value={row.value}
 				/>
@@ -789,6 +810,7 @@ export {
 	type RoutineFieldType,
 	type RoutineFilterMatchMode,
 	type RoutineFilterOperator,
+	type RoutineFilterReading,
 	type RoutineFilterRow,
 	type RoutineFilterValues,
 	RoutineForm,
