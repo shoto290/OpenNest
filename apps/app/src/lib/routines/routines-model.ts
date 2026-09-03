@@ -1,4 +1,6 @@
 import type {
+	RoutineFilterRow,
+	RoutineFilterValues,
 	RoutineFormRefusal,
 	RoutineFormValues,
 	RoutineTriggerKind,
@@ -7,10 +9,21 @@ import type {
 } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
+import {
+	FIELD_TYPES,
+	FILTER_OPERATORS,
+	type FieldType,
+	OPERATOR_TAKES_VALUE,
+} from "./filter-vocabulary"
 import type { Routine, RoutineKey } from "./routine-contract"
-import type { TriggerSource } from "./trigger-contract"
+import type {
+	Filter,
+	FilterRow,
+	PayloadField,
+	TriggerSource,
+} from "./trigger-contract"
 
-export type SourceTitles = ReadonlyMap<string, string>
+export type KnownSources = ReadonlyMap<string, TriggerSource>
 
 export const sourceKeyOf = (botId: string, triggerSourceId: string) =>
 	`${botId}/${triggerSourceId}`
@@ -19,26 +32,24 @@ export const botIdsOf = (routines: Routine[]): string[] => [
 	...new Set(routines.map((routine) => routine.botId)),
 ]
 
-export const toSourceTitles = (
+export const toKnownSources = (
 	declared: { botId: string; sources: TriggerSource[] }[],
-): SourceTitles =>
+): KnownSources =>
 	new Map(
 		declared.flatMap(({ botId, sources }) =>
-			sources.map(
-				(source) => [sourceKeyOf(botId, source.id), source.title] as const,
-			),
+			sources.map((source) => [sourceKeyOf(botId, source.id), source] as const),
 		),
 	)
 
 export const toRoutineRows = (
 	routines: Routine[],
-	titles: SourceTitles,
+	known: KnownSources,
 ): RoutineRowModel[] =>
 	routines.map((routine) => ({
 		id: routine.id,
 		title: routine.title,
 		triggerSourceTitle:
-			titles.get(sourceKeyOf(routine.botId, routine.triggerSourceId)) ??
+			known.get(sourceKeyOf(routine.botId, routine.triggerSourceId))?.title ??
 			routine.triggerSourceId,
 		isEnabled: routine.isEnabled,
 		hasStoppedItself: !routine.isEnabled && routine.consecutiveFailures > 0,
@@ -53,10 +64,90 @@ const KINDS_BY_SOURCE_ID: Record<string, RoutineTriggerKind> = {
 export const triggerKindOf = (triggerSourceId: string): RoutineTriggerKind =>
 	KINDS_BY_SOURCE_ID[triggerSourceId] ?? "plain"
 
+export const toTriggerSource = ({
+	id,
+	title,
+	payload,
+}: TriggerSource): RoutineTriggerSource => ({
+	id,
+	title,
+	payload,
+	kind: triggerKindOf(id),
+})
+
 export const toTriggerSources = (
 	declared: TriggerSource[],
-): RoutineTriggerSource[] =>
-	declared.map(({ id, title }) => ({ id, title, kind: triggerKindOf(id) }))
+): RoutineTriggerSource[] => declared.map(toTriggerSource)
+
+const typeOf = (fields: PayloadField[], field: string) =>
+	fields.find((declared) => declared.name === field)?.type
+
+const asNumber = (value: string) => {
+	const held = Number(value)
+	return value.trim() === "" || Number.isNaN(held) ? value : held
+}
+
+const written = (value: string, fieldType: FieldType | undefined) => {
+	if (fieldType === "number") {
+		return asNumber(value)
+	}
+
+	return fieldType === "boolean" ? value === "true" : value
+}
+
+const toFilterRow = (
+	row: RoutineFilterRow,
+	fields: PayloadField[],
+): FilterRow => {
+	const { field, operator } = row
+	const fieldType = typeOf(fields, field) ?? row.readAs?.fieldType
+
+	return OPERATOR_TAKES_VALUE[operator]
+		? { field, operator, value: written(row.value, fieldType) }
+		: { field, operator }
+}
+
+const asRead = (row: RoutineFilterRow, read: FilterRow[]) =>
+	read.find((held) => isSameRow(row, toFormRow(held)))
+
+export const toFilter = (
+	filter: RoutineFilterValues,
+	fields: PayloadField[],
+	read?: Filter,
+): Filter => ({
+	matchMode: filter.matchMode,
+	rows: filter.rows.map(
+		(row) => asRead(row, read?.rows ?? []) ?? toFilterRow(row, fields),
+	),
+})
+
+const readTypeOf = (value: FilterRow["value"]): FieldType | undefined => {
+	if (typeof value === "number") return "number"
+	if (typeof value === "boolean") return "boolean"
+
+	return typeof value === "string" ? "string" : undefined
+}
+
+const toFormRow = ({
+	field,
+	operator,
+	value,
+}: FilterRow): RoutineFilterRow => ({
+	field,
+	operator,
+	value: value === undefined ? "" : String(value),
+	readAs: { operator, fieldType: readTypeOf(value) },
+})
+
+const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>
+	row.field === held.field &&
+	row.operator === held.operator &&
+	row.value === held.value
+
+export const toFormFilter = (filter: Filter): RoutineFilterValues => ({
+	matchMode: filter.matchMode,
+	rows: filter.rows.map(toFormRow),
+})
 
 const textIn = (triggerConfig: unknown, field: string): string => {
 	if (typeof triggerConfig !== "object" || triggerConfig === null) {
@@ -73,6 +164,7 @@ export const toFormValues = (routine: Routine): RoutineFormValues => ({
 	triggerSourceId: routine.triggerSourceId,
 	expression: textIn(routine.triggerConfig, "expression"),
 	path: textIn(routine.triggerConfig, "path"),
+	filter: toFormFilter(routine.filter),
 })
 
 export const toTriggerConfig = (values: RoutineFormValues): unknown => {
@@ -89,15 +181,40 @@ const REFUSALS_BY_BLANK_FIELD: Record<string, RoutineFormRefusal> = {
 	instruction: "blankInstruction",
 }
 
-const refusalIn = (reason: unknown): { kind: string; field?: string } | null =>
+type RefusalReason = {
+	kind: string
+	field?: string
+	row?: number
+	operator?: string
+	fieldType?: string
+}
+
+const refusalIn = (reason: unknown): RefusalReason | null =>
 	typeof reason === "object" && reason !== null && "kind" in reason
-		? (reason as { kind: string; field?: string })
+		? (reason as RefusalReason)
 		: null
+
+const toOperatorRefusal = ({
+	row,
+	operator,
+	fieldType,
+}: RefusalReason): RoutineFormRefusal | null => {
+	const refusedOperator = FILTER_OPERATORS.find((held) => held === operator)
+	const refusedType = FIELD_TYPES.find((held) => held === fieldType)
+
+	return typeof row === "number" && refusedOperator && refusedType
+		? { row, operator: refusedOperator, fieldType: refusedType }
+		: null
+}
 
 export const toFormRefusal = (reason: unknown): RoutineFormRefusal | null => {
 	const refused = refusalIn(reason)
 	if (!refused) {
 		return null
+	}
+
+	if (refused.kind === "unsupportedOperator") {
+		return toOperatorRefusal(refused)
 	}
 
 	if (refused.kind === "unreadableExpression") {

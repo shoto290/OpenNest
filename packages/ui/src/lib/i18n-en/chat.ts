@@ -339,10 +339,61 @@ const chat = {
 					"The address, the key and the header name are available once the routine is saved.",
 				failure: "The address and the key of this routine could not be read.",
 			},
+			filter: {
+				label: "Filter",
+				everyEvent: "Every event runs this routine.",
+				add: "Add a row",
+				row: "Row {{rank}}",
+				remove: "Remove the row on {{field}}",
+				matchMode: {
+					label: "Run when",
+					all: "Every row holds",
+					any: "Any row holds",
+				},
+				field: {
+					label: "Field",
+					otherPath: "Another path",
+				},
+				path: {
+					label: "Path",
+					placeholder: "sender.address",
+				},
+				operator: {
+					label: "Operator",
+				},
+				value: {
+					label: "Value",
+					true: "True",
+					false: "False",
+				},
+				operators: {
+					exists: "is present",
+					not_exists: "is absent",
+					equals: "equals",
+					not_equals: "does not equal",
+					contains: "contains",
+					not_contains: "does not contain",
+					starts_with: "starts with",
+					ends_with: "ends with",
+					gt: "is greater than",
+					lt: "is less than",
+				},
+				fieldTypes: {
+					string: "text",
+					number: "number",
+					boolean: "boolean",
+					datetime: "date",
+				},
+			},
 			error: {
 				blankTitle: "A routine needs a title.",
 				blankInstruction: "A routine needs an instruction.",
+				blankValue: "This row needs a value.",
+				untypedComparison:
+					"This comparison needs a field the trigger declares.",
 				unreadableExpression: "This expression cannot be read as a schedule.",
+				unsupportedOperator:
+					"{{operator}} does not fit a field declared as {{fieldType}}.",
 			},
 		},
 		row: {

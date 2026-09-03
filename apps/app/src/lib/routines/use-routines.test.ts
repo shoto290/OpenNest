@@ -5,13 +5,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import {
 	EMPTY_ROUTINE_VALUES,
+	type RoutineFilterValues,
 	type RoutineFormValues,
 } from "@workspace/ui/components/routine-form"
 
 import type { Routine, RoutineKey } from "./routine-contract"
 import { routinesTransport } from "./routines-transport"
+import type { TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
-import { useRoutines } from "./use-routines"
+import { type ConversationRoutines, useRoutines } from "./use-routines"
 
 vi.mock("./routines-transport", () => ({
 	routinesTransport: {
@@ -299,7 +301,7 @@ it("hands the panel a trigger source the lead does not declare", async () => {
 	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	expect(result.current.form.sources).toEqual([
-		{ id: "schedule", title: "Schedule", kind: "schedule" },
+		{ id: "schedule", title: "Schedule", kind: "schedule", payload: [] },
 	])
 
 	readKey.mockResolvedValueOnce(A_WEBHOOK_KEY)
@@ -311,6 +313,7 @@ it("hands the panel a trigger source the lead does not declare", async () => {
 		id: "local-webhook",
 		title: "local-webhook",
 		kind: "localWebhook",
+		payload: [],
 	})
 })
 
@@ -464,4 +467,247 @@ it("writes again when a save is fired after an earlier save settled", async () =
 
 	expect(create).toHaveBeenCalledTimes(2)
 	expect(result.current.routines).toHaveLength(1)
+})
+
+const INBOX_ROUTINE: Routine = {
+	...ROUTINE,
+	id: "r-3",
+	botId: "b-2",
+	triggerSourceId: "space-inbox",
+	filter: {
+		matchMode: "all",
+		rows: [{ field: "unreadCount", operator: "gt", value: 10 }],
+	},
+	triggerConfig: {},
+}
+
+const INBOX_SOURCE = {
+	id: "space-inbox",
+	title: "When the space inbox fills",
+	payload: [
+		{ name: "unreadCount", type: "number" as const },
+		{ name: "subject", type: "string" as const },
+	],
+	dedupeKey: "receivedAt",
+}
+
+const TWO_ROW_ROUTINE: Routine = {
+	...INBOX_ROUTINE,
+	id: "r-4",
+	filter: {
+		matchMode: "all",
+		rows: [
+			{ field: "unreadCount", operator: "gt", value: 10 },
+			{ field: "subject", operator: "contains", value: "invoice" },
+		],
+	},
+}
+
+const READ_ROWS = [
+	{ field: "unreadCount", operator: "gt" as const, value: "10" },
+	{ field: "subject", operator: "contains" as const, value: "invoice" },
+]
+
+const mountOwnedRoutine = async (
+	listed: Routine[],
+	owning: () => Promise<TriggerSource[]>,
+) => {
+	list.mockResolvedValueOnce(listed)
+	sources.mockImplementation((botId: string) =>
+		botId === INBOX_ROUTINE.botId ? owning() : Promise.resolve(DECLARED),
+	)
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+	return result
+}
+
+const declaringNothing = () =>
+	Promise.reject(new Error("the sources are unreadable"))
+
+const declaringTheInbox = () => Promise.resolve([INBOX_SOURCE])
+
+const savedRows = (
+	result: { current: ConversationRoutines },
+	routine: Routine,
+	rows: RoutineFilterValues["rows"],
+) => {
+	act(() => {
+		result.current.form.onOpen(routine.id)
+	})
+
+	update.mockResolvedValueOnce(routine)
+	return act(async () => {
+		result.current.form.onSave(
+			entered({
+				title: routine.title,
+				instruction: routine.instruction,
+				triggerSourceId: routine.triggerSourceId,
+				filter: { matchMode: "all", rows },
+			}),
+		)
+	})
+}
+
+const writtenRows = () => vi.mocked(update).mock.calls[0]?.[1].filter.rows
+
+it("keeps an untouched row typed as it was read while another row is added", async () => {
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		...READ_ROWS,
+		{ field: "sender.address", operator: "exists", value: "" },
+	])
+
+	expect(writtenRows()).toEqual([
+		...TWO_ROW_ROUTINE.filter.rows,
+		{ field: "sender.address", operator: "exists" },
+	])
+})
+
+it("keeps an untouched row typed as it was read while another row is edited", async () => {
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		READ_ROWS[0],
+		{ ...READ_ROWS[1], value: "receipt" },
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCount", operator: "gt", value: 10 },
+		{ field: "subject", operator: "contains", value: "receipt" },
+	])
+})
+
+it("writes every row from the declared fields once one of them is edited", async () => {
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringTheInbox)
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		{ ...READ_ROWS[0], value: "7" },
+		READ_ROWS[1],
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCount", operator: "gt", value: 7 },
+		{ field: "subject", operator: "contains", value: "invoice" },
+	])
+})
+
+it("keeps a value typed by the source the lead bot does not declare", async () => {
+	const result = await mountOwnedRoutine([INBOX_ROUTINE], declaringTheInbox)
+
+	act(() => {
+		result.current.form.onOpen(INBOX_ROUTINE.id)
+	})
+	expect(result.current.form.open?.values.filter.rows).toEqual([
+		{
+			field: "unreadCount",
+			operator: "gt",
+			value: "10",
+			readAs: { operator: "gt", fieldType: "number" },
+		},
+	])
+
+	update.mockResolvedValueOnce(INBOX_ROUTINE)
+	await act(async () => {
+		result.current.form.onSave(
+			entered({
+				title: INBOX_ROUTINE.title,
+				instruction: INBOX_ROUTINE.instruction,
+				triggerSourceId: INBOX_ROUTINE.triggerSourceId,
+				filter: {
+					matchMode: "all",
+					rows: [{ field: "unreadCount", operator: "gt", value: "10" }],
+				},
+			}),
+		)
+	})
+
+	expect(update).toHaveBeenCalledWith(
+		INBOX_ROUTINE.id,
+		expect.objectContaining({ filter: INBOX_ROUTINE.filter }),
+	)
+})
+
+it("leaves the filter of a routine whose source went unread as it was read", async () => {
+	const result = await mountOwnedRoutine([INBOX_ROUTINE], declaringNothing)
+
+	act(() => {
+		result.current.form.onOpen(INBOX_ROUTINE.id)
+	})
+
+	expect(result.current.form.open?.refusal).toBeUndefined()
+	expect(result.current.form.open?.values.filter).toEqual({
+		matchMode: "all",
+		rows: [
+			{
+				field: "unreadCount",
+				operator: "gt",
+				value: "10",
+				readAs: { operator: "gt", fieldType: "number" },
+			},
+		],
+	})
+
+	update.mockResolvedValueOnce(INBOX_ROUTINE)
+	await act(async () => {
+		result.current.form.onSave(
+			entered({
+				title: "Inbox digest",
+				instruction: INBOX_ROUTINE.instruction,
+				triggerSourceId: INBOX_ROUTINE.triggerSourceId,
+				filter: {
+					matchMode: "all",
+					rows: [{ field: "unreadCount", operator: "gt", value: "10" }],
+				},
+			}),
+		)
+	})
+
+	expect(update).toHaveBeenCalledWith(
+		INBOX_ROUTINE.id,
+		expect.objectContaining({
+			title: "Inbox digest",
+			filter: INBOX_ROUTINE.filter,
+		}),
+	)
+})
+
+it("writes an edited value in the type the row was read with", async () => {
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		{
+			...READ_ROWS[0],
+			value: "7",
+			readAs: { operator: "gt", fieldType: "number" },
+		},
+		READ_ROWS[1],
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCount", operator: "gt", value: 7 },
+		{ field: "subject", operator: "contains", value: "invoice" },
+	])
+})
+
+it("writes a renamed path in the type the row was read with", async () => {
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		{
+			...READ_ROWS[0],
+			field: "unreadCounts",
+			value: "7",
+			readAs: { operator: "gt", fieldType: "number" },
+		},
+		READ_ROWS[1],
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCounts", operator: "gt", value: 7 },
+		{ field: "subject", operator: "contains", value: "invoice" },
+	])
 })

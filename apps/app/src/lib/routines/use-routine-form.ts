@@ -11,18 +11,24 @@ import type { RoutinesPanelForm } from "@workspace/ui/components/routines-panel"
 
 import type { Routine } from "./routine-contract"
 import {
+	type KnownSources,
+	sourceKeyOf,
+	toFilter,
 	toFormRefusal,
 	toFormValues,
 	toTriggerConfig,
+	toTriggerSource,
 	toWebhook,
 	triggerKindOf,
 } from "./routines-model"
 import { routinesTransport } from "./routines-transport"
+import type { Filter } from "./trigger-contract"
 
 export type RoutineFormWiring = {
 	conversationId: string
 	leadBotId: string | undefined
 	sources: RoutineTriggerSource[]
+	known: KnownSources
 	held: Routine[]
 	onWritten: (routine: Routine) => void
 	onWriteFailure: () => void
@@ -34,19 +40,29 @@ const isWebhook = (routine: Routine) =>
 const sourcesOf = (
 	open: RoutineFormModel | null,
 	declared: RoutineTriggerSource[],
+	known: KnownSources,
+	held: Routine[],
 ): RoutineTriggerSource[] => {
 	const openSourceId = open?.id ? open.values.triggerSourceId : null
 	if (!openSourceId || declared.some(({ id }) => id === openSourceId)) {
 		return declared
 	}
 
+	const botId = held.find(({ id }) => id === open?.id)?.botId
+	const carried = botId
+		? known.get(sourceKeyOf(botId, openSourceId))
+		: undefined
+
 	return [
 		...declared,
-		{
-			id: openSourceId,
-			title: openSourceId,
-			kind: triggerKindOf(openSourceId),
-		},
+		carried
+			? toTriggerSource(carried)
+			: {
+					id: openSourceId,
+					title: openSourceId,
+					payload: [],
+					kind: triggerKindOf(openSourceId),
+				},
 	]
 }
 
@@ -54,6 +70,7 @@ export const useRoutineForm = ({
 	conversationId,
 	leadBotId,
 	sources,
+	known,
 	held,
 	onWritten,
 	onWriteFailure,
@@ -108,6 +125,22 @@ export const useRoutineForm = ({
 		[place, readKey],
 	)
 
+	const formSources = useMemo(
+		() => sourcesOf(open, sources, known, held),
+		[open, sources, known, held],
+	)
+
+	const filterOf = useCallback(
+		(values: RoutineFormValues, read?: Filter) =>
+			toFilter(
+				values.filter,
+				formSources.find(({ id }) => id === values.triggerSourceId)?.payload ??
+					[],
+				read,
+			),
+		[formSources],
+	)
+
 	const create = useCallback(
 		(values: RoutineFormValues) =>
 			leadBotId
@@ -117,11 +150,11 @@ export const useRoutineForm = ({
 						title: values.title,
 						instruction: values.instruction,
 						triggerSourceId: values.triggerSourceId,
-						filter: { matchMode: "all", rows: [] },
+						filter: filterOf(values),
 						triggerConfig: toTriggerConfig(values),
 					})
 				: null,
-		[conversationId, leadBotId],
+		[conversationId, leadBotId, filterOf],
 	)
 
 	const edit = useCallback(
@@ -131,13 +164,13 @@ export const useRoutineForm = ({
 				? routinesTransport.update(id, {
 						title: values.title,
 						instruction: values.instruction,
-						filter: routine.filter,
+						filter: filterOf(values, routine.filter),
 						triggerConfig: toTriggerConfig(values),
 						isEnabled: routine.isEnabled,
 					})
 				: null
 		},
-		[held],
+		[held, filterOf],
 	)
 
 	const save = useCallback(
@@ -212,13 +245,13 @@ export const useRoutineForm = ({
 	return useMemo(
 		() => ({
 			open,
-			sources: sourcesOf(open, sources),
+			sources: formSources,
 			canCreate: sources.length > 0,
 			onNew: openNew,
 			onOpen: openRoutine,
 			onClose: close,
 			onSave: save,
 		}),
-		[open, sources, openNew, openRoutine, close, save],
+		[open, sources, formSources, openNew, openRoutine, close, save],
 	)
 }

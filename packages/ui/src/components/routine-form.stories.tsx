@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { expect, fn, screen, spyOn } from "storybook/test"
+import { expect, fn, screen, spyOn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -8,14 +8,18 @@ import {
 } from "@workspace/storybook/story-utils"
 import {
 	EMPTY_ROUTINE_VALUES,
+	type RoutineFilterRow,
 	RoutineForm,
+	type RoutineFormModel,
 	type RoutineFormProps,
 } from "@workspace/ui/components/routine-form"
 import {
 	CALLED_FORM,
+	FILTERED_FORM,
 	INBOX_FORM,
 	SCHEDULED_FORM,
 	TRIGGER_SOURCES,
+	UNDESCRIBED_FORM,
 	WATCHING_FORM,
 } from "@workspace/ui/components/routines.fixtures"
 import { ROUTINES_PANEL_WIDTH } from "@workspace/ui/components/routines-panel"
@@ -334,5 +338,728 @@ export const KeyUnreadable = meta.story({
 			),
 		).toBeVisible()
 		await expect(canvas.getByDisplayValue("Deploy report")).toBeVisible()
+	},
+})
+
+const filtered = (rows: RoutineFilterRow[]): RoutineFormModel => ({
+	...INBOX_FORM,
+	values: { ...INBOX_FORM.values, filter: { matchMode: "all", rows } },
+})
+
+const PRESENCE_FILTER = filtered([
+	{ field: "receivedAt", operator: "exists", value: "" },
+])
+
+const BOOLEAN_FILTER = filtered([
+	{ field: "isFlagged", operator: "equals", value: "true" },
+])
+
+const OTHER_PATH_FILTER = filtered([
+	{ field: "sender.address", operator: "exists", value: "" },
+])
+
+const NUMBER_FILTER = filtered([
+	{ field: "unreadCount", operator: "gt", value: "10" },
+])
+
+const MISSING_VALUE_FILTER = filtered([
+	{ field: "subject", operator: "contains", value: "" },
+])
+
+const LONG_FILTER = filtered([
+	{
+		field: "subject",
+		operator: "contains",
+		value: "quarterly-invoice-reconciliation-2026-north-region",
+	},
+	{
+		field: "delivery.attachments.first.originalFileName",
+		operator: "exists",
+		value: "",
+	},
+])
+
+export const FilterWithoutARow = meta.story({
+	args: INBOX_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A routine no row narrows: every event the trigger reports runs it. Check that the block says so in words rather than showing an empty list, and that the match mode is absent — one row is what makes the question of every or any worth asking. Pick `FilterOnTwoRows` for the same block once rows exist.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("Every event runs this routine."),
+		).toBeVisible()
+		await expect(
+			canvas.queryByRole("combobox", { name: "Run when" }),
+		).not.toBeInTheDocument()
+		await expect(
+			canvas.getByRole("button", { name: "Add a row" }),
+		).toBeVisible()
+	},
+})
+
+export const FilterOnTwoRows = meta.story({
+	args: FILTERED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A saved filter reopened: two rows in the order they were saved, each with the field, the operator and the value they were saved with, under one match mode for the whole list. Check that the rows carry their rank for a screen reader, that appending a row lands the focus on the field control of that row, that removing it hands the focus to the row that took its place, and that saving sends the rows as they stand.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const rowOne = within(canvas.getByRole("group", { name: "Row 1" }))
+		const rowTwo = within(canvas.getByRole("group", { name: "Row 2" }))
+
+		await expect(
+			canvas.getByRole("combobox", { name: "Run when" }),
+		).toHaveTextContent("Any row holds")
+		await expect(
+			rowOne.getByRole("combobox", { name: "Field" }),
+		).toHaveTextContent("subject")
+		await expect(
+			rowOne.getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("contains")
+		await expect(rowOne.getByRole("textbox", { name: "Value" })).toHaveValue(
+			"invoice",
+		)
+		await expect(rowTwo.getByRole("spinbutton", { name: "Value" })).toHaveValue(
+			10,
+		)
+
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+		const rowThree = within(canvas.getByRole("group", { name: "Row 3" }))
+		await expect(
+			rowThree.getByRole("combobox", { name: "Field" }),
+		).toHaveFocus()
+
+		await userEvent.click(
+			rowThree.getByRole("button", { name: "Remove the row on subject" }),
+		)
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole(
+				"combobox",
+				{
+					name: "Field",
+				},
+			),
+		).toHaveFocus()
+
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledWith(FILTERED_FORM.values)
+	},
+})
+
+export const FilterOnAPresentField = meta.story({
+	args: PRESENCE_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row whose operator asks nothing but presence. Check that no value control is drawn for it — an operator that takes no value must not leave a box the reader could fill and lose — and that removing the only row hands the focus back to the control that appends one.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await expect(
+			row.getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is present")
+		await expect(
+			row.queryByRole("textbox", { name: "Value" }),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(
+			row.getByRole("button", { name: "Remove the row on receivedAt" }),
+		)
+		await expect(
+			canvas.getByRole("button", { name: "Add a row" }),
+		).toHaveFocus()
+	},
+})
+
+export const FilterOnABooleanField = meta.story({
+	args: BOOLEAN_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row on a field the source declares as a boolean. Check that the value is picked from a list holding true and false and nothing else, so no typed word can reach a field that takes neither, and that the operator list is the short one a boolean accepts.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+		const value = row.getByRole("combobox", { name: "Value" })
+
+		await expect(value).toHaveTextContent("True")
+		await userEvent.click(value)
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+	},
+})
+
+export const FilterOnAnotherPath = meta.story({
+	args: OTHER_PATH_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row on a dotted path the source does not declare. Check that the field control reads as another path and brings a text control for the path itself, and that the operator list holds presence alone: the engine reads a value through the type its source declares, so a path no source declares can only be asked whether it is there. Pick `FilterOnABooleanField` for a field whose declared type opens the comparison operators.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await expect(
+			row.getByRole("combobox", { name: "Field" }),
+		).toHaveTextContent("Another path")
+		await expect(row.getByRole("textbox", { name: "Path" })).toHaveValue(
+			"sender.address",
+		)
+		await expect(
+			row.queryByRole("textbox", { name: "Value" }),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(row.getByRole("combobox", { name: "Operator" }))
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+	},
+})
+
+export const FilterMovedToAnotherPath = meta.story({
+	args: FILTERED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row leaving a declared field for a free path, and coming back. Check that the operator falls back to one the path still offers instead of staying on a comparison no payload could ever hold, that the path control keeps the focus while a reader types a name the source happens to declare, and that picking a declared field from the field control puts that field back in place of the path.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await userEvent.click(row().getByRole("combobox", { name: "Field" }))
+		await userEvent.click(
+			await screen.findByRole("option", { name: "Another path" }),
+		)
+		await expect(
+			row().getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is present")
+
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Path" }),
+			"subject",
+		)
+		await expect(row().getByRole("textbox", { name: "Path" })).toHaveFocus()
+		await expect(row().getByRole("textbox", { name: "Path" })).toHaveValue(
+			"subject",
+		)
+
+		await userEvent.click(row().getByRole("combobox", { name: "Field" }))
+		await userEvent.click(
+			await screen.findByRole("option", { name: "subject" }),
+		)
+		await expect(
+			row().queryByRole("textbox", { name: "Path" }),
+		).not.toBeInTheDocument()
+	},
+})
+
+export const FilterOnANumberField = meta.story({
+	args: NUMBER_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row on a field the source declares as a number. Check that the value control carries a number and nothing else — the engine reads the value as the declared type, and a word saved there would make the row false for every payload — and that typing letters into it leaves it empty rather than storing them.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("spinbutton", { name: "Value" })
+
+		await expect(value).toHaveValue(10)
+		await userEvent.clear(value)
+		await userEvent.type(value, "many")
+		await expect(value).toHaveValue(null)
+	},
+})
+
+export const FilterMissingAValue = meta.story({
+	args: MISSING_VALUE_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row whose operator takes a value the reader left empty, at the moment they save. The engine accepts such a row and then never matches on it, so the form is the last place it can be caught. Check that saving marks the value control of that row, that the message is tied to that control, that the routine is left unwritten, and that filling the value clears the mark without a second save.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("textbox", { name: "Value" })
+		const message = canvas.getByText("This row needs a value.")
+
+		await expect(value).toHaveAttribute("aria-invalid", "true")
+		await expect(value.getAttribute("aria-describedby")).toContain(message.id)
+		await expect(args.onSave).not.toHaveBeenCalled()
+
+		await userEvent.type(value, "invoice")
+		await expect(value).not.toHaveAttribute("aria-invalid")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const FilterRefusedForItsOperator = meta.story({
+	args: {
+		...FILTERED_FORM,
+		refusal: { row: 1, operator: "gt", fieldType: "boolean" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The write came back refusing the second row: Rust is the only authority on what an operator may ask of a declared type. Check that the refusal marks the operator control of that row alone, that it names the operator and the type in a message tied to that control, and that the first row and everything above it still hold what the reader entered.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const refused = within(
+			canvas.getByRole("group", { name: "Row 2" }),
+		).getByRole("combobox", { name: "Operator" })
+		const message = canvas.getByText(
+			"is greater than does not fit a field declared as boolean.",
+		)
+
+		await expect(refused).toHaveAttribute("aria-invalid", "true")
+		await expect(refused.getAttribute("aria-describedby")).toContain(message.id)
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 1" })).getByRole(
+				"combobox",
+				{
+					name: "Operator",
+				},
+			),
+		).not.toHaveAttribute("aria-invalid")
+		await expect(canvas.getByDisplayValue("invoice")).toBeVisible()
+	},
+})
+
+export const FilterRefusedThenEdited = meta.story({
+	args: {
+		...FILTERED_FORM,
+		refusal: { row: 1, operator: "gt", fieldType: "boolean" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The row a write was refused for, removed by the reader. The refusal names a rank in the filter that was written, so it stops describing anything the moment the rows move. Check that no mark is left behind on the row that took its place, and that nothing is marked once the refused row is gone. Pick `FilterRefusedForItsOperator` for the refusal as it lands.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole("button", {
+				name: "Remove the row on unreadCount",
+			}),
+		)
+
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 1" })).getByRole(
+				"combobox",
+				{
+					name: "Operator",
+				},
+			),
+		).not.toHaveAttribute("aria-invalid")
+		await expect(
+			canvas.queryByText(
+				"is greater than does not fit a field declared as boolean.",
+			),
+		).not.toBeInTheDocument()
+	},
+})
+
+export const FilterAtThePanelWidth = meta.story({
+	args: LONG_FILTER,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The block at the width the panel opens at, holding a path and a value longer than the panel is wide. Check that the controls of a row stack instead of sharing a line, that none of them is cut off, and that nothing pushes the form into a horizontal scrollbar the reader would have to drag the panel wider to escape.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const block = slotIn(canvasElement, "routine-filter")
+
+		await expect(block.scrollWidth).toBeLessThanOrEqual(block.clientWidth)
+		for (const row of block.querySelectorAll<HTMLElement>(
+			"[data-slot='routine-filter-row']",
+		)) {
+			await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth)
+		}
+	},
+})
+
+export const FilterCarriedToAnotherSource = meta.story({
+	args: { id: null, values: EMPTY_ROUTINE_VALUES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A routine still unwritten, whose rows were built against one trigger before the reader picked another. Each source declares its own payload, so a row can lose the field it was written for. Check that the operator falls back to one the new source accepts rather than staying on a comparison its control no longer offers, and that the value goes with it: an operator or a value the engine cannot read would be saved as a row that never holds.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const pick = async (label: string, option: string) => {
+			await userEvent.click(canvas.getByRole("combobox", { name: label }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("Trigger", "When the space inbox fills")
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		await pick("Field", "subject")
+		await pick("Operator", "contains")
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Value" }),
+			"invoice",
+		)
+
+		await pick("Trigger", "On a schedule")
+
+		const operator = row().getByRole("combobox", { name: "Operator" })
+		await expect(operator).toHaveTextContent("is present")
+		await userEvent.click(operator)
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+	},
+})
+
+export const FilterRefusedThenMovedToAnotherSource = meta.story({
+	args: {
+		id: null,
+		values: FILTERED_FORM.values,
+		refusal: { row: 1, operator: "gt", fieldType: "boolean" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A refusal raised against one source, on a routine still unwritten, then another trigger picked. The refusal names a rank in a filter written for the source that was on screen; the rows are rehomed by the pick, so the refusal describes nothing any more. Check that no row is left marked and that the message is gone rather than hanging over the row that took its place.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("combobox", { name: "Trigger" }))
+		await userEvent.click(
+			await screen.findByRole("option", { name: "On a schedule" }),
+		)
+
+		await expect(
+			canvas.queryByText(
+				"is greater than does not fit a field declared as boolean.",
+			),
+		).not.toBeInTheDocument()
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole(
+				"combobox",
+				{
+					name: "Operator",
+				},
+			),
+		).not.toHaveAttribute("aria-invalid")
+	},
+})
+
+export const FilterOnAPathTheNextSourceDeclares = meta.story({
+	args: { id: null, values: EMPTY_ROUTINE_VALUES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row moved onto a free path under one trigger, whose path names a field the next trigger declares. Check that picking that trigger hands the row the field control of a declared field instead of leaving it on the path control it was built with: the path is a field again, and the operators of its declared type come back with it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const pick = async (label: string, option: string) => {
+			await userEvent.click(canvas.getByRole("combobox", { name: label }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("Trigger", "When the space inbox fills")
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		await pick("Field", "Another path")
+		await userEvent.type(row().getByRole("textbox", { name: "Path" }), "path")
+
+		await pick("Trigger", "When a watched file changes")
+
+		await expect(
+			row().queryByRole("textbox", { name: "Path" }),
+		).not.toBeInTheDocument()
+		await expect(
+			row().getByRole("combobox", { name: "Field" }),
+		).toHaveTextContent("path")
+	},
+})
+
+export const FilterOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A written routine whose trigger nothing described to the form: no field is declared, so every row reads as a free path. Check that each row keeps the operator it was read with rather than falling back to presence, and that the value control still carries the type the value was read in. Pick `FilterPathRenamedOnAnUndescribedSource` for what the reader editing that path does to the reading.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const row = within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await expect(
+			row.getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is greater than")
+		await expect(row.getByRole("spinbutton", { name: "Value" })).toHaveValue(10)
+		await expect(row.getByRole("textbox", { name: "Path" })).toHaveValue(
+			"unreadCount",
+		)
+	},
+})
+
+export const FilterValueEditedOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The value of a row read as a number, edited on a source that declares nothing. Check that the control takes a number and hands one back, so the write carries the type the row was read with instead of turning a comparison into text the engine cannot read.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("spinbutton", { name: "Value" })
+
+		await userEvent.clear(value)
+		await userEvent.type(value, "7")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		await expect(args.onSave).toHaveBeenCalledWith({
+			...UNDESCRIBED_FORM.values,
+			filter: {
+				matchMode: "all",
+				rows: [
+					{
+						...UNDESCRIBED_FORM.values.filter.rows[0],
+						value: "7",
+					},
+					UNDESCRIBED_FORM.values.filter.rows[1],
+				],
+			},
+		})
+	},
+})
+
+export const FilterValueRefusedOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A word typed into the value of a row read as a number. The control takes no letters, so the row is left without a value, and a row whose operator takes a value is not saved without one. Check that the row is marked, that the form stays open on what the reader entered, and that the other row keeps its value untouched.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const value = within(
+			canvas.getByRole("group", { name: "Row 1" }),
+		).getByRole("spinbutton", { name: "Value" })
+
+		await userEvent.clear(value)
+		await userEvent.type(value, "abc")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		await expect(args.onSave).not.toHaveBeenCalled()
+		await expect(value).toHaveAttribute("aria-invalid", "true")
+		await expect(canvas.getByText("This row needs a value.")).toBeVisible()
+		await expect(
+			within(canvas.getByRole("group", { name: "Row 2" })).getByRole(
+				"textbox",
+				{
+					name: "Value",
+				},
+			),
+		).toHaveValue("invoice")
+	},
+})
+
+export const FilterOperatorTakenBackOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A presence operator picked on a row read with a comparison, on a source that declares nothing. Nothing on screen knows the type of that path, so the comparison the row was read with stays in the list rather than disappearing behind the pick. Check that it can be picked again and that the value comes back with it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		const pick = async (option: string) => {
+			await userEvent.click(row().getByRole("combobox", { name: "Operator" }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("is present")
+		await expect(
+			row().queryByRole("spinbutton", { name: "Value" }),
+		).not.toBeInTheDocument()
+
+		await pick("is greater than")
+		await expect(row().getByRole("spinbutton", { name: "Value" })).toHaveValue(
+			10,
+		)
+	},
+})
+
+export const FilterPathRenamedOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The free path of a row read as a number, renamed to another path no field declares, then its value edited. Renaming a path is not the reader saying the row is something else: check that the value control still takes a number after the rename, that the operator the row was read with is still the one on screen, and that the saved row carries the new path with that operator and a number. Pick `FilterMovedToAnotherPath` for the rename that lands on a declared field, where the declared type takes over.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+
+		await userEvent.type(row().getByRole("textbox", { name: "Path" }), "s")
+		await expect(
+			row().getByRole("combobox", { name: "Operator" }),
+		).toHaveTextContent("is greater than")
+
+		const value = row().getByRole("spinbutton", { name: "Value" })
+		await userEvent.clear(value)
+		await userEvent.type(value, "7")
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+
+		await expect(args.onSave).toHaveBeenCalledWith({
+			...UNDESCRIBED_FORM.values,
+			filter: {
+				matchMode: "all",
+				rows: [
+					{
+						...UNDESCRIBED_FORM.values.filter.rows[0],
+						field: "unreadCounts",
+						value: "7",
+					},
+					UNDESCRIBED_FORM.values.filter.rows[1],
+				],
+			},
+		})
+	},
+})
+
+export const FilterPathLeavingADeclaredField = meta.story({
+	args: { id: null, values: EMPTY_ROUTINE_VALUES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A row taken to a free path, typed onto a field the source declares, given a comparison and a value, then typed away again onto a name nothing declares. The engine reads a comparison through the declared type of the field, so a row that leaves the field keeps nothing of what the field lent it. Check that the operator control falls back to presence and offers nothing else, that the value goes with it, and that the row saved is the one on screen.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		const pick = async (label: string, option: string) => {
+			await userEvent.click(canvas.getByRole("combobox", { name: label }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("Trigger", "When the space inbox fills")
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+		await pick("Field", "Another path")
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Path" }),
+			"subject",
+		)
+		await pick("Operator", "contains")
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Value" }),
+			"invoice",
+		)
+
+		await userEvent.type(row().getByRole("textbox", { name: "Path" }), "s")
+
+		const operator = row().getByRole("combobox", { name: "Operator" })
+		await expect(operator).toHaveTextContent("is present")
+		await expect(
+			row().queryByRole("textbox", { name: "Value" }),
+		).not.toBeInTheDocument()
+
+		await userEvent.click(operator)
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+		await userEvent.keyboard("{Escape}")
+
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledWith({
+			...EMPTY_ROUTINE_VALUES,
+			triggerSourceId: "space-inbox",
+			filter: {
+				matchMode: "all",
+				rows: [{ field: "subjects", operator: "exists", value: "" }],
+			},
+		})
+	},
+})
+
+export const FilterPathRenamedBackOnAnUndescribedSource = meta.story({
+	args: UNDESCRIBED_FORM,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The free path of a row read as a number, renamed and then typed back to the name it was read with. Nothing the reader did leaves a trace: check that the row saved is the row read, so the write can hand back the filter it read rather than a rebuilt one.",
+			},
+		},
+	},
+	play: async ({ args, canvas, userEvent }) => {
+		const path = () =>
+			within(canvas.getByRole("group", { name: "Row 1" })).getByRole(
+				"textbox",
+				{
+					name: "Path",
+				},
+			)
+
+		await userEvent.type(path(), "s")
+		await userEvent.type(path(), "{backspace}")
+		await expect(path()).toHaveValue("unreadCount")
+
+		await userEvent.click(canvas.getByRole("button", { name: "Save routine" }))
+		await expect(args.onSave).toHaveBeenCalledWith(UNDESCRIBED_FORM.values)
 	},
 })

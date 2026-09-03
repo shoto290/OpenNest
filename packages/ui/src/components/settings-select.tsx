@@ -1,11 +1,12 @@
 "use client"
 
 import { Select } from "@base-ui/react/select"
-import { useId } from "react"
+import { type Ref, useId } from "react"
 
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	FIELD_CONTROL_CLASS,
+	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
@@ -23,6 +24,8 @@ type SettingsSelectProps = {
 	options: SettingsSelectOption[]
 	placeholder?: string
 	hint?: string
+	error?: string
+	ref?: Ref<HTMLButtonElement>
 }
 
 const SettingsSelect = ({
@@ -32,9 +35,13 @@ const SettingsSelect = ({
 	options,
 	placeholder,
 	hint,
+	error,
+	ref,
 }: SettingsSelectProps) => {
 	const id = useId()
 	const hintId = hint ? `${id}-hint` : undefined
+	const errorId = error ? `${id}-error` : undefined
+	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined
 
 	return (
 		<div className="flex shrink-0 flex-col gap-1.5">
@@ -45,11 +52,14 @@ const SettingsSelect = ({
 			>
 				<Select.Label className={FIELD_LABEL_CLASS}>{label}</Select.Label>
 				<Select.Trigger
-					aria-describedby={hintId}
+					aria-describedby={describedBy}
+					aria-invalid={error ? true : undefined}
 					className={cn(
 						FIELD_CONTROL_CLASS,
+						error && FIELD_CONTROL_INVALID_CLASS,
 						"flex items-center justify-between gap-2 pr-2.5 text-left hover:bg-muted",
 					)}
+					ref={ref}
 				>
 					<Select.Value
 						className="min-w-0 truncate data-placeholder:text-muted-foreground"
@@ -94,6 +104,11 @@ const SettingsSelect = ({
 			{hint ? (
 				<p className="text-muted-foreground text-xs" id={hintId}>
 					{hint}
+				</p>
+			) : null}
+			{error ? (
+				<p className="text-destructive text-xs" id={errorId}>
+					{error}
 				</p>
 			) : null}
 		</div>

@@ -21,6 +21,7 @@ type SettingsFieldProps = {
 	fill?: boolean
 	readOnly?: boolean
 	masked?: boolean
+	numeric?: boolean
 }
 
 const SettingsField = ({
@@ -35,8 +36,10 @@ const SettingsField = ({
 	fill = false,
 	readOnly = false,
 	masked = false,
+	numeric = false,
 }: SettingsFieldProps) => {
 	const id = useId()
+	const controlType = numeric ? "number" : "text"
 	const hintId = hint ? `${id}-hint` : undefined
 	const errorId = error ? `${id}-error` : undefined
 	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined
@@ -89,7 +92,8 @@ const SettingsField = ({
 						placeholder={placeholder}
 						readOnly={readOnly}
 						spellCheck={masked ? false : undefined}
-						type={masked ? "password" : "text"}
+						step={numeric ? "any" : undefined}
+						type={masked ? "password" : controlType}
 						value={value}
 					/>
 				</div>

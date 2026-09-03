@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest"
 
 import {
+	ROUTINE_OPERATOR_TAKES_VALUE,
+	ROUTINE_OPERATORS_BY_FIELD_TYPE,
+} from "@workspace/ui/components/routine-form"
+
+import {
 	FIELD_TYPES,
 	FILTER_MATCH_MODES,
 	FILTER_OPERATORS,
+	OPERATOR_TAKES_VALUE,
 	OPERATORS_BY_FIELD_TYPE,
 } from "./filter-vocabulary"
 
@@ -43,4 +49,19 @@ describe("the shared filter vocabulary", () => {
 			)
 		},
 	)
+})
+
+describe("the filter vocabulary the routine form offers", () => {
+	it.each(FIELD_TYPES)(
+		"gives %s the operators the core accepts",
+		(fieldType) => {
+			expect(sorted(ROUTINE_OPERATORS_BY_FIELD_TYPE[fieldType])).toEqual(
+				sorted(vocabulary.operatorsByFieldType[fieldType]),
+			)
+		},
+	)
+
+	it("holds the operators that take a value the front declares", () => {
+		expect(ROUTINE_OPERATOR_TAKES_VALUE).toEqual(OPERATOR_TAKES_VALUE)
+	})
 })

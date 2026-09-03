@@ -10,9 +10,9 @@ import type {
 import type { Routine } from "./routine-contract"
 import {
 	botIdsOf,
-	type SourceTitles,
+	type KnownSources,
+	toKnownSources,
 	toRoutineRows,
-	toSourceTitles,
 	toTriggerSources,
 } from "./routines-model"
 import { routinesTransport } from "./routines-transport"
@@ -24,7 +24,7 @@ const withoutWriteFailure = (current: RoutinesFailure | null) =>
 	current === "write" ? null : current
 
 const NO_ROUTINES: Routine[] = []
-const NO_TITLES: SourceTitles = new Map()
+const NO_KNOWN_SOURCES: KnownSources = new Map()
 const NO_SOURCES: RoutineTriggerSource[] = []
 
 export type ConversationRoutines = {
@@ -60,15 +60,15 @@ const leadDeclaration = (
 ): Declaration | null =>
 	leadBotId && declared ? { botId: leadBotId, sources: declared } : null
 
-const titlesOf = async (
+const knownOf = async (
 	listed: Routine[],
 	lead: Declaration | null,
-): Promise<SourceTitles> => {
+): Promise<KnownSources> => {
 	const others = await declaredBy(
 		botIdsOf(listed).filter((botId) => botId !== lead?.botId),
 	)
 
-	return toSourceTitles(lead ? [lead, ...others] : others)
+	return toKnownSources(lead ? [lead, ...others] : others)
 }
 
 export const useRoutines = (
@@ -76,7 +76,7 @@ export const useRoutines = (
 	leadBotId?: string,
 ): ConversationRoutines => {
 	const [held, setHeld] = useState<Routine[]>(NO_ROUTINES)
-	const [titles, setTitles] = useState<SourceTitles>(NO_TITLES)
+	const [known, setKnown] = useState<KnownSources>(NO_KNOWN_SOURCES)
 	const [sources, setSources] = useState<RoutineTriggerSource[]>(NO_SOURCES)
 	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
 
@@ -93,8 +93,8 @@ export const useRoutines = (
 				return
 			}
 
-			setTitles(
-				await titlesOf(listing.value, leadDeclaration(leadBotId, declared)),
+			setKnown(
+				await knownOf(listing.value, leadDeclaration(leadBotId, declared)),
 			)
 			setHeld(listing.value)
 			setFailure(declared ? null : "read")
@@ -155,12 +155,13 @@ export const useRoutines = (
 		conversationId,
 		leadBotId,
 		sources,
+		known,
 		held,
 		onWritten: hold,
 		onWriteFailure: raiseWriteFailure,
 	})
 
-	const routines = useMemo(() => toRoutineRows(held, titles), [held, titles])
+	const routines = useMemo(() => toRoutineRows(held, known), [held, known])
 
 	return useMemo(
 		() => ({ routines, failure, reload, setEnabled, remove, form }),
