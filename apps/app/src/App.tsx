@@ -5,6 +5,7 @@ import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
 import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
 import { ConversationSettingsDialog } from "@workspace/ui/components/conversation-settings-dialog"
 import { NewConversationDialog } from "@workspace/ui/components/new-conversation-dialog"
+import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
 import { UpdateBadge } from "@workspace/ui/components/update-badge"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
@@ -860,6 +861,7 @@ export function App() {
 				skills={userPlugin.state.skills.map(toSkillItem)}
 				value={userSettings}
 			/>
+			<NoticeSurface />
 		</>
 	)
 }

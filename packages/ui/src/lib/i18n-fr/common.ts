@@ -24,6 +24,10 @@ const common = {
 	contextMenu: {
 		label: "Menu contextuel",
 	},
+	notice: {
+		label: "Avis",
+		close: "Fermer l'avis",
+	},
 	notification: {
 		question: "Vous a posé une question",
 		permission: "Demande votre permission",
