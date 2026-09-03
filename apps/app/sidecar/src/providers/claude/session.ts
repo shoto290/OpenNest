@@ -1,3 +1,5 @@
+import { homedir } from "node:os"
+
 import {
 	type Options,
 	query,
@@ -74,6 +76,7 @@ export const buildOptions = (
 	const managedSettings = securityFloor({
 		appDataDir: request.appDataDir,
 		conversationId: request.conversationId,
+		home: homedir(),
 		platform: process.platform,
 		pluginPaths: pluginPaths(request),
 		writablePaths: writablePaths(writeScope(request)),
