@@ -693,6 +693,7 @@ const RoutineForm = ({
 		(candidate) => candidate.id === entered.triggerSourceId,
 	)
 	const kind = source?.kind ?? "plain"
+	const fields = source?.payload ?? []
 
 	const answer = (field: keyof RoutineFormValues, value: string) =>
 		setEntered((held) => ({ ...held, [field]: value }))
@@ -709,7 +710,6 @@ const RoutineForm = ({
 
 	const save = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
-		const fields = source?.payload ?? []
 		const isRefused = entered.filter.rows.some(
 			(row) => isMissingValue(row) || isUntypedComparison(row, fields),
 		)
@@ -800,7 +800,7 @@ const RoutineForm = ({
 				/>
 			) : null}
 			<FilterBlock
-				fields={source?.payload ?? []}
+				fields={fields}
 				key={entered.triggerSourceId}
 				filter={entered.filter}
 				marksRefusedRows={marksRefusedRows}
