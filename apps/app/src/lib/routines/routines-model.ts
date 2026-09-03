@@ -105,12 +105,18 @@ const toFilterRow = (
 		: { field, operator }
 }
 
+const asRead = (row: RoutineFilterRow, read: FilterRow[]) =>
+	read.find((held) => isSameRow(row, toFormRow(held)))
+
 export const toFilter = (
 	filter: RoutineFilterValues,
 	fields: PayloadField[],
+	read?: Filter,
 ): Filter => ({
 	matchMode: filter.matchMode,
-	rows: filter.rows.map((row) => toFilterRow(row, fields)),
+	rows: filter.rows.map(
+		(row) => asRead(row, read?.rows ?? []) ?? toFilterRow(row, fields),
+	),
 })
 
 const toFormRow = ({
@@ -122,19 +128,6 @@ const toFormRow = ({
 	operator,
 	value: value === undefined ? "" : String(value),
 })
-
-export const isFilterAsRead = (
-	entered: RoutineFilterValues,
-	held: Filter,
-): boolean => {
-	const read = toFormFilter(held)
-
-	return (
-		entered.matchMode === read.matchMode &&
-		entered.rows.length === read.rows.length &&
-		entered.rows.every((row, at) => isSameRow(row, read.rows[at]))
-	)
-}
 
 const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>
 	row.field === held.field &&

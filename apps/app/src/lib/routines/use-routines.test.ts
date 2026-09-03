@@ -5,13 +5,14 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import {
 	EMPTY_ROUTINE_VALUES,
+	type RoutineFilterValues,
 	type RoutineFormValues,
 } from "@workspace/ui/components/routine-form"
 
 import type { Routine, RoutineKey } from "./routine-contract"
 import { routinesTransport } from "./routines-transport"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
-import { useRoutines } from "./use-routines"
+import { type ConversationRoutines, useRoutines } from "./use-routines"
 
 vi.mock("./routines-transport", () => ({
 	routinesTransport: {
@@ -482,9 +483,118 @@ const INBOX_ROUTINE: Routine = {
 const INBOX_SOURCE = {
 	id: "space-inbox",
 	title: "When the space inbox fills",
-	payload: [{ name: "unreadCount", type: "number" as const }],
+	payload: [
+		{ name: "unreadCount", type: "number" as const },
+		{ name: "subject", type: "string" as const },
+	],
 	dedupeKey: "receivedAt",
 }
+
+const TWO_ROW_ROUTINE: Routine = {
+	...INBOX_ROUTINE,
+	id: "r-4",
+	filter: {
+		matchMode: "all",
+		rows: [
+			{ field: "unreadCount", operator: "gt", value: 10 },
+			{ field: "subject", operator: "contains", value: "invoice" },
+		],
+	},
+}
+
+const READ_ROWS = [
+	{ field: "unreadCount", operator: "gt" as const, value: "10" },
+	{ field: "subject", operator: "contains" as const, value: "invoice" },
+]
+
+const mountUndescribed = async (listed: Routine[]) => {
+	list.mockResolvedValueOnce(listed)
+	sources.mockImplementation((botId: string) =>
+		botId === INBOX_ROUTINE.botId
+			? Promise.reject(new Error("the sources are unreadable"))
+			: Promise.resolve(DECLARED),
+	)
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+	return result
+}
+
+const savedRows = (
+	result: { current: ConversationRoutines },
+	routine: Routine,
+	rows: RoutineFilterValues["rows"],
+) => {
+	act(() => {
+		result.current.form.onOpen(routine.id)
+	})
+
+	update.mockResolvedValueOnce(routine)
+	return act(async () => {
+		result.current.form.onSave(
+			entered({
+				title: routine.title,
+				instruction: routine.instruction,
+				triggerSourceId: routine.triggerSourceId,
+				filter: { matchMode: "all", rows },
+			}),
+		)
+	})
+}
+
+const writtenRows = () => vi.mocked(update).mock.calls[0]?.[1].filter.rows
+
+it("keeps an untouched row typed as it was read while another row is added", async () => {
+	const result = await mountUndescribed([TWO_ROW_ROUTINE])
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		...READ_ROWS,
+		{ field: "sender.address", operator: "exists", value: "" },
+	])
+
+	expect(writtenRows()).toEqual([
+		...TWO_ROW_ROUTINE.filter.rows,
+		{ field: "sender.address", operator: "exists" },
+	])
+})
+
+it("keeps an untouched row typed as it was read while another row is edited", async () => {
+	const result = await mountUndescribed([TWO_ROW_ROUTINE])
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		READ_ROWS[0],
+		{ ...READ_ROWS[1], value: "receipt" },
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCount", operator: "gt", value: 10 },
+		{ field: "subject", operator: "contains", value: "receipt" },
+	])
+})
+
+it("writes every row from the declared fields once one of them is edited", async () => {
+	list.mockResolvedValueOnce([TWO_ROW_ROUTINE])
+	sources.mockImplementation((botId: string) =>
+		Promise.resolve(botId === INBOX_ROUTINE.botId ? [INBOX_SOURCE] : DECLARED),
+	)
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+
+	await savedRows(result, TWO_ROW_ROUTINE, [
+		{ ...READ_ROWS[0], value: "7" },
+		READ_ROWS[1],
+	])
+
+	expect(writtenRows()).toEqual([
+		{ field: "unreadCount", operator: "gt", value: 7 },
+		{ field: "subject", operator: "contains", value: "invoice" },
+	])
+})
 
 it("keeps a value typed by the source the lead bot does not declare", async () => {
 	list.mockResolvedValueOnce([INBOX_ROUTINE])

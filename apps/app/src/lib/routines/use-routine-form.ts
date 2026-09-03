@@ -11,7 +11,6 @@ import type { RoutinesPanelForm } from "@workspace/ui/components/routines-panel"
 
 import type { Routine } from "./routine-contract"
 import {
-	isFilterAsRead,
 	type KnownSources,
 	sourceKeyOf,
 	toFilter,
@@ -23,6 +22,7 @@ import {
 	triggerKindOf,
 } from "./routines-model"
 import { routinesTransport } from "./routines-transport"
+import type { Filter } from "./trigger-contract"
 
 export type RoutineFormWiring = {
 	conversationId: string
@@ -131,11 +131,12 @@ export const useRoutineForm = ({
 	)
 
 	const filterOf = useCallback(
-		(values: RoutineFormValues) =>
+		(values: RoutineFormValues, read?: Filter) =>
 			toFilter(
 				values.filter,
 				formSources.find(({ id }) => id === values.triggerSourceId)?.payload ??
 					[],
+				read,
 			),
 		[formSources],
 	)
@@ -163,9 +164,7 @@ export const useRoutineForm = ({
 				? routinesTransport.update(id, {
 						title: values.title,
 						instruction: values.instruction,
-						filter: isFilterAsRead(values.filter, routine.filter)
-							? routine.filter
-							: filterOf(values),
+						filter: filterOf(values, routine.filter),
 						triggerConfig: toTriggerConfig(values),
 						isEnabled: routine.isEnabled,
 					})
