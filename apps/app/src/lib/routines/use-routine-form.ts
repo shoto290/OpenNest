@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 
 import {
 	EMPTY_ROUTINE_VALUES,
@@ -39,11 +39,16 @@ export const useRoutineForm = ({
 	onWriteFailure,
 }: RoutineFormWiring): RoutinesPanelForm => {
 	const [open, setOpen] = useState<RoutineFormModel | null>(null)
+	const lastRead = useRef(0)
 
 	const readKey = useCallback((routineId: string) => {
+		lastRead.current += 1
+		const read = lastRead.current
 		const settle = (revise: (model: RoutineFormModel) => RoutineFormModel) =>
 			setOpen((current) =>
-				current && current.id === routineId ? revise(current) : current,
+				current && current.id === routineId && read === lastRead.current
+					? revise(current)
+					: current,
 			)
 
 		void routinesTransport.key(routineId).then(
@@ -102,6 +107,8 @@ export const useRoutineForm = ({
 
 			const written = open.id === null ? create(values) : edit(open.id, values)
 			if (!written) {
+				setOpen({ ...open, values, refusal: undefined })
+				onWriteFailure()
 				return
 			}
 

@@ -251,3 +251,46 @@ it("marks the title of a form refused for a blank title", async () => {
 	)
 	expect(result.current.failure).toBeNull()
 })
+
+it("lists the routines of a conversation whose sources are unreadable", async () => {
+	list.mockResolvedValueOnce([ROUTINE])
+	sources.mockRejectedValue(new Error("the sources are unreadable"))
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+
+	await waitFor(() => expect(result.current.failure).toBe("read"))
+	expect(result.current.routines).toHaveLength(1)
+	expect(result.current.form.canCreate).toBe(false)
+})
+
+it("keeps the key a later read carried when an earlier read rejects", async () => {
+	const result = await mountLeadRoutines([WEBHOOK_ROUTINE])
+	let refuse = (_reason: unknown) => {}
+	readKey.mockReturnValueOnce(
+		new Promise((_resolve, reject) => {
+			refuse = reject
+		}),
+	)
+	readKey.mockResolvedValueOnce(A_WEBHOOK_KEY)
+
+	act(() => {
+		result.current.form.onOpen(WEBHOOK_ROUTINE.id)
+	})
+	await act(async () => {
+		result.current.form.onOpen(WEBHOOK_ROUTINE.id)
+	})
+	await waitFor(() => expect(result.current.form.open?.webhook).toBeDefined())
+
+	await act(async () => {
+		refuse(new Error("the key is unreadable"))
+	})
+
+	expect(result.current.form.open?.hasFailedToReadKey).toBeUndefined()
+	expect(result.current.form.open?.webhook).toEqual({
+		url: A_WEBHOOK_KEY.url,
+		key: A_WEBHOOK_KEY.key,
+		header: A_WEBHOOK_KEY.header,
+	})
+})

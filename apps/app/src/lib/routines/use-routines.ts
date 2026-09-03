@@ -54,6 +54,12 @@ const declaredBy = async (botIds: string[]): Promise<Declaration[]> => {
 const declaredByLead = (leadBotId: string | undefined) =>
 	leadBotId ? triggerSourcesTransport.sources(leadBotId) : Promise.resolve([])
 
+const leadDeclaration = (
+	leadBotId: string | undefined,
+	declared: TriggerSource[] | null,
+): Declaration | null =>
+	leadBotId && declared ? { botId: leadBotId, sources: declared } : null
+
 const titlesOf = async (
 	listed: Routine[],
 	lead: Declaration | null,
@@ -75,23 +81,24 @@ export const useRoutines = (
 	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
 
 	const reload = useCallback(() => {
-		void Promise.all([
+		void Promise.allSettled([
 			routinesTransport.list(conversationId),
 			declaredByLead(leadBotId),
-		]).then(
-			async ([listed, lead]) => {
-				setTitles(
-					await titlesOf(
-						listed,
-						leadBotId ? { botId: leadBotId, sources: lead } : null,
-					),
-				)
-				setSources(toTriggerSources(lead))
-				setHeld(listed)
-				setFailure(null)
-			},
-			() => setFailure("read"),
-		)
+		]).then(async ([listing, declaring]) => {
+			const declared = declaring.status === "fulfilled" ? declaring.value : null
+			setSources(declared ? toTriggerSources(declared) : NO_SOURCES)
+
+			if (listing.status === "rejected") {
+				setFailure("read")
+				return
+			}
+
+			setTitles(
+				await titlesOf(listing.value, leadDeclaration(leadBotId, declared)),
+			)
+			setHeld(listing.value)
+			setFailure(declared ? null : "read")
+		})
 	}, [conversationId, leadBotId])
 
 	useEffect(reload, [reload])
