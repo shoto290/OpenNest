@@ -11,6 +11,7 @@ import {
 
 import type { Routine, RoutineKey } from "./routine-contract"
 import { routinesTransport } from "./routines-transport"
+import type { TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 import { type ConversationRoutines, useRoutines } from "./use-routines"
 
@@ -507,12 +508,13 @@ const READ_ROWS = [
 	{ field: "subject", operator: "contains" as const, value: "invoice" },
 ]
 
-const mountUndescribed = async (listed: Routine[]) => {
+const mountOwnedRoutine = async (
+	listed: Routine[],
+	owning: () => Promise<TriggerSource[]>,
+) => {
 	list.mockResolvedValueOnce(listed)
 	sources.mockImplementation((botId: string) =>
-		botId === INBOX_ROUTINE.botId
-			? Promise.reject(new Error("the sources are unreadable"))
-			: Promise.resolve(DECLARED),
+		botId === INBOX_ROUTINE.botId ? owning() : Promise.resolve(DECLARED),
 	)
 
 	const { result } = renderHook(() =>
@@ -521,6 +523,11 @@ const mountUndescribed = async (listed: Routine[]) => {
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	return result
 }
+
+const declaringNothing = () =>
+	Promise.reject(new Error("the sources are unreadable"))
+
+const declaringTheInbox = () => Promise.resolve([INBOX_SOURCE])
 
 const savedRows = (
 	result: { current: ConversationRoutines },
@@ -547,7 +554,7 @@ const savedRows = (
 const writtenRows = () => vi.mocked(update).mock.calls[0]?.[1].filter.rows
 
 it("keeps an untouched row typed as it was read while another row is added", async () => {
-	const result = await mountUndescribed([TWO_ROW_ROUTINE])
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
 
 	await savedRows(result, TWO_ROW_ROUTINE, [
 		...READ_ROWS,
@@ -561,7 +568,7 @@ it("keeps an untouched row typed as it was read while another row is added", asy
 })
 
 it("keeps an untouched row typed as it was read while another row is edited", async () => {
-	const result = await mountUndescribed([TWO_ROW_ROUTINE])
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringNothing)
 
 	await savedRows(result, TWO_ROW_ROUTINE, [
 		READ_ROWS[0],
@@ -575,15 +582,7 @@ it("keeps an untouched row typed as it was read while another row is edited", as
 })
 
 it("writes every row from the declared fields once one of them is edited", async () => {
-	list.mockResolvedValueOnce([TWO_ROW_ROUTINE])
-	sources.mockImplementation((botId: string) =>
-		Promise.resolve(botId === INBOX_ROUTINE.botId ? [INBOX_SOURCE] : DECLARED),
-	)
-
-	const { result } = renderHook(() =>
-		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
-	)
-	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+	const result = await mountOwnedRoutine([TWO_ROW_ROUTINE], declaringTheInbox)
 
 	await savedRows(result, TWO_ROW_ROUTINE, [
 		{ ...READ_ROWS[0], value: "7" },
@@ -597,15 +596,7 @@ it("writes every row from the declared fields once one of them is edited", async
 })
 
 it("keeps a value typed by the source the lead bot does not declare", async () => {
-	list.mockResolvedValueOnce([INBOX_ROUTINE])
-	sources.mockImplementation((botId: string) =>
-		Promise.resolve(botId === INBOX_ROUTINE.botId ? [INBOX_SOURCE] : DECLARED),
-	)
-
-	const { result } = renderHook(() =>
-		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
-	)
-	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+	const result = await mountOwnedRoutine([INBOX_ROUTINE], declaringTheInbox)
 
 	act(() => {
 		result.current.form.onOpen(INBOX_ROUTINE.id)
@@ -636,17 +627,7 @@ it("keeps a value typed by the source the lead bot does not declare", async () =
 })
 
 it("leaves the filter of a routine whose source went unread as it was read", async () => {
-	list.mockResolvedValueOnce([INBOX_ROUTINE])
-	sources.mockImplementation((botId: string) =>
-		botId === INBOX_ROUTINE.botId
-			? Promise.reject(new Error("the sources are unreadable"))
-			: Promise.resolve(DECLARED),
-	)
-
-	const { result } = renderHook(() =>
-		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
-	)
-	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+	const result = await mountOwnedRoutine([INBOX_ROUTINE], declaringNothing)
 
 	act(() => {
 		result.current.form.onOpen(INBOX_ROUTINE.id)
