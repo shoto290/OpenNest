@@ -10,6 +10,7 @@ type SwitchProps = {
 	id?: string
 	"aria-describedby"?: string
 	"aria-label"?: string
+	"aria-labelledby"?: string
 	disabled?: boolean
 	className?: string
 }
