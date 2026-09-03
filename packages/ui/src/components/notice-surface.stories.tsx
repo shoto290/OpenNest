@@ -1,7 +1,7 @@
 import {
 	expect,
 	screen,
-	type userEvent as user,
+	type UserEventObject,
 	waitFor,
 	within,
 } from "storybook/test"
@@ -86,7 +86,7 @@ type SwipeOffset = {
 
 const swipe = async (
 	notice: HTMLElement,
-	pointer: ReturnType<typeof user.setup>,
+	pointer: UserEventObject,
 	offset: SwipeOffset,
 ) => {
 	const box = notice.getBoundingClientRect()
@@ -109,6 +109,18 @@ const swipe = async (
 		{ keys: "[/MouseLeft]" },
 	])
 }
+
+const failureNotice = async () => {
+	const notice = await within(viewport()).findByRole("alertdialog", {
+		hidden: true,
+	})
+	await waitFor(() => expect(notice).toBeVisible())
+
+	return notice
+}
+
+const closeControl = () =>
+	within(viewport()).getByRole("button", { hidden: true })
 
 const noticesOnScreen = () =>
 	Array.from(
@@ -191,10 +203,7 @@ export const Error = meta.story({
 		const announcement = await screen.findByRole("alert")
 		await expect(announcement).toHaveTextContent(FAILURE.title)
 
-		const notice = await within(viewport()).findByRole("alertdialog", {
-			hidden: true,
-		})
-		await waitFor(() => expect(notice).toBeVisible())
+		await failureNotice()
 
 		const announced = screen.getAllByText(FAILURE.title, {
 			ignore: '[aria-hidden="true"], [aria-hidden="true"] *',
@@ -211,7 +220,7 @@ export const Error = meta.story({
 
 		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
 
-		const close = within(viewport()).getByRole("button", { hidden: true })
+		const close = closeControl()
 		await waitFor(async () => {
 			await userEvent.tab()
 			await expect(close).toHaveFocus()
@@ -281,11 +290,8 @@ export const LongContent = meta.story({
 			canvas.getByRole("button", { name: "Report the long failure" }),
 		)
 
-		const notice = await within(viewport()).findByRole("alertdialog", {
-			hidden: true,
-		})
-		const close = within(viewport()).getByRole("button", { hidden: true })
-		await waitFor(() => expect(notice).toBeVisible())
+		const notice = await failureNotice()
+		const close = closeControl()
 
 		await expect(close).toHaveAttribute("aria-label", "Close notice")
 
@@ -322,10 +328,7 @@ export const Dismissing = meta.story({
 			canvas.getByRole("button", { name: "Run the routine" }),
 		)
 
-		const notice = await within(viewport()).findByRole("alertdialog", {
-			hidden: true,
-		})
-		await waitFor(() => expect(notice).toBeVisible())
+		const notice = await failureNotice()
 
 		await swipe(notice, userEvent, { y: SWIPE_DISTANCE })
 		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
@@ -368,10 +371,7 @@ export const WithDialog = meta.story({
 		await waitFor(() => expect(dialog).toBeVisible())
 
 		raiseFailureNotice(FAILURE)
-		const notice = await within(viewport()).findByRole("alertdialog", {
-			hidden: true,
-		})
-		await waitFor(() => expect(notice).toBeVisible())
+		const notice = await failureNotice()
 
 		const box = notice.getBoundingClientRect()
 		const topmost = document.elementFromPoint(
@@ -380,9 +380,7 @@ export const WithDialog = meta.story({
 		)
 		await expect(notice.contains(topmost)).toBe(true)
 
-		await userEvent.click(
-			within(viewport()).getByRole("button", { hidden: true }),
-		)
+		await userEvent.click(closeControl())
 		await waitFor(() =>
 			expect(within(viewport()).queryByText(FAILURE.title)).toBe(null),
 		)
