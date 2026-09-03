@@ -9,6 +9,18 @@ const BODY_KEY = {
 	finishedTurn: "common:notification.finishedTurn",
 } as const satisfies Record<NotifiedEvent, string>
 
+export type NotificationFailure = "clicks" | "focus" | "send"
+
+const FAILURE_TITLE_KEY = {
+	clicks: "common:notification.failure.clicks",
+	focus: "common:notification.failure.focus",
+	send: "common:notification.failure.send",
+} as const satisfies Record<NotificationFailure, string>
+
+export const notificationFailureTitleFor = (
+	failure: NotificationFailure,
+): string => i18n.t(FAILURE_TITLE_KEY[failure])
+
 export type NotificationWordsInput = {
 	name: string
 	event: NotifiedEvent

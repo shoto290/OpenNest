@@ -1,3 +1,5 @@
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+
 import {
 	type ConversationRound,
 	type NotificationSwitches,
@@ -9,7 +11,11 @@ import type {
 	NotificationRequest,
 	NotificationTarget,
 } from "./notification-port"
-import { notificationWordsFor } from "./notification-words"
+import {
+	type NotificationFailure,
+	notificationFailureTitleFor,
+	notificationWordsFor,
+} from "./notification-words"
 
 import type { ChatState } from "../chat/chat-state"
 import { conversationName } from "../conversations/roster-conversations"
@@ -48,6 +54,8 @@ type SpacesSource = {
 export type NotificationSourceSwitches = NotificationSwitches &
 	Pick<UserPreferences, "notifyWithSound">
 
+export type FailureNoticeReporter = (notice: NoticeMessage) => void
+
 export type NotificationSourceOptions = {
 	chat: ChatSource
 	runtimes: RuntimeSource
@@ -59,12 +67,16 @@ export type NotificationSourceOptions = {
 	watchFocus: (report: (isFocused: boolean) => void) => Promise<() => void>
 	raiseWindow: () => void
 	playChime: () => void
+	reportFailure: FailureNoticeReporter
 }
 
 type Reading = {
 	switches: NotificationSourceSwitches
 	hasFocus: boolean
 }
+
+const reasonOf = (reason: unknown): string =>
+	reason instanceof Error ? reason.message : String(reason)
 
 const forgetBeyond = <Held>(seen: Map<string, Held>, ids: string[]) => {
 	if (seen.size <= ids.length) {
@@ -88,11 +100,27 @@ export const startNotificationSource = ({
 	watchFocus,
 	raiseWindow,
 	playChime,
+	reportFailure,
 }: NotificationSourceOptions): (() => void) => {
 	const seen = new Map<string, ChatState>()
 	const seenRounds = new Map<string, ConversationRound>()
 
 	let windowFocus: boolean | undefined
+
+	const reportedFailures = new Set<NotificationFailure>()
+
+	const failWith =
+		(failure: NotificationFailure) =>
+		(reason: unknown): undefined => {
+			if (reportedFailures.has(failure)) {
+				return
+			}
+			reportedFailures.add(failure)
+			reportFailure({
+				title: notificationFailureTitleFor(failure),
+				description: reasonOf(reason),
+			})
+		}
 
 	const botNotifications = ({
 		switches,
@@ -184,7 +212,7 @@ export const startNotificationSource = ({
 		]
 
 		for (const request of requests) {
-			void notifications.send(request)
+			void notifications.send(request).catch(failWith("send"))
 		}
 
 		if (requests.length > 0 && reading.switches.notifyWithSound) {
@@ -215,8 +243,10 @@ export const startNotificationSource = ({
 	const stopRuntimes = runtimes.subscribe(compare)
 	const focus = watchFocus((isFocused) => {
 		windowFocus = isFocused
-	}).catch(() => undefined)
-	const activation = notifications.onActivate(activate).catch(() => undefined)
+	}).catch(failWith("focus"))
+	const activation = notifications
+		.onActivate(activate)
+		.catch(failWith("clicks"))
 
 	return () => {
 		stopChat()

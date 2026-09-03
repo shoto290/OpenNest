@@ -88,6 +88,7 @@ const aWorld = async () => {
 		watchFocus: async () => () => undefined,
 		raiseWindow: () => undefined,
 		playChime: () => undefined,
+		reportFailure: () => undefined,
 	})
 	await Promise.resolve()
 
