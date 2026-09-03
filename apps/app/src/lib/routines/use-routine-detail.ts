@@ -16,6 +16,24 @@ type RunsRead = {
 	hasReadFullPage: boolean
 }
 
+type OpenRoutine = {
+	routineId: string
+	read: RunsRead | null
+	isReading: boolean
+	hasFailedToReadRuns: boolean
+	isRunning: boolean
+	refusal: RoutineRunRefusal | null
+}
+
+const opening = (routineId: string): OpenRoutine => ({
+	routineId,
+	read: null,
+	isReading: true,
+	hasFailedToReadRuns: false,
+	isRunning: false,
+	refusal: null,
+})
+
 export type RoutineDetailWiring = {
 	routines: RoutineRowModel[]
 	onWriteFailure: () => void
@@ -25,101 +43,102 @@ export const useRoutineDetail = ({
 	routines,
 	onWriteFailure,
 }: RoutineDetailWiring): RoutinesPanelDetail => {
-	const [openId, setOpenId] = useState<string | null>(null)
-	const [read, setRead] = useState<RunsRead | null>(null)
-	const [isReading, setReading] = useState(false)
-	const [hasFailedToReadRuns, setFailedToRead] = useState(false)
-	const [isRunning, setRunning] = useState(false)
-	const [refusal, setRefusal] = useState<RoutineRunRefusal | null>(null)
+	const [held, setHeld] = useState<OpenRoutine | null>(null)
 	const placed = useRef(0)
 
-	const readRuns = useCallback((routineId: string) => {
-		const placement = placed.current
-		setReading(true)
-		setFailedToRead(false)
+	const revise = useCallback(
+		(placement: number, change: (held: OpenRoutine) => OpenRoutine) =>
+			setHeld((current) =>
+				current && placement === placed.current ? change(current) : current,
+			),
+		[],
+	)
 
-		void routinesTransport.runs(routineId).then(
-			(carried) => {
-				if (placement !== placed.current) {
-					return
-				}
-				setRead({
-					runs: toRunModels(carried),
-					readAt: Date.now(),
-					hasReadFullPage: carried.length >= DEFAULT_RUN_PAGE,
-				})
-				setReading(false)
-			},
-			() => {
-				if (placement !== placed.current) {
-					return
-				}
-				setFailedToRead(true)
-				setReading(false)
-			},
-		)
-	}, [])
+	const readRuns = useCallback(
+		(routineId: string) => {
+			const placement = placed.current
+			revise(placement, (current) => ({
+				...current,
+				isReading: true,
+				hasFailedToReadRuns: false,
+			}))
 
-	const place = useCallback((routineId: string | null) => {
-		placed.current += 1
-		setOpenId(routineId)
-		setRead(null)
-		setReading(false)
-		setFailedToRead(false)
-		setRunning(false)
-		setRefusal(null)
-	}, [])
+			void routinesTransport.runs(routineId).then(
+				(carried) =>
+					revise(placement, (current) => ({
+						...current,
+						isReading: false,
+						read: {
+							runs: toRunModels(carried),
+							readAt: Date.now(),
+							hasReadFullPage: carried.length >= DEFAULT_RUN_PAGE,
+						},
+					})),
+				() =>
+					revise(placement, (current) => ({
+						...current,
+						isReading: false,
+						hasFailedToReadRuns: true,
+					})),
+			)
+		},
+		[revise],
+	)
 
 	const onOpen = useCallback(
 		(routineId: string) => {
-			place(routineId)
+			placed.current += 1
+			setHeld(opening(routineId))
 			readRuns(routineId)
 		},
-		[place, readRuns],
+		[readRuns],
 	)
 
-	const onClose = useCallback(() => place(null), [place])
+	const onClose = useCallback(() => {
+		placed.current += 1
+		setHeld(null)
+	}, [])
 
 	const onRetryRuns = useCallback(() => {
-		if (openId) {
-			readRuns(openId)
+		if (held) {
+			readRuns(held.routineId)
 		}
-	}, [openId, readRuns])
+	}, [held, readRuns])
 
 	const onRunNow = useCallback(() => {
-		if (!openId || isRunning) {
+		if (!held || held.isRunning) {
 			return
 		}
 
 		const placement = placed.current
-		setRunning(true)
-		setRefusal(null)
+		const { routineId } = held
+		revise(placement, (current) => ({
+			...current,
+			isRunning: true,
+			refusal: null,
+		}))
 
-		void routinesTransport
-			.runNow(openId)
-			.then(
-				(decision) => {
-					if (placement !== placed.current) {
-						return
-					}
-					if (decision.kind === "refused") {
-						setRefusal(decision.by)
-						return
-					}
-					readRuns(openId)
-				},
-				() => onWriteFailure(),
-			)
-			.finally(() => {
-				if (placement === placed.current) {
-					setRunning(false)
+		void routinesTransport.runNow(routineId).then(
+			(decision) => {
+				revise(placement, (current) => ({
+					...current,
+					isRunning: false,
+					refusal: decision.kind === "refused" ? decision.by : null,
+				}))
+				if (decision.kind !== "refused") {
+					readRuns(routineId)
 				}
-			})
-	}, [openId, isRunning, readRuns, onWriteFailure])
+			},
+			() => {
+				revise(placement, (current) => ({ ...current, isRunning: false }))
+				onWriteFailure()
+			},
+		)
+	}, [held, revise, readRuns, onWriteFailure])
 
 	const open = useMemo(() => {
-		const row = routines.find(({ id }) => id === openId)
-		if (!row) {
+		const row = routines.find(({ id }) => id === held?.routineId)
+		if (!held || !row) {
 			return null
 		}
 
@@ -128,23 +147,15 @@ export const useRoutineDetail = ({
 			title: row.title,
 			triggerSourceTitle: row.triggerSourceTitle,
 			hasStoppedItself: row.hasStoppedItself,
-			runs: read?.runs ?? [],
-			isReadingRuns: isReading && read === null,
-			hasFailedToReadRuns,
-			hasReadFullPage: read?.hasReadFullPage ?? false,
-			isRunning,
-			refusal: refusal ?? undefined,
-			now: read?.readAt ?? 0,
+			runs: held.read?.runs ?? [],
+			isReadingRuns: held.isReading && held.read === null,
+			hasFailedToReadRuns: held.hasFailedToReadRuns,
+			hasReadFullPage: held.read?.hasReadFullPage ?? false,
+			isRunning: held.isRunning,
+			refusal: held.refusal ?? undefined,
+			now: held.read?.readAt ?? 0,
 		}
-	}, [
-		routines,
-		openId,
-		read,
-		isReading,
-		hasFailedToReadRuns,
-		isRunning,
-		refusal,
-	])
+	}, [routines, held])
 
 	return useMemo(
 		() => ({ open, onOpen, onClose, onRetryRuns, onRunNow }),
