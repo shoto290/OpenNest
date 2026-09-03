@@ -1,5 +1,6 @@
 import {
 	expect,
+	isInaccessible,
 	screen,
 	type UserEventObject,
 	waitFor,
@@ -7,6 +8,7 @@ import {
 } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { A11Y_FLOATING_FOCUS_GUARDS } from "@workspace/storybook/story-utils"
 import { Button, buttonVariants } from "@workspace/ui/components/button"
 import {
 	Content,
@@ -51,10 +53,6 @@ const STACK: NoticeMessage[] = [
 const SHORT_DELAY = 700
 
 const SWIPE_DISTANCE = 80
-
-const A11Y_URGENT_NOTICE_HIDDEN_UNTIL_FOCUSED = {
-	config: { rules: [{ id: "aria-hidden-focus", enabled: false }] },
-}
 
 type NoticeDemoProps = NoticeSurfaceProps & {
 	label: string
@@ -241,11 +239,11 @@ export const Error = meta.story({
 
 export const Stacked = meta.story({
 	parameters: {
-		a11y: A11Y_URGENT_NOTICE_HIDDEN_UNTIL_FOCUSED,
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
-					"Four failures raised in a row from the module itself, three kept. Reach for this when several jobs fail at once: check that the surface holds no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the top inline-end edge so a reader's eye lands on what just happened rather than on what they already read. The `aria-hidden-focus` audit is off here for the same reason as in `LongContent`: three urgent notices sit unfocused, hidden from the accessibility tree by the library while their mirrors do the announcing.",
+					"Four failures raised in a row from the module itself, three kept. Reach for this when several jobs fail at once: check that the surface holds no more than three notices, that the one that no longer fits is the oldest, and that the newest sits nearest the top inline-end edge so a reader's eye lands on what just happened rather than on what they already read. The `aria-hidden-focus` audit is left to review here for the same reason as in `LongContent`: three urgent notices sit unfocused, hidden from the accessibility tree by the library while their mirrors do the announcing.",
 			},
 		},
 	},
@@ -277,11 +275,11 @@ export const LongContent = meta.story({
 		/>
 	),
 	parameters: {
-		a11y: A11Y_URGENT_NOTICE_HIDDEN_UNTIL_FOCUSED,
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
 				story:
-					"A failure whose title is one unbreakable word and whose description runs several sentences. Check that both wrap inside the notice instead of pushing it wider than the window, and that the close control keeps its own column at the inline end, still fully inside the notice and still 24 CSS pixels of hit area. The `aria-hidden-focus` audit is off here: the library keeps an urgent notice out of the accessibility tree until the surface is focused, so that its hidden mirror announces it once, and the close control stays in the tab order meanwhile.",
+					"A failure whose title is one unbreakable word and whose description runs several sentences. Check that both wrap inside the notice instead of pushing it wider than the window, and that the close control keeps its own column at the inline end, still fully inside the notice and still 24 CSS pixels of hit area. The `aria-hidden-focus` audit is left to review here: the library keeps an urgent notice out of the accessibility tree until the surface is focused, so that its hidden mirror announces it once, and the close control stays in the tab order meanwhile.",
 			},
 		},
 	},
@@ -361,7 +359,7 @@ export const WithDialog = meta.story({
 		docs: {
 			description: {
 				story:
-					"A background failure raised while a modal dialog holds the window — the moment the surface exists for. The dialog dims the page and takes pointer interaction away from everything behind it, so the notice viewport draws above it and takes its own pointer events back: check that the notice is the topmost element under its own centre, that its close control dismisses it, and that the dialog is still open and untouched afterwards. Focus stays trapped in the dialog while it is open, so the notice is reachable here by pointer, not by Tab.",
+					"A background failure raised while a modal dialog holds the window — the moment the surface exists for. The dialog dims the page and takes pointer interaction away from everything behind it, so the notice viewport draws above it and takes its own pointer events back: check that the notice is the topmost element under its own centre, that its close control dismisses it, and that the dialog is still open and untouched afterwards. Focus stays trapped in the dialog while it is open, so the notice is reachable here by pointer, not by Tab. The dialog hides the rest of the document from the accessibility tree and spares only what carries a live region: the viewport carries one and stays in the tree, but the library's hidden urgent announcement is a separate element beside it and does not, so a failure whose announcement was already on screen when the dialog opened is never read to a screen reader while the dialog stays open.",
 			},
 		},
 	},
@@ -379,6 +377,8 @@ export const WithDialog = meta.story({
 			box.top + box.height / 2,
 		)
 		await expect(notice.contains(topmost)).toBe(true)
+		await expect(viewport()).not.toHaveAttribute("aria-hidden")
+		await expect(isInaccessible(viewport())).toBe(false)
 
 		await userEvent.click(closeControl())
 		await waitFor(() =>
