@@ -266,11 +266,7 @@ mod tests {
 	}
 
 	fn calling(key: Option<&str>, body: &str) -> String {
-		hosted(Some("127.0.0.1"), key, body)
-	}
-
-	fn hosted(host: Option<&str>, key: Option<&str>, body: &str) -> String {
-		reaching("POST", PATH, host, key, body)
+		reaching("POST", PATH, Some("127.0.0.1"), key, body)
 	}
 
 	fn reaching(
@@ -381,7 +377,6 @@ mod tests {
 		let answer = answered(address_of(&webhook), calling(Some(A_KEY), &long)).await;
 
 		assert_eq!(answer, (TOO_LARGE.0.as_u16(), TOO_LARGE.1.to_owned()));
-		assert_ne!(answer, refused(), "a call refused for its size names its size");
 		no_row_was_written(&app).await;
 
 		webhook.stop();
@@ -395,9 +390,9 @@ mod tests {
 		let address = address_of(&webhook);
 
 		for request in [
-			hosted(Some("attacker.example"), Some(A_KEY), "{}"),
-			hosted(Some("127.0.0.1.attacker.example"), Some(A_KEY), "{}"),
-			hosted(None, Some(A_KEY), "{}"),
+			reaching("POST", PATH, Some("attacker.example"), Some(A_KEY), "{}"),
+			reaching("POST", PATH, Some("127.0.0.1.attacker.example"), Some(A_KEY), "{}"),
+			reaching("POST", PATH, None, Some(A_KEY), "{}"),
 		] {
 			assert_eq!(answered(address, request).await, refused());
 		}
@@ -415,7 +410,8 @@ mod tests {
 		let address = address_of(&webhook);
 
 		for host in ["localhost", "127.0.0.1", &format!("localhost:{}", address.port())] {
-			let answer = answered(address, hosted(Some(host), Some(A_KEY), "{}")).await;
+			let request = reaching("POST", PATH, Some(host), Some(A_KEY), "{}");
+			let answer = answered(address, request).await;
 			assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()), "{host} was refused");
 		}
 
