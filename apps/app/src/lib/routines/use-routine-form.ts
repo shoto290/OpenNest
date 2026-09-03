@@ -30,11 +30,6 @@ export type RoutineFormWiring = {
 const isWebhook = (routine: Routine) =>
 	triggerKindOf(routine.triggerSourceId) === "localWebhook"
 
-const revising =
-	(routineId: string, revise: (model: RoutineFormModel) => RoutineFormModel) =>
-	(current: RoutineFormModel | null) =>
-		current && current.id === routineId ? revise(current) : current
-
 export const useRoutineForm = ({
 	conversationId,
 	leadBotId,
@@ -46,21 +41,14 @@ export const useRoutineForm = ({
 	const [open, setOpen] = useState<RoutineFormModel | null>(null)
 
 	const readKey = useCallback((routineId: string) => {
+		const settle = (revise: (model: RoutineFormModel) => RoutineFormModel) =>
+			setOpen((current) =>
+				current && current.id === routineId ? revise(current) : current,
+			)
+
 		void routinesTransport.key(routineId).then(
-			(read) =>
-				setOpen(
-					revising(routineId, (model) => ({
-						...model,
-						webhook: toWebhook(read),
-					})),
-				),
-			() =>
-				setOpen(
-					revising(routineId, (model) => ({
-						...model,
-						hasFailedToReadKey: true,
-					})),
-				),
+			(read) => settle((model) => ({ ...model, webhook: toWebhook(read) })),
+			() => settle((model) => ({ ...model, hasFailedToReadKey: true })),
 		)
 	}, [])
 

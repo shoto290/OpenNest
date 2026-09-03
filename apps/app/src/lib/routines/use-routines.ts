@@ -54,6 +54,17 @@ const declaredBy = async (botIds: string[]): Promise<Declaration[]> => {
 const declaredByLead = (leadBotId: string | undefined) =>
 	leadBotId ? triggerSourcesTransport.sources(leadBotId) : Promise.resolve([])
 
+const titlesOf = async (
+	listed: Routine[],
+	lead: Declaration | null,
+): Promise<SourceTitles> => {
+	const others = await declaredBy(
+		botIdsOf(listed).filter((botId) => botId !== lead?.botId),
+	)
+
+	return toSourceTitles(lead ? [lead, ...others] : others)
+}
+
 export const useRoutines = (
 	conversationId: string,
 	leadBotId?: string,
@@ -69,14 +80,10 @@ export const useRoutines = (
 			declaredByLead(leadBotId),
 		]).then(
 			async ([listed, lead]) => {
-				const others = await declaredBy(
-					botIdsOf(listed).filter((botId) => botId !== leadBotId),
-				)
 				setTitles(
-					toSourceTitles(
-						leadBotId
-							? [{ botId: leadBotId, sources: lead }, ...others]
-							: others,
+					await titlesOf(
+						listed,
+						leadBotId ? { botId: leadBotId, sources: lead } : null,
 					),
 				)
 				setSources(toTriggerSources(lead))
