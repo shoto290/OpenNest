@@ -287,13 +287,12 @@ const appended = (fields: RoutinePayloadField[]): RoutineFilterRow => {
 	}
 }
 
-const naming = (
-	fields: RoutinePayloadField[],
+const carried = (
 	row: RoutineFilterRow,
 	field: string,
+	held: RoutineFieldType | undefined,
+	fieldType: RoutineFieldType | undefined,
 ): RoutineFilterRow => {
-	const held = typeOf(fields, row.field)
-	const fieldType = typeOf(fields, field)
 	const accepted = operatorsOf(fieldType)
 
 	return {
@@ -301,6 +300,45 @@ const naming = (
 		operator: accepted.includes(row.operator) ? row.operator : accepted[0],
 		value: held === fieldType ? row.value : blankValueFor(fieldType),
 	}
+}
+
+const naming = (
+	fields: RoutinePayloadField[],
+	row: RoutineFilterRow,
+	field: string,
+): RoutineFilterRow =>
+	carried(row, field, typeOf(fields, row.field), typeOf(fields, field))
+
+const isSameRow = (row: RoutineFilterRow, held: RoutineFilterRow) =>
+	row.field === held.field &&
+	row.operator === held.operator &&
+	row.value === held.value
+
+const fieldsOf = (
+	sources: RoutineTriggerSource[],
+	triggerSourceId: string,
+): RoutinePayloadField[] =>
+	sources.find(({ id }) => id === triggerSourceId)?.payload ?? []
+
+const rehomed = (
+	values: RoutineFormValues,
+	triggerSourceId: string,
+	sources: RoutineTriggerSource[],
+): RoutineFormValues => {
+	const was = fieldsOf(sources, values.triggerSourceId)
+	const now = fieldsOf(sources, triggerSourceId)
+	const rows = values.filter.rows.map((row) =>
+		carried(row, row.field, typeOf(was, row.field), typeOf(now, row.field)),
+	)
+
+	if (
+		triggerSourceId === values.triggerSourceId &&
+		rows.every((row, at) => isSameRow(row, values.filter.rows[at]))
+	) {
+		return values
+	}
+
+	return { ...values, triggerSourceId, filter: { ...values.filter, rows } }
 }
 
 const rowRefusalIn = (refusal: RoutineFormRefusal | undefined) =>
@@ -594,10 +632,13 @@ const RoutineForm = ({
 	onSave,
 }: RoutineFormProps) => {
 	const { t } = useTranslation("chat")
-	const [entered, setEntered] = useState(values)
+	const [entered, setEntered] = useState(() =>
+		rehomed(values, values.triggerSourceId, sources),
+	)
 	const [rowRefusal, setRowRefusal] = useState(() => rowRefusalIn(refusal))
 	const [marksMissingValues, setMarksMissingValues] = useState(false)
 	const readRefusal = useRef(refusal)
+	const readSources = useRef(sources)
 	const form = useRef<HTMLFormElement>(null)
 
 	useEffect(() => {
@@ -607,6 +648,11 @@ const RoutineForm = ({
 	if (readRefusal.current !== refusal) {
 		readRefusal.current = refusal
 		setRowRefusal(rowRefusalIn(refusal))
+	}
+
+	if (readSources.current !== sources) {
+		readSources.current = sources
+		setEntered((held) => rehomed(held, held.triggerSourceId, sources))
 	}
 
 	const isWritten = id !== null
@@ -675,7 +721,9 @@ const RoutineForm = ({
 			) : (
 				<SettingsSelect
 					label={t("routines.form.source.label")}
-					onValueChange={(value) => answer("triggerSourceId", value)}
+					onValueChange={(value) =>
+						setEntered((held) => rehomed(held, value, sources))
+					}
 					options={sources.map(({ id: value, title }) => ({
 						label: title,
 						value,
@@ -732,6 +780,8 @@ export {
 	ROUTINE_FIELD_TYPES,
 	ROUTINE_FILTER_MATCH_MODES,
 	ROUTINE_FILTER_OPERATORS,
+	ROUTINE_OPERATOR_TAKES_VALUE,
+	ROUTINE_OPERATORS_BY_FIELD_TYPE,
 	type RoutineFieldType,
 	type RoutineFilterMatchMode,
 	type RoutineFilterOperator,

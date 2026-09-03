@@ -23,7 +23,7 @@ import type {
 	TriggerSource,
 } from "./trigger-contract"
 
-export type SourceTitles = ReadonlyMap<string, string>
+export type KnownSources = ReadonlyMap<string, TriggerSource>
 
 export const sourceKeyOf = (botId: string, triggerSourceId: string) =>
 	`${botId}/${triggerSourceId}`
@@ -32,26 +32,24 @@ export const botIdsOf = (routines: Routine[]): string[] => [
 	...new Set(routines.map((routine) => routine.botId)),
 ]
 
-export const toSourceTitles = (
+export const toKnownSources = (
 	declared: { botId: string; sources: TriggerSource[] }[],
-): SourceTitles =>
+): KnownSources =>
 	new Map(
 		declared.flatMap(({ botId, sources }) =>
-			sources.map(
-				(source) => [sourceKeyOf(botId, source.id), source.title] as const,
-			),
+			sources.map((source) => [sourceKeyOf(botId, source.id), source] as const),
 		),
 	)
 
 export const toRoutineRows = (
 	routines: Routine[],
-	titles: SourceTitles,
+	known: KnownSources,
 ): RoutineRowModel[] =>
 	routines.map((routine) => ({
 		id: routine.id,
 		title: routine.title,
 		triggerSourceTitle:
-			titles.get(sourceKeyOf(routine.botId, routine.triggerSourceId)) ??
+			known.get(sourceKeyOf(routine.botId, routine.triggerSourceId))?.title ??
 			routine.triggerSourceId,
 		isEnabled: routine.isEnabled,
 		hasStoppedItself: !routine.isEnabled && routine.consecutiveFailures > 0,
@@ -66,15 +64,20 @@ const KINDS_BY_SOURCE_ID: Record<string, RoutineTriggerKind> = {
 export const triggerKindOf = (triggerSourceId: string): RoutineTriggerKind =>
 	KINDS_BY_SOURCE_ID[triggerSourceId] ?? "plain"
 
+export const toTriggerSource = ({
+	id,
+	title,
+	payload,
+}: TriggerSource): RoutineTriggerSource => ({
+	id,
+	title,
+	payload,
+	kind: triggerKindOf(id),
+})
+
 export const toTriggerSources = (
 	declared: TriggerSource[],
-): RoutineTriggerSource[] =>
-	declared.map(({ id, title, payload }) => ({
-		id,
-		title,
-		payload,
-		kind: triggerKindOf(id),
-	}))
+): RoutineTriggerSource[] => declared.map(toTriggerSource)
 
 const typeOf = (fields: PayloadField[], field: string) =>
 	fields.find((declared) => declared.name === field)?.type

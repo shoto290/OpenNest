@@ -466,3 +466,51 @@ it("writes again when a save is fired after an earlier save settled", async () =
 	expect(create).toHaveBeenCalledTimes(2)
 	expect(result.current.routines).toHaveLength(1)
 })
+
+const INBOX_ROUTINE: Routine = {
+	...ROUTINE,
+	id: "r-3",
+	botId: "b-2",
+	triggerSourceId: "space-inbox",
+	filter: {
+		matchMode: "all",
+		rows: [{ field: "unreadCount", operator: "gt", value: 10 }],
+	},
+	triggerConfig: {},
+}
+
+const INBOX_SOURCE = {
+	id: "space-inbox",
+	title: "When the space inbox fills",
+	payload: [{ name: "unreadCount", type: "number" as const }],
+	dedupeKey: "receivedAt",
+}
+
+it("keeps a value typed by the source the lead bot does not declare", async () => {
+	list.mockResolvedValueOnce([INBOX_ROUTINE])
+	sources.mockImplementation((botId: string) =>
+		Promise.resolve(botId === INBOX_ROUTINE.botId ? [INBOX_SOURCE] : DECLARED),
+	)
+
+	const { result } = renderHook(() =>
+		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	)
+	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+
+	act(() => {
+		result.current.form.onOpen(INBOX_ROUTINE.id)
+	})
+	expect(result.current.form.open?.values.filter.rows).toEqual([
+		{ field: "unreadCount", operator: "gt", value: "10" },
+	])
+
+	update.mockResolvedValueOnce(INBOX_ROUTINE)
+	await act(async () => {
+		result.current.form.onSave(result.current.form.open?.values ?? entered({}))
+	})
+
+	expect(update).toHaveBeenCalledWith(
+		INBOX_ROUTINE.id,
+		expect.objectContaining({ filter: INBOX_ROUTINE.filter }),
+	)
+})

@@ -714,3 +714,39 @@ export const FilterAtThePanelWidth = meta.story({
 		}
 	},
 })
+
+export const FilterCarriedToAnotherSource = meta.story({
+	args: { id: null, values: EMPTY_ROUTINE_VALUES },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A routine still unwritten, whose rows were built against one trigger before the reader picked another. Each source declares its own payload, so a row can lose the field it was written for. Check that the operator falls back to one the new source accepts rather than staying on a comparison its control no longer offers, and that the value goes with it: an operator or a value the engine cannot read would be saved as a row that never holds.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const pick = async (label: string, option: string) => {
+			await userEvent.click(canvas.getByRole("combobox", { name: label }))
+			await userEvent.click(await screen.findByRole("option", { name: option }))
+		}
+
+		await pick("Trigger", "When the space inbox fills")
+		await userEvent.click(canvas.getByRole("button", { name: "Add a row" }))
+
+		const row = () => within(canvas.getByRole("group", { name: "Row 1" }))
+		await pick("Field", "subject")
+		await pick("Operator", "contains")
+		await userEvent.type(
+			row().getByRole("textbox", { name: "Value" }),
+			"invoice",
+		)
+
+		await pick("Trigger", "On a schedule")
+
+		const operator = row().getByRole("combobox", { name: "Operator" })
+		await expect(operator).toHaveTextContent("is present")
+		await userEvent.click(operator)
+		await expect(await screen.findAllByRole("option")).toHaveLength(2)
+	},
+})

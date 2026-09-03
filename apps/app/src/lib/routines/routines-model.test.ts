@@ -5,8 +5,8 @@ import {
 	botIdsOf,
 	toFilter,
 	toFormFilter,
+	toKnownSources,
 	toRoutineRows,
-	toSourceTitles,
 } from "./routines-model"
 import type { Filter, PayloadField, TriggerSource } from "./trigger-contract"
 
@@ -45,17 +45,17 @@ describe("botIdsOf", () => {
 })
 
 describe("toRoutineRows", () => {
-	const titles = toSourceTitles([{ botId: "b-1", sources: [SCHEDULE] }])
+	const known = toKnownSources([{ botId: "b-1", sources: [SCHEDULE] }])
 
 	it("names the trigger source declared by the bot of the routine", () => {
-		expect(toRoutineRows([routine({})], titles)[0].triggerSourceTitle).toBe(
+		expect(toRoutineRows([routine({})], known)[0].triggerSourceTitle).toBe(
 			SCHEDULE.title,
 		)
 	})
 
 	it("names a source no read declared by its id", () => {
 		expect(
-			toRoutineRows([routine({ triggerSourceId: "webhook" })], titles)[0]
+			toRoutineRows([routine({ triggerSourceId: "webhook" })], known)[0]
 				.triggerSourceTitle,
 		).toBe("webhook")
 	})
@@ -64,7 +64,7 @@ describe("toRoutineRows", () => {
 		expect(
 			toRoutineRows(
 				[routine({ isEnabled: false, consecutiveFailures: 3 })],
-				titles,
+				known,
 			)[0].hasStoppedItself,
 		).toBe(true)
 	})
@@ -73,7 +73,7 @@ describe("toRoutineRows", () => {
 		expect(
 			toRoutineRows(
 				[routine({ isEnabled: true, consecutiveFailures: 3 })],
-				titles,
+				known,
 			)[0].hasStoppedItself,
 		).toBe(false)
 	})
@@ -82,7 +82,7 @@ describe("toRoutineRows", () => {
 		expect(
 			toRoutineRows(
 				[routine({ isEnabled: false, consecutiveFailures: 0 })],
-				titles,
+				known,
 			)[0].hasStoppedItself,
 		).toBe(false)
 	})
