@@ -35,14 +35,18 @@ const sourcesOf = (
 	open: RoutineFormModel | null,
 	declared: RoutineTriggerSource[],
 ): RoutineTriggerSource[] => {
-	const carried = open?.id ? open.values.triggerSourceId : null
-	if (!carried || declared.some((source) => source.id === carried)) {
+	const openSourceId = open?.id ? open.values.triggerSourceId : null
+	if (!openSourceId || declared.some(({ id }) => id === openSourceId)) {
 		return declared
 	}
 
 	return [
 		...declared,
-		{ id: carried, title: carried, kind: triggerKindOf(carried) },
+		{
+			id: openSourceId,
+			title: openSourceId,
+			kind: triggerKindOf(openSourceId),
+		},
 	]
 }
 
@@ -68,7 +72,8 @@ export const useRoutineForm = ({
 			)
 
 		void routinesTransport.key(routineId).then(
-			(read) => settle((model) => ({ ...model, webhook: toWebhook(read) })),
+			(carried) =>
+				settle((model) => ({ ...model, webhook: toWebhook(carried) })),
 			() => settle((model) => ({ ...model, hasFailedToReadKey: true })),
 		)
 	}, [])
