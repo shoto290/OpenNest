@@ -502,7 +502,7 @@ const FilterBlock = ({
 
 	const holdFreePath = (index: number, isFree: boolean) =>
 		setFreePaths((held) =>
-			filter.rows.map((_, at) => (at === index ? isFree : (held[at] ?? false))),
+			held.map((wasFree, at) => (at === index ? isFree : wasFree)),
 		)
 
 	const operatorMessageFor = (index: number) =>
