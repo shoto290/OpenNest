@@ -63,7 +63,7 @@ type RoutinesPanelProps = RoutinesPanelListProps & {
 }
 
 type RoutinesPanelBodyProps = RoutinesPanelListProps & {
-	onNewRoutine: (opener: string) => void
+	onNewRoutine: () => void
 	onOpenRoutine: (routineId: string) => void
 }
 
@@ -107,10 +107,7 @@ const RoutinesPanelBody = ({
 				<EmptyStateShell
 					action={
 						form?.canCreate ? (
-							<Button
-								data-opens={EMPTY_OPENER}
-								onClick={() => onNewRoutine(EMPTY_OPENER)}
-							>
+							<Button data-opens={EMPTY_OPENER} onClick={onNewRoutine}>
 								<Icons.Add aria-hidden="true" />
 								{t("routines.form.new")}
 							</Button>
@@ -231,7 +228,7 @@ const RoutinesPanelSurface = (props: RoutinesPanelListProps) => {
 			<AnimatedSidebarContent>
 				<RoutinesPanelBody
 					{...props}
-					onNewRoutine={(picked) => remember(picked, () => form?.onNew())}
+					onNewRoutine={() => remember(EMPTY_OPENER, () => form?.onNew())}
 					onOpenRoutine={(routineId) =>
 						remember(routineId, () => form?.onOpen(routineId))
 					}
