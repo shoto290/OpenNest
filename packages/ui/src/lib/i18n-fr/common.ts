@@ -32,6 +32,12 @@ const common = {
 		question: "Vous a posé une question",
 		permission: "Demande votre permission",
 		finishedTurn: "A terminé son tour",
+		failure: {
+			clicks: "Cliquer sur une notification n'ouvrira plus sa conversation",
+			focus:
+				"Des notifications peuvent désormais apparaître alors que l'app est au premier plan",
+			send: "Une notification n'a pas pu être affichée",
+		},
 	},
 	update: {
 		badge: {

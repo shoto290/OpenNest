@@ -1,5 +1,7 @@
 import { useEffect } from "react"
 
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+
 import { createNotifications } from "./create-notifications"
 import { createChime } from "./notification-chime"
 import { startNotificationSource } from "./notification-source"
@@ -39,6 +41,7 @@ export const useNotifications = ({
 				watchFocus: watchWindowFocus,
 				raiseWindow: () => revealWindow({ withFocus: true }),
 				playChime: createChime(),
+				reportFailure: raiseFailureNotice,
 			}),
 		[chat, runtimes, roster, spaces, user],
 	)

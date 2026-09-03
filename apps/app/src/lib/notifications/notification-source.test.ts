@@ -169,6 +169,7 @@ type Harness = {
 	notifications: FakeNotificationPort
 	windowFocus: ReturnType<typeof createFakeWindowFocus>
 	playChime: ReturnType<typeof vi.fn>
+	reportFailure: ReturnType<typeof vi.fn>
 	stop: () => void
 }
 
@@ -184,6 +185,7 @@ const start = async (
 	const notifications = createFakeNotificationPort()
 	const windowFocus = createFakeWindowFocus()
 	const playChime = vi.fn()
+	const reportFailure = vi.fn()
 
 	const stop = startNotificationSource({
 		chat,
@@ -196,6 +198,7 @@ const start = async (
 		watchFocus: windowFocus.watch,
 		raiseWindow: () => undefined,
 		playChime,
+		reportFailure,
 		...options,
 	})
 	await Promise.resolve()
@@ -208,6 +211,7 @@ const start = async (
 		notifications,
 		windowFocus,
 		playChime,
+		reportFailure,
 		stop,
 	}
 }
@@ -530,5 +534,73 @@ describe("startNotificationSource on a conversation", () => {
 		harness.runtimes.publish("room-one")
 
 		expect(harness.notifications.sent).toEqual([])
+	})
+})
+
+const REFUSAL = "no notification centre"
+
+const aRefusedSend = (): FakeNotificationPort => {
+	const notifications = createFakeNotificationPort()
+	notifications.send = () => Promise.reject(new Error(REFUSAL))
+	return notifications
+}
+
+describe("startNotificationSource when a subscription breaks", () => {
+	it("raises a notice when the click subscription is refused", async () => {
+		const notifications = createFakeNotificationPort()
+		notifications.onActivate = () => Promise.reject(new Error("no listener"))
+
+		const harness = await start({ notifications })
+
+		expect(harness.reportFailure).toHaveBeenCalledWith({
+			title: "Clicking a notification will no longer open its conversation",
+			description: "no listener",
+		})
+	})
+
+	it("raises a notice when the focus watch is refused", async () => {
+		const harness = await start({
+			watchFocus: () => Promise.reject(new Error("no window")),
+		})
+
+		expect(harness.reportFailure).toHaveBeenCalledWith({
+			title: "Notifications may now appear while the app is in front",
+			description: "no window",
+		})
+	})
+
+	it("raises a notice when the host refuses to show a notification", async () => {
+		const harness = await start({ notifications: aRefusedSend() })
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", { question: question("q-1") })
+		await Promise.resolve()
+
+		expect(harness.reportFailure).toHaveBeenCalledWith({
+			title: "A notification could not be shown",
+			description: REFUSAL,
+		})
+	})
+
+	it("raises one notice however many notifications the host refuses", async () => {
+		const harness = await start({ notifications: aRefusedSend() })
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", { question: question("q-1") })
+		await Promise.resolve()
+		harness.chat.publish("bot-one", { permission: permission("p-1") })
+		await Promise.resolve()
+
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+	})
+
+	it("stays quiet while every subscription holds and every notification shows", async () => {
+		const harness = await start()
+		seed(harness, "bot-one")
+
+		harness.chat.publish("bot-one", { question: question("q-1") })
+		await Promise.resolve()
+
+		expect(harness.reportFailure).not.toHaveBeenCalled()
 	})
 })
