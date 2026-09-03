@@ -341,6 +341,7 @@ const chat = {
 				header: "Nom de l'en-tête",
 				copy: "Copier {{field}} de cette routine",
 				copied: "{{field}} copié",
+				reading: "L'adresse et la clé sont en cours de lecture.",
 				pending:
 					"L'adresse, la clé et le nom de l'en-tête seront disponibles une fois la routine enregistrée.",
 				failure: "L'adresse et la clé de cette routine n'ont pas pu être lues.",

@@ -117,12 +117,26 @@ type WebhookBlockProps = {
 	isWritten: boolean
 }
 
+type WebhookKeyLine = "failure" | "pending" | "reading"
+
+const keyLineOf = ({
+	webhook,
+	hasFailedToReadKey,
+	isWritten,
+}: WebhookBlockProps): WebhookKeyLine | null => {
+	if (hasFailedToReadKey) return "failure"
+	if (!isWritten) return "pending"
+
+	return webhook ? null : "reading"
+}
+
 const WebhookBlock = ({
 	webhook,
 	hasFailedToReadKey,
 	isWritten,
 }: WebhookBlockProps) => {
 	const { t } = useTranslation("chat")
+	const line = keyLineOf({ hasFailedToReadKey, isWritten, webhook })
 
 	return (
 		<div className="flex flex-col gap-2" data-slot="routine-webhook">
@@ -138,16 +152,16 @@ const WebhookBlock = ({
 				label={t("routines.form.webhook.header")}
 				value={webhook?.header ?? ""}
 			/>
-			{hasFailedToReadKey ? (
-				<p className="text-destructive text-xs">
-					{t("routines.form.webhook.failure")}
+			{line ? (
+				<p
+					className={cn(
+						"text-xs",
+						line === "failure" ? "text-destructive" : "text-muted-foreground",
+					)}
+				>
+					{t(`routines.form.webhook.${line}`)}
 				</p>
 			) : null}
-			{isWritten ? null : (
-				<p className="text-muted-foreground text-xs">
-					{t("routines.form.webhook.pending")}
-				</p>
-			)}
 		</div>
 	)
 }

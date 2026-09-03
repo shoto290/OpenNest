@@ -332,6 +332,7 @@ const chat = {
 				header: "Header name",
 				copy: "Copy the {{field}} of this routine",
 				copied: "{{field}} copied",
+				reading: "The address and the key are being read.",
 				pending:
 					"The address, the key and the header name are available once the routine is saved.",
 				failure: "The address and the key of this routine could not be read.",

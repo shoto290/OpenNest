@@ -164,6 +164,33 @@ export const BeforeItsFirstWrite = meta.story({
 	},
 })
 
+export const KeyStillReading = meta.story({
+	args: { ...CALLED_FORM, webhook: undefined },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Every edit of a webhook routine starts here: the routine is written, its key is read after the form opens, and the three fields hold nothing for as long as that read is out. Check that the block says the read is running instead of borrowing the line of a routine that was never written, and that it says it once — never beside the pending line or the failure. Pick `BeforeItsFirstWrite` for the routine that has no key yet, `KeyUnreadable` for the read that came back empty handed.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("The address and the key are being read."),
+		).toBeVisible()
+		await expect(
+			canvas.queryByText(
+				"The address, the key and the header name are available once the routine is saved.",
+			),
+		).not.toBeInTheDocument()
+		await expect(
+			canvas.queryByText(
+				"The address and the key of this routine could not be read.",
+			),
+		).not.toBeInTheDocument()
+	},
+})
+
 export const OnASourceWithNoConfiguration = meta.story({
 	args: INBOX_FORM,
 	parameters: {
